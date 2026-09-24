@@ -1,6 +1,7 @@
-import { GitBranch, GitCompareArrows } from 'lucide-react';
+import { GitBranch } from 'lucide-react';
 import { gitApi } from './api';
 import { filesApi } from '../files/api';
+import { FileTypeIcon } from '../files/FileTypeIcon';
 import { MobilePageHeader, MobileRefresh, MobileState } from '../../mobile/MobilePrimitives';
 import { useMobileResource, useMobileScroll, type MobileRoute } from '../../mobile/mobileState';
 import type { MobileNavigate } from '../../mobile/mobileState';
@@ -15,7 +16,7 @@ export function MobileGit({ route, visible, navigate, back }: { route: MobileRou
       {status.data && <div className="mobile-branch-card"><GitBranch size={23} /><div><strong>{status.data.branch || 'Detached HEAD'}</strong><span>{status.data.files.length} 个变更 · 领先 {status.data.ahead} / 落后 {status.data.behind}</span></div></div>}
       <MobileState loading={status.loading && !status.data} error={status.error} retry={status.reload} empty={status.data?.files.length === 0 ? '工作区干净，暂无文件变更。' : undefined} />
       <div className="mobile-list">{status.data?.files.map((file) => <div key={file.path} className="mobile-git-row">
-        <div className="mobile-git-file"><GitCompareArrows size={18} /><span>{file.path}</span></div>
+        <div className="mobile-git-file"><FileTypeIcon path={file.path} /><span>{file.path}</span></div>
         <div className="mobile-git-actions">
           {file.index_status !== ' ' && file.index_status !== '?' && <button onClick={() => navigate({ workspace: route.workspace, view: 'git', diff: file.path, staged: '1' })}><b>{file.index_status}</b>已暂存 · 查看 Diff</button>}
           {file.worktree_status !== ' ' && <button onClick={() => navigate({ workspace: route.workspace, view: 'git', diff: file.path, untracked: file.worktree_status === '?' ? '1' : undefined })}><b>{file.worktree_status}</b>{file.worktree_status === '?' ? '未跟踪' : '工作区'} · 查看 Diff</button>}

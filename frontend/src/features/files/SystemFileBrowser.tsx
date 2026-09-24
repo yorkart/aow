@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
-import { ArrowUp, Check, ChevronDown, ChevronRight, Copy, Download, File as FileIcon, Folder, FolderOpen, Home, LoaderCircle, Pin, PinOff, RefreshCw, Upload, X } from 'lucide-react';
+import { ArrowUp, Check, ChevronDown, ChevronRight, Copy, Download, Home, LoaderCircle, Pin, PinOff, RefreshCw, Upload, X } from 'lucide-react';
 import { filesApi } from './api';
+import { DirectoryTypeIcon, FileTypeIcon } from './FileTypeIcon';
 import type { DirectoryListing, FileEntry } from './types';
 import { usePinnedDirectories } from './usePinnedDirectories';
 import './system-file-browser.css';
@@ -69,7 +70,7 @@ function DirectoryTree(props: DirectoryTreeProps) {
         {pending.has(path) ? <LoaderCircle className="system-file-spin" /> : isExpanded ? <ChevronDown /> : <ChevronRight />}
       </button>
       <button className="system-file-tree-name" title={path} aria-current={currentPath === path ? 'location' : undefined} onClick={() => onNavigate(path)}>
-        {isExpanded ? <FolderOpen /> : <Folder />}<span>{path === '/' ? '/' : path.split('/').pop()}</span>
+        <DirectoryTypeIcon expanded={isExpanded} /><span>{path === '/' ? '/' : path.split('/').pop()}</span>
       </button>
       <span className="system-file-tree-actions">
         <DirectoryPin path={path} pins={pins} className="system-file-tree-pin" />
@@ -354,8 +355,8 @@ export function SystemFileBrowser({ open, onHide, onOpenFile, navigationRequest,
       <aside className="system-file-shortcuts" aria-label="快捷导航与收藏">
         <div className="system-file-pane-title">快捷导航</div>
         <nav aria-label="快捷导航">
-          <button title="根目录 /" onClick={() => void navigate('/')} aria-pressed={currentPath === '/'}><Folder /><span>/</span></button>
-          <button title="/tmp" onClick={() => void navigate('/tmp')} aria-pressed={currentPath === '/tmp'}><Folder /><span>/tmp</span></button>
+          <button title="根目录 /" onClick={() => void navigate('/')} aria-pressed={currentPath === '/'}><DirectoryTypeIcon /><span>/</span></button>
+          <button title="/tmp" onClick={() => void navigate('/tmp')} aria-pressed={currentPath === '/tmp'}><DirectoryTypeIcon /><span>/tmp</span></button>
           <button title={home || 'Home'} onClick={() => void (home ? navigate(home) : loadHome())} aria-pressed={!!home && currentPath === home}><Home /><span>Home</span></button>
         </nav>
         <section className="system-file-bookmarks" aria-label="收藏目录">
@@ -363,7 +364,7 @@ export function SystemFileBrowser({ open, onHide, onOpenFile, navigationRequest,
           {pins.error ? <div className="system-file-bookmark-error" role="alert"><span>{pins.error}</span><button onClick={() => void pins.reload()}>重新加载</button></div> : null}
           {pins.loading && pins.paths.length === 0 ? <p className="system-file-bookmarks-empty">正在加载收藏…</p> : !pins.error && pins.paths.length === 0 ? <p className="system-file-bookmarks-empty">Pin 常用目录，在这里快速访问。</p> : null}
           <ul>{pins.paths.map((path) => <li key={path} className={currentPath === path ? 'selected' : ''}>
-            <button className="system-file-bookmark-link" title={path} aria-label={`打开收藏 ${path}`} aria-current={currentPath === path ? 'location' : undefined} onClick={() => void navigate(path)}><Folder /><span><strong>{path.split('/').pop() || '/'}</strong><small>{path}</small></span></button>
+            <button className="system-file-bookmark-link" title={path} aria-label={`打开收藏 ${path}`} aria-current={currentPath === path ? 'location' : undefined} onClick={() => void navigate(path)}><DirectoryTypeIcon /><span><strong>{path.split('/').pop() || '/'}</strong><small>{path}</small></span></button>
             <DirectoryPin path={path} pins={pins} />
           </li>)}</ul>
         </section>
@@ -373,14 +374,14 @@ export function SystemFileBrowser({ open, onHide, onOpenFile, navigationRequest,
         <table><thead><tr><th>名称</th><th>大小</th><th>修改时间</th><th>操作</th></tr></thead><tbody>
           {listing?.entries.map((entry) => <tr key={entry.path} className={selectedPath === entry.path ? 'selected' : ''} aria-selected={selectedPath === entry.path} onClick={() => setSelectedPath(entry.path)} onDoubleClick={() => { if (entry.kind === 'directory') void navigate(entry.path); }}>
             <td><button className="system-file-entry-name" title={entry.is_symlink ? `${entry.path} → ${entry.link_target}` : entry.path} onClick={() => { setSelectedPath(entry.path); if (entry.kind === 'directory') void navigate(entry.path); }}>
-              {entry.kind === 'directory' ? <Folder className="system-file-folder" /> : <FileIcon />}<span>{entry.name}</span>{entry.is_symlink ? <small>↗</small> : null}
+              {entry.kind === 'directory' ? <DirectoryTypeIcon /> : <FileTypeIcon path={entry.path} />}<span>{entry.name}</span>{entry.is_symlink ? <small>↗</small> : null}
             </button></td>
             <td>{entry.kind === 'file' ? formatSize(entry.size) : '—'}</td>
             <td>{entry.modified_ms == null ? '—' : new Date(entry.modified_ms).toLocaleString()}</td>
             <td><div className="system-file-entry-actions">{entry.kind === 'file' && !/\.(png|jpe?g|gif|webp|ico|bmp|pdf|zip|gz|tar|exe|so|woff2?|mp[34]|mov|docx?|xlsx?)$/i.test(entry.name) ? <button title="打开文件" aria-label={`打开 ${entry.name}`} onClick={() => onOpenFile(entry)}>打开</button> : null}<button title="复制路径" aria-label={`复制路径 ${entry.name}`} onClick={() => void copyPath(entry.path)}><Copy /></button>{entry.kind === 'directory' ? <DirectoryPin path={entry.path} label={entry.name} pins={pins} /> : entry.kind === 'file' ? <a href={filesApi.rawUrl(entry.path)} download={entry.name} title="下载文件" aria-label={`下载 ${entry.name}`}><Download /></a> : null}</div></td>
           </tr>)}
         </tbody></table>
-        {!listing ? <div className="system-file-empty">{loading ? <><LoaderCircle className="system-file-spin" />正在加载目录…</> : '请选择目录'}</div> : listing.entries.length === 0 ? <div className="system-file-empty"><FolderOpen />目录为空，可拖入文件上传</div> : null}
+        {!listing ? <div className="system-file-empty">{loading ? <><LoaderCircle className="system-file-spin" />正在加载目录…</> : '请选择目录'}</div> : listing.entries.length === 0 ? <div className="system-file-empty"><DirectoryTypeIcon expanded />目录为空，可拖入文件上传</div> : null}
       </div>
     </div>
     {uploads.length > 0 ? <section className="system-file-uploads" aria-label="上传任务">

@@ -89,7 +89,7 @@ body { position:fixed; inset:0; }
 .mobile-list-row:last-child { border-bottom:0!important; }
 .mobile-list-row>svg:last-child { color:#758196; }
 .mobile-row-icon { width:34px; height:36px; display:grid; flex-shrink:0; place-items:center; color:#adb9cd; }
-.mobile-row-icon.folder { color:#d5b87e; }
+.mobile-row-icon > :is(.directory-type-icon,.file-type-icon) { --file-icon-size:20px; }
 .mobile-app .agent-icon { width:21px; height:21px; object-fit:contain; flex-shrink:0; }
 .mobile-session-row strong { white-space:normal; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; font-size:13px; line-height:1.55; }
 .mobile-segments { display:flex; gap:4px; margin:0 16px 16px; padding:4px; border-radius:11px; background:var(--m-panel); border:1px solid var(--m-line); }
@@ -130,7 +130,6 @@ body { position:fixed; inset:0; }
 .mobile-git-row { padding:15px; border-bottom:1px solid var(--m-line); }
 .mobile-git-row:last-child { border:0; }
 .mobile-git-file { display:flex; align-items:flex-start; gap:10px; overflow-wrap:anywhere; font-size:12px; }
-.mobile-git-file>svg { color:#94a4be; }
 .mobile-git-actions { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 0 25px; }
 .mobile-git-actions button { min-height:40px; padding:6px 9px; border-radius:8px; border:1px solid #3a4557; color:#aebed5; font-size:11px; }
 .mobile-git-actions b { color:#e0c58f; padding-right:7px; }

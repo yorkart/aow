@@ -12,7 +12,7 @@ import { prTabId } from './tabRoutes/pr';
 import { FloatingWorkspaceProvider, FloatingOpenMenu, useFloatingWorkspace, openingInFloatingWorkspace, withFloatingOpen, readStored, persist } from './floatingWorkspaceState';
 import type { CSSProperties, DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from 'react';
 import {
-  ArrowUp, Bell, Bot, CalendarClock, Check, ChevronDown, ChevronRight, CircleHelp, CornerDownLeft, FileText, Files, Folder, FolderGit2, FolderOpen, GitBranch, GitBranchPlus, GitPullRequest, MessageSquare, MoreHorizontal,
+  ArrowUp, Bell, Bot, CalendarClock, Check, ChevronDown, ChevronRight, CircleHelp, CornerDownLeft, FileText, Files, FolderGit2, FolderOpen, GitBranch, GitBranchPlus, GitPullRequest, MessageSquare, MoreHorizontal,
   LoaderCircle, Network, NotebookPen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pencil, Pin, PinOff, Plus, RefreshCw, Settings, SquareTerminal, Trash2, X,
 } from 'lucide-react';
 import { gitApi } from '../features/git/api';
@@ -31,6 +31,7 @@ import { NotificationSettingsPanel } from '../features/notifications/Notificatio
 import { SessionShareButton } from '../features/sessions/SessionShareButton';
 import { Explorer } from '../features/files/Explorer';
 import { SystemFileBrowser } from '../features/files/SystemFileBrowser';
+import { DirectoryTypeIcon } from '../features/files/FileTypeIcon';
 import { PullRequestDetailView } from '../features/pr/PullRequestDetailView';
 import { PullRequestsPanel } from '../features/pr/PullRequestsPanel';
 import { SessionSnapshotView } from '../features/sessions/SessionSnapshotView';
@@ -561,7 +562,7 @@ function RegisterProjectDialog({ onClose, onRegistered }: {
               <div className="project-aow-directory-list" aria-busy={browserLoading}>
                 {browserLoading ? <div className="project-aow-directory-state"><LoaderCircle className="spinning" />正在读取目录…</div> : null}
                 {!browserLoading && browserError ? <div className="project-aow-directory-state error" role="alert">{browserError}</div> : null}
-                {!browserLoading && !browserError ? browserDirectories.map((directory) => <button type="button" key={directory.path} title={directory.path} onClick={() => void loadBrowserDirectory(directory.path)}><Folder /><span>{directory.name}</span><ChevronRight /></button>) : null}
+                {!browserLoading && !browserError ? browserDirectories.map((directory) => <button type="button" key={directory.path} title={directory.path} onClick={() => void loadBrowserDirectory(directory.path)}><DirectoryTypeIcon /><span>{directory.name}</span><ChevronRight /></button>) : null}
                 {!browserLoading && !browserError && !browserDirectories.length ? <div className="project-aow-directory-state">此目录下没有子目录</div> : null}
               </div>
               <div className="project-aow-directory-footer"><code title={browserPath}>{browserPath || (browserLoading ? '正在定位目录…' : '尚未选择目录')}</code></div>
