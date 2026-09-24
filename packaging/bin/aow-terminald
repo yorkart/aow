@@ -1,0 +1,38 @@
+#!/bin/sh
+
+set -eu
+
+runtime_root=${AOW_RUNTIME_ROOT:-${HOME:?HOME must be set}/.local/lib/aow}
+active_release=$runtime_root/active/terminald
+
+if [ ! -d "$active_release" ]; then
+    printf 'error: no active AOW terminald release; run the AOW installer and enter y to activate terminald\n' >&2
+    exit 1
+fi
+
+release=$(CDPATH= cd -P "$active_release" && pwd)
+releases_dir=$(CDPATH= cd -P "$runtime_root/releases" && pwd)
+case "$release" in
+    "$releases_dir"/*) ;;
+    *)
+        printf 'error: active terminald release is outside %s: %s\n' "$releases_dir" "$release" >&2
+        exit 1
+        ;;
+esac
+
+terminald=$release/bin/aow-terminald
+node=$runtime_root/node
+if [ ! -x "$terminald" ] || [ ! -x "$node" ]; then
+    printf 'error: active terminald release or managed Node runtime is unavailable\n' >&2
+    exit 1
+fi
+
+if [ -n "${AOW_TERMINALD_SOCKET:-}" ]; then
+    socket=$AOW_TERMINALD_SOCKET
+elif [ -n "${XDG_RUNTIME_DIR:-}" ]; then
+    socket=$XDG_RUNTIME_DIR/aow-terminald/terminald.sock
+else
+    socket=/tmp/aow-terminald-$(id -u)/terminald.sock
+fi
+
+exec "$terminald" --socket "$socket" --vt-node "$node"

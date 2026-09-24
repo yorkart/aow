@@ -1,0 +1,5 @@
+.terminal-lifecycle-dot { background: var(--muted); border-radius: 50%; }
+.terminal-lifecycle-dot.running { background: #73c991; }
+.terminal-lifecycle-dot.starting { background: #d7ba7d; }
+.terminal-lifecycle-dot.failed,.terminal-lifecycle-dot.exited { background: var(--aow-error); }
+.terminal-lifecycle-dot.interrupted { background: #d99a55; }

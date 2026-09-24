@@ -1,0 +1,38 @@
+[package]
+name = "aow-terminald"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "aow-terminald"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+axum.workspace = true
+bytes.workspace = true
+futures-util.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+libc.workspace = true
+portable-pty.workspace = true
+aow-agents = { path = "../agents" }
+aow-process = { path = "../process" }
+aow-protocol = { path = "../protocol" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tempfile = "3.20"
+tokio = { workspace = true, features = ["process"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+vte.workspace = true
+
+[dev-dependencies]
+aow-terminald-client = { path = "../terminald-client" }
+tokio-tungstenite.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+aow-macos-log = { path = "../macos-log" }

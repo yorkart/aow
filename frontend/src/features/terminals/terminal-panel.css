@@ -1,0 +1,27 @@
+.terminal-panel { display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0; }
+.terminal-panel-groups { flex: 1; }
+.terminal-panel-group { min-width: 0; }
+.terminal-panel-group + .terminal-panel-group { border-top: 1px solid var(--aow-line); }
+.terminal-panel-body { min-width: 0; }
+.terminal-panel-body[hidden] { display: none; }
+.terminal-panel-row.active { background: var(--aow-selection); }
+.terminal-panel-empty { margin: 0; padding: 10px; color: var(--muted); font-size: 12px; }
+.terminal-panel-error { margin: 0; padding: 8px; color: var(--aow-error); font-size: 12px; }
+.terminal-panel-count { flex: none; margin-left: auto; padding: 0 5px; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.terminal-worktree-heading { display: flex; align-items: center; gap: 4px; width: 100%; min-height: 27px; padding: 4px 8px; color: var(--muted); text-align: left; cursor: pointer; }
+.terminal-worktree-heading:hover { color: var(--text); background: var(--hover); }
+.terminal-worktree-heading:focus-visible { outline: 1px solid var(--aow-accent); outline-offset: -1px; }
+.terminal-worktree-heading > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.terminal-worktree-heading > svg { flex: 0 0 12px; width: 12px; height: 12px; }
+.terminal-worktree-heading > svg.expanded { transform: rotate(90deg); }
+.terminal-worktree-group .terminal-panel-row { padding-left: 12px; }
+.aow-panel-header-actions > .terminal-scope-active { color: var(--aow-accent); }
+.terminal-scope-menu-separator { margin: 4px 0; border-top: 1px solid var(--aow-line); }
+.terminal-panel-status { display: flex; align-items: center; gap: 5px; overflow: hidden; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.terminal-panel-status-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.terminal-panel-status-separator { flex: none; color: var(--muted); }
+.terminal-panel-status-dot { flex: 0 0 6px; width: 6px; height: 6px; }
+.terminal-panel-status > svg { flex: 0 0 13px; width: 13px; height: 13px; }
+.terminal-panel-status > .terminal-panel-state-active { color: #73c991; }
+.project-aow-terminal-menu .danger { margin-top: 3px; color: #d99a94; border-top: 1px solid var(--aow-line); border-radius: 0 0 3px 3px; }
+.project-aow-terminal-menu .danger:hover, .project-aow-terminal-menu .danger:focus-visible { color: #fff; background: #7a302b; }

@@ -1,0 +1,24 @@
+.aow-panel-stack { position:relative; contain:layout; min-width:0; min-height:0; height:100%; display:flex; flex-direction:column; overflow:hidden; }
+.aow-panel-viewport { position:relative; flex:1; min-height:0; overflow:auto; overflow-anchor:none; scroll-padding-top:var(--panel-scroll-top,0px); scroll-padding-bottom:var(--panel-scroll-bottom,0px); scrollbar-width:thin; }
+.aow-panel-content { min-width:0; display:flow-root; }
+.aow-panel { min-width:0; }
+.aow-panel > [data-panel-anchor] { height:var(--project-aow-header-height,27px); }
+.aow-panel > [data-panel-anchor] > .aow-panel-header { position:relative; z-index:10; margin:0; }
+.aow-panel > [data-panel-anchor] > .aow-panel-header[data-docked="top"],
+.aow-panel > [data-panel-anchor] > .aow-panel-header[data-docked="bottom"] { position:fixed; top:calc(var(--panel-viewport-top) + var(--panel-dock-offset)); left:var(--panel-viewport-left); width:var(--panel-viewport-width); }
+.aow-panel-header[data-docked="top"] { box-shadow:0 1px 3px #0005; }
+.aow-panel-header[data-docked="bottom"] { box-shadow:0 -1px 3px #0005; }
+/* Header controls already occupy the reserved area; focusing them must not
+   scroll the viewport again and dismiss a just-opened menu. */
+.aow-panel-header button { scroll-margin-top:calc(-1 * var(--panel-scroll-top,0px)); scroll-margin-bottom:calc(-1 * var(--panel-scroll-bottom,0px)); }
+.aow-panel > .aow-panel-body { min-height:0; height:auto; flex:none; overflow:visible; }
+.aow-panel > .aow-panel-body[hidden] { display:none; }
+.aow-panel-jump { flex:none; width:100%; min-height:27px; border:0; border-bottom:1px solid var(--aow-line); padding:4px 8px; background:var(--aow-header); color:var(--aow-text); font:inherit; }
+.aow-panel-header > .aow-panel-toggle { color:#adc0d9; }
+.aow-panel-toggle > svg { width:13px; height:13px; transition:transform .1s; }
+.aow-panel-toggle > svg.expanded { transform:rotate(90deg); }
+.aow-panel-header > .aow-panel-toggle + .aow-panel-header-title { padding-left:0; }
+.aow-panel-header-title { overflow:hidden; }
+.aow-panel-header-title > strong { flex:1; }
+.aow-panel-body .aow-panel > [data-panel-anchor] > .aow-panel-header { background:var(--aow-panel); }
+.aow-panel-virtual-list { position:relative; width:100%; }

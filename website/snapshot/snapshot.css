@@ -1,0 +1,53 @@
+/* Only the snapshot wrapper is styled here. The UI uses frontend/src styles. */
+#root {
+  display: flex;
+  flex-direction: column;
+}
+.snapshot-strip {
+  height: 25px;
+  flex: 0 0 25px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 10px;
+  font:
+    10px/1.4 system-ui,
+    sans-serif;
+  color: #9eabb9;
+  background: #15191e;
+  border-bottom: 1px solid #30343c;
+}
+.snapshot-app {
+  min-height: 0;
+  flex: 1;
+  position: relative;
+}
+.snapshot-loading {
+  padding: 24px;
+  color: #9eabb9;
+  font:
+    12px system-ui,
+    sans-serif;
+}
+.snapshot-notice {
+  position: fixed;
+  z-index: 9999;
+  bottom: 36px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 90%;
+  padding: 10px 14px;
+  border: 1px solid #586879;
+  border-radius: 5px;
+  color: #d6e1eb;
+  background: #202a34;
+  font:
+    12px/1.6 system-ui,
+    sans-serif;
+}
+.snapshot-app .mobile-app {
+  position: absolute;
+  top: 0;
+  height: 100%;
+}

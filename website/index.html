@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#090a0b" />
+    <meta
+      name="description"
+      content="AoW 是面向 AI Agent 的浏览器开发工作台。在你自己的电脑或服务器上，管理项目、Worktree、终端、会话和自动化，手机也能接着工作。"
+    />
+    <title>AoW — 你的 Agent，你的工作台</title>
+    <link rel="canonical" href="{{SITE_URL}}" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:title" content="AoW — 你的 Agent，你的工作台" />
+    <meta
+      property="og:description"
+      content="把 AI 开发，放进一个工作台。运行在自己的机器上，通过浏览器随时访问。"
+    />
+    <meta property="og:url" content="{{SITE_URL}}" />
+    <meta property="og:image" content="{{SITE_URL}}assets/workspace.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="{{BASE_PATH}}assets/workspace-icon.svg"
+    />
+    <link rel="stylesheet" href="{{BASE_PATH}}styles.css" />
+    <link rel="stylesheet" href="{{BASE_PATH}}snapshot-embed.css" />
+    <script type="module" src="{{BASE_PATH}}main.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳到主要内容</a>
+    <svg
+      class="icon-definitions"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <symbol id="i-arrow" viewBox="0 0 24 24">
+        <path d="M5 12h14m-6-6 6 6-6 6" />
+      </symbol>
+      <symbol id="i-external" viewBox="0 0 24 24">
+        <path d="M7 17 17 7M7 7h10v10" />
+      </symbol>
+      <symbol id="i-terminal" viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="16" rx="3" />
+        <path d="m7 9 3 3-3 3m6 0h4" />
+      </symbol>
+      <symbol id="i-branch" viewBox="0 0 24 24">
+        <circle cx="6" cy="5" r="2" />
+        <circle cx="6" cy="19" r="2" />
+        <circle cx="18" cy="6" r="2" />
+        <path d="M6 7v10m12-9a10 10 0 0 1-10 10" />
+      </symbol>
+      <symbol id="i-chat" viewBox="0 0 24 24">
+        <path
+          d="M21 14a3 3 0 0 1-3 3H8l-5 4V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3Z"
+        />
+        <path d="M7 8h10M7 12h6" />
+      </symbol>
+      <symbol id="i-clock" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3 2" />
+      </symbol>
+      <symbol id="i-files" viewBox="0 0 24 24">
+        <path
+          d="M14 2H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Zm0 0v6h6M8 12h8m-8 4h5"
+        />
+      </symbol>
+      <symbol id="i-bell" viewBox="0 0 24 24">
+        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" />
+      </symbol>
+      <symbol id="i-nodes" viewBox="0 0 24 24">
+        <rect x="8" y="2" width="8" height="6" rx="1" />
+        <rect x="2" y="16" width="8" height="6" rx="1" />
+        <rect x="14" y="16" width="8" height="6" rx="1" />
+        <path d="M12 8v4M6 16v-4h12v4" />
+      </symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24">
+        <rect x="8" y="8" width="12" height="13" rx="2" />
+        <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" />
+      </symbol>
+      <symbol id="i-github" viewBox="0 0 24 24">
+        <path
+          d="M9 19c-4 1-4-2-6-2m12 5v-4a3.5 3.5 0 0 0-1-3c3 0 6-1.5 6-5a4 4 0 0 0-1-3 4 4 0 0 0 0-3s-1 0-3 1a10 10 0 0 0-8 0C6 4 5 4 5 4a4 4 0 0 0 0 3 4 4 0 0 0-1 3c0 3.5 3 5 6 5a3.5 3.5 0 0 0-1 3v4"
+        />
+      </symbol>
+    </svg>
+
+    <header class="site-header">
+      <div class="nav-wrap container">
+        <a class="brand" href="{{BASE_PATH}}" aria-label="AoW 首页"
+          ><img
+            src="{{BASE_PATH}}assets/workspace-icon.svg"
+            width="30"
+            height="30"
+            alt=""
+          /><span>AoW</span></a
+        >
+        <button
+          class="menu-toggle"
+          type="button"
+          aria-controls="site-nav"
+          aria-expanded="false"
+          aria-label="打开导航"
+        >
+          <span></span><span></span>
+        </button>
+        <nav class="site-nav" id="site-nav" aria-label="主导航">
+          <a href="#features">产品功能</a>
+          <a href="https://github.com/yorkart/aow/blob/main/docs/usage.md"
+            >使用文档 <svg class="icon small"><use href="#i-external" /></svg
+          ></a>
+          <a href="https://github.com/yorkart/aow/releases">更新记录</a>
+          <a class="nav-github" href="https://github.com/yorkart/aow"
+            ><svg class="icon"><use href="#i-github" /></svg
+            ><span>GitHub</span></a
+          >
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero container" aria-labelledby="hero-title">
+        <div class="eyebrow hero-eyebrow">
+          <span class="status-dot"></span>AGENT-ORIENTED WORKBENCH
+        </div>
+        <h1 id="hero-title">把 AI 开发，<br /><span>放进一个工作台。</span></h1>
+        <p class="hero-description">
+          项目、终端、Agent 会话与自动化，在浏览器里井然有序。<br
+            class="desktop-break"
+          />运行在自己的电脑或服务器，离开桌面也能继续。
+        </p>
+        <div
+          class="hero-install"
+          id="install"
+          role="group"
+          aria-label="安装 AoW"
+        >
+          <div class="command-card">
+            <span class="command-prompt" aria-hidden="true">$</span>
+            <pre><code id="install-command">curl -fsSL https://github.com/yorkart/aow/releases/latest/download/aow-install.sh | bash</code></pre>
+            <button
+              class="copy-button"
+              type="button"
+              data-copy="install-command"
+              aria-label="复制安装命令"
+            >
+              <svg class="icon small"><use href="#i-copy" /></svg
+              ><span>复制</span>
+            </button>
+          </div>
+          <p class="hero-note">
+            <span>macOS / Linux · Node.js 20+</span
+            ><a
+              href="https://github.com/yorkart/aow/blob/main/docs/release-installation.md"
+              >安装说明 <svg class="icon small"><use href="#i-external" /></svg
+            ></a>
+          </p>
+        </div>
+
+        <div class="product-preview" id="preview">
+          <div class="preview-tabs" role="group" aria-label="探索 AoW 工作台">
+            <button
+              type="button"
+              data-scenario="workspace"
+              data-action="scenario"
+              data-id="workspace"
+            >
+              <svg class="icon"><use href="#i-branch" /></svg>项目与文件
+            </button>
+            <button
+              type="button"
+              data-scenario="terminal"
+              data-action="scenario"
+              data-id="terminal"
+            >
+              <svg class="icon"><use href="#i-terminal" /></svg>终端记录
+            </button>
+            <button
+              type="button"
+              data-scenario="git"
+              data-action="scenario"
+              data-id="git"
+            >
+              <svg class="icon"><use href="#i-branch" /></svg>Git 浏览
+            </button>
+          </div>
+          <div class="demo-bar">
+            <span><span class="status-dot"></span>真实前端 · 只读数据快照</span
+            ><button type="button" data-action="reset">↺ 重置快照</button>
+          </div>
+          <iframe
+            id="workbench"
+            class="snapshot-frame"
+            title="AoW 真实工作台快照"
+            src="{{BASE_PATH}}snapshot/"
+            loading="lazy"
+            sandbox="allow-scripts allow-same-origin allow-downloads"
+          ></iframe>
+          <p class="preview-caption">
+            直接浏览 AoW 的文件、Git 记录与终端快照。<span
+              id="demo-feedback"
+              role="status"
+              aria-live="polite"
+              >使用 AoW 现有前端，内容来自实际采集。</span
+            >
+          </p>
+        </div>
+      </section>
+
+      <section class="agents-section container" aria-label="支持的 Agent">
+        <p>继续使用你熟悉的 Agent</p>
+        <div class="agent-list">
+          <span
+            ><img
+              src="{{BASE_PATH}}assets/codex.png"
+              width="28"
+              height="28"
+              alt=""
+            />Codex</span
+          ><span
+            ><img
+              src="{{BASE_PATH}}assets/claude.png"
+              width="28"
+              height="28"
+              alt=""
+            />Claude Code</span
+          ><span
+            ><img
+              src="{{BASE_PATH}}assets/trae.png"
+              width="28"
+              height="28"
+              alt=""
+            />TraeCode CLI</span
+          ><span class="other-agent"
+            ><svg class="icon"><use href="#i-terminal" /></svg>你的 CLI
+            工具</span
+          >
+        </div>
+        <p class="agent-note">
+          使用你已有的账号与订阅，在运行 AoW 的机器上安装并登录对应 CLI。
+        </p>
+      </section>
+
+      <section
+        class="features-section section-border"
+        id="features"
+        aria-labelledby="features-title"
+      >
+        <div class="container">
+          <div class="section-heading">
+            <div>
+              <span class="eyebrow">A HOME FOR YOUR WORK</span>
+              <h2 id="features-title">从一个任务，<br />到整个开发过程。</h2>
+            </div>
+            <p>
+              把分散的工具放回同一个上下文。<br />你决定下一步，AoW
+              把工作衔接起来。
+            </p>
+          </div>
+          <div class="feature-grid">
+            <article class="feature-card">
+              <svg class="icon feature-icon"><use href="#i-branch" /></svg
+              ><span class="feature-number">01</span>
+              <h3>多个 Worktree，各自有序</h3>
+              <p>
+                以项目和 Worktree
+                组织任务，切换时保留各自的文件、终端与工作目录。
+              </p>
+              <div class="branch-demo" aria-hidden="true">
+                <span><i></i>Project <small>项目</small></span
+                ><span><i></i>Worktree <small>工作区</small></span
+                ><span><i></i>Terminal <small>执行环境</small></span>
+              </div>
+            </article>
+            <article class="feature-card">
+              <svg class="icon feature-icon"><use href="#i-chat" /></svg
+              ><span class="feature-number">02</span>
+              <h3>执行用终端，回看用对话</h3>
+              <p>
+                在 Terminal 操作，在 Conversation
+                查看轮次、过程和结论。切换视图，继续同一个任务。
+              </p>
+              <div class="mode-demo" aria-hidden="true">
+                <span
+                  ><svg class="icon"><use href="#i-terminal" /></svg
+                  >Terminal</span
+                ><span>⇄</span
+                ><span
+                  ><svg class="icon"><use href="#i-chat" /></svg
+                  >Conversation</span
+                >
+              </div>
+            </article>
+            <article class="feature-card">
+              <svg class="icon feature-icon"><use href="#i-files" /></svg
+              ><span class="feature-number">03</span>
+              <h3>参考资料，放在手边</h3>
+              <p>
+                文件、Notes、Git Diff
+                和浮动工作区，让需求、代码与临时记录始终触手可及。
+              </p>
+              <div class="file-demo" aria-hidden="true">
+                <span
+                  ><svg class="icon small"><use href="#i-files" /></svg
+                  >README.md</span
+                ><span
+                  ><svg class="icon small"><use href="#i-branch" /></svg
+                  >查看文件变更</span
+                >
+              </div>
+            </article>
+            <article class="feature-card compact">
+              <svg class="icon feature-icon"><use href="#i-clock" /></svg
+              ><span class="feature-number">04</span>
+              <h3>让重复任务按计划运行</h3>
+              <p>
+                为 Agent
+                选择项目、工作区和运行计划。代码巡检与日常整理，也能安排进日程。
+              </p>
+            </article>
+            <article class="feature-card compact">
+              <svg class="icon feature-icon"><use href="#i-bell" /></svg
+              ><span class="feature-number">05</span>
+              <h3>完成后，再回来处理</h3>
+              <p>
+                通过页面提醒了解任务进展；配置飞书后，也可以在工作台之外接收任务完成通知。
+              </p>
+            </article>
+            <article class="feature-card compact">
+              <svg class="icon feature-icon"><use href="#i-nodes" /></svg
+              ><span class="feature-number">06</span>
+              <h3>你的机器，你的工作环境</h3>
+              <p>
+                在本机或服务器运行
+                AoW。为多台机器配置节点入口，在浏览器中打开各自的工作台。
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section
+        class="mobile-section section-border"
+        id="mobile"
+        aria-labelledby="mobile-title"
+      >
+        <div class="container mobile-layout">
+          <div class="mobile-copy">
+            <span class="eyebrow">AWAY FROM YOUR DESK</span>
+            <h2 id="mobile-title">离开电脑，<br />工作也能接着走。</h2>
+            <p>
+              手机打开同一个 AoW
+              地址，查看项目、会话与执行记录。需要操作时，接管正在运行的终端。
+            </p>
+            <ul class="check-list">
+              <li>桌面与手机，连接同一个工作台</li>
+              <li>终端画面同步，需要输入时再接管</li>
+              <li>回到电脑，继续原来的工作区</li>
+            </ul>
+            <a
+              class="text-link"
+              href="https://github.com/yorkart/aow/blob/main/docs/usage.md#手机访问"
+              >了解手机访问 <svg class="icon"><use href="#i-arrow" /></svg
+            ></a>
+            <p class="mobile-note">
+              通过可信网络或安全远程入口访问，无需另装手机应用。
+            </p>
+          </div>
+          <div class="phone-stage">
+            <div class="phone-frame">
+              <div class="phone-camera" aria-hidden="true"></div>
+              <iframe
+                id="phone-demo"
+                class="phone-snapshot"
+                title="AoW 手机工作台快照"
+                src="{{BASE_PATH}}snapshot/?ui=mobile"
+                loading="lazy"
+                sandbox="allow-scripts allow-same-origin allow-downloads"
+              ></iframe>
+            </div>
+            <div class="phone-caption">
+              <span class="status-dot"></span>同一份数据快照，AoW 原生手机界面。
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="faq-section section-border" aria-labelledby="faq-title">
+        <div class="container faq-layout">
+          <div>
+            <span class="eyebrow">GOOD TO KNOW</span>
+            <h2 id="faq-title">开始之前，<br />你可能想了解。</h2>
+          </div>
+          <div class="faq-list">
+            <details>
+              <summary>AoW 是什么？<span aria-hidden="true">+</span></summary>
+              <p>
+                AoW（Agent-oriented Workbench）是面向 AI Agent
+                的浏览器开发工作台。它运行在你自己的电脑或服务器上，把 Git
+                项目、Worktree、文件、Terminal、Agent
+                会话和自动化集中到一个界面。
+              </p>
+            </details>
+            <details>
+              <summary>
+                需要把代码上传到 AoW 吗？<span aria-hidden="true">+</span>
+              </summary>
+              <p>
+                AoW 直接访问运行机器上的仓库和文件，不要求上传到一个托管的 AoW
+                服务。Agent CLI
+                如何使用模型服务，取决于你为相应工具配置的账号和服务。
+              </p>
+            </details>
+            <details>
+              <summary>
+                可以使用哪些 Agent？<span aria-hidden="true">+</span>
+              </summary>
+              <p>
+                终端可运行你已安装的 CLI。AoW 为 Codex、Claude Code 和 TraeCode
+                CLI 提供会话、识别及自动化等集成；请先在运行 AoW
+                的机器上安装对应 CLI 并登录。不同 Agent
+                的具体能力以使用文档为准。
+              </p>
+            </details>
+            <details>
+              <summary>
+                支持哪些系统？手机需要安装应用吗？<span aria-hidden="true"
+                  >+</span
+                >
+              </summary>
+              <p>
+                安装包支持 Linux、macOS 的 x86_64 和
+                ARM64。手机通过浏览器访问同一个服务地址即可使用移动界面，无需安装独立应用。手机必须能够访问
+                AoW 所在的网络。
+              </p>
+            </details>
+            <details>
+              <summary>
+                怎么访问远程服务器上的 AoW？<span aria-hidden="true">+</span>
+              </summary>
+              <p>
+                默认只监听 127.0.0.1:8282，可以通过 SSH 隧道访问。可信内网或 VPN
+                可配置监听地址；公网使用需要 HTTPS 和额外的访问控制。<a
+                  href="https://github.com/yorkart/aow#如何访问"
+                  >查看访问配置</a
+                >。
+              </p>
+            </details>
+            <details>
+              <summary>
+                关闭网页，任务还会继续吗？<span aria-hidden="true">+</span>
+              </summary>
+              <p>
+                终端由 terminald
+                管理；关闭网页不等于停止终端。自动化任务由系统定时器触发独立
+                Runner。运行机器及相关服务需要保持可用；未配置应用层补跑或自动重试。
+              </p>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <section class="closing-section container">
+        <span class="eyebrow">YOUR AGENTS. YOUR WORKSPACE.</span>
+        <h2>让工具各就各位。<br /><span>让想法继续向前。</span></h2>
+        <p>运行在你的机器上，打开在你的浏览器里。</p>
+      </section>
+    </main>
+
+    <footer class="site-footer section-border">
+      <div class="container footer-top">
+        <div>
+          <a class="brand" href="{{BASE_PATH}}"
+            ><img
+              src="{{BASE_PATH}}assets/workspace-icon.svg"
+              width="28"
+              height="28"
+              alt=""
+            /><span>AoW</span></a
+          >
+          <p>Agent-oriented Workbench<br />为你和你的 Agent 准备的工作台。</p>
+        </div>
+        <div class="footer-links">
+          <div>
+            <span>产品</span><a href="#features">产品功能</a
+            ><a href="#mobile">手机访问</a><a href="#install">安装 AoW</a>
+          </div>
+          <div>
+            <span>资源</span
+            ><a href="https://github.com/yorkart/aow/blob/main/docs/usage.md"
+              >使用文档</a
+            ><a href="https://github.com/yorkart/aow/blob/main/docs/aow-cli.md"
+              >CLI 说明</a
+            ><a href="https://github.com/yorkart/aow/releases">版本记录</a>
+          </div>
+          <div>
+            <span>参与</span><a href="https://github.com/yorkart/aow">GitHub</a
+            ><a href="https://github.com/yorkart/aow/issues">问题反馈</a>
+          </div>
+        </div>
+      </div>
+      <div class="container footer-bottom">
+        <span>AoW · Built for the way you work.</span
+        ><a href="#main">回到顶部 ↑</a>
+      </div>
+    </footer>
+    <p class="copy-status" role="status" aria-live="polite"></p>
+  </body>
+</html>

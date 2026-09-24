@@ -1,0 +1,13 @@
+[Unit]
+Description=AOW web server
+
+[Service]
+Type=exec
+EnvironmentFile=-%h/.config/aow/server.env
+ExecStart=%h/.local/lib/aow/bin/aow-server
+UMask=0077
+Restart=on-failure
+RestartSec=1s
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,21 @@
+{
+  "name": "@aow/vt-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node ./dist/vt-worker.mjs",
+    "build": "esbuild ./bin/vt-worker.mjs --bundle --platform=node --format=esm --target=node20 --outfile=./dist/vt-worker.mjs",
+    "test": "npm run build && node --test"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@xterm/addon-serialize": "0.14.0",
+    "@xterm/headless": "6.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12"
+  }
+}

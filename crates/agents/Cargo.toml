@@ -1,0 +1,26 @@
+[package]
+name = "aow-agents"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = []
+launch = ["dep:serde", "dep:thiserror", "dep:anyhow", "dep:serde_json", "dep:tokio", "dep:aow-config"]
+sessions = ["dep:chrono", "dep:rusqlite", "dep:serde", "dep:serde_json", "dep:thiserror", "dep:walkdir", "dep:tokio", "dep:uuid"]
+automation = ["dep:anyhow", "dep:serde", "dep:serde_json", "dep:tokio", "dep:aow-config"]
+
+[dependencies]
+aow-config = { path = "../config", optional = true }
+anyhow = { workspace = true, optional = true }
+chrono = { workspace = true, optional = true }
+rusqlite = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+thiserror = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+uuid = { workspace = true, optional = true }
+walkdir = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile = "3.20"
