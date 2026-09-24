@@ -1,0 +1,17 @@
+.review-provider-settings-host:not([hidden]) { display: flex; flex: 1; min-height: 0; min-width: 0; }
+.review-provider-settings-host > section { flex: 1; }
+.review-provider-settings { min-width: 0; }
+.review-provider-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.review-provider-toolbar label { display: flex; align-items: center; gap: 10px; flex: 1; }
+.review-provider-toolbar select { min-width: 120px; max-width: 250px; flex: 1; }
+.review-provider-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 18px 0; }
+.review-provider-hosts { grid-column: 1 / -1; }
+.review-provider-fields input, .review-provider-fields textarea { width: 100%; box-sizing: border-box; }
+.review-provider-editor { border: 1px solid var(--aow-line); overflow: hidden; border-radius: 6px; margin-top: 10px; }
+.review-provider-protocol { margin-top: 16px; }
+.review-provider-protocol summary { cursor: pointer; }
+.review-provider-protocol pre { overflow: auto; }
+.review-provider-settings .project-aow-dialog-footer { flex-wrap: wrap; }
+.review-remote-picker { padding: 8px 12px; display: flex; gap: 8px; align-items: center; }
+.review-remote-picker select { min-width: 0; max-width: 100%; flex: 1; }
+@media (max-width: 700px) { .review-provider-fields { grid-template-columns: 1fr; } }

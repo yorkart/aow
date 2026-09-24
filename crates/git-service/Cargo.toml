@@ -1,0 +1,14 @@
+[package]
+name = "aow-git-service"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+aow-protocol = { path = "../protocol" }
+thiserror.workspace = true
+tokio.workspace = true
+walkdir.workspace = true
+tempfile = "3.20"
+
+[dev-dependencies]

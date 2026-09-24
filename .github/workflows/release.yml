@@ -1,0 +1,175 @@
+name: CI and release
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Finish an in-flight main release before another run can advance latest.
+concurrency:
+  group: aow-ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - id: version
+        run: echo "version=v$(date -u +%Y.%m.%d)-${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}-${GITHUB_SHA:0:12}" >> "$GITHUB_OUTPUT"
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            vt-worker/package-lock.json
+      - name: Set up Rust
+        run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
+      - name: Check product portal snapshot freshness
+        run: node website/scripts/check-snapshot-freshness.mjs
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: test-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}-${{ github.sha }}
+          restore-keys: test-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}-
+      - name: Set up test tools
+        run: cargo install just --locked
+      - name: Test VT worker
+        run: just test-vt-worker
+      - name: Test Rust workspace
+        run: |
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            TMPDIR="$(node -p 'require("node:fs").realpathSync(require("node:os").tmpdir())')"
+            export TMPDIR
+          fi
+          cargo test --workspace --locked -- --test-threads=4
+      - name: Test packaging, installers and service lifecycle
+        run: node --test scripts/tests/*.test.mjs
+      - name: Check frontend
+        run: |
+          npm --prefix frontend ci --ignore-scripts --no-audit --no-fund
+          npm --prefix frontend run typecheck
+          npm --prefix frontend run test:architecture
+
+  build:
+    needs: [version, test]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux-x86_64
+            target: x86_64-unknown-linux-musl
+          - runner: ubuntu-24.04-arm
+            platform: linux-aarch64
+            target: aarch64-unknown-linux-musl
+          - runner: macos-15-intel
+            platform: macos-x86_64
+            target: x86_64-apple-darwin
+          - runner: macos-15
+            platform: macos-aarch64
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      RELEASE_VERSION: ${{ needs.version.outputs.version }}
+      RELEASE_PLATFORM: ${{ matrix.platform }}
+      RUST_TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            vt-worker/package-lock.json
+      - name: Set up Rust target
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+          rustup target add "$RUST_TARGET"
+      - name: Set up musl compiler
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --yes musl-tools binutils
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: release-${{ matrix.platform }}-${{ hashFiles('Cargo.lock') }}-${{ github.sha }}
+          restore-keys: release-${{ matrix.platform }}-${{ hashFiles('Cargo.lock') }}-
+      - name: Build and validate native package
+        run: |
+          package=$(bash scripts/package-release.sh --version "$RELEASE_VERSION")
+          mkdir -p target/release-assets
+          cp "$package" "target/release-assets/aow-$RELEASE_PLATFORM.tar.gz"
+      - name: Smoke test real macOS package with isolated services
+        if: runner.os == 'macOS'
+        env:
+          AOW_NATIVE_TEST_PACKAGE: ${{ github.workspace }}/target/release-assets/aow-${{ matrix.platform }}.tar.gz
+        run: node --test --test-name-pattern='real AOW macOS release' scripts/tests/macos-release.test.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: package-${{ matrix.platform }}
+          path: target/release-assets/*.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+  publish:
+    needs: [version, build]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          pattern: package-*
+          path: target/github-packages
+          merge-multiple: true
+      - name: Prepare complete release and checksums
+        run: |
+          node scripts/prepare-github-release.mjs "$RELEASE_VERSION" "$GITHUB_SHA" "$GITHUB_REPOSITORY" target/github-packages target/github-release
+      - name: Publish complete release
+        run: bash scripts/publish-github-release.sh "$RELEASE_VERSION" "$GITHUB_SHA" target/github-release

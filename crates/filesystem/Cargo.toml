@@ -1,0 +1,15 @@
+[package]
+name = "aow-filesystem"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+bytes.workspace = true
+futures-util.workspace = true
+libc.workspace = true
+mime_guess.workspace = true
+aow-protocol = { path = "../protocol" }
+thiserror.workspace = true
+tokio.workspace = true
+uuid.workspace = true

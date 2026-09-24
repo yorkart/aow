@@ -1,0 +1,47 @@
+[package]
+name = "aow-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+axum.workspace = true
+bytes.workspace = true
+chrono.workspace = true
+futures-util.workspace = true
+http.workspace = true
+libc.workspace = true
+mime_guess.workspace = true
+md5.workspace = true
+percent-encoding.workspace = true
+reqwest.workspace = true
+aow-agents = { path = "../agents", features = ["launch", "sessions", "automation"] }
+aow-automations = { path = "../automations" }
+aow-config = { path = "../config" }
+aow-filesystem = { path = "../filesystem" }
+aow-git-service = { path = "../git-service" }
+aow-operation-log = { path = "../operation-log" }
+aow-protocol = { path = "../protocol" }
+aow-process = { path = "../process" }
+aow-terminald-client = { path = "../terminald-client" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+tokio-util.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+
+tempfile = "3.20"
+
+[dev-dependencies]
+rusqlite.workspace = true
+aow-terminald = { path = "../terminald" }
+tower = { version = "0.5", features = ["util"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+aow-macos-log = { path = "../macos-log" }

@@ -1,0 +1,15 @@
+[Unit]
+Description=AOW terminal daemon
+
+[Service]
+Type=exec
+UnsetEnvironment=AOW_TERMINALD_VT_WORKER
+ExecStart=%h/.local/lib/aow/bin/aow-terminald
+RuntimeDirectory=aow-terminald
+RuntimeDirectoryMode=0700
+UMask=0077
+Restart=on-failure
+RestartSec=1s
+
+[Install]
+WantedBy=default.target

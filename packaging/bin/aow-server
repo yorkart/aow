@@ -1,0 +1,42 @@
+#!/bin/sh
+
+set -eu
+
+runtime_root=${AOW_RUNTIME_ROOT:-${HOME:?HOME must be set}/.local/lib/aow}
+active_release=$runtime_root/active/server
+
+if [ ! -d "$active_release" ]; then
+    printf 'error: no active AOW server release; run the AOW installer first\n' >&2
+    exit 1
+fi
+
+release=$(CDPATH= cd -P "$active_release" && pwd)
+releases_dir=$(CDPATH= cd -P "$runtime_root/releases" && pwd)
+case "$release" in
+    "$releases_dir"/*) ;;
+    *)
+        printf 'error: active server release is outside %s: %s\n' "$releases_dir" "$release" >&2
+        exit 1
+        ;;
+esac
+
+server=$release/bin/aow-server
+frontend=$release/frontend/dist
+if [ ! -x "$server" ] || [ ! -f "$frontend/index.html" ]; then
+    printf 'error: active server release is incomplete: %s\n' "$release" >&2
+    exit 1
+fi
+
+server_host=${AOW_SERVER_HOST:-127.0.0.1}
+set -- "$server" --frontend "$frontend" --host "$server_host"
+if [ -n "${AOW_SERVER_PORT:-}" ]; then
+    set -- "$@" --port "$AOW_SERVER_PORT"
+fi
+if [ -n "${AOW_SERVER_STATE_DIR:-}" ]; then
+    set -- "$@" --state-dir "$AOW_SERVER_STATE_DIR"
+fi
+if [ -n "${AOW_TERMINALD_SOCKET:-}" ]; then
+    set -- "$@" --terminald-socket "$AOW_TERMINALD_SOCKET"
+fi
+
+exec "$@"

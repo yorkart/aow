@@ -1,0 +1,8 @@
+/target/
+/frontend/node_modules/
+/frontend/dist/
+/frontend/*.tsbuildinfo
+/website/_site/
+/website/_snapshot/
+__pycache__/
+*.pyc
