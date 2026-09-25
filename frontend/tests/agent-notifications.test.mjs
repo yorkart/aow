@@ -356,6 +356,7 @@ try {
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     let testsSent = 0;
+    let contextReady = false;
     const qr = `data:image/svg+xml;base64,${Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="white"/><rect x="32" y="32" width="64" height="64"/></svg>').toString('base64')}`;
     await page.route('**/api/aow/im/wechat**', async route => {
       const request = route.request();
@@ -375,10 +376,13 @@ try {
         providers = providers.filter(provider => provider.provider !== 'wechat');
         return route.fulfill({ json: settings() });
       }
-      return route.fulfill({ json: { connection: { receiving: true, context_ready: true, error: null } } });
+      return route.fulfill({ json: { connection: { receiving: true, context_ready: contextReady, error: null } } });
     });
     await page.goto(`${base}/tests/agent-notifications-preview.html`);
     await page.getByRole('button', { name: 'IM 设置', exact: true }).click();
+    const steps = page.getByRole('list', { name: '微信推送设置步骤' });
+    assert.equal(await steps.getByRole('listitem').count(), 4);
+    assert.equal(await page.getByRole('button', { name: '发送微信测试消息' }).isDisabled(), true);
     await page.getByRole('button', { name: '扫码连接微信' }).click();
     await page.getByLabel('微信配对码').waitFor();
     assert.equal(await page.getByAltText('微信 Bot 登录二维码').evaluate(image => image.complete && image.naturalWidth > 0), true);
@@ -386,10 +390,22 @@ try {
     await page.getByLabel('微信配对码').fill('123456');
     await page.getByRole('button', { name: '确认配对码' }).click();
     await page.getByText('接收账号：scanner', { exact: true }).waitFor();
+    await page.getByText('等待接收你在微信中发送的消息…', { exact: true }).waitFor();
+    assert.equal(testsSent, 0);
+    assert.equal(await page.getByRole('button', { name: '发送微信测试消息' }).isDisabled(), true);
+    assert.match(await steps.locator('[aria-current="step"]').innerText(), /在微信中向 Bot 发一条消息/);
+    contextReady = true;
+    // The existing status poll observes the inbound message without sending anything.
+    await page.getByText('已收到你的消息，可以发送测试通知。', { exact: true }).waitFor();
     assert.equal(testsSent, 0);
     await page.getByRole('button', { name: '发送微信测试消息' }).click();
-    await page.getByText('测试消息已发送。', { exact: true }).waitFor();
+    await page.getByText('测试请求已提交，请到微信查看“AoW 微信推送测试”。', { exact: true }).waitFor();
     assert.equal(testsSent, 1);
+    assert.equal(await page.getByText('已确认收到微信测试通知。', { exact: true }).count(), 0);
+    assert.match(await steps.locator('[aria-current="step"]').innerText(), /确认微信收到通知/);
+    await page.getByRole('button', { name: '我已收到', exact: true }).click();
+    await page.getByText('已确认收到微信测试通知。', { exact: true }).waitFor();
+    await page.screenshot({ path: '/tmp/aow-wechat-setup-confirmed.png' });
     await page.getByLabel('飞书 App ID').fill('cli_new');
     await page.getByLabel('飞书 App Secret').fill('secret');
     await page.getByRole('button', { name: '保存', exact: true }).click();
@@ -414,7 +430,93 @@ try {
     await page.getByRole('button', { name: 'IM 设置', exact: true }).click();
     await page.getByRole('button', { name: '解除微信绑定' }).click();
     await page.getByRole('button', { name: '扫码连接微信' }).waitFor();
+    assert.equal(await page.getByText('已确认收到微信测试通知。', { exact: true }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: '发送微信测试消息' }).isDisabled(), true);
     assert.deepEqual(providers, []);
+    assert.deepEqual(errors, []);
+  });
+
+  await test('wechat setup preserves pending receipt checks and clears them on failed sends or rebinding', async t => {
+    preferences = { enabled: true, channels: ['page'] };
+    providers = [{ provider: 'wechat', account_id: 'bot', user_id: 'scanner' }];
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    t.after(() => page.close());
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    let contextReady = true;
+    let failSend = false;
+    let statusUnavailable = true;
+    let testsSent = 0;
+    await page.route('**/api/aow/im/wechat**', async route => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      if (path.endsWith('/login')) return route.fulfill({ json: { id: 'same-account', status: 'wait', qr_image: null, message: '等待扫码' } });
+      if (path.endsWith('/login/same-account')) {
+        contextReady = false;
+        return route.fulfill({ json: { id: 'same-account', status: 'confirmed', qr_image: null, message: '已重新绑定同一账号' } });
+      }
+      if (path.endsWith('/test')) {
+        testsSent++;
+        if (failSend) {
+          contextReady = false;
+          return route.fulfill({ status: 400, json: { message: '微信会话尚未就绪或已失效，请先向 Bot 发一条消息' } });
+        }
+        return route.fulfill({ json: { message: '测试消息已发送。' } });
+      }
+      if (statusUnavailable) return route.fulfill({ status: 503, json: { message: '暂时无法读取微信状态' } });
+      return route.fulfill({ json: { connection: { receiving: true, context_ready: contextReady, error: null } } });
+    });
+    await page.goto(`${base}/tests/agent-notifications-preview.html`);
+    await page.getByRole('button', { name: 'IM 设置', exact: true }).click();
+    const sendTest = page.getByRole('button', { name: '发送微信测试消息', exact: true });
+    const steps = page.getByRole('list', { name: '微信推送设置步骤' });
+    await page.getByText('暂时无法读取微信状态', { exact: true }).waitFor();
+    assert.equal(await sendTest.isDisabled(), true);
+    statusUnavailable = false;
+    await page.getByRole('button', { name: '我已发送，检查状态' }).click();
+    await page.getByText('已收到你的消息，可以发送测试通知。', { exact: true }).waitFor();
+    await sendTest.click();
+    await page.getByRole('button', { name: '还没收到', exact: true }).click();
+    await page.getByText(/请确认查看的是本次扫码账号与 Bot 的私聊/).waitFor();
+    assert.equal(testsSent, 1);
+    assert.equal(await page.getByText('已确认收到微信测试通知。', { exact: true }).count(), 0);
+
+    // Losing context must not erase a receipt question for an already submitted test.
+    contextReady = false;
+    await page.getByText('等待接收你在微信中发送的消息…', { exact: true }).waitFor();
+    assert.equal(await sendTest.isDisabled(), true);
+    await page.getByRole('button', { name: '我已收到', exact: true }).click();
+    await page.getByText('已确认收到微信测试通知。', { exact: true }).waitFor();
+    contextReady = true;
+    await page.getByRole('button', { name: '我已发送，检查状态' }).click();
+    await page.getByText('已收到你的消息，可以发送测试通知。', { exact: true }).waitFor();
+
+    failSend = true;
+    await sendTest.click();
+    await page.getByRole('alert').filter({ hasText: '微信会话尚未就绪或已失效' }).waitFor();
+    await page.getByText('等待接收你在微信中发送的消息…', { exact: true }).waitFor();
+    assert.equal(testsSent, 2);
+    assert.equal(await page.getByRole('button', { name: '我已收到', exact: true }).count(), 0);
+    assert.equal(await page.getByText('已确认收到微信测试通知。', { exact: true }).count(), 0);
+    assert.equal(await sendTest.isDisabled(), true);
+    assert.match(await steps.locator('[aria-current="step"]').innerText(), /在微信中向 Bot 发一条消息/);
+    await page.screenshot({ path: '/tmp/aow-wechat-setup-mobile-retry.png' });
+
+    failSend = false; contextReady = true;
+    await page.getByRole('button', { name: '我已发送，检查状态' }).click();
+    await page.getByText('已收到你的消息，可以发送测试通知。', { exact: true }).waitFor();
+    await sendTest.click();
+    await page.getByRole('button', { name: '我已收到', exact: true }).click();
+    await page.getByText('已确认收到微信测试通知。', { exact: true }).waitFor();
+    await page.getByRole('button', { name: '重新扫码绑定', exact: true }).click();
+    await page.getByText('等待接收你在微信中发送的消息…', { exact: true }).waitFor();
+    assert.equal(await page.getByText('已确认收到微信测试通知。', { exact: true }).count(), 0);
+    assert.equal(await sendTest.isDisabled(), true);
+    assert.equal(testsSent, 3);
+    assert.match(await steps.locator('[aria-current="step"]').innerText(), /在微信中向 Bot 发一条消息/);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    const bounds = await steps.boundingBox();
+    assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 390);
     assert.deepEqual(errors, []);
   });
 
