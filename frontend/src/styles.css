@@ -84,6 +84,8 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .changes-list { min-height:0; max-height:35%; overflow:auto; }
 .source-control.commits-collapsed .changes-list:not([hidden]) { flex:1; max-height:none; }
 .change-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .change-directory { flex:1; min-width:0; overflow:hidden; color:#888; text-overflow:ellipsis; white-space:nowrap; } .change-row b { margin-left:auto; margin-right:9px; color:#e2c08d; white-space:nowrap; }
+.change-row b[data-status="A"] { color:#89d185; }
+.change-row b[data-status="D"] { color:#f48771; }
 .change-name.deleted { text-decoration:line-through; }
 .source-change-list { position:relative; flex-shrink:0; }
 .source-change-slot { position:absolute; left:0; right:0; height:24px; }
