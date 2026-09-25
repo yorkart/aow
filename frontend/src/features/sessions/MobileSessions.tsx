@@ -8,7 +8,7 @@ import type { AowAgentSession } from './types';
 import { MobilePageHeader, MobileRefresh, MobileState, mobileTime } from '../../mobile/MobilePrimitives';
 import { useMobileResource, useMobileScroll, type MobileRoute, type MobileNavigate } from '../../mobile/mobileState';
 
-const agents = ['codex', 'claude', 'traecli'] as const;
+const agents = ['codex', 'claude', 'traecli', 'hermes'] as const;
 const statusNames = { completed: '已完成', failed: '失败', interrupted: '已中断', in_progress: '进行中' };
 
 export function MobileSessions({ route, visible, navigate, back }: { route: MobileRoute; visible: boolean; navigate: MobileNavigate; back: () => void }) {
@@ -52,7 +52,7 @@ export function MobileSessionReader({ session, workspace, back }: { session: Aow
         <div className="mobile-turn-label">第 {index + 1} 轮 · {statusNames[turn.status]}{index === snapshot.data!.turns.length - 1 && <span>最新一轮</span>}</div>
         <section className="mobile-message user"><SessionMessageContent text={turn.user.text} className="mobile-markdown" /></section>
         <section className="mobile-message assistant">
-          <header className="mobile-session-agent"><AgentIcon agentId={session.agent} /><strong>{session.agent === 'codex' ? 'Codex' : session.agent === 'claude' ? 'Claude' : 'TraeCode CLI'}</strong></header>
+          <header className="mobile-session-agent"><AgentIcon agentId={session.agent} /><strong>{{ codex: 'Codex', claude: 'Claude', traecli: 'TraeCode CLI', hermes: 'Hermes' }[session.agent]}</strong></header>
           <SessionTurnProcess key={`${session.id}:${turn.id}:${index === snapshot.data!.turns.length - 1}`} turn={turn} isLatest={index === snapshot.data!.turns.length - 1} />
           {turn.final && <SessionMessageContent text={turn.final.text} imageReferenceText={turn.user.text} className="mobile-markdown" />}
           <SessionTurnPending turn={turn} />

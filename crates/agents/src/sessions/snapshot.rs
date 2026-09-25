@@ -1,5 +1,6 @@
 mod claude;
 mod codex_like;
+mod hermes;
 mod tool_details;
 use claude::parse_claude;
 use codex_like::parse_codex_like;
@@ -32,6 +33,8 @@ pub enum SnapshotError {
     Invalid(String),
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Database(#[from] rusqlite::Error),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -287,6 +290,24 @@ pub(crate) fn read_codex_like(
     Ok(snapshot(locator, turns))
 }
 
+pub(crate) fn read_hermes(
+    locator: AgentSessionLocator,
+) -> Result<AgentSessionSnapshot, SnapshotError> {
+    validate_locator(&locator)?;
+    let mut connection = super::hermes::open_db(&locator.transcript_path)?;
+    let transaction = connection.transaction()?;
+    let exists: bool = transaction.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sessions WHERE id = ?1)",
+        [&locator.session_id],
+        |row| row.get(0),
+    )?;
+    if !exists {
+        return Err(SnapshotError::NotFound);
+    }
+    let records = super::hermes::snapshot_records(&transaction, &locator.session_id)?;
+    Ok(snapshot(locator, hermes::parse(records)))
+}
+
 pub(super) fn validate_locator(locator: &AgentSessionLocator) -> Result<(), SnapshotError> {
     let path = locator
         .transcript_path
@@ -296,10 +317,12 @@ pub(super) fn validate_locator(locator: &AgentSessionLocator) -> Result<(), Snap
             _ => SnapshotError::Io(error),
         })?;
     let root = locator.trusted_root.canonicalize()?;
-    if !path.starts_with(&root)
-        || path.extension().and_then(|value| value.to_str()) != Some("jsonl")
-        || !path.metadata()?.is_file()
-    {
+    let valid_store = if locator.agent == "hermes" {
+        path == root.join("state.db")
+    } else {
+        path.extension().and_then(|value| value.to_str()) == Some("jsonl")
+    };
+    if !path.starts_with(&root) || !valid_store || !path.metadata()?.is_file() {
         return Err(SnapshotError::Invalid(
             "transcript escaped its trusted history root".to_owned(),
         ));

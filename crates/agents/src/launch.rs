@@ -19,16 +19,18 @@ pub enum AgentType {
     Claude,
     Codex,
     TraeCli,
+    Hermes,
 }
 
 impl AgentType {
-    pub const ALL: [Self; 3] = [Self::Claude, Self::Codex, Self::TraeCli];
+    pub const ALL: [Self; 4] = [Self::Claude, Self::Codex, Self::TraeCli, Self::Hermes];
 
     pub fn agent(self) -> Agent {
         match self {
             Self::Claude => Agent::Claude,
             Self::Codex => Agent::Codex,
             Self::TraeCli => Agent::TraeCli,
+            Self::Hermes => Agent::Hermes,
         }
     }
 
@@ -75,7 +77,7 @@ impl AgentLaunch {
             return Err(LaunchError::Invalid("invalid resume session ID".to_owned()));
         }
         let argument = match self.agent_type {
-            AgentType::Claude => "--resume",
+            AgentType::Claude | AgentType::Hermes => "--resume",
             AgentType::Codex | AgentType::TraeCli => "resume",
         };
         self.args

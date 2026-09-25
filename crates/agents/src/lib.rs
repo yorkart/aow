@@ -15,4 +15,4 @@ pub mod process;
 mod registry;
 
 pub use process::{AgentProcessMatcher, ProcessInfo, recognize_process};
-pub use registry::{Agent, AgentDefinition, CLAUDE, CODEX, KNOWN_AGENTS, TRAECLI};
+pub use registry::{Agent, AgentDefinition, CLAUDE, CODEX, HERMES, KNOWN_AGENTS, TRAECLI};

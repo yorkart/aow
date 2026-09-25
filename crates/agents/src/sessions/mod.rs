@@ -1,6 +1,7 @@
 mod claude;
 mod codex;
 mod codex_like;
+mod hermes;
 pub mod snapshot;
 pub mod tail;
 pub mod tracking;
@@ -59,6 +60,7 @@ pub struct AgentSessionLocator {
     pub session_id: String,
     pub title: String,
     pub cwd: PathBuf,
+    /// Native transcript file, or the Hermes state database.
     pub transcript_path: PathBuf,
     pub trusted_root: PathBuf,
 }
@@ -95,6 +97,7 @@ pub struct SessionRoots {
     pub(crate) claude: PathBuf,
     pub(crate) codex: PathBuf,
     pub(crate) traecli: PathBuf,
+    pub(crate) hermes: PathBuf,
 }
 
 impl SessionRoots {
@@ -112,6 +115,7 @@ impl SessionRoots {
             claude: SessionAgent::Claude.session_root(process_home, environment),
             codex: SessionAgent::Codex.session_root(process_home, environment),
             traecli: SessionAgent::TraeCli.session_root(process_home, environment),
+            hermes: SessionAgent::Hermes.session_root(process_home, environment),
         }
     }
 
@@ -242,6 +246,7 @@ pub enum SessionAgent {
     Claude,
     Codex,
     TraeCli,
+    Hermes,
 }
 
 impl SessionAgent {
@@ -250,6 +255,7 @@ impl SessionAgent {
             Self::Claude => Agent::Claude,
             Self::Codex => Agent::Codex,
             Self::TraeCli => Agent::TraeCli,
+            Self::Hermes => Agent::Hermes,
         }
     }
 }
@@ -260,6 +266,7 @@ impl Agent {
             Self::Claude => Some(SessionAgent::Claude),
             Self::Codex => Some(SessionAgent::Codex),
             Self::TraeCli => Some(SessionAgent::TraeCli),
+            Self::Hermes => Some(SessionAgent::Hermes),
             _ => None,
         }
     }
@@ -271,6 +278,7 @@ impl AgentSessionProvider for SessionAgent {
             Self::Claude => claude::Claude.session_root(process_home, environment),
             Self::Codex => codex::Codex.session_root(process_home, environment),
             Self::TraeCli => traecli::TraeCli.session_root(process_home, environment),
+            Self::Hermes => hermes::Hermes.session_root(process_home, environment),
         }
     }
     fn list_sessions(&self, roots: &SessionRoots, workspace_path: &Path) -> Vec<AgentSession> {
@@ -278,6 +286,7 @@ impl AgentSessionProvider for SessionAgent {
             Self::Claude => claude::Claude.list_sessions(roots, workspace_path),
             Self::Codex => codex::Codex.list_sessions(roots, workspace_path),
             Self::TraeCli => traecli::TraeCli.list_sessions(roots, workspace_path),
+            Self::Hermes => hermes::Hermes.list_sessions(roots, workspace_path),
         }
     }
     fn find_session(&self, roots: &SessionRoots, session_id: &str) -> Option<AgentSession> {
@@ -285,6 +294,7 @@ impl AgentSessionProvider for SessionAgent {
             Self::Claude => claude::Claude.find_session(roots, session_id),
             Self::Codex => codex::Codex.find_session(roots, session_id),
             Self::TraeCli => traecli::TraeCli.find_session(roots, session_id),
+            Self::Hermes => hermes::Hermes.find_session(roots, session_id),
         }
     }
     fn current_title(&self, locator: &AgentSessionLocator) -> Option<String> {
@@ -296,6 +306,7 @@ impl AgentSessionProvider for SessionAgent {
             Self::Claude => claude::Claude.current_title(locator),
             Self::Codex => codex::Codex.current_title(locator),
             Self::TraeCli => traecli::TraeCli.current_title(locator),
+            Self::Hermes => hermes::Hermes.current_title(locator),
         }
     }
     fn read_snapshot(
@@ -311,6 +322,7 @@ impl AgentSessionProvider for SessionAgent {
             Self::Claude => claude::Claude.read_snapshot(locator),
             Self::Codex => codex::Codex.read_snapshot(locator),
             Self::TraeCli => traecli::TraeCli.read_snapshot(locator),
+            Self::Hermes => hermes::Hermes.read_snapshot(locator),
         }
     }
 }

@@ -32,12 +32,23 @@ pub const TRAECLI: AgentDefinition = AgentDefinition {
     configuration_env: &["TRAECLI_HOME", "TRAE_HOME"],
 };
 
+pub const HERMES: AgentDefinition = AgentDefinition {
+    id: "hermes",
+    display_name: "Hermes",
+    commands: &["hermes"],
+    // The classic CLI has a stable input prompt, independent of the user's
+    // preferred interface. Hermes accepts --cli for both chat and resume.
+    args: &["--cli"],
+    configuration_env: &["HERMES_HOME"],
+};
+
 /// Built-in agent adapters. New behavior is added in source and compiled into the binary.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Agent {
     Claude,
     Codex,
     TraeCli,
+    Hermes,
     Gemini,
     OpenCode,
     Aider,
@@ -53,6 +64,7 @@ pub const KNOWN_AGENTS: &[Agent] = &[
     Agent::Claude,
     Agent::Codex,
     Agent::TraeCli,
+    Agent::Hermes,
     Agent::Gemini,
     Agent::OpenCode,
     Agent::Aider,
@@ -81,6 +93,7 @@ impl Agent {
             Self::Claude => &CLAUDE,
             Self::Codex => &CODEX,
             Self::TraeCli => &TRAECLI,
+            Self::Hermes => &HERMES,
             Self::Gemini => &AgentDefinition {
                 id: "gemini",
                 display_name: "Gemini CLI",

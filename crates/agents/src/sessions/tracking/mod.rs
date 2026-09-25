@@ -6,6 +6,7 @@
 mod claude;
 mod codex;
 mod codex_like;
+mod hermes;
 mod traecli;
 
 use std::{future::Future, path::Path};
@@ -75,6 +76,7 @@ pub enum TrackingAgent {
     Claude,
     Codex,
     TraeCli,
+    Hermes,
 }
 
 impl TrackingAgent {
@@ -83,6 +85,7 @@ impl TrackingAgent {
             Self::Claude => Agent::Claude,
             Self::Codex => Agent::Codex,
             Self::TraeCli => Agent::TraeCli,
+            Self::Hermes => Agent::Hermes,
         }
     }
 }
@@ -93,6 +96,7 @@ impl Agent {
             Self::Claude => Some(TrackingAgent::Claude),
             Self::Codex => Some(TrackingAgent::Codex),
             Self::TraeCli => Some(TrackingAgent::TraeCli),
+            Self::Hermes => Some(TrackingAgent::Hermes),
             _ => None,
         }
     }
@@ -104,6 +108,7 @@ impl AgentSessionTracker for TrackingAgent {
             Self::Claude => claude::Claude.resolve_live_session(context).await,
             Self::Codex => codex::Codex.resolve_live_session(context).await,
             Self::TraeCli => traecli::TraeCli.resolve_live_session(context).await,
+            Self::Hermes => hermes::Hermes.resolve_live_session(context).await,
         }
     }
 
@@ -117,6 +122,7 @@ impl AgentSessionTracker for TrackingAgent {
             Self::Claude => claude::Claude.candidate_sessions(target, cwd, roots),
             Self::Codex => codex::Codex.candidate_sessions(target, cwd, roots),
             Self::TraeCli => traecli::TraeCli.candidate_sessions(target, cwd, roots),
+            Self::Hermes => hermes::Hermes.candidate_sessions(target, cwd, roots),
         }
     }
 
@@ -125,6 +131,7 @@ impl AgentSessionTracker for TrackingAgent {
             Self::Claude => claude::Claude.task_stop_parser(),
             Self::Codex => codex::Codex.task_stop_parser(),
             Self::TraeCli => traecli::TraeCli.task_stop_parser(),
+            Self::Hermes => hermes::Hermes.task_stop_parser(),
         }
     }
 }

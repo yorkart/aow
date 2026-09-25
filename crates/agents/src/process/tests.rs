@@ -45,6 +45,28 @@ fn recognizes_native_agents_and_interpreter_entrypoints_only() {
         ),
         ("/usr/bin/echo", vec!["echo", "codex"], None),
         (
+            "/usr/bin/python3.13",
+            vec!["python3.13", "/venv/bin/hermes", "--cli"],
+            Some("hermes"),
+        ),
+        (
+            "/Library/Frameworks/Python.framework/Python",
+            vec!["python3", "/venv/bin/hermes"],
+            Some("hermes"),
+        ),
+        ("/usr/bin/python3", vec!["python3", "-c", "hermes"], None),
+        (
+            "/usr/bin/python3",
+            vec!["python3", "-m", "unrelated", "hermes"],
+            None,
+        ),
+        (
+            "/usr/bin/python3",
+            vec!["python3", "/project/worker.py", "/venv/bin/hermes"],
+            None,
+        ),
+        ("/usr/bin/echo", vec!["echo", "hermes"], None),
+        (
             "/usr/bin/node",
             vec!["node", "server.js", "/opt/codex"],
             None,

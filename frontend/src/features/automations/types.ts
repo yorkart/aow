@@ -1,4 +1,4 @@
-export type AutomationAgent = 'codex' | 'traecli' | 'claude';
+export type AutomationAgent = 'codex' | 'traecli' | 'claude' | 'hermes';
 
 export type WorkspaceMode = 'existing' | 'new_worktree' | 'new_branch' | 'temporary';
 

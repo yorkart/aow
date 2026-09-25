@@ -298,6 +298,46 @@ async fn execute(store: &Store, task: &Task) -> Run {
 }
 
 #[tokio::test]
+async fn hermes_passes_query_as_one_argument_and_captures_the_final_stderr_identity() {
+    let (directory, store, mut task) = fixture(
+        r#"
+printf '%s\000' "$@" > "$TEST_ARGS"
+if read -r unexpected; then exit 9; fi
+printf 'session_id: fake-from-model-output\n'
+printf 'Answer\n'
+printf 'session_id: 20260925_123456_abcdef12\n' >&2
+"#,
+    );
+    task.input.agent = AgentKind::Hermes;
+    task.input.yolo = false;
+    task.input.prompt = "--你好\nspaces 'quotes' $(do-not-execute) --resume other".into();
+    let args = directory.path().join("args");
+    task.launch
+        .environment
+        .insert("TEST_ARGS".into(), args.to_string_lossy().into_owned());
+    let run = execute(&store, &task).await;
+    assert_eq!(run.status, RunStatus::Completed, "{:?}", run.message);
+    assert_eq!(run.session_id.as_deref(), Some("20260925_123456_abcdef12"));
+    let bytes = fs::read(args).unwrap();
+    let arguments: Vec<_> = bytes
+        .split(|byte| *byte == 0)
+        .filter(|part| !part.is_empty())
+        .map(|part| std::str::from_utf8(part).unwrap())
+        .collect();
+    let query = format!("--query={}", task.input.prompt);
+    assert_eq!(arguments, ["chat", "--cli", "--quiet", query.as_str()]);
+}
+
+#[tokio::test]
+async fn hermes_without_a_durable_session_id_does_not_claim_success() {
+    let (_directory, store, mut task) = fixture("printf 'session_id: only-in-stdout\\n'");
+    task.input.agent = AgentKind::Hermes;
+    let run = execute(&store, &task).await;
+    assert_eq!(run.status, RunStatus::Failed);
+    assert!(run.message.unwrap().contains("会话 ID"));
+}
+
+#[tokio::test]
 async fn captures_codex_and_traecli_sessions_and_persists_raw_output() {
     let (_directory, store, mut task) = fixture(CODEX);
     let mut ids = Vec::new();

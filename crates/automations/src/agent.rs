@@ -9,7 +9,7 @@ use std::{
 };
 
 use anyhow::Result;
-use aow_agents::automation::AgentAutomation;
+use aow_agents::automation::{AgentAutomation, PromptMode};
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader},
     process::Command,
@@ -42,7 +42,6 @@ pub fn command(
         .current_dir(directory)
         .envs(&task.launch.environment)
         .envs(agent_environment)
-        .stdin(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true)
         .process_group(0);
@@ -53,6 +52,17 @@ pub fn command(
                 .automation_arguments(task.input.yolo, session_id)?,
         )
         .stdout(Stdio::piped());
+    match task.input.agent.prompt_mode() {
+        PromptMode::Stdin => {
+            command.stdin(Stdio::piped());
+        }
+        PromptMode::Argument(flag) => {
+            // Keep leading dashes in the prompt from becoming CLI options.
+            command
+                .arg(format!("{flag}={}", task.input.prompt))
+                .stdin(Stdio::null());
+        }
+    }
     Ok(command)
 }
 
