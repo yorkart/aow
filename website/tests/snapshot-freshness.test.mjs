@@ -7,6 +7,43 @@ import { test } from "node:test";
 import { checkSnapshotFreshness } from "../scripts/check-snapshot-freshness.mjs";
 import { captureSourceState, blobHash } from "../scripts/snapshot-source.mjs";
 
+test("captured history keeps merged branches together when commit dates interleave", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "aow-merge-history-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const git = (...args) => execFileSync("git", args, {
+    cwd: root,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+  git("init", "--quiet");
+  git("config", "user.name", "Snapshot test");
+  git("config", "user.email", "snapshot@example.invalid");
+  git("config", "commit.gpgsign", "false");
+  await writeFile(join(root, "README.md"), "Merge history fixture\n");
+  git("add", "README.md");
+  const tree = git("write-tree");
+  const commit = (day, subject, ...parents) => {
+    const date = `2026-01-0${day}T12:00:00Z`;
+    return execFileSync("git", [
+      "commit-tree", tree, ...parents.flatMap((id) => ["-p", id]), "-m", subject,
+    ], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date },
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+  };
+  const base = commit(1, "Base");
+  const mainFirst = commit(2, "Main first", base);
+  const featureFirst = commit(3, "Feature first", base);
+  const mainLast = commit(4, "Main last", mainFirst);
+  const featureLast = commit(5, "Feature last", featureFirst);
+  const revision = commit(6, "Merge main into feature", featureLast, mainLast);
+  const source = captureSourceState(root, revision);
+  assert.deepEqual(source.commits, [revision, mainLast, mainFirst, featureLast, featureFirst]);
+  assert.notDeepEqual(source.commits, git("log", "-5", "--format=%H", revision).split("\n"));
+});
+
 test("freshness tracks product content, including uncommitted changes, without an artifact commit loop", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "aow-freshness-"));
   t.after(() => rm(root, { recursive: true, force: true }));

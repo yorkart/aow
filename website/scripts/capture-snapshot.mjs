@@ -180,7 +180,7 @@ try {
           sent = true;
           ws.send(JSON.stringify({ type: "resize", cols: 100, rows: 30 }));
           // These are the only commands submitted to the isolated captured PTY.
-          ws.send(Buffer.from("git log -5 --oneline\r"));
+          ws.send(Buffer.from("git log --topo-order -5 --oneline\r"));
           setTimeout(
             () => ws.send(Buffer.from("git status --short --branch\r")),
             250,
@@ -304,7 +304,7 @@ try {
     omittedCommitDiffs,
     scope:
       "Isolated checkout of this local repository commit; selected tracked files and up to 5 commits. Generated snapshot payload diffs and remote tracking refs are omitted. No personal Agent sessions or scheduled tasks.",
-    commands: ["git log -5 --oneline", "git status --short --branch"],
+    commands: ["git log --topo-order -5 --oneline", "git status --short --branch"],
     terminal: {
       tabId: terminal.id,
       paneId: pane.id,

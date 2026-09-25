@@ -35,7 +35,7 @@ test("captured files, history and terminal output agree with the recorded source
   for (const id of commits)
     assert.ok(snapshot.terminal.output.includes(id.slice(0, 7)));
   assert.deepEqual(snapshot.commands, [
-    "git log -5 --oneline",
+    "git log --topo-order -5 --oneline",
     "git status --short --branch",
   ]);
   for (const command of snapshot.commands)
