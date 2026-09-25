@@ -128,6 +128,8 @@ jobs:
           key: release-${{ matrix.platform }}-${{ hashFiles('Cargo.lock') }}-${{ github.sha }}
           restore-keys: release-${{ matrix.platform }}-${{ hashFiles('Cargo.lock') }}-
       - name: Build and validate native package
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: |
           package=$(bash scripts/package-release.sh --version "$RELEASE_VERSION")
           mkdir -p target/release-assets
