@@ -2,7 +2,10 @@
 use std::{
     collections::HashSet,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use axum::{
@@ -18,9 +21,12 @@ use uuid::Uuid;
 use crate::{
     AppState, HttpError,
     aow::{AowError, atomic_save_document},
-    im::{ImConfig, ImConfigUpdate, ImConfigView, ImKind, ImProvider, Provider},
     terminal::notifications::TaskStopNotification,
 };
+
+use aow_im::{ImConfig, ImConfigUpdate, ImConfigView, ImKind, ImProvider, Provider};
+
+mod messages;
 
 const FILE_NAME: &str = "notification-settings.json";
 const QUEUE_CAPACITY: usize = 64;
@@ -35,6 +41,7 @@ pub(crate) struct AutomationFailureNotification {
 pub(crate) enum Channel {
     Page,
     Feishu,
+    Wechat,
 }
 
 impl Channel {
@@ -42,6 +49,7 @@ impl Channel {
         match self {
             Self::Page => None,
             Self::Feishu => Some(ImKind::Feishu),
+            Self::Wechat => Some(ImKind::Wechat),
         }
     }
 }
@@ -119,13 +127,20 @@ impl Document {
             if let Some(kind) = channel.provider()
                 && !providers.contains(&kind)
             {
-                return Err("请先配置飞书机器人；移除机器人前请取消选择飞书推送".into());
+                let name = if kind == ImKind::Feishu {
+                    "飞书"
+                } else {
+                    "微信"
+                };
+                return Err(format!(
+                    "请先配置{name}机器人；移除机器人前请取消选择{name}推送"
+                ));
             }
         }
         Ok(())
     }
 
-    fn view(&self) -> SettingsView {
+    pub(crate) fn view(&self) -> SettingsView {
         SettingsView {
             im: ImSettingsView {
                 providers: self.im.providers.iter().map(ImConfig::view).collect(),
@@ -141,14 +156,24 @@ struct ImSettingsView {
 }
 
 #[derive(Serialize)]
-struct SettingsView {
+pub(crate) struct SettingsView {
     im: ImSettingsView,
     notifications: NotificationSettings,
 }
 
 #[derive(Deserialize)]
 #[serde(tag = "section", rename_all = "snake_case", deny_unknown_fields)]
-enum SettingsUpdate {
+pub(crate) enum SettingsUpdate {
+    ImProvider {
+        config: ImConfigUpdate,
+    },
+    ImRemove {
+        provider: ImKind,
+    },
+    #[serde(skip)]
+    WechatBinding {
+        credentials: aow_im::wechat::Credentials,
+    },
     Im {
         providers: Vec<ImConfigUpdate>,
     },
@@ -178,6 +203,8 @@ struct Delivery {
 
 struct Inner {
     path: Option<PathBuf>,
+    started: AtomicBool,
+    wechat_login: aow_im::wechat::LoginManager,
     state: Mutex<RuntimeState>,
     sender: mpsc::Sender<Delivery>,
     receiver: Mutex<Option<mpsc::Receiver<Delivery>>>,
@@ -194,13 +221,14 @@ impl NotificationManager {
     pub(crate) async fn send_automation_failure(
         &self,
         run: aow_automations::Run,
+        channel: aow_automations::FailureNotification,
         delivery_id: &str,
     ) -> anyhow::Result<bool> {
-        let Some((provider, event)) = self.automation_delivery(run) else {
+        let Some((provider, event)) = self.automation_delivery(run, channel) else {
             return Ok(false);
         };
         provider
-            .send_automation_failure(&event, delivery_id)
+            .send(&messages::automation_failure(&event), delivery_id)
             .await?;
         Ok(true)
     }
@@ -208,6 +236,7 @@ impl NotificationManager {
     fn automation_delivery(
         &self,
         run: aow_automations::Run,
+        channel: aow_automations::FailureNotification,
     ) -> Option<(Provider, AutomationFailureNotification)> {
         let (provider, base_url) = {
             let state = self.inner.state.lock().unwrap();
@@ -215,7 +244,13 @@ impl NotificationManager {
                 state
                     .providers
                     .iter()
-                    .find(|provider| provider.config.kind() == ImKind::Feishu)
+                    .find(|provider| {
+                        provider.config.kind()
+                            == match channel {
+                                aow_automations::FailureNotification::Feishu => ImKind::Feishu,
+                                aow_automations::FailureNotification::Wechat => ImKind::Wechat,
+                            }
+                    })
                     .map(|provider| provider.provider.clone()),
                 state.document.notifications.public_base_url.clone(),
             )
@@ -251,11 +286,18 @@ impl NotificationManager {
 
     fn new(path: Option<PathBuf>, document: Document) -> Result<Self, AowError> {
         document.validate().map_err(AowError::Invalid)?;
-        let providers = build_providers(&document.im.providers, &[])?;
+        let providers = build_providers(
+            &document.im.providers,
+            &[],
+            path.as_deref().and_then(Path::parent),
+        )?;
         let (sender, receiver) = mpsc::channel(QUEUE_CAPACITY);
         Ok(Self {
             inner: Arc::new(Inner {
                 path,
+                started: AtomicBool::new(false),
+                wechat_login: aow_im::wechat::LoginManager::new()
+                    .map_err(AowError::Configuration)?,
                 state: Mutex::new(RuntimeState {
                     document,
                     providers,
@@ -267,20 +309,54 @@ impl NotificationManager {
         })
     }
 
-    fn view(&self) -> SettingsView {
+    pub(crate) fn view(&self) -> SettingsView {
         self.inner.state.lock().unwrap().document.view()
     }
 
-    fn update(&self, update: SettingsUpdate) -> Result<SettingsView, AowError> {
+    pub(crate) fn update(&self, update: SettingsUpdate) -> Result<SettingsView, AowError> {
         let mut state = self.inner.state.lock().unwrap();
         let mut next = state.document.clone();
         match update {
+            SettingsUpdate::WechatBinding { credentials } => {
+                next.im
+                    .providers
+                    .retain(|config| config.kind() != ImKind::Wechat);
+                next.im.providers.push(ImConfig::Wechat { credentials });
+            }
+            SettingsUpdate::ImProvider { config } => {
+                let config = config
+                    .resolve(&state.document.im.providers)
+                    .map_err(AowError::Invalid)?;
+                next.im.providers.retain(|old| old.kind() != config.kind());
+                next.im.providers.push(config);
+            }
+            SettingsUpdate::ImRemove { provider } => {
+                next.im.providers.retain(|config| config.kind() != provider);
+            }
             SettingsUpdate::Im { providers } => {
                 next.im.providers = providers
                     .into_iter()
                     .map(|update| update.resolve(&state.document.im.providers))
                     .collect::<Result<_, _>>()
                     .map_err(AowError::Invalid)?;
+                // Legacy clients replace the Feishu list. They cannot disconnect
+                // a QR binding that was added after they loaded their settings.
+                if !next
+                    .im
+                    .providers
+                    .iter()
+                    .any(|config| config.kind() == ImKind::Wechat)
+                {
+                    next.im.providers.extend(
+                        state
+                            .document
+                            .im
+                            .providers
+                            .iter()
+                            .filter(|config| config.kind() == ImKind::Wechat)
+                            .cloned(),
+                    );
+                }
             }
             SettingsUpdate::Notifications {
                 agent_task_completed,
@@ -294,9 +370,23 @@ impl NotificationManager {
             }
         }
         next.validate().map_err(AowError::Invalid)?;
-        let providers = build_providers(&next.im.providers, &state.providers)?;
+        let providers = build_providers(
+            &next.im.providers,
+            &state.providers,
+            self.inner.path.as_deref().and_then(Path::parent),
+        )?;
         if let Some(path) = &self.inner.path {
             atomic_save_document(path, &next)?;
+        }
+        for previous in &state.providers {
+            if !next.im.providers.contains(&previous.config) {
+                previous.provider.retire();
+            }
+        }
+        if self.inner.started.load(Ordering::Relaxed) {
+            for configured in &providers {
+                configured.provider.start();
+            }
         }
         state.document = next;
         state.providers = providers;
@@ -304,7 +394,43 @@ impl NotificationManager {
         Ok(state.document.view())
     }
 
+    pub(crate) fn wechat_login(&self) -> &aow_im::wechat::LoginManager {
+        &self.inner.wechat_login
+    }
+
+    pub(crate) fn wechat_credentials(&self) -> Option<aow_im::wechat::Credentials> {
+        self.inner
+            .state
+            .lock()
+            .unwrap()
+            .document
+            .im
+            .providers
+            .iter()
+            .find_map(|config| match config {
+                ImConfig::Wechat { credentials } => Some(credentials.clone()),
+                _ => None,
+            })
+    }
+
+    pub(crate) fn wechat(&self) -> Option<Arc<aow_im::wechat::WechatClient>> {
+        self.inner
+            .state
+            .lock()
+            .unwrap()
+            .providers
+            .iter()
+            .find_map(|config| match &config.provider {
+                Provider::Wechat(client) => Some(client.clone()),
+                _ => None,
+            })
+    }
+
     pub(crate) fn start(&self) {
+        self.inner.started.store(true, Ordering::Relaxed);
+        for configured in &self.inner.state.lock().unwrap().providers {
+            configured.provider.start();
+        }
         let Some(mut receiver) = self.inner.receiver.lock().unwrap().take() else {
             return;
         };
@@ -337,7 +463,7 @@ impl NotificationManager {
                 drop(inner);
                 for (kind, provider) in providers {
                     if let Err(error) = provider
-                        .send_notification(&delivery.event, &delivery.id)
+                        .send(&messages::task_completed(&delivery.event), &delivery.id)
                         .await
                     {
                         tracing::warn!(provider = ?kind, session_id = %delivery.event.session_id, %error, "agent notification delivery failed");
@@ -417,13 +543,14 @@ fn normalize_public_base_url(value: &str) -> Result<String, String> {
 fn build_providers(
     configs: &[ImConfig],
     previous: &[ConfiguredProvider],
+    state_dir: Option<&Path>,
 ) -> Result<Vec<ConfiguredProvider>, AowError> {
     configs
         .iter()
         .map(|config| {
             let provider = match previous.iter().find(|old| old.config == *config) {
                 Some(old) => old.provider.clone(),
-                None => config.build().map_err(AowError::Configuration)?,
+                None => config.build(state_dir).map_err(AowError::Configuration)?,
             };
             Ok(ConfiguredProvider {
                 config: config.clone(),

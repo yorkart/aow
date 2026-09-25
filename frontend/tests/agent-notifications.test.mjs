@@ -34,6 +34,25 @@ const server = await createServer({
       }
       response.end(JSON.stringify(settings()));
     });
+    server.middlewares.use('/api/aow/im/feishu', async (request, response) => {
+      response.setHeader('Content-Type', 'application/json');
+      if (request.method === 'DELETE') {
+        if (preferences.channels.includes('feishu')) {
+          response.statusCode = 400;
+          response.end(JSON.stringify({ message: '请先取消选择飞书推送' }));
+          return;
+        }
+        providers = providers.filter(provider => provider.provider !== 'feishu');
+      } else {
+        let text = '';
+        for await (const chunk of request) text += chunk;
+        const input = JSON.parse(text);
+        storedSecret = input.app_secret || storedSecret;
+        providers = [...providers.filter(provider => provider.provider !== 'feishu'),
+          { provider: 'feishu', app_id: input.app_id, secret_configured: true }];
+      }
+      response.end(JSON.stringify(settings()));
+    });
     server.middlewares.use('/api/terminals/task-stops', (request, response) => {
       response.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
       response.write(': connected\n\n');
@@ -328,6 +347,101 @@ try {
     await page.screenshot({ path: '/tmp/aow-im-settings.png' });
     await page.close();
     await waitConnections(0);
+  });
+  await test('wechat QR verification, private test delivery and provider edits work independently', async t => {
+    preferences = { enabled: true, channels: ['page'] };
+    providers = [{ provider: 'feishu', app_id: 'cli_existing', secret_configured: true }];
+    const page = await browser.newPage({ viewport: { width: 1100, height: 1000 } });
+    t.after(() => page.close());
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    let testsSent = 0;
+    const qr = `data:image/svg+xml;base64,${Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="white"/><rect x="32" y="32" width="64" height="64"/></svg>').toString('base64')}`;
+    await page.route('**/api/aow/im/wechat**', async route => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      if (path.endsWith('/login')) return route.fulfill({ json: { id: 'qr-1', status: 'wait', qr_image: qr, message: '请用手机微信扫码。' } });
+      if (path.endsWith('/login/qr-1')) {
+        if (request.method() === 'DELETE') return route.fulfill({ status: 204 });
+        const code = request.postDataJSON()?.verify_code;
+        if (!code) return route.fulfill({ json: { id: 'qr-1', status: 'need_verifycode', qr_image: qr, message: '请输入手机微信显示的数字。' } });
+        assert.equal(code, '123456');
+        providers.push({ provider: 'wechat', account_id: 'bot', user_id: 'scanner' });
+        return route.fulfill({ json: { id: 'qr-1', status: 'confirmed', qr_image: null, message: '微信 Bot 已绑定，通知将发给本次扫码的微信账号。' } });
+      }
+      if (path.endsWith('/test')) { testsSent++; return route.fulfill({ json: { message: '测试消息已发送。' } }); }
+      if (request.method() === 'DELETE') {
+        if (preferences.channels.includes('wechat')) return route.fulfill({ status: 400, json: { message: '移除机器人前请取消选择微信推送' } });
+        providers = providers.filter(provider => provider.provider !== 'wechat');
+        return route.fulfill({ json: settings() });
+      }
+      return route.fulfill({ json: { connection: { receiving: true, context_ready: true, error: null } } });
+    });
+    await page.goto(`${base}/tests/agent-notifications-preview.html`);
+    await page.getByRole('button', { name: 'IM 设置', exact: true }).click();
+    await page.getByRole('button', { name: '扫码连接微信' }).click();
+    await page.getByLabel('微信配对码').waitFor();
+    assert.equal(await page.getByAltText('微信 Bot 登录二维码').evaluate(image => image.complete && image.naturalWidth > 0), true);
+    await page.screenshot({ path: '/tmp/aow-wechat-pairing.png' });
+    await page.getByLabel('微信配对码').fill('123456');
+    await page.getByRole('button', { name: '确认配对码' }).click();
+    await page.getByText('接收账号：scanner', { exact: true }).waitFor();
+    assert.equal(testsSent, 0);
+    await page.getByRole('button', { name: '发送微信测试消息' }).click();
+    await page.getByText('测试消息已发送。', { exact: true }).waitFor();
+    assert.equal(testsSent, 1);
+    await page.getByLabel('飞书 App ID').fill('cli_new');
+    await page.getByLabel('飞书 App Secret').fill('secret');
+    await page.getByRole('button', { name: '保存', exact: true }).click();
+    await page.getByText('IM 配置已保存。', { exact: true }).waitFor();
+    assert.equal(providers.some(provider => provider.provider === 'wechat'), true);
+    await page.getByRole('button', { name: '移除飞书配置' }).click();
+    await page.getByRole('button', { name: '移除飞书配置' }).waitFor({ state: 'detached' });
+    assert.deepEqual(providers.map(provider => provider.provider), ['wechat']);
+    await page.getByRole('button', { name: '通知设置', exact: true }).click();
+    await page.getByLabel('微信推送', { exact: true }).check();
+    await page.getByRole('button', { name: '保存', exact: true }).click();
+    await page.getByText('通知配置已保存，即时生效。', { exact: true }).waitFor();
+    assert.deepEqual(preferences.channels, ['page', 'wechat']);
+    await page.getByRole('button', { name: 'IM 设置', exact: true }).click();
+    await page.getByRole('button', { name: '解除微信绑定' }).click();
+    await page.getByText('移除机器人前请取消选择微信推送', { exact: true }).waitFor();
+    assert.equal(providers.length, 1);
+    await page.getByRole('button', { name: '通知设置', exact: true }).click();
+    await page.getByLabel('微信推送', { exact: true }).uncheck();
+    await page.getByRole('button', { name: '保存', exact: true }).click();
+    await page.getByText('通知配置已保存，即时生效。', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'IM 设置', exact: true }).click();
+    await page.getByRole('button', { name: '解除微信绑定' }).click();
+    await page.getByRole('button', { name: '扫码连接微信' }).waitFor();
+    assert.deepEqual(providers, []);
+    assert.deepEqual(errors, []);
+  });
+
+  await test('expired QR can be refreshed and leaving settings cancels pending login', async t => {
+    preferences = { enabled: true, channels: ['page'] }; providers = [];
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    t.after(() => page.close());
+    let starts = 0;
+    const cancelled = [];
+    await page.route('**/api/aow/im/wechat/login**', route => {
+      const request = route.request();
+      if (request.url().endsWith('/login')) return route.fulfill({ json: { id: `qr-${++starts}`, status: 'wait', qr_image: null, message: '等待扫码' } });
+      if (request.method() === 'DELETE') { cancelled.push(request.url().split('/').at(-1)); return route.fulfill({ status: 204 }); }
+      const id = request.url().split('/').at(-1);
+      return route.fulfill({ json: { id, status: id === 'qr-1' ? 'expired' : 'wait', qr_image: null, message: id === 'qr-1' ? '二维码已过期，请重新生成。' : '等待扫码' } });
+    });
+    await page.goto(`${base}/tests/agent-notifications-preview.html`);
+    await page.getByRole('button', { name: 'IM 设置', exact: true }).click();
+    await page.getByRole('button', { name: '扫码连接微信' }).click();
+    await page.getByText('二维码已过期，请重新生成。', { exact: true }).waitFor();
+    await page.getByRole('button', { name: '重新生成二维码' }).click();
+    await page.getByText('等待扫码', { exact: true }).waitFor();
+    await Promise.all([
+      page.waitForResponse(response => response.url().endsWith('/login/qr-2') && response.request().method() === 'DELETE'),
+      page.getByRole('button', { name: '通知设置', exact: true }).click(),
+    ]);
+    assert.ok(cancelled.includes('qr-1') && cancelled.includes('qr-2'));
   });
 } finally {
   await browser?.close();

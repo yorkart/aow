@@ -6,8 +6,7 @@ use serde_json::{Value, json};
 use tokio::sync::Mutex;
 
 use super::ImProvider;
-use crate::notifications::AutomationFailureNotification;
-use crate::terminal::notifications::TaskStopNotification;
+use crate::Message;
 
 mod cards;
 
@@ -21,7 +20,7 @@ struct CachedToken {
     refresh_at: Instant,
 }
 
-pub(crate) struct FeishuClient {
+pub struct FeishuClient {
     http: Client,
     base_url: String,
     app_id: String,
@@ -157,10 +156,9 @@ impl FeishuClient {
             // for the authentication layer; never log the response body or secrets.
             if let Some(data) = data
                 && data["code"].as_i64().is_some()
+                && (status.is_success() || data["code"].as_i64() != Some(0))
             {
-                if status.is_success() || data["code"].as_i64() != Some(0) {
-                    return Ok(data);
-                }
+                return Ok(data);
             }
             bail!("飞书响应无效（HTTP {}）", status.as_u16());
         }
@@ -202,21 +200,8 @@ impl FeishuClient {
 }
 
 impl ImProvider for FeishuClient {
-    async fn send_notification(
-        &self,
-        event: &TaskStopNotification,
-        delivery_id: &str,
-    ) -> Result<()> {
-        self.send_cards(|owner| cards::messages(event, owner, delivery_id))
-            .await
-    }
-
-    async fn send_automation_failure(
-        &self,
-        event: &AutomationFailureNotification,
-        delivery_id: &str,
-    ) -> Result<()> {
-        self.send_cards(|owner| Ok(vec![cards::automation_failure(event, owner, delivery_id)?]))
+    async fn send(&self, message: &Message, delivery_id: &str) -> Result<()> {
+        self.send_cards(|owner| cards::messages(message, owner, delivery_id))
             .await
     }
 }

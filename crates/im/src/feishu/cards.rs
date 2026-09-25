@@ -4,102 +4,20 @@
 use std::ops::Range;
 
 use anyhow::{Result, bail, ensure};
-use aow_agents::Agent;
 use serde_json::{Value, json};
 
-use crate::notifications::AutomationFailureNotification;
-use crate::terminal::notifications::TaskStopNotification;
+use crate::Message;
 
 const MAX_REQUEST_BYTES: usize = 28_000;
 
-pub(super) fn automation_failure(
-    event: &AutomationFailureNotification,
-    owner: &str,
-    delivery_id: &str,
-) -> Result<Value> {
-    let run = &event.run;
-    let mut elements = vec![
-        plain_text(format!(
-            "任务：{}\nAgent：{}\n任务 ID：{}\n执行 ID：{}\n结束时间：{}\n耗时：{}\n退出码：{}",
-            run.task_name,
-            run.agent.id(),
-            run.task_id,
-            run.id,
-            run.finished_at
-                .map(|at| at.to_rfc3339())
-                .unwrap_or_else(|| "未知".into()),
-            run.duration_ms
-                .map(|ms| format!("{:.1} 秒", ms as f64 / 1000.0))
-                .unwrap_or_else(|| "未知".into()),
-            run.exit_code
-                .map(|code| code.to_string())
-                .unwrap_or_else(|| "无".into()),
-        )),
-        plain_text(format!(
-            "失败原因：\n{}",
-            run.message
-                .as_deref()
-                .unwrap_or("未记录失败原因")
-                .chars()
-                .take(2000)
-                .collect::<String>()
-        )),
-    ];
-    if let Some(url) = &event.run_url {
-        elements.push(json!({"tag":"div","text":{"tag":"lark_md","content":format!("[查看执行记录]({url})")}}));
-    }
-    let card = json!({
-        "schema":"2.0", "config":{"update_multi":true},
-        "header":{"title":{"tag":"plain_text","content":format!("自动化失败 · {}", run.task_name)},"template":"red"},
-        "body":{"elements":elements}
-    });
-    let message = json!({"receive_id":owner,"msg_type":"interactive","content":serde_json::to_string(&card)?,"uuid":delivery_id});
-    ensure!(
-        size(&message)? <= MAX_REQUEST_BYTES,
-        "飞书失败提醒超出大小限制"
-    );
-    Ok(message)
-}
-
-pub(super) fn messages(
-    event: &TaskStopNotification,
-    owner: &str,
-    delivery_id: &str,
-) -> Result<Vec<Value>> {
-    let agent = Agent::from_id(&event.agent)
-        .map(|agent| agent.definition().display_name)
-        .unwrap_or(&event.agent);
-    let mut projects = Vec::new();
-    let mut metadata = Vec::new();
-    for source in &event.sources {
-        let project = source.project_name.trim();
-        if !project.is_empty() && !projects.contains(&project) {
-            projects.push(project);
-        }
-        metadata.push(match &source.tab_url {
-            Some(url) => json!({"tag":"div","text":{"tag":"lark_md",
-                "content":format!("Tab：[{}]({url})", link_label(&source.tab_name))}}),
-            None => plain_text(format!("Tab：{}", source.tab_name)),
-        });
-    }
-    let project = if projects.is_empty() {
-        "未命名项目".to_owned()
-    } else {
-        projects.join("、")
-    };
-    let title = format!("{project}·{}·{agent}·完成", event.title);
-    metadata.push(plain_text(format!(
-        "会话：{}\nSession ID：{}",
-        event.title, event.session_id
-    )));
-    // Plain text keeps arbitrary labels from becoming Markdown or mentions.
-    let metadata = Value::Array(metadata);
-    let text = event
-        .conclusion
-        .as_deref()
-        .filter(|text| !text.trim().is_empty())
-        .unwrap_or("未捕获到本轮结论。");
-    let single = request(&title, &metadata, text, owner, delivery_id, 1, 1)?;
+pub(super) fn messages(message: &Message, owner: &str, delivery_id: &str) -> Result<Vec<Value>> {
+    let metadata = Value::Array(message.fields.iter().map(|field| match &field.url {
+        Some(url) => json!({"tag":"div","text":{"tag":"lark_md",
+            "content":format!("{}：[{}]({url})", link_label(&field.label), link_label(&field.value))}}),
+        None => plain_text(format!("{}：{}", field.label, field.value)),
+    }).collect());
+    let text = &message.body;
+    let single = request(message, &metadata, text, owner, delivery_id, 1, 1)?;
     if size(&single)? <= MAX_REQUEST_BYTES {
         return Ok(vec![single]);
     }
@@ -109,7 +27,7 @@ pub(super) fn messages(
     let reserve = text.len();
     let fits = |fragment: &str| -> Result<bool> {
         Ok(size(&request(
-            &title,
+            message,
             &metadata,
             fragment,
             owner,
@@ -186,7 +104,7 @@ pub(super) fn messages(
         .enumerate()
         .map(|(index, fragment)| {
             let message = request(
-                &title,
+                message,
                 &metadata,
                 &fragment,
                 owner,
@@ -228,7 +146,7 @@ fn size(message: &Value) -> Result<usize> {
 }
 
 fn request(
-    title: &str,
+    message: &Message,
     metadata: &Value,
     conclusion: &str,
     owner: &str,
@@ -237,14 +155,14 @@ fn request(
     total: usize,
 ) -> Result<Value> {
     let title = if total == 1 {
-        title.to_owned()
+        message.title.clone()
     } else {
-        format!("{title} · {index}/{total}")
+        format!("{} · {index}/{total}", message.title)
     };
     let card = json!({
         "schema": "2.0",
         "config": {"update_multi":true, "width_mode":"default"},
-        "header": {"title":{"tag":"plain_text","content":title},"template":"blue"},
+        "header": {"title":{"tag":"plain_text","content":title},"template":if message.error {"red"} else {"blue"}},
         "body": {
             "direction":"vertical", "padding":"12px 12px 20px 12px",
             "elements":[
@@ -253,8 +171,9 @@ fn request(
                      "background_style":"grey-50","padding":"12px",
                      "elements":metadata}
                 ]},
-                {"tag":"markdown","content":"**本轮结论**"},
-                {"tag":"markdown","content":conclusion}
+                plain_text(message.body_label.clone()),
+                if message.markdown { json!({"tag":"markdown","content":conclusion}) }
+                else { plain_text(conclusion.to_owned()) }
             ]
         }
     });

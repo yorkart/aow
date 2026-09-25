@@ -1,7 +1,125 @@
 use super::*;
 use crate::terminal::notifications::TaskStopSource;
+use aow_automations::FailureNotification;
 use serde_json::{Value, json};
 use std::os::unix::fs::PermissionsExt;
+
+fn wechat_credentials() -> aow_im::wechat::Credentials {
+    aow_im::wechat::Credentials {
+        account_id: "wechat-bot".into(),
+        user_id: "scanner".into(),
+        bot_token: "wechat-private-token".into(),
+        base_url: "https://ilinkai.weixin.qq.com".into(),
+        binding_id: "00000000-0000-4000-8000-000000000001".into(),
+    }
+}
+
+#[test]
+fn wechat_binding_persists_privately_and_provider_edits_preserve_each_other() {
+    let root = tempfile::tempdir().unwrap();
+    let manager = NotificationManager::persistent(root.path()).unwrap();
+    manager
+        .update(im("cli_test", Some("feishu-secret")))
+        .unwrap();
+    manager
+        .update(SettingsUpdate::WechatBinding {
+            credentials: wechat_credentials(),
+        })
+        .unwrap();
+    // A legacy Feishu-only client cannot erase a newly bound WeChat account.
+    manager.update(im("cli_test", None)).unwrap();
+    assert!(manager.wechat().is_some());
+    manager
+        .update(preferences(
+            true,
+            vec![Channel::Page, Channel::Wechat, Channel::Feishu],
+        ))
+        .unwrap();
+    assert!(
+        manager
+            .update(SettingsUpdate::ImRemove {
+                provider: ImKind::Wechat
+            })
+            .is_err()
+    );
+    let view = serde_json::to_string(&manager.view()).unwrap();
+    assert!(view.contains("scanner"));
+    for secret in [
+        "bot_token",
+        "wechat-private-token",
+        "feishu-secret",
+        "binding_id",
+    ] {
+        assert!(!view.contains(secret));
+    }
+    drop(manager);
+    let restored = NotificationManager::persistent(root.path()).unwrap();
+    assert_eq!(
+        restored.wechat_credentials().unwrap().bot_token,
+        "wechat-private-token"
+    );
+    assert_eq!(serde_json::to_string(&restored.view()).unwrap(), view);
+    restored
+        .update(preferences(true, vec![Channel::Page]))
+        .unwrap();
+    restored
+        .update(SettingsUpdate::ImRemove {
+            provider: ImKind::Feishu,
+        })
+        .unwrap();
+    assert!(restored.wechat().is_some());
+    restored
+        .update(im("cli_test", Some("other-secret")))
+        .unwrap();
+    restored
+        .update(SettingsUpdate::ImRemove {
+            provider: ImKind::Wechat,
+        })
+        .unwrap();
+    assert!(restored.wechat().is_none());
+    assert_eq!(
+        restored
+            .inner
+            .state
+            .lock()
+            .unwrap()
+            .document
+            .im
+            .providers
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn automation_routes_to_snapshot_channel_and_uses_transport_independent_messages() {
+    let manager = NotificationManager::in_memory();
+    manager
+        .update(SettingsUpdate::WechatBinding {
+            credentials: wechat_credentials(),
+        })
+        .unwrap();
+    let run: aow_automations::Run = serde_json::from_value(json!({
+        "id":"run-1", "task_id":"task-1", "task_revision":1, "task_name":"检查 <at id=all>", "agent":"codex",
+        "source":"scheduled", "status":"failed", "started_at":"2026-01-01T00:00:00Z", "message":"失败原因"
+    })).unwrap();
+    assert!(
+        manager
+            .automation_delivery(run.clone(), FailureNotification::Feishu)
+            .is_none()
+    );
+    let (provider, event) = manager
+        .automation_delivery(run, FailureNotification::Wechat)
+        .unwrap();
+    assert!(matches!(provider, Provider::Wechat(_)));
+    let message = messages::automation_failure(&event);
+    assert!(message.error && !message.markdown);
+    assert_eq!(message.title, "自动化失败 · 检查 <at id=all>");
+    assert!(message.text(4000).contains("执行 ID：run-1"));
+    let message = messages::task_completed(&super::tests::event());
+    assert_eq!(message.title, "AOW·task·TraeCode CLI·完成");
+    assert!(message.text(4000).contains("Session ID：session-1"));
+}
 
 #[tokio::test]
 async fn automation_delivery_uses_local_bot_and_its_own_preference_and_link() {
@@ -12,7 +130,7 @@ async fn automation_delivery_uses_local_bot_and_its_own_preference_and_link() {
     })).unwrap();
     assert!(
         !manager
-            .send_automation_failure(run.clone(), "delivery")
+            .send_automation_failure(run.clone(), FailureNotification::Feishu, "delivery")
             .await
             .unwrap()
     );
@@ -29,7 +147,7 @@ async fn automation_delivery_uses_local_bot_and_its_own_preference_and_link() {
         })
         .unwrap();
     let (_, event) = manager
-        .automation_delivery(run.clone())
+        .automation_delivery(run.clone(), FailureNotification::Feishu)
         .expect("automation ignores interactive completion switch");
     assert_eq!(
         event.run_url.as_deref(),
@@ -43,7 +161,7 @@ async fn automation_delivery_uses_local_bot_and_its_own_preference_and_link() {
         .unwrap();
     assert_eq!(
         manager
-            .automation_delivery(run.clone())
+            .automation_delivery(run.clone(), FailureNotification::Feishu)
             .unwrap()
             .1
             .run_url
@@ -53,7 +171,11 @@ async fn automation_delivery_uses_local_bot_and_its_own_preference_and_link() {
     manager
         .update(SettingsUpdate::Im { providers: vec![] })
         .unwrap();
-    assert!(manager.automation_delivery(run).is_none());
+    assert!(
+        manager
+            .automation_delivery(run, FailureNotification::Feishu)
+            .is_none()
+    );
 }
 
 fn im(app: &str, secret: Option<&str>) -> SettingsUpdate {
@@ -244,7 +366,10 @@ fn changing_credentials_replaces_provider_but_notification_changes_preserve_toke
         .provider
         .clone();
     let (Provider::Feishu(original), Provider::Feishu(preserved), Provider::Feishu(changed)) =
-        (original, preserved, changed);
+        (original, preserved, changed)
+    else {
+        panic!("expected Feishu providers")
+    };
     assert!(Arc::ptr_eq(&original, &preserved));
     assert!(!Arc::ptr_eq(&original, &changed));
 }

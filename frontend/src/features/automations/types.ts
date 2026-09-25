@@ -30,7 +30,7 @@ export interface TaskInput {
   yolo: boolean;
   precheck_command: string;
   precheck_timeout_seconds: number;
-  failure_notification: 'feishu' | null;
+  failure_notification: 'feishu' | 'wechat' | null;
 }
 
 export type RunStatus = 'preparing' | 'running' | 'completed' | 'failed' | 'skipped' | 'interrupted';

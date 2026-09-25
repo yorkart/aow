@@ -20,22 +20,25 @@ struct Mock {
     owner_type: AtomicUsize,
 }
 
-pub(super) fn notification(conclusion: &str) -> TaskStopNotification {
-    TaskStopNotification {
-        agent: "codex".into(),
-        session_id: "session-1".into(),
-        title: "完成检查".into(),
-        cwd: "/workspace/项目".into(),
-        turn_id: Some("turn-1".into()),
-        conclusion: Some(conclusion.into()),
-        instance_ids: vec!["pane".into()],
-        sources: vec![crate::terminal::notifications::TaskStopSource {
-            project_name: "AOW".into(),
-            tab_name: "检查".into(),
-            workspace_root: "/workspace/项目".into(),
-            tab_id: "tab".into(),
-            tab_url: None,
-        }],
+pub(super) fn notification(conclusion: &str) -> Message {
+    Message {
+        title: "AOW·完成检查·Codex·完成".into(),
+        fields: vec![
+            crate::Field {
+                label: "Tab".into(),
+                value: "检查".into(),
+                url: None,
+            },
+            crate::Field {
+                label: "会话".into(),
+                value: "完成检查\nSession ID：session-1".into(),
+                url: None,
+            },
+        ],
+        body_label: "本轮结论".into(),
+        body: conclusion.into(),
+        markdown: true,
+        error: false,
     }
 }
 
@@ -154,19 +157,26 @@ async fn concurrent_requests_share_token_and_refresh_near_expiry() {
 #[tokio::test]
 async fn automation_failure_uses_existing_transport_with_failure_card_and_run_link() {
     let fixture = fixture().await;
-    let run = serde_json::from_value(json!({
-        "id":"run-1", "task_id":"12345678", "task_revision":1,
-        "task_name":"检查 <at id=all></at>", "agent":"codex", "source":"scheduled", "status":"failed",
-        "started_at":"2026-01-01T00:00:00Z", "finished_at":"2026-01-01T00:00:02Z",
-        "duration_ms":2000, "exit_code":1, "message":"失败 <at id=all></at> **literal**"
-    })).unwrap();
-    let event = AutomationFailureNotification {
-        run,
-        run_url: Some("https://aow.example.com/aow/tabs/automation/12345678/runs/run-1".into()),
-    };
+    let mut event = notification("失败 <at id=all></at> **literal**");
+    event.title = "自动化失败 · 检查 <at id=all></at>".into();
+    event.error = true;
+    event.markdown = false;
+    event.body_label = "失败原因".into();
+    event.fields = vec![
+        crate::Field {
+            label: "执行 ID".into(),
+            value: "run-1".into(),
+            url: None,
+        },
+        crate::Field {
+            label: "执行记录".into(),
+            value: "查看执行记录".into(),
+            url: Some("https://aow.example.com/aow/tabs/automation/12345678/runs/run-1".into()),
+        },
+    ];
     fixture
         .client
-        .send_automation_failure(&event, "failure-delivery")
+        .send(&event, "failure-delivery")
         .await
         .unwrap();
     let messages = fixture.state.messages.lock().await;
@@ -179,20 +189,18 @@ async fn automation_failure_uses_existing_transport_with_failure_card_and_run_li
         card["header"]["title"]["content"],
         "自动化失败 · 检查 <at id=all></at>"
     );
-    assert_eq!(card["body"]["elements"][0]["text"]["tag"], "plain_text");
-    assert!(
-        card["body"]["elements"][0]["text"]["content"]
-            .as_str()
-            .unwrap()
-            .contains("执行 ID：run-1")
-    );
-    assert_eq!(
-        card["body"]["elements"][1]["text"]["content"],
-        "失败原因：\n失败 <at id=all></at> **literal**"
-    );
+    let fields = &card["body"]["elements"][0]["columns"][0]["elements"];
+    assert_eq!(fields[0]["text"]["tag"], "plain_text");
+    assert_eq!(fields[0]["text"]["content"], "执行 ID：run-1");
     assert_eq!(
         card["body"]["elements"][2]["text"]["content"],
-        format!("[查看执行记录]({})", event.run_url.unwrap())
+        "失败 <at id=all></at> **literal**"
+    );
+    assert!(
+        fields[1]["text"]["content"]
+            .as_str()
+            .unwrap()
+            .contains(event.fields[1].url.as_ref().unwrap())
     );
 }
 
@@ -203,7 +211,7 @@ async fn resolves_owner_and_recovers_rejected_token_without_losing_message_conte
     let text = "Agent 任务完成\n项目：AOW\nTab：检查\nSession ID：session-1";
     fixture
         .client
-        .send_notification(&notification(text), "delivery-1")
+        .send(&notification(text), "delivery-1")
         .await
         .unwrap();
     assert_eq!(fixture.state.tokens.load(Ordering::SeqCst), 2);
@@ -224,12 +232,12 @@ async fn authentication_retry_reuses_delivery_id_and_future_events_are_independe
     fixture.state.fail_message.store(99991663, Ordering::SeqCst);
     fixture
         .client
-        .send_notification(&notification("first turn"), "delivery-1")
+        .send(&notification("first turn"), "delivery-1")
         .await
         .unwrap();
     fixture
         .client
-        .send_notification(&notification("next turn"), "delivery-2")
+        .send(&notification("next turn"), "delivery-2")
         .await
         .unwrap();
     let messages = fixture.state.messages.lock().await;
@@ -244,7 +252,7 @@ async fn rate_limit_retries_once_but_server_failures_do_not_retry() {
     fixture.state.fail_message.store(230020, Ordering::SeqCst);
     fixture
         .client
-        .send_notification(&notification("rate limited"), "delivery-1")
+        .send(&notification("rate limited"), "delivery-1")
         .await
         .unwrap();
     let messages = fixture.state.messages.lock().await;
@@ -255,7 +263,7 @@ async fn rate_limit_retries_once_but_server_failures_do_not_retry() {
     assert!(
         fixture
             .client
-            .send_notification(&notification("failure"), "delivery-2")
+            .send(&notification("failure"), "delivery-2")
             .await
             .is_err()
     );
@@ -269,7 +277,7 @@ async fn non_member_owner_is_not_used_as_a_recipient() {
     assert!(
         fixture
             .client
-            .send_notification(&notification("hello"), "delivery")
+            .send(&notification("hello"), "delivery")
             .await
             .is_err()
     );
@@ -283,11 +291,7 @@ async fn multipart_cards_send_in_order_and_retry_only_the_rejected_part() {
     let event = notification(&"长结论 🦀\n\n".repeat(5000));
     let expected = cards::messages(&event, "ou_owner", "delivery").unwrap();
     assert!(expected.len() > 1);
-    fixture
-        .client
-        .send_notification(&event, "delivery")
-        .await
-        .unwrap();
+    fixture.client.send(&event, "delivery").await.unwrap();
     let messages = fixture.state.messages.lock().await;
     assert_eq!(messages.len(), expected.len() + 1);
     assert_eq!(messages[0], messages[1]);

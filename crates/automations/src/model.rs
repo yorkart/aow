@@ -19,6 +19,7 @@ pub enum WorkspaceMode {
 #[serde(rename_all = "snake_case")]
 pub enum FailureNotification {
     Feishu,
+    Wechat,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
