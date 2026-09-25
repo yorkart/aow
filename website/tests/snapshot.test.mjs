@@ -56,7 +56,14 @@ test("captured files, history and terminal output agree with the recorded source
 
 test("recorded reads work through project Pages prefixes without mutating the capture", () => {
   const path = `/api/fs/text${workspace}/README.md`;
+  const avatarPath = `/api/aow/projects/${project.id}/avatar`;
+  assert.ok(Object.hasOwn(snapshot.responses, avatarPath));
+  assert.equal(snapshot.responses[avatarPath].avatar_url, project.avatar_url);
   for (const prefix of ["", "/aow/snapshot", "/another-project/snapshot"]) {
+    assert.deepEqual(
+      snapshotResponse(snapshot, prefix + avatarPath).data,
+      snapshot.responses[avatarPath],
+    );
     const result = snapshotResponse(snapshot, prefix + path);
     assert.equal(result.status, 200);
     assert.equal(result.data.content, snapshot.responses[path].content);

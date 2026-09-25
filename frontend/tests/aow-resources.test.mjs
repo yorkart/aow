@@ -135,6 +135,11 @@ try {
           next_cursor: null, budget_exhausted: false, scanned_bytes: 500 };
       }
       else if (url.pathname === '/api/aow/projects') data = state.projects;
+      else if (/\/api\/aow\/projects\/[^/]+\/avatar$/.test(url.pathname)) {
+        await state.avatarGate;
+        if (state.avatarFailure) { await route.fulfill({ status: 503, json: { message: 'Avatar unavailable' } }); return; }
+        data = { avatar_url: state.avatarUrl ?? null };
+      }
       else if (url.pathname === '/api/aow/worktree-removals') data = state.removalJobs;
       else if (url.pathname.endsWith('/worktrees/removals') || (url.pathname.endsWith('/worktrees/removal') && request.method() === 'DELETE')) {
         const items = request.method() === 'DELETE' ? [{ path: url.searchParams.get('path'), force: url.searchParams.get('force') === 'true' }] : request.postDataJSON().items;
@@ -347,6 +352,52 @@ try {
   }
 
   const groupButton = (root, name) => root.getByRole('button', { name: new RegExp(`^(展开|收起) ${name} 分组`) });
+
+  await test('project avatars load independently, directly reference the image and recover from broken or unsupported providers', async t => {
+    let releaseAvatar;
+    const gate = new Promise(resolve => { releaseAvatar = resolve; });
+    t.after(() => releaseAvatar());
+    const imageRequests = [];
+    const { page, state } = await fixture(t, { beforeOpen: async ({ context, state }) => {
+      state.avatarGate = gate;
+      state.avatarUrl = 'https://avatars.example.com/owner.svg';
+      await context.route('https://avatars.example.com/**', route => {
+        imageRequests.push(route.request());
+        return route.request().url().includes('broken') ? route.abort() : route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" rx="12" fill="#3267cf"/><circle cx="32" cy="24" r="10" fill="white"/><path d="M12 58a20 20 0 0 1 40 0" fill="white"/></svg>' });
+      });
+    } });
+    const header = page.locator('.project-aow-project-row').first();
+    assert.equal(await header.locator('svg.project-icon').isVisible(), true, 'project and terminals render while avatar metadata is pending');
+    releaseAvatar();
+    const avatar = header.locator('img.project-icon');
+    await avatar.waitFor();
+    await eventually(() => avatar.evaluate(image => image.complete && image.naturalWidth > 0));
+    assert.equal(await avatar.getAttribute('src'), state.avatarUrl);
+    assert.equal(await avatar.getAttribute('referrerpolicy'), 'no-referrer');
+    assert.equal(imageRequests[0].resourceType(), 'image');
+    assert.equal(imageRequests[0].headers().referer, undefined);
+    assert.deepEqual(await avatar.evaluate(image => [image.clientWidth, image.clientHeight]), [14, 14]);
+    if (process.env.AOW_PROJECT_ICON_SCREENSHOT) await page.screenshot({ path: process.env.AOW_PROJECT_ICON_SCREENSHOT });
+
+    state.projects = state.projects.map(project => ({ ...project, avatar_url: state.avatarUrl }));
+    state.avatarFailure = true;
+    await page.reload();
+    await avatar.waitFor();
+    assert.equal(await avatar.getAttribute('src'), state.avatarUrl, 'saved URL remains visible when metadata is unavailable');
+    state.avatarFailure = false;
+    state.avatarUrl = 'https://avatars.example.com/broken.svg';
+    await page.evaluate(() => window.dispatchEvent(new Event('aow-review-providers-changed')));
+    await eventually(() => Promise.resolve(imageRequests.some(request => request.url().includes('broken'))));
+    await header.locator('svg.project-icon').waitFor();
+    assert.equal(await avatar.count(), 0, 'a broken image returns to the folder icon');
+
+    state.avatarUrl = null;
+    const refreshed = page.waitForResponse(response => response.url().endsWith('/projects/project/avatar'));
+    await page.evaluate(() => window.dispatchEvent(new Event('aow-review-providers-changed')));
+    await refreshed;
+    await header.locator('svg.project-icon').waitFor();
+    assert.deepEqual(state.errors, []);
+  });
 
   async function registrationFixture(t) {
     const result = await fixture(t, { beforeOpen: async ({ context, state }) => {

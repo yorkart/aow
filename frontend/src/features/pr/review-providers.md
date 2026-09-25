@@ -1,6 +1,6 @@
 # Review Provider 脚本协议 v2
 
-通过 stdin 接收一个 JSON 请求，通过 stdout 返回一个 JSON 对象。Python 3 脚本实现 describe、list、detail、diff 四个 API，可选实现 `commit_links` 提供仓库和提交网页链接；具体 CLI/API 调用方式及平台 URL 规则由脚本决定。诊断日志写入 stderr。
+通过 stdin 接收一个 JSON 请求，通过 stdout 返回一个 JSON 对象。Python 3 脚本实现 describe、list、detail、diff 四个 API，可选实现 `commit_links` 提供仓库和提交网页链接，或 `repository_info` 提供仓库所属用户／组织头像；具体 CLI/API 调用方式及平台 URL 规则由脚本决定。诊断日志写入 stderr。
 
 v2 统一使用 Pull Request 命名，列表字段为 `pull_requests`。未经修改的旧版内置 GitHub 脚本会在服务启动时自动升级，保留 Provider 的名称、域名和启用状态。自定义或修改过的脚本不会被覆盖，需要更新为 v2 后重新上传；版本不匹配会明确报错。已有 v2 脚本未实现可选的 `commit_links` 时，原有 PR 功能继续可用，提交详情不显示远程链接。
 
@@ -51,6 +51,20 @@ Settings → Pull Requests 管理 Provider：唯一 ID、显示名称、启用�
 用于检查协议版本和必需 API 的声明。Settings 的“检查协议”执行当前预览的脚本（包括尚未保存的上传内容），不保存它，也不代表实际仓库查询已通过。
 
 支持提交外链时，在 `operations` 中追加 `"commit_links"`。应用只在脚本声明此能力后调用。
+
+## repository_info（可选）
+
+在 `describe.operations` 中追加 `"repository_info"`。请求：`operation: "repository_info"`，`params: {}`；`repository` 与 PR 查询相同，包含 `root`、`host`、`path`、`remote`，不包含 remote URL 中的账号密码。
+
+```json
+{"version":2,"result":{"avatar_url":"https://avatars.example.com/team.png"}}
+```
+
+`avatar_url` 为仓库所属用户或组织的头像，不是当前登录用户的头像。没有可用头像时返回 `null`；请求或鉴权失败应返回 error。URL 必须是无账号密码的绝对 HTTP(S) URL，并能由用户的浏览器直接加载；不要返回需额外 Authorization 请求头的地址或在 URL 中嵌入访问令牌。
+
+项目使用 `origin`，没有 `origin` 时使用唯一的 remote；多个 remote 且没有 `origin` 时不自动选择。选定的 remote 无匹配 Provider 时显示默认图标，不借用其他 remote 的 Provider，也不随当前分支变化。已有 v2 脚本未声明此能力时显示默认图标，PR 功能不受影响。查询不依赖仓库是否存在 PR，也不读取仓库中的 logo 文件。
+
+桌面和手机通过 `GET /api/aow/projects/<id>/avatar` 独立加载头像，不阻塞项目注册或列表。AOW 只保存头像 URL，不下载图片，前端直接引用，图片加载失败时回退到默认图标。查询失败时保留此前保存的头像 URL。已解析 URL 缓存 15 分钟，无头像或查询失败缓存 1 分钟；Provider 配置、remote 地址或执行 PATH 改变时重新查询。头像脚本的 describe 和 repository_info 合计最多 8 秒，整个元数据查询最多 12 秒。
 
 ## commit_links（可选）
 
@@ -149,6 +163,8 @@ Settings → Pull Requests 管理 Provider：唯一 ID、显示名称、启用�
 移动端传 `patch_only: true`，此时必须提供 unified diff `patch`，可以不返回两侧全文（填 null）。没有文本差异时 patch 为空字符串。二进制文件设置 binary=true；内容太大或不完整设置 truncated=true，无法提供的内容用 null，UI 将明确提示。
 
 ## 内置 GitHub 适配器
+
+`repository_info` 使用 `gh api --hostname <host> repos/<owner>/<repo>`，读取 `owner.avatar_url`，复用服务器上 gh 的登录状态。用户浏览器仍需能访问返回的头像地址。未经修改的旧版内置脚本会自动升级以支持头像；自定义脚本按需添加此可选能力。
 
 内置脚本使用 gh api 和 gh pr view，显式指定远端 host/repository，分页加载 PR、文件和讨论。代码讨论使用 GraphQL 的 isResolved，并处理线程内评论分页；辅助部分失败展示 warnings。diff 读取 merge base 与 head SHA 对应的内容；超过 1 MiB 或不可取得完整文本时提示不完整。GitHub files API 的 3000 文件上限会在详情中显示提示。
 

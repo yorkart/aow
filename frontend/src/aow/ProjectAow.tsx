@@ -67,6 +67,7 @@ import { OperationLogPanel } from '../features/operations/OperationLogPanel';
 import { useWorktreeUnreadCounts } from '../features/notifications/taskNotifications';
 import type { WorktreeResourceState } from './worktreeResources';
 import { aowApi } from './aowApi';
+import { ProjectIcon } from './ProjectIcon';
 import { agentsApi } from '../features/agents/api';
 import { sessionsApi } from '../features/sessions/api';
 import type { WorktreeRemovalJob, WorktreeRemovalPreview } from './types';
@@ -2375,7 +2376,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
           <span>此 Tab 正在主仓库工作区显示。</span>
           <button type="button" onClick={() => floating.removeHosted(worktree.path, activeCenterId)}><CornerDownLeft aria-hidden="true" />移回当前工作区</button>
         </div> : null}
-        {!activeCenterId ? <div className="project-aow-welcome"><FolderGit2 /><h2>{project.name}</h2><p>{worktree.path}</p><span>点击 + 新建 Terminal 或启动本地 Agent；从右侧打开文件和 Git Diff。</span></div> : null}
+        {!activeCenterId ? <div className="project-aow-welcome"><ProjectIcon project={project} size={32} /><h2>{project.name}</h2><p>{worktree.path}</p><span>点击 + 新建 Terminal 或启动本地 Agent；从右侧打开文件和 Git Diff。</span></div> : null}
       </div>
     </main>
     <div className="project-aow-right-resizer" role="separator" aria-label="调整右侧栏宽度" aria-orientation="vertical" onPointerDown={onStartRightResize} />
@@ -2663,7 +2664,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
     if (!await confirm({
       title: '移除 Project？',
       description: '移除后将取消该项目的注册，不会删除磁盘上的仓库或 Worktree。',
-      items: [{ id: project.id, label: project.name, detail: project.registered_path, icon: <FolderGit2 /> }],
+      items: [{ id: project.id, label: project.name, detail: project.registered_path, icon: <ProjectIcon project={project} /> }],
       confirmLabel: '移除 Project',
       danger: true,
     })) return;
@@ -2824,7 +2825,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
               ...project.worktrees.filter(worktree => compactWorktrees.has(worktree.path)),
             ];
             return <AowPanel key={project.id} className="project-aow-project" headerClassName="project-aow-project-row"
-              title={project.name} tooltip={project.registered_path} icon={<FolderGit2 />} collapsed={collapsedProjects[project.id]}
+              title={project.name} tooltip={project.registered_path} icon={<ProjectIcon project={project} />} collapsed={collapsedProjects[project.id]}
               empty={!project.worktrees.length && !project.error} onCollapsedChange={collapsed => setCollapsedProjects(current => ({ ...current, [project.id]: collapsed }))}
               actions={<><AowIconButton title="刷新 Worktree" aria-label={`刷新 ${project.name} Worktree`} onClick={() => {
                 void aowApi.refreshProject(project.id).then(updated => setProjects(items => items.map(item => item.id === project.id ? updated : item)))

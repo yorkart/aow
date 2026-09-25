@@ -193,6 +193,7 @@ try {
       }
     });
   });
+  await record(`/api/aow/projects/${project.id}/avatar`);
   await record("/api/aow/projects", (values) =>
     values.filter((value) => value.id === project.id),
   );

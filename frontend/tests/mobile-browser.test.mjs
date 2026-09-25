@@ -61,6 +61,7 @@ async function fixture(context, pins = { paths: [], revision: 0, failWrites: fal
     let data;
     if (url.pathname === '/api/auth/status') data = { configured: true, authenticated: true };
     else if (url.pathname === '/api/aow/projects') data = [project];
+    else if (url.pathname === '/api/aow/projects/project/avatar') data = { avatar_url: null };
     else if (url.pathname === '/api/aow/agents') data = [{ id: 'codex', display_name: 'Codex', available: true, args: [], env: {} }];
     else if (url.pathname === '/api/aow/settings') data = { notes_base: '/notes' };
     else if (url.pathname === '/api/terminals') data = terminalTabs.filter(tab => !url.searchParams.has('workspace_root') || tab.workspace_root === url.searchParams.get('workspace_root'));
@@ -177,6 +178,35 @@ async function noOverflow(page) {
 let browser;
 try {
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
+  await test('mobile project avatars load directly and fall back without changing the project card layout', async t => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    t.after(() => context.close());
+    const state = await fixture(context);
+    let avatarUrl = 'https://avatars.example.com/owner.svg';
+    await context.route('**/api/aow/projects/project/avatar', route => route.fulfill({ json: { avatar_url: avatarUrl } }));
+    await context.route('https://avatars.example.com/**', route => route.request().url().includes('broken') ? route.abort()
+      : route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" rx="12" fill="#3267cf"/><circle cx="32" cy="24" r="10" fill="white"/><path d="M12 58a20 20 0 0 1 40 0" fill="white"/></svg>' }));
+    const page = await context.newPage();
+    await page.goto(`${baseURL}/?ui=mobile`);
+    const card = page.locator('.mobile-project-card').first();
+    const avatar = card.locator('img.project-icon');
+    await avatar.waitFor();
+    assert.equal(await avatar.getAttribute('src'), avatarUrl);
+    assert.deepEqual(await avatar.evaluate(image => [image.clientWidth, image.clientHeight]), [28, 28]);
+    await noOverflow(page);
+    await snapshot(page, 'project-avatar');
+    const box = await card.boundingBox();
+    avatarUrl = 'https://avatars.example.com/broken.svg';
+    await page.evaluate(() => window.dispatchEvent(new Event('aow-review-providers-changed')));
+    await card.locator('svg.project-icon').waitFor();
+    assert.deepEqual(await card.boundingBox(), box);
+    assert.equal(await avatar.count(), 0);
+    await card.getByRole('button', { name: /main.*主目录/ }).click();
+    await page.locator('.mobile-terminal-tabs').waitFor();
+    assert.equal(await page.locator('.mobile-brand-title strong').textContent(), project.name);
+    assert.equal(await page.locator('.mobile-brand-title span').textContent(), 'main');
+    assert.deepEqual(state.errors, []);
+  });
   await test('mobile terminal catalog opens worktree instances in the main workspace without duplicating terminals', async t => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     t.after(() => context.close());
