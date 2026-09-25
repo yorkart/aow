@@ -115,6 +115,8 @@ Hermes 适配已在 **0.18.0** 验证。将 `hermes` 所在目录加入 Settings
 
 Conversation 和分享页只读访问 Hermes 的 `state.db`，支持用户输入、工具调用与结果、最终回复、历史恢复和标题刷新。原地压缩后保留原始对话，合并复制的消息并隐藏内部摘要；撤销的消息保持隐藏。`HERMES_HOME` 指向根目录时跟随该根的 `active_profile`；指向 `profiles/<name>` 时固定使用该 profile。未指定时使用 `~/.hermes` 及其 active profile。注册多个实例时，建议各自显式设置 profile 目录。不需要开启 JSON 导出，也不会迁移数据库或安装 hook。
 
+Hermes 经典 CLI 不发送动态任务标题。AoW 在精确关联当前进程与会话后，从 `state.db` 提取标题并显示到桌面 Tab、Terminal 列表及手机面板；标题尚未生成时使用首条用户消息，后续自动生成或 `/title` 修改会在终端元数据刷新时更新。手动重命名的 Tab 保留用户名称。缺少有效进程关联时保留终端原名称，不根据目录中的历史会话推断标题。
+
 终端自动关联及完成提醒需要 Hermes `runtime/active_sessions.json` 中与当前 PID 对应的记录。Hermes 配置启用 `max_concurrent_sessions` 时会生成这份记录；未启用或记录失效时，在 Conversation 中手动选择会话，不自动订阅完成提醒，即使同目录只有一个候选也不推断归属。完成提醒从当前 SQLite 消息位置开始，只接受没有工具调用且明确标记 `stop`、`end_turn` 或 `stop_sequence` 的 assistant 记录；压缩复制的历史回复、工具输出、验证续跑和不完整回复不触发提醒。
 
 自动化使用 `hermes chat --cli --quiet --query=<prompt>` 创建持久会话，按任务设置传入 `--yolo`。Hermes 在执行结束时向 stderr 输出 session ID，因此运行期间可能暂时没有会话链接；执行退出后才校验并保存该 ID。`--oneshot` 不提供这一协议，不能作为自动化启动参数。

@@ -2954,7 +2954,7 @@ try {
     const { page, state } = await fixture(t, { multipleTerminals: true });
     assert.equal(await tab(page, 'Shell').locator('img.agent-icon').count(), 0);
     assert.equal(await tab(page, 'Background').getAttribute('aria-selected'), 'false');
-    for (const [agent, asset] of [['codex', 'codex.png'], ['claude', 'claude.png'], ['traecli', 'trae.png']]) {
+    for (const [agent, asset] of [['codex', 'codex.png'], ['claude', 'claude.png'], ['traecli', 'trae.png'], ['hermes', 'hermes.png']]) {
       state.agents = { 'wt-0-pane': agent, 'wt-0-background-pane': agent };
       await eventually(async () => await tab(page, 'Background').locator('img.agent-icon').count() === 1
         && (await tab(page, 'Background').locator('img.agent-icon').getAttribute('src')).includes(asset));
@@ -3040,6 +3040,34 @@ try {
     await switchWorktree(page, 1);
     await eventually(async () => await tab(page, 'Shell').count() === 1);
     assert.equal(await tab(page, '新的任务').count(), 0);
+  });
+
+  await test('Hermes database titles update tabs and the terminal list while preserving custom names', async t => {
+    const { page, state } = await fixture(t, { multipleTerminals: true });
+    state.agents = { 'wt-0-pane': 'hermes', 'wt-0-background-pane': 'hermes' };
+    state.titles = { 'wt-0-pane': '首条用户任务', 'wt-0-background-pane': '另一个 Hermes 会话' };
+    await eventually(async () => await tab(page, '首条用户任务').count() === 1);
+    assert.ok((await tab(page, '首条用户任务').locator('img.agent-icon').getAttribute('src')).endsWith('hermes.png'));
+    assert.equal(await tab(page, '另一个 Hermes 会话').getAttribute('aria-selected'), 'false');
+    await surface(page).locator('.terminal-panel-open').filter({ hasText: '首条用户任务' }).waitFor();
+
+    state.titles['wt-0-pane'] = 'Hermes 自动生成的标题';
+    await eventually(async () => await tab(page, 'Hermes 自动生成的标题').count() === 1);
+    await surface(page).locator('.terminal-panel-open').filter({ hasText: 'Hermes 自动生成的标题' }).waitFor();
+    await tab(page, 'Hermes 自动生成的标题').dblclick();
+    const rename = page.getByRole('textbox', { name: 'Terminal 名称', exact: true });
+    await rename.fill('我命名的 Hermes');
+    await rename.press('Enter');
+    await eventually(async () => state.names['wt-0-tab'] === '我命名的 Hermes');
+    state.titles = { 'wt-0-pane': 'Hermes 后续改名', 'wt-0-background-pane': '后台会话新标题' };
+    await eventually(async () => await tab(page, '后台会话新标题').count() === 1);
+    assert.equal(await tab(page, '我命名的 Hermes').count(), 1);
+    await page.reload();
+    await eventually(async () => await tab(page, '后台会话新标题').count() === 1);
+    assert.equal(await tab(page, '我命名的 Hermes').count(), 1);
+    state.agents['wt-0-background-pane'] = null;
+    await eventually(async () => await tab(page, 'Background').count() === 1);
+    assert.equal(await tab(page, 'Background').locator('img.agent-icon').count(), 0);
   });
 
   await test('split terminal tabs summarize agents while each pane keeps its own icon and title', async t => {

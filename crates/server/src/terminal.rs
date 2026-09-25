@@ -39,6 +39,7 @@ use crate::{AppState, HttpError, aow::AgentLaunch};
 pub(crate) mod agent_control;
 pub(crate) mod notifications;
 mod rebuild;
+mod session_titles;
 mod sessions;
 
 const METADATA_FILE: &str = "terminals.json";
@@ -691,6 +692,7 @@ impl TerminalManager {
         detected.agents.retain(|id, _| panes.contains(id));
         detected.titles.retain(|id, _| panes.contains(id));
         detected.processes.retain(|id, _| panes.contains(id));
+        session_titles::enrich(&mut detected).await;
         Ok(detected)
     }
 
