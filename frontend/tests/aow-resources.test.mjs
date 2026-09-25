@@ -3265,6 +3265,45 @@ try {
     await eventually(async () => (await textEditor(page))?.value === 'Initial text');
   }
 
+  for (const action of ['close', 'switch']) {
+    await test(`pending word highlights are cancelled cleanly when editors ${action}`, async t => {
+      const otherPath = `${worktrees[0].path}/other.txt`;
+      const { page, state } = await fixture(t, { beforeOpen: ({ state }) => {
+        state.textFiles[otherPath] = { content: 'Other file', version: 'v1' };
+      } });
+      if (action === 'switch') {
+        await page.getByRole('button', { name: 'Explorer', exact: true }).click();
+        await surface(page).locator(`.tree-row[data-tree-path="${otherPath}"]`).click();
+        await eventually(async () => (await modelPaths(page)).some(path => path.endsWith('/other.txt')));
+      }
+      await openText(page);
+      const monaco = await page.evaluateHandle(async () => (await import('/src/features/editor/monaco.ts')).monaco);
+      // Focus/move and close/switch within the same browser task, before Monaco's
+      // 50 ms word-highlight timer can finish. Ordinary clicks can miss this race.
+      await page.evaluate(({ monaco, action }) => {
+        const area = document.querySelector('.project-aow-surface:not([hidden])');
+        const editor = monaco.editor.getEditors().find(editor => editor.getDomNode()?.closest('.project-aow-surface') === area);
+        editor.focus();
+        editor.setPosition({ lineNumber: 1, column: 3 });
+        if (action === 'close') area.querySelector('button[aria-label="关闭 edit.txt"]').click();
+        else [...area.querySelectorAll('[role="tab"]')].find(tab => tab.textContent.includes('other.txt')).click();
+      }, { monaco, action });
+      await monaco.dispose();
+      if (action === 'close') {
+        await surface(page).getByRole('button', { name: '关闭 edit.txt', exact: true }).waitFor({ state: 'hidden' });
+        await eventually(async () => !(await modelPaths(page)).some(path => path.endsWith('/edit.txt')));
+      } else {
+        await eventually(() => page.evaluate(async () => {
+          const { monaco } = await import('/src/features/editor/monaco.ts');
+          return monaco.editor.getEditors().some(editor => editor.getDomNode()?.checkVisibility() && editor.getValue() === 'Other file');
+        }));
+      }
+      await delay(100);
+      assert.deepEqual(state.errors, []);
+      assert.deepEqual(state.writes, [], 'moving the cursor and leaving an editor must not change its file');
+    });
+  }
+
   await test('manual file refresh updates the existing model, reports deletion, and ignores a closed tab request', async t => {
     const { page, state } = await fixture(t, { clock: true });
     await openText(page);
