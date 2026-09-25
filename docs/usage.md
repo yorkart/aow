@@ -10,6 +10,10 @@
 
 首次初始化内置 `github.com → github` 及适配脚本，脚本内部调用 gh，需要服务器可运行 python3、gh 并完成 gh 登录。其他平台通过用户脚本实现统一 API，脚本自行决定 CLI 或 API 的调用方式。多个 remote 对应不同仓库时可在列表选择；标签页、深链接和手机详情保留 Provider 与 remote 身份。默认配置只初始化一次，不覆盖用户修改或重新添加已删除的 Provider。完整 API、字段及存储规则见 [Review Provider 脚本协议](../frontend/src/features/pr/review-providers.md)，设置页中也可查看。
 
+## 项目头像
+
+注册 Git 项目后，桌面和手机会异步显示仓库所属用户或组织的头像。头像由 **Settings → Pull Requests** 的 Provider 提供：优先使用 `origin`，没有 `origin` 时使用唯一的 remote。内置 GitHub Provider 使用 `gh` 查询 `owner.avatar_url`；自定义脚本可实现可选的 `repository_info`。AOW 保存 URL 并由浏览器直接加载图片，不扫描仓库 logo，也不下载图片文件。未配置、旧脚本不支持或图片加载失败时使用默认项目图标，添加和使用项目不受影响。
+
 ## 多节点访问
 
 在 **Settings → Nodes** 中可配置其他机器的 AOW 地址，每行填写一个完整的 HTTP(S) 地址，保存后点击桌面或手机端首页左上角的 Logo / AOW 文字即可展开菜单；点击节点地址会在新窗口或新标签页打开，保留当前页面。列表允许包含当前节点，可以将同一份配置复制到所有机器；菜单按协议、域名/IP、端口和部署路径过滤当前节点，不同端口或不同 Base Path 仍作为独立节点显示。建议填写部署入口地址，例如 `https://example.com/tools/aow/`；当前部署的 `/aow/`、`/m/` 入口也会被识别为自身。空行和重复地址会自动整理，留空保存可清空列表。配置保存在服务端 `aow-settings.json` 的 `node_addresses` 字段中。

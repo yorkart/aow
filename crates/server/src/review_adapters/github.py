@@ -53,6 +53,10 @@ class GitHub:
         return {"remote_url": repository_url,
                 "commit_url": repository_url + "/commit/" + quote(commit, safe="")}
 
+    def repository_info(self):
+        repository = self.api(self.prefix)
+        return {"avatar_url": (repository.get("owner") or {}).get("avatar_url") or None}
+
     def command(self, *args):
         env = dict(os.environ, GH_PROMPT_DISABLED="1", GH_PAGER="cat")
         result = subprocess.run(["gh", *args], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -207,9 +211,11 @@ def dispatch(request):
         raise ValueError("Unsupported protocol version")
     operation = request["operation"]
     if operation == "describe":
-        return {"operations": ["list", "detail", "diff", "commit_links"]}
+        return {"operations": ["list", "detail", "diff", "commit_links", "repository_info"]}
     github = GitHub(request)
     params = request["params"]
+    if operation == "repository_info":
+        return github.repository_info()
     if operation == "commit_links":
         return github.commit_links(params["commit"])
     if operation == "list":

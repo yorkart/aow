@@ -2,8 +2,9 @@ import { appUrl } from '../lib/basePath';
 import type { ResolvedTab } from '../aow/tabRoutes';
 import { mobileTabTarget } from '../aow/tabRoutes/mobile';
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { ArrowLeft, ArrowUpRight, CalendarClock, ChevronRight, FolderGit2, FolderOpen, GitBranch, GitPullRequest, Home, MessageSquare, Pin, PinOff, Search, TerminalSquare, X } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, CalendarClock, ChevronRight, FolderOpen, GitBranch, GitPullRequest, Home, MessageSquare, Pin, PinOff, Search, TerminalSquare, X } from 'lucide-react';
 import { aowApi } from '../aow/aowApi';
+import { ProjectIcon } from '../aow/ProjectIcon';
 import { usePinnedWorktrees } from '../aow/usePinnedWorktrees';
 import { useAowTabLocation } from '../aow/AowTabEntry';
 import { WorktreeIcon, worktreeColorValues } from '../aow/WorktreeIcon';
@@ -99,7 +100,7 @@ function MobileHome({ projects, loading, error, reload, navigate }: {
     <div className="mobile-home-section"><h3 className="mobile-section-label">全部项目</h3><span>{projects.length}</span></div>
     <MobileState error={error} loading={loading && !projects.length} retry={reload} empty={!loading && !filtered.length ? (query ? '没有匹配的项目或分支。' : '暂无项目，请先在桌面端注册工作区。') : undefined} />
     {filtered.map((project) => <section className="mobile-project-card" key={project.id}>
-      <header><div className="mobile-project-icon"><FolderGit2 size={21} /></div><div className="mobile-row-main"><h2>{project.name}</h2><span>{project.worktrees.length} 个工作区</span></div></header>
+      <header><div className="mobile-project-icon"><ProjectIcon project={project} size={28} /></div><div className="mobile-row-main"><h2>{project.name}</h2><span>{project.worktrees.length} 个工作区</span></div></header>
       {project.error && <p className="mobile-inline-error">{project.error}</p>}
       {project.worktrees.map((worktree) => <MobileWorktreeRow key={worktree.path} project={project} worktree={worktree} pinned={pinned.has(worktree.path)} open={open} togglePin={togglePin} />)}
     </section>)}

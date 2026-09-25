@@ -13,6 +13,7 @@ export const aowApi = {
     body: JSON.stringify({ notes_base: input.notesBase?.trim(), node_addresses: input.nodeAddresses, execution_path: input.executionPath, editor: input.editor }),
   }),
   projects: () => aowRequest<AowProject[]>('/api/aow/projects'),
+  projectAvatar: (id: string, signal?: AbortSignal) => aowRequest<{ avatar_url: string | null }>(`/api/aow/projects/${encodeURIComponent(id)}/avatar`, { signal, cache: 'no-store' }),
   registerProject: (path: string, name?: string, notesPath?: string) => aowRequest<AowProject>('/api/aow/projects', {
     method: 'POST',
     body: JSON.stringify({ path, ...(name?.trim() ? { name: name.trim() } : {}), ...(notesPath?.trim() ? { notes_path: notesPath.trim() } : {}) }),
