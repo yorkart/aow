@@ -4,7 +4,7 @@ use clap::{Args, Subcommand};
 use serde_json::Value;
 use std::{io, path::PathBuf, time::Duration};
 
-const HELP: &str = "Query registered projects through the running AOW server's local Unix socket.
+const HELP: &str = "Query registered projects through the running AoW server's local Unix socket.
 Uses the same --state-dir and OS user as agent commands. No terminald is needed.
 Queries only read the project registry; they do not query Git or return worktrees.
 list returns {items:[...]}; get returns one project. Each project contains id, name
@@ -51,13 +51,13 @@ pub fn execute(args: ProjectArgs, state_dir: PathBuf) -> Result<Value> {
                 .map_err(|_| {
                     TerminaldClientError::Io(io::Error::new(
                         io::ErrorKind::TimedOut,
-                        "AOW project query timed out",
+                        "AoW project query timed out",
                     ))
                 })?
         })
         .with_context(|| {
             format!(
-                "local project API at {}; ensure AOW server is running with this state directory",
+                "local project API at {}; ensure AoW server is running with this state directory",
                 client.socket_path().display()
             )
         })

@@ -66,7 +66,7 @@ function NotificationPreferences({ onBusyChange }: { onBusyChange: (busy: boolea
       </div></div>
       {loading && <p role="status">加载配置中…</p>}
       <>
-        <label className="project-aow-dialog-field"><span>AOW 访问地址</span><input type="url" aria-label="AOW 访问地址" value={publicBaseUrl} disabled={unavailable} spellCheck={false} placeholder="https://aow.example.com" onChange={event => { setPublicBaseUrl(event.target.value); changed(); }} /></label>
+        <label className="project-aow-dialog-field"><span>AoW 访问地址</span><input type="url" aria-label="AoW 访问地址" value={publicBaseUrl} disabled={unavailable} spellCheck={false} placeholder="https://aow.example.com" onChange={event => { setPublicBaseUrl(event.target.value); changed(); }} /></label>
         <button type="button" className="project-aow-dialog-button" disabled={unavailable} onClick={() => { setPublicBaseUrl(appBaseUrl()); changed(); }}>使用当前访问地址</button>
         <p className="project-aow-form-intro">用于 IM 通知中的 Tab 链接，请填写接收设备可访问的部署入口地址，包含端口和子目录（如有）。留空时只显示 Tab 名称。</p>
         <label className="project-aow-dialog-checkbox notification-checkbox notification-master"><input type="checkbox" checked={task.enabled} disabled={unavailable} onChange={event => {

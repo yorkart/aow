@@ -1232,7 +1232,7 @@ mod tests {
         let repo = parent.path().join("sample-repo");
         std::fs::create_dir(&repo).unwrap();
         git(&repo, &["init", "-q", "-b", "main"]);
-        git(&repo, &["config", "user.name", "AOW Test"]);
+        git(&repo, &["config", "user.name", "AoW Test"]);
         git(&repo, &["config", "user.email", "test@example.com"]);
         std::fs::write(repo.join("tracked.txt"), "first\n").unwrap();
         git(&repo, &["add", "tracked.txt"]);
@@ -1340,7 +1340,7 @@ mod tests {
         let repo = parent.path().join("eol-repository");
         std::fs::create_dir(&repo).unwrap();
         git(&repo, &["init", "-q", "-b", "main"]);
-        git(&repo, &["config", "user.name", "AOW Test"]);
+        git(&repo, &["config", "user.name", "AoW Test"]);
         git(&repo, &["config", "user.email", "test@example.com"]);
         git(&repo, &["config", "core.autocrlf", "true"]);
         std::fs::write(repo.join("tracked.txt"), "first\nsecond\nthird\n").unwrap();
@@ -1361,7 +1361,7 @@ mod tests {
         let repo = parent.path().join("merge-repo");
         std::fs::create_dir(&repo).unwrap();
         git(&repo, &["init", "-q", "-b", "main"]);
-        git(&repo, &["config", "user.name", "AOW Test"]);
+        git(&repo, &["config", "user.name", "AoW Test"]);
         git(&repo, &["config", "user.email", "test@example.com"]);
         std::fs::write(repo.join("base.txt"), "base\n").unwrap();
         git(&repo, &["add", "base.txt"]);

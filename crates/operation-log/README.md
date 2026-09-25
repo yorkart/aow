@@ -1,4 +1,4 @@
-# AOW operation log
+# AoW operation log
 
 Shared append-only operation history, independent of HTTP, task execution and UI.
 `Writer` uses `tracing-appender` to write UTF-8 JSONL files named

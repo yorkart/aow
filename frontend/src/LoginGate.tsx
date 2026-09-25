@@ -36,9 +36,9 @@ export function LoginGate({ children }: { children: ReactNode }) {
     return () => { active = false; };
   }, []);
 
-  if (loadError) return <AuthScreen title="无法连接 AOW" detail={loadError} retry={() => window.location.reload()} />;
+  if (loadError) return <AuthScreen title="无法连接 AoW" detail={loadError} retry={() => window.location.reload()} />;
   if (!status) return <AuthScreen title="正在检查登录状态…" detail="" />;
-  if (!status.configured) return <AuthScreen title="尚未设置访问 PIN" detail={status.message ?? '请在运行 AOW 的服务器上执行 `aow pin`。'} />;
+  if (!status.configured) return <AuthScreen title="尚未设置访问 PIN" detail={status.message ?? '请在运行 AoW 的服务器上执行 `aow pin`。'} />;
   if (status.authenticated) return <>{children}</>;
   return <PinLogin onSuccess={() => setStatus({ configured: true, authenticated: true })} />;
 }
@@ -86,7 +86,7 @@ function PinLogin({ onSuccess }: { onSuccess: () => void }) {
   return <main className="aow-auth">
     <section className="aow-auth-card" aria-labelledby="aow-auth-title">
       <div className="aow-auth-mark" aria-hidden="true">A<span /></div>
-      <p className="aow-auth-eyebrow">AOW</p>
+      <p className="aow-auth-eyebrow">AoW</p>
       <h1 id="aow-auth-title">输入访问 PIN</h1>
       <p>请输入服务器管理员设置的 6 位数字 PIN。</p>
       <form onSubmit={onSubmit}>
@@ -103,7 +103,7 @@ function AuthScreen({ title, detail, retry }: { title: string; detail: string; r
   return <main className="aow-auth">
     <section className="aow-auth-card aow-auth-message" aria-live="polite">
       <div className="aow-auth-mark" aria-hidden="true">A<span /></div>
-      <p className="aow-auth-eyebrow">AOW</p>
+      <p className="aow-auth-eyebrow">AoW</p>
       <h1>{title}</h1>
       {detail && <p>{detail}</p>}
       {retry && <button type="button" onClick={retry}>重试</button>}

@@ -89,7 +89,12 @@ for (const siteUrl of [
       assert.ok(asset.pathname.startsWith(basePath + "snapshot/"));
       await access(join(output, asset.pathname.slice(basePath.length)));
     }
-    await access(join(output, "snapshot/data.json"));
+    assert.ok(
+      (await readFile(join(output, "snapshot/data.json"))).equals(
+        await readFile(new URL("../snapshot/data.json", import.meta.url)),
+      ),
+      "Published snapshot data must match the latest capture",
+    );
     await access(join(output, "snapshot/api/fs/raw/workspace/aow/README.md"));
     const snapshotAssets = await readdir(join(output, "snapshot/assets"));
     assert.ok(

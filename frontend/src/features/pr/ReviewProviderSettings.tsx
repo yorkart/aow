@@ -86,7 +86,7 @@ export function ReviewProviderSettings({ active, onBusyChange, onDirtyChange }: 
         <label className="project-aow-dialog-checkbox"><input type="checkbox" checked={provider.enabled} disabled={busy} onChange={e => update({ enabled: e.target.checked })} />启用此 Provider</label>
         <div className="review-provider-toolbar"><strong>Python 脚本（只读预览）</strong><button className="project-aow-dialog-button" disabled={busy} onClick={() => upload.current?.click()}><Upload size={14} />上传脚本</button>
           <input ref={upload} type="file" aria-label="上传 Provider 脚本" accept=".py,.txt,text/plain,text/x-python" hidden onChange={e => void readFile(e.target.files?.[0])} /></div>
-        <p className="project-aow-form-intro">脚本仅支持预览。如需修改，请在本地编辑后上传替换，点击保存后生效。脚本文件由 AOW 管理，运行环境使用 Settings → Environment 中的 python3 和 PATH。</p>
+        <p className="project-aow-form-intro">脚本仅支持预览。如需修改，请在本地编辑后上传替换，点击保存后生效。脚本文件由 AoW 管理，运行环境使用 Settings → Environment 中的 python3 和 PATH。</p>
         {active ? <Suspense fallback={<p>正在加载脚本预览…</p>}><ScriptPreview key={provider.id} value={provider.script} /></Suspense> : null}
       </> : draft ? <p>尚未配置 Provider，点击“添加 Provider”开始配置。</p> : busy ? <p>正在加载 Provider…</p> : <button onClick={() => { setError(''); setLoadRevision(value => value + 1); }}>重新加载</button>}
       <details className="review-provider-protocol"><summary>脚本 API 协议与返回字段</summary><MarkdownContent readOnly text={protocol} /></details>

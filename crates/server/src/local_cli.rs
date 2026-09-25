@@ -79,7 +79,7 @@ pub async fn start_local_cli(state: AppState, state_dir: &Path) -> anyhow::Resul
             );
             match tokio::net::UnixStream::connect(&path).await {
                 Ok(_) => {
-                    anyhow::bail!("AOW CLI socket is already in use: {}", path.display())
+                    anyhow::bail!("AoW CLI socket is already in use: {}", path.display())
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::ConnectionRefused => {
                     let current = std::fs::symlink_metadata(&path)?;

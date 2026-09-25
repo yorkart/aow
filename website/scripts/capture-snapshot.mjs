@@ -119,7 +119,7 @@ try {
     );
     const read = (chunk) => {
       output += chunk;
-      const match = /AOW: (http:\/\/127\.0\.0\.1:\d+)/.exec(output);
+      const match = /AoW: (http:\/\/127\.0\.0\.1:\d+)/.exec(output);
       if (match) {
         clearTimeout(timer);
         resolve(match[1]);
@@ -249,7 +249,7 @@ try {
       );
     }
   }
-  for (const agent of ["codex", "claude", "traecli"])
+  for (const agent of ["codex", "claude", "traecli", "hermes"])
     await record(
       `/api/aow/agent-sessions?${new URLSearchParams({ worktree_path: repo, agent })}`,
     );

@@ -73,7 +73,7 @@ export function WorktreeCleanupDialog({ project, isUnallocated, jobs, progressEr
             <small>{preview.terminal_tabs} 个 Terminal · {preview.agent_tabs} 个 Agent{preview.dirty ? ` · ${preview.change_count} 项未提交内容` : ' · 工作区干净'}</small>
             {preview.dirty ? <details><summary>查看将删除的未提交内容</summary><pre>{preview.changes.join('\n')}{preview.truncated ? '\n…更多变更未显示' : ''}</pre></details> : null}
           </div>)}
-          {dirty.length ? <label className="worktree-cleanup-check danger"><input type="checkbox" checked={acknowledged} disabled={busy} onChange={event => setAcknowledged(event.target.checked)} />我确认强制删除这 {dirty.length} 个 Worktree 的未提交内容，删除后无法从 AOW 恢复。</label> : null}
+          {dirty.length ? <label className="worktree-cleanup-check danger"><input type="checkbox" checked={acknowledged} disabled={busy} onChange={event => setAcknowledged(event.target.checked)} />我确认强制删除这 {dirty.length} 个 Worktree 的未提交内容，删除后无法从 AoW 恢复。</label> : null}
         </> : <>
           <div className="worktree-cleanup-filters">
             <label className="worktree-cleanup-check"><input type="checkbox" checked={onlyUnallocated} disabled={busy} onChange={event => { setOnlyUnallocated(event.target.checked); setSelected(new Set()); }} />仅显示未分配资源</label>

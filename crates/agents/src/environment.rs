@@ -173,7 +173,7 @@ pub async fn load_path_from(config_dir: &Path) -> Result<Vec<PathBuf>> {
                 .with_context(|| format!("无法读取执行环境配置：{}", path.display()))?;
             ensure!(
                 document.version == 1,
-                "不支持的 AOW 配置版本：{}",
+                "不支持的 AoW 配置版本：{}",
                 document.version
             );
             if let Some(paths) = document.execution_path {

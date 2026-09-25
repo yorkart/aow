@@ -14,7 +14,7 @@ use serde::Serialize;
 
 const CONTEXT: &str =
     "Local access: uses the current OS user and filesystem permissions. No PIN, Cookie,
-token, or running AOW server is required for automation queries. Project queries
+token, or running AoW server is required for automation queries. Project queries
 require a running server; agent commands also require terminald, via the local Unix socket.
 Queries do not initialize, migrate,
 repair, or clean state. Help and version work without a state directory.
@@ -51,9 +51,9 @@ Examples (replace IDs with values returned by list commands):
   aow-cli --state-dir /path/to/state automation list";
 
 #[derive(Parser)]
-#[command(name = "aow-cli", version, about = "AOW command-line interface", after_help = CONTEXT)]
+#[command(name = "aow-cli", version, about = "AoW command-line interface", after_help = CONTEXT)]
 struct Cli {
-    /// AOW state directory; see precedence below. Never created by queries.
+    /// AoW state directory; see precedence below. Never created by queries.
     #[arg(long, global = true, value_name = "PATH")]
     state_dir: Option<PathBuf>,
     /// Emit compact JSON instead of pretty-printed JSON.
@@ -70,7 +70,7 @@ enum Command {
     /// Inspect local automation task configurations and execution records.
     #[command(after_help = CONTEXT)]
     Automation(Automation),
-    /// Create hidden interactive agents and submit tasks through the local AOW server.
+    /// Create hidden interactive agents and submit tasks through the local AoW server.
     Agent(agent::AgentArgs),
 }
 

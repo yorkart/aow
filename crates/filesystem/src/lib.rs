@@ -17,7 +17,7 @@ use tokio::{
 };
 use uuid::Uuid;
 
-/// Default local AOW state, shared by the server and command-line tools.
+/// Default local AoW state, shared by the server and command-line tools.
 pub fn default_state_dir() -> PathBuf {
     if let Some(path) = std::env::var_os("AOW_STATE_DIR") {
         return PathBuf::from(path);

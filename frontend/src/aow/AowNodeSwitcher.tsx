@@ -53,7 +53,7 @@ function NodeMenu({ anchor, addresses, mobile, error, onClose }: {
     };
   }, [anchor, onClose]);
   return createPortal(<div ref={menu} id="aow-node-menu" className={`project-aow-context-menu aow-node-menu${mobile ? ' mobile-aow-node-menu' : ''}`}
-    style={{ left: position.x, top: position.y }} role="menu" aria-label="其他 AOW 节点" tabIndex={-1}>
+    style={{ left: position.x, top: position.y }} role="menu" aria-label="其他 AoW 节点" tabIndex={-1}>
     {nodes.map(address => <a key={address} href={address} target="_blank" rel="noopener noreferrer" role="menuitem" title={address} onClick={onClose}>
       <span>{address}</span><ExternalLink aria-hidden="true" />
     </a>)}
@@ -67,8 +67,8 @@ export function AowNodeSwitcher({ addresses, mobile = false, error }: { addresse
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
   return <>
-    <button ref={trigger} type="button" className="aow-node-trigger" title="切换 AOW 节点"
-      aria-label="切换 AOW 节点" aria-haspopup="menu" aria-expanded={open} aria-controls={open ? 'aow-node-menu' : undefined}
+    <button ref={trigger} type="button" className="aow-node-trigger" title="切换 AoW 节点"
+      aria-label="切换 AoW 节点" aria-haspopup="menu" aria-expanded={open} aria-controls={open ? 'aow-node-menu' : undefined}
       onClick={() => setOpen(value => !value)} onKeyDown={event => {
         if (event.key === 'ArrowDown' && !open) { event.preventDefault(); setOpen(true); }
       }}>

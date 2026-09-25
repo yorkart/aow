@@ -123,7 +123,7 @@ declare global {
 
 export function useMobileViewport(title: string) {
   useEffect(() => {
-    document.title = `${title} · AOW`;
+    document.title = `${title} · AoW`;
     window.aowHost?.setTitle?.(title);
   }, [title]);
   useEffect(() => {

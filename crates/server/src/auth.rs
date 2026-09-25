@@ -235,7 +235,7 @@ pub(crate) async fn require_auth(
 ) -> Response {
     let path = request.uri().path();
     // Only the registered read-only share route bypasses PIN authentication.
-    // A share token never establishes a AOW login session.
+    // A share token never establishes a AoW login session.
     let public_share = matches!(
         *request.method(),
         axum::http::Method::GET | axum::http::Method::HEAD
@@ -292,7 +292,7 @@ fn pin_not_configured() -> HttpError {
     HttpError::new(
         StatusCode::SERVICE_UNAVAILABLE,
         "pin_not_configured",
-        "AOW 尚未配置 PIN；请在服务器上运行 `aow pin`",
+        "AoW 尚未配置 PIN；请在服务器上运行 `aow pin`",
         None,
     )
 }
@@ -301,7 +301,7 @@ fn authentication_required() -> HttpError {
     HttpError::new(
         StatusCode::UNAUTHORIZED,
         "authentication_required",
-        "需要输入 PIN 码后才能访问 AOW",
+        "需要输入 PIN 码后才能访问 AoW",
         None,
     )
 }

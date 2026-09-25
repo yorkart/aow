@@ -24,7 +24,7 @@ fn main() -> Result<()> {
     let result = run();
     #[cfg(target_os = "macos")]
     if let Err(error) = &result {
-        aow_macos_log::report_error(&format!("AOW server failed: {error:#}"));
+        aow_macos_log::report_error(&format!("AoW server failed: {error:#}"));
     }
     result
 }
@@ -103,8 +103,8 @@ async fn run() -> Result<()> {
     let address = listen_address(&host, port)?;
     let listener = tokio::net::TcpListener::bind(address).await?;
     let local = listener.local_addr()?;
-    tracing::info!(%local, "aow listening");
-    println!("AOW: http://{local}{}/", base_path.as_str());
+    tracing::info!(%local, "AoW listening");
+    println!("AoW: http://{local}{}/", base_path.as_str());
     let state = AppState::with_runtime_options(frontend, state_dir.clone(), terminald_socket)?
         .with_base_path(base_path);
     state.initialize_global_workspace().await?;

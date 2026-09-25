@@ -136,7 +136,7 @@ jobs:
         if: runner.os == 'macOS'
         env:
           AOW_NATIVE_TEST_PACKAGE: ${{ github.workspace }}/target/release-assets/aow-${{ matrix.platform }}.tar.gz
-        run: node --test --test-name-pattern='real AOW macOS release' scripts/tests/macos-release.test.mjs
+        run: node --test --test-name-pattern='real AoW macOS release' scripts/tests/macos-release.test.mjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: package-${{ matrix.platform }}

@@ -50,7 +50,7 @@ curl -fsSL https://github.com/$GH_REPO/releases/latest/download/aow-install.sh |
 Existing installations: \`aow update\`. For this exact build, append \`-s -- --version $version\` to bash.
 Linux uses systemd user services; macOS uses launchd in a logged-in graphical session.
 EOF
-    gh release create "$version" --draft --target "$revision" --title "AOW $version" --notes-file "$notes"
+    gh release create "$version" --draft --target "$revision" --title "AoW $version" --notes-file "$notes"
 fi
 gh release upload "$version" "$assets/"* --clobber
 # Uploads finish while the release is hidden; only then can latest point at it.

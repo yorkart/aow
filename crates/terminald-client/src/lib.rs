@@ -82,7 +82,7 @@ impl TerminaldClient {
         self.get_json(&format!("{}/screen", runtime_path(id))).await
     }
 
-    /// Local HTTP/JSON transport, also used with the AOW CLI socket.
+    /// Local HTTP/JSON transport, also used with the AoW CLI socket.
     pub async fn get_json<R: DeserializeOwned>(
         &self,
         path: &str,
