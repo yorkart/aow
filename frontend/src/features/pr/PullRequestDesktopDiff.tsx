@@ -1,8 +1,7 @@
-import { DiffEditor } from '@monaco-editor/react';
+import { DiffEditor } from '../editor/MonacoEditor';
 import { useLayoutEffect, useRef } from 'react';
 import type { editor } from 'monaco-editor';
 import { editorLanguage } from '../editor/language';
-import '../editor/monaco';
 import type { PullRequestDiff } from './types';
 
 export default function PullRequestDesktopDiff({ diff, number, path, modelScope, sideBySide }: {

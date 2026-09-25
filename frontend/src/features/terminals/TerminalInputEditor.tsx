@@ -1,5 +1,4 @@
-import Editor from '@monaco-editor/react';
-import '../editor/monaco';
+import Editor from '../editor/MonacoEditor';
 
 export default function TerminalInputEditor({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   return <Editor language="markdown" theme="vs-dark" value={value} onChange={value => onChange(value ?? '')}
@@ -10,8 +9,6 @@ export default function TerminalInputEditor({ value, onChange }: { value: string
       editor.focus();
     }}
     options={{
-      // TerminalInputPane handles textarea key and composition events for submit.
-      editContext: false,
       ariaLabel: '终端 Markdown 输入', automaticLayout: true, minimap: { enabled: false },
       fontFamily: "'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace",
       lineHeight: 15, cursorStyle: 'block', cursorBlinking: 'blink',

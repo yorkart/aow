@@ -1,5 +1,5 @@
 import { hasDocumentOwners } from './workspaceDocuments';
-import Editor, { DiffEditor } from '@monaco-editor/react';
+import Editor, { DiffEditor } from './MonacoEditor';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { Check, ChevronLeft, ChevronRight, Code2, Download, Eye, LoaderCircle, RefreshCw, Save, WrapText, X } from 'lucide-react';
