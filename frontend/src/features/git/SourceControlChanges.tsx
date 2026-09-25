@@ -52,7 +52,7 @@ const FileRow = memo(function FileRow({ item, compact, depth, selected, onOpen }
     aria-current={selected || undefined} onClick={() => onOpen(item)}>
     <span className="chevron" aria-hidden="true" />
     <FileTypeIcon path={item.path} className="change-file-icon" />
-    <span className="change-name">{compact ? item.path.slice(slash + 1) : item.path}</span>
+    <span className={`change-name${item.status.startsWith('D') ? ' deleted' : ''}`}>{compact ? item.path.slice(slash + 1) : item.path}</span>
     {!compact && slash >= 0 ? <span className="change-directory">{item.path.slice(0, slash)}</span> : null}
     <b>{item.status}</b>
   </button>;
