@@ -8,7 +8,7 @@ import './terminal-input.css';
 const TerminalInputEditor = lazy(() => import('./TerminalInputEditor'));
 const DEFAULT_INPUT_HEIGHT = 80;
 
-type Props = Pick<ComponentProps<typeof TerminalPaneView>, 'visible' | 'tabId' | 'pane' | 'active' | 'onFocus' | 'onStatus'>;
+type Props = Pick<ComponentProps<typeof TerminalPaneView>, 'visible' | 'tabId' | 'pane' | 'active' | 'onFocus' | 'onStatus' | 'onRebuild' | 'rebuilding'>;
 
 export function TerminalInputPane(props: Props) {
   const [open, setOpen] = useState(false);

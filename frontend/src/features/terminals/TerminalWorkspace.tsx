@@ -159,6 +159,7 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
   const [maximizedPaneIds, setMaximizedPaneIds] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const [operation, setOperation] = useState('');
+  const rebuildingRef = useRef(false);
   const layoutRef = useRef(layout);
   const draggingPaneIdRef = useRef<string | undefined>(undefined);
   const tabRef = useRef(tab);
@@ -472,6 +473,22 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
     }
   };
 
+  const canRebuild = Boolean(tab?.panes.length && tab.panes.every(pane => pane.status !== 'running'));
+  const rebuild = async () => {
+    if (!tab || !canRebuild || operation || rebuildingRef.current) return;
+    rebuildingRef.current = true;
+    setOperation('rebuild');
+    setError('');
+    try {
+      onTabChange(await terminalApi.rebuild(tab.id));
+    } catch (reason) {
+      setError(message(reason));
+    } finally {
+      rebuildingRef.current = false;
+      setOperation('');
+    }
+  };
+
   const markStatus = (paneId: string, status: TerminalPaneStatus, exitCode?: number | null) => {
     const currentTab = tabRef.current;
     if (currentTab) {
@@ -488,7 +505,7 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
       if (!pane) return <div className="terminal-pane-missing">Pane {node.pane_id} 不存在</div>;
       const agentId = terminalPaneAgent(pane, detectedAgents);
       const title = terminalPaneTitle(pane, detectedAgents, terminalTitles);
-      const paneBusy = operation.endsWith(`:${pane.id}`);
+      const paneBusy = operation === 'rebuild' || operation.endsWith(`:${pane.id}`);
       const paneMaximized = maximizedPaneId === pane.id;
       const paneObscured = Boolean(maximizedPaneId && !paneMaximized);
       const paneDraggable = !operation && !maximizedPaneId && tab!.panes.length > 1;
@@ -542,7 +559,8 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
             ) : null}
             <button title="关闭 pane" aria-label="关闭 pane" disabled={paneBusy} onClick={() => void closePane(pane)}>{paneBusy ? <LoaderCircle className="spinning" /> : <X />}</button>
           </header>}
-            terminal={terminalVisible => <TerminalInputPane key={`${tab!.id}:${pane.id}`} visible={terminalVisible} tabId={tab!.id} pane={pane} active={activePaneId === pane.id} onFocus={() => setActivePaneId(pane.id)} onStatus={(status, code) => markStatus(pane.id, status, code)} />}
+            terminal={terminalVisible => <TerminalInputPane key={`${tab!.id}:${pane.id}`} visible={terminalVisible} tabId={tab!.id} pane={pane} active={activePaneId === pane.id} onFocus={() => setActivePaneId(pane.id)} onStatus={(status, code) => markStatus(pane.id, status, code)}
+              onRebuild={canRebuild ? () => void rebuild() : undefined} rebuilding={operation === 'rebuild'} />}
           />
         </section>
       );

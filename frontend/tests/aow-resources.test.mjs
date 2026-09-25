@@ -1236,13 +1236,18 @@ try {
     assert.equal(await row.locator('.terminal-panel-status-label').textContent(), '运行中');
     await row.getByRole('img', { name: '已接管', exact: true }).waitFor();
     current.panes[1].status = 'interrupted';
+    await refresh();
+    await surface(page).locator('.terminal-pane-status.interrupted').waitFor();
+    assert.equal(await surface(page).getByRole('button', { name: '重建', exact: true }).count(), 0);
     current.panes[2].status = 'exited';
     await refresh();
     await eventually(async () => await row.locator('.terminal-panel-status-label').textContent() === '已中断');
     await row.getByRole('img', { name: '未连接', exact: true }).waitFor();
+    await surface(page).getByRole('button', { name: '重建', exact: true }).waitFor();
     current.panes[1].status = 'exited';
     await refresh();
     await eventually(async () => await row.locator('.terminal-panel-status-label').textContent() === '已退出');
+    assert.equal(await surface(page).getByRole('button', { name: '重建', exact: true }).count(), 0);
   });
 
   await test('terminal startup banners retain actual connection errors instead of claiming observation', async t => {
@@ -1263,7 +1268,7 @@ try {
     await row.getByRole('img', { name: '旁观中', exact: true }).waitFor();
   });
 
-  for (const status of ['exited', 'interrupted']) await test(`rebuild ${status} CLI terminal keeps its tab and replaces the attached pane`, async t => {
+  for (const [status, source] of [['exited', 'menu'], ['interrupted', 'menu'], ['interrupted', 'banner']]) await test(`rebuild ${status} CLI terminal from ${source} keeps its tab and replaces the attached pane`, async t => {
     const { page, state } = await fixture(t, { cliTerminals: 1, beforeOpen: ({ state }) => {
       state.createdTerminalTabs[0].panes[0].status = status;
       state.createdTerminalTabs[0].panes[0].agent_terminal.phase = 'ready';
@@ -1275,6 +1280,7 @@ try {
     let rebuilds = 0;
     let release;
     const gate = new Promise(resolve => { release = resolve; });
+    t.after(() => release());
     await page.route('**/api/terminals/cli-0/rebuild', async route => {
       assert.equal(route.request().method(), 'POST');
       rebuilds += 1;
@@ -1287,12 +1293,20 @@ try {
       state.knownTerminalTabs[rebuilt.id] = rebuilt;
       await route.fulfill({ json: rebuilt });
     });
-    await row.click({ button: 'right' });
-    await page.getByRole('menuitem', { name: '重建', exact: true }).click();
+    if (source === 'banner') {
+      await surface(page).locator('.terminal-connection').getByRole('button', { name: '重建', exact: true }).click();
+    } else {
+      await row.click({ button: 'right' });
+      await page.getByRole('menuitem', { name: '重建', exact: true }).click();
+    }
     await eventually(() => rebuilds === 1);
-    await row.click({ button: 'right' });
-    assert.equal(await page.getByRole('menuitem', { name: '重建中…', exact: true }).isDisabled(), true);
-    await page.keyboard.press('Escape');
+    if (source === 'banner') {
+      assert.equal(await surface(page).getByRole('button', { name: '重建中…', exact: true }).isDisabled(), true);
+    } else {
+      await row.click({ button: 'right' });
+      assert.equal(await page.getByRole('menuitem', { name: '重建中…', exact: true }).isDisabled(), true);
+      await page.keyboard.press('Escape');
+    }
     release();
     await row.getByText('初始化中', { exact: true }).waitFor();
     await eventually(() => state.terminalSockets.some(socket => socket.url().includes('/panes/rebuilt-pane/')));
@@ -1301,23 +1315,36 @@ try {
     assert.equal(await row.count(), 1);
     assert.equal(rebuilds, 1);
     assert.deepEqual(state.closedTerminalIds, []);
+    assert.equal(await surface(page).getByRole('button', { name: '重建', exact: true }).count(), 0);
     await row.click({ button: 'right' });
     assert.equal(await page.getByRole('menuitem', { name: '重建', exact: true }).count(), 0);
   });
 
-  await test('failed rebuild leaves interrupted terminal available for retry', async t => {
+  for (const source of ['menu', 'banner']) await test(`failed rebuild from ${source} leaves interrupted terminal available for retry`, async t => {
     const { page, state } = await fixture(t, { cliTerminals: 1, beforeOpen: ({ state }) => {
       state.createdTerminalTabs[0].panes[0].status = 'interrupted';
     } });
     const row = surface(page).locator('.terminal-panel-row').filter({ hasText: 'CLI agent 0' });
-    await page.route('**/api/terminals/cli-0/rebuild', route => route.fulfill({ status: 503, json: { message: '重建失败：服务暂不可用' } }));
-    await row.click({ button: 'right' });
-    await page.getByRole('menuitem', { name: '重建', exact: true }).click();
+    await row.locator('.terminal-panel-open').click();
+    const oldPane = await surface(page).locator('.terminal-pane:visible .xterm').elementHandle();
+    let rebuilds = 0;
+    await page.route('**/api/terminals/cli-0/rebuild', route => {
+      rebuilds += 1;
+      return route.fulfill({ status: 503, json: { message: '重建失败：服务暂不可用' } });
+    });
+    const retry = source === 'banner'
+      ? surface(page).locator('.terminal-connection').getByRole('button', { name: '重建', exact: true })
+      : page.getByRole('menuitem', { name: '重建', exact: true });
+    if (source === 'menu') await row.click({ button: 'right' });
+    await retry.click();
     await surface(page).getByRole('alert').filter({ hasText: '重建失败：服务暂不可用' }).waitFor();
     await row.getByText('已中断', { exact: true }).waitFor();
     assert.equal(state.createdTerminalTabs[0].panes[0].id, 'cli-pane-0');
-    await row.click({ button: 'right' });
-    assert.equal(await page.getByRole('menuitem', { name: '重建', exact: true }).isEnabled(), true);
+    assert.equal(await oldPane.evaluate(node => node.isConnected), true);
+    if (source === 'menu') await row.click({ button: 'right' });
+    assert.equal(await retry.isEnabled(), true);
+    await retry.click();
+    await eventually(() => rebuilds === 2);
   });
 
   await test('terminal list lifecycle stays independent of hidden, observer and exited views', async t => {

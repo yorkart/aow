@@ -92,6 +92,8 @@ interface Props {
   active: boolean;
   onFocus: () => void;
   onStatus: (status: TerminalPaneStatus, exitCode?: number | null) => void;
+  onRebuild?: () => void;
+  rebuilding?: boolean;
 }
 
 function controlMessage(value: string): ControlMessage | null {
@@ -368,7 +370,7 @@ class LimitedClipboardBase64 implements IBase64 {
   }
 }
 
-export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStatus,
+export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStatus, onRebuild, rebuilding = false,
   sizing = 'container', renderer = 'auto', fontSize = 13, attachEnabled = true, forceOnAttach = false, autoFocus = true, inputSuspended = false, mobileInput = false, controlsRef, onConnectionChange, onFrameChange,
 }: Props) {
   const [connection, setConnection] = useState<ConnectionState>(pane.status === 'running' ? 'connecting' : pane.status);
@@ -1849,7 +1851,16 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
       ) : null}
       <div className={`terminal-connection ${connection}${connectionMessage ? ' has-message' : ''}`} role="status" aria-live="polite">
         <span title={connectionMessage || pane.agent_terminal?.error || undefined}>{terminalPaneStatusMessage(pane, connection, connectionMessage)}</span>
-        {connection === 'observing' || connection === 'waiting' ? (
+        {onRebuild && (pane.status === 'interrupted' || connection === 'interrupted') ? (
+          <button
+            type="button"
+            className="terminal-rebuild-action"
+            disabled={rebuilding}
+            onClick={(event) => { event.stopPropagation(); onRebuild(); }}
+          >
+            {rebuilding ? '重建中…' : '重建'}
+          </button>
+        ) : connection === 'observing' || connection === 'waiting' ? (
           <button
             type="button"
             className="terminal-takeover-action"
