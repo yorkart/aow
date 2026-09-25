@@ -161,11 +161,7 @@ impl Registry {
         self.release_unused();
         if self.readers.len() > MAX_SESSIONS {
             for reader in self.readers.values_mut() {
-                if let Ok(modified) =
-                    std::fs::metadata(&reader.locator.transcript_path).and_then(|m| m.modified())
-                {
-                    reader.modified = modified;
-                }
+                reader.refresh_modified();
             }
         }
         while self.readers.len() > MAX_SESSIONS {

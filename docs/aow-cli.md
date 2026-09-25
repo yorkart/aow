@@ -1,8 +1,8 @@
-# AOW CLI 使用
+# AoW CLI 使用
 
-`aow-cli` 随 AOW 一起安装，用于查询项目、启动 Agent 和查看自动化执行记录。安装方式见 [README](../README.md)，请将 `~/.local/bin` 加入 `PATH`。
+`aow-cli` 随 AoW 一起安装，用于查询项目、启动 Agent 和查看自动化执行记录。安装方式见 [README](../README.md)，请将 `~/.local/bin` 加入 `PATH`。
 
-在运行 AOW 的机器上，以同一系统用户执行。`project` 需要 Web 服务运行；`agent` 还需要 terminald，并提前安装、登录对应 Agent CLI；`automation` 查询可在 Web 服务停止时使用。
+在运行 AoW 的机器上，以同一系统用户执行。`project` 需要 Web 服务运行；`agent` 还需要 terminald，并提前安装、登录对应 Agent CLI；`automation` 查询可在 Web 服务停止时使用。
 
 ## 查询项目
 

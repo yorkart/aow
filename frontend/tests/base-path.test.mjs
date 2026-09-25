@@ -44,7 +44,7 @@ async function startServer(t, base, { envBase = base, args = [] } = {}) {
     child.once('exit', code => finish(new Error(`Server exited ${code}: ${output}`)));
     const read = chunk => {
       output += chunk.toString();
-      const match = /AOW: (http:\/\/127\.0\.0\.1:\d+)/.exec(output);
+      const match = /AoW: (http:\/\/127\.0\.0\.1:\d+)/.exec(output);
       if (match) { clearTimeout(timer); resolve(match[1]); }
     };
     child.stdout.on('data', read);

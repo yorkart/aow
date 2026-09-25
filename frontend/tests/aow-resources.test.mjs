@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { readFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
@@ -352,6 +353,55 @@ try {
   }
 
   const groupButton = (root, name) => root.getByRole('button', { name: new RegExp(`^(展开|收起) ${name} 分组`) });
+
+  await test('worktree creation reports a pull timeout and allows retrying without updating the main repository', async t => {
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    t.after(() => release());
+    const submissions = [];
+    const { page } = await fixture(t, { beforeOpen: async ({ context, state }) => {
+      await context.route('**/api/aow/projects/project/worktrees', async route => {
+        const input = route.request().postDataJSON();
+        submissions.push(input);
+        if (input.pull_first) {
+          await gate;
+          await route.fulfill({ status: 400, json: { message: 'git pull failed in main worktree /workspace/wt-0: git pull timed out after 120 seconds' } });
+          return;
+        }
+        const worktree = { ...worktrees[0], id: 'created', path: input.path, branch: input.branch, is_main: false };
+        const updated = { ...project, worktrees: [...worktrees, worktree] };
+        state.projects = [updated];
+        await route.fulfill({ json: { project: updated, worktree } });
+      });
+    } });
+    await page.getByRole('button', { name: 'Resource Fixture Project 操作', exact: true }).click();
+    await page.getByRole('menuitem', { name: '创建 Worktree', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: '创建 Worktree', exact: true });
+    await dialog.getByLabel('新分支', { exact: true }).fill('feat/tab-style');
+    const path = await dialog.getByLabel('Worktree 路径', { exact: true }).inputValue();
+    await dialog.getByRole('button', { name: '创建 Worktree', exact: true }).click();
+    await dialog.getByRole('status').waitFor();
+    assert.match(await dialog.getByRole('status').textContent(), /正在更新主仓库并创建 Worktree.*2 分钟/);
+    assert.equal(await dialog.getByRole('button', { name: '创建中…', exact: true }).isDisabled(), true);
+    assert.equal(submissions.length, 1);
+    release();
+    await dialog.getByRole('alert').waitFor();
+    assert.match(await dialog.getByRole('alert').textContent(), /git pull timed out after 120 seconds/);
+    assert.equal(await dialog.getByLabel('新分支', { exact: true }).inputValue(), 'feat/tab-style');
+    assert.equal(await dialog.getByLabel('Worktree 路径', { exact: true }).inputValue(), path);
+    assert.equal(await dialog.getByRole('button', { name: '取消', exact: true }).isEnabled(), true);
+    assert.equal(await dialog.getByRole('status').count(), 0);
+    await dialog.getByRole('checkbox', { name: '创建前更新主仓库（git pull）', exact: true }).uncheck();
+    await dialog.getByText('查看 Git 命令', { exact: true }).click();
+    assert.doesNotMatch(await dialog.locator('.project-aow-command-preview code').textContent(), /pull/);
+    await dialog.getByRole('button', { name: '创建 Worktree', exact: true }).click();
+    await dialog.waitFor({ state: 'hidden' });
+    await page.locator('.project-aow-worktrees').getByRole('button').filter({ hasText: 'feat/tab-style' }).waitFor();
+    assert.deepEqual(submissions, [
+      { branch: 'feat/tab-style', base_ref: 'branch-0', path, pull_first: true },
+      { branch: 'feat/tab-style', base_ref: 'branch-0', path, pull_first: false },
+    ]);
+  });
 
   await test('project avatars load independently, directly reference the image and recover from broken or unsupported providers', async t => {
     let releaseAvatar;
@@ -1048,7 +1098,7 @@ try {
   await test('left sidebar hides without remounting workspaces and restores its width and visibility', async t => {
     const { page, state } = await fixture(t);
     const sidebar = page.getByRole('complementary', { name: '项目侧边栏', includeHidden: true });
-    assert.equal(await sidebar.locator('.project-aow-brand strong').textContent(), 'AOW');
+    assert.equal(await sidebar.locator('.project-aow-brand strong').textContent(), 'AoW');
     const terminal = await surface(page).locator('.terminal-emulator-shell:visible').elementHandle();
     const resizer = page.getByRole('separator', { name: '调整项目栏宽度' });
     const handle = await resizer.boundingBox();
@@ -1235,13 +1285,18 @@ try {
     assert.equal(await row.locator('.terminal-panel-status-label').textContent(), '运行中');
     await row.getByRole('img', { name: '已接管', exact: true }).waitFor();
     current.panes[1].status = 'interrupted';
+    await refresh();
+    await surface(page).locator('.terminal-pane-status.interrupted').waitFor();
+    assert.equal(await surface(page).getByRole('button', { name: '重建', exact: true }).count(), 0);
     current.panes[2].status = 'exited';
     await refresh();
     await eventually(async () => await row.locator('.terminal-panel-status-label').textContent() === '已中断');
     await row.getByRole('img', { name: '未连接', exact: true }).waitFor();
+    await surface(page).getByRole('button', { name: '重建', exact: true }).waitFor();
     current.panes[1].status = 'exited';
     await refresh();
     await eventually(async () => await row.locator('.terminal-panel-status-label').textContent() === '已退出');
+    assert.equal(await surface(page).getByRole('button', { name: '重建', exact: true }).count(), 0);
   });
 
   await test('terminal startup banners retain actual connection errors instead of claiming observation', async t => {
@@ -1262,7 +1317,7 @@ try {
     await row.getByRole('img', { name: '旁观中', exact: true }).waitFor();
   });
 
-  for (const status of ['exited', 'interrupted']) await test(`rebuild ${status} CLI terminal keeps its tab and replaces the attached pane`, async t => {
+  for (const [status, source] of [['exited', 'menu'], ['interrupted', 'menu'], ['interrupted', 'banner']]) await test(`rebuild ${status} CLI terminal from ${source} keeps its tab and replaces the attached pane`, async t => {
     const { page, state } = await fixture(t, { cliTerminals: 1, beforeOpen: ({ state }) => {
       state.createdTerminalTabs[0].panes[0].status = status;
       state.createdTerminalTabs[0].panes[0].agent_terminal.phase = 'ready';
@@ -1274,6 +1329,7 @@ try {
     let rebuilds = 0;
     let release;
     const gate = new Promise(resolve => { release = resolve; });
+    t.after(() => release());
     await page.route('**/api/terminals/cli-0/rebuild', async route => {
       assert.equal(route.request().method(), 'POST');
       rebuilds += 1;
@@ -1286,12 +1342,20 @@ try {
       state.knownTerminalTabs[rebuilt.id] = rebuilt;
       await route.fulfill({ json: rebuilt });
     });
-    await row.click({ button: 'right' });
-    await page.getByRole('menuitem', { name: '重建', exact: true }).click();
+    if (source === 'banner') {
+      await surface(page).locator('.terminal-connection').getByRole('button', { name: '重建', exact: true }).click();
+    } else {
+      await row.click({ button: 'right' });
+      await page.getByRole('menuitem', { name: '重建', exact: true }).click();
+    }
     await eventually(() => rebuilds === 1);
-    await row.click({ button: 'right' });
-    assert.equal(await page.getByRole('menuitem', { name: '重建中…', exact: true }).isDisabled(), true);
-    await page.keyboard.press('Escape');
+    if (source === 'banner') {
+      assert.equal(await surface(page).getByRole('button', { name: '重建中…', exact: true }).isDisabled(), true);
+    } else {
+      await row.click({ button: 'right' });
+      assert.equal(await page.getByRole('menuitem', { name: '重建中…', exact: true }).isDisabled(), true);
+      await page.keyboard.press('Escape');
+    }
     release();
     await row.getByText('初始化中', { exact: true }).waitFor();
     await eventually(() => state.terminalSockets.some(socket => socket.url().includes('/panes/rebuilt-pane/')));
@@ -1300,23 +1364,36 @@ try {
     assert.equal(await row.count(), 1);
     assert.equal(rebuilds, 1);
     assert.deepEqual(state.closedTerminalIds, []);
+    assert.equal(await surface(page).getByRole('button', { name: '重建', exact: true }).count(), 0);
     await row.click({ button: 'right' });
     assert.equal(await page.getByRole('menuitem', { name: '重建', exact: true }).count(), 0);
   });
 
-  await test('failed rebuild leaves interrupted terminal available for retry', async t => {
+  for (const source of ['menu', 'banner']) await test(`failed rebuild from ${source} leaves interrupted terminal available for retry`, async t => {
     const { page, state } = await fixture(t, { cliTerminals: 1, beforeOpen: ({ state }) => {
       state.createdTerminalTabs[0].panes[0].status = 'interrupted';
     } });
     const row = surface(page).locator('.terminal-panel-row').filter({ hasText: 'CLI agent 0' });
-    await page.route('**/api/terminals/cli-0/rebuild', route => route.fulfill({ status: 503, json: { message: '重建失败：服务暂不可用' } }));
-    await row.click({ button: 'right' });
-    await page.getByRole('menuitem', { name: '重建', exact: true }).click();
+    await row.locator('.terminal-panel-open').click();
+    const oldPane = await surface(page).locator('.terminal-pane:visible .xterm').elementHandle();
+    let rebuilds = 0;
+    await page.route('**/api/terminals/cli-0/rebuild', route => {
+      rebuilds += 1;
+      return route.fulfill({ status: 503, json: { message: '重建失败：服务暂不可用' } });
+    });
+    const retry = source === 'banner'
+      ? surface(page).locator('.terminal-connection').getByRole('button', { name: '重建', exact: true })
+      : page.getByRole('menuitem', { name: '重建', exact: true });
+    if (source === 'menu') await row.click({ button: 'right' });
+    await retry.click();
     await surface(page).getByRole('alert').filter({ hasText: '重建失败：服务暂不可用' }).waitFor();
     await row.getByText('已中断', { exact: true }).waitFor();
     assert.equal(state.createdTerminalTabs[0].panes[0].id, 'cli-pane-0');
-    await row.click({ button: 'right' });
-    assert.equal(await page.getByRole('menuitem', { name: '重建', exact: true }).isEnabled(), true);
+    assert.equal(await oldPane.evaluate(node => node.isConnected), true);
+    if (source === 'menu') await row.click({ button: 'right' });
+    assert.equal(await retry.isEnabled(), true);
+    await retry.click();
+    await eventually(() => rebuilds === 2);
   });
 
   await test('terminal list lifecycle stays independent of hidden, observer and exited views', async t => {
@@ -2759,7 +2836,7 @@ try {
     await dialog.getByRole('button', { name: '编辑 Codex', exact: true }).click();
     assert.equal(await dialog.getByLabel('Display name', { exact: true }).inputValue(), 'Codex');
     assert.equal(await dialog.getByLabel('Executable', { exact: true }).inputValue(), 'codex');
-    await dialog.getByLabel('Arguments', { exact: true }).fill('["--model", "model with spaces"]');
+    await dialog.getByLabel('Arguments', { exact: true }).fill('--model\nmodel with spaces');
     assert.equal(await dialog.getByLabel('Environment keys', { exact: true }).count(), 0);
     const env = { BASE_URL: 'https://example.com/api?a=b', EMPTY: '', HOME: '/agent/home' };
     await dialog.getByLabel('Environment variables', { exact: true }).fill(JSON.stringify(env));
@@ -2773,12 +2850,12 @@ try {
     await dialog.getByRole('button', { name: /Agents/ }).click();
     await dialog.getByRole('button', { name: '编辑 Codex', exact: true }).click();
     assert.equal(await dialog.getByLabel('Executable', { exact: true }).inputValue(), 'codex');
-    assert.deepEqual(JSON.parse(await dialog.getByLabel('Arguments', { exact: true }).inputValue()), ['--model', 'model with spaces']);
+    assert.equal(await dialog.getByLabel('Arguments', { exact: true }).inputValue(), '--model\nmodel with spaces');
     assert.deepEqual(JSON.parse(await dialog.getByLabel('Environment variables', { exact: true }).inputValue()), env);
     await dialog.getByRole('button', { name: '移除配置', exact: true }).click();
     await dialog.getByText('Auto detected', { exact: true }).waitFor();
     await dialog.getByRole('button', { name: '编辑 Codex', exact: true }).click();
-    assert.equal(await dialog.getByLabel('Arguments', { exact: true }).inputValue(), '[]');
+    assert.equal(await dialog.getByLabel('Arguments', { exact: true }).inputValue(), '');
     assert.equal(await dialog.getByLabel('Environment variables', { exact: true }).inputValue(), '{}');
     await dialog.getByRole('button', { name: '取消编辑', exact: true }).click();
     assert.equal(await dialog.getByRole('button', { name: '注册', exact: true }).isDisabled(), true);
@@ -2791,6 +2868,74 @@ try {
     assert.equal(Object.hasOwn(state.agentUpdates.at(-1), 'id'), false, 'registering after editing must create a new ID');
     assert.deepEqual(state.agentUpdates.at(-1).env, {}, 'blank environment only inherits the launch environment');
     assert.equal(state.registeredAgents.length, 2);
+  });
+
+  await test('agent arguments normalize pasted commands and preserve literal values through save and reopen', async t => {
+    const agent = { id: 'codex', display_name: 'Codex', source: 'detected', available: true, command: 'codex', executable: '/usr/bin/codex', args: [], env: {} };
+    const { page, state } = await fixture(t, { registeredAgents: [agent] });
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    const dialog = page.locator('.project-aow-settings');
+    await dialog.getByRole('button', { name: /Agents/ }).click();
+    await dialog.getByRole('button', { name: '编辑 Codex', exact: true }).click();
+    const input = dialog.getByRole('textbox', { name: 'Arguments', exact: true });
+    assert.equal(await input.evaluate(element => element.tagName), 'TEXTAREA');
+    const command = ['codex -m gpt-6-luna \\', `  -c 'approval_policy="on-request"' \\`, `  -c 'approvals_reviewer="auto_review"'`].join('\r\n');
+    await input.focus();
+    await input.evaluate((element, text) => {
+      const clipboardData = new DataTransfer();
+      clipboardData.setData('text/plain', text);
+      element.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }));
+    }, command);
+    const expected = ['-m', 'gpt-6-luna', '-c', 'approval_policy="on-request"', '-c', 'approvals_reviewer="auto_review"'];
+    assert.equal(await input.inputValue(), expected.join('\n'));
+    await dialog.getByRole('button', { name: '保存配置', exact: true }).click();
+    await dialog.getByRole('status').waitFor();
+    assert.deepEqual(state.agentUpdates.at(-1).args, expected);
+    await dialog.getByRole('button', { name: '编辑 Codex', exact: true }).click();
+    assert.equal(await input.inputValue(), expected.join('\n'));
+    await input.fill(`${expected.join('\n')}\n--message\ntext with spaces and "quotes"`);
+    await dialog.getByRole('button', { name: '保存配置', exact: true }).click();
+    await dialog.getByRole('status').waitFor();
+    assert.deepEqual(state.agentUpdates.at(-1).args, [...expected, '--message', 'text with spaces and "quotes"']);
+    await dialog.getByRole('button', { name: '编辑 Codex', exact: true }).click();
+    await input.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: '/tmp/aow-agent-arguments-desktop.png' });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await input.scrollIntoViewIfNeeded();
+    assert.equal(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth), true);
+    assert.equal(await input.evaluate(element => element.getBoundingClientRect().right <= window.innerWidth), true);
+    await page.screenshot({ path: '/tmp/aow-agent-arguments-mobile.png' });
+  });
+
+  await test('agent arguments keep typing uninterrupted and normalize on blur or keyboard submit', async t => {
+    const agent = { id: 'codex', display_name: 'Codex', source: 'detected', available: true, command: 'codex', executable: '/usr/bin/codex', args: [], env: {} };
+    const { page, state } = await fixture(t, { registeredAgents: [agent] });
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    const dialog = page.locator('.project-aow-settings');
+    await dialog.getByRole('button', { name: /Agents/ }).click();
+    await dialog.getByRole('button', { name: '编辑 Codex', exact: true }).click();
+    const input = dialog.getByRole('textbox', { name: 'Arguments', exact: true });
+    await input.focus();
+    await input.pressSequentially('-m gpt-6-luna');
+    assert.equal(await input.inputValue(), '-m gpt-6-luna');
+    await input.press('Tab');
+    assert.equal(await input.inputValue(), '-m\ngpt-6-luna');
+    await input.fill('--message "hello world"');
+    await input.evaluate(element => element.form.requestSubmit());
+    await dialog.getByRole('status').waitFor();
+    assert.deepEqual(state.agentUpdates.at(-1).args, ['--message', 'hello world']);
+    await dialog.getByRole('button', { name: '编辑 Codex', exact: true }).click();
+    const start = '--message\n'.length;
+    await input.evaluate((element, start) => {
+      element.setSelectionRange(start, start + 'hello'.length);
+      const clipboardData = new DataTransfer();
+      clipboardData.setData('text/plain', 'a new');
+      element.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }));
+    }, start);
+    assert.equal(await input.inputValue(), '--message\na new world');
+    await dialog.getByRole('button', { name: '保存配置', exact: true }).click();
+    await dialog.getByRole('status').waitFor();
+    assert.deepEqual(state.agentUpdates.at(-1).args, ['--message', 'a new world']);
   });
 
   await test('agent registration requires a supported type and shows type icons for custom configurations', async t => {
@@ -2815,7 +2960,7 @@ try {
     assert.deepEqual(await type.locator('option').evaluateAll(options => options.map(option => option.value)), ['', 'claude', 'codex', 'traecli']);
     await dialog.getByLabel('Display name', { exact: true }).fill('My custom wrapper');
     await dialog.getByLabel('Executable', { exact: true }).fill('/opt/custom/start');
-    await dialog.getByLabel('Arguments', { exact: true }).fill('["--anything", "value with spaces"]');
+    await dialog.getByLabel('Arguments', { exact: true }).fill('--anything\nvalue with spaces');
     const env = { CUSTOM_URL: 'https://example.com', EMPTY: '' };
     await dialog.getByLabel('Environment variables', { exact: true }).fill(JSON.stringify(env));
     assert.equal(await dialog.getByRole('button', { name: '注册', exact: true }).isDisabled(), true);
@@ -2856,10 +3001,12 @@ try {
     const args = dialog.getByLabel('Arguments', { exact: true });
     const env = dialog.getByLabel('Environment variables', { exact: true });
     const save = dialog.getByRole('button', { name: '保存配置', exact: true });
-    await args.fill('[42]');
+    await args.fill('--model "incomplete');
     await save.click();
-    await dialog.getByText('Arguments 必须是字符串 JSON 数组', { exact: true }).waitFor();
-    await args.fill('["--changed"]');
+    await dialog.getByText('Arguments 中的引号未闭合，请补全后再保存。', { exact: true }).waitFor();
+    assert.equal(await args.inputValue(), '--model "incomplete');
+    assert.equal(state.agentUpdates.length, 0);
+    await args.fill('--changed');
     for (const invalid of ['[]', 'null', '{"KEY":42}', '{"BAD=KEY":"value"}']) {
       await env.fill(invalid);
       await save.click();
@@ -2870,7 +3017,7 @@ try {
     state.failAgentSave = true;
     await save.click();
     await dialog.getByText('Agent configuration write failed', { exact: true }).waitFor();
-    assert.equal(await args.inputValue(), '["--changed"]');
+    assert.equal(await args.inputValue(), '--changed');
     assert.equal(await env.inputValue(), '{"KEY":"value"}');
     assert.deepEqual(state.registeredAgents, [agent]);
     state.failAgentSave = false;
@@ -2884,7 +3031,7 @@ try {
     const { page, state } = await fixture(t, { multipleTerminals: true });
     assert.equal(await tab(page, 'Shell').locator('img.agent-icon').count(), 0);
     assert.equal(await tab(page, 'Background').getAttribute('aria-selected'), 'false');
-    for (const [agent, asset] of [['codex', 'codex.png'], ['claude', 'claude.png'], ['traecli', 'trae.png']]) {
+    for (const [agent, asset] of [['codex', 'codex.png'], ['claude', 'claude.png'], ['traecli', 'trae.png'], ['hermes', 'hermes.png']]) {
       state.agents = { 'wt-0-pane': agent, 'wt-0-background-pane': agent };
       await eventually(async () => await tab(page, 'Background').locator('img.agent-icon').count() === 1
         && (await tab(page, 'Background').locator('img.agent-icon').getAttribute('src')).includes(asset));
@@ -2970,6 +3117,50 @@ try {
     await switchWorktree(page, 1);
     await eventually(async () => await tab(page, 'Shell').count() === 1);
     assert.equal(await tab(page, '新的任务').count(), 0);
+  });
+
+  await test('exported live agent metadata displays its title and icon in tabs and the terminal list', { skip: !process.env.AOW_TITLE_TEST_EXPORT }, async t => {
+    const metadata = JSON.parse(await readFile(process.env.AOW_TITLE_TEST_EXPORT, 'utf8'));
+    const agent = metadata.agents.live;
+    const title = metadata.titles.live;
+    assert.ok(agent && title && metadata.processes.live.pid > 0);
+    const { page, state } = await fixture(t);
+    state.agents = { 'wt-0-pane': agent };
+    state.titles = { 'wt-0-pane': title };
+    await eventually(async () => await tab(page, title).count() === 1);
+    assert.equal(await tab(page, title).locator('img.agent-icon').count(), 1);
+    await surface(page).locator('.terminal-panel-open').filter({ hasText: title }).waitFor();
+    await page.reload();
+    await eventually(async () => await tab(page, title).count() === 1);
+    await surface(page).locator('.terminal-panel-open').filter({ hasText: title }).waitFor();
+  });
+
+  await test('Hermes database titles update tabs and the terminal list while preserving custom names', async t => {
+    const { page, state } = await fixture(t, { multipleTerminals: true });
+    state.agents = { 'wt-0-pane': 'hermes', 'wt-0-background-pane': 'hermes' };
+    state.titles = { 'wt-0-pane': '首条用户任务', 'wt-0-background-pane': '另一个 Hermes 会话' };
+    await eventually(async () => await tab(page, '首条用户任务').count() === 1);
+    assert.ok((await tab(page, '首条用户任务').locator('img.agent-icon').getAttribute('src')).endsWith('hermes.png'));
+    assert.equal(await tab(page, '另一个 Hermes 会话').getAttribute('aria-selected'), 'false');
+    await surface(page).locator('.terminal-panel-open').filter({ hasText: '首条用户任务' }).waitFor();
+
+    state.titles['wt-0-pane'] = 'Hermes 自动生成的标题';
+    await eventually(async () => await tab(page, 'Hermes 自动生成的标题').count() === 1);
+    await surface(page).locator('.terminal-panel-open').filter({ hasText: 'Hermes 自动生成的标题' }).waitFor();
+    await tab(page, 'Hermes 自动生成的标题').dblclick();
+    const rename = page.getByRole('textbox', { name: 'Terminal 名称', exact: true });
+    await rename.fill('我命名的 Hermes');
+    await rename.press('Enter');
+    await eventually(async () => state.names['wt-0-tab'] === '我命名的 Hermes');
+    state.titles = { 'wt-0-pane': 'Hermes 后续改名', 'wt-0-background-pane': '后台会话新标题' };
+    await eventually(async () => await tab(page, '后台会话新标题').count() === 1);
+    assert.equal(await tab(page, '我命名的 Hermes').count(), 1);
+    await page.reload();
+    await eventually(async () => await tab(page, '后台会话新标题').count() === 1);
+    assert.equal(await tab(page, '我命名的 Hermes').count(), 1);
+    state.agents['wt-0-background-pane'] = null;
+    await eventually(async () => await tab(page, 'Background').count() === 1);
+    assert.equal(await tab(page, 'Background').locator('img.agent-icon').count(), 0);
   });
 
   await test('split terminal tabs summarize agents while each pane keeps its own icon and title', async t => {
@@ -3193,6 +3384,45 @@ try {
     await surface(page).getByRole('button', { name: 'Explorer', exact: true }).click();
     await surface(page).locator(`.tree-row[data-tree-path="${textPath}"]`).click();
     await eventually(async () => (await textEditor(page))?.value === 'Initial text');
+  }
+
+  for (const action of ['close', 'switch']) {
+    await test(`pending word highlights are cancelled cleanly when editors ${action}`, async t => {
+      const otherPath = `${worktrees[0].path}/other.txt`;
+      const { page, state } = await fixture(t, { beforeOpen: ({ state }) => {
+        state.textFiles[otherPath] = { content: 'Other file', version: 'v1' };
+      } });
+      if (action === 'switch') {
+        await page.getByRole('button', { name: 'Explorer', exact: true }).click();
+        await surface(page).locator(`.tree-row[data-tree-path="${otherPath}"]`).click();
+        await eventually(async () => (await modelPaths(page)).some(path => path.endsWith('/other.txt')));
+      }
+      await openText(page);
+      const monaco = await page.evaluateHandle(async () => (await import('/src/features/editor/monaco.ts')).monaco);
+      // Focus/move and close/switch within the same browser task, before Monaco's
+      // 50 ms word-highlight timer can finish. Ordinary clicks can miss this race.
+      await page.evaluate(({ monaco, action }) => {
+        const area = document.querySelector('.project-aow-surface:not([hidden])');
+        const editor = monaco.editor.getEditors().find(editor => editor.getDomNode()?.closest('.project-aow-surface') === area);
+        editor.focus();
+        editor.setPosition({ lineNumber: 1, column: 3 });
+        if (action === 'close') area.querySelector('button[aria-label="关闭 edit.txt"]').click();
+        else [...area.querySelectorAll('[role="tab"]')].find(tab => tab.textContent.includes('other.txt')).click();
+      }, { monaco, action });
+      await monaco.dispose();
+      if (action === 'close') {
+        await surface(page).getByRole('button', { name: '关闭 edit.txt', exact: true }).waitFor({ state: 'hidden' });
+        await eventually(async () => !(await modelPaths(page)).some(path => path.endsWith('/edit.txt')));
+      } else {
+        await eventually(() => page.evaluate(async () => {
+          const { monaco } = await import('/src/features/editor/monaco.ts');
+          return monaco.editor.getEditors().some(editor => editor.getDomNode()?.checkVisibility() && editor.getValue() === 'Other file');
+        }));
+      }
+      await delay(100);
+      assert.deepEqual(state.errors, []);
+      assert.deepEqual(state.writes, [], 'moving the cursor and leaving an editor must not change its file');
+    });
   }
 
   await test('manual file refresh updates the existing model, reports deletion, and ignores a closed tab request', async t => {

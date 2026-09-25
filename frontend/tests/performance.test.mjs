@@ -50,7 +50,10 @@ try {
         await route.fulfill(state.commandError ? { status: 400, json: { message: state.commandError } } : { status: 204 });
         return;
       }
-      else if (url.pathname === '/api/git/commit/files') data = { repository: '/fixture', commit: url.searchParams.get('commit'), files: files.map(file => ({ path: file.path, status: 'M', original_path: null })) };
+      else if (url.pathname === '/api/git/commit/files') {
+        await state.commitFilesGate;
+        data = { repository: '/fixture', commit: url.searchParams.get('commit'), files: state.commitFiles ?? files.map(file => ({ path: file.path, status: 'M', original_path: null })) };
+      }
       await route.fulfill(data === undefined ? { status: 404, json: { message: 'Unknown fixture endpoint' } } : { json: data });
     });
     const page = await context.newPage();
@@ -67,6 +70,72 @@ try {
     await page.getByRole('button', { name: `定位 ${title}`, exact: true }).click();
     await page.clock.runFor(32);
   }
+
+  await test('commit graph keeps HEAD as the mainline and connects across expanded file lists', async t => {
+    const { page, state } = await fixture(t);
+    state.commits = [
+      { id: 'head', parents: ['main', 'feature'], subject: 'Merge feature' },
+      { id: 'feature', parents: ['base'], subject: 'Feature change' },
+      { id: 'main', parents: ['base'], subject: 'Main change' },
+      { id: 'base', parents: [], subject: 'Common base' },
+    ].map(value => ({ ...commits[0], ...value, short_id: value.id }));
+    state.commitFiles = [{ path: 'frontend/src/styles.css', status: 'M', original_path: null }];
+    await page.getByRole('button', { name: '收起 Changes', exact: true }).click();
+    await page.getByRole('button', { name: '刷新 Commits', exact: true }).click();
+    await page.locator('.commit-row code').filter({ hasText: 'head' }).waitFor();
+    await navigate(page, 'Commits');
+    const geometry = await page.locator('.commit-node').evaluateAll(nodes => nodes.map(node => {
+      const dot = node.querySelector('circle');
+      const graph = node.querySelector('.commit-graph-layer').getBoundingClientRect();
+      return { x: dot.cx.baseVal.value, color: getComputedStyle(dot).stroke,
+        clear: node.querySelector('.commit-disclosure').getBoundingClientRect().left >= graph.right };
+    }));
+    for (const index of [2, 3]) {
+      assert.equal(geometry[index].x, geometry[0].x);
+      assert.equal(geometry[index].color, geometry[0].color);
+    }
+    assert.ok(geometry[1].x > geometry[0].x);
+    assert.ok(geometry.every(row => row.clear), 'graph lanes must not overlap labels or disclosure controls');
+
+    async function connected() {
+      const measurements = await page.locator('.commit-node').evaluateAll(nodes => nodes.slice(0, -1).flatMap((node, index) => {
+        const svg = node.querySelector('svg').getBoundingClientRect();
+        const next = nodes[index + 1].getBoundingClientRect();
+        const lines = [...node.querySelectorAll('.commit-graph-continuation')];
+        return lines.length ? lines.map(line => {
+          const box = line.getBoundingClientRect();
+          return { startGap: box.top - svg.bottom, endGap: next.top - box.bottom, width: box.width };
+        }) : [{ startGap: 0, endGap: next.top - svg.bottom, width: 1 }];
+      }));
+      assert.ok(measurements.every(line => Math.abs(line.startGap) < .1 && Math.abs(line.endGap) < .1 && line.width === 1), JSON.stringify(measurements));
+      assert.ok(await page.locator('.commit-graph-edge').evaluateAll(edges => edges.every(edge => getComputedStyle(edge).strokeWidth === '1px')));
+    }
+    await connected();
+    let releaseFiles;
+    state.commitFilesGate = new Promise(resolve => { releaseFiles = resolve; });
+    try {
+      await page.locator('.commit-row').first().click();
+      await page.locator('.commit-changes [role="status"]').waitFor();
+      await connected();
+      releaseFiles(); state.commitFilesGate = null;
+      await page.locator('.commit-changes .change-row').waitFor();
+      await connected();
+      await page.getByRole('button', { name: 'Commits 视图选项', exact: true }).click();
+      await page.getByRole('menuitemradio', { name: 'View as Tree', exact: true }).click();
+      await page.locator('.commit-changes .source-change-tree').waitFor();
+      await connected();
+      if (process.env.AOW_GIT_GRAPH_SCREENSHOT) await page.locator('.source-control').screenshot({ path: process.env.AOW_GIT_GRAPH_SCREENSHOT });
+      await page.locator('.commit-changes .change-folder-row').first().click();
+      await page.locator('.commit-changes .change-row').waitFor({ state: 'detached' });
+      await connected();
+      state.commitFiles = [];
+      await page.locator('.commit-row').nth(1).click();
+      await page.locator('.commit-changes .side-empty').filter({ hasText: '此提交没有文件变更' }).waitFor();
+      await connected();
+      await page.locator('.commit-row').first().click();
+      await connected();
+    } finally { releaseFiles(); state.commitFilesGate = null; }
+  });
 
   await test('Source Control menus dismiss outside, toggle, and preserve independent layouts', async t => {
     const { page } = await fixture(t);
@@ -113,6 +182,9 @@ try {
     await menu.waitFor({ state: 'detached' });
     await commitsMenu.click();
     await page.evaluate(() => window.performancePreview.setVisible(false));
+    // Let React commit the hidden state before toggling it back on.
+    await page.locator('.source-control').waitFor({ state: 'hidden' });
+    await menu.waitFor({ state: 'detached' });
     await page.evaluate(() => window.performancePreview.setVisible(true));
     await menu.waitFor({ state: 'detached' });
   });

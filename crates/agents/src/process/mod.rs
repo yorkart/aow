@@ -2,6 +2,7 @@
 
 mod claude;
 mod codex;
+mod hermes;
 mod info;
 mod traecli;
 
@@ -16,7 +17,10 @@ pub trait AgentProcessMatcher: Sync {
 
 impl Agent {
     pub fn detects_processes(self) -> bool {
-        matches!(self, Self::Codex | Self::Claude | Self::TraeCli)
+        matches!(
+            self,
+            Self::Codex | Self::Claude | Self::TraeCli | Self::Hermes
+        )
     }
 }
 
@@ -26,6 +30,7 @@ impl AgentProcessMatcher for Agent {
             Self::Codex => codex::Codex.matches_process(process),
             Self::Claude => claude::Claude.matches_process(process),
             Self::TraeCli => traecli::TraeCli.matches_process(process),
+            Self::Hermes => hermes::Hermes.matches_process(process),
             _ => false,
         }
     }

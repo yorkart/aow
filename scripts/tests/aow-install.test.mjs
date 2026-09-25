@@ -103,7 +103,7 @@ esac
       write(join(bundle, 'bin', name), '#!/bin/sh\n[ "${FAIL_BINARY:-}" != 1 ]\n', true);
     }
     write(join(bundle, 'bin/aow-server'), '#!/bin/sh\nprintf "%s\\n" "$@" >> "$INITIALIZE_LOG"\n[ "${FAIL_INITIALIZE:-}" != 1 ]\n', true);
-    write(join(bundle, 'frontend/dist/index.html'), '<html>AOW</html>');
+    write(join(bundle, 'frontend/dist/index.html'), '<html>AoW</html>');
     write(join(bundle, 'manifest.json'), JSON.stringify({ release_id: version, platform: { os: 'linux', arch: 'x86_64' } }));
     for (const path of [
       'scripts/start-server.sh', 'scripts/start-terminald.sh', 'scripts/replace-symlink.mjs', 'scripts/server-state-dir.sh',
@@ -728,7 +728,7 @@ test('aow update uses the saved repository and refreshed installer while preserv
   write(pin, 'keep-pin');
   f.pack('2.0.0');
   writeFileSync(join(f.downloads, 'aow-install.sh'), readFileSync(join(f.downloads, 'aow-install.sh'), 'utf8')
-    .replace('Installed AOW %s in %s', 'Updated by refreshed installer %s in %s'));
+    .replace('Installed AoW %s in %s', 'Updated by refreshed installer %s in %s'));
   writeFileSync(f.downloadLog, '');
   const result = f.manager();
   assert.ifError(result.error);

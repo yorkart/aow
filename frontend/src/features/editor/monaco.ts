@@ -2,14 +2,14 @@ import { loader } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
 
 export { monaco };
-import { conf as javascriptConfiguration, language as javascriptLanguage } from 'monaco-editor/esm/vs/basic-languages/javascript/javascript.js';
-import { conf as pythonConfiguration, language as pythonLanguage } from 'monaco-editor/esm/vs/basic-languages/python/python.js';
-import { conf as typescriptConfiguration, language as typescriptLanguage } from 'monaco-editor/esm/vs/basic-languages/typescript/typescript.js';
-import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
-import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker';
-import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker';
-import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
-import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker';
+import { conf as javascriptConfiguration, language as javascriptLanguage } from 'monaco-editor/languages/definitions/javascript/javascript.js';
+import { conf as pythonConfiguration, language as pythonLanguage } from 'monaco-editor/languages/definitions/python/python.js';
+import { conf as typescriptConfiguration, language as typescriptLanguage } from 'monaco-editor/languages/definitions/typescript/typescript.js';
+import editorWorker from 'monaco-editor/editor/editor.worker.js?worker';
+import cssWorker from 'monaco-editor/languages/features/css/css.worker.js?worker';
+import htmlWorker from 'monaco-editor/languages/features/html/html.worker.js?worker';
+import jsonWorker from 'monaco-editor/languages/features/json/json.worker.js?worker';
+import tsWorker from 'monaco-editor/languages/features/typescript/ts.worker.js?worker';
 
 // Both the editor workspace and PR inline diffs use Monaco. Keep its worker
 // configuration in one module imported by each lazy editor entry, so a DiffEditor

@@ -6,7 +6,7 @@ runtime_root=${AOW_RUNTIME_ROOT:-${HOME:?HOME must be set}/.local/lib/aow}
 active_release=$runtime_root/active/terminald
 
 if [ ! -d "$active_release" ]; then
-    printf 'error: no active AOW terminald release; run the AOW installer and enter y to activate terminald\n' >&2
+    printf 'error: no active AoW terminald release; run the AoW installer and enter y to activate terminald\n' >&2
     exit 1
 fi
 

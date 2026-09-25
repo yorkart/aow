@@ -1,6 +1,61 @@
 use super::{ProcessInfo, recognize_process};
 
 #[test]
+fn recognizes_managed_python_relaunch_without_matching_arbitrary_inline_code() {
+    let bootstrap = "import sys, runpy; sys.path.insert(0, '/opt/hermes-agent'); sys.argv = ['/opt/venv/bin/hermes', '--cli']; runpy.run_path('/opt/venv/bin/hermes', run_name='__main__')";
+    for code in [
+        bootstrap.to_owned(),
+        bootstrap.replace(
+            "'--cli'",
+            "'--cli', '--query', \"quoted 'prompt'; ] runpy.run_path(\\\"other\\\")\"",
+        ),
+    ] {
+        assert_eq!(
+            recognize_process(&ProcessInfo::new(
+                Some("/opt/python3.14"),
+                &["python3", "-W", "ignore", "-X", "utf8", "-I", "-c", &code]
+            )),
+            Some(crate::Agent::Hermes)
+        );
+    }
+    for code in [
+        format!("print({bootstrap:?})"),
+        format!("{bootstrap}; unrelated()"),
+        bootstrap.replace(
+            "runpy.run_path('/opt/venv/bin/hermes'",
+            "runpy.run_path('/opt/worker.py'",
+        ),
+        bootstrap.replace("['/opt/venv/bin/hermes'", "['/opt/bin/worker'"),
+        bootstrap.replace("'--cli'", "call('hermes')"),
+        "hermes".to_owned(),
+    ] {
+        assert_eq!(
+            recognize_process(&ProcessInfo::new(
+                Some("/opt/python3.14"),
+                &["python3", "-I", "-c", &code]
+            )),
+            None,
+            "{code}"
+        );
+    }
+    for args in [
+        vec!["python3", "/project/worker.py", "-c", bootstrap],
+        vec!["python3", "-m", "worker", "-c", bootstrap],
+        vec!["python3", "--", "-c", bootstrap],
+        vec!["python3", "-", "-c", bootstrap],
+    ] {
+        assert_eq!(
+            recognize_process(&ProcessInfo::new(Some("/opt/python3.14"), &args)),
+            None
+        );
+    }
+    assert_eq!(
+        recognize_process(&ProcessInfo::new(Some("/bin/sh"), &["sh", "-c", bootstrap])),
+        None
+    );
+}
+
+#[test]
 fn recognizes_native_agents_and_interpreter_entrypoints_only() {
     for (executable, args, expected) in [
         ("/usr/bin/codex", vec!["codex"], Some("codex")),
@@ -44,6 +99,28 @@ fn recognizes_native_agents_and_interpreter_entrypoints_only() {
             Some("traecli"),
         ),
         ("/usr/bin/echo", vec!["echo", "codex"], None),
+        (
+            "/usr/bin/python3.13",
+            vec!["python3.13", "/venv/bin/hermes", "--cli"],
+            Some("hermes"),
+        ),
+        (
+            "/Library/Frameworks/Python.framework/Python",
+            vec!["python3", "/venv/bin/hermes"],
+            Some("hermes"),
+        ),
+        ("/usr/bin/python3", vec!["python3", "-c", "hermes"], None),
+        (
+            "/usr/bin/python3",
+            vec!["python3", "-m", "unrelated", "hermes"],
+            None,
+        ),
+        (
+            "/usr/bin/python3",
+            vec!["python3", "/project/worker.py", "/venv/bin/hermes"],
+            None,
+        ),
+        ("/usr/bin/echo", vec!["echo", "hermes"], None),
         (
             "/usr/bin/node",
             vec!["node", "server.js", "/opt/codex"],

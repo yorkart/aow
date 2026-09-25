@@ -22,7 +22,7 @@ struct Mock {
 
 pub(super) fn notification(conclusion: &str) -> Message {
     Message {
-        title: "AOW·完成检查·Codex·完成".into(),
+        title: "AoW·完成检查·Codex·完成".into(),
         fields: vec![
             crate::Field {
                 label: "Tab".into(),
@@ -208,7 +208,7 @@ async fn automation_failure_uses_existing_transport_with_failure_card_and_run_li
 async fn resolves_owner_and_recovers_rejected_token_without_losing_message_content() {
     let fixture = fixture().await;
     fixture.state.reject_token.store(1, Ordering::SeqCst);
-    let text = "Agent 任务完成\n项目：AOW\nTab：检查\nSession ID：session-1";
+    let text = "Agent 任务完成\n项目：AoW\nTab：检查\nSession ID：session-1";
     fixture
         .client
         .send(&notification(text), "delivery-1")

@@ -16,14 +16,14 @@ const tabs = [
     panes: [pane('logs', '日志'), pane('shell', 'Shell'), pane('codex', 'Codex', { kind: 'agent', agent_id: 'codex' })] },
   { id: 'tab-b', name: '服务', workspace_root: workspace, revision: 1, layout: leaf('server'), panes: [pane('server', 'Shell')] },
 ];
-const project = { id: 'project', name: 'AOW', registered_path: workspace, common_git_dir: `${workspace}/.git`, notes_path: '/notes/aow',
+const project = { id: 'project', name: 'AoW', registered_path: workspace, common_git_dir: `${workspace}/.git`, notes_path: '/notes/aow',
   worktrees: [{ id: 'main', project_id: 'project', path: workspace, branch: 'main', head: 'abc', is_main: true, detached: false, locked: false, prunable: false, color: 'default' },
     { id: 'feature', project_id: 'project', path: '/workspace/mobile', branch: 'feat/mobile-experience', head: 'abc', is_main: false, color: 'blue' }] };
 const session = { id: 'session-one', agent: 'codex', session_id: 'session-one', title: '实现手机端工作台', cwd: workspace, created_at: '2026-09-11T08:00:00Z', updated_at: '2026-09-11T09:00:00Z' };
 const automationRun = { id: 'run-one', task_id: 'task-one', task_revision: 1, task_name: '每日代码巡检', agent: 'codex', source: 'scheduled', status: 'completed',
   started_at: '2026-09-12T01:00:00Z', finished_at: '2026-09-12T01:02:03Z', workspace_path: workspace, branch: 'main', session_id: 'automation-session',
   agent_pid: 1234, agent_command: ['codex'], exit_code: 0, message: '执行完成', preparation_ms: 100, session_acquired_ms: 200, duration_ms: 123000 };
-const automation = { id: 'task-one', revision: 1, name: '每日代码巡检', prompt: '# 巡检要求\n\n检查项目构建和测试结果。', agent: 'codex', project_id: 'project', project_name: 'AOW',
+const automation = { id: 'task-one', revision: 1, name: '每日代码巡检', prompt: '# 巡检要求\n\n检查项目构建和测试结果。', agent: 'codex', project_id: 'project', project_name: 'AoW',
   workspace_mode: 'existing', workspace_path: workspace, cleanup_worktree: false, base_branch: '', cron: '0 9 * * *', interval_seconds: null, max_concurrent_runs: 1, enabled: true, yolo: true,
   precheck_command: 'git status --short', precheck_timeout_seconds: 30, is_running: false, scheduler_error: null, last_run: automationRun, next_run_at: '2026-09-12T01:00:00Z',
   created_at: '2026-09-11T01:00:00Z', updated_at: '2026-09-11T02:00:00Z' };
@@ -84,7 +84,7 @@ async function fixture(context, pins = { paths: [], revision: 0, failWrites: fal
       await route.fulfill({ body: 'external file', contentType: 'text/plain' });
       return;
     }
-    else if (url.pathname.startsWith('/api/fs/text')) data = { path: workspace + '/README.md', content: '# AOW\n\n手机端 **文件预览**。\n\n<script>window.__unsafe=true</script>\n', language: 'markdown', mime: 'text/markdown', size: 100, version: 'v1' };
+    else if (url.pathname.startsWith('/api/fs/text')) data = { path: workspace + '/README.md', content: '# AoW\n\n手机端 **文件预览**。\n\n<script>window.__unsafe=true</script>\n', language: 'markdown', mime: 'text/markdown', size: 100, version: 'v1' };
     else if (url.pathname === '/api/git/status') data = { repository: workspace, branch: 'main', ahead: 1, behind: 0, files: [{ path: 'frontend/src/main.tsx', index_status: 'M', worktree_status: 'M', original_path: null }] };
     else if (url.pathname === '/api/git/diff') data = { repository: workspace, path: 'frontend/src/main.tsx', staged: url.searchParams.get('staged') === 'true', patch: '@@ -1 +1 @@\n-desktop\n+mobile\n', truncated: false };
     else if (url.pathname === '/api/aow/automations/task-one/runs/run-one') data = automationRun;
@@ -92,7 +92,7 @@ async function fixture(context, pins = { paths: [], revision: 0, failWrites: fal
     else if (url.pathname === '/api/aow/automations/task-one/runs') data = [automationRun];
     else if (url.pathname === '/api/aow/automations/task-one') data = automation;
     else if (url.pathname === '/api/aow/automations') data = [automation];
-    else if (url.pathname === '/api/git/repositories') data = [{ name: 'AOW', path: workspace, branch: 'main' }];
+    else if (url.pathname === '/api/git/repositories') data = [{ name: 'AoW', path: workspace, branch: 'main' }];
     else if (url.pathname === '/api/git/ignored') data = { repository: workspace, ignored: [] };
     else if (url.pathname === '/api/git/log') data = { commits: [], repository: workspace, upstream: null, upstream_commit: null };
     else { await route.fulfill({ status: 404, json: { message: `No test fixture: ${url.pathname}` } }); return; }
@@ -207,6 +207,92 @@ try {
     assert.equal(await page.locator('.mobile-brand-title span').textContent(), 'main');
     assert.deepEqual(state.errors, []);
   });
+  for (const width of [320, 390]) await test(`mobile terminal creation waits for a Terminal or Agent choice at ${width}px`, async t => {
+    const context = await browser.newContext({ viewport: { width, height: 844 }, isMobile: true, hasTouch: true });
+    t.after(() => context.close());
+    const state = await fixture(context);
+    const created = [];
+    const configured = { id: 'codex-review', agent_type: 'codex', display_name: 'Review Codex', source: 'configured', available: true, args: [], env: {} };
+    await context.route('**/api/aow/agents?**', route => route.fulfill({ json: [
+      { ...configured, id: 'codex', display_name: 'Codex', source: 'detected' }, configured,
+      { ...configured, id: 'unavailable', display_name: 'Unavailable Agent', available: false },
+    ] }));
+    await context.route('**/api/terminals', async route => {
+      assert.equal(route.request().method(), 'POST');
+      const body = route.request().postDataJSON();
+      created.push(body);
+      const id = `created-${created.length}`;
+      const tab = { id, name: body.agent_id ? 'Review Codex' : 'Terminal', workspace_root: body.workspace_root,
+        layout: leaf(`${id}-pane`), panes: [pane(`${id}-pane`, 'Shell', body.agent_id ? { kind: 'agent', agent_id: body.agent_id } : {})] };
+      state.terminalTabs.push(tab);
+      await route.fulfill({ json: tab });
+    });
+    const page = await context.newPage();
+    await page.goto(`${baseURL}/m#workspace=${encodeURIComponent(workspace)}&view=terminal`);
+    const trigger = page.getByRole('button', { name: '新建终端', exact: true });
+    const menu = page.getByRole('menu', { name: '新建终端或 Agent', exact: true });
+    await trigger.tap();
+    await menu.getByRole('menuitem', { name: 'Review Codex', exact: true }).waitFor();
+    assert.equal(await trigger.getAttribute('aria-expanded'), 'true');
+    assert.equal(await trigger.getAttribute('aria-controls'), await menu.getAttribute('id'));
+    assert.deepEqual(await menu.getByRole('menuitem').allTextContents(), ['Terminal', 'Codex', 'Review Codex']);
+    assert.deepEqual(created, [], 'opening the menu does not create a process');
+    const bounds = await menu.boundingBox();
+    const anchor = await trigger.boundingBox();
+    assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width && bounds.y >= anchor.y + anchor.height);
+    await noOverflow(page);
+    await snapshot(page, `terminal-new-menu-${width}`);
+    await trigger.tap();
+    await menu.waitFor({ state: 'hidden' });
+    await trigger.tap();
+    await page.keyboard.press('Escape');
+    await menu.waitFor({ state: 'hidden' });
+    assert.equal(await trigger.evaluate(button => document.activeElement === button), true);
+    await trigger.tap();
+    await page.getByRole('button', { name: '刷新', exact: true }).tap();
+    await menu.waitFor({ state: 'hidden' });
+    await trigger.tap();
+    await page.getByRole('button', { name: 'Conversation', exact: true }).tap();
+    await menu.waitFor({ state: 'hidden' });
+    await page.getByRole('button', { name: '终端', exact: true }).tap();
+    assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
+    assert.deepEqual(created, [], 'dismissing the menu or leaving the page does not create a process');
+    for (const [index, choice] of ['Terminal', 'Review Codex'].entries()) {
+      await trigger.tap();
+      await menu.getByRole('menuitem', { name: choice, exact: true }).tap();
+      await menu.waitFor({ state: 'hidden' });
+      await page.locator(`[id="mobile-terminal-panel-created-${index + 1}:created-${index + 1}-pane"]`).waitFor();
+      assert.equal(await page.getByRole('tab', { selected: true }).getAttribute('aria-controls'), `mobile-terminal-panel-created-${index + 1}:created-${index + 1}-pane`);
+    }
+    assert.deepEqual(created, [
+      { workspace_root: workspace, cwd: workspace },
+      { workspace_root: workspace, cwd: workspace, agent_id: configured.id },
+    ]);
+    assert.deepEqual(state.mutations, []);
+    assert.deepEqual(state.errors, []);
+  });
+
+  await test('mobile terminal creation keeps Terminal available when Agent loading fails or the list is empty', async t => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    t.after(() => context.close());
+    const state = await fixture(context);
+    let failed = true;
+    await context.route('**/api/aow/agents?**', route => route.fulfill(failed
+      ? { status: 500, json: { message: 'Agent service unavailable' } } : { json: [] }));
+    const page = await context.newPage();
+    await page.goto(`${baseURL}/m#workspace=${encodeURIComponent(workspace)}&view=terminal`);
+    await page.getByRole('button', { name: '新建终端', exact: true }).tap();
+    const menu = page.getByRole('menu', { name: '新建终端或 Agent', exact: true });
+    await menu.getByRole('alert').waitFor();
+    assert.equal(await menu.getByRole('menuitem', { name: 'Terminal', exact: true }).isEnabled(), true);
+    failed = false;
+    await menu.getByRole('menuitem', { name: '重新加载 Agent', exact: true }).tap();
+    await menu.getByText('未发现可用 Agent', { exact: true }).waitFor();
+    assert.equal(await menu.getByRole('menuitem', { name: 'Terminal', exact: true }).isEnabled(), true);
+    assert.deepEqual(state.mutations, []);
+    assert.deepEqual(state.errors, []);
+  });
+
   await test('mobile terminal catalog opens worktree instances in the main workspace without duplicating terminals', async t => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     t.after(() => context.close());
@@ -537,7 +623,7 @@ try {
     await page.getByRole('button', { name: '接管终端', exact: true }).click();
     await terminalReady(page);
     assert.equal(state.sockets.length, 1);
-    assert.match(await page.locator('.terminal-emulator').innerText(), /AOW mobile terminal/);
+    assert.match(await page.locator('.terminal-emulator').innerText(), /AoW mobile terminal/);
     assert.equal(JSON.parse(state.messages[0].message).force, false, 'first mobile attach observes before an explicit takeover');
     const portrait = await terminalSize(page, state, (size) => size.cols < 60 && size.rows > 35);
     await terminalFits(page);
@@ -1317,18 +1403,18 @@ try {
     assert.deepEqual(await pinned.locator('.mobile-worktree-row strong').allTextContents(), ['feat/mobile-experience']);
     await search.fill('');
     await snapshot(page, 'mobile-projects-pinned');
-    await pinned.getByRole('button', { name: '取消置顶 AOW · feat/mobile-experience', exact: true }).click();
+    await pinned.getByRole('button', { name: '取消置顶 AoW · feat/mobile-experience', exact: true }).click();
     await page.waitForFunction(() => document.querySelectorAll('.mobile-pinned .mobile-worktree-row').length === 1);
     assert.deepEqual(pins.paths, ['/server-only', workspace, '/removed-worktree']);
     await desktop.evaluate(() => window.dispatchEvent(new Event('focus')));
     await desktop.waitForFunction(() => document.querySelectorAll('.project-aow-pinned > button').length === 1);
 
     pins.failWrites = true;
-    await page.getByRole('button', { name: '置顶 AOW · feat/mobile-experience', exact: true }).click();
+    await page.getByRole('button', { name: '置顶 AoW · feat/mobile-experience', exact: true }).click();
     await page.getByRole('alert').filter({ hasText: '置顶同步失败' }).waitFor();
     assert.deepEqual(await pinned.locator('.mobile-worktree-row strong').allTextContents(), ['main'], 'failed config writes do not pretend pins were saved');
     pins.failWrites = false;
-    await page.getByRole('button', { name: '置顶 AOW · feat/mobile-experience', exact: true }).click();
+    await page.getByRole('button', { name: '置顶 AoW · feat/mobile-experience', exact: true }).click();
     await page.waitForFunction(() => document.querySelectorAll('.mobile-pinned .mobile-worktree-row').length === 2);
     await page.reload();
     await visible(page, '.mobile-pinned .mobile-worktree-row');
@@ -1452,7 +1538,7 @@ try {
     try {
       const page = await context.newPage();
       await page.goto(baseURL + '/?ui=desktop');
-      const projectButton = page.getByRole('button', { name: /^(展开|收起) AOW$/ });
+      const projectButton = page.getByRole('button', { name: /^(展开|收起) AoW$/ });
       if (await projectButton.getAttribute('aria-expanded') === 'false') await projectButton.click();
       await page.locator('.project-aow-worktrees > button').first().click();
       await page.getByRole('button', { name: 'Pull Requests', exact: true }).click();
@@ -1517,7 +1603,7 @@ try {
       const page = await context.newPage();
       page.on('dialog', async (dialog) => { nativeDialogs.push(dialog.message()); await dialog.dismiss(); });
       await page.goto(baseURL + '/?ui=desktop');
-      const projectButton = page.getByRole('button', { name: /^(展开|收起) AOW$/ });
+      const projectButton = page.getByRole('button', { name: /^(展开|收起) AoW$/ });
       if (await projectButton.getAttribute('aria-expanded') === 'false') await projectButton.click();
       await page.locator('.project-aow-worktrees > button').first().click();
       const shell = page.locator('.terminal-pane .terminal-emulator-shell').first();
@@ -1634,12 +1720,12 @@ try {
       };
       await page.goto(baseURL + '/?ui=desktop');
       await visible(page, '.project-aow');
-      const projectButton = page.getByRole('button', { name: /^(展开|收起) AOW$/ });
+      const projectButton = page.getByRole('button', { name: /^(展开|收起) AoW$/ });
       if (await projectButton.getAttribute('aria-expanded') === 'false') await projectButton.click();
       await page.locator('.project-aow-worktrees > button').first().click();
       await openPath('/tmp/external.md', '/tmp/external.md');
       await page.locator('.project-aow-center-tab[title="external.md"]').click({ button: 'right' });
-      assert.equal(await page.getByRole('menuitem', { name: '重命名', exact: true }).count(), 0, 'external files cannot be renamed from the aow');
+      assert.equal(await page.getByRole('menuitem', { name: '重命名', exact: true }).count(), 0, 'external files cannot be renamed from AoW');
       await page.keyboard.press('Escape');
 
       await openPath('  relative.txt  ', `${workspace}/relative.txt`);
@@ -1683,7 +1769,7 @@ try {
     const page = await context.newPage();
     await page.goto(baseURL + '/?ui=desktop');
     await visible(page, '.project-aow');
-    const projectButton = page.getByRole('button', { name: /^(展开|收起) AOW$/ });
+    const projectButton = page.getByRole('button', { name: /^(展开|收起) AoW$/ });
     if (await projectButton.getAttribute('aria-expanded') === 'false') await projectButton.click();
     await page.locator('.project-aow-worktrees > button').first().click();
     await visible(page, '.terminal-split');

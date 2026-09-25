@@ -1,5 +1,4 @@
-import Editor from '@monaco-editor/react';
-import '../editor/monaco';
+import Editor from '../editor/MonacoEditor';
 
 export default function TerminalInputEditor({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   return <Editor language="markdown" theme="vs-dark" value={value} onChange={value => onChange(value ?? '')}

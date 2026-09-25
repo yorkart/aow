@@ -860,7 +860,7 @@ async fn fs_browser(path: PathBuf, base_path: &BasePath) -> Result<Response, Htt
     let html = format!(
         r#"<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>文件浏览器 - {current}</title><style>
 body{{margin:0;background:#1e1e1e;color:#ccc;font:12px system-ui}}a{{color:#4daafc;text-decoration:none}}header{{display:flex;align-items:center;gap:5px;padding:7px;border-bottom:1px solid #444}}header code{{flex:1;overflow:hidden;text-overflow:ellipsis}}button,.button{{padding:4px 8px;border:1px solid #555;border-radius:4px;background:#2d2d2d;color:#ddd;cursor:pointer}}main{{padding:6px}}table{{width:100%;border-collapse:collapse}}th,td{{padding:4px 7px;border-bottom:1px solid #393939;text-align:left}}tr:hover{{background:#292929}}.copy{{padding:2px 7px}}#status{{color:#9cdcfe}}
-</style></head><body><header><a class="button" href="{base}/fs{parent}/">..</a><a class="button" href="{base}/fs{home}/">Home</a><a class="button" href="{base}/fs/tmp/">/tmp</a><a class="button" href="{base}/aow/">Project AOW</a><code>{current}</code><input id="files" type="file" multiple><button id="upload">上传</button><span id="status"></span></header><main><table><thead><tr><th>权限</th><th>链接</th><th>UID</th><th>GID</th><th>大小</th><th>修改时间</th><th>类型</th><th>名称</th><th>操作</th></tr></thead><tbody>{rows}</tbody></table></main><script>
+</style></head><body><header><a class="button" href="{base}/fs{parent}/">..</a><a class="button" href="{base}/fs{home}/">Home</a><a class="button" href="{base}/fs/tmp/">/tmp</a><a class="button" href="{base}/aow/">Project AoW</a><code>{current}</code><input id="files" type="file" multiple><button id="upload">上传</button><span id="status"></span></header><main><table><thead><tr><th>权限</th><th>链接</th><th>UID</th><th>GID</th><th>大小</th><th>修改时间</th><th>类型</th><th>名称</th><th>操作</th></tr></thead><tbody>{rows}</tbody></table></main><script>
 document.addEventListener('click',async e=>{{const b=e.target.closest('.copy');if(b){{await navigator.clipboard.writeText(b.dataset.path);b.textContent='✓';setTimeout(()=>b.textContent='⧉',1000)}}}});
 document.getElementById('upload').onclick=async()=>{{const files=[...document.getElementById('files').files];for(const file of files){{document.getElementById('status').textContent='上传 '+file.name;const response=await fetch('{upload_base}/'+encodeURIComponent(file.name),{{method:'PUT',body:file}});if(!response.ok)throw new Error(await response.text())}}location.reload()}};
 </script></body></html>"#,
@@ -900,7 +900,7 @@ async fn help_page(State(state): State<AppState>) -> axum::response::Html<String
         tool["path"] = state.base_path.url(tool["path"].as_str().unwrap()).into();
     }
     axum::response::Html(format!(
-        "<!doctype html><meta charset=utf-8><title>AOW API</title><h1>AOW API</h1><pre>{}</pre>",
+        "<!doctype html><meta charset=utf-8><title>AoW API</title><h1>AoW API</h1><pre>{}</pre>",
         escape_html(&serde_json::to_string_pretty(&schema).unwrap())
     ))
 }
@@ -2249,7 +2249,7 @@ mod tests {
         )
         .unwrap();
         assert!(browser.contains("<th>权限</th>"));
-        assert!(browser.contains("Project AOW"));
+        assert!(browser.contains("Project AoW"));
         assert!(browser.contains("/aow/"));
 
         let legacy_view = app

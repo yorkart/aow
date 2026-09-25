@@ -46,7 +46,7 @@ export function SessionSnapshotView({ session, snapshot, loading, error, onRefre
   const navigationRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [activeTurn, setActiveTurn] = useState(0);
   const turnCount = snapshot?.turns.length ?? 0;
-  const agentName = { codex: 'Codex', claude: 'Claude', traecli: 'TraeCode CLI' }[session.agent];
+  const agentName = { codex: 'Codex', claude: 'Claude', traecli: 'TraeCode CLI', hermes: 'Hermes' }[session.agent];
 
   useEffect(() => {
     turnRefs.current = turnRefs.current.slice(0, turnCount);

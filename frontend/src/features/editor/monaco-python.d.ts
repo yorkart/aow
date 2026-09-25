@@ -1,18 +1,18 @@
-declare module 'monaco-editor/esm/vs/basic-languages/python/python.js' {
+declare module 'monaco-editor/languages/definitions/python/python.js' {
   import type { languages } from 'monaco-editor';
 
   export const conf: languages.LanguageConfiguration;
   export const language: languages.IMonarchLanguage;
 }
 
-declare module 'monaco-editor/esm/vs/basic-languages/typescript/typescript.js' {
+declare module 'monaco-editor/languages/definitions/typescript/typescript.js' {
   import type { languages } from 'monaco-editor';
 
   export const conf: languages.LanguageConfiguration;
   export const language: languages.IMonarchLanguage;
 }
 
-declare module 'monaco-editor/esm/vs/basic-languages/javascript/javascript.js' {
+declare module 'monaco-editor/languages/definitions/javascript/javascript.js' {
   import type { languages } from 'monaco-editor';
 
   export const conf: languages.LanguageConfiguration;

@@ -1,5 +1,4 @@
-import '../editor/monaco';
-import Editor from '@monaco-editor/react';
+import Editor from '../editor/MonacoEditor';
 
 export default function ReviewScriptPreview({ value }: { value: string }) {
   return <div className="review-provider-editor"><Editor height="360px" language="python" theme="vs-dark" value={value}

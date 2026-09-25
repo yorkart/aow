@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b --pretty false",
     "test:architecture": "node --test tests/architecture.test.mjs",
+    "test:agent-arguments": "node --test tests/agent-arguments.test.mjs",
     "test:mobile": "node --test tests/mobile-browser.test.mjs",
     "test:pr": "node --test tests/pull-request.test.mjs",
     "test:files": "node --test tests/system-file-browser.test.mjs",
@@ -25,6 +26,7 @@
     "test:configuration": "node --test tests/configuration-settings.test.mjs",
     "test:base-path": "node --test tests/base-path.test.mjs",
     "test:panels": "node --test tests/panel-layout.test.mjs",
+    "test:git": "node --test tests/commit-graph.test.mjs",
     "test:performance": "node --test tests/performance.test.mjs",
     "preview:pr": "node tests/pull-request-preview.mjs"
   },
@@ -40,7 +42,7 @@
     "mammoth": "^1.9.0",
     "marked": "^15.0.6",
     "mermaid": "^11.15.0",
-    "monaco-editor": "^0.52.2",
+    "monaco-editor": "^0.56.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-window": "^1.8.10"

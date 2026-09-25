@@ -1,4 +1,7 @@
-//! Bounded, forward-only reading of task-stop records. New readers start at EOF.
+//! Bounded, forward-only reading of native task-stop records. New readers
+//! start at the current file EOF or SQLite message watermark.
+
+mod hermes;
 
 use std::{
     fs::{File, Metadata},
@@ -19,6 +22,57 @@ const MAX_LINE: usize = 1024 * 1024;
 
 pub struct SessionTail {
     pub locator: AgentSessionLocator,
+    pub modified: SystemTime,
+    source: TailSource,
+}
+
+enum TailSource {
+    Jsonl(JsonlTail),
+    Hermes(hermes::SqliteTail),
+}
+
+impl SessionTail {
+    pub fn from_eof(locator: AgentSessionLocator) -> Result<Self, SnapshotError> {
+        validate_locator(&locator)?;
+        let source = if locator.agent == "hermes" {
+            TailSource::Hermes(hermes::SqliteTail::from_eof(&locator)?)
+        } else {
+            TailSource::Jsonl(JsonlTail::from_eof(locator.clone())?)
+        };
+        let modified = match &source {
+            TailSource::Jsonl(tail) => tail.modified,
+            TailSource::Hermes(tail) => tail.modified,
+        };
+        Ok(Self {
+            locator,
+            modified,
+            source,
+        })
+    }
+
+    pub fn poll(&mut self) -> Result<Vec<TaskStopped>, SnapshotError> {
+        let (events, modified) = match &mut self.source {
+            TailSource::Jsonl(tail) => (tail.poll()?, tail.modified),
+            TailSource::Hermes(tail) => (tail.poll(&self.locator)?, tail.modified),
+        };
+        self.modified = modified;
+        Ok(events)
+    }
+
+    /// Refresh file activity before budget eviction. SQLite activity is tracked
+    /// per session by its reader; a shared DB's mtime is not that session's age.
+    pub fn refresh_modified(&mut self) {
+        if matches!(self.source, TailSource::Jsonl(_))
+            && let Ok(modified) = std::fs::metadata(&self.locator.transcript_path)
+                .and_then(|metadata| metadata.modified())
+        {
+            self.modified = modified;
+        }
+    }
+}
+
+struct JsonlTail {
+    pub locator: AgentSessionLocator,
     parser: Box<dyn TaskStopParser>,
     file: File,
     offset: u64,
@@ -27,7 +81,7 @@ pub struct SessionTail {
     pub modified: SystemTime,
 }
 
-impl SessionTail {
+impl JsonlTail {
     pub fn from_eof(locator: AgentSessionLocator) -> Result<Self, SnapshotError> {
         validate_locator(&locator)?;
         let tracker = crate::Agent::from_id(locator.agent)

@@ -277,7 +277,7 @@ fn git_command(repository: &Path) -> Command {
         .env("GIT_LITERAL_PATHSPECS", "1")
         .args([
             "-c",
-            "user.name=AOW",
+            "user.name=AoW",
             "-c",
             "user.email=aow@localhost",
             "-c",

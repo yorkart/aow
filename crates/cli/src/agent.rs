@@ -11,7 +11,7 @@ use std::{
     time::Duration,
 };
 
-const HELP: &str = "Requires a running AOW server and terminald for the same --state-dir.
+const HELP: &str = "Requires a running AoW server and terminald for the same --state-dir.
 Uses a same-user Unix socket, without a browser PIN or Cookie.
 CLI terminals start hidden at 160 columns by 48 rows. Open Terminal in the right
 sidebar to observe; take over explicitly once startup is complete.
@@ -46,7 +46,7 @@ enum AgentCommand {
     /// Create a hidden agent pane, wait until ready, optionally submit its first task.
     #[command(after_help = HELP)]
     Create {
-        #[arg(long, default_value = "codex", value_parser = ["codex", "traecli"])]
+        #[arg(long, default_value = "codex", value_parser = ["codex", "traecli", "hermes"])]
         agent: String,
         /// Registered project that owns the worktree.
         #[arg(long, value_parser = crate::parse_id)]
@@ -155,8 +155,8 @@ pub fn execute(args: AgentArgs, state_dir: PathBuf) -> Result<Value> {
                 AgentCommand::Get { pane_id } => Ok(client.get_json::<Value>(&format!("/v1/agents/{pane_id}")).await?),
                 AgentCommand::List => Ok(client.get_json::<Value>("/v1/agents").await?),
             }
-        }).await.context("AOW CLI request timed out; operation may still be running, inspect agent list before retrying")?
-    }).with_context(|| format!("local agent API at {}; ensure AOW server and terminald are running with this state directory", client.socket_path().display()))
+        }).await.context("AoW CLI request timed out; operation may still be running, inspect agent list before retrying")?
+    }).with_context(|| format!("local agent API at {}; ensure AoW server and terminald are running with this state directory", client.socket_path().display()))
 }
 
 pub fn failure_json(failure: &StartupFailure) -> Value {

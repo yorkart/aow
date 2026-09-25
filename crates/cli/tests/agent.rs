@@ -12,8 +12,9 @@ fn info(phase: &str) -> Value {
 
 #[test]
 fn create_reports_ready_and_preserves_failed_pane_identity() {
-    for phase in ["ready", "failed"] {
-        let expected = info(phase);
+    for (phase, agent) in [("ready", "codex"), ("failed", "codex"), ("ready", "hermes")] {
+        let mut expected = info(phase);
+        expected["agent"] = json!(agent);
         let (output, header, body) = run(
             &[
                 "agent",
@@ -21,7 +22,7 @@ fn create_reports_ready_and_preserves_failed_pane_identity() {
                 "--project-id",
                 "project-one",
                 "--agent",
-                "codex",
+                agent,
                 "--cwd",
                 "/repo",
                 "--timeout",
@@ -33,6 +34,7 @@ fn create_reports_ready_and_preserves_failed_pane_identity() {
         );
         assert!(header.starts_with("POST /v1/agents HTTP/1.1"));
         assert_eq!(body["timeout_seconds"], 7);
+        assert_eq!(body["agent"], agent);
         assert_eq!(body["cwd"], "/repo");
         assert_eq!(body["project_id"], "project-one");
         for removed in ["repository", "branch", "base", "name"] {

@@ -26,6 +26,8 @@ import type { TerminalSort } from '../features/terminals/TerminalScopeMenu';
 import { isCliTerminal, terminalTabPresentation } from '../features/terminals/terminalPresentation';
 import { AgentSessions } from '../features/sessions/AgentSessions';
 import { AgentIcon } from '../features/agents/AgentIcon';
+import { AgentArgumentsInput } from '../features/agents/AgentArgumentsInput';
+import { argumentsDraft, normalizeArguments } from '../features/agents/arguments';
 import { agentTypes, builtinAgentType, aowAgentType } from '../features/agents/agentTypes';
 import { NotificationSettingsPanel } from '../features/notifications/NotificationSettingsPanel';
 import { SessionShareButton } from '../features/sessions/SessionShareButton';
@@ -312,7 +314,7 @@ function RemoveWorktreeDialog({ state, onClose, onSubmitted }: {
         <code className="project-aow-remove-path" title={state.worktree.path}>{state.worktree.path}</code>
         {affectedTabs ? <p>同时关闭并清理该 Worktree 的 {preview.terminal_tabs} 个 Terminal、{preview.agent_tabs} 个 Agent 及其持久化会话元数据。</p> : <p>该 Worktree 当前没有需要关闭的 Terminal 或 Agent。</p>}
         {preview.dirty ? <div className="project-aow-dirty-warning">
-          <strong>检测到 {preview.change_count} 项未提交内容，强制删除后无法从 AOW 恢复：</strong>
+          <strong>检测到 {preview.change_count} 项未提交内容，强制删除后无法从 AoW 恢复：</strong>
           <pre>{preview.changes.join('\n')}{preview.truncated ? '\n…更多变更未显示' : ''}</pre>
         </div> : <div className="project-aow-clean-note">Git 工作区当前没有未提交内容。</div>}
         {error ? <div className="project-aow-error" role="alert">{error}</div> : null}
@@ -641,13 +643,14 @@ function CreateWorktreeDialog({ project, onClose, onCreated }: {
           <p className="project-aow-form-intro">从指定分支或提交创建新的 Worktree。</p>
           <label className="project-aow-dialog-field"><span>新分支</span><input className="project-aow-dialog-monospace" autoFocus autoComplete="off" spellCheck={false} value={branch} onChange={(event) => changeBranch(event.target.value)} placeholder="feature/my-change" required disabled={busy} /></label>
           <label className="project-aow-dialog-field"><span>起始分支或提交</span><input className="project-aow-dialog-monospace" autoComplete="off" spellCheck={false} value={baseRef} onChange={(event) => setBaseRef(event.target.value)} placeholder="main、origin/main 或 commit SHA" required disabled={busy} /></label>
-          <label className="project-aow-dialog-checkbox" title="创建前先对主仓库执行 git pull，失败则取消创建。"><input type="checkbox" checked={pullFirst} onChange={(event) => setPullFirst(event.target.checked)} disabled={busy} /><span>创建前更新主仓库（git pull）</span></label>
+          <label className="project-aow-dialog-checkbox" title="创建前先对主仓库执行 git pull，失败则取消创建。无需更新时可取消勾选。"><input type="checkbox" checked={pullFirst} onChange={(event) => setPullFirst(event.target.checked)} disabled={busy} /><span>创建前更新主仓库（git pull）</span></label>
           <div className="project-aow-dialog-field">
             <label htmlFor="create-worktree-path">Worktree 路径</label>
             <input id="create-worktree-path" className="project-aow-dialog-monospace" aria-describedby="create-worktree-path-hint" autoComplete="off" spellCheck={false} value={path} onChange={(event) => { setPathEdited(true); setPath(event.target.value); }} placeholder="/absolute/path/to/worktree" required disabled={busy} />
             <small id="create-worktree-path-hint">目标路径必须是尚不存在的绝对路径。</small>
           </div>
           <details className="project-aow-command-preview"><summary>查看 Git 命令</summary><code>{command}</code></details>
+          {busy ? <p className="project-aow-form-intro" role="status">{pullFirst ? '正在更新主仓库并创建 Worktree…' : '正在创建 Worktree…'}单个 Git 步骤最多等待 2 分钟，超时会显示错误。</p> : null}
           {error ? <div className="project-aow-error" role="alert">{error}</div> : null}
         </div>
         <footer className="project-aow-dialog-footer"><button type="button" className="project-aow-dialog-button" disabled={busy} onClick={onClose}>取消</button><button type="submit" className="project-aow-dialog-button primary" disabled={busy || !branch.trim() || !baseRef.trim() || !path.trim()}>{busy ? '创建中…' : '创建 Worktree'}</button></footer>
@@ -676,7 +679,7 @@ function SettingsDialog({ agents, onClose: closeDialog, onReload, onNodesChange 
   const [agentType, setAgentType] = useState<AowAgent['agent_type'] | ''>('');
   const [displayName, setDisplayName] = useState('');
   const [command, setCommand] = useState('');
-  const [args, setArgs] = useState('[]');
+  const [args, setArgs] = useState(() => argumentsDraft());
   const [env, setEnv] = useState('{}');
   const [agentSaved, setAgentSaved] = useState('');
   const agentForm = useRef<HTMLFormElement>(null);
@@ -796,7 +799,7 @@ function SettingsDialog({ agents, onClose: closeDialog, onReload, onNodesChange 
     setAgentType('');
     setDisplayName('');
     setCommand('');
-    setArgs('[]');
+    setArgs(argumentsDraft());
     setEnv('{}');
     setAgentSaved('');
     setError('');
@@ -807,7 +810,7 @@ function SettingsDialog({ agents, onClose: closeDialog, onReload, onNodesChange 
     setAgentType(aowAgentType(agent) ?? '');
     setDisplayName(agent.display_name);
     setCommand(agent.command ?? agent.executable ?? '');
-    setArgs(JSON.stringify(agent.args));
+    setArgs(argumentsDraft(agent.args));
     setEnv(JSON.stringify(agent.env ?? {}, null, 2));
     setAgentSaved('');
     setError('');
@@ -838,10 +841,7 @@ function SettingsDialog({ agents, onClose: closeDialog, onReload, onNodesChange 
     setError('');
     setAgentSaved('');
     try {
-      const parsed = JSON.parse(args) as unknown;
-      if (!Array.isArray(parsed) || parsed.some((value) => typeof value !== 'string')) {
-        throw new Error('Arguments 必须是字符串 JSON 数组');
-      }
+      const parsed = normalizeArguments(args, command).values;
       const environment = JSON.parse(env.trim() || '{}') as unknown;
       if (!environment || typeof environment !== 'object' || Array.isArray(environment)
         || Object.entries(environment).some(([key, value]) => !/^[A-Za-z0-9_]+$/.test(key) || typeof value !== 'string' || value.includes('\0'))) {
@@ -869,7 +869,7 @@ function SettingsDialog({ agents, onClose: closeDialog, onReload, onNodesChange 
       <div className="project-aow-settings-body">
         <nav className="project-aow-settings-nav" aria-label="设置分类">
           <button disabled={busy || settingsBusy} aria-current={section === 'configuration' ? 'page' : undefined} className={section === 'configuration' ? 'active' : ''} onClick={() => { setSection('configuration'); setError(''); }}><Settings /><span><strong>Configuration</strong><small>选择配置仓库和版本</small></span></button>
-          <button disabled={busy || settingsBusy} aria-current={section === 'nodes' ? 'page' : undefined} className={section === 'nodes' ? 'active' : ''} onClick={() => { setSection('nodes'); setError(''); }}><Network /><span><strong>Nodes</strong><small>配置其他 AOW 节点</small></span></button>
+          <button disabled={busy || settingsBusy} aria-current={section === 'nodes' ? 'page' : undefined} className={section === 'nodes' ? 'active' : ''} onClick={() => { setSection('nodes'); setError(''); }}><Network /><span><strong>Nodes</strong><small>配置其他 AoW 节点</small></span></button>
           <button disabled={busy || settingsBusy} aria-current={section === 'editor' ? 'page' : undefined} className={section === 'editor' ? 'active' : ''} onClick={() => { setSection('editor'); setError(''); }}><FileText /><span><strong>Editor</strong><small>配置文件编辑器</small></span></button>
           <button disabled={busy || settingsBusy} aria-current={section === 'notes' ? 'page' : undefined} className={section === 'notes' ? 'active' : ''} onClick={() => setSection('notes')}><NotebookPen /><span><strong>Notes</strong><small>设置默认 Notes 根目录</small></span></button>
           <button disabled={busy || settingsBusy} aria-current={section === 'environment' ? 'page' : undefined} className={section === 'environment' ? 'active' : ''} onClick={() => { setSection('environment'); setError(''); }}><SquareTerminal /><span><strong>Environment</strong><small>配置全局执行 PATH</small></span></button>
@@ -884,7 +884,7 @@ function SettingsDialog({ agents, onClose: closeDialog, onReload, onNodesChange 
           {section === 'review' || section === 'configuration' ? null : section === 'nodes' ? (
             <form className="project-aow-dialog-form" onSubmit={event => { event.preventDefault(); void saveNodes(); }}>
               <div className="project-aow-dialog-body">
-                <div className="project-aow-settings-heading"><div><h2>Nodes</h2><p>配置其他机器上部署的 AOW，点击左上角 Logo 或 AOW 文字即可切换。</p></div></div>
+                <div className="project-aow-settings-heading"><div><h2>Nodes</h2><p>配置其他机器上部署的 AoW，点击左上角 Logo 或 AoW 文字即可切换。</p></div></div>
                 <label className="project-aow-dialog-field"><span>节点地址（每行一个）</span><textarea aria-label="节点地址" spellCheck={false} rows={10} value={nodeAddresses} disabled={settingsLoading || settingsBusy || !settings} onChange={event => { setNodeAddresses(event.target.value); setNodesSaved(false); setError(''); }} placeholder={'https://aow-a.example.com\nhttp://192.168.1.20:8080'} /></label>
                 <p className="project-aow-form-intro">填写完整的 http:// 或 https:// 地址，可以包含当前节点。同一份列表可复制到所有节点；下拉菜单会按协议、域名/IP 和端口自动过滤当前节点。留空并保存可清空列表。</p>
                 {nodesSaved ? <p role="status">节点地址已保存。</p> : null}
@@ -929,7 +929,7 @@ function SettingsDialog({ agents, onClose: closeDialog, onReload, onNodesChange 
           </> : <>
             <form className="project-aow-dialog-form" ref={agentForm} onSubmit={(event) => { event.preventDefault(); void save(); }}>
               <div className="project-aow-dialog-body">
-                <div className="project-aow-settings-heading"><div><h2>Agents</h2><p>目前支持 Claude Code、Codex 和 TraeCode CLI。每种类型可注册多个配置。</p></div><button type="button" className="project-aow-dialog-button" title="重新探测本地 Agent" disabled={busy} onClick={() => void onReload().catch((reason) => setError(message(reason)))}><RefreshCw />刷新</button></div>
+                <div className="project-aow-settings-heading"><div><h2>Agents</h2><p>目前支持 Claude Code、Codex、TraeCode CLI 和 Hermes。每种类型可注册多个配置。</p></div><button type="button" className="project-aow-dialog-button" title="重新探测本地 Agent" disabled={busy} onClick={() => void onReload().catch((reason) => setError(message(reason)))}><RefreshCw />刷新</button></div>
                 <div className="project-aow-agent-list">
                   {agents.map((agent) => <div className="project-aow-agent-row" key={agent.id}>
                     <span className={`project-aow-agent-dot ${agent.available ? 'available' : ''}`} />
@@ -946,7 +946,7 @@ function SettingsDialog({ agents, onClose: closeDialog, onReload, onNodesChange 
                 <p className="project-aow-form-intro">选择类型后，可自由配置名称、启动命令、参数和环境变量。</p>
                 <label className="project-aow-dialog-field"><span>Display name</span><input value={displayName} disabled={busy} onChange={(event) => setDisplayName(event.target.value)} placeholder="例如：工作用 Codex" required /></label>
                 <label className="project-aow-dialog-field"><span>Executable</span><input className="project-aow-dialog-monospace" spellCheck={false} value={command} disabled={busy} onChange={(event) => setCommand(event.target.value)} placeholder="命令名或 /absolute/path" required /></label>
-                <label className="project-aow-dialog-field"><span>Arguments</span><input className="project-aow-dialog-monospace" spellCheck={false} value={args} disabled={busy} onChange={(event) => setArgs(event.target.value)} placeholder='["--flag"]' /></label>
+                <AgentArgumentsInput value={args} onChange={setArgs} executable={command} disabled={busy} onError={setError} />
                 <label className="project-aow-dialog-field"><span>Environment variables</span><textarea aria-label="Environment variables" spellCheck={false} rows={4} value={env} disabled={busy} onChange={(event) => setEnv(event.target.value)} placeholder={'{\n  "BASE_URL": "https://example.com"\n}'} /></label>
                 <p className="project-aow-form-intro">自动继承启动环境。这里只填写需要新增或覆盖的变量（JSON 对象）；留空或填写 {'{}'} 即可保留继承的环境。</p>
                 <p className="project-aow-form-intro">保存后用于新启动的终端 Agent。PATH 统一在 Environment 中配置。移除内置 Agent 的配置后会恢复自动探测。</p>
@@ -2216,7 +2216,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
 
   const renderSidebar = () => (
     <aside className="project-aow-right" hidden={!rightSidebarVisible}>
-      <nav aria-label="AOW side views">
+      <nav aria-label="AoW side views">
         <button className={rightView === 'terminals' ? 'active' : ''} title="Terminal" aria-label="Terminal 面板" onClick={() => setRightView('terminals')}><SquareTerminal /></button>
         <button className={rightView === 'sessions' ? 'active' : ''} title="Conversation" aria-label="Conversation" onClick={() => setRightView('sessions')}><MessageSquare /></button>
         <button className={rightView === 'automations' ? 'active' : ''} title="Automation" aria-label="Automation" onClick={() => setRightView('automations')}><CalendarClock /></button>
@@ -2779,7 +2779,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
   }, []);
 
   useEffect(() => {
-    document.title = activeEntry ? `${activeEntry.project.name} · ${activeEntry.worktree.branch || 'detached'} · AOW` : 'Project AOW';
+    document.title = activeEntry ? `${activeEntry.project.name} · ${activeEntry.worktree.branch || 'detached'} · AoW` : 'Project AoW';
   }, [activeEntry]);
 
   return <div className="project-aow"
@@ -2861,7 +2861,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
             || floating.hostedTabs.some(tab => tab.host === worktree.path && tab.workspace === initialEntry.workspacePath && tab.id === tabCenterId(initialEntry.target))) ? initialEntry : undefined} key={worktree.path} project={project} worktree={worktree} active={worktree.path === activeWorktreePath} agents={agents} onShowLeftSidebar={leftSidebarVisible ? undefined : showLeftSidebar} rightSidebarVisible={rightSidebarVisible} onHideRightSidebar={hideRightSidebar} onShowRightSidebar={showRightSidebar} onStartRightResize={startRightResize} notesRefresh={notesRefreshByProject[project.id] ?? initialExplorerRefresh} onNotesChanged={notesChanged} onResourcesChanged={reportResources} />)}
         {activeEntry && busyWorktrees.has(activeEntry.worktree.path) ? <div className="project-aow-no-context"><LoaderCircle className="spinning" /><p>该 Worktree 正在清理，可继续使用其他工作区。</p><button onClick={() => setCleanupProjectId(activeEntry.project.id)}>查看清理进度</button></div> : null}
         {!activeEntry && !leftSidebarVisible ? <nav className="project-aow-center-tabs project-aow-empty-toolbar"><LeftSidebarToggle onClick={showLeftSidebar} /></nav> : null}
-        {!activeEntry ? <div className="project-aow-no-context"><FolderGit2 /><h1>Project AOW</h1><p>从左侧注册并选择一个 Project Worktree。</p></div> : null}
+        {!activeEntry ? <div className="project-aow-no-context"><FolderGit2 /><h1>Project AoW</h1><p>从左侧注册并选择一个 Project Worktree。</p></div> : null}
       </div>
     </div>
     <footer className="project-aow-status"><span>{activeEntry?.worktree.path ?? 'No active worktree'}</span>

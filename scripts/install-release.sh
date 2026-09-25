@@ -160,7 +160,7 @@ try {
     }
     process.stdout.write(id);
 } catch (error) {
-    console.error(`error: invalid AOW release: ${error.message}`);
+    console.error(`error: invalid AoW release: ${error.message}`);
     process.exit(1);
 }
 JS
@@ -329,7 +329,7 @@ JS
     tar -xzf "$stage/release.tar.gz" --no-same-owner --no-same-permissions -C "$stage/unpacked"
     support=$stage/unpacked
     version=$(validate_release "$support" "$version")
-    printf 'Installing AOW %s\n' "$version"
+    printf 'Installing AoW %s\n' "$version"
     local -a helpers=(
         scripts/start-server.sh scripts/start-terminald.sh scripts/replace-symlink.mjs scripts/server-state-dir.sh
         packaging/bin/aow packaging/bin/aow-server packaging/bin/aow-terminald
@@ -398,7 +398,7 @@ JS
     replace_link "releases/$version" "$runtime_root/latest"
     replace_link "$release/bin/aow-automation-runner" "$user_bin_dir/aow-automation-runner"
     replace_link "$release/bin/aow-cli" "$user_bin_dir/aow-cli"
-    printf 'Installed AOW %s in %s\n' "$version" "$release"
+    printf 'Installed AoW %s in %s\n' "$version" "$release"
     case ":${PATH:-}:" in
         *":$user_bin_dir:"*) ;;
         *) printf 'Add this directory to PATH to use aow and aow-cli: %s\n' "$user_bin_dir" ;;
@@ -413,7 +413,7 @@ JS
     lock_acquired=0
     : >"$stage/confirmation"
     if terminald_confirmation | sh "$support/scripts/start-terminald.sh" "$version"; then
-        printf 'AOW %s is installed and its services are active.\n' "$version"
+        printf 'AoW %s is installed and its services are active.\n' "$version"
     elif [[ $(cat "$stage/confirmation") != y ]]; then
         printf 'Skipped terminald; Web server, CLI and Runner are updated to %s.\n' "$version"
     else

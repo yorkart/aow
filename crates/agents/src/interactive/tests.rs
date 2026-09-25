@@ -5,6 +5,28 @@ fn lines(text: &str) -> Vec<String> {
 }
 
 #[test]
+fn hermes_accepts_idle_cli_prompts_but_not_approval_clarification_or_working_states() {
+    let agent = InteractiveAgent::Hermes;
+    for screen in [
+        "Welcome to Hermes\n────────\n❯\n────────",
+        "Ready\n│ work-profile ❯   │\n",
+    ] {
+        assert!(agent.input_ready(&lines(screen)), "{screen}");
+    }
+    for screen in [
+        "Loading Hermes",
+        "⚠ ❯",
+        "? ❯",
+        "🔐 ❯",
+        "✎ ❯",
+        "⚕ ❯ msg=interrupt · /queue",
+        "❯ type your answer here and press Enter",
+    ] {
+        assert!(!agent.input_ready(&lines(screen)), "{screen}");
+    }
+}
+
+#[test]
 fn footer_probe_ignores_loading_and_scrollback_noise() {
     let agent = InteractiveAgent::TraeCli;
     assert!(!agent.input_ready(&lines(

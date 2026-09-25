@@ -6,7 +6,7 @@ runtime_root=${AOW_RUNTIME_ROOT:-${HOME:?HOME must be set}/.local/lib/aow}
 active_release=$runtime_root/active/server
 
 if [ ! -d "$active_release" ]; then
-    printf 'error: no active AOW server release; run the AOW installer first\n' >&2
+    printf 'error: no active AoW server release; run the AoW installer first\n' >&2
     exit 1
 fi
 

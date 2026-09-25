@@ -39,6 +39,7 @@ use crate::{AppState, HttpError, aow::AgentLaunch};
 pub(crate) mod agent_control;
 pub(crate) mod notifications;
 mod rebuild;
+mod session_titles;
 mod sessions;
 
 const METADATA_FILE: &str = "terminals.json";
@@ -376,7 +377,7 @@ impl TerminalManager {
                 if let Some(agent) = &mut pane.agent_terminal {
                     if agent.phase == aow_protocol::AgentTerminalPhase::Starting {
                         agent.phase = aow_protocol::AgentTerminalPhase::Failed;
-                        agent.error = Some("AOW restarted during agent initialization".into());
+                        agent.error = Some("AoW restarted during agent initialization".into());
                     }
                 }
             }
@@ -691,6 +692,7 @@ impl TerminalManager {
         detected.agents.retain(|id, _| panes.contains(id));
         detected.titles.retain(|id, _| panes.contains(id));
         detected.processes.retain(|id, _| panes.contains(id));
+        session_titles::enrich(&mut detected).await;
         Ok(detected)
     }
 
@@ -719,7 +721,7 @@ impl TerminalManager {
         let shell = normalize_shell(request.shell.as_deref())?;
         if request.agent_id.is_some() {
             return Err(TerminalError::Invalid(
-                "agent_id is only accepted by the aow terminal endpoint".to_owned(),
+                "agent_id is only accepted by the AoW terminal endpoint".to_owned(),
             ));
         }
         let (rows, cols) = terminal_size(request.rows, request.cols)?;

@@ -1,8 +1,7 @@
-import { DiffEditor } from '@monaco-editor/react';
+import { DiffEditor } from '../editor/MonacoEditor';
 import { useLayoutEffect, useRef } from 'react';
 import type { editor } from 'monaco-editor';
 import { editorLanguage } from '../editor/language';
-import '../editor/monaco';
 import type { PullRequestDiff } from './types';
 
 export default function PullRequestDesktopDiff({ diff, number, path, modelScope, sideBySide }: {
@@ -19,7 +18,9 @@ export default function PullRequestDesktopDiff({ diff, number, path, modelScope,
     models?.modified.dispose();
     editorRef.current = null;
   }, []);
-  const base = `inmemory://pull-request/${encodeURIComponent(modelScope)}/${number}`;
+  // Uri.parse decodes once; keep scope slashes escaped so TypeScript workers
+  // cannot normalize them into a different model path.
+  const base = `inmemory://pull-request/${encodeURIComponent(encodeURIComponent(modelScope))}/${number}`;
   return <DiffEditor height={420} original={diff.original!} modified={diff.modified!} language={editorLanguage(path)}
     originalModelPath={`${base}/original/${encodeURIComponent(diff.original_path ?? path)}`}
     modifiedModelPath={`${base}/modified/${encodeURIComponent(path)}`} theme="vs-dark"

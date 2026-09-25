@@ -3,6 +3,7 @@
 mod claude;
 mod codex;
 mod codex_like;
+mod hermes;
 mod traecli;
 
 use crate::Agent;
@@ -12,6 +13,9 @@ use serde::{Deserialize, Serialize};
 /// Native execution without a terminal, always starting a new persistent session.
 pub trait AgentAutomation {
     fn session_id_mode(&self) -> SessionIdMode;
+    fn prompt_mode(&self) -> PromptMode {
+        PromptMode::Stdin
+    }
     fn validate_arguments(&self, arguments: &[String]) -> Result<()>;
     fn automation_arguments(&self, yolo: bool, session_id: Option<&str>) -> Result<Vec<String>>;
     fn session_from_line(&self, line: &[u8]) -> Option<String>;
@@ -21,6 +25,14 @@ pub trait AgentAutomation {
 pub enum SessionIdMode {
     GeneratedUuid,
     FromOutput,
+    /// Hermes emits its durable identity on stderr only after the query ends.
+    FromStderrOnExit,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PromptMode {
+    Stdin,
+    Argument(&'static str),
 }
 
 /// Only adapters with automation support can be stored in an automation task.
@@ -31,6 +43,7 @@ pub enum AutomationAgent {
     #[serde(rename = "traecli")]
     TraeCli,
     Claude,
+    Hermes,
 }
 
 impl AutomationAgent {
@@ -39,6 +52,7 @@ impl AutomationAgent {
             Self::Codex => Agent::Codex,
             Self::TraeCli => Agent::TraeCli,
             Self::Claude => Agent::Claude,
+            Self::Hermes => Agent::Hermes,
         }
     }
     pub fn id(self) -> &'static str {
@@ -52,6 +66,7 @@ impl Agent {
             Self::Codex => Some(AutomationAgent::Codex),
             Self::TraeCli => Some(AutomationAgent::TraeCli),
             Self::Claude => Some(AutomationAgent::Claude),
+            Self::Hermes => Some(AutomationAgent::Hermes),
             _ => None,
         }
     }
@@ -63,6 +78,13 @@ impl AgentAutomation for AutomationAgent {
             Self::Codex => codex::Codex.session_id_mode(),
             Self::TraeCli => traecli::TraeCli.session_id_mode(),
             Self::Claude => claude::Claude.session_id_mode(),
+            Self::Hermes => hermes::Hermes.session_id_mode(),
+        }
+    }
+    fn prompt_mode(&self) -> PromptMode {
+        match self {
+            Self::Hermes => hermes::Hermes.prompt_mode(),
+            _ => PromptMode::Stdin,
         }
     }
     fn validate_arguments(&self, arguments: &[String]) -> Result<()> {
@@ -70,6 +92,7 @@ impl AgentAutomation for AutomationAgent {
             Self::Codex => codex::Codex.validate_arguments(arguments),
             Self::TraeCli => traecli::TraeCli.validate_arguments(arguments),
             Self::Claude => claude::Claude.validate_arguments(arguments),
+            Self::Hermes => hermes::Hermes.validate_arguments(arguments),
         }
     }
     fn automation_arguments(&self, yolo: bool, session_id: Option<&str>) -> Result<Vec<String>> {
@@ -77,6 +100,7 @@ impl AgentAutomation for AutomationAgent {
             Self::Codex => codex::Codex.automation_arguments(yolo, session_id),
             Self::TraeCli => traecli::TraeCli.automation_arguments(yolo, session_id),
             Self::Claude => claude::Claude.automation_arguments(yolo, session_id),
+            Self::Hermes => hermes::Hermes.automation_arguments(yolo, session_id),
         }
     }
     fn session_from_line(&self, line: &[u8]) -> Option<String> {
@@ -84,6 +108,7 @@ impl AgentAutomation for AutomationAgent {
             Self::Codex => codex::Codex.session_from_line(line),
             Self::TraeCli => traecli::TraeCli.session_from_line(line),
             Self::Claude => claude::Claude.session_from_line(line),
+            Self::Hermes => hermes::Hermes.session_from_line(line),
         }
     }
 }

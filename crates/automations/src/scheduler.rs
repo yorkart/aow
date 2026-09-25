@@ -139,7 +139,7 @@ impl Scheduler {
             self.runner.is_absolute()
                 && fs::metadata(&self.runner)
                     .is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0),
-            "请先通过 GitHub Releases 安装 AOW"
+            "请先通过 GitHub Releases 安装 AoW"
         );
         let args = if self.platform == Platform::Systemd {
             vec!["--user".into(), "show-environment".into()]
@@ -196,7 +196,7 @@ impl Scheduler {
         match self.platform {
             Platform::Systemd => {
                 let service = format!(
-                    "[Unit]\nDescription=AOW automation trigger {}\n[Service]\nType=oneshot\nExecStart=:{}\nUMask=0077\nStandardOutput=null\nStandardError=journal\n",
+                    "[Unit]\nDescription=AoW automation trigger {}\n[Service]\nType=oneshot\nExecStart=:{}\nUMask=0077\nStandardOutput=null\nStandardError=journal\n",
                     task.id,
                     args.iter()
                         .map(|arg| unit_arg(arg))
@@ -204,7 +204,7 @@ impl Scheduler {
                         .join(" ")
                 );
                 let timer = format!(
-                    "[Unit]\nDescription=AOW automation {}\n[Timer]\n{}\nPersistent=false\nAccuracySec=1s\n[Install]\nWantedBy=timers.target\n",
+                    "[Unit]\nDescription=AoW automation {}\n[Timer]\n{}\nPersistent=false\nAccuracySec=1s\n[Install]\nWantedBy=timers.target\n",
                     task.id,
                     if let Some(seconds) = task.input.interval_seconds {
                         format!("OnActiveSec={seconds}s\nOnUnitInactiveSec={seconds}s")

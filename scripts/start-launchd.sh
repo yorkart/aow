@@ -28,12 +28,12 @@ case "$requested" in
     ''|[!A-Za-z0-9]*|*[!A-Za-z0-9._-]*) fail "invalid release id: $requested" ;;
     *) candidate=$runtime_root/releases/$requested ;;
 esac
-[ -d "$candidate" ] || fail "AOW release is unavailable: $candidate"
+[ -d "$candidate" ] || fail "AoW release is unavailable: $candidate"
 release=$(CDPATH= cd -P "$candidate" && pwd)
 releases=$(CDPATH= cd -P "$runtime_root/releases" && pwd)
 case "$release" in "$releases"/*) ;; *) fail 'release resolves outside the releases directory' ;; esac
 [ -x "$release/bin/aow-$component" ] && [ -x "$runtime_root/bin/aow-$component" ] \
-    || fail 'AOW binary or launcher is unavailable; run the installer first'
+    || fail 'AoW binary or launcher is unavailable; run the installer first'
 if [ "$component" = server ]; then
     [ -f "$release/frontend/dist/index.html" ] || fail 'incomplete server frontend'
     bash "$repo_root/packaging/bin/aow" pin --if-missing

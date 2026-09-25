@@ -20,22 +20,24 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tokio::{fs::OpenOptions, process::Command};
+use tokio::fs::OpenOptions;
 use uuid::Uuid;
 
 use crate::{AppState, HttpError};
+use git::{git_output, optional_git_output};
 
 const PROJECTS_FILE: &str = "aow-projects.json";
 const AGENTS_FILE: &str = "aow-agents.json";
 const REGISTRY_VERSION: u32 = 1;
 mod configuration;
+mod git;
 mod global;
 mod project_avatar;
 mod removal;
 
 #[derive(Debug, Error)]
 pub(crate) enum AowError {
-    #[error("invalid aow request: {0}")]
+    #[error("invalid AoW request: {0}")]
     Invalid(String),
     #[error("project not found: {0}")]
     ProjectNotFound(String),
@@ -49,7 +51,7 @@ pub(crate) enum AowError {
     Git(String),
     #[error("configuration repository: {0:#}")]
     Configuration(#[source] anyhow::Error),
-    #[error("aow state lock is poisoned")]
+    #[error("AoW state lock is poisoned")]
     Poisoned,
     #[error(transparent)]
     Io(#[from] std::io::Error),
@@ -952,7 +954,7 @@ impl AowManager {
                 .await
                 .map_err(|error| {
                     AowError::Git(format!(
-                        "git pull failed in main worktree {}: {error}",
+                        "git pull failed in main worktree {}: {error}\n可先在终端检查 git pull，或取消勾选「创建前更新主仓库」后重试。",
                         main_worktree.path
                     ))
                 })?;
@@ -2336,29 +2338,6 @@ fn validate_remote_component(value: &str) -> Result<&str, AowError> {
     Ok(value)
 }
 
-async fn optional_git_output(cwd: &Path, args: &[&str]) -> Result<Option<String>, AowError> {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(cwd)
-        .output()
-        .await
-        .map_err(|error| AowError::Git(error.to_string()))?;
-    if output.status.success() {
-        return String::from_utf8(output.stdout)
-            .map(Some)
-            .map_err(|error| AowError::Git(format!("git output is not UTF-8: {error}")));
-    }
-    if output.status.code() == Some(1) && output.stderr.is_empty() {
-        return Ok(None);
-    }
-    let message = String::from_utf8_lossy(&output.stderr).trim().to_owned();
-    Err(AowError::Git(if message.is_empty() {
-        format!("git {} exited with {}", args.join(" "), output.status)
-    } else {
-        message
-    }))
-}
-
 async fn prepare_notes_directory(path: &Path) -> Result<String, AowError> {
     if !path.is_absolute() {
         return Err(AowError::Invalid(
@@ -2484,25 +2463,6 @@ fn parse_worktrees(project_id: &str, output: &str) -> Vec<Worktree> {
             .then_with(|| left.path.cmp(&right.path))
     });
     result
-}
-
-async fn git_output(cwd: &Path, args: &[&str]) -> Result<String, AowError> {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(cwd)
-        .output()
-        .await
-        .map_err(|error| AowError::Git(error.to_string()))?;
-    if !output.status.success() {
-        let message = String::from_utf8_lossy(&output.stderr).trim().to_owned();
-        return Err(AowError::Git(if message.is_empty() {
-            format!("git {} exited with {}", args.join(" "), output.status)
-        } else {
-            message
-        }));
-    }
-    String::from_utf8(output.stdout)
-        .map_err(|error| AowError::Git(format!("git output is not UTF-8: {error}")))
 }
 
 async fn validate_absolute_directory(value: &str) -> Result<PathBuf, AowError> {
@@ -2652,7 +2612,7 @@ where
             let document: RegistryDocument<T> = serde_json::from_slice(&bytes)?;
             if document.version != REGISTRY_VERSION {
                 return Err(AowError::Invalid(format!(
-                    "unsupported aow registry version {}",
+                    "unsupported AoW registry version {}",
                     document.version
                 )));
             }
@@ -2699,7 +2659,7 @@ fn load_settings(path: &Path, default_notes_base: PathBuf) -> Result<AowSettings
             let document: SettingsDocument = serde_json::from_slice(&bytes)?;
             if document.version != REGISTRY_VERSION {
                 return Err(AowError::Invalid(format!(
-                    "unsupported aow settings version {}",
+                    "unsupported AoW settings version {}",
                     document.version
                 )));
             }
@@ -2823,7 +2783,8 @@ fn snapshot_response(error: aow_agents::sessions::snapshot::SnapshotError) -> Re
             error.to_string(),
             None,
         ),
-        aow_agents::sessions::snapshot::SnapshotError::Io(_) => {
+        aow_agents::sessions::snapshot::SnapshotError::Io(_)
+        | aow_agents::sessions::snapshot::SnapshotError::Database(_) => {
             HttpError::internal(error.to_string())
         }
     }
@@ -3751,7 +3712,7 @@ mod tests {
         let agents = AowManager::in_memory()
             .agents_in_path(&[directory.path().to_path_buf()])
             .unwrap();
-        assert_eq!(agents.len(), 3);
+        assert_eq!(agents.len(), AgentType::ALL.len());
         for agent_type in AgentType::ALL {
             assert!(agents.iter().any(|agent| {
                 agent.id == agent_type.id() && agent.agent_type == Some(agent_type)
@@ -4269,7 +4230,7 @@ mod tests {
         .unwrap();
         let commit_args = [
             "-c",
-            "user.name=AOW Test",
+            "user.name=AoW Test",
             "-c",
             "user.email=aow@example.com",
             "commit",
@@ -4375,7 +4336,7 @@ mod tests {
             StdCommand::new("git")
                 .args([
                     "-c",
-                    "user.name=AOW Test",
+                    "user.name=AoW Test",
                     "-c",
                     "user.email=aow@example.com",
                     "commit",

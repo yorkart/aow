@@ -29,6 +29,14 @@ try {
     assert.equal(terminalSessionCandidates({ ...data(), live_session_id: 'not-yet-written' }).automatic, undefined);
     assert.equal(terminalSessionCandidates({ ...data([session('trae', '修复终端会话', 'traecli')]), agent: 'traecli' }).automatic.session_id, 'trae');
   });
+  await test('Hermes uses its native session identity and never a stale terminal title', () => {
+    const hermes = { ...data([session('hermes-one', '修复终端会话', 'hermes')]), agent: 'hermes' };
+    assert.equal(terminalSessionTitle('Hermes | demo', cwd), '');
+    assert.equal(terminalSessionCandidates(hermes).automatic, undefined);
+    assert.deepEqual(terminalSessionCandidates(hermes).matches, []);
+    assert.equal(terminalSessionCandidates({ ...hermes, live_session_id: 'hermes-one' }).automatic.session_id, 'hermes-one');
+    assert.equal(terminalSessionCandidates({ ...hermes, live_session_id: 'not-yet-written' }).automatic, undefined);
+  });
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
   const url = `http://127.0.0.1:${server.httpServer.address().port}/tests/terminal-session-preview.html`;
 
@@ -129,6 +137,34 @@ try {
     await update(page, { agentProcesses: { one: next.process } });
     await pane.locator('.terminal-agent-session-list > button').nth(1).waitFor();
     assert.equal(await pane.locator('.project-aow-session-snapshot').count(), 0);
+  });
+
+  await test('Hermes title changes retain manual selection until the native session changes', async t => {
+    const hermes = { ...data([session('first', '首条用户消息', 'hermes'), session('second', '手动选择的历史', 'hermes')]),
+      agent: 'hermes', title: '首条用户消息', live_session_id: 'first' };
+    const state = await open(t, hermes);
+    const { page, pane } = state;
+    await update(page, { detectedAgents: { one: 'hermes', two: null }, terminalTitles: { one: hermes.title } });
+    await pane.getByRole('button', { name: '切换到会话详情' }).click();
+    await pane.getByRole('heading', { name: '首条用户消息' }).waitFor();
+    await pane.getByRole('button', { name: '重新选择' }).click();
+    await pane.locator('.terminal-agent-session-list > button').filter({ hasText: '手动选择的历史' }).click();
+    await pane.getByRole('heading', { name: '手动选择的历史' }).waitFor();
+
+    const renamed = { ...hermes, title: '自动生成的会话标题',
+      sessions: [session('first', '自动生成的会话标题', 'hermes'), hermes.sessions[1]] };
+    state.setData(renamed);
+    await update(page, { terminalTitles: { one: renamed.title } });
+    await pane.locator('.terminal-pane-name').filter({ hasText: renamed.title }).waitFor();
+    assert.equal(await pane.locator('.terminal-pane-name').innerText(), renamed.title);
+    await pane.getByRole('button', { name: '刷新会话列表' }).click();
+    await pane.getByRole('heading', { name: '手动选择的历史' }).waitFor();
+    assert.match(await pane.locator('.terminal-agent-session-toolbar').innerText(), /已选择 · second/);
+
+    state.setData({ ...renamed, live_session_id: 'new', sessions: [...renamed.sessions, session('new', '新的会话', 'hermes')] });
+    await pane.getByRole('button', { name: '刷新会话列表' }).click();
+    await pane.getByRole('heading', { name: '新的会话' }).waitFor();
+    assert.match(await pane.locator('.terminal-agent-session-toolbar').innerText(), /当前会话 · new/);
   });
 
   await test('Claude PID identity wins over title and an absent transcript does not open a namesake', async t => {

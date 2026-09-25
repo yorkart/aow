@@ -212,7 +212,10 @@ time.sleep(30)
 "#,
     )
     .unwrap();
-    for (index, agent_type) in ["codex", "codex", "claude", "traecli"].iter().enumerate() {
+    for (index, agent_type) in ["codex", "codex", "claude", "traecli", "hermes"]
+        .iter()
+        .enumerate()
+    {
         let id = format!("resume-profile-{index}");
         let log = fixture
             .directory
@@ -236,7 +239,7 @@ time.sleep(30)
                 "agent_id": id, "resume_session_id": session_id}),
         )
         .await;
-        let resume_arg = if *agent_type == "claude" {
+        let resume_arg = if matches!(*agent_type, "claude" | "hermes") {
             "--resume"
         } else {
             "resume"

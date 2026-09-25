@@ -2,21 +2,23 @@
 
 安装与访问入口见 [README](../README.md)，服务设置与数据目录见 [配置说明](configuration.md)，本机命令见 [CLI 说明](aow-cli.md)。
 
-使用 Agent 功能前，请在运行 AOW 的机器上安装对应 CLI 并登录账号。
+使用 Agent 功能前，请在运行 AoW 的机器上安装对应 CLI 并登录账号。
 
 ## 项目与 Pull Requests
 
-首页会进入 Project AOW。注册本机 Git 仓库后，可在页面中管理关联 Worktree、Notes、文件、Git Diff、Terminal，以及本地 Agent 会话。右侧 **Pull Requests** 面板通过配置的 Provider 展示当前账号创建的 Open PR，详情按「概览、文件变更、检查、讨论」组织。Settings → Pull Requests 可管理域名映射和 Python 脚本：脚本仅支持只读预览或上传替换，保存后由 AOW 管理脚本文件。
+首页会进入 Project AoW。注册本机 Git 仓库后，可在页面中管理关联 Worktree、Notes、文件、Git Diff、Terminal，以及本地 Agent 会话。右侧 **Pull Requests** 面板通过配置的 Provider 展示当前账号创建的 Open PR，详情按「概览、文件变更、检查、讨论」组织。Settings → Pull Requests 可管理域名映射和 Python 脚本：脚本仅支持只读预览或上传替换，保存后由 AoW 管理脚本文件。
+
+创建 Worktree 默认先对主仓库执行 `git pull`，无需拉取远端时可取消勾选。每个 Git 步骤最多等待 2 分钟；超时会停止命令及其子进程，并显示失败的命令。拉取失败时不会继续创建，可先在终端处理网络或认证问题后重试。如果 `git worktree add` 超时，Git 可能已经创建分支或目录，请先刷新项目并检查状态。
 
 首次初始化内置 `github.com → github` 及适配脚本，脚本内部调用 gh，需要服务器可运行 python3、gh 并完成 gh 登录。其他平台通过用户脚本实现统一 API，脚本自行决定 CLI 或 API 的调用方式。多个 remote 对应不同仓库时可在列表选择；标签页、深链接和手机详情保留 Provider 与 remote 身份。默认配置只初始化一次，不覆盖用户修改或重新添加已删除的 Provider。完整 API、字段及存储规则见 [Review Provider 脚本协议](../frontend/src/features/pr/review-providers.md)，设置页中也可查看。
 
 ## 项目头像
 
-注册 Git 项目后，桌面和手机会异步显示仓库所属用户或组织的头像。头像由 **Settings → Pull Requests** 的 Provider 提供：优先使用 `origin`，没有 `origin` 时使用唯一的 remote。内置 GitHub Provider 使用 `gh` 查询 `owner.avatar_url`；自定义脚本可实现可选的 `repository_info`。AOW 保存 URL 并由浏览器直接加载图片，不扫描仓库 logo，也不下载图片文件。未配置、旧脚本不支持或图片加载失败时使用默认项目图标，添加和使用项目不受影响。
+注册 Git 项目后，桌面和手机会异步显示仓库所属用户或组织的头像。头像由 **Settings → Pull Requests** 的 Provider 提供：优先使用 `origin`，没有 `origin` 时使用唯一的 remote。内置 GitHub Provider 使用 `gh` 查询 `owner.avatar_url`；自定义脚本可实现可选的 `repository_info`。AoW 保存 URL 并由浏览器直接加载图片，不扫描仓库 logo，也不下载图片文件。未配置、旧脚本不支持或图片加载失败时使用默认项目图标，添加和使用项目不受影响。
 
 ## 多节点访问
 
-在 **Settings → Nodes** 中可配置其他机器的 AOW 地址，每行填写一个完整的 HTTP(S) 地址，保存后点击桌面或手机端首页左上角的 Logo / AOW 文字即可展开菜单；点击节点地址会在新窗口或新标签页打开，保留当前页面。列表允许包含当前节点，可以将同一份配置复制到所有机器；菜单按协议、域名/IP、端口和部署路径过滤当前节点，不同端口或不同 Base Path 仍作为独立节点显示。建议填写部署入口地址，例如 `https://example.com/tools/aow/`；当前部署的 `/aow/`、`/m/` 入口也会被识别为自身。空行和重复地址会自动整理，留空保存可清空列表。配置保存在服务端 `aow-settings.json` 的 `node_addresses` 字段中。
+在 **Settings → Nodes** 中可配置其他机器的 AoW 地址，每行填写一个完整的 HTTP(S) 地址，保存后点击桌面或手机端首页左上角的 Logo / AoW 文字即可展开菜单；点击节点地址会在新窗口或新标签页打开，保留当前页面。列表允许包含当前节点，可以将同一份配置复制到所有机器；菜单按协议、域名/IP、端口和部署路径过滤当前节点，不同端口或不同 Base Path 仍作为独立节点显示。建议填写部署入口地址，例如 `https://example.com/tools/aow/`；当前部署的 `/aow/`、`/m/` 入口也会被识别为自身。空行和重复地址会自动整理，留空保存可清空列表。配置保存在服务端 `aow-settings.json` 的 `node_addresses` 字段中。
 
 ## 工作区与终端
 
@@ -38,7 +40,7 @@ Project Explorer 和 Notes Explorer 支持右键“粘贴”上传剪贴板图�
 
 ## Terminal Agent 图标
 
-Linux 和 macOS 上的普通 Terminal 会自动识别其中运行的 Codex、Claude Code 和 TraeCode CLI（`traecli`），桌面和手机标签页会显示对应 Agent 图标，退出后恢复终端图标。检测约每 1.5 秒刷新，通过读取本机进程信息实现，无需安装 hook 或修改 Agent 配置。分割标签页取首个检测到 Agent 的窗格，手机端按窗格分别显示。
+Linux 和 macOS 上的普通 Terminal 会自动识别其中运行的 Codex、Claude Code、TraeCode CLI（`traecli`）和 Hermes，桌面和手机标签页会显示对应 Agent 图标，退出后恢复终端图标。检测约每 1.5 秒刷新，通过读取本机进程信息实现，无需安装 hook 或修改 Agent 配置。分割标签页取首个检测到 Agent 的窗格，手机端按窗格分别显示。
 
 检测范围是 terminald 所在主机、同一 PTY 的进程；终端中再进入 SSH、容器或 tmux 的内部会话暂不识别。Linux 使用 `/proc`，macOS 使用原生进程接口，两者共用 Agent 匹配和前台进程选择规则。
 
@@ -59,7 +61,14 @@ Linux 和 macOS 上的普通 Terminal 会自动识别其中运行的 Codex、Cla
 
 **Settings → IM** 中可配置飞书企业自建应用机器人，只需填写 App ID 和 App Secret。飞书开发者后台需开启并发布机器人能力，开通 `application:application:self_manage`（管理应用自身资源）和 `im:message:send_as_bot`（以应用的身份发消息），并确保应用所有者在可用范围内。后端自动查询当前应用 owner，无需配置接收人。密钥保存后不回传网页，编辑时留空保留；更换 App ID 时需重新填写密钥。
 
-**Settings → IM → 微信 Bot** 支持普通微信私聊。点击“扫码连接微信”，用接收通知的微信账号扫码；若页面要求配对码，输入手机微信显示的数字。绑定后点击“发送微信测试消息”，确认手机收到，再在 **Settings → 通知** 勾选“微信推送”。目前不支持普通微信群，也不会通过微信执行 Agent 指令。
+**Settings → IM → 微信 Bot** 支持普通微信私聊，页面按四步引导验证推送：
+
+1. 点击“扫码连接微信”，用接收通知的微信账号扫码；若页面要求配对码，输入手机微信显示的数字。
+2. 打开微信里的 Bot 私聊，发送一句“你好”。页面会自动检查接收状态，也可点击“我已发送，检查状态”。
+3. 页面提示已收到你的消息后，点击“发送微信测试消息”，由 AoW 发送测试通知。
+4. 在微信中实际看到“AoW 微信推送测试”后，点击“我已收到”。如果还没收到，按页面提示检查会话并重试。发送接口返回成功时，页面仍等待用户确认收件。
+
+验证完成后，在 **Settings → 通知** 勾选“微信推送”并保存。扫码完成表示身份已绑定；首次设置需先向 Bot 发消息建立通知会话。目前不支持普通微信群，也不会通过微信执行 Agent 指令。
 
 微信参考 Hermes 的直接发送方式：有效凭证保存后可按需通过 HTTP 发送，断线或重启不要求保持原来的连接。服务端后台轮询用于更新扫码者的会话上下文。若微信明确拒绝旧上下文，使用相同发送标识去掉上下文重试一次；网络超时不自动重发。如果测试仍提示会话未就绪，请先向微信 Bot 发一条消息再试，必要时重新扫码。主动消息是否受理仍取决于微信端的会话和额度限制。
 
@@ -75,7 +84,7 @@ IM 凭证和通知设置保存在本机状态目录的 `notification-settings.js
 
 桌面左侧 Projects 和 Pinned 列表默认在对应 Worktree 条目的最右侧显示未读通知数量，数量为 0 时隐藏。角标与页面通知共用同一份持久化队列：新提醒计入对应 Worktree，关闭单个或全部弹框不扣减未读数量；激活来源 Tab 或移除失效通知时同步扣减，刷新后恢复。同一条通知在同一个 Worktree 中只计一次，即使它关联多个 Tab；没有来源 Worktree 的旧版通知不计入角标。
 
-IM 消息由后台发送，需要在 **Settings → 通知 → AOW 访问地址** 设置接收设备可访问的 HTTP(S) 地址，例如 `https://aow.example.com`；也可点击“使用当前访问地址”填入浏览器的站点地址。配置保存在本机 `notification-settings.json` 的 `notifications.public_base_url`，网页保存立即生效。没有配置时，飞书继续显示普通 Tab 文本；配置后为每个来源 Tab 生成独立链接，长结论的每片卡片都会保留这些链接。
+IM 消息由后台发送，需要在 **Settings → 通知 → AoW 访问地址** 设置接收设备可访问的 HTTP(S) 地址，例如 `https://aow.example.com`；也可点击“使用当前访问地址”填入浏览器的站点地址。配置保存在本机 `notification-settings.json` 的 `notifications.public_base_url`，网页保存立即生效。没有配置时，飞书继续显示普通 Tab 文本；配置后为每个来源 Tab 生成独立链接，长结论的每片卡片都会保留这些链接。
 
 也可以在已有配置文件的 `notifications` 对象中添加 `"public_base_url": "https://aow.example.com"`，保留其他字段和 IM 凭据；手动编辑文件后重启 Web server 生效。旧配置缺少该字段时按空地址处理，无需迁移。访问地址不是飞书回调接口，链接仍走原有 PIN 登录。
 
@@ -93,7 +102,7 @@ IM 消息由后台发送，需要在 **Settings → 通知 → AOW 访问地址*
 
 TraeCode CLI 适配面向 **2.0**。
 
-会话详情按轮次展示用户输入、Agent 处理过程和最终结论。处理过程包含公开进度说明、工具名称和执行状态，工具详情可展开查看已记录的命令、参数和执行输出，不展示内部推理。支持 Codex、TraeCode CLI 和 Claude 的本地会话记录。
+会话详情按轮次展示用户输入、Agent 处理过程和最终结论。处理过程包含公开进度说明、工具名称和执行状态，工具详情可展开查看已记录的命令、参数和执行输出，不展示内部推理。支持 Codex、TraeCode CLI、Claude 和 Hermes 的本地会话记录。
 
 连续工具调用默认合并为英文概要，例如 `Read files, edited files, ran commands`；结合工具名称和会话记录中的命令分类去重汇总，保留调用次数及失败/执行中状态。点击概要可展开工具列表，Agent 的进度说明会分隔前后两组调用。
 
@@ -109,6 +118,26 @@ TraeCode CLI 适配面向 **2.0**。
 
 分享验证：`cargo test -p aow-server session_shares`；在 `frontend/` 下执行 `npm run test:shares`。
 
+## Hermes
+
+Hermes 适配已在 **0.18.0** 验证。将 `hermes` 所在目录加入 Settings 的执行 PATH 后，可自动发现或手动注册 Hermes；内置启动使用经典 `--cli` 界面，恢复会话使用 `--resume <session-id>`。进程识别同时支持直接启动脚本和 Hermes 切换到托管 Python 后的 `-I -c` 启动形式。`aow-cli agent create --agent hermes` 支持等待默认输入提示符就绪并提交初始任务；自定义皮肤改变提示符时可直接使用普通 Terminal。
+
+Conversation 和分享页只读访问 Hermes 的 `state.db`，支持用户输入、工具调用与结果、最终回复、历史恢复和标题刷新。原地压缩后保留原始对话，合并复制的消息并隐藏内部摘要；撤销的消息保持隐藏。`HERMES_HOME` 指向根目录时跟随该根的 `active_profile`；指向 `profiles/<name>` 时固定使用该 profile。未指定时使用 `~/.hermes` 及其 active profile。注册多个实例时，建议各自显式设置 profile 目录。不需要开启 JSON 导出，也不会迁移数据库或安装 hook。
+
+Hermes 经典 CLI 不发送动态任务标题。AoW 在精确关联当前进程与会话后，从 `state.db` 提取标题并显示到桌面 Tab、Terminal 列表及手机面板；标题尚未生成时使用首条用户消息，后续自动生成或 `/title` 修改会在终端元数据刷新时更新。手动重命名的 Tab 保留用户名称。缺少有效进程关联时保留终端原名称，不根据目录中的历史会话推断标题。
+
+终端自动关联及完成提醒需要 Hermes `runtime/active_sessions.json` 中与当前 PID 对应的记录。部分 Hermes 版本仅在配置启用 `max_concurrent_sessions` 时生成这份记录；记录缺失或失效时，在 Conversation 中手动选择会话，不自动订阅完成提醒，即使同目录只有一个候选也不推断归属。完成提醒从当前 SQLite 消息位置开始，只接受没有工具调用且明确标记 `stop`、`end_turn` 或 `stop_sequence` 的 assistant 记录；压缩复制的历史回复、工具输出、验证续跑和不完整回复不触发提醒。
+
+自动化使用 `hermes chat --cli --quiet --query=<prompt>` 创建持久会话，按任务设置传入 `--yolo`。Hermes 在执行结束时向 stderr 输出 session ID，因此运行期间可能暂时没有会话链接；执行退出后才校验并保存该 ID。`--oneshot` 不提供这一协议，不能作为自动化启动参数。
+
+验证：`cargo test -p aow-agents --all-features`、`cargo test -p aow-automations --test runtime hermes`；前端执行 `npm run build` 和 `npm run test:sessions`。
+
+原生回归：将 `AOW_HERMES_TEST_PYTHON` 设置为 Hermes venv 的 Python，运行 `cargo test -p aow-agents --all-features --test hermes_native -- --ignored --nocapture --test-threads=1`。用例只在临时 profile 中检查压缩、重复消息、profile 解析和新 CLI 归属；CLI 用例需要 PTY 权限，不调用模型服务。非标准安装可用 `AOW_HERMES_TEST_SOURCE` 指定 Hermes 源码目录。
+
+标题链路验证：设置 `AOW_TITLE_TEST_PID`、`AOW_TITLE_TEST_SESSION_ID`、`AOW_TITLE_TEST_EXPECTED`，运行 `cargo test -p aow-server --lib native_process_title_matches_the_live_session -- --ignored --nocapture`。测试只读真实进程和会话数据，通过临时 daemon 传输调用生产标题接口，不需要在当前终端输入命令或重启服务。可用 `AOW_TITLE_TEST_EXPORT` 指定临时 JSON 文件，再在前端目录以相同变量运行 `node --test --test-name-pattern='exported live agent metadata' tests/aow-resources.test.mjs`，验证这份返回数据的 Tab 图标、标题及右侧 Terminal 列表。
+
+真实会话检查：在已打开的 Hermes 终端显示 `/status` 并保持空闲，设置 `AOW_HERMES_TEST_PID`、`AOW_HERMES_TEST_SESSION_ID` 和 `AOW_HERMES_TEST_RUNTIME_ID` 后，运行 `cargo test -p aow-server --test hermes_live -- --ignored --nocapture`。它只读核对进程、会话关联、原生消息、工具结果和屏幕；完成提醒通过临时数据库重放该会话验证。原生前台进程识别可用 `cargo test -p aow-terminald native_scan_matches_an_existing_hermes_process -- --ignored --nocapture` 检查。若同时设置 `AOW_HERMES_TEST_EXPORT` 为临时目录，可在前端目录使用同一变量运行 `node --test --test-name-pattern='exported native Hermes' tests/session-snapshot.test.mjs`，验证这份真实快照的桌面和手机展示。导出内容包含该会话的公开消息和工具输出，仅应保存在本机私有目录。
+
 ## 手机访问
 
 手机打开同一个服务地址即可进入移动界面，也可以直接访问 `/m` 或 `/m/`。
@@ -123,6 +152,6 @@ Terminal 的分割窗格会展开为独立标签。若已有其他窗口控制�
 
 GitHub 安装器和 `aow update` 会把 Runner 的稳定入口更新为所选 release；后续计划任务和手动任务自动使用新 Runner，已开始运行的任务不受影响。Runner 不是常驻进程，因此不需要单独的 start 命令。
 
-点击左侧 Pinned 上方的“自动化”，创建任务并设置 Agent、项目、工作区和运行计划。支持 Codex、TraeCode CLI、Claude Code；每次运行都会创建新会话。详情页显示概述和执行历史，可复制每次运行的 session ID。
+点击左侧 Pinned 上方的“自动化”，创建任务并设置 Agent、项目、工作区和运行计划。支持 Codex、TraeCode CLI、Claude Code、Hermes；每次运行都会创建新会话。详情页显示概述和执行历史，可复制每次运行的 session ID。
 
 Linux 使用 systemd user timer，macOS 使用当前登录用户的 launchd。定时器触发独立 Runner，前端或 Web 服务重启不会影响任务触发及已启动的执行。未实现应用层补跑或重试，也不读取 Agent rollout。

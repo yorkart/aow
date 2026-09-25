@@ -1,4 +1,4 @@
-export type AowAgentType = 'claude' | 'codex' | 'traecli';
+export type AowAgentType = 'claude' | 'codex' | 'traecli' | 'hermes';
 
 export interface AowAgent {
   id: string;

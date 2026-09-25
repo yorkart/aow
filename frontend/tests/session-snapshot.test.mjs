@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
@@ -40,6 +41,53 @@ try {
   }
 
   for (const mobile of [false, true]) {
+    await test(`${mobile ? 'mobile' : 'desktop'} displays exported native Hermes session data`, { skip: !process.env.AOW_HERMES_TEST_EXPORT }, async (t) => {
+      const directory = process.env.AOW_HERMES_TEST_EXPORT;
+      const nativeSession = JSON.parse(await readFile(join(directory, 'session.json'), 'utf8'));
+      const nativeSnapshot = JSON.parse(await readFile(join(directory, 'snapshot.json'), 'utf8'));
+      const { page, updateSnapshot } = await open(t, mobile);
+      updateSnapshot(nativeSnapshot);
+      await update(page, { session: nativeSession, snapshot: nativeSnapshot });
+      await page.getByText(nativeSession.title, { exact: true }).first().waitFor();
+      const turns = page.locator(mobile ? '.mobile-turn' : '.project-aow-snapshot-turn');
+      await turns.last().getByText(nativeSnapshot.turns.at(-1).user.text, { exact: true }).waitFor();
+      assert.equal(await turns.count(), nativeSnapshot.turns.length);
+      const finals = page.locator(mobile ? '.mobile-message.assistant .mobile-markdown' : '.project-aow-snapshot-conclusion');
+      assert.equal(await finals.count(), nativeSnapshot.turns.filter(turn => turn.final).length);
+      assert.equal(await page.locator('.session-turn-pending.interrupted').count(), nativeSnapshot.turns.filter(turn => turn.status === 'interrupted' && !turn.final).length);
+      for (const toggle of await page.locator('.session-process-toggle').all()) {
+        if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click();
+      }
+      for (const group of await page.locator('.session-tool-group-toggle').all()) {
+        if (await group.getAttribute('aria-expanded') === 'false') await group.click();
+      }
+      const tools = nativeSnapshot.turns.flatMap(turn => turn.activities).filter(activity => activity.kind === 'tool');
+      assert.equal(await page.locator('.session-process-tool').count(), tools.length);
+      assert.equal(await page.locator('.session-process-tool.failed').count(), tools.filter(tool => tool.status === 'failed').length);
+      const toolDetails = page.locator('.session-tool-toggle');
+      for (const toggle of await toolDetails.all()) await toggle.click();
+      assert.equal(await page.locator('.session-tool-detail:visible').count(), tools.length);
+      await noOverflow(page);
+    });
+
+    await test(`${mobile ? 'mobile' : 'desktop'} Hermes conversations show their own identity and native transcript`, async (t) => {
+      const { page, updateSnapshot } = await open(t, mobile);
+      const hermesSession = { ...session, id: 'hermes:hermes-session', session_id: 'hermes-session', agent: 'hermes', title: 'Hermes conversation' };
+      const hermesSnapshot = { ...snapshot, agent: 'hermes', session_id: 'hermes-session', title: hermesSession.title,
+        turns: [makeTurn('hermes-1', 'Read the repository', 'Hermes completed the task.', [{ kind: 'tool', text: 'terminal', status: 'completed' }])] };
+      updateSnapshot(hermesSnapshot);
+      await update(page, { session: hermesSession, snapshot: hermesSnapshot });
+      await page.getByText('Hermes completed the task.', { exact: true }).waitFor();
+      await page.getByText('Hermes', { exact: true }).first().waitFor();
+      const icons = page.locator('img.agent-icon');
+      assert.ok(await icons.count() > 0);
+      assert.match(await icons.first().getAttribute('src'), /hermes/);
+      await icons.first().evaluate(image => image.decode());
+      assert.equal(await icons.first().evaluate(image => image.complete && image.naturalWidth > 0), true);
+      assert.equal(await page.getByText('TraeCode CLI', { exact: true }).count(), 0);
+      await noOverflow(page);
+    });
+
     await test(`${mobile ? 'mobile' : 'desktop'} image references preview local attachments without changing message text`, async (t) => {
       const { page, updateSnapshot } = await open(t, mobile);
       const file = '/tmp/截图 #1 & example.png';

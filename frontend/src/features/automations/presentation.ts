@@ -1,5 +1,5 @@
 import type { AutomationAgent, WorkspaceMode, RunStatus } from './types';
-export const agentNames: Record<AutomationAgent, string> = { codex: 'Codex', traecli: 'TraeCode CLI', claude: 'Claude Code' };
+export const agentNames: Record<AutomationAgent, string> = { codex: 'Codex', traecli: 'TraeCode CLI', claude: 'Claude Code', hermes: 'Hermes' };
 export const workspaceNames: Record<WorkspaceMode, string> = { existing: '现有工作区', new_worktree: '新建 Worktree', new_branch: '新建分支', temporary: '临时目录（TMP）' };
 export const runNames: Record<RunStatus, string> = { preparing: '准备中', running: '执行中', completed: '已完成', failed: '失败', skipped: '已跳过', interrupted: '已中断' };
 export const errorMessage = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
