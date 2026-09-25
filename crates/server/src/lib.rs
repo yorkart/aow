@@ -40,7 +40,7 @@ mod local_cli;
 pub use local_cli::start_local_cli;
 mod aow;
 mod automations;
-mod im;
+mod im_api;
 mod notifications;
 mod operations;
 mod pull_requests;
@@ -233,6 +233,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(aow::routes())
         .merge(pull_requests::routes())
         .merge(notifications::routes())
+        .merge(im_api::routes())
         .merge(operations::routes())
         .merge(automations::routes())
         .merge(session_shares::routes())

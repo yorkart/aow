@@ -41,6 +41,32 @@ fn state(store: &Store, id: &str) -> DeliveryState {
 }
 
 #[tokio::test]
+async fn wechat_choice_is_taken_from_run_snapshot_even_after_task_switches_to_feishu() {
+    let root = tempfile::tempdir().unwrap();
+    let store = Arc::new(Store::new(root.path().into()).unwrap());
+    let mut task = task();
+    task.input.failure_notification = Some(FailureNotification::Wechat);
+    finish(
+        &mut start(&store, &task, "wechat-failed"),
+        RunStatus::Failed,
+    );
+    task.input.failure_notification = Some(FailureNotification::Feishu);
+    store.save_task(&task).unwrap();
+    poll(
+        store.clone(),
+        |run, channel, _| {
+            assert_eq!(run.id, "wechat-failed");
+            assert_eq!(channel, FailureNotification::Wechat);
+            async { Ok(true) }
+        },
+        false,
+    )
+    .await
+    .unwrap();
+    assert_eq!(state(&store, "wechat-failed").status, DeliveryStatus::Sent);
+}
+
+#[tokio::test]
 async fn server_observer_starts_without_frontend_requests() {
     let root = tempfile::tempdir().unwrap();
     let manager = crate::automations::AutomationManager::new(
@@ -99,7 +125,8 @@ async fn observes_snapshot_failures_in_any_completion_order_and_survives_restart
     let sent = std::sync::Mutex::new(Vec::new());
     poll(
         store.clone(),
-        |run, id| {
+        |run, channel, id| {
+            assert_eq!(channel, FailureNotification::Feishu);
             assert_eq!(run.task_name, "每日检查");
             assert!(Uuid::parse_str(&id).is_ok());
             sent.lock().unwrap().push(run.id);
@@ -122,7 +149,7 @@ async fn observes_snapshot_failures_in_any_completion_order_and_survives_restart
     let restarted = Arc::new(Store::open(root.path().into()).unwrap());
     poll(
         restarted.clone(),
-        |run, _| {
+        |run, _, _| {
             sent.lock().unwrap().push(run.id);
             async { Ok(true) }
         },
@@ -132,7 +159,7 @@ async fn observes_snapshot_failures_in_any_completion_order_and_survives_restart
     .unwrap();
     poll(
         restarted,
-        |_, _| async { panic!("duplicate notification") },
+        |_, _, _| async { panic!("duplicate notification") },
         false,
     )
     .await
@@ -161,7 +188,7 @@ async fn only_failed_opted_in_runs_notify_and_missing_bot_does_not_replay() {
     let calls = AtomicUsize::new(0);
     poll(
         store.clone(),
-        |run, _| {
+        |run, _, _| {
             assert_eq!(run.id, "failed");
             calls.fetch_add(1, Ordering::SeqCst);
             async { Ok(false) }
@@ -184,7 +211,7 @@ async fn only_failed_opted_in_runs_notify_and_missing_bot_does_not_replay() {
     finish(&mut start(&store, &task, "later"), RunStatus::Failed);
     poll(
         store.clone(),
-        |run, _| {
+        |run, _, _| {
             assert_eq!(run.id, "later");
             async { Ok(true) }
         },
@@ -205,7 +232,7 @@ async fn overlapping_observers_and_uncertain_deliveries_never_replay() {
     let inherited_lock = held._lock.0.try_clone().unwrap();
     poll(
         store.clone(),
-        |_, _| async { panic!("another observer owns the lock") },
+        |_, _, _| async { panic!("another observer owns the lock") },
         false,
     )
     .await
@@ -213,7 +240,7 @@ async fn overlapping_observers_and_uncertain_deliveries_never_replay() {
     drop(held);
     poll(
         store.clone(),
-        |_, _| async { anyhow::bail!("network failed") },
+        |_, _, _| async { anyhow::bail!("network failed") },
         false,
     )
     .await
@@ -231,7 +258,7 @@ async fn overlapping_observers_and_uncertain_deliveries_never_replay() {
     .unwrap();
     poll(
         store.clone(),
-        |_, _| async { panic!("must not retry ambiguous delivery") },
+        |_, _, _| async { panic!("must not retry ambiguous delivery") },
         false,
     )
     .await
@@ -267,7 +294,7 @@ async fn processes_offline_failures_before_pruning_history() {
     let calls = AtomicUsize::new(0);
     poll(
         store.clone(),
-        |run, _| {
+        |run, _, _| {
             assert_eq!(run.id, "0000");
             calls.fetch_add(1, Ordering::SeqCst);
             // Finish an older active run after the scan but before cleanup.
@@ -283,7 +310,7 @@ async fn processes_offline_failures_before_pruning_history() {
     assert!(store.root.join("runs/12345678/0000-late").exists());
     poll(
         store.clone(),
-        |run, _| {
+        |run, _, _| {
             assert_eq!(run.id, "0000-late");
             calls.fetch_add(1, Ordering::SeqCst);
             async { Ok(true) }

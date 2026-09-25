@@ -52,7 +52,8 @@ export function AutomationEditor({ task, kind = 'scheduled', project, agents, ti
   const [error, setError] = useState('');
   const manual = draft.kind === 'manual';
   const names = variableNames(draft.prompt_bindings);
-  const [botStatus, setBotStatus] = useState<'loading' | 'available' | 'missing' | 'error'>('loading');
+  const [botStatus, setBotStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [availableBots, setAvailableBots] = useState<string[]>([]);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const promptEditorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
@@ -61,7 +62,10 @@ export function AutomationEditor({ task, kind = 'scheduled', project, agents, ti
   useEffect(() => {
     let active = true;
     void notificationsApi.notificationSettings().then(settings => {
-      if (active) setBotStatus(settings.im.providers.some(provider => provider.provider === 'feishu' && provider.secret_configured) ? 'available' : 'missing');
+      if (active) {
+        setAvailableBots(settings.im.providers.filter(provider => provider.provider === 'wechat' || provider.secret_configured).map(provider => provider.provider));
+        setBotStatus('ready');
+      }
     }).catch(() => { if (active) setBotStatus('error'); });
     return () => { active = false; };
   }, []);
@@ -166,11 +170,11 @@ export function AutomationEditor({ task, kind = 'scheduled', project, agents, ti
             <label><span>超时时间</span><select aria-label="超时时间" value={draft.precheck_timeout_seconds} onChange={(event) => update('precheck_timeout_seconds', Number(event.target.value))}>{[30, 60, 120, 300, 600].map((seconds) => <option key={seconds} value={seconds}>{seconds} 秒</option>)}</select></label>
           </details>
           <div className="automation-settings-divider" />
-          <label><span>失败提醒</span><select aria-label="失败提醒" value={draft.failure_notification ?? ''} disabled={busy} onChange={event => update('failure_notification', event.target.value === 'feishu' ? 'feishu' : null)}>
+          <label><span>失败提醒</span><select aria-label="失败提醒" value={draft.failure_notification ?? ''} disabled={busy} onChange={event => update('failure_notification', event.target.value === 'feishu' || event.target.value === 'wechat' ? event.target.value : null)}>
             <option value="">不提醒</option>
-            <option value="feishu" disabled={botStatus !== 'available'}>飞书 Bot{botStatus === 'missing' ? ' · 当前环境未配置' : ''}</option>
+            {(['feishu', 'wechat'] as const).map(provider => <option key={provider} value={provider} disabled={!availableBots.includes(provider)}>{provider === 'feishu' ? '飞书' : '微信'} Bot{botStatus === 'ready' && !availableBots.includes(provider) ? ' · 当前环境未配置' : ''}</option>)}
           </select></label>
-          <p className="automation-hint">{botStatus === 'loading' ? '正在检查飞书 Bot 配置…' : botStatus === 'error' ? '无法读取飞书 Bot 配置，已有提醒设置仍会保留。' : botStatus === 'missing' ? draft.failure_notification === 'feishu' ? '当前环境未配置飞书 Bot，已保留提醒设置；配置完成后，后续执行失败时会发送提醒。' : '在 Settings → IM 配置飞书 Bot 后，可选择失败提醒。' : '任务执行失败时通过飞书 Bot 提醒；跳过和中断不提醒。'}</p>
+          <p className="automation-hint">{botStatus === 'loading' ? '正在检查 IM Bot 配置…' : botStatus === 'error' ? '无法读取 IM Bot 配置，已有提醒设置仍会保留。' : draft.failure_notification && !availableBots.includes(draft.failure_notification) ? `当前环境未配置${draft.failure_notification === 'feishu' ? '飞书' : '微信'} Bot，已保留提醒设置；配置完成后，后续执行失败时会发送提醒。` : !availableBots.length ? '在 Settings → IM 配置飞书或微信 Bot 后，可选择失败提醒。' : '任务执行失败时通过所选 Bot 提醒；跳过和中断不提醒。'}</p>
         </aside>
       </div>
       {error ? <div className="automation-error" role="alert">{error}</div> : null}

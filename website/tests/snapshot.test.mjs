@@ -35,7 +35,7 @@ test("captured files, history and terminal output agree with the recorded source
   for (const id of commits)
     assert.ok(snapshot.terminal.output.includes(id.slice(0, 7)));
   assert.deepEqual(snapshot.commands, [
-    "git log -5 --oneline",
+    "git log --topo-order -5 --oneline",
     "git status --short --branch",
   ]);
   for (const command of snapshot.commands)
@@ -86,6 +86,24 @@ test("recorded reads work through project Pages prefixes without mutating the ca
   assert.equal(snapshotResponse(snapshot, "/assets/editor.js"), null);
 });
 
+test("IM settings replay the isolated account's recorded unbound state", () => {
+  for (const prefix of ["", "/aow/snapshot", "/another-project/snapshot"]) {
+    const settings = snapshotResponse(
+      snapshot,
+      prefix + "/api/aow/notification-settings",
+    );
+    assert.equal(settings.status, 200);
+    assert.deepEqual(settings.data.im.providers, []);
+    assert.deepEqual(settings.data.notifications.agent_task_completed, {
+      enabled: true,
+      channels: ["page"],
+    });
+    const wechat = snapshotResponse(snapshot, prefix + "/api/aow/im/wechat");
+    assert.equal(wechat.status, 200);
+    assert.deepEqual(wechat.data, { connection: null });
+  }
+});
+
 test("uncaptured reads and all writes have explicit failures instead of fabricated successes", () => {
   assert.equal(
     snapshotResponse(snapshot, "/api/fs/text/etc/passwd").status,
@@ -101,6 +119,11 @@ test("uncaptured reads and all writes have explicit failures instead of fabricat
     ["POST", "/api/aow/automations"],
     ["POST", "/api/aow/automations/anything/run"],
     ["PATCH", "/api/aow/settings"],
+    ["PUT", "/api/aow/notification-settings"],
+    ["PUT", "/api/aow/im/feishu"],
+    ["POST", "/api/aow/im/wechat/login"],
+    ["POST", "/api/aow/im/wechat/test"],
+    ["DELETE", "/api/aow/im/wechat"],
     ["PUT", `/api/fs/file${workspace}/README.md`],
     ["DELETE", "/api/fs/entries"],
   ]) {

@@ -67,7 +67,12 @@ fn directories(root: &Path) -> Result<Vec<(String, PathBuf)>> {
     Ok(result)
 }
 
-fn candidate(store: &Store, task_id: &str, run_id: &str, directory: &Path) -> Result<Option<Run>> {
+fn candidate(
+    store: &Store,
+    task_id: &str,
+    run_id: &str,
+    directory: &Path,
+) -> Result<Option<(Run, FailureNotification)>> {
     let path = directory.join(STATE_FILE);
     match fs::read(&path) {
         Ok(bytes) => {
@@ -97,9 +102,9 @@ fn candidate(store: &Store, task_id: &str, run_id: &str, directory: &Path) -> Re
         return Ok(None);
     }
     if detail.run.status == RunStatus::Failed
-        && detail.configuration.failure_notification == Some(FailureNotification::Feishu)
+        && let Some(channel) = detail.configuration.failure_notification
     {
-        return Ok(Some(detail.run));
+        return Ok(Some((detail.run, channel)));
     }
     save(&path, DeliveryStatus::NotRequested, None, None)?;
     Ok(None)
@@ -121,7 +126,7 @@ struct Scan {
     // A single observer owns scanning, delivery and pruning, even if two server
     // processes temporarily overlap. This file is never unlinked or renamed.
     _lock: ScanLock,
-    pending: Vec<(PathBuf, Run)>,
+    pending: Vec<(PathBuf, (Run, FailureNotification))>,
 }
 
 fn scan(store: &Store) -> Result<Option<Scan>> {
@@ -170,14 +175,14 @@ fn scan(store: &Store) -> Result<Option<Scan>> {
 
 pub(super) async fn poll<F, Fut>(store: Arc<Store>, send: F, prune: bool) -> Result<()>
 where
-    F: Fn(Run, String) -> Fut,
+    F: Fn(Run, FailureNotification, String) -> Fut,
     Fut: Future<Output = Result<bool>>,
 {
     let scan_store = store.clone();
     let Some(scan) = tokio::task::spawn_blocking(move || scan(&scan_store)).await?? else {
         return Ok(());
     };
-    for (path, run) in scan.pending {
+    for (path, (run, channel)) in scan.pending {
         let delivery_id = Uuid::new_v4().to_string();
         let claim_path = path.clone();
         let claim_id = delivery_id.clone();
@@ -189,11 +194,17 @@ where
             tracing::warn!(task_id = %run.task_id, run_id = %run.id, %error, "cannot persist automation notification attempt");
             continue;
         }
-        let (status, message) = match send(run.clone(), delivery_id.clone()).await {
+        let (status, message) = match send(run.clone(), channel, delivery_id.clone()).await {
             Ok(true) => (DeliveryStatus::Sent, None),
             Ok(false) => (
                 DeliveryStatus::SkippedMissingBot,
-                Some("当前环境未配置飞书 Bot，跳过本次提醒".into()),
+                Some(format!(
+                    "当前环境未配置{} Bot，跳过本次提醒",
+                    match channel {
+                        FailureNotification::Feishu => "飞书",
+                        FailureNotification::Wechat => "微信",
+                    }
+                )),
             ),
             Err(error) => (DeliveryStatus::Failed, Some(format!("{error:#}"))),
         };

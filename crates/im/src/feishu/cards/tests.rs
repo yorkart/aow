@@ -8,7 +8,7 @@ fn card(message: &Value) -> Value {
 #[test]
 fn metadata_precedes_the_complete_reply_and_is_plain_text() {
     let mut event = notification("## 结果\n\n完成检查。\n\n```rust\nfn main() {}\n```\n");
-    event.title = "<at id=all></at> *literal title*".into();
+    event.title = "AOW·<at id=all></at> *literal title*·Codex·完成".into();
     let messages = messages(&event, "ou_owner", "delivery").unwrap();
     assert_eq!(messages.len(), 1);
     let card = card(&messages[0]);
@@ -26,25 +26,25 @@ fn metadata_precedes_the_complete_reply_and_is_plain_text() {
         })
         .collect::<Vec<_>>()
         .join("\n");
-    for value in ["Tab：检查", &event.title, "Session ID：session-1"] {
+    for value in ["Tab：检查", "完成检查", "Session ID：session-1"] {
         assert!(text.contains(value), "missing {value}");
     }
-    for value in ["Agent：", "项目：", "工作目录：", &event.cwd] {
+    for value in ["Agent：", "项目：", "工作目录："] {
         assert!(!text.contains(value), "unexpected {value}");
     }
-    assert_eq!(elements[1]["content"], "**本轮结论**");
-    assert_eq!(elements[2]["content"].as_str(), event.conclusion.as_deref());
+    assert_eq!(elements[1]["text"]["content"], "本轮结论");
+    assert_eq!(elements[2]["content"].as_str(), Some(event.body.as_str()));
 }
 
 #[test]
 fn tab_links_are_independent_escaped_and_repeated_on_every_card() {
     let mut event = notification(&"结论\n\n".repeat(7000));
-    event.sources[0].tab_name = "检查 [x] <at id=all>".into();
-    event.sources[0].tab_url = Some("https://aow.example.com/aow/tabs/first".into());
-    let mut second = event.sources[0].clone();
-    second.tab_name = "另一个 Tab".into();
-    second.tab_url = Some("https://aow.example.com/aow/tabs/second".into());
-    event.sources.push(second);
+    event.fields[0].value = "检查 [x] <at id=all>".into();
+    event.fields[0].url = Some("https://aow.example.com/aow/tabs/first".into());
+    let mut second = event.fields[0].clone();
+    second.value = "另一个 Tab".into();
+    second.url = Some("https://aow.example.com/aow/tabs/second".into());
+    event.fields.insert(1, second);
     let messages = messages(&event, "ou_owner", "delivery").unwrap();
     assert!(messages.len() > 1);
     for message in messages {
@@ -133,13 +133,13 @@ fn giant_lines_and_code_blocks_preserve_all_content_and_balanced_fences() {
 #[test]
 fn no_conclusion_is_explicit_and_oversized_metadata_fails_before_delivery() {
     let mut event = notification("");
-    event.conclusion = None;
+    event.body = "未捕获到本轮结论。".into();
     let message = messages(&event, "ou_owner", "delivery").unwrap();
     assert_eq!(
         card(&message[0])["body"]["elements"][2]["content"],
         "未捕获到本轮结论。"
     );
-    event.sources[0].project_name = "项目".repeat(10_000);
+    event.title = "项目".repeat(10_000);
     assert!(
         messages(&event, "ou_owner", "delivery")
             .unwrap_err()

@@ -41,7 +41,8 @@ export function captureSourceState(root, revision) {
       throw new Error(`Unsupported snapshot source: ${path}`);
     files[path] = `${mode} ${hash}`;
   }
-  const commits = git(root, "log", "-5", "--format=%H", revision)
+  // Match the Git API when merged branches have interleaved commit dates.
+  const commits = git(root, "log", "--topo-order", "-5", "--format=%H", revision)
     .trim().split("\n");
   return { version: 1, files, commits };
 }

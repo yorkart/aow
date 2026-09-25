@@ -65,11 +65,11 @@ impl AutomationManager {
                     .is_none_or(|last: Instant| last.elapsed() >= RUN_HISTORY_CLEANUP_INTERVAL);
                 let result = notifications::poll(
                     store,
-                    |run, delivery_id| {
+                    |run, channel, delivery_id| {
                         let notifications = notifications.clone();
                         async move {
                             notifications
-                                .send_automation_failure(run, &delivery_id)
+                                .send_automation_failure(run, channel, &delivery_id)
                                 .await
                         }
                     },

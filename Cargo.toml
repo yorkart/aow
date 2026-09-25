@@ -11,6 +11,7 @@ members = [
   "crates/terminald",
   "crates/terminald-client",
   "crates/server",
+  "crates/im",
   "crates/automations",
   "crates/cli",
 ]
