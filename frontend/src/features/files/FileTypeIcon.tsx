@@ -1,37 +1,56 @@
-import {
-  Archive, Braces, CodeXml, Database, File, FileArchive, FileCode2, FileCog,
-  FileImage, FileJson, FileSpreadsheet, FileText, Folder, FolderOpen, Image,
-  Palette, ScrollText, TerminalSquare,
-} from 'lucide-react';
-import { extension } from '../editor/language';
+import { Folder, FolderOpen } from 'lucide-react';
+import theme from '../../assets/seti/vs-seti-icon-theme.json';
+import languages from '../../assets/seti/language-associations.json';
+import './file-type-icon.css';
 
 interface Props { path: string; className?: string }
 interface DirectoryProps { expanded?: boolean; className?: string }
 
+const fileNames = new Map(Object.entries(theme.fileNames));
+const fileExtensions = new Map(Object.entries(theme.fileExtensions));
+const languageNames = new Map(Object.entries(languages.fileNames));
+const languageExtensions = new Map(Object.entries(languages.fileExtensions));
+const languagePatterns = Object.entries(languages.filePatterns)
+  .sort(([a], [b]) => b.length - a.length)
+  .map(([pattern, icon]) => ({
+    pattern: new RegExp(`^${pattern.split('*').map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`),
+    icon,
+  }));
+const icons = new Map(Object.entries(theme.iconDefinitions).map(([id, icon]) => [id, {
+  character: String.fromCodePoint(parseInt(icon.fontCharacter.slice(1), 16)),
+  color: 'fontColor' in icon ? icon.fontColor : 'var(--aow-muted)',
+}]));
+
+function iconForPath(path: string) {
+  const name = path.split(/[/\\]/).pop()?.toLowerCase() ?? '';
+  const named = fileNames.get(name);
+  if (named) return named;
+
+  // VS Code gives named files and compound extensions (e.g. test.tsx)
+  // precedence over the language's icon. Only inspect the basename.
+  const suffixes: string[] = [];
+  for (let dot = name.indexOf('.'); dot >= 0; dot = name.indexOf('.', dot + 1)) {
+    const suffix = name.slice(dot + 1);
+    const icon = fileExtensions.get(suffix);
+    if (icon) return icon;
+    suffixes.push(suffix);
+  }
+  const language = languageNames.get(name) ?? languagePatterns.find(({ pattern }) => pattern.test(name))?.icon;
+  if (language) return language;
+  for (const suffix of suffixes) {
+    const icon = languageExtensions.get(suffix);
+    if (icon) return icon;
+  }
+  return theme.file;
+}
+
 export function DirectoryTypeIcon({ expanded = false, className = '' }: DirectoryProps) {
   const Icon = expanded ? FolderOpen : Folder;
-  return <Icon className={`directory-type-icon ${className}`.trim()} />;
+  return <Icon aria-hidden="true" className={`directory-type-icon ${className}`.trim()} />;
 }
 
 export function FileTypeIcon({ path, className = '' }: Props) {
-  const name = path.split('/').pop()?.toLowerCase() ?? path.toLowerCase();
-  const ext = extension(path);
-  const classes = (kind: string) => `file-type-icon ${kind} ${className}`.trim();
-
-  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'avif'].includes(ext)) return <FileImage className={classes('image')} />;
-  if (ext === 'json' || ['package-lock.json', 'tsconfig.json'].includes(name)) return <FileJson className={classes('json')} />;
-  if (['md', 'markdown', 'txt', 'log', 'rst'].includes(ext) || ['readme', 'license', 'notice'].includes(name)) return <FileText className={classes('text')} />;
-  if (['html', 'htm', 'xml', 'vue', 'svelte', 'astro'].includes(ext)) return <CodeXml className={classes('markup')} />;
-  if (['css', 'scss', 'sass', 'less', 'styl', 'stylus', 'postcss'].includes(ext)) return <Palette className={classes('stylesheet')} />;
-  if (['rs', 'ts', 'tsx', 'js', 'jsx', 'py', 'go', 'java', 'c', 'cc', 'cpp', 'h', 'hpp', 'cs', 'php', 'rb', 'swift', 'kt'].includes(ext)) return <FileCode2 className={classes('code')} />;
-  if (['sh', 'bash', 'zsh', 'fish', 'ps1', 'bat', 'cmd'].includes(ext)) return <TerminalSquare className={classes('shell')} />;
-  if (['toml', 'yaml', 'yml', 'ini', 'conf', 'config', 'properties', 'env'].includes(ext) || name.startsWith('.')) return <FileCog className={classes('config')} />;
-  if (['zip', 'gz', 'tgz', 'tar', 'bz2', 'xz', '7z', 'rar'].includes(ext)) return <FileArchive className={classes('archive')} />;
-  if (['csv', 'xls', 'xlsx'].includes(ext)) return <FileSpreadsheet className={classes('sheet')} />;
-  if (['sql', 'db', 'sqlite', 'sqlite3'].includes(ext)) return <Database className={classes('database')} />;
-  if (['pdf', 'doc', 'docx', 'odt'].includes(ext)) return <ScrollText className={classes('document')} />;
-  if (['lock'].includes(ext)) return <Braces className={classes('lock')} />;
-  if (['wasm', 'bin', 'exe'].includes(ext)) return <Archive className={classes('binary')} />;
-  if (['image'].includes(ext)) return <Image className={classes('image')} />;
-  return <File className={classes('default')} />;
+  const icon = icons.get(iconForPath(path)) ?? icons.get(theme.file)!;
+  return <i aria-hidden="true" className={`file-type-icon ${className}`.trim()}
+    data-icon={icon.character} style={{ color: icon.color }} />;
 }

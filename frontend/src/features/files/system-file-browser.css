@@ -4,7 +4,7 @@
 .system-file-browser button,.system-file-browser a { color:inherit; cursor:pointer; }
 .system-file-browser button:disabled { opacity:.4; cursor:default; }
 .system-file-browser button:focus-visible,.system-file-browser a:focus-visible { outline:1px solid var(--aow-accent); outline-offset:-1px; }
-.system-file-browser svg { width:15px; height:15px; flex-shrink:0; }
+.system-file-browser svg:not(.directory-type-icon) { width:15px; height:15px; flex-shrink:0; }
 .system-file-toolbar { flex:0 0 auto; display:flex; justify-content:space-between; gap:12px; padding:10px 12px 7px; }
 .system-file-toolbar-actions { width:100%; display:flex; align-items:center; gap:5px; }
 .system-file-toolbar button { min-width:28px; height:28px; display:flex; align-items:center; justify-content:center; gap:6px; padding:0 8px; border:1px solid var(--aow-control-line); border-radius:4px; }
@@ -21,7 +21,7 @@
 .system-file-shortcuts { padding:0 6px 10px; background:var(--aow-panel); border-right:1px solid var(--aow-line); }
 .system-file-shortcuts nav { display:flex; flex-direction:column; gap:3px; }
 .system-file-shortcuts nav > button { height:31px; display:flex; align-items:center; gap:8px; padding:0 9px; border-radius:4px; text-align:left; }
-.system-file-shortcuts nav > button svg { color:var(--aow-accent); }
+.system-file-shortcuts nav > button svg:not(.directory-type-icon) { color:var(--aow-accent); }
 .system-file-shortcuts nav > button[aria-pressed=true],.system-file-bookmarks li.selected { color:#dceaff; background:var(--aow-selection); }
 .system-file-bookmarks { margin-top:14px; border-top:1px solid var(--aow-line); }
 .system-file-bookmarks .system-file-pane-title { display:flex; align-items:center; gap:6px; }
@@ -31,7 +31,6 @@
 .system-file-bookmarks ul { margin:0; padding:0; list-style:none; }
 .system-file-bookmarks li { display:flex; align-items:center; gap:3px; margin-bottom:3px; border-radius:4px; }
 .system-file-bookmark-link { display:flex; align-items:center; gap:7px; flex:1; min-width:0; padding:7px 5px 7px 9px; text-align:left; border-radius:4px; }
-.system-file-bookmark-link > svg { color:var(--folder); }
 .system-file-bookmark-link > span { display:flex; flex-direction:column; gap:3px; min-width:0; }
 .system-file-bookmark-link strong,.system-file-bookmark-link small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:400; }
 .system-file-bookmark-link small { color:var(--aow-muted); font-size:10px; }
@@ -52,7 +51,6 @@
 .system-file-tree-row > button,.system-file-tree-actions > button { height:26px; padding:0; border-radius:3px; }
 .system-file-tree-toggle { flex:0 0 20px; display:grid; place-items:center; color:var(--aow-muted) !important; }
 .system-file-tree-name { flex:1; min-width:max-content; display:flex; align-items:center; gap:6px; text-align:left; }
-.system-file-tree-name svg,.system-file-folder { color:var(--folder); }
 .system-file-tree-name span { white-space:nowrap; }
 .system-file-tree-actions { position:sticky; right:5px; z-index:1; flex:0 0 50px; align-self:stretch; display:flex; align-items:center; padding-left:4px; background:var(--tree-row-background); }
 .system-file-tree-copy,.system-file-tree-pin { flex:0 0 23px; display:grid; place-items:center; opacity:0; }
@@ -78,6 +76,7 @@
 .system-file-entry-actions svg { width:13px; height:13px; }
 .system-file-empty { min-height:150px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; color:var(--aow-muted); }
 .system-file-empty svg { width:27px; height:27px; }
+.system-file-empty .directory-type-icon { --file-icon-size:27px; }
 .system-file-error { display:flex; align-items:center; gap:10px; flex:0 0 auto; max-height:75px; padding:7px 12px; color:var(--aow-error); background:#452b294d; overflow:auto; overflow-wrap:anywhere; }
 .system-file-error span { flex:1; }
 .system-file-error button { flex:0 0 22px; display:grid; place-items:center; }

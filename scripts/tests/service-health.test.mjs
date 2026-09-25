@@ -84,11 +84,13 @@ test('health requires the PID advertised by a new release and detects restarts d
   const config = await endpoint(t, 'server', (_, response) => {
     response.end(JSON.stringify({ service: 'aow', ok: true, pid: 1234 }));
   });
-  await assert.rejects(waitForHealth(config, () => 1235, 50), /active launchd process/);
+  // Allow a real HTTP round trip under CI load before asserting PID ownership.
+  // The separate unresponsive-endpoint test covers the request deadline.
+  await assert.rejects(waitForHealth(config, () => 1235, 1000), /active launchd process/);
   let calls = 0;
-  await assert.rejects(waitForHealth(config, () => ++calls % 2 ? 1234 : 1235, 50), /active launchd process/);
+  await assert.rejects(waitForHealth(config, () => ++calls % 2 ? 1234 : 1235, 1000), /active launchd process/);
   const old = await endpoint(t, 'server', (_, response) => response.end('{"service":"aow","ok":true}'));
-  await assert.rejects(waitForHealth(old, () => 1234, 50), /active launchd process/);
+  await assert.rejects(waitForHealth(old, () => 1234, 1000), /active launchd process/);
 });
 
 test('unresponsive health checks have a total deadline', async t => {

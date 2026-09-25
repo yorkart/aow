@@ -53,6 +53,12 @@ export async function buildSnapshot(outDir) {
     join(root, "frontend/public/workspace-icon.svg"),
     join(outDir, "workspace-icon.svg"),
   );
+  // publicDir is disabled for snapshots; preserve the bundled assets' notices.
+  await cp(
+    join(root, "frontend/public/third-party"),
+    join(outDir, "third-party"),
+    { recursive: true },
+  );
   // The product's download links are normal browser requests, not fetch calls.
   // Publish the recorded file bytes at those same URLs as static files.
   const snapshot = JSON.parse(

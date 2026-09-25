@@ -96,6 +96,19 @@ for (const siteUrl of [
       snapshotAssets.some((name) => /editor\.worker.*\.js$/.test(name)),
       "Monaco workers must be bundled locally",
     );
+    assert.ok(
+      snapshotAssets.some((name) => /^seti-.*\.woff$/.test(name)),
+      "Seti icons must use a bundled font",
+    );
+    for (const name of ["LICENSE", "ThirdPartyNotices.txt"]) {
+      assert.equal(
+        await readFile(join(output, "snapshot/third-party/seti", name), "utf8"),
+        await readFile(
+          new URL(`../../frontend/public/third-party/seti/${name}`, import.meta.url),
+          "utf8",
+        ),
+      );
+    }
   });
 }
 

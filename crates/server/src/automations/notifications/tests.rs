@@ -201,6 +201,8 @@ async fn overlapping_observers_and_uncertain_deliveries_never_replay() {
     let store = Arc::new(Store::new(root.path().into()).unwrap());
     finish(&mut start(&store, &task(), "failed"), RunStatus::Failed);
     let held = scan(&store).unwrap().unwrap();
+    // A concurrent fork may keep the same open file description alive until exec.
+    let inherited_lock = held._lock.0.try_clone().unwrap();
     poll(
         store.clone(),
         |_, _| async { panic!("another observer owns the lock") },
@@ -217,6 +219,7 @@ async fn overlapping_observers_and_uncertain_deliveries_never_replay() {
     .await
     .unwrap();
     assert_eq!(state(&store, "failed").status, DeliveryStatus::Failed);
+    drop(inherited_lock);
     // Simulate shutdown between HTTP delivery and persisting its outcome.
     finish(&mut start(&store, &task(), "uncertain"), RunStatus::Failed);
     save(

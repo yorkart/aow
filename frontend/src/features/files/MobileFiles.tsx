@@ -1,5 +1,6 @@
-import { ChevronRight, File, FileText, Folder, FolderOpen } from 'lucide-react';
+import { ChevronRight, FileText } from 'lucide-react';
 import { filesApi } from './api';
+import { DirectoryTypeIcon, FileTypeIcon } from './FileTypeIcon';
 import { MarkdownContent } from '../../components/MarkdownContent';
 import { MobilePageHeader, MobileRefresh, MobileState } from '../../mobile/MobilePrimitives';
 import { useMobileResource, useMobileScroll, type MobileRoute } from '../../mobile/mobileState';
@@ -22,14 +23,14 @@ export function MobileFiles({ route, notesPath, visible, navigate, back }: {
       subtitle={directory === root ? '浏览工作区内容' : directory.slice(root.length + 1)} back={directory === root ? undefined : back}
       actions={<MobileRefresh reload={listing.reload} loading={listing.loading} />} />
     <div className="mobile-segments" role="tablist" aria-label="文件来源">
-      <button role="tab" aria-selected={route.notes !== '1'} onClick={() => navigate({ workspace: route.workspace, view: 'files' }, true)}><Folder size={16} />项目文件</button>
+      <button role="tab" aria-selected={route.notes !== '1'} onClick={() => navigate({ workspace: route.workspace, view: 'files' }, true)}><DirectoryTypeIcon />项目文件</button>
       <button role="tab" aria-selected={route.notes === '1'} onClick={() => navigate({ workspace: route.workspace, view: 'files', notes: '1' }, true)}><FileText size={16} />Notes</button>
     </div>
     <div className="mobile-scroll" ref={scroll}>
       <MobileState loading={listing.loading && !listing.data} error={listing.error} retry={listing.reload} empty={listing.data?.entries.length === 0 ? '这个目录是空的。' : undefined} />
       <div className="mobile-list">{listing.data?.entries.slice().sort((a, b) => Number(b.kind === 'directory') - Number(a.kind === 'directory') || a.name.localeCompare(b.name))
         .map((entry) => <button key={entry.path} className="mobile-list-row" onClick={() => navigate({ ...base, ...(entry.kind === 'directory' ? { directory: entry.path } : { directory, file: entry.path }) })}>
-          <div className={`mobile-row-icon ${entry.kind === 'directory' ? 'folder' : ''}`}>{entry.kind === 'directory' ? <FolderOpen size={21} /> : <File size={20} />}</div>
+          <div className="mobile-row-icon">{entry.kind === 'directory' ? <DirectoryTypeIcon /> : <FileTypeIcon path={entry.path} />}</div>
           <div className="mobile-row-main"><strong>{entry.name}</strong><span>{entry.kind === 'directory' ? '文件夹' : `${Math.max(1, Math.ceil(entry.size / 1024))} KB`}</span></div><ChevronRight size={17} />
         </button>)}</div>
     </div>
