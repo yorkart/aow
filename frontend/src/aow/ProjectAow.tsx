@@ -26,6 +26,8 @@ import type { TerminalSort } from '../features/terminals/TerminalScopeMenu';
 import { isCliTerminal, terminalTabPresentation } from '../features/terminals/terminalPresentation';
 import { AgentSessions } from '../features/sessions/AgentSessions';
 import { AgentIcon } from '../features/agents/AgentIcon';
+import { AgentArgumentsInput } from '../features/agents/AgentArgumentsInput';
+import { argumentsDraft, normalizeArguments } from '../features/agents/arguments';
 import { agentTypes, builtinAgentType, aowAgentType } from '../features/agents/agentTypes';
 import { NotificationSettingsPanel } from '../features/notifications/NotificationSettingsPanel';
 import { SessionShareButton } from '../features/sessions/SessionShareButton';
@@ -675,7 +677,7 @@ function SettingsDialog({ agents, onClose: closeDialog, onReload, onNodesChange 
   const [agentType, setAgentType] = useState<AowAgent['agent_type'] | ''>('');
   const [displayName, setDisplayName] = useState('');
   const [command, setCommand] = useState('');
-  const [args, setArgs] = useState('[]');
+  const [args, setArgs] = useState(() => argumentsDraft());
   const [env, setEnv] = useState('{}');
   const [agentSaved, setAgentSaved] = useState('');
   const agentForm = useRef<HTMLFormElement>(null);
@@ -795,7 +797,7 @@ function SettingsDialog({ agents, onClose: closeDialog, onReload, onNodesChange 
     setAgentType('');
     setDisplayName('');
     setCommand('');
-    setArgs('[]');
+    setArgs(argumentsDraft());
     setEnv('{}');
     setAgentSaved('');
     setError('');
@@ -806,7 +808,7 @@ function SettingsDialog({ agents, onClose: closeDialog, onReload, onNodesChange 
     setAgentType(aowAgentType(agent) ?? '');
     setDisplayName(agent.display_name);
     setCommand(agent.command ?? agent.executable ?? '');
-    setArgs(JSON.stringify(agent.args));
+    setArgs(argumentsDraft(agent.args));
     setEnv(JSON.stringify(agent.env ?? {}, null, 2));
     setAgentSaved('');
     setError('');
@@ -837,10 +839,7 @@ function SettingsDialog({ agents, onClose: closeDialog, onReload, onNodesChange 
     setError('');
     setAgentSaved('');
     try {
-      const parsed = JSON.parse(args) as unknown;
-      if (!Array.isArray(parsed) || parsed.some((value) => typeof value !== 'string')) {
-        throw new Error('Arguments 必须是字符串 JSON 数组');
-      }
+      const parsed = normalizeArguments(args, command).values;
       const environment = JSON.parse(env.trim() || '{}') as unknown;
       if (!environment || typeof environment !== 'object' || Array.isArray(environment)
         || Object.entries(environment).some(([key, value]) => !/^[A-Za-z0-9_]+$/.test(key) || typeof value !== 'string' || value.includes('\0'))) {
@@ -945,7 +944,7 @@ function SettingsDialog({ agents, onClose: closeDialog, onReload, onNodesChange 
                 <p className="project-aow-form-intro">选择类型后，可自由配置名称、启动命令、参数和环境变量。</p>
                 <label className="project-aow-dialog-field"><span>Display name</span><input value={displayName} disabled={busy} onChange={(event) => setDisplayName(event.target.value)} placeholder="例如：工作用 Codex" required /></label>
                 <label className="project-aow-dialog-field"><span>Executable</span><input className="project-aow-dialog-monospace" spellCheck={false} value={command} disabled={busy} onChange={(event) => setCommand(event.target.value)} placeholder="命令名或 /absolute/path" required /></label>
-                <label className="project-aow-dialog-field"><span>Arguments</span><input className="project-aow-dialog-monospace" spellCheck={false} value={args} disabled={busy} onChange={(event) => setArgs(event.target.value)} placeholder='["--flag"]' /></label>
+                <AgentArgumentsInput value={args} onChange={setArgs} executable={command} disabled={busy} onError={setError} />
                 <label className="project-aow-dialog-field"><span>Environment variables</span><textarea aria-label="Environment variables" spellCheck={false} rows={4} value={env} disabled={busy} onChange={(event) => setEnv(event.target.value)} placeholder={'{\n  "BASE_URL": "https://example.com"\n}'} /></label>
                 <p className="project-aow-form-intro">自动继承启动环境。这里只填写需要新增或覆盖的变量（JSON 对象）；留空或填写 {'{}'} 即可保留继承的环境。</p>
                 <p className="project-aow-form-intro">保存后用于新启动的终端 Agent。PATH 统一在 Environment 中配置。移除内置 Agent 的配置后会恢复自动探测。</p>

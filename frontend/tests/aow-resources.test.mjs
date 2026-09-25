@@ -2708,7 +2708,7 @@ try {
     await dialog.getByRole('button', { name: '编辑 Codex', exact: true }).click();
     assert.equal(await dialog.getByLabel('Display name', { exact: true }).inputValue(), 'Codex');
     assert.equal(await dialog.getByLabel('Executable', { exact: true }).inputValue(), 'codex');
-    await dialog.getByLabel('Arguments', { exact: true }).fill('["--model", "model with spaces"]');
+    await dialog.getByLabel('Arguments', { exact: true }).fill('--model\nmodel with spaces');
     assert.equal(await dialog.getByLabel('Environment keys', { exact: true }).count(), 0);
     const env = { BASE_URL: 'https://example.com/api?a=b', EMPTY: '', HOME: '/agent/home' };
     await dialog.getByLabel('Environment variables', { exact: true }).fill(JSON.stringify(env));
@@ -2722,12 +2722,12 @@ try {
     await dialog.getByRole('button', { name: /Agents/ }).click();
     await dialog.getByRole('button', { name: '编辑 Codex', exact: true }).click();
     assert.equal(await dialog.getByLabel('Executable', { exact: true }).inputValue(), 'codex');
-    assert.deepEqual(JSON.parse(await dialog.getByLabel('Arguments', { exact: true }).inputValue()), ['--model', 'model with spaces']);
+    assert.equal(await dialog.getByLabel('Arguments', { exact: true }).inputValue(), '--model\nmodel with spaces');
     assert.deepEqual(JSON.parse(await dialog.getByLabel('Environment variables', { exact: true }).inputValue()), env);
     await dialog.getByRole('button', { name: '移除配置', exact: true }).click();
     await dialog.getByText('Auto detected', { exact: true }).waitFor();
     await dialog.getByRole('button', { name: '编辑 Codex', exact: true }).click();
-    assert.equal(await dialog.getByLabel('Arguments', { exact: true }).inputValue(), '[]');
+    assert.equal(await dialog.getByLabel('Arguments', { exact: true }).inputValue(), '');
     assert.equal(await dialog.getByLabel('Environment variables', { exact: true }).inputValue(), '{}');
     await dialog.getByRole('button', { name: '取消编辑', exact: true }).click();
     assert.equal(await dialog.getByRole('button', { name: '注册', exact: true }).isDisabled(), true);
@@ -2740,6 +2740,74 @@ try {
     assert.equal(Object.hasOwn(state.agentUpdates.at(-1), 'id'), false, 'registering after editing must create a new ID');
     assert.deepEqual(state.agentUpdates.at(-1).env, {}, 'blank environment only inherits the launch environment');
     assert.equal(state.registeredAgents.length, 2);
+  });
+
+  await test('agent arguments normalize pasted commands and preserve literal values through save and reopen', async t => {
+    const agent = { id: 'codex', display_name: 'Codex', source: 'detected', available: true, command: 'codex', executable: '/usr/bin/codex', args: [], env: {} };
+    const { page, state } = await fixture(t, { registeredAgents: [agent] });
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    const dialog = page.locator('.project-aow-settings');
+    await dialog.getByRole('button', { name: /Agents/ }).click();
+    await dialog.getByRole('button', { name: '编辑 Codex', exact: true }).click();
+    const input = dialog.getByRole('textbox', { name: 'Arguments', exact: true });
+    assert.equal(await input.evaluate(element => element.tagName), 'TEXTAREA');
+    const command = ['codex -m gpt-6-luna \\', `  -c 'approval_policy="on-request"' \\`, `  -c 'approvals_reviewer="auto_review"'`].join('\r\n');
+    await input.focus();
+    await input.evaluate((element, text) => {
+      const clipboardData = new DataTransfer();
+      clipboardData.setData('text/plain', text);
+      element.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }));
+    }, command);
+    const expected = ['-m', 'gpt-6-luna', '-c', 'approval_policy="on-request"', '-c', 'approvals_reviewer="auto_review"'];
+    assert.equal(await input.inputValue(), expected.join('\n'));
+    await dialog.getByRole('button', { name: '保存配置', exact: true }).click();
+    await dialog.getByRole('status').waitFor();
+    assert.deepEqual(state.agentUpdates.at(-1).args, expected);
+    await dialog.getByRole('button', { name: '编辑 Codex', exact: true }).click();
+    assert.equal(await input.inputValue(), expected.join('\n'));
+    await input.fill(`${expected.join('\n')}\n--message\ntext with spaces and "quotes"`);
+    await dialog.getByRole('button', { name: '保存配置', exact: true }).click();
+    await dialog.getByRole('status').waitFor();
+    assert.deepEqual(state.agentUpdates.at(-1).args, [...expected, '--message', 'text with spaces and "quotes"']);
+    await dialog.getByRole('button', { name: '编辑 Codex', exact: true }).click();
+    await input.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: '/tmp/aow-agent-arguments-desktop.png' });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await input.scrollIntoViewIfNeeded();
+    assert.equal(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth), true);
+    assert.equal(await input.evaluate(element => element.getBoundingClientRect().right <= window.innerWidth), true);
+    await page.screenshot({ path: '/tmp/aow-agent-arguments-mobile.png' });
+  });
+
+  await test('agent arguments keep typing uninterrupted and normalize on blur or keyboard submit', async t => {
+    const agent = { id: 'codex', display_name: 'Codex', source: 'detected', available: true, command: 'codex', executable: '/usr/bin/codex', args: [], env: {} };
+    const { page, state } = await fixture(t, { registeredAgents: [agent] });
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    const dialog = page.locator('.project-aow-settings');
+    await dialog.getByRole('button', { name: /Agents/ }).click();
+    await dialog.getByRole('button', { name: '编辑 Codex', exact: true }).click();
+    const input = dialog.getByRole('textbox', { name: 'Arguments', exact: true });
+    await input.focus();
+    await input.pressSequentially('-m gpt-6-luna');
+    assert.equal(await input.inputValue(), '-m gpt-6-luna');
+    await input.press('Tab');
+    assert.equal(await input.inputValue(), '-m\ngpt-6-luna');
+    await input.fill('--message "hello world"');
+    await input.evaluate(element => element.form.requestSubmit());
+    await dialog.getByRole('status').waitFor();
+    assert.deepEqual(state.agentUpdates.at(-1).args, ['--message', 'hello world']);
+    await dialog.getByRole('button', { name: '编辑 Codex', exact: true }).click();
+    const start = '--message\n'.length;
+    await input.evaluate((element, start) => {
+      element.setSelectionRange(start, start + 'hello'.length);
+      const clipboardData = new DataTransfer();
+      clipboardData.setData('text/plain', 'a new');
+      element.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }));
+    }, start);
+    assert.equal(await input.inputValue(), '--message\na new world');
+    await dialog.getByRole('button', { name: '保存配置', exact: true }).click();
+    await dialog.getByRole('status').waitFor();
+    assert.deepEqual(state.agentUpdates.at(-1).args, ['--message', 'a new world']);
   });
 
   await test('agent registration requires a supported type and shows type icons for custom configurations', async t => {
@@ -2764,7 +2832,7 @@ try {
     assert.deepEqual(await type.locator('option').evaluateAll(options => options.map(option => option.value)), ['', 'claude', 'codex', 'traecli']);
     await dialog.getByLabel('Display name', { exact: true }).fill('My custom wrapper');
     await dialog.getByLabel('Executable', { exact: true }).fill('/opt/custom/start');
-    await dialog.getByLabel('Arguments', { exact: true }).fill('["--anything", "value with spaces"]');
+    await dialog.getByLabel('Arguments', { exact: true }).fill('--anything\nvalue with spaces');
     const env = { CUSTOM_URL: 'https://example.com', EMPTY: '' };
     await dialog.getByLabel('Environment variables', { exact: true }).fill(JSON.stringify(env));
     assert.equal(await dialog.getByRole('button', { name: '注册', exact: true }).isDisabled(), true);
@@ -2805,10 +2873,12 @@ try {
     const args = dialog.getByLabel('Arguments', { exact: true });
     const env = dialog.getByLabel('Environment variables', { exact: true });
     const save = dialog.getByRole('button', { name: '保存配置', exact: true });
-    await args.fill('[42]');
+    await args.fill('--model "incomplete');
     await save.click();
-    await dialog.getByText('Arguments 必须是字符串 JSON 数组', { exact: true }).waitFor();
-    await args.fill('["--changed"]');
+    await dialog.getByText('Arguments 中的引号未闭合，请补全后再保存。', { exact: true }).waitFor();
+    assert.equal(await args.inputValue(), '--model "incomplete');
+    assert.equal(state.agentUpdates.length, 0);
+    await args.fill('--changed');
     for (const invalid of ['[]', 'null', '{"KEY":42}', '{"BAD=KEY":"value"}']) {
       await env.fill(invalid);
       await save.click();
@@ -2819,7 +2889,7 @@ try {
     state.failAgentSave = true;
     await save.click();
     await dialog.getByText('Agent configuration write failed', { exact: true }).waitFor();
-    assert.equal(await args.inputValue(), '["--changed"]');
+    assert.equal(await args.inputValue(), '--changed');
     assert.equal(await env.inputValue(), '{"KEY":"value"}');
     assert.deepEqual(state.registeredAgents, [agent]);
     state.failAgentSave = false;
