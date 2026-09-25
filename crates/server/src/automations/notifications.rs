@@ -105,10 +105,22 @@ fn candidate(store: &Store, task_id: &str, run_id: &str, directory: &Path) -> Re
     Ok(None)
 }
 
+struct ScanLock(File);
+
+impl Drop for ScanLock {
+    fn drop(&mut self) {
+        // A concurrent fork can inherit this file description until exec.
+        // Closing our copy alone would keep the next observer locked out.
+        unsafe {
+            libc::flock(self.0.as_raw_fd(), libc::LOCK_UN);
+        }
+    }
+}
+
 struct Scan {
     // A single observer owns scanning, delivery and pruning, even if two server
     // processes temporarily overlap. This file is never unlinked or renamed.
-    _lock: File,
+    _lock: ScanLock,
     pending: Vec<(PathBuf, Run)>,
 }
 
@@ -128,6 +140,7 @@ fn scan(store: &Store) -> Result<Option<Scan>> {
         }
         return Err(error.into());
     }
+    let lock = ScanLock(lock);
     let mut pending = Vec::new();
     // Walk local run journals, including runs whose task was deleted or whose
     // config repository changed. Each journal contains its own config snapshot.
