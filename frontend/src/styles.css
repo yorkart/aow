@@ -639,7 +639,7 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .project-aow-dialog .project-aow-dialog-field > label,.project-aow-dialog .project-aow-dialog-field > span { display:flex; align-items:center; gap:6px; color:var(--aow-text); font-size:11px; font-weight:600; }
 .project-aow-dialog-field em { color:var(--aow-muted); font-size:10px; font-style:normal; font-weight:400; }
 .project-aow-dialog input:not([type="checkbox"]) { min-width:0; width:100%; height:30px; flex-shrink:0; padding:0 8px; color:var(--aow-text); background:var(--aow-input); border:1px solid var(--aow-control-line); border-radius:4px; font:inherit; }
-.project-aow-dialog input.project-aow-dialog-monospace,.project-aow-dialog .project-aow-directory-address input { font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace; }
+.project-aow-dialog input.project-aow-dialog-monospace,.project-aow-dialog textarea.project-aow-dialog-monospace,.project-aow-dialog .project-aow-directory-address input { font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace; }
 .project-aow-dialog input:focus { border-color:var(--aow-accent); }
 .project-aow-dialog input:disabled { opacity:.5; }
 .project-aow-dialog-field small { color:var(--aow-muted); font-size:11px; line-height:1.5; overflow-wrap:anywhere; }

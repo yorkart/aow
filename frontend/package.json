@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b --pretty false",
     "test:architecture": "node --test tests/architecture.test.mjs",
+    "test:agent-arguments": "node --test tests/agent-arguments.test.mjs",
     "test:mobile": "node --test tests/mobile-browser.test.mjs",
     "test:pr": "node --test tests/pull-request.test.mjs",
     "test:files": "node --test tests/system-file-browser.test.mjs",
