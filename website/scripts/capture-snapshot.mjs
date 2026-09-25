@@ -208,6 +208,8 @@ try {
     "/api/aow/pinned-worktrees",
     "/api/aow/pinned-directories",
     "/api/aow/worktree-removals",
+    "/api/aow/notification-settings",
+    "/api/aow/im/wechat",
     "/api/operations/active",
     "/api/aow/automations/status",
   ])
