@@ -14,7 +14,8 @@
 .aow-panel > .aow-panel-body { min-height:0; height:auto; flex:none; overflow:visible; }
 .aow-panel > .aow-panel-body[hidden] { display:none; }
 .aow-panel-jump { flex:none; width:100%; min-height:27px; border:0; border-bottom:1px solid var(--aow-line); padding:4px 8px; background:var(--aow-header); color:var(--aow-text); font:inherit; }
-.aow-panel-header > .aow-panel-toggle { color:#adc0d9; }
+/* Align the 13px chevron with the tree root's 5px inset, keeping its 22px hit area. */
+.aow-panel-header > .aow-panel-toggle { margin-left:-3.5px; color:#adc0d9; }
 .aow-panel-toggle > svg { width:13px; height:13px; transition:transform .1s; }
 .aow-panel-toggle > svg.expanded { transform:rotate(90deg); }
 .aow-panel-header > .aow-panel-toggle + .aow-panel-header-title { padding-left:0; }
