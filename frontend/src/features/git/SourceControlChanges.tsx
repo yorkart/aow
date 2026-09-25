@@ -1,4 +1,4 @@
-import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { DirectoryTypeIcon, FileTypeIcon } from '../files/FileTypeIcon';
 
@@ -43,12 +43,14 @@ function buildTree(items: ChangeItem[]): Directory {
   return root;
 }
 
-const FileRow = memo(function FileRow({ item, compact, selected, onOpen }: {
-  item: ChangeItem; compact: boolean; selected: boolean; onOpen: Props['onOpen'];
+const FileRow = memo(function FileRow({ item, compact, depth, selected, onOpen }: {
+  item: ChangeItem; compact: boolean; depth: number; selected: boolean; onOpen: Props['onOpen'];
 }) {
   const slash = item.path.lastIndexOf('/');
-  return <button data-workspace-open className={`change-row${selected ? ' selected' : ''}`} title={item.title}
+  return <button data-workspace-open className={`tree-row change-row${selected ? ' selected' : ''}`} title={item.title}
+    style={{ '--tree-depth': depth } as CSSProperties}
     aria-current={selected || undefined} onClick={() => onOpen(item)}>
+    <span className="chevron" aria-hidden="true" />
     <FileTypeIcon path={item.path} className="change-file-icon" />
     <span className="change-name">{compact ? item.path.slice(slash + 1) : item.path}</span>
     {!compact && slash >= 0 ? <span className="change-directory">{item.path.slice(0, slash)}</span> : null}
@@ -157,12 +159,14 @@ export const SourceControlChanges = memo(function SourceControlChanges({ items, 
       const index = range.start + offset;
       return <div key={row.type === 'file' ? row.item.id : `directory:${row.directory.path}`}
         className="source-change-slot" data-change-index={index}
-        style={{ top: index * rowHeight, paddingLeft: layout === 'tree' ? row.depth * 12 : 0 }}>
+        style={{ top: index * rowHeight }}>
         {row.type === 'file'
-          ? <FileRow item={row.item} compact={layout === 'tree'} selected={row.item.id === selectedId} onOpen={onOpen} />
-          : <button className="change-folder-row" title={row.directory.path}
+          ? <FileRow item={row.item} compact={layout === 'tree'} depth={row.depth} selected={row.item.id === selectedId} onOpen={onOpen} />
+          : <button className="tree-row change-folder-row" title={row.directory.path}
+            style={{ '--tree-depth': row.depth } as CSSProperties}
             aria-expanded={!collapsed.has(row.directory.path)} onClick={() => toggleDirectory(row.directory.path)}>
-            <ChevronRight className="tree-disclosure" /><DirectoryTypeIcon expanded={!collapsed.has(row.directory.path)} />
+            <span className={`chevron${collapsed.has(row.directory.path) ? '' : ' expanded'}`} aria-hidden="true"><ChevronRight /></span>
+            <DirectoryTypeIcon expanded={!collapsed.has(row.directory.path)} />
             <span className="change-name">{row.directory.name}</span>
           </button>}
       </div>;

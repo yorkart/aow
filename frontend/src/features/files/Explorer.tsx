@@ -1,6 +1,6 @@
 import { withFloatingOpen } from '../../aow/floatingWorkspaceState';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { ClipboardEvent, MouseEvent, ReactNode } from 'react';
+import type { ClipboardEvent, CSSProperties, MouseEvent, ReactNode } from 'react';
 import { FixedSizeList, type ListChildComponentProps } from 'react-window';
 import { ChevronRight, FolderUp, RefreshCw } from 'lucide-react';
 import { filesApi } from './api';
@@ -437,7 +437,7 @@ export function Explorer({ root, activePath, onRootChange, onOpenFile, onRenameF
     const row = displayRows[index];
     if (row.type === 'root') {
       return <div
-        style={{ ...style, paddingLeft: 5 }}
+        style={style}
         className="tree-row workspace-root-node"
         data-tree-path={root} data-tree-directory={root}
         title={root}
@@ -451,7 +451,7 @@ export function Explorer({ root, activePath, onRootChange, onOpenFile, onRenameF
       </div>;
     }
     if (row.type === 'parent') {
-      return <div style={{ ...style, paddingLeft: 19 }} className="tree-row parent-workspace-node" title={`上级目录：${row.path}`} onClick={() => onRootChange(row.path)}>
+      return <div style={{ ...style, '--tree-depth': 1 } as CSSProperties} className="tree-row parent-workspace-node" title={`上级目录：${row.path}`} onClick={() => onRootChange(row.path)}>
         <span className="chevron" />
         <FolderUp className="parent-folder" />
         <span className="tree-label">..</span>
@@ -461,7 +461,7 @@ export function Explorer({ root, activePath, onRootChange, onOpenFile, onRenameF
       if (!creation) return null;
       const directory = creation.kind === 'directory';
       return <div
-        style={{ ...style, paddingLeft: 19 + row.depth * 14 }}
+        style={{ ...style, '--tree-depth': row.depth + 1 } as CSSProperties}
         className="tree-row tree-new-entry"
         onClick={(event) => event.stopPropagation()}
         onPointerDown={(event) => event.stopPropagation()}
@@ -495,7 +495,7 @@ export function Explorer({ root, activePath, onRootChange, onOpenFile, onRenameF
     const node = row.node; const directory = node.kind === 'directory';
     return (
       <div
-        style={{ ...style, paddingLeft: 19 + node.depth * 14 }}
+        style={{ ...style, '--tree-depth': node.depth + 1 } as CSSProperties}
         className={`tree-row${node.ignored ? ' git-ignored' : ''}${(selection?.path ?? activePath) === node.path ? ' selected' : ''}${revealedPath === node.path ? ' uploaded' : ''}`}
         data-tree-path={node.path} data-tree-directory={directory ? node.path : node.path.slice(0, node.path.lastIndexOf('/')) || '/'}
         title={node.path}

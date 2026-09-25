@@ -4,7 +4,6 @@
 .terminal-panel-group + .terminal-panel-group { border-top: 1px solid var(--aow-line); }
 .terminal-panel-body { min-width: 0; }
 .terminal-panel-body[hidden] { display: none; }
-.terminal-panel-row.active { background: var(--aow-selection); }
 .terminal-panel-empty { margin: 0; padding: 10px; color: var(--muted); font-size: 12px; }
 .terminal-panel-error { margin: 0; padding: 8px; color: var(--aow-error); font-size: 12px; }
 .terminal-panel-count { flex: none; margin-left: auto; padding: 0 5px; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }

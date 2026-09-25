@@ -192,7 +192,6 @@ body { position:fixed; inset:0; }
 .mobile-terminal-catalog .terminal-worktree-heading>span { font-size:12px; }
 .mobile-terminal-catalog .terminal-panel-count { font-size:11px; }
 .mobile-terminal-catalog .terminal-panel-row { border-bottom:1px solid #ffffff06; }
-.mobile-terminal-catalog .terminal-panel-row.active { background:var(--aow-selection); }
 .mobile-terminal-catalog .aow-list-row-open { min-height:64px; padding:12px; gap:10px; }
 .mobile-terminal-catalog .aow-list-row-title { padding-right:36px; font-size:13px; line-height:20px; }
 .mobile-terminal-catalog .aow-list-row-menu { top:7px; right:6px; width:40px; height:44px; color:var(--m-muted); }
