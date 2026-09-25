@@ -282,9 +282,7 @@ fn add_codex_user(
             .as_ref()
             .is_some_and(|user| user.text != message.text)
     }) {
-        if !task_active
-            && let Some(draft) = current.as_mut()
-        {
+        if !task_active && let Some(draft) = current.as_mut() {
             draft.status = terminal_status(draft);
         }
         push_codex_draft(turns, current.take());

@@ -1694,7 +1694,10 @@ pub(crate) fn routes() -> Router<AppState> {
         )
         .route("/api/aow/projects/{id}", delete(remove_project))
         .route("/api/aow/projects/{id}/refresh", post(refresh_project))
-        .route("/api/aow/projects/{id}/avatar", get(project_avatar::get_avatar))
+        .route(
+            "/api/aow/projects/{id}/avatar",
+            get(project_avatar::get_avatar),
+        )
         .route(
             "/api/aow/projects/{id}/notes/bind",
             post(bind_project_notes),
