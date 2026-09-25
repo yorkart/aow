@@ -335,13 +335,13 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .project-aow-layout.right-sidebar-hidden .project-aow-right-resizer { display:none; }
 .project-aow-surface[hidden] { display:none; }
 .project-aow-center { min-width:0; min-height:0; display:flex; flex-direction:column; background:var(--aow-surface); }
-.project-aow-center-tabs { height:var(--project-aow-topbar-height); flex:0 0 var(--project-aow-topbar-height); display:flex; background:#202329; border-bottom:1px solid #30343c; }
-.project-aow-center-tab-scroll { min-width:0; flex:0 1 auto; display:flex; overflow-x:auto; scrollbar-width:none; }
+.project-aow-center-tabs { height:var(--project-aow-topbar-height); flex:0 0 var(--project-aow-topbar-height); display:flex; background:#202329; box-shadow:inset 0 -1px #30343c; }
+.project-aow-center-tab-scroll { min-width:0; flex:0 1 auto; display:flex; padding-right:4px; overflow-x:auto; scroll-padding-inline:4px; scrollbar-width:none; }
 .project-aow-center-tab-scroll::-webkit-scrollbar { display:none; }
-.project-aow-center-tab { min-width:108px; max-width:210px; height:var(--project-aow-topbar-height); display:flex; align-items:center; gap:4px; padding:0 6px; color:#8f96a1; font-size:11px; background:#202329; border-right:1px solid #30343c; outline:none; cursor:pointer; }
+.project-aow-center-tab { position:relative; min-width:108px; max-width:210px; height:var(--project-aow-topbar-height); display:flex; align-items:center; gap:4px; padding:0 6px; color:#8f96a1; font-size:11px; background:#202329; border-right:1px solid #30343c; outline:none; cursor:pointer; }
 .project-aow-center-tab:hover { color:#dadddf; background:#252930; }
-.project-aow-center-tab.active { color:#fff; background:#181a1f; box-shadow:inset 0 2px #6ca8f1; }
-.project-aow-center-tab:focus-visible { outline:1px solid #6ca8f1; outline-offset:-1px; }
+.project-aow-center-tab.active { color:#fff; background:var(--aow-surface); border-radius:4px 4px 0 0; }
+.project-aow-center-tab:focus-visible { outline:1px solid var(--tab-group-color); outline-offset:-3px; }
 .project-aow-center-tab > svg:first-child { flex:0 0 13px; width:13px; }
 .project-aow-center-tab > svg:first-child:not(.file-type-icon) { color:#78a9e9; }
 .project-aow-center-tab > .agent-icon { flex:0 0 14px; width:14px; height:14px; }
@@ -355,9 +355,13 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .project-aow-center-tab-scroll .project-aow-tab-close { flex:0 0 15px; width:15px; height:17px; display:grid; place-items:center; padding:1px; border-radius:3px; }
 .project-aow-center-tab-scroll .project-aow-tab-close svg { width:13px; height:13px; }
 .project-aow-center-tab-scroll .project-aow-tab-close:hover { color:white; background:#444b56; }
-.project-aow-tab-group { position:relative; display:flex; align-items:stretch; flex:0 0 auto; min-width:0; height:100%; background:#202329; }
+.project-aow-tab-group { position:relative; display:flex; align-items:stretch; align-self:flex-end; flex:0 0 auto; min-width:0; height:calc(100% - 4px); background:#202329; }
 .project-aow-tab-group + .project-aow-tab-group { margin-left:6px; }
-.project-aow-tab-group::after { content:""; position:absolute; z-index:1; right:0; bottom:0; left:0; height:2px; border-radius:1px; background:var(--tab-group-color); opacity:.65; pointer-events:none; }
+.project-aow-group-toggle::after,.project-aow-group-tabs .project-aow-center-tab::after { content:""; position:absolute; z-index:1; inset:0; border:0 solid var(--tab-group-color); border-bottom-width:1px; pointer-events:none; }
+.project-aow-group-tabs .project-aow-center-tab::after { right:-1px; }
+.project-aow-group-tabs .project-aow-center-tab.active::after { bottom:4px; border-width:1px 1px 0; border-radius:inherit; }
+/* Curve outward into the neighboring bottom lines, covering their square junctions. */
+.project-aow-group-tabs .project-aow-center-tab.active::before { content:""; position:absolute; z-index:2; left:-3px; right:-4px; bottom:0; height:4px; background:radial-gradient(circle at top left,transparent 3px,var(--tab-group-color) 3px 4px,var(--aow-surface) 4px) left / 4px 4px no-repeat,radial-gradient(circle at top right,transparent 3px,var(--tab-group-color) 3px 4px,var(--aow-surface) 4px) right / 4px 4px no-repeat; pointer-events:none; }
 .project-aow-group-tabs { display:flex; min-width:0; height:100%; }
 .project-aow-group-tabs .project-aow-center-tab { height:100%; border-right-color:#ffffff0a; }
 .project-aow-group-tabs .project-aow-center-tab:last-child { border-right-color:transparent; }
