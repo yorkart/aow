@@ -46,6 +46,12 @@ Environment="AOW_TERMINALD_SOCKET=/path/to/terminald.sock"
 
 直接运行二进制时不会读取 `server.env`，需使用 `--host`、`--port`、`--state-dir`、`--terminald-socket`、`--base-path` 参数设置。
 
+### 终端语言与中文显示
+
+新建终端继承 terminald 的语言环境；`LANG` 未设置或为空时，macOS 默认使用 `en_US.UTF-8`，Linux 默认使用 `C.UTF-8`。已有的非空 `LANG` 和所有 `LC_*` 设置会保留，`LC_ALL`、`LC_CTYPE` 仍按系统规则决定字符编码。
+
+旧会话中如果 Vim 将 UTF-8 中文显示成 `~X` 等字符，可退出 Vim 后用 `LC_ALL=en_US.UTF-8 vim 文件路径` 临时打开（Linux 使用 `LC_ALL=C.UTF-8`）。运行 `locale` 可检查语言环境，Vim 中执行 `:set encoding? fileencoding?` 可查看当前编码。更新 terminald 后，新建会话才会获得新的默认值；重启 terminald 会结束现有终端会话。
+
 ## 部署到域名子目录（Base Path）
 
 在 `server.env` 中设置：

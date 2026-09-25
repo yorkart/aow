@@ -196,6 +196,80 @@ fn runtime_environment_inherits_and_applies_additions_and_overrides() {
 }
 
 #[test]
+fn runtime_locale_defaults_to_utf8_and_preserves_explicit_settings() {
+    let default_locale = if cfg!(target_os = "macos") {
+        "en_US.UTF-8"
+    } else {
+        "C.UTF-8"
+    };
+    for (lang, ctype, all, expected_lang) in [
+        ("", "", "", default_locale),
+        ("zh_CN.UTF-8", "", "", "zh_CN.UTF-8"),
+        ("C", "", "", "C"),
+        ("", "zh_CN.UTF-8", "C", default_locale),
+    ] {
+        let output = run_locale_probe(
+            [("LANG", lang), ("LC_CTYPE", ctype), ("LC_ALL", all)],
+            "printf '%s\\n' \"$LANG\" \"$LC_CTYPE\" \"$LC_ALL\" > \"$AOW_TEST_OUTPUT\"",
+            None,
+        );
+        assert_eq!(output, format!("{expected_lang}\n{ctype}\n{all}\n"));
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn runtime_without_locale_lets_vim_read_chinese_as_utf8() {
+    // Exercise the system Vim that exhibited the bug, without user vimrc,
+    // swap files or viminfo. strtrans exposes the control-byte rendering that
+    // a latin1 buffer would otherwise send to the terminal.
+    let text = "# 设置默认模型提供商为纯HTTP模式\n# 核心：关闭WebSocket支持\n";
+    let output = run_locale_probe(
+        [("LANG", ""), ("LC_CTYPE", ""), ("LC_ALL", "")],
+        "exec /usr/bin/vim -Nu NONE -n -i NONE -es \
+         -c 'call writefile([&encoding, &fileencoding, strtrans(getline(1)), strtrans(getline(2))], $AOW_TEST_OUTPUT)' \
+         -c 'qa!' sample.txt",
+        Some(text),
+    );
+    assert_eq!(output, format!("utf-8\nutf-8\n{text}"));
+}
+
+fn run_locale_probe(locale: [(&str, &str); 3], script: &str, text: Option<&str>) -> String {
+    let directory = tempfile::tempdir().unwrap();
+    let output_path = directory.path().join("output.txt");
+    if let Some(text) = text {
+        std::fs::write(directory.path().join("sample.txt"), text).unwrap();
+    }
+    let mut environment: std::collections::BTreeMap<String, String> = locale
+        .into_iter()
+        .map(|(key, value)| (key.to_owned(), value.to_owned()))
+        .collect();
+    environment.insert(
+        "AOW_TEST_OUTPUT".to_owned(),
+        output_path.to_string_lossy().into_owned(),
+    );
+    let mut spawned = spawn_runtime_blocking(
+        format!("locale-test-{}", Uuid::new_v4()),
+        TerminalRuntimeSpec {
+            cwd: directory.path().to_string_lossy().into_owned(),
+            shell: "/bin/sh".to_owned(),
+            arguments: vec!["-c".to_owned(), script.to_owned()],
+            environment,
+            rows: 24,
+            cols: 80,
+        },
+        Arc::new(SpawnTracker::default()).begin(),
+        None,
+    )
+    .unwrap();
+    let status = spawned.child.as_mut().unwrap().wait().unwrap();
+    // The child was already reaped; do not signal it from the drop guard.
+    spawned.child.take();
+    assert_eq!(status.exit_code(), 0);
+    std::fs::read_to_string(output_path).unwrap()
+}
+
+#[test]
 fn session_stat_parser_assumption_matches_this_process() {
     #[cfg(target_os = "linux")]
     {

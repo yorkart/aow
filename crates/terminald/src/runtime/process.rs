@@ -128,6 +128,17 @@ pub(super) fn spawn_runtime_blocking(
     for (key, value) in &spec.environment {
         command.env(key, value);
     }
+    // Service managers (especially launchd) may provide no locale. Without
+    // one, Vim defaults to latin1 and displays UTF-8 text as control bytes.
+    // Apply the fallback after per-runtime overrides and leave LC_* intact.
+    if command.get_env("LANG").is_none_or(|value| value.is_empty()) {
+        let locale = if cfg!(target_os = "macos") {
+            "en_US.UTF-8"
+        } else {
+            "C.UTF-8"
+        };
+        command.env("LANG", locale);
+    }
     command.cwd(&spec.cwd);
     command.env("TERM", "xterm-256color");
     command.env("COLORTERM", "truecolor");
