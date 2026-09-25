@@ -643,13 +643,14 @@ function CreateWorktreeDialog({ project, onClose, onCreated }: {
           <p className="project-aow-form-intro">从指定分支或提交创建新的 Worktree。</p>
           <label className="project-aow-dialog-field"><span>新分支</span><input className="project-aow-dialog-monospace" autoFocus autoComplete="off" spellCheck={false} value={branch} onChange={(event) => changeBranch(event.target.value)} placeholder="feature/my-change" required disabled={busy} /></label>
           <label className="project-aow-dialog-field"><span>起始分支或提交</span><input className="project-aow-dialog-monospace" autoComplete="off" spellCheck={false} value={baseRef} onChange={(event) => setBaseRef(event.target.value)} placeholder="main、origin/main 或 commit SHA" required disabled={busy} /></label>
-          <label className="project-aow-dialog-checkbox" title="创建前先对主仓库执行 git pull，失败则取消创建。"><input type="checkbox" checked={pullFirst} onChange={(event) => setPullFirst(event.target.checked)} disabled={busy} /><span>创建前更新主仓库（git pull）</span></label>
+          <label className="project-aow-dialog-checkbox" title="创建前先对主仓库执行 git pull，失败则取消创建。无需更新时可取消勾选。"><input type="checkbox" checked={pullFirst} onChange={(event) => setPullFirst(event.target.checked)} disabled={busy} /><span>创建前更新主仓库（git pull）</span></label>
           <div className="project-aow-dialog-field">
             <label htmlFor="create-worktree-path">Worktree 路径</label>
             <input id="create-worktree-path" className="project-aow-dialog-monospace" aria-describedby="create-worktree-path-hint" autoComplete="off" spellCheck={false} value={path} onChange={(event) => { setPathEdited(true); setPath(event.target.value); }} placeholder="/absolute/path/to/worktree" required disabled={busy} />
             <small id="create-worktree-path-hint">目标路径必须是尚不存在的绝对路径。</small>
           </div>
           <details className="project-aow-command-preview"><summary>查看 Git 命令</summary><code>{command}</code></details>
+          {busy ? <p className="project-aow-form-intro" role="status">{pullFirst ? '正在更新主仓库并创建 Worktree…' : '正在创建 Worktree…'}单个 Git 步骤最多等待 2 分钟，超时会显示错误。</p> : null}
           {error ? <div className="project-aow-error" role="alert">{error}</div> : null}
         </div>
         <footer className="project-aow-dialog-footer"><button type="button" className="project-aow-dialog-button" disabled={busy} onClick={onClose}>取消</button><button type="submit" className="project-aow-dialog-button primary" disabled={busy || !branch.trim() || !baseRef.trim() || !path.trim()}>{busy ? '创建中…' : '创建 Worktree'}</button></footer>

@@ -8,6 +8,8 @@
 
 首页会进入 Project AoW。注册本机 Git 仓库后，可在页面中管理关联 Worktree、Notes、文件、Git Diff、Terminal，以及本地 Agent 会话。右侧 **Pull Requests** 面板通过配置的 Provider 展示当前账号创建的 Open PR，详情按「概览、文件变更、检查、讨论」组织。Settings → Pull Requests 可管理域名映射和 Python 脚本：脚本仅支持只读预览或上传替换，保存后由 AoW 管理脚本文件。
 
+创建 Worktree 默认先对主仓库执行 `git pull`，无需拉取远端时可取消勾选。每个 Git 步骤最多等待 2 分钟；超时会停止命令及其子进程，并显示失败的命令。拉取失败时不会继续创建，可先在终端处理网络或认证问题后重试。如果 `git worktree add` 超时，Git 可能已经创建分支或目录，请先刷新项目并检查状态。
+
 首次初始化内置 `github.com → github` 及适配脚本，脚本内部调用 gh，需要服务器可运行 python3、gh 并完成 gh 登录。其他平台通过用户脚本实现统一 API，脚本自行决定 CLI 或 API 的调用方式。多个 remote 对应不同仓库时可在列表选择；标签页、深链接和手机详情保留 Provider 与 remote 身份。默认配置只初始化一次，不覆盖用户修改或重新添加已删除的 Provider。完整 API、字段及存储规则见 [Review Provider 脚本协议](../frontend/src/features/pr/review-providers.md)，设置页中也可查看。
 
 ## 项目头像

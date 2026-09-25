@@ -354,6 +354,55 @@ try {
 
   const groupButton = (root, name) => root.getByRole('button', { name: new RegExp(`^(展开|收起) ${name} 分组`) });
 
+  await test('worktree creation reports a pull timeout and allows retrying without updating the main repository', async t => {
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    t.after(() => release());
+    const submissions = [];
+    const { page } = await fixture(t, { beforeOpen: async ({ context, state }) => {
+      await context.route('**/api/aow/projects/project/worktrees', async route => {
+        const input = route.request().postDataJSON();
+        submissions.push(input);
+        if (input.pull_first) {
+          await gate;
+          await route.fulfill({ status: 400, json: { message: 'git pull failed in main worktree /workspace/wt-0: git pull timed out after 120 seconds' } });
+          return;
+        }
+        const worktree = { ...worktrees[0], id: 'created', path: input.path, branch: input.branch, is_main: false };
+        const updated = { ...project, worktrees: [...worktrees, worktree] };
+        state.projects = [updated];
+        await route.fulfill({ json: { project: updated, worktree } });
+      });
+    } });
+    await page.getByRole('button', { name: 'Resource Fixture Project 操作', exact: true }).click();
+    await page.getByRole('menuitem', { name: '创建 Worktree', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: '创建 Worktree', exact: true });
+    await dialog.getByLabel('新分支', { exact: true }).fill('feat/tab-style');
+    const path = await dialog.getByLabel('Worktree 路径', { exact: true }).inputValue();
+    await dialog.getByRole('button', { name: '创建 Worktree', exact: true }).click();
+    await dialog.getByRole('status').waitFor();
+    assert.match(await dialog.getByRole('status').textContent(), /正在更新主仓库并创建 Worktree.*2 分钟/);
+    assert.equal(await dialog.getByRole('button', { name: '创建中…', exact: true }).isDisabled(), true);
+    assert.equal(submissions.length, 1);
+    release();
+    await dialog.getByRole('alert').waitFor();
+    assert.match(await dialog.getByRole('alert').textContent(), /git pull timed out after 120 seconds/);
+    assert.equal(await dialog.getByLabel('新分支', { exact: true }).inputValue(), 'feat/tab-style');
+    assert.equal(await dialog.getByLabel('Worktree 路径', { exact: true }).inputValue(), path);
+    assert.equal(await dialog.getByRole('button', { name: '取消', exact: true }).isEnabled(), true);
+    assert.equal(await dialog.getByRole('status').count(), 0);
+    await dialog.getByRole('checkbox', { name: '创建前更新主仓库（git pull）', exact: true }).uncheck();
+    await dialog.getByText('查看 Git 命令', { exact: true }).click();
+    assert.doesNotMatch(await dialog.locator('.project-aow-command-preview code').textContent(), /pull/);
+    await dialog.getByRole('button', { name: '创建 Worktree', exact: true }).click();
+    await dialog.waitFor({ state: 'hidden' });
+    await page.locator('.project-aow-worktrees').getByRole('button').filter({ hasText: 'feat/tab-style' }).waitFor();
+    assert.deepEqual(submissions, [
+      { branch: 'feat/tab-style', base_ref: 'branch-0', path, pull_first: true },
+      { branch: 'feat/tab-style', base_ref: 'branch-0', path, pull_first: false },
+    ]);
+  });
+
   await test('project avatars load independently, directly reference the image and recover from broken or unsupported providers', async t => {
     let releaseAvatar;
     const gate = new Promise(resolve => { releaseAvatar = resolve; });

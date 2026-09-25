@@ -20,15 +20,17 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tokio::{fs::OpenOptions, process::Command};
+use tokio::fs::OpenOptions;
 use uuid::Uuid;
 
 use crate::{AppState, HttpError};
+use git::{git_output, optional_git_output};
 
 const PROJECTS_FILE: &str = "aow-projects.json";
 const AGENTS_FILE: &str = "aow-agents.json";
 const REGISTRY_VERSION: u32 = 1;
 mod configuration;
+mod git;
 mod global;
 mod project_avatar;
 mod removal;
@@ -952,7 +954,7 @@ impl AowManager {
                 .await
                 .map_err(|error| {
                     AowError::Git(format!(
-                        "git pull failed in main worktree {}: {error}",
+                        "git pull failed in main worktree {}: {error}\n可先在终端检查 git pull，或取消勾选「创建前更新主仓库」后重试。",
                         main_worktree.path
                     ))
                 })?;
@@ -2336,29 +2338,6 @@ fn validate_remote_component(value: &str) -> Result<&str, AowError> {
     Ok(value)
 }
 
-async fn optional_git_output(cwd: &Path, args: &[&str]) -> Result<Option<String>, AowError> {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(cwd)
-        .output()
-        .await
-        .map_err(|error| AowError::Git(error.to_string()))?;
-    if output.status.success() {
-        return String::from_utf8(output.stdout)
-            .map(Some)
-            .map_err(|error| AowError::Git(format!("git output is not UTF-8: {error}")));
-    }
-    if output.status.code() == Some(1) && output.stderr.is_empty() {
-        return Ok(None);
-    }
-    let message = String::from_utf8_lossy(&output.stderr).trim().to_owned();
-    Err(AowError::Git(if message.is_empty() {
-        format!("git {} exited with {}", args.join(" "), output.status)
-    } else {
-        message
-    }))
-}
-
 async fn prepare_notes_directory(path: &Path) -> Result<String, AowError> {
     if !path.is_absolute() {
         return Err(AowError::Invalid(
@@ -2484,25 +2463,6 @@ fn parse_worktrees(project_id: &str, output: &str) -> Vec<Worktree> {
             .then_with(|| left.path.cmp(&right.path))
     });
     result
-}
-
-async fn git_output(cwd: &Path, args: &[&str]) -> Result<String, AowError> {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(cwd)
-        .output()
-        .await
-        .map_err(|error| AowError::Git(error.to_string()))?;
-    if !output.status.success() {
-        let message = String::from_utf8_lossy(&output.stderr).trim().to_owned();
-        return Err(AowError::Git(if message.is_empty() {
-            format!("git {} exited with {}", args.join(" "), output.status)
-        } else {
-            message
-        }));
-    }
-    String::from_utf8(output.stdout)
-        .map_err(|error| AowError::Git(format!("git output is not UTF-8: {error}")))
 }
 
 async fn validate_absolute_directory(value: &str) -> Result<PathBuf, AowError> {
