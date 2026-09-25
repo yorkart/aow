@@ -115,13 +115,23 @@ async fn fixture(root: Option<&Path>) -> Fixture {
 fn message() -> Message {
     Message {
         title: "完成检查".into(),
-        fields: vec![crate::Field {
-            label: "Tab".into(),
-            value: "查看结果".into(),
-            url: Some("https://aow.example.com/aow/tabs/terminal/a%2Fb".into()),
-        }],
+        fields: vec![
+            crate::Field {
+                label: "Tab".into(),
+                value: "查看结果".into(),
+                url: Some("https://aow.example.com/aow/tabs/terminal/a%2Fb".into()),
+            },
+            crate::Field {
+                label: "会话".into(),
+                value: "检查结果\nSession ID：session-1".into(),
+                url: None,
+            },
+        ],
         body_label: "结论".into(),
-        body: "中文 🦀".repeat(8000),
+        body: format!(
+            "已完成检查。\n第二行说明。\n\n```rust\nlet ok = true;\n```\n\n{}",
+            "中文 🦀".repeat(8000)
+        ),
         markdown: true,
         error: false,
     }
@@ -142,7 +152,15 @@ async fn sends_once_without_polling_or_context_and_bounds_unicode_preserving_lin
     let text = msg["item_list"][0]["text_item"]["text"].as_str().unwrap();
     assert!(text.chars().count() <= 4000);
     assert!(text.ends_with('…'));
-    assert!(text.contains("https://aow.example.com/aow/tabs/terminal/a%2Fb"));
+    assert!(text.starts_with(concat!(
+        "完成检查\n\n",
+        "Tab：查看结果\n\n",
+        "https://aow.example.com/aow/tabs/terminal/a%2Fb\n\n",
+        "会话：检查结果\n\n",
+        "Session ID：session-1\n\n",
+        "结论：\n\n",
+        "已完成检查。\n第二行说明。\n\n```rust\nlet ok = true;\n```\n\n中文 🦀",
+    )));
 }
 
 #[tokio::test]

@@ -20,20 +20,22 @@ pub struct Message {
 impl Message {
     /// A single bounded notification, reserving space for complete source URLs.
     /// This is our text budget, not a claimed upstream protocol limit.
+    /// Metadata uses paragraphs so rich-text clients do not fold its line breaks.
+    /// The body keeps its original Markdown layout.
     pub fn text(&self, limit: usize) -> String {
         let title = truncate(&self.title, 160.min(limit));
         let mut metadata = String::new();
         for field in &self.fields {
             let value = match &field.url {
                 Some(url) => format!(
-                    "\n{}：{}\n{url}",
+                    "\n\n{}：{}\n\n{url}",
                     truncate(&field.label, 40),
-                    truncate(&field.value, 80)
+                    paragraphs(&truncate(&field.value, 80))
                 ),
                 None => format!(
-                    "\n{}：{}",
+                    "\n\n{}：{}",
                     truncate(&field.label, 40),
-                    truncate(&field.value, 160)
+                    paragraphs(&truncate(&field.value, 160))
                 ),
             };
             if title.chars().count() + metadata.chars().count() + value.chars().count() + 300
@@ -43,12 +45,19 @@ impl Message {
             }
         }
         let prefix = format!(
-            "{title}{metadata}\n\n{}：\n",
+            "{title}{metadata}\n\n{}：\n\n",
             truncate(&self.body_label, 40)
         );
         let budget = limit.saturating_sub(prefix.chars().count());
         truncate(&format!("{prefix}{}", truncate(&self.body, budget)), limit)
     }
+}
+
+fn paragraphs(text: &str) -> String {
+    text.lines()
+        .filter(|line| !line.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n")
 }
 
 fn truncate(text: &str, limit: usize) -> String {

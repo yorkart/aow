@@ -7,6 +7,8 @@
 - 微信：Tencent iLink 扫码、配对码、HTTP 直发、上下文更新及持久化。
 - `ImConfig` 保存本机凭证，`ImConfigView` 只包含公开状态；不为凭证实现 `Debug`。
 
+微信通知用空行分隔标题、Tab、会话、Session ID、链接和正文标题，避免客户端将单换行合并到同一段落。正文保留原始 Markdown 换行与代码块；整条消息仍限制长度并优先保留完整来源链接。
+
 调用方负责持久化渠道配置和组装业务消息。`ImConfig::build(state_dir)` 创建客户端；`Provider::start()` 启动可选的微信接收轮询，`send()` 不依赖轮询。替换或移除渠道后调用 `Provider::retire()`，停止旧客户端并删除该绑定的上下文。客户端析构会停止轮询，保留有效会话以供下次启动。
 
 微信 `LoginManager` 提供 `start`、`poll`、`cancel`。`poll` 接收同步提交回调；只有当前二维码有效且未被取消时才提交凭证。回调需要先成功保存凭证，再返回成功。长期凭证不出现在 `LoginView`。
