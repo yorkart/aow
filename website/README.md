@@ -6,7 +6,7 @@
 
 `website/snapshot/main.tsx` 直接导入 `frontend/src/aow/ProjectAow.tsx` 和 `frontend/src/mobile/MobileAow.tsx`。文件树、标签页、Markdown、Monaco 编辑器、Git 差异、xterm 终端、桌面和手机导航均使用产品组件和样式。
 
-`website/snapshot/data.json` 保存采集时间、仓库地址、完整提交 ID、原始 API 响应和真实 PTY 输出。目前采集范围是提交 `f38a9cc` 的 217 个源码与文档文件、2 次实际提交及其文件差异。工作台中的项目对应 AoW 仓库，Notes 对应该提交的 `docs/`。
+`website/snapshot/data.json` 保存采集时间、仓库地址、完整提交 ID、原始 API 响应和真实 PTY 输出。目前采集范围是提交 `67b1669` 的 218 个源码与文档文件、4 次实际提交及其文件差异。工作台中的项目对应 AoW 仓库，Notes 对应该提交的 `docs/`。
 
 采集脚本在临时目录克隆当前提交，启动隔离的 AoW server 与 terminald，通过真实 API 注册项目、创建终端并读取数据。终端实际执行了 `git log -5 --oneline` 和 `git status --short --branch`，保存其原始输出；仅移除采集结束标记。临时克隆产生的远程跟踪引用会移除，以免把本地克隆误显示为已推送到 GitHub。
 
@@ -117,6 +117,6 @@ website/
   tests/                    数据与部署校验
 ```
 
-`assets/workspace.png` 仅用于分享预览，从当前真实前端快照页面截图。页面内的工作台使用交互式前端。品牌图标来自产品已有素材；Agent 图标来源见 [Agent icons](../frontend/src/assets/agents/README.md)。
+`assets/workspace.png` 仅用于分享预览，从当前真实前端快照页面截图。页面内的工作台使用交互式前端。品牌图标来自产品已有素材；Agent 图标来源见 [Agent icons](../frontend/src/assets/agents/README.md)。文件图标使用 VS Code Seti 主题，来源见 [Seti icons](../frontend/src/assets/seti/README.md)，构建时会将其 MIT 许可证和第三方声明复制到 `snapshot/third-party/seti/`。
 
 原 `frontend/public/promo/` 已移除，工作台“产品介绍”入口指向 Pages 门户。
