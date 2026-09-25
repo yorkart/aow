@@ -26,6 +26,7 @@
     "test:configuration": "node --test tests/configuration-settings.test.mjs",
     "test:base-path": "node --test tests/base-path.test.mjs",
     "test:panels": "node --test tests/panel-layout.test.mjs",
+    "test:git": "node --test tests/commit-graph.test.mjs",
     "test:performance": "node --test tests/performance.test.mjs",
     "preview:pr": "node tests/pull-request-preview.mjs"
   },

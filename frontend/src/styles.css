@@ -102,14 +102,14 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .commit-subject { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .commit-node.pushed .commit-subject { color:#bbb; }
 .commit-graph-layer { position:absolute; z-index:2; top:0; bottom:0; left:0; overflow:visible; pointer-events:none; }
 .commit-graph-layer svg { position:absolute; top:0; left:0; overflow:visible; }
-.commit-graph-edge { fill:none; stroke:var(--lane-color); stroke-width:2; stroke-linecap:round; vector-effect:non-scaling-stroke; }
-.commit-graph-node { stroke:var(--lane-color); stroke-width:2; vector-effect:non-scaling-stroke; } .commit-graph-node.outgoing { fill:var(--lane-color); } .commit-graph-node.pushed { fill:var(--panel); } .commit-node:is(:has(.commit-row:hover),.selected) .commit-graph-node.pushed { fill:var(--aow-list-highlight); }
-.commit-graph-continuation { position:absolute; top:28px; bottom:0; width:2px; margin-left:-1px; background:var(--lane-color); }
+.commit-graph-edge { fill:none; stroke:var(--lane-color); stroke-width:1; stroke-linecap:round; vector-effect:non-scaling-stroke; }
+.commit-graph-node { stroke:var(--lane-color); stroke-width:1.5; vector-effect:non-scaling-stroke; } .commit-graph-node.outgoing { fill:var(--lane-color); } .commit-graph-node.pushed { fill:var(--panel); } .commit-node:is(:has(.commit-row:hover),.selected) .commit-graph-node.pushed { fill:var(--aow-list-highlight); }
+.commit-graph-continuation { position:absolute; top:28px; bottom:0; width:1px; margin-left:-.5px; background:var(--lane-color); }
 .commit-graph-spacer { width:var(--commit-content-offset); }
 .commit-refs { max-width:120px; display:flex; align-items:center; gap:3px; overflow:hidden; }
 .commit-ref { min-width:0; display:flex; align-items:center; gap:3px; padding:1px 5px; overflow:hidden; border:1px solid currentColor; border-radius:9px; font-size:10px; line-height:15px; text-overflow:ellipsis; white-space:nowrap; }
 .commit-ref svg { flex:0 0 11px; width:11px; height:11px; } .commit-ref.local { color:#75beff; background:#163d57; } .commit-ref.remote { color:#d7a7d7; background:#49304d; }
-.commit-changes { --tree-inset:calc(var(--commit-content-offset) + 22px); position:relative; z-index:1; margin:0 0 3px; }
+.commit-changes { --tree-inset:calc(var(--commit-content-offset) + 22px); position:relative; z-index:1; padding-bottom:3px; }
 .commit-detail-popover { position:fixed; z-index:1200; max-height:calc(100vh - 16px); overflow:auto; padding:12px; color:#d4d4d4; background:#252526; border:1px solid #555; border-radius:6px; box-shadow:0 8px 28px #000a; font-size:12px; }
 .commit-detail-popover.pinned { border-color:#3c7ca8; } .commit-detail-close { position:absolute; top:5px; right:5px; width:24px; height:24px; display:grid; place-items:center; padding:0; color:#aaa; border-radius:3px; cursor:pointer; } .commit-detail-close:hover { color:white; background:#444; } .commit-detail-close svg { width:14px; height:14px; }
 .commit-detail-loading { min-height:72px; display:flex; align-items:center; justify-content:center; gap:7px; color:#aaa; } .commit-detail-loading svg { width:15px; height:15px; } .commit-detail-error { padding:9px; color:#f48771; background:#321f1c; border:1px solid #6f2b20; }

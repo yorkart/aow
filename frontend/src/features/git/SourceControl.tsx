@@ -8,6 +8,7 @@ import {
 import { gitApi } from './api';
 import { useSourceControlPolling } from './useSourceControlPolling';
 import { SourceControlChanges, type ChangeItem } from './SourceControlChanges';
+import { buildCommitGraph, type CommitGraphRow } from './commitGraph';
 import type { GitCommit, GitCommitDetail, GitCommitFile, GitFileStatus, RepositorySummary } from './types';
 import { CommitDetailPopover } from './CommitDetailPopover';
 import { AowIconButton } from '../../components/AowIconButton';
@@ -15,9 +16,6 @@ import { AowPanel, AowPanelStack } from '../../components/AowPanel';
 
 type Layout = 'list' | 'tree';
 type CommitState = 'outgoing' | 'pushed';
-interface GraphLane { color: string; expected: string }
-interface GraphEdge { from: number; to: number; color: string; startsAtNode: boolean }
-interface CommitGraphRow { lane: number; color: string; incomingFrom?: number; edges: GraphEdge[]; continuing: { lane: number; color: string }[]; width: number }
 
 interface Props {
   root: string;
@@ -77,100 +75,24 @@ const graphPadding = 7;
 const graphRowHeight = 28;
 const graphMiddle = graphRowHeight / 2;
 const graphNodeRadius = 4.5;
-const graphLaneColors = ['#4daafc', '#e5c07b', '#c586c0', '#4ec9b0', '#ce9178', '#b4a0ff', '#89d185', '#f48771'];
-
-function buildCommitGraph(commits: GitCommit[]) {
-  const active: GraphLane[] = [];
-  const rows = new Map<string, CommitGraphRow>();
-  let nextColor = 0;
-  const allocateLane = (expected: string, usedColors: Set<string>) => {
-    const availableOffset = graphLaneColors.findIndex((_, offset) => !usedColors.has(graphLaneColors[(nextColor + offset) % graphLaneColors.length]));
-    if (availableOffset >= 0) {
-      const color = graphLaneColors[(nextColor + availableOffset) % graphLaneColors.length];
-      nextColor += availableOffset + 1;
-      usedColors.add(color);
-      return { color, expected };
-    }
-    const color = graphLaneColors[nextColor % graphLaneColors.length];
-    nextColor += 1;
-    return { color, expected };
-  };
-
-  for (const commit of commits) {
-    const inputLanes = [...active];
-    const usedColors = new Set(inputLanes.map((candidate) => candidate.color));
-    let lane = inputLanes.find((candidate) => candidate.expected === commit.id);
-    const incomingFrom = lane ? inputLanes.indexOf(lane) : undefined;
-    if (!lane) lane = allocateLane(commit.id, usedColors);
-    const remaining = inputLanes.filter((candidate) => candidate !== lane);
-    const parentTargets: GraphLane[] = [];
-    let firstParentTarget: GraphLane | undefined;
-    const edges: GraphEdge[] = [];
-
-    commit.parents.forEach((parent, parentIndex) => {
-      let target = remaining.find((candidate) => candidate.expected === parent)
-        ?? parentTargets.find((candidate) => candidate.expected === parent);
-      if (!target && parentIndex === 0) {
-        lane.expected = parent;
-        target = lane;
-      } else if (!target) {
-        target = allocateLane(parent, usedColors);
-      }
-      if (parentIndex === 0) firstParentTarget = target;
-      parentTargets.push(target);
-    });
-
-    const outputLanes = [...remaining];
-    for (const target of parentTargets.slice(1)) {
-      if (!outputLanes.includes(target)) outputLanes.push(target);
-    }
-    if (firstParentTarget) {
-      const previousIndex = outputLanes.indexOf(firstParentTarget);
-      if (previousIndex >= 0) outputLanes.splice(previousIndex, 1);
-      outputLanes.push(firstParentTarget);
-    }
-
-    const nodeLane = Math.max(0, inputLanes.length - 1, outputLanes.length - 1);
-    inputLanes.forEach((candidate, from) => {
-      if (candidate === lane) return;
-      const to = outputLanes.indexOf(candidate);
-      if (to >= 0) edges.push({ from, to, color: candidate.color, startsAtNode: false });
-    });
-    parentTargets.forEach((target, parentIndex) => {
-      const targetWasActive = remaining.includes(target);
-      edges.push({
-        from: nodeLane, to: outputLanes.indexOf(target),
-        color: parentIndex === 0 && targetWasActive ? lane.color : target.color,
-        startsAtNode: true,
-      });
-    });
-
-    const continuing = outputLanes.map((candidate, index) => ({ lane: index, color: candidate.color }));
-    rows.set(commit.id, {
-      lane: nodeLane, color: lane.color, incomingFrom, edges, continuing,
-      width: graphPadding * 2 + (nodeLane + 1) * graphLaneGap,
-    });
-    active.splice(0, active.length, ...outputLanes);
-  }
-
-  return rows;
-}
 
 function graphX(lane: number) { return graphPadding + lane * graphLaneGap; }
+function graphWidth(row: CommitGraphRow) { return graphX(row.columns - 1) + graphNodeRadius + 1; }
 
 function laneStyle(color: string) { return { '--lane-color': color } as CSSProperties; }
 
 function CommitGraph({ commit, row, expanded }: { commit: GitCommit; row: CommitGraphRow; expanded: boolean }) {
   const state: CommitState = commit.is_pushed ? 'pushed' : 'outgoing';
   const nodeX = graphX(row.lane);
-  return <span className="commit-graph-layer" style={{ width: row.width }} aria-hidden="true">
-    <svg width={row.width} height={graphRowHeight} viewBox={`0 0 ${row.width} ${graphRowHeight}`}>
+  const width = graphWidth(row);
+  return <span className="commit-graph-layer" style={{ width }} aria-hidden="true">
+    <svg width={width} height={graphRowHeight} viewBox={`0 0 ${width} ${graphRowHeight}`}>
       {row.edges.map((edge, index) => {
         const from = graphX(edge.from); const to = graphX(edge.to);
         const startY = edge.startsAtNode ? graphMiddle : 0;
         return <path key={`${edge.from}:${edge.to}:${index}`} className="commit-graph-edge" style={laneStyle(edge.color)} d={`M ${from} ${startY} C ${from} ${graphMiddle}, ${to} ${graphMiddle}, ${to} ${graphRowHeight}`} />;
       })}
-      {row.incomingFrom !== undefined ? <path className="commit-graph-edge" style={laneStyle(row.color)} d={`M ${graphX(row.incomingFrom)} 0 C ${graphX(row.incomingFrom)} ${graphMiddle / 2}, ${nodeX} ${graphMiddle / 2}, ${nodeX} ${graphMiddle}`} /> : null}
+      {row.incoming.map(line => <path key={line.lane} className="commit-graph-edge" style={laneStyle(line.color)} d={`M ${graphX(line.lane)} 0 C ${graphX(line.lane)} ${graphMiddle / 2}, ${nodeX} ${graphMiddle / 2}, ${nodeX} ${graphMiddle}`} />)}
       <circle className={`commit-graph-node ${state}`} style={laneStyle(row.color)} cx={nodeX} cy={graphMiddle} r={graphNodeRadius} />
     </svg>
     {expanded ? row.continuing.map((line) => <i key={line.lane} className="commit-graph-continuation" style={{ left: graphX(line.lane), ...laneStyle(line.color) }} />) : null}
@@ -502,7 +424,7 @@ export const SourceControl = memo(function SourceControl({ root, visible, refres
           const state = commit.is_pushed ? 'pushed' : 'outgoing';
           const graphRow = commitGraph.get(commit.id)!;
           const stateTitle = commit.is_pushed ? `已推送${upstream ? `到 ${upstream}` : ''}` : upstream ? `尚未推送到 ${upstream}` : '仅存在于本地（未配置 upstream）';
-          const rowStyle = { '--commit-content-offset': `${graphX(graphRow.lane) + graphNodeRadius + 1}px` } as CSSProperties;
+          const rowStyle = { '--commit-content-offset': `${graphWidth(graphRow)}px` } as CSSProperties;
           const selected = commitPopover?.commit.id === commit.id;
           const changesId = `${sectionIdPrefix}-commit-${commit.id}`;
           return <div className={`commit-node ${state}${isExpanded ? ' expanded' : ''}${selected ? ' selected' : ''}`} style={rowStyle} key={commit.id} onPointerLeave={schedulePopoverClose}>
