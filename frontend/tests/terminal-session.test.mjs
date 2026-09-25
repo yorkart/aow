@@ -29,6 +29,14 @@ try {
     assert.equal(terminalSessionCandidates({ ...data(), live_session_id: 'not-yet-written' }).automatic, undefined);
     assert.equal(terminalSessionCandidates({ ...data([session('trae', '修复终端会话', 'traecli')]), agent: 'traecli' }).automatic.session_id, 'trae');
   });
+  await test('Hermes uses its native session identity and never a stale terminal title', () => {
+    const hermes = { ...data([session('hermes-one', '修复终端会话', 'hermes')]), agent: 'hermes' };
+    assert.equal(terminalSessionTitle('Hermes | demo', cwd), '');
+    assert.equal(terminalSessionCandidates(hermes).automatic, undefined);
+    assert.deepEqual(terminalSessionCandidates(hermes).matches, []);
+    assert.equal(terminalSessionCandidates({ ...hermes, live_session_id: 'hermes-one' }).automatic.session_id, 'hermes-one');
+    assert.equal(terminalSessionCandidates({ ...hermes, live_session_id: 'not-yet-written' }).automatic, undefined);
+  });
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
   const url = `http://127.0.0.1:${server.httpServer.address().port}/tests/terminal-session-preview.html`;
 

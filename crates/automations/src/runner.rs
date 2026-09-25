@@ -420,8 +420,9 @@ async fn execute(
             ));
         }
     }
-    let specified_id = (task.input.agent.session_id_mode() == SessionIdMode::GeneratedUuid)
-        .then(|| Uuid::new_v4().to_string());
+    let session_mode = task.input.agent.session_id_mode();
+    let specified_id =
+        (session_mode == SessionIdMode::GeneratedUuid).then(|| Uuid::new_v4().to_string());
     if let Some(session_id) = &specified_id {
         writer.append(&RunEvent::Session {
             session_id: session_id.clone(),
@@ -437,11 +438,14 @@ async fn execute(
         pid: child.id().unwrap(),
         command: agent_command,
     })?;
-    let mut stdin = child.stdin.take().unwrap();
+    let stdin = child.stdin.take();
     let prompt = task.input.prompt.clone();
     let input = tokio::spawn(async move {
-        stdin.write_all(prompt.as_bytes()).await?;
-        stdin.shutdown().await
+        if let Some(mut stdin) = stdin {
+            stdin.write_all(prompt.as_bytes()).await?;
+            stdin.shutdown().await?;
+        }
+        Ok::<_, std::io::Error>(())
     });
     let stdout = child.stdout.take().context("Agent 未提供标准输出")?;
     let stderr = child.stderr.take().context("Agent 未提供错误输出")?;
@@ -452,7 +456,12 @@ async fn execute(
     let reporter = specified_id
         .is_none()
         .then(|| (task.input.agent, tx.clone(), session_reported));
-    let output = tokio::spawn(agent::capture_stdout(stdout, stdout_file, reporter.clone()));
+    let stdout_reporter = if session_mode == SessionIdMode::FromStderrOnExit {
+        None
+    } else {
+        reporter.clone()
+    };
+    let output = tokio::spawn(agent::capture_stdout(stdout, stdout_file, stdout_reporter));
     let errors = tokio::spawn(agent::capture_stderr(stderr, stderr_file, reporter));
     drop(tx);
     let mut session_received = specified_id.is_some();
@@ -466,13 +475,16 @@ async fn execute(
                 None => channel_open = false,
             },
             status = child.wait() => break status.map_err(Into::into),
-            _ = &mut session_deadline, if !session_received => break Err(anyhow::anyhow!("Agent 启动 60 秒内未返回会话 ID")),
+            _ = &mut session_deadline, if !session_received && session_mode == SessionIdMode::FromOutput => break Err(anyhow::anyhow!("Agent 启动 60 秒内未返回会话 ID")),
         }
     };
     // Descendants must not keep inherited pipes open after the agent exits or
     // after the session-ID deadline aborts the run.
     drop(_group);
     let output = output.await??;
+    // Hermes reports its identity on stderr at exit. Drain both readers before
+    // consuming the channel, otherwise the final session line races validation.
+    let stderr = errors.await??;
     while let Ok(session_id) = rx.try_recv() {
         writer.append(&RunEvent::Session {
             session_id,
@@ -480,7 +492,6 @@ async fn execute(
         })?;
         session_received = true;
     }
-    let stderr = errors.await??;
     if output.truncated {
         writer.append(&RunEvent::OutputTruncated {
             output: RunOutput::Stdio,

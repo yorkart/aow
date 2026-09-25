@@ -54,7 +54,7 @@ function relativeTime(value: string) {
 }
 
 export function TerminalAgentPane({ tabId, paneId, agentId, title, cwd, process, visible, header, terminal }: Props) {
-  const supported = agentId === 'claude' || agentId === 'codex' || agentId === 'traecli';
+  const supported = agentId === 'claude' || agentId === 'codex' || agentId === 'traecli' || agentId === 'hermes';
   const storageKey = `terminal.agent-session.${tabId}.${paneId}`;
   const identity = JSON.stringify([tabId, paneId, agentId, process?.pid, process?.start_time, process?.cwd ?? cwd,
     terminalSessionTitle(title, process?.cwd ?? cwd)]);

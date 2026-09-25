@@ -2815,7 +2815,8 @@ fn snapshot_response(error: aow_agents::sessions::snapshot::SnapshotError) -> Re
             error.to_string(),
             None,
         ),
-        aow_agents::sessions::snapshot::SnapshotError::Io(_) => {
+        aow_agents::sessions::snapshot::SnapshotError::Io(_)
+        | aow_agents::sessions::snapshot::SnapshotError::Database(_) => {
             HttpError::internal(error.to_string())
         }
     }
@@ -3743,7 +3744,7 @@ mod tests {
         let agents = AowManager::in_memory()
             .agents_in_path(&[directory.path().to_path_buf()])
             .unwrap();
-        assert_eq!(agents.len(), 3);
+        assert_eq!(agents.len(), AgentType::ALL.len());
         for agent_type in AgentType::ALL {
             assert!(agents.iter().any(|agent| {
                 agent.id == agent_type.id() && agent.agent_type == Some(agent_type)

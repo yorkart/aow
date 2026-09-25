@@ -34,7 +34,7 @@ Project Explorer 和 Notes Explorer 支持右键“粘贴”上传剪贴板图�
 
 ## Terminal Agent 图标
 
-Linux 和 macOS 上的普通 Terminal 会自动识别其中运行的 Codex、Claude Code 和 TraeCode CLI（`traecli`），桌面和手机标签页会显示对应 Agent 图标，退出后恢复终端图标。检测约每 1.5 秒刷新，通过读取本机进程信息实现，无需安装 hook 或修改 Agent 配置。分割标签页取首个检测到 Agent 的窗格，手机端按窗格分别显示。
+Linux 和 macOS 上的普通 Terminal 会自动识别其中运行的 Codex、Claude Code、TraeCode CLI（`traecli`）和 Hermes，桌面和手机标签页会显示对应 Agent 图标，退出后恢复终端图标。检测约每 1.5 秒刷新，通过读取本机进程信息实现，无需安装 hook 或修改 Agent 配置。分割标签页取首个检测到 Agent 的窗格，手机端按窗格分别显示。
 
 检测范围是 terminald 所在主机、同一 PTY 的进程；终端中再进入 SSH、容器或 tmux 的内部会话暂不识别。Linux 使用 `/proc`，macOS 使用原生进程接口，两者共用 Agent 匹配和前台进程选择规则。
 
@@ -81,7 +81,7 @@ Linux 和 macOS 上的普通 Terminal 会自动识别其中运行的 Codex、Cla
 
 TraeCode CLI 适配面向 **2.0**。
 
-会话详情按轮次展示用户输入、Agent 处理过程和最终结论。处理过程包含公开进度说明、工具名称和执行状态，工具详情可展开查看已记录的命令、参数和执行输出，不展示内部推理。支持 Codex、TraeCode CLI 和 Claude 的本地会话记录。
+会话详情按轮次展示用户输入、Agent 处理过程和最终结论。处理过程包含公开进度说明、工具名称和执行状态，工具详情可展开查看已记录的命令、参数和执行输出，不展示内部推理。支持 Codex、TraeCode CLI、Claude 和 Hermes 的本地会话记录。
 
 连续工具调用默认合并为英文概要，例如 `Read files, edited files, ran commands`；结合工具名称和会话记录中的命令分类去重汇总，保留调用次数及失败/执行中状态。点击概要可展开工具列表，Agent 的进度说明会分隔前后两组调用。
 
@@ -97,6 +97,22 @@ TraeCode CLI 适配面向 **2.0**。
 
 分享验证：`cargo test -p aow-server session_shares`；在 `frontend/` 下执行 `npm run test:shares`。
 
+## Hermes
+
+Hermes 适配已在 **0.18.0** 验证。将 `hermes` 所在目录加入 Settings 的执行 PATH 后，可自动发现或手动注册 Hermes；内置启动使用经典 `--cli` 界面，恢复会话使用 `--resume <session-id>`。`aow-cli agent create --agent hermes` 支持等待默认输入提示符就绪并提交初始任务；自定义皮肤改变提示符时可直接使用普通 Terminal。
+
+Conversation 和分享页只读访问 Hermes 的 `state.db`，支持用户输入、工具调用与结果、最终回复、历史恢复和标题刷新。原地压缩后保留原始对话，合并复制的消息并隐藏内部摘要；撤销的消息保持隐藏。`HERMES_HOME` 指向根目录时跟随该根的 `active_profile`；指向 `profiles/<name>` 时固定使用该 profile。未指定时使用 `~/.hermes` 及其 active profile。注册多个实例时，建议各自显式设置 profile 目录。不需要开启 JSON 导出，也不会迁移数据库或安装 hook。
+
+终端自动关联及完成提醒需要 Hermes `runtime/active_sessions.json` 中与当前 PID 对应的记录。Hermes 配置启用 `max_concurrent_sessions` 时会生成这份记录；未启用或记录失效时，在 Conversation 中手动选择会话，不自动订阅完成提醒，即使同目录只有一个候选也不推断归属。完成提醒从当前 SQLite 消息位置开始，只接受没有工具调用且明确标记 `stop`、`end_turn` 或 `stop_sequence` 的 assistant 记录；压缩复制的历史回复、工具输出、验证续跑和不完整回复不触发提醒。
+
+自动化使用 `hermes chat --cli --quiet --query=<prompt>` 创建持久会话，按任务设置传入 `--yolo`。Hermes 在执行结束时向 stderr 输出 session ID，因此运行期间可能暂时没有会话链接；执行退出后才校验并保存该 ID。`--oneshot` 不提供这一协议，不能作为自动化启动参数。
+
+验证：`cargo test -p aow-agents --all-features`、`cargo test -p aow-automations --test runtime hermes`；前端执行 `npm run build` 和 `npm run test:sessions`。
+
+原生回归：将 `AOW_HERMES_TEST_PYTHON` 设置为 Hermes venv 的 Python，运行 `cargo test -p aow-agents --all-features --test hermes_native -- --ignored --nocapture --test-threads=1`。用例只在临时 profile 中检查压缩、重复消息、profile 解析和新 CLI 归属；CLI 用例需要 PTY 权限，不调用模型服务。非标准安装可用 `AOW_HERMES_TEST_SOURCE` 指定 Hermes 源码目录。
+
+真实会话检查：在已打开的 Hermes 终端显示 `/status` 并保持空闲，设置 `AOW_HERMES_TEST_PID`、`AOW_HERMES_TEST_SESSION_ID` 和 `AOW_HERMES_TEST_RUNTIME_ID` 后，运行 `cargo test -p aow-server --test hermes_live -- --ignored --nocapture`。它只读核对进程、会话关联、原生消息、工具结果和屏幕；完成提醒通过临时数据库重放该会话验证。原生前台进程识别可用 `cargo test -p aow-terminald native_scan_matches_an_existing_hermes_process -- --ignored --nocapture` 检查。若同时设置 `AOW_HERMES_TEST_EXPORT` 为临时目录，可在前端目录使用同一变量运行 `node --test --test-name-pattern='exported native Hermes' tests/session-snapshot.test.mjs`，验证这份真实快照的桌面和手机展示。导出内容包含该会话的公开消息和工具输出，仅应保存在本机私有目录。
+
 ## 手机访问
 
 手机打开同一个服务地址即可进入移动界面，也可以直接访问 `/m` 或 `/m/`。
@@ -111,6 +127,6 @@ Terminal 的分割窗格会展开为独立标签。若已有其他窗口控制�
 
 GitHub 安装器和 `aow update` 会把 Runner 的稳定入口更新为所选 release；后续计划任务和手动任务自动使用新 Runner，已开始运行的任务不受影响。Runner 不是常驻进程，因此不需要单独的 start 命令。
 
-点击左侧 Pinned 上方的“自动化”，创建任务并设置 Agent、项目、工作区和运行计划。支持 Codex、TraeCode CLI、Claude Code；每次运行都会创建新会话。详情页显示概述和执行历史，可复制每次运行的 session ID。
+点击左侧 Pinned 上方的“自动化”，创建任务并设置 Agent、项目、工作区和运行计划。支持 Codex、TraeCode CLI、Claude Code、Hermes；每次运行都会创建新会话。详情页显示概述和执行历史，可复制每次运行的 session ID。
 
 Linux 使用 systemd user timer，macOS 使用当前登录用户的 launchd。定时器触发独立 Runner，前端或 Web 服务重启不会影响任务触发及已启动的执行。未实现应用层补跑或重试，也不读取 Agent rollout。

@@ -1,6 +1,6 @@
 export interface AowAgentSession {
   id: string;
-  agent: 'claude' | 'codex' | 'traecli';
+  agent: 'claude' | 'codex' | 'traecli' | 'hermes';
   session_id: string;
   title: string;
   cwd: string;

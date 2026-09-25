@@ -1,5 +1,27 @@
 use super::*;
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+#[ignore = "requires AOW_HERMES_TEST_PID for an existing foreground Hermes CLI; read-only"]
+fn native_scan_matches_an_existing_hermes_process() {
+    let pid: i32 = std::env::var("AOW_HERMES_TEST_PID")
+        .unwrap()
+        .parse()
+        .unwrap();
+    let info = aow_process::info(pid).unwrap();
+    let sessions = BTreeMap::from([("live-hermes".into(), Some(info.session))]);
+    let detected = scan(&sessions).unwrap();
+    assert_eq!(detected.agents["live-hermes"].as_deref(), Some("hermes"));
+    let process = &detected.processes["live-hermes"];
+    assert_eq!(process.pid, pid);
+    assert_eq!(process.start_time, info.start_time);
+    assert_eq!(Path::new(&process.cwd), aow_process::cwd(pid).unwrap());
+    eprintln!(
+        "Hermes PID {pid}, PTY session {}, cwd {}",
+        info.session, process.cwd
+    );
+}
+
 fn select_agent(session: i32, processes: &BTreeMap<i32, Process>) -> Option<&'static str> {
     select_process(session, processes).and_then(|(process, _)| process.agent)
 }
@@ -69,7 +91,7 @@ fn native_scan_recognizes_all_agents_and_tracks_the_live_cwd_and_exit() {
     let root = directory.path().canonicalize().unwrap();
     let cwd = root.join("project with spaces");
     std::fs::create_dir(&cwd).unwrap();
-    for agent in ["claude", "codex", "traecli"] {
+    for agent in ["claude", "codex", "traecli", "hermes"] {
         let ready = root.join(format!("{agent}-ready"));
         let tracker = Arc::new(SpawnTracker::default());
         // Give a harmless shell the Agent's argv[0]. This exercises native

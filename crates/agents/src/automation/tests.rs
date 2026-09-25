@@ -6,6 +6,7 @@ fn saved_agent_ids_match_registered_agents_and_supported_capabilities() {
         ("codex", Agent::Codex),
         ("traecli", Agent::TraeCli),
         ("claude", Agent::Claude),
+        ("hermes", Agent::Hermes),
     ] {
         let saved = format!("\"{id}\"");
         let adapter: AutomationAgent = serde_json::from_str(&saved).unwrap();
@@ -25,6 +26,7 @@ fn each_adapter_enforces_new_sessions_and_uses_its_own_session_protocol() {
         AutomationAgent::Codex,
         AutomationAgent::TraeCli,
         AutomationAgent::Claude,
+        AutomationAgent::Hermes,
     ] {
         assert!(
             agent
@@ -69,5 +71,51 @@ fn each_adapter_enforces_new_sessions_and_uses_its_own_session_protocol() {
     assert!(claude.automation_arguments(true, None).is_err());
     for flag in ["-c", "-rold-session", "-ptext"] {
         assert!(claude.validate_arguments(&[flag.into()]).is_err());
+    }
+}
+
+#[test]
+fn hermes_uses_persistent_quiet_chat_and_only_accepts_native_session_lines() {
+    let agent = AutomationAgent::Hermes;
+    assert_eq!(agent.session_id_mode(), SessionIdMode::FromStderrOnExit);
+    assert_eq!(agent.prompt_mode(), PromptMode::Argument("--query"));
+    assert_eq!(
+        agent.automation_arguments(false, None).unwrap(),
+        ["chat", "--cli", "--quiet"]
+    );
+    assert!(
+        agent
+            .automation_arguments(true, None)
+            .unwrap()
+            .contains(&"--yolo".into())
+    );
+    assert_eq!(
+        agent
+            .session_from_line(b"session_id: 20260925_123456_ab12cd34\n")
+            .as_deref(),
+        Some("20260925_123456_ab12cd34")
+    );
+    for line in [
+        "response session_id: wrong",
+        "session_id:",
+        "session_id: --flag",
+        "session_id: ../../escape",
+        "session_id: two words",
+    ] {
+        assert!(agent.session_from_line(line.as_bytes()).is_none(), "{line}");
+    }
+    for flag in [
+        "--query=wrong",
+        "-qwrong",
+        "--oneshot",
+        "-z",
+        "-c",
+        "-rold",
+        "chat",
+        "--source=tool",
+        "--tui",
+        "--",
+    ] {
+        assert!(agent.validate_arguments(&[flag.into()]).is_err(), "{flag}");
     }
 }

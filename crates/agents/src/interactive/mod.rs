@@ -2,6 +2,7 @@
 
 mod codex;
 mod codex_like;
+mod hermes;
 mod traecli;
 
 use crate::Agent;
@@ -18,6 +19,7 @@ pub trait AgentInteractive: Send + Sync {
 pub enum InteractiveAgent {
     Codex,
     TraeCli,
+    Hermes,
 }
 
 impl Agent {
@@ -25,6 +27,7 @@ impl Agent {
         match self {
             Self::Codex => Some(InteractiveAgent::Codex),
             Self::TraeCli => Some(InteractiveAgent::TraeCli),
+            Self::Hermes => Some(InteractiveAgent::Hermes),
             _ => None,
         }
     }
@@ -35,6 +38,7 @@ impl AgentInteractive for InteractiveAgent {
         match self {
             Self::Codex => codex::Codex.input_ready(lines),
             Self::TraeCli => traecli::TraeCli.input_ready(lines),
+            Self::Hermes => hermes::Hermes.input_ready(lines),
         }
     }
 }

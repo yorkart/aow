@@ -56,16 +56,21 @@ fn basename(path: &str) -> &str {
 }
 
 fn interpreter_script<'a>(executable: Option<&str>, arguments: &[&'a str]) -> Option<&'a str> {
-    if !matches!(
-        basename(executable?),
-        "node" | "nodejs" | "bun" | "python" | "python3"
-    ) {
+    let interpreter = basename(executable?);
+    let python = matches!(interpreter, "python" | "Python")
+        || interpreter.strip_prefix("python").is_some_and(|version| {
+            !version.is_empty()
+                && version
+                    .split('.')
+                    .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+        });
+    if !python && !matches!(interpreter, "node" | "nodejs" | "bun") {
         return None;
     }
     let mut arguments = arguments.iter().skip(1);
     while let Some(argument) = arguments.next() {
         match *argument {
-            "-e" | "--eval" | "-p" | "--print" | "-c" => return None,
+            "-e" | "--eval" | "-p" | "--print" | "-c" | "-m" => return None,
             option if option.starts_with("--eval=") || option.starts_with("--print=") => {
                 return None;
             }

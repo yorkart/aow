@@ -4,6 +4,7 @@ export const agentTypes: { id: AowAgentType; label: string }[] = [
   { id: 'claude', label: 'Claude Code' },
   { id: 'codex', label: 'Codex' },
   { id: 'traecli', label: 'TraeCode CLI' },
+  { id: 'hermes', label: 'Hermes' },
 ];
 
 export function builtinAgentType(id?: string): AowAgentType | undefined {
