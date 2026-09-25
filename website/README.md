@@ -6,7 +6,7 @@
 
 `website/snapshot/main.tsx` 直接导入 `frontend/src/aow/ProjectAow.tsx` 和 `frontend/src/mobile/MobileAow.tsx`。文件树、标签页、Markdown、Monaco 编辑器、Git 差异、xterm 终端、桌面和手机导航均使用产品组件和样式。
 
-`website/snapshot/data.json` 保存采集时间、仓库地址、完整提交 ID、原始 API 响应和真实 PTY 输出。目前采集范围是提交 `18c1d91` 的 227 个源码与文档文件、5 次实际提交及其文件差异。工作台中的项目对应 AoW 仓库，Notes 对应该提交的 `docs/`。项目头像接口也采集真实响应，桌面和手机直接引用返回的头像 URL。
+`website/snapshot/data.json` 保存采集时间、仓库地址、完整提交 ID、原始 API 响应和真实 PTY 输出。目前采集范围是提交 `2ab9634` 的 232 个源码与文档文件、5 次实际提交及其文件差异。工作台中的项目对应 AoW 仓库，Notes 对应该提交的 `docs/`。项目头像接口也采集真实响应，桌面和手机直接引用返回的头像 URL。
 
 采集脚本在临时目录克隆当前提交，启动隔离的 AoW server 与 terminald，通过真实 API 注册项目、创建终端并读取数据。终端实际执行了 `git log --topo-order -5 --oneline` 和 `git status --short --branch`，保存其原始输出；仅移除采集结束标记。提交清单和终端均使用与 Git API 相同的拓扑顺序，保证合并分支后的提交记录一致。临时克隆产生的远程跟踪引用会移除，以免把本地克隆误显示为已推送到 GitHub。
 
