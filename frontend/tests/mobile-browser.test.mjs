@@ -207,6 +207,92 @@ try {
     assert.equal(await page.locator('.mobile-brand-title span').textContent(), 'main');
     assert.deepEqual(state.errors, []);
   });
+  for (const width of [320, 390]) await test(`mobile terminal creation waits for a Terminal or Agent choice at ${width}px`, async t => {
+    const context = await browser.newContext({ viewport: { width, height: 844 }, isMobile: true, hasTouch: true });
+    t.after(() => context.close());
+    const state = await fixture(context);
+    const created = [];
+    const configured = { id: 'codex-review', agent_type: 'codex', display_name: 'Review Codex', source: 'configured', available: true, args: [], env: {} };
+    await context.route('**/api/aow/agents?**', route => route.fulfill({ json: [
+      { ...configured, id: 'codex', display_name: 'Codex', source: 'detected' }, configured,
+      { ...configured, id: 'unavailable', display_name: 'Unavailable Agent', available: false },
+    ] }));
+    await context.route('**/api/terminals', async route => {
+      assert.equal(route.request().method(), 'POST');
+      const body = route.request().postDataJSON();
+      created.push(body);
+      const id = `created-${created.length}`;
+      const tab = { id, name: body.agent_id ? 'Review Codex' : 'Terminal', workspace_root: body.workspace_root,
+        layout: leaf(`${id}-pane`), panes: [pane(`${id}-pane`, 'Shell', body.agent_id ? { kind: 'agent', agent_id: body.agent_id } : {})] };
+      state.terminalTabs.push(tab);
+      await route.fulfill({ json: tab });
+    });
+    const page = await context.newPage();
+    await page.goto(`${baseURL}/m#workspace=${encodeURIComponent(workspace)}&view=terminal`);
+    const trigger = page.getByRole('button', { name: '新建终端', exact: true });
+    const menu = page.getByRole('menu', { name: '新建终端或 Agent', exact: true });
+    await trigger.tap();
+    await menu.getByRole('menuitem', { name: 'Review Codex', exact: true }).waitFor();
+    assert.equal(await trigger.getAttribute('aria-expanded'), 'true');
+    assert.equal(await trigger.getAttribute('aria-controls'), await menu.getAttribute('id'));
+    assert.deepEqual(await menu.getByRole('menuitem').allTextContents(), ['Terminal', 'Codex', 'Review Codex']);
+    assert.deepEqual(created, [], 'opening the menu does not create a process');
+    const bounds = await menu.boundingBox();
+    const anchor = await trigger.boundingBox();
+    assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width && bounds.y >= anchor.y + anchor.height);
+    await noOverflow(page);
+    await snapshot(page, `terminal-new-menu-${width}`);
+    await trigger.tap();
+    await menu.waitFor({ state: 'hidden' });
+    await trigger.tap();
+    await page.keyboard.press('Escape');
+    await menu.waitFor({ state: 'hidden' });
+    assert.equal(await trigger.evaluate(button => document.activeElement === button), true);
+    await trigger.tap();
+    await page.getByRole('button', { name: '刷新', exact: true }).tap();
+    await menu.waitFor({ state: 'hidden' });
+    await trigger.tap();
+    await page.getByRole('button', { name: 'Conversation', exact: true }).tap();
+    await menu.waitFor({ state: 'hidden' });
+    await page.getByRole('button', { name: '终端', exact: true }).tap();
+    assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
+    assert.deepEqual(created, [], 'dismissing the menu or leaving the page does not create a process');
+    for (const [index, choice] of ['Terminal', 'Review Codex'].entries()) {
+      await trigger.tap();
+      await menu.getByRole('menuitem', { name: choice, exact: true }).tap();
+      await menu.waitFor({ state: 'hidden' });
+      await page.locator(`[id="mobile-terminal-panel-created-${index + 1}:created-${index + 1}-pane"]`).waitFor();
+      assert.equal(await page.getByRole('tab', { selected: true }).getAttribute('aria-controls'), `mobile-terminal-panel-created-${index + 1}:created-${index + 1}-pane`);
+    }
+    assert.deepEqual(created, [
+      { workspace_root: workspace, cwd: workspace },
+      { workspace_root: workspace, cwd: workspace, agent_id: configured.id },
+    ]);
+    assert.deepEqual(state.mutations, []);
+    assert.deepEqual(state.errors, []);
+  });
+
+  await test('mobile terminal creation keeps Terminal available when Agent loading fails or the list is empty', async t => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    t.after(() => context.close());
+    const state = await fixture(context);
+    let failed = true;
+    await context.route('**/api/aow/agents?**', route => route.fulfill(failed
+      ? { status: 500, json: { message: 'Agent service unavailable' } } : { json: [] }));
+    const page = await context.newPage();
+    await page.goto(`${baseURL}/m#workspace=${encodeURIComponent(workspace)}&view=terminal`);
+    await page.getByRole('button', { name: '新建终端', exact: true }).tap();
+    const menu = page.getByRole('menu', { name: '新建终端或 Agent', exact: true });
+    await menu.getByRole('alert').waitFor();
+    assert.equal(await menu.getByRole('menuitem', { name: 'Terminal', exact: true }).isEnabled(), true);
+    failed = false;
+    await menu.getByRole('menuitem', { name: '重新加载 Agent', exact: true }).tap();
+    await menu.getByText('未发现可用 Agent', { exact: true }).waitFor();
+    assert.equal(await menu.getByRole('menuitem', { name: 'Terminal', exact: true }).isEnabled(), true);
+    assert.deepEqual(state.mutations, []);
+    assert.deepEqual(state.errors, []);
+  });
+
   await test('mobile terminal catalog opens worktree instances in the main workspace without duplicating terminals', async t => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     t.after(() => context.close());

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowUp, Keyboard, KeyboardOff, List, Plus, ShieldCheck, TerminalSquare } from 'lucide-react';
+import { ArrowUp, Keyboard, KeyboardOff, List, ShieldCheck, TerminalSquare } from 'lucide-react';
 import { TerminalPaneView } from './TerminalPaneView';
 import { TerminalPanel } from './TerminalPanel';
 import { TerminalLifecycleDot } from './TerminalLifecycleDot';
@@ -20,6 +20,7 @@ import { mobileRouteUrl, saveMobileValue, storedMobileValue } from '../../mobile
 import { useMobileTerminalGestures } from './useMobileTerminalGestures';
 import { useMobileTerminalSurface } from './useMobileTerminalSurface';
 import { MobileTerminalCatalog } from './MobileTerminalCatalog';
+import { MobileTerminalNewMenu } from './MobileTerminalNewMenu';
 
 type FlatTerminal = ReturnType<typeof flattenTerminalTabs>[number];
 const DEFAULT_TERMINAL_FONT_SIZE = 12;
@@ -114,8 +115,9 @@ export function MobileTerminals({ project, worktree, visible, headerActions, ini
   useEffect(() => {
     if (visible) document.getElementById(`mobile-terminal-${activeKey}`)?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
   }, [activeKey, visible]);
-  const create = async () => {
-    const tab = await terminals.create();
+  const create = async (agentId?: string) => {
+    setOperationError('');
+    const tab = await terminals.create(agentId);
     if (tab?.panes[0]) setSelected(`${tab.id}:${tab.panes[0].id}`);
   };
   const reload = () => { void terminals.reload(); if (showAll || hasHostedTabs) projectTerminals.reload(); };
@@ -142,7 +144,7 @@ export function MobileTerminals({ project, worktree, visible, headerActions, ini
       <button ref={catalogButton} className="mobile-icon-button" aria-label="终端列表" aria-haspopup="dialog" aria-expanded={catalogOpen} aria-controls={catalogId}
         onClick={() => setCatalogOpen(true)}><List size={21} /></button>
       <MobileRefresh reload={reload} loading={terminals.loading || projectTerminals.loading} />
-      <button className="mobile-icon-button" aria-label="新建终端" disabled={terminals.busy} onClick={() => void create()}><Plus size={21} /></button>
+      <MobileTerminalNewMenu busy={terminals.busy} onCreate={agentId => void create(agentId)} />
     </>, headerActions)}
     {error && <div className="mobile-inline-error" role="alert">{error}</div>}
     {visible && catalogOpen && <MobileTerminalCatalog id={catalogId} onClose={closeCatalog} returnFocus={catalogButton.current}>{container => <>

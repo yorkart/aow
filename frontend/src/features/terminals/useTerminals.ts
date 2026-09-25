@@ -111,7 +111,7 @@ export function useTerminals(workspaceRoot: string, enabled: boolean) {
     return () => window.clearInterval(timer);
   }, [enabled, load]);
 
-  const create = useCallback(async () => {
+  const create = useCallback(async (agentId?: string) => {
     if (workspaceRootRef.current !== workspaceRoot) return null;
     requestGeneration.current += 1;
     const operationGeneration = ++busyGeneration.current;
@@ -120,7 +120,7 @@ export function useTerminals(workspaceRoot: string, enabled: boolean) {
     setBusy(true);
     setError('');
     try {
-      const tab = await terminalApi.create(workspaceRoot, { cwd: workspaceRoot });
+      const tab = await terminalApi.create(workspaceRoot, { cwd: workspaceRoot, agentId });
       if (workspaceGeneration.current !== rootGeneration
         || workspaceRootRef.current !== workspaceRoot) return null;
       stateRootRef.current = workspaceRoot;

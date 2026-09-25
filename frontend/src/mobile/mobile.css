@@ -163,6 +163,14 @@ body { position:fixed; inset:0; }
 .mobile-automation-result > .mobile-state { min-height:130px; }
 .mobile-muted { color:var(--m-muted); font-size:12px; }
 .mobile-terminal-page,.mobile-terminal { flex:1; min-height:0; min-width:0; width:100%; display:flex; flex-direction:column; }
+.mobile-terminal-new { position:relative; }
+.mobile-terminal-new-menu { position:absolute; z-index:60; top:calc(100% + 4px); right:0; width:240px; max-width:calc(100vw - 24px); max-height:min(360px,calc(var(--mobile-height,100dvh) - 100px - env(safe-area-inset-top))); overflow:auto; overscroll-behavior:contain; padding:5px; border:1px solid var(--m-line); border-radius:10px; background:var(--m-panel); box-shadow:0 12px 32px #0006; }
+.mobile-terminal-new-menu button { display:flex; align-items:center; gap:10px; width:100%; min-height:44px; padding:10px; border-radius:6px; text-align:left; }
+.mobile-terminal-new-menu button:hover,.mobile-terminal-new-menu button:focus-visible { background:var(--m-raised); }
+.mobile-terminal-new-menu button>span { min-width:0; overflow-wrap:anywhere; }
+.mobile-terminal-new-label { margin-top:4px; padding:8px 10px 4px; border-top:1px solid var(--m-line); color:var(--m-muted); font-size:11px; }
+.mobile-terminal-new-menu .mobile-terminal-new-status { padding:10px; color:var(--m-muted); font-size:12px; overflow-wrap:anywhere; }
+.mobile-terminal-new-menu .mobile-terminal-new-status.error { color:#efb09f; }
 .mobile-terminal-catalog { --project-aow-header-height:44px; --aow-line:var(--m-line); --aow-selection:#29374c; --aow-accent:var(--m-accent); --muted:var(--m-muted); --text:var(--m-text); --hover:#ffffff08; position:fixed; top:var(--mobile-top,0); right:0; bottom:auto; left:auto; width:min(420px,calc(100% - 24px)); max-width:none; height:var(--mobile-height,100dvh); max-height:none; margin:0; padding:env(safe-area-inset-top) env(safe-area-inset-right) var(--mobile-safe-bottom) 0; box-sizing:border-box; overflow:hidden; border:0; border-left:1px solid var(--m-line); border-radius:14px 0 0 14px; color:var(--m-text); background:var(--m-panel); box-shadow:-12px 0 40px #0005; }
 .mobile-terminal-catalog[open] { display:flex; flex-direction:column; }
 .mobile-terminal-catalog::backdrop { background:#0008; }
