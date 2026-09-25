@@ -2,10 +2,7 @@
 
 use aow_agents::{
     Agent,
-    sessions::{
-        SessionRoots,
-        tracking::{AgentSessionTracker, LiveSessionContext, SessionResolution, SessionTarget},
-    },
+    sessions::{titles::AgentSessionTitleProvider, tracking::LiveSessionContext},
 };
 use aow_protocol::{TerminalAgentList, TerminalAgentProcess};
 
@@ -13,50 +10,41 @@ use super::sessions;
 
 pub(super) async fn enrich(detected: &mut TerminalAgentList) {
     for (pane, agent) in &detected.agents {
-        // Keep other agents' native activity/attention titles. Hermes resolves
-        // identity from its PID registry, never from this display-only title.
-        if agent.as_deref() != Some(Agent::Hermes.id()) {
+        let Some(provider) = agent
+            .as_deref()
+            .and_then(Agent::from_id)
+            .and_then(Agent::session_titles)
+        else {
             continue;
-        }
+        };
         let Some(process) = detected.processes.get(pane) else {
             continue;
         };
-        if let Some(title) = hermes_title(process.clone()).await {
+        let terminal_title = detected.titles.get(pane).map_or("", String::as_str);
+        if let Some(title) = native_title(&provider, process.clone(), terminal_title).await {
             detected.titles.insert(pane.clone(), title);
         }
     }
 }
 
-async fn hermes_title(process: TerminalAgentProcess) -> Option<String> {
+async fn native_title(
+    provider: &impl AgentSessionTitleProvider,
+    process: TerminalAgentProcess,
+    terminal_title: &str,
+) -> Option<String> {
     let identity = process.clone();
     let environment = tokio::task::spawn_blocking(move || sessions::process_environment(&identity))
         .await
         .ok()??;
-    let home = environment.get("HOME")?;
-    let tracker = Agent::Hermes.session_tracking()?;
-    let SessionResolution::Resolved(target @ SessionTarget::Id(_)) = tracker
-        .resolve_live_session(LiveSessionContext {
+    let title = provider
+        .session_title(LiveSessionContext {
             pid: Some(process.pid),
             cwd: &process.cwd,
-            title: "",
+            title: terminal_title,
             environment: &environment,
         })
-        .await
-    else {
-        return None;
-    };
-    let roots = SessionRoots::from_configuration(home, &environment);
-    tokio::task::spawn_blocking(move || {
-        let candidates = tracker.candidate_sessions(&target, process.cwd.as_ref(), roots);
-        // Refresh from the native database on each metadata poll: generated
-        // titles, /title and /new must not require a completion event or restart.
-        let [session] = candidates.as_slice() else {
-            return None;
-        };
-        sessions::same_process(&process).then(|| session.title.clone())
-    })
-    .await
-    .ok()?
+        .await?;
+    sessions::same_process(&process).then_some(title)
 }
 
 #[cfg(test)]

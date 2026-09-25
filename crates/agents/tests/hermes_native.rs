@@ -4,6 +4,7 @@
 
 use aow_agents::{
     Agent,
+    process::{ProcessInfo, recognize_process},
     sessions::{
         self, AgentSessionProvider, SessionRoots, snapshot,
         tail::SessionTail,
@@ -45,6 +46,33 @@ fn native(root: &Path, code: &str) -> String {
         String::from_utf8_lossy(&output.stderr)
     );
     String::from_utf8(output.stdout).unwrap().trim().to_owned()
+}
+
+#[test]
+#[ignore = "requires AOW_HERMES_TEST_PYTHON; checks the installed launcher's generated argv without starting an agent"]
+fn recognizes_the_installed_managed_python_launcher() {
+    let directory = tempfile::tempdir().unwrap();
+    let commands = native(
+        directory.path(),
+        r#"
+import ast, json, os
+from pathlib import Path
+source = (Path(os.environ['PYTHONPATH']) / 'hermes_cli/venv_sync.py').read_text()
+node = next(n for n in ast.parse(source).body if isinstance(n, ast.FunctionDef) and n.name == 'relaunch_command')
+exec(compile(ast.Module(body=[node], type_ignores=[]), 'native_relaunch', 'exec'))
+root = Path('/test/Hermes source')
+python = Path('/test/python3.14')
+print(json.dumps([relaunch_command(python, root, [str(root / 'venv/bin/hermes'), *args], ['python'], None)
+    for args in [['--cli'], ['--cli', '--resume', 'native-session'], ['--cli', '--query', 'quotes \' " and \\ in prompt']]]))
+"#,
+    );
+    for command in serde_json::from_str::<Vec<Vec<String>>>(&commands).unwrap() {
+        let args: Vec<_> = command.iter().map(String::as_str).collect();
+        assert_eq!(
+            recognize_process(&ProcessInfo::new(Some(&command[0]), &args)),
+            Some(Agent::Hermes)
+        );
+    }
 }
 
 fn prepare(root: &Path) {

@@ -111,19 +111,21 @@ TraeCode CLI 适配面向 **2.0**。
 
 ## Hermes
 
-Hermes 适配已在 **0.18.0** 验证。将 `hermes` 所在目录加入 Settings 的执行 PATH 后，可自动发现或手动注册 Hermes；内置启动使用经典 `--cli` 界面，恢复会话使用 `--resume <session-id>`。`aow-cli agent create --agent hermes` 支持等待默认输入提示符就绪并提交初始任务；自定义皮肤改变提示符时可直接使用普通 Terminal。
+Hermes 适配已在 **0.18.0** 验证。将 `hermes` 所在目录加入 Settings 的执行 PATH 后，可自动发现或手动注册 Hermes；内置启动使用经典 `--cli` 界面，恢复会话使用 `--resume <session-id>`。进程识别同时支持直接启动脚本和 Hermes 切换到托管 Python 后的 `-I -c` 启动形式。`aow-cli agent create --agent hermes` 支持等待默认输入提示符就绪并提交初始任务；自定义皮肤改变提示符时可直接使用普通 Terminal。
 
 Conversation 和分享页只读访问 Hermes 的 `state.db`，支持用户输入、工具调用与结果、最终回复、历史恢复和标题刷新。原地压缩后保留原始对话，合并复制的消息并隐藏内部摘要；撤销的消息保持隐藏。`HERMES_HOME` 指向根目录时跟随该根的 `active_profile`；指向 `profiles/<name>` 时固定使用该 profile。未指定时使用 `~/.hermes` 及其 active profile。注册多个实例时，建议各自显式设置 profile 目录。不需要开启 JSON 导出，也不会迁移数据库或安装 hook。
 
 Hermes 经典 CLI 不发送动态任务标题。AoW 在精确关联当前进程与会话后，从 `state.db` 提取标题并显示到桌面 Tab、Terminal 列表及手机面板；标题尚未生成时使用首条用户消息，后续自动生成或 `/title` 修改会在终端元数据刷新时更新。手动重命名的 Tab 保留用户名称。缺少有效进程关联时保留终端原名称，不根据目录中的历史会话推断标题。
 
-终端自动关联及完成提醒需要 Hermes `runtime/active_sessions.json` 中与当前 PID 对应的记录。Hermes 配置启用 `max_concurrent_sessions` 时会生成这份记录；未启用或记录失效时，在 Conversation 中手动选择会话，不自动订阅完成提醒，即使同目录只有一个候选也不推断归属。完成提醒从当前 SQLite 消息位置开始，只接受没有工具调用且明确标记 `stop`、`end_turn` 或 `stop_sequence` 的 assistant 记录；压缩复制的历史回复、工具输出、验证续跑和不完整回复不触发提醒。
+终端自动关联及完成提醒需要 Hermes `runtime/active_sessions.json` 中与当前 PID 对应的记录。部分 Hermes 版本仅在配置启用 `max_concurrent_sessions` 时生成这份记录；记录缺失或失效时，在 Conversation 中手动选择会话，不自动订阅完成提醒，即使同目录只有一个候选也不推断归属。完成提醒从当前 SQLite 消息位置开始，只接受没有工具调用且明确标记 `stop`、`end_turn` 或 `stop_sequence` 的 assistant 记录；压缩复制的历史回复、工具输出、验证续跑和不完整回复不触发提醒。
 
 自动化使用 `hermes chat --cli --quiet --query=<prompt>` 创建持久会话，按任务设置传入 `--yolo`。Hermes 在执行结束时向 stderr 输出 session ID，因此运行期间可能暂时没有会话链接；执行退出后才校验并保存该 ID。`--oneshot` 不提供这一协议，不能作为自动化启动参数。
 
 验证：`cargo test -p aow-agents --all-features`、`cargo test -p aow-automations --test runtime hermes`；前端执行 `npm run build` 和 `npm run test:sessions`。
 
 原生回归：将 `AOW_HERMES_TEST_PYTHON` 设置为 Hermes venv 的 Python，运行 `cargo test -p aow-agents --all-features --test hermes_native -- --ignored --nocapture --test-threads=1`。用例只在临时 profile 中检查压缩、重复消息、profile 解析和新 CLI 归属；CLI 用例需要 PTY 权限，不调用模型服务。非标准安装可用 `AOW_HERMES_TEST_SOURCE` 指定 Hermes 源码目录。
+
+标题链路验证：设置 `AOW_TITLE_TEST_PID`、`AOW_TITLE_TEST_SESSION_ID`、`AOW_TITLE_TEST_EXPECTED`，运行 `cargo test -p aow-server --lib native_process_title_matches_the_live_session -- --ignored --nocapture`。测试只读真实进程和会话数据，通过临时 daemon 传输调用生产标题接口，不需要在当前终端输入命令或重启服务。可用 `AOW_TITLE_TEST_EXPORT` 指定临时 JSON 文件，再在前端目录以相同变量运行 `node --test --test-name-pattern='exported live agent metadata' tests/aow-resources.test.mjs`，验证这份返回数据的 Tab 图标、标题及右侧 Terminal 列表。
 
 真实会话检查：在已打开的 Hermes 终端显示 `/status` 并保持空闲，设置 `AOW_HERMES_TEST_PID`、`AOW_HERMES_TEST_SESSION_ID` 和 `AOW_HERMES_TEST_RUNTIME_ID` 后，运行 `cargo test -p aow-server --test hermes_live -- --ignored --nocapture`。它只读核对进程、会话关联、原生消息、工具结果和屏幕；完成提醒通过临时数据库重放该会话验证。原生前台进程识别可用 `cargo test -p aow-terminald native_scan_matches_an_existing_hermes_process -- --ignored --nocapture` 检查。若同时设置 `AOW_HERMES_TEST_EXPORT` 为临时目录，可在前端目录使用同一变量运行 `node --test --test-name-pattern='exported native Hermes' tests/session-snapshot.test.mjs`，验证这份真实快照的桌面和手机展示。导出内容包含该会话的公开消息和工具输出，仅应保存在本机私有目录。
 

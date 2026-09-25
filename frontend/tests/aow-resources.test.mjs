@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { readFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
@@ -3040,6 +3041,22 @@ try {
     await switchWorktree(page, 1);
     await eventually(async () => await tab(page, 'Shell').count() === 1);
     assert.equal(await tab(page, '新的任务').count(), 0);
+  });
+
+  await test('exported live agent metadata displays its title and icon in tabs and the terminal list', { skip: !process.env.AOW_TITLE_TEST_EXPORT }, async t => {
+    const metadata = JSON.parse(await readFile(process.env.AOW_TITLE_TEST_EXPORT, 'utf8'));
+    const agent = metadata.agents.live;
+    const title = metadata.titles.live;
+    assert.ok(agent && title && metadata.processes.live.pid > 0);
+    const { page, state } = await fixture(t);
+    state.agents = { 'wt-0-pane': agent };
+    state.titles = { 'wt-0-pane': title };
+    await eventually(async () => await tab(page, title).count() === 1);
+    assert.equal(await tab(page, title).locator('img.agent-icon').count(), 1);
+    await surface(page).locator('.terminal-panel-open').filter({ hasText: title }).waitFor();
+    await page.reload();
+    await eventually(async () => await tab(page, title).count() === 1);
+    await surface(page).locator('.terminal-panel-open').filter({ hasText: title }).waitFor();
   });
 
   await test('Hermes database titles update tabs and the terminal list while preserving custom names', async t => {

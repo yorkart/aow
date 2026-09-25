@@ -4,6 +4,7 @@ mod codex_like;
 mod hermes;
 pub mod snapshot;
 pub mod tail;
+pub mod titles;
 pub mod tracking;
 mod traecli;
 

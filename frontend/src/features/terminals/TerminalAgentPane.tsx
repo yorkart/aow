@@ -5,6 +5,7 @@ import type { AgentSessionSnapshot, AowAgentSession } from '../sessions/types';
 import type { TerminalAgentProcess, TerminalPaneSessions } from './types';
 import { terminalApi } from './terminalApi';
 import { sessionsApi } from '../sessions/api';
+import { agentSessionTitleSource } from '../agents/agentTypes';
 import { sessionSearch, terminalSessionCandidates, terminalSessionTitle } from './terminalSessionMatching';
 import { SessionSnapshotView } from '../sessions/SessionSnapshotView';
 import { SessionShareButton } from '../sessions/SessionShareButton';
@@ -54,12 +55,12 @@ function relativeTime(value: string) {
 }
 
 export function TerminalAgentPane({ tabId, paneId, agentId, title, cwd, process, visible, header, terminal }: Props) {
-  const supported = agentId === 'claude' || agentId === 'codex' || agentId === 'traecli' || agentId === 'hermes';
+  const titleSource = agentSessionTitleSource(agentId);
+  const supported = !!titleSource;
   const storageKey = `terminal.agent-session.${tabId}.${paneId}`;
-  // Hermes titles come from its native database and can change after the first
-  // turn or /title. They describe the session; they are not its identity.
+  // Native display titles can change without changing the session identity.
   const identity = JSON.stringify([tabId, paneId, agentId, process?.pid, process?.start_time, process?.cwd ?? cwd,
-    agentId === 'hermes' ? '' : terminalSessionTitle(title, process?.cwd ?? cwd)]);
+    titleSource === 'native' ? '' : terminalSessionTitle(title, process?.cwd ?? cwd)]);
   const [open, setOpen] = useState(false);
   const [association, setAssociation] = useState<Association>();
   const [loading, setLoading] = useState(false);
