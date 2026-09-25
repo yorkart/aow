@@ -355,7 +355,8 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .project-aow-center-tab-scroll .project-aow-tab-close { flex:0 0 15px; width:15px; height:17px; display:grid; place-items:center; padding:1px; border-radius:3px; }
 .project-aow-center-tab-scroll .project-aow-tab-close svg { width:13px; height:13px; }
 .project-aow-center-tab-scroll .project-aow-tab-close:hover { color:white; background:#444b56; }
-.project-aow-tab-group { position:relative; display:flex; align-items:stretch; align-self:flex-end; flex:0 0 auto; min-width:0; height:calc(100% - 4px); background:#202329; }
+.project-aow-tab-group,.project-aow-new { align-self:flex-end; height:calc(100% - 4px); }
+.project-aow-tab-group { position:relative; display:flex; align-items:stretch; flex:0 0 auto; min-width:0; background:#202329; }
 .project-aow-tab-group + .project-aow-tab-group { margin-left:6px; }
 .project-aow-group-toggle::after,.project-aow-group-tabs .project-aow-center-tab::after { content:""; position:absolute; z-index:1; inset:0; border:0 solid var(--tab-group-color); border-bottom-width:1px; pointer-events:none; }
 .project-aow-group-tabs .project-aow-center-tab::after { right:-1px; }
@@ -374,7 +375,7 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .project-aow-tab-group.collapsed .project-aow-group-toggle > svg { transform:translate(-2px,-2px); }
 .project-aow-group-count { position:absolute; right:2px; bottom:4px; width:11px; height:11px; display:grid; place-items:center; color:#e1e6ee; background:#202329; border-radius:2px; font-size:9px; font-weight:600; line-height:1; font-variant-numeric:tabular-nums; pointer-events:none; }
 .project-aow-new { position:relative; flex:0 0 29px; display:grid; place-items:center; border-left:1px solid #30343c; }
-.project-aow-new-trigger { width:21px; height:21px; display:grid; place-items:center; padding:0; color:#aab0ba; line-height:0; border-radius:3px; }
+.project-aow-new-trigger { width:21px; height:100%; display:grid; place-items:center; padding:0; color:#aab0ba; line-height:0; border-radius:3px; }
 .project-aow-new-trigger:hover { color:white; background:#353a43; }
 .project-aow-new-trigger svg { display:block; width:14px; height:14px; }
 .project-aow-right-show { width:32px; flex:0 0 32px; display:grid; place-items:center; margin-left:auto; padding:0; color:#89909b; border-left:1px solid #30343c; }
