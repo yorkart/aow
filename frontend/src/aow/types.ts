@@ -22,6 +22,7 @@ export type WorktreeIconId = 'default'
 
 export interface AowProject {
   builtin?: boolean;
+  avatar_url?: string | null;
   id: string;
   name: string;
   registered_path: string;

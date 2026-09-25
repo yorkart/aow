@@ -24,7 +24,20 @@ class AdapterTests(unittest.TestCase):
 
     def test_describe_does_not_need_cli_or_repository(self):
         self.assertEqual(github.dispatch({"version": 2, "operation": "describe", "repository": None}),
-                         {"operations": ["list", "detail", "diff", "commit_links"]})
+                         {"operations": ["list", "detail", "diff", "commit_links", "repository_info"]})
+
+    def test_repository_info_uses_owner_avatar_for_users_and_organizations(self):
+        request = dict(REQUEST, operation="repository_info")
+        for kind in ("User", "Organization"):
+            with self.subTest(kind=kind), patch.object(github.GitHub, "api", return_value={
+                    "owner": {"type": kind, "login": "team", "avatar_url": "https://avatars.example.com/team"}}) as api:
+                self.assertEqual(github.dispatch(request), {"avatar_url": "https://avatars.example.com/team"})
+                api.assert_called_once_with("repos/team/project")
+        with patch.object(self.client, "api", return_value={"owner": {}}):
+            self.assertEqual(self.client.repository_info(), {"avatar_url": None})
+        with patch.object(self.client, "api", side_effect=RuntimeError("auth required")):
+            with self.assertRaisesRegex(RuntimeError, "auth required"):
+                self.client.repository_info()
 
     def test_commit_links_use_configured_host_without_cli_or_network(self):
         request = copy.deepcopy(REQUEST)

@@ -33,7 +33,10 @@ const GITHUB_SCRIPT: &str = include_str!("review_adapters/github.py");
 const PREVIOUS_GITHUB_SCRIPT_MD5: &[&str] = &[
     "d1e903f22605a41bf437bf77bc85a981",
     "28fea8f4f7673254cca56a6122bfd0a2",
+    "135515472a8c25185cf5a81a35b89138",
 ];
+
+mod repository_info;
 
 type Result<T> = std::result::Result<T, PullRequestError>;
 #[derive(Debug, thiserror::Error)]
@@ -105,6 +108,7 @@ struct StoredProvider {
 pub struct ProviderManager {
     inner: Arc<Mutex<Settings>>,
     config: Option<ConfigRepository>,
+    repository_info: Arc<repository_info::RepositoryInfoCache>,
 }
 impl Default for ProviderManager {
     fn default() -> Self {
@@ -120,6 +124,7 @@ impl Default for ProviderManager {
                 }],
             })),
             config: None,
+            repository_info: Arc::default(),
         }
     }
 }
@@ -1174,6 +1179,233 @@ else:
             'commit_url':'https://browser.example.org/project/123/revisions/'+sha}
 print(json.dumps(dict(version=2,result=result)))
 "#;
+
+    const AVATAR_FIXTURE: &str = r#"import json,sys,os
+r=json.load(sys.stdin)
+assert 'secret' not in json.dumps(r)
+if r['operation']=='describe':
+    assert r['repository'] is None
+    result={'operations':['list','detail','diff','repository_info']}
+else:
+    assert r['operation']=='repository_info'
+    assert r['params']=={}
+    assert r['repository']['root']==os.getcwd()
+    with open('.avatar-calls','a') as log: log.write('call\n')
+    result={'avatar_url':'https://avatars.example.com/'+r['repository']['path'].split('/')[0]}
+print(json.dumps(dict(version=2,result=result)))
+"#;
+
+    #[tokio::test]
+    async fn repository_avatars_use_origin_and_cache_by_remote_provider_and_path() {
+        let repo = repository();
+        let root = repo.path().canonicalize().unwrap();
+        let repo_path = root.to_str().unwrap();
+        remote(
+            &root,
+            "origin",
+            "https://user:secret@git.example.com/team/repo.git",
+        );
+        remote(&root, "upstream", "git@git.example.com:other/repo.git");
+        let manager = ProviderManager::default();
+        manager
+            .save(Settings {
+                revision: 0,
+                providers: vec![provider(AVATAR_FIXTURE)],
+            })
+            .unwrap();
+        let paths = paths();
+        let (first, second) = tokio::join!(
+            manager.repository_avatar(repo_path, &paths),
+            manager.repository_avatar(repo_path, &paths)
+        );
+        assert_eq!(
+            first.unwrap().as_deref(),
+            Some("https://avatars.example.com/team")
+        );
+        assert_eq!(
+            second.unwrap().as_deref(),
+            Some("https://avatars.example.com/team")
+        );
+        assert_eq!(
+            std::fs::read_to_string(root.join(".avatar-calls")).unwrap(),
+            "call\n"
+        );
+
+        git(
+            repo_path,
+            &[
+                "remote",
+                "set-url",
+                "origin",
+                "git@git.example.com:new/repo.git",
+            ],
+            &paths,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            manager
+                .repository_avatar(repo_path, &paths)
+                .await
+                .unwrap()
+                .as_deref(),
+            Some("https://avatars.example.com/new")
+        );
+        let mut next_paths = paths.clone();
+        next_paths.push("/extra-bin".into());
+        manager
+            .repository_avatar(repo_path, &next_paths)
+            .await
+            .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(root.join(".avatar-calls"))
+                .unwrap()
+                .lines()
+                .count(),
+            3
+        );
+
+        let mut settings = manager.settings().unwrap();
+        settings.providers[0].script = AVATAR_FIXTURE.replace(
+            "'https://avatars.example.com/'+r['repository']['path'].split('/')[0]",
+            "None",
+        );
+        manager.save(settings).unwrap();
+        assert!(
+            manager
+                .repository_avatar(repo_path, &paths)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        // An unmatched origin must not fall through to a configured upstream.
+        git(
+            repo_path,
+            &[
+                "remote",
+                "set-url",
+                "origin",
+                "git@unknown.example.com:team/repo.git",
+            ],
+            &paths,
+        )
+        .await
+        .unwrap();
+        assert!(
+            manager
+                .repository_avatar(repo_path, &paths)
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn repository_avatars_support_a_single_remote_and_skip_legacy_or_ambiguous_providers() {
+        let repo = repository();
+        let root = repo.path().canonicalize().unwrap();
+        let repo_path = root.to_str().unwrap();
+        let manager = ProviderManager::default();
+        manager
+            .save(Settings {
+                revision: 0,
+                providers: vec![provider(AVATAR_FIXTURE)],
+            })
+            .unwrap();
+        assert!(
+            manager
+                .repository_avatar(repo_path, &paths())
+                .await
+                .unwrap()
+                .is_none()
+        );
+        remote(&root, "review", "git@git.example.com:team/repo.git");
+        assert_eq!(
+            manager
+                .repository_avatar(repo_path, &paths())
+                .await
+                .unwrap()
+                .as_deref(),
+            Some("https://avatars.example.com/team")
+        );
+        remote(&root, "upstream", "git@git.example.com:other/repo.git");
+        assert!(
+            manager
+                .repository_avatar(repo_path, &paths())
+                .await
+                .unwrap()
+                .is_none()
+        );
+        git(repo_path, &["remote", "remove", "upstream"], &paths())
+            .await
+            .unwrap();
+
+        let mut settings = manager.settings().unwrap();
+        settings.providers[0].script = "import json,sys\nr=json.load(sys.stdin)\nassert r['operation']=='describe'\nprint(json.dumps({'version':2,'result':{'operations':['list','detail','diff']}}))".into();
+        manager.save(settings).unwrap();
+        assert!(
+            manager
+                .repository_avatar(repo_path, &paths())
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(
+            std::fs::read_to_string(root.join(".avatar-calls")).unwrap(),
+            "call\n"
+        );
+    }
+
+    #[tokio::test]
+    async fn repository_avatars_reject_invalid_urls_and_recover_after_provider_changes() {
+        let repo = repository();
+        let root = repo.path().canonicalize().unwrap();
+        let repo_path = root.to_str().unwrap();
+        remote(&root, "origin", "git@git.example.com:team/repo.git");
+        let manager = ProviderManager::default();
+        for url in [
+            "javascript:alert(1)",
+            "file:///tmp/icon.png",
+            "/relative",
+            "https://user:secret@example.com/icon",
+            "https://example.com/icon\n",
+        ] {
+            let mut settings = manager.settings().unwrap();
+            settings.providers = vec![provider(&format!(
+                "import json,sys\nr=json.load(sys.stdin)\nv={{'operations':['list','detail','diff','repository_info']}} if r['operation']=='describe' else {{'avatar_url':{}}}\nprint(json.dumps({{'version':2,'result':v}}))",
+                serde_json::to_string(url).unwrap()
+            ))];
+            manager.save(settings).unwrap();
+            assert!(
+                manager
+                    .repository_avatar(repo_path, &paths())
+                    .await
+                    .is_err(),
+                "{url}"
+            );
+        }
+        let mut settings = manager.settings().unwrap();
+        settings.providers = vec![provider(AVATAR_FIXTURE)];
+        manager.save(settings).unwrap();
+        assert_eq!(
+            manager
+                .repository_avatar(repo_path, &paths())
+                .await
+                .unwrap()
+                .as_deref(),
+            Some("https://avatars.example.com/team")
+        );
+        let mut settings = manager.settings().unwrap();
+        settings.providers[0].enabled = false;
+        manager.save(settings).unwrap();
+        assert!(
+            manager
+                .repository_avatar(repo_path, &paths())
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
 
     #[tokio::test]
     async fn commit_links_follow_configured_provider_and_preserve_local_details() {

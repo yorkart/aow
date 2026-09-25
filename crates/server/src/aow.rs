@@ -30,6 +30,7 @@ const AGENTS_FILE: &str = "aow-agents.json";
 const REGISTRY_VERSION: u32 = 1;
 mod configuration;
 mod global;
+mod project_avatar;
 mod removal;
 
 #[derive(Debug, Error)]
@@ -207,6 +208,8 @@ struct StoredProject {
     notes_custom: bool,
     #[serde(default)]
     builtin: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    avatar_url: Option<String>,
     #[serde(default)]
     worktree_colors: BTreeMap<String, WorktreeColor>,
     #[serde(default)]
@@ -251,6 +254,7 @@ pub(crate) struct Project {
     common_git_dir: String,
     notes_path: String,
     builtin: bool,
+    avatar_url: Option<String>,
     worktrees: Vec<Worktree>,
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
@@ -841,6 +845,7 @@ impl AowManager {
                     notes_identity,
                     notes_custom: request.notes_path.is_some(),
                     builtin: false,
+                    avatar_url: None,
                     worktree_colors: BTreeMap::new(),
                     worktree_icons: BTreeMap::new(),
                 };
@@ -1687,6 +1692,7 @@ pub(crate) fn routes() -> Router<AppState> {
         )
         .route("/api/aow/projects/{id}", delete(remove_project))
         .route("/api/aow/projects/{id}/refresh", post(refresh_project))
+        .route("/api/aow/projects/{id}/avatar", get(project_avatar::get_avatar))
         .route(
             "/api/aow/projects/{id}/notes/bind",
             post(bind_project_notes),
@@ -2125,6 +2131,7 @@ async fn project_from_stored(stored: StoredProject) -> Project {
         common_git_dir: String::new(),
         notes_path: stored.notes_path.clone(),
         builtin: stored.builtin,
+        avatar_url: stored.avatar_url.clone(),
         worktrees: Vec::new(),
         error: None,
     };
@@ -2161,6 +2168,7 @@ async fn project_from_stored_strict(stored: StoredProject) -> Result<Project, Ao
         common_git_dir: common,
         notes_path: stored.notes_path,
         builtin: stored.builtin,
+        avatar_url: stored.avatar_url,
         worktrees,
         error: None,
     })
