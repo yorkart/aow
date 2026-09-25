@@ -249,7 +249,7 @@ try {
       );
     }
   }
-  for (const agent of ["codex", "claude", "traecli"])
+  for (const agent of ["codex", "claude", "traecli", "hermes"])
     await record(
       `/api/aow/agent-sessions?${new URLSearchParams({ worktree_path: repo, agent })}`,
     );
