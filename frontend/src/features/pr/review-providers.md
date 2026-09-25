@@ -8,7 +8,7 @@ v2 统一使用 Pull Request 命名，列表字段为 `pull_requests`。未经�
 
 ## 配置和仓库匹配
 
-Settings → Pull Requests 管理 Provider：唯一 ID、显示名称、启用状态、remote 域名和 Python 脚本。脚本自行决定调用 CLI、HTTP API 或其他方式，AOW 只传入操作、仓库信息和参数。Python 和脚本调用的工具使用 Settings → Environment 的 PATH。运行所需工具与登录状态由用户准备。
+Settings → Pull Requests 管理 Provider：唯一 ID、显示名称、启用状态、remote 域名和 Python 脚本。脚本自行决定调用 CLI、HTTP API 或其他方式，AoW 只传入操作、仓库信息和参数。Python 和脚本调用的工具使用 Settings → Environment 的 PATH。运行所需工具与登录状态由用户准备。
 
 首次初始化写入 `github.com → github` 和内置 GitHub 脚本；该脚本内部调用 `gh`。后续重启保留修改、停用和删除结果，不重新覆盖默认值。其他平台由用户添加适配器。页面仅提供脚本的只读预览；需要修改时，在本地编辑文件后点击“上传脚本”替换内容。上传仅在浏览器中读取文本供预览，点击保存后才生效。页面不接收或展示脚本路径。
 
@@ -64,7 +64,7 @@ Settings → Pull Requests 管理 Provider：唯一 ID、显示名称、启用�
 
 项目使用 `origin`，没有 `origin` 时使用唯一的 remote；多个 remote 且没有 `origin` 时不自动选择。选定的 remote 无匹配 Provider 时显示默认图标，不借用其他 remote 的 Provider，也不随当前分支变化。已有 v2 脚本未声明此能力时显示默认图标，PR 功能不受影响。查询不依赖仓库是否存在 PR，也不读取仓库中的 logo 文件。
 
-桌面和手机通过 `GET /api/aow/projects/<id>/avatar` 独立加载头像，不阻塞项目注册或列表。AOW 只保存头像 URL，不下载图片，前端直接引用，图片加载失败时回退到默认图标。查询失败时保留此前保存的头像 URL。已解析 URL 缓存 15 分钟，无头像或查询失败缓存 1 分钟；Provider 配置、remote 地址或执行 PATH 改变时重新查询。头像脚本的 describe 和 repository_info 合计最多 8 秒，整个元数据查询最多 12 秒。
+桌面和手机通过 `GET /api/aow/projects/<id>/avatar` 独立加载头像，不阻塞项目注册或列表。AoW 只保存头像 URL，不下载图片，前端直接引用，图片加载失败时回退到默认图标。查询失败时保留此前保存的头像 URL。已解析 URL 缓存 15 分钟，无头像或查询失败缓存 1 分钟；Provider 配置、remote 地址或执行 PATH 改变时重新查询。头像脚本的 describe 和 repository_info 合计最多 8 秒，整个元数据查询最多 12 秒。
 
 ## commit_links（可选）
 

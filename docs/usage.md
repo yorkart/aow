@@ -2,21 +2,21 @@
 
 安装与访问入口见 [README](../README.md)，服务设置与数据目录见 [配置说明](configuration.md)，本机命令见 [CLI 说明](aow-cli.md)。
 
-使用 Agent 功能前，请在运行 AOW 的机器上安装对应 CLI 并登录账号。
+使用 Agent 功能前，请在运行 AoW 的机器上安装对应 CLI 并登录账号。
 
 ## 项目与 Pull Requests
 
-首页会进入 Project AOW。注册本机 Git 仓库后，可在页面中管理关联 Worktree、Notes、文件、Git Diff、Terminal，以及本地 Agent 会话。右侧 **Pull Requests** 面板通过配置的 Provider 展示当前账号创建的 Open PR，详情按「概览、文件变更、检查、讨论」组织。Settings → Pull Requests 可管理域名映射和 Python 脚本：脚本仅支持只读预览或上传替换，保存后由 AOW 管理脚本文件。
+首页会进入 Project AoW。注册本机 Git 仓库后，可在页面中管理关联 Worktree、Notes、文件、Git Diff、Terminal，以及本地 Agent 会话。右侧 **Pull Requests** 面板通过配置的 Provider 展示当前账号创建的 Open PR，详情按「概览、文件变更、检查、讨论」组织。Settings → Pull Requests 可管理域名映射和 Python 脚本：脚本仅支持只读预览或上传替换，保存后由 AoW 管理脚本文件。
 
 首次初始化内置 `github.com → github` 及适配脚本，脚本内部调用 gh，需要服务器可运行 python3、gh 并完成 gh 登录。其他平台通过用户脚本实现统一 API，脚本自行决定 CLI 或 API 的调用方式。多个 remote 对应不同仓库时可在列表选择；标签页、深链接和手机详情保留 Provider 与 remote 身份。默认配置只初始化一次，不覆盖用户修改或重新添加已删除的 Provider。完整 API、字段及存储规则见 [Review Provider 脚本协议](../frontend/src/features/pr/review-providers.md)，设置页中也可查看。
 
 ## 项目头像
 
-注册 Git 项目后，桌面和手机会异步显示仓库所属用户或组织的头像。头像由 **Settings → Pull Requests** 的 Provider 提供：优先使用 `origin`，没有 `origin` 时使用唯一的 remote。内置 GitHub Provider 使用 `gh` 查询 `owner.avatar_url`；自定义脚本可实现可选的 `repository_info`。AOW 保存 URL 并由浏览器直接加载图片，不扫描仓库 logo，也不下载图片文件。未配置、旧脚本不支持或图片加载失败时使用默认项目图标，添加和使用项目不受影响。
+注册 Git 项目后，桌面和手机会异步显示仓库所属用户或组织的头像。头像由 **Settings → Pull Requests** 的 Provider 提供：优先使用 `origin`，没有 `origin` 时使用唯一的 remote。内置 GitHub Provider 使用 `gh` 查询 `owner.avatar_url`；自定义脚本可实现可选的 `repository_info`。AoW 保存 URL 并由浏览器直接加载图片，不扫描仓库 logo，也不下载图片文件。未配置、旧脚本不支持或图片加载失败时使用默认项目图标，添加和使用项目不受影响。
 
 ## 多节点访问
 
-在 **Settings → Nodes** 中可配置其他机器的 AOW 地址，每行填写一个完整的 HTTP(S) 地址，保存后点击桌面或手机端首页左上角的 Logo / AOW 文字即可展开菜单；点击节点地址会在新窗口或新标签页打开，保留当前页面。列表允许包含当前节点，可以将同一份配置复制到所有机器；菜单按协议、域名/IP、端口和部署路径过滤当前节点，不同端口或不同 Base Path 仍作为独立节点显示。建议填写部署入口地址，例如 `https://example.com/tools/aow/`；当前部署的 `/aow/`、`/m/` 入口也会被识别为自身。空行和重复地址会自动整理，留空保存可清空列表。配置保存在服务端 `aow-settings.json` 的 `node_addresses` 字段中。
+在 **Settings → Nodes** 中可配置其他机器的 AoW 地址，每行填写一个完整的 HTTP(S) 地址，保存后点击桌面或手机端首页左上角的 Logo / AoW 文字即可展开菜单；点击节点地址会在新窗口或新标签页打开，保留当前页面。列表允许包含当前节点，可以将同一份配置复制到所有机器；菜单按协议、域名/IP、端口和部署路径过滤当前节点，不同端口或不同 Base Path 仍作为独立节点显示。建议填写部署入口地址，例如 `https://example.com/tools/aow/`；当前部署的 `/aow/`、`/m/` 入口也会被识别为自身。空行和重复地址会自动整理，留空保存可清空列表。配置保存在服务端 `aow-settings.json` 的 `node_addresses` 字段中。
 
 ## 工作区与终端
 
@@ -75,7 +75,7 @@ IM 凭证和通知设置保存在本机状态目录的 `notification-settings.js
 
 桌面左侧 Projects 和 Pinned 列表默认在对应 Worktree 条目的最右侧显示未读通知数量，数量为 0 时隐藏。角标与页面通知共用同一份持久化队列：新提醒计入对应 Worktree，关闭单个或全部弹框不扣减未读数量；激活来源 Tab 或移除失效通知时同步扣减，刷新后恢复。同一条通知在同一个 Worktree 中只计一次，即使它关联多个 Tab；没有来源 Worktree 的旧版通知不计入角标。
 
-IM 消息由后台发送，需要在 **Settings → 通知 → AOW 访问地址** 设置接收设备可访问的 HTTP(S) 地址，例如 `https://aow.example.com`；也可点击“使用当前访问地址”填入浏览器的站点地址。配置保存在本机 `notification-settings.json` 的 `notifications.public_base_url`，网页保存立即生效。没有配置时，飞书继续显示普通 Tab 文本；配置后为每个来源 Tab 生成独立链接，长结论的每片卡片都会保留这些链接。
+IM 消息由后台发送，需要在 **Settings → 通知 → AoW 访问地址** 设置接收设备可访问的 HTTP(S) 地址，例如 `https://aow.example.com`；也可点击“使用当前访问地址”填入浏览器的站点地址。配置保存在本机 `notification-settings.json` 的 `notifications.public_base_url`，网页保存立即生效。没有配置时，飞书继续显示普通 Tab 文本；配置后为每个来源 Tab 生成独立链接，长结论的每片卡片都会保留这些链接。
 
 也可以在已有配置文件的 `notifications` 对象中添加 `"public_base_url": "https://aow.example.com"`，保留其他字段和 IM 凭据；手动编辑文件后重启 Web server 生效。旧配置缺少该字段时按空地址处理，无需迁移。访问地址不是飞书回调接口，链接仍走原有 PIN 登录。
 

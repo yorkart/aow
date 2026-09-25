@@ -11,7 +11,7 @@ export const detail = {
   source_branch: 'feature/pr-details', target_branch: 'develop', url: 'https://github.com/example/aow/pull/42',
   created_at: '2026-09-11T06:32:00Z', updated_at: '2026-09-12T03:45:00Z',
   description: '## 背景\n\n在工作台中快速了解 PR 的当前进展，让代码变更、审阅反馈和检查结果更容易阅读。\n\n## 变更内容\n\n- 增加作者、审阅人与变更统计\n- 展示完整讨论与 CI 检查输出\n- 支持文件筛选和两种 Diff 布局\n\n### 验证\n\n- [x] TypeScript 类型检查\n- [x] Rust 解析回归测试\n- [ ] 浏览器视觉检查\n\n```ts\nconst options = { readOnly: true, originalEditable: false };\n```\n\n> 此页面仅用于查看 PR 信息。',
-  changes_count: 4, commits_count: 3, diverged_commits_count: 2, milestone: 'AOW · September', review_status: 'pending', check_summary_status: 'some_failed', mergeable: false,
+  changes_count: 4, commits_count: 3, diverged_commits_count: 2, milestone: 'AoW · September', review_status: 'pending', check_summary_status: 'some_failed', mergeable: false,
   author, reviewers: [reviewer, { id: 'r2', username: 'zhou.ming', display_name: '周明' }], labels: ['frontend', '体验优化'],
   files: [{ path: 'frontend/src/features/pr/PullRequestDetailView.tsx', change_type: 'modified', additions: 186, deletions: 74 }, { path: 'frontend/src/features/pr/PullRequestDetailView.css', change_type: 'added', additions: 128, deletions: 0 }, { path: 'crates/server/src/pull_requests.rs', change_type: 'modified', additions: 62, deletions: 18 }, { path: 'assets/preview.png', change_type: 'added', additions: null, deletions: null }],
   checks: [

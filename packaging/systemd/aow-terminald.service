@@ -1,5 +1,5 @@
 [Unit]
-Description=AOW terminal daemon
+Description=AoW terminal daemon
 
 [Service]
 Type=exec

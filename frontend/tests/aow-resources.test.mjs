@@ -1048,7 +1048,7 @@ try {
   await test('left sidebar hides without remounting workspaces and restores its width and visibility', async t => {
     const { page, state } = await fixture(t);
     const sidebar = page.getByRole('complementary', { name: '项目侧边栏', includeHidden: true });
-    assert.equal(await sidebar.locator('.project-aow-brand strong').textContent(), 'AOW');
+    assert.equal(await sidebar.locator('.project-aow-brand strong').textContent(), 'AoW');
     const terminal = await surface(page).locator('.terminal-emulator-shell:visible').elementHandle();
     const resizer = page.getByRole('separator', { name: '调整项目栏宽度' });
     const handle = await resizer.boundingBox();

@@ -257,7 +257,7 @@ export function EditorArea({ documents, activeId, wordWrapOverride, onWordWrapCh
           />
         );
       })() : null}
-      {!active ? <div className="welcome"><h1>AOW</h1><p>从左侧文件树选择文件，或切换到 Source Control 查看更改。</p></div> : (
+      {!active ? <div className="welcome"><h1>AoW</h1><p>从左侧文件树选择文件，或切换到 Source Control 查看更改。</p></div> : (
         <>
           <div className="editor-toolbar">
             <code title={active.path}>{active.path}</code>

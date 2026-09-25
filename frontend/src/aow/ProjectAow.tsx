@@ -314,7 +314,7 @@ function RemoveWorktreeDialog({ state, onClose, onSubmitted }: {
         <code className="project-aow-remove-path" title={state.worktree.path}>{state.worktree.path}</code>
         {affectedTabs ? <p>同时关闭并清理该 Worktree 的 {preview.terminal_tabs} 个 Terminal、{preview.agent_tabs} 个 Agent 及其持久化会话元数据。</p> : <p>该 Worktree 当前没有需要关闭的 Terminal 或 Agent。</p>}
         {preview.dirty ? <div className="project-aow-dirty-warning">
-          <strong>检测到 {preview.change_count} 项未提交内容，强制删除后无法从 AOW 恢复：</strong>
+          <strong>检测到 {preview.change_count} 项未提交内容，强制删除后无法从 AoW 恢复：</strong>
           <pre>{preview.changes.join('\n')}{preview.truncated ? '\n…更多变更未显示' : ''}</pre>
         </div> : <div className="project-aow-clean-note">Git 工作区当前没有未提交内容。</div>}
         {error ? <div className="project-aow-error" role="alert">{error}</div> : null}
@@ -868,7 +868,7 @@ function SettingsDialog({ agents, onClose: closeDialog, onReload, onNodesChange 
       <div className="project-aow-settings-body">
         <nav className="project-aow-settings-nav" aria-label="设置分类">
           <button disabled={busy || settingsBusy} aria-current={section === 'configuration' ? 'page' : undefined} className={section === 'configuration' ? 'active' : ''} onClick={() => { setSection('configuration'); setError(''); }}><Settings /><span><strong>Configuration</strong><small>选择配置仓库和版本</small></span></button>
-          <button disabled={busy || settingsBusy} aria-current={section === 'nodes' ? 'page' : undefined} className={section === 'nodes' ? 'active' : ''} onClick={() => { setSection('nodes'); setError(''); }}><Network /><span><strong>Nodes</strong><small>配置其他 AOW 节点</small></span></button>
+          <button disabled={busy || settingsBusy} aria-current={section === 'nodes' ? 'page' : undefined} className={section === 'nodes' ? 'active' : ''} onClick={() => { setSection('nodes'); setError(''); }}><Network /><span><strong>Nodes</strong><small>配置其他 AoW 节点</small></span></button>
           <button disabled={busy || settingsBusy} aria-current={section === 'editor' ? 'page' : undefined} className={section === 'editor' ? 'active' : ''} onClick={() => { setSection('editor'); setError(''); }}><FileText /><span><strong>Editor</strong><small>配置文件编辑器</small></span></button>
           <button disabled={busy || settingsBusy} aria-current={section === 'notes' ? 'page' : undefined} className={section === 'notes' ? 'active' : ''} onClick={() => setSection('notes')}><NotebookPen /><span><strong>Notes</strong><small>设置默认 Notes 根目录</small></span></button>
           <button disabled={busy || settingsBusy} aria-current={section === 'environment' ? 'page' : undefined} className={section === 'environment' ? 'active' : ''} onClick={() => { setSection('environment'); setError(''); }}><SquareTerminal /><span><strong>Environment</strong><small>配置全局执行 PATH</small></span></button>
@@ -883,7 +883,7 @@ function SettingsDialog({ agents, onClose: closeDialog, onReload, onNodesChange 
           {section === 'review' || section === 'configuration' ? null : section === 'nodes' ? (
             <form className="project-aow-dialog-form" onSubmit={event => { event.preventDefault(); void saveNodes(); }}>
               <div className="project-aow-dialog-body">
-                <div className="project-aow-settings-heading"><div><h2>Nodes</h2><p>配置其他机器上部署的 AOW，点击左上角 Logo 或 AOW 文字即可切换。</p></div></div>
+                <div className="project-aow-settings-heading"><div><h2>Nodes</h2><p>配置其他机器上部署的 AoW，点击左上角 Logo 或 AoW 文字即可切换。</p></div></div>
                 <label className="project-aow-dialog-field"><span>节点地址（每行一个）</span><textarea aria-label="节点地址" spellCheck={false} rows={10} value={nodeAddresses} disabled={settingsLoading || settingsBusy || !settings} onChange={event => { setNodeAddresses(event.target.value); setNodesSaved(false); setError(''); }} placeholder={'https://aow-a.example.com\nhttp://192.168.1.20:8080'} /></label>
                 <p className="project-aow-form-intro">填写完整的 http:// 或 https:// 地址，可以包含当前节点。同一份列表可复制到所有节点；下拉菜单会按协议、域名/IP 和端口自动过滤当前节点。留空并保存可清空列表。</p>
                 {nodesSaved ? <p role="status">节点地址已保存。</p> : null}
@@ -2215,7 +2215,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
 
   const renderSidebar = () => (
     <aside className="project-aow-right" hidden={!rightSidebarVisible}>
-      <nav aria-label="AOW side views">
+      <nav aria-label="AoW side views">
         <button className={rightView === 'terminals' ? 'active' : ''} title="Terminal" aria-label="Terminal 面板" onClick={() => setRightView('terminals')}><SquareTerminal /></button>
         <button className={rightView === 'sessions' ? 'active' : ''} title="Conversation" aria-label="Conversation" onClick={() => setRightView('sessions')}><MessageSquare /></button>
         <button className={rightView === 'automations' ? 'active' : ''} title="Automation" aria-label="Automation" onClick={() => setRightView('automations')}><CalendarClock /></button>
@@ -2778,7 +2778,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
   }, []);
 
   useEffect(() => {
-    document.title = activeEntry ? `${activeEntry.project.name} · ${activeEntry.worktree.branch || 'detached'} · AOW` : 'Project AOW';
+    document.title = activeEntry ? `${activeEntry.project.name} · ${activeEntry.worktree.branch || 'detached'} · AoW` : 'Project AoW';
   }, [activeEntry]);
 
   return <div className="project-aow"
@@ -2860,7 +2860,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
             || floating.hostedTabs.some(tab => tab.host === worktree.path && tab.workspace === initialEntry.workspacePath && tab.id === tabCenterId(initialEntry.target))) ? initialEntry : undefined} key={worktree.path} project={project} worktree={worktree} active={worktree.path === activeWorktreePath} agents={agents} onShowLeftSidebar={leftSidebarVisible ? undefined : showLeftSidebar} rightSidebarVisible={rightSidebarVisible} onHideRightSidebar={hideRightSidebar} onShowRightSidebar={showRightSidebar} onStartRightResize={startRightResize} notesRefresh={notesRefreshByProject[project.id] ?? initialExplorerRefresh} onNotesChanged={notesChanged} onResourcesChanged={reportResources} />)}
         {activeEntry && busyWorktrees.has(activeEntry.worktree.path) ? <div className="project-aow-no-context"><LoaderCircle className="spinning" /><p>该 Worktree 正在清理，可继续使用其他工作区。</p><button onClick={() => setCleanupProjectId(activeEntry.project.id)}>查看清理进度</button></div> : null}
         {!activeEntry && !leftSidebarVisible ? <nav className="project-aow-center-tabs project-aow-empty-toolbar"><LeftSidebarToggle onClick={showLeftSidebar} /></nav> : null}
-        {!activeEntry ? <div className="project-aow-no-context"><FolderGit2 /><h1>Project AOW</h1><p>从左侧注册并选择一个 Project Worktree。</p></div> : null}
+        {!activeEntry ? <div className="project-aow-no-context"><FolderGit2 /><h1>Project AoW</h1><p>从左侧注册并选择一个 Project Worktree。</p></div> : null}
       </div>
     </div>
     <footer className="project-aow-status"><span>{activeEntry?.worktree.path ?? 'No active worktree'}</span>

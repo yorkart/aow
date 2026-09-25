@@ -395,7 +395,7 @@ test('confirmed terminald activation finishes after its waiting parent receives 
   assert.equal(readFileSync(marker, 'utf8'), 'done');
 });
 
-test('real AOW macOS release installs with isolated mocked services', {
+test('real AoW macOS release installs with isolated mocked services', {
   skip: !process.env.AOW_NATIVE_TEST_PACKAGE,
 }, t => {
   const f = fixture(t, process.arch === 'arm64' ? 'aarch64' : 'x86_64');

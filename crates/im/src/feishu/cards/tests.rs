@@ -8,13 +8,13 @@ fn card(message: &Value) -> Value {
 #[test]
 fn metadata_precedes_the_complete_reply_and_is_plain_text() {
     let mut event = notification("## 结果\n\n完成检查。\n\n```rust\nfn main() {}\n```\n");
-    event.title = "AOW·<at id=all></at> *literal title*·Codex·完成".into();
+    event.title = "AoW·<at id=all></at> *literal title*·Codex·完成".into();
     let messages = messages(&event, "ou_owner", "delivery").unwrap();
     assert_eq!(messages.len(), 1);
     let card = card(&messages[0]);
     assert_eq!(
         card["header"]["title"]["content"],
-        "AOW·<at id=all></at> *literal title*·Codex·完成"
+        "AoW·<at id=all></at> *literal title*·Codex·完成"
     );
     let elements = card["body"]["elements"].as_array().unwrap();
     let metadata = elements[0]["columns"][0]["elements"].as_array().unwrap();
@@ -85,7 +85,7 @@ fn long_unicode_and_json_escapes_split_within_the_actual_request_budget() {
         let card = card(message);
         assert_eq!(
             card["header"]["title"]["content"],
-            format!("AOW·完成检查·Codex·完成 · {}/{}", index + 1, messages.len())
+            format!("AoW·完成检查·Codex·完成 · {}/{}", index + 1, messages.len())
         );
         let elements = &card["body"]["elements"];
         if let Some(previous) = &previous_metadata {

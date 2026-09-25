@@ -34,7 +34,7 @@ resolve_release() {
         *) candidate=$releases_dir/$requested ;;
     esac
     if [ ! -d "$candidate" ]; then
-        printf 'error: AOW release is unavailable: %s\n' "$candidate" >&2
+        printf 'error: AoW release is unavailable: %s\n' "$candidate" >&2
         return 1
     fi
     resolved=$(CDPATH='' cd -P "$candidate" && pwd)
@@ -48,7 +48,7 @@ resolve_release() {
     esac
     if [ ! -x "$resolved/bin/aow-server" ] \
         || [ ! -f "$resolved/frontend/dist/index.html" ]; then
-        printf 'error: incomplete AOW server release: %s\n' "$resolved" >&2
+        printf 'error: incomplete AoW server release: %s\n' "$resolved" >&2
         return 1
     fi
     printf '%s\n' "$resolved"
@@ -112,7 +112,7 @@ if ! user_manager_available; then
     exit 1
 fi
 if [ ! -x "$launcher" ]; then
-    printf '%s\n' 'error: AOW launcher is unavailable; install AOW first' >&2
+    printf '%s\n' 'error: AoW launcher is unavailable; install AoW first' >&2
     exit 1
 fi
 

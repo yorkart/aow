@@ -30,7 +30,7 @@ fn main() -> Result<()> {
     let result = run();
     #[cfg(target_os = "macos")]
     if let Err(error) = &result {
-        aow_macos_log::report_error(&format!("AOW terminald failed: {error:#}"));
+        aow_macos_log::report_error(&format!("AoW terminald failed: {error:#}"));
     }
     result
 }

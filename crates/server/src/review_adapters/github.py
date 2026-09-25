@@ -1,4 +1,4 @@
-"""AOW review protocol v2 — GitHub adapter using gh.
+"""AoW review protocol v2 — GitHub adapter using gh.
 
 One JSON request on stdin; one {version, result|error} response on stdout.
 Upload this script in Settings → Pull Requests. Python 3 standard library only.

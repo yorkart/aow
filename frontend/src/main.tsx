@@ -15,7 +15,7 @@ const Aow = mobile
   : lazy(() => import('./aow/desktop'));
 const SharedSessionPage = lazy(() => import('./features/sessions/SharedSessionPage').then(module => ({ default: module.SharedSessionPage })));
 const shareRoute = /^\/share\/([^/]+)\/?$/.exec(appPath(window.location.pathname) ?? '');
-const fallback = <div role="status" style={{ padding: 24, color: '#d7d9de', background: '#181a1f', minHeight: '100dvh', fontFamily: 'system-ui' }}>正在打开 AOW…</div>;
+const fallback = <div role="status" style={{ padding: 24, color: '#d7d9de', background: '#181a1f', minHeight: '100dvh', fontFamily: 'system-ui' }}>正在打开 AoW…</div>;
 
 const root = createRoot(document.getElementById('root')!);
 root.render(<StrictMode>{shareRoute

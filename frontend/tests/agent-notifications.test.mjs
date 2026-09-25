@@ -68,16 +68,16 @@ const server = await createServer({
     });
     server.middlewares.use('/api/aow/projects', (_request, response) => {
       response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify([{ id: 'project', name: 'AOW', worktrees: [{ id: 'worktree', path: '/workspace/demo' }] }]));
+      response.end(JSON.stringify([{ id: 'project', name: 'AoW', worktrees: [{ id: 'worktree', path: '/workspace/demo' }] }]));
     });
   } }],
 });
 let browser;
-const source = (tab_id = 'tab', project_name = 'AOW', tab_name = '性能排查') => ({
+const source = (tab_id = 'tab', project_name = 'AoW', tab_name = '性能排查') => ({
   tab_id, project_name, tab_name, workspace_root: '/workspace/demo',
 });
-const notice = (id, agent = 'codex') => ({ agent, session_id: id, title: '同名任务', cwd: '/workspace/demo', instance_ids: ['pane'], sources: [source(id, 'AOW', id)] });
-const notification = (page, tabName) => page.getByRole('button', { name: `打开通知：AOW · ${tabName}`, exact: true });
+const notice = (id, agent = 'codex') => ({ agent, session_id: id, title: '同名任务', cwd: '/workspace/demo', instance_ids: ['pane'], sources: [source(id, 'AoW', id)] });
+const notification = (page, tabName) => page.getByRole('button', { name: `打开通知：AoW · ${tabName}`, exact: true });
 function send(data) {
   if (!preferences.enabled || !preferences.channels.includes('page')) return;
   for (const response of connections) response.write(`event: task-stopped\ndata: ${JSON.stringify(data)}\n\n`);
@@ -103,12 +103,12 @@ try {
     send({ ...notice('one'), conclusion: '仅飞书展示的本轮结论'.repeat(10000) });
     await notification(page, 'one').waitFor();
     assert.equal(await page.getByText('仅飞书展示的本轮结论', { exact: false }).count(), 0);
-    assert.equal(await page.locator('.agent-task-notice-heading strong').textContent(), 'AOW');
+    assert.equal(await page.locator('.agent-task-notice-heading strong').textContent(), 'AoW');
     assert.equal(await page.locator('.agent-task-notice-tab').textContent(), 'one');
     assert.match(await page.locator('.agent-task-notice .agent-icon').getAttribute('src'), /codex\.png/);
     assert.equal(await page.locator('.agent-task-notice a').count(), 0);
     assert.equal(await page.locator('.agent-task-notice').getByRole('button').count(), 2);
-    await page.getByRole('button', { name: '关闭通知：AOW · one', exact: true }).waitFor();
+    await page.getByRole('button', { name: '关闭通知：AoW · one', exact: true }).waitFor();
     assert.equal(await page.getByRole('button', { name: '移除通知' }).count(), 0);
     assert.equal(await page.getByText('同名任务', { exact: true }).count(), 0);
     assert.equal(await page.getByText('Session ID', { exact: false }).count(), 0);
@@ -127,7 +127,7 @@ try {
     send({ invalid: true });
     send({ ...notice('00000000-0000-4000-8000-000000000001', 'claude'), title: '<img src=x onerror="window.bad=true">',
       sources: [source(), source('other-tab', 'TraeCode CLI', 'Terminal 34'), null, { invalid: true }] });
-    await page.getByText('AOW、TraeCode CLI', { exact: true }).waitFor();
+    await page.getByText('AoW、TraeCode CLI', { exact: true }).waitFor();
     await page.getByText('性能排查、Terminal 34', { exact: true }).waitFor();
     assert.equal(await page.locator('.agent-task-notice img:not(.agent-icon)').count(), 0);
     assert.match(await page.locator('.agent-task-notice .agent-icon').getAttribute('src'), /claude\.png/);
@@ -215,7 +215,7 @@ try {
     await waitConnections(1);
     for (let index = 1; index <= 7; index++) send(notice(`close-${index}`));
     await page.getByRole('button', { name: /还有 2 条通知/ }).waitFor();
-    const close = page.getByRole('button', { name: '关闭通知：AOW · close-7', exact: true });
+    const close = page.getByRole('button', { name: '关闭通知：AoW · close-7', exact: true });
     const cardBox = await page.locator('.agent-task-notice').first().boundingBox();
     const closeBox = await close.boundingBox();
     assert.ok(closeBox.x >= cardBox.x && closeBox.x + closeBox.width <= cardBox.x + cardBox.width);
@@ -226,7 +226,7 @@ try {
     assert.deepEqual(await page.locator('.agent-task-notice-tab').allTextContents(),
       ['close-6', 'close-5', 'close-4', 'close-3', 'close-2']);
     await page.getByRole('button', { name: /还有 1 条通知/ }).click();
-    await page.getByRole('button', { name: '关闭通知：AOW · close-6', exact: true }).press('Space');
+    await page.getByRole('button', { name: '关闭通知：AoW · close-6', exact: true }).press('Space');
     await notification(page, 'close-6').waitFor({ state: 'detached' });
     await page.getByRole('button', { name: '收起', exact: true }).waitFor();
     assert.deepEqual(await page.locator('.agent-task-notice-tab').allTextContents(),
@@ -278,7 +278,7 @@ try {
     send(notice('memory-only'));
     await page.getByText('memory-only', { exact: true }).waitFor();
     await page.getByRole('alert').filter({ hasText: '通知暂时无法保存' }).waitFor();
-    await page.getByRole('button', { name: '关闭通知：AOW · memory-only', exact: true }).click();
+    await page.getByRole('button', { name: '关闭通知：AoW · memory-only', exact: true }).click();
     await page.locator('.agent-task-notifications').waitFor({ state: 'detached' });
     send(notice('memory-only'));
     await notification(page, 'memory-only').click();
@@ -311,8 +311,8 @@ try {
     await page.getByRole('button', { name: '通知设置', exact: true }).click();
     await page.getByLabel('飞书推送', { exact: true }).check();
     await page.getByRole('button', { name: '使用当前访问地址', exact: true }).click();
-    assert.equal(await page.getByLabel('AOW 访问地址').inputValue(), base);
-    await page.getByLabel('AOW 访问地址').fill('https://aow.example.com');
+    assert.equal(await page.getByLabel('AoW 访问地址').inputValue(), base);
+    await page.getByLabel('AoW 访问地址').fill('https://aow.example.com');
     await page.getByLabel('页面提示', { exact: true }).uncheck();
     await page.getByRole('button', { name: '保存', exact: true }).click();
     await page.getByText('通知配置已保存，即时生效。', { exact: true }).waitFor();
@@ -322,7 +322,7 @@ try {
     await page.getByRole('button', { name: '通知设置', exact: true }).click();
     await page.getByLabel('飞书推送', { exact: true }).waitFor();
     assert.equal(await page.getByLabel('飞书推送', { exact: true }).isChecked(), true);
-    assert.equal(await page.getByLabel('AOW 访问地址').inputValue(), 'https://aow.example.com');
+    assert.equal(await page.getByLabel('AoW 访问地址').inputValue(), 'https://aow.example.com');
     assert.equal(await page.getByLabel('页面提示', { exact: true }).isChecked(), false);
     await page.getByRole('button', { name: 'IM 设置', exact: true }).click();
     await page.getByRole('button', { name: '移除飞书配置', exact: true }).click();

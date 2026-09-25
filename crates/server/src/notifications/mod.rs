@@ -520,7 +520,7 @@ fn normalize_public_base_url(value: &str) -> Result<String, String> {
         return Ok(String::new());
     }
     let invalid =
-        || "请填写有效的 AOW HTTP(S) 部署地址，可含 Base Path，不含账号、查询参数或片段".to_owned();
+        || "请填写有效的 AoW HTTP(S) 部署地址，可含 Base Path，不含账号、查询参数或片段".to_owned();
     let url = reqwest::Url::parse(value).map_err(|_| invalid())?;
     if value.len() > 2048
         || !matches!(url.scheme(), "http" | "https")

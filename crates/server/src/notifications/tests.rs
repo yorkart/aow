@@ -117,7 +117,7 @@ fn automation_routes_to_snapshot_channel_and_uses_transport_independent_messages
     assert_eq!(message.title, "自动化失败 · 检查 <at id=all>");
     assert!(message.text(4000).contains("执行 ID：run-1"));
     let message = messages::task_completed(&super::tests::event());
-    assert_eq!(message.title, "AOW·task·TraeCode CLI·完成");
+    assert_eq!(message.title, "AoW·task·TraeCode CLI·完成");
     assert!(message.text(4000).contains("Session ID：session-1"));
 }
 
@@ -202,7 +202,7 @@ fn event() -> TaskStopNotification {
         conclusion: Some("本轮结论".into()),
         instance_ids: vec!["pane".into()],
         sources: vec![TaskStopSource {
-            project_name: "AOW".into(),
+            project_name: "AoW".into(),
             tab_name: "开发".into(),
             workspace_root: "/repo".into(),
             tab_id: "tab".into(),
@@ -396,7 +396,7 @@ fn dispatch_obeys_channels_without_browser_or_session_deduplication() {
     let first = im_receiver.try_recv().unwrap();
     let second = im_receiver.try_recv().unwrap();
     assert_ne!(first.id, second.id);
-    assert_eq!(first.event.sources[0].project_name, "AOW");
+    assert_eq!(first.event.sources[0].project_name, "AoW");
     assert_eq!(first.event.sources[0].tab_name, "开发");
     assert_eq!(first.event.conclusion.as_deref(), Some("本轮结论"));
     assert_eq!(first.event.session_id, "session-1");

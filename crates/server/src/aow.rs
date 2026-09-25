@@ -35,7 +35,7 @@ mod removal;
 
 #[derive(Debug, Error)]
 pub(crate) enum AowError {
-    #[error("invalid aow request: {0}")]
+    #[error("invalid AoW request: {0}")]
     Invalid(String),
     #[error("project not found: {0}")]
     ProjectNotFound(String),
@@ -49,7 +49,7 @@ pub(crate) enum AowError {
     Git(String),
     #[error("configuration repository: {0:#}")]
     Configuration(#[source] anyhow::Error),
-    #[error("aow state lock is poisoned")]
+    #[error("AoW state lock is poisoned")]
     Poisoned,
     #[error(transparent)]
     Io(#[from] std::io::Error),
@@ -2652,7 +2652,7 @@ where
             let document: RegistryDocument<T> = serde_json::from_slice(&bytes)?;
             if document.version != REGISTRY_VERSION {
                 return Err(AowError::Invalid(format!(
-                    "unsupported aow registry version {}",
+                    "unsupported AoW registry version {}",
                     document.version
                 )));
             }
@@ -2699,7 +2699,7 @@ fn load_settings(path: &Path, default_notes_base: PathBuf) -> Result<AowSettings
             let document: SettingsDocument = serde_json::from_slice(&bytes)?;
             if document.version != REGISTRY_VERSION {
                 return Err(AowError::Invalid(format!(
-                    "unsupported aow settings version {}",
+                    "unsupported AoW settings version {}",
                     document.version
                 )));
             }
@@ -4270,7 +4270,7 @@ mod tests {
         .unwrap();
         let commit_args = [
             "-c",
-            "user.name=AOW Test",
+            "user.name=AoW Test",
             "-c",
             "user.email=aow@example.com",
             "commit",
@@ -4376,7 +4376,7 @@ mod tests {
             StdCommand::new("git")
                 .args([
                     "-c",
-                    "user.name=AOW Test",
+                    "user.name=AoW Test",
                     "-c",
                     "user.email=aow@example.com",
                     "commit",

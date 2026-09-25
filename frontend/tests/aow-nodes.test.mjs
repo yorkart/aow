@@ -53,11 +53,11 @@ try {
     const page = await context.newPage();
     page.on('pageerror', error => state.errors.push(error.message));
     await page.goto(mobile ? `${base}/m` : `${base}/aow/?ui=desktop`);
-    await page.getByRole('button', { name: '切换 AOW 节点', exact: true }).waitFor();
+    await page.getByRole('button', { name: '切换 AoW 节点', exact: true }).waitFor();
     return { page, state };
   }
-  const trigger = page => page.getByRole('button', { name: '切换 AOW 节点', exact: true });
-  const menu = page => page.getByRole('menu', { name: '其他 AOW 节点' });
+  const trigger = page => page.getByRole('button', { name: '切换 AoW 节点', exact: true });
+  const menu = page => page.getByRole('menu', { name: '其他 AoW 节点' });
   async function openSettings(page) {
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: '设置', exact: true });
@@ -93,13 +93,13 @@ try {
     await dialog.getByRole('button', { name: '关闭', exact: true }).click();
     await trigger(page).click();
     await page.screenshot({ path: '/tmp/aow-node-menu.png' });
-    await page.context().route('https://node-b.example/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Other AOW</h1>' }));
+    await page.context().route('https://node-b.example/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Other AoW</h1>' }));
     const originalUrl = page.url();
     const newPage = page.context().waitForEvent('page');
     await menu(page).getByRole('menuitem', { name: destination, exact: true }).click();
     const opened = await newPage;
     await opened.waitForURL(destination);
-    assert.equal(await opened.getByRole('heading').innerText(), 'Other AOW');
+    assert.equal(await opened.getByRole('heading').innerText(), 'Other AoW');
     assert.equal(await opened.evaluate(() => window.opener), null);
     assert.equal(page.url(), originalUrl);
     await menu(page).waitFor({ state: 'hidden' });
@@ -157,13 +157,13 @@ try {
       await page.getByRole('heading', { name: '你的项目', exact: true }).tap();
       await menu(page).waitFor({ state: 'hidden' });
       await brand.getByText('AoW', { exact: true }).tap();
-      await page.context().route('https://node-b.example/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Other AOW</h1>' }));
+      await page.context().route('https://node-b.example/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Other AoW</h1>' }));
       const originalUrl = page.url();
       const newPage = page.context().waitForEvent('page');
       await menu(page).getByRole('menuitem', { name: destination, exact: true }).tap();
       const opened = await newPage;
       await opened.waitForURL(destination);
-      assert.equal(await opened.getByRole('heading').innerText(), 'Other AOW');
+      assert.equal(await opened.getByRole('heading').innerText(), 'Other AoW');
       assert.equal(page.url(), originalUrl);
       await menu(page).waitFor({ state: 'hidden' });
     }

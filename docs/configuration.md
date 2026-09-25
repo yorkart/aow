@@ -62,7 +62,7 @@ AOW_BASE_PATH=/tools/aow
 curl --fail --show-error http://127.0.0.1:8282/tools/aow/api/health
 ```
 
-更换路径后更新书签，以及 **Settings → 通知 → AOW 访问地址**。
+更换路径后更新书签，以及 **Settings → 通知 → AoW 访问地址**。
 
 ## 配置仓库与版本
 
@@ -75,7 +75,7 @@ config-repo = "/absolute/path/to/config-repo"
 config-id = "550e8400-e29b-41d4-a716-446655440000"
 ```
 
-实际配置目录是 `<config-repo>/<config-id>/`。保存有变化时会提示重启 AOW 服务；重启前，运行中的服务继续使用原版本。再次打开 Settings 可以查看已保存的选择和当前运行版本。保存相同选择不会重复写入文件。
+实际配置目录是 `<config-repo>/<config-id>/`。保存有变化时会提示重启 AoW 服务；重启前，运行中的服务继续使用原版本。再次打开 Settings 可以查看已保存的选择和当前运行版本。保存相同选择不会重复写入文件。
 
 服务在启动时将 `config.toml` 载入内存，运行期间不再读取该文件。Settings 查询从内存返回；保存使用内存中的配置文档写入文件，并更新待重启的选择，当前生效版本不变。外部编辑文件也只有重启服务后才会加载。
 
