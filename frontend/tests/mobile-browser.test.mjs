@@ -1621,9 +1621,22 @@ try {
         await page.mouse.move(bounds.x + 20, bounds.y + 30);
         await page.mouse.click(bounds.x + 20, bounds.y + 8);
       }
+      async function selectedText() {
+        return shell.locator('.xterm').evaluate((element) => {
+          const clipboardData = new DataTransfer();
+          element.dispatchEvent(new ClipboardEvent('copy', { clipboardData, bubbles: true, cancelable: true }));
+          return clipboardData.getData('text/plain');
+        });
+      }
+      async function moveWithoutSelecting() {
+        const bounds = await shell.locator('.xterm-screen').boundingBox();
+        await page.mouse.move(bounds.x + 180, bounds.y + 45, { steps: 3 });
+        assert.equal(await selectedText(), '', 'moving with the mouse button released must not extend a terminal selection');
+      }
       async function closed() {
         await dialog.waitFor({ state: 'detached' });
         assert.equal(await page.locator(':modal').count(), 0, 'dismissal releases the modal backdrop');
+        await moveWithoutSelecting();
         await shell.locator('.xterm-helper-textarea').focus();
         assert.equal(await shell.locator('.xterm-helper-textarea').evaluate((node) => node === document.activeElement), true, 'terminal can receive focus again');
         assert.equal(context.pages().length, 1, 'cancel never opens a destination');
@@ -1631,9 +1644,11 @@ try {
       for (const uri of ['', '   ', 'invalid-url', 'javascript:alert(1)', 'file:///tmp/test']) {
         await clickLink(uri);
         assert.equal(await dialog.count(), 0, `ignored URL: ${uri}`);
+        await moveWithoutSelecting();
       }
       await clickLink();
       await dialog.waitFor();
+      await moveWithoutSelecting();
       assert.equal(await dialog.locator('.confirmation-items span').textContent(), destination);
       await snapshot(page, 'desktop-terminal-link-confirmation');
       assert.equal(await dialog.getByRole('button', { name: '取消', exact: true }).evaluate((node) => node === document.activeElement), true);
@@ -1649,6 +1664,7 @@ try {
       ]) {
         await clickLink();
         await dialog.waitFor();
+        await moveWithoutSelecting();
         await dismiss();
         await closed();
       }
@@ -1686,6 +1702,35 @@ try {
       await dialog.waitFor();
       await dialog.getByRole('button', { name: '取消', exact: true }).click();
       await closed();
+
+      // Applications with mouse reporting also need the release that activates
+      // a link, otherwise they retain a pressed button while the dialog is open.
+      socket.send(Buffer.from('\x1b[?1002h\x1b[?1006h'));
+      const mouseMessageStart = state.messages.length;
+      await clickLink();
+      await dialog.waitFor();
+      await moveWithoutSelecting();
+      const mouseInput = state.messages.slice(mouseMessageStart)
+        .filter(({ url, message }) => url === socket.url() && Buffer.isBuffer(message))
+        .map(({ message }) => message.toString()).join('');
+      const press = mouseInput.match(/\x1b\[<0;\d+;\d+M/);
+      assert.ok(press, 'the terminal receives the link click press');
+      assert.equal(mouseInput, press[0] + press[0].replace(/M$/, 'm'), 'the terminal receives a matching release before dialog interaction');
+      await page.keyboard.press('Escape');
+      await closed();
+      socket.send(Buffer.from('\x1b[?1002l\x1b[?1006l'));
+      await shell.locator('.xterm.enable-mouse-events').waitFor({ state: 'detached' });
+
+      // Ending link clicks must still leave ordinary drag selection working.
+      const screen = await shell.locator('.xterm-screen').boundingBox();
+      await page.mouse.move(screen.x + 2, screen.y + 8);
+      await page.mouse.down();
+      await page.mouse.move(screen.x + 180, screen.y + 8, { steps: 5 });
+      await page.mouse.up();
+      const selection = await selectedText();
+      assert.equal(selection, 'OPEN-LINK suffix');
+      await page.mouse.move(screen.x + 250, screen.y + 60);
+      assert.equal(await selectedText(), selection, 'a completed drag selection stays fixed when hovering');
       assert.deepEqual(nativeDialogs, [], 'terminal links never call native confirm');
       assert.deepEqual(state.errors, []);
       assert.deepEqual(state.mutations, []);
