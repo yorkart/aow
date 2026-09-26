@@ -1041,7 +1041,7 @@ try {
     await row.locator('svg.lucide-cat').waitFor();
     await page.getByText('Appearance save failed', { exact: true }).waitFor();
     assert.equal(await menu.getByRole('menuitemradio', { name: '猫', exact: true }).getAttribute('aria-checked'), 'true');
-    assert.equal(await row.locator('svg').evaluate(svg => getComputedStyle(svg).color), 'rgb(121, 169, 235)');
+    assert.equal(await row.locator('svg').evaluate(svg => getComputedStyle(svg).color), 'rgb(215, 217, 222)');
     await page.reload();
     await row.locator('svg.lucide-cat').waitFor();
   });

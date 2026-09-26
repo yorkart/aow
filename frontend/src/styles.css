@@ -240,7 +240,7 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .project-aow-worktrees { margin:1px 0 5px 20px; padding-left:9px; border-left:1px solid #343944; }
 .project-aow-worktrees > button,.project-aow-pinned > button { width:100%; min-height:36px; display:flex; align-items:center; gap:7px; padding:3px 8px; color:#aeb3bc; text-align:left; border-radius:0; }
 .project-aow-worktrees > button:is(:hover,.active),.project-aow-pinned > button:is(:hover,.active) { color:#fff; background:var(--aow-list-highlight); }
-.project-aow-worktrees > button > svg,.project-aow-pinned > button > svg { flex:0 0 14px; width:14px; color:#79a9eb; }
+.project-aow-worktrees > button > svg,.project-aow-pinned > button > svg { flex:0 0 14px; width:14px; color:var(--aow-text); }
 .project-aow-worktrees > button > span,.project-aow-pinned > button > span { min-width:0; flex:1; display:flex; flex-direction:column; gap:0; }
 .project-aow-worktrees strong,.project-aow-worktrees small,.project-aow-pinned strong,.project-aow-pinned small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .project-aow-worktrees small,.project-aow-pinned small { color:#737b87; font-size:10px; }
