@@ -34,6 +34,7 @@ const PREVIOUS_GITHUB_SCRIPT_MD5: &[&str] = &[
     "d1e903f22605a41bf437bf77bc85a981",
     "28fea8f4f7673254cca56a6122bfd0a2",
     "135515472a8c25185cf5a81a35b89138",
+    "04de57157c9355d6b2aea8f278930ecd",
 ];
 
 mod repository_info;
@@ -448,10 +449,17 @@ impl ProviderManager {
 }
 fn upgrade_bundled_scripts(settings: &mut Settings, previous_digests: &[&str]) -> Result<bool> {
     let mut changed = false;
+    let bundled = |script: &str| {
+        previous_digests.contains(&format!("{:x}", md5::compute(script.as_bytes())).as_str())
+    };
     for provider in &mut settings.providers {
-        if previous_digests
-            .contains(&format!("{:x}", md5::compute(provider.script.as_bytes())).as_str())
-        {
+        // A legacy copy capitalized the module's branding as AOW. Normalize
+        // only that header; every other byte must match a known bundled script.
+        let canonical = provider
+            .script
+            .strip_prefix("\"\"\"AOW review protocol")
+            .map(|rest| format!("\"\"\"AoW review protocol{rest}"));
+        if bundled(&provider.script) || canonical.as_deref().is_some_and(bundled) {
             provider.script = GITHUB_SCRIPT.into();
             changed = true;
         }
@@ -568,6 +576,18 @@ pub struct ReviewQuery {
     pub repo: String,
     pub provider: Option<String>,
     pub remote: Option<String>,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PullRequestListState {
+    Open,
+    All,
+}
+#[derive(Deserialize)]
+pub struct PullRequestListQuery {
+    #[serde(flatten)]
+    pub target: ReviewQuery,
+    pub state: Option<PullRequestListState>,
 }
 #[derive(Deserialize)]
 pub struct DiffQuery {
@@ -1015,6 +1035,28 @@ mod tests {
         assert_eq!(restored.providers[0].script, GITHUB_SCRIPT);
         assert_eq!(restored.providers[1].script, custom.script);
     }
+
+    #[test]
+    fn bundled_branding_variant_upgrades_but_custom_logic_is_preserved() {
+        let previous =
+            "\"\"\"AoW review protocol v2 — GitHub adapter using gh.\"\"\"\nprint('old')\n";
+        let digest = format!("{:x}", md5::compute(previous.as_bytes()));
+        let mut settings = ProviderManager::default().settings().unwrap();
+        settings.providers[0].script = previous.replacen("AoW", "AOW", 1);
+        settings.providers[0].name = "Personal GitHub".into();
+        let mut custom = settings.providers[0].clone();
+        custom.id = "custom".into();
+        custom.script.push_str("print('custom logic')\n");
+        settings.providers.push(custom.clone());
+
+        assert!(upgrade_bundled_scripts(&mut settings, &[&digest]).unwrap());
+        assert_eq!(settings.revision, 1);
+        assert_eq!(settings.providers[0].script, GITHUB_SCRIPT);
+        assert_eq!(settings.providers[0].name, "Personal GitHub");
+        assert_eq!(settings.providers[1].script, custom.script);
+        assert!(!upgrade_bundled_scripts(&mut settings, &[&digest]).unwrap());
+        assert_eq!(settings.revision, 1);
+    }
     const FIXTURE: &str = r#"import json,sys,os
 r=json.load(sys.stdin)
 assert r['version']==2
@@ -1024,7 +1066,10 @@ assert r['repository']['root']==os.getcwd()
 p=r['params']
 summary=dict(number=p.get('number',42),status='open',draft=False,title=r['repository']['path'],source_branch='feature',target_branch='main',url=None,created_at='',updated_at='')
 if r['operation']=='list':
-    result=dict(repository='ignored',current_branch='feature',current_user=dict(id='u',username='user',display_name='User'),pull_requests=[summary])
+    items=[summary]
+    if p.get('state')=='all':
+        items += [dict(summary,number=43,status='merged'),dict(summary,number=44,status='closed')]
+    result=dict(repository='ignored',current_branch='feature',current_user=dict(id='u',username='user',display_name='User'),pull_requests=items)
 elif r['operation']=='detail':
     result=dict(summary,description='body',changes_count=1,commits_count=1,review_status='approved',check_summary_status='passed',mergeable=True,reviewers=[],checks=[],unresolved_threads=[],files=[dict(path='file.txt',change_type='M',additions=1,deletions=1)],author=None,labels=[],merge_checks=[],threads=[],warnings=[],diverged_commits_count=0,milestone=None)
 else:
@@ -1059,7 +1104,14 @@ print(json.dumps(dict(version=2,result=result)))
         let mut state = AppState::new(PathBuf::new());
         state.review_providers = manager.clone();
         let app = crate::build_router(state);
-        for suffix in ["", "/42", "/42/diff"] {
+        for (suffix, filter) in [
+            ("", ""),
+            ("", "&state=open"),
+            ("", "&state=all"),
+            ("", "&state=invalid"),
+            ("/42", ""),
+            ("/42/diff", ""),
+        ] {
             use axum::{
                 body::{Body, to_bytes},
                 http::Request,
@@ -1069,7 +1121,7 @@ print(json.dumps(dict(version=2,result=result)))
                 .clone()
                 .oneshot(
                     Request::get(format!(
-                        "/api/my-pull-requests{suffix}?repo={}&path=file.txt",
+                        "/api/my-pull-requests{suffix}?repo={}&path=file.txt{filter}",
                         query.repo
                     ))
                     .body(Body::empty())
@@ -1077,13 +1129,31 @@ print(json.dumps(dict(version=2,result=result)))
                 )
                 .await
                 .unwrap();
-            assert_eq!(response.status(), StatusCode::OK, "{suffix}");
+            if filter == "&state=invalid" {
+                assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+                continue;
+            }
+            assert_eq!(response.status(), StatusCode::OK, "{suffix}{filter}");
             let body = to_bytes(response.into_body(), OUTPUT_LIMIT).await.unwrap();
             let value: Value = serde_json::from_slice(&body).unwrap();
             assert_eq!(value["provider"], "custom");
             if suffix.is_empty() {
                 assert_eq!(value["pull_requests"][0]["number"], 42);
                 assert_eq!(value["pull_requests"][0]["remote"], "origin");
+                let statuses: Vec<_> = value["pull_requests"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|pr| pr["status"].as_str().unwrap())
+                    .collect();
+                assert_eq!(
+                    statuses,
+                    if filter == "&state=all" {
+                        vec!["open", "merged", "closed"]
+                    } else {
+                        vec!["open"]
+                    }
+                );
             } else {
                 assert_eq!(value["number"], 42);
             }

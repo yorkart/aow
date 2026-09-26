@@ -734,15 +734,19 @@ async fn git_commit_diff(
 
 async fn my_pull_requests(
     State(state): State<AppState>,
-    Query(query): Query<pull_requests::ReviewQuery>,
+    Query(query): Query<pull_requests::PullRequestListQuery>,
 ) -> Result<Json<serde_json::Value>, HttpError> {
+    let params = match query.state {
+        Some(state) => serde_json::json!({ "state": state }),
+        None => serde_json::json!({}),
+    };
     Ok(Json(
         state
             .review_providers
             .call(
-                &query,
+                &query.target,
                 "list",
-                serde_json::json!({}),
+                params,
                 &state
                     .aow
                     .execution_path()
@@ -891,7 +895,7 @@ async fn help_page(State(state): State<AppState>) -> axum::response::Html<String
             ,{"name":"git_commit_detail","method":"GET","path":"/api/git/commit/detail?repo={absolute_path}&commit={commit_id}"}
             ,{"name":"git_commit_files","method":"GET","path":"/api/git/commit/files?repo={absolute_path}&commit={commit_id}"}
             ,{"name":"git_commit_diff","method":"GET","path":"/api/git/commit/diff?repo={absolute_path}&commit={commit_id}&path={relative_path}"}
-            ,{"name":"my_pull_requests","method":"GET","path":"/api/my-pull-requests?repo={absolute_path}","description":"Open reviews from the configured provider"}
+            ,{"name":"my_pull_requests","method":"GET","path":"/api/my-pull-requests?repo={absolute_path}","description":"Current user's open reviews from the configured provider; add state=all to include merged and closed reviews"}
             ,{"name":"my_pull_request_detail","method":"GET","path":"/api/my-pull-requests/{number}?repo={absolute_path}","description":"Review detail from the configured provider"}
             ,{"name":"my_pull_request_diff","method":"GET","path":"/api/my-pull-requests/{number}/diff?repo={absolute_path}&path={relative_path}","description":"Review file diff from the configured provider"}
         ]

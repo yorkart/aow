@@ -423,11 +423,15 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .pull-requests-user strong { color:#d2d9e3; font-size:12px; font-weight:550; }
 .pull-requests-user small { color:#87919d; font-size:11px; }
 .pull-requests-body { min-width:0; }
+.pull-requests-filter-menu { width:180px; }
+.pull-requests-filter-menu button span { flex:1; }
 .my-pr-state { min-height:74px; display:flex; align-items:center; justify-content:center; gap:7px; color:#8d97a5; }
 .my-pr-state svg { width:15px; height:15px; }
 .my-pr-list { min-width:0; }
 .my-pr-row { color:#bdc5cf; }
 .my-pr-row .aow-list-row-open > svg { color:#7faee8; }
+.my-pr-row-merged .aow-list-row-open > svg { color:#bd93f9; }
+.my-pr-row-closed .aow-list-row-open > svg { color:#e8a39d; }
 .my-pr-row .aow-list-row-title { font-size:11px; font-weight:550; }
 .my-pr-row-details { min-width:0; display:flex; align-items:center; justify-content:space-between; gap:7px; }
 .my-pr-row-details small { min-width:0; overflow:hidden; color:#88929f; font:10px ui-monospace,SFMono-Regular,Consolas,monospace; text-overflow:ellipsis; white-space:nowrap; }
