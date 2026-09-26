@@ -28,3 +28,4 @@
   .mobile-page-header > .session-share-button span { display:none; }
   .mobile-page-header > .session-share-button { min-width:40px; min-height:40px; }
 }
+.session-share-notice > svg { color:inherit; }

@@ -46,3 +46,4 @@
 .operation-log-empty { display:flex; align-items:center; justify-content:center; gap:8px; padding:25px; color:#9caabb; }
 .operation-log-panel > footer { border-top:1px solid #ffffff12; color:#a4b1c1; }
 @media (max-width:700px) { .operation-log-row { flex-wrap:wrap; gap:4px 8px; } .operation-log-message { flex-basis:100%; } .operation-log-filters input { width:150px; } .operation-status-task { max-width:160px; } }
+.operation-status-warning > svg { color:inherit; }

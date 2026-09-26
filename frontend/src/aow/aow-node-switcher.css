@@ -3,7 +3,7 @@
 .aow-node-trigger:focus-visible { outline:1px solid var(--aow-accent); outline-offset:-2px; }
 .aow-node-trigger > img { flex:0 0 16px; width:16px; height:16px; object-fit:contain; }
 .aow-node-trigger > strong { min-width:0; overflow:hidden; font-size:12px; font-weight:700; text-overflow:ellipsis; white-space:nowrap; }
-.aow-node-trigger > svg { flex:0 0 12px; width:12px; height:12px; color:var(--aow-muted); }
+.aow-node-trigger > svg { flex:0 0 12px; width:12px; height:12px; color:var(--aow-icon-foreground, var(--aow-icon)); }
 .aow-node-menu { width:max-content; min-width:220px; max-width:min(440px,calc(100vw - 8px)); max-height:calc(100vh - 8px); overflow-y:auto; }
 .aow-node-menu a { min-height:30px; display:flex; align-items:center; gap:12px; padding:6px 8px; color:#cbd0d8; border-radius:3px; text-decoration:none; }
 .aow-node-menu a:hover,.aow-node-menu a:focus-visible { color:#fff; background:#33465e; outline:none; }

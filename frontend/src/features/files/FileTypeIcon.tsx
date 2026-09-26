@@ -18,7 +18,7 @@ const languagePatterns = Object.entries(languages.filePatterns)
   }));
 const icons = new Map(Object.entries(theme.iconDefinitions).map(([id, icon]) => [id, {
   character: String.fromCodePoint(parseInt(icon.fontCharacter.slice(1), 16)),
-  color: 'fontColor' in icon ? icon.fontColor : 'var(--aow-muted)',
+  color: id === theme.file || !('fontColor' in icon) ? 'var(--aow-icon)' : icon.fontColor,
 }]));
 
 function iconForPath(path: string) {

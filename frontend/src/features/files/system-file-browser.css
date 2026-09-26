@@ -21,7 +21,7 @@
 .system-file-shortcuts { padding:0 6px 10px; background:var(--aow-panel); border-right:1px solid var(--aow-line); }
 .system-file-shortcuts nav { display:flex; flex-direction:column; gap:3px; }
 .system-file-shortcuts nav > button { height:31px; display:flex; align-items:center; gap:8px; padding:0 9px; border-radius:0; text-align:left; }
-.system-file-shortcuts nav > button svg:not(.directory-type-icon) { color:var(--aow-accent); }
+.system-file-shortcuts nav > button svg:not(.directory-type-icon) { color:var(--aow-icon-foreground, var(--aow-icon)); }
 .system-file-shortcuts nav > button:is(:hover:not(:disabled),[aria-pressed=true]),.system-file-bookmarks li:is(:hover,.selected) { color:white; background:var(--aow-list-highlight); }
 .system-file-bookmarks { margin-top:14px; border-top:1px solid var(--aow-line); }
 .system-file-bookmarks .system-file-pane-title { display:flex; align-items:center; gap:6px; }
@@ -102,3 +102,4 @@
 @keyframes system-file-spin { to { transform:rotate(360deg); } }
 @media(max-width:1050px) { .system-file-browser { width:calc(100vw - 24px); height:calc(100dvh - 32px); } .system-file-body { grid-template-columns:170px 220px minmax(0,1fr); } .system-file-list th:nth-child(3),.system-file-list td:nth-child(3) { display:none; } }
 @media(max-width:700px) { .system-file-body { grid-template-columns:150px 210px minmax(260px,1fr); overflow-x:auto; } .system-file-toolbar { gap:5px; padding:8px; } .system-file-toolbar button { padding:0 6px; } .system-file-footer > span:last-child,.system-file-uploads header > span,.system-file-list th:nth-child(2),.system-file-list td:nth-child(2) { display:none; } }
+.system-file-toolbar .system-file-upload-button > svg { color:inherit; }

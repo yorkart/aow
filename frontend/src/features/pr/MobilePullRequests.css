@@ -4,7 +4,7 @@
 .mobile-pr-cards { display:grid; gap:12px; padding:0 16px 20px; }
 .mobile-app .mobile-pr-card { display:block; width:100%; min-width:0; padding:15px; border:1px solid var(--m-line); border-radius:13px; background:var(--m-panel); text-align:left; }
 .mobile-pr-card-top { display:flex; align-items:center; gap:8px; margin-bottom:9px; color:#9bcbb4; font-size:12px; }
-.mobile-pr-card-top > svg:last-child { margin-left:auto; color:#7c8da4; }
+.mobile-pr-card-top > svg:last-child { margin-left:auto; color:var(--aow-icon-foreground, var(--aow-icon)); }
 .mobile-pr-card-top .current { color:#afc7e7; border-color:#405878; }
 .mobile-pr-card > strong { display:block; color:#dbe4f1; font-size:14px; font-weight:550; line-height:1.6; overflow-wrap:anywhere; }
 .mobile-pr-card-branches { display:flex; align-items:center; gap:6px; margin:11px 0 9px; min-width:0; color:#8fa8c8; font-size:10px; }
@@ -59,3 +59,4 @@
 .pr-touch-diff .hunk { color:#a6c5eb; background:#223247; }
 .pr-touch-diff .meta { color:#859ab5; font-size:11px; }
 @media(min-width:700px) { .mobile-pr-cards { width:100%; max-width:800px; margin-inline:auto; }.mobile-pr-search { width:calc(100% - 32px); max-width:768px; margin-inline:auto; } }
+.mobile-pr-card-top > svg:first-child { color:inherit; }

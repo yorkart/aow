@@ -24,3 +24,4 @@
 .terminal-agent-session-list button > span { display:flex; flex-wrap:wrap; justify-content:space-between; gap:6px; color:#7f8da0; font-size:10px; }
 .terminal-agent-session-list code { overflow-wrap:anywhere; }
 .terminal-agent-session-surface button:focus-visible { outline:2px solid #7ca8df; outline-offset:-2px; }
+.terminal-pane-header .terminal-agent-session-button[aria-pressed="true"] > svg { color:inherit; }
