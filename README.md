@@ -1,77 +1,79 @@
 # AoW
 
-## 项目介绍
+English | [简体中文](README.zh-CN.md)
 
-**AoW — Agent-oriented Workbench**，面向 AI Agent 的浏览器开发工作台，运行在你自己的电脑或服务器上。
+## Overview
 
-在一个界面中管理 Git 仓库和 Worktree、浏览和编辑文件、使用 Terminal、查看 Agent 会话与执行自动化任务。支持 Codex、Claude Code 等主流Agent，提供桌面和手机界面。
+**AoW — Agent-oriented Workbench** is a browser-based development workbench for AI agents that runs on your own computer or server.
 
-详细功能见 [使用说明](docs/usage.md)。
+Manage Git repositories and worktrees, browse and edit files, use terminals, review agent conversations, and run automation tasks in one interface. AoW supports popular agents such as Codex and Claude Code, with desktop and mobile interfaces.
 
-产品门户：[yorkart.github.io/aow](https://yorkart.github.io/aow/)。门户独立通过 GitHub Pages 发布，源码、预览与部署说明见 [website/README.md](website/README.md)。
+For details, see the [Usage guide](docs/usage.md).
 
-## 安装 / 升级
+Product website: [yorkart.github.io/aow](https://yorkart.github.io/aow/). The website is published separately through GitHub Pages. See [website/README.md](website/README.md) for its source, preview, and deployment instructions.
 
-支持 **Linux、macOS 的 x86_64 和 ARM64**。运行环境需要 Bash、Node.js 20+、Git、tar 和 curl；Linux 需要可用的 systemd 用户服务，macOS 需要当前用户已登录图形会话。
+## Installation and upgrades
 
-在需要运行 AoW 的机器上安装：
+Supports **Linux and macOS on x86_64 and ARM64**. Runtime requirements are Bash, Node.js 20+, Git, tar, and curl. Linux requires working systemd user services; macOS requires the current user to be logged into a graphical session.
+
+Run the following command on the machine where you want to run AoW:
 
 ```bash
 curl -fsSL https://github.com/yorkart/aow/releases/latest/download/aow-install.sh | bash
 ```
 
-安装器从 GitHub Release 获取对应平台的包，校验后安装并启动 Web 服务。首次安装需要在终端设置 6 位访问 PIN；提示启动 terminald 时输入小写 `y`，才能使用 Terminal。升级时重启 terminald 会结束它管理的现有终端会话。
+The installer downloads the package for your platform from GitHub Releases, verifies it, installs it, and starts the web service. On the first installation, you must set a six-digit access PIN in the terminal. When prompted to start terminald, enter lowercase `y` to enable terminals. Restarting terminald during an upgrade ends any existing terminal sessions it manages.
 
-安装后升级：
+To upgrade an existing installation:
 
 ```bash
 aow update
 ```
 
-请将 `~/.local/bin` 加入 `PATH`；修改访问 PIN 使用 `aow pin`。
+Add `~/.local/bin` to your `PATH`. Use `aow pin` to change the access PIN.
 
-版本与产物见 [GitHub Releases](https://github.com/yorkart/aow/releases)，指定版本安装与排错见 [安装说明](docs/release-installation.md)。
+See [GitHub Releases](https://github.com/yorkart/aow/releases) for versions and release packages, and the [Installation guide](docs/release-installation.md) for installing a specific version and troubleshooting.
 
-## 如何访问
+## Accessing AoW
 
-Web 服务默认仅监听 `127.0.0.1:8282`，在本机打开 `http://127.0.0.1:8282/` 并输入安装时设置的 PIN。远程访问可使用 SSH 隧道。
+By default, the web service listens only on `127.0.0.1:8282`. Open `http://127.0.0.1:8282/` on the same machine and enter the PIN set during installation. For remote access, you can use an SSH tunnel.
 
-### 通过 IP 直接访问（需显式开启）
+### Direct access by IP address (explicit opt-in required)
 
-在 `~/.config/aow/server.env` 中选择一种绑定方式（仅保留一项，指定地址请替换为网卡的实际 IP；其他示例使用时取消注释）：
+Choose one bind address in `~/.config/aow/server.env`. Keep only one setting active, replace specific addresses with an actual IP address assigned to a network interface, and uncomment the example you want to use:
 
 ```dotenv
-# 指定 IPv4 地址
+# Specific IPv4 address
 AOW_SERVER_HOST=192.168.1.10
 
-# 全部 IPv4 接口
+# All IPv4 interfaces
 # AOW_SERVER_HOST=0.0.0.0
 
-# 指定 IPv6 地址
+# Specific IPv6 address
 # AOW_SERVER_HOST=2001:db8::10
 
-# 全部 IPv6 接口，部分系统也接受 IPv4 连接
+# All IPv6 interfaces; some systems also accept IPv4 connections
 # AOW_SERVER_HOST=::
 ```
 
-按 [配置说明](docs/configuration.md#监听地址与服务配置) 使设置生效，并在防火墙或安全组中仅允许可信来源访问 TCP 8282，然后打开 `http://<服务器IP>:8282/`（IPv6 使用 `http://[IPv6地址]:8282/`）。手机访问时自动进入移动界面。
+Apply the setting as described in the [Configuration guide](docs/configuration.md#监听地址与服务配置), and configure your firewall or security group to allow only trusted sources to access TCP port 8282. Then open `http://<server-ip>:8282/` (for IPv6, use `http://[ipv6-address]:8282/`). Phones automatically use the mobile interface.
 
-IP 直连适用于可信内网或 VPN，访问来源应受到限制。AoW 能操作运行账号的文件和终端，6 位 PIN 只是轻量访问门槛；公网访问请配置 HTTPS 和额外的访问控制。
+Direct IP access is intended for trusted internal networks or VPNs, with access restricted to trusted sources. AoW can access files and terminals as the user running it, and the six-digit PIN is only a lightweight access barrier. For public internet access, configure HTTPS and additional access controls.
 
-### 通过 SSH 隧道访问
+### Access through an SSH tunnel
 
-访问自己远程机器上的 AoW 时，可以通过 SSH 隧道安全连接。在本机执行以下命令，将 `user@host` 替换为远程机器的 SSH 登录地址：
+You can securely connect to AoW on your remote machine through an SSH tunnel. Run the following command on your local machine, replacing `user@host` with the SSH login address of the remote machine:
 
 ```bash
 ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:18282:127.0.0.1:8282 user@host
 ```
 
-保持 SSH 连接，在本机浏览器打开 `http://127.0.0.1:18282/`。本地端口 `18282` 可以替换为其他空闲端口。
+Keep the SSH connection open and visit `http://127.0.0.1:18282/` in your local browser. You can replace local port `18282` with another available port.
 
-默认监听配置即可使用隧道，服务器只需开放 SSH 端口。
+The default listen address works with this tunnel; the server only needs to expose its SSH port.
 
-## 本地开发与环境要求
+## Local development and requirements
 
-在运行依赖之外，准备 Rust stable / Cargo、npm 和 just。macOS 需要 Xcode Command Line Tools；Linux 打包需要 C 编译器、`musl-gcc`、`readelf` 和本机架构的 Rust musl target。macOS 安装脚本测试还需要 Python 3。
+In addition to the runtime dependencies, install Rust stable / Cargo, npm, and just. macOS requires Xcode Command Line Tools. Building Linux packages requires a C compiler, `musl-gcc`, `readelf`, and the Rust musl target for the machine's architecture. Testing the macOS installation scripts also requires Python 3.
 
-在源码目录运行 `just build` 编译、`just test` 测试；本地部署先 `just package`，再 `just install`。本地包与 GitHub 包使用相同安装流程，会更新当前用户实际运行的服务。开发服务也默认仅监听本机。
+From the repository root, run `just build` to build and `just test` to run tests. For local deployment, run `just package`, then `just install`. Local packages use the same installation process as GitHub release packages and update the services actually running under the current user. Development services also listen only on localhost by default.

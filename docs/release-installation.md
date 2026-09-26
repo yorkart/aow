@@ -17,7 +17,7 @@ curl -fsSL https://github.com/yorkart/aow/releases/latest/download/aow-install.s
 
 首次安装按提示设置 6 位 PIN，并在启动 terminald 的提示中输入小写 `y`，启用网页 Terminal。升级时可跳过 terminald 重启，保留现有终端会话；重启 terminald 会结束这些会话。
 
-安装后在本机打开 `http://127.0.0.1:8282/` 并输入 PIN。远程访问方式见 [README](../README.md#如何访问)。
+安装后在本机打开 `http://127.0.0.1:8282/` 并输入 PIN。远程访问方式见 [README](../README.zh-CN.md#如何访问)。
 
 将 `~/.local/bin` 加入 shell 的 `PATH` 后，可使用：
 
