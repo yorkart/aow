@@ -1,7 +1,7 @@
-.aow-list-row { position:relative; width:100%; min-width:0; border-radius:0; color:inherit; }
+.aow-list-row { position:relative; width:100%; min-width:0; border-radius:0; color:var(--aow-text); }
 .aow-list-row:is(:hover,.active,.selected) { background:var(--aow-list-highlight); }
 .aow-list-row > .aow-list-row-open { width:100%; min-width:0; min-height:0; display:flex; align-items:flex-start; justify-content:flex-start; gap:6px; padding:6px 8px; border:0; border-radius:0; background:transparent; color:inherit; text-align:left; font-size:12px; cursor:pointer; }
-.aow-list-row > .aow-list-row-open:hover:not(:disabled) { color:inherit; background:transparent; }
+.aow-list-row > .aow-list-row-open:hover:not(:disabled) { color:var(--aow-text-hover); background:transparent; }
 .aow-list-row-open > svg,.aow-list-row-open > img { flex:none; width:16px; height:16px; margin-top:1px; }
 .aow-list-row-content { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
 /* Reserve menu space only in the title; metadata keeps the full content width. */

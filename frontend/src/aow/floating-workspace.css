@@ -16,7 +16,7 @@
 .floating-workspace-sidebar > aside { width:100%; height:100%; display:flex; flex-direction:column; }
 .floating-workspace-empty { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; }
 .floating-workspace-empty button { display:flex; align-items:center; gap:10px; width:240px; padding:10px 14px; text-align:left; border-radius:5px; color:inherit; background:transparent; border:0; cursor:pointer; }
-.floating-workspace-empty button:hover { background:var(--aow-hover); }
+.floating-workspace-empty button:hover { background:var(--aow-hover); color:var(--aow-text-hover); }
 .floating-workspace-empty button:disabled { opacity:.45; cursor:default; }
 .floating-workspace-empty svg { width:17px; height:17px; }
 .floating-workspace-resize { position:absolute; right:0; bottom:0; width:15px; height:15px; cursor:nwse-resize; touch-action:none; border-right:3px solid var(--aow-muted); border-bottom:3px solid var(--aow-muted); border-radius:0 0 8px 0; }

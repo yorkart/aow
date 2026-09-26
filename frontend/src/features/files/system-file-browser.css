@@ -8,8 +8,8 @@
 .system-file-toolbar { flex:0 0 auto; display:flex; justify-content:space-between; gap:12px; padding:10px 12px 7px; }
 .system-file-toolbar-actions { width:100%; display:flex; align-items:center; gap:5px; }
 .system-file-toolbar button { min-width:28px; height:28px; display:flex; align-items:center; justify-content:center; gap:6px; padding:0 8px; border:1px solid var(--aow-control-line); border-radius:4px; }
-.system-file-toolbar .system-file-upload-button { margin-left:auto; color:white; background:var(--aow-primary); border-color:var(--aow-primary); }
-.system-file-browser button:hover:not(:disabled),.system-file-entry-actions a:hover { background:var(--aow-hover); color:white; }
+.system-file-toolbar .system-file-upload-button { margin-left:auto; color:var(--aow-text-hover); background:var(--aow-primary); border-color:var(--aow-primary); }
+.system-file-browser button:hover:not(:disabled),.system-file-entry-actions a:hover { background:var(--aow-hover); color:var(--aow-text-hover); }
 .system-file-toolbar .system-file-upload-button:hover:not(:disabled) { background:var(--aow-primary-hover); }
 .system-file-address { flex:0 0 auto; display:flex; gap:0; margin:0 12px 10px; }
 .system-file-address input { flex:1; min-width:0; height:30px; padding:0 9px; color:var(--aow-text); background:var(--aow-input); border:1px solid var(--aow-control-line); border-radius:4px 0 0 4px; outline:none; font:12px ui-monospace,SFMono-Regular,Consolas,monospace; }
@@ -22,7 +22,7 @@
 .system-file-shortcuts nav { display:flex; flex-direction:column; gap:3px; }
 .system-file-shortcuts nav > button { height:31px; display:flex; align-items:center; gap:8px; padding:0 9px; border-radius:0; text-align:left; }
 .system-file-shortcuts nav > button svg:not(.directory-type-icon) { color:var(--aow-icon-foreground, var(--aow-icon)); }
-.system-file-shortcuts nav > button:is(:hover:not(:disabled),[aria-pressed=true]),.system-file-bookmarks li:is(:hover,.selected) { color:white; background:var(--aow-list-highlight); }
+.system-file-shortcuts nav > button:is(:hover:not(:disabled),[aria-pressed=true]),.system-file-bookmarks li:is(:hover,.selected) { color:var(--aow-text-hover); background:var(--aow-list-highlight); }
 .system-file-bookmarks { margin-top:14px; border-top:1px solid var(--aow-line); }
 .system-file-bookmarks .system-file-pane-title { display:flex; align-items:center; gap:6px; }
 .system-file-bookmarks .system-file-pane-title > svg { width:12px; height:12px; }
@@ -63,7 +63,7 @@
 .system-file-list th:nth-child(2) { width:82px; }
 .system-file-list th:nth-child(3) { width:160px; }
 .system-file-list th:last-child { width:76px; }
-.system-file-list td { height:35px; padding:0 10px; border-bottom:1px solid #ffffff05; color:#aeb5bf; font-size:11px; white-space:nowrap; }
+.system-file-list td { height:35px; padding:0 10px; border-bottom:1px solid #ffffff05; color:var(--aow-text-secondary); font-size:11px; white-space:nowrap; }
 .system-file-list td:first-child { color:var(--aow-text); }
 .system-file-list tr:is(:hover,.selected) { background:var(--aow-list-highlight); }
 .system-file-entry-name { display:flex; align-items:center; gap:8px; width:100%; height:32px; padding:0; text-align:left; background:transparent !important; }
@@ -94,7 +94,7 @@
 .system-file-failure { color:var(--aow-error); }
 .system-file-footer { flex:0 0 30px; display:flex; align-items:center; gap:15px; padding:0 12px; border-top:1px solid var(--aow-line); color:var(--aow-muted); font-size:10px; }
 .system-file-footer > span:first-child { min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.system-file-drop-overlay { position:absolute; inset:48px 8px 8px; z-index:5; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:24px; color:#dceaff; background:#243b59f0; border:2px dashed var(--aow-accent); border-radius:6px; pointer-events:none; }
+.system-file-drop-overlay { position:absolute; inset:48px 8px 8px; z-index:5; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:24px; color:var(--aow-text); background:#243b59f0; border:2px dashed var(--aow-accent); border-radius:6px; pointer-events:none; }
 .system-file-drop-overlay > svg { width:38px; height:38px; }
 .system-file-drop-overlay > strong { font-size:16px; }
 .system-file-drop-overlay > span { max-width:100%; overflow-wrap:anywhere; }
