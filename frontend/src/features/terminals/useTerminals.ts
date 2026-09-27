@@ -3,6 +3,7 @@ import { terminalApi } from './terminalApi';
 import { isCliTerminal } from './terminalPresentation';
 import { useTerminalAgents } from './useTerminalAgents';
 import type { TerminalLayout, TerminalPaneStatus, TerminalTab } from './types';
+import { subscribeWorkspaceChanges } from '../../lib/workspaceEvents';
 
 function message(reason: unknown) {
   return reason instanceof Error ? reason.message : String(reason);
@@ -102,13 +103,21 @@ export function useTerminals(workspaceRoot: string, enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
     let pending = false;
-    const timer = window.setInterval(() => {
+    let queued = false;
+    let disposed = false;
+    const refresh = () => {
+      if (pending) { queued = true; return; }
       if (document.visibilityState === 'visible' && !pending) {
         pending = true;
-        void load(true).finally(() => { pending = false; });
+        void load(true).finally(() => {
+          pending = false;
+          if (queued && !disposed) { queued = false; refresh(); }
+        });
       }
-    }, 3000);
-    return () => window.clearInterval(timer);
+    };
+    const timer = window.setInterval(refresh, 3000);
+    const unsubscribe = subscribeWorkspaceChanges(change => { if (change.reset || change.terminals) refresh(); });
+    return () => { disposed = true; unsubscribe(); window.clearInterval(timer); };
   }, [enabled, load]);
 
   const create = useCallback(async (agentId?: string) => {

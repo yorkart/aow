@@ -114,13 +114,15 @@ async fn create_inner(
         )
         .await
         .map_err(terminal_http_error)?;
+    state.workspace_events.terminals_changed();
     let manager = state.terminals;
     log.resource(format!("/aow/tabs/terminal/{}", tab.id));
     let pane_id = tab.panes[0].id.clone();
     let log = log.clone();
     // Own the lifecycle independently of the HTTP client. A disconnected CLI
     // must not leave a pane permanently in Starting with no initializer.
-    tokio::spawn(async move {
+    let events = state.workspace_events;
+    let result = tokio::spawn(async move {
         manager
             .initialize_agent_lifecycle(
                 &pane_id,
@@ -135,7 +137,9 @@ async fn create_inner(
     .await
     .map_err(|error| HttpError::internal(error.to_string()))?
     .map(Json)
-    .map_err(terminal_http_error)
+    .map_err(terminal_http_error);
+    events.terminals_changed();
+    result
 }
 
 #[cfg(test)]

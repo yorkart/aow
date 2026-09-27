@@ -1,3 +1,6 @@
+mod watch;
+pub use watch::{GitChanges, GitWatcher};
+
 use std::{
     collections::{BTreeSet, HashSet},
     path::{Path, PathBuf},

@@ -469,6 +469,15 @@ struct AgentsQuery {
 }
 
 impl AowManager {
+    pub(crate) fn repository_roots(&self) -> Result<Vec<PathBuf>, AowError> {
+        Ok(self
+            .lock()?
+            .projects
+            .iter()
+            .map(|project| PathBuf::from(&project.registered_path))
+            .collect())
+    }
+
     pub(crate) fn in_memory() -> Self {
         Self {
             inner: Arc::new(AowInner {
@@ -1810,6 +1819,7 @@ async fn register_project(
         .register_project(request)
         .await
         .map_err(aow_response)?;
+    state.workspace_events.projects_changed();
     Ok((StatusCode::CREATED, Json(project)))
 }
 
@@ -1818,6 +1828,7 @@ async fn remove_project(
     AxumPath(id): AxumPath<String>,
 ) -> Result<StatusCode, Response> {
     state.aow.remove_project(&id).await.map_err(aow_response)?;
+    state.workspace_events.projects_changed();
     Ok(StatusCode::NO_CONTENT)
 }
 

@@ -3728,6 +3728,7 @@ mod tests {
             aow: crate::aow::AowManager::in_memory(),
             automations: None,
             operations: crate::operations::OperationService::in_memory(),
+            workspace_events: crate::workspace_events::WorkspaceEvents::new(),
             review_providers: crate::pull_requests::ProviderManager::default(),
         })
     }
@@ -4374,6 +4375,7 @@ mod tests {
             aow: crate::aow::AowManager::in_memory(),
             automations: None,
             operations: crate::operations::OperationService::in_memory(),
+            workspace_events: crate::workspace_events::WorkspaceEvents::new(),
             review_providers: crate::pull_requests::ProviderManager::default(),
         });
         let response = app

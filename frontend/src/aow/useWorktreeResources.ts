@@ -3,6 +3,7 @@ import { readStored } from './floatingWorkspaceState';
 import { terminalApi } from '../features/terminals/terminalApi';
 import type { AowProject } from './types';
 import { isWorktreeUnallocated, type WorktreeResourceState } from './worktreeResources';
+import { subscribeWorkspaceChanges } from '../lib/workspaceEvents';
 
 interface StoredResources {
   documents?: unknown[];
@@ -46,9 +47,11 @@ export function useWorktreeResources(projects: AowProject[], externalTabWorkspac
     void refresh();
     // Mounted workspaces already report their inventories through useTerminals.
     const timer = window.setInterval(() => void refresh(), 3000);
+    const unsubscribe = subscribeWorkspaceChanges(change => { if (change.reset || change.terminals) void refresh(); });
     document.addEventListener('visibilitychange', refresh);
     return () => {
       controller.abort();
+      unsubscribe();
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', refresh);
     };

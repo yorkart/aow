@@ -17,6 +17,7 @@ use crate::{
 };
 
 pub fn build_router(state: AppState) -> Router {
+    state.workspace_events.start(state.aow.clone());
     let base_path = state.base_path.clone();
     let app = Router::new()
         .merge(auth::routes())
@@ -80,6 +81,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(notifications::routes())
         .merge(im_api::routes())
         .merge(operations::routes())
+        .merge(crate::workspace_events::routes())
         .merge(automations::routes())
         .merge(session_shares::routes())
         .fallback(spa_or_asset)

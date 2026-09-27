@@ -43,6 +43,7 @@ mod notifications;
 mod operations;
 mod pull_requests;
 mod routes;
+mod workspace_events;
 pub use routes::build_router;
 mod session_shares;
 mod terminal;
@@ -72,6 +73,7 @@ pub struct AppState {
     aow: aow::AowManager,
     automations: Option<automations::AutomationManager>,
     operations: operations::OperationService,
+    workspace_events: workspace_events::WorkspaceEvents,
     review_providers: pull_requests::ProviderManager,
 }
 
@@ -93,6 +95,7 @@ impl AppState {
             automations: None,
             review_providers: pull_requests::ProviderManager::default(),
             operations: operations::OperationService::in_memory(),
+            workspace_events: workspace_events::WorkspaceEvents::new(),
         }
     }
 
@@ -113,6 +116,7 @@ impl AppState {
             TerminalError::Invalid(format!("failed to initialize aow: {error}"))
         })?;
         Ok(Self {
+            workspace_events: workspace_events::WorkspaceEvents::new(),
             review_providers: pull_requests::ProviderManager::persistent(&state_dir)
                 .map_err(|e| TerminalError::Invalid(e.to_string()))?,
             base_path: BasePath::default(),

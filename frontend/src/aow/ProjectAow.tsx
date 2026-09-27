@@ -1,5 +1,6 @@
 import { SettingsDialog } from '../features/settings/SettingsDialog';
 import { appLocalStorage } from '../lib/basePath';
+import { subscribeWorkspaceChanges } from '../lib/workspaceEvents';
 import { useWorkspaceDocuments, updateSharedDocument, nextDocumentInstanceId, sharedDocument, isPreviewOwned, savingDocuments, failedDocuments } from '../features/editor/workspaceDocuments';
 import { Fragment, lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -9,7 +10,7 @@ import { captureTabTarget, openTabTarget, tabCenterId, type ResolvedTab, type Ta
 import { diffDocument } from './tabRoutes/diff';
 import { prTabId } from './tabRoutes/pr';
 import { FloatingWorkspaceProvider, FloatingOpenMenu, useFloatingWorkspace, openingInFloatingWorkspace, withFloatingOpen, readStored, persist } from './floatingWorkspaceState';
-import type { CSSProperties, DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from 'react';
+import type { SetStateAction, CSSProperties, DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from 'react';
 import {
   ArrowUp, CalendarClock, Check, ChevronDown, ChevronRight, CircleHelp, CornerDownLeft, FileText, Files, FolderGit2, FolderOpen, GitBranch, GitBranchPlus, GitPullRequest, MessageSquare, MoreHorizontal,
   LoaderCircle, NotebookPen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pencil, Pin, PinOff, Plus, RefreshCw, Settings, SquareTerminal, Trash2, X,
@@ -2088,7 +2089,14 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
   const reportTabLocationError = useAowTabLocationError();
   const [floatingFocused, setFloatingFocused] = useState(floating.visible);
   const [globalProject, setGlobalProject] = useState<AowProject>();
-  const [projects, setProjects] = useState<AowProject[]>([]);
+  const [projects, updateProjects] = useState<AowProject[]>([]);
+  const projectVersion = useRef(0);
+  const projectsRef = useRef(projects);
+  projectsRef.current = projects;
+  const setProjects = useCallback((action: SetStateAction<AowProject[]>) => {
+    projectVersion.current += 1;
+    updateProjects(action);
+  }, []);
   const operations = useOperations();
   const [logPanel, setLogPanel] = useState<{ operationId?: string }>();
   const removals = useWorktreeRemovals();
@@ -2129,30 +2137,80 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
   const suppressPinnedClickRef = useRef(false);
 
   const projectNotesPaths = useRef(new Map<string, string>());
-  const loadProjects = useCallback(async (notesMoved = false) => {
-    setLoading(true);
-    setError('');
-    try {
-      const all = await aowApi.projects();
-      if (notesMoved) floating.setNotesMoves(all.flatMap(project => {
-        const from = projectNotesPaths.current.get(project.id);
-        return from && from !== project.notes_path ? [{ from, to: project.notes_path }] : [];
-      }));
-      projectNotesPaths.current = new Map(all.map(project => [project.id, project.notes_path]));
-      const builtin = all.find(project => project.builtin);
-      setGlobalProject(builtin);
-      floating.retainWorkspaces(all.flatMap(project => project.worktrees.map(worktree => worktree.path)));
-      floating.setGlobalRoot(builtin?.worktrees.find(worktree => worktree.is_main)?.path ?? builtin?.worktrees[0]?.path ?? '');
-      const next = all.filter(project => !project.builtin);
-      setProjects(next);
-      const paths = next.flatMap((project) => project.worktrees.map((worktree) => worktree.path));
-      setActiveWorktreePath((current) => paths.includes(current) ? current : paths[0] ?? '');
-    } catch (reason) {
-      setError(message(reason));
-    } finally {
-      setLoading(false);
-    }
+  const projectRequest = useRef<Promise<void> | undefined>(undefined);
+  const projectReload = useRef({ requested: false, notesMoved: false });
+  const projectsMounted = useRef(true);
+  useEffect(() => {
+    projectsMounted.current = true;
+    return () => { projectsMounted.current = false; };
   }, []);
+  const loadProjects = useCallback(async (notesMoved = false, quiet = false) => {
+    projectReload.current.requested = true;
+    projectReload.current.notesMoved ||= notesMoved;
+    if (!quiet) { setLoading(true); setError(''); }
+    if (projectRequest.current) return projectRequest.current;
+    const request = (async () => {
+      do {
+        projectReload.current.requested = false;
+        const version = projectVersion.current;
+        try {
+          const fetched = await aowApi.projects();
+          if (!projectsMounted.current) return;
+          // A local mutation or newer event wins over an in-flight snapshot.
+          if (version !== projectVersion.current || projectReload.current.requested) {
+            projectReload.current.requested = true;
+            continue;
+          }
+          const previous = new Map(projectsRef.current.map(project => [project.id, project]));
+          const all = fetched.map(project => project.error && previous.has(project.id)
+            ? { ...project, worktrees: previous.get(project.id)!.worktrees } : project);
+          if (projectReload.current.notesMoved) floating.setNotesMoves(all.flatMap(project => {
+            const from = projectNotesPaths.current.get(project.id);
+            return from && from !== project.notes_path ? [{ from, to: project.notes_path }] : [];
+          }));
+          projectReload.current.notesMoved = false;
+          projectNotesPaths.current = new Map(all.map(project => [project.id, project.notes_path]));
+          const builtin = all.find(project => project.builtin);
+          setGlobalProject(current => builtin?.error && current ? { ...builtin, worktrees: current.worktrees } : builtin);
+          // A failed scan is not evidence that workspaces disappeared.
+          if (!all.some(project => project.error)) {
+            floating.retainWorkspaces(all.flatMap(project => project.worktrees.map(worktree => worktree.path)));
+            floating.setGlobalRoot(builtin?.worktrees.find(worktree => worktree.is_main)?.path ?? builtin?.worktrees[0]?.path ?? '');
+          }
+          const next = all.filter(project => !project.builtin);
+          projectsRef.current = next;
+          setProjects(next);
+          const paths = next.flatMap(project => project.worktrees.map(worktree => worktree.path));
+          setActiveWorktreePath(current => paths.includes(current) ? current : paths[0] ?? '');
+          setError('');
+        } catch (reason) {
+          if (projectsMounted.current) setError(message(reason));
+        }
+      } while (projectReload.current.requested && projectsMounted.current);
+    })();
+    projectRequest.current = request;
+    try { await request; } finally {
+      projectRequest.current = undefined;
+      if (projectsMounted.current) setLoading(false);
+    }
+  }, [setProjects]);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = () => {
+      if (document.visibilityState !== 'visible') return;
+      clearTimeout(timer);
+      timer = setTimeout(() => { void loadProjects(false, true); }, 100);
+    };
+    const unsubscribe = subscribeWorkspaceChanges(change => { if (change.reset || change.projects) refresh(); });
+    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('focus', refresh);
+    return () => {
+      unsubscribe(); clearTimeout(timer);
+      document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [loadProjects]);
 
   const loadAgents = useCallback(async () => {
     try { setAgents(await agentsApi.agents(true)); } catch (reason) { setError(message(reason)); }

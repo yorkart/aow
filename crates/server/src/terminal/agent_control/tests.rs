@@ -394,6 +394,17 @@ async fn control(
 #[tokio::test]
 async fn hidden_agent_readiness_observation_takeover_and_repeated_submission() {
     let fixture = Fixture::new("ready").await;
+    let events = crate::build_router(fixture.state.clone())
+        .oneshot(
+            Request::get("/api/workspace/events")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let mut events = events.into_body().into_data_stream();
+    let first = events.next().await.unwrap().unwrap();
+    assert!(String::from_utf8_lossy(&first).contains("\"terminals\":0"));
     let client = fixture.client.clone();
     let mut request = fixture.request();
     request.task = Some("first task\n保持多行 $HOME `literal`".into());
@@ -415,6 +426,21 @@ async fn hidden_agent_readiness_observation_takeover_and_repeated_submission() {
     })
     .await
     .unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let frame = events.next().await.unwrap().unwrap();
+            let text = String::from_utf8_lossy(&frame);
+            let Some(data) = text.lines().find_map(|line| line.strip_prefix("data: ")) else {
+                continue;
+            };
+            let snapshot: Value = serde_json::from_str(data).unwrap();
+            if snapshot["terminals"].as_u64().unwrap() > 0 {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("CLI creation must notify browsers without relying on Git writes");
     let pane = &initial.panes[0];
     assert_eq!(initial.name_is_custom, Some(false));
     assert_eq!(

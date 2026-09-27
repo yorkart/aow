@@ -6,8 +6,10 @@ license.workspace = true
 
 [dependencies]
 aow-protocol = { path = "../protocol" }
+notify.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+tracing.workspace = true
 walkdir.workspace = true
 tempfile = "3.20"
 
