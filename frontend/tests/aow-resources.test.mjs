@@ -3222,6 +3222,9 @@ try {
     assert.equal(await page.getByRole('button', { name: '重命名 shell 窗口', exact: true }).count(), 0);
     await panes.nth(0).locator('.terminal-pane-name').dblclick();
     assert.equal(await page.getByRole('textbox', { name: 'shell 窗口名称', exact: true }).count(), 0);
+    await panes.nth(0).getByRole('button', { name: '恢复布局', exact: true }).waitFor();
+    await panes.nth(0).locator('.terminal-pane-name').dblclick();
+    await panes.nth(0).getByRole('button', { name: '最大化 shell 窗口', exact: true }).waitFor();
     state.titles = { 'wt-0-pane': '新的任务', 'wt-0-review': '继续审查' };
     await eventually(async () => await panes.nth(0).locator('.terminal-pane-name').textContent() === '新的任务');
     await eventually(async () => await panes.nth(1).locator('.terminal-pane-name').textContent() === '继续审查');
