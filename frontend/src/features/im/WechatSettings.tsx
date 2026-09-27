@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { imApi } from './api';
-import type { ImProviderView, WechatLogin, WechatStatus } from './types';
+import type { ImProviderView, WechatLogin, WechatStatus, WechatVerification } from './types';
 
 const failure = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
 const polling = (login: WechatLogin) => ['wait', 'scaned', 'scaned_but_redirect'].includes(login.status);
-type TestResult = 'idle' | 'sent' | 'confirmed' | 'missing';
 
 function SetupStep({ number, title, complete, current, children }: {
   number: number; title: string; complete: boolean; current: boolean; children: ReactNode;
@@ -25,13 +24,14 @@ export function WechatSettings({ provider, disabled, onChanged, onBusyChange }: 
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [testResult, setTestResult] = useState<TestResult>('idle');
   const [testing, setTesting] = useState(false);
   const [statusCycle, setStatusCycle] = useState(0);
   const [statusError, setStatusError] = useState('');
   const [connection, setConnection] = useState<WechatStatus['connection']>(null);
   const mounted = useRef(true);
   const currentId = useRef<string | undefined>(undefined);
+  const statusVersion = useRef(0);
+  const operating = useRef(false);
 
   useEffect(() => {
     mounted.current = true;
@@ -42,22 +42,25 @@ export function WechatSettings({ provider, disabled, onChanged, onBusyChange }: 
   }, []);
 
   useEffect(() => {
-    setTestResult('idle');
+    setConnection(null);
   }, [provider?.account_id, provider?.user_id]);
 
   useEffect(() => {
-    setConnection(null); setStatusError('');
+    setStatusError('');
     if (!provider) return;
     let active = true;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     const check = async () => {
+      const version = statusVersion.current;
       try {
-        const status = await imApi.wechatStatus(controller.signal);
-        if (active) {
-          setConnection(status.connection); setStatusError('');
+        if (!operating.current) {
+          const status = await imApi.wechatStatus(controller.signal);
+          if (active && !operating.current && version === statusVersion.current) {
+            setConnection(status.connection); setStatusError('');
+          }
         }
-      } catch (reason) { if (active) setStatusError(failure(reason)); }
+      } catch (reason) { if (active && version === statusVersion.current) setStatusError(failure(reason)); }
       if (active) timer = setTimeout(() => void check(), 5000);
     };
     void check();
@@ -76,7 +79,8 @@ export function WechatSettings({ provider, disabled, onChanged, onBusyChange }: 
         if (!active) return;
         setLogin(next); setError('');
         if (next.status === 'confirmed') {
-          currentId.current = undefined; setStatusCycle(value => value + 1); await onChanged();
+          currentId.current = undefined; statusVersion.current++; setConnection(null);
+          setStatusCycle(value => value + 1); await onChanged();
         }
         else if (polling(next)) timer = setTimeout(() => void poll(), 1000);
       } catch (reason) { if (active) setError(failure(reason)); }
@@ -88,13 +92,18 @@ export function WechatSettings({ provider, disabled, onChanged, onBusyChange }: 
   }, [login?.id, cycle, onChanged]);
 
   const operation = async (work: () => Promise<void>) => {
+    operating.current = true; statusVersion.current++;
     setBusy(true); onBusyChange(true); setError('');
-    try { await work(); } catch (reason) { if (mounted.current) setError(failure(reason)); }
-    finally { if (mounted.current) { setBusy(false); onBusyChange(false); } }
+    try { await work(); } catch (reason) {
+      if (mounted.current) { setError(failure(reason)); setStatusCycle(value => value + 1); }
+    } finally {
+      operating.current = false; statusVersion.current++;
+      if (mounted.current) { setBusy(false); onBusyChange(false); }
+    }
   };
   const start = () => operation(async () => {
     if (currentId.current) await imApi.cancelWechat(currentId.current);
-    setLogin(undefined); setCode(''); setTestResult('idle');
+    setLogin(undefined); setCode('');
     const next = await imApi.startWechat();
     if (!mounted.current) { await imApi.cancelWechat(next.id); return; }
     currentId.current = next.id; setLogin(next);
@@ -106,18 +115,25 @@ export function WechatSettings({ provider, disabled, onChanged, onBusyChange }: 
   const unavailable = disabled || busy;
   const pairing = !!login && (polling(login) || login.status === 'need_verifycode');
   const contextReady = !!provider && !!connection?.context_ready;
+  const verification = pairing ? null : connection?.verification;
+  const testResult = verification?.receipt ?? 'idle';
   const testSubmitted = testResult !== 'idle';
   const confirmed = testResult === 'confirmed';
   const step = !provider || pairing ? 1 : testSubmitted ? confirmed ? 0 : 4 : contextReady ? 3 : 2;
+  const updateVerification = (verification: WechatVerification | null) => {
+    setConnection(current => current && { ...current, verification });
+  };
   const sendTest = () => operation(async () => {
-    setTestResult('idle'); setTesting(true);
+    updateVerification(null); setTesting(true);
     try {
-      await imApi.testWechat();
-      if (mounted.current) setTestResult('sent');
-    } catch (reason) {
-      if (mounted.current) setStatusCycle(value => value + 1);
-      throw reason;
+      const result = await imApi.testWechat();
+      if (mounted.current) updateVerification(result.verification);
     } finally { if (mounted.current) setTesting(false); }
+  });
+  const receipt = (received: boolean) => operation(async () => {
+    if (!verification) return;
+    const result = await imApi.wechatReceipt(verification.test_id, received);
+    if (mounted.current) updateVerification(result.verification);
   });
   return <section className="im-wechat" aria-label="微信 Bot 设置">
     <h3>微信 Bot {provider && <small className="notification-configured">{confirmed ? '已验证' : '已绑定'}</small>}</h3>
@@ -129,7 +145,7 @@ export function WechatSettings({ provider, disabled, onChanged, onBusyChange }: 
           <button type="button" className="project-aow-dialog-button" disabled={unavailable} onClick={() => void start()}>{login && login.status !== 'confirmed' ? '重新生成二维码' : provider ? '重新扫码绑定' : '扫码连接微信'}</button>
           {login && login.status !== 'confirmed' && <button type="button" className="project-aow-dialog-button" disabled={unavailable} onClick={() => void cancel()}>关闭扫码</button>}
           {provider && <button type="button" className="project-aow-dialog-button" disabled={unavailable} onClick={() => void operation(async () => {
-            await imApi.disconnectWechat(); currentId.current = undefined; setLogin(undefined); setTestResult('idle'); await onChanged();
+            await imApi.disconnectWechat(); currentId.current = undefined; setLogin(undefined); setConnection(null); await onChanged();
           })}>解除微信绑定</button>}
         </div>
         {login && login.status !== 'confirmed' && <div className="im-wechat-login">
@@ -142,7 +158,7 @@ export function WechatSettings({ provider, disabled, onChanged, onBusyChange }: 
               const next = await imApi.pollWechat(login.id, code.trim());
               setCode(''); setLogin(next);
               if (next.status === 'confirmed') {
-                currentId.current = undefined; setStatusCycle(value => value + 1); await onChanged();
+                currentId.current = undefined; setConnection(null); setStatusCycle(value => value + 1); await onChanged();
               }
               setCycle(value => value + 1);
             });
@@ -163,11 +179,11 @@ export function WechatSettings({ provider, disabled, onChanged, onBusyChange }: 
         <div className="im-actions"><button type="button" className="project-aow-dialog-button primary" disabled={unavailable || pairing || !contextReady} onClick={() => void sendTest()}>{testing ? '正在发送…' : '发送微信测试消息'}</button></div>
       </SetupStep>
       <SetupStep number={4} title="确认微信收到通知" complete={confirmed} current={step === 4}>
-        <p className="project-aow-form-intro">{confirmed ? '验证完成。请在 Settings → 通知中勾选“微信推送”，并保存通知设置。' : '请以微信中实际出现测试通知为准，收到后点击“我已收到”。'}</p>
+        <p className="project-aow-form-intro">{confirmed ? '验证完成，记录已保存。请在 Settings → 通知中勾选“微信推送”，并保存通知设置。后续连接状态请查看第二步提示。' : '请以微信中实际出现测试通知为准，收到后点击“我已收到”。'}</p>
         {testResult === 'missing' && <p className="im-wechat-progress" role="status">请确认查看的是本次扫码账号与 Bot 的私聊。向 Bot 再发一条消息，然后重新发送测试通知；仍未收到时，可重新扫码绑定。</p>}
         {testSubmitted && !confirmed && <div className="im-actions">
-          <button type="button" className="project-aow-dialog-button primary" disabled={unavailable || pairing} onClick={() => setTestResult('confirmed')}>我已收到</button>
-          <button type="button" className="project-aow-dialog-button" disabled={unavailable || pairing} onClick={() => setTestResult('missing')}>还没收到</button>
+          <button type="button" className="project-aow-dialog-button primary" disabled={unavailable || pairing} onClick={() => void receipt(true)}>我已收到</button>
+          <button type="button" className="project-aow-dialog-button" disabled={unavailable || pairing} onClick={() => void receipt(false)}>还没收到</button>
         </div>}
         {confirmed && <p className="im-wechat-progress im-wechat-verified" role="status">已确认收到微信测试通知。</p>}
       </SetupStep>

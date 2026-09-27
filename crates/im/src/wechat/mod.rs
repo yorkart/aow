@@ -54,6 +54,22 @@ impl Credentials {
 struct Session {
     cursor: String,
     context_token: Option<String>,
+    #[serde(default)]
+    verification: Option<TestVerification>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TestVerification {
+    pub test_id: String,
+    pub receipt: TestReceipt,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TestReceipt {
+    Sent,
+    Confirmed,
+    Missing,
 }
 
 #[derive(Clone, Default, Serialize)]
@@ -61,6 +77,7 @@ pub struct ConnectionStatus {
     pub receiving: bool,
     pub context_ready: bool,
     pub error: Option<String>,
+    pub verification: Option<TestVerification>,
 }
 
 struct Inner {
@@ -108,8 +125,54 @@ impl WechatClient {
 
     pub fn status(&self) -> ConnectionStatus {
         let mut status = self.inner.status.lock().unwrap().clone();
-        status.context_ready = self.inner.session.lock().unwrap().context_token.is_some();
+        let session = self.inner.session.lock().unwrap();
+        status.context_ready = session.context_token.is_some();
+        status.verification = session.verification.clone();
         status
+    }
+
+    /// Persist setup progress for this binding; accepting a send is not a receipt.
+    pub async fn send_test(&self, message: &Message) -> Result<TestVerification> {
+        let _sending = self.inner.sending.lock().await;
+        self.inner
+            .update_session(|session| session.verification = None)?;
+        let verification = TestVerification {
+            test_id: Uuid::new_v4().to_string(),
+            receipt: TestReceipt::Sent,
+        };
+        self.inner.send(message, &verification.test_id).await?;
+        self.inner.update_session(|session| {
+            session.verification = Some(verification.clone());
+        })?;
+        Ok(verification)
+    }
+
+    pub async fn record_test_receipt(
+        &self,
+        test_id: &str,
+        received: bool,
+    ) -> Result<TestVerification> {
+        let _sending = self.inner.sending.lock().await;
+        // Serialize with test sends, so an old page cannot confirm a newer test
+        // or a replacement binding (even when it belongs to the same account).
+        let mut verification = self
+            .inner
+            .session
+            .lock()
+            .unwrap()
+            .verification
+            .clone()
+            .filter(|verification| verification.test_id == test_id)
+            .context("测试记录已更新，请刷新微信设置后重试")?;
+        verification.receipt = if received {
+            TestReceipt::Confirmed
+        } else {
+            TestReceipt::Missing
+        };
+        self.inner.update_session(|session| {
+            session.verification = Some(verification.clone());
+        })?;
+        Ok(verification)
     }
 
     /// Receive polling is optional for sending and is owned by this client.
@@ -135,6 +198,7 @@ impl WechatClient {
                     receiving: !failed,
                     context_ready: false,
                     error: result.err().map(|error| error.to_string()),
+                    verification: None,
                 };
                 // Long polls normally hold upstream for ~35s; enforce pacing when
                 // it returns immediately, and back off on transient failures.
@@ -227,8 +291,14 @@ impl Inner {
 
 impl ImProvider for WechatClient {
     async fn send(&self, message: &Message, delivery_id: &str) -> Result<()> {
-        let inner = &self.inner;
-        let _sending = inner.sending.lock().await;
+        let _sending = self.inner.sending.lock().await;
+        self.inner.send(message, delivery_id).await
+    }
+}
+
+impl Inner {
+    async fn send(&self, message: &Message, delivery_id: &str) -> Result<()> {
+        let inner = self;
         ensure!(inner.active.load(Ordering::Acquire), "微信绑定已移除或替换");
         let context = inner.session.lock().unwrap().context_token.clone();
         let mut body = json!({"msg": {

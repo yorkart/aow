@@ -357,6 +357,7 @@ try {
     page.on('pageerror', error => errors.push(error.message));
     let testsSent = 0;
     let contextReady = false;
+    let verification = null;
     const qr = `data:image/svg+xml;base64,${Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="white"/><rect x="32" y="32" width="64" height="64"/></svg>').toString('base64')}`;
     await page.route('**/api/aow/im/wechat**', async route => {
       const request = route.request();
@@ -370,13 +371,23 @@ try {
         providers.push({ provider: 'wechat', account_id: 'bot', user_id: 'scanner' });
         return route.fulfill({ json: { id: 'qr-1', status: 'confirmed', qr_image: null, message: '微信 Bot 已绑定，通知将发给本次扫码的微信账号。' } });
       }
-      if (path.endsWith('/test')) { testsSent++; return route.fulfill({ json: { message: '测试消息已发送。' } }); }
+      if (path.endsWith('/test')) {
+        verification = { test_id: `test-${++testsSent}`, receipt: 'sent' };
+        return route.fulfill({ json: { message: '测试消息已发送。', verification } });
+      }
+      if (path.endsWith('/test/receipt')) {
+        const input = request.postDataJSON();
+        assert.equal(input.test_id, verification.test_id);
+        verification = { ...verification, receipt: input.received ? 'confirmed' : 'missing' };
+        return route.fulfill({ json: { verification } });
+      }
       if (request.method() === 'DELETE') {
         if (preferences.channels.includes('wechat')) return route.fulfill({ status: 400, json: { message: '移除机器人前请取消选择微信推送' } });
         providers = providers.filter(provider => provider.provider !== 'wechat');
+        verification = null;
         return route.fulfill({ json: settings() });
       }
-      return route.fulfill({ json: { connection: { receiving: true, context_ready: contextReady, error: null } } });
+      return route.fulfill({ json: { connection: { receiving: true, context_ready: contextReady, error: null, verification } } });
     });
     await page.goto(`${base}/tests/agent-notifications-preview.html`);
     await page.getByRole('button', { name: 'IM 设置', exact: true }).click();
@@ -405,6 +416,11 @@ try {
     assert.match(await steps.locator('[aria-current="step"]').innerText(), /确认微信收到通知/);
     await page.getByRole('button', { name: '我已收到', exact: true }).click();
     await page.getByText('已确认收到微信测试通知。', { exact: true }).waitFor();
+    await page.reload();
+    await page.getByRole('button', { name: 'IM 设置', exact: true }).click();
+    await page.getByText('已确认收到微信测试通知。', { exact: true }).waitFor();
+    assert.equal(await steps.locator('.complete').count(), 4);
+    assert.equal(testsSent, 1);
     await page.screenshot({ path: '/tmp/aow-wechat-setup-confirmed.png' });
     await page.getByLabel('飞书 App ID').fill('cli_new');
     await page.getByLabel('飞书 App Secret').fill('secret');
@@ -420,6 +436,8 @@ try {
     await page.getByText('通知配置已保存，即时生效。', { exact: true }).waitFor();
     assert.deepEqual(preferences.channels, ['page', 'wechat']);
     await page.getByRole('button', { name: 'IM 设置', exact: true }).click();
+    await page.getByText('已确认收到微信测试通知。', { exact: true }).waitFor();
+    assert.equal(await steps.locator('.complete').count(), 4);
     await page.getByRole('button', { name: '解除微信绑定' }).click();
     await page.getByText('移除机器人前请取消选择微信推送', { exact: true }).waitFor();
     assert.equal(providers.length, 1);
@@ -447,24 +465,32 @@ try {
     let failSend = false;
     let statusUnavailable = true;
     let testsSent = 0;
+    let verification = null;
     await page.route('**/api/aow/im/wechat**', async route => {
       const request = route.request();
       const path = new URL(request.url()).pathname;
       if (path.endsWith('/login')) return route.fulfill({ json: { id: 'same-account', status: 'wait', qr_image: null, message: '等待扫码' } });
       if (path.endsWith('/login/same-account')) {
-        contextReady = false;
+        contextReady = false; verification = null;
         return route.fulfill({ json: { id: 'same-account', status: 'confirmed', qr_image: null, message: '已重新绑定同一账号' } });
       }
       if (path.endsWith('/test')) {
-        testsSent++;
+        testsSent++; verification = null;
         if (failSend) {
           contextReady = false;
           return route.fulfill({ status: 400, json: { message: '微信会话尚未就绪或已失效，请先向 Bot 发一条消息' } });
         }
-        return route.fulfill({ json: { message: '测试消息已发送。' } });
+        verification = { test_id: `test-${testsSent}`, receipt: 'sent' };
+        return route.fulfill({ json: { message: '测试消息已发送。', verification } });
+      }
+      if (path.endsWith('/test/receipt')) {
+        const input = request.postDataJSON();
+        assert.equal(input.test_id, verification.test_id);
+        verification = { ...verification, receipt: input.received ? 'confirmed' : 'missing' };
+        return route.fulfill({ json: { verification } });
       }
       if (statusUnavailable) return route.fulfill({ status: 503, json: { message: '暂时无法读取微信状态' } });
-      return route.fulfill({ json: { connection: { receiving: true, context_ready: contextReady, error: null } } });
+      return route.fulfill({ json: { connection: { receiving: true, context_ready: contextReady, error: null, verification } } });
     });
     await page.goto(`${base}/tests/agent-notifications-preview.html`);
     await page.getByRole('button', { name: 'IM 设置', exact: true }).click();
@@ -518,6 +544,79 @@ try {
     const bounds = await steps.boundingBox();
     assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 390);
     assert.deepEqual(errors, []);
+  });
+
+  await test('wechat receipts persist across clients and failed saves, without hiding connection errors', async t => {
+    preferences = { enabled: true, channels: ['page'] };
+    providers = [{ provider: 'wechat', account_id: 'bot', user_id: 'scanner' }];
+    let verification = { test_id: 'saved-test', receipt: 'sent' };
+    let failSave = true;
+    let connectionError = null;
+    let holdStatus = false;
+    let staleStatus;
+    let resolveHeld;
+    const held = new Promise(resolve => { resolveHeld = resolve; });
+    const desktop = await browser.newPage({ viewport: { width: 1100, height: 1000 } });
+    const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    t.after(() => Promise.all([desktop.close(), mobile.close()]));
+    for (const page of [desktop, mobile]) {
+      await page.route('**/api/aow/im/wechat**', async route => {
+        const request = route.request();
+        const path = new URL(request.url()).pathname;
+        if (path.endsWith('/test/receipt')) {
+          assert.deepEqual(request.postDataJSON(), { test_id: 'saved-test', received: true });
+          if (failSave) return route.fulfill({ status: 400, json: { message: '无法保存微信会话' } });
+          verification = { ...verification, receipt: 'confirmed' };
+          return route.fulfill({ json: { verification } });
+        }
+        if (path.endsWith('/login') || path.endsWith('/login/cancelled')) {
+          if (request.method() === 'DELETE') return route.fulfill({ status: 204 });
+          return route.fulfill({ json: { id: 'cancelled', status: 'wait', qr_image: null, message: '等待扫码' } });
+        }
+        assert.equal(request.method(), 'GET'); // Reopening never sends a test automatically.
+        const json = { connection: { receiving: !connectionError, context_ready: !connectionError, error: connectionError, verification } };
+        if (holdStatus && page === mobile) {
+          holdStatus = false;
+          staleStatus = () => route.fulfill({ json });
+          resolveHeld();
+          return;
+        }
+        return route.fulfill({ json });
+      });
+      await page.goto(`${base}/tests/agent-notifications-preview.html`);
+      await page.getByRole('button', { name: 'IM 设置', exact: true }).click();
+      await page.getByRole('button', { name: '我已收到', exact: true }).waitFor();
+      assert.equal(await page.locator('.im-wechat-step.complete').count(), 3);
+    }
+    await mobile.getByRole('button', { name: '我已收到', exact: true }).click();
+    await mobile.getByRole('alert').filter({ hasText: '无法保存微信会话' }).waitFor();
+    assert.equal(await mobile.getByText('已确认收到微信测试通知。', { exact: true }).count(), 0);
+    await mobile.reload();
+    await mobile.getByRole('button', { name: 'IM 设置', exact: true }).click();
+    await mobile.getByRole('button', { name: '我已收到', exact: true }).waitFor();
+    failSave = false;
+    holdStatus = true;
+    await held; // A poll started before confirmation must not overwrite its result.
+    await mobile.getByRole('button', { name: '我已收到', exact: true }).click();
+    await mobile.getByText('已确认收到微信测试通知。', { exact: true }).waitFor();
+    await staleStatus();
+    await mobile.evaluate(() => new Promise(resolve => setTimeout(resolve, 100)));
+    assert.equal(await mobile.locator('.im-wechat-step.complete').count(), 4);
+    await desktop.getByText('已确认收到微信测试通知。', { exact: true }).waitFor();
+    assert.equal(await desktop.locator('.im-wechat-step.complete').count(), 4);
+
+    await mobile.getByRole('button', { name: '重新扫码绑定', exact: true }).click();
+    await mobile.getByText('等待扫码', { exact: true }).waitFor();
+    await mobile.getByRole('button', { name: '关闭扫码', exact: true }).click();
+    await mobile.getByText('已确认收到微信测试通知。', { exact: true }).waitFor();
+
+    connectionError = '微信会话尚未就绪或已失效，请先向 Bot 发一条消息';
+    await mobile.reload();
+    await mobile.getByRole('button', { name: 'IM 设置', exact: true }).click();
+    await mobile.getByText(connectionError, { exact: true }).waitFor();
+    assert.equal(await mobile.locator('.im-wechat-step.complete').count(), 4);
+    assert.equal(await mobile.getByRole('button', { name: '发送微信测试消息', exact: true }).isDisabled(), true);
+    assert.ok(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   });
 
   await test('expired QR can be refreshed and leaving settings cancels pending login', async t => {

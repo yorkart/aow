@@ -1,5 +1,5 @@
 //! Authenticated HTTP boundary only; all IM protocol/auth/session logic is in aow-im.
-use aow_im::{ImConfigUpdate, ImKind, ImProvider, Message};
+use aow_im::{ImConfigUpdate, ImKind, Message};
 use axum::{
     Json, Router,
     extract::{Path, State},
@@ -23,6 +23,7 @@ pub(crate) fn routes() -> Router<AppState> {
             post(poll_login).delete(cancel_login),
         )
         .route("/api/aow/im/wechat/test", post(test_send))
+        .route("/api/aow/im/wechat/test/receipt", put(test_receipt))
 }
 
 fn error(error: impl std::fmt::Display) -> Response {
@@ -153,13 +154,34 @@ async fn test_send(State(state): State<AppState>) -> Response {
         markdown: false,
         error: false,
     };
+    match client.send_test(&message).await {
+        Ok(verification) => (
+            [(CACHE_CONTROL, "no-store")],
+            Json(json!({"message":"测试消息已发送。", "verification": verification})),
+        )
+            .into_response(),
+        Err(reason) => error(reason),
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReceiptInput {
+    test_id: String,
+    received: bool,
+}
+
+async fn test_receipt(State(state): State<AppState>, Json(input): Json<ReceiptInput>) -> Response {
+    let Some(client) = state.aow.notifications().wechat() else {
+        return error("请先扫码绑定微信 Bot");
+    };
     match client
-        .send(&message, &uuid::Uuid::new_v4().to_string())
+        .record_test_receipt(&input.test_id, input.received)
         .await
     {
-        Ok(()) => (
+        Ok(verification) => (
             [(CACHE_CONTROL, "no-store")],
-            Json(json!({"message":"测试消息已发送。"})),
+            Json(json!({"verification": verification})),
         )
             .into_response(),
         Err(reason) => error(reason),
@@ -191,6 +213,7 @@ mod tests {
             ("POST", "/api/aow/im/wechat/login/id"),
             ("DELETE", "/api/aow/im/wechat/login/id"),
             ("POST", "/api/aow/im/wechat/test"),
+            ("PUT", "/api/aow/im/wechat/test/receipt"),
         ] {
             let response = app
                 .clone()
@@ -238,6 +261,23 @@ mod tests {
                     .method("POST")
                     .uri("/api/aow/im/wechat/test")
                     .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(response.headers()[CACHE_CONTROL], "no-store");
+    }
+
+    #[tokio::test]
+    async fn test_receipt_requires_a_bound_provider() {
+        let response = crate::build_router(AppState::new("/unused".into()))
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/api/aow/im/wechat/test/receipt")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"test_id":"old-test","received":true}"#))
                     .unwrap(),
             )
             .await
