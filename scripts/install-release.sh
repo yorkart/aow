@@ -49,8 +49,10 @@ Options:
 Requires Bash, tar, Node.js 20+, Git, and Linux/systemd or macOS/launchd.
 macOS selects LaunchAgent with a graphical session, otherwise LaunchDaemon.
 The selected mode/account is saved in update.json and reused on updates.
-LaunchDaemon registration requires a one-time local administrator action;
-configuration changes require registration again. The installer never uses sudo.
+First-time LaunchDaemon setup requires an administrator-owned checkout:
+  just install --user TARGET_ACCOUNT
+Later updates run as the target account. Configuration changes may require registration again.
+This release installer never uses sudo; just install coordinates administrator setup.
 Downloads require curl and HTTPS access to GitHub Releases.
 Installs under ~/.local/lib/aow; preserves existing configuration and data.
 Also installs aow update / aow pin and remembers the GitHub repository.
@@ -217,7 +219,11 @@ terminald_confirmation() {
     # reply, never bytes from `curl ... | bash`. Record it to distinguish a skip
     # (the start script exits 1) from a real failure after the user confirmed.
     local answer=
-    if { IFS= read -r answer </dev/tty; } 2>/dev/null; then
+    # The administrator coordinator already asked once for this invocation.
+    if [[ ${AOW_INSTALL_MANAGED:-} == 1 && -n ${AOW_INSTALL_TERMINALD:-} ]]; then
+        answer=$AOW_INSTALL_TERMINALD
+        printf '%s' "$answer" >"$stage/confirmation"
+    elif { IFS= read -r answer </dev/tty; } 2>/dev/null; then
         printf '%s' "$answer" >"$stage/confirmation"
     else
         answer=
@@ -425,7 +431,9 @@ JS
     if [[ "$service_mode" == launchdaemon ]]; then
         local server_status=0 terminald_status=0
         : >"$stage/confirmation"
-        printf '%s\n' 'Start/restart terminald? This ends its existing terminal sessions. Enter lowercase y to confirm:' >&2
+        if [[ ${AOW_INSTALL_MANAGED:-} != 1 || -z ${AOW_INSTALL_TERMINALD:-} ]]; then
+            printf '%s\n' 'Start/restart terminald? This ends its existing terminal sessions. Enter lowercase y to confirm:' >&2
+        fi
         terminald_confirmation >"$stage/terminald-answer"
         sh "$support/scripts/start-server.sh" "$version" || server_status=$?
         if [[ "$server_status" != 0 && "$server_status" != 78 ]]; then
@@ -443,7 +451,11 @@ JS
             fi
         fi
         if [[ "$server_status" == 78 || "$terminald_status" == 78 ]]; then
-            node "$support/scripts/launchd-mode.mjs" hint "$runtime_root"
+            if [[ ${AOW_INSTALL_MANAGED:-} == 1 ]]; then
+                printf '%s\n' 'LaunchDaemon registration is pending; the administrator installer will register and verify services automatically.' >&2
+            else
+                node "$support/scripts/launchd-mode.mjs" hint "$runtime_root"
+            fi
             return 78
         fi
         printf 'AoW %s is installed (LaunchDaemon); unconfirmed terminald changes were skipped.\n' "$version"

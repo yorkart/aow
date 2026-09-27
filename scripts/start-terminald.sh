@@ -3,8 +3,10 @@
 set -eu
 
 # Require confirmation before changing runtime files or touching the service.
-printf '%s\n' '警告：此操作将启动或重启 terminald，重启会终止它管理的所有终端会话。' >&2
-printf '%s' '请输入 y 并回车以继续，其他输入取消: ' >&2
+if [ "${AOW_INSTALL_MANAGED:-}" != 1 ] || [ -z "${AOW_INSTALL_TERMINALD:-}" ]; then
+    printf '%s\n' '警告：此操作将启动或重启 terminald，重启会终止它管理的所有终端会话。' >&2
+    printf '%s' '请输入 y 并回车以继续，其他输入取消: ' >&2
+fi
 if ! IFS= read -r confirmation || [ "$confirmation" != y ]; then
     printf '%s\n' '已取消，terminald 保持当前状态。' >&2
     exit 1

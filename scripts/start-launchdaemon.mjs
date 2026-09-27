@@ -5,6 +5,7 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSy
 import { userInfo } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { setTimeout as delay } from 'node:timers/promises';
 import { isDeepStrictEqual } from 'node:util';
 import { daemonLabel, launchctl, missingDomain, readDaemon, resolveService } from './launchd-mode.mjs';
 
@@ -22,9 +23,9 @@ function job() {
   return { registered: true, pid: Number.isSafeInteger(pid) && pid > 1 ? pid : null };
 }
 
-function signalOwnJob() {
+function signalOwnJob(signal = 'TERM', expectedPid = null) {
   const { pid } = job();
-  if (!pid) return null;
+  if (!pid || (expectedPid !== null && pid !== expectedPid)) return null;
   const owner = spawnSync('ps', ['-o', 'uid=', '-p', String(pid)], { encoding: 'utf8', timeout: 5000 });
   if (owner.error) throw owner.error;
   if (owner.status === 1 && !owner.stdout.trim()) return pid; // Already exited.
@@ -33,10 +34,28 @@ function signalOwnJob() {
   }
   if (job().pid !== pid) return pid;
   // The kernel also enforces UID ownership. Never invoke sudo or signal a group.
-  const result = spawnSync('kill', ['-TERM', String(pid)], { encoding: 'utf8', timeout: 5000 });
+  const result = spawnSync('kill', [`-${signal}`, String(pid)], { encoding: 'utf8', timeout: 5000 });
   if (result.error) throw result.error;
   if (result.status !== 0 && job().pid === pid) throw new Error(`Cannot restart LaunchDaemon: ${result.stderr.trim()}`);
   return pid;
+}
+
+async function restartOwnJob() {
+  const previousPid = signalOwnJob();
+  if (!previousPid) return null;
+  // A direct SIGTERM does not use launchd's ExitTimeOut. Long-lived HTTP
+  // connections can keep graceful shutdown waiting after the listener closes.
+  const deadline = Date.now() + 5000;
+  while (job().pid === previousPid) {
+    if (Date.now() >= deadline) {
+      console.error(`aow-${component} did not exit within 5 seconds; forcing the previous process to stop.`);
+      // Recheck both the job PID and its UID; never kill a replacement process.
+      signalOwnJob('KILL', previousPid);
+      break;
+    }
+    await delay(100);
+  }
+  return previousPid;
 }
 
 function linkSnapshot(path) {
@@ -92,7 +111,7 @@ function waitForHealth(previousPid) {
   { stdio: ['ignore', 'pipe', 'pipe'], timeout: 35000 });
 }
 
-function main() {
+async function main() {
   if (!['server', 'terminald'].includes(component) || !runtime?.startsWith('/')) throw new Error('Invalid LaunchDaemon activation arguments');
   if (resolveService(runtime).mode !== 'launchdaemon') throw new Error('Installation is not configured for LaunchDaemon');
   if (requested !== 'latest' && !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(requested)) throw new Error('Invalid release id');
@@ -142,7 +161,7 @@ function main() {
       writeAtomic(nodeMarker, nodePath + '\n');
     }
     replaceLink(release, active);
-    waitForHealth(signalOwnJob());
+    waitForHealth(await restartOwnJob());
   } catch (error) {
     replaceLink(previous, active);
     if (component === 'terminald') {
@@ -150,16 +169,19 @@ function main() {
       if (previousMarker !== null) writeAtomic(nodeMarker, previousMarker);
       else if (existsSync(nodeMarker)) unlinkSync(nodeMarker);
     }
-    try { const failedPid = signalOwnJob(); if (previous !== null) waitForHealth(failedPid); }
-    catch { console.error(`error: failed to restore previous ${component} LaunchDaemon; inspect system/${daemonLabel(component)}`); }
-    throw new Error(`aow-${component} activation failed; restored previous release (${error.message})`);
+    let restored = false;
+    try {
+      const failedPid = await restartOwnJob();
+      if (previous !== null) { waitForHealth(failedPid); restored = true; }
+    } catch { console.error(`error: failed to restore previous ${component} LaunchDaemon; inspect system/${daemonLabel(component)}`); }
+    throw new Error(`aow-${component} activation failed; ${restored ? 'restored previous release' : 'restored previous release link, but service recovery was not verified'} (${error.message})`);
   }
   clearRequest();
   console.log(`aow-${component} is active on release ${release.split('/').at(-1)} (LaunchDaemon)`);
   return 0;
 }
 
-try { process.exitCode = main(); }
+try { process.exitCode = await main(); }
 catch (error) { console.error(`error: ${error.message}`); process.exitCode = 1; }
 finally {
   if (stage) rmSync(stage, { recursive: true, force: true });

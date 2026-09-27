@@ -75,8 +75,31 @@ mode=$1
 for last in "$@"; do :; done
 exec python3 -c 'import json,plistlib,sys; value=plistlib.load(open(sys.argv[1], "rb")); print(json.dumps(value)) if sys.argv[2]=="-convert" else None' "$last" "$mode"
 `, true);
-  write(join(tools, 'ps'), `#!/bin/sh\necho "\${MOCK_PROCESS_UID:-${process.getuid()}}"\n`, true);
-  write(join(tools, 'kill'), '#!/bin/sh\nprintf "signal %s\\n" "$*" >> "$SERVICE_LOG"\n', true);
+  write(join(tools, 'ps'), `#!/bin/sh
+if [ -n "\${MOCK_KILL_PROCESS_UID:-}" ] && [ -f "$SERVICE_STATE/term-sent" ]; then
+  echo "$MOCK_KILL_PROCESS_UID"
+else
+  echo "\${MOCK_PROCESS_UID:-${process.getuid()}}"
+fi
+`, true);
+  write(join(tools, 'kill'), `#!/bin/sh
+printf "signal %s\\n" "$*" >> "$SERVICE_LOG"
+for component in server terminald; do
+  state=$SERVICE_STATE/org.aow.service.$component
+  [ -f "$state" ] || continue
+  pid=$(cat "$state")
+  if [ -z "$pid" ]; then
+    if [ "$component" = server ]; then pid=987654; else pid=987655; fi
+  fi
+  [ "$2" = "$pid" ] || continue
+  printf 'signal-component %s %s %s\\n' "$component" "$1" "$pid" >> "$SERVICE_LOG"
+  if [ "$1" = -TERM ]; then
+    touch "$SERVICE_STATE/term-sent"
+    [ "\${STALL_TERM:-}" != "$component" ] || exit 0
+  fi
+  echo "$((pid + 2))" > "$state"
+done
+`, true);
   write(join(tools, 'launchctl'), `#!/bin/sh
 printf '%s\\n' "$*" >> "$SERVICE_LOG"
 name=\${2##*/}
@@ -85,7 +108,8 @@ case "$1" in
     case "$2" in
       gui/[0-9]*)
         case "$2" in */org.aow.*) ;; *)
-          if [ "\${GUI_QUERY_ERROR:-}" = 1 ]; then echo 'Operation not permitted' >&2; exit 1; fi
+          if [ -n "\${GUI_QUERY_ERROR:-}" ]; then echo "\${GUI_QUERY_MESSAGE:-Operation not permitted}" >&2; exit "$GUI_QUERY_ERROR"; fi
+          if [ "\${FAIL_GUI:-}" = 125 ]; then echo 'Could not print domain: 125: Domain does not support specified action' >&2; exit 125; fi
           if [ "\${FAIL_GUI:-}" = 1 ]; then echo 'Could not find domain for user' >&2; exit 112; fi
           exit 0;; esac;;
     esac
@@ -99,7 +123,11 @@ case "$1" in
       rm -f "$SERVICE_STATE/$name" "$SERVICE_STATE/$name.unloading"
     fi
     if [ ! -f "$SERVICE_STATE/$name" ]; then echo 'Could not find service' >&2; exit 113; fi
-    printf 'state = running\\npid = 987654\\n';;
+    pid=$(cat "$SERVICE_STATE/$name")
+    if [ -z "$pid" ]; then
+      if [ "$name" = org.aow.service.terminald ]; then pid=987655; else pid=987654; fi
+    fi
+    printf 'state = running\\npid = %s\\n' "$pid";;
   enable) exit 0;;
   bootout)
     if [ -f "$SERVICE_STATE/$name" ] && [ "\${BOOTOUT_POLLS:-0}" -gt 0 ]; then
@@ -134,6 +162,8 @@ if [ ! -f "$DOWNLOAD_ROOT/$path" ]; then printf 404; exit 22; fi
 cp "$DOWNLOAD_ROOT/$path" "$output"
 `, true);
   const env = { ...process.env, HOME: home, PATH: `${tools}:${process.env.PATH}`, SHELL: '/bin/zsh',
+    // Exercise the unprivileged preparation phase of the administrator installer.
+    AOW_INSTALL_MANAGED: '1', AOW_INSTALL_TERMINALD: '',
     AOW_RUNTIME_ROOT: runtime, AOW_USER_BIN_DIR: join(home, '.local/bin'),
     AOW_STATE_DIR: '', AOW_SERVER_STATE_DIR: '', AOW_RELEASE_REPOSITORY: '',
     AOW_SERVER_HOST: '', AOW_SERVER_PORT: '', AOW_BASE_PATH: '', AOW_TERMINALD_SOCKET: '',
@@ -403,6 +433,14 @@ test('macOS installer does not treat GUI inspection errors as a headless account
   assert.match(result.stderr, /graphical user session/);
   assert.equal(existsSync(join(f.runtime, 'latest')), false);
   assert.doesNotMatch(f.log(f.serviceLog), /bootstrap|bootout/);
+  for (const extra of [
+    { GUI_QUERY_ERROR: '125' },
+    { GUI_QUERY_ERROR: '1', GUI_QUERY_MESSAGE: 'Could not print domain: 125: Domain does not support specified action' },
+  ]) {
+    const error = f.run(process.execPath, [alias, 'resolve', f.runtime], extra);
+    assert.notEqual(error.status, 0);
+    assert.match(error.stderr, /Cannot inspect graphical user session/);
+  }
 });
 
 test('saved LaunchAgent mode persists without a GUI and rejects account/configuration mismatches', t => {
@@ -412,9 +450,11 @@ test('saved LaunchAgent mode persists without a GUI and rejects account/configur
   const settings = JSON.parse(f.log(path));
   assert.deepEqual(settings.service, { mode: 'launchagent', user: userInfo().username, uid: process.getuid() });
   writeFileSync(f.serviceLog, '');
-  const missing = f.install([], { FAIL_GUI: '1' });
-  assert.notEqual(missing.status, 0);
-  assert.match(missing.stderr, /will not silently switch modes/);
+  for (const code of ['1', '125']) {
+    const missing = f.install([], { FAIL_GUI: code });
+    assert.notEqual(missing.status, 0);
+    assert.match(missing.stderr, /will not silently switch modes/);
+  }
   assert.doesNotMatch(f.log(f.serviceLog), /bootstrap|bootout/);
   settings.service.user = 'another-account';
   writeFileSync(path, JSON.stringify(settings));
@@ -435,6 +475,59 @@ test('legacy LaunchAgent installations retain their mode before update.json has 
   succeeds(f.install());
   assert.equal(JSON.parse(f.log(path)).custom_setting, 'preserved');
   assert.equal(JSON.parse(f.log(path)).service.mode, 'launchagent');
+});
+
+test('local install stages LaunchDaemons when the GUI domain returns unsupported action (125)', {
+  skip: process.getuid() === 0,
+}, t => {
+  const f = fixture(t);
+  succeeds(f.pack('1.0.0'));
+  const pending = f.run('/bin/bash', ['scripts/install-release.sh', '--package', 'target/packages/latest'],
+    { FAIL_GUI: '125', AOW_INSTALL_TERMINALD: 'y' });
+  assert.equal(pending.status, 78, pending.stdout + pending.stderr);
+  assert.match(pending.stdout, /macOS service mode: launchdaemon/);
+  assert.match(pending.stdout + pending.stderr, /registration is pending/);
+  assert.doesNotMatch(pending.stdout + pending.stderr, /Enter lowercase y|请输入 y/);
+  const settings = JSON.parse(f.log(join(f.runtime, 'update.json')));
+  assert.deepEqual(settings.service, { mode: 'launchdaemon', user: userInfo().username, uid: process.getuid() });
+  const request = JSON.parse(f.log(join(f.runtime, 'pending-launchdaemon.json')));
+  assert.deepEqual(Object.keys(request.components).sort(), ['server', 'terminald']);
+  assert.equal(existsSync(f.plist('server')), false);
+  assert.equal(existsSync(f.plist('terminald')), false);
+  assert.doesNotMatch(f.log(f.serviceLog), /bootstrap|bootout|signal/);
+});
+
+test('unregistered headless installs stop before PIN setup; registered services can update without an administrator', {
+  skip: process.getuid() === 0,
+}, t => {
+  const f = fixture(t);
+  succeeds(f.pack('1.0.0')); succeeds(f.publish('1.0.0'));
+  const pin = join(f.home, '.local/state/aow/pin.md5');
+  rmSync(pin);
+  const first = f.install([], { FAIL_GUI: '125', AOW_INSTALL_MANAGED: '' });
+  assert.equal(first.status, 78, first.stdout + first.stderr);
+  assert.match(first.stderr, /just install --user/);
+  assert.equal(existsSync(pin), false);
+  assert.equal(existsSync(join(f.runtime, 'latest')), false);
+  assert.equal(existsSync(join(f.runtime, 'update.json')), false);
+  assert.doesNotMatch(f.log(f.serviceLog), /bootstrap|bootout|signal/);
+  write(pin, 'e10adc3949ba59abbe56e057f20f883e\n');
+  // An interrupted administrator installation is still unregistered, even if
+  // files, saved mode and a pending request exist.
+  assert.equal(f.install([], { FAIL_GUI: '125', AOW_INSTALL_TERMINALD: 'n' }).status, 78);
+  const request = f.log(join(f.runtime, 'pending-launchdaemon.json'));
+  const pending = f.install([], { AOW_INSTALL_MANAGED: '' });
+  assert.equal(pending.status, 78, pending.stdout + pending.stderr);
+  assert.match(pending.stderr, /just install --user/);
+  assert.equal(f.log(join(f.runtime, 'pending-launchdaemon.json')), request);
+  f.registerDaemons();
+  const checked = f.run(process.execPath, [join(f.repo, 'scripts/launchd-mode.mjs'), 'check-install', f.runtime]);
+  succeeds(checked);
+  assert.equal(JSON.parse(checked.stdout).registrationRequired, false);
+  const update = f.install([], { AOW_INSTALL_MANAGED: '' });
+  succeeds(update);
+  assert.doesNotMatch(update.stderr, /requires an administrator account/);
+  assert.equal(existsSync(join(f.runtime, 'pending-launchdaemon.json')), false);
 });
 
 test('headless install stages registration, persists mode, updates without sudo and rolls back failures', {
@@ -473,9 +566,61 @@ test('headless install stages registration, persists mode, updates without sudo 
   assert.notEqual(failed.status, 0);
   assert.equal(realpathSync(join(f.runtime, 'active/terminald')), join(f.runtime, 'releases/1.0.0'));
   assert.match(f.log(f.serviceLog), /signal -TERM 987654/);
+  assert.doesNotMatch(f.log(f.serviceLog), /signal -KILL/);
   assert.doesNotMatch(f.log(f.serviceLog), /bootstrap|bootout|kickstart/);
   assert.equal(existsSync(f.plist('server')), false);
   assert.equal(existsSync(join(f.runtime, '.launchdaemon-activation.lock')), false);
+});
+
+test('headless update bounds stuck shutdown and rollback without signalling skipped terminald', {
+  skip: process.getuid() === 0,
+}, t => {
+  const f = fixture(t);
+  succeeds(f.pack('1.0.0')); succeeds(f.publish('1.0.0'));
+  assert.equal(f.install([], { FAIL_GUI: '1' }, 'y\n').status, 78);
+  f.registerDaemons();
+  succeeds(f.install([], {}, 'y\n'));
+  const nodeTarget = readlinkSync(join(f.runtime, 'node'));
+  succeeds(f.pack('2.0.0')); succeeds(f.publish('2.0.0'));
+  writeFileSync(f.serviceLog, '');
+
+  // A stuck old server and an unhealthy replacement must both be stopped so
+  // that rollback can start a healthy process on the previous release.
+  const failed = f.install([], { STALL_TERM: 'server', FAIL_HEALTH: 'server' }, 'n\n');
+  assert.notEqual(failed.status, 0);
+  assert.match(failed.stdout + failed.stderr, /restored previous release/);
+  assert.equal((f.log(f.serviceLog).match(/signal-component server -KILL/g) || []).length, 2);
+  assert.equal(realpathSync(join(f.runtime, 'active/server')), join(f.runtime, 'releases/1.0.0'));
+  assert.doesNotMatch(f.log(f.serviceLog), /signal-component terminald/);
+
+  writeFileSync(f.serviceLog, '');
+  const updated = f.install([], { STALL_TERM: 'server' }, 'n\n');
+  succeeds(updated);
+  assert.match(updated.stdout + updated.stderr, /did not exit within 5 seconds/);
+  assert.equal((f.log(f.serviceLog).match(/signal-component server -KILL/g) || []).length, 1);
+  assert.doesNotMatch(f.log(f.serviceLog), /signal-component terminald/);
+  assert.equal(realpathSync(join(f.runtime, 'active/server')), join(f.runtime, 'releases/2.0.0'));
+  assert.equal(realpathSync(join(f.runtime, 'active/terminald')), join(f.runtime, 'releases/1.0.0'));
+  assert.equal(readlinkSync(join(f.runtime, 'node')), nodeTarget);
+  assert.equal(existsSync(join(f.runtime, '.launchdaemon-activation.lock')), false);
+});
+
+test('forced daemon shutdown rechecks ownership and does not claim an unverified rollback recovered', {
+  skip: process.getuid() === 0,
+}, t => {
+  const f = fixture(t);
+  succeeds(f.pack('1.0.0')); succeeds(f.publish('1.0.0'));
+  assert.equal(f.install([], { FAIL_GUI: '1' }).status, 78);
+  f.registerDaemons();
+  succeeds(f.pack('2.0.0')); succeeds(f.publish('2.0.0'));
+  writeFileSync(f.serviceLog, '');
+  const refused = f.install([], { STALL_TERM: 'server', MOCK_KILL_PROCESS_UID: String(process.getuid() + 1) }, 'n\n');
+  assert.notEqual(refused.status, 0);
+  assert.match(refused.stdout + refused.stderr, /different account/);
+  assert.match(refused.stdout + refused.stderr, /service recovery was not verified/);
+  assert.match(f.log(f.serviceLog), /signal -TERM/);
+  assert.doesNotMatch(f.log(f.serviceLog), /signal -KILL/);
+  assert.equal(realpathSync(join(f.runtime, 'active/server')), join(f.runtime, 'releases/1.0.0'));
 });
 
 test('daemon config changes require registration without replacing active releases; foreign PID is never signalled', {

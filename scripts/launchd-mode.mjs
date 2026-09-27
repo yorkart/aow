@@ -24,6 +24,10 @@ export function hasGui(uid) {
   const result = launchctl(['print', `gui/${uid}`]);
   if (result.status === 0) return true;
   if (missingDomain(result)) return false;
+  // A background-only account can have a user domain but no GUI domain (125).
+  // Scope this to the GUI probe; it does not mean a system service is missing.
+  if (result.status === 125
+    && /could not print domain: 125: domain does not support specified action/i.test(result.stderr)) return false;
   throw new Error(`Cannot inspect graphical user session: ${result.stderr.trim() || `launchctl exited ${result.status}`}`);
 }
 
@@ -82,21 +86,54 @@ export function resolveService(runtime) {
 
 export function registrationHint(runtime) {
   const identity = userInfo();
-  console.error(`LaunchDaemon registration is pending: ${join(runtime, 'pending-launchdaemon.json')}`);
-  console.error('From an administrator’s local terminal, use an administrator-owned, trusted checkout of AoW:');
+  console.error('\nInstallation is incomplete: LaunchDaemon registration is pending. To continue:');
+  console.error('1. Switch to an administrator account on this Mac and open a local terminal (not SSH).');
+  console.error('   Change to a trusted AoW checkout with a local package, owned by the administrator and not writable by the service account.');
+  console.error('2. Run the following command and enter the administrator account password when prompted:');
   const quotedUser = `'${identity.username.replaceAll("'", "'\\''")}'`;
-  console.error(`  sudo -k /usr/bin/python3 -I scripts/register-launchdaemon.py --user ${quotedUser}`);
-  console.error('Then rerun just install (or aow update) as the service account. Do not give that account sudo access.');
+  console.error(`  just install --user ${quotedUser}`);
+  console.error('   The installer will prepare files as the target user, register services, and verify startup automatically.');
+  console.error(`3. After installation succeeds, future updates can run as ${identity.username} with just install or aow update.`);
+  console.error('Do not give the service account sudo access.');
+  console.error(`Registration request: ${join(runtime, 'pending-launchdaemon.json')}`);
+  console.error('Exit code 78 means administrator registration is required and startup has not been verified; just reports this incomplete installation as failed.');
+}
+
+export function registrationRequired(service) {
+  if (service.mode !== 'launchdaemon') return false;
+  if (!readDaemon('server')) return true;
+  const result = launchctl(['print', `system/${daemonLabel('server')}`]);
+  if (result.status === 0) return false;
+  if (missingDomain(result)) return true;
+  throw new Error(`Cannot inspect LaunchDaemon registration: ${result.stderr.trim()}`);
+}
+
+function firstInstallHint(service) {
+  const quotedUser = `'${service.user.replaceAll("'", "'\\''")}'`;
+  console.error(`First-time LaunchDaemon setup for ${service.user} requires an administrator account.`);
+  console.error('From an administrator-owned, trusted AoW checkout on this Mac, run:');
+  console.error(`  just install --user ${quotedUser}`);
+  console.error('The administrator installer will prepare files as the target user, register services, and verify startup.');
+  console.error('After registration, run updates as the target account without sudo.');
+  console.error('Exit code 78 means administrator setup is required; installation is incomplete.');
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const [command, runtime, destination] = process.argv.slice(2);
     if (command === 'hint') registrationHint(runtime);
-    else if (command === 'resolve') {
+    else if (command === 'check-install') {
       const service = resolveService(runtime);
-      if (destination) writeFileSync(destination, JSON.stringify(service) + '\n', { mode: 0o600 });
-      process.stdout.write(service.mode + '\n');
-    } else throw new Error('Usage: launchd-mode.mjs resolve|hint RUNTIME [OUTPUT]');
+      process.stdout.write(JSON.stringify({ ...service, registrationRequired: registrationRequired(service) }) + '\n');
+    } else if (command === 'resolve') {
+      const service = resolveService(runtime);
+      if (destination && process.env.AOW_INSTALL_MANAGED !== '1' && registrationRequired(service)) {
+        firstInstallHint(service);
+        process.exitCode = 78;
+      } else {
+        if (destination) writeFileSync(destination, JSON.stringify(service) + '\n', { mode: 0o600 });
+        process.stdout.write(service.mode + '\n');
+      }
+    } else throw new Error('Usage: launchd-mode.mjs resolve|check-install|hint RUNTIME [OUTPUT]');
   } catch (error) { console.error(`error: ${error.message}`); process.exitCode = 1; }
 }

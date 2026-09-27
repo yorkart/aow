@@ -17,7 +17,25 @@ curl -fsSL https://github.com/yorkart/aow/releases/latest/download/aow-install.s
 
 首次安装按提示设置 6 位 PIN，并在启动 terminald 的提示中输入小写 `y`，启用网页 Terminal。升级时可跳过 terminald 重启，保留现有终端会话；重启 terminald 会结束这些会话。
 
-macOS LaunchDaemon 首次安装会准备登记请求，以退出码 **78** 结束，表示等待管理员登记，尚未完成启动验证。本地管理员在自己拥有、服务账户不可写的可信 AoW 源码目录执行（需要 Python 3）：
+### macOS 本地安装与目标账户
+
+macOS 本地安装需要 Python 3.9+。`just install` 默认安装到当前账户；`--user` 指定实际运行 AoW 的账户。安装器先显示目标账户，再检查该账户的图形会话和已有服务登记：
+
+```bash
+just install                           # 当前账户，使用 target/packages/latest
+just install --user aow-service         # 指定运行账户
+just install /path/to/package.tar.gz --user aow-service
+```
+
+有图形会话时使用 LaunchAgent，当前账户可直接安装。无图形会话、尚未登记 LaunchDaemon 且发起安装的账户不是管理员时，安装器会在设置 PIN 和切换版本前停止，并提示到管理员账户执行 `just install --user aow-service`。只有安装目录或待登记请求不代表登记已经完成。
+
+管理员须在这台 Mac 的本地交互终端中，使用自己拥有、服务账户不可写的可信 AoW 源码和安装包运行该命令（需要 Python 3）。可先执行 `just package` 生成本地包。安装器按需请求管理员密码，然后以目标用户身份安装文件和配置 PIN，以管理员权限登记系统服务，最后回到目标用户身份验证启动；整个流程无需手动切换账户。terminald 的启动或重启只确认一次。
+
+目标账户需要 Node.js 20+。安装器会以目标用户身份读取其登录 shell 的 PATH，支持该账户通过 nvm 安装的 Node.js；管理员的环境变量和凭据不会传给目标账户，服务配置读取目标账户的 `~/.config/aow/server.env`。
+
+首次从下载脚本安装无图形服务账户时，也会提示使用上述管理员入口。登记完成后，回到服务账户使用 `just install` 或 `aow update` 更新，无需 sudo；已有安装保持原服务模式。配置变化需要重新登记时，仍会以退出码 **78** 提示管理员处理。
+
+已有待登记请求也可由本地管理员在自己的可信源码目录中手动登记：
 
 ```bash
 sudo -k /usr/bin/python3 -I scripts/register-launchdaemon.py --user aow-service
@@ -75,6 +93,8 @@ aow pin                            # 修改访问 PIN
 ## 服务管理与系统日志
 
 以安装 AoW 的同一系统用户执行以下命令。重启 Web 服务不会结束后台终端；重启 terminald 会结束其管理的所有终端会话。
+
+LaunchDaemon 更新会先发送 SIGTERM，等待最多 5 秒正常退出；若旧进程仍未退出，安装器会重新核对 PID 与账户归属，再用 SIGKILL 结束该进程，并检查新进程的健康状态。这样可避免长连接让 Web 服务停在「端口已关闭但进程未退出」的状态。选择 `n` 跳过 terminald 时，只重启 Web 服务，terminald 及其终端会话保持运行。
 
 ### Linux
 

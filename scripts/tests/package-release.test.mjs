@@ -30,7 +30,7 @@ function fixture(t) {
   write(join(tools, 'uname'), `#!/bin/sh\ncase "$1" in -s) echo Linux;; -m) echo ${machine};; esac\n`, true);
   mkdirSync(join(repo, 'vt-worker'), { recursive: true });
   for (const path of [
-    'justfile', 'scripts/package-release.sh', 'scripts/install-release.sh',
+    'justfile', 'scripts/package-release.sh', 'scripts/install-release.sh', 'scripts/install-local.sh',
     'scripts/start-server.sh', 'scripts/start-terminald.sh', 'scripts/replace-symlink.mjs', 'scripts/server-state-dir.sh',
     'scripts/start-launchd.sh', 'scripts/launchd-service.mjs', 'scripts/activate-terminald.mjs', 'scripts/service-health.mjs',
     'scripts/launchd-mode.mjs', 'scripts/start-launchdaemon.mjs', 'scripts/register-launchdaemon.py',
