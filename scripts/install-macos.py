@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Install for a macOS account, elevating only the administrator coordinator.
 
-All package scripts, binaries, PIN setup and health checks run as the target
+All package scripts, binaries, account setup and health checks run as the target
 account. Only the trusted registration helper runs with root privileges.
 """
 import argparse

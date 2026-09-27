@@ -35,7 +35,7 @@ Install a GitHub Release or local package, then start/restart its services.
 Without --version, install this script's release (or resolve latest from source).
 With --version, download that release directly. All packages require SHA256 verification.
 Only a lowercase y entered at the terminal permits starting/restarting terminald.
-A missing pin.md5 must be created interactively before starting the server.
+On first installation, set a login account and confirm its password interactively before starting the server.
 
 Options:
   --repo OWNER/REPO GitHub repository (default: $DEFAULT_REPOSITORY).
@@ -55,7 +55,7 @@ Later updates run as the target account. Configuration changes may require regis
 This release installer never uses sudo; just install coordinates administrator setup.
 Downloads require curl and HTTPS access to GitHub Releases.
 Installs under ~/.local/lib/aow; preserves existing configuration and data.
-Also installs aow update / aow pin and remembers the GitHub repository.
+Also installs aow update / aow account and remembers the GitHub repository.
 Local installs preserve the saved repository unless explicitly overridden.
 EOF
 }
@@ -407,7 +407,7 @@ JS
     local state_dir
     state_dir=$(server_state_dir)
     # Use the verified package before changing any installed command or service.
-    bash "$support/packaging/bin/aow" pin --if-missing
+    bash "$support/packaging/bin/aow" account --if-missing
     "$release/bin/aow-server" --initialize-state-if-missing --state-dir "$state_dir"
     if [[ "$release" == "$support" ]]; then
         release=$runtime_root/releases/$version

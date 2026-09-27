@@ -15,7 +15,7 @@
 curl -fsSL https://github.com/yorkart/aow/releases/latest/download/aow-install.sh | bash
 ```
 
-首次安装按提示设置 6 位 PIN，并在启动 terminald 的提示中输入小写 `y`，启用网页 Terminal。升级时可跳过 terminald 重启，保留现有终端会话；重启 terminald 会结束这些会话。
+首次安装必须按提示输入登录账号、密码并再次确认密码，并在启动 terminald 的提示中输入小写 `y`，启用网页 Terminal。密码输入不回显；未完成账户设置或取消输入时不会启动服务。升级时可跳过 terminald 重启，保留现有终端会话；重启 terminald 会结束这些会话。
 
 ### macOS 本地安装与目标账户
 
@@ -27,9 +27,9 @@ just install --user aow-service         # 指定运行账户
 just install /path/to/package.tar.gz --user aow-service
 ```
 
-有图形会话时使用 LaunchAgent，当前账户可直接安装。无图形会话、尚未登记 LaunchDaemon 且发起安装的账户不是管理员时，安装器会在设置 PIN 和切换版本前停止，并提示到管理员账户执行 `just install --user aow-service`。只有安装目录或待登记请求不代表登记已经完成。
+有图形会话时使用 LaunchAgent，当前账户可直接安装。无图形会话、尚未登记 LaunchDaemon 且发起安装的账户不是管理员时，安装器会在设置登录账户和切换版本前停止，并提示到管理员账户执行 `just install --user aow-service`。只有安装目录或待登记请求不代表登记已经完成。
 
-管理员须在这台 Mac 的本地交互终端中，使用自己拥有、服务账户不可写的可信 AoW 源码和安装包运行该命令（需要 Python 3）。可先执行 `just package` 生成本地包。安装器按需请求管理员密码，然后以目标用户身份安装文件和配置 PIN，以管理员权限登记系统服务，最后回到目标用户身份验证启动；整个流程无需手动切换账户。terminald 的启动或重启只确认一次。
+管理员须在这台 Mac 的本地交互终端中，使用自己拥有、服务账户不可写的可信 AoW 源码和安装包运行该命令（需要 Python 3）。可先执行 `just package` 生成本地包。安装器按需请求管理员密码，然后以目标用户身份安装文件和配置登录账号和密码，以管理员权限登记系统服务，最后回到目标用户身份验证启动；整个流程无需手动切换账户。terminald 的启动或重启只确认一次。
 
 目标账户需要 Node.js 20+。安装器会以目标用户身份读取其登录 shell 的 PATH，支持该账户通过 nvm 安装的 Node.js；管理员的环境变量和凭据不会传给目标账户，服务配置读取目标账户的 `~/.config/aow/server.env`。
 
@@ -43,17 +43,17 @@ sudo -k /usr/bin/python3 -I scripts/register-launchdaemon.py --user aow-service
 
 将 `aow-service` 替换为实际安装账户；随后回到该账户重新执行安装命令，完成启动验证。不要在服务账户可写的源码或发布目录中以 sudo 执行脚本，也不要给服务账户 sudo 权限。
 
-安装后在本机打开 `http://127.0.0.1:8282/` 并输入 PIN。远程访问方式见 [README](../README.zh-CN.md#如何访问)。
+安装后在本机打开 `http://127.0.0.1:8282/` 并使用安装时设置的账号和密码登录。远程访问方式见 [README](../README.zh-CN.md#如何访问)。
 
 将 `~/.local/bin` 加入 shell 的 `PATH` 后，可使用：
 
 ```bash
 aow update                         # 升级到最新版本
 aow update --version RELEASE-TAG    # 切换到指定版本
-aow pin                            # 修改访问 PIN
+aow account                        # 修改登录账号和密码
 ```
 
-`RELEASE-TAG` 替换为 [GitHub Releases](https://github.com/yorkart/aow/releases) 中的完整版本标签。升级保留配置、PIN 和用户数据；切换旧版本不会恢复旧数据。修改 PIN 后需重新登录网页。
+`RELEASE-TAG` 替换为 [GitHub Releases](https://github.com/yorkart/aow/releases) 中的完整版本标签。升级保留配置、登录账户和用户数据；切换旧版本不会恢复旧数据。修改账号或密码后需重新登录网页。旧版仅有 PIN 的安装，升级时必须在交互终端中设置账号和密码；旧 PIN 不再用于登录。
 
 ## 安装后的目录
 
@@ -67,7 +67,7 @@ aow pin                            # 修改访问 PIN
 | `~/.local/lib/aow/update.json` | 更新来源、命令目录，以及 macOS 服务模式、账户和 UID |
 | `~/.local/lib/aow/pending-launchdaemon.json` | 等待管理员登记的 LaunchDaemon 请求；完成安装验证后清除 |
 | `~/.config/aow/server.env` | 服务配置 |
-| `~/.local/state/aow/` | 项目配置、终端状态、自动化记录、PIN 等用户数据 |
+| `~/.local/state/aow/` | 项目配置、终端状态、自动化记录、登录凭据等用户数据 |
 | `~/aow/` | 默认 Notes 目录 |
 | `~/.config/systemd/user/aow-*.service` | Linux 服务配置 |
 | `~/Library/LaunchAgents/org.aow.*.plist` | macOS LaunchAgent 配置 |

@@ -1,3 +1,4 @@
+import { credentials } from './account-fixture.mjs';
 // Opt-in integration test: only creates uniquely named jobs and an isolated HOME.
 // AOW_NATIVE_SERVICE_TESTS=1 node --test scripts/tests/launchd-native.test.mjs
 import assert from 'node:assert/strict';
@@ -52,7 +53,7 @@ test('real launchd activates isolated native services, restarts crashes, and rol
     XDG_STATE_HOME: '', XDG_RUNTIME_DIR: '', AOW_LOG_MODE: '', AOW_BASE_PATH: '' };
   writeFileSync(join(home, '.config/aow/server.env'), 'AOW_BASE_PATH=/tools/aow/\n');
   execFileSync(join(root, 'target/debug/aow-server'), ['--initialize-state', '--state-dir', state], { env, stdio: 'pipe' });
-  writeFileSync(join(state, 'pin.md5'), 'e10adc3949ba59abbe56e057f20f883e\n', { mode: 0o600 });
+  writeFileSync(join(state, 'credentials.json'), credentials(), { mode: 0o600 });
   for (const version of ['1.0.0', '2.0.0']) {
     const release = join(runtime, 'releases', version);
     mkdirSync(join(release, 'bin'), { recursive: true });

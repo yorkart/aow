@@ -22,7 +22,7 @@ Run the following command on the machine where you want to run AoW:
 curl -fsSL https://github.com/yorkart/aow/releases/latest/download/aow-install.sh | bash
 ```
 
-The installer downloads the package for your platform from GitHub Releases, verifies it, installs it, and starts the web service. On the first installation, you must set a six-digit access PIN in the terminal. When prompted to start terminald, enter lowercase `y` to enable terminals. Restarting terminald during an upgrade ends any existing terminal sessions it manages.
+The installer downloads the package for your platform from GitHub Releases, verifies it, installs it, and starts the web service. On the first installation, you must enter a local login username and password in the terminal and confirm the password before the service starts. When prompted to start terminald, enter lowercase `y` to enable terminals. Restarting terminald during an upgrade ends any existing terminal sessions it manages.
 
 LaunchDaemon installations pause for registration by a local administrator before starting services. They run as the installing account and do not require its desktop login. Subsequent code updates need no administrator privileges; changes to the system service configuration require registration again.
 
@@ -32,13 +32,13 @@ To upgrade an existing installation:
 aow update
 ```
 
-Add `~/.local/bin` to your `PATH`. Use `aow pin` to change the access PIN.
+Add `~/.local/bin` to your `PATH`. Use `aow account` to change the login username or password. Upgrades preserve the account; installations that only have an old PIN must set up an account once.
 
 See [GitHub Releases](https://github.com/yorkart/aow/releases) for versions and release packages, and the [Installation guide](docs/release-installation.md) for installing a specific version and troubleshooting.
 
 ## Accessing AoW
 
-By default, the web service listens only on `127.0.0.1:8282`. Open `http://127.0.0.1:8282/` on the same machine and enter the PIN set during installation. For remote access, you can use an SSH tunnel.
+By default, the web service listens only on `127.0.0.1:8282`. Open `http://127.0.0.1:8282/` on the same machine and log in with the username and password set during installation. For remote access, you can use an SSH tunnel.
 
 ### Direct access by IP address (explicit opt-in required)
 
@@ -60,7 +60,7 @@ AOW_SERVER_HOST=192.168.1.10
 
 Apply the setting as described in the [Configuration guide](docs/configuration.md#监听地址与服务配置), and configure your firewall or security group to allow only trusted sources to access TCP port 8282. Then open `http://<server-ip>:8282/` (for IPv6, use `http://[ipv6-address]:8282/`). Phones automatically use the mobile interface.
 
-Direct IP access is intended for trusted internal networks or VPNs, with access restricted to trusted sources. AoW can access files and terminals as the user running it, and the six-digit PIN is only a lightweight access barrier. For public internet access, configure HTTPS and additional access controls.
+Direct IP access is intended for trusted internal networks or VPNs, with access restricted to trusted sources. AoW can access files and terminals as the user running it. For public internet access, configure HTTPS and additional access controls.
 
 ### Access through an SSH tunnel
 

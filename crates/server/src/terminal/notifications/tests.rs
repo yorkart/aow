@@ -248,13 +248,9 @@ async fn source_labels_identify_each_owning_tab_once_and_follow_renames() {
 async fn event_endpoint_requires_aow_login() {
     use tower::ServiceExt;
     let root = tempfile::tempdir().unwrap();
-    std::fs::write(
-        root.path().join(crate::auth::PIN_HASH_FILE),
-        format!("{:x}", md5::compute("123456")),
-    )
-    .unwrap();
+    crate::auth::write_credentials(root.path(), "admin", "test-password");
     let mut state = AppState::new(root.path().join("frontend"));
-    state.auth = crate::auth::PinAuth::persistent(root.path());
+    state.auth = crate::auth::AccountAuth::persistent(root.path());
     let response = crate::build_router(state)
         .oneshot(
             axum::http::Request::get("/api/terminals/task-stops")

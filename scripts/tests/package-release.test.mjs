@@ -1,3 +1,4 @@
+import { credentials } from './account-fixture.mjs';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -69,7 +70,7 @@ printf '%s %s\\n' '${name}' "$*" >> "$BUILD_LOG"
     MOCK_ARCH: machine, MOCK_RUST_LIBDIR: rustLibdir, ELF_LOG: join(temp, 'elf.log'),
     [`CC_${target.replaceAll('-', '_')}`]: 'musl-gcc',
   };
-  write(join(env.AOW_STATE_DIR, 'pin.md5'), 'e10adc3949ba59abbe56e057f20f883e\n');
+  write(join(env.AOW_STATE_DIR, 'credentials.json'), credentials());
   for (const args of [['init'], ['-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '--allow-empty', '-m', 'fixture']]) {
     assert.equal(spawnSync('git', args, { cwd: repo, env }).status, 0);
   }

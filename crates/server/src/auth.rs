@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    num::NonZeroU32,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
@@ -14,26 +15,38 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
+use ring::pbkdf2;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{AppState, HttpError};
 
-pub(crate) const PIN_HASH_FILE: &str = "pin.md5";
+pub(crate) const CREDENTIALS_FILE: &str = "credentials.json";
+const PASSWORD_ITERATIONS: NonZeroU32 = NonZeroU32::new(600_000).unwrap();
 const SESSION_COOKIE: &str = "aow_session";
 
 #[derive(Clone)]
-pub(crate) struct PinAuth {
+pub(crate) struct AccountAuth {
     cookie_name: String,
-    pin_hash_path: Option<PathBuf>,
-    sessions: Arc<Mutex<HashMap<String, String>>>,
+    credentials_path: Option<PathBuf>,
+    sessions: Arc<Mutex<HashMap<String, Credentials>>>,
 }
 
-enum PinConfiguration {
+enum AccountConfiguration {
     Disabled,
     NotConfigured,
-    Configured(String),
+    Configured(Credentials),
     Invalid(String),
+}
+
+// Version 1 uses PBKDF2-HMAC-SHA256 (600,000 iterations), a random 16-byte
+// salt, and a 32-byte hash. The installer writes the same format atomically.
+#[derive(Clone, Deserialize, Serialize, PartialEq, Eq)]
+struct Credentials {
+    version: u32,
+    username: String,
+    salt: String,
+    password_hash: String,
 }
 
 #[derive(Serialize)]
@@ -46,14 +59,15 @@ pub(crate) struct AuthStatus {
 
 #[derive(Deserialize)]
 pub(crate) struct LoginRequest {
-    pub pin: String,
+    pub username: String,
+    pub password: String,
 }
 
-impl PinAuth {
+impl AccountAuth {
     pub(crate) fn persistent(state_dir: &Path) -> Self {
         Self {
             cookie_name: SESSION_COOKIE.to_owned(),
-            pin_hash_path: Some(state_dir.join(PIN_HASH_FILE)),
+            credentials_path: Some(state_dir.join(CREDENTIALS_FILE)),
             sessions: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -63,7 +77,7 @@ impl PinAuth {
     pub(crate) fn disabled() -> Self {
         Self {
             cookie_name: SESSION_COOKIE.to_owned(),
-            pin_hash_path: None,
+            credentials_path: None,
             sessions: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -74,24 +88,24 @@ impl PinAuth {
 
     pub(crate) fn status(&self, headers: &HeaderMap) -> AuthStatus {
         match self.configuration() {
-            PinConfiguration::Configured(hash) => AuthStatus {
+            AccountConfiguration::Configured(credentials) => AuthStatus {
                 configured: true,
-                authenticated: self.has_session(headers, &hash),
+                authenticated: self.has_session(headers, &credentials),
                 message: None,
             },
-            PinConfiguration::Disabled => AuthStatus {
+            AccountConfiguration::Disabled => AuthStatus {
                 configured: false,
                 authenticated: false,
                 message: None,
             },
-            PinConfiguration::NotConfigured => AuthStatus {
+            AccountConfiguration::NotConfigured => AuthStatus {
                 configured: false,
                 authenticated: false,
-                message: Some(format!(
-                    "尚未配置 PIN。请在服务器上运行 `aow pin`，它会创建 {PIN_HASH_FILE}。"
-                )),
+                message: Some(
+                    "尚未设置登录账户。请在服务器上运行 `aow account` 设置账号和密码。".into(),
+                ),
             },
-            PinConfiguration::Invalid(message) => AuthStatus {
+            AccountConfiguration::Invalid(message) => AuthStatus {
                 configured: false,
                 authenticated: false,
                 message: Some(message),
@@ -101,48 +115,61 @@ impl PinAuth {
 
     pub(crate) fn authorize(&self, headers: &HeaderMap) -> Result<(), HttpError> {
         match self.configuration() {
-            PinConfiguration::Disabled => Ok(()),
-            PinConfiguration::Configured(hash) if self.has_session(headers, &hash) => Ok(()),
-            PinConfiguration::Configured(_) => Err(authentication_required()),
-            PinConfiguration::NotConfigured => Err(pin_not_configured()),
-            PinConfiguration::Invalid(message) => Err(HttpError::new(
+            AccountConfiguration::Disabled => Ok(()),
+            AccountConfiguration::Configured(credentials)
+                if self.has_session(headers, &credentials) =>
+            {
+                Ok(())
+            }
+            AccountConfiguration::Configured(_) => Err(authentication_required()),
+            AccountConfiguration::NotConfigured => Err(account_not_configured()),
+            AccountConfiguration::Invalid(message) => Err(HttpError::new(
                 StatusCode::SERVICE_UNAVAILABLE,
-                "pin_configuration_invalid",
+                "account_configuration_invalid",
                 message,
                 None,
             )),
         }
     }
 
-    pub(crate) fn login(&self, pin: &str) -> Result<String, HttpError> {
-        if !valid_pin(pin) {
+    pub(crate) fn login(&self, username: &str, password: &str) -> Result<String, HttpError> {
+        if !valid_username(username) || password.is_empty() || password.len() > 1024 {
             return Err(HttpError::new(
                 StatusCode::BAD_REQUEST,
-                "invalid_pin",
-                "PIN 必须恰好为 6 位数字",
+                "invalid_credentials",
+                "请输入有效的账号和密码",
                 None,
             ));
         }
-        let expected_hash = match self.configuration() {
-            PinConfiguration::Configured(hash) => hash,
-            PinConfiguration::Disabled | PinConfiguration::NotConfigured => {
-                return Err(pin_not_configured());
+        let credentials = match self.configuration() {
+            AccountConfiguration::Configured(credentials) => credentials,
+            AccountConfiguration::Disabled | AccountConfiguration::NotConfigured => {
+                return Err(account_not_configured());
             }
-            PinConfiguration::Invalid(message) => {
+            AccountConfiguration::Invalid(message) => {
                 return Err(HttpError::new(
                     StatusCode::SERVICE_UNAVAILABLE,
-                    "pin_configuration_invalid",
+                    "account_configuration_invalid",
                     message,
                     None,
                 ));
             }
         };
-        let entered_hash = format!("{:x}", md5::compute(pin.as_bytes()));
-        if !constant_time_eq(&entered_hash, &expected_hash) {
+        let salt = decode_hex::<16>(&credentials.salt).expect("validated salt");
+        let hash = decode_hex::<32>(&credentials.password_hash).expect("validated hash");
+        let password_matches = pbkdf2::verify(
+            pbkdf2::PBKDF2_HMAC_SHA256,
+            PASSWORD_ITERATIONS,
+            &salt,
+            password.as_bytes(),
+            &hash,
+        )
+        .is_ok();
+        if !password_matches || username != credentials.username {
             return Err(HttpError::new(
                 StatusCode::UNAUTHORIZED,
-                "invalid_pin",
-                "PIN 不正确",
+                "invalid_credentials",
+                "账号或密码不正确",
                 None,
             ));
         }
@@ -150,54 +177,60 @@ impl PinAuth {
         let token = Uuid::new_v4().simple().to_string();
         self.sessions
             .lock()
-            .map_err(|_| HttpError::internal("PIN 会话锁不可用"))?
-            .insert(token.clone(), expected_hash);
+            .map_err(|_| HttpError::internal("登录会话锁不可用"))?
+            .insert(token.clone(), credentials);
         Ok(token)
     }
 
-    fn has_session(&self, headers: &HeaderMap, current_hash: &str) -> bool {
+    fn has_session(&self, headers: &HeaderMap, current_credentials: &Credentials) -> bool {
         let Some(token) = session_token(headers, &self.cookie_name) else {
             return false;
         };
         let Ok(mut sessions) = self.sessions.lock() else {
             return false;
         };
-        let Some(session_hash) = sessions.get(token) else {
+        let Some(session_credentials) = sessions.get(token) else {
             return false;
         };
-        if constant_time_eq(session_hash, current_hash) {
+        if session_credentials == current_credentials {
             true
         } else {
-            // A newly configured PIN invalidates sessions created with the old one.
+            // Changing the account or password invalidates existing sessions.
             sessions.remove(token);
             false
         }
     }
 
-    fn configuration(&self) -> PinConfiguration {
-        let Some(path) = &self.pin_hash_path else {
-            return PinConfiguration::Disabled;
+    fn configuration(&self) -> AccountConfiguration {
+        let Some(path) = &self.credentials_path else {
+            return AccountConfiguration::Disabled;
         };
         let contents = match std::fs::read_to_string(path) {
             Ok(contents) => contents,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                return PinConfiguration::NotConfigured;
+                return AccountConfiguration::NotConfigured;
             }
             Err(error) => {
-                return PinConfiguration::Invalid(format!(
-                    "无法读取 PIN 配置 {}：{error}",
+                return AccountConfiguration::Invalid(format!(
+                    "无法读取账户配置 {}：{error}",
                     path.display()
                 ));
             }
         };
-        let hash = contents.trim();
-        if hash.len() != 32 || !hash.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-            return PinConfiguration::Invalid(format!(
-                "PIN 配置 {} 无效；请重新运行 `aow pin`",
+        match serde_json::from_str::<Credentials>(&contents) {
+            Ok(credentials)
+                if credentials.version == 1
+                    && valid_username(&credentials.username)
+                    && decode_hex::<16>(&credentials.salt).is_some()
+                    && decode_hex::<32>(&credentials.password_hash).is_some() =>
+            {
+                AccountConfiguration::Configured(credentials)
+            }
+            _ => AccountConfiguration::Invalid(format!(
+                "账户配置 {} 无效；请重新运行 `aow account`",
                 path.display()
-            ));
+            )),
         }
-        PinConfiguration::Configured(hash.to_ascii_lowercase())
     }
 }
 
@@ -209,7 +242,11 @@ pub(crate) async fn login(
     State(state): State<AppState>,
     Json(request): Json<LoginRequest>,
 ) -> Result<Response, HttpError> {
-    let token = state.auth.login(&request.pin)?;
+    let auth = state.auth.clone();
+    let token =
+        tokio::task::spawn_blocking(move || auth.login(&request.username, &request.password))
+            .await
+            .map_err(|_| HttpError::internal("登录验证失败"))??;
     let mut response = Json(AuthStatus {
         configured: true,
         authenticated: true,
@@ -234,7 +271,7 @@ pub(crate) async fn require_auth(
     next: Next,
 ) -> Response {
     let path = request.uri().path();
-    // Only the registered read-only share route bypasses PIN authentication.
+    // Only the registered read-only share route bypasses account authentication.
     // A share token never establishes a AoW login session.
     let public_share = matches!(
         *request.method(),
@@ -273,26 +310,30 @@ fn session_token<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
         })
 }
 
-fn valid_pin(pin: &str) -> bool {
-    pin.len() == 6 && pin.bytes().all(|byte| byte.is_ascii_digit())
+fn valid_username(username: &str) -> bool {
+    !username.is_empty()
+        && username.len() <= 256
+        && !username
+            .chars()
+            .any(|character| character.is_whitespace() || character.is_control())
 }
 
-fn constant_time_eq(left: &str, right: &str) -> bool {
-    if left.len() != right.len() {
-        return false;
+fn decode_hex<const N: usize>(value: &str) -> Option<[u8; N]> {
+    if value.len() != N * 2 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return None;
     }
-    let mut difference = 0_u8;
-    for (left, right) in left.bytes().zip(right.bytes()) {
-        difference |= left ^ right;
+    let mut bytes = [0; N];
+    for (index, byte) in bytes.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&value[index * 2..index * 2 + 2], 16).ok()?;
     }
-    difference == 0
+    Some(bytes)
 }
 
-fn pin_not_configured() -> HttpError {
+fn account_not_configured() -> HttpError {
     HttpError::new(
         StatusCode::SERVICE_UNAVAILABLE,
-        "pin_not_configured",
-        "AoW 尚未配置 PIN；请在服务器上运行 `aow pin`",
+        "account_not_configured",
+        "AoW 尚未设置登录账户；请在服务器上运行 `aow account`",
         None,
     )
 }
@@ -301,37 +342,112 @@ fn authentication_required() -> HttpError {
     HttpError::new(
         StatusCode::UNAUTHORIZED,
         "authentication_required",
-        "需要输入 PIN 码后才能访问 AoW",
+        "请使用账号和密码登录 AoW",
         None,
     )
 }
 
 #[cfg(test)]
+pub(crate) fn write_credentials(directory: &Path, username: &str, password: &str) {
+    let salt = Uuid::new_v4();
+    let mut hash = [0; 32];
+    pbkdf2::derive(
+        pbkdf2::PBKDF2_HMAC_SHA256,
+        PASSWORD_ITERATIONS,
+        salt.as_bytes(),
+        password.as_bytes(),
+        &mut hash,
+    );
+    let credentials = Credentials {
+        version: 1,
+        username: username.into(),
+        salt: salt.simple().to_string(),
+        password_hash: hash.iter().map(|byte| format!("{byte:02x}")).collect(),
+    };
+    std::fs::write(
+        directory.join(CREDENTIALS_FILE),
+        serde_json::to_vec(&credentials).unwrap(),
+    )
+    .unwrap();
+}
+
+#[cfg(test)]
 mod tests {
+    use super::*;
     use std::fs;
 
-    use super::*;
-
     #[test]
-    fn validates_only_six_digit_pins() {
-        assert!(valid_pin("012345"));
-        assert!(!valid_pin("12345"));
-        assert!(!valid_pin("1234567"));
-        assert!(!valid_pin("12a456"));
+    fn account_and_password_are_both_required_and_password_is_not_normalized() {
+        let directory = tempfile::tempdir().unwrap();
+        let password = " 密码 p@ss ";
+        write_credentials(directory.path(), "本地用户", password);
+        let auth = AccountAuth::persistent(directory.path());
+        assert!(auth.login("本地用户", password).is_ok());
+        for (username, password) in [
+            ("", password),
+            (" 本地用户", password),
+            ("other", password),
+            ("本地用户", ""),
+            ("本地用户", "123456"),
+            ("本地用户", password.trim()),
+        ] {
+            assert!(auth.login(username, password).is_err());
+        }
     }
 
     #[test]
-    fn changed_pin_invalidates_existing_sessions() {
+    fn changed_account_or_password_invalidates_existing_sessions() {
         let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join(PIN_HASH_FILE);
-        fs::write(&path, format!("{:x}\n", md5::compute(b"123456"))).unwrap();
-        let auth = PinAuth::persistent(directory.path());
-        let token = auth.login("123456").unwrap();
+        write_credentials(directory.path(), "admin", "password");
+        let auth = AccountAuth::persistent(directory.path());
         let mut headers = HeaderMap::new();
-        headers.insert(COOKIE, cookie_header(&token));
+        headers.insert(
+            COOKIE,
+            cookie_header(&auth.login("admin", "password").unwrap()),
+        );
+        assert!(auth.authorize(&headers).is_ok());
+        write_credentials(directory.path(), "admin", "new-password");
+        assert!(auth.authorize(&headers).is_err());
+        headers.insert(
+            COOKIE,
+            cookie_header(&auth.login("admin", "new-password").unwrap()),
+        );
         assert!(auth.authorize(&headers).is_ok());
 
-        fs::write(&path, format!("{:x}\n", md5::compute(b"654321"))).unwrap();
+        // Changing only the username must also revoke sessions, even when the
+        // password hash and salt are unchanged.
+        let path = directory.path().join(CREDENTIALS_FILE);
+        let mut credentials: Credentials =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        credentials.username = "renamed".into();
+        fs::write(path, serde_json::to_vec(&credentials).unwrap()).unwrap();
         assert!(auth.authorize(&headers).is_err());
+        assert!(auth.login("admin", "new-password").is_err());
+        assert!(auth.login("renamed", "new-password").is_ok());
+    }
+
+    #[test]
+    fn missing_legacy_and_malformed_credentials_never_allow_access() {
+        let directory = tempfile::tempdir().unwrap();
+        let auth = AccountAuth::persistent(directory.path());
+        fs::write(
+            directory.path().join("pin.md5"),
+            "e10adc3949ba59abbe56e057f20f883e",
+        )
+        .unwrap();
+        assert!(!auth.status(&HeaderMap::new()).configured);
+        assert!(auth.authorize(&HeaderMap::new()).is_err());
+        assert!(auth.login("admin", "123456").is_err());
+        for contents in [
+            "",
+            "{}",
+            "not JSON",
+            r#"{"version":1,"username":"admin","salt":"invalid","password_hash":"invalid"}"#,
+        ] {
+            fs::write(directory.path().join(CREDENTIALS_FILE), contents).unwrap();
+            assert!(!auth.status(&HeaderMap::new()).configured);
+            assert!(auth.authorize(&HeaderMap::new()).is_err());
+            assert!(auth.login("admin", "123456").is_err());
+        }
     }
 }

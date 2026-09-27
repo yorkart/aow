@@ -66,7 +66,7 @@ const PATH_SEGMENT_ENCODE_SET: &AsciiSet = &CONTROLS
 pub struct AppState {
     base_path: BasePath,
     frontend_dist: PathBuf,
-    auth: auth::PinAuth,
+    auth: auth::AccountAuth,
     session_shares: session_shares::SessionShares,
     terminals: terminal::TerminalManager,
     aow: aow::AowManager,
@@ -86,7 +86,7 @@ impl AppState {
         Self {
             base_path: BasePath::default(),
             frontend_dist,
-            auth: auth::PinAuth::disabled(),
+            auth: auth::AccountAuth::disabled(),
             session_shares: session_shares::SessionShares::in_memory(),
             terminals: terminal::TerminalManager::in_memory(TerminaldClient::new(terminald_socket)),
             aow: aow::AowManager::in_memory(),
@@ -119,7 +119,7 @@ impl AppState {
             frontend_dist,
             operations: operations::OperationService::persistent(&state_dir.join("operation-logs"))
                 .map_err(|error| TerminalError::Invalid(error.to_string()))?,
-            auth: auth::PinAuth::persistent(&state_dir),
+            auth: auth::AccountAuth::persistent(&state_dir),
             session_shares: session_shares::SessionShares::persistent(&state_dir).map_err(
                 |error| {
                     TerminalError::Invalid(format!("failed to initialize session shares: {error}"))
@@ -1349,18 +1349,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn configured_pin_protects_api_routes_and_invalidates_changed_pin_sessions() {
+    async fn configured_account_protects_api_routes_and_invalidates_changed_password_sessions() {
         let root = TempDir::new().unwrap();
         let frontend = root.path().join("frontend");
         std::fs::create_dir(&frontend).unwrap();
         std::fs::write(frontend.join("index.html"), "<div id=root></div>").unwrap();
         let state_dir = root.path().join("state");
         std::fs::create_dir(&state_dir).unwrap();
-        let pin_path = state_dir.join(auth::PIN_HASH_FILE);
-        std::fs::write(&pin_path, format!("{:x}\n", md5::compute(b"123456"))).unwrap();
+        auth::write_credentials(&state_dir, "admin", "test-password");
 
         let mut state = AppState::new(frontend);
-        state.auth = auth::PinAuth::persistent(&state_dir);
+        state.auth = auth::AccountAuth::persistent(&state_dir);
         let app = build_router(state);
 
         let denied = app
@@ -1370,12 +1369,39 @@ mod tests {
             .unwrap();
         assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
 
+        for (payload, expected) in [
+            (r#"{"pin":"123456"}"#, StatusCode::UNPROCESSABLE_ENTITY),
+            (
+                r#"{"username":"other","password":"test-password"}"#,
+                StatusCode::UNAUTHORIZED,
+            ),
+            (
+                r#"{"username":"admin","password":"wrong-password"}"#,
+                StatusCode::UNAUTHORIZED,
+            ),
+        ] {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::post("/api/auth/login")
+                        .header("content-type", "application/json")
+                        .body(Body::from(payload))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), expected);
+            assert!(!response.headers().contains_key("set-cookie"));
+        }
+
         let logged_in = app
             .clone()
             .oneshot(
                 Request::post("/api/auth/login")
                     .header("content-type", "application/json")
-                    .body(Body::from(r#"{"pin":"123456"}"#))
+                    .body(Body::from(
+                        r#"{"username":"admin","password":"test-password"}"#,
+                    ))
                     .unwrap(),
             )
             .await
@@ -1395,7 +1421,7 @@ mod tests {
             .unwrap();
         assert_eq!(allowed.status(), StatusCode::OK);
 
-        std::fs::write(&pin_path, format!("{:x}\n", md5::compute(b"654321"))).unwrap();
+        auth::write_credentials(&state_dir, "admin", "new-password");
         let invalidated = app
             .oneshot(
                 Request::get("/api/fs/tree")

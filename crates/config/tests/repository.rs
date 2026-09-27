@@ -37,7 +37,7 @@ fn migration_copies_only_configuration_and_preserves_originals() {
     )
     .unwrap();
     for path in [
-        "pin.md5",
+        "credentials.json",
         "terminals.json",
         "session-shares.json",
         "clipboard-images/image.png",
@@ -69,7 +69,7 @@ fn migration_copies_only_configuration_and_preserves_originals() {
     let files = git(repo, &["ls-files"]);
     assert_eq!(files.lines().count(), 4, "{files}");
     for forbidden in [
-        "pin.md5",
+        "credentials.json",
         "terminals",
         "shares",
         "clipboard",
@@ -284,7 +284,7 @@ fn runtime_paths_and_symlink_destinations_are_rejected() {
     let outside = tempfile::tempdir().unwrap();
     let config = ConfigRepository::initialize(state.path()).unwrap();
     for path in [
-        "pin.md5",
+        "credentials.json",
         "terminals.json",
         "automations/runs/test.json",
         "../aow-settings.json",

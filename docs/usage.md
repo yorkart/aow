@@ -86,7 +86,7 @@ IM 凭证和通知设置保存在本机状态目录的 `notification-settings.js
 
 IM 消息由后台发送，需要在 **Settings → 通知 → AoW 访问地址** 设置接收设备可访问的 HTTP(S) 地址，例如 `https://aow.example.com`；也可点击“使用当前访问地址”填入浏览器的站点地址。配置保存在本机 `notification-settings.json` 的 `notifications.public_base_url`，网页保存立即生效。没有配置时，飞书继续显示普通 Tab 文本；配置后为每个来源 Tab 生成独立链接，长结论的每片卡片都会保留这些链接。
 
-也可以在已有配置文件的 `notifications` 对象中添加 `"public_base_url": "https://aow.example.com"`，保留其他字段和 IM 凭据；手动编辑文件后重启 Web server 生效。旧配置缺少该字段时按空地址处理，无需迁移。访问地址不是飞书回调接口，链接仍走原有 PIN 登录。
+也可以在已有配置文件的 `notifications` 对象中添加 `"public_base_url": "https://aow.example.com"`，保留其他字段和 IM 凭据；手动编辑文件后重启 Web server 生效。旧配置缺少该字段时按空地址处理，无需迁移。访问地址不是飞书回调接口，链接仍走账号密码登录。
 
 结束事件携带当前轮次的 `conclusion`（最终回复），由各 Agent 的 `TaskStopParser` 实现提取并在结束边界固定。Codex / TraeCode CLI 优先使用结束记录的 `last_agent_message`，否则取当前轮已捕获的最终回复；Claude 收集同一 assistant 消息的文本块，在 `turn_duration` 时交付。工具输出和思考内容不作为结论；监听前的历史不回读，缺失结论时传 `null`，不借用上一轮内容。页面提示忽略结论。
 
@@ -94,7 +94,7 @@ IM 消息由后台发送，需要在 **Settings → 通知 → AoW 访问地址*
 
 飞书通过 Rust HTTP 客户端发送，应用 token 只缓存在内存、临近过期时按需重新获取；更换凭据会替换客户端和缓存。每条任务事件有独立发送标识，token 失效或限流重试时复用该标识。网络超时不自动重发，避免不确定的重复投递。发送队列最多保存 64 条待发通知，发送失败或队列满时记录服务端日志；不持久化待发事件，服务重启后不补发。飞书与微信接入位于独立的 `crates/im`（`aow-im`）crate，通过 `ImProvider::send` 接收通用消息；server 负责业务消息组装，与 Agent 会话监听解耦。微信发送单条最多 4,000 字符的摘要，保留可容纳的来源链接，超长结论使用省略标记；这是客户端预算，不是微信服务端额度承诺。
 
-监听注册和网页事件传输仅存于内存，服务重启后重新探测并从 EOF 开始。后端每约 1.5 秒轮询，Claude PID 查询沿用 5 秒成功缓存。事件通过受 PIN 保护的 `/api/terminals/task-stops` SSE 接口发送，不开放给匿名会话分享页。
+监听注册和网页事件传输仅存于内存，服务重启后重新探测并从 EOF 开始。后端每约 1.5 秒轮询，Claude PID 查询沿用 5 秒成功缓存。事件通过受登录认证保护的 `/api/terminals/task-stops` SSE 接口发送，不开放给匿名会话分享页。
 
 验证：`cargo test -p aow-agents --features sessions sessions::tail`、`cargo test -p aow-server terminal::notifications`；在 `frontend/` 下执行 `npm run test:notifications` 和 `npm run test:tab-links`。
 
@@ -110,7 +110,7 @@ TraeCode CLI 适配面向 **2.0**。
 
 最新一轮默认展开处理过程，历史轮次默认收起，可手动展开查看；刷新同一会话会保留手动展开状态，新一轮出现时上一轮自动收起。桌面端可通过对话导航或「最新一轮」跳转，手机端使用相同的折叠规则。过长的过程仅保留每轮最近 500 条摘要，并显示截断提示。
 
-会话详情顶部的「分享」可创建并复制动态只读链接，桌面、Terminal 内会话详情和手机均可操作。同一会话复用有效链接；「取消分享」会立即停止服务端读取，再次创建会生成新链接。创建、查看分享设置和取消分享仍需要原有 PIN 登录；访客只需持有链接，无需 PIN，分享 token 不会产生登录 Cookie，也不能用于访问文件、Terminal 或其他工作台接口。
+会话详情顶部的「分享」可创建并复制动态只读链接，桌面、Terminal 内会话详情和手机均可操作。同一会话复用有效链接；「取消分享」会立即停止服务端读取，再次创建会生成新链接。创建、查看分享设置和取消分享仍需要账号密码登录；访客只需持有链接，无需登录，分享 token 不会产生登录 Cookie，也不能用于访问文件、Terminal 或其他工作台接口。
 
 分享页展示当前会话及后续对话，包括处理过程和工具详情，沿用最近 200 轮的展示范围；页面可见时每 10 秒刷新，隐藏时暂停，恢复可见立即刷新。分享取消或源记录不可用后，页面在下次读取时清空正文并提示。分享关系原子保存到 `<state-dir>/session-shares.json`，服务重启后继续有效；内容从本地会话记录读取，服务需要保持在线，本地文件和附件不会因此开放访问。
 

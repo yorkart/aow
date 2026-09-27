@@ -22,7 +22,7 @@
 curl -fsSL https://github.com/yorkart/aow/releases/latest/download/aow-install.sh | bash
 ```
 
-安装器从 GitHub Release 获取对应平台的包，校验后安装并启动 Web 服务。首次安装需要在终端设置 6 位访问 PIN；提示启动 terminald 时输入小写 `y`，才能使用 Terminal。升级时重启 terminald 会结束它管理的现有终端会话。
+安装器从 GitHub Release 获取对应平台的包，校验后安装并启动 Web 服务。首次安装必须在终端输入登录账号、密码并确认密码，保存后才启动服务；提示启动 terminald 时输入小写 `y`，才能使用 Terminal。升级时重启 terminald 会结束它管理的现有终端会话。
 
 LaunchDaemon 首次安装会暂停，等待本地管理员登记后再启动服务。服务以安装账户运行，无需登录该账户的桌面；后续程序更新不需要管理员权限，系统服务配置变化时需再次登记。
 
@@ -32,13 +32,13 @@ LaunchDaemon 首次安装会暂停，等待本地管理员登记后再启动服�
 aow update
 ```
 
-请将 `~/.local/bin` 加入 `PATH`；修改访问 PIN 使用 `aow pin`。
+请将 `~/.local/bin` 加入 `PATH`；修改登录账号或密码使用 `aow account`。后续升级保留账户；旧版只有 PIN 的安装需要首次设置账号和密码。
 
 版本与产物见 [GitHub Releases](https://github.com/yorkart/aow/releases)，指定版本安装与排错见 [安装说明](docs/release-installation.md)。
 
 ## 如何访问
 
-Web 服务默认仅监听 `127.0.0.1:8282`，在本机打开 `http://127.0.0.1:8282/` 并输入安装时设置的 PIN。远程访问可使用 SSH 隧道。
+Web 服务默认仅监听 `127.0.0.1:8282`，在本机打开 `http://127.0.0.1:8282/` 并使用安装时设置的账号和密码登录。远程访问可使用 SSH 隧道。
 
 ### 通过 IP 直接访问（需显式开启）
 
@@ -60,7 +60,7 @@ AOW_SERVER_HOST=192.168.1.10
 
 按 [配置说明](docs/configuration.md#监听地址与服务配置) 使设置生效，并在防火墙或安全组中仅允许可信来源访问 TCP 8282，然后打开 `http://<服务器IP>:8282/`（IPv6 使用 `http://[IPv6地址]:8282/`）。手机访问时自动进入移动界面。
 
-IP 直连适用于可信内网或 VPN，访问来源应受到限制。AoW 能操作运行账号的文件和终端，6 位 PIN 只是轻量访问门槛；公网访问请配置 HTTPS 和额外的访问控制。
+IP 直连适用于可信内网或 VPN，访问来源应受到限制。AoW 能操作运行账号的文件和终端；公网访问请配置 HTTPS 和额外的访问控制。
 
 ### 通过 SSH 隧道访问
 

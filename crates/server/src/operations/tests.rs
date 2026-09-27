@@ -139,7 +139,7 @@ async fn history_api_filters_pages_validates_cursors_and_uses_authentication() {
             StatusCode::BAD_REQUEST
         );
     }
-    state.auth = crate::auth::PinAuth::persistent(dir.path());
+    state.auth = crate::auth::AccountAuth::persistent(dir.path());
     let protected = crate::build_router(state);
     for path in [
         "/api/operation-logs",

@@ -14,7 +14,7 @@ html, body, #root { width:100%; height:100%; margin:0; overflow:hidden; }
 .aow-auth p { margin:0; color:var(--aow-text-secondary); font-size:14px; line-height:1.55; }
 .aow-auth form { display:grid; gap:9px; margin-top:23px; }
 .aow-auth label { color:var(--aow-text); font-size:12px; font-weight:600; }
-.aow-auth input { width:100%; padding:10px 12px; color:var(--aow-text); background:#1e1e1e; border:1px solid #5c626d; border-radius:5px; outline:none; font:600 20px ui-monospace,monospace; letter-spacing:.28em; text-align:center; }
+.aow-auth input { width:100%; padding:10px 12px; color:var(--aow-text); background:#1e1e1e; border:1px solid #5c626d; border-radius:5px; outline:none; font:400 16px system-ui,sans-serif; }
 .aow-auth input:focus { border-color:#6ca8f1; box-shadow:0 0 0 2px #3569a655; }
 .aow-auth button { margin-top:6px; padding:10px 14px; color:var(--aow-text-hover); background:#3569a6; border-radius:5px; cursor:pointer; font-weight:600; }
 .aow-auth button:hover:not(:disabled) { background:#437dbe; }

@@ -13,11 +13,11 @@ async function authStatus(): Promise<AuthStatus> {
   return response.json() as Promise<AuthStatus>;
 }
 
-async function login(pin: string): Promise<AuthStatus> {
+async function login(username: string, password: string): Promise<AuthStatus> {
   const response = await fetch(appUrl('/api/auth/login'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pin }),
+    body: JSON.stringify({ username, password }),
   });
   const payload = await response.json().catch(() => null) as { message?: string } | null;
   if (!response.ok) throw new Error(payload?.message ?? `登录失败（HTTP ${response.status}）`);
@@ -38,60 +38,56 @@ export function LoginGate({ children }: { children: ReactNode }) {
 
   if (loadError) return <AuthScreen title="无法连接 AoW" detail={loadError} retry={() => window.location.reload()} />;
   if (!status) return <AuthScreen title="正在检查登录状态…" detail="" />;
-  if (!status.configured) return <AuthScreen title="尚未设置访问 PIN" detail={status.message ?? '请在运行 AoW 的服务器上执行 `aow pin`。'} />;
+  if (!status.configured) return <AuthScreen title="尚未设置登录账户" detail={status.message ?? '请在运行 AoW 的服务器上执行 `aow account`。'} />;
   if (status.authenticated) return <>{children}</>;
-  return <PinLogin onSuccess={() => setStatus({ configured: true, authenticated: true })} />;
+  return <AccountLogin onSuccess={() => setStatus({ configured: true, authenticated: true })} />;
 }
 
-function PinLogin({ onSuccess }: { onSuccess: () => void }) {
-  const [pin, setPin] = useState('');
+function AccountLogin({ onSuccess }: { onSuccess: () => void }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string>();
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
 
-  const submit = async (pinToSubmit: string) => {
+  const submit = async () => {
     if (submittingRef.current) return;
-    if (!/^\d{6}$/.test(pinToSubmit)) {
-      setError('请输入 6 位数字 PIN。');
+    if (!username || !password) {
+      setError('请输入账号和密码。');
       return;
     }
     submittingRef.current = true;
     setSubmitting(true);
     setError(undefined);
     try {
-      const result = await login(pinToSubmit);
+      const result = await login(username, password);
       if (!result.authenticated) throw new Error('登录未完成，请重试。');
       onSuccess();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '登录失败，请重试。');
-      setPin('');
+      setPassword('');
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
     }
   };
 
-  const onPinChange = (value: string) => {
-    const nextPin = value.replace(/\D/g, '').slice(0, 6);
-    setPin(nextPin);
-    setError(undefined);
-    if (nextPin.length === 6) void submit(nextPin);
-  };
-
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
-    void submit(pin);
+    void submit();
   };
 
   return <main className="aow-auth">
     <section className="aow-auth-card" aria-labelledby="aow-auth-title">
       <div className="aow-auth-mark" aria-hidden="true">A<span /></div>
       <p className="aow-auth-eyebrow">AoW</p>
-      <h1 id="aow-auth-title">输入访问 PIN</h1>
-      <p>请输入服务器管理员设置的 6 位数字 PIN。</p>
+      <h1 id="aow-auth-title">登录 AoW</h1>
+      <p>请输入首次安装时设置的账号和密码。</p>
       <form onSubmit={onSubmit}>
-        <label htmlFor="aow-pin">PIN 码</label>
-        <input id="aow-pin" autoComplete="one-time-code" autoFocus inputMode="numeric" maxLength={6} pattern="[0-9]{6}" placeholder="••••••" type="password" value={pin} disabled={submitting} onChange={(event) => onPinChange(event.target.value)} />
+        <label htmlFor="aow-username">账号</label>
+        <input id="aow-username" name="username" autoComplete="username" autoFocus autoCapitalize="none" spellCheck={false} placeholder="请输入账号" type="text" value={username} required disabled={submitting} onChange={(event) => { setUsername(event.target.value); setError(undefined); }} />
+        <label htmlFor="aow-password">密码</label>
+        <input id="aow-password" name="password" autoComplete="current-password" placeholder="请输入密码" type="password" value={password} required disabled={submitting} onChange={(event) => { setPassword(event.target.value); setError(undefined); }} />
         {error && <p className="aow-auth-error" role="alert">{error}</p>}
         <button type="submit" disabled={submitting}>{submitting ? '正在验证…' : '登录'}</button>
       </form>

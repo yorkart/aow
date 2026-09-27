@@ -13,7 +13,7 @@ use clap::{Args, Parser, Subcommand, error::ErrorKind};
 use serde::Serialize;
 
 const CONTEXT: &str =
-    "Local access: uses the current OS user and filesystem permissions. No PIN, Cookie,
+    "Local access: uses the current OS user and filesystem permissions. No web login, Cookie,
 token, or running AoW server is required for automation queries. Project queries
 require a running server; agent commands also require terminald, via the local Unix socket.
 Queries do not initialize, migrate,

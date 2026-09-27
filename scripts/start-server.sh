@@ -117,7 +117,7 @@ if [ ! -x "$launcher" ]; then
 fi
 
 release=$(resolve_release "$requested_release")
-bash "$repo_root/packaging/bin/aow" pin --if-missing
+bash "$repo_root/packaging/bin/aow" account --if-missing
 was_active=0
 if systemctl --user is-active --quiet "$unit_name"; then
     was_active=1

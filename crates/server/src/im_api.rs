@@ -176,15 +176,11 @@ mod tests {
     use tower::ServiceExt;
 
     #[tokio::test]
-    async fn all_im_routes_require_existing_pin_authentication() {
+    async fn all_im_routes_require_account_authentication() {
         let root = tempfile::tempdir().unwrap();
-        std::fs::write(
-            root.path().join(crate::auth::PIN_HASH_FILE),
-            format!("{:x}", md5::compute("123456")),
-        )
-        .unwrap();
+        crate::auth::write_credentials(root.path(), "admin", "test-password");
         let mut state = AppState::new(root.path().join("frontend"));
-        state.auth = crate::auth::PinAuth::persistent(root.path());
+        state.auth = crate::auth::AccountAuth::persistent(root.path());
         let app = crate::build_router(state);
         for (method, path) in [
             ("PUT", "/api/aow/im/feishu"),

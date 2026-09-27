@@ -1,3 +1,4 @@
+import { credentials, assertCredentials } from './account-fixture.mjs';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -44,7 +45,7 @@ function fixture(t, arch = 'aarch64') {
   }
   for (const binary of binaries) write(join(artifacts, binary), '#!/bin/sh\nexit 0\n', true);
   write(join(repo, 'frontend/dist/index.html'), '<html>macOS release</html>');
-  write(join(home, '.local/state/aow/pin.md5'), 'e10adc3949ba59abbe56e057f20f883e\n');
+  write(join(home, '.local/state/aow/credentials.json'), credentials());
   // Lifecycle tests mock the health transport; service-health.test.mjs exercises
   // real HTTP and Unix sockets, including mismatched PIDs and startup delays.
   write(join(tools, 'node'), `#!/bin/sh
@@ -328,7 +329,7 @@ for (const arch of ['aarch64', 'x86_64']) {
     assert.equal(JSON.parse(f.log(join(f.runtime, 'update.json'))).repository, 'yorkart/aow');
     assert.match(f.log(f.env.DOWNLOAD_LOG), new RegExp(`/aow-macos-${arch}\\.tar\\.gz`));
     assert.doesNotMatch(f.log(f.serviceLog), /systemctl|kickstart/);
-    assert.equal(f.log(join(f.home, '.local/state/aow/pin.md5')), 'e10adc3949ba59abbe56e057f20f883e\n');
+    assert.equal(f.log(join(f.home, '.local/state/aow/credentials.json')), credentials());
   });
 }
 
@@ -387,14 +388,14 @@ test('macOS package records the highest binary deployment target and rejects old
   assert.doesNotMatch(f.log(f.serviceLog), /bootstrap|bootout/);
 });
 
-test('macOS first install sets a hidden PIN with the system Bash and then starts both services', t => {
+test('macOS first install sets a login account and hidden password with the system Bash and then starts both services', t => {
   const f = fixture(t);
-  rmSync(join(f.home, '.local/state/aow/pin.md5'));
+  rmSync(join(f.home, '.local/state/aow/credentials.json'));
   succeeds(f.pack('first')); succeeds(f.publish('first'));
-  const result = f.run('/bin/bash', ['-c', `cat ${quote(join(f.output, 'aow-install.sh'))} | /bin/bash`], {}, '123456\n123456\ny\n');
+  const result = f.run('/bin/bash', ['-c', `cat ${quote(join(f.output, 'aow-install.sh'))} | /bin/bash`], {}, 'admin\ntest-password\ntest-password\ny\n');
   succeeds(result);
-  assert.doesNotMatch(result.stdout + result.stderr, /123456/);
-  assert.equal(f.log(join(f.home, '.local/state/aow/pin.md5')), 'e10adc3949ba59abbe56e057f20f883e\n');
+  assert.doesNotMatch(result.stdout + result.stderr, /test-password/);
+  assertCredentials(f.log(join(f.home, '.local/state/aow/credentials.json')), 'test-password');
   assert.equal(existsSync(f.plist('server')), true);
   assert.equal(existsSync(f.plist('terminald')), true);
 });
@@ -497,21 +498,21 @@ test('local install stages LaunchDaemons when the GUI domain returns unsupported
   assert.doesNotMatch(f.log(f.serviceLog), /bootstrap|bootout|signal/);
 });
 
-test('unregistered headless installs stop before PIN setup; registered services can update without an administrator', {
+test('unregistered headless installs stop before account setup; registered services can update without an administrator', {
   skip: process.getuid() === 0,
 }, t => {
   const f = fixture(t);
   succeeds(f.pack('1.0.0')); succeeds(f.publish('1.0.0'));
-  const pin = join(f.home, '.local/state/aow/pin.md5');
-  rmSync(pin);
+  const account = join(f.home, '.local/state/aow/credentials.json');
+  rmSync(account);
   const first = f.install([], { FAIL_GUI: '125', AOW_INSTALL_MANAGED: '' });
   assert.equal(first.status, 78, first.stdout + first.stderr);
   assert.match(first.stderr, /just install --user/);
-  assert.equal(existsSync(pin), false);
+  assert.equal(existsSync(account), false);
   assert.equal(existsSync(join(f.runtime, 'latest')), false);
   assert.equal(existsSync(join(f.runtime, 'update.json')), false);
   assert.doesNotMatch(f.log(f.serviceLog), /bootstrap|bootout|signal/);
-  write(pin, 'e10adc3949ba59abbe56e057f20f883e\n');
+  write(account, credentials());
   // An interrupted administrator installation is still unregistered, even if
   // files, saved mode and a pending request exist.
   assert.equal(f.install([], { FAIL_GUI: '125', AOW_INSTALL_TERMINALD: 'n' }).status, 78);
@@ -661,11 +662,11 @@ test('pending headless installation retains its mode before registration and lea
   assert.doesNotMatch(f.log(f.serviceLog), /bootstrap|bootout|signal/);
   f.registerDaemons();
   succeeds(f.install());
-  rmSync(join(f.home, '.local/state/aow/pin.md5'));
+  rmSync(join(f.home, '.local/state/aow/credentials.json'));
   writeFileSync(f.serviceLog, '');
-  const missingPin = f.run('/bin/sh', ['scripts/start-server.sh', '1.0.0']);
-  assert.notEqual(missingPin.status, 0);
-  assert.match(missingPin.stderr, /交互终端/);
+  const missingAccount = f.run('/bin/sh', ['scripts/start-server.sh', '1.0.0']);
+  assert.notEqual(missingAccount.status, 0);
+  assert.match(missingAccount.stderr, /交互终端/);
   assert.doesNotMatch(f.log(f.serviceLog), /signal|bootstrap|bootout/);
   // Conflicting registrations cannot be resolved by silently changing mode.
   write(f.plist('server'), '<plist/>');

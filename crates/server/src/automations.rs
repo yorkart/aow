@@ -564,7 +564,7 @@ mod tests {
         .unwrap();
         // This test exercises automation persistence, not the HTTP
         // authentication boundary. Runtime construction remains protected.
-        state.auth = crate::auth::PinAuth::disabled();
+        state.auth = crate::auth::AccountAuth::disabled();
         state.automations.as_mut().unwrap().scheduler = Scheduler {
             platform: Platform::Systemd,
             runner: fake.clone(),
@@ -748,7 +748,7 @@ mod tests {
             directory.path().join("terminal.sock"),
         )
         .unwrap();
-        restarted.auth = crate::auth::PinAuth::disabled();
+        restarted.auth = crate::auth::AccountAuth::disabled();
         restarted.automations.as_mut().unwrap().scheduler = manager.scheduler.clone();
         let router = crate::build_router(restarted);
         let (code, detail) = call(&router, "GET", &path, serde_json::Value::Null).await;
@@ -1033,7 +1033,7 @@ mod tests {
             directory.path().join("terminal.sock"),
         )
         .unwrap();
-        state.auth = crate::auth::PinAuth::disabled();
+        state.auth = crate::auth::AccountAuth::disabled();
         state.automations.as_mut().unwrap().scheduler = Scheduler {
             platform: Platform::Systemd,
             runner: fake.clone(),

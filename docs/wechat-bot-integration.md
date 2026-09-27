@@ -85,7 +85,7 @@
 | `crates/im/src/lib.rs`、`message.rs` | `ImProvider::send`、渠道配置及脱敏视图、通用消息模型 |
 | `crates/im/src/feishu/`（入口 `mod.rs`） | 从原 `crates/server/src/im` 迁入的飞书鉴权、owner 查询、限流和卡片分片 |
 | `crates/im/src/wechat/` | iLink HTTP、扫码/配对码/重定向、上下文与游标持久化、独立长轮询、单次直发和 Hermes 降级 |
-| `crates/server/src/im_api.rs` | 现有 PIN 认证下的配置、扫码、状态、测试消息及解除本机绑定 API |
+| `crates/server/src/im_api.rs` | 账号密码认证下的配置、扫码、状态、测试消息及解除本机绑定 API |
 | `crates/server/src/notifications/` | 业务消息组装、配置落盘、页面/飞书/微信渠道及通知队列 |
 | `frontend/src/features/im/` | 独立 IM 设置 UI，分别操作飞书和微信 |
 | `crates/server/src/automations/notifications.rs` | 保存执行快照中的渠道选择，再交给通知层投递 |

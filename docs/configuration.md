@@ -95,9 +95,11 @@ config-id = "550e8400-e29b-41d4-a716-446655440000"
 
 `config.toml` 当前只使用这两个顶层字段。保存版本选择会保留其他字段和注释，未来可扩展分层配置；当前尚未实现全局、用户和项目配置的覆盖规则。
 
-## Notes 目录与访问 PIN
+## Notes 目录与登录账户
 
 - **Notes 目录**：在 **Settings → Notes** 中修改，默认 `~/aow`。保存后迁移使用默认路径的 Notes，自定义绑定的 Notes 路径保持不变。
-- **访问 PIN**：在服务器终端执行 `aow pin`。手动使用自定义数据目录时，执行 `AOW_SERVER_STATE_DIR=/path/to/state aow pin`；修改后重新登录网页。
+- **登录账户**：在服务器终端执行 `aow account`。手动使用自定义数据目录时，执行 `AOW_SERVER_STATE_DIR=/path/to/state aow account`；按提示输入账号、密码并确认密码，修改后重新登录网页。
+
+账户仅保存在服务所在机器的数据目录中（默认 `~/.local/state/aow/credentials.json`），权限为 `0600`。当前使用一个本地账户，保存账号、随机盐和 PBKDF2-HMAC-SHA256 密码哈希，不保存明文密码。账户不进入配置 Git 仓库。首次安装必须设置，后续升级保留；忘记密码可在服务器终端重新运行 `aow account`，无需重启服务。旧 `pin.md5` 不再读取，也不会自动转换成账户。
 
 服务日志和故障排查见 [安装说明](release-installation.md)。

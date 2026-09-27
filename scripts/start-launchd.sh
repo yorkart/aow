@@ -12,7 +12,7 @@ runtime_root=${AOW_RUNTIME_ROOT:-${HOME:?HOME must be set}/.local/lib/aow}
 service_mode=$(node "$script_dir/launchd-mode.mjs" resolve "$runtime_root")
 if [ "$service_mode" = launchdaemon ]; then
     if [ "$component" = server ]; then
-        bash "$repo_root/packaging/bin/aow" pin --if-missing
+        bash "$repo_root/packaging/bin/aow" account --if-missing
     fi
     exec node "$script_dir/start-launchdaemon.mjs" "$component" "$runtime_root" "$requested"
 fi
@@ -43,7 +43,7 @@ case "$release" in "$releases"/*) ;; *) fail 'release resolves outside the relea
     || fail 'AoW binary or launcher is unavailable; run the installer first'
 if [ "$component" = server ]; then
     [ -f "$release/frontend/dist/index.html" ] || fail 'incomplete server frontend'
-    bash "$repo_root/packaging/bin/aow" pin --if-missing
+    bash "$repo_root/packaging/bin/aow" account --if-missing
 fi
 [ ! -e "$active" ] || [ -L "$active" ] || fail 'active release must be a symlink'
 [ ! -L "$plist" ] && [ ! -d "$plist" ] || fail 'LaunchAgent destination must be a regular file'
