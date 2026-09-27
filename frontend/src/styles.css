@@ -141,8 +141,8 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .editor-toolbar code { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--aow-text-secondary); font-size:11px; }
 .editor-toolbar button { flex:0 0 23px; }
 .editor-toolbar button[aria-pressed="true"] { color:var(--aow-accent); background:var(--aow-selection); }
-.markdown-view-switch { display:flex; align-items:center; gap:6px; flex-shrink:0; }
-.markdown-view-switch button.active { color:var(--aow-accent); background:var(--aow-selection); }
+.editor-toolbar-group { display:flex; align-items:center; gap:6px; flex:0 0 auto; }
+.editor-toolbar-separator { flex:0 0 1px; height:13px; margin:0 3px; background:var(--aow-text-secondary); opacity:.3; }
 .editor-file-notice { min-height:30px; flex:0 0 auto; display:flex; align-items:center; gap:8px; padding:5px 9px; border-bottom:1px solid; font-size:12px; }
 .editor-file-notice span { min-width:0; flex:1; } .editor-file-notice.warning { color:#cca700; background:#332f13; border-color:#6b6118; } .editor-file-notice.info { color:#9cdcfe; background:#122b3a; border-color:#25556f; } .editor-file-notice.error { color:#f48771; background:#321f1c; border-color:#6f2b20; }
 .editor-file-notice button { padding:2px 6px; color:inherit; border:1px solid currentColor; border-radius:3px; cursor:pointer; white-space:nowrap; } .editor-file-notice button:hover { background:#ffffff12; }
