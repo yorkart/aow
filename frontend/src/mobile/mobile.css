@@ -229,9 +229,9 @@ body { position:fixed; inset:0; }
 .mobile-accessory-keys { display:flex; gap:4px; overflow-x:auto; padding:2px 6px; scrollbar-width:none; }
 .mobile-accessory-keys button { flex-shrink:0; height:24px; min-width:36px; padding:0 8px; border:1px solid #3c4452; border-radius:4px; background:#2a303b; color:var(--aow-text); font-size:11px; white-space:nowrap; }
 .mobile-accessory-keys button:active:not(:disabled) { background:#455570; transform:translateY(1px); }
-.mobile-composer { display:flex; gap:5px; align-items:center; height:34px; margin:2px 6px 5px; border:1px solid #3b4454; border-radius:8px; background:#151922; padding:2px; }
+.mobile-composer { display:flex; gap:5px; align-items:flex-end; min-height:34px; margin:2px 6px 5px; border:1px solid #3b4454; border-radius:8px; background:#151922; padding:2px; }
 .mobile-composer button { width:30px; height:28px; flex:0 0 30px; display:grid; place-items:center; color:#95a5ba; border-radius:5px; }
-.mobile-composer textarea { width:100%; min-width:0; height:28px; resize:none; padding:3px 0; border:0; outline:none; background:none; font-size:16px; line-height:22px; }
+.mobile-composer textarea { width:100%; min-width:0; height:28px; min-height:28px; max-height:calc(5 * 22px + 6px); overflow-y:auto; resize:none; padding:3px 0; border:0; outline:none; background:none; font-size:16px; line-height:22px; }
 .mobile-composer textarea::placeholder { color:var(--aow-muted); font-size:12px; }
 .mobile-composer .mobile-send { background:#bad0ee; color:#1b2a3e; }
 .spinning { animation:mobile-spin .8s linear infinite; }
