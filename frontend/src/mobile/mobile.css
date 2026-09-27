@@ -6,6 +6,8 @@ body { position:fixed; inset:0; }
 .mobile-app { --m-bg:#111318; --m-panel:#1a1d24; --m-raised:#242832; --m-line:#2b303b; --m-text:var(--aow-text); --m-muted:var(--aow-muted); --m-accent:#b2cdf5; position:fixed; top:var(--mobile-top,0); inset-inline:0; height:var(--mobile-height,100dvh); display:flex; flex-direction:column; color:var(--m-text); background:var(--m-bg); font-size:14px; line-height:1.5; padding-top:env(safe-area-inset-top); padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right); -webkit-tap-highlight-color:transparent; }
 .mobile-app [hidden] { display:none!important; }
 .mobile-app { min-height:0; overflow:hidden; }
+.mobile-main { flex:1; min-height:0; display:flex; flex-direction:column; }
+.mobile-settings-loading { position:absolute; inset:0; z-index:1000; display:flex; background:var(--m-bg); }
 .mobile-app button,.mobile-app input,.mobile-app textarea { font:inherit; color:inherit; }
 .mobile-app button { border:0; background:none; cursor:pointer; touch-action:manipulation; }
 .mobile-app button:disabled { opacity:.4; cursor:default; }

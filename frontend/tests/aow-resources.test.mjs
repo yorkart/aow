@@ -2957,7 +2957,7 @@ try {
     assert.notEqual(icons[2], icons[1]);
     assert.equal(icons[3], icons[0]);
     const type = dialog.getByRole('combobox', { name: 'Agent 类型', exact: true });
-    assert.deepEqual(await type.locator('option').evaluateAll(options => options.map(option => option.value)), ['', 'claude', 'codex', 'traecli']);
+    assert.deepEqual(await type.locator('option').evaluateAll(options => options.map(option => option.value)), ['', 'claude', 'codex', 'traecli', 'hermes']);
     await dialog.getByLabel('Display name', { exact: true }).fill('My custom wrapper');
     await dialog.getByLabel('Executable', { exact: true }).fill('/opt/custom/start');
     await dialog.getByLabel('Arguments', { exact: true }).fill('--anything\nvalue with spaces');

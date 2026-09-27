@@ -108,13 +108,13 @@ async function fixture(context, pins = { paths: [], revision: 0, failWrites: fal
         if (observedPaths.has(path) && !control.force) {
           socket.send(JSON.stringify({ type: 'control', state: 'observing' }));
           socket.send(JSON.stringify({ type: 'stream', epoch: 'epoch-observer', offset: 0, reset: true, replay_bytes: 0,
-            restore_cols: 120, restore_rows: terminalRows, restore: '\x1b[2J\x1b[HAow mobile terminal\r\n$ ' }));
+            restore_cols: 120, restore_rows: terminalRows, restore: '\x1b[2J\x1b[HAoW mobile terminal\r\n$ ' }));
           return;
         }
         if (control.force) observedPaths.delete(path);
         socket.send(JSON.stringify({ type: 'control', state: 'claimed' }));
         socket.send(JSON.stringify({ type: 'stream', epoch: 'epoch-one', offset: 0, reset: true, replay_bytes: 0,
-          restore_cols: 120, restore_rows: terminalRows, restore: '\x1b[2J\x1b[HAow mobile terminal\r\n$ ' }));
+          restore_cols: 120, restore_rows: terminalRows, restore: '\x1b[2J\x1b[HAoW mobile terminal\r\n$ ' }));
       }
     });
   });
@@ -1231,7 +1231,7 @@ try {
     const socket = state.sockets[0];
     socket.send(JSON.stringify({ type: 'control', state: 'claimed' }));
     socket.send(JSON.stringify({ type: 'stream', epoch: 'epoch-one', offset: 0, reset: true, replay_bytes: 1,
-      restore_cols: 120, restore_rows: 140, restore: '\x1b[2J\x1b[HAow mobile terminal\r\n$ ' }));
+      restore_cols: 120, restore_rows: 140, restore: '\x1b[2J\x1b[HAoW mobile terminal\r\n$ ' }));
     await page.waitForTimeout(300);
     assert.equal(await page.getByRole('textbox', { name: '终端命令' }).isDisabled(), true);
     assert.deepEqual(controlMessages(state, 'resize'), [], 'receiving control does not resize before replay finishes');
