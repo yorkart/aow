@@ -14,7 +14,7 @@ Product website: [yorkart.github.io/aow](https://yorkart.github.io/aow/). The we
 
 ## Installation and upgrades
 
-Supports **Linux and macOS on x86_64 and ARM64**. Runtime requirements are Bash, Node.js 20+, Git, tar, and curl. Linux requires working systemd user services; macOS requires the current user to be logged into a graphical session.
+Supports **Linux and macOS on x86_64 and ARM64**. Runtime requirements are Bash, Node.js 20+, Git, tar, and curl. Linux requires working systemd user services. On first installation, macOS selects LaunchAgent if the installing account has a graphical session, otherwise LaunchDaemon; updates retain that choice. Existing LaunchAgent installations keep their mode.
 
 Run the following command on the machine where you want to run AoW:
 
@@ -23,6 +23,8 @@ curl -fsSL https://github.com/yorkart/aow/releases/latest/download/aow-install.s
 ```
 
 The installer downloads the package for your platform from GitHub Releases, verifies it, installs it, and starts the web service. On the first installation, you must set a six-digit access PIN in the terminal. When prompted to start terminald, enter lowercase `y` to enable terminals. Restarting terminald during an upgrade ends any existing terminal sessions it manages.
+
+LaunchDaemon installations pause for registration by a local administrator before starting services. They run as the installing account and do not require its desktop login. Subsequent code updates need no administrator privileges; changes to the system service configuration require registration again.
 
 To upgrade an existing installation:
 

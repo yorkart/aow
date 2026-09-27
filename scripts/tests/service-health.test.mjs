@@ -99,3 +99,15 @@ test('unresponsive health checks have a total deadline', async t => {
   await assert.rejects(waitForHealth(config, () => 1234, 100), /timed out/);
   assert.ok(Date.now() - started < 1000);
 });
+
+test('daemon restart health never accepts the previous healthy process', async t => {
+  let requests = 0;
+  const config = await endpoint(t, 'server', (_, response) => {
+    requests++;
+    response.end(JSON.stringify({ service: 'aow', ok: true, pid: 1234 }));
+  });
+  await assert.rejects(waitForHealth(config, () => 1234, 150, 1234), /not restarted/);
+  assert.equal(requests, 0);
+  await waitForHealth(config, () => 1234, 1000, 999);
+  assert.equal(requests, 1);
+});

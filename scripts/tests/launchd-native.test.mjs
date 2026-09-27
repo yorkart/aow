@@ -33,7 +33,7 @@ test('real launchd activates isolated native services, restarts crashes, and rol
     mkdirSync(join(directory, path), { recursive: true });
   }
   mkdirSync(join(runtime, 'bin'), { recursive: true });
-  for (const file of ['start-launchd.sh', 'launchd-service.mjs', 'service-health.mjs', 'server-state-dir.sh']) {
+  for (const file of ['start-launchd.sh', 'launchd-service.mjs', 'launchd-mode.mjs', 'service-health.mjs', 'server-state-dir.sh']) {
     writeFileSync(join(directory, 'scripts', file), readFileSync(join(root, 'scripts', file), 'utf8')
       .replaceAll('org.aow.', `${namespace}.`), { mode: 0o700 });
   }

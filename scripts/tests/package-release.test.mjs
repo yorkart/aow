@@ -33,6 +33,7 @@ function fixture(t) {
     'justfile', 'scripts/package-release.sh', 'scripts/install-release.sh',
     'scripts/start-server.sh', 'scripts/start-terminald.sh', 'scripts/replace-symlink.mjs', 'scripts/server-state-dir.sh',
     'scripts/start-launchd.sh', 'scripts/launchd-service.mjs', 'scripts/activate-terminald.mjs', 'scripts/service-health.mjs',
+    'scripts/launchd-mode.mjs', 'scripts/start-launchdaemon.mjs', 'scripts/register-launchdaemon.py',
     'packaging/bin/aow', 'packaging/bin/aow-server', 'packaging/bin/aow-terminald',
     'packaging/systemd/aow-server.service', 'packaging/systemd/aow-terminald.service',
   ]) {

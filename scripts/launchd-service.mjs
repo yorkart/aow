@@ -1,20 +1,30 @@
 import { existsSync, lstatSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { userInfo } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 
 // Generate data, never shell source: paths/config values may contain quotes,
 // whitespace, XML characters or dollar signs.
-const [component, runtime, destination, nodePath] = process.argv.slice(2);
-if (!['server', 'terminald'].includes(component) || !runtime?.startsWith('/') || !destination) {
-  throw new Error('Usage: launchd-service.mjs server|terminald RUNTIME PLIST');
+const [component, runtime, destination, nodePath, mode = 'launchagent'] = process.argv.slice(2);
+if (!['server', 'terminald'].includes(component) || !runtime?.startsWith('/') || !destination
+  || !['launchagent', 'launchdaemon'].includes(mode)) {
+  throw new Error('Usage: launchd-service.mjs server|terminald RUNTIME PLIST [NODE] [launchagent|launchdaemon]');
 }
+const daemon = mode === 'launchdaemon';
+const identity = userInfo();
+if (daemon && identity.uid === 0) throw new Error('LaunchDaemon must run as a non-root account');
 const home = process.env.HOME;
 const environment = {
   HOME: home,
-  SHELL: process.env.SHELL || '/bin/zsh',
+  SHELL: daemon ? '/bin/zsh' : process.env.SHELL || '/bin/zsh',
   PATH: [...new Set([process.env.AOW_USER_BIN_DIR || join(home, '.local/bin'),
-    ...process.env.PATH.split(delimiter), '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin'])].join(delimiter),
+    ...(daemon ? [runtime, join(home, '.cargo/bin')] : process.env.PATH.split(delimiter)),
+    '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin'])].join(delimiter),
   AOW_RUNTIME_ROOT: runtime,
 };
+const daemonKeys = new Set(['HOME', 'USER', 'LOGNAME', 'SHELL', 'PATH', 'LANG', 'LC_ALL', 'LC_CTYPE',
+  'AOW_RUNTIME_ROOT', 'AOW_SERVER_HOST', 'AOW_SERVER_PORT', 'AOW_SERVER_STATE_DIR', 'AOW_STATE_DIR',
+  'AOW_TERMINALD_SOCKET', 'AOW_BASE_PATH', 'XDG_STATE_HOME', 'XDG_RUNTIME_DIR', 'AOW_LOG_MODE']);
 if (process.env.USER) environment.USER = process.env.USER;
 // Match server_state_dir's environment > server.env > state-dir defaults.
 try {
@@ -23,6 +33,9 @@ try {
     const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
     if (!match) throw new Error('Unsupported server.env line; use KEY=value or KEY="value"');
     const [, key, raw] = match;
+    if (daemon && !daemonKeys.has(key)) {
+      throw new Error(`Unsupported LaunchDaemon server.env key: ${key}; keep credentials out of system plists`);
+    }
     environment[key] = raw.replace(/^(['"])(.*)\1$/, '$2');
   }
 } catch (error) {
@@ -35,6 +48,11 @@ for (const key of ['AOW_SERVER_HOST', 'AOW_SERVER_PORT', 'AOW_SERVER_STATE_DIR',
 // These paths define the installation and cannot be redirected by server.env.
 environment.HOME = home;
 environment.AOW_RUNTIME_ROOT = runtime;
+if (daemon) {
+  environment.USER = identity.username;
+  environment.LOGNAME = identity.username;
+  environment.LANG ||= 'en_US.UTF-8';
+}
 delete environment.AOW_SERVICE_LOG;
 environment.AOW_LOG_MODE = 'unified';
 if (component === 'terminald') {
@@ -68,12 +86,13 @@ function xml(value) {
 const plist = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-<key>Label</key><string>org.aow.${component}</string>
+<key>Label</key><string>org.aow.${daemon ? 'service.' : ''}${component}</string>
+${daemon ? `<key>UserName</key><string>${xml(identity.username)}</string>\n<key>GroupName</key><string>${xml(execFileSync('id', ['-gn'], { encoding: 'utf8' }).trim())}</string>` : ''}
 <key>ProgramArguments</key><array><string>${xml(join(runtime, 'bin', `aow-${component}`))}</string></array>
 <key>EnvironmentVariables</key><dict>${Object.entries(environment).map(([key, value]) => `<key>${xml(key)}</key><string>${xml(value)}</string>`).join('')}</dict>
 <key>WorkingDirectory</key><string>${xml(home)}</string>
 <key>RunAtLoad</key><true/>
-<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+<key>KeepAlive</key>${daemon ? '<true/>' : '<dict><key>SuccessfulExit</key><false/></dict>'}
 <key>ThrottleInterval</key><integer>1</integer>
 <key>Umask</key><integer>63</integer>
 <key>StandardOutPath</key><string>/dev/null</string>

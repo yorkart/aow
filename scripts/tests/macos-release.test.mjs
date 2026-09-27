@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir, userInfo } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
@@ -12,6 +12,7 @@ const quote = value => `'${value.replaceAll("'", "'\\''")}'`;
 const files = ['scripts/install-release.sh', 'scripts/package-release.sh',
   'scripts/start-server.sh', 'scripts/start-terminald.sh', 'scripts/start-launchd.sh', 'scripts/launchd-service.mjs',
   'scripts/activate-terminald.mjs', 'scripts/service-health.mjs',
+  'scripts/launchd-mode.mjs', 'scripts/start-launchdaemon.mjs', 'scripts/register-launchdaemon.py',
   'scripts/replace-symlink.mjs', 'scripts/server-state-dir.sh', 'packaging/bin/aow',
   'packaging/bin/aow-server', 'packaging/bin/aow-terminald',
   'packaging/systemd/aow-server.service', 'packaging/systemd/aow-terminald.service'];
@@ -30,9 +31,16 @@ function fixture(t, arch = 'aarch64') {
   const output = join(temp, 'downloads');
   const serviceLog = join(temp, 'services.log');
   const serviceState = join(temp, 'service-state');
+  const daemonDirectory = join(temp, 'LaunchDaemons');
   const artifacts = join(repo, 'target', `${arch}-apple-darwin`, 'release');
   for (const path of files) {
-    write(join(repo, path), readFileSync(join(root, path)), !path.endsWith('.mjs'));
+    let content = readFileSync(join(root, path), 'utf8');
+    if (path === 'scripts/launchd-mode.mjs') {
+      // Isolated stand-ins for root-owned plists; never touch system jobs.
+      content = content.replace("'/Library/LaunchDaemons'", JSON.stringify(daemonDirectory))
+        .replace('const daemonOwner = 0;', `const daemonOwner = ${process.getuid()};`);
+    }
+    write(join(repo, path), content, !path.endsWith('.mjs'));
   }
   for (const binary of binaries) write(join(artifacts, binary), '#!/bin/sh\nexit 0\n', true);
   write(join(repo, 'frontend/dist/index.html'), '<html>macOS release</html>');
@@ -62,7 +70,13 @@ else
 fi
 `, true);
   write(join(tools, 'sw_vers'), '#!/bin/sh\necho "${MOCK_MACOS_VERSION:-26.7}"\n', true);
-  write(join(tools, 'plutil'), '#!/bin/sh\nexec python3 -c \'import plistlib,sys; plistlib.load(open(sys.argv[1], "rb"))\' "$2"\n', true);
+  write(join(tools, 'plutil'), `#!/bin/sh
+mode=$1
+for last in "$@"; do :; done
+exec python3 -c 'import json,plistlib,sys; value=plistlib.load(open(sys.argv[1], "rb")); print(json.dumps(value)) if sys.argv[2]=="-convert" else None' "$last" "$mode"
+`, true);
+  write(join(tools, 'ps'), `#!/bin/sh\necho "\${MOCK_PROCESS_UID:-${process.getuid()}}"\n`, true);
+  write(join(tools, 'kill'), '#!/bin/sh\nprintf "signal %s\\n" "$*" >> "$SERVICE_LOG"\n', true);
   write(join(tools, 'launchctl'), `#!/bin/sh
 printf '%s\\n' "$*" >> "$SERVICE_LOG"
 name=\${2##*/}
@@ -70,7 +84,10 @@ case "$1" in
   print)
     case "$2" in
       gui/[0-9]*)
-        case "$2" in */org.aow.*) ;; *) [ "\${FAIL_GUI:-}" != 1 ]; exit $?;; esac;;
+        case "$2" in */org.aow.*) ;; *)
+          if [ "\${GUI_QUERY_ERROR:-}" = 1 ]; then echo 'Operation not permitted' >&2; exit 1; fi
+          if [ "\${FAIL_GUI:-}" = 1 ]; then echo 'Could not find domain for user' >&2; exit 112; fi
+          exit 0;; esac;;
     esac
     if [ -f "$SERVICE_STATE/$name.unloading" ]; then
       remaining=$(cat "$SERVICE_STATE/$name.unloading")
@@ -81,8 +98,8 @@ case "$1" in
       fi
       rm -f "$SERVICE_STATE/$name" "$SERVICE_STATE/$name.unloading"
     fi
-    [ -f "$SERVICE_STATE/$name" ] || exit 113
-    printf 'state = running\\n';;
+    if [ ! -f "$SERVICE_STATE/$name" ]; then echo 'Could not find service' >&2; exit 113; fi
+    printf 'state = running\\npid = 987654\\n';;
   enable) exit 0;;
   bootout)
     if [ -f "$SERVICE_STATE/$name" ] && [ "\${BOOTOUT_POLLS:-0}" -gt 0 ]; then
@@ -119,6 +136,7 @@ cp "$DOWNLOAD_ROOT/$path" "$output"
   const env = { ...process.env, HOME: home, PATH: `${tools}:${process.env.PATH}`, SHELL: '/bin/zsh',
     AOW_RUNTIME_ROOT: runtime, AOW_USER_BIN_DIR: join(home, '.local/bin'),
     AOW_STATE_DIR: '', AOW_SERVER_STATE_DIR: '', AOW_RELEASE_REPOSITORY: '',
+    AOW_SERVER_HOST: '', AOW_SERVER_PORT: '', AOW_BASE_PATH: '', AOW_TERMINALD_SOCKET: '',
     XDG_STATE_HOME: '', XDG_RUNTIME_DIR: '', XDG_CONFIG_HOME: join(home, '.config'),
     SERVICE_LOG: serviceLog, SERVICE_STATE: serviceState, DOWNLOAD_ROOT: output,
     DOWNLOAD_LOG: join(temp, 'downloads.log') };
@@ -140,7 +158,19 @@ cp "$DOWNLOAD_ROOT/$path" "$output"
   const install = (args = [], extra = {}, reply) => run('bash', [join(output, 'aow-install.sh'), ...args], extra, reply);
   const log = path => existsSync(path) ? readFileSync(path, 'utf8') : '';
   const plist = component => join(home, `Library/LaunchAgents/org.aow.${component}.plist`);
-  return { temp, repo, home, runtime, tools, output, artifacts, env, serviceLog, run, pack, publish, install, log, plist };
+  const registerDaemons = () => {
+    const request = JSON.parse(readFileSync(join(runtime, 'pending-launchdaemon.json'), 'utf8'));
+    for (const config of Object.values(request.components)) {
+      const path = join(daemonDirectory, `${config.Label}.plist`);
+      mkdirSync(daemonDirectory, { recursive: true });
+      const rendered = spawnSync('python3', ['-c', 'import json,plistlib,sys; sys.stdout.buffer.write(plistlib.dumps(json.load(sys.stdin)))'],
+        { input: JSON.stringify(config), encoding: 'utf8' });
+      succeeds(rendered);
+      write(path, rendered.stdout);
+      write(join(serviceState, config.Label), '');
+    }
+  };
+  return { temp, repo, home, runtime, tools, output, artifacts, env, serviceLog, run, pack, publish, install, log, plist, daemonDirectory, registerDaemons };
 }
 function succeeds(result) { assert.equal(result.status, 0, result.stdout + result.stderr); }
 
@@ -360,13 +390,160 @@ test('macOS installer validates the package platform before running binaries or 
   assert.doesNotMatch(f.log(f.serviceLog), /bootstrap|bootout/);
 });
 
-test('macOS installer refuses unavailable GUI domains before deploying a release', t => {
+test('macOS installer does not treat GUI inspection errors as a headless account', t => {
   const f = fixture(t);
+  const alias = join(f.temp, 'mode-link.mjs');
+  symlinkSync(join(f.repo, 'scripts/launchd-mode.mjs'), alias);
+  const mode = f.run(process.execPath, [alias, 'resolve', f.runtime]);
+  succeeds(mode);
+  assert.equal(mode.stdout, 'launchagent\n');
   succeeds(f.pack('1.0.0')); succeeds(f.publish('1.0.0'));
-  const result = f.install([], { FAIL_GUI: '1' });
+  const result = f.install([], { GUI_QUERY_ERROR: '1' });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /graphical user session/);
-  assert.equal(existsSync(f.runtime), false);
+  assert.equal(existsSync(join(f.runtime, 'latest')), false);
+  assert.doesNotMatch(f.log(f.serviceLog), /bootstrap|bootout/);
+});
+
+test('saved LaunchAgent mode persists without a GUI and rejects account/configuration mismatches', t => {
+  const f = fixture(t);
+  succeeds(f.pack('1.0.0')); succeeds(f.publish('1.0.0')); succeeds(f.install());
+  const path = join(f.runtime, 'update.json');
+  const settings = JSON.parse(f.log(path));
+  assert.deepEqual(settings.service, { mode: 'launchagent', user: userInfo().username, uid: process.getuid() });
+  writeFileSync(f.serviceLog, '');
+  const missing = f.install([], { FAIL_GUI: '1' });
+  assert.notEqual(missing.status, 0);
+  assert.match(missing.stderr, /will not silently switch modes/);
+  assert.doesNotMatch(f.log(f.serviceLog), /bootstrap|bootout/);
+  settings.service.user = 'another-account';
+  writeFileSync(path, JSON.stringify(settings));
+  const mismatch = f.install();
+  assert.notEqual(mismatch.status, 0);
+  assert.match(mismatch.stderr, /does not match the installation account/);
+});
+
+test('legacy LaunchAgent installations retain their mode before update.json has a service record', t => {
+  const f = fixture(t);
+  succeeds(f.pack('1.0.0')); succeeds(f.publish('1.0.0')); succeeds(f.install());
+  const path = join(f.runtime, 'update.json');
+  const settings = JSON.parse(f.log(path));
+  delete settings.service;
+  settings.custom_setting = 'preserved';
+  writeFileSync(path, JSON.stringify(settings));
+  assert.notEqual(f.install([], { FAIL_GUI: '1' }).status, 0);
+  succeeds(f.install());
+  assert.equal(JSON.parse(f.log(path)).custom_setting, 'preserved');
+  assert.equal(JSON.parse(f.log(path)).service.mode, 'launchagent');
+});
+
+test('headless install stages registration, persists mode, updates without sudo and rolls back failures', {
+  skip: process.getuid() === 0,
+}, t => {
+  const f = fixture(t);
+  succeeds(f.pack('1.0.0')); succeeds(f.publish('1.0.0'));
+  const pending = f.install([], { FAIL_GUI: '1' }, 'y\n');
+  assert.equal(pending.status, 78, pending.stdout + pending.stderr);
+  assert.match(pending.stdout + pending.stderr, /registration is pending/);
+  const settings = JSON.parse(f.log(join(f.runtime, 'update.json')));
+  assert.equal(settings.service.mode, 'launchdaemon');
+  const request = JSON.parse(f.log(join(f.runtime, 'pending-launchdaemon.json')));
+  assert.deepEqual(Object.keys(request.components).sort(), ['server', 'terminald']);
+  for (const config of Object.values(request.components)) {
+    assert.equal(config.UserName, userInfo().username);
+    assert.equal(config.KeepAlive, true);
+    assert.equal(config.EnvironmentVariables.HOME, f.home);
+    assert.equal(config.StandardOutPath, '/dev/null');
+  }
+  assert.doesNotMatch(f.log(f.serviceLog), /bootstrap|bootout|signal/);
+  f.registerDaemons();
+  succeeds(f.install([], { FAIL_GUI: '1' }, 'y\n'));
+  assert.equal(existsSync(join(f.runtime, 'pending-launchdaemon.json')), false);
+  const managedNode = realpathSync(join(f.runtime, 'node'));
+  succeeds(f.install([], { PATH: `${f.runtime}:${f.env.PATH}` }, 'y\n'));
+  assert.equal(realpathSync(join(f.runtime, 'node')), managedNode);
+  assert.notEqual(readlinkSync(join(f.runtime, 'node')), join(f.runtime, 'node'));
+  succeeds(f.pack('2.0.0')); succeeds(f.publish('2.0.0'));
+  // Even with a GUI now present, aow update must retain the saved daemon mode.
+  const manager = join(f.home, '.local/bin/aow');
+  succeeds(f.run(manager, ['update'], {}, 'n\n'));
+  assert.equal(realpathSync(join(f.runtime, 'active/server')), join(f.runtime, 'releases/2.0.0'));
+  assert.equal(realpathSync(join(f.runtime, 'active/terminald')), join(f.runtime, 'releases/1.0.0'));
+  const failed = f.install([], { FAIL_HEALTH: 'terminald' }, 'y\n');
+  assert.notEqual(failed.status, 0);
+  assert.equal(realpathSync(join(f.runtime, 'active/terminald')), join(f.runtime, 'releases/1.0.0'));
+  assert.match(f.log(f.serviceLog), /signal -TERM 987654/);
+  assert.doesNotMatch(f.log(f.serviceLog), /bootstrap|bootout|kickstart/);
+  assert.equal(existsSync(f.plist('server')), false);
+  assert.equal(existsSync(join(f.runtime, '.launchdaemon-activation.lock')), false);
+});
+
+test('daemon config changes require registration without replacing active releases; foreign PID is never signalled', {
+  skip: process.getuid() === 0,
+}, t => {
+  const f = fixture(t);
+  succeeds(f.pack('1.0.0')); succeeds(f.publish('1.0.0'));
+  assert.equal(f.install([], { FAIL_GUI: '1' }, 'y\n').status, 78);
+  f.registerDaemons();
+  succeeds(f.install([], {}, 'y\n'));
+  succeeds(f.pack('2.0.0')); succeeds(f.publish('2.0.0'));
+  write(join(f.home, '.config/aow/server.env'), 'AOW_SERVER_PORT=8283\n');
+  writeFileSync(f.serviceLog, '');
+  assert.equal(f.install([], {}, 'n\n').status, 78);
+  assert.equal(realpathSync(join(f.runtime, 'active/server')), join(f.runtime, 'releases/1.0.0'));
+  assert.doesNotMatch(f.log(f.serviceLog), /signal|bootstrap|bootout/);
+  f.registerDaemons();
+  const refused = f.install([], { MOCK_PROCESS_UID: String(process.getuid() + 1) }, 'n\n');
+  assert.notEqual(refused.status, 0);
+  assert.match(refused.stdout + refused.stderr, /different account/);
+  assert.doesNotMatch(f.log(f.serviceLog), /signal/);
+  assert.equal(realpathSync(join(f.runtime, 'active/server')), join(f.runtime, 'releases/1.0.0'));
+});
+
+test('pending headless installation retains its mode before registration and leaves unconfirmed terminald untouched', {
+  skip: process.getuid() === 0,
+}, t => {
+  const f = fixture(t);
+  succeeds(f.pack('1.0.0')); succeeds(f.publish('1.0.0'));
+  assert.equal(f.install([], { FAIL_GUI: '1' }).status, 78);
+  // A graphical login after preparation must not change the saved mode.
+  assert.equal(f.install().status, 78);
+  const request = JSON.parse(f.log(join(f.runtime, 'pending-launchdaemon.json')));
+  assert.deepEqual(Object.keys(request.components), ['server']);
+  assert.equal(existsSync(join(f.runtime, 'active/terminald')), false);
+  assert.equal(existsSync(join(f.runtime, 'node')), false);
+  assert.equal(existsSync(f.plist('server')), false);
+  assert.doesNotMatch(f.log(f.serviceLog), /bootstrap|bootout|signal/);
+  f.registerDaemons();
+  succeeds(f.install());
+  rmSync(join(f.home, '.local/state/aow/pin.md5'));
+  writeFileSync(f.serviceLog, '');
+  const missingPin = f.run('/bin/sh', ['scripts/start-server.sh', '1.0.0']);
+  assert.notEqual(missingPin.status, 0);
+  assert.match(missingPin.stderr, /交互终端/);
+  assert.doesNotMatch(f.log(f.serviceLog), /signal|bootstrap|bootout/);
+  // Conflicting registrations cannot be resolved by silently changing mode.
+  write(f.plist('server'), '<plist/>');
+  const conflict = f.install();
+  assert.notEqual(conflict.status, 0);
+  assert.match(conflict.stderr, /Both LaunchAgent and LaunchDaemon/);
+});
+
+test('daemon installation refuses a system configuration belonging to another account', {
+  skip: process.getuid() === 0,
+}, t => {
+  const f = fixture(t);
+  succeeds(f.pack('1.0.0')); succeeds(f.publish('1.0.0'));
+  assert.equal(f.install([], { FAIL_GUI: '1' }).status, 78);
+  const pending = join(f.runtime, 'pending-launchdaemon.json');
+  const request = JSON.parse(f.log(pending));
+  request.components.server.UserName = 'another-service-account';
+  writeFileSync(pending, JSON.stringify(request));
+  f.registerDaemons();
+  const conflict = f.install();
+  assert.notEqual(conflict.status, 0);
+  assert.match(conflict.stderr, /belong to another account/);
+  assert.doesNotMatch(f.log(f.serviceLog), /bootstrap|bootout|signal/);
 });
 
 test('native macOS Mach-O binaries pass the real packaging checks', { skip: process.platform !== 'darwin' }, t => {

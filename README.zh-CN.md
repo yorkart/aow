@@ -14,7 +14,7 @@
 
 ## 安装 / 升级
 
-支持 **Linux、macOS 的 x86_64 和 ARM64**。运行环境需要 Bash、Node.js 20+、Git、tar 和 curl；Linux 需要可用的 systemd 用户服务，macOS 需要当前用户已登录图形会话。
+支持 **Linux、macOS 的 x86_64 和 ARM64**。运行环境需要 Bash、Node.js 20+、Git、tar 和 curl；Linux 需要可用的 systemd 用户服务。macOS 首次安装时，安装账户有图形会话则选择 LaunchAgent，否则选择 LaunchDaemon；后续更新沿用已记录的模式，已有 LaunchAgent 安装保持原模式。
 
 在需要运行 AoW 的机器上安装：
 
@@ -23,6 +23,8 @@ curl -fsSL https://github.com/yorkart/aow/releases/latest/download/aow-install.s
 ```
 
 安装器从 GitHub Release 获取对应平台的包，校验后安装并启动 Web 服务。首次安装需要在终端设置 6 位访问 PIN；提示启动 terminald 时输入小写 `y`，才能使用 Terminal。升级时重启 terminald 会结束它管理的现有终端会话。
+
+LaunchDaemon 首次安装会暂停，等待本地管理员登记后再启动服务。服务以安装账户运行，无需登录该账户的桌面；后续程序更新不需要管理员权限，系统服务配置变化时需再次登记。
 
 安装后升级：
 

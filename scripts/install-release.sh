@@ -31,7 +31,7 @@ usage() {
 Usage: install-release.sh [--repo OWNER/REPO] [--version VERSION]
        install-release.sh --package FILE [--repo OWNER/REPO]
 
-Install a GitHub Release or local package, then start/restart its user services.
+Install a GitHub Release or local package, then start/restart its services.
 Without --version, install this script's release (or resolve latest from source).
 With --version, download that release directly. All packages require SHA256 verification.
 Only a lowercase y entered at the terminal permits starting/restarting terminald.
@@ -47,7 +47,10 @@ Options:
   -h, --help        Show this help.
 
 Requires Bash, tar, Node.js 20+, Git, and Linux/systemd or macOS/launchd.
-macOS installation requires a logged-in graphical user session.
+macOS selects LaunchAgent with a graphical session, otherwise LaunchDaemon.
+The selected mode/account is saved in update.json and reused on updates.
+LaunchDaemon registration requires a one-time local administrator action;
+configuration changes require registration again. The installer never uses sudo.
 Downloads require curl and HTTPS access to GitHub Releases.
 Installs under ~/.local/lib/aow; preserves existing configuration and data.
 Also installs aow update / aow pin and remembers the GitHub repository.
@@ -277,9 +280,7 @@ JS
             fail 'a systemd user manager is required'
         fi
     else
-        if ! command -v launchctl >/dev/null || ! launchctl print "gui/$(id -u)" >/dev/null 2>&1; then
-            fail 'a logged-in macOS graphical user session is required (launchd gui domain)'
-        fi
+        command -v launchctl >/dev/null || fail 'launchctl is required'
     fi
 
     # The shipped systemd units use %h/.local/lib/aow.
@@ -337,11 +338,19 @@ JS
     if [[ "$os" == linux ]]; then
         helpers+=(packaging/systemd/aow-server.service packaging/systemd/aow-terminald.service)
     else
-        helpers+=(scripts/start-launchd.sh scripts/launchd-service.mjs scripts/activate-terminald.mjs)
+        helpers+=(scripts/start-launchd.sh scripts/launchd-service.mjs scripts/activate-terminald.mjs
+            scripts/launchd-mode.mjs scripts/start-launchdaemon.mjs scripts/service-health.mjs
+            scripts/register-launchdaemon.py)
     fi
     for entry in "${helpers[@]}"; do
         [[ -f "$support/$entry" ]] || fail "archive is missing $entry"
     done
+    local service_mode='' service_record=''
+    if [[ "$os" == macos ]]; then
+        service_record=$stage/service.json
+        service_mode=$(node "$support/scripts/launchd-mode.mjs" resolve "$runtime_root" "$service_record")
+        printf 'macOS service mode: %s\n' "$service_mode"
+    fi
     chmod 0755 "$support"/bin/* "$support"/packaging/bin/*
 
     local release=$runtime_root/releases/$version
@@ -373,10 +382,17 @@ JS
             fail "refusing to replace unmanaged entry: $user_bin_dir/aow"
         fi
     fi
-    node --input-type=module - "$stage/update.json" "$repository" "$user_bin_dir" <<'JS'
-import { writeFileSync } from 'node:fs';
-const [destination, repository, userBinDir] = process.argv.slice(2);
-writeFileSync(destination, JSON.stringify({ repository, user_bin_dir: userBinDir }, null, 2) + '\n');
+    node --input-type=module - "$stage/update.json" "$repository" "$user_bin_dir" "$runtime_root/update.json" "$service_record" <<'JS'
+import { readFileSync, writeFileSync } from 'node:fs';
+const [destination, repository, userBinDir, previous, serviceRecord] = process.argv.slice(2);
+let settings = {};
+try { settings = JSON.parse(readFileSync(previous, 'utf8')); }
+catch (error) { if (error.code !== 'ENOENT') throw error; }
+if (!settings || Array.isArray(settings) || typeof settings !== 'object') throw new Error('Invalid update.json');
+settings.repository = repository;
+settings.user_bin_dir = userBinDir;
+if (serviceRecord) settings.service = JSON.parse(readFileSync(serviceRecord, 'utf8'));
+writeFileSync(destination, JSON.stringify(settings, null, 2) + '\n');
 JS
 
     # shellcheck source-path=SCRIPTDIR
@@ -406,6 +422,33 @@ JS
 
     # Complete other activation work first: restarting terminald may terminate
     # the terminal running this installer. Release the install lock beforehand.
+    if [[ "$service_mode" == launchdaemon ]]; then
+        local server_status=0 terminald_status=0
+        : >"$stage/confirmation"
+        printf '%s\n' 'Start/restart terminald? This ends its existing terminal sessions. Enter lowercase y to confirm:' >&2
+        terminald_confirmation >"$stage/terminald-answer"
+        sh "$support/scripts/start-server.sh" "$version" || server_status=$?
+        if [[ "$server_status" != 0 && "$server_status" != 78 ]]; then
+            fail 'LaunchDaemon server activation failed; previous service settings are preserved'
+        fi
+        # Persist even a pending first registration so a later GUI login cannot
+        # change its mode. The pending request is not administrator authorization.
+        replace_file "$stage/update.json" "$runtime_root/update.json" 0600
+        rmdir -- "$lock_dir"
+        lock_acquired=0
+        if [[ $(cat "$stage/confirmation") == y ]]; then
+            sh "$support/scripts/start-terminald.sh" "$version" <"$stage/terminald-answer" || terminald_status=$?
+            if [[ "$terminald_status" != 0 && "$terminald_status" != 78 ]]; then
+                fail 'LaunchDaemon terminald activation failed; inspect the saved service mode and running server'
+            fi
+        fi
+        if [[ "$server_status" == 78 || "$terminald_status" == 78 ]]; then
+            node "$support/scripts/launchd-mode.mjs" hint "$runtime_root"
+            return 78
+        fi
+        printf 'AoW %s is installed (LaunchDaemon); unconfirmed terminald changes were skipped.\n' "$version"
+        return
+    fi
     sh "$support/scripts/start-server.sh" "$version"
     # Remember the repository only after the server activates successfully.
     replace_file "$stage/update.json" "$runtime_root/update.json" 0600
