@@ -14,7 +14,7 @@ const FIRST_TURN: &str = "{\"type\":\"event_msg\",\"payload\":{\"type\":\"user_m
 
 fn state(root: &Path) -> AppState {
     let mut state = AppState::new(root.join("frontend"));
-    state.auth = crate::auth::AccountAuth::persistent(root);
+    state.auth = crate::auth::AuthService::persistent(root);
     state.session_shares = SessionShares::persistent(root).unwrap();
     state
 }
@@ -75,7 +75,13 @@ async fn share_links_follow_the_current_mount_after_restart() {
     let cookie = format!(
         "{}={}",
         initial.base_path.cookie_name(),
-        initial.auth.login("admin", "test-password").unwrap()
+        initial
+            .auth
+            .login(
+                "password",
+                serde_json::json!({"username": "admin", "password": "test-password"})
+            )
+            .unwrap()
     );
     let app = crate::build_router(initial);
     let share = body(
@@ -111,7 +117,13 @@ async fn share_links_follow_the_current_mount_after_restart() {
     let cookie = format!(
         "{}={}",
         restored.base_path.cookie_name(),
-        restored.auth.login("admin", "test-password").unwrap()
+        restored
+            .auth
+            .login(
+                "password",
+                serde_json::json!({"username": "admin", "password": "test-password"})
+            )
+            .unwrap()
     );
     let app = crate::build_router(restored);
     let info = body(
@@ -151,7 +163,13 @@ async fn sharing_requires_login_but_live_reading_survives_restart_and_revocation
     let initial = state(&root);
     let cookie = format!(
         "aow_session={}",
-        initial.auth.login("admin", "test-password").unwrap()
+        initial
+            .auth
+            .login(
+                "password",
+                serde_json::json!({"username": "admin", "password": "test-password"})
+            )
+            .unwrap()
     );
     cache_locator(&initial, locator(&root));
     let app = crate::build_router(initial);
@@ -280,7 +298,13 @@ async fn sharing_requires_login_but_live_reading_survives_restart_and_revocation
     let restarted = state(&root);
     let new_cookie = format!(
         "aow_session={}",
-        restarted.auth.login("admin", "test-password").unwrap()
+        restarted
+            .auth
+            .login(
+                "password",
+                serde_json::json!({"username": "admin", "password": "test-password"})
+            )
+            .unwrap()
     );
     let app = crate::build_router(restarted.clone());
     assert_eq!(

@@ -1,5 +1,5 @@
 use super::*;
-use crate::{AppState, auth::AccountAuth, build_router};
+use crate::{AppState, auth::AuthService, build_router};
 use axum::{
     Router,
     body::{Body, to_bytes},
@@ -18,7 +18,7 @@ fn fixture(base: &str) -> (tempfile::TempDir, AppState) {
     .unwrap();
     crate::auth::write_credentials(root.path(), "admin", "test-password");
     let mut state = AppState::new(root.path().to_path_buf());
-    state.auth = AccountAuth::persistent(root.path());
+    state.auth = AuthService::persistent(root.path());
     (root, state.with_base_path(BasePath::parse(base).unwrap()))
 }
 

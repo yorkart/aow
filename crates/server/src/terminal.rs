@@ -3693,7 +3693,7 @@ mod tests {
         routes().with_state(AppState {
             base_path: crate::BasePath::default(),
             frontend_dist: PathBuf::new(),
-            auth: crate::auth::AccountAuth::disabled(),
+            auth: crate::auth::AuthService::disabled(),
             session_shares: crate::session_shares::SessionShares::in_memory(),
             terminals: manager,
             aow: crate::aow::AowManager::in_memory(),
@@ -4339,7 +4339,7 @@ mod tests {
         let app = crate::build_router(AppState {
             base_path: crate::BasePath::default(),
             frontend_dist: PathBuf::new(),
-            auth: crate::auth::AccountAuth::disabled(),
+            auth: crate::auth::AuthService::disabled(),
             session_shares: crate::session_shares::SessionShares::in_memory(),
             terminals: manager.clone(),
             aow: crate::aow::AowManager::in_memory(),

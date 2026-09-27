@@ -250,7 +250,7 @@ async fn event_endpoint_requires_aow_login() {
     let root = tempfile::tempdir().unwrap();
     crate::auth::write_credentials(root.path(), "admin", "test-password");
     let mut state = AppState::new(root.path().join("frontend"));
-    state.auth = crate::auth::AccountAuth::persistent(root.path());
+    state.auth = crate::auth::AuthService::persistent(root.path());
     let response = crate::build_router(state)
         .oneshot(
             axum::http::Request::get("/api/terminals/task-stops")

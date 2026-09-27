@@ -66,7 +66,7 @@ const PATH_SEGMENT_ENCODE_SET: &AsciiSet = &CONTROLS
 pub struct AppState {
     base_path: BasePath,
     frontend_dist: PathBuf,
-    auth: auth::AccountAuth,
+    auth: auth::AuthService,
     session_shares: session_shares::SessionShares,
     terminals: terminal::TerminalManager,
     aow: aow::AowManager,
@@ -86,7 +86,7 @@ impl AppState {
         Self {
             base_path: BasePath::default(),
             frontend_dist,
-            auth: auth::AccountAuth::disabled(),
+            auth: auth::AuthService::disabled(),
             session_shares: session_shares::SessionShares::in_memory(),
             terminals: terminal::TerminalManager::in_memory(TerminaldClient::new(terminald_socket)),
             aow: aow::AowManager::in_memory(),
@@ -119,7 +119,7 @@ impl AppState {
             frontend_dist,
             operations: operations::OperationService::persistent(&state_dir.join("operation-logs"))
                 .map_err(|error| TerminalError::Invalid(error.to_string()))?,
-            auth: auth::AccountAuth::persistent(&state_dir),
+            auth: auth::AuthService::persistent(&state_dir),
             session_shares: session_shares::SessionShares::persistent(&state_dir).map_err(
                 |error| {
                     TerminalError::Invalid(format!("failed to initialize session shares: {error}"))
@@ -140,7 +140,6 @@ impl AppState {
     }
 
     pub fn with_base_path(mut self, base_path: BasePath) -> Self {
-        self.auth.set_cookie_name(base_path.cookie_name());
         self.base_path = base_path;
         self
     }
@@ -173,8 +172,7 @@ pub async fn initialize_aow_state(path: &std::path::Path) -> anyhow::Result<()> 
 pub fn build_router(state: AppState) -> Router {
     let base_path = state.base_path.clone();
     let app = Router::new()
-        .route("/api/auth/status", get(auth::status))
-        .route("/api/auth/login", axum::routing::post(auth::login))
+        .merge(auth::routes())
         .route("/api/health", get(health))
         .route("/api/fs/home", get(list_home))
         .route("/api/fs/tree", get(list_root))
@@ -1359,7 +1357,7 @@ mod tests {
         auth::write_credentials(&state_dir, "admin", "test-password");
 
         let mut state = AppState::new(frontend);
-        state.auth = auth::AccountAuth::persistent(&state_dir);
+        state.auth = auth::AuthService::persistent(&state_dir);
         let app = build_router(state);
 
         let denied = app
@@ -1371,6 +1369,10 @@ mod tests {
 
         for (payload, expected) in [
             (r#"{"pin":"123456"}"#, StatusCode::UNPROCESSABLE_ENTITY),
+            (
+                r#"{"method":"unknown","username":"admin","password":"test-password"}"#,
+                StatusCode::BAD_REQUEST,
+            ),
             (
                 r#"{"username":"other","password":"test-password"}"#,
                 StatusCode::UNAUTHORIZED,

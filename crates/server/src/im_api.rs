@@ -180,7 +180,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         crate::auth::write_credentials(root.path(), "admin", "test-password");
         let mut state = AppState::new(root.path().join("frontend"));
-        state.auth = crate::auth::AccountAuth::persistent(root.path());
+        state.auth = crate::auth::AuthService::persistent(root.path());
         let app = crate::build_router(state);
         for (method, path) in [
             ("PUT", "/api/aow/im/feishu"),

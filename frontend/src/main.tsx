@@ -1,7 +1,7 @@
 import { appPath } from './lib/basePath';
 import { lazy, StrictMode, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
-import { LoginGate } from './LoginGate';
+import { LoginGate } from './features/auth/LoginGate';
 import { AgentTaskNotifications } from './features/notifications/AgentTaskNotifications';
 import { AowTabEntry } from './aow/AowTabEntry';
 import './styles.css';

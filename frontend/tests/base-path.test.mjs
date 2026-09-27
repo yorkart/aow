@@ -66,6 +66,9 @@ try {
       const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
       t.after(() => context.close());
       const origin = await startServer(t, base);
+      const authStatus = await fetch(`${origin}${base}/api/auth/status`).then(response => response.json());
+      assert.deepEqual(authStatus.methods, [{ id: 'password', label: '账号密码', configured: true }]);
+      assert.equal(authStatus.authenticated, false);
       const requests = new Set();
       const sockets = [];
       const errors = [];
@@ -107,6 +110,11 @@ try {
       page.setDefaultTimeout(15000);
       page.on('pageerror', error => errors.push(error.message));
       page.on('request', request => requests.add(new URL(request.url()).pathname));
+      page.on('request', request => {
+        if (new URL(request.url()).pathname === `${base}/api/auth/login`) {
+          assert.equal(request.postDataJSON().method, 'password');
+        }
+      });
       await page.goto(`${origin}${base}/aow/tabs/terminal/target?ui=desktop`);
       await page.getByLabel('账号').fill('admin');
       await page.getByLabel('密码', { exact: true }).fill('wrong-password');
