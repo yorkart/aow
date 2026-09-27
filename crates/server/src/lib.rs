@@ -144,6 +144,11 @@ impl AppState {
         self
     }
 
+    pub fn with_secure_cookies(mut self, enabled: bool) -> Self {
+        self.auth.secure_cookies = enabled;
+        self
+    }
+
     /// Reconciles durable terminal tabs with the external terminal daemon.
     /// A later terminal request retries this operation if startup happens
     /// while the daemon is unavailable.
@@ -474,7 +479,43 @@ async fn raw_response(
     let response_headers = response.headers_mut();
     response_headers.insert(ACCEPT_RANGES, HeaderValue::from_static("bytes"));
     response_headers.insert(CONTENT_TYPE, HeaderValue::from_str(&content_type).unwrap());
-    if attachment {
+    // Files are untrusted content, even when the reader is authenticated.
+    // Restrict inline rendering and sandbox documents opened directly as well
+    // as in an iframe; HttpOnly alone cannot prevent same-origin API calls.
+    response_headers.insert(
+        "x-content-type-options",
+        HeaderValue::from_static("nosniff"),
+    );
+    response_headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    let safe_inline = matches!(
+        content_type.as_str(),
+        "text/plain"
+            | "application/pdf"
+            | "image/png"
+            | "image/jpeg"
+            | "image/gif"
+            | "image/webp"
+            | "image/avif"
+            | "image/bmp"
+            | "image/x-icon"
+            | "image/vnd.microsoft.icon"
+            | "audio/mpeg"
+            | "audio/ogg"
+            | "audio/wav"
+            | "audio/mp4"
+            | "video/mp4"
+            | "video/webm"
+            | "video/ogg"
+    );
+    // PDF viewers are browser plugins and cannot run in a sandboxed document.
+    // Only allow known inert media types inline; sandbox all other file types.
+    if !safe_inline {
+        response_headers.insert(
+            "content-security-policy",
+            HeaderValue::from_static("sandbox; default-src 'none'"),
+        );
+    }
+    if attachment || !safe_inline {
         let filename = path.file_name().unwrap_or_default().to_string_lossy();
         response_headers.insert(
             CONTENT_DISPOSITION,

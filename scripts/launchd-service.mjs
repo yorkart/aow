@@ -24,7 +24,7 @@ const environment = {
 };
 const daemonKeys = new Set(['HOME', 'USER', 'LOGNAME', 'SHELL', 'PATH', 'LANG', 'LC_ALL', 'LC_CTYPE',
   'AOW_RUNTIME_ROOT', 'AOW_SERVER_HOST', 'AOW_SERVER_PORT', 'AOW_SERVER_STATE_DIR', 'AOW_STATE_DIR',
-  'AOW_TERMINALD_SOCKET', 'AOW_BASE_PATH', 'XDG_STATE_HOME', 'XDG_RUNTIME_DIR', 'AOW_LOG_MODE']);
+  'AOW_TERMINALD_SOCKET', 'AOW_BASE_PATH', 'AOW_AUTH_SECURE_COOKIE', 'XDG_STATE_HOME', 'XDG_RUNTIME_DIR', 'AOW_LOG_MODE']);
 if (process.env.USER) environment.USER = process.env.USER;
 // Match server_state_dir's environment > server.env > state-dir defaults.
 try {
@@ -42,7 +42,7 @@ try {
   if (error.code !== 'ENOENT') throw error;
 }
 for (const key of ['AOW_SERVER_HOST', 'AOW_SERVER_PORT', 'AOW_SERVER_STATE_DIR',
-  'AOW_STATE_DIR', 'AOW_TERMINALD_SOCKET', 'AOW_BASE_PATH', 'XDG_STATE_HOME', 'XDG_RUNTIME_DIR']) {
+  'AOW_STATE_DIR', 'AOW_TERMINALD_SOCKET', 'AOW_BASE_PATH', 'AOW_AUTH_SECURE_COOKIE', 'XDG_STATE_HOME', 'XDG_RUNTIME_DIR']) {
   if (process.env[key]) environment[key] = process.env[key];
 }
 // These paths define the installation and cannot be redirected by server.env.

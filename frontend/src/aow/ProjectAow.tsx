@@ -1,5 +1,6 @@
 import { ReviewProviderSettings } from '../features/pr/ReviewProviderSettings';
 import { ConfigurationSettings } from '../features/configuration/ConfigurationSettings';
+import { LogoutButton } from '../features/auth/LogoutButton';
 import { appLocalStorage } from '../lib/basePath';
 import { useWorkspaceDocuments, updateSharedDocument, nextDocumentInstanceId, sharedDocument, isPreviewOwned, savingDocuments, failedDocuments } from '../features/editor/workspaceDocuments';
 import { Fragment, lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -877,6 +878,7 @@ function SettingsDialog({ agents, onClose: closeDialog, onReload, onNodesChange 
           <button disabled={busy || settingsBusy} aria-current={section === 'im' ? 'page' : undefined} className={section === 'im' ? 'active' : ''} onClick={() => setSection('im')}><MessageSquare /><span><strong>IM</strong><small>配置消息机器人</small></span></button>
           <button disabled={busy || settingsBusy} aria-current={section === 'notifications' ? 'page' : undefined} className={section === 'notifications' ? 'active' : ''} onClick={() => setSection('notifications')}><Bell /><span><strong>通知</strong><small>选择任务完成通知方式</small></span></button>
           <button type="button" className={section === 'review' ? 'active' : ''} disabled={busy || settingsBusy} onClick={() => setSection('review')}><GitPullRequest /><span><strong>Pull Requests</strong><small>Provider、CLI 和脚本</small></span></button>
+          <LogoutButton disabled={busy || settingsBusy} />
         </nav>
         <div className="project-aow-settings-content">
           <div className="review-provider-settings-host" hidden={section !== 'review'}><ReviewProviderSettings active={section === 'review'} onBusyChange={setSettingsBusy} onDirtyChange={setReviewDirty} /></div>

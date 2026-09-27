@@ -32,7 +32,7 @@ with tempfile.TemporaryDirectory(prefix='aow-registration-') as temporary:
             'StandardOutPath': '/dev/null', 'StandardErrorPath': '/dev/null',
             'EnvironmentVariables': {'HOME': str(home), 'USER': account.pw_name,
                 'LOGNAME': account.pw_name, 'AOW_RUNTIME_ROOT': str(runtime),
-                'AOW_LOG_MODE': 'unified', 'AOW_SERVER_PORT': port},
+                'AOW_LOG_MODE': 'unified', 'AOW_SERVER_PORT': port, 'AOW_AUTH_SECURE_COOKIE': 'true'},
         }
     request = {'version': 1, 'user': account.pw_name, 'uid': account.pw_uid,
                'home': str(home), 'runtime': str(runtime),

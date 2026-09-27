@@ -12,8 +12,10 @@ use password::PasswordProvider;
 use provider::LoginProvider;
 use sessions::Sessions;
 
+mod audit;
 mod authorization;
 mod http;
+mod limits;
 mod password;
 mod provider;
 mod sessions;
@@ -28,6 +30,8 @@ pub(crate) struct AuthService {
     providers: Vec<Arc<dyn LoginProvider>>,
     sessions: Sessions,
     disabled: bool,
+    limiter: limits::LoginLimiter,
+    pub(crate) secure_cookies: bool,
 }
 
 #[derive(Serialize)]
@@ -58,6 +62,8 @@ impl AuthService {
             providers,
             sessions: Sessions::default(),
             disabled: false,
+            limiter: limits::LoginLimiter::default(),
+            secure_cookies: false,
         }
     }
 
@@ -92,13 +98,34 @@ impl AuthService {
         };
         AuthStatus {
             configured,
-            authenticated: !self.disabled && self.authorize(token).is_ok(),
+            authenticated: !self.disabled && self.check(token, false).is_ok(),
             methods,
             message,
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn login(&self, method: &str, credentials: Value) -> Result<String, HttpError> {
+        self.login_with_attempt(method, credentials, &self.limiter.begin()?)
+    }
+
+    fn login_with_attempt(
+        &self,
+        method: &str,
+        credentials: Value,
+        attempt: &limits::Attempt,
+    ) -> Result<String, HttpError> {
+        let result = self.authenticate(method, credentials);
+        attempt.finish(
+            result.is_ok(),
+            result
+                .as_ref()
+                .is_err_and(|error| error.status == StatusCode::UNAUTHORIZED),
+        );
+        result
+    }
+
+    fn authenticate(&self, method: &str, credentials: Value) -> Result<String, HttpError> {
         let provider = self
             .providers
             .iter()
@@ -115,22 +142,49 @@ impl AuthService {
         self.sessions.create(provider.id(), identity)
     }
 
+    #[cfg(test)]
     pub(super) fn authorize(&self, token: Option<&str>) -> Result<(), HttpError> {
+        self.check(token, true).map(|_| ())
+    }
+
+    fn access(&self, token: Option<&str>) -> Result<Option<SessionAccess>, HttpError> {
+        Ok(self.check(token, true)?.map(|session| SessionAccess {
+            auth: self.clone(),
+            token: token.expect("authenticated token").to_owned(),
+            cancelled: session.cancelled,
+        }))
+    }
+
+    fn check(
+        &self,
+        token: Option<&str>,
+        touch: bool,
+    ) -> Result<Option<sessions::Session>, HttpError> {
         if self.disabled {
-            return Ok(());
+            return Ok(None);
         }
         if let Some(token) = token
-            && let Some(session) = self.sessions.get(token)?
+            && let Some(session) = self.sessions.get(token, false)?
         {
-            if let Some(provider) = self
+            let validation = self
                 .providers
                 .iter()
                 .find(|provider| provider.id() == session.method)
-                && provider.validate_session(&session.identity)?
-            {
-                return Ok(());
+                .map(|provider| provider.validate_session(&session.identity))
+                .unwrap_or(Ok(false));
+            match validation {
+                Ok(true) => {
+                    return self
+                        .sessions
+                        .get(token, touch)?
+                        .map(Some)
+                        .ok_or_else(authentication_required);
+                }
+                result => {
+                    self.sessions.revoke(token)?;
+                    result?;
+                }
             }
-            self.sessions.revoke(token)?;
         }
         // Report setup errors when none of the login methods is available.
         let mut configuration_error = None;
@@ -150,6 +204,35 @@ impl AuthService {
                 None,
             )
         }))
+    }
+}
+
+/// A connection retains its originating session; it never becomes an independent authorization.
+#[derive(Clone)]
+pub(crate) struct SessionAccess {
+    auth: AuthService,
+    token: String,
+    cancelled: tokio_util::sync::CancellationToken,
+}
+
+impl SessionAccess {
+    pub(crate) fn validate(&self, activity: bool) -> Result<(), HttpError> {
+        if self.cancelled.is_cancelled() {
+            return Err(authentication_required());
+        }
+        self.auth.check(Some(&self.token), activity).map(|_| ())
+    }
+
+    pub(crate) async fn revoked(&self) {
+        loop {
+            if self.validate(false).is_err() {
+                return;
+            }
+            tokio::select! {
+                _ = self.cancelled.cancelled() => return,
+                _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {},
+            }
+        }
     }
 }
 

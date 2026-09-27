@@ -18,3 +18,8 @@ export async function login(method: string, credentials: Record<string, unknown>
   if (!payload?.authenticated) throw new Error('登录未完成，请重试。');
   return payload;
 }
+
+export async function logout(): Promise<void> {
+  const response = await fetch(appUrl('/api/auth/logout'), { method: 'POST', cache: 'no-store' });
+  if (!response.ok) throw new Error(`退出登录失败（HTTP ${response.status}）`);
+}

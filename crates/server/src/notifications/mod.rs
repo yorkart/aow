@@ -27,6 +27,7 @@ use crate::{
 use aow_im::{ImConfig, ImConfigUpdate, ImConfigView, ImKind, ImProvider, Provider};
 
 mod messages;
+mod security;
 
 const FILE_NAME: &str = "notification-settings.json";
 const QUEUE_CAPACITY: usize = 64;
@@ -202,6 +203,7 @@ struct Delivery {
 }
 
 struct Inner {
+    security: security::Dispatcher,
     path: Option<PathBuf>,
     started: AtomicBool,
     wechat_login: aow_im::wechat::LoginManager,
@@ -294,6 +296,7 @@ impl NotificationManager {
         let (sender, receiver) = mpsc::channel(QUEUE_CAPACITY);
         Ok(Self {
             inner: Arc::new(Inner {
+                security: security::Dispatcher::default(),
                 path,
                 started: AtomicBool::new(false),
                 wechat_login: aow_im::wechat::LoginManager::new()
@@ -311,6 +314,32 @@ impl NotificationManager {
 
     pub(crate) fn view(&self) -> SettingsView {
         self.inner.state.lock().unwrap().document.view()
+    }
+
+    /// Security events use every configured IM provider, independently of
+    /// agent-completion preferences. Snapshot the recipients for this event.
+    pub(crate) async fn notify_security(
+        &self,
+        message: aow_im::Message,
+        record: aow_operation_log::Record,
+        operations: crate::operations::OperationService,
+    ) {
+        let providers = self.security_providers();
+        self.inner
+            .security
+            .dispatch(message, record, operations, providers)
+            .await;
+    }
+
+    fn security_providers(&self) -> Vec<(ImKind, Provider)> {
+        self.inner
+            .state
+            .lock()
+            .unwrap()
+            .providers
+            .iter()
+            .map(|entry| (entry.config.kind(), entry.provider.clone()))
+            .collect()
     }
 
     pub(crate) fn update(&self, update: SettingsUpdate) -> Result<SettingsView, AowError> {

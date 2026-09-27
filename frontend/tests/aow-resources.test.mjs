@@ -738,7 +738,7 @@ try {
     await page.getByRole('button', { name: '操作日志', exact: true }).click();
     await page.getByRole('region', { name: '操作日志', exact: true }).getByText('最新启动记录', { exact: true }).waitFor();
     assert.equal(await page.getByRole('button', { name: '查看清理结果', exact: true }).count(), 0);
-    await page.screenshot({ path: '/tmp/aow-operation-logs.png' });
+    await page.screenshot({ path: `${process.env.AOW_TEST_SCREENSHOT_DIR ?? '/tmp'}/aow-operation-logs.png` });
   });
 
   await test('empty worktrees use compact rows while main, pinned and opened resources retain full rows', async t => {

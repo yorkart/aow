@@ -214,3 +214,166 @@ async fn another_login_method_uses_the_same_http_cookie_and_access_policy() {
         assert_eq!(response.status(), expected);
     }
 }
+
+#[tokio::test]
+async fn session_access_is_revoked_on_logout_rotation_or_provider_failure() {
+    use std::time::Duration;
+    for failed_configuration in [false, true] {
+        let provider = Arc::new(TestProvider::new("test"));
+        let auth = AuthService::with_providers(vec![provider.clone()]);
+        let token = auth.login("test", json!({"proof": "accepted"})).unwrap();
+        let access = auth.access(Some(&token)).unwrap().unwrap();
+        if failed_configuration {
+            provider.enabled.store(false, Ordering::SeqCst);
+        } else {
+            provider.revision.store(2, Ordering::SeqCst);
+        }
+        assert!(access.validate(true).is_err());
+        tokio::time::timeout(Duration::from_millis(100), access.revoked())
+            .await
+            .unwrap();
+        // Restoring the old credentials cannot resurrect a revoked session.
+        provider.enabled.store(true, Ordering::SeqCst);
+        provider.revision.store(1, Ordering::SeqCst);
+        assert!(access.validate(true).is_err());
+    }
+}
+
+#[tokio::test]
+async fn logout_revokes_http_and_stream_access_and_clears_the_scoped_secure_cookie() {
+    use axum::{body::Body, http::Request};
+    use futures_util::StreamExt;
+    use tower::ServiceExt;
+    let root = tempfile::tempdir().unwrap();
+    let mut state = crate::AppState::new(root.path().to_owned())
+        .with_base_path(crate::BasePath::parse("/tools/aow").unwrap());
+    state.auth = AuthService::with_providers(vec![Arc::new(TestProvider::new("test"))]);
+    state = state.with_secure_cookies(true);
+    let auth = state.auth.clone();
+    let app = crate::build_router(state);
+    let login = app
+        .clone()
+        .oneshot(
+            Request::post("/tools/aow/api/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"method":"test","proof":"accepted"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(login.status(), StatusCode::OK);
+    assert_eq!(login.headers()["cache-control"], "no-store");
+    let cookie = login.headers()["set-cookie"].to_str().unwrap();
+    assert!(cookie.contains("Path=/tools/aow/; HttpOnly; SameSite=Strict; Secure"));
+    let cookie = cookie.split(';').next().unwrap().to_owned();
+    let token = cookie.split_once('=').unwrap().1;
+    let access = auth.access(Some(token)).unwrap().unwrap();
+    let events = app
+        .clone()
+        .oneshot(
+            Request::get("/tools/aow/api/operation-logs")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(events.status(), StatusCode::OK);
+    let events = app
+        .clone()
+        .oneshot(
+            Request::get("/tools/aow/api/operations/stream")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(events.status(), StatusCode::OK);
+    let mut stream = events.into_body().into_data_stream();
+    assert!(stream.next().await.is_some());
+    let logout = app
+        .clone()
+        .oneshot(
+            Request::post("/tools/aow/api/auth/logout")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(logout.status(), StatusCode::NO_CONTENT);
+    assert!(
+        logout.headers()["set-cookie"]
+            .to_str()
+            .unwrap()
+            .contains("Path=/tools/aow/; HttpOnly; SameSite=Strict; Secure; Max-Age=0")
+    );
+    assert!(access.validate(true).is_err());
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_secs(1), stream.next())
+            .await
+            .unwrap()
+            .is_none()
+    );
+    let denied = app
+        .oneshot(
+            Request::get("/tools/aow/api/fs/tree")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn login_admission_rejects_excess_work_and_ignores_forged_forwarded_headers() {
+    use axum::{body::Body, http::Request};
+    use tower::ServiceExt;
+    let root = tempfile::tempdir().unwrap();
+    let mut state = crate::AppState::new(root.path().to_owned());
+    state.auth = AuthService::with_providers(vec![Arc::new(TestProvider::new("test"))]);
+    let auth = state.auth.clone();
+    let app = crate::build_router(state);
+    let first = auth.limiter.begin().unwrap();
+    let second = auth.limiter.begin().unwrap();
+    let make_login = || {
+        Request::post("/api/auth/login")
+            .header("content-type", "application/json")
+            .header("x-forwarded-for", "192.0.2.1")
+            .header("x-forwarded-proto", "https")
+            .body(Body::from(r#"{"method":"test","proof":"accepted"}"#))
+            .unwrap()
+    };
+    let limited = app.clone().oneshot(make_login()).await.unwrap();
+    assert_eq!(limited.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert!(limited.headers().contains_key("retry-after"));
+    assert!(!limited.headers().contains_key("set-cookie"));
+    drop(first);
+    drop(second);
+    let login = app.clone().oneshot(make_login()).await.unwrap();
+    assert_eq!(login.status(), StatusCode::OK);
+    assert!(
+        !login.headers()["set-cookie"]
+            .to_str()
+            .unwrap()
+            .contains("; Secure")
+    );
+    for path in ["/api/auth/login", "/api/auth/logout"] {
+        let denied = app
+            .clone()
+            .oneshot(
+                Request::post(path)
+                    .header("host", "aow.example")
+                    .header("origin", "https://evil.example")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"method":"test","proof":"accepted"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(denied.status(), StatusCode::FORBIDDEN);
+    }
+}

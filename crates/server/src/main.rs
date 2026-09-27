@@ -34,6 +34,13 @@ async fn run() -> Result<()> {
     let mut host = "127.0.0.1".to_owned();
     let mut port = 8282_u16;
     let mut frontend = PathBuf::from("frontend/dist");
+    let mut secure_cookies = match std::env::var("AOW_AUTH_SECURE_COOKIE") {
+        Ok(value) if !value.is_empty() => value
+            .parse::<bool>()
+            .context("AOW_AUTH_SECURE_COOKIE must be true or false")?,
+        Ok(_) | Err(std::env::VarError::NotPresent) => false,
+        Err(error) => return Err(error).context("invalid AOW_AUTH_SECURE_COOKIE"),
+    };
     let mut base_path = std::env::var_os("AOW_BASE_PATH").unwrap_or_default();
     let mut state_dir = default_terminal_state_dir();
     let mut terminald_socket = TerminaldClient::default_socket_path();
@@ -48,6 +55,7 @@ async fn run() -> Result<()> {
                     .context("--base-path requires a value")?
                     .into()
             }
+            "--secure-cookies" => secure_cookies = true,
             "--initialize-state" => initialize_only = true,
             "--initialize-state-if-missing" => {
                 initialize_only = true;
@@ -77,7 +85,7 @@ async fn run() -> Result<()> {
             }
             "-h" | "--help" => {
                 println!(
-                    "Usage: aow-server [--host 127.0.0.1] [--port 8282] [--base-path PATH] [--frontend frontend/dist] [--state-dir PATH] [--terminald-socket PATH] [--initialize-state | --initialize-state-if-missing]\nHost: IPv4 or IPv6 address (for example 127.0.0.1 or ::1); default 127.0.0.1\nBase path: --base-path overrides AOW_BASE_PATH; default /"
+                    "Usage: aow-server [--host 127.0.0.1] [--port 8282] [--base-path PATH] [--secure-cookies] [--frontend frontend/dist] [--state-dir PATH] [--terminald-socket PATH] [--initialize-state | --initialize-state-if-missing]\nHost: IPv4 or IPv6 address (for example 127.0.0.1 or ::1); default 127.0.0.1\nBase path: --base-path overrides AOW_BASE_PATH; default /\nHTTPS: --secure-cookies or AOW_AUTH_SECURE_COOKIE=true marks session cookies Secure"
                 );
                 return Ok(());
             }
@@ -106,17 +114,21 @@ async fn run() -> Result<()> {
     tracing::info!(%local, "AoW listening");
     println!("AoW: http://{local}{}/", base_path.as_str());
     let state = AppState::with_runtime_options(frontend, state_dir.clone(), terminald_socket)?
-        .with_base_path(base_path);
+        .with_base_path(base_path)
+        .with_secure_cookies(secure_cookies);
     state.initialize_global_workspace().await?;
     if let Err(error) = state.reconcile_terminals().await {
         tracing::warn!(%error, "initial terminald reconciliation failed; terminal requests will retry");
     }
     state.start_agent_notifications();
     let cli = aow_server::start_local_cli(state.clone(), &state_dir).await?;
-    axum::serve(listener, build_router(state))
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-        .map_err(anyhow::Error::from)?;
+    axum::serve(
+        listener,
+        build_router(state).into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await
+    .map_err(anyhow::Error::from)?;
     cli.shutdown().await;
     Ok(())
 }

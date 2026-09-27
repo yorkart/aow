@@ -34,7 +34,7 @@ IPv6 浏览器地址使用方括号，例如 `http://[::1]:8282/`。若改为 IP
 
 macOS **LaunchDaemon** 模式会将配置写入由 root 管理的系统 plist。配置变化时，安装器先准备请求并以退出码 78 提示本地管理员登记；登记后回到服务账户重跑安装验证。仅程序版本变化不需要重新登记，步骤见 [安装说明](release-installation.md)。
 
-LaunchDaemon 的 `server.env` 仅接受服务配置和基本运行环境：`AOW_SERVER_HOST`、`AOW_SERVER_PORT`、`AOW_SERVER_STATE_DIR`、`AOW_STATE_DIR`、`AOW_TERMINALD_SOCKET`、`AOW_BASE_PATH`、`XDG_STATE_HOME`、`XDG_RUNTIME_DIR`、`PATH`、`SHELL`、`LANG`、`LC_ALL`、`LC_CTYPE`。账户身份、HOME、运行目录和日志模式由安装器固定。系统 plist 可被其他本机账户读取，不要在其中填写 API 密钥或口令；其他环境变量会被拒绝。
+LaunchDaemon 的 `server.env` 仅接受服务配置和基本运行环境：`AOW_SERVER_HOST`、`AOW_SERVER_PORT`、`AOW_SERVER_STATE_DIR`、`AOW_STATE_DIR`、`AOW_TERMINALD_SOCKET`、`AOW_BASE_PATH`、`AOW_AUTH_SECURE_COOKIE`、`XDG_STATE_HOME`、`XDG_RUNTIME_DIR`、`PATH`、`SHELL`、`LANG`、`LC_ALL`、`LC_CTYPE`。账户身份、HOME、运行目录和日志模式由安装器固定。系统 plist 可被其他本机账户读取，不要在其中填写 API 密钥或口令；其他环境变量会被拒绝。
 
 LaunchDaemon 默认 PATH 包含 `~/.local/bin`、AoW 管理的 Node 入口、`~/.cargo/bin` 和常用系统/Homebrew 目录，不继承安装终端的完整 PATH；开发 shell 可在服务账户自己的 `.zprofile` / `.zshrc` 中初始化 Node 和其他工具链。
 
@@ -75,6 +75,32 @@ curl --fail --show-error http://127.0.0.1:8282/tools/aow/api/health
 ```
 
 更换路径后更新书签，以及 **Settings → 通知 → AoW 访问地址**。
+
+## 登录与 HTTPS
+
+本机 HTTP 和 SSH 隧道访问默认保持兼容。通过 HTTPS 反向代理访问时，在 `server.env` 中设置并按上面的步骤重启服务：
+
+```dotenv
+AOW_AUTH_SECURE_COOKIE=true
+```
+
+直接运行二进制也可使用 `--secure-cookies`。该设置为登录和清除会话的 Cookie 添加 `Secure`；它不为后端启用 TLS，反向代理仍需负责 HTTPS、HTTP 跳转和 HSTS。代理应保留浏览器请求的 `Host`，以便登录/退出请求检查 `Origin`。服务端不根据客户端可伪造的 `X-Forwarded-Proto` 降低 Cookie 安全设置。只接受 `true` 或 `false`，本机 HTTP 默认为 `false`。
+
+登录会话最长保留 12 小时，30 分钟没有工作台 API 请求或终端输入时过期；登录状态轮询和终端输出不延长空闲期限。桌面在 Settings 中、手机在项目首页右上角可退出登录。退出、会话过期、修改账号/密码后，旧会话的新请求和终端输入会被拒绝，已建立的终端和事件流最迟在下一次会话检查时断开（约 1 秒）；这不会结束 terminald 中的进程。
+
+登录校验全局最多并发 2 个，最多突发 10 次，此后每 6 秒恢复一次额度。连续 5 次凭据错误后开始退避，最长 60 秒；被限流时返回 `429` 和 `Retry-After`。这些限制不使用客户端提交的账号名或转发 IP 来创建独立额度。重启服务会清空内存会话和限流状态。
+
+文件原始接口对 HTML、SVG、XML、脚本及其他未允许内联的类型强制下载，并设置沙箱和禁止类型嗅探的响应头。普通图片、PDF、纯文本和受支持音视频仍可预览；下载后在本机打开文件应自行判断其来源。
+
+### 登录通知与审计日志
+
+每次登录成功或失败（包括错误密码、无效请求、来源检查失败和限流），都会记录日志并向当前已配置的全部 IM 渠道（飞书、微信）逐条发送通知。它独立于“Agent 完成通知”开关；未配置 IM 时仍记录日志。未登录访问受保护接口、文件页、帮助页或直接打开工作台/其他非公开页面地址，只记录日志，不推送通知。健康检查、登录状态轮询、前端静态资源、公开分享页面及其只读接口不记录这类访问审计。工作台入口仍显示登录表单，受保护的数据接口仍拒绝匿名请求。
+
+操作日志面板可按“认证”来源，或“登录 / 未登录访问 / 认证通知”类型筛选，并按 IP、账号、事件 ID 搜索。记录包括 UTC 时间、事件 ID、服务启动 ID、实际连接 IP 和端口、请求方法/路径（含 Base Path）、HTTP 版本/状态、处理耗时、提交的账号、验证后的身份、User-Agent、来源页面、结果和原因。密码、Cookie、Authorization、请求正文、查询参数及分享令牌不会写入审计记录；来自请求的字符串会限制长度并清除控制字符。
+
+`peer_ip` 是服务实际收到的 TCP 连接来源。经过反向代理或 SSH 隧道时，它可能是代理/隧道端点；`X-Forwarded-For`、`X-Real-IP`、`Forwarded` 会另外记录为 `*_unverified`，不能直接当作已验证的客户端 IP。回溯时应结合可信反向代理的访问日志；代理应覆盖来自客户端的伪造转发头。
+
+日志位于服务数据目录的 `operation-logs/operations.YYYY-MM-DD-HH.log`（默认 `~/.local/state/aow/operation-logs/`），按小时轮转，最多保留 720 个文件。登录结果先写入日志，再交给独立的有界通知队列；满队列会等待，未登录访问的日志不受通知队列影响。各渠道的发送成功、失败或 30 秒超时都会使用同一事件 ID 追加记录；投递失败不改变登录结果，也不会阻止其他渠道尝试。队列不跨服务重启恢复，已落盘的审计日志保留；通知未送达时可据此排查。底层 IM 渠道可能有自身的速率限制。
 
 ## 配置仓库与版本
 

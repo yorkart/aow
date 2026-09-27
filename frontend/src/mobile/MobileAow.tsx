@@ -1,4 +1,5 @@
 import { appUrl } from '../lib/basePath';
+import { LogoutButton } from '../features/auth/LogoutButton';
 import type { ResolvedTab } from '../aow/tabRoutes';
 import { mobileTabTarget } from '../aow/tabRoutes/mobile';
 import { lazy, Suspense, useEffect, useState } from 'react';
@@ -53,6 +54,7 @@ export function MobileAow({ initialEntry }: { initialEntry?: ResolvedTab } = {})
         <button className="mobile-brand-title" onClick={goHome}><strong>{project?.name}</strong><span>{worktree.branch || 'Detached HEAD'}</span></button>
       </> : <MobileNodeSwitcher />}
       <div className="mobile-header-actions" ref={setHeaderActions} />
+      {!worktree && <LogoutButton className="mobile-icon-button" compact />}
     </header>
     {route.workspace ? project && worktree ? <MobileWorkspace initialTabId={route.terminal} key={worktree.path} project={project} worktree={worktree} route={route} navigate={navigate} back={() => back(fallback)} headerActions={headerActions} />
       : <div className="mobile-home"><MobileState loading={projects.loading} error={projects.error} retry={projects.reload} empty="工作区不存在或已被移除。" /><button className="mobile-button" onClick={goHome}><Home size={17} />返回项目</button></div>

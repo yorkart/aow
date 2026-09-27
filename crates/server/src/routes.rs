@@ -97,3 +97,53 @@ pub fn build_router(state: AppState) -> Router {
             base_path::mount,
         ))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{body::Body, http::Request};
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn untrusted_raw_documents_are_downloaded_and_sandboxed_without_breaking_images() {
+        let directory = tempfile::tempdir().unwrap();
+        let app = build_router(AppState::new(directory.path().to_owned()));
+        for (name, attachment) in [
+            ("preview.html", true),
+            ("preview.svg", true),
+            ("preview.xml", true),
+            ("preview.js", true),
+            ("preview.png", false),
+            ("preview.pdf", false),
+            ("preview.txt", false),
+        ] {
+            let path = directory.path().join(name);
+            std::fs::write(&path, "test content").unwrap();
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::get(format!("/api/fs/raw{}", path.display()))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), axum::http::StatusCode::OK);
+            if attachment {
+                assert_eq!(
+                    response.headers()["content-security-policy"],
+                    "sandbox; default-src 'none'"
+                );
+            } else {
+                assert!(!response.headers().contains_key("content-security-policy"));
+            }
+            assert_eq!(response.headers()["x-content-type-options"], "nosniff");
+            assert_eq!(response.headers()["cache-control"], "no-store");
+            assert_eq!(
+                response.headers().contains_key("content-disposition"),
+                attachment,
+                "{name}"
+            );
+        }
+    }
+}

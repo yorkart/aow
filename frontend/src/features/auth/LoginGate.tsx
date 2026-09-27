@@ -17,6 +17,18 @@ export function LoginGate({ children }: { children: ReactNode }) {
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    if (!status?.authenticated) return;
+    let active = true;
+    const check = () => {
+      if (document.visibilityState === 'hidden') return;
+      void authStatus().then(next => { if (active) setStatus(next); }).catch(() => {});
+    };
+    const timer = window.setInterval(check, 30_000);
+    document.addEventListener('visibilitychange', check);
+    return () => { active = false; window.clearInterval(timer); document.removeEventListener('visibilitychange', check); };
+  }, [status?.authenticated]);
+
   if (loadError) return <AuthScreen title="无法连接 AoW" detail={loadError} retry={() => window.location.reload()} />;
   if (!status) return <AuthScreen title="正在检查登录状态…" />;
   if (!status.configured) return <AuthScreen title="尚未配置登录方式" detail={status.message ?? '请在服务器上完成登录配置。'} />;

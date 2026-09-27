@@ -1801,6 +1801,7 @@ async fn attach_terminal_pane(
     AxumPath((tab_id, pane_id)): AxumPath<(String, String)>,
     Query(query): Query<AttachQuery>,
     headers: HeaderMap,
+    access: Option<axum::Extension<crate::auth::SessionAccess>>,
     websocket: WebSocketUpgrade,
 ) -> Result<Response, HttpError> {
     validate_request_origin(&headers).map_err(terminal_http_error)?;
@@ -1825,7 +1826,16 @@ async fn attach_terminal_pane(
                 )
                 .await
             {
-                Ok(daemon) => bridge_terminal_socket(socket, daemon, manager, pane_id).await,
+                Ok(daemon) => {
+                    bridge_terminal_socket(
+                        socket,
+                        daemon,
+                        manager,
+                        pane_id,
+                        access.map(|access| access.0),
+                    )
+                    .await
+                }
                 Err(error) => reject_terminal_socket(socket, error).await,
             }
         })
@@ -1914,6 +1924,7 @@ async fn bridge_terminal_socket(
     daemon: TerminaldAttachStream,
     manager: TerminalManager,
     pane_id: String,
+    access: Option<crate::auth::SessionAccess>,
 ) {
     let (mut browser_tx, mut browser_rx) = browser.split();
     let (mut daemon_tx, mut daemon_rx) = daemon.split();
@@ -1921,10 +1932,28 @@ async fn bridge_terminal_socket(
     let mut resize_sync_pending = false;
     let cli_pane = manager.cli_agent(&pane_id).is_ok();
     let mut browser_control_guard = None;
+    let revoked = async {
+        match &access {
+            Some(access) => access.revoked().await,
+            None => std::future::pending::<()>().await,
+        }
+    };
+    tokio::pin!(revoked);
     loop {
         tokio::select! {
+            biased;
+            _ = &mut revoked => {
+                let _ = send_bridge_message(&mut browser_tx, Message::Close(None), BRIDGE_CLOSE_FORWARD_TIMEOUT).await;
+                break;
+            },
             browser_message = browser_rx.next() => match browser_message {
                 Some(Ok(message)) => {
+                    // Polling closes idle connections, while checking each input
+                    // prevents commands racing with a password change or logout.
+                    if access.as_ref().is_some_and(|access| access.validate(matches!(message, Message::Binary(_) | Message::Text(_))).is_err()) {
+                        let _ = send_bridge_message(&mut browser_tx, Message::Close(None), BRIDGE_CLOSE_FORWARD_TIMEOUT).await;
+                        break;
+                    }
                     let close = matches!(message, Message::Close(_));
                     let mut message = axum_to_tungstenite(message);
                     if cli_pane && !close {

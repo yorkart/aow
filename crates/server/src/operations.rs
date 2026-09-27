@@ -16,10 +16,10 @@ use serde::{Deserialize, Serialize};
 use std::{
     convert::Infallible,
     path::Path,
-    sync::{Arc, Mutex, mpsc},
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-use tokio::sync::watch;
+use tokio::sync::{mpsc, oneshot, watch};
 
 #[cfg(test)]
 mod tests;
@@ -108,8 +108,13 @@ impl Runtime {
 }
 
 struct LogWorker {
-    sender: Option<mpsc::SyncSender<Record>>,
+    sender: Option<mpsc::Sender<LogEntry>>,
     thread: Option<std::thread::JoinHandle<()>>,
+}
+
+struct LogEntry {
+    record: Record,
+    persisted: Option<oneshot::Sender<bool>>,
 }
 impl Drop for LogWorker {
     fn drop(&mut self) {
@@ -153,20 +158,25 @@ impl OperationService {
         let runtime = Arc::new(Mutex::new(runtime));
         let worker = if let Some(directory) = directory {
             let writer = Writer::open(directory, 24 * 30)?;
-            let (sender, receiver) = mpsc::sync_channel::<Record>(1024);
+            let (sender, mut receiver) = mpsc::channel::<LogEntry>(1024);
             let runtime = runtime.clone();
             let changes = changes.clone();
             let thread = std::thread::Builder::new()
                 .name("operation-log".into())
                 .spawn(move || {
-                    while let Ok(record) = receiver.recv() {
-                        if let Err(error) = writer.append(&record) {
+                    while let Some(entry) = receiver.blocking_recv() {
+                        let result = writer.append(&entry.record);
+                        let persisted = result.is_ok();
+                        if let Err(error) = result {
                             tracing::error!(%error, "operation log write failed");
                             let mut state =
                                 runtime.lock().unwrap_or_else(|error| error.into_inner());
                             state.log_error = Some("操作日志写入失败，部分记录可能不完整".into());
                             state.revision += 1;
                             changes.send_replace(state.snapshot());
+                        }
+                        if let Some(reply) = entry.persisted {
+                            let _ = reply.send(persisted);
                         }
                     }
                 })?;
@@ -194,6 +204,39 @@ impl OperationService {
             .lock()
             .unwrap_or_else(|error| error.into_inner())
             .snapshot()
+    }
+
+    /// Standalone audit events do not create live progress operations. Wait for
+    /// the bounded queue and disk write instead of dropping events under load.
+    pub(crate) async fn record(&self, mut record: Record) {
+        record.boot_id = self.inner.runtime.lock().unwrap().boot_id.clone();
+        let Some(worker) = &self.inner.worker else {
+            return;
+        };
+        let (reply, persisted) = oneshot::channel();
+        let event_id = record.operation_id.clone();
+        if worker
+            .sender
+            .as_ref()
+            .unwrap()
+            .send(LogEntry {
+                record,
+                persisted: Some(reply),
+            })
+            .await
+            .is_err()
+            || !persisted.await.unwrap_or(false)
+        {
+            tracing::error!(%event_id, "audit log persistence failed");
+            let mut state = self.inner.runtime.lock().unwrap();
+            state.log_error = Some("审计日志写入失败，部分记录可能不完整".into());
+            state.revision += 1;
+            self.inner.changes.send_replace(state.snapshot());
+        } else {
+            let mut state = self.inner.runtime.lock().unwrap();
+            state.revision += 1;
+            self.inner.changes.send_replace(state.snapshot());
+        }
     }
 
     pub(crate) fn begin(&self, spec: Spec) -> Handle {
@@ -294,7 +337,15 @@ impl OperationService {
             total: operation.total,
         };
         if let Some(worker) = &self.inner.worker
-            && worker.sender.as_ref().unwrap().try_send(record).is_err()
+            && worker
+                .sender
+                .as_ref()
+                .unwrap()
+                .try_send(LogEntry {
+                    record,
+                    persisted: None,
+                })
+                .is_err()
         {
             state.log_error = Some("操作日志队列已满或不可用，部分记录可能不完整".into());
             tracing::error!(operation_id = id, "operation log queue unavailable");
