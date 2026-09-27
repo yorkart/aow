@@ -1,0 +1,4 @@
+interface:
+  display_name: "AoW 门户快照"
+  short_description: "生成和刷新 AoW 真实前端快照，适配界面变化并验收桌面与手机交互"
+  default_prompt: "使用 $aow-portal-snapshot 刷新门户数据快照，并完成源码一致性校验与页面验收。"

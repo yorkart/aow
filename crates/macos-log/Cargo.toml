@@ -1,0 +1,12 @@
+[package]
+name = "aow-macos-log"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[build-dependencies]
+cc = "1"

@@ -1,0 +1,12 @@
+.aow-node-trigger { min-width:0; flex:1; height:100%; display:flex; align-items:center; gap:6px; padding:0 8px 0 10px; color:inherit; text-align:left; }
+.aow-node-trigger:hover,.aow-node-trigger[aria-expanded="true"] { background:var(--aow-hover); }
+.aow-node-trigger:focus-visible { outline:1px solid var(--aow-accent); outline-offset:-2px; }
+.aow-node-trigger > img { flex:0 0 16px; width:16px; height:16px; object-fit:contain; }
+.aow-node-trigger > strong { min-width:0; overflow:hidden; font-size:12px; font-weight:700; text-overflow:ellipsis; white-space:nowrap; }
+.aow-node-trigger > svg { flex:0 0 12px; width:12px; height:12px; color:var(--aow-muted); }
+.aow-node-menu { width:max-content; min-width:220px; max-width:min(440px,calc(100vw - 8px)); max-height:calc(100vh - 8px); overflow-y:auto; }
+.aow-node-menu a { min-height:30px; display:flex; align-items:center; gap:12px; padding:6px 8px; color:#cbd0d8; border-radius:3px; text-decoration:none; }
+.aow-node-menu a:hover,.aow-node-menu a:focus-visible { color:#fff; background:#33465e; outline:none; }
+.aow-node-menu a > span { min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.aow-node-menu a > svg { flex:0 0 13px; width:13px; height:13px; }
+.aow-node-empty { max-width:260px; margin:0; padding:8px; color:#a7b1bf; line-height:1.6; }

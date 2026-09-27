@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+
+# Resolve the installed symlink before loading the helper from this release.
+script_path=$(node -e 'process.stdout.write(require("node:fs").realpathSync(process.argv[1]))' "${BASH_SOURCE[0]}")
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=../../scripts/server-state-dir.sh
+source "$(dirname -- "$script_path")/../../scripts/server-state-dir.sh"
+stage=
+pin_pending_file=
+cleanup() {
+    [[ -z "$pin_pending_file" ]] || rm -f -- "$pin_pending_file"
+    [[ -z "$stage" ]] || rm -rf -- "$stage"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
+fail() { printf 'error: %s\n' "$*" >&2; exit 1; }
+usage() {
+    cat <<'HELP'
+Usage: aow update [--version VERSION] [--repo OWNER/REPO]
+       aow pin
+
+pin               Set or change the six-digit access PIN; no server restart needed.
+
+Update from the saved GitHub repository, following its latest release.
+--version VERSION  Install a specific GitHub release tag.
+--repo OWNER/REPO Use a different GitHub repository and remember it after activation.
+-h, --help         Show help without downloading or changing services.
+
+Repository priority: --repo > AOW_RELEASE_REPOSITORY > saved repository > yorkart/aow.
+Only a lowercase y entered at the terminal permits starting/restarting terminald.
+HELP
+}
+pin_command() {
+    local if_missing=0
+    while (( $# )); do
+        case "$1" in
+            --if-missing) if_missing=1; shift ;;
+            -h|--help)
+                printf '%s\n' 'Usage: aow pin [--if-missing]' \
+                    'Set a six-digit PIN using hidden input and confirmation.' \
+                    '--if-missing  Keep an existing pin.md5 (used during installation/startup).'
+                return ;;
+            *) fail "unknown pin argument: $1" ;;
+        esac
+    done
+    local state_dir pin_file pin_tty=9 pin confirm
+    state_dir=$(server_state_dir)
+    pin_file=$state_dir/pin.md5
+    if (( if_missing )) && [[ -f "$pin_file" ]]; then return; fi
+    [[ ! -d "$pin_file" ]] || fail "PIN destination is a directory: $pin_file"
+    if ! { exec 9<>/dev/tty; } 2>/dev/null; then
+        fail 'PIN 设置需要交互终端；请在终端重新运行安装，或执行 aow pin。'
+    fi
+    [[ -t "$pin_tty" ]] || fail 'PIN 设置需要交互终端。'
+    if (( if_missing )); then
+        printf '%s\n' '尚未配置访问 PIN，必须先创建 PIN 才能启动 server。' >&"$pin_tty"
+    fi
+    while :; do
+        printf '%s' '请输入 6 位数字 PIN: ' >&"$pin_tty"
+        if ! IFS= read -r -s -u "$pin_tty" pin; then
+            printf '\n' >&"$pin_tty"
+            fail 'PIN 输入已取消，未保存 PIN。'
+        fi
+        printf '\n' >&"$pin_tty"
+        if [[ ! "$pin" =~ ^[0-9]{6}$ ]]; then
+            printf '%s\n' 'PIN 必须恰好为 6 位数字，不能为空，请重新输入。' >&"$pin_tty"
+            continue
+        fi
+        printf '%s' '请再次输入 PIN: ' >&"$pin_tty"
+        if ! IFS= read -r -s -u "$pin_tty" confirm; then
+            printf '\n' >&"$pin_tty"
+            fail 'PIN 输入已取消，未保存 PIN。'
+        fi
+        printf '\n' >&"$pin_tty"
+        if [[ "$pin" == "$confirm" ]]; then break; fi
+        printf '%s\n' '两次输入的 PIN 不一致，请重新输入。' >&"$pin_tty"
+    done
+    exec 9>&-
+    mkdir -p -- "$state_dir"
+    pin_pending_file=$(mktemp "$state_dir/.pin.md5.XXXXXX")
+    printf '%s' "$pin" | node -e '
+        const { createHash } = require("node:crypto");
+        const { readFileSync } = require("node:fs");
+        process.stdout.write(createHash("md5").update(readFileSync(0)).digest("hex") + "\n");
+    ' >"$pin_pending_file"
+    unset pin confirm
+    chmod 0600 "$pin_pending_file"
+    node -e 'require("node:fs").renameSync(process.argv[1], process.argv[2])' "$pin_pending_file" "$pin_file"
+    pin_pending_file=
+    printf 'PIN 已保存到 %s；无需重启 server。\n' "$pin_file"
+}
+config_value() {
+    node --input-type=module - "$runtime_root/update.json" "$1" <<'JS'
+import { readFileSync } from 'node:fs';
+const [path, field] = process.argv.slice(2);
+try {
+    const value = JSON.parse(readFileSync(path, 'utf8'))[field];
+    if (value != null && typeof value !== 'string') throw new Error(`invalid ${field}`);
+    process.stdout.write(value || '');
+} catch (error) {
+    if (error.code !== 'ENOENT') {
+        console.error(`error: cannot read update configuration: ${error.message}`);
+        process.exit(1);
+    }
+}
+JS
+}
+main() {
+    case "${1:-}" in
+        ''|-h|--help) usage; return ;;
+        pin) shift; pin_command "$@"; return ;;
+        update) shift ;;
+        *) fail "unknown command: $1 (use: aow update / aow pin)" ;;
+    esac
+    local repository=${AOW_RELEASE_REPOSITORY:-} version=''
+    while (( $# )); do
+        case "$1" in
+            --repo|--version)
+                if (( $# < 2 )) || [[ -z "$2" ]]; then fail "$1 requires a value"; fi
+                if [[ "$1" == --repo ]]; then repository=$2; else version=$2; fi
+                shift 2 ;;
+            -h|--help) usage; return ;;
+            *) fail "unknown argument: $1" ;;
+        esac
+    done
+    if [[ -n "$version" ]]; then
+        [[ "$version" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && "$version" != latest ]] \
+            || fail "invalid version: $version"
+    fi
+    local runtime_root=${HOME:?HOME must be set}/.local/lib/aow
+    [[ ${AOW_RUNTIME_ROOT:-$runtime_root} == "$runtime_root" ]] \
+        || fail 'aow update requires ~/.local/lib/aow as AOW_RUNTIME_ROOT'
+    command -v node >/dev/null || fail 'Node.js 20+ is required'
+    if [[ -z "$repository" ]]; then repository=$(config_value repository); fi
+    repository=${repository:-yorkart/aow}
+    [[ "$repository" =~ ^[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+$ ]] \
+        || fail '--repo must be a GitHub repository in OWNER/REPO form'
+    local installer_url=https://github.com/$repository/releases/latest/download/aow-install.sh
+    local user_bin_dir=${AOW_USER_BIN_DIR:-}
+    if [[ -z "$user_bin_dir" ]]; then user_bin_dir=$(config_value user_bin_dir); fi
+    user_bin_dir=${user_bin_dir:-$HOME/.local/bin}
+    [[ "$user_bin_dir" == /* ]] || fail 'the command directory must be an absolute path'
+    export AOW_USER_BIN_DIR=$user_bin_dir
+    command -v curl >/dev/null || fail 'curl is required for updates'
+    stage=$(mktemp -d "$runtime_root/.update.XXXXXX")
+    printf 'Downloading installer from %s\n' "$installer_url"
+    curl --fail --show-error --location --retry 3 --connect-timeout 15 \
+        --proto '=https' --proto-redir '=https' \
+        --output "$stage/aow-install.sh" "$installer_url"
+    [[ -s "$stage/aow-install.sh" ]] || fail 'downloaded installer is empty'
+    bash -n "$stage/aow-install.sh"
+    local -a args=(--repo "$repository")
+    if [[ -n "$version" ]]; then args+=(--version "$version"); fi
+    # Invoke the same public installer; it owns version resolution, installation,
+    # configuration persistence and terminald confirmation. Keep EXIT cleanup here.
+    bash "$stage/aow-install.sh" "${args[@]}"
+}
+main "$@"

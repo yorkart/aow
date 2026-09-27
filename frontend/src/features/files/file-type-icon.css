@@ -1,0 +1,37 @@
+@font-face {
+  font-family: 'Aow Seti';
+  src: url('../../assets/seti/seti.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;
+}
+
+.directory-type-icon,
+.file-type-icon {
+  flex: 0 0 var(--file-icon-size, 16px);
+  width: var(--file-icon-size, 16px);
+  height: var(--file-icon-size, 16px);
+  vertical-align: middle;
+}
+
+.directory-type-icon {
+  color: var(--aow-muted);
+  fill: none;
+}
+
+.file-type-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-style: normal;
+}
+
+.file-type-icon::before {
+  content: attr(data-icon);
+  /* Seti's glyphs use 150% of VS Code's 16px icon slot. */
+  font: normal normal calc(var(--file-icon-size, 16px) * 1.5)/1 'Aow Seti';
+  text-transform: none;
+  letter-spacing: normal;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

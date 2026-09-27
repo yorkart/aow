@@ -1,0 +1,36 @@
+.agent-task-notifications { position:fixed; z-index:12000; top:max(16px,env(safe-area-inset-top)); right:max(16px,env(safe-area-inset-right)); display:flex; flex-direction:column; gap:8px; width:min(340px,calc(100vw - 32px)); max-height:calc(100dvh - max(16px,env(safe-area-inset-top)) - max(16px,env(safe-area-inset-bottom))); padding:2px 2px 12px; box-sizing:border-box; pointer-events:none; }
+.agent-task-notifications.is-expanded { padding:10px; background:#1c2633f5; border:1px solid #53677f; border-radius:12px; box-shadow:0 12px 40px #0006; pointer-events:auto; }
+.agent-task-notifications-toolbar { display:flex; align-items:center; justify-content:flex-end; flex:none; gap:6px; min-height:26px; color:#c4d1e2; font-size:12px; }
+.agent-task-notifications-toolbar > span { margin-right:auto; padding:4px 7px; border-radius:5px; background:#26313f; }
+.agent-task-notifications-toolbar button { display:flex; align-items:center; gap:3px; padding:5px 7px; border:0; border-radius:5px; background:#26313f; color:#c4d1e2; font:inherit; cursor:pointer; pointer-events:auto; }
+.agent-task-notifications-list { display:flex; flex-direction:column; gap:6px; min-height:0; overflow-y:auto; overscroll-behavior:contain; pointer-events:auto; scrollbar-width:thin; scrollbar-color:#53677f transparent; }
+.agent-task-notifications-stack { position:relative; isolation:isolate; display:flex; align-items:center; gap:10px; flex:none; width:calc(100% - 16px); margin:0 8px; padding:12px; border:1px solid #53677f; border-radius:9px; color:#e0e8f2; background:#2b394b; box-shadow:0 6px 18px #0004; cursor:pointer; pointer-events:auto; text-align:left; }
+.agent-task-notifications-stack::before,.agent-task-notifications-stack::after { content:""; position:absolute; z-index:-1; inset:0 5px -5px; background:#26313f; border:1px solid #53677f; border-radius:9px; pointer-events:none; }
+.agent-task-notifications-stack::after { z-index:-2; inset:0 10px -10px; background:#202b38; }
+.agent-task-notifications-stack > span { flex:1; }
+.agent-task-notifications-stack strong { display:block; font-size:13px; font-weight:600; }
+.agent-task-notifications-stack small { display:block; margin-top:3px; color:#b3c3d8; font-size:11px; }
+.agent-task-notifications-stack > svg { color:#b4d7ff; }
+.agent-task-notifications-stack:hover { background:#35465d; border-color:#8aacca; }
+.agent-task-notifications-storage-error { flex:none; padding:8px; border-radius:6px; color:#ffcf9c; background:#3b3029; font-size:12px; pointer-events:auto; }
+.agent-task-notice { position:relative; flex:none; min-width:0; color:#e0e8f2; background:#26313f; border:1px solid #53677f; border-radius:10px; box-shadow:0 8px 28px #0005; pointer-events:auto; overflow:hidden; }
+.agent-task-notice-open { display:flex; align-items:center; gap:11px; width:100%; padding:13px 43px 13px 13px; border:0; border-radius:9px; color:inherit; background:transparent; text-align:left; font:inherit; cursor:pointer; }
+.agent-task-notice-close { position:absolute; top:8px; right:8px; display:grid; place-items:center; width:24px; height:24px; padding:0; border:0; border-radius:5px; color:#a8bad0; background:transparent; cursor:pointer; }
+.agent-task-notice-close:hover:not(:disabled) { color:#fff; background:#4b5e77; }
+.agent-task-notice-close:disabled { opacity:.5; cursor:progress; }
+.agent-task-notice-open:hover:not(:disabled) { background:#334359; }
+.agent-task-notice-open:active:not(:disabled) { background:#3b4c61; }
+.agent-task-notice-open:disabled { cursor:default; }
+.agent-task-notice-open[aria-busy="true"] { cursor:progress; }
+.agent-task-notice-agent { display:grid; place-items:center; flex:0 0 30px; width:30px; height:30px; }
+.agent-task-notice-agent .agent-icon { width:28px; height:28px; }
+.agent-task-notice-content { flex:1; min-width:0; }
+.agent-task-notice-heading { display:flex; align-items:baseline; gap:10px; }
+.agent-task-notice-heading strong { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; font-weight:600; line-height:1.5; }
+.agent-task-notice time { flex:none; color:#a8bad0; font-size:10px; font-variant-numeric:tabular-nums; }
+.agent-task-notice-tab { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:3px; font-size:12px; line-height:1.5; color:#c4d1e2; }
+.agent-task-notice-failure { display:flex; align-items:center; gap:8px; padding:0 13px 10px; }
+.agent-task-notice-error { flex:1; min-width:0; font-size:12px; line-height:1.4; color:#ffb4ab; overflow-wrap:anywhere; }
+.agent-task-notice-remove { flex:none; padding:4px 6px; border:0; border-radius:4px; color:#e0e8f2; background:#3b4c61; font-size:12px; cursor:pointer; }
+.agent-task-notice-remove:hover,.agent-task-notifications-toolbar button:hover { background:#4b5e77; }
+.agent-task-notifications button:focus-visible,.agent-task-notifications-list:focus-visible { outline:2px solid #a3c9ef; outline-offset:-2px; }

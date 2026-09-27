@@ -1,0 +1,5 @@
+button.aow-icon-button { width:22px; height:22px; min-height:22px; flex:0 0 22px; display:grid; place-items:center; padding:0; border:0; color:#a7b1bf; background:transparent; border-radius:3px; cursor:pointer; }
+button.aow-icon-button:hover:not(:disabled) { color:#fff; background:#414a57; }
+button.aow-icon-button:disabled { opacity:.55; cursor:default; }
+button.aow-icon-button:focus-visible { outline:1px solid var(--aow-accent); outline-offset:-1px; }
+button.aow-icon-button > svg { width:13px; height:13px; }

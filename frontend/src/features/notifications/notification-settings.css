@@ -1,0 +1,8 @@
+.notification-settings-form .notification-checkbox { display:flex; align-items:center; justify-content:flex-start; gap:6px; cursor:pointer; }
+.notification-settings-form .notification-checkbox input { flex:0 0 14px; width:14px; height:14px; margin:0; accent-color:#6ca8f1; }
+.notification-settings-form .notification-checkbox span { width:auto; flex:initial; }
+.notification-settings-form .notification-master { font-weight:600; }
+.notification-channels { display:flex; flex-direction:column; min-width:0; gap:10px; margin:0; padding:10px 12px; border:1px solid var(--aow-line); border-radius:4px; }
+.notification-channels legend { padding:0 6px; color:#aeb7c3; font-size:11px; }
+.notification-configured { margin-left:8px; font-size:11px; font-weight:400; color:#81c8a0; }
+.notification-settings-form .project-aow-form-intro { overflow-wrap:anywhere; }
