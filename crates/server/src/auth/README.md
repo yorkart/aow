@@ -2,6 +2,8 @@
 
 业务路由只接入 `AuthService` 和 `require_auth`，不依赖具体的登录方式。
 
+认证子路由由本模块定义，在 [routes.rs](../routes.rs) 的 `build_router` 中统一挂载；公共中间件和 Base Path 挂载也由该入口装配。
+
 | 文件 | 职责 |
 | --- | --- |
 | `mod.rs` | 注册登录方式、分发认证请求、查询登录状态、统一校验会话 |

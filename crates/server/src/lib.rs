@@ -13,7 +13,7 @@ use aow_git_service as git;
 use aow_protocol::{ApiError, RenameResult};
 use aow_terminald_client::TerminaldClient;
 use axum::{
-    Json, Router,
+    Json,
     body::Body,
     extract::{Path as AxumPath, Query, State},
     http::{
@@ -24,14 +24,12 @@ use axum::{
         },
     },
     response::{IntoResponse, Response},
-    routing::{get, put},
 };
 use futures_util::TryStreamExt;
 use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
 use serde::Deserialize;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio_util::io::ReaderStream;
-use tower_http::{compression::CompressionLayer, trace::TraceLayer};
 
 mod auth;
 mod base_path;
@@ -44,6 +42,8 @@ mod im_api;
 mod notifications;
 mod operations;
 mod pull_requests;
+mod routes;
+pub use routes::build_router;
 mod session_shares;
 mod terminal;
 pub use terminal::{TerminalError, default_state_dir as default_terminal_state_dir};
@@ -167,88 +167,6 @@ pub async fn initialize_aow_state(path: &std::path::Path) -> anyhow::Result<()> 
         .initialize_global()
         .await?;
     Ok(())
-}
-
-pub fn build_router(state: AppState) -> Router {
-    let base_path = state.base_path.clone();
-    let app = Router::new()
-        .merge(auth::routes())
-        .route("/api/health", get(health))
-        .route("/api/fs/home", get(list_home))
-        .route("/api/fs/tree", get(list_root))
-        .route("/api/fs/tree/{*path}", get(list_path))
-        .route("/api/fs/text/{*path}", get(read_text))
-        .route("/api/fs/raw/{*path}", get(raw_file))
-        .route(
-            "/api/fs/file/{*path}",
-            put(write_file).patch(rename_file_path),
-        )
-        .route(
-            "/api/fs/entries",
-            axum::routing::post(create_fs_entry)
-                .patch(rename_fs_entry)
-                .delete(delete_fs_entry),
-        )
-        .route("/api/git/repositories", get(git_repositories))
-        .route("/api/git/ignored", axum::routing::post(git_ignored))
-        .route("/api/git/status", get(git_status))
-        .route("/api/git/pull", axum::routing::post(git_pull))
-        .route("/api/git/push", axum::routing::post(git_push))
-        .route("/api/git/log", get(git_log))
-        .route("/api/git/diff", get(git_diff))
-        .route("/api/git/commit/detail", get(git_commit_detail))
-        .route("/api/git/commit/files", get(git_commit_files))
-        .route("/api/git/commit/diff", get(git_commit_diff))
-        .route("/api/my-pull-requests", get(my_pull_requests))
-        .route(
-            "/api/my-pull-requests/{number}",
-            get(my_pull_request_detail),
-        )
-        .route(
-            "/api/my-pull-requests/{number}/diff",
-            get(my_pull_request_diff),
-        )
-        .route("/", get(root_redirect))
-        .route("/aow", get(aow_root_redirect))
-        .route("/aow/", get(aow_root))
-        .route("/aow/tabs/{tab_id}", get(aow_root))
-        .route("/aow/tabs/{tab_id}/", get(aow_root))
-        .route("/aow/tabs/terminal/{tab_id}", get(aow_root))
-        .route("/aow/tabs/pr/{provider}/{number}", get(aow_root))
-        .route("/aow/tabs/session/{agent}/{session_id}", get(aow_root))
-        .route("/aow/tabs/automation/{task_id}", get(aow_root))
-        .route(
-            "/aow/tabs/automation/{task_id}/runs/{run_id}",
-            get(aow_root),
-        )
-        .route("/m", get(aow_root))
-        .route("/m/", get(aow_root))
-        .route("/fs", get(fs_root_redirect))
-        .route("/fs/", get(fs_root))
-        .route("/fs/{*path}", get(fs_path))
-        .route("/help", get(help_page))
-        .merge(terminal::routes())
-        .merge(aow::routes())
-        .merge(pull_requests::routes())
-        .merge(notifications::routes())
-        .merge(im_api::routes())
-        .merge(operations::routes())
-        .merge(automations::routes())
-        .merge(session_shares::routes())
-        .fallback(spa_or_asset)
-        .layer(axum::middleware::from_fn_with_state(
-            state.clone(),
-            auth::require_auth,
-        ))
-        .layer(CompressionLayer::new())
-        .layer(TraceLayer::new_for_http())
-        .with_state(state);
-    Router::new()
-        .fallback_service(app)
-        .layer(axum::middleware::from_fn_with_state(
-            base_path,
-            base_path::mount,
-        ))
 }
 
 async fn health() -> Json<serde_json::Value> {
