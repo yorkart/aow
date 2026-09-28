@@ -1,5 +1,9 @@
 use super::*;
-use std::{fs, io::Write};
+use std::{
+    fs,
+    io::{Seek, SeekFrom, Write},
+    path::Path,
+};
 
 fn record(index: usize) -> Record {
     Record {

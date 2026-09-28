@@ -1,16 +1,20 @@
 use super::*;
 use crate::{
-    BasePath, HttpError,
+    AppState, BasePath, HttpError,
     auth::{
         AuthService,
         provider::{LoginProvider, VerifiedIdentity},
     },
     operations::OperationService,
 };
-use aow_operation_log::{ReadOptions, Reader};
-use axum::{body::Body, http::Request};
+use aow_operation_log::{ReadOptions, Reader, Record};
+use axum::{
+    body::Body,
+    extract::ConnectInfo,
+    http::{Request, StatusCode},
+};
 use serde_json::{Value, json};
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc};
 use tower::ServiceExt;
 
 struct LocalProvider;
