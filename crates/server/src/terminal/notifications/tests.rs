@@ -379,7 +379,7 @@ async fn codex_like_stops_use_the_expected_environment(with_process: bool) {
                 .args([
                     "--ignored",
                     "--exact",
-                    "terminal::sessions::tests::native_environment_fixture",
+                    "terminal::sessions::process::tests::native_environment_fixture",
                 ])
                 .env("AOW_NATIVE_ENV_FIXTURE", "1")
                 .envs(&environment)
