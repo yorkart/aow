@@ -1,4 +1,4 @@
-//! Bridges registered project roots and Git changes to the workspace SSE stream.
+//! Bridges registered project roots and Git changes to workspace event streams.
 
 use std::{
     collections::BTreeMap,
@@ -20,7 +20,7 @@ use tokio::sync::{Notify, watch};
 use crate::{AppState, aow::AowManager};
 
 #[derive(Clone, Debug, Serialize)]
-struct Snapshot {
+pub(crate) struct Snapshot {
     boot_id: String,
     revision: u64,
     projects: u64,
@@ -46,6 +46,10 @@ impl Drop for Inner {
 pub(crate) struct WorkspaceEvents(Arc<Inner>);
 
 impl WorkspaceEvents {
+    pub(crate) fn subscribe(&self) -> watch::Receiver<Snapshot> {
+        self.0.changes.subscribe()
+    }
+
     pub(crate) fn new() -> Self {
         Self(Arc::new(Inner {
             changes: watch::channel(Snapshot {

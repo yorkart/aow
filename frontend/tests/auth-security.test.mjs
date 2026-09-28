@@ -90,6 +90,12 @@ for (const action of ['password', 'password-with-immediate-input', 'logout']) {
     t.after(() => reader.cancel());
     assert.equal((await bounded(reader.read(), 'initial event')).done, false);
     const closed = once(ws, 'close');
+    const live = new WebSocket(f.url('/api/events/ws').replace('http:', 'ws:'), { headers: { cookie, origin: f.origin } });
+    t.after(() => live.terminate());
+    const liveReady = once(live, 'message');
+    await once(live, 'open');
+    assert.equal(JSON.parse((await liveReady)[0].toString()).event, 'workspace');
+    const liveClosed = once(live, 'close');
     if (action === 'logout') {
       const logout = await fetch(f.url('/api/auth/logout'), { method: 'POST', headers: { cookie } });
       assert.equal(logout.status, 204);
@@ -102,6 +108,7 @@ for (const action of ['password', 'password-with-immediate-input', 'logout']) {
       ws.send(Buffer.from(`printf revoked > '${marker}'\n`));
     }
     await bounded(closed, 'revoked WebSocket was not closed');
+    assert.equal((await bounded(liveClosed, 'revoked event WebSocket was not closed'))[0], 1008);
     await bounded((async () => { while (!(await reader.read()).done) {} })(), 'revoked SSE did not end');
     assert.equal(await exists(marker), false);
     assert.equal((await fetch(f.url('/api/fs/tree'), { headers: { cookie } })).status, 401);

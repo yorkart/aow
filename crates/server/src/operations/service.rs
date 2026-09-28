@@ -12,6 +12,10 @@ use super::{
 };
 
 impl OperationService {
+    pub(crate) fn subscribe(&self) -> watch::Receiver<Snapshot> {
+        self.inner.changes.subscribe()
+    }
+
     pub(crate) fn in_memory() -> Self {
         Self::new(None).expect("in-memory operation service")
     }

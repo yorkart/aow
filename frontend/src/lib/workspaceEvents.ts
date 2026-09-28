@@ -1,4 +1,4 @@
-import { appUrl } from './basePath';
+import { LiveEvents } from './liveEvents';
 
 interface Snapshot {
   boot_id: string;
@@ -17,7 +17,7 @@ export interface WorkspaceChange {
 
 type Listener = (change: WorkspaceChange) => void;
 const listeners = new Set<Listener>();
-let source: EventSource | undefined;
+let source: LiveEvents | undefined;
 let fallback: ReturnType<typeof setInterval> | undefined;
 let scheduled = false;
 
@@ -39,7 +39,7 @@ function connect() {
   clearInterval(fallback);
   fallback = undefined;
   if (!listeners.size) return;
-  const connection = new EventSource(appUrl('/api/workspace/events'));
+  const connection = new LiveEvents('workspace');
   source = connection;
   let previous: Snapshot | undefined;
   let reconnected = true;

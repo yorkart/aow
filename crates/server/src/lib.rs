@@ -12,6 +12,7 @@ mod local_cli;
 mod notifications;
 mod operations;
 mod pull_requests;
+mod realtime;
 mod routes;
 mod session_shares;
 mod state;

@@ -81,6 +81,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(notifications::routes())
         .merge(im_api::routes())
         .merge(operations::routes())
+        .merge(crate::realtime::routes())
         .merge(crate::workspace_events::routes())
         .merge(automations::routes())
         .merge(session_shares::routes())

@@ -1,4 +1,5 @@
 import { appUrl } from '../../lib/basePath';
+import { LiveEvents } from '../../lib/liveEvents';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 export type OperationOutcome = 'succeeded' | 'partial_success' | 'failed' | 'interrupted' | 'cancelled';
@@ -77,15 +78,15 @@ export function useOperations() {
     };
     refreshRef.current = () => { void reload(); };
     void reload();
-    const source = new EventSource(appUrl('/api/operations/stream'));
-    const receive = (event: MessageEvent<string>) => {
-      try { const next = JSON.parse(event.data) as OperationSnapshot; generation += 1; apply(next); } catch { /* A reconnect obtains a fresh snapshot. */ }
+    const source = new LiveEvents('operations');
+    const receive = (event: Event) => {
+      try { const next = JSON.parse((event as MessageEvent<string>).data) as OperationSnapshot; generation += 1; apply(next); } catch { /* A reconnect obtains a fresh snapshot. */ }
     };
     source.addEventListener('operations', receive);
     source.onerror = () => { void reload(); };
     const visible = () => { if (document.visibilityState === 'visible') void reload(); };
     const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible' && (source.readyState !== EventSource.OPEN || latest?.operations.some(item => !item.outcome))) void reload();
+      if (document.visibilityState === 'visible' && (source.readyState !== LiveEvents.OPEN || latest?.operations.some(item => !item.outcome))) void reload();
     }, 1500);
     document.addEventListener('visibilitychange', visible);
     window.addEventListener('focus', visible);

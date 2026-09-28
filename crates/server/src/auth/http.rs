@@ -185,7 +185,7 @@ fn cookie(state: &AppState, token: &str, clear: bool) -> HeaderValue {
 
 // Browser requests must originate from this authority. Do not trust forwarded
 // headers supplied by clients, and keep non-browser clients without Origin usable.
-fn check_origin(headers: &HeaderMap) -> Result<(), HttpError> {
+pub(crate) fn check_origin(headers: &HeaderMap) -> Result<(), HttpError> {
     if let Some(origin) = headers.get("origin") {
         let valid = origin
             .to_str()
@@ -206,7 +206,7 @@ fn check_origin(headers: &HeaderMap) -> Result<(), HttpError> {
             return Err(HttpError::new(
                 StatusCode::FORBIDDEN,
                 "invalid_origin",
-                "登录请求来源无效",
+                "请求来源无效",
                 None,
             ));
         }

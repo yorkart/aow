@@ -3,17 +3,29 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
+import { WebSocketServer } from 'ws';
+import react from '@vitejs/plugin-react';
 
 const connections = new Set();
+const events = new WebSocketServer({ noServer: true });
+events.on('connection', socket => {
+  connections.add(socket);
+  socket.on('close', () => connections.delete(socket));
+});
 let preferences = { enabled: true, channels: ['page'] };
 let providers = [];
 let storedSecret;
 let publicBaseUrl = "";
 const settings = () => ({ im: { providers }, notifications: { agent_task_completed: preferences, public_base_url: publicBaseUrl } });
 const server = await createServer({
+  configFile: false,
+  cacheDir: 'node_modules/.vite-notifications-tests',
   root: fileURLToPath(new URL('../', import.meta.url)),
   server: { host: '127.0.0.1', port: 0, proxy: {} },
-  plugins: [{ name: 'task-stop-fixture', configureServer(server) {
+  plugins: [react(), { name: 'task-stop-fixture', configureServer(server) {
+    server.httpServer.on('upgrade', (request, socket, head) => {
+      if (request.url === '/api/events/ws') events.handleUpgrade(request, socket, head, ws => events.emit('connection', ws));
+    });
     server.middlewares.use('/api/aow/notification-settings', async (request, response) => {
       response.setHeader('Content-Type', 'application/json');
       if (request.method === 'PUT') {
@@ -53,12 +65,6 @@ const server = await createServer({
       }
       response.end(JSON.stringify(settings()));
     });
-    server.middlewares.use('/api/terminals/task-stops', (request, response) => {
-      response.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
-      response.write(': connected\n\n');
-      connections.add(response);
-      response.on('close', () => connections.delete(response));
-    });
     server.middlewares.use('/api/terminals/', (request, response) => {
       const id = decodeURIComponent(request.url.slice(1));
       response.setHeader('Content-Type', 'application/json');
@@ -80,7 +86,7 @@ const notice = (id, agent = 'codex') => ({ agent, session_id: id, title: '同名
 const notification = (page, tabName) => page.getByRole('button', { name: `打开通知：AoW · ${tabName}`, exact: true });
 function send(data) {
   if (!preferences.enabled || !preferences.channels.includes('page')) return;
-  for (const response of connections) response.write(`event: task-stopped\ndata: ${JSON.stringify(data)}\n\n`);
+  for (const socket of connections) socket.send(JSON.stringify({ event: 'task-stopped', data }));
 }
 async function waitConnections(count) {
   const deadline = Date.now() + 10_000;
@@ -646,6 +652,7 @@ try {
   });
 } finally {
   await browser?.close();
-  for (const response of connections) response.end();
+  for (const socket of connections) socket.terminate();
+  events.close();
   await server.close();
 }

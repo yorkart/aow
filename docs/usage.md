@@ -94,7 +94,7 @@ IM 消息由后台发送，需要在 **Settings → 通知 → AoW 访问地址*
 
 飞书通过 Rust HTTP 客户端发送，应用 token 只缓存在内存、临近过期时按需重新获取；更换凭据会替换客户端和缓存。每条任务事件有独立发送标识，token 失效或限流重试时复用该标识。网络超时不自动重发，避免不确定的重复投递。发送队列最多保存 64 条待发通知，发送失败或队列满时记录服务端日志；不持久化待发事件，服务重启后不补发。飞书与微信接入位于独立的 `crates/im`（`aow-im`）crate，通过 `ImProvider::send` 接收通用消息；server 负责业务消息组装，与 Agent 会话监听解耦。微信发送单条最多 4,000 字符的摘要，保留可容纳的来源链接，超长结论使用省略标记；这是客户端预算，不是微信服务端额度承诺。
 
-监听注册和网页事件传输仅存于内存，服务重启后重新探测并从 EOF 开始。后端每约 1.5 秒轮询，Claude PID 查询沿用 5 秒成功缓存。事件通过受登录认证保护的 `/api/terminals/task-stops` SSE 接口发送，不开放给匿名会话分享页。
+监听注册和网页事件传输仅存于内存，服务重启后重新探测并从 EOF 开始。后端每约 1.5 秒轮询，Claude PID 查询沿用 5 秒成功缓存。页面通过受登录认证保护的 `/api/events/ws` WebSocket 接收任务通知、工作区变化和操作进度，每个页面共用一条连接，避免多个页面占满 HTTP/1.1 的连接额度。断线后自动重连并重新同步工作区和操作状态；任务通知保持实时发送，不在重连时重播。旧的 SSE 接口保留兼容，但当前页面不再使用；匿名会话分享页不订阅这些事件。
 
 验证：`cargo test -p aow-agents --features sessions sessions::tail`、`cargo test -p aow-server terminal::notifications`；在 `frontend/` 下执行 `npm run test:notifications` 和 `npm run test:tab-links`。
 

@@ -15,6 +15,14 @@ const POLL_INTERVAL: Duration = Duration::from_millis(1500);
 
 pub(super) use api::events;
 pub(crate) use model::{TaskStopNotification, TaskStopSource};
+
+impl super::TerminalManager {
+    pub(crate) fn subscribe_task_stops(
+        &self,
+    ) -> tokio::sync::broadcast::Receiver<TaskStopNotification> {
+        self.inner.task_stops.subscribe()
+    }
+}
 #[cfg(test)]
 use sources::add_sources;
 

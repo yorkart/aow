@@ -5,6 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
+import { installLiveEvents } from './fixtures/live-events.mjs';
 
 const server = await createServer({ root: fileURLToPath(new URL('../', import.meta.url)), logLevel: 'error', server: { host: '127.0.0.1', port: 0, proxy: {}, watch: { usePolling: true } } });
 const worktrees = [0, 1].map(i => ({ id: `wt-${i}`, project_id: 'project', path: `/workspace/wt-${i}`, branch: `branch-${i}`, head: 'abc', is_main: i === 0, detached: false, locked: false, prunable: false }));
@@ -342,28 +343,7 @@ try {
         socket.send(JSON.stringify({ type: 'stream', epoch: 'fixture', offset: 0, reset: true, replay_bytes: 0, restore_cols: cli ? 160 : 120, restore_rows: cli ? 48 : 40, restore: '\x1b[2J\x1b[HFixture ready\r\n$ ' }));
       });
     });
-    // Keep the workspace stream open and inject server snapshots explicitly.
-    // Other EventSource endpoints retain the fixture's normal HTTP behavior.
-    await context.addInitScript(() => {
-      const NativeEventSource = window.EventSource;
-      window.workspaceEventSources = [];
-      window.workspaceSnapshot = { boot_id: 'watch-fixture', revision: 0, projects: 0, terminals: 0, repositories: {} };
-      class WorkspaceSource extends EventTarget {
-        constructor(url) {
-          super(); this.url = String(url); this.readyState = 0;
-          window.workspaceEventSources.push(this);
-          Promise.resolve().then(() => {
-            if (this.readyState === 2) return;
-            this.readyState = 1; this.onopen?.(new Event('open'));
-            this.dispatchEvent(new MessageEvent('workspace', { data: JSON.stringify(window.workspaceSnapshot) }));
-          });
-        }
-        close() { this.readyState = 2; }
-      }
-      window.EventSource = new Proxy(NativeEventSource, { construct(Target, args) {
-        return String(args[0]).includes('/api/workspace/events') ? new WorkspaceSource(args[0]) : Reflect.construct(Target, args);
-      } });
-    });
+    await installLiveEvents(context);
     const page = await context.newPage();
     page.setDefaultTimeout(15000);
     page.on('pageerror', error => state.errors.push(error.stack ?? error.message));
@@ -3373,9 +3353,9 @@ try {
 
   const sendWorkspaceSnapshot = (page, input, reconnect = false) => page.evaluate(({ input, reconnect }) => {
     window.workspaceSnapshot = { ...window.workspaceSnapshot, ...input };
-    const source = window.workspaceEventSources.findLast(source => source.readyState !== 2);
+    const source = window.liveEventSockets.findLast(source => source.readyState !== 3);
     if (reconnect) { source.readyState = 1; source.onopen?.(new Event('open')); }
-    source.dispatchEvent(new MessageEvent('workspace', { data: JSON.stringify(window.workspaceSnapshot) }));
+    source.receive('workspace', window.workspaceSnapshot);
   }, { input, reconnect });
 
   await test('Source Control polls only Changes and refreshes Commits on repository events', async t => {
@@ -3390,9 +3370,9 @@ try {
     await delay(150);
     const initialLogs = logs();
     const initialStatus = statuses();
-    const connections = await page.evaluate(() => window.workspaceEventSources.length);
+    const connections = await page.evaluate(() => window.liveEventSockets.length);
     assert.equal(connections, 1, 'opening Source Control reuses the existing stream');
-    assert.equal(await page.evaluate(() => window.workspaceEventSources[0].url), '/api/workspace/events');
+    assert.equal(await page.evaluate(() => new URL(window.liveEventSockets[0].url).pathname), '/api/events/ws');
     await page.clock.runFor(11000);
     await eventually(() => statuses() > initialStatus);
     assert.equal(logs(), initialLogs, 'healthy idle stream does not poll history');
@@ -3413,12 +3393,12 @@ try {
     assert.equal(logs() + statuses(), before, 'hidden panels do not fetch');
     await switchWorktree(page, 0);
     await eventually(() => logs() > initialLogs + 1);
-    assert.equal(await page.evaluate(() => window.workspaceEventSources.length), connections, 'switching worktrees does not reconnect');
+    assert.equal(await page.evaluate(() => window.liveEventSockets.length), connections, 'switching worktrees does not reconnect');
     await delay(100);
     const resumedLogs = logs();
     await sendWorkspaceSnapshot(page, {}, true);
     await eventually(() => logs() > resumedLogs);
-    assert.equal(await page.evaluate(() => window.workspaceEventSources.filter(source => source.readyState !== 2).length), 1);
+    assert.equal(await page.evaluate(() => window.liveEventSockets.filter(source => source.readyState !== 3).length), 1);
     await page.getByRole('button', { name: '隐藏右侧栏', exact: true }).click();
     await delay(100);
     const hidden = logs() + statuses();
@@ -3464,12 +3444,13 @@ try {
     await eventually(() => logs() > 0);
     await delay(150);
     await page.evaluate(() => {
-      const source = window.workspaceEventSources.findLast(source => source.readyState !== 2);
-      source.readyState = 0; source.onerror?.(new Event('error'));
+      const source = window.liveEventSockets.findLast(source => source.readyState !== 3);
+      window.liveEventsOffline = true; source.close();
     });
     const before = logs();
     await page.clock.runFor(31000);
     await eventually(() => logs() > before);
+    await page.evaluate(() => { window.liveEventsOffline = false; document.dispatchEvent(new Event('visibilitychange')); });
     await sendWorkspaceSnapshot(page, {}, true);
     await delay(150);
     const recovered = logs();

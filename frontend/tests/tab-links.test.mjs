@@ -5,6 +5,7 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
+import { installLiveEvents } from './fixtures/live-events.mjs';
 
 const screenshotDir = process.env.AOW_TEST_SCREENSHOT_DIR || '/tmp';
 await mkdir(screenshotDir, { recursive: true });
@@ -43,16 +44,10 @@ try {
     const run = { id: 'run-old', task_id: task.id, task_name: task.name, agent: 'codex', source: 'manual', status: 'completed', started_at: '2026-09-19T00:00:00Z', finished_at: '2026-09-19T00:01:00Z', workspace_path: root, branch: 'dev', session_id: null, duration_ms: 60000, exit_code: 0 };
     const pr = { number: 42, title: 'Linked PR', source_branch: 'dev', target_branch: 'main', status: 'open', draft: false, created_at: '', updated_at: '', url: null, description: 'PR description', files: [], checks: [], reviewers: [], threads: [], unresolved_threads: [], changes_count: 0, commits_count: 1 };
     t.after(async () => { await context.close(); assert.deepEqual(state.errors, []); if (!editable) assert.deepEqual(state.mutations, []); });
+    await installLiveEvents(context);
     await context.addInitScript(({ root, floating, extraFloatingTabs }) => {
-      const taskStopSources = new Set();
-      window.EventSource = class extends EventSource {
-        constructor(...args) { super(...args); taskStopSources.add(this); }
-        close() { taskStopSources.delete(this); super.close(); }
-      };
-      window.sendTaskStop = data => {
-        for (const source of taskStopSources) source.dispatchEvent(new MessageEvent('task-stopped', { data: JSON.stringify(data) }));
-      };
-      window.taskStopReady = () => taskStopSources.size > 0;
+      window.sendTaskStop = data => window.emitLiveEvent('task-stopped', data);
+      window.taskStopReady = () => window.liveEventSockets.some(socket => socket.readyState === 1);
       localStorage.setItem('aow-active', '/workspace/main');
       localStorage.setItem(`aow-workspace-tabs:${root}`, JSON.stringify({ active: 'terminal:other' }));
       sessionStorage.setItem(`aow.mobile.terminal.${root}`, 'other:other-pane');
