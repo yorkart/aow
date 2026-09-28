@@ -111,6 +111,97 @@ fn codex_keeps_ordered_progress_and_tool_details_without_reasoning() {
 }
 
 #[test]
+fn traecli_canonical_history_keeps_messages_and_tools_without_legacy_projections() {
+    use serde_json::json;
+    let turns = parse_records(vec![
+        json!({"type":"session_meta","payload":{"history_format":"canonical_v1","history_mode":"paginated"}}),
+        json!({"type":"event_msg","payload":{"type":"task_started","turn_id":"canonical-turn"}}),
+        json!({"type":"history_mutation","payload":{"version":1,"operation":"append","items":[
+            {"type":"message","role":"developer","content":[{"type":"input_text","text":"DEVELOPER_INSTRUCTIONS"}]},
+            {"type":"message","role":"user","content":[{"type":"input_text","text":"# AGENTS.md instructions for /workspace"},{"type":"input_text","text":"<environment_context>INJECTED_CONTEXT</environment_context>"}]}
+        ]}}),
+        json!({"timestamp":"2026-09-28T12:03:45.154Z","type":"history_mutation","payload":{"version":1,"commit_id":"commit-1","turn_id":"canonical-turn","operation":"append","items":[
+            {"type":"message","id":"user-1","role":"user","content":[{"type":"input_text","text":"统计当前项代码量"}],"internal_chat_message_metadata_passthrough":{"content_item_kinds":["user.text"]}}
+        ]}}),
+        json!({"type":"history_mutation","payload":{"version":1,"operation":"append","items":[
+            {"type":"reasoning","content":[{"type":"reasoning_text","text":"PRIVATE_REASONING"}]},
+            {"type":"message","role":"assistant","phase":"commentary","content":[{"type":"output_text","text":"Counting the code"}]},
+            {"type":"custom_tool_call","call_id":"exec-1","name":"exec","input":"run checks"},
+            {"type":"custom_tool_call_output","call_id":"exec-1","output":[{"type":"input_text","text":"42 lines"}]},
+            {"type":"function_call","call_id":"exec-2","name":"exec_command","arguments":"{\"cmd\":\"wc -l main.rs\"}"},
+            {"type":"function_call_output","call_id":"exec-2","output":"Process exited with code 0\n42 main.rs"},
+            {"type":"trae_extra_info","extra_info":{"content":"PRIVATE_EXTRA_INFO"}}
+        ]}}),
+        json!({"timestamp":"2026-09-28T12:06:14.415Z","type":"history_mutation","payload":{"version":1,"operation":"append","items":[
+            {"type":"message","role":"assistant","phase":"final_answer","content":[{"type":"output_text","text":"The project has 42 lines of code."}]}
+        ]}}),
+        json!({"type":"event_msg","payload":{"type":"task_complete","turn_id":"canonical-turn"}}),
+    ]);
+    assert_eq!(turns.len(), 1);
+    let turn = &turns[0];
+    assert_eq!(turn.id, "canonical-turn");
+    assert_eq!(turn.status, "completed");
+    assert_eq!(turn.user.text, "统计当前项代码量");
+    assert_eq!(
+        turn.user.timestamp.as_deref(),
+        Some("2026-09-28T12:03:45.154Z")
+    );
+    let final_message = turn.final_message.as_ref().unwrap();
+    assert_eq!(final_message.text, "The project has 42 lines of code.");
+    assert_eq!(
+        final_message.timestamp.as_deref(),
+        Some("2026-09-28T12:06:14.415Z")
+    );
+    assert_eq!(turn.activities.len(), 3);
+    assert_eq!(turn.activities[0].text, "Counting the code");
+    assert_eq!(turn.activities[1].status, Some("completed"));
+    assert_eq!(turn.activities[2].status, Some("completed"));
+    assert_eq!(
+        turn.activities[1]
+            .details
+            .as_ref()
+            .unwrap()
+            .output
+            .as_ref()
+            .unwrap()
+            .text,
+        "42 lines"
+    );
+    let serialized = serde_json::to_string(turn).unwrap();
+    for hidden in [
+        "DEVELOPER_INSTRUCTIONS",
+        "INJECTED_CONTEXT",
+        "PRIVATE_REASONING",
+        "PRIVATE_EXTRA_INFO",
+    ] {
+        assert!(!serialized.contains(hidden));
+    }
+}
+
+#[test]
+fn traecli_canonical_appends_preserve_live_turns_and_skip_context_replacements() {
+    let (_directory, path) = write(
+        r#"{"type":"event_msg","payload":{"type":"task_started","turn_id":"live-turn"}}
+{"type":"history_mutation","payload":{"version":1,"operation":"append","items":[{"type":"message","role":"user","content":"first request"}]}}
+{"type":"response_item","payload":{"type":"message","role":"user","content":"first request"}}
+{"type":"history_mutation","payload":{"version":1,"operation":"append","items":[{"type":"message","role":"assistant","phase":"commentary","content":"Working"}]}}
+{"type":"history_mutation","payload":{"version":1,"operation":"replace","items":[{"type":"message","role":"user","content":"COMPACTED_CONTEXT"}]}}
+{"type":"history_mutation","payload":{"version":2,"operation":"append","items":[{"type":"message","role":"user","content":"UNKNOWN_SCHEMA"}]}}
+{"type":"history_mutation","payload":{"version":1,"operation":"append","items":null}}
+{"type":"history_mutation","payload":{"version":1,"operation":"append","items":[{"type":"message","role":"user","content":"additional instruction"}]}}
+{"type":"history_mutation","payload":
+"#,
+    );
+    let turns = parse_codex_like(&path).unwrap();
+    assert_eq!(turns.len(), 2);
+    assert_eq!(turns[0].user.text, "first request");
+    assert_eq!(turns[0].activities[0].text, "Working");
+    assert_eq!(turns[1].user.text, "additional instruction");
+    assert!(turns.iter().all(|turn| turn.status == "in_progress"));
+    assert!(turns.iter().all(|turn| turn.final_message.is_none()));
+}
+
+#[test]
 fn traecli_item_projections_merge_tool_start_and_end_by_call_id() {
     use serde_json::json;
     let turns = parse_records(vec![
