@@ -100,7 +100,7 @@ try {
     await pane.getByRole('heading', { name: '修复终端会话' }).waitFor();
     assert.equal(await pane.locator('.terminal-pane-name').innerText(), '⠋ 修复终端会话 | demo');
     assert.equal(await page.locator('.terminal-pane').nth(1).locator('.terminal-pane-surface').isVisible(), true);
-    await page.screenshot({ path: '/tmp/aow-terminal-session.png' });
+    await page.screenshot({ path: `/tmp/aow-terminal-session-${process.pid}.png` });
     state.setData(data([session(), session('namesake')]));
     await pane.getByRole('button', { name: '刷新会话列表' }).click();
     await pane.locator('.terminal-agent-session-list > button').nth(1).waitFor();
