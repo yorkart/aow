@@ -104,8 +104,14 @@ with patch.object(m.os, 'getgrouplist', return_value=[20, 12]), patch.object(m.s
 
 # Administrator inputs stay immutable while scripts and verification run as the
 # target. Only validated, currently confirmed components reach registration.
-with tempfile.TemporaryDirectory(prefix='aow-admin-test-') as temporary:
+temporary_directory = tempfile.TemporaryDirectory
+with temporary_directory(prefix='aow-admin-test-') as temporary:
     directory = pathlib.Path(temporary)
+    # The installer is macOS-only, but its mocked coordinator is tested on Linux
+    # too. Check the production staging path, then keep the fixture portable.
+    def administrator_stage(*args, **kwargs):
+        assert kwargs.pop('dir') == '/private/tmp'
+        return temporary_directory(*args, dir=directory, **kwargs)
     installer = directory / 'install-release.sh'
     installer.write_text('#!/bin/sh\nexit 78\n')
     archive = directory / 'aow.tar.gz'
@@ -138,7 +144,8 @@ with tempfile.TemporaryDirectory(prefix='aow-admin-test-') as temporary:
              patch.object(m, 'target_login_path', return_value='/usr/bin:/bin'), \
              patch.object(m, 'trusted_path', side_effect=lambda path, owner: pathlib.Path(path)), \
              patch('builtins.input', return_value=reply), patch.object(m, 'run_as_user', side_effect=run_target), \
-             patch.object(m, 'registration_module', return_value=helper), contextlib.redirect_stdout(io.StringIO()):
+             patch.object(m, 'registration_module', return_value=helper), \
+             patch.object(m.tempfile, 'TemporaryDirectory', side_effect=administrator_stage), contextlib.redirect_stdout(io.StringIO()):
             assert m.install_as_administrator(target, archive, caller.pw_uid) == 0
         assert events == ['prepare as target', 'register ' + ','.join(components), *['verify ' + name for name in components]]
         assert all(not path.exists() for path in frozen_paths)
@@ -148,7 +155,8 @@ with tempfile.TemporaryDirectory(prefix='aow-admin-test-') as temporary:
              patch.object(m, 'target_login_path', return_value='/usr/bin:/bin'), \
              patch.object(m, 'trusted_path', side_effect=lambda path, owner: pathlib.Path(path)), \
              patch('builtins.input', return_value='n'), patch.object(m, 'run_as_user', return_value=code), \
-             patch.object(m, 'registration_module') as load_helper, contextlib.redirect_stdout(io.StringIO()):
+             patch.object(m, 'registration_module') as load_helper, \
+             patch.object(m.tempfile, 'TemporaryDirectory', side_effect=administrator_stage), contextlib.redirect_stdout(io.StringIO()):
             assert m.install_as_administrator(target, archive, caller.pw_uid) == code
             load_helper.assert_not_called()
     archive.chmod(0o666)
