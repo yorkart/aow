@@ -142,6 +142,9 @@ export function EditorArea({ documents, activeId, wordWrapOverride, onWordWrapCh
   const wrapEnabled = wordWrapOverride ?? editor.word_wrap;
   const wordWrap = wrapEnabled ? 'on' : 'off';
   const saveLabel = active?.saving ? '自动保存中…' : active?.dirty ? '立即保存' : '已自动保存';
+  const showWordWrap = active?.kind === 'text' || active?.kind === 'json' || active?.kind === 'diff'
+    || (active?.kind === 'markdown' && active.markdownView === 'editor');
+  const markdownViewLabel = active?.markdownView === 'editor' ? '切换到预览' : '切换到源码';
   const editorArea = useRef<HTMLElement>(null);
   const tabs = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<TabContextMenu>();
@@ -261,23 +264,31 @@ export function EditorArea({ documents, activeId, wordWrapOverride, onWordWrapCh
         <>
           <div className="editor-toolbar">
             <code title={active.path}>{active.path}</code>
-            {active.kind === 'markdown' ? (
-              <div className="markdown-view-switch" role="group" aria-label="Markdown 查看方式">
-                <button className={active.markdownView !== 'editor' ? 'active' : ''} title="预览" aria-label="预览" aria-pressed={active.markdownView !== 'editor'} onClick={() => onMarkdownViewChange(active.id, 'preview')}><Eye aria-hidden="true" /></button>
-                <button className={active.markdownView === 'editor' ? 'active' : ''} title="编辑" aria-label="编辑" aria-pressed={active.markdownView === 'editor'} onClick={() => onMarkdownViewChange(active.id, 'editor')}><Code2 aria-hidden="true" /></button>
-              </div>
+            {showWordWrap || active.kind === 'markdown' ? (
+              <>
+                <div className="editor-toolbar-group" role="group" aria-label="视图操作">
+                  {showWordWrap ? <button
+                    className={wrapEnabled ? 'active' : undefined} aria-label="自动换行" aria-pressed={wrapEnabled}
+                    title={`自动换行：${wrapEnabled ? '已开启' : '已关闭'}（${wordWrapOverride === undefined ? '跟随全局设置' : '当前 Tab'}）`}
+                    onClick={() => onWordWrapChange(active.id, !wrapEnabled)}><WrapText aria-hidden="true" /></button> : null}
+                  {active.kind === 'markdown' ? <button
+                    title={markdownViewLabel} aria-label={markdownViewLabel}
+                    onClick={() => onMarkdownViewChange(active.id, active.markdownView === 'editor' ? 'preview' : 'editor')}>
+                    {active.markdownView === 'editor' ? <Eye aria-hidden="true" /> : <Code2 aria-hidden="true" />}
+                  </button> : null}
+                </div>
+                <span className="editor-toolbar-separator" aria-hidden="true" />
+              </>
             ) : null}
-            {(active.kind === 'text' || active.kind === 'json' || active.kind === 'markdown') && !active.readOnly ? <button
-              title={`${saveLabel}；自动保存已开启（macOS: Command+S；其他系统: Ctrl+S）`} aria-label={saveLabel} aria-busy={Boolean(active.saving)}
-              disabled={!canSaveDocument(active)} onClick={() => onSave(active.id)}>
-              {active.saving ? <LoaderCircle className="spinning" aria-hidden="true" /> : active.dirty ? <Save aria-hidden="true" /> : <Check aria-hidden="true" />}
-            </button> : null}
-            <button title={active.refreshing ? '正在刷新…' : active.diffSource ? '刷新 Diff' : '刷新文件'} aria-label={active.diffSource ? '刷新 Diff' : '刷新文件'} aria-busy={Boolean(active.refreshing)} disabled={active.loading || active.refreshing || active.saving} onClick={() => onRefresh(active.id)}><RefreshCw className={active.refreshing ? 'spinning' : undefined} aria-hidden="true" /></button>
-            {!active.diffSource ? <button title="下载文件" aria-label="下载文件" onClick={() => downloadFile(active.path)}><Download aria-hidden="true" /></button> : null}
-            {active.kind === 'text' || active.kind === 'json' || active.kind === 'diff' || (active.kind === 'markdown' && active.markdownView === 'editor') ? <button
-              className={wrapEnabled ? 'active' : undefined} aria-label="自动换行" aria-pressed={wrapEnabled}
-              title={`自动换行：${wrapEnabled ? '已开启' : '已关闭'}（${wordWrapOverride === undefined ? '跟随全局设置' : '当前 Tab'}）`}
-              onClick={() => onWordWrapChange(active.id, !wrapEnabled)}><WrapText aria-hidden="true" /></button> : null}
+            <div className="editor-toolbar-group" role="group" aria-label="文件操作">
+              {(active.kind === 'text' || active.kind === 'json' || active.kind === 'markdown') && !active.readOnly ? <button
+                title={`${saveLabel}；自动保存已开启（macOS: Command+S；其他系统: Ctrl+S）`} aria-label={saveLabel} aria-busy={Boolean(active.saving)}
+                disabled={!canSaveDocument(active)} onClick={() => onSave(active.id)}>
+                {active.saving ? <LoaderCircle className="spinning" aria-hidden="true" /> : active.dirty ? <Save aria-hidden="true" /> : <Check aria-hidden="true" />}
+              </button> : null}
+              <button title={active.refreshing ? '正在刷新…' : active.diffSource ? '刷新 Diff' : '刷新文件'} aria-label={active.diffSource ? '刷新 Diff' : '刷新文件'} aria-busy={Boolean(active.refreshing)} disabled={active.loading || active.refreshing || active.saving} onClick={() => onRefresh(active.id)}><RefreshCw className={active.refreshing ? 'spinning' : undefined} aria-hidden="true" /></button>
+              {!active.diffSource ? <button title="下载文件" aria-label="下载文件" onClick={() => downloadFile(active.path)}><Download aria-hidden="true" /></button> : null}
+            </div>
           </div>
           {active.pendingExternal ? (
             <div className="editor-file-notice warning">

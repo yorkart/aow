@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
 
+const screenshotDir = process.env.AOW_TEST_SCREENSHOT_DIR || '/tmp';
+await mkdir(screenshotDir, { recursive: true });
 const server = await createServer({ root: fileURLToPath(new URL('../', import.meta.url)), logLevel: 'error',
   server: { host: '127.0.0.1', port: 0, proxy: {}, watch: { usePolling: true } } });
 const worktrees = ['/workspace/main', '/workspace/linked'].map((path, i) => ({
@@ -134,15 +138,17 @@ try {
   const desktopTarget = page => page.locator('.project-aow-surface:not([hidden]) .project-aow-center-tab.active').filter({ hasText: 'Target Tab' });
   await test('deep link survives login and refresh and overrides the saved project and tab', async t => {
     const { page, state, root } = await fixture(t, { login: true });
-    await page.getByLabel('PIN 码').waitFor();
+    await page.getByLabel('账号').waitFor();
     assert.equal(state.targetReads, 0);
-    await page.getByLabel('PIN 码').fill('123456');
+    await page.getByLabel('账号').fill('admin');
+    await page.getByLabel('密码', { exact: true }).fill('test-password');
+    await page.getByRole('button', { name: '登录', exact: true }).click();
     await desktopTarget(page).waitFor();
     assert.equal(await page.locator('.project-aow-status').innerText().then(value => value.includes(root)), true);
     assert.match(page.url(), /\/aow\/tabs\/terminal\/target\?/);
     await page.reload();
     await desktopTarget(page).waitFor();
-    await page.screenshot({ path: '/tmp/aow-tab-link-desktop.png' });
+    await page.screenshot({ path: join(screenshotDir, 'aow-tab-link-desktop.png') });
     assert.ok(state.targetReads >= 2);
   });
 
@@ -235,7 +241,7 @@ try {
       assert.ok(Math.abs(rowBox.x + rowBox.width - badgeBox.x - badgeBox.width - 8) <= 1);
       assert.ok(badgeBox.y >= rowBox.y && badgeBox.y + badgeBox.height <= rowBox.y + rowBox.height);
     }
-    await page.screenshot({ path: '/tmp/aow-worktree-unread.png' });
+    await page.screenshot({ path: join(screenshotDir, 'aow-worktree-unread.png') });
 
     // Opening the worktree activates Other Tab and clears only its notification.
     await page.locator(`.project-aow-pinned button[title="${root}"]`).click();
@@ -277,7 +283,7 @@ try {
     await (await notifyTab(page, 'target', root)).waitFor();
     await expectCounts(3);
     await page.getByText('2 条待处理', { exact: true }).waitFor();
-    await page.screenshot({ path: '/tmp/aow-notification-close.png' });
+    await page.screenshot({ path: join(screenshotDir, 'aow-notification-close.png') });
     await page.getByRole('button', { name: '全部关闭', exact: true }).click();
     await page.locator('.agent-task-notifications').waitFor({ state: 'detached' });
     await expectCounts(3);

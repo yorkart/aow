@@ -85,7 +85,7 @@
 | `crates/im/src/lib.rs`、`message.rs` | `ImProvider::send`、渠道配置及脱敏视图、通用消息模型 |
 | `crates/im/src/feishu/`（入口 `mod.rs`） | 从原 `crates/server/src/im` 迁入的飞书鉴权、owner 查询、限流和卡片分片 |
 | `crates/im/src/wechat/` | iLink HTTP、扫码/配对码/重定向、上下文与游标持久化、独立长轮询、单次直发和 Hermes 降级 |
-| `crates/server/src/im_api.rs` | 现有 PIN 认证下的配置、扫码、状态、测试消息及解除本机绑定 API |
+| `crates/server/src/im_api.rs` | 账号密码认证下的配置、扫码、状态、测试消息及解除本机绑定 API |
 | `crates/server/src/notifications/` | 业务消息组装、配置落盘、页面/飞书/微信渠道及通知队列 |
 | `frontend/src/features/im/` | 独立 IM 设置 UI，分别操作飞书和微信 |
 | `crates/server/src/automations/notifications.rs` | 保存执行快照中的渠道选择，再交给通知层投递 |
@@ -96,6 +96,8 @@
 扫码状态在内存中保存五分钟。取消/刷新后，即使旧状态请求稍后返回成功，也不能提交旧凭证。验证码通过 AoW 的 POST JSON 提交，不放入 AoW URL。二维码由本机生成 SVG，不向第三方图片服务暴露二维码内容。Tencent 返回的 API 地址仅允许 HTTPS、默认端口和 `weixin.qq.com` 下的主机；禁用 HTTP 自动跳转。
 
 用户流程：Settings → IM → 微信 Bot → 扫码并按需输入手机验证码 → 在微信中向 Bot 发一条消息 → 页面检测到会话后发送测试通知 → 用户确认微信实际收到 → 在通知设置中选择微信。页面区分身份绑定、收到用户消息、测试请求提交和用户确认收件；发送请求成功不会自动标记验证完成。接收对象固定为扫码者；其他用户、群消息和 Bot 消息不能更新其上下文。自动化失败提醒可以独立选择微信，不依赖 Agent 任务完成开关。
+
+测试提交与用户收件确认随当前绑定一起保存到会话文件，刷新页面、切换手机/桌面或重启服务后会恢复。重新测试会清除上次验证结果；重新绑定会从头验证，取消扫码保留原记录。完成记录表示曾经验证成功，当前连接异常仍单独显示。旧版本未保存的第三、四步无法自动恢复，需要再发送测试并确认一次。
 
 发送参考 Hermes：有上下文则携带；没有上下文也可尝试直发。仅对明确的 `-14`，或 `-2` 且 `errmsg` 为 `prepare failed` / `unknown error` 的业务拒绝，去掉上下文并使用相同 `client_id` 重试一次。HTTP 错误、网络超时、未知业务错误不重试。首版只发送一条有长度上限的文本；没有收消息轮询也可发送，不依赖某一条永不断开的连接。
 

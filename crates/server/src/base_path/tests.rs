@@ -1,5 +1,5 @@
 use super::*;
-use crate::{AppState, auth::PinAuth, build_router};
+use crate::{AppState, auth::AuthService, build_router};
 use axum::{
     Router,
     body::{Body, to_bytes},
@@ -16,13 +16,9 @@ fn fixture(base: &str) -> (tempfile::TempDir, AppState) {
         "export const ready = true;",
     )
     .unwrap();
-    std::fs::write(
-        root.path().join("pin.md5"),
-        format!("{:x}", md5::compute("123456")),
-    )
-    .unwrap();
+    crate::auth::write_credentials(root.path(), "admin", "test-password");
     let mut state = AppState::new(root.path().to_path_buf());
-    state.auth = PinAuth::persistent(root.path());
+    state.auth = AuthService::persistent(root.path());
     (root, state.with_base_path(BasePath::parse(base).unwrap()))
 }
 
@@ -155,7 +151,9 @@ async fn mount_is_bounded_and_preserves_authentication_and_cookie_scope() {
         .oneshot(
             Request::post("/tools/aow/api/auth/login")
                 .header("content-type", "application/json")
-                .body(Body::from(r#"{"pin":"123456"}"#))
+                .body(Body::from(
+                    r#"{"username":"admin","password":"test-password"}"#,
+                ))
                 .unwrap(),
         )
         .await

@@ -5,8 +5,8 @@ package *args:
     ./scripts/package-release.sh "$@"
 
 [positional-arguments]
-install package="target/packages/latest":
-    ./scripts/install-release.sh --package "$1"
+install *args:
+    bash ./scripts/install-local.sh "$@"
 
 build-vt-worker:
     cd vt-worker && npm ci --ignore-scripts --no-audit --no-fund

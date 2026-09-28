@@ -340,6 +340,146 @@ fn rejects_untrusted_credential_destinations_and_unsafe_session_paths() {
 }
 
 #[tokio::test]
+async fn setup_progress_survives_restart_and_context_loss_without_assuming_receipt() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root
+        .path()
+        .join("im/wechat")
+        .join(format!("{}.json", credentials().binding_id));
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    // Existing installations have no verification field.
+    std::fs::write(&path, br#"{"cursor":"old","context_token":"context"}"#).unwrap();
+    let f = fixture(Some(root.path())).await;
+    assert!(f.client.status().context_ready);
+    assert!(f.client.status().verification.is_none());
+    let verification = f.client.send_test(&message()).await.unwrap();
+    assert_eq!(verification.receipt, TestReceipt::Sent);
+    let restore = || WechatClient::new(credentials(), Some(root.path())).unwrap();
+    assert_eq!(restore().status().verification, Some(verification.clone()));
+    f.client
+        .record_test_receipt(&verification.test_id, false)
+        .await
+        .unwrap();
+    assert_eq!(
+        restore().status().verification.unwrap().receipt,
+        TestReceipt::Missing
+    );
+    f.client
+        .record_test_receipt(&verification.test_id, true)
+        .await
+        .unwrap();
+    f.client
+        .inner
+        .update_session(|session| session.context_token = None)
+        .unwrap();
+    f.client.inner.receive().await.unwrap();
+    let restored = restore().status();
+    assert!(!restored.context_ready);
+    assert_eq!(
+        restored.verification.unwrap().receipt,
+        TestReceipt::Confirmed
+    );
+    assert_eq!(
+        std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+        0o600
+    );
+    f.client.retire();
+    assert!(!path.exists());
+    assert!(restore().status().verification.is_none());
+    assert!(
+        f.client
+            .record_test_receipt(&verification.test_id, true)
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn receipt_is_scoped_to_current_test_and_binding_and_failed_tests_reset_progress() {
+    let root = tempfile::tempdir().unwrap();
+    let f = fixture(Some(root.path())).await;
+    assert!(f.client.record_test_receipt("unknown", true).await.is_err());
+    let first = f.client.send_test(&message()).await.unwrap();
+    f.client
+        .record_test_receipt(&first.test_id, true)
+        .await
+        .unwrap();
+    let second = f.client.send_test(&message()).await.unwrap();
+    assert!(
+        f.client
+            .record_test_receipt(&first.test_id, true)
+            .await
+            .is_err()
+    );
+    assert_eq!(f.client.status().verification, Some(second.clone()));
+    let mut replacement = credentials();
+    replacement.binding_id = Uuid::new_v4().to_string();
+    let rebound = WechatClient::new(replacement, Some(root.path())).unwrap();
+    assert!(
+        rebound
+            .record_test_receipt(&second.test_id, true)
+            .await
+            .is_err()
+    );
+    assert!(rebound.status().verification.is_none());
+
+    f.client
+        .record_test_receipt(&second.test_id, true)
+        .await
+        .unwrap();
+    f.mock
+        .responses
+        .lock()
+        .unwrap()
+        .push_back((StatusCode::OK, json!({"ret":1})));
+    assert!(f.client.send_test(&message()).await.is_err());
+    assert!(f.client.status().verification.is_none());
+    assert!(
+        WechatClient::new(credentials(), Some(root.path()))
+            .unwrap()
+            .status()
+            .verification
+            .is_none()
+    );
+    assert!(
+        f.client
+            .record_test_receipt(&second.test_id, true)
+            .await
+            .is_err()
+    );
+    // Normal task/login notifications must not mark setup as tested or confirmed.
+    f.client
+        .send(&message(), "ordinary-notification")
+        .await
+        .unwrap();
+    assert!(f.client.status().verification.is_none());
+}
+
+#[tokio::test]
+async fn failed_receipt_save_does_not_claim_verification_in_memory_or_on_disk() {
+    let root = tempfile::tempdir().unwrap();
+    let mut f = fixture(Some(root.path())).await;
+    let verification = f.client.send_test(&message()).await.unwrap();
+    let blocker = root.path().join("not-a-directory");
+    std::fs::write(&blocker, "").unwrap();
+    Arc::get_mut(&mut f.client.inner).unwrap().path = Some(blocker.join("session.json"));
+    assert!(
+        f.client
+            .record_test_receipt(&verification.test_id, true)
+            .await
+            .is_err()
+    );
+    assert_eq!(f.client.status().verification, Some(verification.clone()));
+    assert_eq!(
+        WechatClient::new(credentials(), Some(root.path()))
+            .unwrap()
+            .status()
+            .verification,
+        Some(verification)
+    );
+}
+
+#[tokio::test]
 async fn polling_is_owned_once_and_stopping_it_does_not_disable_direct_send() {
     let root = tempfile::tempdir().unwrap();
     let f = fixture(Some(root.path())).await;

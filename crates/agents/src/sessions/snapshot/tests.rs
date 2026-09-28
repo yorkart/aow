@@ -439,7 +439,10 @@ fn codex_task_completion_settles_all_inputs_received_during_the_task() {
         assert!(turns[0].final_message.is_none());
         assert_eq!(turns[0].activities[0].status, Some(tool_status));
         if expected == "completed" {
-            assert_eq!(turns[1].final_message.as_ref().unwrap().text, "Combined answer");
+            assert_eq!(
+                turns[1].final_message.as_ref().unwrap().text,
+                "Combined answer"
+            );
         }
 
         records.extend([
@@ -473,7 +476,10 @@ fn codex_closes_previous_turn_when_next_turn_starts_without_completion() {
         ]);
         assert_eq!(turns.len(), 3);
         assert!(turns.iter().all(|turn| turn.status == "completed"));
-        assert_eq!(turns[0].final_message.as_ref().unwrap().text, "First answer");
+        assert_eq!(
+            turns[0].final_message.as_ref().unwrap().text,
+            "First answer"
+        );
         assert_eq!(turns[0].activities[0].status, Some("unknown"));
     }
 }
@@ -497,8 +503,14 @@ fn codex_next_turn_interrupts_unfinished_work_and_preserves_failures() {
             records.push(json!({"type":"event_msg","payload":{"type":"user_message","message":"second request"}}));
             let turns = parse_records(records);
             assert_eq!(turns.len(), 2);
-            assert_eq!(turns[0].status, if failed { "failed" } else { "interrupted" });
-            assert_eq!(turns[0].activities[0].status, Some(if failed { "unknown" } else { "interrupted" }));
+            assert_eq!(
+                turns[0].status,
+                if failed { "failed" } else { "interrupted" }
+            );
+            assert_eq!(
+                turns[0].activities[0].status,
+                Some(if failed { "unknown" } else { "interrupted" })
+            );
             assert_eq!(turns[1].status, "in_progress");
         }
     }

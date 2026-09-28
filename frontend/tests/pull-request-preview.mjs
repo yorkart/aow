@@ -1,7 +1,7 @@
 // Run from frontend: node tests/pull-request-preview.mjs
 import { createServer } from 'vite';
 import { fileURLToPath } from 'node:url';
-import { detail } from './fixtures/pull-request.mjs';
+import { detail, pullRequests } from './fixtures/pull-request.mjs';
 const requests = new Map();
 const server = await createServer({
   root: fileURLToPath(new URL('../', import.meta.url)),
@@ -17,15 +17,14 @@ const server = await createServer({
       if (scenario === 'error' || (scenario === 'refresh-error' && count > 2) || (scenario === 'diff-error' && url.pathname.endsWith('/diff') && count === 1)) {
         res.statusCode = 500; res.end(JSON.stringify({ message: '测试：服务暂时不可用' })); return;
       }
-      let result = structuredClone(detail);
       const number = Number(url.pathname.split('/')[1]) || 42;
+      let result = structuredClone(pullRequests.find(pr => pr.number === number) || detail);
       result.number = number;
-      if (number === 43) Object.assign(result, { title: 'docs: 补充手机站说明', draft: true, source_branch: 'docs/mobile-guide' });
       if (scenario === 'empty') result = { ...result, description: '', files: [], threads: [], unresolved_threads: [], checks: [], reviewers: [], labels: [], merge_checks: [], author: null, commits_count: 0, changes_count: 0, mergeable: null, check_summary_status: 'no_checks', review_status: 'unknown' };
       if (scenario === 'readonly') result.description = '<input type=checkbox checked> Task <input type=text value=editable><form><button>Submit</button></form><div contenteditable=true>Read only HTML</div>';
       if (scenario === 'partial') result.warnings = ['CI 检查加载失败：服务超时，请刷新重试。'];
       if (scenario === 'long') { result.title = 'feat: ' + '兼容非常长的Pull Request标题和各种狭窄工作台布局'.repeat(4); result.source_branch = 'feature/' + 'very-long-branch-name-'.repeat(12); }
-      if (url.pathname === '/' || url.pathname === '') result = { repository: url.searchParams.get('repo'), current_branch: 'feature/pr-details', current_user: detail.author, pull_requests: scenario === 'empty' ? [] : [detail, { ...detail, number: 43, title: 'docs: 补充手机站说明', draft: true, source_branch: 'docs/mobile-guide' }] };
+      if (url.pathname === '/' || url.pathname === '') result = { repository: url.searchParams.get('repo'), current_branch: 'feature/pr-details', current_user: detail.author, pull_requests: scenario === 'empty' ? [] : pullRequests.filter(pr => url.searchParams.get('state') === 'all' || pr.status === 'open') };
       if (url.pathname.endsWith('/diff')) {
         const path = url.searchParams.get('path');
         result = { repository: '/fixtures/' + scenario, number, path, original_path: null, original: 'const options = { readOnly: false };\n', modified: 'const options = { readOnly: true };\nconst label = "只读";\n', binary: path?.endsWith('.png'), truncated: false, patch: '@@ -1 +1,2 @@\n-const options = { readOnly: false };\n+const options = { readOnly: true };\n+const label = "只读";\n' };

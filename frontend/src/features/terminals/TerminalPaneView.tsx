@@ -681,7 +681,8 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
       linkHandler: {
         activate(event, uri) {
           event.preventDefault();
-          event.stopPropagation();
+          // Let mouseup reach xterm's document listeners so selection drags end
+          // and mouse-reporting applications receive the button release.
           if (!clipboardContextRef.current.visible) return;
           let url: URL;
           try { url = new URL(uri); } catch { return; }

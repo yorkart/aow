@@ -1,8 +1,9 @@
 import { appUrl } from '../lib/basePath';
+import { LogoutButton } from '../features/auth/LogoutButton';
 import type { ResolvedTab } from '../aow/tabRoutes';
 import { mobileTabTarget } from '../aow/tabRoutes/mobile';
-import { lazy, Suspense, useEffect, useState } from 'react';
-import { ArrowLeft, ArrowUpRight, CalendarClock, ChevronRight, FolderOpen, GitBranch, GitPullRequest, Home, MessageSquare, Pin, PinOff, Search, TerminalSquare, X } from 'lucide-react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { ArrowLeft, ArrowUpRight, CalendarClock, ChevronRight, FolderOpen, GitBranch, GitPullRequest, Home, MessageSquare, Pin, PinOff, Search, Settings, TerminalSquare, X } from 'lucide-react';
 import { aowApi } from '../aow/aowApi';
 import { ProjectIcon } from '../aow/ProjectIcon';
 import { usePinnedWorktrees } from '../aow/usePinnedWorktrees';
@@ -21,6 +22,7 @@ const MobileFiles = lazy(() => import('../features/files/MobileFiles').then((mod
 const MobileGit = lazy(() => import('../features/git/MobileGit').then((module) => ({ default: module.MobileGit })));
 const MobileAutomations = lazy(() => import('../features/automations/MobileAutomations').then((module) => ({ default: module.MobileAutomations })));
 const MobilePullRequests = lazy(() => import('../features/pr/MobilePullRequests').then((module) => ({ default: module.MobilePullRequests })));
+const MobileSettings = lazy(() => import('./MobileSettings').then(module => ({ default: module.MobileSettings })));
 
 const navigation = [
   { id: 'terminal', label: '终端', icon: TerminalSquare },
@@ -41,28 +43,38 @@ export function MobileAow({ initialEntry }: { initialEntry?: ResolvedTab } = {})
     syncLocation(target, target ? '' : mobileRouteUrl(route));
   }, [route, projects.data, syncLocation]);
   const [headerActions, setHeaderActions] = useState<HTMLDivElement | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [nodeAddresses, setNodeAddresses] = useState<string[]>();
+  const settingsButton = useRef<HTMLButtonElement>(null);
   const project = projects.data?.find((item) => item.worktrees.some((worktree) => worktree.path === route.workspace));
   const worktree = project?.worktrees.find((item) => item.path === route.workspace);
   useMobileViewport(project?.name ?? '项目');
   const goHome = () => navigate({});
   const fallback = { workspace: route.workspace, view: route.view, ...(route.view === 'files' && route.notes ? { notes: route.notes } : {}) };
   return <div className="mobile-app">
-    <header className="mobile-app-header">
-      {worktree ? <>
-        <button className="mobile-icon-button" aria-label="返回项目列表" onClick={goHome}><ArrowLeft size={21} /></button>
-        <button className="mobile-brand-title" onClick={goHome}><strong>{project?.name}</strong><span>{worktree.branch || 'Detached HEAD'}</span></button>
-      </> : <MobileNodeSwitcher />}
-      <div className="mobile-header-actions" ref={setHeaderActions} />
-    </header>
-    {route.workspace ? project && worktree ? <MobileWorkspace initialTabId={route.terminal} key={worktree.path} project={project} worktree={worktree} route={route} navigate={navigate} back={() => back(fallback)} headerActions={headerActions} />
-      : <div className="mobile-home"><MobileState loading={projects.loading} error={projects.error} retry={projects.reload} empty="工作区不存在或已被移除。" /><button className="mobile-button" onClick={goHome}><Home size={17} />返回项目</button></div>
-      : <MobileHome projects={projects.data?.filter(project => !project.builtin) ?? []} loading={projects.loading} error={projects.error} reload={projects.reload} navigate={navigate} />}
+    <div className="mobile-main" inert={showSettings}>
+      <header className="mobile-app-header">
+        {worktree ? <>
+          <button className="mobile-icon-button" aria-label="返回项目列表" onClick={goHome}><ArrowLeft size={21} /></button>
+          <button className="mobile-brand-title" onClick={goHome}><strong>{project?.name}</strong><span>{worktree.branch || 'Detached HEAD'}</span></button>
+        </> : <MobileNodeSwitcher addresses={nodeAddresses} />}
+        <div className="mobile-header-actions" ref={setHeaderActions} />
+        {!worktree && <button ref={settingsButton} className="mobile-icon-button" aria-label="设置" title="设置" onClick={() => setShowSettings(true)}><Settings size={20} /></button>}
+        {!worktree && <LogoutButton className="mobile-icon-button" compact />}
+      </header>
+      {route.workspace ? project && worktree ? <MobileWorkspace initialTabId={route.terminal} key={worktree.path} project={project} worktree={worktree} route={route} navigate={navigate} back={() => back(fallback)} headerActions={headerActions} />
+        : <div className="mobile-home"><MobileState loading={projects.loading} error={projects.error} retry={projects.reload} empty="工作区不存在或已被移除。" /><button className="mobile-button" onClick={goHome}><Home size={17} />返回项目</button></div>
+        : <MobileHome projects={projects.data?.filter(project => !project.builtin) ?? []} loading={projects.loading} error={projects.error} reload={projects.reload} navigate={navigate} />}
+    </div>
+    {showSettings && <Suspense fallback={<div className="mobile-settings-loading"><MobileState loading /></div>}>
+      <MobileSettings onClose={() => { setShowSettings(false); requestAnimationFrame(() => settingsButton.current?.focus()); }} onReload={projects.reload} onNodesChange={setNodeAddresses} />
+    </Suspense>}
   </div>;
 }
 
-function MobileNodeSwitcher() {
+function MobileNodeSwitcher({ addresses }: { addresses?: string[] }) {
   const settings = useMobileResource('aow-settings', () => aowApi.settings());
-  return <AowNodeSwitcher mobile addresses={settings.data ? settings.data.node_addresses ?? [] : undefined} error={settings.error} />;
+  return <AowNodeSwitcher mobile addresses={addresses ?? (settings.data ? settings.data.node_addresses ?? [] : undefined)} error={addresses ? undefined : settings.error} />;
 }
 
 function MobileHome({ projects, loading, error, reload, navigate }: {

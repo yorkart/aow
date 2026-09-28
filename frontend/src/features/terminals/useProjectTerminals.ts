@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { terminalApi } from './terminalApi';
 import type { TerminalAgentList, TerminalPaneStatus, TerminalTab } from './types';
 import type { AowWorktree } from '../../aow/types';
+import { subscribeWorkspaceChanges } from '../../lib/workspaceEvents';
 
 const empty = { tabs: [] as TerminalTab[], agents: {}, titles: {}, processes: {} };
 
@@ -18,8 +19,10 @@ export function useProjectTerminals(worktrees: AowWorktree[], enabled: boolean) 
     if (!enabled) return;
     const controller = new AbortController();
     let pending = false;
+    let queued = false;
     const refresh = async () => {
-      if (pending || document.visibilityState !== 'visible') return;
+      if (pending) { queued = true; return; }
+      if (document.visibilityState !== 'visible' || controller.signal.aborted) return;
       pending = true;
       try {
         const [tabs, metadata] = await Promise.all([
@@ -33,13 +36,16 @@ export function useProjectTerminals(worktrees: AowWorktree[], enabled: boolean) 
         if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : String(reason));
       } finally {
         pending = false;
+        if (queued && !controller.signal.aborted) { queued = false; void refresh(); }
       }
     };
     void refresh();
     const timer = window.setInterval(() => void refresh(), 3000);
+    const unsubscribe = subscribeWorkspaceChanges(change => { if (change.reset || change.terminals) void refresh(); });
     document.addEventListener('visibilitychange', refresh);
     return () => {
       controller.abort();
+      unsubscribe();
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', refresh);
     };

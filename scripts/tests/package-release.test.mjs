@@ -1,3 +1,4 @@
+import { credentials } from './account-fixture.mjs';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -30,9 +31,10 @@ function fixture(t) {
   write(join(tools, 'uname'), `#!/bin/sh\ncase "$1" in -s) echo Linux;; -m) echo ${machine};; esac\n`, true);
   mkdirSync(join(repo, 'vt-worker'), { recursive: true });
   for (const path of [
-    'justfile', 'scripts/package-release.sh', 'scripts/install-release.sh',
+    'justfile', 'scripts/package-release.sh', 'scripts/install-release.sh', 'scripts/install-local.sh',
     'scripts/start-server.sh', 'scripts/start-terminald.sh', 'scripts/replace-symlink.mjs', 'scripts/server-state-dir.sh',
     'scripts/start-launchd.sh', 'scripts/launchd-service.mjs', 'scripts/activate-terminald.mjs', 'scripts/service-health.mjs',
+    'scripts/launchd-mode.mjs', 'scripts/start-launchdaemon.mjs', 'scripts/register-launchdaemon.py',
     'packaging/bin/aow', 'packaging/bin/aow-server', 'packaging/bin/aow-terminald',
     'packaging/systemd/aow-server.service', 'packaging/systemd/aow-terminald.service',
   ]) {
@@ -68,7 +70,7 @@ printf '%s %s\\n' '${name}' "$*" >> "$BUILD_LOG"
     MOCK_ARCH: machine, MOCK_RUST_LIBDIR: rustLibdir, ELF_LOG: join(temp, 'elf.log'),
     [`CC_${target.replaceAll('-', '_')}`]: 'musl-gcc',
   };
-  write(join(env.AOW_STATE_DIR, 'pin.md5'), 'e10adc3949ba59abbe56e057f20f883e\n');
+  write(join(env.AOW_STATE_DIR, 'credentials.json'), credentials());
   for (const args of [['init'], ['-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '--allow-empty', '-m', 'fixture']]) {
     assert.equal(spawnSync('git', args, { cwd: repo, env }).status, 0);
   }

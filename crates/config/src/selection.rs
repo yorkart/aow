@@ -1,7 +1,19 @@
-use super::*;
+use std::{
+    ffi::OsStr,
+    fs,
+    path::{Path, PathBuf},
+};
+
+use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use toml_edit::{DocumentMut, value};
+use uuid::Uuid;
 
+use super::{
+    ConfigRepository,
+    git::git_text,
+    storage::{FileLock, atomic_write, private_directories},
+};
 pub const CONFIG_FILE: &str = "config.toml";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

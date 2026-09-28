@@ -420,7 +420,7 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
   }, [activePaneId, operation, tab, visible]);
 
   const togglePaneMaximized = (pane: TerminalPane) => {
-    if (!tab || operation) return;
+    if (!tab || tab.panes.length <= 1 || operation) return;
     setActivePaneId(pane.id);
     setDraggingPaneId(undefined);
     draggingPaneIdRef.current = undefined;
@@ -535,6 +535,10 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
             draggable={paneDraggable}
             onDragStart={(event) => startPaneDrag(event, pane.id)}
             onDragEnd={finishPaneDrag}
+            onDoubleClick={(event) => {
+              if (event.target instanceof Element && event.target.closest('button')) return;
+              togglePaneMaximized(pane);
+            }}
           >
             <GripVertical className="terminal-pane-drag-handle" aria-label="拖动 pane 调整布局" />
             <TerminalLifecycleDot className="terminal-pane-status" state={terminalPaneLifecycle(pane)} />

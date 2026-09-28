@@ -2,9 +2,9 @@
 
 通过 stdin 接收一个 JSON 请求，通过 stdout 返回一个 JSON 对象。Python 3 脚本实现 describe、list、detail、diff 四个 API，可选实现 `commit_links` 提供仓库和提交网页链接，或 `repository_info` 提供仓库所属用户／组织头像；具体 CLI/API 调用方式及平台 URL 规则由脚本决定。诊断日志写入 stderr。
 
-v2 统一使用 Pull Request 命名，列表字段为 `pull_requests`。未经修改的旧版内置 GitHub 脚本会在服务启动时自动升级，保留 Provider 的名称、域名和启用状态。自定义或修改过的脚本不会被覆盖，需要更新为 v2 后重新上传；版本不匹配会明确报错。已有 v2 脚本未实现可选的 `commit_links` 时，原有 PR 功能继续可用，提交详情不显示远程链接。
+v2 统一使用 Pull Request 命名，列表字段为 `pull_requests`。未经修改的旧版内置 GitHub 脚本会在服务启动时自动升级，保留 Provider 的名称、域名和启用状态；仅模块说明开头的 `AoW` / `AOW` 大小写差异也兼容识别，其余内容仍需匹配已知内置版本。自定义或有其他修改的脚本不会被覆盖，需要更新为 v2 后重新上传；版本不匹配会明确报错。已有 v2 脚本未实现可选的 `commit_links` 时，原有 PR 功能继续可用，提交详情不显示远程链接。
 
-工作台提供 `GET /api/my-pull-requests?repo=<仓库绝对路径>`、`GET /api/my-pull-requests/<number>?repo=...` 和 `GET /api/my-pull-requests/<number>/diff?repo=...&path=<仓库相对路径>`。这三个接口均可携带 `provider` 和 `remote`；列表只返回当前账号创建的 Open PR。
+工作台提供 `GET /api/my-pull-requests?repo=<仓库绝对路径>`、`GET /api/my-pull-requests/<number>?repo=...` 和 `GET /api/my-pull-requests/<number>/diff?repo=...&path=<仓库相对路径>`。这三个接口均可携带 `provider` 和 `remote`；列表默认返回当前账号创建的 Open PR，可传 `state=all` 同时获取 Merged 和 Closed PR。桌面侧栏按 Open PRs、Merged PRs、Closed PRs 分组，Open PRs 的菜单可过滤 Draft。
 
 ## 配置和仓库匹配
 
@@ -88,7 +88,9 @@ Settings → Pull Requests 管理 Provider：唯一 ID、显示名称、启用�
 
 ## list
 
-请求：`operation: "list"`，`params: {}`。返回当前账号在该远端仓库创建的 Open PR；获取当前用户、分页和平台数据转换由脚本完成。
+请求：`operation: "list"`，`params: {}` 或 `params: {"state":"open"}` 返回当前账号在该远端仓库创建的 Open PR；`params: {"state":"all"}` 返回该账号创建的所有状态 PR。获取当前用户、分页和平台数据转换由脚本完成，建议按更新时间倒序返回。
+
+内置 GitHub 脚本支持 `state=all`，未经修改的旧版内置脚本会自动升级。自定义脚本需要支持此参数才能在侧栏中展示历史 PR；仍只返回 Open PR 的脚本可继续展示进行中的 PR。
 
 ```json
 {

@@ -4,6 +4,7 @@
 
 | 目录 | 职责 |
 | --- | --- |
+| `features/auth/` | 登录入口、登录方式、认证接口与状态、专用样式 |
 | `features/automations/` | 定时与手动任务、编辑器、运行参数和历史 |
 | `features/terminals/` | 终端面板、分屏、连接、输入和终端状态 |
 | `features/sessions/` | Agent 会话列表、消息、执行过程、快照和分享 |

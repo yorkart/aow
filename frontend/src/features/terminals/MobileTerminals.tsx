@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowUp, Keyboard, KeyboardOff, List, ShieldCheck, TerminalSquare } from 'lucide-react';
 import { TerminalPaneView } from './TerminalPaneView';
@@ -203,6 +203,24 @@ function MobileTerminal({ entry, visible, onStatus }: {
   const [frame, setFrame] = useState<TerminalFrame>({ cols: 80, rows: 24, width: 0, height: 360, top: 0, cursorRow: 0 });
   const surface = useMobileTerminalSurface(viewport, frame, visible);
   const ready = requested && visible && connection === 'connected';
+  useLayoutEffect(() => {
+    const node = input.current;
+    if (!node || !visible) return;
+    let width = 0;
+    const resize = () => {
+      if (!node.clientWidth || node.clientWidth === width) return;
+      width = node.clientWidth;
+      const scrollTop = node.scrollTop;
+      // Measure wrapped content from one row; CSS caps the height at five rows.
+      node.style.height = 'auto';
+      node.style.height = `${node.scrollHeight}px`;
+      node.scrollTop = scrollTop;
+    };
+    resize();
+    const observer = new ResizeObserver(resize);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [draft, visible]);
   const hideKeyboard = () => {
     focusedInput.current?.blur();
     focusedInput.current = null;

@@ -1,0 +1,15 @@
+:root {
+  --aow-icon: #8fa5bf;
+  --aow-icon-hover: #adc0d9;
+  --aow-icon-active: var(--aow-accent);
+  --aow-icon-disabled: #596a80;
+}
+
+/* A low-specificity default also covers icons in menus and portalled dialogs. */
+:where(svg.lucide) { color: var(--aow-icon-foreground, var(--aow-icon)); }
+:where(button:not(:disabled):hover, a:hover, summary:hover) { --aow-icon-foreground: var(--aow-icon-hover); }
+:where(button.active, button[aria-pressed="true"], button[aria-selected="true"], button[aria-current], [role="tab"][aria-selected="true"]) { --aow-icon-foreground: var(--aow-icon-active); }
+:where(button:disabled) { --aow-icon-foreground: var(--aow-icon-disabled); }
+
+/* Filled and destructive controls retain the foreground of their label. */
+:where(.primary, .danger, .aow-icon-inherit) > .lucide { color: inherit; }

@@ -1,6 +1,6 @@
-import { ReviewProviderSettings } from '../features/pr/ReviewProviderSettings';
-import { ConfigurationSettings } from '../features/configuration/ConfigurationSettings';
+import { SettingsDialog } from '../features/settings/SettingsDialog';
 import { appLocalStorage } from '../lib/basePath';
+import { subscribeWorkspaceChanges } from '../lib/workspaceEvents';
 import { useWorkspaceDocuments, updateSharedDocument, nextDocumentInstanceId, sharedDocument, isPreviewOwned, savingDocuments, failedDocuments } from '../features/editor/workspaceDocuments';
 import { Fragment, lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -10,14 +10,14 @@ import { captureTabTarget, openTabTarget, tabCenterId, type ResolvedTab, type Ta
 import { diffDocument } from './tabRoutes/diff';
 import { prTabId } from './tabRoutes/pr';
 import { FloatingWorkspaceProvider, FloatingOpenMenu, useFloatingWorkspace, openingInFloatingWorkspace, withFloatingOpen, readStored, persist } from './floatingWorkspaceState';
-import type { CSSProperties, DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from 'react';
+import type { SetStateAction, CSSProperties, DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from 'react';
 import {
-  ArrowUp, Bell, Bot, CalendarClock, Check, ChevronDown, ChevronRight, CircleHelp, CornerDownLeft, FileText, Files, FolderGit2, FolderOpen, GitBranch, GitBranchPlus, GitPullRequest, MessageSquare, MoreHorizontal,
-  LoaderCircle, Network, NotebookPen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pencil, Pin, PinOff, Plus, RefreshCw, Settings, SquareTerminal, Trash2, X,
+  ArrowUp, CalendarClock, Check, ChevronDown, ChevronRight, CircleHelp, CornerDownLeft, FileText, Files, FolderGit2, FolderOpen, GitBranch, GitBranchPlus, GitPullRequest, MessageSquare, MoreHorizontal,
+  LoaderCircle, NotebookPen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pencil, Pin, PinOff, Plus, RefreshCw, Settings, SquareTerminal, Trash2, X,
 } from 'lucide-react';
 import { gitApi } from '../features/git/api';
 import { filesApi } from '../features/files/api';
-import { defaultEditorSettings, EditorSettingsProvider, useEditorSettings, useWordWrapOverrides } from '../features/editor/editorSettings';
+import { EditorSettingsProvider, useEditorSettings, useWordWrapOverrides } from '../features/editor/editorSettings';
 import { AutomationDetail } from '../features/automations/AutomationDetail';
 import { AutomationPanel } from '../features/automations/AutomationPanel';
 import type { AutomationRun, AutomationTask } from '../features/automations/types';
@@ -26,10 +26,7 @@ import type { TerminalSort } from '../features/terminals/TerminalScopeMenu';
 import { isCliTerminal, terminalTabPresentation } from '../features/terminals/terminalPresentation';
 import { AgentSessions } from '../features/sessions/AgentSessions';
 import { AgentIcon } from '../features/agents/AgentIcon';
-import { AgentArgumentsInput } from '../features/agents/AgentArgumentsInput';
-import { argumentsDraft, normalizeArguments } from '../features/agents/arguments';
-import { agentTypes, builtinAgentType, aowAgentType } from '../features/agents/agentTypes';
-import { NotificationSettingsPanel } from '../features/notifications/NotificationSettingsPanel';
+import { aowAgentType } from '../features/agents/agentTypes';
 import { SessionShareButton } from '../features/sessions/SessionShareButton';
 import { Explorer } from '../features/files/Explorer';
 import { SystemFileBrowser } from '../features/files/SystemFileBrowser';
@@ -43,7 +40,6 @@ import { AowIconButton } from '../components/AowIconButton';
 import { useConfirmation } from '../components/ConfirmationDialog';
 import { AowPanel, AowPanelStack } from '../components/AowPanel';
 import { AowNodeSwitcher } from './AowNodeSwitcher';
-import { parseNodeAddresses } from './aowNodes';
 import { WorktreeIcon, worktreeColors, worktreeColorValues, worktreeIconGroups, worktreeIconLabel } from './WorktreeIcon';
 import { WorkspaceTabs, type WorkspaceTab as CenterTab, type TabRevealRequest, workspaceTabGroup as centerTabGroup, groupWorkspaceTabs } from './WorkspaceTabs';
 import { loadEditorArea } from '../features/editor/editorLoader';
@@ -56,7 +52,7 @@ import type { MarkdownViewMode, OpenDocument, PreviewKind } from '../features/ed
 import type { PullRequestSummary } from '../features/pr/types';
 import type { TerminalTab } from '../features/terminals/types';
 import type { AowAgent } from '../features/agents/types';
-import type { AowProject, AowWorktree, AowSettings, WorktreeColor, WorktreeIconId } from './types';
+import type { AowProject, AowWorktree, WorktreeColor, WorktreeIconId } from './types';
 import { useTerminals } from '../features/terminals/useTerminals';
 import { useProjectTerminals } from '../features/terminals/useProjectTerminals';
 import { usePinnedWorktrees } from './usePinnedWorktrees';
@@ -659,308 +655,6 @@ function CreateWorktreeDialog({ project, onClose, onCreated }: {
   </div>;
 }
 
-function SettingsDialog({ agents, onClose: closeDialog, onReload, onNodesChange }: { agents: AowAgent[]; onClose: () => void; onReload: (notesMoved?: boolean) => Promise<void>; onNodesChange: (addresses: string[]) => void }) {
-  const [section, setSection] = useState<'notes' | 'editor' | 'environment' | 'agents' | 'im' | 'notifications' | 'nodes' | 'review' | 'configuration'>('notes');
-  const [reviewDirty, setReviewDirty] = useState(false);
-  const [configurationDirty, setConfigurationDirty] = useState(false);
-  const onClose = () => { if (!(reviewDirty || configurationDirty) || window.confirm(configurationDirty ? '设置有未保存的修改，是否放弃并关闭？' : 'Provider 有未保存的修改，是否放弃并关闭？')) closeDialog(); };
-  const { updateEditorSettings } = useEditorSettings();
-  const [editorWordWrap, setEditorWordWrap] = useState(false);
-  const [editorSaved, setEditorSaved] = useState(false);
-  const [settings, setSettings] = useState<AowSettings>();
-  const [nodeAddresses, setNodeAddresses] = useState('');
-  const [nodesSaved, setNodesSaved] = useState(false);
-  const [notesBase, setNotesBase] = useState('');
-  const [executionPath, setExecutionPath] = useState('');
-  const [environmentSaved, setEnvironmentSaved] = useState(false);
-  const [settingsLoading, setSettingsLoading] = useState(true);
-  const [settingsBusy, setSettingsBusy] = useState(false);
-  const [editingAgentId, setEditingAgentId] = useState<string>();
-  const [agentType, setAgentType] = useState<AowAgent['agent_type'] | ''>('');
-  const [displayName, setDisplayName] = useState('');
-  const [command, setCommand] = useState('');
-  const [args, setArgs] = useState(() => argumentsDraft());
-  const [env, setEnv] = useState('{}');
-  const [agentSaved, setAgentSaved] = useState('');
-  const agentForm = useRef<HTMLFormElement>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    let active = true;
-    void aowApi.settings()
-      .then((next) => {
-        if (!active) return;
-        setSettings(next);
-        setNotesBase(next.notes_base);
-        setNodeAddresses((next.node_addresses ?? []).join('\n'));
-        onNodesChange(next.node_addresses ?? []);
-        setExecutionPath((next.execution_path ?? []).join('\n'));
-        setEditorWordWrap(next.editor?.word_wrap ?? false);
-        updateEditorSettings(next.editor ?? defaultEditorSettings);
-      })
-      .catch((reason) => { if (active) setError(message(reason)); })
-      .finally(() => { if (active) setSettingsLoading(false); });
-    return () => { active = false; };
-  }, [updateEditorSettings, onNodesChange]);
-
-  const saveNodes = async () => {
-    setError('');
-    setNodesSaved(false);
-    try {
-      const addresses = parseNodeAddresses(nodeAddresses);
-      setSettingsBusy(true);
-      const next = await aowApi.updateSettings({ nodeAddresses: addresses });
-      setSettings(next);
-      setNodeAddresses(next.node_addresses.join('\n'));
-      onNodesChange(next.node_addresses);
-      setNodesSaved(true);
-    } catch (reason) {
-      setError(message(reason));
-    } finally {
-      setSettingsBusy(false);
-    }
-  };
-
-  const saveEditor = async () => {
-    setSettingsBusy(true);
-    setError('');
-    setEditorSaved(false);
-    try {
-      const next = await aowApi.updateSettings({ editor: { word_wrap: editorWordWrap } });
-      setSettings(next);
-      setEditorWordWrap(next.editor.word_wrap);
-      updateEditorSettings(next.editor);
-      setEditorSaved(true);
-    } catch (reason) {
-      setError(message(reason));
-    } finally {
-      setSettingsBusy(false);
-    }
-  };
-
-  const saveNotesRoot = async () => {
-    const target = notesBase.trim();
-    if (!target.startsWith('/')) {
-      setError('Notes 根目录必须是服务端上的绝对路径。');
-      return;
-    }
-    setSettingsBusy(true);
-    setError('');
-    try {
-      const next = await aowApi.updateSettings({ notesBase: target });
-      setSettings(next);
-      setNotesBase(next.notes_base);
-      await onReload(true);
-    } catch (reason) {
-      setError(message(reason));
-    } finally {
-      setSettingsBusy(false);
-    }
-  };
-
-  const readEnvironment = async () => {
-    setSettingsBusy(true);
-    setError('');
-    setEnvironmentSaved(false);
-    try {
-      setExecutionPath((await aowApi.discoveredPath()).join('\n'));
-    } catch (reason) {
-      setError(message(reason));
-    } finally {
-      setSettingsBusy(false);
-    }
-  };
-
-  const saveEnvironment = async () => {
-    const paths = executionPath.split('\n').map((path) => path.trim()).filter(Boolean);
-    if (!paths.length || paths.some((path) => !path.startsWith('/') || path.includes(':'))) {
-      setError('PATH 每行填写一个服务端绝对目录路径，不使用冒号分隔。');
-      return;
-    }
-    setSettingsBusy(true);
-    setError('');
-    setEnvironmentSaved(false);
-    try {
-      const next = await aowApi.updateSettings({ executionPath: paths });
-      setSettings(next);
-      setExecutionPath(next.execution_path.join('\n'));
-      setEnvironmentSaved(true);
-      await onReload();
-    } catch (reason) {
-      setError(message(reason));
-    } finally {
-      setSettingsBusy(false);
-    }
-  };
-
-  const resetAgentForm = () => {
-    setEditingAgentId(undefined);
-    setAgentType('');
-    setDisplayName('');
-    setCommand('');
-    setArgs(argumentsDraft());
-    setEnv('{}');
-    setAgentSaved('');
-    setError('');
-  };
-
-  const editAgent = (agent: AowAgent) => {
-    setEditingAgentId(agent.id);
-    setAgentType(aowAgentType(agent) ?? '');
-    setDisplayName(agent.display_name);
-    setCommand(agent.command ?? agent.executable ?? '');
-    setArgs(argumentsDraft(agent.args));
-    setEnv(JSON.stringify(agent.env ?? {}, null, 2));
-    setAgentSaved('');
-    setError('');
-    agentForm.current?.querySelector('select')?.scrollIntoView({ block: 'nearest' });
-  };
-
-  const removeAgent = async (id: string) => {
-    setBusy(true);
-    setError('');
-    setAgentSaved('');
-    try {
-      await agentsApi.removeAgent(id);
-      if (editingAgentId === id) resetAgentForm();
-      await onReload();
-    } catch (reason) {
-      setError(message(reason));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const save = async () => {
-    if (!agentType) {
-      setError('请选择 Agent 类型。');
-      return;
-    }
-    setBusy(true);
-    setError('');
-    setAgentSaved('');
-    try {
-      const parsed = normalizeArguments(args, command).values;
-      const environment = JSON.parse(env.trim() || '{}') as unknown;
-      if (!environment || typeof environment !== 'object' || Array.isArray(environment)
-        || Object.entries(environment).some(([key, value]) => !/^[A-Za-z0-9_]+$/.test(key) || typeof value !== 'string' || value.includes('\0'))) {
-        throw new Error('Environment variables 必须是变量名到字符串值的 JSON 对象');
-      }
-      await agentsApi.registerAgent({
-        id: editingAgentId,
-        agentType,
-        displayName, command, args: parsed,
-        env: environment as Record<string, string>,
-      });
-      resetAgentForm();
-      setAgentSaved(`${displayName} 配置已保存。`);
-      await onReload();
-    } catch (reason) {
-      setError(message(reason));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return <div className="project-aow-modal-backdrop" onPointerDown={() => { if (!busy && !settingsBusy) onClose(); }}>
-    <section className="project-aow-modal project-aow-dialog project-aow-settings" role="dialog" aria-modal="true" aria-labelledby="aow-settings-title" onPointerDown={(event) => event.stopPropagation()}>
-      <header><div><Settings /><strong id="aow-settings-title">设置</strong></div><button type="button" title="关闭" aria-label="关闭" disabled={busy || settingsBusy} onClick={onClose}><X /></button></header>
-      <div className="project-aow-settings-body">
-        <nav className="project-aow-settings-nav" aria-label="设置分类">
-          <button disabled={busy || settingsBusy} aria-current={section === 'configuration' ? 'page' : undefined} className={section === 'configuration' ? 'active' : ''} onClick={() => { setSection('configuration'); setError(''); }}><Settings /><span><strong>Configuration</strong><small>选择配置仓库和版本</small></span></button>
-          <button disabled={busy || settingsBusy} aria-current={section === 'nodes' ? 'page' : undefined} className={section === 'nodes' ? 'active' : ''} onClick={() => { setSection('nodes'); setError(''); }}><Network /><span><strong>Nodes</strong><small>配置其他 AoW 节点</small></span></button>
-          <button disabled={busy || settingsBusy} aria-current={section === 'editor' ? 'page' : undefined} className={section === 'editor' ? 'active' : ''} onClick={() => { setSection('editor'); setError(''); }}><FileText /><span><strong>Editor</strong><small>配置文件编辑器</small></span></button>
-          <button disabled={busy || settingsBusy} aria-current={section === 'notes' ? 'page' : undefined} className={section === 'notes' ? 'active' : ''} onClick={() => setSection('notes')}><NotebookPen /><span><strong>Notes</strong><small>设置默认 Notes 根目录</small></span></button>
-          <button disabled={busy || settingsBusy} aria-current={section === 'environment' ? 'page' : undefined} className={section === 'environment' ? 'active' : ''} onClick={() => { setSection('environment'); setError(''); }}><SquareTerminal /><span><strong>Environment</strong><small>配置全局执行 PATH</small></span></button>
-          <button disabled={busy || settingsBusy} aria-current={section === 'agents' ? 'page' : undefined} className={section === 'agents' ? 'active' : ''} onClick={() => setSection('agents')}><Bot /><span><strong>Agents</strong><small>配置 3 种支持的 Agent</small></span><i>{agents.filter((agent) => agent.available).length}</i></button>
-          <button disabled={busy || settingsBusy} aria-current={section === 'im' ? 'page' : undefined} className={section === 'im' ? 'active' : ''} onClick={() => setSection('im')}><MessageSquare /><span><strong>IM</strong><small>配置消息机器人</small></span></button>
-          <button disabled={busy || settingsBusy} aria-current={section === 'notifications' ? 'page' : undefined} className={section === 'notifications' ? 'active' : ''} onClick={() => setSection('notifications')}><Bell /><span><strong>通知</strong><small>选择任务完成通知方式</small></span></button>
-          <button type="button" className={section === 'review' ? 'active' : ''} disabled={busy || settingsBusy} onClick={() => setSection('review')}><GitPullRequest /><span><strong>Pull Requests</strong><small>Provider、CLI 和脚本</small></span></button>
-        </nav>
-        <div className="project-aow-settings-content">
-          <div className="review-provider-settings-host" hidden={section !== 'review'}><ReviewProviderSettings active={section === 'review'} onBusyChange={setSettingsBusy} onDirtyChange={setReviewDirty} /></div>
-          <div className="configuration-settings-host" hidden={section !== 'configuration'}><ConfigurationSettings active={section === 'configuration'} onBusyChange={setSettingsBusy} onDirtyChange={setConfigurationDirty} /></div>
-          {section === 'review' || section === 'configuration' ? null : section === 'nodes' ? (
-            <form className="project-aow-dialog-form" onSubmit={event => { event.preventDefault(); void saveNodes(); }}>
-              <div className="project-aow-dialog-body">
-                <div className="project-aow-settings-heading"><div><h2>Nodes</h2><p>配置其他机器上部署的 AoW，点击左上角 Logo 或 AoW 文字即可切换。</p></div></div>
-                <label className="project-aow-dialog-field"><span>节点地址（每行一个）</span><textarea aria-label="节点地址" spellCheck={false} rows={10} value={nodeAddresses} disabled={settingsLoading || settingsBusy || !settings} onChange={event => { setNodeAddresses(event.target.value); setNodesSaved(false); setError(''); }} placeholder={'https://aow-a.example.com\nhttp://192.168.1.20:8080'} /></label>
-                <p className="project-aow-form-intro">填写完整的 http:// 或 https:// 地址，可以包含当前节点。同一份列表可复制到所有节点；下拉菜单会按协议、域名/IP 和端口自动过滤当前节点。留空并保存可清空列表。</p>
-                {nodesSaved ? <p role="status">节点地址已保存。</p> : null}
-                {error ? <div className="project-aow-error" role="alert">{error}</div> : null}
-              </div>
-              <footer className="project-aow-dialog-footer"><button type="submit" className="project-aow-dialog-button primary" disabled={settingsLoading || settingsBusy || !settings}>{settingsBusy ? '保存中…' : '保存'}</button></footer>
-            </form>
-          ) : section === 'im' || section === 'notifications' ? <NotificationSettingsPanel section={section} onBusyChange={setSettingsBusy} /> : section === 'editor' ? (
-            <form className="project-aow-dialog-form" onSubmit={event => { event.preventDefault(); void saveEditor(); }}>
-              <div className="project-aow-dialog-body">
-                <div className="project-aow-settings-heading"><div><h2>Editor</h2><p>设置文件编辑器的全局默认行为。</p></div></div>
-                <label className="project-aow-dialog-checkbox"><input type="checkbox" checked={editorWordWrap} disabled={settingsLoading || settingsBusy || !settings} onChange={event => { setEditorWordWrap(event.target.checked); setEditorSaved(false); setError(''); }} /><span>Word Wrap（自动换行）</span></label>
-                <p className="project-aow-form-intro">开启后，长行会根据编辑区宽度自动折行。每个文件 Tab 可通过右上角开关临时切换，刷新或重新打开后恢复使用全局配置。</p>
-                {editorSaved ? <p role="status">已保存 Editor 配置。</p> : null}
-                {error ? <div className="project-aow-error" role="alert">{error}</div> : null}
-              </div>
-              <footer className="project-aow-dialog-footer"><button type="submit" className="project-aow-dialog-button primary" disabled={settingsLoading || settingsBusy || !settings}>{settingsBusy ? '保存中…' : '保存'}</button></footer>
-            </form>
-          ) : section === 'notes' ? <>
-            <form className="project-aow-dialog-form" onSubmit={(event) => { event.preventDefault(); void saveNotesRoot(); }}>
-              <div className="project-aow-dialog-body">
-                <div className="project-aow-settings-heading"><div><h2>Notes</h2><p>新注册项目在未指定 Notes path 时，会以仓库地址映射到这个根目录下。</p></div></div>
-                <label className="project-aow-dialog-field"><span>Notes root</span><input className="project-aow-dialog-monospace" autoFocus spellCheck={false} value={notesBase} disabled={settingsLoading || settingsBusy} onChange={(event) => { setNotesBase(event.target.value); setError(''); }} placeholder="/absolute/path/to/aow" required /></label>
-                <small className="project-aow-dialog-path-hint">当前根目录：<code title={settings?.notes_base}>{settings?.notes_base ?? '加载中…'}</code></small>
-                <p className="project-aow-form-intro">保存后，使用默认映射的项目会迁移已有 Notes；显式绑定的自定义目录保持原位置。目标目录冲突时会保留原绑定并提示。</p>
-                {error ? <div className="project-aow-error" role="alert">{error}</div> : null}
-              </div>
-              <footer className="project-aow-dialog-footer"><button type="submit" className="project-aow-dialog-button primary" disabled={settingsLoading || settingsBusy || !notesBase.trim()}>{settingsBusy ? '保存中…' : '保存'}</button></footer>
-            </form>
-          </> : section === 'environment' ? <>
-            <form className="project-aow-dialog-form" onSubmit={(event) => { event.preventDefault(); void saveEnvironment(); }}>
-              <div className="project-aow-dialog-body">
-                <div className="project-aow-settings-heading"><div><h2>Environment</h2><p>统一配置新启动的 Agent 和自动化任务使用的命令搜索路径。</p></div></div>
-                <label className="project-aow-dialog-field"><span>PATH 目录（从上到下优先）</span><textarea aria-label="PATH 目录" spellCheck={false} rows={10} value={executionPath} disabled={settingsLoading || settingsBusy} onChange={(event) => { setExecutionPath(event.target.value); setEnvironmentSaved(false); setError(''); }} placeholder={'/opt/python/3.11/bin\n/usr/local/bin\n/usr/bin\n/bin'} required /></label>
-                <p className="project-aow-form-intro">每行一个服务器上的绝对目录。要优先使用某个 Python，请把包含 python3 的目录放在前面；这里不填写可执行文件，也不展开 ~、$HOME 或 $PATH。</p>
-                <p className="project-aow-form-intro">保存后对后续执行生效，已有任务无需重新保存。正在运行的任务保持原环境。</p>
-                {environmentSaved ? <p role="status">执行环境已保存。</p> : null}
-                {error ? <div className="project-aow-error" role="alert">{error}</div> : null}
-              </div>
-              <footer className="project-aow-dialog-footer"><button type="button" className="project-aow-dialog-button" disabled={settingsLoading || settingsBusy} onClick={() => void readEnvironment()}><RefreshCw size={14} />从本机环境读取</button><button type="submit" className="project-aow-dialog-button primary" disabled={settingsLoading || settingsBusy || !executionPath.trim()}>{settingsBusy ? '处理中…' : '保存'}</button></footer>
-            </form>
-          </> : <>
-            <form className="project-aow-dialog-form" ref={agentForm} onSubmit={(event) => { event.preventDefault(); void save(); }}>
-              <div className="project-aow-dialog-body">
-                <div className="project-aow-settings-heading"><div><h2>Agents</h2><p>目前支持 Claude Code、Codex、TraeCode CLI 和 Hermes。每种类型可注册多个配置。</p></div><button type="button" className="project-aow-dialog-button" title="重新探测本地 Agent" disabled={busy} onClick={() => void onReload().catch((reason) => setError(message(reason)))}><RefreshCw />刷新</button></div>
-                <div className="project-aow-agent-list">
-                  {agents.map((agent) => <div className="project-aow-agent-row" key={agent.id}>
-                    <span className={`project-aow-agent-dot ${agent.available ? 'available' : ''}`} />
-                    <AgentIcon agentId={aowAgentType(agent)} />
-                    <div><strong>{agent.display_name}</strong><small>{agentTypes.find(type => type.id === aowAgentType(agent))?.label ?? '未设置类型，请编辑补选'}</small><code>{agent.executable ?? '未找到 executable'}</code></div>
-                    <small>{agent.source === 'detected' ? 'Auto detected' : 'Configured'}</small>
-                    <button type="button" className="project-aow-agent-edit" title={`编辑 ${agent.display_name}`} aria-pressed={editingAgentId === agent.id} disabled={busy} onClick={() => editAgent(agent)}><Pencil /></button>
-                    {agent.source === 'configured' ? <button type="button" title="移除配置" disabled={busy} onClick={() => void removeAgent(agent.id)}><Trash2 /></button> : null}
-                  </div>)}
-                  {!agents.length ? <p className="project-aow-empty">尚未发现本地 Agent，可在下方注册。</p> : null}
-                </div>
-                <h3>{editingAgentId ? '编辑 Agent 配置' : '注册 Agent 配置'}</h3>
-                <label className="project-aow-dialog-field"><span>Agent 类型 <em>必填</em></span><div className="project-aow-agent-type"><AgentIcon agentId={agentType} /><select aria-label="Agent 类型" value={agentType ?? ''} disabled={busy || !!builtinAgentType(editingAgentId)} onChange={(event) => { setAgentType(builtinAgentType(event.target.value) ?? ''); setError(''); }} required><option value="" disabled>请选择 Agent 类型</option>{agentTypes.map(type => <option key={type.id} value={type.id}>{type.label}</option>)}</select></div></label>
-                <p className="project-aow-form-intro">选择类型后，可自由配置名称、启动命令、参数和环境变量。</p>
-                <label className="project-aow-dialog-field"><span>Display name</span><input value={displayName} disabled={busy} onChange={(event) => setDisplayName(event.target.value)} placeholder="例如：工作用 Codex" required /></label>
-                <label className="project-aow-dialog-field"><span>Executable</span><input className="project-aow-dialog-monospace" spellCheck={false} value={command} disabled={busy} onChange={(event) => setCommand(event.target.value)} placeholder="命令名或 /absolute/path" required /></label>
-                <AgentArgumentsInput value={args} onChange={setArgs} executable={command} disabled={busy} onError={setError} />
-                <label className="project-aow-dialog-field"><span>Environment variables</span><textarea aria-label="Environment variables" spellCheck={false} rows={4} value={env} disabled={busy} onChange={(event) => setEnv(event.target.value)} placeholder={'{\n  "BASE_URL": "https://example.com"\n}'} /></label>
-                <p className="project-aow-form-intro">自动继承启动环境。这里只填写需要新增或覆盖的变量（JSON 对象）；留空或填写 {'{}'} 即可保留继承的环境。</p>
-                <p className="project-aow-form-intro">保存后用于新启动的终端 Agent。PATH 统一在 Environment 中配置。移除内置 Agent 的配置后会恢复自动探测。</p>
-                {agentSaved ? <p role="status">{agentSaved}</p> : null}
-                {error ? <div className="project-aow-error" role="alert">{error}</div> : null}
-              </div>
-              <footer className="project-aow-dialog-footer">{editingAgentId ? <button type="button" className="project-aow-dialog-button" disabled={busy} onClick={resetAgentForm}>取消编辑</button> : null}<button type="submit" className="project-aow-dialog-button primary" disabled={busy || !agentType}>{busy ? '保存中…' : editingAgentId ? '保存配置' : '注册'}</button></footer>
-            </form>
-          </>}
-        </div>
-      </div>
-    </section>
-  </div>;
-}
 
 function LeftSidebarToggle({ expanded = false, onClick }: { expanded?: boolean; onClick: () => void }) {
   const label = expanded ? '隐藏左侧栏' : '显示左侧栏';
@@ -2395,7 +2089,14 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
   const reportTabLocationError = useAowTabLocationError();
   const [floatingFocused, setFloatingFocused] = useState(floating.visible);
   const [globalProject, setGlobalProject] = useState<AowProject>();
-  const [projects, setProjects] = useState<AowProject[]>([]);
+  const [projects, updateProjects] = useState<AowProject[]>([]);
+  const projectVersion = useRef(0);
+  const projectsRef = useRef(projects);
+  projectsRef.current = projects;
+  const setProjects = useCallback((action: SetStateAction<AowProject[]>) => {
+    projectVersion.current += 1;
+    updateProjects(action);
+  }, []);
   const operations = useOperations();
   const [logPanel, setLogPanel] = useState<{ operationId?: string }>();
   const removals = useWorktreeRemovals();
@@ -2436,30 +2137,80 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
   const suppressPinnedClickRef = useRef(false);
 
   const projectNotesPaths = useRef(new Map<string, string>());
-  const loadProjects = useCallback(async (notesMoved = false) => {
-    setLoading(true);
-    setError('');
-    try {
-      const all = await aowApi.projects();
-      if (notesMoved) floating.setNotesMoves(all.flatMap(project => {
-        const from = projectNotesPaths.current.get(project.id);
-        return from && from !== project.notes_path ? [{ from, to: project.notes_path }] : [];
-      }));
-      projectNotesPaths.current = new Map(all.map(project => [project.id, project.notes_path]));
-      const builtin = all.find(project => project.builtin);
-      setGlobalProject(builtin);
-      floating.retainWorkspaces(all.flatMap(project => project.worktrees.map(worktree => worktree.path)));
-      floating.setGlobalRoot(builtin?.worktrees.find(worktree => worktree.is_main)?.path ?? builtin?.worktrees[0]?.path ?? '');
-      const next = all.filter(project => !project.builtin);
-      setProjects(next);
-      const paths = next.flatMap((project) => project.worktrees.map((worktree) => worktree.path));
-      setActiveWorktreePath((current) => paths.includes(current) ? current : paths[0] ?? '');
-    } catch (reason) {
-      setError(message(reason));
-    } finally {
-      setLoading(false);
-    }
+  const projectRequest = useRef<Promise<void> | undefined>(undefined);
+  const projectReload = useRef({ requested: false, notesMoved: false });
+  const projectsMounted = useRef(true);
+  useEffect(() => {
+    projectsMounted.current = true;
+    return () => { projectsMounted.current = false; };
   }, []);
+  const loadProjects = useCallback(async (notesMoved = false, quiet = false) => {
+    projectReload.current.requested = true;
+    projectReload.current.notesMoved ||= notesMoved;
+    if (!quiet) { setLoading(true); setError(''); }
+    if (projectRequest.current) return projectRequest.current;
+    const request = (async () => {
+      do {
+        projectReload.current.requested = false;
+        const version = projectVersion.current;
+        try {
+          const fetched = await aowApi.projects();
+          if (!projectsMounted.current) return;
+          // A local mutation or newer event wins over an in-flight snapshot.
+          if (version !== projectVersion.current || projectReload.current.requested) {
+            projectReload.current.requested = true;
+            continue;
+          }
+          const previous = new Map(projectsRef.current.map(project => [project.id, project]));
+          const all = fetched.map(project => project.error && previous.has(project.id)
+            ? { ...project, worktrees: previous.get(project.id)!.worktrees } : project);
+          if (projectReload.current.notesMoved) floating.setNotesMoves(all.flatMap(project => {
+            const from = projectNotesPaths.current.get(project.id);
+            return from && from !== project.notes_path ? [{ from, to: project.notes_path }] : [];
+          }));
+          projectReload.current.notesMoved = false;
+          projectNotesPaths.current = new Map(all.map(project => [project.id, project.notes_path]));
+          const builtin = all.find(project => project.builtin);
+          setGlobalProject(current => builtin?.error && current ? { ...builtin, worktrees: current.worktrees } : builtin);
+          // A failed scan is not evidence that workspaces disappeared.
+          if (!all.some(project => project.error)) {
+            floating.retainWorkspaces(all.flatMap(project => project.worktrees.map(worktree => worktree.path)));
+            floating.setGlobalRoot(builtin?.worktrees.find(worktree => worktree.is_main)?.path ?? builtin?.worktrees[0]?.path ?? '');
+          }
+          const next = all.filter(project => !project.builtin);
+          projectsRef.current = next;
+          setProjects(next);
+          const paths = next.flatMap(project => project.worktrees.map(worktree => worktree.path));
+          setActiveWorktreePath(current => paths.includes(current) ? current : paths[0] ?? '');
+          setError('');
+        } catch (reason) {
+          if (projectsMounted.current) setError(message(reason));
+        }
+      } while (projectReload.current.requested && projectsMounted.current);
+    })();
+    projectRequest.current = request;
+    try { await request; } finally {
+      projectRequest.current = undefined;
+      if (projectsMounted.current) setLoading(false);
+    }
+  }, [setProjects]);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = () => {
+      if (document.visibilityState !== 'visible') return;
+      clearTimeout(timer);
+      timer = setTimeout(() => { void loadProjects(false, true); }, 100);
+    };
+    const unsubscribe = subscribeWorkspaceChanges(change => { if (change.reset || change.projects) refresh(); });
+    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('focus', refresh);
+    return () => {
+      unsubscribe(); clearTimeout(timer);
+      document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [loadProjects]);
 
   const loadAgents = useCallback(async () => {
     try { setAgents(await agentsApi.agents(true)); } catch (reason) { setError(message(reason)); }

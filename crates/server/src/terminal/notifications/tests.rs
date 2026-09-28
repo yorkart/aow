@@ -1,5 +1,13 @@
+use super::registry::{Identity, Registry, SessionKey, Target};
 use super::*;
-use std::fs::{File, OpenOptions};
+use aow_agents::sessions::{AgentSessionLocator, SessionEnvironment};
+use aow_protocol::TerminalAgentProcess;
+use std::{
+    fs::{File, OpenOptions},
+    io::Write,
+    path::Path,
+    time::{Duration, SystemTime},
+};
 
 fn identity(title: &str) -> Identity {
     Identity {
@@ -248,13 +256,9 @@ async fn source_labels_identify_each_owning_tab_once_and_follow_renames() {
 async fn event_endpoint_requires_aow_login() {
     use tower::ServiceExt;
     let root = tempfile::tempdir().unwrap();
-    std::fs::write(
-        root.path().join(crate::auth::PIN_HASH_FILE),
-        format!("{:x}", md5::compute("123456")),
-    )
-    .unwrap();
+    crate::auth::write_credentials(root.path(), "admin", "test-password");
     let mut state = AppState::new(root.path().join("frontend"));
-    state.auth = crate::auth::PinAuth::persistent(root.path());
+    state.auth = crate::auth::AuthService::persistent(root.path());
     let response = crate::build_router(state)
         .oneshot(
             axum::http::Request::get("/api/terminals/task-stops")
@@ -375,7 +379,7 @@ async fn codex_like_stops_use_the_expected_environment(with_process: bool) {
                 .args([
                     "--ignored",
                     "--exact",
-                    "terminal::sessions::tests::native_environment_fixture",
+                    "terminal::sessions::process::tests::native_environment_fixture",
                 ])
                 .env("AOW_NATIVE_ENV_FIXTURE", "1")
                 .envs(&environment)

@@ -1,8 +1,10 @@
-# PR 详情验证
+# PR 面板与详情验证
 
-运行 `npm run test:pr` 检查状态映射、外部链接、缺失日期和 Diff 模型释放；后端使用 `cargo test -p aow-server pull_requests` 验证 Provider 协议、remote 匹配和配置升级。
+运行 `npm run test:pr` 检查面板状态分组、Draft 过滤与偏好保存、历史 PR 详情、空列表与错误恢复，以及状态映射、外部链接、缺失日期和 Diff 模型释放；后端使用 `cargo test -p aow-server pull_requests` 验证 Provider 协议、列表状态参数、remote 匹配和配置升级。
 
 运行 `npm run preview:pr`，打开 http://127.0.0.1:5199/tests/pull-request-preview.html。预览使用独立测试数据，只拦截 PR 查询，不连接真实代码托管服务。测试服务拒绝所有非 GET 请求并记录请求方法。
+
+追加 `?panel` 可预览右侧的 Open PRs、Merged PRs、Closed PRs 三个面板。Open PRs 标题最右侧的 `…` 菜单只有「过滤 Draft」开关，其他分组不受影响；各组可独立折叠，点击任意 PR 可打开详情。追加 `?panel&scenario=empty` 或 `?panel&scenario=error` 检查空列表和请求失败。
 
 浏览器验证：
 

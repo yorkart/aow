@@ -342,6 +342,28 @@ try {
         socket.send(JSON.stringify({ type: 'stream', epoch: 'fixture', offset: 0, reset: true, replay_bytes: 0, restore_cols: cli ? 160 : 120, restore_rows: cli ? 48 : 40, restore: '\x1b[2J\x1b[HFixture ready\r\n$ ' }));
       });
     });
+    // Keep the workspace stream open and inject server snapshots explicitly.
+    // Other EventSource endpoints retain the fixture's normal HTTP behavior.
+    await context.addInitScript(() => {
+      const NativeEventSource = window.EventSource;
+      window.workspaceEventSources = [];
+      window.workspaceSnapshot = { boot_id: 'watch-fixture', revision: 0, projects: 0, terminals: 0, repositories: {} };
+      class WorkspaceSource extends EventTarget {
+        constructor(url) {
+          super(); this.url = String(url); this.readyState = 0;
+          window.workspaceEventSources.push(this);
+          Promise.resolve().then(() => {
+            if (this.readyState === 2) return;
+            this.readyState = 1; this.onopen?.(new Event('open'));
+            this.dispatchEvent(new MessageEvent('workspace', { data: JSON.stringify(window.workspaceSnapshot) }));
+          });
+        }
+        close() { this.readyState = 2; }
+      }
+      window.EventSource = new Proxy(NativeEventSource, { construct(Target, args) {
+        return String(args[0]).includes('/api/workspace/events') ? new WorkspaceSource(args[0]) : Reflect.construct(Target, args);
+      } });
+    });
     const page = await context.newPage();
     page.setDefaultTimeout(15000);
     page.on('pageerror', error => state.errors.push(error.stack ?? error.message));
@@ -738,7 +760,7 @@ try {
     await page.getByRole('button', { name: '操作日志', exact: true }).click();
     await page.getByRole('region', { name: '操作日志', exact: true }).getByText('最新启动记录', { exact: true }).waitFor();
     assert.equal(await page.getByRole('button', { name: '查看清理结果', exact: true }).count(), 0);
-    await page.screenshot({ path: '/tmp/aow-operation-logs.png' });
+    await page.screenshot({ path: `${process.env.AOW_TEST_SCREENSHOT_DIR ?? '/tmp'}/aow-operation-logs.png` });
   });
 
   await test('empty worktrees use compact rows while main, pinned and opened resources retain full rows', async t => {
@@ -1041,7 +1063,7 @@ try {
     await row.locator('svg.lucide-cat').waitFor();
     await page.getByText('Appearance save failed', { exact: true }).waitFor();
     assert.equal(await menu.getByRole('menuitemradio', { name: '猫', exact: true }).getAttribute('aria-checked'), 'true');
-    assert.equal(await row.locator('svg').evaluate(svg => getComputedStyle(svg).color), 'rgb(121, 169, 235)');
+    assert.equal(await row.locator('svg').evaluate(svg => getComputedStyle(svg).color), 'rgb(143, 165, 191)');
     await page.reload();
     await row.locator('svg.lucide-cat').waitFor();
   });
@@ -2957,7 +2979,7 @@ try {
     assert.notEqual(icons[2], icons[1]);
     assert.equal(icons[3], icons[0]);
     const type = dialog.getByRole('combobox', { name: 'Agent 类型', exact: true });
-    assert.deepEqual(await type.locator('option').evaluateAll(options => options.map(option => option.value)), ['', 'claude', 'codex', 'traecli']);
+    assert.deepEqual(await type.locator('option').evaluateAll(options => options.map(option => option.value)), ['', 'claude', 'codex', 'traecli', 'hermes']);
     await dialog.getByLabel('Display name', { exact: true }).fill('My custom wrapper');
     await dialog.getByLabel('Executable', { exact: true }).fill('/opt/custom/start');
     await dialog.getByLabel('Arguments', { exact: true }).fill('--anything\nvalue with spaces');
@@ -3222,6 +3244,9 @@ try {
     assert.equal(await page.getByRole('button', { name: '重命名 shell 窗口', exact: true }).count(), 0);
     await panes.nth(0).locator('.terminal-pane-name').dblclick();
     assert.equal(await page.getByRole('textbox', { name: 'shell 窗口名称', exact: true }).count(), 0);
+    await panes.nth(0).getByRole('button', { name: '恢复布局', exact: true }).waitFor();
+    await panes.nth(0).locator('.terminal-pane-name').dblclick();
+    await panes.nth(0).getByRole('button', { name: '最大化 shell 窗口', exact: true }).waitFor();
     state.titles = { 'wt-0-pane': '新的任务', 'wt-0-review': '继续审查' };
     await eventually(async () => await panes.nth(0).locator('.terminal-pane-name').textContent() === '新的任务');
     await eventually(async () => await panes.nth(1).locator('.terminal-pane-name').textContent() === '继续审查');
@@ -3346,28 +3371,111 @@ try {
     await delay(100);
   }
 
-  await test('Source Control polling is limited to the visible worktree and sidebar; Explorer never polls', async t => {
+  const sendWorkspaceSnapshot = (page, input, reconnect = false) => page.evaluate(({ input, reconnect }) => {
+    window.workspaceSnapshot = { ...window.workspaceSnapshot, ...input };
+    const source = window.workspaceEventSources.findLast(source => source.readyState !== 2);
+    if (reconnect) { source.readyState = 1; source.onopen?.(new Event('open')); }
+    source.dispatchEvent(new MessageEvent('workspace', { data: JSON.stringify(window.workspaceSnapshot) }));
+  }, { input, reconnect });
+
+  await test('Source Control polls only Changes and refreshes Commits on repository events', async t => {
     const { page, state } = await fixture(t, { clock: true });
-    const count = () => state.requests.filter(path => ['/api/git/status', '/api/git/log'].includes(path)).length;
+    const logs = () => state.requests.filter(path => path === '/api/git/log').length;
+    const statuses = () => state.requests.filter(path => path === '/api/git/status').length;
     await page.clock.runFor(11000);
-    assert.equal(count(), 0, 'Explorer does not start Git polling');
+    assert.equal(logs() + statuses(), 0, 'Explorer does not start Git polling');
     const trees = state.requests.filter(path => path.startsWith('/api/fs/tree')).length;
     await page.getByRole('button', { name: 'Source Control', exact: true }).click();
-    await eventually(() => count() === 2);
-    await delay(100);
-    await page.clock.runFor(5100);
-    await eventually(() => count() === 4);
+    await eventually(() => logs() > 0 && statuses() > 0);
+    await delay(150);
+    const initialLogs = logs();
+    const initialStatus = statuses();
+    const connections = await page.evaluate(() => window.workspaceEventSources.length);
+    assert.equal(connections, 1, 'opening Source Control reuses the existing stream');
+    assert.equal(await page.evaluate(() => window.workspaceEventSources[0].url), '/api/workspace/events');
+    await page.clock.runFor(11000);
+    await eventually(() => statuses() > initialStatus);
+    assert.equal(logs(), initialLogs, 'healthy idle stream does not poll history');
     assert.equal(state.requests.filter(path => path.startsWith('/api/fs/tree')).length, trees);
+    const projectLoads = state.requests.filter(path => path === '/api/aow/projects').length;
+    await sendWorkspaceSnapshot(page, { revision: 1, repositories: { '/unrelated': 1 } });
+    await delay(100);
+    assert.equal(logs(), initialLogs, 'unrelated repository events do not reload history');
+    await sendWorkspaceSnapshot(page, { revision: 2, repositories: { [worktrees[0].path]: 2 } });
+    await eventually(() => logs() === initialLogs + 1);
+    await page.clock.runFor(500);
+    assert.equal(state.requests.filter(path => path === '/api/aow/projects').length, projectLoads, 'commits do not reload the worktree list');
     await switchWorktree(page, 1);
-    const before = count();
+    await delay(100);
+    const before = logs() + statuses();
+    await sendWorkspaceSnapshot(page, { revision: 3, repositories: { [worktrees[0].path]: 3 } });
     await page.clock.runFor(11000);
-    assert.equal(count(), before);
+    assert.equal(logs() + statuses(), before, 'hidden panels do not fetch');
     await switchWorktree(page, 0);
-    await eventually(() => count() === before + 2);
+    await eventually(() => logs() > initialLogs + 1);
+    assert.equal(await page.evaluate(() => window.workspaceEventSources.length), connections, 'switching worktrees does not reconnect');
+    await delay(100);
+    const resumedLogs = logs();
+    await sendWorkspaceSnapshot(page, {}, true);
+    await eventually(() => logs() > resumedLogs);
+    assert.equal(await page.evaluate(() => window.workspaceEventSources.filter(source => source.readyState !== 2).length), 1);
     await page.getByRole('button', { name: '隐藏右侧栏', exact: true }).click();
-    const hidden = count();
+    await delay(100);
+    const hidden = logs() + statuses();
     await page.clock.runFor(11000);
-    assert.equal(count(), hidden);
+    assert.equal(logs() + statuses(), hidden);
+  });
+
+  await test('workspace events discover an external worktree and its CLI agent without changing selection', async t => {
+    const { page, state } = await fixture(t, { clock: true });
+    const panel = surface(page).locator('.terminal-panel');
+    await panel.getByRole('button', { name: 'CLI Terminals 显示范围', exact: true }).click();
+    await page.getByRole('menuitemcheckbox').click();
+    await delay(100);
+    await page.clock.pauseAt('2026-09-15T01:00:00Z');
+    const external = { ...worktrees[1], id: 'external', path: '/outside/new-worktree', branch: 'external-feature' };
+    state.projects = [{ ...project, worktrees: [...worktrees, external] }];
+    state.createdTerminalTabs.push({ id: 'external-cli', name: 'External CLI agent', workspace_root: external.path, revision: 1,
+      layout: { type: 'pane', pane_id: 'external-pane' }, panes: [{ id: 'external-pane', name: 'codex', kind: 'agent', agent_id: 'codex',
+        cwd: external.path, shell: '/bin/codex', status: 'running', rows: 48, cols: 160,
+        agent_terminal: { phase: 'ready', error: null, task_submitted: true } }] });
+    await sendWorkspaceSnapshot(page, { revision: 1, projects: 1, terminals: 1 });
+    await page.clock.runFor(500);
+    await eventually(async () => await page.locator(`.project-aow-worktrees button[title="${external.path}"]`).count() === 1);
+    await eventually(async () => await panel.locator('.terminal-panel-open').filter({ hasText: 'External CLI agent' }).count() === 1);
+    assert.ok(await page.locator(`.project-aow-worktrees button[title="${worktrees[0].path}"]`).evaluate(button => button.classList.contains('active')));
+    assert.equal(await surface(page).getByRole('tab', { name: /External CLI agent/ }).count(), 0, 'discovery does not open or attach CLI panes');
+    state.projects = [{ ...project, error: 'temporary Git failure', worktrees: [] }];
+    await sendWorkspaceSnapshot(page, { revision: 2, projects: 2 });
+    await page.clock.runFor(500);
+    await eventually(async () => await page.getByText('temporary Git failure', { exact: true }).count() === 1);
+    assert.equal(await page.locator(`.project-aow-worktrees button[title="${external.path}"]`).count(), 1, 'failed scans preserve known worktrees');
+    state.projects = [project];
+    await sendWorkspaceSnapshot(page, { revision: 3, projects: 3 });
+    await page.clock.runFor(500);
+    await eventually(async () => await page.locator(`.project-aow-worktrees button[title="${external.path}"]`).count() === 0);
+    assert.ok(await page.locator(`.project-aow-worktrees button[title="${worktrees[0].path}"]`).evaluate(button => button.classList.contains('active')));
+  });
+
+  await test('workspace event connection failures use fallback and stop polling history after recovery', async t => {
+    const { page, state } = await fixture(t, { clock: true });
+    await page.getByRole('button', { name: 'Source Control', exact: true }).click();
+    const logs = () => state.requests.filter(path => path === '/api/git/log').length;
+    await eventually(() => logs() > 0);
+    await delay(150);
+    await page.evaluate(() => {
+      const source = window.workspaceEventSources.findLast(source => source.readyState !== 2);
+      source.readyState = 0; source.onerror?.(new Event('error'));
+    });
+    const before = logs();
+    await page.clock.runFor(31000);
+    await eventually(() => logs() > before);
+    await sendWorkspaceSnapshot(page, {}, true);
+    await delay(150);
+    const recovered = logs();
+    await page.clock.runFor(31000);
+    await delay(100);
+    assert.equal(logs(), recovered);
   });
 
   const textPath = `${worktrees[0].path}/edit.txt`;

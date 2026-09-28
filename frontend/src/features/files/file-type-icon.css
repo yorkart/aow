@@ -15,7 +15,7 @@
 }
 
 .directory-type-icon {
-  color: var(--aow-muted);
+  color: var(--aow-icon-foreground, var(--aow-icon));
   fill: none;
 }
 

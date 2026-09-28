@@ -12,7 +12,7 @@ use std::{
 };
 
 const HELP: &str = "Requires a running AoW server and terminald for the same --state-dir.
-Uses a same-user Unix socket, without a browser PIN or Cookie.
+Uses a same-user Unix socket, without a browser login or Cookie.
 CLI terminals start hidden at 160 columns by 48 rows. Open Terminal in the right
 sidebar to observe; take over explicitly once startup is complete.
 The caller must prepare the worktree before creating an agent. --project-id and

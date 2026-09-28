@@ -1,0 +1,67 @@
+.mobile-settings-backdrop { position:absolute; inset:0; z-index:1000; display:flex; padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); background:var(--m-bg); }
+.mobile-app .mobile-settings { width:100%; height:100%; max-height:none; min-width:0; border:0; border-radius:0; box-shadow:none; outline:none; background:var(--m-bg); }
+.mobile-settings > .mobile-settings-header { flex:0 0 auto; min-height:56px; gap:8px; padding:4px 8px; border-color:var(--m-line); }
+.mobile-settings > .mobile-settings-header > strong { min-width:0; flex:1; font-size:18px; }
+.mobile-settings > .mobile-settings-header > button { flex:0 0 44px; width:44px; height:44px; border-radius:12px; }
+.mobile-settings > .mobile-settings-header svg { width:21px; height:21px; }
+.mobile-settings .project-aow-settings-body { display:flex; flex-direction:column; }
+.mobile-settings .project-aow-settings-nav { flex:1; display:block; padding:16px 16px max(24px,env(safe-area-inset-bottom)); border:0; background:var(--m-bg); overscroll-behavior:contain; }
+.mobile-settings .project-aow-settings-nav button { display:flex; width:100%; min-height:70px; padding:14px; gap:12px; border:1px solid var(--m-line); border-bottom:0; background:var(--m-panel); }
+.mobile-settings .project-aow-settings-nav button:first-child { border-radius:14px 14px 0 0; }
+.mobile-settings .project-aow-settings-nav button:last-child { border-bottom:1px solid var(--m-line); border-radius:0 0 14px 14px; }
+.mobile-settings .project-aow-settings-nav button > svg { width:21px; height:21px; color:var(--m-accent); }
+.mobile-settings .project-aow-settings-nav button > svg:last-child { width:16px; height:16px; color:var(--m-muted); }
+.mobile-settings .project-aow-settings-nav button strong { font-size:15px; }
+.mobile-settings .project-aow-settings-nav button small { display:block; font-size:12px; }
+.mobile-settings .project-aow-settings-content { flex:1; }
+.mobile-settings .project-aow-dialog-body { padding:20px 16px 24px; gap:18px; overscroll-behavior:contain; overflow-wrap:anywhere; }
+.mobile-settings .project-aow-settings-heading { padding-bottom:16px; align-items:center; }
+.mobile-settings .project-aow-settings-heading h2 { display:none; }
+.mobile-settings .project-aow-settings-heading p { font-size:13px; line-height:1.7; }
+.mobile-settings .project-aow-dialog-body h3 { font-size:15px; }
+.mobile-settings .project-aow-form-intro { font-size:13px; line-height:1.7; }
+.mobile-settings .project-aow-dialog-field { min-width:0; display:flex; flex-direction:column; align-items:stretch; gap:8px; }
+.mobile-settings .project-aow-dialog-field > span { font-size:13px; }
+.mobile-settings .project-aow-dialog-field :is(input:not([type="checkbox"]), textarea),.mobile-settings select { min-width:0; width:100%; min-height:44px; padding:10px 12px; border:1px solid var(--m-line); border-radius:10px; background:var(--m-panel); color:var(--m-text); font-size:16px; line-height:1.5; }
+.mobile-settings .project-aow-dialog-field input { height:44px; }
+.mobile-settings .project-aow-dialog-field textarea { resize:vertical; min-height:120px; }
+.mobile-settings input:focus,.mobile-settings textarea:focus,.mobile-settings select:focus { outline:1px solid var(--m-accent); outline-offset:-1px; }
+.mobile-settings .project-aow-dialog-checkbox,.mobile-settings form .project-aow-dialog-checkbox { display:flex; align-items:center; min-height:48px; gap:12px; font-size:14px; }
+.mobile-settings .project-aow-dialog-checkbox input,.mobile-settings .configuration-version input[type="radio"] { width:20px; height:20px; flex:0 0 20px; }
+.mobile-settings .project-aow-dialog-checkbox span { font-size:14px; }
+.mobile-settings .project-aow-dialog-button { min-height:44px; height:auto; max-width:100%; padding:10px 14px; border-radius:11px; font-size:13px; white-space:normal; line-height:1.5; background:#252d39; border-color:#3c4655; }
+.mobile-settings .project-aow-dialog-button.primary,.mobile-settings .project-aow-dialog-button.primary:hover:not(:disabled) { color:#182333; background:#c0d4f0; border-color:#c0d4f0; font-weight:650; }
+.mobile-settings .project-aow-dialog-button svg { width:17px; height:17px; }
+.mobile-settings .project-aow-dialog-footer { gap:8px; padding:12px 16px max(12px,env(safe-area-inset-bottom)); background:var(--m-bg); border-color:var(--m-line); }
+.mobile-settings .project-aow-dialog-footer > button { flex:1 1 auto; }
+.mobile-settings .project-aow-dialog-footer > small { flex-basis:100%; color:var(--m-muted); font-size:12px; }
+.mobile-settings .project-aow-dialog-path-hint { display:block; font-size:12px; }
+.mobile-settings .project-aow-dialog-path-hint code { display:block; white-space:normal; overflow-wrap:anywhere; font-size:12px; }
+.mobile-settings p[role="status"],.mobile-settings .project-aow-error { font-size:13px; }
+.mobile-settings .project-aow-agent-list { display:flex; flex-direction:column; gap:8px; }
+.mobile-settings .project-aow-agent-row { display:grid; grid-template-columns:8px 22px minmax(0,1fr) 44px 44px; gap:4px; padding:10px 6px; background:var(--m-panel); border:1px solid var(--m-line); border-radius:12px; }
+.mobile-settings .project-aow-agent-row > div { grid-column:3 / -1; }
+.mobile-settings .project-aow-agent-row strong { font-size:14px; }
+.mobile-settings .project-aow-agent-row small,.mobile-settings .project-aow-agent-row code { font-size:12px; }
+.mobile-settings .project-aow-agent-row > small { grid-column:2 / 4; }
+.mobile-settings .project-aow-agent-row > button { width:44px; height:44px; }
+.mobile-settings .project-aow-agent-row > button svg { width:18px; height:18px; }
+.mobile-settings .project-aow-agent-type { min-width:0; }
+.mobile-settings .project-aow-agent-type select { height:auto; }
+.mobile-settings .configuration-repository { display:flex; flex-direction:column; align-items:stretch; padding:0; overflow:visible; }
+.mobile-settings .configuration-repository > button { align-self:flex-end; }
+.mobile-settings .configuration-versions,.mobile-settings .notification-channels { border-color:var(--m-line); border-radius:12px; padding:12px; gap:2px; }
+.mobile-settings .configuration-versions legend,.mobile-settings .notification-channels legend { font-size:12px; }
+.mobile-settings .configuration-version { min-height:48px; gap:12px; }
+.mobile-settings .review-provider-toolbar label { min-width:0; flex:1 1 100%; flex-direction:column; align-items:stretch; gap:8px; }
+.mobile-settings .review-provider-toolbar select { max-width:none; }
+.mobile-settings .review-provider-fields { grid-template-columns:minmax(0,1fr); margin:0; }
+.mobile-settings .review-provider-protocol { min-width:0; }
+.mobile-settings .review-provider-protocol summary { min-height:44px; padding-block:10px; }
+.mobile-settings .review-provider-protocol table { display:block; overflow:auto; }
+.mobile-settings .im-wechat-step { border-radius:12px; padding:12px; }
+.mobile-settings .im-wechat-step-heading { flex-wrap:wrap; }
+.mobile-settings .im-wechat-step-heading h4 { font-size:13px; }
+.mobile-settings .im-wechat-step-body { margin-left:0; }
+.mobile-settings #im-feishu-settings,.mobile-settings .im-wechat-login form { padding:0; overflow:visible; }
+.mobile-settings .im-actions > button { flex:1 1 auto; }

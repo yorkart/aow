@@ -16,6 +16,7 @@ mime_guess.workspace = true
 md5.workspace = true
 percent-encoding.workspace = true
 reqwest.workspace = true
+ring = "0.17"
 aow-agents = { path = "../agents", features = ["launch", "sessions", "automation"] }
 aow-automations = { path = "../automations" }
 aow-im = { path = "../im" }

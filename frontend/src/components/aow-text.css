@@ -1,0 +1,22 @@
+:root {
+  /* Shared text roles, based on the PR detail palette. */
+  --aow-text: #cbd2dc;
+  --aow-text-hover: #e8f1ff;
+  --aow-text-strong: #e0e5ed;
+  --aow-text-secondary: #94a3b7;
+  --aow-muted: #8593a5;
+  --aow-link: #8ab8f0;
+  --aow-link-hover: #bedaff;
+
+  /* Older workspace components use the same palette. */
+  --text: var(--aow-text);
+  --muted: var(--aow-muted);
+  color: var(--aow-text);
+}
+
+/* Component rules can retain status colors and filled-button contrast. */
+:where(h1, h2, h3, h4, h5, h6) { color: var(--aow-text-strong); }
+:where(a) { color: var(--aow-link); }
+:where(a:hover) { color: var(--aow-link-hover); }
+:where(button:not(:disabled):hover, summary:hover) { color: var(--aow-text-hover); }
+:where(input, textarea)::placeholder { color: var(--aow-muted); opacity: 1; }

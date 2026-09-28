@@ -1,6 +1,6 @@
 import { aowRequest } from '../../lib/aowRequest';
 import type { NotificationSettings } from '../notifications/types';
-import type { WechatLogin, WechatStatus } from './types';
+import type { WechatLogin, WechatStatus, WechatVerification } from './types';
 
 export const imApi = {
   saveFeishu: (app_id: string, app_secret?: string) => aowRequest<NotificationSettings>('/api/aow/im/feishu', {
@@ -14,5 +14,8 @@ export const imApi = {
   }),
   cancelWechat: (id: string) => aowRequest<void>(`/api/aow/im/wechat/login/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   disconnectWechat: () => aowRequest<NotificationSettings>('/api/aow/im/wechat', { method: 'DELETE' }),
-  testWechat: () => aowRequest<{ message: string }>('/api/aow/im/wechat/test', { method: 'POST' }),
+  testWechat: () => aowRequest<{ message: string; verification: WechatVerification }>('/api/aow/im/wechat/test', { method: 'POST' }),
+  wechatReceipt: (test_id: string, received: boolean) => aowRequest<{ verification: WechatVerification }>('/api/aow/im/wechat/test/receipt', {
+    method: 'PUT', body: JSON.stringify({ test_id, received }),
+  }),
 };

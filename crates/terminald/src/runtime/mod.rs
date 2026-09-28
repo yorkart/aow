@@ -43,33 +43,45 @@ use tokio::{
 };
 use uuid::Uuid;
 
+const SERVICE_NAME: &str = "aow-terminald";
+const SCROLLBACK_LIMIT: usize = 8 * 1024 * 1024;
+const REPLAY_CHUNK_SIZE: usize = 64 * 1024;
+const OUTPUT_CHANNEL_CAPACITY: usize = 512;
+const SOCKET_SEND_TIMEOUT: Duration = Duration::from_secs(2);
+const SOCKET_WRITE_BUFFER_SIZE: usize = 64 * 1024;
+// A 2 MiB serialized ANSI snapshot can expand substantially when control
+// bytes are escaped inside its JSON text frame. Keep the WebSocket buffer
+// bounded while leaving enough room for that single restore message.
+const SOCKET_MAX_WRITE_BUFFER_SIZE: usize = 16 * 1024 * 1024;
+const MAX_RUNTIME_ID_BYTES: usize = 1024;
+const DELETE_REAP_TIMEOUT: Duration = Duration::from_secs(10);
+
 use crate::{
-    DELETE_REAP_TIMEOUT, MAX_RUNTIME_ID_BYTES, OUTPUT_CHANNEL_CAPACITY, REPLAY_CHUNK_SIZE,
-    SCROLLBACK_LIMIT, SERVICE_NAME, SOCKET_MAX_WRITE_BUFFER_SIZE, SOCKET_SEND_TIMEOUT,
-    SOCKET_WRITE_BUFFER_SIZE, TerminaldError,
+    TerminaldError,
     vt_worker::{VtSession, VtSnapshot, VtWorker, VtWorkerClient},
 };
 
 mod agents;
 mod http;
-#[path = "runtime.rs"]
-mod implementation;
 mod output;
 mod process;
+mod runtime;
 mod server;
+mod socket;
 mod state;
 mod validation;
 mod websocket;
 
-use implementation::*;
 use output::*;
 use process::*;
+use runtime::*;
 use state::*;
 use validation::*;
 
-pub(crate) use http::build_router;
+pub use http::build_router;
 use http::router_with_state;
-pub use server::{default_socket_path, run, run_with_shutdown, run_with_shutdown_and_vt_worker};
+pub use server::{run, run_with_shutdown, run_with_shutdown_and_vt_worker};
+pub use socket::default_socket_path;
 
 #[cfg(test)]
 mod tests;

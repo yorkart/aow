@@ -1,8 +1,11 @@
 use super::*;
+use crate::AppState;
+use aow_operation_log::{Level, Page, ReadOptions, Reader};
 use axum::{
     body::{Body, to_bytes},
-    http::Request,
+    http::{Request, StatusCode},
 };
+use std::time::Duration;
 use tower::ServiceExt;
 
 fn spec(id: &str) -> Spec {
@@ -139,7 +142,7 @@ async fn history_api_filters_pages_validates_cursors_and_uses_authentication() {
             StatusCode::BAD_REQUEST
         );
     }
-    state.auth = crate::auth::PinAuth::persistent(dir.path());
+    state.auth = crate::auth::AuthService::persistent(dir.path());
     let protected = crate::build_router(state);
     for path in [
         "/api/operation-logs",

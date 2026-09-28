@@ -14,7 +14,7 @@ const FIRST_TURN: &str = "{\"type\":\"event_msg\",\"payload\":{\"type\":\"user_m
 
 fn state(root: &Path) -> AppState {
     let mut state = AppState::new(root.join("frontend"));
-    state.auth = crate::auth::PinAuth::persistent(root);
+    state.auth = crate::auth::AuthService::persistent(root);
     state.session_shares = SessionShares::persistent(root).unwrap();
     state
 }
@@ -69,17 +69,19 @@ async fn share_links_follow_the_current_mount_after_restart() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().canonicalize().unwrap();
     std::fs::write(root.join("session.jsonl"), FIRST_TURN).unwrap();
-    std::fs::write(
-        root.join(crate::auth::PIN_HASH_FILE),
-        format!("{:x}", md5::compute(b"123456")),
-    )
-    .unwrap();
+    crate::auth::write_credentials(&root, "admin", "test-password");
     let initial = state(&root).with_base_path(crate::BasePath::parse("/tools/aow").unwrap());
     cache_locator(&initial, locator(&root));
     let cookie = format!(
         "{}={}",
         initial.base_path.cookie_name(),
-        initial.auth.login("123456").unwrap()
+        initial
+            .auth
+            .login(
+                "password",
+                serde_json::json!({"username": "admin", "password": "test-password"})
+            )
+            .unwrap()
     );
     let app = crate::build_router(initial);
     let share = body(
@@ -115,7 +117,13 @@ async fn share_links_follow_the_current_mount_after_restart() {
     let cookie = format!(
         "{}={}",
         restored.base_path.cookie_name(),
-        restored.auth.login("123456").unwrap()
+        restored
+            .auth
+            .login(
+                "password",
+                serde_json::json!({"username": "admin", "password": "test-password"})
+            )
+            .unwrap()
     );
     let app = crate::build_router(restored);
     let info = body(
@@ -150,14 +158,19 @@ async fn sharing_requires_login_but_live_reading_survives_restart_and_revocation
     let root = dir.path().canonicalize().unwrap();
     std::fs::create_dir(root.join("frontend")).unwrap();
     std::fs::write(root.join("frontend/index.html"), "<div id=root></div>").unwrap();
-    std::fs::write(
-        root.join(crate::auth::PIN_HASH_FILE),
-        format!("{:x}", md5::compute(b"123456")),
-    )
-    .unwrap();
+    crate::auth::write_credentials(&root, "admin", "test-password");
     std::fs::write(root.join("session.jsonl"), FIRST_TURN).unwrap();
     let initial = state(&root);
-    let cookie = format!("aow_session={}", initial.auth.login("123456").unwrap());
+    let cookie = format!(
+        "aow_session={}",
+        initial
+            .auth
+            .login(
+                "password",
+                serde_json::json!({"username": "admin", "password": "test-password"})
+            )
+            .unwrap()
+    );
     cache_locator(&initial, locator(&root));
     let app = crate::build_router(initial);
     let create_path = "/api/aow/agent-sessions/test-session/share";
@@ -283,7 +296,16 @@ async fn sharing_requires_login_but_live_reading_survives_restart_and_revocation
 
     // Fresh login state and no in-memory locator cache: the public link still works.
     let restarted = state(&root);
-    let new_cookie = format!("aow_session={}", restarted.auth.login("123456").unwrap());
+    let new_cookie = format!(
+        "aow_session={}",
+        restarted
+            .auth
+            .login(
+                "password",
+                serde_json::json!({"username": "admin", "password": "test-password"})
+            )
+            .unwrap()
+    );
     let app = crate::build_router(restarted.clone());
     assert_eq!(
         request(&app, "GET", &public_path, None, Value::Null)
