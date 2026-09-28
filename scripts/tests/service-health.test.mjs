@@ -80,17 +80,24 @@ test('server health follows the configured Base Path and normalizes its trailing
   await requestHealth({ ...root, basePath: '/' });
 });
 
-test('health requires the PID advertised by a new release and detects restarts during the probe', async t => {
-  const config = await endpoint(t, 'server', (_, response) => {
-    response.end(JSON.stringify({ service: 'aow', ok: true, pid: 1234 }));
-  });
-  // Allow a real HTTP round trip under CI load before asserting PID ownership.
-  // The separate unresponsive-endpoint test covers the request deadline.
-  await assert.rejects(waitForHealth(config, () => 1235, 1000), /active launchd process/);
+test('health requires the PID advertised by a new release and detects restarts during the probe', { timeout: 5000 }, async t => {
+  const timeout = 1000;
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  const respond = body => (_, response) => {
+    // End the retry window after the real HTTP probe reaches this listener.
+    // A near-deadline retry must not replace the ownership error with a timeout.
+    // Only the retry clock is mocked; the HTTP request timer still runs normally.
+    now += timeout;
+    response.end(JSON.stringify(body));
+  };
+  const config = await endpoint(t, 'server', respond({ service: 'aow', ok: true, pid: 1234 }));
+  await assert.rejects(waitForHealth(config, () => 1235, timeout), /active launchd process/);
   let calls = 0;
-  await assert.rejects(waitForHealth(config, () => ++calls % 2 ? 1234 : 1235, 1000), /active launchd process/);
-  const old = await endpoint(t, 'server', (_, response) => response.end('{"service":"aow","ok":true}'));
-  await assert.rejects(waitForHealth(old, () => 1234, 1000), /active launchd process/);
+  await assert.rejects(waitForHealth(config, () => ++calls % 2 ? 1234 : 1235, timeout), /active launchd process/);
+  assert.equal(calls, 2);
+  const old = await endpoint(t, 'server', respond({ service: 'aow', ok: true }));
+  await assert.rejects(waitForHealth(old, () => 1234, timeout), /active launchd process/);
 });
 
 test('unresponsive health checks have a total deadline', async t => {
