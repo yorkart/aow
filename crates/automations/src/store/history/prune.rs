@@ -6,7 +6,6 @@ use std::{
 use anyhow::Result;
 
 use super::super::{FileLock, Store, try_exclusive, valid_component};
-use super::order::compare_ids;
 
 impl Store {
     /// Removes old completed journals while retaining the newest `retain` runs
@@ -46,23 +45,7 @@ impl Store {
         retain: usize,
         can_remove: &impl Fn(&str, &str) -> bool,
     ) -> Result<usize> {
-        let directory = self.root.join("runs").join(task_id);
-        let mut run_ids = Vec::new();
-        for entry in fs::read_dir(&directory)? {
-            let entry = entry?;
-            let file_type = entry.file_type()?;
-            let path = entry.path();
-            if !file_type.is_dir() || file_type.is_symlink() {
-                continue;
-            }
-            let Some(run_id) = path.file_name().and_then(|name| name.to_str()) else {
-                continue;
-            };
-            if valid_component(run_id).is_ok() {
-                run_ids.push(run_id.to_owned());
-            }
-        }
-        run_ids.sort_unstable_by(|a, b| compare_ids(b, a));
+        let run_ids = self.run_ids(task_id, None)?;
 
         let mut removed = 0;
         for run_id in run_ids.into_iter().skip(retain) {

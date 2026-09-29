@@ -55,11 +55,11 @@ aow-cli automation get TASK-ID
 aow-cli automation runs list TASK-ID --limit 20
 aow-cli automation runs get TASK-ID RUN-ID
 
-# 翻到下一页：RUN-ID 使用上一页返回的 next_cursor
-aow-cli automation runs list TASK-ID --limit 20 --before RUN-ID
+# 翻到下一页：直接使用上一页返回的 next_cursor
+aow-cli automation runs list TASK-ID --limit 20 --before NEXT-CURSOR
 ```
 
-`TASK-ID` 和 `RUN-ID` 从列表结果获取。任务列表默认隐藏已删除任务，添加 `--include-deleted` 可一并查看。执行列表的 `--limit` 默认 50、范围 1–500；`next_cursor` 为 `null` 表示没有下一页。
+`TASK-ID` 和 `RUN-ID` 从列表结果获取。任务列表默认隐藏已删除任务，添加 `--include-deleted` 可一并查看。执行列表按记录的 `started_at` 倒序排列，`--limit` 默认 50、范围 1–500；`next_cursor` 为 `null` 表示没有下一页。游标与资源 ID 独立，调用方原样传回即可，游标对应的记录被清理后仍可继续翻页。
 
 CLI 当前只查询自动化任务，创建、修改和执行请使用网页。执行详情中的 `stdout_path`、`stderr_path` 是本机日志路径，可自行打开查看。
 

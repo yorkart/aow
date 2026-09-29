@@ -27,8 +27,8 @@ try {
     const statuses = ['Todo', 'In progress', 'In review', 'Done'].map((name, i) => ({ id: `s${i}`, name, color: ['#8b8b93', '#d7a84b', '#7999e8', '#62b58d'][i] }));
     const board = { version: 1, status_revision: 1, statuses, inbox: [], tasks: [] };
     const writes = []; const reads = []; const receipts = new Map(); const failResponses = new Set(); let failCapture = false; let conflictMove = false;
-    let idSequence = 2104775476131139584n;
-    const nextId = () => (idSequence++).toString(36);
+    let idSequence = 0;
+    const nextId = () => `Resource_v2-${++idSequence}`;
     await page.route('**/api/ids', route => {
       errors.push('Unexpected standalone ID allocation');
       return route.fulfill({ status: 404 });
@@ -154,7 +154,8 @@ try {
     assert.ok(writes.every(w => !('id' in w.input)));
     assert.equal(writes.at(-1).input.request_key, writes.at(-2).input.request_key, 'failed saves reuse their request key');
     assert.notEqual(writes[0].input.request_key, writes[1].input.request_key, 'each creation has a new request key');
-    assert.ok(board.inbox.every(item => /^[0-9a-z]{1,13}$/.test(item.id)));
+    assert.equal(new Set(board.inbox.map(item => item.id)).size, 2);
+    assert.ok(board.inbox.every(item => !writes.some(write => write.input.request_key === item.id)));
   });
   await test('one Markdown input derives its title, preserves the body on edit and passes it to conversion', async t => {
     const { page, board, writes, errors } = await fixture(t);

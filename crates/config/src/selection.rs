@@ -11,6 +11,7 @@ use toml_edit::{DocumentMut, value};
 use super::{
     ConfigRepository,
     git::git_text,
+    layout::REGISTRIES,
     storage::{FileLock, atomic_write, private_directories},
 };
 pub const CONFIG_FILE: &str = "config.toml";
@@ -126,7 +127,7 @@ pub fn inspect_repository(path: &Path) -> Result<RepositoryVersions> {
     let version = directory
         .file_name()
         .and_then(OsStr::to_str)
-        .filter(|name| valid_config_id(name));
+        .filter(|name| valid_config_id(name) && has_configuration(&directory));
     let parent_repository = version
         .and_then(|_| directory.parent())
         .and_then(|parent| repository_root(parent).ok());
@@ -141,6 +142,7 @@ pub fn inspect_repository(path: &Path) -> Result<RepositoryVersions> {
         if entry.file_type()?.is_dir()
             && let Some(name) = entry.file_name().to_str()
             && valid_config_id(name)
+            && has_configuration(&entry.path())
         {
             config_ids.push(name.to_owned());
         }
@@ -234,8 +236,11 @@ pub fn save_selection(
     Ok((selection, changed))
 }
 
-/// Application IDs using the fixed Twitter epoch have at least 12 Base36
-/// characters (since 2011). Keep ordinary repository folders out of discovery.
+/// IDs are opaque path components; configuration contents identify a version.
 pub(super) fn valid_config_id(id: &str) -> bool {
-    (12..=13).contains(&id.len()) && aow_id::Snowflake::from_base36(id).is_ok()
+    aow_id::is_valid_id(id)
+}
+
+fn has_configuration(directory: &Path) -> bool {
+    REGISTRIES.iter().any(|name| directory.join(name).is_file())
 }

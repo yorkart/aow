@@ -1,9 +1,4 @@
-use std::{
-    fs::{self, OpenOptions},
-    io::Read,
-    os::unix::fs::OpenOptionsExt,
-    path::PathBuf,
-};
+use std::{fs::OpenOptions, io::Read, os::unix::fs::OpenOptionsExt, path::PathBuf};
 
 use anyhow::{Context, Result, ensure};
 use chrono::Utc;
@@ -11,10 +6,9 @@ use serde::Deserialize;
 
 use crate::{Run, RunDetail, RunOutput, RunStatus, TaskInput};
 
-use super::super::{FileLock, Store, is_not_found, try_shared, valid_component};
-use super::order::compare_ids;
+use super::super::{FileLock, Store, is_not_found, try_shared};
 
-const MAX_RUN_EVENTS_BYTES: u64 = 1024 * 1024;
+pub(super) const MAX_RUN_EVENTS_BYTES: u64 = 1024 * 1024;
 
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -177,34 +171,5 @@ impl Store {
             }
         }
         Ok(runs)
-    }
-
-    pub(crate) fn run_ids(&self, task_id: &str, before: Option<&str>) -> Result<Vec<String>> {
-        valid_component(task_id)?;
-        let directory = self.root.join("runs").join(task_id);
-        let entries = match fs::read_dir(directory) {
-            Ok(entries) => entries,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-            Err(error) => return Err(error.into()),
-        };
-        let mut ids = Vec::new();
-        for entry in entries {
-            let entry = entry?;
-            let file_type = match entry.file_type() {
-                Ok(file_type) => file_type,
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-                Err(error) => return Err(error.into()),
-            };
-            if file_type.is_dir() && !file_type.is_symlink() {
-                let id = entry.file_name().to_string_lossy().into_owned();
-                if valid_component(&id).is_ok()
-                    && before.is_none_or(|before| compare_ids(&id, before).is_lt())
-                {
-                    ids.push(id);
-                }
-            }
-        }
-        ids.sort_unstable_by(|a, b| compare_ids(b, a));
-        Ok(ids)
     }
 }

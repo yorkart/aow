@@ -325,7 +325,7 @@ fn inbox_creation_receipts_survive_commit_failure_restart_and_edits() {
     let id = store.inbox_page(None, true, 50, None).unwrap().items[0]
         .id
         .clone();
-    assert!(aow_id::Snowflake::from_base36(&id).is_ok());
+    assert!(aow_id::is_valid_id(&id));
     assert_ne!(id, input.request_key);
     assert!(
         config
@@ -390,7 +390,7 @@ fn status_creation_receipts_survive_commit_failure_and_restart() {
     assert!(store.write_statuses(input.clone()).is_err());
     let saved = store.snapshot().unwrap();
     let id = &saved.statuses[0].id;
-    assert!(aow_id::Snowflake::from_base36(id).is_ok());
+    assert!(aow_id::is_valid_id(id));
     fs::remove_file(lock).unwrap();
     drop(store);
 

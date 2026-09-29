@@ -5,19 +5,32 @@ import ts from 'typescript';
 
 const source = await readFile(new URL('../src/features/automations/runOrder.ts', import.meta.url), 'utf8');
 const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 } });
-const { newestRunFirst } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
+const { newestRunFirst, runCursor } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 
-test('mixed legacy and Snowflake runs keep the same chronological order as server cursors', () => {
-  const middle = ((BigInt(Date.parse('2026-09-29T12:00:00Z')) - 1288834974657n) << 22n).toString(36);
-  const oldest = '20260928T120000000Z_9999';
-  const newest = '20260930T120000000Z_0000';
-  const rows = [oldest, middle, newest].map(id => ({ id }));
-  assert.deepEqual(rows.sort(newestRunFirst).map(row => row.id), [newest, middle, oldest]);
+test('history uses recorded start times regardless of opaque ID spelling', () => {
+  const rows = [
+    { id: '20990101T120000000Z_old', started_at: '2026-09-26T12:00:00Z' },
+    { id: '0', started_at: '2026-09-28T12:00:00Z' },
+    { id: '550e8400-e29b-41d4-a716-446655440000', started_at: '2026-09-27T12:00:00Z' },
+  ];
+  assert.deepEqual(rows.sort(newestRunFirst).map(row => row.id), ['0', '550e8400-e29b-41d4-a716-446655440000', '20990101T120000000Z_old']);
 });
 
-test('sorting preserves the full Snowflake sequence and handles encoding length changes', () => {
-  const values = [36n ** 12n - 1n, 36n ** 12n, 36n ** 12n + 1n];
-  const rows = values.map(id => ({ id: id.toString(36) }));
-  assert.deepEqual(rows.sort(newestRunFirst).map(row => row.id), values.reverse().map(id => id.toString(36)));
-  assert.deepEqual(['run-1', 'run-3', 'run-2'].map(id => ({ id })).sort(newestRunFirst).map(row => row.id), ['run-3', 'run-2', 'run-1']);
+test('history keeps server precision and only uses IDs to break equal-time ties', () => {
+  const rows = [
+    { id: 'z-old', started_at: '2026-09-29T12:00:00.123456700Z' },
+    { id: 'A-new', started_at: '2026-09-29T12:00:00.123456701Z' },
+    { id: 'Z-tied', started_at: '2026-09-29T14:00:00.123456701+02:00' },
+  ];
+  assert.deepEqual(rows.sort(newestRunFirst).map(row => row.id), ['Z-tied', 'A-new', 'z-old']);
+  assert.equal(newestRunFirst(
+    { id: 'same', started_at: '2026-09-29T12:00:00.123Z' },
+    { id: 'same', started_at: '2026-09-29T12:00:00.123000000Z' },
+  ), 0);
+});
+
+test('pagination cursor carries metadata separately and preserves the complete ID', () => {
+  const run = { id: 'Future_v2-A', started_at: '2026-09-29T12:00:00.123456701Z' };
+  assert.equal(runCursor(run), '2026-09-29T12:00:00.123456701Z/Future_v2-A');
+  assert.equal(run.id, 'Future_v2-A');
 });

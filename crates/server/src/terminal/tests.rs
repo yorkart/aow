@@ -923,12 +923,9 @@ async fn clipboard_image_route_stores_private_png() {
         path.extension().and_then(|value| value.to_str()),
         Some("png")
     );
-    path.file_stem()
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .parse::<aow_id::Snowflake>()
-        .unwrap();
+    assert!(aow_id::is_valid_id(
+        path.file_stem().unwrap().to_str().unwrap()
+    ));
     assert_eq!(std::fs::read(&path).unwrap(), image);
     #[cfg(unix)]
     {

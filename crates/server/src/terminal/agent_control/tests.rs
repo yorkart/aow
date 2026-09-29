@@ -1156,7 +1156,7 @@ async fn board_conversion_prepares_once_and_start_does_not_change_status() {
     let created = post(&app, &convert_path, input.clone()).await;
     assert_eq!(created["execution"], "preparing");
     let task_id = created["id"].as_str().unwrap();
-    task_id.parse::<aow_id::Snowflake>().unwrap();
+    assert!(aow_id::is_valid_id(task_id));
     assert_ne!(task_id, "board-task");
     post(&app, &convert_path, input).await;
     let ready = tokio::time::timeout(Duration::from_secs(25), async {

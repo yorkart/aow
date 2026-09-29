@@ -1,45 +1,95 @@
-use std::cmp::Ordering;
+use std::{
+    fs::{self, OpenOptions},
+    io::{BufRead, BufReader, Read},
+    os::unix::fs::OpenOptionsExt,
+};
 
-/// Compare creation times embedded in either Snowflake or legacy timestamp IDs.
-/// Keep this ordering shared by pagination and retention. The string tie-breaker
-/// also preserves the ordering of legacy opaque IDs.
-pub(super) fn compare_ids(left: &str, right: &str) -> Ordering {
-    timestamp(left)
-        .cmp(&timestamp(right))
-        .then_with(|| left.cmp(right))
+use anyhow::{Context, Result, ensure};
+use chrono::{DateTime, Utc};
+use serde::Deserialize;
+
+use super::super::{Store, is_not_found, valid_component};
+use super::RunCursor;
+use super::read::MAX_RUN_EVENTS_BYTES;
+
+#[derive(Deserialize)]
+struct StartedEvent {
+    #[serde(rename = "type")]
+    kind: String,
+    run: RunIdentity,
 }
 
-fn timestamp(id: &str) -> Option<u64> {
-    if (12..=13).contains(&id.len())
-        && let Ok(value) = id.parse::<aow_id::Snowflake>()
-    {
-        return Some(value.timestamp_millis() + aow_id::TWITTER_EPOCH_MILLIS);
+#[derive(Deserialize)]
+struct RunIdentity {
+    id: String,
+    task_id: String,
+    started_at: DateTime<Utc>,
+}
+
+impl Store {
+    /// Pagination and retention share the recorded start time. IDs only break
+    /// ties; their spelling and generating algorithm carry no time semantics.
+    pub(crate) fn run_ids(&self, task_id: &str, before: Option<&str>) -> Result<Vec<String>> {
+        valid_component(task_id)?;
+        let before = before.map(str::parse::<RunCursor>).transpose()?;
+        let directory = self.root.join("runs").join(task_id);
+        let entries = match fs::read_dir(directory) {
+            Ok(entries) => Some(entries),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error.into()),
+        };
+        let mut runs = Vec::new();
+        for entry in entries.into_iter().flatten() {
+            let entry = entry?;
+            let file_type = match entry.file_type() {
+                Ok(file_type) => file_type,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(error.into()),
+            };
+            let id = entry.file_name().to_string_lossy().into_owned();
+            if !file_type.is_dir() || file_type.is_symlink() || valid_component(&id).is_err() {
+                continue;
+            }
+            match self.run_started_at(task_id, &id) {
+                Ok(Some(started_at)) => runs.push((started_at, id)),
+                Ok(None) => continue,
+                Err(error) if is_not_found(&error) => continue,
+                Err(error) => return Err(error),
+            }
+        }
+        runs.sort_unstable_by(|left, right| right.cmp(left));
+        if let Some(before) = before {
+            runs.retain(|(time, id)| {
+                (*time, id.as_str()) < (before.started_at, before.id.as_str())
+            });
+        }
+        Ok(runs.into_iter().map(|(_, id)| id).collect())
     }
-    let (time, _) = id.split_once('_')?;
-    chrono::NaiveDateTime::parse_from_str(time, "%Y%m%dT%H%M%S%3fZ")
-        .ok()?
-        .and_utc()
-        .timestamp_millis()
-        .try_into()
-        .ok()
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn orders_mixed_formats_by_time_instead_of_alphabet() {
-        let millis = chrono::DateTime::parse_from_rfc3339("2026-09-29T12:00:00Z")
-            .unwrap()
-            .timestamp_millis() as u64;
-        let id = aow_id::Snowflake::from_u64((millis - aow_id::TWITTER_EPOCH_MILLIS) << 22)
-            .unwrap()
-            .to_string();
-        assert_eq!(timestamp(&id), Some(millis));
-        assert_eq!(timestamp("20260929T120000000Z_1234"), Some(millis));
-        assert!(compare_ids("20260928T120000000Z_9999", &id).is_lt());
-        assert!(compare_ids(&id, "20260930T120000000Z_0000").is_lt());
-        assert!(compare_ids("run-1", "run-2").is_lt());
+    fn run_started_at(&self, task_id: &str, run_id: &str) -> Result<Option<DateTime<Utc>>> {
+        let file = OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NOFOLLOW)
+            .open(self.run_events_path(task_id, run_id)?)?;
+        ensure!(file.metadata()?.is_file(), "执行记录不是普通文件");
+        // The complete start event is published before writers append to the
+        // journal. Read just this immutable header when ordering the history.
+        let mut line = Vec::new();
+        BufReader::new(file.take(MAX_RUN_EVENTS_BYTES + 1)).read_until(b'\n', &mut line)?;
+        ensure!(
+            line.len() as u64 <= MAX_RUN_EVENTS_BYTES,
+            "执行记录超过大小限制"
+        );
+        if !line.ends_with(b"\n") {
+            return Ok(None);
+        }
+        let event: StartedEvent =
+            serde_json::from_slice(&line).context("执行记录包含无效开始事件")?;
+        ensure!(event.kind == "started", "执行记录缺少开始事件");
+        ensure!(
+            event.run.id == run_id && event.run.task_id == task_id,
+            "执行文件 ID 不匹配"
+        );
+        Ok(Some(event.run.started_at))
     }
 }

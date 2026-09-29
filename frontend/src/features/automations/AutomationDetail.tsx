@@ -107,7 +107,7 @@ function RunHistory({ taskId, visible, refreshKey, onOpenSession, expanded, onEx
   const loadMore = async () => {
     setMoreBusy(true);
     try {
-      const next = await automationApi.runs(taskId, runs.at(-1)?.id);
+      const next = await automationApi.runs(taskId, runs.at(-1));
       setRuns((current) => [...new Map([...current, ...next].map((run) => [run.id, run])).values()].sort(newestRunFirst));
       setHasMore(next.length === 50); setError('');
     } catch (reason) { setError(errorMessage(reason)); }

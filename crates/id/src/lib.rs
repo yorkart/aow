@@ -29,8 +29,10 @@ mod error;
 mod generator;
 mod id;
 mod local;
+mod validation;
 
 pub use error::Error;
 pub use generator::{Generator, TWITTER_EPOCH_MILLIS};
 pub use id::Snowflake;
 pub use local::{new_id, new_snowflake};
+pub use validation::is_valid_id;

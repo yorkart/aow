@@ -731,11 +731,7 @@ async fn aow_notes_use_the_shared_filesystem_routes() {
         .unwrap()
         .strip_suffix(".md")
         .unwrap();
-    assert!(note_id.len() <= 13);
-    assert_eq!(
-        note_id.parse::<aow_id::Snowflake>().unwrap().to_string(),
-        note_id
-    );
+    assert!(aow_id::is_valid_id(note_id));
 
     let listing = app
         .clone()

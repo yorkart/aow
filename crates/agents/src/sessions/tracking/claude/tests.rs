@@ -103,22 +103,27 @@ async fn native_lookup_is_cached_per_environment_and_failure_is_not_an_empty_res
 }
 
 #[test]
-fn claude_uses_full_uuid_for_the_exact_pid_and_rejects_ambiguity() {
+fn claude_uses_opaque_session_ids_for_the_exact_pid_and_rejects_ambiguity() {
     let id = "550e8400-e29b-41d4-a716-446655440000";
     let sessions: Vec<ClaudeSession> = serde_json::from_value(serde_json::json!([
         {"id":"job1", "pid":123, "sessionId":id},
         {"id":"job2", "pid":456},
-        {"pid":789, "sessionId":"short-job-id"}
+        {"pid":789, "sessionId":"Session_v2-A"},
+        {"pid":890, "sessionId":"../escape"}
     ]))
     .unwrap();
     assert_eq!(claude_session_id(&sessions, 123).as_deref(), Some(id));
     assert_eq!(claude_session_id(&sessions, 456), None);
-    assert_eq!(claude_session_id(&sessions, 789), None);
+    assert_eq!(
+        claude_session_id(&sessions, 789).as_deref(),
+        Some("Session_v2-A")
+    );
+    assert_eq!(claude_session_id(&sessions, 890), None);
     assert_eq!(claude_session_id(&sessions, 999), None);
     let mut conflicting = sessions;
     conflicting.push(ClaudeSession {
         pid: Some(123),
-        session_id: Some(Uuid::new_v4().to_string()),
+        session_id: Some("Another_session-v2".into()),
     });
     assert_eq!(claude_session_id(&conflicting, 123), None);
 }

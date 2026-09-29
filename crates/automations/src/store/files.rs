@@ -19,7 +19,7 @@ pub fn valid_component(value: &str) -> Result<()> {
     Ok(())
 }
 
-/// Allocate a compact Snowflake ID for a new execution.
+/// Allocate an opaque ID for a new execution.
 pub fn new_run_id() -> String {
     aow_id::new_id()
 }

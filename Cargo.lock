@@ -115,6 +115,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "aow-config",
+ "aow-id",
  "chrono",
  "rusqlite",
  "serde",
@@ -122,7 +123,6 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.19",
  "tokio",
- "uuid",
  "walkdir",
 ]
 

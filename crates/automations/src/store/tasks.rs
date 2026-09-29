@@ -20,7 +20,7 @@ impl Store {
             .join(format!("{id}.json")))
     }
 
-    /// Allocate a task ID from the shared local Snowflake generator.
+    /// Allocate a task ID from the shared local generator.
     pub fn new_task_id(&self) -> Result<String> {
         Ok(aow_id::new_id())
     }

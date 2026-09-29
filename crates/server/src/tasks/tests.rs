@@ -163,7 +163,7 @@ async fn inbox_creation_assigns_ids_deduplicates_retries_and_guards_edits() {
     assert_eq!(retry_status, status);
     assert_eq!(retry, first);
     let id = first["id"].as_str().unwrap();
-    id.parse::<aow_id::Snowflake>().unwrap();
+    assert!(aow_id::is_valid_id(id));
     assert_ne!(id, "capture-once");
     assert!(first.get("creation").is_none());
     assert!(first.get("request_key").is_none());
@@ -409,11 +409,7 @@ async fn shared_status_configuration_allocates_ids_and_deduplicates_saves() {
     assert_eq!(board["status_revision"], 2);
     let statuses = board["statuses"].clone();
     for status in statuses.as_array().unwrap() {
-        status["id"]
-            .as_str()
-            .unwrap()
-            .parse::<aow_id::Snowflake>()
-            .unwrap();
+        assert!(aow_id::is_valid_id(status["id"].as_str().unwrap()));
     }
     assert_ne!(statuses[0]["id"], statuses[1]["id"]);
     assert_eq!(

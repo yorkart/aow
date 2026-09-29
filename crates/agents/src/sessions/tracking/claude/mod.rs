@@ -6,7 +6,6 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::io::AsyncReadExt;
-use uuid::Uuid;
 
 pub(super) struct Claude;
 
@@ -130,7 +129,7 @@ fn claude_session_id(sessions: &[ClaudeSession], pid: i32) -> Option<String> {
         .iter()
         .filter(|session| session.pid == Some(pid))
         .filter_map(|session| session.session_id.as_deref())
-        .filter(|id| Uuid::parse_str(id).is_ok());
+        .filter(|id| aow_id::is_valid_id(id));
     let first = ids.next()?;
     ids.all(|id| id == first).then(|| first.to_owned())
 }

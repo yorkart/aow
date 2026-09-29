@@ -376,31 +376,83 @@ fn deleting_a_requirement_whose_initial_commit_failed_is_retryable() {
 }
 
 #[test]
-fn repository_discovery_accepts_current_ids_and_rejects_uuids() {
+fn repository_discovery_uses_configuration_contents_and_opaque_ids() {
     let root = tempfile::tempdir().unwrap();
     let config = ConfigRepository::initialize(root.path()).unwrap();
     let selection = config.selection();
-    selection.config_id.parse::<aow_id::Snowflake>().unwrap();
-    let second = "g123456789ab";
-    fs::create_dir(selection.config_repo.join(second)).unwrap();
-    let rejected = "550e8400-e29b-41d4-a716-446655440000";
-    fs::create_dir(selection.config_repo.join(rejected)).unwrap();
-    let invalid = ConfigSelection {
-        config_id: rejected.into(),
-        ..selection.clone()
-    };
-    assert_eq!(
-        ConfigRepository::from_selection(&invalid)
-            .err()
-            .unwrap()
-            .to_string(),
-        "配置 ID 不合法"
-    );
-    fs::create_dir(selection.config_repo.join("not-a-version")).unwrap();
+    assert!(aow_id::is_valid_id(&selection.config_id));
+    let ids = [
+        "g123456789ab",
+        "550e8400-e29b-41d4-a716-446655440000",
+        "Config_v2-A",
+        "0",
+        "0001",
+        "zzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+    ];
+    for id in ids {
+        let directory = selection.config_repo.join(id);
+        fs::create_dir(&directory).unwrap();
+        fs::write(
+            directory.join("aow-projects.json"),
+            b"{\"version\":1,\"items\":[]}",
+        )
+        .unwrap();
+        let selected = ConfigSelection {
+            config_id: id.into(),
+            ..selection.clone()
+        };
+        assert_eq!(
+            ConfigRepository::from_selection(&selected)
+                .unwrap()
+                .selection(),
+            selected
+        );
+        assert_eq!(
+            inspect_repository(&directory)
+                .unwrap()
+                .selected_id
+                .as_deref(),
+            Some(id)
+        );
+    }
+    let invalid_id = "invalid.name";
+    fs::create_dir(selection.config_repo.join(invalid_id)).unwrap();
+    fs::write(
+        selection
+            .config_repo
+            .join(invalid_id)
+            .join("aow-projects.json"),
+        b"{}",
+    )
+    .unwrap();
+    for id in [
+        "",
+        "../escape",
+        "a/b",
+        "a\\b",
+        "a b",
+        invalid_id,
+        &"x".repeat(129),
+    ] {
+        let invalid = ConfigSelection {
+            config_id: id.into(),
+            ..selection.clone()
+        };
+        assert_eq!(
+            ConfigRepository::from_selection(&invalid)
+                .err()
+                .unwrap()
+                .to_string(),
+            "配置 ID 不合法"
+        );
+    }
+    // Folder names alone do not identify configuration versions.
+    fs::create_dir(selection.config_repo.join("g123456789ad")).unwrap();
     fs::create_dir(selection.config_repo.join("docs")).unwrap();
     fs::write(selection.config_repo.join("g123456789ac"), "file").unwrap();
     let choices = inspect_repository(&selection.config_repo).unwrap();
-    let mut expected = vec![selection.config_id.clone(), second.to_owned()];
+    let mut expected = vec![selection.config_id.clone()];
+    expected.extend(ids.map(str::to_owned));
     expected.sort();
     assert_eq!(choices.config_ids, expected);
     assert_eq!(choices.selected_id, None);
@@ -411,13 +463,15 @@ fn repository_discovery_accepts_current_ids_and_rejects_uuids() {
         Some(selection.config_id.as_str())
     );
     assert_eq!(direct.config_ids, choices.config_ids);
-    let orphan = root.path().join(second);
+    let orphan = root.path().join("Config_v2-A");
     fs::create_dir(&orphan).unwrap();
+    fs::write(orphan.join("aow-projects.json"), b"{}").unwrap();
     for invalid in [
         root.path().to_path_buf(),
         orphan,
-        selection.config_repo.join("not-a-version"),
-        selection.config_repo.join(rejected),
+        selection.config_repo.join("g123456789ad"),
+        selection.config_repo.join("docs"),
+        selection.config_repo.join(invalid_id),
         root.path().join("missing"),
         Path::new("relative").to_path_buf(),
     ] {
@@ -427,7 +481,9 @@ fn repository_discovery_accepts_current_ids_and_rejects_uuids() {
             invalid.display()
         );
     }
-    fs::remove_dir(selection.config_repo.join(second)).unwrap();
+    for id in ids {
+        fs::remove_dir_all(selection.config_repo.join(id)).unwrap();
+    }
     fs::remove_dir_all(config.directory()).unwrap();
     assert!(
         inspect_repository(&selection.config_repo)
@@ -479,7 +535,7 @@ fn toml_selection_switches_on_reopen_preserves_extra_fields_and_skips_noops() {
             ..selection.clone()
         },
         ConfigSelection {
-            config_id: "550e8400-e29b-41d4-a716-446655440000".into(),
+            config_id: "missing-version".into(),
             ..selection.clone()
         },
         ConfigSelection {
@@ -515,7 +571,7 @@ fn invalid_toml_never_falls_back_to_old_selector_or_initializes_a_repository() {
         "",
         "bad = [",
         "config-repo = 42",
-        "config-repo = '/tmp'\nconfig-id = 'invalid'",
+        "config-repo = '/tmp'\nconfig-id = 'invalid/id'",
         "config-repo = 'relative'\nconfig-id = '550e8400-e29b-41d4-a716-446655440000'",
     ] {
         fs::write(state.join(CONFIG_FILE), text).unwrap();

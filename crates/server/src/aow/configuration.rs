@@ -164,8 +164,13 @@ mod tests {
             AowManager::persistent_with_notes_base(&state_dir, temp.path().join("notes")).unwrap();
         let active = state.aow.inner.config.as_ref().unwrap().selection();
         assert_ne!(active, target);
-        let second_id = "g123456789ab";
+        let second_id = "Config_v2-A";
         std::fs::create_dir(target.config_repo.join(second_id)).unwrap();
+        std::fs::write(
+            target.config_repo.join(second_id).join("aow-projects.json"),
+            b"{\"version\":1,\"items\":[]}",
+        )
+        .unwrap();
         let router = routes().with_state(state.clone());
         let endpoint = "/api/aow/settings/configuration";
         // External edits must not be reread by Settings GET or PUT. Even invalid

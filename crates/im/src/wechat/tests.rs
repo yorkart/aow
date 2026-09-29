@@ -337,9 +337,12 @@ fn rejects_untrusted_credential_destinations_and_unsafe_session_paths() {
     assert!(credentials().validate().is_ok());
     for id in [
         "../../escape",
-        "00000000-0000-4000-8000-000000000001",
-        "G123456789AB",
+        "binding/child",
+        "binding\\child",
+        "binding.name",
+        "binding name",
         "",
+        &"x".repeat(129),
     ] {
         let mut credentials = credentials();
         credentials.binding_id = id.into();
@@ -348,6 +351,39 @@ fn rejects_untrusted_credential_destinations_and_unsafe_session_paths() {
             "无效的微信绑定 ID"
         );
         assert!(WechatClient::new(credentials, None).is_err());
+    }
+}
+
+#[test]
+fn binding_ids_are_opaque_strings_and_preserve_their_session_paths() {
+    let root = tempfile::tempdir().unwrap();
+    for id in [
+        "00000000-0000-4000-8000-000000000001",
+        "G123456789AB",
+        "binding_v2-X",
+        "0",
+        "0001",
+        "zzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+    ] {
+        let mut credentials = credentials();
+        credentials.binding_id = id.into();
+        credentials.validate().unwrap();
+        let client = WechatClient::new(credentials.clone(), Some(root.path())).unwrap();
+        client
+            .inner
+            .update_session(|session| session.cursor = "saved-cursor".into())
+            .unwrap();
+        assert!(
+            root.path()
+                .join("im/wechat")
+                .join(format!("{id}.json"))
+                .is_file()
+        );
+        let restored = WechatClient::new(credentials, Some(root.path())).unwrap();
+        assert_eq!(
+            restored.inner.session.lock().unwrap().cursor,
+            "saved-cursor"
+        );
     }
 }
 
