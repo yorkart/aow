@@ -140,33 +140,61 @@ struct ClaudeCacheEntry {
     sessions: Option<Vec<ClaudeSession>>,
 }
 
-static CLAUDE_CACHE: LazyLock<tokio::sync::Mutex<Vec<ClaudeCacheEntry>>> =
+#[derive(Default)]
+struct ClaudeSessionCache {
+    entries: Vec<ClaudeCacheEntry>,
+}
+
+static CLAUDE_CACHE: LazyLock<tokio::sync::Mutex<ClaudeSessionCache>> =
     LazyLock::new(Default::default);
 
 async fn claude_sessions(environment: &SessionEnvironment) -> Option<Vec<ClaudeSession>> {
     // Share one CLI query across panes and clients. Cache unsupported versions
     // and failures longer; this is never run by the frequent agent badge poll.
-    let mut cache = CLAUDE_CACHE.lock().await;
-    cache.retain(|entry| {
-        entry.captured.elapsed()
-            < Duration::from_secs(if entry.sessions.is_some() { 5 } else { 30 })
-    });
-    if let Some(entry) = cache.iter().find(|entry| entry.environment == *environment) {
-        return entry.sessions.clone();
-    }
-    let sessions = query_claude(environment).await;
-    if cache.len() >= 16 {
-        cache.remove(0);
-    }
-    cache.push(ClaudeCacheEntry {
-        environment: environment.clone(),
-        captured: Instant::now(),
-        sessions: sessions.clone(),
-    });
-    sessions
+    CLAUDE_CACHE
+        .lock()
+        .await
+        .sessions(
+            environment,
+            query_claude(environment, Duration::from_secs(3)),
+        )
+        .await
 }
 
-async fn query_claude(environment: &SessionEnvironment) -> Option<Vec<ClaudeSession>> {
+impl ClaudeSessionCache {
+    async fn sessions(
+        &mut self,
+        environment: &SessionEnvironment,
+        query: impl std::future::Future<Output = Option<Vec<ClaudeSession>>>,
+    ) -> Option<Vec<ClaudeSession>> {
+        self.entries.retain(|entry| {
+            entry.captured.elapsed()
+                < Duration::from_secs(if entry.sessions.is_some() { 5 } else { 30 })
+        });
+        if let Some(entry) = self
+            .entries
+            .iter()
+            .find(|entry| entry.environment == *environment)
+        {
+            return entry.sessions.clone();
+        }
+        let sessions = query.await;
+        if self.entries.len() >= 16 {
+            self.entries.remove(0);
+        }
+        self.entries.push(ClaudeCacheEntry {
+            environment: environment.clone(),
+            captured: Instant::now(),
+            sessions: sessions.clone(),
+        });
+        sessions
+    }
+}
+
+async fn query_claude(
+    environment: &SessionEnvironment,
+    timeout: Duration,
+) -> Option<Vec<ClaudeSession>> {
     let mut command = tokio::process::Command::new("claude");
     command
         .args(["agents", "--json"])
@@ -179,7 +207,7 @@ async fn query_claude(environment: &SessionEnvironment) -> Option<Vec<ClaudeSess
     // No shell interpolation, prompts, hooks or user config writes.
     let mut child = command.spawn().ok()?;
     let stdout = child.stdout.take()?;
-    tokio::time::timeout(Duration::from_secs(3), async {
+    tokio::time::timeout(timeout, async {
         let mut bytes = Vec::new();
         stdout
             .take(1024 * 1024 + 1)

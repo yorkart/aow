@@ -22,41 +22,110 @@ fn cli_fixture(root: &Path, response: &str) -> SessionEnvironment {
     .collect()
 }
 
+#[tokio::test]
+async fn lookup_cache_is_scoped_to_environment_and_preserves_failures() {
+    let mut cache = ClaudeSessionCache::default();
+    let environment: SessionEnvironment = [("CLAUDE_CONFIG_DIR".into(), "/first".into())]
+        .into_iter()
+        .collect();
+    let sessions = cache
+        .sessions(&environment, async {
+            Some(vec![ClaudeSession {
+                pid: Some(123),
+                session_id: Some("Session-A".into()),
+            }])
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        claude_session_id(&sessions, 123).as_deref(),
+        Some("Session-A")
+    );
+    // Cache hits must not poll the query, including a different PID's lookup.
+    let cached = cache
+        .sessions(&environment, async {
+            panic!("a cached environment must not query again")
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        claude_session_id(&cached, 123).as_deref(),
+        Some("Session-A")
+    );
+    assert_eq!(claude_session_id(&cached, 456), None);
+
+    let unavailable: SessionEnvironment = [("CLAUDE_CONFIG_DIR".into(), "/second".into())]
+        .into_iter()
+        .collect();
+    assert!(cache.sessions(&unavailable, async { None }).await.is_none());
+    assert!(
+        cache
+            .sessions(&unavailable, async {
+                panic!("a cached failure must not query again")
+            })
+            .await
+            .is_none()
+    );
+
+    let empty: SessionEnvironment = [("CLAUDE_CONFIG_DIR".into(), "/third".into())]
+        .into_iter()
+        .collect();
+    assert!(
+        cache
+            .sessions(&empty, async { Some(Vec::new()) })
+            .await
+            .unwrap()
+            .is_empty()
+    );
+
+    // Expire entries explicitly so cache lifetimes need no sleeps or subprocesses.
+    for entry in &mut cache.entries {
+        entry.captured = Instant::now() - Duration::from_secs(6);
+    }
+    assert!(
+        cache
+            .sessions(&environment, async { Some(Vec::new()) })
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        cache
+            .sessions(&unavailable, async {
+                panic!("failures have a longer lifetime than successful queries")
+            })
+            .await
+            .is_none()
+    );
+    cache
+        .entries
+        .iter_mut()
+        .find(|entry| entry.environment == unavailable)
+        .unwrap()
+        .captured = Instant::now() - Duration::from_secs(31);
+    assert!(
+        cache
+            .sessions(&unavailable, async { Some(Vec::new()) })
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}
+
 #[cfg(unix)]
 #[tokio::test]
-async fn native_lookup_is_cached_per_environment_and_failure_is_not_an_empty_result() {
+async fn native_lookup_reads_each_environment_and_distinguishes_invalid_and_empty_json() {
+    // Allow process startup on loaded hosts without changing the production
+    // three-second deadline. Its enforcement is tested separately below.
+    let timeout = Duration::from_secs(15);
     let first = tempfile::tempdir().unwrap();
-    let id = "550e8400-e29b-41d4-a716-446655440000";
+    let id = "Session-A";
     let environment = cli_fixture(
         first.path(),
         &format!(r#"[{{"pid":123,"id":"short-job","sessionId":"{id}"}}]"#),
     );
-    let context = || LiveSessionContext {
-        pid: Some(123),
-        cwd: "/workspace/demo",
-        title: "A plausible title",
-        environment: &environment,
-    };
-    let tracker = Agent::Claude.session_tracking().unwrap();
-    assert_eq!(
-        tracker.resolve_live_session(context()).await,
-        SessionResolution::Resolved(SessionTarget::Id(id.into()))
-    );
-    // Several panes/clients reuse the same CLI result, including PID misses.
-    std::fs::write(first.path().join("config/active.json"), "[]").unwrap();
-    assert_eq!(
-        tracker.resolve_live_session(context()).await,
-        SessionResolution::Resolved(SessionTarget::Id(id.into()))
-    );
-    assert_eq!(
-        tracker
-            .resolve_live_session(LiveSessionContext {
-                pid: Some(456),
-                ..context()
-            })
-            .await,
-        SessionResolution::NotFound
-    );
+    let sessions = query_claude(&environment, timeout).await.unwrap();
+    assert_eq!(claude_session_id(&sessions, 123).as_deref(), Some(id));
     assert_eq!(
         std::fs::read_to_string(first.path().join("config/queries")).unwrap(),
         "x"
@@ -64,26 +133,7 @@ async fn native_lookup_is_cached_per_environment_and_failure_is_not_an_empty_res
 
     let second = tempfile::tempdir().unwrap();
     let unavailable = cli_fixture(second.path(), "invalid JSON");
-    assert_eq!(
-        tracker
-            .resolve_live_session(LiveSessionContext {
-                environment: &unavailable,
-                ..context()
-            })
-            .await,
-        SessionResolution::Unavailable
-    );
-    // A failed query is cached too, and cannot turn into title matching.
-    std::fs::write(second.path().join("config/active.json"), "[]").unwrap();
-    assert_eq!(
-        tracker
-            .resolve_live_session(LiveSessionContext {
-                environment: &unavailable,
-                ..context()
-            })
-            .await,
-        SessionResolution::Unavailable
-    );
+    assert!(query_claude(&unavailable, timeout).await.is_none());
     assert_eq!(
         std::fs::read_to_string(second.path().join("config/queries")).unwrap(),
         "x"
@@ -91,15 +141,27 @@ async fn native_lookup_is_cached_per_environment_and_failure_is_not_an_empty_res
 
     let third = tempfile::tempdir().unwrap();
     let empty = cli_fixture(third.path(), "[]");
-    assert_eq!(
-        tracker
-            .resolve_live_session(LiveSessionContext {
-                environment: &empty,
-                ..context()
-            })
-            .await,
-        SessionResolution::NotFound
-    );
+    assert!(query_claude(&empty, timeout).await.unwrap().is_empty());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn native_lookup_enforces_its_deadline() {
+    let directory = tempfile::tempdir().unwrap();
+    let environment = cli_fixture(directory.path(), "[]");
+    // exec keeps the delayed command in the child that kill_on_drop owns.
+    std::fs::write(
+        directory.path().join("bin/claude"),
+        "#!/bin/sh\nexec /bin/sleep 30\n",
+    )
+    .unwrap();
+    let result = tokio::time::timeout(
+        Duration::from_secs(5),
+        query_claude(&environment, Duration::from_millis(20)),
+    )
+    .await
+    .expect("the query did not enforce its deadline");
+    assert!(result.is_none());
 }
 
 #[test]
