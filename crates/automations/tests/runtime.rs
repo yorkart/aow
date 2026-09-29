@@ -804,6 +804,99 @@ fn run_history_retention_is_per_task_and_does_not_remove_active_runs() {
     drop(active_writer);
 }
 
+#[test]
+fn pruning_skips_unreadable_journals_and_continues_across_tasks() {
+    let (_directory, store, mut task) = fixture(CODEX);
+    let mut active = Vec::new();
+    for task_id in ["first-task", "second-task"] {
+        task.id = task_id.into();
+        for (id, at) in [
+            ("active", "2026-01-01T00:00:00Z"),
+            ("old", "2026-01-02T00:00:00Z"),
+            ("keep", "2026-01-03T00:00:00Z"),
+        ] {
+            let mut run = runner::initial_run(&task, id.into(), RunSource::Manual);
+            run.started_at = at.parse().unwrap();
+            let writer = store.create_run(&run, &task).unwrap();
+            if id == "active" {
+                active.push(writer);
+            }
+        }
+        for id in ["bad-header", "unreadable"] {
+            let path = store.run_path(task_id, id).unwrap();
+            fs::create_dir_all(&path).unwrap();
+            if id == "bad-header" {
+                fs::write(path.join("events.jsonl"), b"invalid-json\n").unwrap();
+            } else {
+                fs::create_dir(path.join("events.jsonl")).unwrap();
+            }
+        }
+    }
+    let mut errors = Vec::new();
+    let removed = store
+        .prune_run_history_with_errors(
+            1,
+            |_, _| true,
+            |task, run, error| {
+                errors.push((task.to_string(), run.to_string(), error));
+            },
+        )
+        .unwrap();
+    assert_eq!(removed, 2);
+    assert_eq!(errors.len(), 4);
+    for task_id in ["first-task", "second-task"] {
+        for id in ["bad-header", "unreadable", "active", "keep"] {
+            assert!(store.run_path(task_id, id).unwrap().exists());
+        }
+        assert!(!store.run_path(task_id, "old").unwrap().exists());
+        assert!(
+            errors
+                .iter()
+                .any(|(task, run, _)| task == task_id && run == "bad-header")
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|(task, run, _)| task == task_id && run == "unreadable")
+        );
+        // Ordinary queries still surface corruption instead of silently hiding data.
+        assert!(store.runs(task_id, None, 1).is_err());
+    }
+    drop(active);
+}
+
+#[test]
+fn pruning_continues_after_an_individual_removal_fails() {
+    let (_directory, store, task) = fixture(CODEX);
+    for id in ["blocked", "healthy"] {
+        let run = runner::initial_run(&task, id.into(), RunSource::Manual);
+        drop(store.create_run(&run, &task).unwrap());
+    }
+    // A directory at the active-link path prevents removal of just this run.
+    let blocked_link = store
+        .root
+        .join("runs")
+        .join(&task.id)
+        .join(".active/blocked");
+    fs::create_dir(blocked_link).unwrap();
+    let mut errors = Vec::new();
+    assert_eq!(
+        store
+            .prune_run_history_with_errors(
+                0,
+                |_, _| true,
+                |_, id, _| {
+                    errors.push(id.to_string());
+                }
+            )
+            .unwrap(),
+        1
+    );
+    assert_eq!(errors, ["blocked"]);
+    assert!(store.run_path(&task.id, "blocked").unwrap().exists());
+    assert!(!store.run_path(&task.id, "healthy").unwrap().exists());
+}
+
 #[tokio::test]
 async fn native_timer_rendering_sync_and_dispatch_use_only_detached_runner_commands() {
     let (directory, store, mut task) = fixture(CODEX);

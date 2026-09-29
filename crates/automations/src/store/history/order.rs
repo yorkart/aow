@@ -30,6 +30,15 @@ impl Store {
     /// Pagination and retention share the recorded start time. IDs only break
     /// ties; their spelling and generating algorithm carry no time semantics.
     pub(crate) fn run_ids(&self, task_id: &str, before: Option<&str>) -> Result<Vec<String>> {
+        self.run_ids_with_errors(task_id, before, |_, error| Err(error))
+    }
+
+    pub(super) fn run_ids_with_errors(
+        &self,
+        task_id: &str,
+        before: Option<&str>,
+        mut on_error: impl FnMut(&str, anyhow::Error) -> Result<()>,
+    ) -> Result<Vec<String>> {
         valid_component(task_id)?;
         let before = before.map(str::parse::<RunCursor>).transpose()?;
         let directory = self.root.join("runs").join(task_id);
@@ -41,12 +50,15 @@ impl Store {
         let mut runs = Vec::new();
         for entry in entries.into_iter().flatten() {
             let entry = entry?;
+            let id = entry.file_name().to_string_lossy().into_owned();
             let file_type = match entry.file_type() {
                 Ok(file_type) => file_type,
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-                Err(error) => return Err(error.into()),
+                Err(error) => {
+                    on_error(&id, error.into())?;
+                    continue;
+                }
             };
-            let id = entry.file_name().to_string_lossy().into_owned();
             if !file_type.is_dir() || file_type.is_symlink() || valid_component(&id).is_err() {
                 continue;
             }
@@ -54,7 +66,7 @@ impl Store {
                 Ok(Some(started_at)) => runs.push((started_at, id)),
                 Ok(None) => continue,
                 Err(error) if is_not_found(&error) => continue,
-                Err(error) => return Err(error),
+                Err(error) => on_error(&id, error)?,
             }
         }
         runs.sort_unstable_by(|left, right| right.cmp(left));

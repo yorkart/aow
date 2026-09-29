@@ -88,6 +88,7 @@ impl Store {
                 file,
                 directory: temporary.clone(),
                 active_path: None,
+                failure: None,
             };
             writer.append(&RunEvent::Started {
                 run: Box::new(run.clone()),

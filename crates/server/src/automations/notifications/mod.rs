@@ -15,6 +15,9 @@ use aow_automations::{
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+mod warnings;
+pub(super) use warnings::Warnings;
+
 const STATE_FILE: &str = "failure-notification.json";
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -128,7 +131,7 @@ struct Scan {
     pending: Vec<(PathBuf, (Run, FailureNotification))>,
 }
 
-fn scan(store: &Store) -> Result<Option<Scan>> {
+fn scan(store: &Store, warnings: &Warnings) -> Result<Option<Scan>> {
     let lock = OpenOptions::new()
         .read(true)
         .write(true)
@@ -152,7 +155,7 @@ fn scan(store: &Store) -> Result<Option<Scan>> {
         let runs = match directories(&directory) {
             Ok(runs) => runs,
             Err(error) => {
-                tracing::warn!(%task_id, %error, "cannot scan automation runs for failure notifications");
+                warnings.report("scan runs", &task_id, "", &error);
                 continue;
             }
         };
@@ -161,7 +164,7 @@ fn scan(store: &Store) -> Result<Option<Scan>> {
                 Ok(Some(run)) => pending.push((directory.join(STATE_FILE), run)),
                 Ok(None) => {}
                 Err(error) => {
-                    tracing::warn!(%task_id, %run_id, %error, "cannot inspect automation failure notification")
+                    warnings.report("inspect run", &task_id, &run_id, &error);
                 }
             }
         }
@@ -172,13 +175,21 @@ fn scan(store: &Store) -> Result<Option<Scan>> {
     }))
 }
 
-pub(super) async fn poll<F, Fut>(store: Arc<Store>, send: F, prune: bool) -> Result<()>
+pub(super) async fn poll<F, Fut>(
+    store: Arc<Store>,
+    send: F,
+    prune: bool,
+    warnings: Warnings,
+) -> Result<()>
 where
     F: Fn(Run, FailureNotification, String) -> Fut,
     Fut: Future<Output = Result<bool>>,
 {
     let scan_store = store.clone();
-    let Some(scan) = tokio::task::spawn_blocking(move || scan(&scan_store)).await?? else {
+    let scan_warnings = warnings.clone();
+    let Some(scan) =
+        tokio::task::spawn_blocking(move || scan(&scan_store, &scan_warnings)).await??
+    else {
         return Ok(());
     };
     for (path, (run, channel)) in scan.pending {
@@ -190,7 +201,12 @@ where
         })
         .await?
         {
-            tracing::warn!(task_id = %run.task_id, run_id = %run.id, %error, "cannot persist automation notification attempt");
+            warnings.report(
+                "persist notification attempt",
+                &run.task_id,
+                &run.id,
+                &error,
+            );
             continue;
         }
         let (status, message) = match send(run.clone(), channel, delivery_id.clone()).await {
@@ -212,27 +228,33 @@ where
             tokio::task::spawn_blocking(move || save(&path, status, Some(delivery_id), message))
                 .await?
         {
-            tracing::warn!(task_id = %run.task_id, run_id = %run.id, %error, "cannot persist automation notification result");
+            warnings.report("persist notification result", &run.task_id, &run.id, &error);
         }
     }
     // Offline failures must be observed before the normal retention policy can
     // remove old journals. Delivery state is removed along with its run directory.
     if prune {
         tokio::task::spawn_blocking(move || {
-            store.prune_run_history_if(super::RUN_HISTORY_RETENTION, |task_id, run_id| {
-                // A run may finish after scanning, while another notification
-                // is being sent. Keep it until a later poll has processed it.
-                let path = store
-                    .root
-                    .join("runs")
-                    .join(task_id)
-                    .join(run_id)
-                    .join(STATE_FILE);
-                fs::read(path)
-                    .ok()
-                    .and_then(|bytes| serde_json::from_slice::<DeliveryState>(&bytes).ok())
-                    .is_some_and(|state| state.status != DeliveryStatus::Sending)
-            })
+            store.prune_run_history_with_errors(
+                super::RUN_HISTORY_RETENTION,
+                |task_id, run_id| {
+                    // A run may finish after scanning, while another notification
+                    // is being sent. Keep it until a later poll has processed it.
+                    let path = store
+                        .root
+                        .join("runs")
+                        .join(task_id)
+                        .join(run_id)
+                        .join(STATE_FILE);
+                    fs::read(path)
+                        .ok()
+                        .and_then(|bytes| serde_json::from_slice::<DeliveryState>(&bytes).ok())
+                        .is_some_and(|state| state.status != DeliveryStatus::Sending)
+                },
+                |task_id, run_id, error| {
+                    warnings.report("prune run history", task_id, run_id, &error)
+                },
+            )
         })
         .await??;
     }

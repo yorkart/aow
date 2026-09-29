@@ -22,6 +22,31 @@ impl Store {
         retain: usize,
         can_remove: impl Fn(&str, &str) -> bool,
     ) -> Result<usize> {
+        self.prune_history(retain, can_remove, |_, _, error| Err(error))
+    }
+
+    /// Continue cleaning healthy history when individual journals or tasks fail.
+    /// Unreadable headers are retained for diagnosis, never guessed to be old.
+    /// The callback receives an empty run ID for task-level failures. Errors
+    /// reading the history root still propagate to the caller.
+    pub fn prune_run_history_with_errors(
+        &self,
+        retain: usize,
+        can_remove: impl Fn(&str, &str) -> bool,
+        mut on_error: impl FnMut(&str, &str, anyhow::Error),
+    ) -> Result<usize> {
+        self.prune_history(retain, can_remove, |task_id, run_id, error| {
+            on_error(task_id, run_id, error);
+            Ok(())
+        })
+    }
+
+    fn prune_history(
+        &self,
+        retain: usize,
+        can_remove: impl Fn(&str, &str) -> bool,
+        mut on_error: impl FnMut(&str, &str, anyhow::Error) -> Result<()>,
+    ) -> Result<usize> {
         let runs_root = self.root.join("runs");
         let mut removed = 0;
         for entry in fs::read_dir(runs_root)? {
@@ -34,7 +59,10 @@ impl Store {
             if valid_component(&task_id).is_err() {
                 continue;
             }
-            removed += self.prune_task_run_history(&task_id, retain, &can_remove)?;
+            match self.prune_task_run_history(&task_id, retain, &can_remove, &mut on_error) {
+                Ok(count) => removed += count,
+                Err(error) => on_error(&task_id, "", error)?,
+            }
         }
         Ok(removed)
     }
@@ -44,19 +72,27 @@ impl Store {
         task_id: &str,
         retain: usize,
         can_remove: &impl Fn(&str, &str) -> bool,
+        on_error: &mut impl FnMut(&str, &str, anyhow::Error) -> Result<()>,
     ) -> Result<usize> {
-        let run_ids = self.run_ids(task_id, None)?;
+        let run_ids = self.run_ids_with_errors(task_id, None, |run_id, error| {
+            on_error(task_id, run_id, error)
+        })?;
 
         let mut removed = 0;
         for run_id in run_ids.into_iter().skip(retain) {
             if !can_remove(task_id, &run_id) {
                 continue;
             }
-            let Some(file) = self.lock_inactive_run(task_id, &run_id)? else {
-                continue;
-            };
-            if self.remove_locked_run(task_id, &run_id, file)? {
-                removed += 1;
+            let result = (|| {
+                let Some(file) = self.lock_inactive_run(task_id, &run_id)? else {
+                    return Ok(false);
+                };
+                self.remove_locked_run(task_id, &run_id, file)
+            })();
+            match result {
+                Ok(true) => removed += 1,
+                Ok(false) => {}
+                Err(error) => on_error(task_id, &run_id, error)?,
             }
         }
         Ok(removed)

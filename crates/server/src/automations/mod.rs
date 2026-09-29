@@ -58,10 +58,12 @@ impl AutomationManager {
         let store = Arc::downgrade(&self.store);
         handle.spawn(async move {
             let mut last_cleanup = None;
+            let warnings = notifications::Warnings::default();
             let mut interval = tokio::time::interval(FAILURE_NOTIFICATION_INTERVAL);
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             loop {
                 interval.tick().await;
+                warnings.flush();
                 let Some(store) = store.upgrade() else { break };
                 let prune = last_cleanup
                     .is_none_or(|last: Instant| last.elapsed() >= RUN_HISTORY_CLEANUP_INTERVAL);
@@ -76,14 +78,15 @@ impl AutomationManager {
                         }
                     },
                     prune,
+                    warnings.clone(),
                 )
                 .await;
-                match result {
-                    Ok(()) if prune => last_cleanup = Some(Instant::now()),
-                    Ok(()) => {}
-                    Err(error) => {
-                        tracing::warn!(%error, "failed to check automation failure notifications")
-                    }
+                // Failed cleanup attempts observe the same interval as successful ones.
+                if prune {
+                    last_cleanup = Some(Instant::now());
+                }
+                if let Err(error) = result {
+                    warnings.report("poll failure notifications", "", "", &error);
                 }
             }
         });

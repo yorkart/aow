@@ -2,6 +2,14 @@ use super::*;
 use aow_automations::{RunEvent, RunSource, Task, runner::initial_run, store::RunWriter};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+async fn poll<F, Fut>(store: Arc<Store>, send: F, prune: bool) -> Result<()>
+where
+    F: Fn(Run, FailureNotification, String) -> Fut,
+    Fut: Future<Output = Result<bool>>,
+{
+    super::poll(store, send, prune, Warnings::default()).await
+}
+
 fn task() -> Task {
     serde_json::from_value(serde_json::json!({
         "id":"12345678", "revision":1,
@@ -227,7 +235,7 @@ async fn overlapping_observers_and_uncertain_deliveries_never_replay() {
     let root = tempfile::tempdir().unwrap();
     let store = Arc::new(Store::new(root.path().into()).unwrap());
     finish(&mut start(&store, &task(), "failed"), RunStatus::Failed);
-    let held = scan(&store).unwrap().unwrap();
+    let held = scan(&store, &Warnings::default()).unwrap().unwrap();
     // A concurrent fork may keep the same open file description alive until exec.
     let inherited_lock = held._lock.0.try_clone().unwrap();
     poll(
@@ -333,4 +341,80 @@ fn legacy_tasks_default_to_no_reminder_and_synced_preferences_validate_without_b
     let legacy: Task = serde_json::from_value(value).unwrap();
     assert_eq!(legacy.input.failure_notification, None);
     task().input.validate().unwrap();
+}
+
+#[tokio::test]
+async fn corrupt_records_do_not_stop_delivery_and_repaired_records_are_retried() {
+    let root = tempfile::tempdir().unwrap();
+    let store = Arc::new(Store::new(root.path().into()).unwrap());
+    let task = task();
+    let mut originals = Vec::new();
+    for id in ["bad-header", "bad-body", "bad-state", "healthy"] {
+        finish(&mut start(&store, &task, id), RunStatus::Failed);
+        let path = store.run_path(&task.id, id).unwrap().join("events.jsonl");
+        let bytes = fs::read(&path).unwrap();
+        if id == "bad-header" {
+            fs::write(&path, b"invalid-json\n").unwrap();
+            originals.push((path, bytes));
+        } else if id == "bad-body" {
+            let mut broken = bytes.clone();
+            broken.extend_from_slice(b"{\"type\":\"workspace\",{\"type\":\"finished\"}\n");
+            fs::write(&path, broken).unwrap();
+            originals.push((path, bytes));
+        } else if id == "bad-state" {
+            let path = path.with_file_name(STATE_FILE);
+            save(
+                &path,
+                DeliveryStatus::Sent,
+                Some("already-sent".into()),
+                None,
+            )
+            .unwrap();
+            let bytes = fs::read(&path).unwrap();
+            fs::write(&path, b"{\"status\":").unwrap();
+            originals.push((path, bytes));
+        }
+    }
+    let warnings = Warnings::default();
+    let delivered = std::sync::Mutex::new(Vec::new());
+    for _ in 0..12 {
+        super::poll(
+            store.clone(),
+            |run, _, _| {
+                delivered.lock().unwrap().push(run.id);
+                async { Ok(true) }
+            },
+            true,
+            warnings.clone(),
+        )
+        .await
+        .unwrap();
+    }
+    assert_eq!(*delivered.lock().unwrap(), ["healthy"]);
+    assert!(store.read_run(&task.id, "bad-header").is_err());
+    assert!(store.read_run(&task.id, "bad-body").is_err());
+    for (path, bytes) in originals {
+        fs::write(path, bytes).unwrap();
+    }
+    for _ in 0..2 {
+        super::poll(
+            store.clone(),
+            |run, _, _| {
+                delivered.lock().unwrap().push(run.id);
+                async { Ok(true) }
+            },
+            true,
+            warnings.clone(),
+        )
+        .await
+        .unwrap();
+    }
+    assert_eq!(
+        *delivered.lock().unwrap(),
+        ["healthy", "bad-body", "bad-header"]
+    );
+    assert_eq!(
+        state(&store, "bad-state").delivery_id.as_deref(),
+        Some("already-sent")
+    );
 }
