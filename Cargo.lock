@@ -202,6 +202,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "aow-id"
+version = "0.1.0"
+
+[[package]]
 name = "aow-im"
 version = "0.1.0"
 dependencies = [

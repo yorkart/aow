@@ -1,0 +1,6 @@
+[package]
+name = "aow-id"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Thread-safe Snowflake IDs with compact string encodings for AoW"
