@@ -167,29 +167,9 @@ pub(super) async fn start(
     Ok(Json(task))
 }
 
-fn shell_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\\''"))
-}
 fn prompt(state: &AppState, task: &BoardTask) -> Result<String, HttpError> {
-    let statuses = state.tasks.snapshot()?.statuses;
-    let command = if let Some(path) = state.aow.task_state_dir() {
-        format!(
-            "aow-cli --state-dir {}",
-            shell_quote(&path.to_string_lossy())
-        )
-    } else {
-        "aow-cli".into()
-    };
-    Ok(format!(
-        "{}\n\n{}\n\n[AoW task context]\nTask ID: {}\nAvailable statuses (id/name): {}\nRead status definitions: {} task statuses\nRead current state: {} task get {}\nReport status: {} task set-status {} --status STATUS-ID --expected-revision REVISION --reason 'explanation'\nRead the current revision before reporting. Statuses describe progress only; do not infer approval or execute additional work from a status label. Follow the user's instructions and continue this conversation when steered.\n",
-        task.title,
-        task.description,
-        task.id,
-        serde_json::to_string(&statuses).unwrap(),
-        command,
-        command,
-        task.id,
-        command,
-        task.id
+    Ok(super::context::prompt(
+        task,
+        &state.tasks.snapshot()?.statuses,
     ))
 }

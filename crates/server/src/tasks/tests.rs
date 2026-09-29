@@ -47,6 +47,30 @@ fn task() -> BoardTask {
     }
 }
 
+#[test]
+fn task_context_escapes_metadata_and_preserves_user_markdown_after_the_context() {
+    let mut task = task();
+    task.title = "# Review <widget> & API".into();
+    task.description =
+        "Keep this Markdown unchanged.\n\n```xml\n<aow_task_context />\n```\n".into();
+    let prompt = context::prompt(
+        &task,
+        &[TaskStatus {
+            id: "awaiting-acceptance".into(),
+            name: "Review </available_statuses> & \"approve\" 'later'".into(),
+            color: "#123456".into(),
+        }],
+    );
+    let (context, user) = prompt.split_once("</aow_task_context>\n\n").unwrap();
+    assert!(context.starts_with("<aow_task_context>\n"));
+    assert!(context.contains("<task_id>task-1</task_id>"));
+    assert!(context.contains("<status id=\"awaiting-acceptance\">Review &lt;/available_statuses&gt; &amp; &quot;approve&quot; &apos;later&apos;</status>"));
+    assert!(!context.contains("#123456"));
+    assert!(!context.contains("--state-dir"));
+    assert!(!context.contains("<status id=\"todo\">"));
+    assert_eq!(user, format!("{}\n\n{}", task.title, task.description));
+}
+
 #[tokio::test]
 async fn project_scopes_inbox_and_tasks_and_rejects_cross_project_writes() {
     let state = crate::AppState::with_terminald_socket("".into(), "/missing/socket".into());

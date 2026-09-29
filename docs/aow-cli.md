@@ -80,6 +80,8 @@ aow-cli automation runs list --help
 
 数据目录默认是 `~/.local/state/aow`，也可由 `AOW_STATE_DIR` 或 `XDG_STATE_HOME` 指定；`--state-dir` 优先。服务使用自定义目录时，CLI 必须指定同一目录。`--state-dir` 和 `--compact` 均可放在子命令前后。
 
+AoW 启动或重建终端 Agent 时，会在进程环境中设置指向当前服务实例的 `AOW_STATE_DIR`，覆盖 Agent 配置中的同名值；Agent 及其继承环境的子进程可以直接使用 `aow-cli task ...`。这不会修改保存的 Agent 配置。已有运行中的 Agent 不会自动获得新环境，需要重新创建或重建后生效。
+
 成功时向标准输出写入 JSON：列表通常为 `{"items":[...]}`，详情为单个对象。失败时以非零状态退出，并向标准错误输出 `{"error":{"code":"错误类型","message":"原因"}}`。查询到失败的自动化执行记录仍算查询成功，需查看记录中的状态判断任务结果。
 
 ## Inbox 与任务看板
@@ -140,7 +142,9 @@ aow-cli task set-status task-20260928-01 --status in-review \
   --expected-revision 6 --reason '已创建 PR，等待 Review'
 ```
 
-`task create` 和 `task start` 返回当前记录，执行准备在后台继续。`execution` 为 `preparing`、`ready`、`submitting`、`submitted` 或 `failed`，与看板 `status_id` 独立。`submitted` 只表示初始内容已发送，后续执行结果由对话和外部检查确认。任务启动会附带任务 ID、可选状态和上报命令，Agent 可用 `aow-cli` 更新状态。
+`task create` 和 `task start` 返回当前记录，执行准备在后台继续。`execution` 为 `preparing`、`ready`、`submitting`、`submitted` 或 `failed`，与看板 `status_id` 独立。`submitted` 只表示初始内容已发送，后续执行结果由对话和外部检查确认。
+
+首次提交任务时，AoW 在用户标题和 Markdown 正文前加入 `<aow_task_context>` 上下文块，包含任务 ID、当前可选状态的 ID/名称和 `aow-cli task ...` 上报说明。状态名称中的 XML 特殊字符会转义，用户正文保持原样。该标签用于标识应用提供的上下文，不改变 Agent 的消息角色；立即执行和稍后执行使用相同格式。状态变化不预设流转顺序、不代表用户验收；上报前读取最新状态定义和任务 revision，后续继续在原会话中接受用户调整。
 
 状态更新和初始提交都要求 `expected_revision`。HTTP 409 / CLI 退出码 7 表示记录已改变或操作冲突，需要重新读取并判断，不能盲目覆盖。转换需复用同一个 `--id` 来重试不确定的响应；再次转换同一个需求须使用新任务 ID 和最新 Inbox revision。Agent 启动或提交中断时会保留任务和已创建资源，显示错误；先打开关联终端检查，避免重复发送。归档任务不停止或删除 Agent / Worktree。
 

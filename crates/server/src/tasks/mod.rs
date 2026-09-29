@@ -1,5 +1,6 @@
 //! Lightweight capture and user-defined task states. No state implies execution.
 mod api;
+mod context;
 mod execution;
 mod inbox;
 mod persistence;
