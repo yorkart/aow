@@ -1,5 +1,9 @@
 # Development Guidelines
 
+## Git Worktrees
+
+- Create and manage all Git worktrees outside the main repository directory, as sibling directories under the same parent directory (for example, `../aow-feature`). Never place worktrees inside the main repository directory.
+
 ## Rust and Frontend
 
 - Use Cargo for the Rust workspace and follow the Rust edition and formatting conventions defined in `Cargo.toml` and existing code.
