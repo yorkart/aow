@@ -9,6 +9,7 @@ use axum::{
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
+        .merge(super::sources_api::routes())
         .route("/", get(board))
         .route("/statuses", post(write_statuses))
         .route("/inbox", get(list_inbox).post(create_inbox))

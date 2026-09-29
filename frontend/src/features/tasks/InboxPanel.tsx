@@ -8,6 +8,7 @@ import { tasksApi, taskError, useInboxPage, type useTaskBoard } from './api';
 import { TaskDialog } from './TaskDialog';
 import { InboxMenu } from './InboxMenu';
 import { InboxEditor } from './InboxEditor';
+import { IssuePanel } from './IssuePanel';
 import { inboxAge } from './presentation';
 import type { BoardTask, InboxItem, InboxSummary } from './types';
 
@@ -60,7 +61,7 @@ export function InboxPanel({ state, onConvert, onTask }: { state: ReturnType<typ
       </AowListRowMeta>
     </AowListRow>)}
     {inbox.data?.next_cursor && <div className="tasks-empty"><button disabled={inbox.loading} onClick={inbox.loadMore}>{inbox.loading ? '正在加载…' : '加载更多需求'}</button></div>}
-  </AowPanel></AowPanelStack>
+  </AowPanel><IssuePanel key={state.projectId} projectId={state.projectId} visible={state.visible} /></AowPanelStack>
     {menu?.kind === 'options' && <InboxMenu {...menu} label="Inbox 显示选项" onClose={closeMenu}>
       <button role="menuitemcheckbox" aria-checked={showConverted} onClick={() => { setShowConverted(!showConverted); closeMenu(); menu.anchor.focus(); }}>
         <Check style={{ visibility: showConverted ? 'visible' : 'hidden' }} />显示已转化

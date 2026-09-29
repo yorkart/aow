@@ -77,4 +77,31 @@
 .tasks-mobile { display:flex; flex-direction:column; height:100%; min-height:0; }
 .tasks-mobile > nav { display:flex; gap:8px; padding:8px; }
 .tasks-mobile > nav button { padding:8px 16px; background:#ffffff0a; border-radius:5px; }
+.tasks-issue-toolbar { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 12px; color:var(--aow-muted,#898e99); font-size:11px; }
+.tasks-issue-toolbar > span { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.tasks-issue-toolbar select { flex:none; padding:3px; max-width:110px; border:1px solid var(--aow-control-line,#ffffff14); border-radius:4px; background:var(--aow-input,#14171c); color:var(--aow-text,#d5d7dd); font:inherit; color-scheme:dark; }
+.tasks-issue-filters { padding:8px 12px; border-bottom:1px solid var(--aow-line,#ffffff09); font-size:11px; }
+.tasks-issue-filters > div:first-child { display:flex; align-items:center; justify-content:space-between; gap:8px; color:var(--aow-muted,#898e99); }
+.tasks-issue-filters button,.tasks-source-retry { border:0; background:transparent; color:var(--aow-accent,#9fc5ef); font:inherit; cursor:pointer; padding:3px; }
+.tasks-source-retry { display:block; margin-top:6px; }
+.tasks-label-options { display:flex; flex-direction:column; gap:5px; max-height:180px; overflow:auto; margin-top:8px; }
+.tasks-label-options label { display:flex; align-items:center; gap:6px; cursor:pointer; overflow-wrap:anywhere; }
+.tasks-label-options input { flex:none; accent-color:#9fc5ef; }
+.tasks-label-dot { flex:none; width:8px; height:8px; border-radius:50%; background:#898e99; }
+.tasks-issue-list { margin:0; padding:0; list-style:none; }
+.tasks-issue-list > li { padding:9px 12px; border-bottom:1px solid var(--aow-line,#ffffff09); }
+.tasks-issue-list > li:hover { background:var(--aow-hover,#ffffff0b); }
+.tasks-issue-title { display:flex; gap:7px; align-items:flex-start; }
+.tasks-issue-title > svg { flex:none; margin-top:3px; }
+.tasks-issue-open { color:#62b58d; }
+.tasks-issue-closed { color:#b49ae6; }
+.tasks-issue-title a,.tasks-issue-title > span { color:inherit; text-decoration:none; overflow-wrap:anywhere; min-width:0; }
+.tasks-issue-title a:hover { color:var(--aow-accent,#9fc5ef); text-decoration:underline; }
+.tasks-issue-title a > svg { margin-left:5px; vertical-align:middle; opacity:.6; }
+.tasks-issue-meta { display:flex; flex-wrap:wrap; gap:4px 8px; margin:5px 0 0 21px; font-size:10px; color:var(--aow-muted,#898e99); }
+.tasks-issue-meta > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
+.tasks-issue-labels { display:flex; flex-wrap:wrap; gap:4px; margin:6px 0 0 21px; }
+.tasks-issue-labels > span { font-size:10px; color:var(--aow-muted,#a0a7b3); background:#ffffff09; border:1px solid var(--aow-control-line,#ffffff14); border-radius:8px; padding:0 6px; overflow-wrap:anywhere; max-width:100%; }
+.tasks-source-setting + .tasks-source-setting { border-top:1px solid var(--aow-line,#ffffff14); padding-top:16px; margin-top:16px; }
+.tasks-source-repository { font-size:11px; color:var(--aow-muted,#898e99); overflow-wrap:anywhere; }
 @media(max-width:650px) { .tasks-board-toolbar { padding:10px; } .tasks-board-toolbar > div { gap:5px; } .tasks-board-filters { padding:0 10px 10px; gap:8px; } .tasks-board-filters > span { display:none; } .tasks-columns { padding:0 10px 10px; gap:10px; } .tasks-column { flex-basis:80vw; max-width:none; } .tasks-form-row { grid-template-columns:1fr; gap:0; } .tasks-dialog { padding:16px; } }

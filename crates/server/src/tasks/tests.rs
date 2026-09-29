@@ -456,3 +456,102 @@ async fn shared_status_configuration_allocates_ids_and_deduplicates_saves() {
         board
     );
 }
+
+#[tokio::test]
+async fn issue_source_routes_use_project_provider_and_preserve_filter_names() {
+    let directory = tempfile::tempdir().unwrap();
+    let repo = directory.path().join("repo");
+    std::fs::create_dir(&repo).unwrap();
+    for args in [
+        vec!["init", "--quiet"],
+        vec![
+            "remote",
+            "add",
+            "origin",
+            "git@git.example.com:team/repo.git",
+        ],
+    ] {
+        assert!(
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(&repo)
+                .output()
+                .unwrap()
+                .status
+                .success()
+        );
+    }
+    let app = crate::build_router(crate::AppState::new("".into()));
+    let script = r#"import json,sys
+r=json.load(sys.stdin)
+if r['operation']=='describe':
+ result={'operations':['list','detail','diff','issues','issue_labels']}
+else:
+ assert r['repository']['path']=='team/repo'
+ assert r['repository']['remote']=='origin'
+ if r['operation']=='issue_labels':
+  result={'labels':[{'name':'需求, UI','color':'abcdef','description':''}]}
+ else:
+  assert r['operation']=='issues'
+  assert r['params']=={'state':'all','labels':['bug','需求, UI']}
+  result={'issues':[{'number':42,'title':'Shared issue','status':'open','url':'https://git.example.com/issues/42','labels':['需求, UI'],'assignees':['bob'],'updated_at':'2026-09-29T00:00:00Z'}]}
+print(json.dumps({'version':2,'result':result}))
+"#;
+    let (status, _) = call(&app, "PUT", "/api/aow/review-providers", json!({"revision":0,"providers":[{"id":"custom","name":"Custom","enabled":true,"hosts":["git.example.com"],"script":script}]})).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, project) = call(
+        &app,
+        "POST",
+        "/api/aow/projects",
+        json!({"path":repo,"notes_path":directory.path().join("notes")}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{project}");
+    let endpoint = format!("/api/tasks/sources/{}", project["id"].as_str().unwrap());
+    let (status, mut settings) = call(&app, "GET", &endpoint, Value::Null).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, targets) = call(&app, "GET", &format!("{endpoint}/targets"), Value::Null).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(targets["targets"][0]["provider"], "custom");
+    let (status, labels) = call(&app, "GET", &format!("{endpoint}/labels"), Value::Null).await;
+    assert_eq!(status, StatusCode::OK, "{labels}");
+    assert_eq!(labels["labels"][0]["name"], "需求, UI");
+    let input = json!({"state":"all","labels":["bug","需求, UI"]});
+    let (status, result) = call(&app, "POST", &format!("{endpoint}/issues"), input.clone()).await;
+    assert_eq!(status, StatusCode::OK, "{result}");
+    assert_eq!(result["issues"][0]["number"], 42);
+    assert_eq!(result["provider"], "custom");
+    assert_eq!(result["remote"], "origin");
+    settings["sources"][1]["enabled"] = json!(false);
+    assert_eq!(
+        call(&app, "PUT", &endpoint, settings.clone()).await.0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        call(&app, "PUT", &endpoint, settings).await.0,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        call(&app, "POST", &format!("{endpoint}/issues"), input)
+            .await
+            .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        call(&app, "GET", "/api/tasks/sources/missing", Value::Null)
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        call(
+            &app,
+            "POST",
+            &format!("{endpoint}/issues"),
+            json!({"state":"invalid"})
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+}

@@ -17,7 +17,7 @@ export function MobileTasks({ project, worktree, visible, navigate }: { project:
   const [agents, setAgents] = useState<AowAgent[]>([]);
   const [error, setError] = useState('');
   useEffect(() => { void agentsApi.agents().then(setAgents).catch(e => setError(taskError(e))); }, []);
-  return <div className="tasks-mobile"><nav><button aria-pressed={view === 'inbox'} onClick={() => setView('inbox')}>Inbox</button><button aria-pressed={view === 'board'} onClick={() => setView('board')}>Task Board</button></nav>
+  return <div className="tasks-mobile"><nav><button aria-pressed={view === 'inbox'} onClick={() => setView('inbox')}>需求源</button><button aria-pressed={view === 'board'} onClick={() => setView('board')}>Task Board</button></nav>
     {error && <p className="tasks-error" role="alert">{error}</p>}
     {view === 'inbox' ? <InboxPanel state={state} onConvert={setItem} onTask={() => setView('board')} /> : <TaskBoard state={state} onOpen={async task => {
       if (!task.tab_id) return; const terminal = await terminalApi.get(task.tab_id); navigate({ workspace: terminal.workspace_root, view: 'terminal', terminal: terminal.id });

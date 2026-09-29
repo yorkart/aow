@@ -164,6 +164,32 @@ Settings → Pull Requests 管理 Provider：唯一 ID、显示名称、启用�
 
 移动端传 `patch_only: true`，此时必须提供 unified diff `patch`，可以不返回两侧全文（填 null）。没有文本差异时 patch 为空字符串。二进制文件设置 binary=true；内容太大或不完整设置 truncated=true，无法提供的内容用 null，UI 将明确提示。
 
+## issues / issue_labels（可选）
+
+Tasks 面板在 Inbox 下方展示仓库共享 Issue。需求源配置按项目保存到当前配置仓库的 `tasks/sources.json`，包含固定启用的 `inbox` 与可启停的 `repository_issues` 来源；后者可自动匹配仓库，或绑定现有 Provider 和 remote。多个不同仓库匹配时必须选择 remote。保存使用项目级 revision 检测冲突。
+
+仓库 Python 脚本在 `describe.operations` 中声明 `issues` 和 `issue_labels`。未声明时展示能力缺失提示，不影响已有 PR API。Issue 查询不限制创建人或负责人，不创建本地 Inbox 副本，也不修改远端 Issue。
+
+`issues` 请求参数为 `{"state":"open","labels":["bug","需求, UI"]}`。`state` 可为 `open`、`closed`、`all`，默认 `open`。`labels` 是完整标签名称数组，多个标签按 **OR** 匹配，空数组不限制标签；分页、过滤和平台适配全部由脚本完成，不能返回未说明的部分结果。GitHub 适配器分页读取仓库 Issue 后排除带 `pull_request` 的条目，并在 Python 中执行标签筛选。
+
+```json
+{"issues":[{"number":42,"title":"Support shared requirements","status":"open","url":"https://github.com/team/repo/issues/42","labels":["bug"],"assignees":["alice"],"updated_at":"2026-09-29T01:00:00Z"}]}
+```
+
+`status` 只能为 `open` 或 `closed`；编号必须为不重复的正整数。`url` 为无账号密码的 HTTP(S) 链接，无法提供时为 null；`updated_at` 为 RFC 3339 时间。应用补充列表的 `provider`、`provider_name` 和 `remote` 身份。
+
+`issue_labels` 请求参数为 `{}`，返回仓库全部可用标签，包括没有关联当前 Issue 的标签：
+
+```json
+{"labels":[{"name":"bug","color":"d73a4a","description":"Something is not working"}]}
+```
+
+`color` 是不带 `#` 的六位十六进制颜色，未知时用空字符串；`description` 未设置时用空字符串。接口失败应返回协议 error，不得伪装为空列表。
+
+前端通过 `GET/PUT /api/tasks/sources/<project_id>` 管理来源，`GET /api/tasks/sources/<project_id>/targets` 查询可选仓库，`GET /api/tasks/sources/<project_id>/labels` 查询标签，`POST /api/tasks/sources/<project_id>/issues` 携带 JSON 筛选条件进行只读查询。后端从已注册项目解析本地仓库，再调用已配置的 Python Provider。
+
+GitHub 接口参考：[仓库 Issue 列表](https://docs.github.com/en/rest/issues/issues#list-repository-issues)、[仓库 Label 列表](https://docs.github.com/en/rest/issues/labels#list-labels-for-a-repository)。
+
 ## 内置 GitHub 适配器
 
 `repository_info` 使用 `gh api --hostname <host> repos/<owner>/<repo>`，读取 `owner.avatar_url`，复用服务器上 gh 的登录状态。用户浏览器仍需能访问返回的头像地址。未经修改的旧版内置脚本会自动升级以支持头像；自定义脚本按需添加此可选能力。

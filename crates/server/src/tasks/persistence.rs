@@ -54,6 +54,7 @@ impl Persistence {
     }
 
     pub fn load(&self, data: &mut TaskData) -> Result<()> {
+        data.sources = self.load_sources()?;
         let statuses = self.config.directory().join("tasks/statuses.json");
         if let Some(document) = read_optional::<Statuses>(&statuses)? {
             ensure!(document.version == 1, "Unsupported task status format");
@@ -211,14 +212,14 @@ impl Persistence {
         .map_err(Into::into)
     }
 
-    fn save_config(&self, relative: &Path, value: &impl Serialize) -> Result<()> {
+    pub(super) fn save_config(&self, relative: &Path, value: &impl Serialize) -> Result<()> {
         let mut bytes = serde_json::to_vec_pretty(value)?;
         bytes.push(b'\n');
         self.config.save(relative, &bytes)
     }
 }
 
-fn read_optional<T: serde::de::DeserializeOwned>(path: &Path) -> Result<Option<T>> {
+pub(super) fn read_optional<T: serde::de::DeserializeOwned>(path: &Path) -> Result<Option<T>> {
     match fs::symlink_metadata(path) {
         Ok(metadata) => ensure!(
             metadata.is_file(),

@@ -476,3 +476,39 @@ fn concurrent_conversion_is_accepted_once_and_receipt_survives_restart() {
     assert!(store.task_for_request(&changed).is_err());
     assert_eq!(store.snapshot().unwrap().tasks.len(), 1);
 }
+
+#[test]
+fn requirement_sources_persist_per_project_with_revision_conflicts() {
+    use super::sources::{RequirementSource, SourceSettings};
+    let state = tempfile::tempdir().unwrap();
+    let config = ConfigRepository::initialize(state.path()).unwrap();
+    let store = open(state.path(), &config);
+    let settings = SourceSettings {
+        revision: 0,
+        sources: vec![
+            RequirementSource::Inbox,
+            RequirementSource::RepositoryIssues {
+                enabled: false,
+                provider: Some("custom".into()),
+                remote: Some("upstream".into()),
+            },
+        ],
+    };
+    let saved = store.save_sources("project", settings.clone()).unwrap();
+    assert_eq!(saved.revision, 1);
+    assert!(store.save_sources("project", settings).is_err());
+    assert_eq!(store.sources("other").unwrap().revision, 0);
+    assert_eq!(
+        serde_json::to_value(open(state.path(), &config).sources("project").unwrap()).unwrap(),
+        serde_json::to_value(saved).unwrap()
+    );
+    assert!(
+        git(&config, &["show", "--format=", "--name-only", "HEAD"]).ends_with("tasks/sources.json")
+    );
+    let invalid = SourceSettings {
+        revision: 1,
+        sources: vec![RequirementSource::Inbox, RequirementSource::Inbox],
+    };
+    assert!(store.save_sources("project", invalid).is_err());
+    assert!(store.sources("../escape").is_err());
+}

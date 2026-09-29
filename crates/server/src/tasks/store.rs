@@ -79,6 +79,7 @@ pub(super) fn now() -> String {
 }
 
 pub(super) struct TaskData {
+    pub sources: BTreeMap<String, super::sources::SourceSettings>,
     pub board: TaskBoard,
     /// Persistent stores retain only summaries. Bodies are read on demand.
     pub inbox: BTreeMap<String, InboxSummary>,
@@ -100,6 +101,7 @@ impl TaskStore {
             _ => anyhow::bail!("Persistent tasks require an active configuration"),
         };
         let mut data = TaskData {
+            sources: BTreeMap::new(),
             board: defaults(),
             inbox: BTreeMap::new(),
             memory_inbox: BTreeMap::new(),

@@ -40,6 +40,7 @@ try {
       if (request.method() === 'GET') {
         reads.push({ path, query: url.search });
         const project = url.searchParams.get('project_id');
+        if (path.startsWith('/sources/')) return route.fulfill({ json: { revision: 0, sources: [{ type: 'inbox' }, { type: 'repository_issues', enabled: false, provider: null, remote: null }] } });
         if (path.startsWith('/inbox/')) {
           const { task_ids, ...item } = board.inbox.find(item => item.id === path.split('/')[2]);
           return route.fulfill({ json: item });
