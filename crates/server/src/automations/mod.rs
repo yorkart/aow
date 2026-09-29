@@ -24,7 +24,7 @@ use crate::{AppState, PROCESS_HOME};
 
 mod api;
 mod notifications;
-pub(crate) use api::routes;
+pub(crate) use api::{cli_routes, routes};
 
 const RUN_HISTORY_RETENTION: usize = 200;
 const RUN_HISTORY_CLEANUP_INTERVAL: Duration = Duration::from_secs(5 * 60);

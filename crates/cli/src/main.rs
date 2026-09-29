@@ -16,8 +16,9 @@ use serde::Serialize;
 
 const CONTEXT: &str =
     "Local access: uses the current OS user and filesystem permissions. No web login, Cookie,
-token, or running AoW server is required for automation queries. Project queries
-require a running server; agent commands also require terminald, via the local Unix socket.
+token, or running AoW server is required for automation queries. Automation creation,
+task commands and project queries require a running server via the local Unix socket;
+agent commands also require terminald.
 Queries do not initialize, migrate,
 repair, or clean state. Help and version work without a state directory.
 
@@ -47,6 +48,7 @@ Examples (replace IDs with values returned by list commands):
   aow-cli project get PROJECT-ID
   aow-cli agent create --project-id PROJECT-ID --cwd /worktrees/fix
   aow-cli automation list
+  aow-cli automation create --file task.json --project-id PROJECT-ID
   aow-cli automation get 12345678
   aow-cli automation runs list 12345678 --limit 20
   aow-cli automation runs get 12345678 20260913T090000000Z_1234
@@ -71,7 +73,7 @@ enum Command {
     Task(task::TaskArgs),
     /// Query registered project IDs, names and repository paths through the local server.
     Project(project::ProjectArgs),
-    /// Inspect local automation task configurations and execution records.
+    /// Create paused automation tasks and inspect local configurations and execution records.
     #[command(after_help = CONTEXT)]
     Automation(automation::Automation),
     /// Create hidden interactive agents and submit tasks through the local AoW server.

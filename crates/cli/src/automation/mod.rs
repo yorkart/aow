@@ -8,6 +8,8 @@ use serde_json::Value;
 use super::CONTEXT;
 use crate::parse_id;
 
+mod create;
+
 #[derive(Args)]
 pub(super) struct Automation {
     #[command(subcommand)]
@@ -16,6 +18,8 @@ pub(super) struct Automation {
 
 #[derive(Subcommand)]
 enum AutomationCommand {
+    /// Create a new paused task from a saved JSON file in the target project.
+    Create(create::CreateArgs),
     /// List all tasks, newest created first (ID descending breaks ties).
     #[command(after_help = CONTEXT)]
     List {
@@ -75,24 +79,33 @@ fn parse_run_cursor(value: &str) -> std::result::Result<String, String> {
 }
 
 pub(super) fn execute(command: Automation, state_dir: PathBuf) -> Result<Value> {
-    let query = AutomationQuery::open(state_dir)?;
     // Build a complete result before touching stdout, so failed queries never emit partial JSON.
     let value = match command.command {
+        AutomationCommand::Create(args) => return create::execute(args, state_dir),
         AutomationCommand::List {
             project_id,
             include_deleted,
-        } => serde_json::json!({ "items": query.tasks(project_id.as_deref(), include_deleted)? }),
-        AutomationCommand::Get { task_id } => serde_json::to_value(query.task(&task_id)?)?,
-        AutomationCommand::Runs(runs) => match runs.command {
-            RunsCommand::List {
-                task_id,
-                limit,
-                before,
-            } => serde_json::to_value(query.runs(&task_id, before.as_deref(), limit.into())?)?,
-            RunsCommand::Get { task_id, run_id } => {
-                serde_json::to_value(query.run(&task_id, &run_id)?)?
+        } => {
+            serde_json::json!({ "items": AutomationQuery::open(state_dir)?.tasks(project_id.as_deref(), include_deleted)? })
+        }
+        AutomationCommand::Get { task_id } => {
+            serde_json::to_value(AutomationQuery::open(state_dir)?.task(&task_id)?)?
+        }
+        AutomationCommand::Runs(runs) => {
+            let query = AutomationQuery::open(state_dir)?;
+            match runs.command {
+                RunsCommand::List {
+                    task_id,
+                    limit,
+                    before,
+                } => {
+                    serde_json::to_value(query.runs(&task_id, before.as_deref(), limit.into())?)?
+                }
+                RunsCommand::Get { task_id, run_id } => {
+                    serde_json::to_value(query.run(&task_id, &run_id)?)?
+                }
             }
-        },
+        }
     };
     Ok(value)
 }

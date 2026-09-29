@@ -61,6 +61,225 @@ async fn call_text(router: &Router, path: &str) -> (StatusCode, String) {
 }
 
 #[tokio::test]
+async fn cli_import_rebinds_saved_tasks_and_isolates_failures() {
+    use aow_terminald_client::{TerminaldClient, TerminaldClientError};
+    use serde_json::{Value, json};
+
+    let directory = tempfile::tempdir().unwrap();
+    let repository = directory.path().join("target repo");
+    fs::create_dir(&repository).unwrap();
+    assert!(
+        std::process::Command::new("git")
+            .args(["init", "-b", "main"])
+            .current_dir(&repository)
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    assert!(
+        std::process::Command::new("git")
+            .args([
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.invalid",
+                "commit",
+                "--allow-empty",
+                "-m",
+                "initial"
+            ])
+            .current_dir(&repository)
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    let fake = directory.path().join("fake-agent");
+    fs::write(&fake, "#!/bin/sh\ntouch \"$0.called\"\n").unwrap();
+    fs::set_permissions(&fake, fs::Permissions::from_mode(0o700)).unwrap();
+    let state_dir = directory.path().join("state");
+    let mut state = AppState::with_state_dir(
+        directory.path().join("frontend"),
+        state_dir.clone(),
+        directory.path().join("no-terminald.sock"),
+    )
+    .unwrap();
+    state.auth = crate::auth::AuthService::disabled();
+    state.automations.as_mut().unwrap().scheduler = Scheduler {
+        platform: Platform::Systemd,
+        runner: fake.clone(),
+        directory: directory.path().join("units"),
+        manager_command: fake.clone(),
+        dispatch_command: fake.clone(),
+    };
+    let manager = state.automations.clone().unwrap();
+    let router = crate::build_router(state.clone());
+    let (code, project) = call(&router, "POST", "/api/aow/projects", json!({
+        "path": repository, "name":"Target project", "notes_path":directory.path().join("notes"),
+    })).await;
+    assert_eq!(code, StatusCode::CREATED, "{project}");
+    let (code, agent) = call(
+        &router,
+        "POST",
+        "/api/aow/agents",
+        json!({
+            "id":"codex", "agent_type":"codex", "display_name":"Local Codex", "command":fake,
+        }),
+    )
+    .await;
+    assert_eq!(code, StatusCode::CREATED, "{agent}");
+    let server = crate::local_cli::start_local_cli(state, &state_dir)
+        .await
+        .unwrap();
+    let client = TerminaldClient::new(state_dir.join("cli/cli.sock"));
+    let source = json!({
+        "id":"12345678", "revision":99, "created_at":"2020-01-01T00:00:00Z", "updated_at":"2020-01-01T00:00:00Z",
+        "name":"迁移任务", "prompt":"检查最近变更\n保留换行", "agent":"codex", "kind":"scheduled",
+        "project_id":"old-project", "project_name":"Old project", "repository_path":"/old/repo",
+        "workspace_path":"/old/worktree", "workspace_mode":"new_worktree", "base_branch":"main",
+        "cleanup_worktree":false, "cron":"0 9 * * 1-5", "interval_seconds":null,
+        "max_concurrent_runs":3, "enabled":true, "yolo":false,
+        "precheck_command":"git status --porcelain", "precheck_timeout_seconds":42, "failure_notification":"feishu",
+        "launch":{"executable":"/old/codex", "args":["old-argument"], "environment":{"OLD_MACHINE_ONLY":"old"}},
+        "deleted":true, "scheduler_error":"old error", "is_running":true,
+    });
+    let request = json!({"project_id":project["id"], "configuration":source});
+    let created: Value = client.post_json("/v1/automations", &request).await.unwrap();
+    let id = created["id"].as_str().unwrap();
+    assert!(aow_id::is_valid_id(id));
+    assert_ne!(created["id"], source["id"]);
+    assert_eq!(created["enabled"], false);
+    assert_eq!(created["project_id"], project["id"]);
+    assert_eq!(created["project_name"], "Target project");
+    assert_eq!(
+        created["workspace_path"],
+        repository.canonicalize().unwrap().to_str().unwrap()
+    );
+    assert_eq!(created["revision"], 1);
+    assert_ne!(created["created_at"], source["created_at"]);
+    assert!(created["next_run_at"].is_null());
+    assert_eq!(created["is_running"], false);
+    assert!(created["scheduler_error"].is_null());
+    for field in [
+        "name",
+        "prompt",
+        "agent",
+        "kind",
+        "workspace_mode",
+        "base_branch",
+        "cron",
+        "interval_seconds",
+        "max_concurrent_runs",
+        "yolo",
+        "precheck_command",
+        "precheck_timeout_seconds",
+        "failure_notification",
+    ] {
+        assert_eq!(created[field], source[field], "{field}");
+    }
+    assert_eq!(created["cleanup_worktree"], true);
+    let saved = manager.store.get_task(id).unwrap();
+    assert!(!saved.deleted);
+    assert_eq!(saved.repository_path, repository.canonicalize().unwrap());
+    assert_eq!(saved.launch.executable, fake);
+    assert!(!saved.launch.args.iter().any(|arg| arg == "old-argument"));
+    assert!(!saved.launch.environment.contains_key("OLD_MACHINE_ONLY"));
+    assert_eq!(
+        call(
+            &router,
+            "GET",
+            &format!("/api/aow/automations/{id}"),
+            Value::Null
+        )
+        .await
+        .1,
+        created
+    );
+
+    // Reusing a file always creates a fresh task, including a serialized Store task.
+    let duplicate: Value = client
+        .post_json(
+            "/v1/automations",
+            &json!({
+                "project_id":project["id"], "configuration":saved,
+            }),
+        )
+        .await
+        .unwrap();
+    assert_ne!(duplicate["id"], created["id"]);
+
+    for (configuration, project_id, expected) in [
+        (json!({}), project["id"].clone(), StatusCode::BAD_REQUEST),
+        (
+            {
+                let mut input = source.clone();
+                input["cron"] = json!("invalid");
+                input
+            },
+            project["id"].clone(),
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            {
+                let mut input = source.clone();
+                input["agent"] = json!("missing-agent");
+                input
+            },
+            project["id"].clone(),
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            source.clone(),
+            json!("missing-project"),
+            StatusCode::NOT_FOUND,
+        ),
+    ] {
+        assert!(
+            matches!(client.post_json::<_, Value>("/v1/automations", &json!({"project_id":project_id, "configuration":configuration})).await,
+            Err(TerminaldClientError::HttpStatus {status, ..}) if status == expected)
+        );
+    }
+    assert_eq!(manager.store.tasks().unwrap().len(), 2);
+
+    // Target-only fields may be omitted; interval and manual configurations remain portable.
+    let interval: Value = client
+        .post_json(
+            "/v1/automations",
+            &json!({"project_id":project["id"], "configuration":{
+                "name":"Interval", "prompt":"Review", "agent":"codex", "workspace_mode":"existing",
+                "interval_seconds":120, "max_concurrent_runs":1,
+            }}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(interval["interval_seconds"], 120);
+    assert_eq!(interval["enabled"], false);
+    let manual: Value = client.post_json("/v1/automations", &json!({"project_id":project["id"], "configuration":{
+        "name":"Manual", "prompt":"Review {{branch}}", "agent":"codex", "workspace_mode":"existing",
+        "kind":"manual", "max_concurrent_runs":1,
+        "prompt_bindings":[{"name":"branch", "placeholder":"{{branch}}", "start":7, "end":17}],
+    }})).await.unwrap();
+    assert_eq!(manual["kind"], "manual");
+    assert_eq!(manual["prompt_bindings"][0]["name"], "branch");
+    assert_eq!(manager.store.tasks().unwrap().len(), 4);
+    assert!(!directory.path().join("fake-agent.called").exists());
+    assert!(!directory.path().join("units").exists());
+    // The private CLI endpoint is not published on the Web router.
+    let response = router
+        .oneshot(
+            Request::post("/v1/automations")
+                .header("content-type", "application/json")
+                .body(Body::from(request.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert!(!response.status().is_success());
+    server.shutdown().await;
+}
+
+#[tokio::test]
 async fn api_persists_config_sync_errors_and_history_across_server_restarts() {
     let directory = tempfile::tempdir().unwrap();
     let repository = directory.path().join("repo");

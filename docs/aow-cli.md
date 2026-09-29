@@ -1,6 +1,6 @@
 # AoW CLI 使用
 
-`aow-cli` 随 AoW 一起安装，用于查询项目、启动 Agent、管理 Inbox 与任务状态，以及查看自动化执行记录。安装方式见 [README](../README.md)，请将 `~/.local/bin` 加入 `PATH`。
+`aow-cli` 随 AoW 一起安装，用于查询项目、启动 Agent、管理 Inbox 与任务状态，以及创建自动化任务、查看执行记录。安装方式见 [README](../README.md)，请将 `~/.local/bin` 加入 `PATH`。
 
 在运行 AoW 的机器上，以同一系统用户执行。`project` 需要 Web 服务运行；`agent` 还需要 terminald，并提前安装、登录对应 Agent CLI；`automation` 查询可在 Web 服务停止时使用。
 
@@ -61,7 +61,67 @@ aow-cli automation runs list TASK-ID --limit 20 --before NEXT-CURSOR
 
 `TASK-ID` 和 `RUN-ID` 从列表结果获取。任务列表默认隐藏已删除任务，添加 `--include-deleted` 可一并查看。执行列表按记录的 `started_at` 倒序排列，`--limit` 默认 50、范围 1–500；`next_cursor` 为 `null` 表示没有下一页。游标与资源 ID 独立，调用方原样传回即可，游标对应的记录被清理后仍可继续翻页。
 
-CLI 当前只查询自动化任务，创建、修改和执行请使用网页。执行详情中的 `stdout_path`、`stderr_path` 是本机日志路径，可自行打开查看。
+CLI 支持从 JSON 文件创建自动化任务；修改、启用和执行请使用网页。执行详情中的 `stdout_path`、`stderr_path` 是本机日志路径，可自行打开查看。
+
+## 从文件创建或迁移自动化任务
+
+在目标机器上运行 AoW 服务，以同一系统用户执行；服务使用自定义数据目录时，传入相同的 `--state-dir`。创建通过本机私有 Unix socket 完成，无需浏览器登录或 terminald；对应 Agent 需要已在目标机器安装并配置。
+
+```bash
+# 查询目标项目 ID
+aow-cli project list
+
+# 从任务文件创建；也可以直接使用 automation get 输出的 JSON
+aow-cli automation create --file task.json --project-id TARGET-PROJECT-ID
+
+# 从标准输入读取，便于脚本处理
+aow-cli automation create --file - --project-id TARGET-PROJECT-ID < task.json
+```
+
+`--file` 和 `--project-id` 均必填。文件须为一个 JSON 对象，上限 1 MiB；支持已有保存的任务文件、`automation get` 输出及只包含任务配置的 JSON。列表输出中的 `items` 数组不能作为单个任务直接导入。
+
+每次成功调用都会创建一个新任务：
+
+- 服务端重新生成任务 ID、时间和 revision，不复用原任务身份或执行历史。
+- 项目归属和 `workspace_path` 使用目标项目及其仓库根目录，忽略文件中的原值；`workspace_mode` 保留，因此选择新 Worktree 或临时目录的任务仍按原模式执行。
+- 强制 `enabled: false`，定时任务以暂停状态保存，随后在网页确认配置并启用；手动任务保留手动类型，不产生定时计划。
+- 保留名称、提示词、Agent 类型、运行计划、并发数、提示词变量绑定、执行前检查及通知等任务配置。Agent 启动路径、启动参数和配置环境由目标机器重新解析；忽略源文件中的 `launch`、删除标记及运行状态。
+
+从零创建时可以使用下面的最小定时任务配置，无需填写项目、路径或启用状态：
+
+```json
+{
+  "name": "Daily review",
+  "prompt": "检查项目最近的变更",
+  "agent": "codex",
+  "workspace_mode": "existing",
+  "cron": "0 9 * * 1-5",
+  "max_concurrent_runs": 1
+}
+```
+
+其他配置沿用网页创建接口：`kind`（默认 `scheduled`）、`prompt_bindings`、`base_branch`、`interval_seconds`、`cleanup_worktree`、`yolo`、`precheck_command`、`precheck_timeout_seconds` 和 `failure_notification`。`new_worktree`／`new_branch` 模式需要 `base_branch`；新 Worktree 沿用系统的执行后清理规则。`interval_seconds` 有值时按间隔运行，否则使用 `cron`；cron 按目标机器本地时区解释。手动任务使用 `kind: "manual"`，不填写 cron 或间隔。
+
+批量迁移时逐文件调用，失败后继续处理其他文件。下面的脚本适用于 Bash，结束时输出成功／失败数量；有文件失败则返回非零状态：
+
+```bash
+project_id=TARGET-PROJECT-ID
+succeeded=0
+failed=0
+for file in ./automation-files/*.json; do
+  [ -f "$file" ] || continue
+  if aow-cli automation create --file "$file" --project-id "$project_id"; then
+    succeeded=$((succeeded + 1))
+  else
+    printf '导入失败：%s\n' "$file" >&2
+    failed=$((failed + 1))
+  fi
+done
+printf '成功：%s，失败：%s\n' "$succeeded" "$failed"
+[ "$failed" -eq 0 ]
+```
+
+成功时输出新任务 JSON，失败时沿用 CLI 的错误 JSON 和非零退出码。重复调用会创建多个任务；若请求超时或响应丢失，先通过 `automation list --project-id TARGET-PROJECT-ID` 确认结果，再决定是否重试。
 
 ## 通用选项与帮助
 

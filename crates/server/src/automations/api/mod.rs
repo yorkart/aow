@@ -17,8 +17,13 @@ fn manager(state: &AppState) -> Result<&AutomationManager, (StatusCode, Json<ser
     })
 }
 
+mod import;
 mod runs;
 mod tasks;
+
+pub(crate) fn cli_routes() -> Router<AppState> {
+    Router::new().route("/v1/automations", post(import::create))
+}
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
