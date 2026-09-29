@@ -128,7 +128,7 @@ async fn observes_snapshot_failures_in_any_completion_order_and_survives_restart
         |run, channel, id| {
             assert_eq!(channel, FailureNotification::Feishu);
             assert_eq!(run.task_name, "每日检查");
-            assert!(Uuid::parse_str(&id).is_ok());
+            assert!(id.parse::<aow_id::Snowflake>().is_ok());
             sent.lock().unwrap().push(run.id);
             async { Ok(true) }
         },

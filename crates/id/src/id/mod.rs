@@ -5,6 +5,7 @@ use crate::{
     generator::{MAX_NODE, MAX_SEQUENCE, SEQUENCE_BITS, TIME_SHIFT},
 };
 
+const BASE36: &[u8; 36] = b"0123456789abcdefghijklmnopqrstuvwxyz";
 const BASE62: &[u8; 62] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 // Preserve the upstream alphabet, which differs from Bitcoin's Base58 alphabet.
 const BASE58: &[u8; 58] = b"123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -12,8 +13,8 @@ const BASE58: &[u8; 58] = b"123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRST
 /// A non-negative 63-bit Snowflake value. Numeric ordering follows timestamp,
 /// then node ID, then sequence; this is not a cross-node event ordering guarantee.
 ///
-/// `Display` and `FromStr` use canonical, unpadded Base62. These strings are case
-/// sensitive and at most 11 characters. Variable-width text is not numerically
+/// `Display` and `FromStr` use canonical, unpadded lowercase Base36, safe for
+/// case-insensitive filenames and at most 13 characters. Variable-width text is not numerically
 /// sortable; use the value's `Ord` implementation for sorting.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Snowflake(u64);
@@ -44,6 +45,16 @@ impl Snowflake {
         (self.0 & MAX_SEQUENCE as u64) as u16
     }
 
+    /// Encode using `0-9a-z` without padding (at most 13 characters).
+    pub fn to_base36(self) -> String {
+        encode(self.0, BASE36)
+    }
+
+    /// Decode canonical lowercase Base36, rejecting uppercase and leading zeros.
+    pub fn from_base36(text: &str) -> Result<Self, Error> {
+        decode(text, BASE36)
+    }
+
     /// Encode using `0-9A-Za-z` without padding.
     pub fn to_base62(self) -> String {
         encode(self.0, BASE62)
@@ -67,7 +78,7 @@ impl Snowflake {
 
 impl fmt::Display for Snowflake {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.to_base62())
+        formatter.write_str(&self.to_base36())
     }
 }
 
@@ -75,12 +86,12 @@ impl FromStr for Snowflake {
     type Err = Error;
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
-        Self::from_base62(text)
+        Self::from_base36(text)
     }
 }
 
 fn encode(mut value: u64, alphabet: &[u8]) -> String {
-    let mut buffer = [0; 11];
+    let mut buffer = [0; 13];
     let mut start = buffer.len();
     let radix = alphabet.len() as u64;
     loop {
@@ -91,13 +102,15 @@ fn encode(mut value: u64, alphabet: &[u8]) -> String {
             break;
         }
     }
-    // Both private alphabets contain only ASCII.
+    // The private alphabets contain only ASCII.
     String::from_utf8(buffer[start..].to_vec()).expect("ID alphabet is ASCII")
 }
 
 fn decode(text: &str, alphabet: &[u8]) -> Result<Snowflake, Error> {
     let bytes = text.as_bytes();
-    if bytes.is_empty() || bytes.len() > 11 || (bytes.len() > 1 && bytes[0] == alphabet[0]) {
+    let max_length = if alphabet.len() == 36 { 13 } else { 11 };
+    if bytes.is_empty() || bytes.len() > max_length || (bytes.len() > 1 && bytes[0] == alphabet[0])
+    {
         return Err(Error::InvalidEncoding);
     }
     let mut value = 0_u64;

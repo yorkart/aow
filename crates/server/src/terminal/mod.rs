@@ -29,6 +29,7 @@ use axum::{
 use futures_util::{SinkExt, StreamExt, stream::FuturesUnordered};
 use serde::{Deserialize, Serialize};
 use tokio_tungstenite::tungstenite;
+#[cfg(test)]
 use uuid::Uuid;
 
 use crate::{AppState, HttpError, aow::AgentLaunch};

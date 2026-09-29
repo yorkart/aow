@@ -22,6 +22,7 @@ pub fn build_router(state: AppState) -> Router {
     let app = Router::new()
         .merge(auth::routes())
         .route("/api/health", get(health))
+        .route("/api/ids", axum::routing::post(allocate_id))
         .route("/api/fs/home", get(list_home))
         .route("/api/fs/tree", get(list_root))
         .route("/api/fs/tree/{*path}", get(list_path))
@@ -102,11 +103,39 @@ pub fn build_router(state: AppState) -> Router {
         ))
 }
 
+async fn allocate_id() -> axum::Json<serde_json::Value> {
+    axum::Json(serde_json::json!({ "id": aow_id::new_id() }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use axum::{body::Body, http::Request};
     use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn browser_ids_are_unique_canonical_snowflakes() {
+        let directory = tempfile::tempdir().unwrap();
+        let app = build_router(AppState::new(directory.path().to_owned()));
+        let mut ids = std::collections::HashSet::new();
+        for _ in 0..16 {
+            let response = app
+                .clone()
+                .oneshot(Request::post("/api/ids").body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), axum::http::StatusCode::OK);
+            let body = axum::body::to_bytes(response.into_body(), 1024)
+                .await
+                .unwrap();
+            let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            let id = value["id"].as_str().unwrap();
+            let parsed: aow_id::Snowflake = id.parse().unwrap();
+            assert_eq!(parsed.to_string(), id);
+            assert!(id.len() <= 13);
+            assert!(ids.insert(id.to_owned()));
+        }
+    }
 
     #[tokio::test]
     async fn untrusted_raw_documents_are_downloaded_and_sandboxed_without_breaking_images() {

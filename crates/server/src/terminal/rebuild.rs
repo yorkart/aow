@@ -59,7 +59,7 @@ impl TerminalManager {
             .panes
             .iter()
             .map(|pane| TerminalPane {
-                id: Uuid::new_v4().to_string(),
+                id: aow_id::new_id(),
                 status: TerminalPaneStatus::Running,
                 exit_code: None,
                 agent_terminal: pane.agent_terminal.as_ref().map(|_| AgentTerminalState {

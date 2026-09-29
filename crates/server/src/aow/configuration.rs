@@ -164,7 +164,7 @@ mod tests {
             AowManager::persistent_with_notes_base(&state_dir, temp.path().join("notes")).unwrap();
         let active = state.aow.inner.config.as_ref().unwrap().selection();
         assert_ne!(active, target);
-        let second_id = "550e8400-e29b-41d4-a716-446655440000";
+        let second_id = "g123456789ab";
         std::fs::create_dir(target.config_repo.join(second_id)).unwrap();
         let router = routes().with_state(state.clone());
         let endpoint = "/api/aow/settings/configuration";

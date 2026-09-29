@@ -127,7 +127,7 @@ impl AowManager {
                 result
             } else {
                 let project = StoredProject {
-                    id: Uuid::new_v4().to_string(),
+                    id: aow_id::new_id(),
                     name: requested_name.unwrap_or_else(|| default_name.clone()),
                     registered_path,
                     common_git_dir,

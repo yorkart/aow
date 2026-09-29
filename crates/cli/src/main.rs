@@ -26,7 +26,7 @@ State directory precedence:
   > $HOME/.local/state/aow (normally ~/.local/state/aow).
   Without these environment variables: the OS temp directory/aow-<pid>.
   A server started with a custom --state-dir requires the same path here.
-  config.toml selects a Git repository (config-repo) and UUID directory (config-id).
+  config.toml selects a Git repository (config-repo) and configuration directory (config-id).
   Run history stays in the local state directory. Without config.toml, queries
   read configuration in the state directory without initializing a repository.
 

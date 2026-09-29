@@ -726,7 +726,16 @@ async fn aow_notes_use_the_shared_filesystem_routes() {
         .to_string_lossy();
     assert!(temporary_name.starts_with(".tmp-"));
     assert!(temporary_path.ends_with(".md"));
-    assert_eq!(temporary_name.len(), 16);
+    let note_id = temporary_name
+        .strip_prefix(".tmp-")
+        .unwrap()
+        .strip_suffix(".md")
+        .unwrap();
+    assert!(note_id.len() <= 13);
+    assert_eq!(
+        note_id.parse::<aow_id::Snowflake>().unwrap().to_string(),
+        note_id
+    );
 
     let listing = app
         .clone()

@@ -196,7 +196,7 @@ async fn all_login_outcomes_are_persisted_with_peer_evidence_and_without_secrets
         ] {
             assert!(!record.message.contains(secret), "leaked {secret}");
         }
-        uuid::Uuid::parse_str(&record.operation_id).unwrap();
+        record.operation_id.parse::<aow_id::Snowflake>().unwrap();
         chrono::DateTime::parse_from_rfc3339(&record.timestamp).unwrap();
     }
 }

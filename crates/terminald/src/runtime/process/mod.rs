@@ -169,7 +169,7 @@ pub(super) fn spawn_runtime_blocking(
     drop(pair.slave);
     let (events, _) = broadcast::channel(OUTPUT_CHANNEL_CAPACITY);
     let (controller_changed, _) = watch::channel(None);
-    let stream_epoch = Uuid::new_v4().to_string();
+    let stream_epoch = aow_id::new_id();
     let vt_session = vt_worker
         .as_ref()
         .map(|worker| worker.create_session(stream_epoch.clone(), spec.cols, spec.rows));

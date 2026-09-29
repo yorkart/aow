@@ -4,6 +4,7 @@ import { tasksApi, taskError } from './api';
 import { TaskDialog } from './TaskDialog';
 import { parseInboxMarkdown } from './presentation';
 import type { InboxItem } from './types';
+import { allocateId } from '../../lib/id';
 
 const Editor = lazy(() => import('../editor/MonacoEditor'));
 
@@ -11,7 +12,7 @@ export function InboxEditor({ item, projectId, onClose }: { item?: InboxItem; pr
   const [markdown, setMarkdown] = useState(() => item ? `${item.title}${item.description ? `\n${item.description}` : ''}` : '');
   const [busy, setBusy] = useState(false);
   const locked = useRef(false);
-  const id = useRef(item?.id ?? crypto.randomUUID());
+  const id = useRef(item?.id);
   const input = useRef<editor.IStandaloneCodeEditor | undefined>(undefined);
   const refocus = useRef(false);
   useLayoutEffect(() => { if (!busy && refocus.current) { refocus.current = false; input.current?.focus(); } }, [busy]);
@@ -27,9 +28,10 @@ export function InboxEditor({ item, projectId, onClose }: { item?: InboxItem; pr
     if (encoder.encode(description).length > 100000) { setError('需求正文过长，请精简后再保存。'); input.current?.focus(); return; }
     locked.current = true; setBusy(true); setError('');
     try {
+      id.current ??= await allocateId();
       await tasksApi.inbox({ id: id.current, project_id: projectId, title, description, expected_revision: item?.revision });
       if (again) {
-        id.current = crypto.randomUUID(); setMarkdown(''); input.current?.setValue('');
+        id.current = undefined; setMarkdown(''); input.current?.setValue('');
         setNotice('已加入 Inbox，继续录入下一条');
       } else onClose();
     } catch (error) { setError(taskError(error)); }

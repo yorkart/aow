@@ -6,6 +6,7 @@ use std::{
 use anyhow::Result;
 
 use super::super::{FileLock, Store, try_exclusive, valid_component};
+use super::order::compare_ids;
 
 impl Store {
     /// Removes old completed journals while retaining the newest `retain` runs
@@ -61,7 +62,7 @@ impl Store {
                 run_ids.push(run_id.to_owned());
             }
         }
-        run_ids.sort_unstable_by(|a, b| b.cmp(a));
+        run_ids.sort_unstable_by(|a, b| compare_ids(b, a));
 
         let mut removed = 0;
         for run_id in run_ids.into_iter().skip(retain) {

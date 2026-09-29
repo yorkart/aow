@@ -1,7 +1,6 @@
 use std::{collections::BTreeMap, io::Write, os::unix::fs::OpenOptionsExt, path::Path};
 
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use super::*;
 
@@ -136,7 +135,7 @@ pub(crate) fn atomic_save_document<T: Serialize>(
         path.file_name()
             .and_then(|name| name.to_str())
             .unwrap_or("aow"),
-        Uuid::new_v4().as_simple()
+        aow_id::new_id()
     ));
     let result = (|| {
         let bytes = serde_json::to_vec_pretty(document)?;

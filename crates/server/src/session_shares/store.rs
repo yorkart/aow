@@ -151,7 +151,7 @@ impl SessionShares {
             return Ok(entry.record.info());
         }
         let record = StoredShare {
-            id: Uuid::new_v4().simple().to_string(),
+            id: aow_id::new_id(),
             token: Uuid::new_v4().simple().to_string(),
             agent: locator.agent.to_owned(),
             session_id: locator.session_id,

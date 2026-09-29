@@ -12,6 +12,7 @@ use serde::Deserialize;
 use crate::{Run, RunDetail, RunOutput, RunStatus, TaskInput};
 
 use super::super::{FileLock, Store, is_not_found, try_shared, valid_component};
+use super::order::compare_ids;
 
 const MAX_RUN_EVENTS_BYTES: u64 = 1024 * 1024;
 
@@ -196,13 +197,14 @@ impl Store {
             };
             if file_type.is_dir() && !file_type.is_symlink() {
                 let id = entry.file_name().to_string_lossy().into_owned();
-                if valid_component(&id).is_ok() && before.is_none_or(|before| id.as_str() < before)
+                if valid_component(&id).is_ok()
+                    && before.is_none_or(|before| compare_ids(&id, before).is_lt())
                 {
                     ids.push(id);
                 }
             }
         }
-        ids.sort_unstable_by(|a, b| b.cmp(a));
+        ids.sort_unstable_by(|a, b| compare_ids(b, a));
         Ok(ids)
     }
 }

@@ -14,7 +14,6 @@ use aow_automations::{
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 const STATE_FILE: &str = "failure-notification.json";
 
@@ -183,7 +182,7 @@ where
         return Ok(());
     };
     for (path, (run, channel)) in scan.pending {
-        let delivery_id = Uuid::new_v4().to_string();
+        let delivery_id = aow_id::new_id();
         let claim_path = path.clone();
         let claim_id = delivery_id.clone();
         if let Err(error) = tokio::task::spawn_blocking(move || {

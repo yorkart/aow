@@ -21,7 +21,7 @@ fn maximum_value_matches_the_go_base58_vector() {
 #[test]
 fn encodings_round_trip_boundaries_and_distributed_values() {
     let mut values = vec![0, 1, i64::MAX as u64];
-    for radix in [58_u64, 62] {
+    for radix in [36_u64, 58, 62] {
         let mut power = radix;
         while power <= i64::MAX as u64 {
             values.extend([power - 1, power, power + 1]);
@@ -43,6 +43,10 @@ fn encodings_round_trip_boundaries_and_distributed_values() {
         let id = Snowflake::from_u64(value).unwrap();
         let base62 = id.to_base62();
         let base58 = id.to_base58();
+        let base36 = id.to_base36();
+        assert!(base36.len() <= 13);
+        assert_eq!(base36, base36.to_ascii_lowercase());
+        assert_eq!(Snowflake::from_base36(&base36), Ok(id));
         assert!(base62.len() <= 11);
         assert!(base58.len() <= 11);
         assert_eq!(Snowflake::from_base62(&base62), Ok(id));
@@ -80,5 +84,30 @@ fn base62_is_case_sensitive_and_sorting_uses_the_numeric_value() {
     let smaller = Snowflake::from_u64(61).unwrap();
     let larger = Snowflake::from_u64(62).unwrap();
     assert!(smaller < larger);
-    assert!(smaller.to_string() > larger.to_string());
+    assert!(smaller.to_base62() > larger.to_base62());
+}
+
+#[test]
+fn default_encoding_is_canonical_lowercase_base36() {
+    let max = Snowflake::from_u64(i64::MAX as u64).unwrap();
+    assert_eq!(max.to_string(), "1y2p0ij32e8e7");
+    assert_eq!("1y2p0ij32e8e7".parse(), Ok(max));
+    for invalid in ["", "00", "01", "A", "-1", " 1", "1\n", "é"] {
+        assert_eq!(Snowflake::from_base36(invalid), Err(Error::InvalidEncoding));
+    }
+    assert_eq!(
+        Snowflake::from_base36("1y2p0ij32e8e8"),
+        Err(Error::IdOutOfRange)
+    );
+    assert_eq!(
+        Snowflake::from_base36("zzzzzzzzzzzzz"),
+        Err(Error::IdOutOfRange)
+    );
+    // Values that differ only by case in Base62 must stay distinct as filenames.
+    let first = Snowflake::from_u64(10).unwrap();
+    let second = Snowflake::from_u64(36).unwrap();
+    assert_ne!(
+        first.to_string().to_lowercase(),
+        second.to_string().to_lowercase()
+    );
 }

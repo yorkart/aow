@@ -146,7 +146,7 @@ impl NotesMove {
                 }
                 // Retain the complete source until the bindings have been committed.
                 let backup =
-                    source.with_file_name(format!(".aow-notes-migration-{}", Uuid::new_v4()));
+                    source.with_file_name(format!(".aow-notes-migration-{}", aow_id::new_id()));
                 if let Err(error) = std::fs::rename(source, &backup) {
                     let _ = std::fs::remove_dir_all(target);
                     return Err(error);

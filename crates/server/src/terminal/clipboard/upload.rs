@@ -2,7 +2,6 @@ use axum::body::Body;
 use chrono::{SecondsFormat, Utc};
 use futures_util::StreamExt;
 use tokio::io::AsyncWriteExt;
-use uuid::Uuid;
 
 use super::super::*;
 use super::{clipboard_image_type, storage::open_private_file};
@@ -17,12 +16,12 @@ impl TerminalManager {
         self.ensure_pane(tab_id, pane_id)?;
         let _operation = self.inner.clipboard_operation.lock().await;
         let used_bytes = self.inner.clipboard.clean_expired()?;
-        let upload_id = Uuid::new_v4();
+        let upload_id = aow_id::new_id();
         let temp_path = self
             .inner
             .clipboard
             .directory
-            .join(format!(".{}.tmp", upload_id.as_simple()));
+            .join(format!(".{}.tmp", upload_id));
         let result = self
             .write_clipboard_image(tab_id, pane_id, body, upload_id, &temp_path, used_bytes)
             .await;
@@ -37,7 +36,7 @@ impl TerminalManager {
         tab_id: &str,
         pane_id: &str,
         body: Body,
-        upload_id: Uuid,
+        upload_id: String,
         temp_path: &Path,
         used_bytes: u64,
     ) -> Result<ClipboardImageResponse, TerminalError> {
@@ -67,11 +66,11 @@ impl TerminalManager {
         drop(file);
         self.ensure_pane(tab_id, pane_id)?;
 
-        let final_path = self.inner.clipboard.directory.join(format!(
-            "{}.{}",
-            upload_id.as_simple(),
-            image_type.extension
-        ));
+        let final_path = self
+            .inner
+            .clipboard
+            .directory
+            .join(format!("{}.{}", upload_id, image_type.extension));
         {
             let state = self.lock_state()?;
             let tab = state

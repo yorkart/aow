@@ -1378,3 +1378,30 @@ async fn manual_run_parameters_survive_dispatch_failure_and_legacy_history_remai
         Some(BTreeMap::new())
     );
 }
+
+#[test]
+fn mixed_legacy_and_snowflake_runs_paginate_and_prune_chronologically() {
+    let (_directory, store, task) = fixture(CODEX);
+    let middle_millis = chrono::DateTime::parse_from_rfc3339("2026-09-29T12:00:00Z")
+        .unwrap()
+        .timestamp_millis() as u64;
+    let middle = aow_id::Snowflake::from_u64((middle_millis - aow_id::TWITTER_EPOCH_MILLIS) << 22)
+        .unwrap()
+        .to_string();
+    let oldest = "20260928T120000000Z_9999";
+    let newest = "20260930T120000000Z_0000";
+    for id in [oldest, middle.as_str(), newest] {
+        let run = runner::initial_run(&task, id.into(), RunSource::Manual);
+        drop(store.create_run(&run, &task).unwrap());
+    }
+    let page = store.runs(&task.id, None, 1).unwrap();
+    assert_eq!(page[0].id, newest);
+    let page = store.runs(&task.id, Some(&page[0].id), 1).unwrap();
+    assert_eq!(page[0].id, middle);
+    let page = store.runs(&task.id, Some(&page[0].id), 1).unwrap();
+    assert_eq!(page[0].id, oldest);
+    assert_eq!(store.prune_run_history(2).unwrap(), 1);
+    assert!(!store.run_path(&task.id, oldest).unwrap().exists());
+    assert!(store.run_path(&task.id, &middle).unwrap().exists());
+    assert!(store.run_path(&task.id, newest).unwrap().exists());
+}

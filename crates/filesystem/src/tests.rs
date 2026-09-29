@@ -6,13 +6,12 @@ use std::{
 use bytes::Bytes;
 use futures_util::{StreamExt, stream};
 use tokio::fs;
-use uuid::Uuid;
 
 use super::*;
 use crate::paths::display_path;
 
 fn temp_dir() -> PathBuf {
-    let path = std::env::temp_dir().join(format!("aow-test-{}", Uuid::new_v4()));
+    let path = std::env::temp_dir().join(format!("aow-test-{}", aow_id::new_id()));
     std::fs::create_dir(&path).unwrap();
     path
 }

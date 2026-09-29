@@ -104,13 +104,13 @@ AOW_AUTH_SECURE_COOKIE=true
 
 ## 配置仓库与版本
 
-在 **Settings → Configuration** 中输入服务所在机器上的 Git 仓库根目录，点击“读取版本”，再单选一个 UUID 版本目录并保存。输入 UUID 版本目录时，会自动定位到父仓库并选中该版本；非 Git 仓库或普通子目录会提示错误。
+在 **Settings → Configuration** 中输入服务所在机器上的 Git 仓库根目录，点击“读取版本”，再单选一个配置版本目录并保存。输入配置版本目录时，会自动定位到父仓库并选中该版本；非 Git 仓库或普通子目录会提示错误。
 
 选择保存在数据目录下的 `config.toml`（默认 `~/.local/state/aow/config.toml`）：
 
 ```toml
 config-repo = "/absolute/path/to/config-repo"
-config-id = "550e8400-e29b-41d4-a716-446655440000"
+config-id = "g123456789ab"
 ```
 
 实际配置目录是 `<config-repo>/<config-id>/`。保存有变化时会提示重启 AoW 服务；重启前，运行中的服务继续使用原版本。再次打开 Settings 可以查看已保存的选择和当前运行版本。保存相同选择不会重复写入文件。

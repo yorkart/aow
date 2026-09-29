@@ -6,8 +6,6 @@ use std::{
 };
 
 use anyhow::{Context, Result, ensure};
-use chrono::Utc;
-use uuid::Uuid;
 
 pub fn valid_component(value: &str) -> Result<()> {
     ensure!(
@@ -21,21 +19,9 @@ pub fn valid_component(value: &str) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn random_decimal(width: usize) -> String {
-    let upper_bound = 10_u128.pow(width as u32);
-    format!(
-        "{:0width$}",
-        Uuid::new_v4().as_u128() % upper_bound,
-        width = width
-    )
-}
-
+/// Allocate a compact Snowflake ID for a new execution.
 pub fn new_run_id() -> String {
-    format!(
-        "{}_{}",
-        Utc::now().format("%Y%m%dT%H%M%S%3fZ"),
-        random_decimal(4)
-    )
+    aow_id::new_id()
 }
 
 pub fn private_dir(path: &Path) -> Result<()> {
@@ -53,7 +39,7 @@ pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
     if !parent.exists() {
         private_dir(parent)?;
     }
-    let temporary = parent.join(format!(".{}.tmp", Uuid::new_v4().as_simple()));
+    let temporary = parent.join(format!(".{}.tmp", aow_id::new_id()));
     let result = (|| {
         let mut file = OpenOptions::new()
             .write(true)

@@ -26,7 +26,7 @@ impl OperationService {
 
     fn new(directory: Option<&Path>) -> Result<Self, aow_operation_log::Error> {
         let mut runtime = Runtime {
-            boot_id: uuid::Uuid::new_v4().to_string(),
+            boot_id: aow_id::new_id(),
             revision: 0,
             entries: Vec::new(),
             log_error: None,

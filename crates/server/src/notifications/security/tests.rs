@@ -36,7 +36,7 @@ async fn login_notifies_all_providers_while_anonymous_access_only_logs() {
                 user_id: "test-user".into(),
                 bot_token: "fake-token".into(),
                 base_url: "https://ilinkai.weixin.qq.com".into(),
-                binding_id: "00000000-0000-4000-8000-000000000001".into(),
+                binding_id: "g123456789ab".into(),
             },
         })
         .unwrap();

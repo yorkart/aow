@@ -4,7 +4,6 @@ use std::sync::{
 };
 
 use tokio::sync::{mpsc, watch};
-use uuid::Uuid;
 
 use super::{
     super::config::{SESSION_ACTIVE, normalize_vt_cols},
@@ -41,7 +40,7 @@ impl VtWorkerClient {
     pub(crate) fn create_session(&self, generation: String, cols: u16, rows: u16) -> VtSession {
         let cols = normalize_vt_cols(cols);
         let state = Arc::new(SessionState {
-            session_id: Uuid::new_v4().to_string(),
+            session_id: aow_id::new_id(),
             generation,
             scrollback: self.scrollback,
             status: AtomicU8::new(SESSION_ACTIVE),

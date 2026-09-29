@@ -7,7 +7,6 @@ use std::{
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use toml_edit::{DocumentMut, value};
-use uuid::Uuid;
 
 use super::{
     ConfigRepository,
@@ -93,15 +92,12 @@ impl ConfigRepository {
             selection.config_repo.is_absolute(),
             "config-repo 必须是绝对路径"
         );
-        ensure!(
-            Uuid::parse_str(&selection.config_id).is_ok(),
-            "config-id 必须是 UUID"
-        );
+        ensure!(valid_config_id(&selection.config_id), "配置 ID 不合法");
         let repository = repository_root(&selection.config_repo)?;
         let config = Self::from_directory(&repository.join(&selection.config_id))?;
         ensure!(
             config.repository == repository && config.selection().config_id == selection.config_id,
-            "配置版本必须是该 Git 仓库根目录下对应的 UUID 目录"
+            "配置版本必须是该 Git 仓库根目录下对应的配置版本目录"
         );
         Ok(config)
     }
@@ -121,7 +117,7 @@ pub(super) fn repository_root(path: &Path) -> Result<PathBuf> {
     Ok(repository)
 }
 
-/// List UUID directories, accepting either a repository or one of its versions.
+/// List configuration version directories, accepting a repository or one of its versions.
 pub fn inspect_repository(path: &Path) -> Result<RepositoryVersions> {
     ensure!(path.is_absolute(), "请输入 Git 仓库的绝对路径");
     let directory = fs::canonicalize(path)
@@ -130,7 +126,7 @@ pub fn inspect_repository(path: &Path) -> Result<RepositoryVersions> {
     let version = directory
         .file_name()
         .and_then(OsStr::to_str)
-        .filter(|name| Uuid::parse_str(name).is_ok());
+        .filter(|name| valid_config_id(name));
     let parent_repository = version
         .and_then(|_| directory.parent())
         .and_then(|parent| repository_root(parent).ok());
@@ -144,7 +140,7 @@ pub fn inspect_repository(path: &Path) -> Result<RepositoryVersions> {
         let entry = entry?;
         if entry.file_type()?.is_dir()
             && let Some(name) = entry.file_name().to_str()
-            && Uuid::parse_str(name).is_ok()
+            && valid_config_id(name)
         {
             config_ids.push(name.to_owned());
         }
@@ -236,4 +232,10 @@ pub fn save_selection(
     let _lock = FileLock::acquire(&state_dir.join(".config-init.lock"))?;
     let changed = write_selection(state_dir, &selection)?;
     Ok((selection, changed))
+}
+
+/// Application IDs using the fixed Twitter epoch have at least 12 Base36
+/// characters (since 2011). Keep ordinary repository folders out of discovery.
+pub(super) fn valid_config_id(id: &str) -> bool {
+    (12..=13).contains(&id.len()) && aow_id::Snowflake::from_base36(id).is_ok()
 }

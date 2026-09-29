@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+aow-id = { path = "../id" }
 anyhow.workspace = true
 axum.workspace = true
 bytes.workspace = true

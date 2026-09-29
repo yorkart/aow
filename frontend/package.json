@@ -21,6 +21,7 @@
     "test:notifications": "node --test tests/agent-notifications.test.mjs",
     "test:manual-tasks": "node --test tests/manual-tasks.test.mjs",
     "test:automation-notifications": "node --test tests/automation-notifications.test.mjs",
+    "test:automation-order": "node --test tests/automation-order.test.mjs",
     "test:tab-links": "node --test tests/tab-links.test.mjs",
     "test:resources": "node --test tests/aow-resources.test.mjs",
     "test:nodes": "node --test tests/aow-nodes.test.mjs",

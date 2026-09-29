@@ -8,7 +8,6 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use qrcode::{QrCode, render::svg};
 use serde::Serialize;
 use serde_json::json;
-use uuid::Uuid;
 
 use super::{
     Credentials,
@@ -49,7 +48,7 @@ impl LoginManager {
     }
 
     pub async fn start(&self, previous: Option<Credentials>) -> Result<LoginView> {
-        let id = Uuid::new_v4().to_string();
+        let id = aow_id::new_id();
         let tokens: Vec<_> = previous
             .iter()
             .map(|credentials| credentials.bot_token.clone())
@@ -177,7 +176,7 @@ impl LoginManager {
                     base_url: validate_base(
                         response["baseurl"].as_str().unwrap_or(&login.base_url),
                     )?,
-                    binding_id: Uuid::new_v4().to_string(),
+                    binding_id: aow_id::new_id(),
                 };
                 credentials.validate()?;
                 accept(credentials)?;

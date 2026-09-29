@@ -6,7 +6,6 @@ use std::{
 };
 
 use anyhow::{Context, Result, ensure};
-use uuid::Uuid;
 
 use super::{
     git::{git_checked, git_command, git_text},
@@ -43,11 +42,8 @@ impl ConfigRepository {
         let name = directory
             .file_name()
             .and_then(OsStr::to_str)
-            .context("配置目录名必须是 UUID")?;
-        ensure!(
-            Uuid::parse_str(name).is_ok(),
-            "配置目录名必须是 UUID：{name}"
-        );
+            .context("配置 ID 不合法")?;
+        ensure!(selection::valid_config_id(name), "配置 ID 不合法");
         let repository = directory
             .parent()
             .context("配置目录缺少仓库父目录")?
@@ -88,7 +84,7 @@ impl ConfigRepository {
             git_text(&repository, &["init", "--template="])?;
             git_text(&repository, &["symbolic-ref", "HEAD", "refs/heads/main"])?;
         }
-        let directory = repository.join(Uuid::new_v4().to_string());
+        let directory = repository.join(aow_id::new_id());
         fs::DirBuilder::new().mode(0o700).create(&directory)?;
         let config = Self::from_directory(&directory)?;
         let _save = config.lock()?;

@@ -31,7 +31,7 @@ async fn create_with_task(
 ) -> Result<Json<AgentTerminalInfo>, HttpError> {
     tokio::spawn(async move {
         let log = state.operations.begin(Spec {
-            id: Uuid::new_v4().to_string(),
+            id: aow_id::new_id(),
             kind: "agent.create",
             source: if task_id.is_some() { "tasks" } else { "cli" },
             title: format!("创建 Agent · {}", request.agent),

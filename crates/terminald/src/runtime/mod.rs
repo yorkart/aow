@@ -41,7 +41,6 @@ use tokio::{
     task::JoinSet,
     time::timeout,
 };
-use uuid::Uuid;
 
 const SERVICE_NAME: &str = "aow-terminald";
 const SCROLLBACK_LIMIT: usize = 8 * 1024 * 1024;

@@ -119,7 +119,7 @@ impl Sink<Message> for CollectingSink {
 fn test_runtime() -> (Arc<Runtime>, SpawnedRuntime) {
     let tracker = Arc::new(SpawnTracker::default());
     let spawned = spawn_runtime_blocking(
-        format!("unit-test-{}", Uuid::new_v4()),
+        format!("unit-test-{}", aow_id::new_id()),
         TerminalRuntimeSpec {
             cwd: "/".to_owned(),
             shell: "/bin/sh".to_owned(),
@@ -168,7 +168,7 @@ fn runtime_environment_inherits_and_applies_additions_and_overrides() {
         }
         let tracker = Arc::new(SpawnTracker::default());
         let mut spawned = spawn_runtime_blocking(
-            format!("environment-test-{}", Uuid::new_v4()),
+            format!("environment-test-{}", aow_id::new_id()),
             TerminalRuntimeSpec {
                 cwd: directory.path().to_string_lossy().into_owned(),
                 shell: "/bin/sh".to_owned(),
@@ -249,7 +249,7 @@ fn run_locale_probe(locale: [(&str, &str); 3], script: &str, text: Option<&str>)
         output_path.to_string_lossy().into_owned(),
     );
     let mut spawned = spawn_runtime_blocking(
-        format!("locale-test-{}", Uuid::new_v4()),
+        format!("locale-test-{}", aow_id::new_id()),
         TerminalRuntimeSpec {
             cwd: directory.path().to_string_lossy().into_owned(),
             shell: "/bin/sh".to_owned(),

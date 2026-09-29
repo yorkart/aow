@@ -5,7 +5,6 @@ use tokio::{
     fs::{self, OpenOptions},
     io::AsyncWriteExt,
 };
-use uuid::Uuid;
 
 use aow_protocol::WriteResult;
 
@@ -73,7 +72,7 @@ where
         ensure_expected_version(&path, expected, existing.as_ref())?;
     }
 
-    let temp_path = parent.join(format!(".aow-{}.uploading", Uuid::new_v4()));
+    let temp_path = parent.join(format!(".aow-{}.uploading", aow_id::new_id()));
     let mut temp = OpenOptions::new()
         .create_new(true)
         .write(true)

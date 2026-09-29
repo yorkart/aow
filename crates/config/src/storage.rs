@@ -9,7 +9,6 @@ use std::{
 };
 
 use anyhow::{Context, Result, ensure};
-use uuid::Uuid;
 
 pub(super) fn copy_json(source: &Path, destination: &Path) -> Result<(PathBuf, Vec<u8>)> {
     ensure!(
@@ -57,7 +56,7 @@ impl Drop for FileLock {
 pub(super) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
     let parent = path.parent().context("配置文件缺少父目录")?;
     private_directories(parent)?;
-    let temporary = parent.join(format!(".{}.tmp", Uuid::new_v4()));
+    let temporary = parent.join(format!(".{}.tmp", aow_id::new_id()));
     let result = (|| {
         let mut file = OpenOptions::new()
             .create_new(true)

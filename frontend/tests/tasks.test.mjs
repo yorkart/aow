@@ -24,7 +24,13 @@ try {
     const now = (clockTime ?? new Date()).toISOString();
     const statuses = ['Todo', 'In progress', 'In review', 'Done'].map((name, i) => ({ id: `s${i}`, name, color: ['#8b8b93', '#d7a84b', '#7999e8', '#62b58d'][i] }));
     const board = { version: 1, status_revision: 1, statuses, inbox: [], tasks: [] };
-    const writes = []; const reads = []; let failCapture = false; let conflictMove = false;
+    const writes = []; const reads = []; const allocatedIds = []; let failCapture = false; let conflictMove = false;
+    let idSequence = 2104775476131139584n;
+    await page.route('**/api/ids', route => {
+      assert.equal(route.request().method(), 'POST');
+      const id = (idSequence++).toString(36); allocatedIds.push(id);
+      return route.fulfill({ json: { id } });
+    });
     await page.route('**/api/workspace/events', route => route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }));
     await page.route('**/api/aow/projects', route => route.fulfill({ json: [{ id: 'project', name: 'AoW', registered_path: '/repo', worktrees: [{ id: 'main', path: '/repo', branch: 'main' }] }] }));
     await page.route('**/api/tasks**', async route => {
@@ -87,7 +93,7 @@ try {
     });
     await page.goto(`${base}/tests/tasks-preview.html`);
     await page.getByRole('region', { name: 'Todo', exact: true }).waitFor();
-    return { page, board, writes, reads, errors, failCapture: value => { failCapture = value; }, conflictMove: value => { conflictMove = value; } };
+    return { page, board, writes, reads, errors, allocatedIds, failCapture: value => { failCapture = value; }, conflictMove: value => { conflictMove = value; } };
   }
   async function writeMarkdown(page, value) {
     const input = page.getByRole('textbox', { name: '需求内容' });
@@ -107,7 +113,7 @@ try {
     await dialog.getByRole('button', { name: again ? '连续创建' : '创建', exact: true }).click();
   }
   await test('continuous capture stays focused, failure preserves input, creation closes without agents', async t => {
-    const { page, board, writes, errors, failCapture } = await fixture(t);
+    const { page, board, writes, errors, allocatedIds, failCapture } = await fixture(t);
     await page.getByRole('button', { name: '录入需求', exact: true }).first().click();
     await capture(page, '第一个想法\n\n  ', true);
     const dialog = page.getByRole('dialog', { name: '录入需求' });
@@ -122,6 +128,9 @@ try {
     await dialog.waitFor({ state: 'hidden' });
     assert.equal(board.inbox.length, 2); assert.equal(board.tasks.length, 0);
     assert.ok(writes.every(w => w.path === '/inbox')); assert.deepEqual(errors, []);
+    assert.equal(allocatedIds.length, 2);
+    assert.ok(writes.every(w => allocatedIds.includes(w.input.id)));
+    assert.equal(writes.at(-1).input.id, writes.at(-2).input.id, 'failed saves reuse their allocated ID');
   });
   await test('one Markdown input derives its title, preserves the body on edit and passes it to conversion', async t => {
     const { page, board, writes, errors } = await fixture(t);
@@ -362,6 +371,7 @@ try {
     assert.equal(await dialog.getByLabel('项目', { exact: true }).count(), 0);
     assert.deepEqual(await dialog.getByLabel('工作目录').locator('option').allTextContents(), ['main · /other']);
     await dialog.getByLabel('创建新的 Worktree').check();
+    await dialog.locator('fieldset:not([disabled])').waitFor();
     assert.match(await dialog.getByLabel('Worktree 路径').inputValue(), /^\/other-task-/);
     assert.equal(await dialog.getByLabel('基于分支 / 引用').inputValue(), 'main');
     await page.screenshot({ path: '/tmp/aow-task-convert-project.png', fullPage: true });

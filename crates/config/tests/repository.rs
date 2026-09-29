@@ -376,20 +376,29 @@ fn deleting_a_requirement_whose_initial_commit_failed_is_retryable() {
 }
 
 #[test]
-fn repository_discovery_validates_roots_and_selects_uuid_input() {
+fn repository_discovery_accepts_current_ids_and_rejects_uuids() {
     let root = tempfile::tempdir().unwrap();
     let config = ConfigRepository::initialize(root.path()).unwrap();
     let selection = config.selection();
-    let second = "550e8400-e29b-41d4-a716-446655440000";
+    selection.config_id.parse::<aow_id::Snowflake>().unwrap();
+    let second = "g123456789ab";
     fs::create_dir(selection.config_repo.join(second)).unwrap();
+    let rejected = "550e8400-e29b-41d4-a716-446655440000";
+    fs::create_dir(selection.config_repo.join(rejected)).unwrap();
+    let invalid = ConfigSelection {
+        config_id: rejected.into(),
+        ..selection.clone()
+    };
+    assert_eq!(
+        ConfigRepository::from_selection(&invalid)
+            .err()
+            .unwrap()
+            .to_string(),
+        "配置 ID 不合法"
+    );
     fs::create_dir(selection.config_repo.join("not-a-version")).unwrap();
-    fs::write(
-        selection
-            .config_repo
-            .join("550e8400-e29b-41d4-a716-446655440001"),
-        "file",
-    )
-    .unwrap();
+    fs::create_dir(selection.config_repo.join("docs")).unwrap();
+    fs::write(selection.config_repo.join("g123456789ac"), "file").unwrap();
     let choices = inspect_repository(&selection.config_repo).unwrap();
     let mut expected = vec![selection.config_id.clone(), second.to_owned()];
     expected.sort();
@@ -408,6 +417,7 @@ fn repository_discovery_validates_roots_and_selects_uuid_input() {
         root.path().to_path_buf(),
         orphan,
         selection.config_repo.join("not-a-version"),
+        selection.config_repo.join(rejected),
         root.path().join("missing"),
         Path::new("relative").to_path_buf(),
     ] {

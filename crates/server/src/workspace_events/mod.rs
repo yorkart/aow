@@ -54,7 +54,7 @@ impl WorkspaceEvents {
     pub(crate) fn new() -> Self {
         Self(Arc::new(Inner {
             changes: watch::channel(Snapshot {
-                boot_id: uuid::Uuid::new_v4().to_string(),
+                boot_id: aow_id::new_id(),
                 revision: 0,
                 projects: 0,
                 terminals: 0,

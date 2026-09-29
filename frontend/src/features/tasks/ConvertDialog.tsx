@@ -4,6 +4,7 @@ import type { AowProject, AowWorktree } from '../../aow/types';
 import { TaskDialog } from './TaskDialog';
 import { taskError, tasksApi } from './api';
 import type { BoardTask, InboxItem, TaskStatus } from './types';
+import { allocateId } from '../../lib/id';
 
 export function ConvertDialog({ item, statuses, agents, project, worktree, onClose, onCreated }: {
   item: InboxItem; statuses: TaskStatus[]; agents: AowAgent[]; project: AowProject; worktree: AowWorktree;
@@ -16,19 +17,32 @@ export function ConvertDialog({ item, statuses, agents, project, worktree, onClo
   const [status, setStatus] = useState(statuses[0]?.id ?? '');
   const [cwd, setCwd] = useState(worktree.path);
   const [newWorktree, setNewWorktree] = useState(false);
-  const suffix = useRef(crypto.randomUUID().slice(0, 8));
-  const [branch, setBranch] = useState(`task/${suffix.current}`);
+  const [branch, setBranch] = useState('');
   const [baseRef, setBaseRef] = useState(worktree.branch || 'HEAD');
-  const [newPath, setNewPath] = useState(`${project.registered_path}-task-${suffix.current}`);
+  const [newPath, setNewPath] = useState('');
   const [startNow, setStartNow] = useState(false);
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
   const [error, setError] = useState('');
-  const requestId = useRef(crypto.randomUUID());
+  const requestId = useRef<string | undefined>(undefined);
+  const prepareWorktree = async (enabled: boolean) => {
+    if (lock.current) return;
+    if (!enabled) { setNewWorktree(false); return; }
+    setNewWorktree(true);
+    lock.current = true; setBusy(true); setError('');
+    try {
+      requestId.current ??= await allocateId();
+      const id = requestId.current;
+      setBranch(value => value || `task/${id}`);
+      setNewPath(value => value || `${project.registered_path}-task-${id}`);
+    } catch (error) { setNewWorktree(false); setError(taskError(error)); }
+    finally { lock.current = false; setBusy(false); }
+  };
   const save = async () => {
     if (lock.current) return;
     lock.current = true; setBusy(true); setError('');
     try {
+      requestId.current ??= await allocateId();
       const task = await tasksApi.convert(item, { id: requestId.current, expected_revision: item.revision, title: title.trim(), description, agent, status_id: status, project_id: project.id, cwd: newWorktree ? newPath : cwd, worktree: newWorktree ? { branch, base_ref: baseRef } : null, start_now: startNow });
       onCreated(task); onClose();
     } catch (error) { setError(taskError(error)); }
@@ -40,7 +54,7 @@ export function ConvertDialog({ item, statuses, agents, project, worktree, onClo
       <label>任务说明<textarea rows={3} maxLength={100000} value={description} onChange={e => setDescription(e.target.value)} /></label>
       <label>Agent<select required value={agent} onChange={e => setAgent(e.target.value)}><option value="" disabled>选择 Agent</option>{supported.map(a => <option key={a.id} value={a.id}>{a.display_name}</option>)}</select></label>
       {!supported.length && <p className="tasks-error">没有可用的交互 Agent。请先在设置中配置 Codex、Trae CLI 或 Hermes。</p>}
-      <label className="tasks-check"><input type="checkbox" disabled={project.builtin} checked={newWorktree} onChange={e => setNewWorktree(e.target.checked)} />创建新的 Worktree</label>
+      <label className="tasks-check"><input type="checkbox" disabled={project.builtin} checked={newWorktree} onChange={e => void prepareWorktree(e.target.checked)} />创建新的 Worktree</label>
       {newWorktree ? <><div className="tasks-form-row"><label>新分支<input required value={branch} onChange={e => setBranch(e.target.value)} /></label><label>基于分支 / 引用<input required value={baseRef} onChange={e => setBaseRef(e.target.value)} /></label></div><label>Worktree 路径<input required value={newPath} onChange={e => setNewPath(e.target.value)} /></label></> : <label>工作目录<select required value={cwd} onChange={e => setCwd(e.target.value)}>{project.worktrees.map(w => <option key={w.path} value={w.path}>{w.branch || '工作目录'} · {w.path}</option>)}</select></label>}
       <label>初始状态<select required value={status} onChange={e => setStatus(e.target.value)}>{statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
       <label className="tasks-check"><input type="checkbox" checked={startNow} onChange={e => setStartNow(e.target.checked)} />立即执行</label>

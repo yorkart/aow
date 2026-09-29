@@ -90,7 +90,7 @@ impl Runtime {
         }
         Ok(RuntimeConnection {
             runtime: self.clone(),
-            attachment_id: Uuid::new_v4().as_u128(),
+            attachment_id: u128::from(aow_id::new_snowflake().as_u64()),
             resume_after: after,
             vt_snapshot,
             deleted_changed,
