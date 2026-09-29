@@ -49,7 +49,7 @@ fn capture_does_not_send_agent_or_execution_configuration() {
         &[
             "task",
             "capture",
-            "--id",
+            "--request-key",
             "idea-123",
             "--project-id",
             "project",
@@ -58,13 +58,17 @@ fn capture_does_not_send_agent_or_execution_configuration() {
         ],
         None,
         200,
-        json!({"id":"idea-123","revision":1}),
+        json!({"id":"createdidea","revision":1}),
     );
     assert!(output.status.success());
     assert!(header.starts_with("POST /v1/tasks/inbox HTTP/1.1"));
     assert_eq!(
         body,
-        json!({"id":"idea-123","project_id":"project","expected_revision":null,"title":"An idea","description":""})
+        json!({"request_key":"idea-123","project_id":"project","title":"An idea","description":""})
+    );
+    assert_eq!(
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()["id"],
+        "createdidea"
     );
 }
 #[test]
@@ -92,7 +96,7 @@ fn create_uses_a_board_status_without_a_group() {
         &[
             "task",
             "create",
-            "--id",
+            "--request-key",
             "task-123",
             "--inbox",
             "idea-123",
@@ -109,7 +113,7 @@ fn create_uses_a_board_status_without_a_group() {
         ],
         None,
         200,
-        json!({"id":"task-123","revision":1}),
+        json!({"id":"createdtask","revision":1}),
     );
     assert!(
         output.status.success(),
@@ -119,6 +123,12 @@ fn create_uses_a_board_status_without_a_group() {
     assert!(header.starts_with("POST /v1/tasks/inbox/idea-123/convert HTTP/1.1"));
     assert_eq!(body["status_id"], "awaiting-acceptance");
     assert_eq!(body["start_now"], false);
+    assert_eq!(body["request_key"], "task-123");
+    assert!(body.get("id").is_none());
+    assert_eq!(
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()["id"],
+        "createdtask"
+    );
     assert!(body.get("group_id").is_none());
 }
 

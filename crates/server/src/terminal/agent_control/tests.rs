@@ -1148,17 +1148,22 @@ async fn board_conversion_prepares_once_and_start_does_not_change_status() {
     std::fs::write(fixture.directory.path().join("agent.py"), script).unwrap();
     let app = crate::build_router(fixture.state.clone());
     post(&app, "/api/aow/agents", json!({"id":"task-codex","agent_type":"codex","display_name":"Task Codex","command":"/usr/bin/python3","args":[fixture.directory.path().join("agent.py"),fixture.log,"ready"]})).await;
-    let inbox = json!({"id":"requirement", "project_id":fixture.project_id, "title":"Implement idea", "description":"Discuss acceptance criteria"});
-    post(&app, "/api/tasks/inbox", inbox).await;
-    let input = json!({"id":"board-task", "expected_revision":1,"title":"Implement idea","description":"Discuss acceptance criteria","status_id":"in-review","project_id":fixture.project_id,"cwd":fixture.repo,"agent":"task-codex","start_now":false});
-    let created = post(&app, "/api/tasks/inbox/requirement/convert", input.clone()).await;
+    let inbox = json!({"request_key":"requirement", "project_id":fixture.project_id, "title":"Implement idea", "description":"Discuss acceptance criteria"});
+    let source = post(&app, "/api/tasks/inbox", inbox).await;
+    let inbox_id = source["id"].as_str().unwrap();
+    let convert_path = format!("/api/tasks/inbox/{inbox_id}/convert");
+    let input = json!({"request_key":"board-task", "expected_revision":1,"title":"Implement idea","description":"Discuss acceptance criteria","status_id":"in-review","project_id":fixture.project_id,"cwd":fixture.repo,"agent":"task-codex","start_now":false});
+    let created = post(&app, &convert_path, input.clone()).await;
     assert_eq!(created["execution"], "preparing");
-    post(&app, "/api/tasks/inbox/requirement/convert", input).await;
+    let task_id = created["id"].as_str().unwrap();
+    task_id.parse::<aow_id::Snowflake>().unwrap();
+    assert_ne!(task_id, "board-task");
+    post(&app, &convert_path, input).await;
     let ready = tokio::time::timeout(Duration::from_secs(25), async {
         loop {
             let task: Value = fixture
                 .client
-                .get_json("/v1/tasks/items/board-task")
+                .get_json(&format!("/v1/tasks/items/{task_id}"))
                 .await
                 .unwrap();
             if task["execution"] != "preparing" {
@@ -1175,10 +1180,10 @@ async fn board_conversion_prepares_once_and_start_does_not_change_status() {
     assert_eq!(inherited, fixture.state_dir.canonicalize().unwrap());
     let child_client = TerminaldClient::new(inherited.join("cli/cli.sock"));
     let observed: Value = child_client
-        .get_json("/v1/tasks/items/board-task")
+        .get_json(&format!("/v1/tasks/items/{task_id}"))
         .await
         .unwrap();
-    assert_eq!(observed["id"], "board-task");
+    assert_eq!(observed["id"], task_id);
     assert_eq!(ready["status_id"], "in-review");
     assert!(
         !fixture.log.exists(),
@@ -1195,17 +1200,17 @@ async fn board_conversion_prepares_once_and_start_does_not_change_status() {
         .get_json("/v1/tasks/inbox?include_converted=true")
         .await
         .unwrap();
-    assert_eq!(inbox["items"][0]["task_ids"], json!(["board-task"]));
+    assert_eq!(inbox["items"][0]["task_ids"], json!([task_id]));
     let input = json!({"expected_revision":ready["revision"]});
     let _: Value = fixture
         .client
-        .post_json("/v1/tasks/items/board-task/start", &input)
+        .post_json(&format!("/v1/tasks/items/{task_id}/start"), &input)
         .await
         .unwrap();
     assert!(
         fixture
             .client
-            .post_json::<_, Value>("/v1/tasks/items/board-task/start", &input)
+            .post_json::<_, Value>(&format!("/v1/tasks/items/{task_id}/start"), &input)
             .await
             .is_err()
     );
@@ -1213,7 +1218,7 @@ async fn board_conversion_prepares_once_and_start_does_not_change_status() {
         loop {
             let task: Value = fixture
                 .client
-                .get_json("/v1/tasks/items/board-task")
+                .get_json(&format!("/v1/tasks/items/{task_id}"))
                 .await
                 .unwrap();
             if task["execution"] != "submitting" {
@@ -1240,7 +1245,7 @@ async fn board_conversion_prepares_once_and_start_does_not_change_status() {
     .await
     .unwrap();
     assert!(input.contains("Discuss acceptance criteria"));
-    assert!(input.contains("aow-cli task set-status board-task"));
+    assert!(input.contains(&format!("aow-cli task set-status {task_id}")));
     let prompt: String = serde_json::from_str(input.trim()).unwrap();
     assert!(prompt.starts_with("<aow_task_context>\n"));
     assert!(
@@ -1251,7 +1256,7 @@ async fn board_conversion_prepares_once_and_start_does_not_change_status() {
     let _: Value = fixture
         .client
         .post_json(
-            "/v1/tasks/items/board-task/status",
+            &format!("/v1/tasks/items/{task_id}/status"),
             &json!({"expected_revision":submitted["revision"],"status_id":"todo"}),
         )
         .await
@@ -1261,23 +1266,28 @@ async fn board_conversion_prepares_once_and_start_does_not_change_status() {
         input,
         "moving status must not submit more input"
     );
-    let new_path = fixture.directory.path().join("task-worktree");
     let source: Value = fixture
         .client
-        .get_json("/v1/tasks/inbox/requirement")
+        .get_json(&format!("/v1/tasks/inbox/{inbox_id}"))
         .await
         .unwrap();
     assert_eq!(
         source["revision"], 1,
         "Conversion does not modify the requirement file"
     );
-    let input = json!({"id":"board-immediate", "expected_revision":source["revision"],"title":"Immediate task","description":"Fresh worktree","status_id":"done","project_id":fixture.project_id,"cwd":new_path,"agent":"task-codex","start_now":true,"worktree":{"branch":"task/isolated","base_ref":"main"}});
-    post(&app, "/api/tasks/inbox/requirement/convert", input.clone()).await;
+    let input = json!({"request_key":"board-immediate", "expected_revision":source["revision"],"title":"Immediate task","description":"Fresh worktree","status_id":"done","project_id":fixture.project_id,"cwd":"","agent":"task-codex","start_now":true,"worktree":{"branch":"","base_ref":"main"}});
+    let accepted = post(&app, &convert_path, input.clone()).await;
+    let immediate_id = accepted["id"].as_str().unwrap();
+    let new_path = PathBuf::from(accepted["cwd"].as_str().unwrap());
+    assert_eq!(
+        new_path,
+        PathBuf::from(format!("{}-task-{immediate_id}", fixture.repo.display()))
+    );
     let immediate = tokio::time::timeout(Duration::from_secs(25), async {
         loop {
             let task: Value = fixture
                 .client
-                .get_json("/v1/tasks/items/board-immediate")
+                .get_json(&format!("/v1/tasks/items/{immediate_id}"))
                 .await
                 .unwrap();
             if task["execution"] != "preparing" {
@@ -1298,7 +1308,7 @@ async fn board_conversion_prepares_once_and_start_does_not_change_status() {
             if lines.len() == 2 && text.ends_with('\n') {
                 let prompt: String = serde_json::from_str(lines[1]).unwrap();
                 assert!(prompt.starts_with("<aow_task_context>\n"));
-                assert!(prompt.contains("<task_id>board-immediate</task_id>"));
+                assert!(prompt.contains(&format!("<task_id>{immediate_id}</task_id>")));
                 assert!(
                     prompt.ends_with("</aow_task_context>\n\nImmediate task\n\nFresh worktree")
                 );
@@ -1310,7 +1320,7 @@ async fn board_conversion_prepares_once_and_start_does_not_change_status() {
     })
     .await
     .unwrap();
-    post(&app, "/api/tasks/inbox/requirement/convert", input).await;
+    post(&app, &convert_path, input).await;
     assert_eq!(
         fixture.state.terminals.list(None).await.unwrap().tabs.len(),
         2

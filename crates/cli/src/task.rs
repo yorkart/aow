@@ -52,9 +52,9 @@ enum TaskCommand {
         inbox: String,
         #[arg(long)]
         expected_revision: u64,
-        /// Stable request ID. Reuse it after an uncertain response to avoid duplicates.
+        /// Request deduplication key. Reuse it after an uncertain response.
         #[arg(long, value_parser = crate::parse_id)]
-        id: String,
+        request_key: String,
         #[arg(long)]
         title: String,
         #[arg(long, default_value = "")]
@@ -95,9 +95,9 @@ enum TaskCommand {
     Capture {
         #[arg(long, value_parser = crate::parse_id)]
         project_id: String,
-        /// Stable client-generated ID; reuse it when retrying the same capture.
+        /// Request deduplication key; the server assigns the resource ID.
         #[arg(long, value_parser = crate::parse_id)]
-        id: String,
+        request_key: String,
         #[arg(long)]
         title: String,
         #[arg(long, default_value = "")]
@@ -152,24 +152,23 @@ pub fn execute(args: TaskArgs, state_dir: PathBuf) -> Result<Value> {
         ),
         TaskCommand::Capture {
             project_id,
-            id,
+            request_key,
             title,
             description,
         } => (
             "/v1/tasks/inbox".into(),
-            Some(serde_json::to_value(InboxWrite {
+            Some(serde_json::to_value(InboxCreate {
                 project_id,
-                id,
+                request_key,
                 title,
                 description,
-                expected_revision: None,
             })?),
             None,
         ),
         TaskCommand::Create {
             inbox,
             expected_revision,
-            id,
+            request_key,
             title,
             description,
             project_id,
@@ -182,7 +181,7 @@ pub fn execute(args: TaskArgs, state_dir: PathBuf) -> Result<Value> {
         } => (
             format!("/v1/tasks/inbox/{inbox}/convert"),
             Some(serde_json::to_value(TaskConvert {
-                id,
+                request_key,
                 expected_revision,
                 title,
                 description,

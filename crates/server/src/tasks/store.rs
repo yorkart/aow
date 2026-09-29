@@ -1,4 +1,5 @@
 use super::persistence::Persistence;
+use super::requests::{CreationReceipt, CreationRequest};
 use crate::{HttpError, workspace_events::WorkspaceEvents};
 use aow_protocol::*;
 use axum::http::StatusCode;
@@ -13,6 +14,16 @@ pub(crate) struct TaskStore {
     pub(super) document: Arc<Mutex<TaskData>>,
     pub(super) persistence: Option<Persistence>,
     pub(super) events: WorkspaceEvents,
+}
+
+/// Internal write after the server has resolved the resource identity.
+#[derive(Clone)]
+pub(super) struct InboxWrite {
+    pub id: String,
+    pub project_id: String,
+    pub expected_revision: Option<u64>,
+    pub title: String,
+    pub description: String,
 }
 
 pub(super) fn invalid(message: impl Into<String>) -> HttpError {
@@ -72,6 +83,9 @@ pub(super) struct TaskData {
     /// Persistent stores retain only summaries. Bodies are read on demand.
     pub inbox: BTreeMap<String, InboxSummary>,
     pub memory_inbox: BTreeMap<String, InboxItem>,
+    pub inbox_requests: BTreeMap<String, CreationReceipt>,
+    pub task_requests: BTreeMap<String, CreationReceipt>,
+    pub status_request: Option<CreationRequest>,
 }
 
 impl TaskStore {
@@ -89,6 +103,9 @@ impl TaskStore {
             board: defaults(),
             inbox: BTreeMap::new(),
             memory_inbox: BTreeMap::new(),
+            inbox_requests: BTreeMap::new(),
+            task_requests: BTreeMap::new(),
+            status_request: None,
         };
         if let Some(persistence) = &persistence {
             persistence.load(&mut data)?;
@@ -107,7 +124,7 @@ impl TaskStore {
             }
         }
         if interrupted && let Some(persistence) = &persistence {
-            persistence.save_tasks(&data.board.tasks)?;
+            persistence.save_tasks(&data.board.tasks, &data.task_requests)?;
         }
         Ok(Self {
             document: Arc::new(Mutex::new(data)),
@@ -130,27 +147,27 @@ impl TaskStore {
         let mut current = self.lock()?;
         let mut next = current.board.clone();
         let result = change(&mut next)?;
-        self.save_board(&current.board, &next)?;
+        self.save_board(&current, &next)?;
+        if current.board.status_revision != next.status_revision {
+            current.status_request = None;
+        }
         current.board = next;
         drop(current);
         self.events.tasks_changed();
         Ok(result)
     }
-    pub(super) fn save_board(
-        &self,
-        current: &TaskBoard,
-        next: &TaskBoard,
-    ) -> Result<(), HttpError> {
+    pub(super) fn save_board(&self, current: &TaskData, next: &TaskBoard) -> Result<(), HttpError> {
         if let Some(persistence) = &self.persistence {
-            if current.status_revision != next.status_revision || current.statuses != next.statuses
+            if current.board.status_revision != next.status_revision
+                || current.board.statuses != next.statuses
             {
                 persistence
-                    .save_statuses(next)
+                    .save_statuses(next, None)
                     .map_err(|e| HttpError::internal(format!("{e:#}")))?;
             }
-            if current.tasks != next.tasks {
+            if current.board.tasks != next.tasks {
                 persistence
-                    .save_tasks(&next.tasks)
+                    .save_tasks(&next.tasks, &current.task_requests)
                     .map_err(|e| HttpError::internal(format!("{e:#}")))?;
             }
         }

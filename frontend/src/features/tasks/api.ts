@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { aowRequest } from '../../lib/aowRequest';
 import { subscribeWorkspaceChanges } from '../../lib/workspaceEvents';
-import type { BoardTask, ConvertInput, InboxItem, InboxPage, InboxSummary, TaskBoardData, TaskStatus } from './types';
+import type { BoardTask, ConvertInput, InboxItem, InboxPage, InboxSummary, TaskBoardData, TaskStatusWrite } from './types';
 
 export const taskError = (error: unknown) => error instanceof Error ? error.message : String(error);
 
@@ -70,11 +70,12 @@ async function write<T>(path: string, value: unknown) {
   finally { void refreshTasks(); }
 }
 export const tasksApi = {
-  inbox: (input: { id: string; project_id: string; expected_revision?: number; title: string; description: string }) => write<InboxItem>('/inbox', input),
+  createInbox: (input: { request_key: string; project_id: string; title: string; description: string }) => write<InboxItem>('/inbox', input),
+  updateInbox: (item: InboxItem, input: { title: string; description: string }) => write<InboxItem>(`/inbox/${encodeURIComponent(item.id)}`, { ...input, project_id: item.project_id, expected_revision: item.revision }),
   getInbox: (id: string) => aowRequest<InboxItem>(`/api/tasks/inbox/${encodeURIComponent(id)}`),
   deleteInbox: (item: InboxSummary) => write(`/inbox/${encodeURIComponent(item.id)}/delete`, { expected_revision: item.revision }),
   convert: (item: InboxItem, input: ConvertInput) => write<BoardTask>(`/inbox/${encodeURIComponent(item.id)}/convert`, input),
-  statuses: (input: { statuses: TaskStatus[]; expected_revision: number }) => write<TaskBoardData>('/statuses', input),
+  statuses: (input: { request_key: string; statuses: TaskStatusWrite[]; expected_revision: number }) => write<TaskBoardData>('/statuses', input),
   move: (task: BoardTask, status: string) => write<BoardTask>(`/items/${encodeURIComponent(task.id)}/status`, { expected_revision: task.revision, status_id: status, reason: 'Updated on task board' }),
   start: (task: BoardTask) => write<BoardTask>(`/items/${encodeURIComponent(task.id)}/start`, { expected_revision: task.revision }),
   archive: (task: BoardTask) => write<BoardTask>(`/items/${encodeURIComponent(task.id)}/archive`, { expected_revision: task.revision }),

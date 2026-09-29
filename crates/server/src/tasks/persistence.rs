@@ -1,3 +1,4 @@
+use super::requests::{CreationReceipt, CreationRequest};
 use super::store::{TaskData, identifier, text};
 use crate::aow::atomic_save_document;
 use anyhow::{Context, Result, ensure};
@@ -5,6 +6,7 @@ use aow_config::ConfigRepository;
 use aow_protocol::{BoardTask, InboxItem, InboxSummary, TaskBoard, TaskStatus};
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
 };
@@ -17,10 +19,12 @@ pub(super) struct Persistence {
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Statuses {
+pub(super) struct Statuses {
     version: u32,
-    revision: u64,
-    statuses: Vec<TaskStatus>,
+    pub revision: u64,
+    pub statuses: Vec<TaskStatus>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request: Option<CreationRequest>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -28,6 +32,16 @@ struct Statuses {
 struct RuntimeTasks {
     version: u32,
     tasks: Vec<BoardTask>,
+    #[serde(default)]
+    requests: BTreeMap<String, CreationReceipt>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub(super) struct StoredInbox {
+    #[serde(flatten)]
+    pub item: InboxItem,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub creation: Option<CreationRequest>,
 }
 
 impl Persistence {
@@ -64,8 +78,9 @@ impl Persistence {
             }
             data.board.status_revision = document.revision;
             data.board.statuses = document.statuses;
+            data.status_request = document.request;
         } else {
-            self.save_statuses(&data.board)?;
+            self.save_statuses(&data.board, None)?;
         }
         if let Some(document) = read_optional::<RuntimeTasks>(&self.runtime)? {
             ensure!(document.version == 1, "Unsupported runtime task format");
@@ -77,6 +92,7 @@ impl Persistence {
                 );
             }
             data.board.tasks = document.tasks;
+            data.task_requests = document.requests;
         }
         for project in directories(&self.config.directory().join("tasks/inbox"))? {
             ensure!(
@@ -98,7 +114,16 @@ impl Persistence {
                     "Requirement must be a regular file: {}",
                     entry.path().display()
                 );
-                let item = self.read_inbox(&entry.path())?;
+                let stored = self.read_inbox(&entry.path())?;
+                let item = stored.item;
+                if let Some(request) = stored.creation {
+                    ensure!(
+                        data.inbox_requests
+                            .insert(request.key.clone(), request.receipt(&item.id))
+                            .is_none(),
+                        "Duplicate Inbox creation request"
+                    );
+                }
                 ensure!(
                     item.project_id == project_id
                         && entry.file_name() == format!("{}.json", item.id).as_str(),
@@ -117,9 +142,10 @@ impl Persistence {
         Ok(())
     }
 
-    pub fn read_inbox(&self, path: &Path) -> Result<InboxItem> {
-        let item: InboxItem = read_optional(path)?
+    pub fn read_inbox(&self, path: &Path) -> Result<StoredInbox> {
+        let stored: StoredInbox = read_optional(path)?
             .with_context(|| format!("Requirement does not exist: {}", path.display()))?;
+        let item = &stored.item;
         ensure!(
             identifier(&item.id).is_ok()
                 && identifier(&item.project_id).is_ok()
@@ -130,7 +156,7 @@ impl Persistence {
             "Invalid requirement: {}",
             path.display()
         );
-        Ok(item)
+        Ok(stored)
     }
 
     pub fn inbox_path(project_id: &str, id: &str) -> PathBuf {
@@ -139,27 +165,47 @@ impl Persistence {
             .join(format!("{id}.json"))
     }
 
-    pub fn save_inbox(&self, item: &InboxItem) -> Result<()> {
-        self.save_config(&Self::inbox_path(&item.project_id, &item.id), item)
+    pub fn save_inbox(&self, item: &InboxItem, creation: Option<&CreationRequest>) -> Result<()> {
+        self.save_config(
+            &Self::inbox_path(&item.project_id, &item.id),
+            &StoredInbox {
+                item: item.clone(),
+                creation: creation.cloned(),
+            },
+        )
     }
 
-    pub fn save_statuses(&self, board: &TaskBoard) -> Result<()> {
+    pub fn read_statuses(&self) -> Result<Option<Statuses>> {
+        read_optional(&self.config.directory().join("tasks/statuses.json"))
+    }
+
+    pub fn save_statuses(
+        &self,
+        board: &TaskBoard,
+        request: Option<&CreationRequest>,
+    ) -> Result<()> {
         self.save_config(
             Path::new("tasks/statuses.json"),
             &Statuses {
                 version: 1,
                 revision: board.status_revision,
                 statuses: board.statuses.clone(),
+                request: request.cloned(),
             },
         )
     }
 
-    pub fn save_tasks(&self, tasks: &[BoardTask]) -> Result<()> {
+    pub fn save_tasks(
+        &self,
+        tasks: &[BoardTask],
+        requests: &BTreeMap<String, CreationReceipt>,
+    ) -> Result<()> {
         atomic_save_document(
             &self.runtime,
             &RuntimeTasks {
                 version: 1,
                 tasks: tasks.to_vec(),
+                requests: requests.clone(),
             },
         )
         .map_err(Into::into)

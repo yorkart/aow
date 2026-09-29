@@ -45,7 +45,27 @@ pub(super) async fn validate(state: &AppState, input: &TaskConvert) -> Result<()
     Ok(())
 }
 
-pub(super) async fn prepare(state: AppState, input: TaskConvert) {
+pub(super) fn resolve_worktree_defaults(
+    state: &AppState,
+    input: &mut TaskConvert,
+    id: &str,
+) -> Result<(), HttpError> {
+    if let Some(worktree) = &mut input.worktree {
+        if worktree.branch.trim().is_empty() {
+            worktree.branch = format!("task/{id}");
+        }
+        if input.cwd.trim().is_empty() {
+            let project = state
+                .aow
+                .registered_project(&input.project_id)
+                .map_err(crate::aow::aow_http_error)?;
+            input.cwd = format!("{}-task-{id}", project.repo_path);
+        }
+    }
+    Ok(())
+}
+
+pub(super) async fn prepare(state: AppState, task_id: String, input: TaskConvert) {
     let result = async {
         if let Some(worktree) = &input.worktree {
             let cwd = state
@@ -58,10 +78,10 @@ pub(super) async fn prepare(state: AppState, input: TaskConvert) {
                 )
                 .await
                 .map_err(crate::aow::aow_http_error)?;
-            state.tasks.update_execution(&input.id, |t| t.cwd = cwd)?;
+            state.tasks.update_execution(&task_id, |t| t.cwd = cwd)?;
             state.workspace_events.projects_changed();
         }
-        let task = state.tasks.get(&input.id)?;
+        let task = state.tasks.get(&task_id)?;
         let prompt = if input.start_now {
             Some(prompt(&state, &task)?)
         } else {
@@ -95,12 +115,12 @@ pub(super) async fn prepare(state: AppState, input: TaskConvert) {
     }
     .await;
     if let Err(error) = result {
-        if let Err(save_error) = state.tasks.update_execution(&input.id, |t| {
+        if let Err(save_error) = state.tasks.update_execution(&task_id, |t| {
             t.execution = TaskExecutionPhase::Failed;
             t.error = Some(error.body.message);
         }) {
             tracing::error!(
-                task_id = input.id,
+                task_id,
                 ?save_error,
                 "Failed to persist task startup failure"
             );

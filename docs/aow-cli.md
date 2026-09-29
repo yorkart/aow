@@ -105,15 +105,15 @@ AoW 启动或重建终端 Agent 时，会在进程环境中设置指向当前服
 需求从创建时就必须包含项目归属。Web 和 CLI 通过同一服务写入，在线页面通过工作区事件实时刷新。
 
 ```bash
-# 随手录入；ID 由调用方生成，同一次录入重试时复用它
+# 随手录入；服务端返回 ID，同一次录入重试时复用 request-key
 # 不会创建 Agent 或 Worktree
-aow-cli task capture --id idea-20260928-01 --project-id PROJECT-ID --title '支持导出报告' \
+aow-cli task capture --request-key capture-20260928-01 --project-id PROJECT-ID --title '支持导出报告' \
   --description '先讨论报告结构和验收标准'
 aow-cli task inbox --project-id PROJECT-ID
 # 继续读取返回的 next_cursor；需要已转换需求时增加 --include-converted
 aow-cli task inbox --project-id PROJECT-ID --limit 50 --cursor NEXT-CURSOR
 # 按需读取完整正文和最新 revision
-aow-cli task inbox-get idea-20260928-01
+aow-cli task inbox-get INBOX-ID
 
 # 查看统一状态及实际 status ID；状态名称和 ID 不必相同
 aow-cli task statuses
@@ -121,7 +121,7 @@ aow-cli task list --project-id PROJECT-ID
 
 # 把需求转为任务并创建交互 Agent，暂不提交需求
 # 使用 Inbox 当前 revision，以及 statuses 返回的状态 ID
-aow-cli task create --id task-20260928-01 --inbox idea-20260928-01 \
+aow-cli task create --request-key convert-20260928-01 --inbox INBOX-ID \
   --expected-revision 1 --title '支持导出报告' \
   --description '先讨论报告结构和验收标准' \
   --project-id PROJECT-ID --cwd /repo --agent codex \
@@ -131,14 +131,14 @@ aow-cli task create --id task-20260928-01 --inbox idea-20260928-01 \
 # --cwd /worktrees/report --new-branch task/report --base-ref main --start-now
 
 # 读取任务的执行情况和当前 revision
-aow-cli task get task-20260928-01
+aow-cli task get TASK-ID
 
 # Agent 已 ready 后才可提交初始需求；以刚读取的 revision 替换 4
-aow-cli task start task-20260928-01 --expected-revision 4
+aow-cli task start TASK-ID --expected-revision 4
 
 # 报告状态，状态 ID 须在看板的统一状态配置中
 # 自动化检查、外部工具脚本或 Agent 均可使用同一接口
-aow-cli task set-status task-20260928-01 --status in-review \
+aow-cli task set-status TASK-ID --status in-review \
   --expected-revision 6 --reason '已创建 PR，等待 Review'
 ```
 
@@ -146,7 +146,7 @@ aow-cli task set-status task-20260928-01 --status in-review \
 
 首次提交任务时，AoW 在用户标题和 Markdown 正文前加入 `<aow_task_context>` 上下文块，包含任务 ID、当前可选状态的 ID/名称和 `aow-cli task ...` 上报说明。状态名称中的 XML 特殊字符会转义，用户正文保持原样。该标签用于标识应用提供的上下文，不改变 Agent 的消息角色；立即执行和稍后执行使用相同格式。状态变化不预设流转顺序、不代表用户验收；上报前读取最新状态定义和任务 revision，后续继续在原会话中接受用户调整。
 
-状态更新和初始提交都要求 `expected_revision`。HTTP 409 / CLI 退出码 7 表示记录已改变或操作冲突，需要重新读取并判断，不能盲目覆盖。转换需复用同一个 `--id` 来重试不确定的响应；再次转换同一个需求须使用新任务 ID 和最新 Inbox revision。Agent 启动或提交中断时会保留任务和已创建资源，显示错误；先打开关联终端检查，避免重复发送。归档任务不停止或删除 Agent / Worktree。
+状态更新和初始提交都要求 `expected_revision`。HTTP 409 / CLI 退出码 7 表示记录已改变或操作冲突，需要重新读取并判断，不能盲目覆盖。创建需求和转换任务时，服务端生成资源 ID 并在响应中返回；后续操作使用返回的 ID。重试不确定的响应须复用同一个 `--request-key` 和相同请求内容；再次转换同一个需求须使用新的请求键和最新 Inbox revision。Agent 启动或提交中断时会保留任务和已创建资源，显示错误；先打开关联终端检查，避免重复发送。归档任务不停止或删除 Agent / Worktree。
 
 任务 API 使用 Web 登录认证；CLI 使用当前用户的私有 Unix socket，与 `agent` 一样要求运行中的 AoW 服务。转换和执行还需要 terminald 及已安装、登录的 Agent。交互启动目前支持 Codex、Trae CLI、Hermes 及这几种类型的自定义配置。自定义状态不会触发内置流水线、PR 轮询或隐式的 Agent 操作；已有定时任务或外部工具可显式调用状态接口。
 

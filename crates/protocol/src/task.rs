@@ -98,11 +98,21 @@ pub struct TaskBoard {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct InboxWrite {
-    /// Stable client-generated ID, also used to deduplicate a retried creation.
-    pub id: String,
+#[serde(deny_unknown_fields)]
+pub struct InboxCreate {
+    /// Identifies a retry of this request; never used as the resource ID.
+    pub request_key: String,
     pub project_id: String,
-    pub expected_revision: Option<u64>,
+    pub title: String,
+    #[serde(default)]
+    pub description: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InboxUpdate {
+    pub project_id: String,
+    pub expected_revision: u64,
     pub title: String,
     #[serde(default)]
     pub description: String,
@@ -114,9 +124,20 @@ pub struct TaskRevision {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TaskStatusesWrite {
+    pub request_key: String,
     pub expected_revision: u64,
-    pub statuses: Vec<TaskStatus>,
+    pub statuses: Vec<TaskStatusWrite>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskStatusWrite {
+    /// Existing status identity. Omit when creating a new status.
+    pub id: Option<String>,
+    pub name: String,
+    pub color: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -126,8 +147,9 @@ pub struct TaskWorktree {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TaskConvert {
-    pub id: String,
+    pub request_key: String,
     pub expected_revision: u64,
     pub title: String,
     #[serde(default)]

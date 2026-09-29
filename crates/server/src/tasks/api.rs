@@ -1,4 +1,4 @@
-use super::{execution, store::*};
+use super::{execution, requests::CreationRequest, store::*};
 use crate::{AppState, HttpError};
 use aow_protocol::*;
 use axum::{
@@ -11,8 +11,8 @@ pub(crate) fn routes() -> Router<AppState> {
     Router::new()
         .route("/", get(board))
         .route("/statuses", post(write_statuses))
-        .route("/inbox", get(list_inbox).post(write_inbox))
-        .route("/inbox/{id}", get(get_inbox))
+        .route("/inbox", get(list_inbox).post(create_inbox))
+        .route("/inbox/{id}", get(get_inbox).post(update_inbox))
         .route("/inbox/{id}/delete", post(delete_inbox))
         .route("/inbox/{id}/convert", post(convert))
         .route("/items/{id}", get(get_task))
@@ -72,11 +72,27 @@ async fn get_inbox(
 ) -> Result<Json<InboxItem>, HttpError> {
     state.tasks.get_inbox(&id).map(Json)
 }
-async fn write_inbox(
+async fn create_inbox(
     State(state): State<AppState>,
-    Json(input): Json<InboxWrite>,
+    Json(input): Json<InboxCreate>,
 ) -> Result<Json<InboxItem>, HttpError> {
-    state.tasks.write_inbox(input).map(Json)
+    state.tasks.create_inbox(input).map(Json)
+}
+async fn update_inbox(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(input): Json<InboxUpdate>,
+) -> Result<Json<InboxItem>, HttpError> {
+    state
+        .tasks
+        .write_inbox(InboxWrite {
+            id,
+            project_id: input.project_id,
+            title: input.title,
+            description: input.description,
+            expected_revision: Some(input.expected_revision),
+        })
+        .map(Json)
 }
 async fn delete_inbox(
     State(state): State<AppState>,
@@ -90,61 +106,29 @@ async fn write_statuses(
     State(state): State<AppState>,
     Json(input): Json<TaskStatusesWrite>,
 ) -> Result<Json<TaskBoard>, HttpError> {
-    if input.statuses.is_empty() {
-        return Err(invalid("The board needs at least one status"));
-    }
-    let mut ids = std::collections::HashSet::new();
-    for status in &input.statuses {
-        identifier(&status.id)?;
-        text(&status.name, 128)?;
-        if !ids.insert(&status.id) {
-            return Err(invalid("Status IDs must be unique"));
-        }
-        if status.color.len() != 7
-            || !status.color.starts_with('#')
-            || !status.color[1..].bytes().all(|b| b.is_ascii_hexdigit())
-        {
-            return Err(invalid("Use a six-digit hex color"));
-        }
-    }
-    state
-        .tasks
-        .change(|board| {
-            revision(board.status_revision, input.expected_revision)?;
-            if board.tasks.iter().any(|t| !ids.contains(&t.status_id)) {
-                return Err(conflict(
-                    "Cannot remove a status used by a task. Move its tasks first.",
-                ));
-            }
-            board.statuses = input.statuses.clone();
-            board.status_revision += 1;
-            Ok(board.clone())
-        })
-        .map(Json)
+    state.tasks.write_statuses(input).map(Json)
 }
 async fn convert(
     State(state): State<AppState>,
     Path(id): Path<String>,
-    Json(input): Json<TaskConvert>,
+    Json(mut input): Json<TaskConvert>,
 ) -> Result<Json<BoardTask>, HttpError> {
-    // Retry of an accepted conversion never creates another terminal/worktree.
-    if let Ok(task) = state.tasks.get(&input.id) {
-        if task.inbox_id == id && task.project_id == input.project_id {
-            return Ok(Json(task));
-        }
-        return Err(conflict("Task ID already exists"));
+    let request = CreationRequest::new(&input.request_key, &(&id, &input))?;
+    if let Some(task) = state.tasks.task_for_request(&request)? {
+        return Ok(Json(task));
     }
-    identifier(&input.id)?;
     text(&input.title, 512)?;
     if !input.description.is_empty() {
         text(&input.description, 100_000)?;
     }
     let item = state.tasks.get_inbox(&id)?;
     check_project(&item, &input.project_id)?;
+    let task_id = aow_id::new_id();
+    execution::resolve_worktree_defaults(&state, &mut input, &task_id)?;
     execution::validate(&state, &input).await?;
-    let task = state.tasks.create_task(
+    let (task, created) = state.tasks.create_task(
         BoardTask {
-            id: input.id.clone(),
+            id: task_id,
             revision: 1,
             inbox_id: id,
             status_id: input.status_id.clone(),
@@ -167,8 +151,11 @@ async fn convert(
             }],
         },
         input.expected_revision,
+        Some(request),
     )?;
-    tokio::spawn(execution::prepare(state, input));
+    if created {
+        tokio::spawn(execution::prepare(state, task.id.clone(), input));
+    }
     Ok(Json(task))
 }
 

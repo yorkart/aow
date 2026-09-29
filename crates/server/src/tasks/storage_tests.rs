@@ -1,4 +1,4 @@
-use super::{persistence::Persistence, store::*};
+use super::{persistence::Persistence, requests::CreationRequest, store::*};
 use aow_config::ConfigRepository;
 use aow_protocol::*;
 use serde_json::{Value, json};
@@ -86,7 +86,9 @@ fn individual_requirements_and_statuses_are_configuration_execution_is_local() {
     store.write_inbox(updated).unwrap();
     assert_eq!(git(&config, &["rev-parse", "HEAD"]), head);
 
-    store.create_task(task(&first), first.revision).unwrap();
+    store
+        .create_task(task(&first), first.revision, None)
+        .unwrap();
     store
         .update_execution("execution", |task| {
             task.status_id = "done".into();
@@ -135,7 +137,9 @@ fn configuration_selection_is_pinned_and_runtime_is_namespaced() {
     let first = ConfigRepository::initialize(state.path()).unwrap();
     let first_store = open(state.path(), &first);
     let idea = capture(&first_store, "first");
-    first_store.create_task(task(&idea), idea.revision).unwrap();
+    first_store
+        .create_task(task(&idea), idea.revision, None)
+        .unwrap();
     let other = tempfile::tempdir().unwrap();
     let second = ConfigRepository::initialize(other.path()).unwrap();
     aow_config::save_selection(state.path(), &second.selection()).unwrap();
@@ -232,7 +236,7 @@ fn summary_pagination_is_stable_and_filters_before_limiting() {
     }
     assert!(store.inbox_page(None, true, 1, Some("invalid")).is_err());
     let idea = store.get_inbox("new").unwrap();
-    store.create_task(task(&idea), idea.revision).unwrap();
+    store.create_task(task(&idea), idea.revision, None).unwrap();
     let page = store.inbox_page(None, false, 1, None).unwrap();
     assert_eq!(page.total, 4);
     assert_eq!(page.items[0].id, "e");
@@ -302,4 +306,173 @@ fn config_commit_failures_can_retry_capture_edit_and_delete() {
     fs::remove_file(&lock).unwrap();
     store.delete_inbox("idea", 2).unwrap();
     assert!(git(&config, &["status", "--porcelain"]).is_empty());
+}
+
+#[test]
+fn inbox_creation_receipts_survive_commit_failure_restart_and_edits() {
+    let state = tempfile::tempdir().unwrap();
+    let config = ConfigRepository::initialize(state.path()).unwrap();
+    let store = open(state.path(), &config);
+    let input = InboxCreate {
+        request_key: "capture-request".into(),
+        project_id: "project".into(),
+        title: "Original".into(),
+        description: "Markdown body".into(),
+    };
+    let lock = config.directory().parent().unwrap().join(".git/index.lock");
+    fs::write(&lock, b"busy").unwrap();
+    assert!(store.create_inbox(input.clone()).is_err());
+    let id = store.inbox_page(None, true, 50, None).unwrap().items[0]
+        .id
+        .clone();
+    assert!(aow_id::Snowflake::from_base36(&id).is_ok());
+    assert_ne!(id, input.request_key);
+    assert!(
+        config
+            .directory()
+            .join(Persistence::inbox_path("project", &id))
+            .is_file()
+    );
+    assert!(
+        !config
+            .directory()
+            .join(Persistence::inbox_path("project", &input.request_key))
+            .exists()
+    );
+    fs::remove_file(lock).unwrap();
+    drop(store);
+
+    let store = open(state.path(), &config);
+    let replay = store.create_inbox(input.clone()).unwrap();
+    assert_eq!(replay.id, id);
+    assert_eq!(replay.revision, 1);
+    assert!(git(&config, &["status", "--porcelain"]).is_empty());
+    store
+        .write_inbox(InboxWrite {
+            id: id.clone(),
+            project_id: "project".into(),
+            expected_revision: Some(1),
+            title: "Edited later".into(),
+            description: "New body".into(),
+        })
+        .unwrap();
+    drop(store);
+    let store = open(state.path(), &config);
+    let replay = store.create_inbox(input.clone()).unwrap();
+    assert_eq!(replay.id, id);
+    assert_eq!(replay.title, "Edited later");
+    assert_eq!(replay.revision, 2);
+    let mut changed = input.clone();
+    changed.title = "Different request".into();
+    assert!(store.create_inbox(changed).is_err());
+    assert_eq!(store.inbox_page(None, true, 50, None).unwrap().total, 1);
+    let mut fresh = input;
+    fresh.request_key = "another-capture".into();
+    assert_ne!(store.create_inbox(fresh).unwrap().id, id);
+}
+
+#[test]
+fn status_creation_receipts_survive_commit_failure_and_restart() {
+    let state = tempfile::tempdir().unwrap();
+    let config = ConfigRepository::initialize(state.path()).unwrap();
+    let store = open(state.path(), &config);
+    let input = TaskStatusesWrite {
+        request_key: "save-statuses".into(),
+        expected_revision: store.snapshot().unwrap().status_revision,
+        statuses: vec![TaskStatusWrite {
+            id: None,
+            name: "Draft".into(),
+            color: "#123456".into(),
+        }],
+    };
+    let lock = config.directory().parent().unwrap().join(".git/index.lock");
+    fs::write(&lock, b"busy").unwrap();
+    assert!(store.write_statuses(input.clone()).is_err());
+    let saved = store.snapshot().unwrap();
+    let id = &saved.statuses[0].id;
+    assert!(aow_id::Snowflake::from_base36(id).is_ok());
+    fs::remove_file(lock).unwrap();
+    drop(store);
+
+    let store = open(state.path(), &config);
+    let replay = store.write_statuses(input.clone()).unwrap();
+    assert_eq!(replay.statuses, saved.statuses);
+    assert_eq!(replay.status_revision, input.expected_revision + 1);
+    assert!(git(&config, &["status", "--porcelain"]).is_empty());
+    let mut changed = input.clone();
+    changed.statuses[0].name = "Different request".into();
+    assert!(store.write_statuses(changed).is_err());
+
+    store
+        .write_statuses(TaskStatusesWrite {
+            request_key: "edit-statuses".into(),
+            expected_revision: replay.status_revision,
+            statuses: vec![TaskStatusWrite {
+                id: Some(id.clone()),
+                name: "Accepted".into(),
+                color: "#123456".into(),
+            }],
+        })
+        .unwrap();
+    assert!(
+        store.write_statuses(input).is_err(),
+        "an old save cannot overwrite a later revision"
+    );
+    assert_eq!(store.snapshot().unwrap().statuses[0].name, "Accepted");
+}
+
+#[test]
+fn concurrent_conversion_is_accepted_once_and_receipt_survives_restart() {
+    let state = tempfile::tempdir().unwrap();
+    let config = ConfigRepository::initialize(state.path()).unwrap();
+    let store = open(state.path(), &config);
+    let item = capture(&store, "idea");
+    let request = CreationRequest::new(
+        "convert-request",
+        &json!({"inbox_id":item.id,"title":"Execute"}),
+    )
+    .unwrap();
+    let barrier = std::sync::Barrier::new(2);
+    let results = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..2)
+            .map(|_| {
+                let store = &store;
+                let request = request.clone();
+                let barrier = &barrier;
+                let mut task = task(&item);
+                task.id = aow_id::new_id();
+                let revision = item.revision;
+                scope.spawn(move || {
+                    barrier.wait();
+                    store.create_task(task, revision, Some(request)).unwrap()
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|handle| handle.join().unwrap())
+            .collect::<Vec<_>>()
+    });
+    assert_eq!(results.iter().filter(|(_, created)| *created).count(), 1);
+    assert_eq!(results[0].0.id, results[1].0.id);
+    assert_eq!(store.snapshot().unwrap().tasks.len(), 1);
+    let id = results[0].0.id.clone();
+    store
+        .update_execution(&id, |task| {
+            task.execution = TaskExecutionPhase::Submitted;
+        })
+        .unwrap();
+    drop(store);
+
+    let store = open(state.path(), &config);
+    let replay = store.task_for_request(&request).unwrap().unwrap();
+    assert_eq!(replay.id, id);
+    assert_eq!(replay.execution, TaskExecutionPhase::Submitted);
+    let changed = CreationRequest::new(
+        &request.key,
+        &json!({"inbox_id":item.id,"title":"Different request"}),
+    )
+    .unwrap();
+    assert!(store.task_for_request(&changed).is_err());
+    assert_eq!(store.snapshot().unwrap().tasks.len(), 1);
 }

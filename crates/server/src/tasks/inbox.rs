@@ -1,4 +1,4 @@
-use super::{persistence::Persistence, store::*};
+use super::{persistence::Persistence, requests::CreationRequest, store::*};
 use crate::HttpError;
 use aow_protocol::*;
 use std::collections::HashMap;
@@ -17,7 +17,8 @@ impl TaskStore {
                 .join(Persistence::inbox_path(&summary.project_id, id));
             let item = persistence
                 .read_inbox(&path)
-                .map_err(|e| HttpError::internal(format!("{e:#}")))?;
+                .map_err(|e| HttpError::internal(format!("{e:#}")))?
+                .item;
             if item.id != id || item.project_id != summary.project_id {
                 return Err(conflict("Requirement identity changed on disk"));
             }
@@ -28,13 +29,55 @@ impl TaskStore {
     }
 
     pub(super) fn write_inbox(&self, input: InboxWrite) -> Result<InboxItem, HttpError> {
-        identifier(&input.id)?;
+        self.write_inbox_with_request(input, None)
+    }
+
+    pub(super) fn create_inbox(&self, input: InboxCreate) -> Result<InboxItem, HttpError> {
+        let request = CreationRequest::new(&input.request_key, &input)?;
+        self.write_inbox_with_request(
+            InboxWrite {
+                id: String::new(),
+                project_id: input.project_id,
+                title: input.title,
+                description: input.description,
+                expected_revision: None,
+            },
+            Some(request),
+        )
+    }
+
+    fn write_inbox_with_request(
+        &self,
+        mut input: InboxWrite,
+        request: Option<CreationRequest>,
+    ) -> Result<InboxItem, HttpError> {
         identifier(&input.project_id)?;
         text(&input.title, 512)?;
         if !input.description.is_empty() {
             text(&input.description, 100_000)?;
         }
         let mut data = self.lock()?;
+        if let Some(request) = &request {
+            input.id = if let Some(receipt) = data.inbox_requests.get(&request.key) {
+                request.verify(&receipt.fingerprint)?;
+                // Replay returns the current resource without undoing later edits.
+                let item = self.read_inbox(&data, &receipt.id)?;
+                input.title = item.title;
+                input.description = item.description;
+                receipt.id.clone()
+            } else {
+                aow_id::new_id()
+            };
+        }
+        identifier(&input.id)?;
+        let creation = request.or_else(|| {
+            data.inbox_requests.iter().find_map(|(key, receipt)| {
+                (receipt.id == input.id).then(|| CreationRequest {
+                    key: key.clone(),
+                    fingerprint: receipt.fingerprint.clone(),
+                })
+            })
+        });
         let item = if data.inbox.contains_key(&input.id) {
             let mut item = self.read_inbox(&data, &input.id)?;
             if item.project_id != input.project_id {
@@ -74,7 +117,7 @@ impl TaskStore {
             }
         };
         if let Some(persistence) = &self.persistence {
-            if let Err(error) = persistence.save_inbox(&item) {
+            if let Err(error) = persistence.save_inbox(&item, creation.as_ref()) {
                 // ConfigRepository deliberately retains a successfully written
                 // file when Git fails. Keep the summary consistent and allow retry.
                 let path = persistence
@@ -82,8 +125,12 @@ impl TaskStore {
                     .directory()
                     .join(Persistence::inbox_path(&item.project_id, &item.id));
                 if let Ok(saved) = persistence.read_inbox(&path) {
+                    if let Some(request) = saved.creation {
+                        data.inbox_requests
+                            .insert(request.key.clone(), request.receipt(&saved.item.id));
+                    }
                     data.inbox
-                        .insert(saved.id.clone(), InboxSummary::from(&saved));
+                        .insert(saved.item.id.clone(), InboxSummary::from(&saved.item));
                 }
                 drop(data);
                 self.events.tasks_changed();
@@ -94,6 +141,10 @@ impl TaskStore {
         }
         data.inbox
             .insert(item.id.clone(), InboxSummary::from(&item));
+        if let Some(request) = creation {
+            data.inbox_requests
+                .insert(request.key.clone(), request.receipt(&item.id));
+        }
         drop(data);
         self.events.tasks_changed();
         Ok(item)
@@ -204,8 +255,22 @@ impl TaskStore {
         &self,
         task: BoardTask,
         expected_inbox_revision: u64,
-    ) -> Result<BoardTask, HttpError> {
+        request: Option<CreationRequest>,
+    ) -> Result<(BoardTask, bool), HttpError> {
         let mut data = self.lock()?;
+        if let Some(request) = &request
+            && let Some(receipt) = data.task_requests.get(&request.key)
+        {
+            request.verify(&receipt.fingerprint)?;
+            let task = data
+                .board
+                .tasks
+                .iter()
+                .find(|task| task.id == receipt.id)
+                .cloned()
+                .ok_or_else(missing)?;
+            return Ok((task, false));
+        }
         if data
             .board
             .tasks
@@ -229,10 +294,38 @@ impl TaskStore {
         }
         let mut next = data.board.clone();
         next.tasks.insert(0, task.clone());
-        self.save_board(&data.board, &next)?;
+        let mut requests = data.task_requests.clone();
+        if let Some(request) = request {
+            requests.insert(request.key.clone(), request.receipt(&task.id));
+        }
+        if let Some(persistence) = &self.persistence {
+            persistence
+                .save_tasks(&next.tasks, &requests)
+                .map_err(|e| HttpError::internal(format!("{e:#}")))?;
+        }
+        data.task_requests = requests;
         data.board = next;
         drop(data);
         self.events.tasks_changed();
-        Ok(task)
+        Ok((task, true))
+    }
+
+    pub(super) fn task_for_request(
+        &self,
+        request: &CreationRequest,
+    ) -> Result<Option<BoardTask>, HttpError> {
+        let data = self.lock()?;
+        let Some(receipt) = data.task_requests.get(&request.key) else {
+            return Ok(None);
+        };
+        request.verify(&receipt.fingerprint)?;
+        Ok(Some(
+            data.board
+                .tasks
+                .iter()
+                .find(|task| task.id == receipt.id)
+                .cloned()
+                .ok_or_else(missing)?,
+        ))
     }
 }

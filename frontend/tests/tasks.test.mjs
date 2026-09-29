@@ -18,18 +18,20 @@ try {
     t.after(() => page.close());
     await installLiveEvents(page, { boot_id: 'tasks-fixture', revision: 0, projects: 0, terminals: 0, tasks: 0, repositories: {} });
     await page.addInitScript(() => {
+      // LAN HTTP pages cannot rely on the secure-context-only randomUUID API.
+      Object.defineProperty(crypto, 'randomUUID', { value: undefined });
       window.emitTaskBoardChange = revision => window.emitLiveEvent('workspace', { boot_id: 'tasks-fixture', revision, projects: 0, terminals: 0, tasks: revision, repositories: {} });
     });
     const errors = []; page.on('pageerror' , e => errors.push(e.message));
     const now = (clockTime ?? new Date()).toISOString();
     const statuses = ['Todo', 'In progress', 'In review', 'Done'].map((name, i) => ({ id: `s${i}`, name, color: ['#8b8b93', '#d7a84b', '#7999e8', '#62b58d'][i] }));
     const board = { version: 1, status_revision: 1, statuses, inbox: [], tasks: [] };
-    const writes = []; const reads = []; const allocatedIds = []; let failCapture = false; let conflictMove = false;
+    const writes = []; const reads = []; const receipts = new Map(); const failResponses = new Set(); let failCapture = false; let conflictMove = false;
     let idSequence = 2104775476131139584n;
+    const nextId = () => (idSequence++).toString(36);
     await page.route('**/api/ids', route => {
-      assert.equal(route.request().method(), 'POST');
-      const id = (idSequence++).toString(36); allocatedIds.push(id);
-      return route.fulfill({ json: { id } });
+      errors.push('Unexpected standalone ID allocation');
+      return route.fulfill({ status: 404 });
     });
     await page.route('**/api/workspace/events', route => route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }));
     await page.route('**/api/aow/projects', route => route.fulfill({ json: [{ id: 'project', name: 'AoW', registered_path: '/repo', worktrees: [{ id: 'main', path: '/repo', branch: 'main' }] }] }));
@@ -56,27 +58,48 @@ try {
         return route.fulfill({ json: { ...snapshot, tasks: board.tasks.filter(task => !project || task.project_id === project) } });
       }
       const input = request.postDataJSON(); writes.push({ path, input });
+      const creation = path === '/inbox' || path === '/statuses' || path.endsWith('/convert');
+      const receiptKey = `${path}:${input.request_key}`;
+      if (creation) {
+        assert.equal('id' in input, false, 'creation never supplies a resource ID');
+        assert.equal(typeof input.request_key, 'string');
+        const previous = receipts.get(receiptKey);
+        if (previous) {
+          assert.deepEqual(input, previous.input, 'retry keeps the same payload');
+          return route.fulfill({ json: previous.result });
+        }
+      }
+      const created = result => {
+        receipts.set(receiptKey, { input, result: structuredClone(result) });
+        if (failResponses.delete(path)) return route.fulfill({ status: 502, json: { message: '响应中断，请重试' } });
+        return route.fulfill({ json: result });
+      };
       if (path === '/inbox') {
         if (failCapture) return route.fulfill({ status: 500, json: { message: '保存失败，请重试' } });
-        const existing = board.inbox.find(item => item.id === input.id);
-        if (existing) {
-          if (input.expected_revision !== existing.revision) return route.fulfill({ status: 409, json: { message: 'This item changed' } });
-          Object.assign(existing, { title: input.title, description: input.description, revision: existing.revision + 1 });
-          return route.fulfill({ json: existing });
-        }
-        const item = { ...input, revision: 1, created_at: now, updated_at: now, task_ids: [] };
-        board.inbox.unshift(item); return route.fulfill({ json: item });
+        const { request_key, ...fields } = input;
+        const item = { ...fields, id: nextId(), revision: 1, created_at: now, updated_at: now, task_ids: [] };
+        board.inbox.unshift(item); return created(item);
+      }
+      if (/^\/inbox\/[^/]+$/.test(path)) {
+        assert.equal('id' in input, false);
+        const existing = board.inbox.find(item => item.id === path.split('/')[2]);
+        if (input.expected_revision !== existing.revision) return route.fulfill({ status: 409, json: { message: 'This item changed' } });
+        Object.assign(existing, { title: input.title, description: input.description, revision: existing.revision + 1 });
+        return route.fulfill({ json: existing });
       }
       if (path === '/statuses') {
         if (input.expected_revision !== board.status_revision) return route.fulfill({ status: 409, json: { message: 'Status configuration changed' } });
-        board.statuses = input.statuses; board.status_revision++;
-        return route.fulfill({ json: board });
+        board.statuses = input.statuses.map(status => ({ ...status, id: status.id ?? nextId() })); board.status_revision++;
+        return created(board);
       }
       if (path.endsWith('/convert')) {
         const item = board.inbox.find(i => i.id === path.split('/')[2]);
-        const task = { ...input, revision: 1, inbox_id: item.id, tab_id: 'agent-terminal', pane_id: 'pane', execution: input.start_now ? 'submitted' : 'ready', archived: false, error: null, created_at: now, updated_at: now, history: [] };
+        const { request_key, ...fields } = input;
+        const id = nextId();
+        const cwd = input.cwd || `${input.project_id === 'other' ? '/other' : '/repo'}-task-${id}`;
+        const task = { ...fields, id, cwd, revision: 1, inbox_id: item.id, tab_id: 'agent-terminal', pane_id: 'pane', execution: input.start_now ? 'submitted' : 'ready', archived: false, error: null, created_at: now, updated_at: now, history: [] };
         board.tasks.push(task); item.task_ids.push(task.id);
-        return route.fulfill({ json: task });
+        return created(task);
       }
       if (path.endsWith('/delete')) {
         board.inbox = board.inbox.filter(item => item.id !== path.split('/')[2]);
@@ -93,7 +116,7 @@ try {
     });
     await page.goto(`${base}/tests/tasks-preview.html`);
     await page.getByRole('region', { name: 'Todo', exact: true }).waitFor();
-    return { page, board, writes, reads, errors, allocatedIds, failCapture: value => { failCapture = value; }, conflictMove: value => { conflictMove = value; } };
+    return { page, board, writes, reads, errors, failResponse: path => failResponses.add(path), failCapture: value => { failCapture = value; }, conflictMove: value => { conflictMove = value; } };
   }
   async function writeMarkdown(page, value) {
     const input = page.getByRole('textbox', { name: '需求内容' });
@@ -113,7 +136,7 @@ try {
     await dialog.getByRole('button', { name: again ? '连续创建' : '创建', exact: true }).click();
   }
   await test('continuous capture stays focused, failure preserves input, creation closes without agents', async t => {
-    const { page, board, writes, errors, allocatedIds, failCapture } = await fixture(t);
+    const { page, board, writes, errors, failCapture } = await fixture(t);
     await page.getByRole('button', { name: '录入需求', exact: true }).first().click();
     await capture(page, '第一个想法\n\n  ', true);
     const dialog = page.getByRole('dialog', { name: '录入需求' });
@@ -128,9 +151,10 @@ try {
     await dialog.waitFor({ state: 'hidden' });
     assert.equal(board.inbox.length, 2); assert.equal(board.tasks.length, 0);
     assert.ok(writes.every(w => w.path === '/inbox')); assert.deepEqual(errors, []);
-    assert.equal(allocatedIds.length, 2);
-    assert.ok(writes.every(w => allocatedIds.includes(w.input.id)));
-    assert.equal(writes.at(-1).input.id, writes.at(-2).input.id, 'failed saves reuse their allocated ID');
+    assert.ok(writes.every(w => !('id' in w.input)));
+    assert.equal(writes.at(-1).input.request_key, writes.at(-2).input.request_key, 'failed saves reuse their request key');
+    assert.notEqual(writes[0].input.request_key, writes[1].input.request_key, 'each creation has a new request key');
+    assert.ok(board.inbox.every(item => /^[0-9a-z]{1,13}$/.test(item.id)));
   });
   await test('one Markdown input derives its title, preserves the body on edit and passes it to conversion', async t => {
     const { page, board, writes, errors } = await fixture(t);
@@ -175,6 +199,21 @@ try {
     const conversion = page.getByRole('dialog', { name: '转为任务' });
     assert.equal(await conversion.getByLabel('任务名称').inputValue(), '导出报告与图片');
     assert.equal(await conversion.getByLabel('任务说明').inputValue(), body);
+    assert.deepEqual(errors, []);
+  });
+  await test('editing a failed creation starts a new request without using a client resource ID', async t => {
+    const { page, board, writes, errors, failCapture } = await fixture(t);
+    await page.getByRole('button', { name: '录入需求', exact: true }).first().click();
+    failCapture(true);
+    await capture(page, '原来的内容');
+    const dialog = page.getByRole('dialog', { name: '录入需求' });
+    await dialog.getByRole('alert').waitFor();
+    failCapture(false);
+    await capture(page, '修改后的内容');
+    await dialog.waitFor({ state: 'hidden' });
+    assert.notEqual(writes[0].input.request_key, writes[1].input.request_key);
+    assert.equal(board.inbox.length, 1);
+    assert.equal(board.inbox[0].title, '修改后的内容');
     assert.deepEqual(errors, []);
   });
   await test('title follows removal and undo; overlong titles stay editable without losing Markdown', async t => {
@@ -332,7 +371,7 @@ try {
     assert.deepEqual(errors, []);
   });
   await test('one shared status configuration controls columns and conversion choices', async t => {
-    const { page, board, writes, errors } = await fixture(t);
+    const { page, board, writes, errors, failResponse } = await fixture(t);
     assert.equal(await page.getByRole('button', { name: '新建任务分组' }).count(), 0);
     assert.equal(await page.getByRole('combobox', { name: '任务分组' }).count(), 0);
     await page.getByRole('button', { name: '配置任务状态' }).click();
@@ -340,10 +379,20 @@ try {
     await dialog.getByLabel('状态名称 1', { exact: true }).fill('草图');
     await dialog.getByRole('button', { name: '添加状态' }).click(); await dialog.getByLabel('状态名称 5', { exact: true }).fill('待确认');
     await dialog.getByRole('button', { name: '上移状态 5' }).click();
+    assert.equal(writes.length, 0, 'draft status rows stay local until saving');
+    failResponse('/statuses');
     await dialog.getByRole('button', { name: '保存', exact: true }).click();
+    await dialog.getByRole('alert').filter({ hasText: '响应中断' }).waitFor();
+    assert.equal(board.statuses.length, 5);
+    const assignedId = board.statuses[3].id;
+    await dialog.getByRole('button', { name: '保存', exact: true }).click();
+    await dialog.waitFor({ state: 'hidden' });
     await page.getByRole('region', { name: '待确认', exact: true }).waitFor();
     assert.equal(board.status_revision, 2); assert.deepEqual(board.statuses.map(s => s.name), ['草图', 'In progress', 'In review', '待确认', 'Done']);
     assert.equal(writes[0].input.expected_revision, 1);
+    assert.equal('id' in writes[0].input.statuses[3], false);
+    assert.equal(board.statuses[3].id, assignedId);
+    assert.deepEqual(writes[0].input, writes[1].input);
     await page.getByRole('button', { name: '录入需求', exact: true }).first().click(); await capture(page, '使用统一状态');
     await page.getByRole('button', { name: '使用统一状态 需求操作' }).click(); await page.getByRole('menuitem', { name: '转为任务…' }).click();
     await page.getByRole('dialog', { name: '转为任务', exact: true }).waitFor();
@@ -352,6 +401,39 @@ try {
     await conversion.getByLabel('初始状态').selectOption(board.statuses[3].id);
     await conversion.getByRole('button', { name: '创建任务' }).click();
     await page.getByRole('region', { name: '待确认', exact: true }).getByRole('button', { name: '使用统一状态', exact: true }).waitFor();
+    assert.deepEqual(errors, []);
+  });
+  await test('lost creation responses reuse request keys and keep the returned resource IDs', async t => {
+    const { page, board, writes, errors, failResponse } = await fixture(t);
+    await page.getByRole('button', { name: '录入需求', exact: true }).first().click();
+    failResponse('/inbox');
+    await capture(page, '响应丢失后重试');
+    const editor = page.getByRole('dialog', { name: '录入需求' });
+    await editor.getByRole('alert').filter({ hasText: '响应中断' }).waitFor();
+    assert.equal(board.inbox.length, 1);
+    const inboxId = board.inbox[0].id;
+    await editor.getByRole('button', { name: '创建', exact: true }).click();
+    await editor.waitFor({ state: 'hidden' });
+    assert.equal(board.inbox.length, 1);
+    assert.equal(board.inbox[0].id, inboxId);
+    assert.notEqual(inboxId, writes[0].input.request_key);
+    assert.deepEqual(writes[0].input, writes[1].input);
+    await page.getByRole('button', { name: '响应丢失后重试 需求操作' }).click();
+    await page.getByRole('menuitem', { name: '转为任务…' }).click();
+    const dialog = page.getByRole('dialog', { name: '转为任务', exact: true });
+    failResponse(`/inbox/${inboxId}/convert`);
+    await dialog.getByRole('button', { name: '创建任务' }).click();
+    await dialog.getByRole('alert').filter({ hasText: '响应中断' }).waitFor();
+    assert.equal(board.tasks.length, 1);
+    const taskId = board.tasks[0].id;
+    await dialog.getByRole('button', { name: '创建任务' }).click();
+    await dialog.waitFor({ state: 'hidden' });
+    await page.getByRole('button', { name: '开始执行：响应丢失后重试' }).waitFor();
+    assert.equal(board.tasks.length, 1);
+    assert.equal(board.tasks[0].id, taskId);
+    assert.notEqual(taskId, writes[2].input.request_key);
+    assert.deepEqual(writes[2].input, writes[3].input);
+    assert.deepEqual(board.inbox[0].task_ids, [taskId]);
     assert.deepEqual(errors, []);
   });
   await test('Inbox and board follow the current project; conversion inherits its worktree context', async t => {
@@ -372,7 +454,8 @@ try {
     assert.deepEqual(await dialog.getByLabel('工作目录').locator('option').allTextContents(), ['main · /other']);
     await dialog.getByLabel('创建新的 Worktree').check();
     await dialog.locator('fieldset:not([disabled])').waitFor();
-    assert.match(await dialog.getByLabel('Worktree 路径').inputValue(), /^\/other-task-/);
+    assert.equal(await dialog.getByLabel('Worktree 路径').inputValue(), '');
+    assert.equal(await dialog.getByLabel('新分支', { exact: true }).inputValue(), '');
     assert.equal(await dialog.getByLabel('基于分支 / 引用').inputValue(), 'main');
     await page.screenshot({ path: '/tmp/aow-task-convert-project.png', fullPage: true });
     await dialog.getByRole('button', { name: '创建任务' }).click();
@@ -380,8 +463,10 @@ try {
     assert.deepEqual(board.inbox.map(i => i.project_id), ['other', 'project']);
     const converted = writes.filter(w => w.path.endsWith('/convert')).map(w => w.input);
     assert.deepEqual(converted.map(t => t.project_id), ['project', 'other']);
-    assert.match(converted[1].cwd, /^\/other-task-/);
+    assert.equal(converted[1].cwd, '');
+    assert.equal(converted[1].worktree.branch, '');
     assert.equal(converted[1].worktree.base_ref, 'main');
+    assert.equal(board.tasks[1].cwd, `/other-task-${board.tasks[1].id}`);
     await page.getByRole('button', { name: 'AoW 项目', exact: true }).click();
     await page.getByRole('button', { name: '开始执行：AoW 需求' }).waitFor();
     assert.equal(await page.getByRole('button', { name: '开始执行：Other 需求' }).count(), 0);
