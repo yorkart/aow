@@ -13,7 +13,7 @@ import { WorkspaceMenuLabel, type WorkspaceMenuAction } from './WorkspaceMenuLab
 
 export interface WorkspaceTab {
   id: string;
-  kind: 'terminal' | 'agent' | 'file' | 'diff' | 'session' | 'automation' | 'pullRequest' | 'browser';
+  kind: 'terminal' | 'agent' | 'file' | 'diff' | 'session' | 'automation' | 'pullRequest' | 'browser' | 'tasks';
   label: string;
   targetId: string;
   title?: string;
@@ -26,6 +26,7 @@ export interface WorkspaceTab {
 export interface TabRevealRequest { tabId: string }
 type WorkspaceTabGroup = Exclude<WorkspaceTab['kind'], 'agent'>;
 const groupDefinitions: { id: WorkspaceTabGroup; label: string; color: string }[] = [
+  { id: 'tasks', label: 'Tasks', color: '#82b7ac' },
   { id: 'browser', label: '系统文件浏览器', color: '#8fa8bd' },
   { id: 'terminal', label: 'Terminal', color: '#6ca8f1' },
   { id: 'session', label: 'Conversation', color: '#ae9bd7' },

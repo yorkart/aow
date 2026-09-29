@@ -1114,3 +1114,143 @@ async fn native_startup_probes() {
     }
     fixture.stop().await;
 }
+
+#[tokio::test]
+async fn board_conversion_prepares_once_and_start_does_not_change_status() {
+    let fixture = Fixture::new("ready").await;
+    let app = crate::build_router(fixture.state.clone());
+    post(&app, "/api/aow/agents", json!({"id":"task-codex","agent_type":"codex","display_name":"Task Codex","command":"/usr/bin/python3","args":[fixture.directory.path().join("agent.py"),fixture.log,"ready"]})).await;
+    let inbox = json!({"id":"requirement", "project_id":fixture.project_id, "title":"Implement idea", "description":"Discuss acceptance criteria"});
+    post(&app, "/api/tasks/inbox", inbox).await;
+    let input = json!({"id":"board-task", "expected_revision":1,"title":"Implement idea","description":"Discuss acceptance criteria","status_id":"in-review","project_id":fixture.project_id,"cwd":fixture.repo,"agent":"task-codex","start_now":false});
+    let created = post(&app, "/api/tasks/inbox/requirement/convert", input.clone()).await;
+    assert_eq!(created["execution"], "preparing");
+    post(&app, "/api/tasks/inbox/requirement/convert", input).await;
+    let ready = tokio::time::timeout(Duration::from_secs(25), async {
+        loop {
+            let task: Value = fixture
+                .client
+                .get_json("/v1/tasks/items/board-task")
+                .await
+                .unwrap();
+            if task["execution"] != "preparing" {
+                break task;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(ready["execution"], "ready", "{ready}");
+    assert_eq!(ready["status_id"], "in-review");
+    assert!(
+        !fixture.log.exists(),
+        "prepare-only must not submit the requirement"
+    );
+    assert_eq!(
+        fixture.state.terminals.list(None).await.unwrap().tabs.len(),
+        1
+    );
+    let board: Value = fixture.client.get_json("/v1/tasks").await.unwrap();
+    assert_eq!(board["tasks"].as_array().unwrap().len(), 1);
+    let inbox: Value = fixture
+        .client
+        .get_json("/v1/tasks/inbox?include_converted=true")
+        .await
+        .unwrap();
+    assert_eq!(inbox["items"][0]["task_ids"], json!(["board-task"]));
+    let input = json!({"expected_revision":ready["revision"]});
+    let _: Value = fixture
+        .client
+        .post_json("/v1/tasks/items/board-task/start", &input)
+        .await
+        .unwrap();
+    assert!(
+        fixture
+            .client
+            .post_json::<_, Value>("/v1/tasks/items/board-task/start", &input)
+            .await
+            .is_err()
+    );
+    let submitted = tokio::time::timeout(Duration::from_secs(20), async {
+        loop {
+            let task: Value = fixture
+                .client
+                .get_json("/v1/tasks/items/board-task")
+                .await
+                .unwrap();
+            if task["execution"] != "submitting" {
+                break task;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(submitted["execution"], "submitted", "{submitted}");
+    assert_eq!(submitted["status_id"], "in-review");
+    assert_eq!(submitted["pane_id"], ready["pane_id"]);
+    let input = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if let Ok(text) = std::fs::read_to_string(&fixture.log)
+                && text.ends_with('\n')
+            {
+                break text;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(input.contains("Discuss acceptance criteria"));
+    assert!(input.contains("aow-cli task set-status board-task"));
+    let _: Value = fixture
+        .client
+        .post_json(
+            "/v1/tasks/items/board-task/status",
+            &json!({"expected_revision":submitted["revision"],"status_id":"todo"}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        std::fs::read_to_string(&fixture.log).unwrap(),
+        input,
+        "moving status must not submit more input"
+    );
+    let new_path = fixture.directory.path().join("task-worktree");
+    let source: Value = fixture
+        .client
+        .get_json("/v1/tasks/inbox/requirement")
+        .await
+        .unwrap();
+    assert_eq!(
+        source["revision"], 1,
+        "Conversion does not modify the requirement file"
+    );
+    let input = json!({"id":"board-immediate", "expected_revision":source["revision"],"title":"Immediate task","description":"Fresh worktree","status_id":"done","project_id":fixture.project_id,"cwd":new_path,"agent":"task-codex","start_now":true,"worktree":{"branch":"task/isolated","base_ref":"main"}});
+    post(&app, "/api/tasks/inbox/requirement/convert", input.clone()).await;
+    let immediate = tokio::time::timeout(Duration::from_secs(25), async {
+        loop {
+            let task: Value = fixture
+                .client
+                .get_json("/v1/tasks/items/board-immediate")
+                .await
+                .unwrap();
+            if task["execution"] != "preparing" {
+                break task;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(immediate["execution"], "submitted", "{immediate}");
+    assert_eq!(immediate["status_id"], "done");
+    assert!(new_path.join(".git").is_file());
+    post(&app, "/api/tasks/inbox/requirement/convert", input).await;
+    assert_eq!(
+        fixture.state.terminals.list(None).await.unwrap().tabs.len(),
+        2
+    );
+    fixture.stop().await;
+}

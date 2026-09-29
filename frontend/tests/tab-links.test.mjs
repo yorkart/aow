@@ -66,6 +66,8 @@ try {
       if (url.pathname === '/api/auth/status') data = { configured: true, authenticated: state.authenticated };
       else if (url.pathname === '/api/auth/login') { state.authenticated = true; data = { configured: true, authenticated: true }; }
       else if (!state.authenticated) { await route.fulfill({ status: 401, json: { message: 'Login required' } }); return; }
+      else if (url.pathname === '/api/tasks') data = { version: 1, status_revision: 1, tasks: [], statuses: [{ id: 'todo', name: 'Todo', color: '#888888' }] };
+      else if (url.pathname === '/api/tasks/inbox') data = { items: [], total: 0, next_cursor: null };
       else if (url.pathname === '/api/aow/projects') data = projects;
       else if (url.pathname === '/api/aow/agents') data = sessionAgent ? [{ id: 'codex', display_name: 'Codex', available: true, args: [], env: {} }] : [];
       else if (url.pathname === '/api/aow/settings') data = { notes_base: '/notes', execution_path: ['/usr/bin'] };
@@ -129,6 +131,26 @@ try {
     await page.goto(destination.href);
     return { page, state, root };
   }
+
+  await test('Tasks navigation opens Inbox and a normal workspace tab that survives refresh', async t => {
+    const { page, state } = await fixture(t);
+    await page.getByRole('button', { name: 'Tasks', exact: true }).filter({ visible: true }).click();
+    const tab = page.locator('.project-aow-surface:not([hidden]) .project-aow-center-tab.active').filter({ hasText: 'Task Board' });
+    await tab.waitFor();
+    await page.getByRole('region', { name: 'Inbox', exact: true }).filter({ visible: true }).waitFor();
+    await page.getByRole('region', { name: 'Todo', exact: true }).waitFor();
+    assert.match(page.url(), /\/aow\/tabs\/tasks\?/);
+    await page.reload(); await tab.waitFor();
+    await page.getByRole('region', { name: 'Todo', exact: true }).waitFor();
+    await page.screenshot({ path: join(screenshotDir, 'aow-tasks-workspace.png') });
+    assert.deepEqual(state.errors, []); assert.deepEqual(state.mutations, []);
+  });
+  await test('Tasks deep link opens on mobile with Inbox capture', async t => {
+    const { page, state } = await fixture(t, { mobile: true, tabUrl: '/aow/tabs/tasks?workspace=wt-1' });
+    await page.getByRole('button', { name: 'Task Board', exact: true }).click();
+    await page.getByRole('region', { name: 'Todo', exact: true }).waitFor();
+    assert.deepEqual(state.errors, []); assert.deepEqual(state.mutations, []);
+  });
 
   const desktopTarget = page => page.locator('.project-aow-surface:not([hidden]) .project-aow-center-tab.active').filter({ hasText: 'Target Tab' });
   await test('deep link survives login and refresh and overrides the saved project and tab', async t => {

@@ -30,7 +30,8 @@
     "test:panels": "node --test tests/panel-layout.test.mjs",
     "test:git": "node --test tests/commit-graph.test.mjs",
     "test:performance": "node --test tests/performance.test.mjs",
-    "preview:pr": "node tests/pull-request-preview.mjs"
+    "preview:pr": "node tests/pull-request-preview.mjs",
+    "test:tasks": "node --test tests/tasks.test.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

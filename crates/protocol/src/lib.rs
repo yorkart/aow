@@ -1,7 +1,10 @@
 mod filesystem;
 mod git;
 mod pull_request;
+mod task;
 mod terminal;
+
+pub use task::*;
 
 pub use filesystem::{
     ApiError, DirectoryListing, FileEntry, FileKind, RenameResult, TextFile, WriteResult,

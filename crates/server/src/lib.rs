@@ -16,6 +16,7 @@ mod realtime;
 mod routes;
 mod session_shares;
 mod state;
+mod tasks;
 mod terminal;
 mod web;
 mod workspace_events;

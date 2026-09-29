@@ -92,6 +92,14 @@ struct AowInner {
 }
 
 impl AowManager {
+    pub(crate) fn task_state_dir(&self) -> Option<&Path> {
+        self.inner.state_dir.as_deref()
+    }
+
+    pub(crate) fn task_configuration(&self) -> Option<aow_config::ConfigRepository> {
+        self.inner.config.clone()
+    }
+
     pub(crate) fn repository_roots(&self) -> Result<Vec<PathBuf>, AowError> {
         Ok(self
             .lock()?

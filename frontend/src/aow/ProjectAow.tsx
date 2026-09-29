@@ -1,3 +1,8 @@
+import { InboxPanel } from '../features/tasks/InboxPanel';
+import { TaskBoard } from '../features/tasks/TaskBoard';
+import { ConvertDialog } from '../features/tasks/ConvertDialog';
+import { useTaskBoard } from '../features/tasks/api';
+import type { InboxItem, BoardTask } from '../features/tasks/types';
 import { SettingsDialog } from '../features/settings/SettingsDialog';
 import { appLocalStorage } from '../lib/basePath';
 import { subscribeWorkspaceChanges } from '../lib/workspaceEvents';
@@ -12,7 +17,7 @@ import { prTabId } from './tabRoutes/pr';
 import { FloatingWorkspaceProvider, FloatingOpenMenu, useFloatingWorkspace, openingInFloatingWorkspace, withFloatingOpen, readStored, persist } from './floatingWorkspaceState';
 import type { SetStateAction, CSSProperties, DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from 'react';
 import {
-  ArrowUp, CalendarClock, Check, ChevronDown, ChevronRight, CircleHelp, CornerDownLeft, FileText, Files, FolderGit2, FolderOpen, GitBranch, GitBranchPlus, GitPullRequest, MessageSquare, MoreHorizontal,
+  ListTodo, ArrowUp, CalendarClock, Check, ChevronDown, ChevronRight, CircleHelp, CornerDownLeft, FileText, Files, FolderGit2, FolderOpen, GitBranch, GitBranchPlus, GitPullRequest, MessageSquare, MoreHorizontal,
   LoaderCircle, NotebookPen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pencil, Pin, PinOff, Plus, RefreshCw, Settings, SquareTerminal, Trash2, X,
 } from 'lucide-react';
 import { gitApi } from '../features/git/api';
@@ -85,7 +90,7 @@ const minRightSidebarWidth = 220;
 const maxRightSidebarWidth = 640;
 const minCenterWidth = 360;
 
-type RightView = 'files' | 'git' | 'pullRequests' | 'sessions' | 'automations' | 'terminals';
+type RightView = 'tasks' | 'files' | 'git' | 'pullRequests' | 'sessions' | 'automations' | 'terminals';
 type AutomationSessionReference = { taskId: string; runId: string };
 type SessionPreview = { session: AowAgentSession; workspacePath: string; snapshot?: AgentSessionSnapshot; loading: boolean; error?: string; automationRun?: AutomationSessionReference };
 type WorktreeEntry = { project: AowProject; worktree: AowWorktree };
@@ -754,6 +759,15 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   }, [floating.publishHost, worktree.path, hostPortal, activeCenterId, active]);
   useEffect(() => () => floating.publishHost(worktree.path), [floating.publishHost, worktree.path]);
   const [rightView, setRightView] = useState<RightView>('terminals');
+  const [taskBoardOpened, setTaskBoardOpened] = useState(false);
+  const [selectedBoardTask, setSelectedBoardTask] = useState<string>();
+  const [convertingRequirement, setConvertingRequirement] = useState<InboxItem>();
+  const taskState = useTaskBoard(project.id, (active && rightSidebarVisible && rightView === 'tasks') || (taskBoardOpened && tabLive('task-board')));
+  const openTaskBoard = () => {
+    setRightView('tasks'); setTaskBoardOpened(true); setActiveCenterId('task-board'); setActiveDocumentId(undefined); routeToFloating('task-board');
+  };
+  const selectBoardTask = (task: BoardTask) => { setSelectedBoardTask(task.id); openTaskBoard(); };
+
   const canShowAllTerminals = worktree.is_main && !project.builtin;
   const terminalScopeKey = `aow-terminal-scope:${worktree.path}`;
   const [terminalScopes, setTerminalScopes] = useState(() => {
@@ -814,9 +828,10 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     id: prTabId(pr.repository ?? worktree.path, pr.number, pr), kind: 'pullRequest', label: `PR #${pr.number}`, targetId: prTabId(pr.repository ?? worktree.path, pr.number, pr),
   })), [openPullRequests]);
   const ownedCenterTabs = useMemo(() => groupWorkspaceTabs([
+    ...(taskBoardOpened ? [{ id: 'task-board', kind: 'tasks' as const, label: 'Task Board', targetId: 'task-board' }] : []),
     ...(browserTab ? [{ id: 'system-files', kind: 'browser' as const, label: '系统文件浏览器', targetId: 'system-files' }] : []),
     ...terminalTabs, ...sessionTabs, ...automationTabs, ...pullRequestTabs, ...documentTabs,
-  ]).flatMap(group => group.tabs), [automationTabs, documentTabs, pullRequestTabs, sessionTabs, terminalTabs, browserTab]);
+  ]).flatMap(group => group.tabs), [automationTabs, documentTabs, pullRequestTabs, sessionTabs, terminalTabs, browserTab, taskBoardOpened]);
   const centerTabs = useMemo(() => groupWorkspaceTabs([...ownedCenterTabs, ...hostedTabs])
     .flatMap(group => group.tabs), [ownedCenterTabs, hostedTabs]);
   const hasFrontendTabs = centerTabs.length > 0 ? true : restored ? false : undefined;
@@ -1522,6 +1537,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   };
 
   const closeTab = async (tab: CenterTab) => {
+    if (tab.kind === 'tasks') { setTaskBoardOpened(false); floating.remove(worktree.path, tab.id); return; }
     if (tab.kind === 'browser') { setBrowserTab(false); floating.remove(worktree.path, tab.id); return; }
     if (centerTabGroup(tab) === 'terminal') {
       hideTerminalTabs([tab]);
@@ -1540,7 +1556,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
       hideTerminalTabs(targets);
       return;
     }
-    if (group === 'browser') {
+    if (group === 'browser' || group === 'tasks') {
       for (const tab of targets) await closeTab(tab);
       return;
     }
@@ -1687,7 +1703,8 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   useEffect(() => {
     let cancelled = false;
     restoring.current = true;
-    const saved = readStored<{ documents?: OpenDocument[]; sessions?: SessionPreview[]; pullRequests?: (PullRequestSummary & { repository?: string })[]; tasks?: AutomationTask[]; terminalVisibility?: Record<string, boolean>; openedCliTerminals?: string[]; active?: string }>(`aow-workspace-tabs:${worktree.path}`, {});
+    const saved = readStored<{ documents?: OpenDocument[]; sessions?: SessionPreview[]; pullRequests?: (PullRequestSummary & { repository?: string })[]; tasks?: AutomationTask[]; taskBoard?: boolean; terminalVisibility?: Record<string, boolean>; openedCliTerminals?: string[]; active?: string }>(`aow-workspace-tabs:${worktree.path}`, {});
+    setTaskBoardOpened(saved.taskBoard === true);
     setTerminalVisibility(saved.terminalVisibility ?? Object.fromEntries((saved.openedCliTerminals ?? []).filter(id => typeof id === 'string').map(id => [id, true])));
     const pending = (Array.isArray(saved.documents) ? saved.documents : []).filter(item => typeof item.path === 'string' && item.path.length < 8192).map(async item => {
       if (item.diffSource) {
@@ -1726,12 +1743,13 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
       documents: documents.map(({ id, path, name, kind, explorerSource, diffSource, readOnly }) => ({ id, path, name, kind, explorerSource, diffSource, readOnly })),
       sessions: sessionPreviews.map(({ session, workspacePath, automationRun }) => ({ session, workspacePath, automationRun })),
       terminalVisibility,
-      pullRequests: openPullRequests, tasks: Object.values(automationTasks), active: activeCenterId,
+      pullRequests: openPullRequests, tasks: Object.values(automationTasks), taskBoard: taskBoardOpened, active: activeCenterId,
     });
-  }, [restored, documents, sessionPreviews, openPullRequests, automationTasks, activeCenterId, worktree.path, terminalVisibility]);
+  }, [restored, documents, sessionPreviews, openPullRequests, automationTasks, activeCenterId, worktree.path, terminalVisibility, taskBoardOpened]);
 
   const routeActions = useRef<TabOpenActions>(null!);
   routeActions.current = {
+    tasks: openTaskBoard,
     terminal: id => {
       if (!terminals.tabs.some(tab => tab.id === id)) throw new Error('该 Tab 已关闭或不存在。');
       setTerminalVisibility(items => ({ ...items, [id]: true }));
@@ -1913,6 +1931,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
       <nav aria-label="AoW side views">
         <button className={rightView === 'terminals' ? 'active' : ''} title="Terminal" aria-label="Terminal 面板" onClick={() => setRightView('terminals')}><SquareTerminal /></button>
         <button className={rightView === 'sessions' ? 'active' : ''} title="Conversation" aria-label="Conversation" onClick={() => setRightView('sessions')}><MessageSquare /></button>
+        <button className={rightView === 'tasks' ? 'active' : ''} title="Tasks" aria-label="Tasks" onClick={openTaskBoard}><ListTodo /></button>
         <button className={rightView === 'automations' ? 'active' : ''} title="Automation" aria-label="Automation" onClick={() => setRightView('automations')}><CalendarClock /></button>
         <span className="project-aow-view-separator" aria-hidden="true" />
         <button className={rightView === 'files' && (!project.builtin || rightSidebarVisible) ? 'active' : ''} title="Explorer" aria-label="Explorer" onClick={() => setRightView('files')}><FolderOpen /></button>
@@ -1983,6 +2002,9 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
           }}
           onOpen={openTerminal} onOpenFloating={tab => openTerminal(tab, true)} />
       </div>
+      <div className="project-aow-right-content" hidden={rightView !== 'tasks'}>
+        <InboxPanel state={taskState} onConvert={setConvertingRequirement} onTask={selectBoardTask} />
+      </div>
       <div className="project-aow-right-content" hidden={rightView !== 'automations'}>
         <AutomationPanel project={project} agents={agents} activeTaskId={activeCenterId?.startsWith('automation:') ? activeCenterId.slice('automation:'.length) : undefined} refreshKey={automationRefreshKey} onOpenTask={openAutomation} onTaskChanged={taskChanged} onTaskDeleted={taskDeleted} />
       </div>
@@ -2008,6 +2030,11 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
       {operationError || terminals.error ? <div className="project-aow-inline-error">{operationError || terminals.error}<button onClick={() => setOperationError('')}><X /></button></div> : null}
       <div className="project-aow-center-content">
         <div ref={setHostPortal} />
+        {taskBoardOpened && projectContent('task-board', <div className="project-aow-session-host" hidden={!tabVisible('task-board')}>
+          <TaskBoard state={taskState} selectedId={selectedBoardTask} onOpen={async task => { if (task.tab_id) openTerminal(await terminalApi.get(task.tab_id)); }} />
+        </div>)}
+        {convertingRequirement && taskState.board && <ConvertDialog item={convertingRequirement} statuses={taskState.board.statuses} agents={agents} project={project} worktree={worktree} onClose={() => setConvertingRequirement(undefined)} onCreated={selectBoardTask} />}
+
         {openedTerminals.map((tab) => <Fragment key={tab.id}>{projectContent(`terminal:${tab.id}`, <div className="project-aow-terminal-host" hidden={!tabVisible(`terminal:${tab.id}`)}>
           <TerminalWorkspace
             visible={tabLive(`terminal:${tab.id}`)}

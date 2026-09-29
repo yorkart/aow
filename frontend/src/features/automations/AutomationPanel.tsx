@@ -15,6 +15,7 @@ import { useConfirmation } from '../../components/ConfirmationDialog';
 import { AowIconButton } from '../../components/AowIconButton';
 import { AowPanel, AowPanelStack } from '../../components/AowPanel';
 import { AowListRow } from '../../components/AowListRow';
+import { AowListRowMeta } from '../../components/AowListRowMeta';
 import './automations.css';
 
 interface AutomationPanelProps {
@@ -101,7 +102,7 @@ export function AutomationPanel({ project, agents, activeTaskId, refreshKey = 0,
           {!loading && items.map(task => <AowListRow key={task.id} role="listitem" className={`automation-panel-row${task.id === activeTaskId ? ' active' : ''}`}
             title={task.name} tooltip={`${task.name} · ID: ${task.id}`} icon={manual ? <MousePointerClick /> : <CalendarClock />} menuLabel="任务操作" onOpen={() => onOpenTask(task)}
             menuExpanded={contextMenu?.taskId === task.id} onMenu={(x, y) => setContextMenu({ taskId: task.id, x, y })}>
-            <small className="automation-panel-meta"><AutomationTaskBadge task={task} /><span aria-hidden="true">•</span><span className="automation-panel-summary"><code>{task.id}</code><span> · </span>{manual ? `${variableNames(task.prompt_bindings).length} 个变量` : scheduleName(task.cron, task.interval_seconds)}</span></small>
+            <AowListRowMeta status={<AutomationTaskBadge task={task} inList />}><code>{task.id}</code><span> · </span>{manual ? `${variableNames(task.prompt_bindings).length} 个变量` : scheduleName(task.cron, task.interval_seconds)}</AowListRowMeta>
           </AowListRow>)}
       </AowPanel>;
     })}

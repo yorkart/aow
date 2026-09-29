@@ -10,6 +10,10 @@ interface MobileAdapter {
 }
 // These adapters translate the same resource routes into the existing mobile readers.
 const adapters: Record<TabTarget['type'], MobileAdapter> = {
+  tasks: {
+    restore: () => ({ view: 'tasks' }),
+    capture: ({ route, worktree }) => route.view === 'tasks' ? { type: 'tasks', workspace: worktree.id } : undefined,
+  },
   terminal: {
     restore: t => t.type === 'terminal' ? { view: 'terminal', terminal: t.tabId } : {},
     capture: () => undefined, // The terminal pane reports its active Tab after loading.

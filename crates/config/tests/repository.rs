@@ -288,6 +288,10 @@ fn runtime_paths_and_symlink_destinations_are_rejected() {
         "terminals.json",
         "automations/runs/test.json",
         "../aow-settings.json",
+        "tasks/runs/task.json",
+        "tasks/inbox/../escape.json",
+        "tasks/inbox/project/../../escape.json",
+        "tasks/inbox/project/nested/idea.json",
     ] {
         assert!(config.save(Path::new(path), b"{}").is_err());
     }
@@ -298,6 +302,77 @@ fn runtime_paths_and_symlink_destinations_are_rejected() {
             .is_err()
     );
     assert!(!outside.path().join("tasks/task-one.json").exists());
+}
+
+#[test]
+fn requirement_files_and_deletions_are_committed_independently() {
+    let state = tempfile::tempdir().unwrap();
+    let config = ConfigRepository::initialize(state.path()).unwrap();
+    let repo = config.directory().parent().unwrap();
+    let first = Path::new("tasks/inbox/project/first.json");
+    let second = Path::new("tasks/inbox/project/second.json");
+    config
+        .save(Path::new("tasks/statuses.json"), b"{}")
+        .unwrap();
+    config.save(first, b"{\"id\":\"first\"}").unwrap();
+    config.save(second, b"{\"id\":\"second\"}").unwrap();
+    fs::write(repo.join("unrelated.json"), b"{}").unwrap();
+    git(repo, &["add", "unrelated.json"]);
+    let lock = repo.join(".git/index.lock");
+    fs::write(&lock, b"busy").unwrap();
+    assert!(config.remove(first).is_err());
+    assert!(!config.directory().join(first).exists());
+    assert!(config.directory().join(second).exists());
+    fs::remove_file(lock).unwrap();
+    config.remove(first).unwrap();
+    assert_eq!(
+        git(repo, &["diff", "--cached", "--name-only"]),
+        "unrelated.json"
+    );
+    assert!(
+        git(repo, &["show", "--format=", "--name-status", "HEAD"])
+            .ends_with("tasks/inbox/project/first.json")
+    );
+    let outside = tempfile::tempdir().unwrap();
+    std::os::unix::fs::symlink(
+        outside.path(),
+        config.directory().join("tasks/inbox/linked"),
+    )
+    .unwrap();
+    fs::write(outside.path().join("idea.json"), b"keep").unwrap();
+    assert!(
+        config
+            .remove(Path::new("tasks/inbox/linked/idea.json"))
+            .is_err()
+    );
+    assert!(
+        config
+            .save(Path::new("tasks/inbox/linked/idea.json"), b"{}")
+            .is_err()
+    );
+    assert_eq!(fs::read(outside.path().join("idea.json")).unwrap(), b"keep");
+}
+
+#[test]
+fn deleting_a_requirement_whose_initial_commit_failed_is_retryable() {
+    let state = tempfile::tempdir().unwrap();
+    let config = ConfigRepository::initialize(state.path()).unwrap();
+    let repo = config.directory().parent().unwrap();
+    let path = Path::new("tasks/inbox/project/idea.json");
+    let lock = repo.join(".git/index.lock");
+    fs::write(&lock, b"busy").unwrap();
+    assert!(config.save(path, b"{}").is_err());
+    assert!(config.remove(path).is_err());
+    fs::remove_file(&lock).unwrap();
+    config.remove(path).unwrap();
+    assert!(git(repo, &["status", "--porcelain"]).is_empty());
+    // Retry a deletion that was staged before a commit failed.
+    config.save(path, b"{}").unwrap();
+    let full_path = config.directory().join(path);
+    fs::remove_file(&full_path).unwrap();
+    git(repo, &["add", "--all", "--", full_path.to_str().unwrap()]);
+    config.remove(path).unwrap();
+    assert!(git(repo, &["status", "--porcelain"]).is_empty());
 }
 
 #[test]

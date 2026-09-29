@@ -21,7 +21,7 @@ use aow_protocol::{
     AgentTerminalCreate, AgentTerminalInfo, AgentTerminalPhase, AgentTerminalState,
     AgentTerminalSubmit, TerminalAttachServerMessage, TerminalControlState,
 };
-pub(crate) use api::{create, get, list, submit};
+pub(crate) use api::{create, create_for_task, get, list, submit};
 #[cfg(test)]
 use connection::AgentConnection;
 #[cfg(test)]

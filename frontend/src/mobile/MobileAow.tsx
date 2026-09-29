@@ -3,7 +3,7 @@ import { LogoutButton } from '../features/auth/LogoutButton';
 import type { ResolvedTab } from '../aow/tabRoutes';
 import { mobileTabTarget } from '../aow/tabRoutes/mobile';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowUpRight, CalendarClock, ChevronRight, FolderOpen, GitBranch, GitPullRequest, Home, MessageSquare, Pin, PinOff, Search, Settings, TerminalSquare, X } from 'lucide-react';
+import { ListTodo, ArrowLeft, ArrowUpRight, CalendarClock, ChevronRight, FolderOpen, GitBranch, GitPullRequest, Home, MessageSquare, Pin, PinOff, Search, Settings, TerminalSquare, X } from 'lucide-react';
 import { aowApi } from '../aow/aowApi';
 import { ProjectIcon } from '../aow/ProjectIcon';
 import { usePinnedWorktrees } from '../aow/usePinnedWorktrees';
@@ -16,6 +16,7 @@ import { mobileRouteUrl, saveMobileValue, storedMobileValue, useMobileResource, 
 import type { MobileNavigate } from './mobileState';
 import './mobile.css';
 
+const MobileTasks = lazy(() => import('../features/tasks/MobileTasks').then(module => ({ default: module.MobileTasks })));
 const MobileTerminals = lazy(() => import('../features/terminals/MobileTerminals').then((module) => ({ default: module.MobileTerminals })));
 const MobileSessions = lazy(() => import('../features/sessions/MobileSessions').then((module) => ({ default: module.MobileSessions })));
 const MobileFiles = lazy(() => import('../features/files/MobileFiles').then((module) => ({ default: module.MobileFiles })));
@@ -27,6 +28,7 @@ const MobileSettings = lazy(() => import('./MobileSettings').then(module => ({ d
 const navigation = [
   { id: 'terminal', label: '终端', icon: TerminalSquare },
   { id: 'sessions', label: 'Conversation', icon: MessageSquare },
+  { id: 'tasks', label: 'Tasks', icon: ListTodo },
   { id: 'automations', label: '自动化', icon: CalendarClock },
   { id: 'files', label: '文件', icon: FolderOpen },
   { id: 'git', label: 'Git', icon: GitBranch },
@@ -155,6 +157,7 @@ function MobileWorkspace({ project, worktree, route, navigate, back, headerActio
           {id === 'files' && <MobileFiles route={route} notesPath={project.notes_path} visible={route.view === id} navigate={navigate} back={back} />}
           {id === 'git' && <MobileGit route={route} visible={route.view === id} navigate={navigate} back={back} />}
           {id === 'pull-requests' && <MobilePullRequests route={route} visible={route.view === id} navigate={navigate} back={back} />}
+          {id === 'tasks' && <MobileTasks project={project} worktree={worktree} visible={route.view === id} navigate={navigate} />}
           {id === 'automations' && <MobileAutomations route={route} projectId={project.id} visible={route.view === id} navigate={navigate} back={back} />}
         </Suspense>
       </div>)}

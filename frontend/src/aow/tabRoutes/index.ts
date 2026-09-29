@@ -7,12 +7,13 @@ import { fileRoute, filesRoute } from './files';
 import { diffRoute } from './diff';
 import { prRoute } from './pr';
 import { sessionRoute } from './session';
+import { tasksRoute } from './tasks';
 import { automationRoute } from './automation';
 import { prefix } from './helpers';
 export type { TabTarget, ResolvedTab, TabOpenActions, AutomationLocation } from './types';
 
 // The registry is the only dispatch point; each adapter owns its typed payload.
-const adapters = [terminalRoute, filesRoute, fileRoute, diffRoute, prRoute, sessionRoute, automationRoute] as TabRouteAdapter[];
+const adapters = [tasksRoute, terminalRoute, filesRoute, fileRoute, diffRoute, prRoute, sessionRoute, automationRoute] as TabRouteAdapter[];
 const registry = new Map(adapters.map(adapter => [adapter.type, adapter]));
 export function parseTabUrl(url: URL): TabTarget | undefined {
   if (!url.pathname.startsWith(prefix)) return;

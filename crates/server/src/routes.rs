@@ -75,6 +75,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/fs/", get(fs_root))
         .route("/fs/{*path}", get(fs_path))
         .route("/help", get(help_page))
+        .nest("/api/tasks", crate::tasks::routes())
         .merge(terminal::routes())
         .merge(aow::routes())
         .merge(pull_requests::routes())

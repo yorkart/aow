@@ -1,6 +1,7 @@
 mod agent;
 mod automation;
 mod project;
+mod task;
 
 use std::{
     io::{self, Write},
@@ -66,6 +67,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Manage Inbox requirements and user-defined task states.
+    Task(task::TaskArgs),
     /// Query registered project IDs, names and repository paths through the local server.
     Project(project::ProjectArgs),
     /// Inspect local automation task configurations and execution records.
@@ -114,6 +117,10 @@ fn execute(cli: Cli) -> Result<()> {
     let state_dir = cli
         .state_dir
         .unwrap_or_else(aow_filesystem::default_state_dir);
+    if let Command::Task(args) = cli.command {
+        let value = task::execute(args, state_dir)?;
+        return write_json(&mut io::stdout().lock(), &value, cli.compact);
+    }
     if let Command::Agent(args) = cli.command {
         let value = agent::execute(args, state_dir)?;
         return write_json(&mut io::stdout().lock(), &value, cli.compact);
