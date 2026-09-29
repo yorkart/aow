@@ -6,7 +6,6 @@ use std::{
 };
 
 use anyhow::{Result, ensure};
-use uuid::Uuid;
 
 use crate::{Run, RunEvent, RunOutput, Task};
 
@@ -66,7 +65,7 @@ impl Store {
         let temporary = directory
             .parent()
             .unwrap()
-            .join(format!(".{}.tmp", Uuid::new_v4().as_simple()));
+            .join(format!(".{}.tmp", aow_id::new_id()));
         let result = (|| {
             fs::create_dir(&temporary)?;
             fs::set_permissions(&temporary, fs::Permissions::from_mode(0o700))?;
@@ -89,6 +88,7 @@ impl Store {
                 file,
                 directory: temporary.clone(),
                 active_path: None,
+                failure: None,
             };
             writer.append(&RunEvent::Started {
                 run: Box::new(run.clone()),

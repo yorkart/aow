@@ -12,6 +12,10 @@ use super::{
 };
 
 impl OperationService {
+    pub(crate) fn subscribe(&self) -> watch::Receiver<Snapshot> {
+        self.inner.changes.subscribe()
+    }
+
     pub(crate) fn in_memory() -> Self {
         Self::new(None).expect("in-memory operation service")
     }
@@ -22,7 +26,7 @@ impl OperationService {
 
     fn new(directory: Option<&Path>) -> Result<Self, aow_operation_log::Error> {
         let mut runtime = Runtime {
-            boot_id: uuid::Uuid::new_v4().to_string(),
+            boot_id: aow_id::new_id(),
             revision: 0,
             entries: Vec::new(),
             log_error: None,

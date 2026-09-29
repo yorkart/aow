@@ -47,7 +47,16 @@ impl AowManager {
             .into_iter()
             .find(|agent| agent.id == id && agent.available)
             .ok_or_else(|| AowError::AgentNotFound(id.to_owned()))?;
-        Ok(agent.into_launch(&path)?)
+        let mut launch = agent.into_launch(&path)?;
+        if let Some(state_dir) = &self.inner.state_dir {
+            // Child tools must reach this AoW instance even when terminald or
+            // the agent profile has a different default state directory.
+            launch.env.insert(
+                "AOW_STATE_DIR".into(),
+                state_dir.to_string_lossy().into_owned(),
+            );
+        }
+        Ok(launch)
     }
 
     pub(crate) async fn resolve_terminal_rebuild_launch(

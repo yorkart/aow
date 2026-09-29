@@ -70,7 +70,7 @@ pub(super) fn credentials() -> Credentials {
         user_id: "owner-id".into(),
         base_url: api::BASE_URL.into(),
         bot_token: "private-bot-token".into(),
-        binding_id: "00000000-0000-4000-8000-000000000001".into(),
+        binding_id: "g123456789ab".into(),
     }
 }
 
@@ -334,9 +334,57 @@ fn rejects_untrusted_credential_destinations_and_unsafe_session_paths() {
         credentials.base_url = base.into();
         assert!(WechatClient::new(credentials, None).is_err());
     }
-    let mut credentials = credentials();
-    credentials.binding_id = "../../escape".into();
-    assert!(WechatClient::new(credentials, None).is_err());
+    assert!(credentials().validate().is_ok());
+    for id in [
+        "../../escape",
+        "binding/child",
+        "binding\\child",
+        "binding.name",
+        "binding name",
+        "",
+        &"x".repeat(129),
+    ] {
+        let mut credentials = credentials();
+        credentials.binding_id = id.into();
+        assert_eq!(
+            credentials.validate().unwrap_err().to_string(),
+            "无效的微信绑定 ID"
+        );
+        assert!(WechatClient::new(credentials, None).is_err());
+    }
+}
+
+#[test]
+fn binding_ids_are_opaque_strings_and_preserve_their_session_paths() {
+    let root = tempfile::tempdir().unwrap();
+    for id in [
+        "00000000-0000-4000-8000-000000000001",
+        "G123456789AB",
+        "binding_v2-X",
+        "0",
+        "0001",
+        "zzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+    ] {
+        let mut credentials = credentials();
+        credentials.binding_id = id.into();
+        credentials.validate().unwrap();
+        let client = WechatClient::new(credentials.clone(), Some(root.path())).unwrap();
+        client
+            .inner
+            .update_session(|session| session.cursor = "saved-cursor".into())
+            .unwrap();
+        assert!(
+            root.path()
+                .join("im/wechat")
+                .join(format!("{id}.json"))
+                .is_file()
+        );
+        let restored = WechatClient::new(credentials, Some(root.path())).unwrap();
+        assert_eq!(
+            restored.inner.session.lock().unwrap().cursor,
+            "saved-cursor"
+        );
+    }
 }
 
 #[tokio::test]
@@ -413,7 +461,7 @@ async fn receipt_is_scoped_to_current_test_and_binding_and_failed_tests_reset_pr
     );
     assert_eq!(f.client.status().verification, Some(second.clone()));
     let mut replacement = credentials();
-    replacement.binding_id = Uuid::new_v4().to_string();
+    replacement.binding_id = aow_id::new_id();
     let rebound = WechatClient::new(replacement, Some(root.path())).unwrap();
     assert!(
         rebound

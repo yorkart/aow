@@ -5,6 +5,7 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
+import { installLiveEvents } from './fixtures/live-events.mjs';
 
 const screenshotDir = process.env.AOW_TEST_SCREENSHOT_DIR || '/tmp';
 await mkdir(screenshotDir, { recursive: true });
@@ -43,16 +44,10 @@ try {
     const run = { id: 'run-old', task_id: task.id, task_name: task.name, agent: 'codex', source: 'manual', status: 'completed', started_at: '2026-09-19T00:00:00Z', finished_at: '2026-09-19T00:01:00Z', workspace_path: root, branch: 'dev', session_id: null, duration_ms: 60000, exit_code: 0 };
     const pr = { number: 42, title: 'Linked PR', source_branch: 'dev', target_branch: 'main', status: 'open', draft: false, created_at: '', updated_at: '', url: null, description: 'PR description', files: [], checks: [], reviewers: [], threads: [], unresolved_threads: [], changes_count: 0, commits_count: 1 };
     t.after(async () => { await context.close(); assert.deepEqual(state.errors, []); if (!editable) assert.deepEqual(state.mutations, []); });
+    await installLiveEvents(context);
     await context.addInitScript(({ root, floating, extraFloatingTabs }) => {
-      const taskStopSources = new Set();
-      window.EventSource = class extends EventSource {
-        constructor(...args) { super(...args); taskStopSources.add(this); }
-        close() { taskStopSources.delete(this); super.close(); }
-      };
-      window.sendTaskStop = data => {
-        for (const source of taskStopSources) source.dispatchEvent(new MessageEvent('task-stopped', { data: JSON.stringify(data) }));
-      };
-      window.taskStopReady = () => taskStopSources.size > 0;
+      window.sendTaskStop = data => window.emitLiveEvent('task-stopped', data);
+      window.taskStopReady = () => window.liveEventSockets.some(socket => socket.readyState === 1);
       localStorage.setItem('aow-active', '/workspace/main');
       localStorage.setItem(`aow-workspace-tabs:${root}`, JSON.stringify({ active: 'terminal:other' }));
       sessionStorage.setItem(`aow.mobile.terminal.${root}`, 'other:other-pane');
@@ -71,6 +66,8 @@ try {
       if (url.pathname === '/api/auth/status') data = { configured: true, authenticated: state.authenticated };
       else if (url.pathname === '/api/auth/login') { state.authenticated = true; data = { configured: true, authenticated: true }; }
       else if (!state.authenticated) { await route.fulfill({ status: 401, json: { message: 'Login required' } }); return; }
+      else if (url.pathname === '/api/tasks') data = { version: 1, status_revision: 1, tasks: [], statuses: [{ id: 'todo', name: 'Todo', color: '#888888' }] };
+      else if (url.pathname === '/api/tasks/inbox') data = { items: [], total: 0, next_cursor: null };
       else if (url.pathname === '/api/aow/projects') data = projects;
       else if (url.pathname === '/api/aow/agents') data = sessionAgent ? [{ id: 'codex', display_name: 'Codex', available: true, args: [], env: {} }] : [];
       else if (url.pathname === '/api/aow/settings') data = { notes_base: '/notes', execution_path: ['/usr/bin'] };
@@ -134,6 +131,26 @@ try {
     await page.goto(destination.href);
     return { page, state, root };
   }
+
+  await test('Tasks navigation opens Inbox and a normal workspace tab that survives refresh', async t => {
+    const { page, state } = await fixture(t);
+    await page.getByRole('button', { name: 'Tasks', exact: true }).filter({ visible: true }).click();
+    const tab = page.locator('.project-aow-surface:not([hidden]) .project-aow-center-tab.active').filter({ hasText: 'Task Board' });
+    await tab.waitFor();
+    await page.getByRole('region', { name: 'Inbox', exact: true }).filter({ visible: true }).waitFor();
+    await page.getByRole('region', { name: 'Todo', exact: true }).waitFor();
+    assert.match(page.url(), /\/aow\/tabs\/tasks\?/);
+    await page.reload(); await tab.waitFor();
+    await page.getByRole('region', { name: 'Todo', exact: true }).waitFor();
+    await page.screenshot({ path: join(screenshotDir, 'aow-tasks-workspace.png') });
+    assert.deepEqual(state.errors, []); assert.deepEqual(state.mutations, []);
+  });
+  await test('Tasks deep link opens on mobile with Inbox capture', async t => {
+    const { page, state } = await fixture(t, { mobile: true, tabUrl: '/aow/tabs/tasks?workspace=wt-1' });
+    await page.getByRole('button', { name: 'Task Board', exact: true }).click();
+    await page.getByRole('region', { name: 'Todo', exact: true }).waitFor();
+    assert.deepEqual(state.errors, []); assert.deepEqual(state.mutations, []);
+  });
 
   const desktopTarget = page => page.locator('.project-aow-surface:not([hidden]) .project-aow-center-tab.active').filter({ hasText: 'Target Tab' });
   await test('deep link survives login and refresh and overrides the saved project and tab', async t => {

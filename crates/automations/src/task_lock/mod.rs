@@ -2,6 +2,9 @@
 
 mod process;
 
+#[cfg(test)]
+mod tests;
+
 use crate::{
     Store,
     store::{private_dir, try_exclusive, valid_component},

@@ -76,13 +76,10 @@ async fn create_temporary_project_note(
     let root = notes::notes_root_canonical(&state.aow, &id)
         .await
         .map_err(aow_response)?;
-    let (path, name) = notes::create_temporary_note_file(
-        &root,
-        request.extension.as_str(),
-        notes::short_random_id,
-    )
-    .await
-    .map_err(aow_response)?;
+    let (path, name) =
+        notes::create_temporary_note_file(&root, request.extension.as_str(), aow_id::new_id)
+            .await
+            .map_err(aow_response)?;
     Ok((
         StatusCode::CREATED,
         Json(TemporaryNoteResult {

@@ -1,5 +1,5 @@
 import { appLocalStorage } from '../../lib/basePath';
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type RefObject } from 'react';
 import { Base64, ClipboardAddon, type ClipboardSelectionType, type IBase64, type IClipboardProvider } from '@xterm/addon-clipboard';
 import { FitAddon } from '@xterm/addon-fit';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
@@ -14,6 +14,7 @@ import { terminalPaneStatusMessage, type TerminalConnectionState } from './termi
 import { installMobileTerminalInput } from './terminalMobileInput';
 import { installMobileTerminalRendering } from './terminalMobileRendering';
 import { usePublishTerminalConnection } from './terminalViewState';
+import { EXPLORER_PATH_MIME, readExplorerPath } from '../files/explorerDrag';
 import '@xterm/xterm/css/xterm.css';
 import './terminal.css';
 
@@ -414,6 +415,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
   const [clipboardImageState, setClipboardImageState] = useState<ClipboardImageState>(null);
   const [clipboardCopyState, setClipboardCopyState] = useState<ClipboardCopyState>(null);
   const [pendingLink, setPendingLink] = useState<{ identity: string; url: URL } | null>(null);
+  const [pathDropActive, setPathDropActive] = useState(false);
   const setRestorePending = (pending: boolean) => {
     // Apply visibility synchronously before feeding reset/replay bytes into
     // xterm. React will retain the class on the next render.
@@ -464,6 +466,31 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
       && socket === inputReadySocketRef.current
       && socket.readyState === WebSocket.OPEN;
   };
+
+  const canDropPath = () => visible && !inputSuspended && pane.status === 'running' && terminalCanMutate();
+  const dragExplorerPath = (event: DragEvent<HTMLDivElement>) => {
+    // Drag data is protected until drop; inspect only the type while hovering.
+    if (!event.dataTransfer.types.includes(EXPLORER_PATH_MIME)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const ready = canDropPath();
+    event.dataTransfer.dropEffect = ready ? 'copy' : 'none';
+    setPathDropActive(ready);
+  };
+  const dropExplorerPath = (event: DragEvent<HTMLDivElement>) => {
+    if (!event.dataTransfer.types.includes(EXPLORER_PATH_MIME)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setPathDropActive(false);
+    const path = readExplorerPath(event.dataTransfer);
+    const terminal = terminalRef.current;
+    if (!path || !terminal || !canDropPath()) return;
+    onFocus();
+    terminal.focus();
+    terminal.paste(`${quotePastedPath(path)} `);
+  };
+
+  useEffect(() => { setPathDropActive(false); }, [visible, inputSuspended, connection, paneIdentity]);
 
   const reportFrame = () => {
     if (presentationRef.current.sizing !== 'saved' && !presentationRef.current.onFrameChange) return;
@@ -1804,6 +1831,12 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
       data-terminal-sizing={sizing}
       aria-busy={restorePending}
       onPointerDown={onFocus}
+      onDragEnter={dragExplorerPath}
+      onDragOver={dragExplorerPath}
+      onDragLeave={(event) => {
+        if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setPathDropActive(false);
+      }}
+      onDrop={dropExplorerPath}
     >
       {visible && pendingLink?.identity === paneIdentity ? (
         <ConfirmationDialog
@@ -1820,6 +1853,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
         />
       ) : null}
       <div ref={hostRef} className="terminal-emulator" />
+      {pathDropActive ? <div className="terminal-path-drop-overlay">松开以输入路径</div> : null}
       {restorePending ? (
         <div className="terminal-restore-status" role="status" aria-live="polite">
           <span aria-hidden="true" />

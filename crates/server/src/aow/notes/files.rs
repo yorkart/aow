@@ -42,26 +42,13 @@ pub(in crate::aow) async fn notes_root_canonical(
     paths::canonical_directory(Path::new(&path)).await
 }
 
-pub(in crate::aow) fn short_random_id() -> String {
-    const ALPHABET: &[u8] = b"23456789abcdefghjkmnpqrstuvwxyz";
-    let bytes = Uuid::new_v4();
-    let mut value = u64::from_le_bytes(bytes.as_bytes()[..8].try_into().unwrap());
-    (0..8)
-        .map(|_| {
-            let character = ALPHABET[(value % ALPHABET.len() as u64) as usize] as char;
-            value /= ALPHABET.len() as u64;
-            character
-        })
-        .collect()
-}
-
 pub(in crate::aow) async fn create_temporary_note_file(
     root: &Path,
     extension: &str,
-    mut random_id: impl FnMut() -> String,
+    mut next_id: impl FnMut() -> String,
 ) -> Result<(PathBuf, String), AowError> {
     for _ in 0..5 {
-        let name = format!(".tmp-{}.{}", random_id(), extension);
+        let name = format!(".tmp-{}.{}", next_id(), extension);
         let path = root.join(&name);
         match OpenOptions::new()
             .create_new(true)

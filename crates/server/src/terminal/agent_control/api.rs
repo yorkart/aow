@@ -1,7 +1,6 @@
 use super::super::*;
 use super::{COLS, ROWS, connection::AgentConnection, model::info};
 use crate::operations::{Handle, Spec};
-use aow_agents::Agent;
 use aow_operation_log::Outcome;
 use aow_protocol::{
     AgentTerminalCreate, AgentTerminalInfo, AgentTerminalPhase, AgentTerminalState,
@@ -14,17 +13,33 @@ pub(crate) async fn create(
     State(state): State<AppState>,
     Json(request): Json<AgentTerminalCreate>,
 ) -> Result<Json<AgentTerminalInfo>, HttpError> {
+    create_with_task(state, request, None).await
+}
+
+pub(crate) async fn create_for_task(
+    state: AppState,
+    request: AgentTerminalCreate,
+    task_id: String,
+) -> Result<Json<AgentTerminalInfo>, HttpError> {
+    create_with_task(state, request, Some(task_id)).await
+}
+
+async fn create_with_task(
+    state: AppState,
+    request: AgentTerminalCreate,
+    task_id: Option<String>,
+) -> Result<Json<AgentTerminalInfo>, HttpError> {
     tokio::spawn(async move {
         let log = state.operations.begin(Spec {
-            id: Uuid::new_v4().to_string(),
+            id: aow_id::new_id(),
             kind: "agent.create",
-            source: "cli",
+            source: if task_id.is_some() { "tasks" } else { "cli" },
             title: format!("创建 Agent · {}", request.agent),
             project_id: Some(request.project_id.clone()),
             resource: Some(request.cwd.clone()),
             total: None,
         });
-        let result = create_inner(state, request, &log).await;
+        let result = create_inner(state, request, &log, task_id).await;
         match &result {
             Ok(info) if info.state.phase == AgentTerminalPhase::Ready => {
                 log.finish(
@@ -55,16 +70,9 @@ async fn create_inner(
     state: AppState,
     request: AgentTerminalCreate,
     log: &Handle,
+    task_id: Option<String>,
 ) -> Result<Json<AgentTerminalInfo>, HttpError> {
     log.progress("检查 Agent 配置和工作目录", None);
-    let adapter = Agent::from_id(&request.agent)
-        .and_then(Agent::interactive)
-        .ok_or_else(|| {
-            terminal_http_error(TerminalError::Invalid(format!(
-                "interactive startup is not supported for agent {}",
-                request.agent
-            )))
-        })?;
     if !(1..=600).contains(&request.timeout_seconds) {
         return Err(terminal_http_error(TerminalError::Invalid(
             "timeout_seconds must be 1-600".into(),
@@ -86,6 +94,12 @@ async fn create_inner(
         .resolve_agent_launch(&request.agent, &cwd)
         .await
         .map_err(crate::aow::aow_http_error)?;
+    let adapter = launch.agent_type.agent().interactive().ok_or_else(|| {
+        terminal_http_error(TerminalError::Invalid(format!(
+            "interactive startup is not supported for agent {}",
+            request.agent
+        )))
+    })?;
     log.progress("创建 Terminal 并启动 Agent", None);
     let tab = state
         .terminals
@@ -109,6 +123,12 @@ async fn create_inner(
         )
         .await
         .map_err(terminal_http_error)?;
+    if let Some(task_id) = &task_id {
+        state.tasks.update_execution(task_id, |task| {
+            task.tab_id = Some(tab.id.clone());
+            task.pane_id = Some(tab.panes[0].id.clone());
+        })?;
+    }
     state.workspace_events.terminals_changed();
     let manager = state.terminals;
     log.resource(format!("/aow/tabs/terminal/{}", tab.id));

@@ -22,7 +22,7 @@ impl TemporaryNoteExtension {
 
 pub(super) use files::{
     CreateTemporaryNoteRequest, TemporaryNoteResult, create_temporary_note_file,
-    notes_root_canonical, prepare_notes_directory, short_random_id,
+    notes_root_canonical, prepare_notes_directory,
 };
 pub(super) use identity::default_notes_identity;
 #[cfg(test)]

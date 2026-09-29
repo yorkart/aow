@@ -859,3 +859,51 @@ print(json.dumps(dict(version=2,result=dict(operations=['list','detail','diff'])
         assert_eq!(response.status(), status);
     }
 }
+
+#[tokio::test]
+async fn issues_require_declared_capability_without_breaking_prs() {
+    let repo = repository();
+    remote(repo.path(), "origin", "git@git.example.com:team/repo.git");
+    let manager = ProviderManager::default();
+    let script = "import json,sys\nr=json.load(sys.stdin)\nassert r['operation']=='describe'\nprint(json.dumps({'version':2,'result':{'operations':['list','detail','diff']}}))";
+    manager
+        .save(Settings {
+            revision: 0,
+            providers: vec![provider(script)],
+        })
+        .unwrap();
+    let query = ReviewQuery {
+        repo: repo.path().to_string_lossy().into_owned(),
+        provider: None,
+        remote: None,
+    };
+    assert!(matches!(
+        manager.call(&query, "issues", json!({}), &paths()).await,
+        Err(PullRequestError::Unavailable(_))
+    ));
+}
+
+#[test]
+fn issue_provider_rejects_unsafe_links_duplicate_ids_and_bad_labels() {
+    let issue = json!({"number":42,"title":"Issue","status":"open","url":"https://example.com/issues/42","labels":[],"assignees":[],"updated_at":"2026-09-29T00:00:00Z"});
+    assert!(issues::validate("issues", json!({"issues":[issue.clone()]})).is_ok());
+    assert!(issues::validate("issues", json!({"issues":[issue.clone(),issue.clone()]})).is_err());
+    for (key, value) in [
+        ("url", json!("javascript:alert(1)")),
+        ("url", json!("https://user:secret@example.com/issue")),
+        ("status", json!("merged")),
+        ("number", json!(0)),
+        ("updated_at", json!("invalid")),
+    ] {
+        let mut invalid = issue.clone();
+        invalid[key] = value;
+        assert!(issues::validate("issues", json!({"issues":[invalid]})).is_err());
+    }
+    assert!(
+        issues::validate(
+            "issue_labels",
+            json!({"labels":[{"name":"bug","color":"nope","description":""}]})
+        )
+        .is_err()
+    );
+}

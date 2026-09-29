@@ -8,6 +8,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::HttpError;
+pub(crate) use http::check_origin;
 use password::PasswordProvider;
 use provider::LoginProvider;
 use sessions::Sessions;

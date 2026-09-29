@@ -122,7 +122,7 @@ try {
     const { page, state } = await fixture(t);
     await useImageClipboard(page);
     await tree(page, 'Notes Explorer').focus();
-    await page.keyboard.press('Control+V');
+    await page.keyboard.press('ControlOrMeta+V');
     await explorer(page, 'Notes Explorer').getByText('已上传', { exact: true }).waitFor();
     assert.equal(state.writes.length, 1); assert.match(state.writes[0].path, /^\/notes\/screenshot-/);
     await page.getByLabel('Outside editor').focus();
@@ -178,6 +178,7 @@ try {
     await page.getByRole('menuitem', { name: '重命名', exact: true }).click();
     const rename = page.getByLabel('新文件名', { exact: true });
     await rename.waitFor();
+    assert.equal(await row(page, '/project/readme.txt').getAttribute('draggable'), 'false');
     assert.equal(await pasteFiles(rename, [{ name: 'ignored.txt' }]), false);
     await rename.press('Escape');
     await page.evaluate(() => {

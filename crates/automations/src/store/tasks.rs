@@ -9,7 +9,7 @@ use anyhow::{Context, Result, ensure};
 
 use crate::Task;
 
-use super::{FileLock, Store, files::random_decimal, private_dir, try_shared, valid_component};
+use super::{FileLock, Store, private_dir, try_shared, valid_component};
 
 impl Store {
     pub fn task_path(&self, id: &str) -> Result<PathBuf> {
@@ -20,28 +20,9 @@ impl Store {
             .join(format!("{id}.json")))
     }
 
-    /// Generates a short task ID that does not already have a persisted task.
-    ///
-    /// A task ID is used in externally visible worktree paths, branch names, and
-    /// native scheduler unit names, so keep it compact while regenerating a
-    /// candidate if its task file already exists.
+    /// Allocate a task ID from the shared local generator.
     pub fn new_task_id(&self) -> Result<String> {
-        self.new_task_id_with(|| random_decimal(8))
-    }
-
-    pub(super) fn new_task_id_with(
-        &self,
-        mut next_candidate: impl FnMut() -> String,
-    ) -> Result<String> {
-        loop {
-            let id = next_candidate();
-            let path = self.task_path(&id)?;
-            match fs::symlink_metadata(path) {
-                Ok(_) => continue,
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(id),
-                Err(error) => return Err(error.into()),
-            }
-        }
+        Ok(aow_id::new_id())
     }
 
     pub fn get_task(&self, id: &str) -> Result<Task> {

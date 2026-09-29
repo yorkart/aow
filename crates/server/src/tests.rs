@@ -726,7 +726,12 @@ async fn aow_notes_use_the_shared_filesystem_routes() {
         .to_string_lossy();
     assert!(temporary_name.starts_with(".tmp-"));
     assert!(temporary_path.ends_with(".md"));
-    assert_eq!(temporary_name.len(), 16);
+    let note_id = temporary_name
+        .strip_prefix(".tmp-")
+        .unwrap()
+        .strip_suffix(".md")
+        .unwrap();
+    assert!(aow_id::is_valid_id(note_id));
 
     let listing = app
         .clone()

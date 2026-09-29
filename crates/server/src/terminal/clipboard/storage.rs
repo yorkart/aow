@@ -3,8 +3,6 @@ use std::{
     time::SystemTime,
 };
 
-use uuid::Uuid;
-
 use super::super::*;
 use super::*;
 
@@ -28,7 +26,7 @@ impl ClipboardStorage {
             let directory = parent.join(format!(
                 "aow-clipboard-{}-{}",
                 std::process::id(),
-                Uuid::new_v4().as_simple()
+                aow_id::new_id()
             ));
             match create_private_directory(&directory, false) {
                 Ok(()) => {

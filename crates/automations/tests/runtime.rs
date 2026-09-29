@@ -745,12 +745,20 @@ fn journals_have_single_owners_tolerate_truncated_tails_and_page_by_timestamp() 
     assert!(store.read_run(&task.id, &legacy_id).is_err());
     assert!(store.run_path("../escape", &id).is_err());
     assert!(store.run_path(&task.id, "../../escape").is_err());
-    for id in ["20260910T010000000Z_b", "20260911T010000000Z_c"] {
-        let run = runner::initial_run(&task, id.into(), RunSource::Manual);
+    for (id, at) in [
+        ("20260910T010000000Z_b", "2026-09-10T01:00:00Z"),
+        ("20260911T010000000Z_c", "2026-09-11T01:00:00Z"),
+    ] {
+        let mut run = runner::initial_run(&task, id.into(), RunSource::Manual);
+        run.started_at = at.parse().unwrap();
         drop(store.create_run(&run, &task).unwrap());
     }
     let page = store
-        .runs(&task.id, Some("20260910T010000000Z_c"), 1)
+        .runs(
+            &task.id,
+            Some("2026-09-11T01:00:00Z/20260911T010000000Z_c"),
+            1,
+        )
         .unwrap();
     assert_eq!(page[0].id, "20260910T010000000Z_b");
 }
@@ -788,11 +796,105 @@ fn run_history_retention_is_per_task_and_does_not_remove_active_runs() {
     }
 
     let active_id = "20260910T000000000Z_active";
-    let active = runner::initial_run(&task, active_id.into(), RunSource::Manual);
+    let mut active = runner::initial_run(&task, active_id.into(), RunSource::Manual);
+    active.started_at = "2026-09-10T00:00:00Z".parse().unwrap();
     let active_writer = store.create_run(&active, &task).unwrap();
     assert_eq!(store.prune_run_history(200).unwrap(), 0);
     assert!(store.run_path(&task.id, active_id).unwrap().exists());
     drop(active_writer);
+}
+
+#[test]
+fn pruning_skips_unreadable_journals_and_continues_across_tasks() {
+    let (_directory, store, mut task) = fixture(CODEX);
+    let mut active = Vec::new();
+    for task_id in ["first-task", "second-task"] {
+        task.id = task_id.into();
+        for (id, at) in [
+            ("active", "2026-01-01T00:00:00Z"),
+            ("old", "2026-01-02T00:00:00Z"),
+            ("keep", "2026-01-03T00:00:00Z"),
+        ] {
+            let mut run = runner::initial_run(&task, id.into(), RunSource::Manual);
+            run.started_at = at.parse().unwrap();
+            let writer = store.create_run(&run, &task).unwrap();
+            if id == "active" {
+                active.push(writer);
+            }
+        }
+        for id in ["bad-header", "unreadable"] {
+            let path = store.run_path(task_id, id).unwrap();
+            fs::create_dir_all(&path).unwrap();
+            if id == "bad-header" {
+                fs::write(path.join("events.jsonl"), b"invalid-json\n").unwrap();
+            } else {
+                fs::create_dir(path.join("events.jsonl")).unwrap();
+            }
+        }
+    }
+    let mut errors = Vec::new();
+    let removed = store
+        .prune_run_history_with_errors(
+            1,
+            |_, _| true,
+            |task, run, error| {
+                errors.push((task.to_string(), run.to_string(), error));
+            },
+        )
+        .unwrap();
+    assert_eq!(removed, 2);
+    assert_eq!(errors.len(), 4);
+    for task_id in ["first-task", "second-task"] {
+        for id in ["bad-header", "unreadable", "active", "keep"] {
+            assert!(store.run_path(task_id, id).unwrap().exists());
+        }
+        assert!(!store.run_path(task_id, "old").unwrap().exists());
+        assert!(
+            errors
+                .iter()
+                .any(|(task, run, _)| task == task_id && run == "bad-header")
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|(task, run, _)| task == task_id && run == "unreadable")
+        );
+        // Ordinary queries still surface corruption instead of silently hiding data.
+        assert!(store.runs(task_id, None, 1).is_err());
+    }
+    drop(active);
+}
+
+#[test]
+fn pruning_continues_after_an_individual_removal_fails() {
+    let (_directory, store, task) = fixture(CODEX);
+    for id in ["blocked", "healthy"] {
+        let run = runner::initial_run(&task, id.into(), RunSource::Manual);
+        drop(store.create_run(&run, &task).unwrap());
+    }
+    // A directory at the active-link path prevents removal of just this run.
+    let blocked_link = store
+        .root
+        .join("runs")
+        .join(&task.id)
+        .join(".active/blocked");
+    fs::create_dir(blocked_link).unwrap();
+    let mut errors = Vec::new();
+    assert_eq!(
+        store
+            .prune_run_history_with_errors(
+                0,
+                |_, _| true,
+                |_, id, _| {
+                    errors.push(id.to_string());
+                }
+            )
+            .unwrap(),
+        1
+    );
+    assert_eq!(errors, ["blocked"]);
+    assert!(store.run_path(&task.id, "blocked").unwrap().exists());
+    assert!(!store.run_path(&task.id, "healthy").unwrap().exists());
 }
 
 #[tokio::test]
@@ -1376,5 +1478,78 @@ async fn manual_run_parameters_survive_dispatch_failure_and_legacy_history_remai
             .unwrap()
             .variables,
         Some(BTreeMap::new())
+    );
+}
+
+#[test]
+fn opaque_run_ids_paginate_and_prune_by_recorded_start_time() {
+    let (_directory, store, task) = fixture(CODEX);
+    let oldest = "20990101T120000000Z_old";
+    let middle = "550e8400-e29b-41d4-a716-446655440000";
+    let tied = "Future_v2-A";
+    let newest = "0";
+    for (id, at) in [
+        (middle, "2026-09-27T12:00:00Z"),
+        (newest, "2026-09-28T12:00:00Z"),
+        (oldest, "2026-09-26T12:00:00Z"),
+        (tied, "2026-09-27T12:00:00Z"),
+    ] {
+        let mut run = runner::initial_run(&task, id.into(), RunSource::Manual);
+        run.started_at = at.parse().unwrap();
+        drop(store.create_run(&run, &task).unwrap());
+    }
+    assert_eq!(
+        store
+            .runs(&task.id, None, 500)
+            .unwrap()
+            .iter()
+            .map(|run| run.id.as_str())
+            .collect::<Vec<_>>(),
+        [newest, tied, middle, oldest]
+    );
+    let page = store.runs(&task.id, None, 1).unwrap();
+    assert_eq!(page[0].id, newest);
+    let page = store
+        .runs(
+            &task.id,
+            Some(&aow_automations::store::RunCursor::from(&page[0]).to_string()),
+            1,
+        )
+        .unwrap();
+    assert_eq!(page[0].id, tied);
+    let page = store
+        .runs(
+            &task.id,
+            Some(&aow_automations::store::RunCursor::from(&page[0]).to_string()),
+            1,
+        )
+        .unwrap();
+    assert_eq!(page[0].id, middle);
+    let page = store
+        .runs(
+            &task.id,
+            Some(&aow_automations::store::RunCursor::from(&page[0]).to_string()),
+            1,
+        )
+        .unwrap();
+    assert_eq!(page[0].id, oldest);
+    assert!(
+        store
+            .runs(&task.id, Some(&format!("2026-09-26T12:00:00Z/{oldest}")), 1)
+            .unwrap()
+            .is_empty()
+    );
+    assert!(store.runs(&task.id, Some("missing-cursor"), 1).is_err());
+    assert!(store.runs(&task.id, Some("../escape"), 1).is_err());
+    assert_eq!(store.prune_run_history(2).unwrap(), 2);
+    assert!(!store.run_path(&task.id, oldest).unwrap().exists());
+    assert!(!store.run_path(&task.id, middle).unwrap().exists());
+    assert!(store.run_path(&task.id, tied).unwrap().exists());
+    assert!(store.run_path(&task.id, newest).unwrap().exists());
+    assert!(
+        store
+            .runs(&task.id, Some(&format!("2026-09-27T12:00:00Z/{middle}")), 1)
+            .unwrap()
+            .is_empty()
     );
 }

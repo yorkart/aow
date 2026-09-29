@@ -24,7 +24,34 @@ class AdapterTests(unittest.TestCase):
 
     def test_describe_does_not_need_cli_or_repository(self):
         self.assertEqual(github.dispatch({"version": 2, "operation": "describe", "repository": None}),
-                         {"operations": ["list", "detail", "diff", "commit_links", "repository_info"]})
+                         {"operations": ["list", "detail", "diff", "commit_links", "repository_info", "issues", "issue_labels"]})
+
+    def test_issues_are_shared_exclude_prs_and_match_any_literal_label(self):
+        items = [dict(PR, labels=[{"name": "bug"}], assignees=[{"login": "bob"}]),
+                 dict(PR, number=43, user={"id": 2}, labels=[{"name": "需求, UI"}]),
+                 dict(PR, number=44, labels=[]),
+                 dict(PR, number=45, labels=[{"name": "bug"}], pull_request={})]
+        self.client.request["params"] = {"state": "all", "labels": ["BUG", "需求, UI"]}
+        with patch.object(self.client, "api", return_value=items) as api:
+            result = self.client.issues()
+        api.assert_called_once_with("repos/team/project/issues?state=all&sort=updated&direction=desc&per_page=100", pages=True)
+        self.assertEqual([item["number"] for item in result["issues"]], [42, 43])
+        self.assertEqual(result["issues"][0]["assignees"], ["bob"])
+        self.client.request["params"] = {}
+        with patch.object(self.client, "api", return_value=items):
+            self.assertEqual(len(self.client.issues()["issues"]), 3)
+        with patch.object(self.client, "api", side_effect=RuntimeError("login required")):
+            with self.assertRaisesRegex(RuntimeError, "login required"):
+                self.client.issues()
+
+    def test_issue_labels_paginate_and_preserve_names(self):
+        with patch.object(self.client, "api", return_value=[{"name": "需求, UI", "color": "abcdef", "description": None}]) as api:
+            self.assertEqual(self.client.issue_labels(), {"labels": [{"name": "需求, UI", "color": "abcdef", "description": ""}]})
+        api.assert_called_once_with("repos/team/project/labels?per_page=100", pages=True)
+        for params in ({"state": "invalid"}, {"labels": "bug"}, {"labels": [1]}):
+            self.client.request["params"] = params
+            with self.assertRaises(ValueError):
+                self.client.issues()
 
     def test_repository_info_uses_owner_avatar_for_users_and_organizations(self):
         request = dict(REQUEST, operation="repository_info")

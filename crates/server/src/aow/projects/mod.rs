@@ -10,7 +10,7 @@ use model::{project_from_stored, resolve_common_git_dir};
 pub(crate) struct ProjectSummary {
     pub(super) id: String,
     pub(super) name: String,
-    pub(super) repo_path: String,
+    pub(crate) repo_path: String,
 }
 
 impl From<&StoredProject> for ProjectSummary {

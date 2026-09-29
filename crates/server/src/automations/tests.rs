@@ -167,8 +167,7 @@ async fn api_persists_config_sync_errors_and_history_across_server_restarts() {
     let (code, task) = call(&router, "POST", "/api/aow/automations", input.clone()).await;
     assert_eq!(code, StatusCode::CREATED, "{task}");
     let id = task["id"].as_str().unwrap();
-    assert_eq!(id.len(), 8);
-    assert!(id.bytes().all(|byte| byte.is_ascii_digit()));
+    assert!(aow_id::is_valid_id(id));
     assert!(task["scheduler_error"].is_null());
     assert_eq!(task["yolo"], true);
     assert_eq!(task["cleanup_worktree"], true);

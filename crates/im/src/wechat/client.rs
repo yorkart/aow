@@ -9,7 +9,6 @@ use std::{
 
 use crate::Message;
 use anyhow::{Context, Result, ensure};
-use uuid::Uuid;
 
 use super::{
     api::{self, Api},
@@ -21,10 +20,7 @@ use super::{
 impl Credentials {
     pub fn validate(&self) -> Result<()> {
         api::validate_base(&self.base_url)?;
-        ensure!(
-            Uuid::parse_str(&self.binding_id).is_ok(),
-            "无效的微信绑定 ID"
-        );
+        ensure!(aow_id::is_valid_id(&self.binding_id), "无效的微信绑定 ID");
         for value in [&self.account_id, &self.user_id, &self.bot_token] {
             ensure!(
                 !value.is_empty() && value.len() <= 4096 && !value.chars().any(char::is_control),
@@ -77,7 +73,7 @@ impl WechatClient {
         self.inner
             .update_session(|session| session.verification = None)?;
         let verification = TestVerification {
-            test_id: Uuid::new_v4().to_string(),
+            test_id: aow_id::new_id(),
             receipt: TestReceipt::Sent,
         };
         self.inner.send(message, &verification.test_id).await?;

@@ -7,11 +7,11 @@ use std::{
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use toml_edit::{DocumentMut, value};
-use uuid::Uuid;
 
 use super::{
     ConfigRepository,
     git::git_text,
+    layout::REGISTRIES,
     storage::{FileLock, atomic_write, private_directories},
 };
 pub const CONFIG_FILE: &str = "config.toml";
@@ -93,15 +93,12 @@ impl ConfigRepository {
             selection.config_repo.is_absolute(),
             "config-repo 必须是绝对路径"
         );
-        ensure!(
-            Uuid::parse_str(&selection.config_id).is_ok(),
-            "config-id 必须是 UUID"
-        );
+        ensure!(valid_config_id(&selection.config_id), "配置 ID 不合法");
         let repository = repository_root(&selection.config_repo)?;
         let config = Self::from_directory(&repository.join(&selection.config_id))?;
         ensure!(
             config.repository == repository && config.selection().config_id == selection.config_id,
-            "配置版本必须是该 Git 仓库根目录下对应的 UUID 目录"
+            "配置版本必须是该 Git 仓库根目录下对应的配置版本目录"
         );
         Ok(config)
     }
@@ -121,7 +118,7 @@ pub(super) fn repository_root(path: &Path) -> Result<PathBuf> {
     Ok(repository)
 }
 
-/// List UUID directories, accepting either a repository or one of its versions.
+/// List configuration version directories, accepting a repository or one of its versions.
 pub fn inspect_repository(path: &Path) -> Result<RepositoryVersions> {
     ensure!(path.is_absolute(), "请输入 Git 仓库的绝对路径");
     let directory = fs::canonicalize(path)
@@ -130,7 +127,7 @@ pub fn inspect_repository(path: &Path) -> Result<RepositoryVersions> {
     let version = directory
         .file_name()
         .and_then(OsStr::to_str)
-        .filter(|name| Uuid::parse_str(name).is_ok());
+        .filter(|name| valid_config_id(name) && has_configuration(&directory));
     let parent_repository = version
         .and_then(|_| directory.parent())
         .and_then(|parent| repository_root(parent).ok());
@@ -144,7 +141,8 @@ pub fn inspect_repository(path: &Path) -> Result<RepositoryVersions> {
         let entry = entry?;
         if entry.file_type()?.is_dir()
             && let Some(name) = entry.file_name().to_str()
-            && Uuid::parse_str(name).is_ok()
+            && valid_config_id(name)
+            && has_configuration(&entry.path())
         {
             config_ids.push(name.to_owned());
         }
@@ -236,4 +234,13 @@ pub fn save_selection(
     let _lock = FileLock::acquire(&state_dir.join(".config-init.lock"))?;
     let changed = write_selection(state_dir, &selection)?;
     Ok((selection, changed))
+}
+
+/// IDs are opaque path components; configuration contents identify a version.
+pub(super) fn valid_config_id(id: &str) -> bool {
+    aow_id::is_valid_id(id)
+}
+
+fn has_configuration(directory: &Path) -> bool {
+    REGISTRIES.iter().any(|name| directory.join(name).is_file())
 }

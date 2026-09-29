@@ -120,7 +120,7 @@ impl AowManager {
             .as_deref()
             .map(validation::validate_id)
             .transpose()?
-            .unwrap_or_else(|| format!("custom-{}", Uuid::new_v4().as_simple()));
+            .unwrap_or_else(aow_id::new_id);
         if AgentType::from_id(&id).is_some_and(|agent_type| agent_type != request.agent_type) {
             return Err(AowError::Invalid(
                 "内置 Agent 的类型必须与其 ID 一致；其他类型请注册为新配置".to_owned(),

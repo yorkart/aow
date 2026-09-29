@@ -38,7 +38,7 @@ impl TerminalManager {
             request.rows.or(Some(target.rows)),
             request.cols.or(Some(target.cols)),
         )?;
-        let pane_id = Uuid::new_v4().to_string();
+        let pane_id = aow_id::new_id();
         let now = timestamp();
         let pane = TerminalPane {
             id: pane_id.clone(),

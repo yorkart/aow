@@ -176,10 +176,15 @@ pub(super) fn group_alive(process: &Process) -> Result<bool> {
     ensure!(group > 1, "任务锁中的进程组无效");
     if unsafe { libc::kill(-group, 0) } != 0 {
         let error = std::io::Error::last_os_error();
-        if error.raw_os_error() == Some(libc::ESRCH) {
-            return Ok(false);
+        match error.raw_os_error() {
+            Some(libc::ESRCH) => return Ok(false),
+            // macOS also returns EPERM when the group contains only zombies.
+            // Inspect its members before deciding; unreadable processes still
+            // fail closed instead of releasing a potentially occupied slot.
+            #[cfg(target_os = "macos")]
+            Some(libc::EPERM) => {}
+            _ => return Err(error.into()),
         }
-        return Err(error.into()); // EPERM is not proof of death.
     }
     if let Some(info) = process_info(group)? {
         // A reused PGID has a newer leader. With a missing leader, an extant

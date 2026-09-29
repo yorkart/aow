@@ -75,7 +75,7 @@ impl AgentConnection {
     }
 
     pub(super) async fn write(&mut self, data: String) -> Result<(), TerminalError> {
-        let request_id = Uuid::new_v4().to_string();
+        let request_id = aow_id::new_id();
         self.send(TerminalAttachClientMessage::Write {
             request_id: request_id.clone(),
             data,

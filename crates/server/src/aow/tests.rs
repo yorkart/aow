@@ -730,20 +730,6 @@ async fn allows_notes_base_nested_in_a_git_repository() {
     assert!(nested.is_dir());
 }
 
-#[test]
-fn generates_short_note_ids_from_the_safe_alphabet() {
-    let first = notes::short_random_id();
-    let second = notes::short_random_id();
-    assert_eq!(first.len(), 8);
-    assert_eq!(second.len(), 8);
-    assert_ne!(first, second);
-    assert!(
-        first
-            .chars()
-            .all(|character| { "23456789abcdefghjkmnpqrstuvwxyz".contains(character) })
-    );
-}
-
 #[tokio::test]
 async fn retries_a_colliding_temporary_note_name_without_scanning() {
     let directory = tempfile::tempdir().unwrap();

@@ -16,7 +16,6 @@ use axum::{
     routing::get,
 };
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::{AppState, HttpError};
 use git::git_output;
@@ -92,6 +91,10 @@ struct AowInner {
 }
 
 impl AowManager {
+    pub(crate) fn task_configuration(&self) -> Option<aow_config::ConfigRepository> {
+        self.inner.config.clone()
+    }
+
     pub(crate) fn repository_roots(&self) -> Result<Vec<PathBuf>, AowError> {
         Ok(self
             .lock()?

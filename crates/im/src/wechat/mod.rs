@@ -19,8 +19,6 @@ use std::{
 };
 #[cfg(test)]
 use tokio::task::JoinHandle;
-#[cfg(test)]
-use uuid::Uuid;
 
 pub use login::{LoginManager, LoginView};
 pub use model::{ConnectionStatus, Credentials, TestReceipt, TestVerification, WechatClient};

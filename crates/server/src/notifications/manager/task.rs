@@ -2,7 +2,6 @@ use super::*;
 
 use aow_im::ImProvider;
 use tokio::sync::broadcast;
-use uuid::Uuid;
 
 use crate::{
     notifications::{Channel, messages},
@@ -90,7 +89,7 @@ impl NotificationManager {
             let delivery = Delivery {
                 event,
                 revision: state.revision,
-                id: Uuid::new_v4().to_string(),
+                id: aow_id::new_id(),
             };
             if self.inner.sender.try_send(delivery).is_err() {
                 tracing::warn!("IM notification queue full or closed; delivery dropped");

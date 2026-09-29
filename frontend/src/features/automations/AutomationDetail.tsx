@@ -1,3 +1,4 @@
+import { newestRunFirst } from './runOrder';
 import type { AutomationLocation } from '../../aow/tabRoutes';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CalendarClock, Check, ChevronDown, ChevronRight, Clock3, Copy, FileText, History, LoaderCircle, MousePointerClick, Pause, Pencil, Play, RefreshCw, Terminal, Trash2, X, Zap } from 'lucide-react';
@@ -90,7 +91,7 @@ function RunHistory({ taskId, visible, refreshKey, onOpenSession, expanded, onEx
         setRuns((current) => {
           const merged = new Map(current.map((run) => [run.id, run]));
           [...next, ...updated].forEach((run) => merged.set(run.id, run));
-          return [...merged.values()].sort((a, b) => b.id.localeCompare(a.id));
+          return [...merged.values()].sort(newestRunFirst);
         });
         setRefreshedAt(Date.now());
         if (!loaded.current) { setHasMore(next.length === 50); loaded.current = true; }
@@ -106,8 +107,8 @@ function RunHistory({ taskId, visible, refreshKey, onOpenSession, expanded, onEx
   const loadMore = async () => {
     setMoreBusy(true);
     try {
-      const next = await automationApi.runs(taskId, runs.at(-1)?.id);
-      setRuns((current) => [...new Map([...current, ...next].map((run) => [run.id, run])).values()].sort((a, b) => b.id.localeCompare(a.id)));
+      const next = await automationApi.runs(taskId, runs.at(-1));
+      setRuns((current) => [...new Map([...current, ...next].map((run) => [run.id, run])).values()].sort(newestRunFirst));
       setHasMore(next.length === 50); setError('');
     } catch (reason) { setError(errorMessage(reason)); }
     finally { setMoreBusy(false); }

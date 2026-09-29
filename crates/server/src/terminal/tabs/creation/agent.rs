@@ -37,8 +37,8 @@ impl TerminalManager {
             .unwrap_or_else(|| cwd.clone());
         validate_directory(&workspace_root).await?;
         let (rows, cols) = terminal_size(request.rows, request.cols)?;
-        let pane_id = Uuid::new_v4().to_string();
-        let tab_id = Uuid::new_v4().to_string();
+        let pane_id = aow_id::new_id();
+        let tab_id = aow_id::new_id();
         let now = timestamp();
         let pane = TerminalPane {
             id: pane_id.clone(),

@@ -288,6 +288,10 @@ fn runtime_paths_and_symlink_destinations_are_rejected() {
         "terminals.json",
         "automations/runs/test.json",
         "../aow-settings.json",
+        "tasks/runs/task.json",
+        "tasks/inbox/../escape.json",
+        "tasks/inbox/project/../../escape.json",
+        "tasks/inbox/project/nested/idea.json",
     ] {
         assert!(config.save(Path::new(path), b"{}").is_err());
     }
@@ -301,22 +305,154 @@ fn runtime_paths_and_symlink_destinations_are_rejected() {
 }
 
 #[test]
-fn repository_discovery_validates_roots_and_selects_uuid_input() {
+fn requirement_files_and_deletions_are_committed_independently() {
+    let state = tempfile::tempdir().unwrap();
+    let config = ConfigRepository::initialize(state.path()).unwrap();
+    let repo = config.directory().parent().unwrap();
+    let first = Path::new("tasks/inbox/project/first.json");
+    let second = Path::new("tasks/inbox/project/second.json");
+    config
+        .save(Path::new("tasks/statuses.json"), b"{}")
+        .unwrap();
+    config.save(first, b"{\"id\":\"first\"}").unwrap();
+    config.save(second, b"{\"id\":\"second\"}").unwrap();
+    fs::write(repo.join("unrelated.json"), b"{}").unwrap();
+    git(repo, &["add", "unrelated.json"]);
+    let lock = repo.join(".git/index.lock");
+    fs::write(&lock, b"busy").unwrap();
+    assert!(config.remove(first).is_err());
+    assert!(!config.directory().join(first).exists());
+    assert!(config.directory().join(second).exists());
+    fs::remove_file(lock).unwrap();
+    config.remove(first).unwrap();
+    assert_eq!(
+        git(repo, &["diff", "--cached", "--name-only"]),
+        "unrelated.json"
+    );
+    assert!(
+        git(repo, &["show", "--format=", "--name-status", "HEAD"])
+            .ends_with("tasks/inbox/project/first.json")
+    );
+    let outside = tempfile::tempdir().unwrap();
+    std::os::unix::fs::symlink(
+        outside.path(),
+        config.directory().join("tasks/inbox/linked"),
+    )
+    .unwrap();
+    fs::write(outside.path().join("idea.json"), b"keep").unwrap();
+    assert!(
+        config
+            .remove(Path::new("tasks/inbox/linked/idea.json"))
+            .is_err()
+    );
+    assert!(
+        config
+            .save(Path::new("tasks/inbox/linked/idea.json"), b"{}")
+            .is_err()
+    );
+    assert_eq!(fs::read(outside.path().join("idea.json")).unwrap(), b"keep");
+}
+
+#[test]
+fn deleting_a_requirement_whose_initial_commit_failed_is_retryable() {
+    let state = tempfile::tempdir().unwrap();
+    let config = ConfigRepository::initialize(state.path()).unwrap();
+    let repo = config.directory().parent().unwrap();
+    let path = Path::new("tasks/inbox/project/idea.json");
+    let lock = repo.join(".git/index.lock");
+    fs::write(&lock, b"busy").unwrap();
+    assert!(config.save(path, b"{}").is_err());
+    assert!(config.remove(path).is_err());
+    fs::remove_file(&lock).unwrap();
+    config.remove(path).unwrap();
+    assert!(git(repo, &["status", "--porcelain"]).is_empty());
+    // Retry a deletion that was staged before a commit failed.
+    config.save(path, b"{}").unwrap();
+    let full_path = config.directory().join(path);
+    fs::remove_file(&full_path).unwrap();
+    git(repo, &["add", "--all", "--", full_path.to_str().unwrap()]);
+    config.remove(path).unwrap();
+    assert!(git(repo, &["status", "--porcelain"]).is_empty());
+}
+
+#[test]
+fn repository_discovery_uses_configuration_contents_and_opaque_ids() {
     let root = tempfile::tempdir().unwrap();
     let config = ConfigRepository::initialize(root.path()).unwrap();
     let selection = config.selection();
-    let second = "550e8400-e29b-41d4-a716-446655440000";
-    fs::create_dir(selection.config_repo.join(second)).unwrap();
-    fs::create_dir(selection.config_repo.join("not-a-version")).unwrap();
+    assert!(aow_id::is_valid_id(&selection.config_id));
+    let ids = [
+        "g123456789ab",
+        "550e8400-e29b-41d4-a716-446655440000",
+        "Config_v2-A",
+        "0",
+        "0001",
+        "zzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+    ];
+    for id in ids {
+        let directory = selection.config_repo.join(id);
+        fs::create_dir(&directory).unwrap();
+        fs::write(
+            directory.join("aow-projects.json"),
+            b"{\"version\":1,\"items\":[]}",
+        )
+        .unwrap();
+        let selected = ConfigSelection {
+            config_id: id.into(),
+            ..selection.clone()
+        };
+        assert_eq!(
+            ConfigRepository::from_selection(&selected)
+                .unwrap()
+                .selection(),
+            selected
+        );
+        assert_eq!(
+            inspect_repository(&directory)
+                .unwrap()
+                .selected_id
+                .as_deref(),
+            Some(id)
+        );
+    }
+    let invalid_id = "invalid.name";
+    fs::create_dir(selection.config_repo.join(invalid_id)).unwrap();
     fs::write(
         selection
             .config_repo
-            .join("550e8400-e29b-41d4-a716-446655440001"),
-        "file",
+            .join(invalid_id)
+            .join("aow-projects.json"),
+        b"{}",
     )
     .unwrap();
+    for id in [
+        "",
+        "../escape",
+        "a/b",
+        "a\\b",
+        "a b",
+        invalid_id,
+        &"x".repeat(129),
+    ] {
+        let invalid = ConfigSelection {
+            config_id: id.into(),
+            ..selection.clone()
+        };
+        assert_eq!(
+            ConfigRepository::from_selection(&invalid)
+                .err()
+                .unwrap()
+                .to_string(),
+            "配置 ID 不合法"
+        );
+    }
+    // Folder names alone do not identify configuration versions.
+    fs::create_dir(selection.config_repo.join("g123456789ad")).unwrap();
+    fs::create_dir(selection.config_repo.join("docs")).unwrap();
+    fs::write(selection.config_repo.join("g123456789ac"), "file").unwrap();
     let choices = inspect_repository(&selection.config_repo).unwrap();
-    let mut expected = vec![selection.config_id.clone(), second.to_owned()];
+    let mut expected = vec![selection.config_id.clone()];
+    expected.extend(ids.map(str::to_owned));
     expected.sort();
     assert_eq!(choices.config_ids, expected);
     assert_eq!(choices.selected_id, None);
@@ -327,12 +463,15 @@ fn repository_discovery_validates_roots_and_selects_uuid_input() {
         Some(selection.config_id.as_str())
     );
     assert_eq!(direct.config_ids, choices.config_ids);
-    let orphan = root.path().join(second);
+    let orphan = root.path().join("Config_v2-A");
     fs::create_dir(&orphan).unwrap();
+    fs::write(orphan.join("aow-projects.json"), b"{}").unwrap();
     for invalid in [
         root.path().to_path_buf(),
         orphan,
-        selection.config_repo.join("not-a-version"),
+        selection.config_repo.join("g123456789ad"),
+        selection.config_repo.join("docs"),
+        selection.config_repo.join(invalid_id),
         root.path().join("missing"),
         Path::new("relative").to_path_buf(),
     ] {
@@ -342,7 +481,9 @@ fn repository_discovery_validates_roots_and_selects_uuid_input() {
             invalid.display()
         );
     }
-    fs::remove_dir(selection.config_repo.join(second)).unwrap();
+    for id in ids {
+        fs::remove_dir_all(selection.config_repo.join(id)).unwrap();
+    }
     fs::remove_dir_all(config.directory()).unwrap();
     assert!(
         inspect_repository(&selection.config_repo)
@@ -394,7 +535,7 @@ fn toml_selection_switches_on_reopen_preserves_extra_fields_and_skips_noops() {
             ..selection.clone()
         },
         ConfigSelection {
-            config_id: "550e8400-e29b-41d4-a716-446655440000".into(),
+            config_id: "missing-version".into(),
             ..selection.clone()
         },
         ConfigSelection {
@@ -430,7 +571,7 @@ fn invalid_toml_never_falls_back_to_old_selector_or_initializes_a_repository() {
         "",
         "bad = [",
         "config-repo = 42",
-        "config-repo = '/tmp'\nconfig-id = 'invalid'",
+        "config-repo = '/tmp'\nconfig-id = 'invalid/id'",
         "config-repo = 'relative'\nconfig-id = '550e8400-e29b-41d4-a716-446655440000'",
     ] {
         fs::write(state.join(CONFIG_FILE), text).unwrap();

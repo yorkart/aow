@@ -17,7 +17,7 @@ try {
     const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
     page.setDefaultTimeout(15000);
     t.after(() => page.close());
-    const errors = [], runs = [], saves = [];
+    const errors = [], runs = [], saves = [], historyRequests = [];
     page.on('pageerror', error => errors.push(error.message));
     const prompt = '检查 🧪 {{分支}} / {{分支}} / {{保持原文}}';
     const bindings = [...prompt.matchAll(/\{\{分支\}\}/gu)].map(match => ({ name: '分支', placeholder: match[0], start: Buffer.byteLength(prompt.slice(0, match.index)), end: Buffer.byteLength(prompt.slice(0, match.index + match[0].length)) }));
@@ -32,7 +32,13 @@ try {
       const suffix = url.pathname.split('/automations')[1];
       if (suffix === '/status') return route.fulfill({ json: { platform: 'systemd', ready: true, timezone: 'UTC' } });
       if (suffix.endsWith('/run')) { runs.push({ id: suffix.split('/')[1], ...route.request().postDataJSON() }); return route.fulfill({ json: { run_id: 'run-123' } }); }
-      if (suffix.endsWith('/runs')) return route.fulfill({ json: history });
+      if (suffix.endsWith('/runs')) {
+        const before = url.searchParams.get('before'); historyRequests.push(before);
+        const rows = history.slice().sort((a, b) => Date.parse(b.started_at) - Date.parse(a.started_at) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
+        const [time, id] = before?.split('/') ?? [];
+        const selected = before ? rows.filter(row => Date.parse(row.started_at) < Date.parse(time) || (Date.parse(row.started_at) === Date.parse(time) && row.id < id)) : rows;
+        return route.fulfill({ json: selected.slice(0, Number(url.searchParams.get('limit') ?? 50)) });
+      }
       if (suffix.includes('/runs/')) return route.fulfill({ json: history.find(run => run.id === suffix.split('/').at(-1)) });
       if (route.request().method() === 'POST' || route.request().method() === 'PUT') {
         const input = route.request().postDataJSON(); saves.push(input);
@@ -45,8 +51,30 @@ try {
     });
     await page.goto(`${base}/tests/manual-tasks-preview.html`);
     await page.getByTitle('分支检查 · ID: 87654321', { exact: true }).waitFor();
-    return { page, errors, runs, saves, tasks };
+    return { page, errors, runs, saves, tasks, historyRequests };
   }
+
+  await test('history pagination sends recorded time separately from opaque resource IDs', async t => {
+    const history = Array.from({ length: 51 }, (_, index) => ({
+      id: `Run_v2-${index}`, task_id: '87654321', task_revision: 1, task_name: '分支检查', agent: 'codex', source: 'manual', status: 'completed',
+      started_at: new Date(Date.parse('2026-09-29T12:00:00Z') - index * 1000).toISOString(), finished_at: null,
+      workspace_path: '/repo', branch: null, session_id: null, agent_pid: null, exit_code: 0, message: null,
+      preparation_ms: 0, session_acquired_ms: null, duration_ms: 1000, variables: {},
+    }));
+    const { page, errors, historyRequests } = await fixture(t, { history });
+    await page.getByTitle('分支检查 · ID: 87654321', { exact: true }).click();
+    await page.getByRole('button', { name: '执行历史', exact: true }).click();
+    const more = page.getByRole('button', { name: '加载更早的记录', exact: true });
+    await more.waitFor();
+    assert.equal(await page.locator('.automation-run-summary').count(), 50);
+    const boundary = history[49];
+    history.splice(49, 1);
+    await more.click();
+    await more.waitFor({ state: 'hidden' });
+    assert.equal(historyRequests.find(value => value !== null), `${boundary.started_at}/${boundary.id}`);
+    assert.equal(await page.locator('.automation-run-summary').count(), 51);
+    assert.deepEqual(errors, []);
+  });
 
   await test('panel splits Schedule above Manual, collapses each group, and opens the shared detail', async t => {
     const { page, errors } = await fixture(t);

@@ -50,7 +50,7 @@ pub(in crate::aow) fn submit(
         }
     }
     let job = RemovalJob {
-        id: Uuid::new_v4().to_string(),
+        id: aow_id::new_id(),
         project_id,
         created_at: chrono::Utc::now().to_rfc3339(),
         finished_at: None,

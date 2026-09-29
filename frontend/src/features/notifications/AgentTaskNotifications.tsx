@@ -1,4 +1,4 @@
-import { appUrl } from '../../lib/basePath';
+import { LiveEvents } from '../../lib/liveEvents';
 import { useEffect, useId, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Layers, X } from 'lucide-react';
 import './agent-task-notifications.css';
@@ -79,10 +79,10 @@ export function AgentTaskNotifications() {
   }, [tabActivity]);
 
   useEffect(() => {
-    const source = new EventSource(appUrl('/api/terminals/task-stops'));
-    const stopped = (event: MessageEvent<string>) => {
+    const source = new LiveEvents('task-stopped');
+    const stopped = (event: Event) => {
       let notice;
-      try { notice = parseTaskStop(JSON.parse(event.data)); } catch { return; }
+      try { notice = parseTaskStop(JSON.parse((event as MessageEvent<string>).data)); } catch { return; }
       if (!notice) return;
       if (notice.sources.some(source => source.tab_id === tabActivity.getCurrent())) return;
       // This is a live callback, not session-level deduplication: every newly

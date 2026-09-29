@@ -7,6 +7,7 @@ import type { AowAgentSession } from '../../features/sessions/types';
 import type { AowProject, AowWorktree } from '../types';
 
 export type TabTarget =
+  | { type: 'tasks'; workspace: string }
   | { type: 'terminal'; tabId: string }
   | { type: 'files'; workspace: string; path: string }
   | { type: 'file'; workspace: string; path: string; source: DocumentSource }
@@ -29,6 +30,7 @@ export interface ResolvedTab {
   pullRequest?: PullRequestSummary; task?: AutomationTask;
 }
 export interface TabOpenActions {
+  tasks: () => void;
   terminal: (id: string) => void;
   files: (path: string) => void;
   file: (path: string, source: DocumentSource) => void | Promise<void>;

@@ -10,6 +10,26 @@ fn validate_git_value(label: &str, value: &str) -> Result<String, AowError> {
     Ok(value.to_owned())
 }
 impl AowManager {
+    pub(crate) async fn create_task_worktree(
+        &self,
+        id: &str,
+        path: &str,
+        branch: &str,
+        base_ref: &str,
+    ) -> Result<String, AowError> {
+        self.create_worktree(
+            id,
+            CreateWorktreeRequest {
+                path: path.into(),
+                branch: branch.into(),
+                base_ref: base_ref.into(),
+                pull_first: false,
+            },
+        )
+        .await
+        .map(|r| r.worktree.path)
+    }
+
     pub(in crate::aow) async fn create_worktree(
         &self,
         id: &str,

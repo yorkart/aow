@@ -10,7 +10,7 @@ fn wechat_credentials() -> aow_im::wechat::Credentials {
         user_id: "scanner".into(),
         bot_token: "wechat-private-token".into(),
         base_url: "https://ilinkai.weixin.qq.com".into(),
-        binding_id: "00000000-0000-4000-8000-000000000001".into(),
+        binding_id: "g123456789ab".into(),
     }
 }
 

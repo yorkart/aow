@@ -75,12 +75,14 @@ pub fn build_router(state: AppState) -> Router {
         .route("/fs/", get(fs_root))
         .route("/fs/{*path}", get(fs_path))
         .route("/help", get(help_page))
+        .nest("/api/tasks", crate::tasks::routes())
         .merge(terminal::routes())
         .merge(aow::routes())
         .merge(pull_requests::routes())
         .merge(notifications::routes())
         .merge(im_api::routes())
         .merge(operations::routes())
+        .merge(crate::realtime::routes())
         .merge(crate::workspace_events::routes())
         .merge(automations::routes())
         .merge(session_shares::routes())
@@ -105,6 +107,18 @@ mod tests {
     use super::*;
     use axum::{body::Body, http::Request};
     use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn standalone_id_allocation_is_not_exposed() {
+        let directory = tempfile::tempdir().unwrap();
+        let app = build_router(AppState::new(directory.path().to_owned()));
+        let response = app
+            .clone()
+            .oneshot(Request::post("/api/ids").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::NOT_FOUND);
+    }
 
     #[tokio::test]
     async fn untrusted_raw_documents_are_downloaded_and_sandboxed_without_breaking_images() {

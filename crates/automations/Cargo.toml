@@ -9,6 +9,7 @@ name = "aow-automation-runner"
 path = "src/main.rs"
 
 [dependencies]
+aow-id = { path = "../id" }
 aow-agents = { path = "../agents", features = ["automation"] }
 aow-config = { path = "../config" }
 anyhow.workspace = true

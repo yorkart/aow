@@ -115,6 +115,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "aow-config",
+ "aow-id",
  "chrono",
  "rusqlite",
  "serde",
@@ -122,7 +123,6 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.19",
  "tokio",
- "uuid",
  "walkdir",
 ]
 
@@ -133,6 +133,7 @@ dependencies = [
  "anyhow",
  "aow-agents",
  "aow-config",
+ "aow-id",
  "chrono",
  "libc",
  "serde",
@@ -166,18 +167,19 @@ name = "aow-config"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "aow-id",
  "libc",
  "serde",
  "serde_json",
  "tempfile",
  "toml_edit",
- "uuid",
 ]
 
 [[package]]
 name = "aow-filesystem"
 version = "0.1.0"
 dependencies = [
+ "aow-id",
  "aow-protocol",
  "bytes",
  "futures-util",
@@ -185,7 +187,6 @@ dependencies = [
  "mime_guess",
  "thiserror 2.0.19",
  "tokio",
- "uuid",
 ]
 
 [[package]]
@@ -202,10 +203,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "aow-id"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "tempfile",
+]
+
+[[package]]
 name = "aow-im"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "aow-id",
  "axum",
  "base64",
  "qrcode",
@@ -266,6 +276,7 @@ dependencies = [
  "aow-config",
  "aow-filesystem",
  "aow-git-service",
+ "aow-id",
  "aow-im",
  "aow-macos-log",
  "aow-operation-log",
@@ -305,6 +316,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "aow-agents",
+ "aow-id",
  "aow-macos-log",
  "aow-process",
  "aow-protocol",
@@ -324,7 +336,6 @@ dependencies = [
  "tokio-tungstenite",
  "tracing",
  "tracing-subscriber",
- "uuid",
  "vte",
 ]
 

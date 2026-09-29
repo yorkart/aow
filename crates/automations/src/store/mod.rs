@@ -11,6 +11,7 @@ use anyhow::Result;
 use aow_config::ConfigRepository;
 
 pub use files::{atomic_write, new_run_id, private_dir, valid_component};
+pub use history::RunCursor;
 pub(crate) use locks::{is_not_found, try_exclusive};
 pub use runs::MAX_RUN_OUTPUT_BYTES;
 pub use writer::RunWriter;

@@ -1,10 +1,11 @@
-import { appUrl } from './basePath';
+import { LiveEvents } from './liveEvents';
 
 interface Snapshot {
   boot_id: string;
   revision: number;
   projects: number;
   terminals: number;
+  tasks: number;
   repositories: Record<string, number>;
 }
 
@@ -12,12 +13,13 @@ export interface WorkspaceChange {
   reset: boolean;
   projects: boolean;
   terminals: boolean;
+  tasks: boolean;
   repositories: ReadonlySet<string>;
 }
 
 type Listener = (change: WorkspaceChange) => void;
 const listeners = new Set<Listener>();
-let source: EventSource | undefined;
+let source: LiveEvents | undefined;
 let fallback: ReturnType<typeof setInterval> | undefined;
 let scheduled = false;
 
@@ -26,7 +28,7 @@ function dispatch(change: WorkspaceChange) {
 }
 
 function reset() {
-  dispatch({ reset: true, projects: true, terminals: true, repositories: new Set() });
+  dispatch({ reset: true, projects: true, terminals: true, tasks: true, repositories: new Set() });
 }
 
 // All registered projects are watched by the server. Changing worktrees does
@@ -39,7 +41,7 @@ function connect() {
   clearInterval(fallback);
   fallback = undefined;
   if (!listeners.size) return;
-  const connection = new EventSource(appUrl('/api/workspace/events'));
+  const connection = new LiveEvents('workspace');
   source = connection;
   let previous: Snapshot | undefined;
   let reconnected = true;
@@ -58,6 +60,7 @@ function connect() {
       reset: reconnected || !previous || previous.boot_id !== next.boot_id,
       projects: previous?.projects !== next.projects,
       terminals: previous?.terminals !== next.terminals,
+      tasks: previous?.tasks !== next.tasks,
       repositories: new Set(Object.keys(next.repositories).filter(root => previous?.repositories[root] !== next.repositories[root])),
     };
     previous = next;

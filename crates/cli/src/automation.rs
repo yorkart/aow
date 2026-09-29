@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use aow_automations::AutomationQuery;
+use aow_automations::{AutomationQuery, store::RunCursor};
 use clap::{Args, Subcommand};
 use serde_json::Value;
 
@@ -45,7 +45,7 @@ struct Runs {
 
 #[derive(Subcommand)]
 enum RunsCommand {
-    /// List runs by run ID descending; pass next_cursor as --before for the next page.
+    /// List runs newest started first; pass next_cursor as --before for the next page.
     #[command(after_help = CONTEXT)]
     List {
         #[arg(value_parser = parse_id)]
@@ -53,8 +53,8 @@ enum RunsCommand {
         /// Maximum number of records in this page (1-500).
         #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u16).range(1..=500))]
         limit: u16,
-        /// Exclusive run ID cursor from the previous page; need not still exist.
-        #[arg(long, value_parser = parse_id)]
+        /// Exclusive cursor from the previous page; its record need not still exist.
+        #[arg(long, value_parser = parse_run_cursor)]
         before: Option<String>,
     },
     /// Get a run and its captured configuration, session ID, and output file paths.
@@ -65,6 +65,13 @@ enum RunsCommand {
         #[arg(value_parser = parse_id)]
         run_id: String,
     },
+}
+
+fn parse_run_cursor(value: &str) -> std::result::Result<String, String> {
+    value
+        .parse::<RunCursor>()
+        .map_err(|_| "执行分页游标不合法".to_owned())?;
+    Ok(value.to_owned())
 }
 
 pub(super) fn execute(command: Automation, state_dir: PathBuf) -> Result<Value> {

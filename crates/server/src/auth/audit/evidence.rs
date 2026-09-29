@@ -67,7 +67,7 @@ impl Evidence {
                 .and_then(safe_url)
         };
         Self {
-            event_id: uuid::Uuid::new_v4().to_string(),
+            event_id: aow_id::new_id(),
             timestamp: chrono::Utc::now().to_rfc3339(),
             started: std::time::Instant::now(),
             method: clean(method.as_str(), 32),

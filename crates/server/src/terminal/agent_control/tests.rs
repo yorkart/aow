@@ -32,6 +32,7 @@ while True:
 
 struct Fixture {
     directory: tempfile::TempDir,
+    state_dir: PathBuf,
     repo: PathBuf,
     project_id: String,
     log: PathBuf,
@@ -46,7 +47,16 @@ struct Fixture {
 
 impl Fixture {
     async fn new(mode: &str) -> Self {
+        Self::with_storage(mode, false).await
+    }
+
+    async fn with_storage(mode: &str, persistent: bool) -> Self {
         let directory = tempfile::tempdir().unwrap();
+        let state_dir = if persistent {
+            directory.path().join("state ' &")
+        } else {
+            directory.path().to_path_buf()
+        };
         let socket = directory.path().join("terminald/daemon.sock");
         let (shutdown, receiver) = tokio::sync::oneshot::channel();
         let daemon_socket = socket.clone();
@@ -97,7 +107,14 @@ impl Fixture {
                 String::from_utf8_lossy(&output.stderr)
             );
         }
-        let mut state = AppState::with_terminald_socket(PathBuf::new(), socket);
+        let mut state = if persistent {
+            let mut state =
+                AppState::with_state_dir(PathBuf::new(), state_dir.clone(), socket).unwrap();
+            state.auth = crate::auth::AuthService::disabled();
+            state
+        } else {
+            AppState::with_terminald_socket(PathBuf::new(), socket)
+        };
         state.operations = crate::operations::OperationService::persistent(
             &directory.path().join("operation-logs"),
         )
@@ -116,12 +133,13 @@ impl Fixture {
         let web = tokio::spawn(async move {
             axum::serve(listener, app).await.unwrap();
         });
-        let cli = crate::start_local_cli(state.clone(), directory.path())
+        let cli = crate::start_local_cli(state.clone(), &state_dir)
             .await
             .unwrap();
-        let client = TerminaldClient::new(directory.path().join("cli/cli.sock"));
+        let client = TerminaldClient::new(state_dir.join("cli/cli.sock"));
         Self {
             directory,
+            state_dir,
             repo,
             project_id,
             log,
@@ -198,7 +216,7 @@ async fn post(app: &Router, path: &str, body: Value) -> Value {
 
 #[tokio::test]
 async fn session_resume_launches_selected_profiles_without_changing_registration() {
-    let fixture = Fixture::new("ready").await;
+    let fixture = Fixture::with_storage("ready", true).await;
     let app = crate::build_router(fixture.state.clone());
     let session_cwd = fixture.repo.join("session subdirectory");
     std::fs::create_dir(&session_cwd).unwrap();
@@ -207,7 +225,7 @@ async fn session_resume_launches_selected_profiles_without_changing_registration
         &script,
         r#"import json, os, sys, time
 with open(sys.argv[1], 'w') as log:
-    json.dump({'args': sys.argv[2:], 'cwd': os.getcwd(), 'profile': os.environ['RESUME_PROFILE']}, log)
+    json.dump({'args': sys.argv[2:], 'cwd': os.getcwd(), 'profile': os.environ['RESUME_PROFILE'], 'state_dir': os.environ['AOW_STATE_DIR']}, log)
 time.sleep(30)
 "#,
     )
@@ -222,7 +240,7 @@ time.sleep(30)
             .path()
             .join(format!("resume-{index}.json"));
         let args = json!([script, log, "--profile", format!("profile {index}")]);
-        let env = json!({"RESUME_PROFILE": id});
+        let env = json!({"RESUME_PROFILE": id, "AOW_STATE_DIR": "/another-aow-instance"});
         post(
             &app,
             "/api/aow/agents",
@@ -265,7 +283,8 @@ time.sleep(30)
         assert_eq!(
             invocation,
             json!({"args": ["--profile", format!("profile {index}"), resume_arg, session_id],
-            "cwd": session_cwd.canonicalize().unwrap(), "profile": id})
+            "cwd": session_cwd.canonicalize().unwrap(), "profile": id,
+            "state_dir": fixture.state_dir.canonicalize().unwrap()})
         );
         let launch = fixture
             .state
@@ -1112,5 +1131,199 @@ async fn native_startup_probes() {
             .await
             .unwrap();
     }
+    fixture.stop().await;
+}
+
+#[tokio::test]
+async fn board_conversion_prepares_once_and_start_does_not_change_status() {
+    let fixture = Fixture::with_storage("ready", true).await;
+    let environment_log = fixture.directory.path().join("task-environment.json");
+    let script = format!(
+        "import os, sys, json, subprocess\n\
+         state_dir = subprocess.check_output([sys.executable, '-c', 'import os; print(os.environ[\"AOW_STATE_DIR\"])'], text=True).strip()\n\
+         with open({}, 'w') as file: json.dump(state_dir, file)\n{}",
+        serde_json::to_string(&environment_log).unwrap(),
+        FAKE_AGENT,
+    );
+    std::fs::write(fixture.directory.path().join("agent.py"), script).unwrap();
+    let app = crate::build_router(fixture.state.clone());
+    post(&app, "/api/aow/agents", json!({"id":"task-codex","agent_type":"codex","display_name":"Task Codex","command":"/usr/bin/python3","args":[fixture.directory.path().join("agent.py"),fixture.log,"ready"]})).await;
+    let inbox = json!({"request_key":"requirement", "project_id":fixture.project_id, "title":"Implement idea", "description":"Discuss acceptance criteria"});
+    let source = post(&app, "/api/tasks/inbox", inbox).await;
+    let inbox_id = source["id"].as_str().unwrap();
+    let convert_path = format!("/api/tasks/inbox/{inbox_id}/convert");
+    let input = json!({"request_key":"board-task", "expected_revision":1,"title":"Implement idea","description":"Discuss acceptance criteria","status_id":"in-review","project_id":fixture.project_id,"cwd":fixture.repo,"agent":"task-codex","start_now":false});
+    let created = post(&app, &convert_path, input.clone()).await;
+    assert_eq!(created["execution"], "preparing");
+    let task_id = created["id"].as_str().unwrap();
+    assert!(aow_id::is_valid_id(task_id));
+    assert_ne!(task_id, "board-task");
+    post(&app, &convert_path, input).await;
+    let ready = tokio::time::timeout(Duration::from_secs(25), async {
+        loop {
+            let task: Value = fixture
+                .client
+                .get_json(&format!("/v1/tasks/items/{task_id}"))
+                .await
+                .unwrap();
+            if task["execution"] != "preparing" {
+                break task;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(ready["execution"], "ready", "{ready}");
+    let inherited: PathBuf =
+        serde_json::from_slice(&std::fs::read(&environment_log).unwrap()).unwrap();
+    assert_eq!(inherited, fixture.state_dir.canonicalize().unwrap());
+    let child_client = TerminaldClient::new(inherited.join("cli/cli.sock"));
+    let observed: Value = child_client
+        .get_json(&format!("/v1/tasks/items/{task_id}"))
+        .await
+        .unwrap();
+    assert_eq!(observed["id"], task_id);
+    assert_eq!(ready["status_id"], "in-review");
+    assert!(
+        !fixture.log.exists(),
+        "prepare-only must not submit the requirement"
+    );
+    assert_eq!(
+        fixture.state.terminals.list(None).await.unwrap().tabs.len(),
+        1
+    );
+    let board: Value = fixture.client.get_json("/v1/tasks").await.unwrap();
+    assert_eq!(board["tasks"].as_array().unwrap().len(), 1);
+    let inbox: Value = fixture
+        .client
+        .get_json("/v1/tasks/inbox?include_converted=true")
+        .await
+        .unwrap();
+    assert_eq!(inbox["items"][0]["task_ids"], json!([task_id]));
+    let input = json!({"expected_revision":ready["revision"]});
+    let _: Value = fixture
+        .client
+        .post_json(&format!("/v1/tasks/items/{task_id}/start"), &input)
+        .await
+        .unwrap();
+    assert!(
+        fixture
+            .client
+            .post_json::<_, Value>(&format!("/v1/tasks/items/{task_id}/start"), &input)
+            .await
+            .is_err()
+    );
+    let submitted = tokio::time::timeout(Duration::from_secs(20), async {
+        loop {
+            let task: Value = fixture
+                .client
+                .get_json(&format!("/v1/tasks/items/{task_id}"))
+                .await
+                .unwrap();
+            if task["execution"] != "submitting" {
+                break task;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(submitted["execution"], "submitted", "{submitted}");
+    assert_eq!(submitted["status_id"], "in-review");
+    assert_eq!(submitted["pane_id"], ready["pane_id"]);
+    let input = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if let Ok(text) = std::fs::read_to_string(&fixture.log)
+                && text.ends_with('\n')
+            {
+                break text;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(input.contains("Discuss acceptance criteria"));
+    assert!(input.contains(&format!("aow-cli task set-status {task_id}")));
+    let prompt: String = serde_json::from_str(input.trim()).unwrap();
+    assert!(prompt.starts_with("<aow_task_context>\n"));
+    assert!(
+        prompt.ends_with("</aow_task_context>\n\nImplement idea\n\nDiscuss acceptance criteria")
+    );
+    assert!(!prompt.contains("--state-dir"));
+    assert!(!prompt.contains(fixture.state_dir.to_str().unwrap()));
+    let _: Value = fixture
+        .client
+        .post_json(
+            &format!("/v1/tasks/items/{task_id}/status"),
+            &json!({"expected_revision":submitted["revision"],"status_id":"todo"}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        std::fs::read_to_string(&fixture.log).unwrap(),
+        input,
+        "moving status must not submit more input"
+    );
+    let source: Value = fixture
+        .client
+        .get_json(&format!("/v1/tasks/inbox/{inbox_id}"))
+        .await
+        .unwrap();
+    assert_eq!(
+        source["revision"], 1,
+        "Conversion does not modify the requirement file"
+    );
+    let input = json!({"request_key":"board-immediate", "expected_revision":source["revision"],"title":"Immediate task","description":"Fresh worktree","status_id":"done","project_id":fixture.project_id,"cwd":"","agent":"task-codex","start_now":true,"worktree":{"branch":"","base_ref":"main"}});
+    let accepted = post(&app, &convert_path, input.clone()).await;
+    let immediate_id = accepted["id"].as_str().unwrap();
+    let new_path = PathBuf::from(accepted["cwd"].as_str().unwrap());
+    assert_eq!(
+        new_path,
+        PathBuf::from(format!("{}-task-{immediate_id}", fixture.repo.display()))
+    );
+    let immediate = tokio::time::timeout(Duration::from_secs(25), async {
+        loop {
+            let task: Value = fixture
+                .client
+                .get_json(&format!("/v1/tasks/items/{immediate_id}"))
+                .await
+                .unwrap();
+            if task["execution"] != "preparing" {
+                break task;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(immediate["execution"], "submitted", "{immediate}");
+    assert_eq!(immediate["status_id"], "done");
+    assert!(new_path.join(".git").is_file());
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let text = std::fs::read_to_string(&fixture.log).unwrap();
+            let lines: Vec<_> = text.lines().collect();
+            if lines.len() == 2 && text.ends_with('\n') {
+                let prompt: String = serde_json::from_str(lines[1]).unwrap();
+                assert!(prompt.starts_with("<aow_task_context>\n"));
+                assert!(prompt.contains(&format!("<task_id>{immediate_id}</task_id>")));
+                assert!(
+                    prompt.ends_with("</aow_task_context>\n\nImmediate task\n\nFresh worktree")
+                );
+                assert!(!prompt.contains("--state-dir"));
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    post(&app, &convert_path, input).await;
+    assert_eq!(
+        fixture.state.terminals.list(None).await.unwrap().tabs.len(),
+        2
+    );
     fixture.stop().await;
 }

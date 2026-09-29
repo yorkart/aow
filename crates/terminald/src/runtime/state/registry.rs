@@ -8,7 +8,7 @@ impl DaemonState {
     pub(in crate::runtime) fn with_vt_worker(vt_worker: Option<VtWorkerClient>) -> Self {
         Self {
             inner: Arc::new(DaemonInner {
-                instance_id: Uuid::new_v4().to_string(),
+                instance_id: aow_id::new_id(),
                 shutting_down: AtomicBool::new(false),
                 in_flight_spawns: Arc::new(SpawnTracker::default()),
                 runtimes: Mutex::new(HashMap::new()),
