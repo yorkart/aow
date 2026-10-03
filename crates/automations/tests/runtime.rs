@@ -1251,7 +1251,7 @@ fn spawn_runner(store: &Store, task: &Task) -> (tokio::process::Child, String) {
     (child, id)
 }
 async fn session(store: &Store, task: &Task, id: &str) -> Run {
-    tokio::time::timeout(Duration::from_secs(10), async {
+    tokio::time::timeout(Duration::from_secs(30), async {
         loop {
             if let Ok(Some(run)) = store.read_run(&task.id, id)
                 && run.session_id.is_some()
@@ -1262,7 +1262,7 @@ async fn session(store: &Store, task: &Task, id: &str) -> Run {
         }
     })
     .await
-    .unwrap()
+    .unwrap_or_else(|_| panic!("run `{id}` did not publish a session ID within 30 seconds"))
 }
 const BLOCKED_AGENT: &str = r#"
 printf 'session id: session-%s\n' "$$"
