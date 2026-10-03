@@ -6,6 +6,10 @@ impl AutomationManager {
         let task = self.task(id)?;
         ensure!(task.input.kind == TaskKind::Manual, "托管仅支持手动任务");
         ensure!(
+            task.input.workspace.workspace_mode == WorkspaceMode::Dynamic,
+            "托管仅支持动态指定工作区的手动任务，请修改任务的工作区方式"
+        );
+        ensure!(
             task.revision == revision,
             "手动任务已修改，请接管后重新选择任务"
         );
@@ -26,9 +30,12 @@ impl AutomationManager {
         event: &TaskStopNotification,
     ) -> Result<()> {
         let run_id = hosting.run_id.as_deref().context("托管运行 ID 缺失")?;
-        task.input.workspace.workspace_mode = WorkspaceMode::Existing;
-        task.input.workspace.workspace_path = PathBuf::from(&hosting.process.cwd);
-        task.input.workspace.base_branch.clear();
+        ensure!(
+            task.input.workspace.workspace_mode == WorkspaceMode::Dynamic,
+            "托管仅支持动态指定工作区的手动任务"
+        );
+        task.input
+            .resolve_workspace(Some(PathBuf::from(&hosting.process.cwd)))?;
         let variables = task
             .input
             .prompt_bindings

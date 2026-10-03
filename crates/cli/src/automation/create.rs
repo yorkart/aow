@@ -14,8 +14,9 @@ const HELP: &str =
 Requires a running AoW server with the same --state-dir and OS user; no terminald
 or browser login is needed. --file - reads JSON from standard input.
 The server assigns a new task ID, binds the task to --project-id and its repository
-directory, and always sets enabled=false. Task settings, including workspace mode,
-are preserved. Saved identity, timestamps, runtime state and Agent launch settings
+directory, and always sets enabled=false. Dynamic manual tasks keep their directory
+unset until execution. Task settings, including workspace mode, are preserved.
+Saved identity, timestamps, runtime state and Agent launch settings
 are ignored; Agent launch settings are resolved on this machine.
 Each successful call creates a new task. After a timeout, inspect automation list
 before retrying. To migrate several files, call create once per file and continue

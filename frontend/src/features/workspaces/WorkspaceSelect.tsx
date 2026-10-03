@@ -1,17 +1,19 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronsUpDown } from 'lucide-react';
 import { aowApi } from '../../aow/aowApi';
 import type { AowProject, ProjectBranches } from '../../aow/types';
 import { workspaceNames, type WorkspaceConfig, type WorkspaceMode } from './types';
 import './workspaces.css';
 
-export function WorkspaceSelect({ project, value, disabled = false, onChange, onValidityChange }: {
+export function WorkspaceSelect({ project, value, disabled = false, allowDynamic = false, onChange, onValidityChange }: {
   project: AowProject;
   value: WorkspaceConfig;
   disabled?: boolean;
+  allowDynamic?: boolean;
   onChange: (value: WorkspaceConfig) => void;
   onValidityChange: (ready: boolean) => void;
 }) {
+  const dynamicGroupName = useId();
   const [branches, setBranches] = useState<ProjectBranches>();
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
@@ -38,7 +40,8 @@ export function WorkspaceSelect({ project, value, disabled = false, onChange, on
   }, [project.id, retry]);
 
   const existingReady = worktrees.some(worktree => worktree.path === value.workspace_path);
-  const ready = value.workspace_mode === 'temporary' || (value.workspace_mode === 'existing'
+  const dynamicGroup = value.workspace_mode === 'temporary' || value.workspace_mode === 'dynamic';
+  const ready = value.workspace_mode === 'dynamic' ? allowDynamic : value.workspace_mode === 'temporary' || (value.workspace_mode === 'existing'
     ? existingReady : Boolean(branches && value.base_branch && worktrees.length));
   useLayoutEffect(() => { onValidityChange(ready); }, [ready, onValidityChange]);
   const branchOptions = branches ? [...new Set([...branches.branches, ...(value.base_branch ? [value.base_branch] : [])])] : [];
@@ -46,10 +49,21 @@ export function WorkspaceSelect({ project, value, disabled = false, onChange, on
   return <div className="workspace-field">
     <span>工作区方式</span>
     <div className="workspace-modes" role="group" aria-label="工作区方式">
-      {(Object.keys(workspaceNames) as WorkspaceMode[]).map(mode => <button key={mode} type="button"
+      {(['new_worktree', 'existing'] as WorkspaceMode[]).map(mode => <button key={mode} type="button"
         className={value.workspace_mode === mode ? 'selected' : ''} aria-pressed={value.workspace_mode === mode}
         disabled={disabled} onClick={() => onChange({ ...value, workspace_mode: mode })}>{workspaceNames[mode]}</button>)}
+      <button type="button" className={dynamicGroup ? 'selected' : ''} aria-pressed={dynamicGroup}
+        disabled={disabled} onClick={() => { if (!dynamicGroup) onChange({ ...value, workspace_mode: 'temporary' }); }}>动态工作区</button>
     </div>
+    {dynamicGroup && <div className="workspace-dynamic-options" role="radiogroup" aria-label="动态工作区类型">
+      {(['temporary', 'dynamic'] as const).map(mode => <label key={mode}
+        title={mode === 'dynamic' && !allowDynamic ? '仅手动任务可动态指定工作区' : undefined}>
+        <input type="radio" name={dynamicGroupName} value={mode} checked={value.workspace_mode === mode}
+          disabled={disabled || (mode === 'dynamic' && !allowDynamic)}
+          onChange={() => onChange({ ...value, workspace_mode: mode })} />
+        <span>{workspaceNames[mode]}</span>
+      </label>)}
+    </div>}
     {value.workspace_mode === 'new_worktree' ? <>
       <label className="workspace-select">
         <span>分支来自</span><select aria-label="分支来自" required value={branches ? value.base_branch : ''}
@@ -66,6 +80,9 @@ export function WorkspaceSelect({ project, value, disabled = false, onChange, on
         {!existingReady && <option value="">{worktrees.length ? '请选择 Worktree' : '当前项目没有可选 Worktree'}</option>}
         {worktrees.map(worktree => <option key={worktree.path} value={worktree.path}>{worktree.is_main ? '主仓库 · ' : ''}{worktree.branch || 'detached'} · {worktree.path.split(/[\\/]/).filter(Boolean).at(-1)}</option>)}
       </select><ChevronsUpDown size={14} aria-hidden="true" />
-    </label> : <p className="workspace-hint">在系统临时目录中创建空工作区。</p>}
+    </label> : <p className="workspace-hint">{value.workspace_mode === 'dynamic'
+      ? '每次执行时必须指定工作区目录；Autopilot 会自动使用被托管 Agent 的工作目录。'
+      : '在系统临时目录中创建空工作区。'}</p>}
+    {dynamicGroup && !allowDynamic && <p className="workspace-hint">动态指定仅供手动任务使用。</p>}
   </div>;
 }

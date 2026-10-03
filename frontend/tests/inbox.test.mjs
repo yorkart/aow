@@ -478,8 +478,9 @@ try {
     const panel = page.getByRole('dialog', { name: '执行需求', exact: true });
     const choices = panel.getByRole('group', { name: '工作区方式', exact: true });
     assert.equal(await choices.getByRole('button').count(), 3);
-    await choices.getByRole('button', { name: '临时工作区', exact: true }).click();
+    await choices.getByRole('button', { name: '动态工作区', exact: true }).click();
     assert.equal(await panel.getByRole('combobox').count(), 1, 'only the Agent selector remains');
+    assert.equal(await panel.getByRole('radio', { name: '动态指定', exact: true }).isDisabled(), true);
     await panel.getByText('此工作区会保留供 Agent 使用，不会自动清理。', { exact: true }).waitFor();
     const screenshots = process.env.AOW_TEST_SCREENSHOT_DIR || '/private/tmp/aow-inbox-inline-screenshots'; await mkdir(screenshots, { recursive: true });
     await page.screenshot({ path: `${screenshots}/inbox-execute-temporary.png` });
@@ -504,7 +505,7 @@ try {
     });
     await page.getByRole('button', { name: '执行需求', exact: true }).click();
     const panel = page.getByRole('dialog', { name: '执行需求', exact: true });
-    await panel.getByRole('button', { name: '临时工作区', exact: true }).click();
+    await panel.getByRole('button', { name: '动态工作区', exact: true }).click();
     await panel.getByRole('button', { name: '开始执行', exact: true }).click();
     await page.getByRole('button', { name: '打开终端', exact: true }).click();
     const terminal = page.locator('[data-floating-workspace] .terminal-pane');

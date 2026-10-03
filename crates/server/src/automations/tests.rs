@@ -263,6 +263,18 @@ async fn cli_import_rebinds_saved_tasks_and_isolates_failures() {
     assert_eq!(manual["kind"], "manual");
     assert_eq!(manual["prompt_bindings"][0]["name"], "branch");
     assert_eq!(manager.store.tasks().unwrap().len(), 4);
+    let dynamic: Value = client
+        .post_json(
+            "/v1/automations",
+            &json!({"project_id":project["id"], "configuration":{
+                "name":"Dynamic", "prompt":"Review", "agent":"codex", "workspace_mode":"dynamic",
+                "workspace_path":"/old/worktree", "kind":"manual", "max_concurrent_runs":1,
+            }}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(dynamic["workspace_mode"], "dynamic");
+    assert_eq!(dynamic["workspace_path"], "");
     assert!(!directory.path().join("fake-agent.called").exists());
     assert!(!directory.path().join("units").exists());
     // The private CLI endpoint is not published on the Web router.
@@ -748,7 +760,7 @@ async fn api_persists_config_sync_errors_and_history_across_server_restarts() {
 }
 
 #[tokio::test]
-async fn api_accepts_temporary_workspace_tasks_without_a_base_branch() {
+async fn api_validates_temporary_and_dynamic_workspace_tasks() {
     let directory = tempfile::tempdir().unwrap();
     let repository = directory.path().join("repository");
     std::fs::create_dir(&repository).unwrap();
@@ -794,6 +806,7 @@ async fn api_accepts_temporary_workspace_tasks_without_a_base_branch() {
         manager_command: fake.clone(),
         dispatch_command: fake.clone(),
     };
+    let manager = state.automations.clone().unwrap();
     let router = crate::build_router(state);
     let (code, project) = call(
         &router,
@@ -826,4 +839,103 @@ async fn api_accepts_temporary_workspace_tasks_without_a_base_branch() {
     assert_eq!(code, StatusCode::CREATED, "{task}");
     assert_eq!(task["workspace_mode"], "temporary");
     assert_eq!(task["base_branch"], "");
+
+    let mut input = serde_json::json!({
+        "name":"Dynamic task", "prompt":"Review", "agent":"codex",
+        "project_id":project["id"], "workspace_mode":"dynamic", "workspace_path":"",
+        "base_branch":"", "cron":"0 9 * * *", "max_concurrent_runs":1, "enabled":true
+    });
+    let (code, result) = call(&router, "POST", "/api/aow/automations", input.clone()).await;
+    assert_eq!(code, StatusCode::BAD_REQUEST, "{result}");
+    assert!(result["message"].as_str().unwrap().contains("仅手动任务"));
+    input["kind"] = "manual".into();
+    input["cron"] = "".into();
+    let (code, dynamic) = call(&router, "POST", "/api/aow/automations", input).await;
+    assert_eq!(code, StatusCode::CREATED, "{dynamic}");
+    let id = dynamic["id"].as_str().unwrap();
+    let endpoint = format!("/api/aow/automations/{id}/run");
+    for path in [
+        serde_json::Value::Null,
+        "".into(),
+        "relative/path".into(),
+        directory
+            .path()
+            .join("missing")
+            .to_string_lossy()
+            .into_owned()
+            .into(),
+        directory.path().to_string_lossy().into_owned().into(),
+    ] {
+        let (code, result) = call(
+            &router,
+            "POST",
+            &endpoint,
+            serde_json::json!({"revision":dynamic["revision"], "workspace_path":path}),
+        )
+        .await;
+        assert_eq!(code, StatusCode::BAD_REQUEST, "{result}");
+    }
+    let cwd = repository.join("frontend");
+    fs::create_dir(&cwd).unwrap();
+    let (code, result) = call(
+        &router,
+        "POST",
+        &endpoint,
+        serde_json::json!({"revision":dynamic["revision"], "workspace_path":cwd}),
+    )
+    .await;
+    assert_eq!(code, StatusCode::ACCEPTED, "{result}");
+    let run_id = result["run_id"].as_str().unwrap();
+    let request = manager
+        .store
+        .take_manual_request(id, run_id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        request.task.input.workspace.workspace_mode,
+        WorkspaceMode::Existing
+    );
+    assert_eq!(request.task.input.workspace.workspace_path, cwd);
+    let template = manager.task(id).unwrap();
+    assert_eq!(
+        template.input.workspace.workspace_mode,
+        WorkspaceMode::Dynamic
+    );
+    assert!(
+        template
+            .input
+            .workspace
+            .workspace_path
+            .as_os_str()
+            .is_empty()
+    );
+    assert!(manager.hosting_task(id, template.revision).is_ok());
+
+    // Other manual workspace modes cannot bind to Autopilot or accept an override.
+    let mut fixed = template;
+    for mode in [
+        WorkspaceMode::Existing,
+        WorkspaceMode::NewWorktree,
+        WorkspaceMode::Temporary,
+    ] {
+        fixed.input.workspace.workspace_mode = mode;
+        fixed.input.workspace.workspace_path = repository.clone();
+        fixed.input.workspace.base_branch = "main".into();
+        manager.store.save_task(&fixed).unwrap();
+        assert!(
+            manager
+                .hosting_task(id, fixed.revision)
+                .unwrap_err()
+                .to_string()
+                .contains("动态指定")
+        );
+        let (code, result) = call(
+            &router,
+            "POST",
+            &endpoint,
+            serde_json::json!({"revision":fixed.revision, "workspace_path":cwd}),
+        )
+        .await;
+        assert_eq!(code, StatusCode::BAD_REQUEST, "{result}");
+    }
 }

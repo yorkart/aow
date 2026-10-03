@@ -10,6 +10,8 @@ pub enum WorkspaceMode {
     NewWorktree,
     Existing,
     Temporary,
+    /// A manual task template whose directory must be supplied for each run.
+    Dynamic,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -59,6 +61,10 @@ impl WorkspaceConfig {
                 "请选择有效的基准分支，长度不能超过 1024 字节"
             ),
             WorkspaceMode::Temporary => {}
+            WorkspaceMode::Dynamic => ensure!(
+                self.workspace_path.as_os_str().is_empty(),
+                "动态指定的工作区目录必须在执行时提供"
+            ),
         }
         Ok(())
     }

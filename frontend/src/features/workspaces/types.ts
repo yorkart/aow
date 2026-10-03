@@ -1,4 +1,4 @@
-export type WorkspaceMode = 'new_worktree' | 'existing' | 'temporary';
+export type WorkspaceMode = 'new_worktree' | 'existing' | 'temporary' | 'dynamic';
 
 export interface WorkspaceConfig {
   workspace_mode: WorkspaceMode;
@@ -7,7 +7,7 @@ export interface WorkspaceConfig {
 }
 
 export const workspaceNames: Record<WorkspaceMode, string> = {
-  new_worktree: '新建 Worktree', existing: '已有 Worktree', temporary: '临时工作区',
+  new_worktree: '新建 Worktree', existing: '已有 Worktree', temporary: '临时工作区', dynamic: '动态指定',
 };
 
 /** Send only the fields used by the selected mode. */

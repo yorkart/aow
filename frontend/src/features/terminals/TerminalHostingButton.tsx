@@ -30,7 +30,7 @@ export function TerminalHostingButton({ tab, pane, onChange }: {
       const project = projects.find(project => project.worktrees.some(worktree => worktree.path === tab.workspace_root));
       if (!project) throw new Error('当前工作区未关联项目');
       return automationApi.list(project.id);
-    }).then(tasks => { if (active) setTasks(tasks.filter(task => task.kind === 'manual')); })
+    }).then(tasks => { if (active) setTasks(tasks.filter(task => task.kind === 'manual' && task.workspace_mode === 'dynamic')); })
       .catch(reason => { if (active) setError(reason instanceof Error ? reason.message : String(reason)); })
       .finally(() => { if (active) setLoading(false); });
     const close = (event: PointerEvent) => {
@@ -61,6 +61,7 @@ export function TerminalHostingButton({ tab, pane, onChange }: {
     {position && createPortal(<div ref={popup} className="terminal-hosting-menu" style={position} role="dialog" aria-label="选择托管任务"
       onPointerDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()}>
       <strong>选择托管任务</strong>
+      <p className="terminal-hosting-limit-hint">仅支持动态指定工作区的手动任务，执行时自动使用当前 Agent 的工作目录。</p>
       <label className="terminal-hosting-limit">最多自动输入次数<input type="number" min="1" step="1" aria-label="最多自动输入次数" value={maxInputs} disabled={busy} onChange={event => setMaxInputs(event.target.value)} /></label>
       <p className="terminal-hosting-limit-hint">达到上限后仍会做最后一次审查，不再自动输入。</p>
       {!validLimit && <p className="terminal-hosting-menu-error" role="alert">请输入有效的正整数</p>}
@@ -69,7 +70,7 @@ export function TerminalHostingButton({ tab, pane, onChange }: {
         {loading ? <p role="status"><LoaderCircle className="spinning" />加载中…</p> : matches.map(task => <button key={task.id} type="button" disabled={busy || !validLimit} onClick={() => void select(task)}>
           <span>{task.name}</span><small>{task.prompt.replace(/\s+/g, ' ').slice(0, 100)}</small>
         </button>)}
-        {!loading && !matches.length && <p>{tasks.length ? '没有匹配的任务' : '暂无手动任务，请先在 Automation 中创建。'}</p>}
+        {!loading && !matches.length && <p>{tasks.length ? '没有匹配的任务' : '暂无可用任务，请在 Automation 中创建手动任务，并选择「动态工作区 → 动态指定」。'}</p>}
       </div>
       {busy && <p role="status">正在开启托管…</p>}
       {error && <p className="terminal-hosting-menu-error" role="alert">{error}</p>}

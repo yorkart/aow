@@ -923,22 +923,36 @@ fn dropping_uncommitted_spawn_kills_and_reaps_shell() {
     )
     .unwrap();
     let pid = spawned.runtime.child_pid.unwrap() as i32;
+    let original_start_time = aow_process::info(pid).unwrap().start_time;
     assert_eq!(tracker.count.load(Ordering::Acquire), 1);
     assert_eq!(unsafe { libc::kill(pid, 0) }, 0);
 
     drop(spawned);
-    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    // Reaping also scans process sessions on macOS; leave time for that work
+    // while the rest of the workspace tests are running concurrently. Keep a
+    // bounded minute for loaded hosted runners, where process enumeration has
+    // exceeded the previous 15-second limit.
+    let deadline = std::time::Instant::now() + Duration::from_secs(60);
     while tracker.count.load(Ordering::Acquire) != 0 {
+        let process_state = aow_process::info(pid)
+            .map(|info| {
+                format!(
+                    "same child: {}, state: {}, session: {}",
+                    info.start_time == original_start_time,
+                    info.state,
+                    info.session
+                )
+            })
+            .unwrap_or_else(|error| format!("process info unavailable: {error}"));
         assert!(
             std::time::Instant::now() < deadline,
-            "uncommitted spawn was not reaped"
+            "uncommitted spawn cleanup did not finish within 60 seconds (pid {pid}: {process_state})"
         );
         thread::sleep(Duration::from_millis(10));
     }
-    assert_eq!(unsafe { libc::kill(pid, 0) }, -1);
-    assert_eq!(
-        std::io::Error::last_os_error().raw_os_error(),
-        Some(libc::ESRCH)
+    assert!(
+        !aow_process::info(pid).is_ok_and(|info| info.start_time == original_start_time),
+        "original shell process {pid} still exists after cleanup"
     );
 }
 

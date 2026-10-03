@@ -34,12 +34,14 @@ try {
       const { page, errors } = await fixture(t);
       const choices = page.getByRole('group', { name: '工作区方式', exact: true });
       assert.equal(await choices.getByRole('button').count(), 3);
-      await choices.getByRole('button', { name: mode === 'temporary' ? '临时工作区' : '新建 Worktree', exact: true }).click();
+      await choices.getByRole('button', { name: mode === 'temporary' ? '动态工作区' : '新建 Worktree', exact: true }).click();
       if (mode === 'new_worktree') {
         const branch = page.getByRole('combobox', { name: '分支来自', exact: true });
         await branch.getByRole('option', { name: 'origin/main（默认）', exact: true }).waitFor({ state: 'attached' });
         await branch.selectOption('origin/release');
       } else {
+        assert.equal(await page.getByRole('radio', { name: '动态指定', exact: true }).isDisabled(), true);
+        assert.equal(await page.getByRole('radio', { name: '临时工作区', exact: true }).isChecked(), true);
         assert.equal(await page.getByRole('combobox', { name: /已有 Worktree|分支来自/ }).count(), 0);
         await page.getByText('任务结束后自动删除临时工作区；该任务的 Agent 会话不会出现在项目的普通会话列表中。', { exact: true }).waitFor();
       }

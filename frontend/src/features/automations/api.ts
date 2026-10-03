@@ -23,7 +23,7 @@ export const automationApi = {
   enabled: (id: string, enabled: boolean) => request<AutomationTask>(`/${id}/enabled`, 'PUT', { enabled }),
   sync: (id: string) => request<AutomationTask>(`/${id}/sync`, 'POST'),
   remove: (id: string) => request<void>(`/${id}`, 'DELETE'),
-  run: (id: string, revision: number, variables: Record<string, string> = {}) => request<{ run_id: string | null }>(`/${id}/run`, 'POST', { revision, variables }),
+  run: (id: string, revision: number, variables: Record<string, string> = {}, workspacePath?: string) => request<{ run_id: string | null }>(`/${id}/run`, 'POST', { revision, variables, workspace_path: workspacePath }),
   runs: (id: string, before?: AutomationRun, limit = 50) => request<AutomationRun[]>(`/${id}/runs?limit=${limit}${before ? `&before=${encodeURIComponent(runCursor(before))}` : ''}`),
   runDetail: (id: string, runId: string) => request<AutomationRun>(`/${id}/runs/${runId}`),
   runOutput: async (id: string, runId: string, output: RunOutput) => {
