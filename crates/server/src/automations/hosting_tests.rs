@@ -300,7 +300,7 @@ async fn run_hosting_case(
     let task = request(&app, "POST", "/api/aow/automations", json!({
         "project_id":project["id"],"name":"Review","kind":"manual","prompt":"Review {{conclusion}} in {{workspace}}",
         "prompt_bindings":[{"name":"conclusion","placeholder":"{{conclusion}}","start":7,"end":21},{"name":"workspace","placeholder":"{{workspace}}","start":25,"end":38}],
-        "agent":"codex","workspace_mode":"new_worktree","workspace_path":repo,"base_branch":"main","cron":"",
+        "agent":"codex","workspace_mode":"dynamic","workspace_path":"","base_branch":"","cron":"",
         "max_concurrent_runs":1,"enabled":true,"precheck_command":"","precheck_timeout_seconds":60
     })).await;
     let tab = request(
@@ -520,7 +520,7 @@ async fn run_hosting_case(
             .input
             .workspace
             .workspace_mode,
-        WorkspaceMode::NewWorktree
+        WorkspaceMode::Dynamic
     );
     if complete_feedback {
         // Restoring a stopped host must keep its count and outcome without

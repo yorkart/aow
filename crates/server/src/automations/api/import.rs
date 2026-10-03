@@ -20,9 +20,19 @@ pub(super) async fn create(
     request
         .configuration
         .insert("project_id".into(), Value::String(request.project_id));
+    let workspace_path = if request
+        .configuration
+        .get("workspace_mode")
+        .and_then(Value::as_str)
+        == Some("dynamic")
+    {
+        String::new()
+    } else {
+        project.repo_path
+    };
     request
         .configuration
-        .insert("workspace_path".into(), Value::String(project.repo_path));
+        .insert("workspace_path".into(), Value::String(workspace_path));
     request
         .configuration
         .insert("enabled".into(), Value::Bool(false));

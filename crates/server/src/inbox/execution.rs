@@ -30,6 +30,9 @@ async fn execute_inner(
     input: Execute,
 ) -> Result<(StatusCode, Json<Run>), HttpError> {
     validate_id(&input.request_key)?;
+    if input.workspace.workspace_mode == WorkspaceMode::Dynamic {
+        return Err(invalid("仅手动任务支持动态指定工作区"));
+    }
     if let Some(run) = state.inbox.existing_run(&id, &input)? {
         return Ok((StatusCode::ACCEPTED, Json(run)));
     }

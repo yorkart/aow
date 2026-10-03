@@ -13,7 +13,7 @@ try {
   const common = { revision: 1, agent: 'codex', project_id: 'project', project_name: 'Project', workspace_mode: 'existing', workspace_path: '/repo', cleanup_worktree: false,
     base_branch: 'main', interval_seconds: null, max_concurrent_runs: 1, enabled: true, yolo: true, precheck_command: '', precheck_timeout_seconds: 60, failure_notification: null,
     created_at: '2026-09-23T00:00:00Z', updated_at: '2026-09-23T00:00:00Z', scheduler_error: null, next_run_at: null, last_run: null, is_running: false };
-  async function fixture(t, { history = [] } = {}) {
+  async function fixture(t, { history = [], dynamic = false } = {}) {
     const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
     page.setDefaultTimeout(15000);
     t.after(() => page.close());
@@ -24,7 +24,7 @@ try {
     const tasks = [
       { ...common, id: '12345678', name: '每日检查', kind: 'scheduled', cron: '0 9 * * *', prompt: '检查代码', prompt_bindings: [] },
       { ...common, id: '87654321', name: '分支检查', kind: 'manual', cron: '', prompt, prompt_bindings: bindings },
-      { ...common, id: '11223344', name: '直接执行', kind: 'manual', cron: '', prompt: '不需要输入', prompt_bindings: [] },
+      { ...common, id: '11223344', name: '直接执行', kind: 'manual', cron: '', prompt: '不需要输入', prompt_bindings: [], ...(dynamic ? { workspace_mode: 'dynamic', workspace_path: '', base_branch: '' } : {}) },
     ];
     await page.route('**/api/aow/projects/*/branches', route => route.fulfill({ json: { branches: ['main', 'origin/main'], default_branch: 'origin/main' } }));
     await page.route('**/api/aow/notification-settings', route => route.fulfill({ json: { im: { providers: [] } } }));
@@ -140,6 +140,44 @@ try {
     await page.getByRole('status').waitFor();
     assert.equal(runs.length, 2);
     assert.deepEqual(runs[1].variables, {});
+    assert.deepEqual(errors, []);
+  });
+
+  await test('dynamic manual tasks require a fresh directory for every run even without variables', async t => {
+    const { page, runs, errors } = await fixture(t, { dynamic: true });
+    await page.getByTitle('直接执行 · ID: 11223344', { exact: true }).click();
+    await page.getByRole('button', { name: '立即运行', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: '运行手动任务' });
+    const directory = dialog.getByRole('textbox', { name: '工作区目录' });
+    const run = dialog.getByRole('button', { name: '运行', exact: true });
+    assert.equal(await run.isDisabled(), true);
+    await directory.fill('relative');
+    assert.equal(await run.isDisabled(), true);
+    await directory.fill('/repo/frontend');
+    await run.click();
+    await dialog.waitFor({ state: 'hidden' });
+    assert.deepEqual(runs, [{ id: '11223344', revision: 1, variables: {}, workspace_path: '/repo/frontend' }]);
+    await page.getByRole('button', { name: '立即运行', exact: true }).click();
+    assert.equal(await directory.inputValue(), '');
+    assert.equal(await run.isDisabled(), true);
+    assert.deepEqual(errors, []);
+  });
+
+  await test('manual editor saves dynamic workspace templates without a fixed directory or branch', async t => {
+    const { page, saves, errors } = await fixture(t);
+    await page.getByTitle('直接执行 · ID: 11223344', { exact: true }).click();
+    await page.getByRole('button', { name: '编辑', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: '编辑手动任务' });
+    await dialog.getByRole('button', { name: '动态工作区', exact: true }).click();
+    const dynamic = dialog.getByRole('radio', { name: '动态指定', exact: true });
+    assert.equal(await dynamic.isEnabled(), true);
+    await dynamic.click();
+    assert.equal(await dialog.getByRole('combobox', { name: /已有 Worktree|分支来自/ }).count(), 0);
+    await dialog.getByRole('button', { name: '保存更改' }).click();
+    await dialog.waitFor({ state: 'hidden' });
+    assert.equal(saves[0].workspace_mode, 'dynamic');
+    assert.equal(saves[0].workspace_path, '');
+    assert.equal(saves[0].base_branch, '');
     assert.deepEqual(errors, []);
   });
 

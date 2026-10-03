@@ -80,6 +80,10 @@ pub async fn prepare(
     git: &impl GitExecutor,
 ) -> Result<PreparedWorkspace> {
     config.validate()?;
+    ensure!(
+        config.workspace_mode != WorkspaceMode::Dynamic,
+        "请在执行时指定工作区目录"
+    );
     if config.workspace_mode == WorkspaceMode::Temporary {
         ensure!(
             !name.is_empty()

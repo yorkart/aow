@@ -18,8 +18,8 @@ impl GitExecutor for Git {
 }
 
 #[test]
-fn configuration_has_exactly_three_modes_and_validates_required_fields() {
-    for mode in ["new_worktree", "existing", "temporary"] {
+fn configuration_validates_workspace_modes_and_required_fields() {
+    for mode in ["new_worktree", "existing", "temporary", "dynamic"] {
         assert!(
             serde_json::from_value::<WorkspaceConfig>(serde_json::json!({"workspace_mode":mode}))
                 .is_ok()
@@ -58,6 +58,25 @@ fn configuration_has_exactly_three_modes_and_validates_required_fields() {
         .validate()
         .is_ok()
     );
+}
+
+#[tokio::test]
+async fn unresolved_dynamic_workspace_cannot_prepare_a_directory() {
+    let config = WorkspaceConfig {
+        workspace_mode: WorkspaceMode::Dynamic,
+        base_branch: String::new(),
+        ..Default::default()
+    };
+    assert!(config.validate().is_ok());
+    let error = prepare(&config, Path::new("/missing"), "manual", &Git)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("执行时指定工作区"));
+    let fixed = WorkspaceConfig {
+        workspace_path: "/repo".into(),
+        ..config
+    };
+    assert!(fixed.validate().is_err());
 }
 
 #[tokio::test]
