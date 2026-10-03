@@ -80,16 +80,22 @@ test('server health follows the configured Base Path and normalizes its trailing
   await requestHealth({ ...root, basePath: '/' });
 });
 
-test('health requires the PID advertised by a new release and detects restarts during the probe', async t => {
+test('health requires the PID advertised by a new release and detects restarts during the probe', { timeout: 5000 }, async t => {
+  const timeout = 1000;
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
   let completedResponses = 0;
   const respond = body => (_, response) => {
     response.once('finish', () => { completedResponses++; });
+    // End the retry window after the real HTTP probe reaches this listener.
+    // Only the retry clock is mocked; the HTTP request timer still runs normally.
+    now += timeout;
     response.end(body);
   };
   const expectRejectedProbe = async (config, runningPid) => {
     const previousResponses = completedResponses;
     await assert.rejects(
-      waitForHealth(config, runningPid, 5000),
+      waitForHealth(config, runningPid, timeout),
       /active launchd process|health request timed out/,
     );
     assert.ok(completedResponses > previousResponses,
@@ -98,16 +104,14 @@ test('health requires the PID advertised by a new release and detects restarts d
   const config = await endpoint(t, 'server', respond(
     JSON.stringify({ service: 'aow', ok: true, pid: 1234 }),
   ));
-  // Allow a real HTTP round trip under CI load before asserting PID ownership.
-  // The request can be cut off at the total deadline after an earlier completed
-  // response already showed the PID mismatch.
+  // Allow a real HTTP round trip before asserting PID ownership.
   await expectRejectedProbe(config, () => 1235);
   let calls = 0;
   await expectRejectedProbe(config, () => ++calls % 2 ? 1234 : 1235);
+  assert.equal(calls, 2);
   const old = await endpoint(t, 'server', respond('{"service":"aow","ok":true}'));
   await expectRejectedProbe(old, () => 1234);
 });
-
 test('unresponsive health checks have a total deadline', async t => {
   const config = await endpoint(t, 'server', () => {});
   const started = Date.now();
