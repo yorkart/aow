@@ -927,11 +927,14 @@ fn dropping_uncommitted_spawn_kills_and_reaps_shell() {
     assert_eq!(unsafe { libc::kill(pid, 0) }, 0);
 
     drop(spawned);
-    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    // Reaping also scans process sessions on macOS; leave time for that work
+    // while the rest of the workspace tests are running concurrently.
+    let deadline = std::time::Instant::now() + Duration::from_secs(15);
     while tracker.count.load(Ordering::Acquire) != 0 {
+        let pid_exists = unsafe { libc::kill(pid, 0) } == 0;
         assert!(
             std::time::Instant::now() < deadline,
-            "uncommitted spawn was not reaped"
+            "uncommitted spawn cleanup did not finish within 15 seconds (pid still exists: {pid_exists})"
         );
         thread::sleep(Duration::from_millis(10));
     }
