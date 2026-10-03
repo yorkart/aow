@@ -45,22 +45,72 @@ fn footer_probe_ignores_loading_and_scrollback_noise() {
 }
 
 #[test]
-fn footer_probe_checks_loading_only_in_the_model_segment() {
-    for agent in [InteractiveAgent::Codex, InteractiveAgent::TraeCli] {
-        let footer = "gpt-6-astra xhigh · /workspace/loading-fix · for agents";
-        assert!(agent.input_ready(&lines(footer)), "{agent:?}: {footer}");
-        let footer = "GPT-5.6-Sol xhigh · Context 100% left · /workspace · loading-fix";
-        assert_eq!(
-            agent.input_ready(&lines(footer)),
-            matches!(agent, InteractiveAgent::TraeCli),
-            "{agent:?}: {footer}"
-        );
-        for footer in [
-            "loading · /workspace · for agents",
-            "model: Loading… · Context 100% left · /workspace",
-            " · /workspace · for agents",
-        ] {
-            assert!(!agent.input_ready(&lines(footer)), "{agent:?}: {footer}");
+fn traecli_footer_probe_checks_loading_only_in_the_model_segment() {
+    let agent = InteractiveAgent::TraeCli;
+    for footer in [
+        "gpt-6-astra xhigh · /workspace/loading-fix · for agents",
+        "GPT-5.6-Sol xhigh · Context 100% left · /workspace · loading-fix",
+    ] {
+        assert!(agent.input_ready(&lines(footer)), "{footer}");
+    }
+    for footer in [
+        "loading · /workspace · for agents",
+        "model: Loading… · Context 100% left · /workspace",
+        " · /workspace · for agents",
+    ] {
+        assert!(!agent.input_ready(&lines(footer)), "{footer}");
+    }
+}
+
+#[test]
+fn codex_accepts_a_directory_in_either_of_the_last_two_content_lines() {
+    let agent = InteractiveAgent::Codex;
+    for footer in [
+        "GPT-6-Astra xhigh · /workspace",
+        "GPT-6-Astra xhigh · ~/workspace",
+        "GPT-6-Astra xhigh · /workspace/loading-fix · for agents",
+        "GPT-6-Astra xhigh · Context 100% left · /workspace",
+        " · /workspace",
+    ] {
+        for suffix in ["", "\n任意状态提示", "\n\n任意状态提示\n\n"] {
+            let screen = format!("› Ask Codex to do anything\n{footer}{suffix}");
+            assert!(agent.input_ready(&lines(&screen)), "{screen}");
         }
+    }
+    for screen in [
+        "",
+        "model: loading\n› Ask Codex to do anything",
+        "GPT-6-Astra xhigh · workspace",
+        "GPT-6-Astra xhigh · ~",
+        "GPT-6-Astra xhigh · Context 100% left",
+        "GPT-6-Astra xhigh /workspace",
+        "GPT-6-Astra xhigh · directory: /workspace",
+        "GPT-6-Astra xhigh · /workspace · for agents\nlogin\nrequired",
+        "GPT-6-Astra xhigh · ~/workspace\n\nlogin\n\nrequired\n\n",
+    ] {
+        assert!(!agent.input_ready(&lines(screen)), "{screen}");
+    }
+}
+
+#[test]
+fn codex_directory_footer_is_independent_of_shortcuts_and_warnings() {
+    let agent = InteractiveAgent::Codex;
+    for shortcuts in [
+        "  ? for shortcuts",
+        "  ? for shortcuts · 100% context left",
+        "  ? for shortcuts  ⚠ 1 warning · f2 to view",
+        "  ? for shortcuts                                      ⚠ 2 warnings · f2 to view",
+    ] {
+        let screen = format!(
+            "› Ask Codex to do anything\n\n  GPT-6-Astra xhigh · ~/workspace/.aow-inbox-task\n{shortcuts}\n\n"
+        );
+        assert!(agent.input_ready(&lines(&screen)), "{screen}");
+    }
+    for screen in [
+        "GPT-6-Astra xhigh · Context 100% left\n  ? for shortcuts  ⚠ 1 warning · f2 to view",
+        "? for shortcuts  ⚠ 1 warning · f2 to view",
+        "GPT-6-Astra xhigh · ~/workspace\n  ? for shortcuts  ⚠ 1 warning · f2 to view\nlogin\nrequired\ncontinue",
+    ] {
+        assert!(!agent.input_ready(&lines(screen)), "{screen}");
     }
 }
