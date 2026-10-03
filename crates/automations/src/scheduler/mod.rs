@@ -42,6 +42,7 @@ pub struct SchedulerStatus {
 }
 
 mod dispatch;
+mod hosting;
 mod render;
 mod sync;
 

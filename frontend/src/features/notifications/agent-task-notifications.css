@@ -29,6 +29,7 @@
 .agent-task-notice-heading strong { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; font-weight:600; line-height:1.5; }
 .agent-task-notice time { flex:none; color:var(--aow-muted); font-size:10px; font-variant-numeric:tabular-nums; }
 .agent-task-notice-tab { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:3px; font-size:12px; line-height:1.5; color:var(--aow-text); }
+.agent-task-notice-content .token-usage { display:block; margin-top:3px; color:var(--aow-muted); }
 .agent-task-notice-failure { display:flex; align-items:center; gap:8px; padding:0 13px 10px; }
 .agent-task-notice-error { flex:1; min-width:0; font-size:12px; line-height:1.4; color:#ffb4ab; overflow-wrap:anywhere; }
 .agent-task-notice-remove { flex:none; padding:4px 6px; border:0; border-radius:4px; color:var(--aow-text); background:#3b4c61; font-size:12px; cursor:pointer; }

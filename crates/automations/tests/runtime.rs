@@ -65,10 +65,12 @@ fn fixture(script: &str) -> (TempDir, Store, Task) {
             prompt: "original prompt".into(),
             agent: AgentKind::Codex,
             project_id: "project".into(),
-            workspace_mode: WorkspaceMode::Existing,
-            workspace_path: repository.clone(),
+            workspace: aow_automations::WorkspaceConfig {
+                workspace_mode: WorkspaceMode::Existing,
+                workspace_path: repository.clone(),
+                base_branch: "main".into(),
+            },
             cleanup_worktree: false,
-            base_branch: "main".into(),
             cron: "0 9 * * 1-5".into(),
             interval_seconds: None,
             max_concurrent_runs: 3,
@@ -83,13 +85,118 @@ fn fixture(script: &str) -> (TempDir, Store, Task) {
         launch: AgentLaunch {
             executable: agent,
             args: Vec::new(),
-            environment: BTreeMap::new(),
+            // Fake agents must never look up results in the developer's history.
+            environment: aow_agents::KNOWN_AGENTS
+                .iter()
+                .flat_map(|agent| agent.definition().configuration_env)
+                .map(|key| (key.to_string(), String::new()))
+                .chain(std::iter::once((
+                    "HOME".into(),
+                    directory
+                        .path()
+                        .join("agent-home")
+                        .to_string_lossy()
+                        .into_owned(),
+                )))
+                .collect(),
         },
         scheduler_error: None,
         deleted: false,
     };
     store.save_task(&task).unwrap();
     (directory, store, task)
+}
+
+#[tokio::test]
+async fn ordinary_run_persists_the_complete_reply_before_history_is_resumed_or_removed() {
+    let (directory, store, mut task) = fixture("exit 99");
+    let script = directory.path().join("claude.py");
+    fs::write(&script, r#"
+import json, os, sys
+from pathlib import Path
+sid = sys.argv[sys.argv.index('--session-id') + 1]
+root = Path(os.environ['CLAUDE_CONFIG_DIR']) / 'projects'
+root.mkdir(parents=True)
+sys.stdin.read()
+records = [
+    {'type':'user', 'sessionId':sid, 'cwd':os.getcwd(), 'message':{'content':'Review'}},
+    {'type':'assistant', 'message':{'id':'reply', 'content':[{'type':'text','text':'P1: first finding'}]}},
+    {'type':'assistant', 'message':{'id':'reply', 'stop_reason':'end_turn', 'content':[{'type':'text','text':'P2: second finding'}]}}
+]
+(root / (sid + '.jsonl')).write_text('\n'.join(json.dumps(record) for record in records))
+print('Unstructured progress output; never use this as the conclusion')
+"#).unwrap();
+    let history = directory.path().join("claude-history");
+    task.input.agent = AgentKind::Claude;
+    task.launch.executable = "/usr/bin/python3".into();
+    task.launch.args = vec![script.to_string_lossy().into_owned()];
+    task.launch.environment.insert(
+        "CLAUDE_CONFIG_DIR".into(),
+        history.to_string_lossy().into_owned(),
+    );
+    store.save_task(&task).unwrap();
+    let id = new_run_id();
+    assert_eq!(
+        runner::run(&store, &task.id, Some(id.clone()), RunSource::Scheduled)
+            .await
+            .unwrap(),
+        RunStatus::Completed
+    );
+    let run = store.read_run(&task.id, &id).unwrap().unwrap();
+    assert!(
+        store
+            .run_path(&task.id, &id)
+            .unwrap()
+            .join("result.json")
+            .is_file()
+    );
+    // No result consumer has run yet. A resumed session must not replace this run's reply.
+    let transcript = history
+        .join("projects")
+        .join(format!("{}.jsonl", run.session_id.as_ref().unwrap()));
+    fs::write(
+        transcript,
+        r#"{"type":"assistant","message":{"content":"Later, unrelated answer"}}"#,
+    )
+    .unwrap();
+    let expected = "P1: first finding\n\nP2: second finding";
+    assert_eq!(store.read_run_result(&run).unwrap(), expected);
+    fs::remove_dir_all(history).unwrap();
+    assert_eq!(
+        Store::open(store.state_dir.clone())
+            .unwrap()
+            .read_run_result(&run)
+            .unwrap(),
+        expected
+    );
+}
+
+#[tokio::test]
+async fn unavailable_result_preserves_process_status_and_failed_runs_have_no_result() {
+    for (exit, status) in [(0, RunStatus::Completed), (1, RunStatus::Failed)] {
+        let (_directory, store, task) = fixture(&format!(
+            "printf 'session id: missing-session\\n' >&2\ncat >/dev/null\nexit {exit}"
+        ));
+        let id = new_run_id();
+        assert_eq!(
+            runner::run(&store, &task.id, Some(id.clone()), RunSource::Manual)
+                .await
+                .unwrap(),
+            status
+        );
+        let run = store.read_run(&task.id, &id).unwrap().unwrap();
+        let result_file = store.run_path(&task.id, &id).unwrap().join("result.json");
+        assert_eq!(result_file.exists(), exit == 0);
+        let error = store.read_run_result(&run).unwrap_err().to_string();
+        assert!(
+            error.contains(if exit == 0 {
+                "未找到本次运行的会话记录"
+            } else {
+                "任务尚未成功结束"
+            }),
+            "{error}"
+        );
+    }
 }
 
 const CODEX: &str = r#"
@@ -168,7 +275,7 @@ async fn registered_agent_environment_is_reloaded_between_runs_and_snapshotted_p
                 "id": "codex",
                 "display_name": "Codex",
                 "command": "codex",
-                "env": {"DYNAMIC_AGENT_ENV": value, "PATH": "/ignored/agent/path"}
+                "env": {"DYNAMIC_AGENT_ENV": value, "PATH": "/ignored/agent/path", "CODEX_HOME": format!("history-{value}"), "HOME": directory.path().join(format!("home-{value}"))}
             }]
         }))
         .unwrap()
@@ -183,6 +290,9 @@ async fn registered_agent_environment_is_reloaded_between_runs_and_snapshotted_p
     task.launch
         .environment
         .insert("DYNAMIC_AGENT_ENV".into(), "task-snapshot".into());
+    task.launch
+        .environment
+        .insert("CODEX_HOME".into(), "/outdated/task-config".into());
     store.save_task(&task).unwrap();
     let task_before = fs::read(store.task_path(&task.id).unwrap()).unwrap();
 
@@ -193,6 +303,18 @@ async fn registered_agent_environment_is_reloaded_between_runs_and_snapshotted_p
             .unwrap();
         let run = store.read_run(&task.id, &id).unwrap().unwrap();
         assert_eq!(status, RunStatus::Completed, "{:?}", run.message);
+        let roots = serde_json::to_value(store.run_session_roots(&task.id, &id).unwrap()).unwrap();
+        assert_eq!(
+            roots["codex"],
+            serde_json::json!(
+                run.workspace_path
+                    .as_ref()
+                    .unwrap()
+                    .join(format!("history-{expected}"))
+            )
+        );
+        assert!(roots.get("DYNAMIC_AGENT_ENV").is_none());
+        assert!(roots.get("PATH").is_none());
         assert_eq!(
             fs::read_to_string(task.repository_path.join("precheck-environment")).unwrap(),
             "task-snapshot"
@@ -436,9 +558,9 @@ cat > "$TEST_PROMPT"
 }
 
 #[tokio::test]
-async fn worktrees_are_always_cleaned_and_branch_switches_reject_dirty_workspaces() {
+async fn worktrees_are_always_cleaned_and_preserve_dirty_main_workspaces() {
     let (_directory, store, mut task) = fixture(CODEX);
-    task.input.workspace_mode = WorkspaceMode::NewWorktree;
+    task.input.workspace.workspace_mode = WorkspaceMode::NewWorktree;
     let first = execute(&store, &task).await;
     let second = execute(&store, &task).await;
     assert_eq!(first.status, RunStatus::Completed, "{:?}", first.message);
@@ -462,11 +584,14 @@ async fn worktrees_are_always_cleaned_and_branch_switches_reject_dirty_workspace
     let forced_cleanup = execute(&store, &task).await;
     assert_eq!(forced_cleanup.status, RunStatus::Completed);
     assert!(!forced_cleanup.workspace_path.as_ref().unwrap().exists());
-    task.input.workspace_mode = WorkspaceMode::NewBranch;
     fs::write(task.repository_path.join("dirty.txt"), "keep me").unwrap();
     let dirty = execute(&store, &task).await;
-    assert_eq!(dirty.status, RunStatus::Failed);
-    assert!(dirty.session_id.is_none());
+    assert_eq!(dirty.status, RunStatus::Completed);
+    assert!(!dirty.workspace_path.as_ref().unwrap().exists());
+    assert_eq!(
+        dirty.workspace_path.as_ref().unwrap().parent(),
+        task.repository_path.parent()
+    );
     assert_eq!(
         git(&task.repository_path, &["branch", "--show-current"]),
         "main"
@@ -475,13 +600,6 @@ async fn worktrees_are_always_cleaned_and_branch_switches_reject_dirty_workspace
         fs::read_to_string(task.repository_path.join("dirty.txt")).unwrap(),
         "keep me"
     );
-    fs::remove_file(task.repository_path.join("dirty.txt")).unwrap();
-    let branch = execute(&store, &task).await;
-    assert_eq!(branch.status, RunStatus::Completed);
-    assert_eq!(
-        git(&task.repository_path, &["branch", "--show-current"]),
-        branch.branch.unwrap()
-    );
 }
 
 #[tokio::test]
@@ -489,8 +607,8 @@ async fn temporary_workspace_runs_outside_the_repository_and_is_removed_afterwar
     let (_directory, store, mut task) = fixture(
         "printf 'session id: temporary-session\n' >&2\ncat >/dev/null\nprintf '%s' \"$PWD\" > executed-cwd",
     );
-    task.input.workspace_mode = WorkspaceMode::Temporary;
-    task.input.base_branch.clear();
+    task.input.workspace.workspace_mode = WorkspaceMode::Temporary;
+    task.input.workspace.base_branch.clear();
     task.input.precheck_command = "test ! -d .git".into();
 
     let run = execute(&store, &task).await;
@@ -513,7 +631,7 @@ async fn cleanup_removes_dirty_worktrees_after_failed_and_skipped_runs() {
     let (_directory, store, mut task) = fixture(
         "printf 'session id: failed-session\n'\ncat >/dev/null\ntouch generated.txt\nexit 17",
     );
-    task.input.workspace_mode = WorkspaceMode::NewWorktree;
+    task.input.workspace.workspace_mode = WorkspaceMode::NewWorktree;
     task.input.cleanup_worktree = true;
     let failed = execute(&store, &task).await;
     assert_eq!(failed.status, RunStatus::Failed);
@@ -651,56 +769,58 @@ while [ ! -f "$TEST_RELEASE" ]; do sleep 0.02; done
 
 #[tokio::test]
 async fn sigterm_leaves_an_interrupted_record_with_session_id() {
-    let (_directory, store, mut task) =
-        fixture("printf 'session id: stopped-session\\n'\ncat >/dev/null\nsleep 60");
-    task.input.workspace_mode = WorkspaceMode::NewWorktree;
-    task.input.cleanup_worktree = true;
-    store.save_task(&task).unwrap();
-    let id = new_run_id();
-    let mut process = Command::new(env!("CARGO_BIN_EXE_aow-automation-runner"))
-        .args([
-            "run",
-            "--state-dir",
-            store.state_dir.to_str().unwrap(),
-            "--task-id",
-            &task.id,
-            "--run-id",
-            &id,
-        ])
-        .kill_on_drop(true)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .unwrap();
-    tokio::time::timeout(Duration::from_secs(10), async {
-        loop {
-            if let Ok(Some(run)) = store.read_run(&task.id, &id)
-                && run.session_id.is_some()
-            {
-                break;
+    for mode in [WorkspaceMode::NewWorktree, WorkspaceMode::Temporary] {
+        let (_directory, store, mut task) =
+            fixture("printf 'session id: stopped-session\\n'\ncat >/dev/null\nsleep 60");
+        task.input.workspace.workspace_mode = mode;
+        task.input.cleanup_worktree = true;
+        store.save_task(&task).unwrap();
+        let id = new_run_id();
+        let mut process = Command::new(env!("CARGO_BIN_EXE_aow-automation-runner"))
+            .args([
+                "run",
+                "--state-dir",
+                store.state_dir.to_str().unwrap(),
+                "--task-id",
+                &task.id,
+                "--run-id",
+                &id,
+            ])
+            .kill_on_drop(true)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                if let Ok(Some(run)) = store.read_run(&task.id, &id)
+                    && run.session_id.is_some()
+                {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
             }
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
-    })
-    .await
-    .unwrap();
-    assert_eq!(
-        unsafe { libc::kill(process.id().unwrap() as i32, libc::SIGTERM) },
-        0,
-        "{}",
-        std::io::Error::last_os_error()
-    );
-    assert!(
-        !tokio::time::timeout(Duration::from_secs(10), process.wait())
-            .await
-            .unwrap()
-            .unwrap()
-            .success()
-    );
-    let run = store.read_run(&task.id, &id).unwrap().unwrap();
-    assert_eq!(run.status, RunStatus::Interrupted);
-    assert_eq!(run.session_id.as_deref(), Some("stopped-session"));
-    assert!(!run.workspace_path.unwrap().exists());
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            unsafe { libc::kill(process.id().unwrap() as i32, libc::SIGTERM) },
+            0,
+            "{}",
+            std::io::Error::last_os_error()
+        );
+        assert!(
+            !tokio::time::timeout(Duration::from_secs(10), process.wait())
+                .await
+                .unwrap()
+                .unwrap()
+                .success()
+        );
+        let run = store.read_run(&task.id, &id).unwrap().unwrap();
+        assert_eq!(run.status, RunStatus::Interrupted);
+        assert_eq!(run.session_id.as_deref(), Some("stopped-session"));
+        assert!(!run.workspace_path.unwrap().exists());
+    }
 }
 
 #[test]
@@ -1363,6 +1483,7 @@ async fn manual_runs_use_isolated_values_and_submitted_task_snapshot() {
                 &aow_automations::ManualRunRequest {
                     task: task.clone(),
                     variables: BTreeMap::from([("分支".into(), value.into())]),
+                    hosted: false,
                 },
             )
             .unwrap();
@@ -1552,4 +1673,172 @@ fn opaque_run_ids_paginate_and_prune_by_recorded_start_time() {
             .unwrap()
             .is_empty()
     );
+}
+
+#[tokio::test]
+async fn hosted_runner_uses_flag_without_context_and_records_concurrency_rejection() {
+    let (_directory, store, mut task) = fixture("printf 'session id: review-session\\n' >&2\ncat");
+    task.input.kind = aow_automations::TaskKind::Manual;
+    task.input.cron.clear();
+    task.input.max_concurrent_runs = 1;
+    store.save_task(&task).unwrap();
+    let original = fs::read(store.task_path(&task.id).unwrap()).unwrap();
+    let run_id = new_run_id();
+    let mut invocation = task.clone();
+    invocation.input.prompt = "Review {{task}}, retain the configured JSON output".into();
+    invocation.input.prompt_bindings = vec![aow_automations::PromptBinding {
+        name: "task".into(),
+        placeholder: "{{task}}".into(),
+        start: 7,
+        end: 15,
+    }];
+    store
+        .save_manual_request(
+            &run_id,
+            &aow_automations::ManualRunRequest {
+                task: invocation,
+                variables: BTreeMap::from([("task".into(), "检查 🧪 $HOME `literal`".into())]),
+                hosted: true,
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        runner::run(&store, &task.id, Some(run_id.clone()), RunSource::Manual)
+            .await
+            .unwrap(),
+        RunStatus::Completed
+    );
+    assert!(
+        !store
+            .run_path(&task.id, &run_id)
+            .unwrap()
+            .join("hosting-context.json")
+            .exists()
+    );
+    let prompt = fs::read_to_string(
+        store
+            .run_output_path(&task.id, &run_id, aow_automations::RunOutput::Stdio)
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(prompt.starts_with("你正在执行一次审查任务，请遵循任务原有的执行和输出要求。审查通过时，在最终输出的最后另起一行，单独追加标记：[AOW_HOSTING_DONE]。\n\n审查任务：\nReview 检查 🧪 $HOME `literal`, retain the configured JSON output\n"));
+    assert!(!prompt.contains("审查上下文："));
+    assert!(!prompt.contains("hosting-context.json"));
+    assert!(!prompt.contains("{{task}}"));
+    assert_eq!(
+        fs::read(store.task_path(&task.id).unwrap()).unwrap(),
+        original
+    );
+    let busy_id = new_run_id();
+    executable(&task.launch.executable, BLOCKED_AGENT);
+    let release = store.state_dir.join("release-hosted-run");
+    task.launch
+        .environment
+        .insert("TEST_RELEASE".into(), release.to_string_lossy().into());
+    store.save_task(&task).unwrap();
+    let blocking_id = new_run_id();
+    let blocking_store = store.clone();
+    let blocking_task_id = task.id.clone();
+    let saved_id = blocking_id.clone();
+    let blocker = tokio::spawn(async move {
+        runner::run(
+            &blocking_store,
+            &blocking_task_id,
+            Some(saved_id),
+            RunSource::Manual,
+        )
+        .await
+    });
+    session(&store, &task, &blocking_id).await;
+    store
+        .save_manual_request(
+            &busy_id,
+            &aow_automations::ManualRunRequest {
+                task: task.clone(),
+                variables: BTreeMap::new(),
+                hosted: true,
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        runner::run(&store, &task.id, Some(busy_id.clone()), RunSource::Manual)
+            .await
+            .unwrap(),
+        RunStatus::Skipped
+    );
+    let skipped = store.read_run(&task.id, &busy_id).unwrap().unwrap();
+    assert_eq!(skipped.status, RunStatus::Skipped);
+    assert!(skipped.message.unwrap().contains("并发限制"));
+    assert!(
+        store
+            .take_manual_request(&task.id, &busy_id)
+            .unwrap()
+            .is_none()
+    );
+    fs::write(release, "done").unwrap();
+    assert_eq!(blocker.await.unwrap().unwrap(), RunStatus::Completed);
+}
+
+#[test]
+fn pending_manual_requests_discard_legacy_context_without_losing_hosted_routing() {
+    let (_directory, store, task) = fixture("exit 0");
+    for (fields, expected_hosted) in [
+        (serde_json::json!({}), false),
+        (serde_json::json!({"hosting_context":null}), false),
+        (
+            serde_json::json!({"hosting_context":{"task":"Old context"}}),
+            true,
+        ),
+        (serde_json::json!({"hosted":true}), true),
+        (serde_json::json!({"hosted":false}), false),
+        (
+            serde_json::json!({"hosted":false,"hosting_context":{"task":"Old context"}}),
+            false,
+        ),
+    ] {
+        let run_id = new_run_id();
+        store
+            .save_manual_request(
+                &run_id,
+                &aow_automations::ManualRunRequest {
+                    task: task.clone(),
+                    variables: BTreeMap::new(),
+                    hosted: false,
+                },
+            )
+            .unwrap();
+        let path = store
+            .root
+            .join("pending")
+            .join(&task.id)
+            .join(format!("{run_id}.json"));
+        let mut queued: serde_json::Value =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        let object = queued.as_object_mut().unwrap();
+        object.remove("hosted");
+        object.extend(fields.as_object().unwrap().clone());
+        fs::write(&path, serde_json::to_vec(&queued).unwrap()).unwrap();
+        let request = store
+            .take_manual_request(&task.id, &run_id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(request.hosted, expected_hosted, "{fields}");
+        let serialized = serde_json::to_value(request).unwrap();
+        assert!(serialized.get("hosting_context").is_none());
+        assert_eq!(serialized["hosted"], expected_hosted);
+        assert!(!path.exists());
+    }
+}
+
+#[tokio::test]
+async fn temporary_workspaces_are_cleaned_after_failure_and_precheck_skip() {
+    let (_directory, store, mut task) = fixture("cat >/dev/null; exit 17");
+    task.input.workspace.workspace_mode = WorkspaceMode::Temporary;
+    let failed = execute(&store, &task).await;
+    assert_eq!(failed.status, RunStatus::Failed);
+    assert!(!failed.workspace_path.unwrap().exists());
+    task.input.precheck_command = "exit 1".into();
+    let skipped = execute(&store, &task).await;
+    assert_eq!(skipped.status, RunStatus::Skipped);
+    assert!(!skipped.workspace_path.unwrap().exists());
 }

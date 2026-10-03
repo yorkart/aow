@@ -183,6 +183,7 @@ impl Registry {
                             cwd: reader.locator.cwd.to_string_lossy().into_owned(),
                             turn_id: event.turn_id,
                             conclusion: event.conclusion,
+                            usage: event.usage,
                             instance_ids: instance_ids.clone(),
                             sources: Vec::new(),
                         });

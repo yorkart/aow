@@ -4,14 +4,22 @@ use aow_protocol::{
 };
 use tokio_tungstenite::tungstenite;
 
-pub(super) struct AgentConnection {
-    pub(super) socket: TerminaldAttachStream,
+pub(in crate::terminal) struct AgentConnection {
+    pub(in crate::terminal) socket: TerminaldAttachStream,
 }
 
 impl AgentConnection {
-    pub(super) async fn claim(
+    pub(in crate::terminal) async fn claim(
         client: &TerminaldClient,
         pane_id: &str,
+    ) -> Result<Self, TerminalError> {
+        Self::claim_with_force(client, pane_id, false).await
+    }
+
+    pub(in crate::terminal) async fn claim_with_force(
+        client: &TerminaldClient,
+        pane_id: &str,
+        force: bool,
     ) -> Result<Self, TerminalError> {
         let socket = client
             .attach_controlled_with_resume(pane_id, None, None)
@@ -19,7 +27,7 @@ impl AgentConnection {
             .map_err(map_client_error)?;
         let mut connection = Self { socket };
         connection
-            .send(TerminalAttachClientMessage::Claim { force: false })
+            .send(TerminalAttachClientMessage::Claim { force })
             .await?;
         loop {
             match Self::check(connection.socket.next().await)? {
@@ -36,7 +44,7 @@ impl AgentConnection {
         }
     }
 
-    pub(super) fn check(
+    pub(in crate::terminal) fn check(
         message: Option<Result<tungstenite::Message, tungstenite::Error>>,
     ) -> Result<Option<TerminalAttachServerMessage>, TerminalError> {
         match message {
@@ -62,7 +70,7 @@ impl AgentConnection {
         }
     }
 
-    pub(super) async fn send(
+    pub(in crate::terminal) async fn send(
         &mut self,
         message: TerminalAttachClientMessage,
     ) -> Result<(), TerminalError> {
@@ -74,7 +82,7 @@ impl AgentConnection {
             .map_err(|error| TerminalError::Daemon(error.to_string()))
     }
 
-    pub(super) async fn write(&mut self, data: String) -> Result<(), TerminalError> {
+    pub(in crate::terminal) async fn write(&mut self, data: String) -> Result<(), TerminalError> {
         let request_id = aow_id::new_id();
         self.send(TerminalAttachClientMessage::Write {
             request_id: request_id.clone(),
@@ -89,14 +97,14 @@ impl AgentConnection {
         }
     }
 
-    pub(super) async fn submit(&mut self, task: &str) -> Result<(), TerminalError> {
+    pub(in crate::terminal) async fn submit(&mut self, task: &str) -> Result<(), TerminalError> {
         self.write(format!("\x1b[200~{task}\x1b[201~")).await?;
         // Give the TUI's paste/input event a separate iteration before Enter.
         tokio::time::sleep(Duration::from_millis(150)).await;
         self.write("\r".into()).await
     }
 
-    pub(super) async fn finish(&mut self) -> Result<(), TerminalError> {
+    pub(in crate::terminal) async fn finish(&mut self) -> Result<(), TerminalError> {
         self.socket
             .close(None)
             .await

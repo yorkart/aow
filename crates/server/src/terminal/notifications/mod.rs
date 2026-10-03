@@ -17,6 +17,13 @@ pub(super) use api::events;
 pub(crate) use model::{TaskStopNotification, TaskStopSource};
 
 impl super::TerminalManager {
+    /// Internal consumers receive the same native events regardless of UI/IM preferences.
+    pub(in crate::terminal) fn subscribe_task_completions(
+        &self,
+    ) -> tokio::sync::broadcast::Receiver<TaskStopNotification> {
+        self.inner.task_completions.subscribe()
+    }
+
     pub(crate) fn subscribe_task_stops(
         &self,
     ) -> tokio::sync::broadcast::Receiver<TaskStopNotification> {

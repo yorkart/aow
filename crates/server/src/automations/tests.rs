@@ -737,6 +737,7 @@ async fn api_persists_config_sync_errors_and_history_across_server_restarts() {
         StatusCode::BAD_REQUEST
     );
     let mut invalid = input;
+    invalid["workspace_mode"] = "existing".into();
     invalid["workspace_path"] = directory.path().to_str().unwrap().into();
     assert_eq!(
         call(&router, "POST", "/api/aow/automations", invalid)
@@ -817,7 +818,7 @@ async fn api_accepts_temporary_workspace_tasks_without_a_base_branch() {
         "/api/aow/automations",
         serde_json::json!({
             "name":"Temporary task", "prompt":"Inspect public status", "agent":"codex",
-            "project_id":project["id"], "workspace_mode":"temporary", "workspace_path":repository,
+            "project_id":project["id"], "workspace_mode":"temporary", "workspace_path":"",
             "base_branch":"", "cron":"0 9 * * *", "max_concurrent_runs":1, "enabled":true
         }),
     )

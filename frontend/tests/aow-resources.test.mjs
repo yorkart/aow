@@ -608,6 +608,93 @@ try {
     assert.deepEqual(state.registrations, []);
   });
 
+  await test('Pinned appears for the first pin and disappears after the last visible worktree is unpinned', async t => {
+    const { page, state } = await fixture(t, { beforeOpen: async ({ context, state }) => {
+      state.pinnedWorktrees.paths = ['/workspace/removed'];
+      await context.addInitScript(() => localStorage.setItem('aow-left-width', '280'));
+    } });
+    const sidebar = page.getByRole('complementary', { name: '项目侧边栏', exact: true });
+    const pinned = sidebar.getByRole('region', { name: 'Pinned', exact: true });
+    const row = sidebar.locator(`.project-aow-worktrees button[title="${worktrees[0].path}"]`);
+    const menu = page.getByRole('menu', { name: `${worktrees[0].path} 操作`, exact: true });
+    assert.equal(await pinned.count(), 0, 'pins for removed worktrees do not leave an empty panel');
+    await row.click({ button: 'right' });
+    await menu.getByRole('menuitem', { name: 'Pin to top', exact: true }).click();
+    await pinned.locator('button[draggable="true"]').waitFor();
+    await eventually(() => state.pinnedWorktrees.paths.includes(worktrees[0].path));
+    await page.reload();
+    await pinned.locator('button[draggable="true"]').waitFor();
+    if (process.env.SIDEBAR_PINNED_SCREENSHOT) await page.screenshot({ path: process.env.SIDEBAR_PINNED_SCREENSHOT });
+    await pinned.locator('button[draggable="true"]').click({ button: 'right' });
+    await menu.getByRole('menuitem', { name: 'Unpin', exact: true }).click();
+    await eventually(async () => await pinned.count() === 0 && !state.pinnedWorktrees.paths.includes(worktrees[0].path));
+    await sidebar.getByRole('region', { name: 'Projects', exact: true }).waitFor();
+    await page.reload();
+    await row.waitFor();
+    assert.equal(await pinned.count(), 0);
+    if (process.env.SIDEBAR_EMPTY_SCREENSHOT) await page.screenshot({ path: process.env.SIDEBAR_EMPTY_SCREENSHOT });
+  });
+
+  await test('empty Pinned keeps synchronization errors visible and allows retrying', async t => {
+    let failLoad = true;
+    const { page } = await fixture(t, { beforeOpen: async ({ context }) => {
+      await context.route('**/api/aow/pinned-worktrees', route => route.fulfill(failLoad
+        ? { status: 503, json: { message: 'Pinned synchronization failed' } }
+        : { json: { paths: [], revision: 1 } }));
+    } });
+    const sidebar = page.getByRole('complementary', { name: '项目侧边栏', exact: true });
+    const alert = sidebar.getByRole('alert');
+    await alert.waitFor();
+    assert.match(await alert.textContent(), /Pinned synchronization failed/);
+    assert.equal(await sidebar.getByRole('region', { name: 'Pinned', exact: true }).count(), 0);
+    failLoad = false;
+    await alert.getByRole('button', { name: '重试', exact: true }).click();
+    await alert.waitFor({ state: 'detached' });
+    assert.equal(await sidebar.getByRole('region', { name: 'Pinned', exact: true }).count(), 0);
+    await sidebar.getByRole('region', { name: 'Projects', exact: true }).waitFor();
+  });
+
+  await test('left sidebar docked headers stay aligned after scrolling, collapsing and resizing', async t => {
+    const { page } = await fixture(t, { beforeOpen: ({ state }) => {
+      state.projects = Array.from({ length: 3 }, (_, index) => ({
+        ...project, id: index ? `project-${index}` : project.id, name: `Dock Fixture ${index}`,
+        worktrees: Array.from({ length: 12 }, (_, row) => index === 0 && row === 0 ? worktrees[0] : ({
+          ...worktrees[1], id: `wt-${index}-${row}`, project_id: index ? `project-${index}` : project.id,
+          path: `/workspace/project-${index}/wt-${row}`, branch: `feature-${row}`, is_main: row === 0,
+        })),
+      }));
+      state.pinnedWorktrees.paths = [worktrees[0].path];
+    } });
+    await page.setViewportSize({ width: 1024, height: 650 });
+    const sidebar = page.getByRole('complementary', { name: '项目侧边栏', exact: true });
+    const viewport = sidebar.locator('.aow-panel-viewport');
+    const docked = sidebar.locator('.aow-panel-header[data-docked="top"], .aow-panel-header[data-docked="bottom"]');
+    const assertAligned = async () => {
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      const bounds = await viewport.evaluate(element => ({ x: element.getBoundingClientRect().x, width: element.clientWidth }));
+      const headers = await docked.evaluateAll(elements => elements.map(element => {
+        const rect = element.getBoundingClientRect();
+        return { x: rect.x, width: rect.width, clickable: element.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)) };
+      }));
+      assert.ok(headers.length > 0);
+      assert.ok(headers.every(header => Math.abs(header.x - bounds.x) < 1 && Math.abs(header.width - bounds.width) < 1 && header.clickable), JSON.stringify(headers));
+    };
+    await viewport.evaluate(element => { element.scrollTop = element.scrollHeight; });
+    await eventually(async () => await sidebar.getByRole('region', { name: 'Pinned', exact: true }).locator('header').getAttribute('data-docked') === 'top');
+    await assertAligned();
+    const previousHeight = await viewport.evaluate(element => element.scrollHeight);
+    await sidebar.getByRole('button', { name: '收起 Dock Fixture 0', exact: true }).click();
+    await eventually(async () => await viewport.evaluate(element => element.scrollHeight) < previousHeight);
+    await assertAligned();
+    const handle = await page.getByRole('separator', { name: '调整项目栏宽度' }).boundingBox();
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + 100);
+    await page.mouse.down();
+    await page.mouse.move(handle.x + handle.width / 2 + 100, handle.y + 100);
+    await page.mouse.up();
+    await assertAligned();
+    if (process.env.SIDEBAR_DOCKED_SCREENSHOT) await page.screenshot({ path: process.env.SIDEBAR_DOCKED_SCREENSHOT });
+  });
+
   await test('project panels share aligned actions and preserve manual collapse across refreshes', async t => {
     const { page, state } = await fixture(t, { beforeOpen: ({ state }) => {
       state.projects = [project, { ...project, id: 'empty-project', name: 'Empty Project', worktrees: [] }];
@@ -623,20 +710,96 @@ try {
     assert.equal(actions.length, 6);
     assert.deepEqual(actions.slice(0, 2), actions.slice(2, 4));
     assert.deepEqual(actions.slice(0, 2), actions.slice(4, 6));
-    assert.ok(actions.every(button => button.width === 22 && button.height === 22));
+    assert.ok(actions.every(button => button.width === 24 && button.height === 24));
     await toggle.click();
     state.projects[1] = { ...state.projects[1], worktrees: [{ ...worktrees[0], project_id: 'empty-project', id: 'empty-main', path: '/workspace/empty' }] };
     await sidebar.getByRole('button', { name: '刷新全部', exact: true }).click();
     await eventually(async () => await emptyToggle.getAttribute('aria-expanded') === 'true');
     assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
     assert.equal(await projectPanel.locator('.project-aow-worktrees').isVisible(), false);
-    await sidebar.getByRole('button', { name: '收起 Projects', exact: true }).click();
-    assert.equal(await projectPanel.isVisible(), false);
-    await sidebar.getByRole('button', { name: '定位 Projects', exact: true }).click();
-    assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
-    await sidebar.getByRole('button', { name: `定位 ${project.name}`, exact: true }).click();
+    await projectPanel.getByRole('button', { name: project.name, exact: true }).click();
     assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
     await projectPanel.locator('.project-aow-worktrees').waitFor();
+  });
+
+  await test('sidebar section titles are plain headings and project rows toggle without intercepting actions', async t => {
+    const { page, state } = await fixture(t, { beforeOpen: async ({ context, state }) => {
+      state.pinnedWorktrees.paths = [worktrees[0].path];
+      await context.route('**/api/aow/projects/project/refresh', async route => {
+        state.requests.push('/api/aow/projects/project/refresh');
+        await route.fulfill({ json: state.projects[0] });
+      });
+      await context.addInitScript(() => localStorage.setItem('aow-left-width', '280'));
+    } });
+    const sidebar = page.getByRole('complementary', { name: '项目侧边栏', exact: true });
+    const headerOf = name => sidebar.getByRole('region', { name, exact: true }).locator(':scope > [data-panel-anchor] > header');
+    for (const name of ['Pinned', 'Projects']) {
+      const header = headerOf(name);
+      assert.equal(await header.locator('.aow-panel-toggle, .aow-panel-header-title > svg').count(), 0);
+      assert.equal(await header.locator('button.aow-panel-header-title').count(), 0);
+      await header.locator('.aow-panel-header-title').click();
+    }
+    await sidebar.locator('.project-aow-pinned > button').waitFor();
+    const projectPanel = sidebar.getByRole('region', { name: project.name, exact: true });
+    const header = headerOf(project.name);
+    const title = header.getByRole('button', { name: project.name, exact: true });
+    const toggle = header.locator('.aow-panel-toggle');
+    assert.equal(await header.locator(':scope > .aow-panel-toggle').count(), 0);
+    assert.deepEqual(await header.locator('.aow-panel-header-actions > button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
+      [`收起 ${project.name}`, `刷新 ${project.name} Worktree`, `${project.name} Project 操作`]);
+    await title.click();
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
+    assert.equal(await projectPanel.locator('.project-aow-worktrees').isVisible(), false);
+    await header.getByRole('button', { name: `刷新 ${project.name} Worktree`, exact: true }).click();
+    await eventually(() => state.requests.includes('/api/aow/projects/project/refresh'));
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
+    await header.getByRole('button', { name: `${project.name} Project 操作`, exact: true }).click();
+    await page.getByRole('menu').waitFor();
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
+    await page.keyboard.press('Escape');
+    await header.click({ position: { x: 3, y: 15 } });
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
+    await title.press('Enter');
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
+    await title.press('Space');
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
+    await toggle.click();
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
+    await title.click();
+    await projectPanel.locator('.project-aow-worktrees').waitFor();
+    await page.mouse.move(400, 500);
+    await title.blur();
+    if (process.env.SIDEBAR_HEADERS_SCREENSHOT) {
+      await toggle.hover();
+      await page.screenshot({ path: process.env.SIDEBAR_HEADERS_SCREENSHOT });
+    }
+  });
+
+  await test('sidebar quick navigation reveals projects without toggling them closed and supports plain section titles', async t => {
+    const { page } = await fixture(t, { beforeOpen: ({ state }) => {
+      state.pinnedWorktrees.paths = [worktrees[0].path];
+      state.projects = [project, ...Array.from({ length: 11 }, (_, index) => ({
+        ...project, id: `empty-${index}`, name: `Empty Project ${index}`, worktrees: [],
+      }))];
+    } });
+    await page.setViewportSize({ width: 1024, height: 400 });
+    const sidebar = page.getByRole('complementary', { name: '项目侧边栏', exact: true });
+    const jump = sidebar.getByRole('combobox', { name: '快速定位面板', exact: true });
+    await jump.waitFor();
+    const target = sidebar.getByRole('region', { name: 'Empty Project 10', exact: true });
+    const toggle = target.locator('.aow-panel-toggle');
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
+    await jump.selectOption({ label: 'Empty Project 10' });
+    await eventually(async () => await toggle.getAttribute('aria-expanded') === 'true');
+    await jump.selectOption({ label: 'Empty Project 10' });
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
+    await target.getByRole('button', { name: 'Empty Project 10', exact: true }).click();
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
+    await jump.selectOption({ label: 'Projects' });
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
+    await jump.selectOption({ label: 'Pinned' });
+    await eventually(async () => await sidebar.locator('.aow-panel-viewport').evaluate(element => element.scrollTop) === 0);
+    await sidebar.locator('.project-aow-pinned > button').waitFor();
   });
 
   await test('worktree cleanup filters only in the dialog, confirms dirty items and tracks mixed background results after closing', async t => {
@@ -759,9 +922,9 @@ try {
     assert.deepEqual(await order(), [paths[0], paths[2], paths[4], paths[1], paths[3]]);
     assert.equal(await row(1).textContent(), 'branch-1');
     assert.equal(await row(1).locator('svg, strong, small').count(), 0);
-    assert.equal(await row(1).evaluate(element => element.getBoundingClientRect().height), 22);
+    assert.equal(await row(1).evaluate(element => element.getBoundingClientRect().height), 27);
     assert.equal(await row(1).locator('.project-aow-worktree-branch').evaluate(element => getComputedStyle(element).fontWeight), '400');
-    assert.equal(await row(1).locator('.project-aow-worktree-dot').evaluate(element => getComputedStyle(element, '::before').backgroundColor), 'rgb(115, 123, 135)');
+    assert.equal(await row(1).locator('.project-aow-worktree-dot').evaluate(element => getComputedStyle(element, '::before').backgroundColor), 'rgb(104, 118, 139)');
     assert.equal(await page.locator('.project-aow-surface').count(), 1, 'inventory must not mount unopened workspaces');
     assert.ok(state.terminalSockets.every(socket => socket.url().includes('/terminals/wt-0-tab/')), 'inventory must not attach to unopened terminals');
 
@@ -1027,6 +1190,7 @@ try {
   await test('worktree icon save failures restore the previous shape and keep its color', async t => {
     const { page, state } = await fixture(t);
     const row = page.locator(`.project-aow-worktrees button[title="${worktrees[0].path}"]`);
+    const originalColor = await row.locator('svg').evaluate(svg => getComputedStyle(svg).color);
     const menu = page.getByRole('menu', { name: `${worktrees[0].path} 操作`, exact: true });
     await row.click({ button: 'right' });
     await menu.getByRole('menuitemradio', { name: '猫', exact: true }).click();
@@ -1043,7 +1207,7 @@ try {
     await row.locator('svg.lucide-cat').waitFor();
     await page.getByText('Appearance save failed', { exact: true }).waitFor();
     assert.equal(await menu.getByRole('menuitemradio', { name: '猫', exact: true }).getAttribute('aria-checked'), 'true');
-    assert.equal(await row.locator('svg').evaluate(svg => getComputedStyle(svg).color), 'rgb(143, 165, 191)');
+    assert.equal(await row.locator('svg').evaluate(svg => getComputedStyle(svg).color), originalColor);
     await page.reload();
     await row.locator('svg.lucide-cat').waitFor();
   });
@@ -2004,12 +2168,10 @@ try {
     await page.getByRole('button', { name: '显示左侧栏', exact: true }).click();
     state.projects = [];
     await page.getByRole('button', { name: '刷新全部', exact: true }).click();
-    await page.getByRole('button', { name: '定位 Projects', exact: true }).click();
     await page.locator('.project-aow-onboarding').waitFor();
     await page.getByRole('button', { name: '隐藏左侧栏', exact: true }).click();
     await page.reload();
     await page.getByRole('button', { name: '显示左侧栏', exact: true }).click();
-    await page.getByRole('button', { name: '定位 Projects', exact: true }).click();
     await page.locator('.project-aow-onboarding').getByRole('button', { name: '注册项目' }).click();
     await page.getByRole('dialog').waitFor();
   });
@@ -2428,7 +2590,7 @@ try {
     await panel.getByRole('button', { name: '打开系统文件浏览器', exact: true }).click();
     await panel.getByRole('button', { name: '打开 edit.txt', exact: true }).click();
     await panel.locator('.monaco-editor').first().waitFor();
-    const editorInput = panel.locator('.monaco-editor textarea').first();
+    const editorInput = panel.locator('.monaco-editor [role="textbox"]').first();
     await editorInput.focus();
     await editorInput.press('ControlOrMeta+A');
     await editorInput.pressSequentially('Shared buffer');
@@ -2452,7 +2614,7 @@ try {
     await panel.getByRole('button', { name: '新建 Markdown', exact: true }).click();
     await eventually(async () => await panel.getByRole('tab').filter({ hasText: '.tmp-fixture.md' }).count() === 2);
     const sourcePath = '/notes/localhost/test/__aow_floating/.tmp-fixture.md';
-    const editor = panel.locator('.monaco-editor textarea').first();
+    const editor = panel.locator('.monaco-editor [role="textbox"]').first();
     await editor.focus();
     await editor.pressSequentially('Before migration');
     await eventually(() => Promise.resolve(state.textFiles[sourcePath].content === 'Before migration'));
@@ -2841,7 +3003,7 @@ try {
     await dialog.getByLabel('Arguments', { exact: true }).fill('--model\nmodel with spaces');
     assert.equal(await dialog.getByLabel('Environment keys', { exact: true }).count(), 0);
     const env = { BASE_URL: 'https://example.com/api?a=b', EMPTY: '', HOME: '/agent/home' };
-    await dialog.getByLabel('Environment variables', { exact: true }).fill(JSON.stringify(env));
+    await dialog.getByLabel('Environment variables', { exact: true }).fill('BASE_URL=https://example.com/api?a=b\nEMPTY=\nHOME=/agent/home');
     await dialog.getByRole('button', { name: '保存配置', exact: true }).click();
     await dialog.getByRole('status').waitFor();
     assert.deepEqual(state.agentUpdates, [{ id: 'codex', agent_type: 'codex', display_name: 'Codex', command: 'codex', args: ['--model', 'model with spaces'], env }]);
@@ -2853,12 +3015,12 @@ try {
     await dialog.getByRole('button', { name: '编辑 Codex', exact: true }).click();
     assert.equal(await dialog.getByLabel('Executable', { exact: true }).inputValue(), 'codex');
     assert.equal(await dialog.getByLabel('Arguments', { exact: true }).inputValue(), '--model\nmodel with spaces');
-    assert.deepEqual(JSON.parse(await dialog.getByLabel('Environment variables', { exact: true }).inputValue()), env);
+    assert.equal(await dialog.getByLabel('Environment variables', { exact: true }).inputValue(), 'BASE_URL=https://example.com/api?a=b\nEMPTY=\nHOME=/agent/home');
     await dialog.getByRole('button', { name: '移除配置', exact: true }).click();
     await dialog.getByText('Auto detected', { exact: true }).waitFor();
     await dialog.getByRole('button', { name: '编辑 Codex', exact: true }).click();
     assert.equal(await dialog.getByLabel('Arguments', { exact: true }).inputValue(), '');
-    assert.equal(await dialog.getByLabel('Environment variables', { exact: true }).inputValue(), '{}');
+    assert.equal(await dialog.getByLabel('Environment variables', { exact: true }).inputValue(), '');
     await dialog.getByRole('button', { name: '取消编辑', exact: true }).click();
     assert.equal(await dialog.getByRole('button', { name: '注册', exact: true }).isDisabled(), true);
     await dialog.getByLabel('Agent 类型', { exact: true }).selectOption('codex');
@@ -2964,7 +3126,7 @@ try {
     await dialog.getByLabel('Executable', { exact: true }).fill('/opt/custom/start');
     await dialog.getByLabel('Arguments', { exact: true }).fill('--anything\nvalue with spaces');
     const env = { CUSTOM_URL: 'https://example.com', EMPTY: '' };
-    await dialog.getByLabel('Environment variables', { exact: true }).fill(JSON.stringify(env));
+    await dialog.getByLabel('Environment variables', { exact: true }).fill('CUSTOM_URL=https://example.com\nEMPTY=');
     assert.equal(await dialog.getByRole('button', { name: '注册', exact: true }).isDisabled(), true);
     assert.equal(await type.evaluate(element => element.validity.valueMissing), true);
     assert.equal(state.agentUpdates.length, 0);
@@ -2989,6 +3151,86 @@ try {
     assert.equal(await menu.getByRole('button', { name: 'My custom wrapper', exact: true }).locator('img.agent-icon').getAttribute('src'), icons[1]);
   });
 
+  await test('agent executable suggestions prefer detection, then the first matching configuration, and preserve manual edits', async t => {
+    const base = { available: true, args: ['--configured'], env: { PROFILE: 'configured' } };
+    const registeredAgents = [
+      { ...base, id: 'custom-codex', agent_type: 'codex', display_name: 'Configured Codex', source: 'configured', command: 'codex-wrapper', executable: '/configured/codex' },
+      { ...base, id: 'codex', display_name: 'Codex', source: 'detected', command: 'codex', executable: '/detected/codex' },
+      { ...base, id: 'first-claude', agent_type: 'claude', display_name: 'First Claude', source: 'configured', command: 'claude', executable: '/configured/first/claude' },
+      { ...base, id: 'second-claude', agent_type: 'claude', display_name: 'Second Claude', source: 'configured', command: 'claude', executable: '/configured/second/claude' },
+      { ...base, id: 'custom-trae', agent_type: 'traecli', display_name: 'Trae wrapper', source: 'configured', command: 'trae-wrapper', executable: null, available: false },
+    ];
+    const { page, state } = await fixture(t, { registeredAgents });
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    const dialog = page.locator('.project-aow-settings');
+    await dialog.getByRole('button', { name: /Agents/ }).click();
+    const type = dialog.getByLabel('Agent 类型', { exact: true });
+    const executable = dialog.getByLabel('Executable', { exact: true });
+    for (const [agentType, expected] of [['codex', '/detected/codex'], ['claude', '/configured/first/claude'], ['traecli', 'trae-wrapper'], ['hermes', '']]) {
+      await type.selectOption(agentType);
+      assert.equal(await executable.inputValue(), expected);
+      assert.equal(await dialog.getByLabel('Arguments', { exact: true }).inputValue(), '');
+      assert.equal(await dialog.getByLabel('Environment variables', { exact: true }).inputValue(), '');
+    }
+    await executable.fill('/manual/hermes');
+    await type.selectOption('codex');
+    assert.equal(await executable.inputValue(), '/manual/hermes', 'manually entered paths remain editable when choosing a type');
+    await dialog.getByRole('button', { name: '刷新', exact: true }).click();
+    assert.equal(await executable.inputValue(), '/manual/hermes', 'refreshing discovery leaves the draft intact');
+    await executable.fill('');
+    await type.selectOption('claude');
+    assert.equal(await executable.inputValue(), '/configured/first/claude');
+    assert.deepEqual(state.agentUpdates, []);
+  });
+
+  await test('agent copies create a new identity and preserve the original configuration through failed saves', async t => {
+    const agent = {
+      id: 'codex', agent_type: 'codex', display_name: 'Work Codex', source: 'configured', available: true,
+      command: '/opt/work/codex', executable: '/opt/work/codex', args: ['--model', 'model with spaces', '-c', 'key="a b"'],
+      env: { BASE_URL: 'https://work.example.com/api?a=b', EMPTY: '', MULTILINE: 'first\nsecond' },
+    };
+    const detected = { id: 'claude', agent_type: 'claude', display_name: 'Claude Code', source: 'detected', available: true, command: 'claude', executable: '/usr/bin/claude', args: [], env: {} };
+    const { page, state } = await fixture(t, { registeredAgents: [agent, detected] });
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    const dialog = page.locator('.project-aow-settings');
+    await dialog.getByRole('button', { name: /Agents/ }).click();
+    assert.equal(await dialog.getByRole('button', { name: /^复制 / }).count(), 2);
+    await dialog.getByRole('button', { name: '编辑 Work Codex', exact: true }).click();
+    assert.equal(await dialog.getByLabel('Agent 类型', { exact: true }).isDisabled(), true);
+    await dialog.getByRole('button', { name: '复制 Work Codex', exact: true }).click();
+    assert.equal(await dialog.getByLabel('Agent 类型', { exact: true }).isDisabled(), false, 'copied builtin configurations are new, editable profiles');
+    assert.equal(await dialog.getByLabel('Agent 类型', { exact: true }).inputValue(), 'codex');
+    assert.equal(await dialog.getByLabel('Display name', { exact: true }).inputValue(), 'Work Codex（副本）');
+    assert.equal(await dialog.getByLabel('Executable', { exact: true }).inputValue(), agent.command);
+    assert.equal(await dialog.getByLabel('Arguments', { exact: true }).inputValue(), agent.args.join('\n'));
+    const env = dialog.getByLabel('Environment variables', { exact: true });
+    assert.equal(await env.inputValue(), 'BASE_URL=https://work.example.com/api?a=b\nEMPTY=\nMULTILINE=first\\nsecond');
+    assert.deepEqual(state.agentUpdates, [], 'copying only prepares a draft');
+    await dialog.getByLabel('Display name', { exact: true }).fill('Personal Codex');
+    await env.fill((await env.inputValue()).replace('https://work.example.com', 'https://personal.example.com'));
+    state.failAgentSave = true;
+    await dialog.getByRole('button', { name: '注册', exact: true }).click();
+    await dialog.getByRole('alert').filter({ hasText: 'Agent configuration write failed' }).waitFor();
+    assert.equal(await dialog.getByLabel('Display name', { exact: true }).inputValue(), 'Personal Codex');
+    assert.deepEqual(state.registeredAgents, [agent, detected]);
+    state.failAgentSave = false;
+    await dialog.getByRole('button', { name: '注册', exact: true }).click();
+    await dialog.getByRole('status').waitFor();
+    const update = state.agentUpdates.at(-1);
+    assert.equal(Object.hasOwn(update, 'id'), false, 'copies never submit the original ID');
+    assert.deepEqual(update, { agent_type: 'codex', display_name: 'Personal Codex', command: agent.command, args: agent.args,
+      env: { ...agent.env, BASE_URL: 'https://personal.example.com/api?a=b' } });
+    assert.equal(state.registeredAgents.length, 3);
+    assert.deepEqual(state.registeredAgents.find(item => item.id === agent.id), agent);
+    await dialog.getByRole('button', { name: '编辑 Personal Codex', exact: true }).click();
+    assert.equal(await env.inputValue(), 'BASE_URL=https://personal.example.com/api?a=b\nEMPTY=\nMULTILINE=first\\nsecond');
+    await dialog.getByRole('button', { name: '复制 Claude Code', exact: true }).click();
+    assert.equal(await dialog.getByLabel('Agent 类型', { exact: true }).inputValue(), 'claude');
+    assert.equal(await dialog.getByLabel('Agent 类型', { exact: true }).isDisabled(), false);
+    assert.equal(await dialog.getByLabel('Display name', { exact: true }).inputValue(), 'Claude Code（副本）');
+    assert.equal(await env.inputValue(), '');
+  });
+
   await test('unavailable configured agents retain editable commands and invalid or failed saves preserve the draft', async t => {
     const agent = { id: 'custom-missing', display_name: 'Missing agent', source: 'configured', available: false, command: 'missing-cli', executable: null, args: ['--existing'], env: { BASE_URL: 'https://example.com' } };
     const { page, state } = await fixture(t, { registeredAgents: [agent] });
@@ -3009,18 +3251,19 @@ try {
     assert.equal(await args.inputValue(), '--model "incomplete');
     assert.equal(state.agentUpdates.length, 0);
     await args.fill('--changed');
-    for (const invalid of ['[]', 'null', '{"KEY":42}', '{"BAD=KEY":"value"}']) {
+    for (const invalid of ['MISSING_SEPARATOR', '=value', 'BAD-KEY=value', '{"KEY":"value"}', 'KEY=one\nKEY=two']) {
       await env.fill(invalid);
       await save.click();
-      await dialog.getByText('Environment variables 必须是变量名到字符串值的 JSON 对象', { exact: true }).waitFor();
+      await dialog.getByRole('alert').filter({ hasText: /Environment variables 第 \d+ 行/ }).waitFor();
       assert.equal(state.agentUpdates.length, 0);
+      assert.equal(await env.inputValue(), invalid, 'validation keeps the invalid draft editable');
     }
-    await env.fill('{"KEY":"value"}');
+    await env.fill('KEY=value');
     state.failAgentSave = true;
     await save.click();
     await dialog.getByText('Agent configuration write failed', { exact: true }).waitFor();
     assert.equal(await args.inputValue(), '--changed');
-    assert.equal(await env.inputValue(), '{"KEY":"value"}');
+    assert.equal(await env.inputValue(), 'KEY=value');
     assert.deepEqual(state.registeredAgents, [agent]);
     state.failAgentSave = false;
     await save.click();

@@ -1,4 +1,5 @@
 import { ChevronRight, MessageSquare } from 'lucide-react';
+import { TokenUsageBadge } from '../../components/TokenUsageBadge';
 import { sessionsApi } from './api';
 import { AgentIcon } from '../agents/AgentIcon';
 import { SessionShareButton } from './SessionShareButton';
@@ -52,7 +53,10 @@ export function MobileSessionReader({ session, workspace, back }: { session: Aow
         <div className="mobile-turn-label">第 {index + 1} 轮 · {statusNames[turn.status]}{index === snapshot.data!.turns.length - 1 && <span>最新一轮</span>}</div>
         <section className="mobile-message user"><SessionMessageContent text={turn.user.text} className="mobile-markdown" /></section>
         <section className="mobile-message assistant">
-          <header className="mobile-session-agent"><AgentIcon agentId={session.agent} /><strong>{{ codex: 'Codex', claude: 'Claude', traecli: 'TraeCode CLI', hermes: 'Hermes' }[session.agent]}</strong></header>
+          <header className="mobile-session-agent">
+            <AgentIcon agentId={session.agent} /><strong>{{ codex: 'Codex', claude: 'Claude', traecli: 'TraeCode CLI', hermes: 'Hermes' }[session.agent]}</strong>
+            <span className="mobile-session-agent-meta"><TokenUsageBadge usage={turn.usage} split />{turn.final?.timestamp && <time dateTime={turn.final.timestamp}>{mobileTime(turn.final.timestamp)}</time>}</span>
+          </header>
           <SessionTurnProcess key={`${session.id}:${turn.id}:${index === snapshot.data!.turns.length - 1}`} turn={turn} isLatest={index === snapshot.data!.turns.length - 1} />
           {turn.final && <SessionMessageContent text={turn.final.text} imageReferenceText={turn.user.text} className="mobile-markdown" />}
           <SessionTurnPending turn={turn} />

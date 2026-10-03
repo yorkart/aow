@@ -55,6 +55,7 @@ async fn multiplexes_snapshots_changes_and_live_notifications_and_resyncs_on_rec
             cwd: "/tmp".into(),
             turn_id: None,
             conclusion: None,
+            usage: None,
             instance_ids: vec![],
             sources: vec![],
         })

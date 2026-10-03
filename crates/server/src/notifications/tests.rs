@@ -200,6 +200,7 @@ fn event() -> TaskStopNotification {
         cwd: "/repo".into(),
         turn_id: None,
         conclusion: Some("本轮结论".into()),
+        usage: None,
         instance_ids: vec!["pane".into()],
         sources: vec![TaskStopSource {
             project_name: "AoW".into(),
@@ -209,6 +210,58 @@ fn event() -> TaskStopNotification {
             tab_url: None,
         }],
     }
+}
+
+#[test]
+fn completed_messages_include_only_the_observed_turn_usage_when_available() {
+    let mut event = event();
+    assert!(
+        messages::task_completed(&event)
+            .fields
+            .iter()
+            .all(|field| field.label != "本轮 Token")
+    );
+    for (input, output, cached, expected) in [
+        (
+            100,
+            20,
+            50,
+            "合计：120 tokens\n输入：100 tokens · 输出：20 tokens\n缓存命中：50 tokens（包含在输入中）",
+        ),
+        (
+            880_000,
+            2_825,
+            500_000,
+            "合计：882.8K tokens\n输入：880K tokens · 输出：2.8K tokens\n缓存命中：500K tokens（包含在输入中）",
+        ),
+        (
+            999_950,
+            1_250,
+            0,
+            "合计：1M tokens\n输入：1M tokens · 输出：1.3K tokens\n缓存命中：0 tokens（包含在输入中）",
+        ),
+    ] {
+        event.usage = Some(aow_agents::sessions::usage::TokenUsage {
+            input_tokens: input,
+            output_tokens: output,
+            cached_input_tokens: cached,
+            total_tokens: input + output,
+            ..Default::default()
+        });
+        let message = messages::task_completed(&event);
+        let field = message
+            .fields
+            .iter()
+            .find(|field| field.label == "本轮 Token")
+            .unwrap();
+        assert_eq!(field.value, expected);
+        assert_eq!(message.body, "本轮结论");
+    }
+    assert!(
+        !serde_json::to_string(&event)
+            .unwrap()
+            .contains("total_token_usage")
+    );
 }
 
 #[test]

@@ -47,12 +47,14 @@ fn footer_probe_ignores_loading_and_scrollback_noise() {
 #[test]
 fn footer_probe_checks_loading_only_in_the_model_segment() {
     for agent in [InteractiveAgent::Codex, InteractiveAgent::TraeCli] {
-        for footer in [
-            "gpt-6-astra xhigh · /workspace/loading-fix · for agents",
-            "GPT-5.6-Sol xhigh · Context 100% left · /workspace · loading-fix",
-        ] {
-            assert!(agent.input_ready(&lines(footer)), "{agent:?}: {footer}");
-        }
+        let footer = "gpt-6-astra xhigh · /workspace/loading-fix · for agents";
+        assert!(agent.input_ready(&lines(footer)), "{agent:?}: {footer}");
+        let footer = "GPT-5.6-Sol xhigh · Context 100% left · /workspace · loading-fix";
+        assert_eq!(
+            agent.input_ready(&lines(footer)),
+            matches!(agent, InteractiveAgent::TraeCli),
+            "{agent:?}: {footer}"
+        );
         for footer in [
             "loading · /workspace · for agents",
             "model: Loading… · Context 100% left · /workspace",

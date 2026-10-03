@@ -175,29 +175,40 @@ impl ConfigRepository {
         .context("配置文件已保存，但 Git 提交失败；再次保存可重试")
     }
 
-    /// Remove one configuration file and record the deletion in Git. Retrying
-    /// after a failed commit also works when the file has already been removed.
-    pub fn remove(&self, relative: &Path) -> Result<()> {
+    /// Update a configuration directory under one repository lock and commit.
+    /// The callback must finish its durable writes before returning. A commit
+    /// failure leaves those writes intact, just as `save` does.
+    pub fn update_directory(
+        &self,
+        relative: &Path,
+        update: impl FnOnce(&Path) -> Result<()>,
+    ) -> Result<()> {
         ensure!(
-            is_configuration(relative),
-            "不支持的配置文件：{}",
+            matches!(
+                relative.to_str(),
+                Some("inbox" | "automations/tasks" | "review-providers")
+            ),
+            "不支持的配置目录：{}",
             relative.display()
         );
         let _save = self.lock()?;
-        let mut path = self.directory.clone();
+        let mut directory = self.directory.clone();
         for component in relative.components() {
-            path.push(component);
-            ensure!(!path.is_symlink(), "配置文件不能通过符号链接访问其他目录");
+            directory.push(component);
+            ensure!(!directory.is_symlink(), "配置目录不能是符号链接");
+            private_directories(&directory)?;
         }
-        match fs::remove_file(&path) {
-            Ok(()) => {
-                fs::File::open(path.parent().unwrap())?.sync_all()?;
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error.into()),
-        }
-        self.commit(&path, &format!("Remove {}", relative.display()))
-            .context("配置文件已删除，但 Git 提交失败；再次删除可重试")
+        check_directory(&directory)?;
+        update(&directory)?;
+        self.commit(
+            &directory,
+            &format!(
+                "Update {}: {}",
+                self.directory.file_name().unwrap().to_string_lossy(),
+                relative.display()
+            ),
+        )
+        .context("配置目录已保存，但 Git 提交失败；再次保存可重试")
     }
 
     fn lock(&self) -> Result<FileLock> {
@@ -206,21 +217,11 @@ impl ConfigRepository {
 
     fn commit(&self, path: &Path, message: &str) -> Result<()> {
         let relative = path.strip_prefix(&self.repository)?;
-        if path.try_exists()? {
-            git_checked(
-                git_command(&self.repository)
-                    .args(["add", "--all", "--"])
-                    .arg(relative),
-            )?;
-        } else {
-            // A failed initial save may leave an untracked file, and a failed
-            // deletion commit may leave no index entry. Both are retryable.
-            git_checked(
-                git_command(&self.repository)
-                    .args(["rm", "--cached", "--ignore-unmatch", "--"])
-                    .arg(relative),
-            )?;
-        }
+        git_checked(
+            git_command(&self.repository)
+                .args(["add", "--all", "--"])
+                .arg(relative),
+        )?;
         let diff = git_command(&self.repository)
             .args(["diff", "--cached", "--quiet", "--"])
             .arg(relative)
@@ -241,4 +242,26 @@ impl ConfigRepository {
         )?;
         Ok(())
     }
+}
+
+fn check_directory(directory: &Path) -> Result<()> {
+    for entry in fs::read_dir(directory)? {
+        let entry = entry?;
+        let kind = entry.file_type()?;
+        ensure!(
+            !kind.is_symlink(),
+            "配置目录不能包含符号链接：{}",
+            entry.path().display()
+        );
+        if kind.is_dir() {
+            check_directory(&entry.path())?;
+        } else {
+            ensure!(
+                kind.is_file(),
+                "配置必须是普通文件：{}",
+                entry.path().display()
+            );
+        }
+    }
+    Ok(())
 }

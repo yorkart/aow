@@ -1,4 +1,5 @@
 use super::*;
+use crate::sessions::usage::{CodexUsage, TokenUsage};
 
 pub(super) fn resolve(context: LiveSessionContext<'_>) -> SessionResolution {
     let title = normalized_title(context.title, context.cwd);
@@ -29,6 +30,8 @@ pub(super) fn candidates(
 pub(super) struct Parser {
     turn_id: Option<String>,
     conclusion: Option<String>,
+    usage: Option<TokenUsage>,
+    token_events: CodexUsage,
 }
 
 impl TaskStopParser for Parser {
@@ -49,15 +52,21 @@ impl TaskStopParser for Parser {
                     Some(Value::String(text)) => (!text.trim().is_empty()).then(|| text.clone()),
                     _ => fallback,
                 };
+                let usage = self.usage.take().filter(|_| same_turn);
                 self.reset();
                 return Some(TaskStopped {
                     turn_id,
                     conclusion,
+                    usage,
                 });
             }
-            ("event_msg", "turn_aborted" | "task_aborted" | "error" | "user_message") => {
-                self.reset()
+            ("event_msg", "turn_aborted" | "task_aborted" | "error") => self.reset(),
+            ("event_msg", "token_count") => {
+                if let Some(usage) = self.token_events.consume(payload) {
+                    TokenUsage::accumulate(&mut self.usage, usage);
+                }
             }
+            ("event_msg", "user_message") => self.conclusion = None,
             ("event_msg", "agent_message") => self.assistant(payload, "message"),
             ("event_msg", "item_completed")
                 if matches!(
@@ -70,7 +79,7 @@ impl TaskStopParser for Parser {
             ("response_item", "message") if payload["role"] == "assistant" => {
                 self.assistant(payload, "content");
             }
-            ("response_item", "message") if payload["role"] == "user" => self.reset(),
+            ("response_item", "message") if payload["role"] == "user" => self.conclusion = None,
             ("response_item", "function_call" | "custom_tool_call" | "web_search_call") => {
                 self.conclusion = None;
             }
@@ -80,7 +89,9 @@ impl TaskStopParser for Parser {
     }
 
     fn reset(&mut self) {
-        *self = Self::default();
+        self.turn_id = None;
+        self.conclusion = None;
+        self.usage = None;
     }
 }
 

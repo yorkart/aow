@@ -14,6 +14,7 @@ members = [
   "crates/server",
   "crates/im",
   "crates/automations",
+  "crates/workspaces",
   "crates/cli",
 ]
 resolver = "2"

@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { ArrowUp, Keyboard, KeyboardOff, List, ShieldCheck, TerminalSquare } from 'lucide-react';
 import { TerminalPaneView } from './TerminalPaneView';
 import { TerminalPanel } from './TerminalPanel';
+import { TerminalHostingButton } from './TerminalHostingButton';
+import { TerminalHostingDetails, hostingStatus } from './TerminalHostingStatus';
 import { TerminalLifecycleDot } from './TerminalLifecycleDot';
 import { isCliTerminal } from './terminalPresentation';
 import { AgentIcon } from '../agents/AgentIcon';
@@ -141,6 +143,7 @@ export function MobileTerminals({ project, worktree, visible, headerActions, ini
   const error = operationError || terminals.error || (hasHostedTabs ? projectTerminals.error : '');
   return <section className="mobile-terminal-page">
     {visible && headerActions && createPortal(<>
+      {active && terminalPaneAgent(active.pane, detectedAgents) && <TerminalHostingButton tab={active.tab} pane={active.pane} onChange={tab => { if (tab.workspace_root === workspace) terminals.replace(tab); else projectTerminals.reload(); }} />}
       <button ref={catalogButton} className="mobile-icon-button" aria-label="终端列表" aria-haspopup="dialog" aria-expanded={catalogOpen} aria-controls={catalogId}
         onClick={() => setCatalogOpen(true)}><List size={21} /></button>
       <MobileRefresh reload={reload} loading={terminals.loading || projectTerminals.loading} />
@@ -188,7 +191,7 @@ function MobileTerminal({ entry, visible, onStatus }: {
   const input = useRef<HTMLTextAreaElement>(null);
   const focusedInput = useRef<HTMLTextAreaElement | null>(null);
   const composing = useRef(false);
-  const [requested, setRequested] = useState(Boolean(entry.pane.agent_terminal));
+  const [requested, setRequested] = useState(Boolean(entry.pane.agent_terminal || entry.pane.hosting));
   const [force, setForce] = useState(false);
   const [connection, setConnection] = useState<TerminalConnectionState>('disconnected');
   const [message, setMessage] = useState<string>();
@@ -202,7 +205,8 @@ function MobileTerminal({ entry, visible, onStatus }: {
   });
   const [frame, setFrame] = useState<TerminalFrame>({ cols: 80, rows: 24, width: 0, height: 360, top: 0, cursorRow: 0 });
   const surface = useMobileTerminalSurface(viewport, frame, visible);
-  const ready = requested && visible && connection === 'connected';
+  const ready = requested && visible && connection === 'connected' && !entry.pane.hosting;
+  useEffect(() => { if (entry.pane.hosting) setRequested(true); }, [entry.pane.hosting?.id]);
   useLayoutEffect(() => {
     const node = input.current;
     if (!node || !visible) return;
@@ -265,12 +269,13 @@ function MobileTerminal({ entry, visible, onStatus }: {
             onConnectionChange={(state, detail) => { setConnection(state); setMessage(detail); if (state === 'connected') setForce(false); }} />
         </div>
       </div>
-      {(!requested || running && !ready && connection !== 'observing') && <div className="mobile-terminal-welcome">
+      {!entry.pane.hosting && (!requested || running && !ready && connection !== 'observing') && <div className="mobile-terminal-welcome">
         <TerminalSquare size={28} /><strong>{entry.title}</strong>
         <p role="status">{requested ? terminalPaneStatusMessage(entry.pane, connection, message) : running ? '接管后同步终端画面与输入' : '进程已结束，可查看保留的输出'}</p>
         <button className="mobile-button mobile-terminal-claim" disabled={requested && connection === 'connecting'} onClick={claim}><ShieldCheck size={14} />{running ? requested ? '重新接管' : '接管终端' : '查看输出'}</button>
       </div>}
-      {requested && running && connection === 'observing' && <button className="mobile-button mobile-terminal-observing-claim" disabled={Boolean(entry.pane.agent_terminal && entry.pane.agent_terminal.phase !== 'ready')} onClick={claim}><ShieldCheck size={14} />接管终端</button>}
+      {entry.pane.hosting && <div className="mobile-terminal-hosting"><div><span>{hostingStatus(entry.pane.hosting)}</span><button className="mobile-button" onClick={claim}>接管</button></div><TerminalHostingDetails hosting={entry.pane.hosting} /></div>}
+      {!entry.pane.hosting && requested && running && connection === 'observing' && <button className="mobile-button mobile-terminal-observing-claim" disabled={Boolean(entry.pane.agent_terminal && entry.pane.agent_terminal.phase !== 'ready')} onClick={claim}><ShieldCheck size={14} />接管终端</button>}
     </div>
     <div className="mobile-terminal-input">
       <div className="mobile-accessory-keys" aria-label="终端辅助按键">

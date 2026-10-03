@@ -50,6 +50,33 @@ fn stop(locator: &AgentSessionLocator) {
 }
 
 #[test]
+fn completion_notifications_forward_only_their_readers_observed_usage() {
+    let root = tempfile::tempdir().unwrap();
+    let locator = fixture(root.path(), "usage", 1);
+    let mut registry = Registry::default();
+    registry.register("pane".into(), identity("title"), vec![locator.clone()]);
+    writeln!(
+        OpenOptions::new()
+            .append(true)
+            .open(&locator.transcript_path)
+            .unwrap(),
+        "{}",
+        serde_json::json!({"type":"event_msg","payload":{"type":"token_count","info":{
+            "last_token_usage":{"input_tokens":100,"output_tokens":20},
+            "total_token_usage":{"input_tokens":10000,"output_tokens":2000}
+        }}})
+    )
+    .unwrap();
+    stop(&locator);
+    let events = registry.poll();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].usage.unwrap().total_tokens, 120);
+    assert_eq!(events[0].session_id, "usage");
+    stop(&locator);
+    assert_eq!(registry.poll()[0].usage, None);
+}
+
+#[test]
 fn refresh_keeps_existing_positions_and_new_candidates_start_at_eof() {
     let root = tempfile::tempdir().unwrap();
     let mut a = fixture(root.path(), "a", 1);
@@ -283,6 +310,7 @@ async fn event_endpoint_streams_only_new_callbacks() {
         cwd: "/workspace".into(),
         turn_id: None,
         conclusion: Some("本轮结论".into()),
+        usage: None,
         instance_ids: vec!["pane".into()],
         sources: Vec::new(),
     };

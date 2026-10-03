@@ -11,7 +11,8 @@
 - For modules with child modules, use a consistent directory-based module layout: place the module root and all child module source files within that module's directory. Do not use a mixed layout that places the module root file alongside a same-named module directory.
 - After changing Rust code, run `cargo fmt --all -- --check` and relevant tests. For changes affecting multiple crates, run `cargo test --workspace`.
 - For frontend or VT worker changes, follow the existing npm scripts in the relevant directory and run the applicable build, typecheck, or tests.
-- For changes spanning multiple components or delivering a complete feature, use the validation targets in `justfile`: `just build` and `just test`.
+- For changes spanning multiple components or delivering a complete feature, use the validation targets in `justfile`: `just build` and `just test`, subject to the regression-test restriction below.
+- Do not run installation and release script regression tests (`node --test scripts/tests/*.test.mjs`) during normal development. Run them only when developing or modifying installation or release script functionality. Since `just test` includes these tests, run its remaining validation steps individually for unrelated changes.
 - If validation cannot be run because of environment or dependency issues, state that clearly; do not claim it passed.
 
 ## Pull Request Requirements

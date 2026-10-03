@@ -1,4 +1,5 @@
 use super::*;
+use crate::sessions::usage::{CodexUsage, TokenUsage};
 
 pub(super) fn parse_codex_like(path: &Path) -> Result<Vec<SnapshotTurn>, SnapshotError> {
     let file = File::open(path)?;
@@ -8,6 +9,7 @@ pub(super) fn parse_codex_like(path: &Path) -> Result<Vec<SnapshotTurn>, Snapsho
     // A running task can receive several user inputs, each displayed as a turn.
     // Keep those drafts together until the task's terminal event settles them.
     let mut task_start = None;
+    let mut token_events = CodexUsage::default();
 
     for record in BufReader::new(file).lines().flat_map(codex_records) {
         let record = record?;
@@ -24,6 +26,15 @@ pub(super) fn parse_codex_like(path: &Path) -> Result<Vec<SnapshotTurn>, Snapsho
         };
 
         match (string(record, "type"), event_type) {
+            (Some("event_msg"), "token_count") => {
+                if let Some(usage) = record
+                    .get("payload")
+                    .and_then(|payload| token_events.consume(payload))
+                    && let Some(draft) = current.as_mut()
+                {
+                    TokenUsage::accumulate(&mut draft.usage, usage);
+                }
+            }
             (Some("event_msg"), "task_started" | "turn_started") => {
                 finish_task(&mut turns, &mut current, &mut task_start);
                 task_start = Some(turns.len());

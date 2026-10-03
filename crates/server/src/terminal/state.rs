@@ -13,9 +13,13 @@ pub(super) struct ManagerInner {
     pub(super) operation: tokio::sync::Mutex<()>,
     pub(super) runtime_sync: tokio::sync::Mutex<()>,
     pub(super) agent_operations: Mutex<HashMap<String, std::sync::Weak<tokio::sync::RwLock<()>>>>,
+    pub(super) hosting_gates: Mutex<HashMap<String, std::sync::Weak<tokio::sync::Mutex<()>>>>,
+    pub(super) hosting_workers: Mutex<HashSet<String>>,
     pub(super) clipboard: clipboard::ClipboardStorage,
     pub(super) clipboard_operation: tokio::sync::Mutex<()>,
     pub(super) task_stops: tokio::sync::broadcast::Sender<notifications::TaskStopNotification>,
+    pub(super) task_completions:
+        tokio::sync::broadcast::Sender<notifications::TaskStopNotification>,
     pub(super) notifications_started: std::sync::atomic::AtomicBool,
 }
 

@@ -41,6 +41,45 @@ try {
   }
 
   for (const mobile of [false, true]) {
+    await test(`${mobile ? 'mobile' : 'desktop'} shows per-turn input and output tokens before the agent timestamp`, async (t) => {
+      const { page, updateSnapshot } = await open(t, mobile);
+      const usage = (input, output) => ({ input_tokens: input, output_tokens: output, total_tokens: input + output,
+        cached_input_tokens: input / 2, cache_write_input_tokens: 0, reasoning_output_tokens: 0 });
+      const next = { ...snapshot, turns: [
+        { ...makeTurn('usage-1', 'First', 'First done', []), usage: usage(1000, 200) },
+        { ...makeTurn('usage-2', 'Second', 'Second done', []), usage: usage(2000, 300) },
+        makeTurn('usage-3', 'Legacy', 'No usage reported', []),
+      ] };
+      updateSnapshot(next);
+      if (mobile) await page.getByRole('button', { name: '刷新', exact: true }).click();
+      else await update(page, { snapshot: next });
+      await page.getByText('No usage reported', { exact: true }).waitFor();
+      assert.deepEqual(await page.locator('.token-usage-input').allTextContents(), ['1K tokens', '2K tokens']);
+      assert.deepEqual(await page.locator('.token-usage-output').allTextContents(), ['200 tokens', '300 tokens']);
+      assert.match(await page.locator('.token-usage').first().getAttribute('title'), /本轮：1,200 tokens\n输入：1,000\n输出：200/);
+      assert.equal(await page.locator('.project-aow-snapshot-turn-label .token-usage, .mobile-turn-label .token-usage').count(), 0);
+      const headers = page.locator(mobile ? '.mobile-session-agent' : '.project-aow-snapshot-message.assistant .project-aow-snapshot-message-header');
+      assert.equal(await headers.locator('.token-usage').count(), 2);
+      assert.equal(await headers.locator('.token-usage + time').count(), 2);
+      assert.equal(await page.getByLabel('输入 1K tokens', { exact: true }).locator('svg').count(), 1);
+      assert.equal(await page.getByLabel('输出 200 tokens', { exact: true }).locator('svg').count(), 1);
+      assert.equal(await page.getByText('本轮', { exact: false }).count(), 0);
+      assert.equal(await page.getByText('3.5K', { exact: false }).count(), 0);
+      if (!mobile) {
+        const input = await page.locator('.token-usage-input').first().boundingBox();
+        const output = await page.locator('.token-usage-output').first().boundingBox();
+        const timestamp = await headers.first().locator('time').boundingBox();
+        assert.ok(input.x + input.width <= output.x && output.x + output.width <= timestamp.x);
+        assert.ok(Math.abs(input.y - timestamp.y) <= 3, 'tokens and timestamp share the agent header row');
+      }
+      await noOverflow(page);
+      await page.screenshot({ path: `/tmp/aow-token-conversation-${mobile ? 'mobile' : 'desktop'}.png` });
+      if (!mobile) {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await noOverflow(page);
+      }
+    });
+
     await test(`${mobile ? 'mobile' : 'desktop'} displays exported native Hermes session data`, { skip: !process.env.AOW_HERMES_TEST_EXPORT }, async (t) => {
       const directory = process.env.AOW_HERMES_TEST_EXPORT;
       const nativeSession = JSON.parse(await readFile(join(directory, 'session.json'), 'utf8'));

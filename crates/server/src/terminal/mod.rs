@@ -39,6 +39,7 @@ mod api;
 mod bridge;
 mod clipboard;
 mod error;
+pub(crate) mod hosting;
 mod layout;
 mod lifecycle;
 pub(crate) mod notifications;

@@ -679,6 +679,9 @@ try {
     assert.equal(controlMessages(state, 'resize').length, resizeCount, 'blur does not resize during keyboard dismissal');
     await page.setViewportSize({ width: 390, height: 844 });
     await terminalSize(page, state, (size) => size.cols === portrait.cols && size.rows === portrait.rows);
+    // Keyboard dismissal preserves the PTY size, so its previous resize message
+    // cannot tell us whether the browser has restored the clipping viewport yet.
+    await page.waitForFunction(height => document.querySelector('.mobile-terminal-panel:not([hidden]) .mobile-terminal-viewport')?.getBoundingClientRect().height === height, canvas.height);
     await terminalFits(page);
     await page.waitForTimeout(250);
     assert.equal(controlMessages(state, 'resize').length, resizeCount, 'keyboard open and close leave terminal dimensions unchanged');

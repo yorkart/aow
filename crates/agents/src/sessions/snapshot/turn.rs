@@ -16,6 +16,7 @@ pub(super) struct TurnDraft {
     pub(super) activities: Vec<SnapshotActivity>,
     pub(super) next_activity: usize,
     pub(super) activities_truncated: bool,
+    pub(super) usage: Option<crate::sessions::usage::TokenUsage>,
 }
 
 impl TurnDraft {
@@ -30,6 +31,7 @@ impl TurnDraft {
             activities: Vec::new(),
             next_activity: 0,
             activities_truncated: false,
+            usage: None,
         }
     }
 
@@ -173,6 +175,7 @@ impl TurnDraft {
             final_message: self.final_message,
             activities: self.activities,
             activities_truncated: self.activities_truncated,
+            usage: self.usage,
         })
     }
 }

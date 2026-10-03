@@ -1,10 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
-import { NotebookPen, Files, Maximize2, Minimize2, Minus, PanelsTopLeft, Pin, PinOff, SquareTerminal, X, PanelRight } from 'lucide-react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import type { AowProject } from './types';
+import { useAowTabLocation } from './AowTabEntry';
+import { terminalApi } from '../features/terminals/terminalApi';
+import { Inbox, NotebookPen, Files, Maximize2, Minimize2, Minus, PanelsTopLeft, Pin, PinOff, SquareTerminal, X, PanelRight } from 'lucide-react';
 import { persist, readStored, useFloatingWorkspace, type FloatingTab } from './floatingWorkspaceState';
 import type { AowAgent } from '../features/agents/types';
 import { WorkspaceTabs, type WorkspaceTab } from './WorkspaceTabs';
 import { useFloatingAutoHide } from './useFloatingAutoHide';
+import { FloatingTerminal } from './FloatingTerminal';
 import './floating-workspace.css';
+
+const InboxPanel = lazy(() => import('../features/inbox/InboxPanel').then(module => ({ default: module.InboxPanel })));
 
 interface Bounds { left: number; top: number; width: number; height: number }
 const defaultBounds = () => ({ left: Math.max(12, (window.innerWidth - 1000) / 2), top: 65, width: Math.min(1100, window.innerWidth - 24), height: Math.min(720, window.innerHeight - 100) });
@@ -13,8 +19,11 @@ function clamp(bounds: Bounds): Bounds {
   const height = Math.min(Math.max(280, bounds.height), window.innerHeight - 16);
   return { width, height, left: Math.max(8, Math.min(bounds.left, window.innerWidth - width - 8)), top: Math.max(8, Math.min(bounds.top, window.innerHeight - height - 8)) };
 }
-export function FloatingWorkspace({ agents }: { agents: AowAgent[] }) {
+export function FloatingWorkspace({ agents, projects, activeLocation = true }: { agents: AowAgent[]; projects: AowProject[]; activeLocation?: boolean }) {
   const floating = useFloatingWorkspace();
+  const syncLocation = useAowTabLocation();
+  const [inboxVisited, setInboxVisited] = useState(floating.inboxOpen);
+  useEffect(() => { if (floating.inboxOpen) setInboxVisited(true); }, [floating.inboxOpen]);
   const [bounds, setBounds] = useState(() => {
     const stored = readStored<Bounds>('aow-floating-bounds', defaultBounds());
     return clamp(stored && [stored.left, stored.top, stored.width, stored.height].every(Number.isFinite) ? stored : defaultBounds());
@@ -89,7 +98,7 @@ export function FloatingWorkspace({ agents }: { agents: AowAgent[] }) {
           const source = sourceTab(tab);
           await floating.sources.current.get(source.workspace)?.rename(source.id, name);
         }} onError={setOperationError}
-        destination={tab => sourceTab(tab).workspace !== floating.globalRoot ? 'restore' : undefined}
+        destination={tab => !sourceTab(tab).external && sourceTab(tab).workspace !== floating.globalRoot ? 'restore' : undefined}
         onOpenElsewhere={tab => {
           const source = sourceTab(tab);
           floating.remove(source.workspace, source.id);
@@ -97,6 +106,7 @@ export function FloatingWorkspace({ agents }: { agents: AowAgent[] }) {
         }}
         onOpenBrowser={() => create('files')} onCreateNote={kind => create(kind === 'md' ? 'markdown' : 'text')}
         onCreateTerminal={agent => create('terminal', agent)} newLabel="浮动工作区新建" tabListLabel="浮动工作区标签"
+        leadingControls={<button className={`floating-workspace-inbox-tab${floating.inboxOpen ? ' active' : ''}`} aria-label="Inbox" aria-pressed={floating.inboxOpen} onClick={() => { floating.openInbox(); syncLocation(undefined); }}><Inbox size={15} />Inbox</button>}
         controls={<div className="floating-workspace-window-actions">
           <button title="全局项目面板" aria-label="全局项目面板" aria-pressed={floating.sidebarOpen} onClick={() => floating.setSidebarOpen(!floating.sidebarOpen)}><PanelRight /></button>
           <button className="floating-workspace-pin" title={floating.pinned ? '取消固定：移出后自动隐藏' : '固定显示浮动工作区'} aria-label="固定显示浮动工作区" aria-pressed={floating.pinned} onClick={floating.togglePinned}>{floating.pinned ? <Pin /> : <PinOff />}</button>
@@ -115,7 +125,16 @@ export function FloatingWorkspace({ agents }: { agents: AowAgent[] }) {
       {operationError ? <div className="project-aow-inline-error" role="alert">{operationError}<button aria-label="关闭错误提示" onClick={() => setOperationError('')}><X /></button></div> : null}
       <div className="floating-workspace-body">
         <div className="floating-workspace-content" ref={floating.setPortal}>
-          {!floating.tabs.length ? <div className="floating-workspace-empty">{actions}{!floating.globalRoot ? <p>正在加载全局项目…</p> : null}</div> : null}
+          {inboxVisited && <div className="floating-workspace-inbox" hidden={!floating.inboxOpen}><Suspense fallback={<p>正在加载 Inbox…</p>}>
+            <InboxPanel visible={floating.visible && floating.inboxOpen} projects={projects} agents={agents} onOpenTerminal={async id => {
+              const tab = await terminalApi.get(id);
+              const external = !projects.some(project => project.worktrees.some(worktree => worktree.path === tab.workspace_root)) && tab.workspace_root !== floating.globalRoot;
+              if (!external) floating.requestTerminal(tab);
+              floating.add(tab.workspace_root, `terminal:${tab.id}`, { id: `terminal:${tab.id}`, kind: 'agent', label: tab.name, targetId: tab.id, external });
+            }} />
+          </Suspense></div>}
+          {floating.tabs.filter(tab => tab.external && !projects.some(project => project.worktrees.some(worktree => worktree.path === tab.workspace)) && tab.workspace !== floating.globalRoot).map(tab => <FloatingTerminal key={tabKey(tab)} entry={tab} activeLocation={activeLocation} />)}
+          {!floating.tabs.length && !floating.inboxOpen ? <div className="floating-workspace-empty">{actions}{!floating.globalRoot ? <p>正在加载全局项目…</p> : null}</div> : null}
         </div>
         <div className="floating-workspace-sidebar" hidden={!floating.sidebarOpen} ref={floating.setSidebar} />
       </div>

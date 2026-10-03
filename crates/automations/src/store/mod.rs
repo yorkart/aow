@@ -1,7 +1,9 @@
 mod files;
 mod history;
 mod locks;
+mod result;
 mod runs;
+mod session_roots;
 mod tasks;
 mod writer;
 

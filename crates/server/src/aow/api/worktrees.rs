@@ -2,6 +2,7 @@ use super::*;
 
 pub(super) fn routes() -> Router<AppState> {
     Router::new()
+        .route("/api/aow/projects/{id}/branches", get(project_branches))
         .route("/api/aow/projects/{id}/worktrees", post(create_worktree))
         .route(
             "/api/aow/projects/{id}/worktrees/color",
@@ -21,6 +22,18 @@ pub(super) fn routes() -> Router<AppState> {
         )
         .route("/api/aow/worktree-removals", get(removal::list_jobs))
 }
+async fn project_branches(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> Result<Json<ProjectBranches>, Response> {
+    state
+        .aow
+        .project_branches(&id)
+        .await
+        .map(Json)
+        .map_err(aow_response)
+}
+
 async fn create_worktree(
     State(state): State<AppState>,
     AxumPath(id): AxumPath<String>,

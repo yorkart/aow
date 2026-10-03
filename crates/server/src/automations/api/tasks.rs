@@ -54,21 +54,16 @@ pub(super) async fn detail(
 
 async fn resolve(state: &AppState, input: &TaskInput) -> Result<(String, PathBuf, AgentLaunch)> {
     input.validate()?;
+    let reference = state
+        .aow
+        .execution_reference_path(&input.project_id, &input.workspace)
+        .await?;
     let (name, repository) = state
         .aow
-        .automation_project(&input.project_id, &input.workspace_path)
+        .automation_project(&input.project_id, std::path::Path::new(&reference))
         .await?;
     let agent_id = input.agent.id();
-    let launch = state
-        .aow
-        .resolve_agent_launch(
-            agent_id,
-            input
-                .workspace_path
-                .to_str()
-                .context("工作区路径不是 UTF-8")?,
-        )
-        .await?;
+    let launch = state.aow.resolve_agent_launch(agent_id, &reference).await?;
     let environment = aow_agents::automation::configuration_environment();
     let launch = AgentLaunch {
         executable: launch.executable.into(),
@@ -80,7 +75,7 @@ async fn resolve(state: &AppState, input: &TaskInput) -> Result<(String, PathBuf
 }
 
 fn force_worktree_cleanup(input: &mut TaskInput) {
-    if input.workspace_mode == WorkspaceMode::NewWorktree {
+    if input.workspace.workspace_mode == WorkspaceMode::NewWorktree {
         input.cleanup_worktree = true;
     }
 }

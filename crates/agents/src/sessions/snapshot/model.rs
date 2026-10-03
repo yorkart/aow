@@ -34,6 +34,8 @@ pub(super) struct SnapshotTurn {
     pub(super) final_message: Option<SnapshotMessage>,
     pub(super) activities: Vec<SnapshotActivity>,
     pub(super) activities_truncated: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) usage: Option<crate::sessions::usage::TokenUsage>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

@@ -1,5 +1,6 @@
 mod agent;
 mod process_group;
+mod result;
 mod workspace;
 
 use std::time::Instant;
@@ -51,6 +52,7 @@ pub async fn run(
     let mut task = store.get_task(task_id)?;
     let deleted = task.deleted;
     let mut variables = Default::default();
+    let mut hosted = false;
     if source == RunSource::Manual {
         if let Some(request) = id
             .as_deref()
@@ -60,6 +62,7 @@ pub async fn run(
         {
             task = request.task;
             variables = request.variables;
+            hosted = request.hosted;
         }
     }
     task.launch.environment.remove("PATH");
@@ -71,6 +74,16 @@ pub async fn run(
     let Some(mut concurrency_slot) =
         store.concurrency_slot(&task.id, task.input.max_concurrent_runs)?
     else {
+        if hosted {
+            let mut writer = store.create_run(&run, &task)?;
+            writer.append(&RunEvent::Finished {
+                at: Utc::now(),
+                status: RunStatus::Skipped,
+                exit_code: None,
+                message: Some("手动任务正在执行，已达到并发限制".into()),
+                duration_ms: 0,
+            })?;
+        }
         return Ok(RunStatus::Skipped);
     };
     concurrency_slot.begin(&run.id)?;
@@ -88,6 +101,9 @@ pub async fn run(
                 // only this in-memory execution copy, without parsing variables.
                 task.input.prompt = task.input.render_prompt(&variables)?;
                 task.input.prompt_bindings.clear();
+                if hosted {
+                    task.input.prompt = crate::hosting::prompt(&task.input.prompt);
+                }
                 let mut agent_environment = environment::load_agent_environment_from(
                     &store.config_dir,
                     task.input.agent.id(),
@@ -110,7 +126,7 @@ pub async fn run(
             _ = shutdown_signal() => Ok((RunStatus::Interrupted, None, Some("执行收到停止信号".into()))),
         }
     };
-    if let Err(error) = cleanup_worktree(store, &task, &run.id, &concurrency_slot).await {
+    if let Err(error) = cleanup_worktree(&task, &run.id, &concurrency_slot).await {
         outcome = cleanup_failure(outcome, error);
     }
     let (status, exit_code, message) = match outcome {

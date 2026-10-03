@@ -7,6 +7,243 @@ use std::{
 };
 
 #[tokio::test]
+async fn inbox_worktree_uses_selected_base_and_lists_unchecked_local_and_remote_branches() {
+    use axum::{
+        body::{Body, to_bytes},
+        http::Request,
+    };
+    use tower::ServiceExt;
+
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().canonicalize().unwrap();
+    let repo = root.join("repo");
+    std::fs::create_dir(&repo).unwrap();
+    git_output(&repo, &["init", "-q", "-b", "main"])
+        .await
+        .unwrap();
+    git_output(
+        &repo,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "initial",
+        ],
+    )
+    .await
+    .unwrap();
+    git_output(&repo, &["branch", "feature/unopened"])
+        .await
+        .unwrap();
+    let state = AppState::new(root.join("state"));
+    let manager = state.aow.clone();
+    let project = manager
+        .register_project(RegisterProjectRequest {
+            path: repo.to_string_lossy().into_owned(),
+            name: None,
+            notes_path: Some(root.join("notes").to_string_lossy().into_owned()),
+        })
+        .await
+        .unwrap();
+    let local = manager.project_branches(&project.id).await.unwrap();
+    assert_eq!(local.branches, ["feature/unopened", "main"]);
+    assert_eq!(local.default_branch, "main");
+    assert_eq!(project.worktrees.len(), 1);
+
+    let main_head = git_output(&repo, &["rev-parse", "HEAD"]).await.unwrap();
+    let release_head = git_output(
+        &repo,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit-tree",
+            "HEAD^{tree}",
+            "-p",
+            "HEAD",
+            "-m",
+            "release",
+        ],
+    )
+    .await
+    .unwrap();
+    git_output(
+        &repo,
+        &["update-ref", "refs/remotes/origin/main", main_head.trim()],
+    )
+    .await
+    .unwrap();
+    git_output(
+        &repo,
+        &[
+            "update-ref",
+            "refs/remotes/origin/release",
+            release_head.trim(),
+        ],
+    )
+    .await
+    .unwrap();
+    git_output(
+        &repo,
+        &[
+            "symbolic-ref",
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/main",
+        ],
+    )
+    .await
+    .unwrap();
+
+    let app = crate::build_router(state);
+    let response = app
+        .oneshot(
+            Request::get(format!("/api/aow/projects/{}/branches", project.id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let branches: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(
+        branches,
+        serde_json::json!({
+            "branches": ["feature/unopened", "main", "origin/main", "origin/release"],
+            "default_branch": "origin/main",
+        })
+    );
+
+    let config = aow_workspaces::WorkspaceConfig {
+        base_branch: "origin/release".into(),
+        ..Default::default()
+    };
+    let prepared = manager
+        .prepare_workspace(&project.id, &config, "inbox/item-request")
+        .await
+        .unwrap();
+    assert!(prepared.created);
+    let path = prepared.directory;
+    assert_eq!(path.parent(), Some(root.as_path()));
+    assert_eq!(
+        git_output(&path, &["rev-parse", "HEAD"]).await.unwrap(),
+        release_head
+    );
+    assert_eq!(
+        git_output(&repo, &["rev-parse", "HEAD"]).await.unwrap(),
+        main_head
+    );
+    let retried = manager
+        .prepare_workspace(&project.id, &config, "inbox/item-request")
+        .await
+        .unwrap();
+    assert!(!retried.created);
+    assert_eq!(retried.directory, path);
+    let existing = manager
+        .prepare_workspace(
+            &project.id,
+            &aow_workspaces::WorkspaceConfig {
+                workspace_mode: aow_workspaces::WorkspaceMode::Existing,
+                workspace_path: repo.clone(),
+                ..Default::default()
+            },
+            "inbox/another-item-request",
+        )
+        .await
+        .unwrap();
+    assert!(!existing.created);
+    assert_eq!(existing.directory, repo);
+    assert_eq!(
+        manager.project(&project.id).await.unwrap().worktrees.len(),
+        2
+    );
+}
+
+#[tokio::test]
+async fn automation_cwd_accepts_worktree_subdirectories_but_rejects_other_repositories() {
+    let directory = tempfile::tempdir().unwrap();
+    let repo = directory.path().join("repo");
+    std::fs::create_dir(&repo).unwrap();
+    git_output(&repo, &["init", "-q", "-b", "main"])
+        .await
+        .unwrap();
+    git_output(
+        &repo,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "initial",
+        ],
+    )
+    .await
+    .unwrap();
+    let linked = directory.path().join("linked");
+    git_output(
+        &repo,
+        &["worktree", "add", "-b", "linked", linked.to_str().unwrap()],
+    )
+    .await
+    .unwrap();
+    let manager = AowManager::persistent_with_notes_base(
+        &directory.path().join("state"),
+        directory.path().join("notes"),
+    )
+    .unwrap();
+    let project = manager
+        .register_project(RegisterProjectRequest {
+            path: repo.to_string_lossy().into(),
+            name: None,
+            notes_path: None,
+        })
+        .await
+        .unwrap();
+    for root in [&repo, &linked] {
+        let cwd = root.join("frontend/src");
+        std::fs::create_dir_all(&cwd).unwrap();
+        for allowed in [root, &cwd] {
+            let (_, registered) = manager
+                .automation_project_for_cwd(&project.id, allowed)
+                .await
+                .unwrap();
+            assert_eq!(registered, repo.canonicalize().unwrap());
+        }
+    }
+    for foreign in [
+        repo.join("nested-repository"),
+        directory.path().join("other"),
+    ] {
+        std::fs::create_dir(&foreign).unwrap();
+        git_output(&foreign, &["init", "-q"]).await.unwrap();
+        let error = manager
+            .automation_project_for_cwd(&project.id, &foreign)
+            .await
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("工作区不属于所选项目"),
+            "{error}"
+        );
+    }
+    let outside_link = repo.join("linked-outside");
+    std::os::unix::fs::symlink(directory.path().join("other"), &outside_link).unwrap();
+    assert!(
+        manager
+            .automation_project_for_cwd(&project.id, &outside_link)
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
 async fn node_settings_persist_clear_and_preserve_other_settings() {
     let directory = tempfile::tempdir().unwrap();
     let notes_base = directory.path().join("notes");

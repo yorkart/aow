@@ -5,15 +5,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use super::AgentKind;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum WorkspaceMode {
-    Existing,
-    NewWorktree,
-    NewBranch,
-    Temporary,
-}
+use aow_workspaces::WorkspaceConfig;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -50,16 +42,14 @@ pub struct TaskInput {
     pub prompt_bindings: Vec<PromptBinding>,
     pub agent: AgentKind,
     pub project_id: String,
-    pub workspace_mode: WorkspaceMode,
-    pub workspace_path: PathBuf,
+    #[serde(flatten)]
+    pub workspace: WorkspaceConfig,
     /// Legacy presentation field retained for saved task compatibility.
     ///
     /// Per-run Worktrees are always removed after execution; the runner does
     /// not use this value to decide whether cleanup occurs.
     #[serde(default = "default_cleanup_worktree")]
     pub cleanup_worktree: bool,
-    #[serde(default)]
-    pub base_branch: String,
     /// Five-field numeric cron, evaluated in the machine's local timezone.
     #[serde(default)]
     pub cron: String,
@@ -122,15 +112,7 @@ impl TaskInput {
             !self.prompt.trim().is_empty() && self.prompt.len() <= 64 * 1024,
             "任务内容不能为空且不能超过 64 KiB"
         );
-        ensure!(self.workspace_path.is_absolute(), "工作区必须使用绝对路径");
-        ensure!(
-            !self
-                .workspace_path
-                .to_string_lossy()
-                .chars()
-                .any(char::is_control),
-            "工作区路径包含控制字符"
-        );
+        self.workspace.validate()?;
         ensure!(self.precheck_command.len() <= 8192, "执行前检查命令过长");
         ensure!(
             (1..=3600).contains(&self.precheck_timeout_seconds),
@@ -140,17 +122,6 @@ impl TaskInput {
             (1..=10).contains(&self.max_concurrent_runs),
             "最大同时执行数必须为 1–10"
         );
-        if matches!(
-            self.workspace_mode,
-            WorkspaceMode::NewWorktree | WorkspaceMode::NewBranch
-        ) {
-            ensure!(
-                !self.base_branch.trim().is_empty()
-                    && !self.base_branch.starts_with('-')
-                    && !self.base_branch.chars().any(char::is_control),
-                "请选择有效的基础分支"
-            );
-        }
         self.validate_schedule()?;
         self.validate_bindings()?;
         Ok(())
@@ -207,6 +178,8 @@ impl TaskInput {
 pub struct ManualRunRequest {
     pub task: Task,
     pub variables: BTreeMap<String, String>,
+    #[serde(default)]
+    pub hosted: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

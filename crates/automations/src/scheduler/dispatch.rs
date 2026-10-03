@@ -38,6 +38,7 @@ impl Scheduler {
                 &ManualRunRequest {
                     task: task.clone(),
                     variables: variables.clone(),
+                    hosted: false,
                 },
             )?;
         }
@@ -65,7 +66,7 @@ impl Scheduler {
         Ok(Some(id))
     }
 
-    async fn dispatch_run(
+    pub(crate) async fn dispatch_run(
         &self,
         store: &Store,
         task: &Task,

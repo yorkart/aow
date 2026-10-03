@@ -26,6 +26,7 @@ try {
       { ...common, id: '87654321', name: '分支检查', kind: 'manual', cron: '', prompt, prompt_bindings: bindings },
       { ...common, id: '11223344', name: '直接执行', kind: 'manual', cron: '', prompt: '不需要输入', prompt_bindings: [] },
     ];
+    await page.route('**/api/aow/projects/*/branches', route => route.fulfill({ json: { branches: ['main', 'origin/main'], default_branch: 'origin/main' } }));
     await page.route('**/api/aow/notification-settings', route => route.fulfill({ json: { im: { providers: [] } } }));
     await page.route('**/api/aow/automations**', route => {
       const url = new URL(route.request().url());
@@ -156,7 +157,7 @@ try {
     await dialog.waitFor({ state: 'hidden' });
     assert.equal(saves[0].prompt_bindings.length, 2);
     await page.getByRole('button', { name: '编辑', exact: true }).click();
-    await dialog.locator('.monaco-editor textarea').focus();
+    await dialog.locator('.monaco-editor [role="textbox"]').focus();
     await page.keyboard.press('ControlOrMeta+a');
     await page.keyboard.insertText('执行 🧪 {{分支}} 和 {{ 检查重点 }}，再次 {{分支}}');
     await dialog.getByRole('region', { name: '任务变量' }).getByText('检查重点', { exact: true }).waitFor();

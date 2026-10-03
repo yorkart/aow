@@ -1,4 +1,4 @@
-import type { AowWorktree, WorktreeColor, WorktreeIconId, AowProject, AowSettings, WorktreeRemovalPreview, WorktreeRemovalJob, PinnedWorktrees, PinnedWorktreesUpdate } from './types';
+import type { AowWorktree, WorktreeColor, WorktreeIconId, AowProject, AowSettings, ProjectBranches, WorktreeRemovalPreview, WorktreeRemovalJob, PinnedWorktrees, PinnedWorktreesUpdate } from './types';
 import { aowRequest } from '../lib/aowRequest';
 
 export const aowApi = {
@@ -13,6 +13,7 @@ export const aowApi = {
     body: JSON.stringify({ notes_base: input.notesBase?.trim(), node_addresses: input.nodeAddresses, execution_path: input.executionPath, editor: input.editor }),
   }),
   projects: () => aowRequest<AowProject[]>('/api/aow/projects'),
+  projectBranches: (id: string, signal?: AbortSignal) => aowRequest<ProjectBranches>(`/api/aow/projects/${encodeURIComponent(id)}/branches`, { signal, cache: 'no-store' }),
   projectAvatar: (id: string, signal?: AbortSignal) => aowRequest<{ avatar_url: string | null }>(`/api/aow/projects/${encodeURIComponent(id)}/avatar`, { signal, cache: 'no-store' }),
   registerProject: (path: string, name?: string, notesPath?: string) => aowRequest<AowProject>('/api/aow/projects', {
     method: 'POST',

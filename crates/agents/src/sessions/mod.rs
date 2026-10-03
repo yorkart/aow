@@ -11,6 +11,7 @@ pub mod tail;
 pub mod titles;
 pub mod tracking;
 mod traecli;
+pub mod usage;
 
 use std::{
     ffi::OsStr,

@@ -68,6 +68,24 @@ impl TerminaldClient {
         expect_json(status, body, &[StatusCode::OK, StatusCode::CREATED])
     }
 
+    pub async fn put_json<T: Serialize + ?Sized, R: DeserializeOwned>(
+        &self,
+        path: &str,
+        request: &T,
+    ) -> Result<R, TerminaldClientError> {
+        let (status, body) = self.request(Method::PUT, path, Some(request)).await?;
+        expect_json(status, body, &[StatusCode::OK, StatusCode::CREATED])
+    }
+
+    pub async fn delete_json<T: Serialize + ?Sized>(
+        &self,
+        path: &str,
+        request: &T,
+    ) -> Result<(), TerminaldClientError> {
+        let (status, body) = self.request(Method::DELETE, path, Some(request)).await?;
+        expect_empty(status, body, &[StatusCode::NO_CONTENT])
+    }
+
     pub async fn list(&self) -> Result<Vec<TerminalRuntime>, TerminaldClientError> {
         let (status, body) = self
             .request(Method::GET, "/v1/runtimes", None::<&()>)

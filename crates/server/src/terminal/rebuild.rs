@@ -60,6 +60,7 @@ impl TerminalManager {
             .iter()
             .map(|pane| TerminalPane {
                 id: aow_id::new_id(),
+                hosting: None,
                 status: TerminalPaneStatus::Running,
                 exit_code: None,
                 agent_terminal: pane.agent_terminal.as_ref().map(|_| AgentTerminalState {

@@ -1,6 +1,7 @@
 use super::super::*;
 use super::{COLS, ROWS, connection::AgentConnection, model::info};
 use crate::operations::{Handle, Spec};
+use aow_agents::launch::AgentType;
 use aow_operation_log::Outcome;
 use aow_protocol::{
     AgentTerminalCreate, AgentTerminalInfo, AgentTerminalPhase, AgentTerminalState,
@@ -13,33 +14,42 @@ pub(crate) async fn create(
     State(state): State<AppState>,
     Json(request): Json<AgentTerminalCreate>,
 ) -> Result<Json<AgentTerminalInfo>, HttpError> {
-    create_with_task(state, request, None).await
+    create_from_source(state, request, "cli").await
 }
 
-pub(crate) async fn create_for_task(
+pub(crate) async fn create_from_source(
     state: AppState,
     request: AgentTerminalCreate,
-    task_id: String,
+    source: &'static str,
 ) -> Result<Json<AgentTerminalInfo>, HttpError> {
-    create_with_task(state, request, Some(task_id)).await
+    create_with_workspace(state, request, source, None).await
 }
 
-async fn create_with_task(
+pub(crate) async fn create_in_workspace(
     state: AppState,
     request: AgentTerminalCreate,
-    task_id: Option<String>,
+    workspace: aow_workspaces::PreparedWorkspace,
+) -> Result<Json<AgentTerminalInfo>, HttpError> {
+    create_with_workspace(state, request, "inbox", Some(workspace)).await
+}
+
+async fn create_with_workspace(
+    state: AppState,
+    request: AgentTerminalCreate,
+    source: &'static str,
+    workspace: Option<aow_workspaces::PreparedWorkspace>,
 ) -> Result<Json<AgentTerminalInfo>, HttpError> {
     tokio::spawn(async move {
         let log = state.operations.begin(Spec {
             id: aow_id::new_id(),
             kind: "agent.create",
-            source: if task_id.is_some() { "tasks" } else { "cli" },
+            source,
             title: format!("创建 Agent · {}", request.agent),
             project_id: Some(request.project_id.clone()),
             resource: Some(request.cwd.clone()),
             total: None,
         });
-        let result = create_inner(state, request, &log, task_id).await;
+        let result = create_inner(state, request, &log, workspace).await;
         match &result {
             Ok(info) if info.state.phase == AgentTerminalPhase::Ready => {
                 log.finish(
@@ -70,7 +80,7 @@ async fn create_inner(
     state: AppState,
     request: AgentTerminalCreate,
     log: &Handle,
-    task_id: Option<String>,
+    workspace: Option<aow_workspaces::PreparedWorkspace>,
 ) -> Result<Json<AgentTerminalInfo>, HttpError> {
     log.progress("检查 Agent 配置和工作目录", None);
     if !(1..=600).contains(&request.timeout_seconds) {
@@ -84,22 +94,55 @@ async fn create_inner(
     validate_directory(&request.cwd)
         .await
         .map_err(terminal_http_error)?;
-    let cwd = state
-        .aow
-        .agent_worktree_path(&request.project_id, &request.cwd)
-        .await
-        .map_err(crate::aow::aow_http_error)?;
-    let launch = state
-        .aow
-        .resolve_agent_launch(&request.agent, &cwd)
-        .await
-        .map_err(crate::aow::aow_http_error)?;
+    let temporary = workspace
+        .as_ref()
+        .filter(|workspace| workspace.workspace_mode == aow_workspaces::WorkspaceMode::Temporary);
+    let (cwd, mut launch) = if let Some(workspace) = temporary {
+        let requested = std::fs::canonicalize(&request.cwd)
+            .map_err(|error| terminal_http_error(TerminalError::Invalid(error.to_string())))?;
+        if requested != workspace.directory {
+            return Err(terminal_http_error(TerminalError::Invalid(
+                "执行目录与准备的工作区不一致".into(),
+            )));
+        }
+        let launch = state
+            .aow
+            .resolve_agent_profile(&request.agent)
+            .await
+            .map_err(crate::aow::aow_http_error)?;
+        (requested.to_string_lossy().into_owned(), launch)
+    } else {
+        let cwd = state
+            .aow
+            .agent_worktree_path(&request.project_id, &request.cwd)
+            .await
+            .map_err(crate::aow::aow_http_error)?;
+        let launch = state
+            .aow
+            .resolve_agent_launch(&request.agent, &cwd)
+            .await
+            .map_err(crate::aow::aow_http_error)?;
+        (cwd, launch)
+    };
     let adapter = launch.agent_type.agent().interactive().ok_or_else(|| {
         terminal_http_error(TerminalError::Invalid(format!(
             "interactive startup is not supported for agent {}",
             request.agent
         )))
     })?;
+    if launch.agent_type == AgentType::Codex {
+        // Managed startup must reach the input prompt without an update menu.
+        // Override only this invocation, after profile flags and before any `--`.
+        let index = launch
+            .args
+            .iter()
+            .position(|arg| arg == "--")
+            .unwrap_or(launch.args.len());
+        launch.args.splice(
+            index..index,
+            ["-c".into(), "check_for_update_on_startup=false".into()],
+        );
+    }
     log.progress("创建 Terminal 并启动 Agent", None);
     let tab = state
         .terminals
@@ -123,12 +166,6 @@ async fn create_inner(
         )
         .await
         .map_err(terminal_http_error)?;
-    if let Some(task_id) = &task_id {
-        state.tasks.update_execution(task_id, |task| {
-            task.tab_id = Some(tab.id.clone());
-            task.pane_id = Some(tab.panes[0].id.clone());
-        })?;
-    }
     state.workspace_events.terminals_changed();
     let manager = state.terminals;
     log.resource(format!("/aow/tabs/terminal/{}", tab.id));
@@ -200,6 +237,11 @@ pub(crate) async fn submit(
     // timed-out submission is not automatic: its delivery may be ambiguous.
     tokio::spawn(async move {
         let manager = state.terminals;
+        let hosting_gate = manager.hosting_gate(&pane_id)?;
+        let _hosting_gate = hosting_gate.lock().await;
+        if manager.hosting(&pane_id)?.is_some() {
+            return Err(TerminalError::Conflict("实例正在托管，请先接管".into()));
+        }
         let operation = manager.agent_operation(&pane_id)?;
         let _lease = operation.try_write_owned().map_err(|_| {
             TerminalError::Conflict(
@@ -233,7 +275,7 @@ pub(crate) async fn submit(
     .map_err(terminal_http_error)
 }
 
-fn validate_task(task: &str) -> Result<(), TerminalError> {
+pub(in crate::terminal) fn validate_task(task: &str) -> Result<(), TerminalError> {
     if task.trim().is_empty()
         || task.len() > MAX_TASK_BYTES
         || task

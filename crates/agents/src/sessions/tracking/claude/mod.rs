@@ -1,4 +1,5 @@
 use super::*;
+use crate::sessions::usage::{ClaudeUsage, TokenUsage};
 use serde::Deserialize;
 use std::{
     process::Stdio,
@@ -46,6 +47,8 @@ impl AgentSessionTracker for Claude {
 struct Parser {
     message_id: Option<String>,
     conclusion: Option<String>,
+    usage: Option<TokenUsage>,
+    token_events: ClaudeUsage,
 }
 
 impl TaskStopParser for Parser {
@@ -59,14 +62,22 @@ impl TaskStopParser for Parser {
         {
             return None;
         }
+        if record["interruptedMessageId"].as_str().is_some() || record["isApiErrorMessage"] == true
+        {
+            self.reset();
+            return None;
+        }
         match record["type"].as_str()? {
             "assistant" => {
                 let message = &record["message"];
                 let message_id = message["id"].as_str().map(str::to_owned);
                 if message_id.is_none() || self.message_id != message_id {
-                    self.reset();
+                    self.clear_reply();
                 }
                 self.message_id = message_id;
+                if let Some(usage) = self.token_events.consume(message) {
+                    TokenUsage::accumulate(&mut self.usage, usage);
+                }
                 let has_tool = message["content"]
                     .as_array()
                     .is_some_and(|parts| parts.iter().any(|part| part["type"] == "tool_use"));
@@ -75,7 +86,7 @@ impl TaskStopParser for Parser {
                     None | Some("end_turn" | "max_tokens" | "stop_sequence" | "refusal")
                 );
                 if !terminal || has_tool {
-                    self.reset();
+                    self.clear_reply();
                 } else if let Some(text) = text_content(&message["content"]) {
                     // Claude can serialize separate content blocks of the same
                     // API message in successive records. Preserve all text blocks.
@@ -89,14 +100,15 @@ impl TaskStopParser for Parser {
             }
             // Includes tool results and Stop-hook continuations: a previous answer
             // is no longer the conclusion once the conversation continues.
-            "user" => self.reset(),
+            "user" => self.clear_reply(),
             "system" if record["subtype"] == "turn_duration" => {
                 // Only the native main-loop boundary emits a notification.
-                let conclusion = self.conclusion.take();
-                self.reset();
+                let usage = self.usage.take();
+                let conclusion = self.take_conclusion();
                 return Some(TaskStopped {
                     turn_id: record["uuid"].as_str().map(str::to_owned),
                     conclusion,
+                    usage,
                 });
             }
             "system"
@@ -114,6 +126,19 @@ impl TaskStopParser for Parser {
 
     fn reset(&mut self) {
         *self = Self::default();
+    }
+
+    fn take_conclusion(&mut self) -> Option<String> {
+        let conclusion = self.conclusion.take();
+        self.reset();
+        conclusion
+    }
+}
+
+impl Parser {
+    fn clear_reply(&mut self) {
+        self.message_id = None;
+        self.conclusion = None;
     }
 }
 

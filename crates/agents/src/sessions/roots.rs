@@ -6,7 +6,7 @@ use super::{
     provider::SessionAgent,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SessionRoots {
     pub(crate) claude: PathBuf,
     pub(crate) codex: PathBuf,
@@ -25,6 +25,11 @@ impl SessionRoots {
     }
 
     pub fn from_configuration(process_home: &Path, environment: &SessionEnvironment) -> Self {
+        let process_home = environment
+            .get("HOME")
+            .filter(|home| !home.as_os_str().is_empty())
+            .map(PathBuf::as_path)
+            .unwrap_or(process_home);
         Self {
             claude: SessionAgent::Claude.session_root(process_home, environment),
             codex: SessionAgent::Codex.session_root(process_home, environment),

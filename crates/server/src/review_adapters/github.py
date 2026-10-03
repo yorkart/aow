@@ -92,34 +92,6 @@ class GitHub:
         return {"repository": self.repo["root"], "current_branch": branch or "HEAD", "current_user": user(current),
                 "pull_requests": [summary(pr) for pr in items if pr["user"]["id"] == current["id"]]}
 
-    def issue_labels(self):
-        labels = self.api(self.prefix + "/labels?per_page=100", pages=True)
-        return {"labels": [{"name": label["name"], "color": label.get("color", ""),
-                            "description": label.get("description") or ""} for label in labels]}
-
-    def issues(self):
-        params = self.request.get("params", {})
-        state = params.get("state", "open")
-        labels = params.get("labels", [])
-        if state not in ("open", "closed", "all"):
-            raise ValueError("issues state must be open, closed or all")
-        if not isinstance(labels, list) or any(not isinstance(label, str) for label in labels):
-            raise ValueError("issues labels must be an array of names")
-        selected = {label.casefold() for label in labels}
-        # GitHub's issues endpoint also returns PRs. Filter after full pagination;
-        # label matching is OR, including literal commas and Unicode in names.
-        items = self.api(self.prefix + f"/issues?state={state}&sort=updated&direction=desc&per_page=100", pages=True)
-        issues = []
-        for item in items:
-            names = [label["name"] for label in item["labels"]]
-            if "pull_request" in item or (selected and not selected.intersection(name.casefold() for name in names)):
-                continue
-            issues.append({"number": item["number"], "title": item["title"], "status": item["state"],
-                           "url": item["html_url"], "labels": names,
-                           "assignees": [assignee["login"] for assignee in item.get("assignees", [])],
-                           "updated_at": item["updated_at"]})
-        return {"issues": issues}
-
     def files(self, number):
         return self.api(f"{self.prefix}/pulls/{number}/files?per_page=100", pages=True)
 
@@ -242,13 +214,9 @@ def dispatch(request):
         raise ValueError("Unsupported protocol version")
     operation = request["operation"]
     if operation == "describe":
-        return {"operations": ["list", "detail", "diff", "commit_links", "repository_info", "issues", "issue_labels"]}
+        return {"operations": ["list", "detail", "diff", "commit_links", "repository_info"]}
     github = GitHub(request)
     params = request["params"]
-    if operation == "issues":
-        return github.issues()
-    if operation == "issue_labels":
-        return github.issue_labels()
     if operation == "repository_info":
         return github.repository_info()
     if operation == "commit_links":

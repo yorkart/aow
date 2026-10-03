@@ -6,7 +6,8 @@
 .terminal-restore-status > span { flex:0 0 14px; width:14px; height:14px; border:2px solid #555; border-top-color:#4daafc; border-radius:50%; animation:spin .8s linear infinite; }
 .terminal-emulator .xterm { width:100%; height:100%; padding:0; }
 .terminal-emulator .xterm-scrollable-element { height:100% !important; }
-.terminal-emulator .xterm-screen { position:absolute; bottom:0; left:0; }
+/* Keep the grid against the scrollbar; whole-column fitting leaves spare pixels on the left. */
+.terminal-emulator .xterm-screen { position:absolute; bottom:0; right:var(--terminal-scrollbar-width); left:auto; }
 .terminal-emulator .xterm-scrollable-element > .scrollbar.vertical { height:100% !important; }
 .terminal-clipboard-image-status { position:absolute; z-index:4; top:10px; left:50%; width:max-content; max-width:calc(100% - 24px); display:flex; align-items:center; gap:6px; padding:5px 9px; overflow:hidden; color:var(--aow-text); background:#252526ee; border:1px solid #555; border-radius:5px; box-shadow:0 2px 8px #0008; pointer-events:none; font-size:13px; line-height:1.5; text-overflow:ellipsis; white-space:nowrap; transform:translateX(-50%); }
 .terminal-clipboard-image-status > span { flex:0 0 10px; width:10px; height:10px; background:#4daafc; border-radius:50%; }

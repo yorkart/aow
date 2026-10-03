@@ -102,8 +102,11 @@ body { position:fixed; inset:0; }
 .mobile-turn { margin-bottom:25px; }
 .mobile-turn-label { display:flex; align-items:center; gap:8px; color:var(--aow-muted); font-size:10px; margin:0 2px 10px; }
 .mobile-turn-label > span { padding:2px 6px; color:#96b9e4; background:#729fdf10; border-radius:4px; }
-.mobile-session-agent { display:flex; align-items:center; gap:8px; margin-bottom:12px; color:var(--aow-text); font-size:12px; }
+.mobile-session-agent { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:12px; color:var(--aow-text); font-size:12px; }
 .mobile-session-agent > .agent-icon { width:22px; height:22px; }
+.mobile-session-agent > strong { flex-shrink:0; }
+.mobile-session-agent-meta { display:flex; flex:1; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:4px 10px; min-width:200px; margin-left:auto; }
+.mobile-session-agent-meta time { color:var(--aow-muted); font-size:10px; white-space:nowrap; }
 .mobile-message { padding:15px; border-radius:15px; font-size:14px; line-height:1.8; overflow-wrap:anywhere; }
 .mobile-message.user { margin-left:20px; background:#26354a; border:1px solid #364a65; border-bottom-right-radius:4px; }
 .mobile-message.assistant { margin:14px 0 0; padding:15px 0; }
@@ -242,3 +245,6 @@ body { position:fixed; inset:0; }
 .mobile-app a:hover { color:var(--aow-link-hover); }
 .mobile-app .mobile-button:not(.primary):hover:not(:disabled),.mobile-bottom-nav button:hover:not(:disabled),.mobile-segments button:hover:not(:disabled),.mobile-terminal-tabs button:hover:not(:disabled),.mobile-accessory-keys button:hover:not(:disabled),.mobile-git-actions button:hover:not(:disabled) { color:var(--aow-text-hover); }
 .mobile-row:hover:not(:disabled) .mobile-row-main > strong,.mobile-worktree-row:hover:not(:disabled) .mobile-row-main > strong,.mobile-resume-card:hover:not(:disabled) .mobile-row-main > strong { color:var(--aow-text-hover); }
+
+.mobile-inbox { flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
+.mobile-inbox > .inbox-panel { flex:1; min-height:0; }

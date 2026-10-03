@@ -23,6 +23,10 @@ pub(crate) fn routes() -> Router<AppState> {
         .route("/api/terminals/agents", get(tabs::list_terminal_agents))
         .route("/api/terminals/task-stops", get(notifications::events))
         .route(
+            "/api/terminals/{tab_id}/panes/{pane_id}/hosting",
+            put(hosting::enable),
+        )
+        .route(
             "/api/terminals/{tab_id}/panes/{pane_id}/agent-sessions",
             get(sessions::list),
         )

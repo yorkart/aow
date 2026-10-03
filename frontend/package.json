@@ -9,6 +9,7 @@
     "typecheck": "tsc -b --pretty false",
     "test:architecture": "node --test tests/architecture.test.mjs",
     "test:agent-arguments": "node --test tests/agent-arguments.test.mjs",
+    "test:agent-environment": "node --test tests/agent-environment.test.mjs",
     "test:mobile": "node --test tests/mobile-browser.test.mjs",
     "test:mobile-settings": "node --test tests/mobile-settings.test.mjs",
     "test:pr": "node --test tests/pull-request.test.mjs",
@@ -17,6 +18,7 @@
     "test:sessions": "node --test tests/session-process.test.mjs tests/session-snapshot.test.mjs",
     "test:shares": "node --test tests/session-share.test.mjs",
     "test:terminal-sessions": "node --test tests/terminal-session.test.mjs",
+    "test:terminal-hosting": "node --test tests/terminal-hosting.test.mjs",
     "test:terminal-input": "node --test tests/terminal-input.test.mjs",
     "test:notifications": "node --test tests/agent-notifications.test.mjs",
     "test:manual-tasks": "node --test tests/manual-tasks.test.mjs",
@@ -32,7 +34,7 @@
     "test:git": "node --test tests/commit-graph.test.mjs",
     "test:performance": "node --test tests/performance.test.mjs",
     "preview:pr": "node tests/pull-request-preview.mjs",
-    "test:tasks": "node --test tests/tasks.test.mjs tests/issue-sources.test.mjs"
+    "test:inbox": "node --test tests/inbox.test.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

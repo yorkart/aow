@@ -79,6 +79,7 @@ function normalizePane(value: unknown): TerminalPane | null {
   const cwd = typeof item.cwd === 'string' ? item.cwd : '';
   const shell = typeof item.shell === 'string' ? item.shell : '';
   const agentTerminal = asRecord(item.agent_terminal);
+  const hosting = asRecord(item.hosting);
   return {
     id: item.id,
     // Pane names are generated; ignore legacy custom names from stored metadata
@@ -88,6 +89,18 @@ function normalizePane(value: unknown): TerminalPane | null {
     shell,
     arguments: Array.isArray(item.arguments) ? item.arguments.filter((value): value is string => typeof value === 'string') : [],
     kind: item.kind === 'agent' ? 'agent' : 'terminal',
+    ...(hosting && typeof hosting.id === 'string' && typeof hosting.task_id === 'string'
+      && typeof hosting.task_name === 'string' && typeof hosting.workspace_root === 'string'
+      && ['waiting', 'reviewing', 'collecting', 'submitting', 'completed', 'limit_reached', 'failed'].includes(String(hosting.phase)) ? {
+      hosting: {
+        id: hosting.id, task_id: hosting.task_id, task_name: hosting.task_name, workspace_root: hosting.workspace_root,
+        phase: hosting.phase as NonNullable<TerminalPane['hosting']>['phase'],
+        max_inputs: typeof hosting.max_inputs === 'number' ? hosting.max_inputs : 3,
+        input_count: typeof hosting.input_count === 'number' ? hosting.input_count : 0,
+        run_id: typeof hosting.run_id === 'string' ? hosting.run_id : null,
+        error: typeof hosting.error === 'string' ? hosting.error : null,
+      },
+    } : {}),
     ...(agentTerminal && ['starting', 'ready', 'failed'].includes(String(agentTerminal.phase)) ? {
       agent_terminal: {
         phase: agentTerminal.phase as 'starting' | 'ready' | 'failed',
@@ -161,6 +174,14 @@ export const terminalApi = {
   async paneSessions(tabId: string, paneId: string, signal?: AbortSignal): Promise<TerminalPaneSessions> {
     return await request(terminalPath(tabId, `/panes/${encodeURIComponent(paneId)}/agent-sessions`),
       { cache: 'no-store' }, 15_000, signal) as TerminalPaneSessions;
+  },
+
+  async host(tabId: string, paneId: string, taskId: string, revision: number, maxInputs: number): Promise<TerminalTab> {
+    const tab = tabFromPayload(await request(terminalPath(tabId, `/panes/${encodeURIComponent(paneId)}/hosting`), {
+      method: 'PUT', body: JSON.stringify({ task_id: taskId, revision, max_inputs: maxInputs }),
+    }, 30_000));
+    if (!tab) throw new Error('服务器返回了无效的托管状态');
+    return tab;
   },
 
   async list(workspaceRoot?: string, signal?: AbortSignal): Promise<TerminalTab[]> {
