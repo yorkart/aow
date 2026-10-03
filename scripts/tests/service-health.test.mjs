@@ -81,16 +81,31 @@ test('server health follows the configured Base Path and normalizes its trailing
 });
 
 test('health requires the PID advertised by a new release and detects restarts during the probe', async t => {
-  const config = await endpoint(t, 'server', (_, response) => {
-    response.end(JSON.stringify({ service: 'aow', ok: true, pid: 1234 }));
-  });
+  let completedResponses = 0;
+  const respond = body => (_, response) => {
+    response.once('finish', () => { completedResponses++; });
+    response.end(body);
+  };
+  const expectRejectedProbe = async (config, runningPid) => {
+    const previousResponses = completedResponses;
+    await assert.rejects(
+      waitForHealth(config, runningPid, 5000),
+      /active launchd process|health request timed out/,
+    );
+    assert.ok(completedResponses > previousResponses,
+      'the health endpoint should complete a response before the probe deadline');
+  };
+  const config = await endpoint(t, 'server', respond(
+    JSON.stringify({ service: 'aow', ok: true, pid: 1234 }),
+  ));
   // Allow a real HTTP round trip under CI load before asserting PID ownership.
-  // The separate unresponsive-endpoint test covers the request deadline.
-  await assert.rejects(waitForHealth(config, () => 1235, 5000), /active launchd process/);
+  // The request can be cut off at the total deadline after an earlier completed
+  // response already showed the PID mismatch.
+  await expectRejectedProbe(config, () => 1235);
   let calls = 0;
-  await assert.rejects(waitForHealth(config, () => ++calls % 2 ? 1234 : 1235, 5000), /active launchd process/);
-  const old = await endpoint(t, 'server', (_, response) => response.end('{"service":"aow","ok":true}'));
-  await assert.rejects(waitForHealth(old, () => 1234, 5000), /active launchd process/);
+  await expectRejectedProbe(config, () => ++calls % 2 ? 1234 : 1235);
+  const old = await endpoint(t, 'server', respond('{"service":"aow","ok":true}'));
+  await expectRejectedProbe(old, () => 1234);
 });
 
 test('unresponsive health checks have a total deadline', async t => {
