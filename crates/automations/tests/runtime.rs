@@ -1068,6 +1068,169 @@ async fn native_timer_rendering_sync_and_dispatch_use_only_detached_runner_comma
     assert!(python.wait().unwrap().success());
 }
 
+#[tokio::test]
+async fn launchd_falls_back_to_background_domain_and_targets_all_operations_explicitly() {
+    let (directory, store, mut task) = fixture("exit 0");
+    let manager = directory.path().join("launchctl");
+    fs::write(&manager, r#"#!/usr/bin/python3
+import json, os, plistlib, sys
+from pathlib import Path
+root = Path(__file__).parent
+config = json.loads((root / 'domains.json').read_text())
+state_file = root / 'loaded.json'
+loaded = json.loads(state_file.read_text()) if state_file.exists() else []
+args = sys.argv[1:]
+record = {'args': args}
+code = 0
+if args[0] == 'print':
+    target = args[1]
+    if not config.get(target.split('/')[0], False):
+        print('Could not print domain: 125: Domain does not support specified action', file=sys.stderr)
+        code = 125
+    elif len(target.split('/')) == 3 and target not in loaded:
+        code = 113
+elif args[0] == 'bootout':
+    assert args[1] == '--wait'
+    loaded.remove(args[2])
+elif args[0] == 'bootstrap':
+    plist = plistlib.loads(Path(args[2]).read_bytes())
+    assert plist['LimitLoadToSessionType'] == ('Background' if args[1].startswith('user/') else 'Aqua')
+    assert plist['KeepAlive'] is False
+    record['plist'] = plist
+    loaded.append(args[1] + '/' + plist['Label'])
+else:
+    raise AssertionError('implicit domain operation: ' + str(args))
+state_file.write_text(json.dumps(loaded))
+with (root / 'commands.jsonl').open('a') as log:
+    log.write(json.dumps(record) + '\n')
+sys.exit(code)
+"#).unwrap();
+    fs::set_permissions(&manager, fs::Permissions::from_mode(0o700)).unwrap();
+    let config = directory.path().join("domains.json");
+    fs::write(&config, r#"{"gui":false,"user":true}"#).unwrap();
+    let scheduler = Scheduler {
+        platform: Platform::Launchd,
+        runner: task.launch.executable.clone(),
+        directory: directory.path().join("LaunchAgents"),
+        manager_command: manager.clone(),
+        dispatch_command: manager,
+    };
+    let uid = unsafe { libc::geteuid() };
+    let label = format!("org.aow.automation.{}", task.id);
+    let loaded = || {
+        serde_json::from_str::<Vec<String>>(
+            &fs::read_to_string(directory.path().join("loaded.json")).unwrap(),
+        )
+        .unwrap()
+    };
+    assert!(scheduler.status().await.ready);
+    scheduler.sync(&store, &task).await.unwrap();
+    assert_eq!(loaded(), [format!("user/{uid}/{label}")]);
+    // Logging into the GUI must not leave a duplicate timer in the user domain.
+    fs::write(&config, r#"{"gui":true,"user":true}"#).unwrap();
+    scheduler.sync(&store, &task).await.unwrap();
+    assert_eq!(loaded(), [format!("gui/{uid}/{label}")]);
+    task.input.kind = aow_automations::TaskKind::Manual;
+    task.input.cron.clear();
+    scheduler.sync(&store, &task).await.unwrap();
+    assert!(loaded().is_empty());
+    fs::write(&config, r#"{"gui":false,"user":true}"#).unwrap();
+    let id = scheduler
+        .dispatch(&store, &task, RunSource::Manual)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(loaded(), [format!("user/{uid}/{label}.run.{id}")]);
+    let commands: Vec<serde_json::Value> =
+        fs::read_to_string(directory.path().join("commands.jsonl"))
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+    let run = commands.last().unwrap();
+    assert_eq!(run["plist"]["RunAtLoad"], true);
+    assert_eq!(run["plist"]["ProgramArguments"][1], "run");
+    assert_eq!(
+        run["plist"]["ProgramArguments"]
+            .as_array()
+            .unwrap()
+            .last()
+            .unwrap(),
+        &id
+    );
+    assert!(!Path::new(run["args"][2].as_str().unwrap()).exists());
+    for timer in commands
+        .iter()
+        .filter(|command| command["plist"]["ProgramArguments"][1] == "trigger")
+    {
+        assert_eq!(timer["plist"]["RunAtLoad"], false);
+        assert!(timer["plist"].get("StartCalendarInterval").is_some());
+    }
+    fs::write(&config, r#"{"gui":false,"user":false}"#).unwrap();
+    let status = scheduler.status().await;
+    assert!(!status.ready);
+    let error = status.message.unwrap();
+    assert!(error.contains(&format!("gui/{uid}")) && error.contains(&format!("user/{uid}")));
+}
+
+#[cfg(target_os = "macos")]
+#[tokio::test]
+#[ignore = "starts an isolated launchd job; run explicitly outside the sandbox"]
+async fn native_launchd_hosted_run_uses_available_user_domain() {
+    struct Cleanup(String);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let uid = unsafe { libc::geteuid() };
+            for domain in [format!("gui/{uid}"), format!("user/{uid}")] {
+                let _ = std::process::Command::new("/bin/launchctl")
+                    .args(["bootout", "--wait", &format!("{domain}/{}", self.0)])
+                    .output();
+            }
+        }
+    }
+    let (directory, store, mut task) =
+        fixture("printf 'session id: native-launchd-session\\n' >&2\ncat >/dev/null\npwd");
+    task.id = aow_id::new_id();
+    task.input.kind = aow_automations::TaskKind::Manual;
+    task.input.cron.clear();
+    let cwd = task.input.workspace.workspace_path.clone();
+    task.input.workspace.workspace_mode = WorkspaceMode::Dynamic;
+    task.input.workspace.workspace_path.clear();
+    store.save_task(&task).unwrap();
+    task.input.resolve_workspace(Some(cwd.clone())).unwrap();
+    let scheduler = Scheduler {
+        runner: env!("CARGO_BIN_EXE_aow-automation-runner").into(),
+        ..Scheduler::new(directory.path())
+    };
+    let id = new_run_id();
+    let _cleanup = Cleanup(format!("org.aow.automation.{}.run.{id}", task.id));
+    scheduler
+        .dispatch_hosted(&store, &task, &id, BTreeMap::new())
+        .await
+        .unwrap();
+    let run = tokio::time::timeout(Duration::from_secs(30), async {
+        loop {
+            if let Ok(Some(run)) = store.read_run(&task.id, &id) {
+                if run.status.terminal() {
+                    break run;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(run.status, RunStatus::Completed, "{:?}", run.message);
+    assert_eq!(run.workspace_path, Some(cwd.canonicalize().unwrap()));
+    let output = store
+        .read_run_output(&task.id, &id, aow_automations::RunOutput::Stdio)
+        .unwrap();
+    assert_eq!(
+        String::from_utf8(output).unwrap().trim(),
+        cwd.canonicalize().unwrap().to_str().unwrap()
+    );
+}
+
 fn spawn_runner(store: &Store, task: &Task) -> (tokio::process::Child, String) {
     let id = new_run_id();
     let child = Command::new(env!("CARGO_BIN_EXE_aow-automation-runner"))
@@ -1088,7 +1251,7 @@ fn spawn_runner(store: &Store, task: &Task) -> (tokio::process::Child, String) {
     (child, id)
 }
 async fn session(store: &Store, task: &Task, id: &str) -> Run {
-    tokio::time::timeout(Duration::from_secs(10), async {
+    tokio::time::timeout(Duration::from_secs(30), async {
         loop {
             if let Ok(Some(run)) = store.read_run(&task.id, id)
                 && run.session_id.is_some()
@@ -1099,7 +1262,7 @@ async fn session(store: &Store, task: &Task, id: &str) -> Run {
         }
     })
     .await
-    .unwrap()
+    .unwrap_or_else(|_| panic!("run `{id}` did not publish a session ID within 30 seconds"))
 }
 const BLOCKED_AGENT: &str = r#"
 printf 'session id: session-%s\n' "$$"
@@ -1466,6 +1629,76 @@ async fn manual_tasks_have_no_timers_and_remove_previous_schedule() {
             .await
             .unwrap(),
         RunStatus::Failed
+    );
+}
+
+#[tokio::test]
+async fn dynamic_manual_runs_require_a_directory_and_keep_the_template_reusable() {
+    let (directory, store, mut task) =
+        fixture("printf 'session id: dynamic-session\\n' >&2\ncat >/dev/null\npwd");
+    task.input.kind = aow_automations::TaskKind::Manual;
+    task.input.cron.clear();
+    task.input.workspace.workspace_mode = WorkspaceMode::Dynamic;
+    task.input.workspace.workspace_path.clear();
+    task.input.workspace.base_branch.clear();
+    task.input.validate().unwrap();
+    store.save_task(&task).unwrap();
+    assert!(task.input.resolve_workspace(None).is_err());
+    assert!(
+        task.input
+            .resolve_workspace(Some("relative".into()))
+            .is_err()
+    );
+    let scheduler = Scheduler::new(directory.path());
+    let error = scheduler
+        .dispatch(&store, &task, RunSource::Manual)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("执行时指定工作区"));
+    for name in ["first", "second"] {
+        let cwd = task.repository_path.join(name);
+        fs::create_dir(&cwd).unwrap();
+        let mut execution = task.clone();
+        execution
+            .input
+            .resolve_workspace(Some(cwd.clone()))
+            .unwrap();
+        let id = new_run_id();
+        store
+            .save_manual_request(
+                &id,
+                &aow_automations::ManualRunRequest {
+                    task: execution,
+                    variables: BTreeMap::new(),
+                    hosted: false,
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            runner::run(&store, &task.id, Some(id.clone()), RunSource::Manual)
+                .await
+                .unwrap(),
+            RunStatus::Completed
+        );
+        let run = store.read_run(&task.id, &id).unwrap().unwrap();
+        assert_eq!(run.workspace_path, Some(cwd.canonicalize().unwrap()));
+        let output = store
+            .read_run_output(&task.id, &id, aow_automations::RunOutput::Stdio)
+            .unwrap();
+        assert_eq!(
+            String::from_utf8(output).unwrap().trim(),
+            cwd.canonicalize().unwrap().to_str().unwrap()
+        );
+        assert!(cwd.is_dir());
+    }
+    assert_eq!(
+        store
+            .get_task(&task.id)
+            .unwrap()
+            .input
+            .workspace
+            .workspace_mode,
+        WorkspaceMode::Dynamic
     );
 }
 

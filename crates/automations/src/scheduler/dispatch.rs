@@ -23,6 +23,10 @@ impl Scheduler {
             "手动任务不能定时触发"
         );
         task.input.render_prompt(&variables)?;
+        ensure!(
+            task.input.workspace.workspace_mode != crate::WorkspaceMode::Dynamic,
+            "请在执行时指定工作区目录"
+        );
         // This avoids creating a transient OS job when all slots are occupied.
         // The runner acquires a slot again as the authoritative race-free check.
         if store
@@ -73,7 +77,7 @@ impl Scheduler {
         source: RunSource,
         id: &str,
     ) -> Result<()> {
-        self.check_ready().await?;
+        let domain = self.check_ready().await?;
         ensure!(
             !task.deleted && (source == RunSource::Manual || task.input.enabled),
             "任务已暂停或删除"
@@ -96,35 +100,14 @@ impl Scheduler {
             launch.extend(args.into_iter().map(|arg| arg.replace('$', "$$")));
             self.command(&self.dispatch_command, &launch).await?;
         } else {
-            // launchctl submit jobs stay registered after exit. Retire only our completed jobs.
-            let _ = tokio::time::timeout(Duration::from_secs(2), async {
-                for run in store.runs(&task.id, None, 100).unwrap_or_default() {
-                    if run.status.terminal() {
-                        let _ = self
-                            .command(
-                                &self.manager_command,
-                                &[
-                                    "remove".into(),
-                                    format!("{}.run.{}", self.label(&task.id), run.id),
-                                ],
-                            )
-                            .await;
-                    }
-                }
-            })
-            .await;
-            let mut launch = vec![
-                "submit".into(),
-                "-l".into(),
-                label,
-                "-o".into(),
-                "/dev/null".into(),
-                "-e".into(),
-                "/dev/null".into(),
-                "--".into(),
-            ];
-            launch.extend(args);
-            self.command(&self.dispatch_command, &launch).await?;
+            self.dispatch_launchd(
+                store,
+                task,
+                &label,
+                &args,
+                domain.as_deref().context("缺少 launchd 用户域")?,
+            )
+            .await?;
         }
         Ok(())
     }

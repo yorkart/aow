@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use super::AgentKind;
-use aow_workspaces::WorkspaceConfig;
+use aow_workspaces::{WorkspaceConfig, WorkspaceMode};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -113,6 +113,11 @@ impl TaskInput {
             "任务内容不能为空且不能超过 64 KiB"
         );
         self.workspace.validate()?;
+        ensure!(
+            self.workspace.workspace_mode != WorkspaceMode::Dynamic
+                || self.kind == TaskKind::Manual,
+            "仅手动任务支持动态指定工作区"
+        );
         ensure!(self.precheck_command.len() <= 8192, "执行前检查命令过长");
         ensure!(
             (1..=3600).contains(&self.precheck_timeout_seconds),
@@ -144,6 +149,28 @@ impl TaskInput {
             );
             previous_end = binding.end;
         }
+        Ok(())
+    }
+
+    /// Resolve a per-run directory on an execution copy, leaving the template intact.
+    pub fn resolve_workspace(&mut self, path: Option<PathBuf>) -> Result<()> {
+        if self.workspace.workspace_mode != WorkspaceMode::Dynamic {
+            ensure!(path.is_none(), "仅动态指定的任务支持执行时传入工作区目录");
+            return Ok(());
+        }
+        ensure!(
+            self.kind == TaskKind::Manual,
+            "仅手动任务支持动态指定工作区"
+        );
+        let workspace = WorkspaceConfig {
+            workspace_mode: WorkspaceMode::Existing,
+            workspace_path: path
+                .filter(|path| !path.as_os_str().is_empty())
+                .ok_or_else(|| anyhow::anyhow!("请在执行时指定工作区目录"))?,
+            base_branch: String::new(),
+        };
+        workspace.validate()?;
+        self.workspace = workspace;
         Ok(())
     }
 

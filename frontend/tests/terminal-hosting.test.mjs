@@ -12,7 +12,7 @@ try {
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
   const base = `http://127.0.0.1:${server.httpServer.address().port}`;
   const hosting = { id: 'hosting-one', task_id: 'review', task_name: '代码 Review', workspace_root: '/repo', phase: 'reviewing', max_inputs: 3, input_count: 0, run_id: 'run-one', error: null };
-  const task = { id: 'review', revision: 3, name: '代码 Review', kind: 'manual', prompt: '检查本轮代码变更', project_id: 'project' };
+  const task = { id: 'review', revision: 3, name: '代码 Review', kind: 'manual', workspace_mode: 'dynamic', prompt: '检查本轮代码变更', project_id: 'project' };
   async function fixture(t, mobile = false) {
     const page = await browser.newPage({ viewport: { width: mobile ? 390 : 1100, height: 750 } });
     page.setDefaultTimeout(15000);
@@ -31,7 +31,7 @@ try {
       if (url.pathname === '/api/aow/projects') return route.fulfill({ json: [{ id: 'project', worktrees: [{ id: 'worktree', path: '/repo' }] }] });
       if (url.pathname === '/api/aow/automations') {
         assert.equal(url.searchParams.get('project_id'), 'project');
-        return route.fulfill({ json: [task, { ...task, id: 'schedule', kind: 'scheduled', name: '定时任务' }] });
+        return route.fulfill({ json: [task, { ...task, id: 'schedule', kind: 'scheduled', name: '定时任务' }, ...['existing', 'new_worktree', 'temporary'].map(mode => ({ ...task, id: mode, workspace_mode: mode, name: `非动态任务 ${mode}` }))] });
       }
       if (url.pathname === '/api/aow/automations/review') return route.fulfill({ json: task });
       if (url.pathname === '/api/aow/automations/review/runs/run-one') return route.fulfill({ json: { id: 'run-one', task_id: 'review', status: 'failed' } });
@@ -71,6 +71,7 @@ try {
     const menu = page.getByRole('dialog', { name: '选择托管任务' });
     await menu.getByRole('button', { name: /代码 Review/ }).waitFor();
     assert.equal(await menu.getByText('定时任务').count(), 0);
+    assert.equal(await menu.getByRole('button', { name: /非动态任务/ }).count(), 0);
     await menu.getByLabel('搜索手动任务').fill('无匹配');
     await menu.getByText('没有匹配的任务').waitFor();
     await menu.getByLabel('搜索手动任务').fill('Review');

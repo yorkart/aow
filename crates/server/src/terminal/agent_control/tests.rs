@@ -20,7 +20,14 @@ if mode == 'update':
         os.write(1, b'Update available\r\n1. Update now\r\n2. Skip')
         while True: time.sleep(1)
 def show(text):
-    os.write(1, ('\x1b[2J\x1b[H' + text + '\x1b[47;1H> \x1b[48;1Hfixture-model · /workspace · ready').encode())
+    if mode in ('compact', 'compact_warning'):
+        row = 47 if mode == 'compact_warning' else 48
+        footer = f'\x1b[45;1H› Ask Codex to do anything\x1b[{row};1H  GPT-6-Astra xhigh · ~/workspace/.aow-inbox-task'
+        if mode == 'compact_warning':
+            footer += '\x1b[48;1H  ? for shortcuts\x1b[48;135H⚠ 1 warning · f2 to view'
+    else:
+        footer = '\x1b[47;1H> \x1b[48;1Hfixture-model · /workspace · ready'
+    os.write(1, ('\x1b[2J\x1b[H' + text + footer).encode())
 os.write(1, b'\x1b[2J\x1b[Hmodel: loading\r\n> Ask anything')
 time.sleep(1)
 if mode == 'exit': sys.exit(9)
@@ -1323,8 +1330,12 @@ async fn hosting_owns_input_and_explicit_takeover_cancels_feedback() {
 
 #[tokio::test]
 async fn inbox_execution_submits_xml_context_and_original_task_once_and_retains_terminal_link() {
-    for mode in ["new_worktree", "existing", "temporary"] {
-        let fixture = Fixture::with_storage("ready", true).await;
+    for (mode, startup) in [
+        ("new_worktree", "compact_warning"),
+        ("existing", "compact"),
+        ("temporary", "ready"),
+    ] {
+        let fixture = Fixture::with_storage(startup, true).await;
         let client = reqwest::Client::new();
         let base = format!("http://{}", fixture.address);
         let markdown =
