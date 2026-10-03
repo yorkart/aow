@@ -98,6 +98,37 @@ impl Runtime {
         }
     }
 
+    pub(in crate::runtime) fn kill_uncommitted_spawn_best_effort(&self) {
+        if self.reap_state.lock().is_ok_and(|reaped| *reaped) {
+            return;
+        }
+        let foreground_process_group = self
+            .master
+            .lock()
+            .ok()
+            .and_then(|master| master.process_group_leader());
+        unsafe {
+            if let Some(process_group) = foreground_process_group
+                && process_group > 1
+            {
+                libc::kill(-process_group, libc::SIGKILL);
+            }
+            if let Some(pid) = self.child_pid
+                && let Ok(pid) = i32::try_from(pid)
+                && pid > 1
+            {
+                libc::kill(-pid, libc::SIGKILL);
+                // Start reaping the PTY leader immediately. Session enumeration
+                // can be slow on macOS and is performed after wait() by
+                // mark_reaped, which also removes any surviving descendants.
+                libc::kill(pid, libc::SIGKILL);
+            }
+        }
+        if let Ok(mut killer) = self.killer.lock() {
+            let _ = killer.kill();
+        }
+    }
+
     pub(in crate::runtime) fn kill_remaining_session_members(&self) {
         let Some(session_id) = self.child_session_id else {
             return;
