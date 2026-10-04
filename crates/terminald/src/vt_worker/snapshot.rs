@@ -20,7 +20,7 @@ use super::{
 pub(super) fn reserve_snapshot_bytes(total: &AtomicUsize, additional: usize) -> bool {
     additional == 0
         || total
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |current| {
                 current
                     .checked_add(additional)
                     .filter(|next| *next <= MAX_TOTAL_CACHED_SNAPSHOT_BYTES)

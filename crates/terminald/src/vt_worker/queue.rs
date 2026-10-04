@@ -55,7 +55,7 @@ impl Drop for WriteBatch {
 
 pub(super) fn reserve_write_bytes(total: &AtomicUsize, bytes: usize) -> bool {
     total
-        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+        .try_update(Ordering::AcqRel, Ordering::Acquire, |current| {
             current
                 .checked_add(bytes)
                 .filter(|next| *next <= MAX_PENDING_WRITE_BYTES)
