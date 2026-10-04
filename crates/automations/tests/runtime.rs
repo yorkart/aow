@@ -77,7 +77,9 @@ fn fixture(script: &str) -> (TempDir, Store, Task) {
             enabled: true,
             yolo: true,
             precheck_command: String::new(),
-            precheck_timeout_seconds: 1,
+            // Functional prechecks spawn real processes on shared CI runners.
+            // Only the timeout regression below needs a one-second deadline.
+            precheck_timeout_seconds: 10,
             failure_notification: None,
         },
         project_name: "Project".into(),
@@ -663,6 +665,7 @@ async fn missing_session_nonzero_exit_precheck_and_paused_tasks_have_distinct_re
     assert_eq!(skipped.status, RunStatus::Skipped);
     assert!(skipped.agent_pid.is_none());
     task.input.precheck_command = "sleep 5".into();
+    task.input.precheck_timeout_seconds = 1;
     let timeout = execute(&store, &task).await;
     assert_eq!(timeout.status, RunStatus::Failed);
     assert!(timeout.message.unwrap().contains("超时"));
@@ -1387,9 +1390,16 @@ async fn simultaneous_triggers_respect_one_stable_concurrency_slot() {
     })
     .await
     .unwrap();
+    // Losing the slot race does not imply that its owner has published a run.
+    // Synchronize with the surviving runner before reading the journal.
+    let winner_id = children
+        .iter_mut()
+        .find_map(|(child, id)| child.try_wait().unwrap().is_none().then(|| id.clone()))
+        .expect("one runner still owns the slot");
+    session(&store, &task, &winner_id).await;
     let runs = store.runs(&task.id, None, 20).unwrap();
     assert_eq!(runs.len(), 1);
-    session(&store, &task, &runs[0].id).await;
+    assert_eq!(runs[0].id, winner_id);
     let lock = store.root.join("runs").join(&task.id).join("slot-1.lock");
     let inode = fs::metadata(&lock).unwrap().ino();
     let owner: serde_json::Value =
