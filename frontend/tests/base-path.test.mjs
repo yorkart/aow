@@ -2,13 +2,12 @@
 // mounts. Build first: cargo build -p aow-server && cd frontend && npm run build
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createHash } from 'node:crypto';
 import { chromium } from 'playwright';
 import { snapshot } from './fixtures/session-snapshot.mjs';
 
@@ -28,7 +27,12 @@ async function startServer(t, base, { envBase = base, args = [] } = {}) {
     }
     await rm(state, { recursive: true, force: true });
   });
-  await writeFile(join(state, 'pin.md5'), createHash('md5').update('123456').digest('hex'));
+  // Exercise the actual first-install credential writer against the Rust server.
+  const command = `bash '${join(repo, 'packaging/bin/aow').replaceAll("'", "'\\''")}' account`;
+  execFileSync('python3', [join(repo, 'scripts/tests/pty-command.py'), command], {
+    input: 'admin\ntest-password\ntest-password\n',
+    env: { ...process.env, AOW_SERVER_STATE_DIR: state }, timeout: 15000,
+  });
   // Keep all initialization writes inside this test's temporary directory.
   await writeFile(join(state, 'aow-settings.json'), JSON.stringify({ version: 1, notes_base: join(state, 'notes') }));
   child = spawn(process.env.AOW_TEST_SERVER ?? join(repo, 'target/debug/aow-server'), [
@@ -62,6 +66,9 @@ try {
       const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
       t.after(() => context.close());
       const origin = await startServer(t, base);
+      const authStatus = await fetch(`${origin}${base}/api/auth/status`).then(response => response.json());
+      assert.deepEqual(authStatus.methods, [{ id: 'password', label: '账号密码', configured: true }]);
+      assert.equal(authStatus.authenticated, false);
       const requests = new Set();
       const sockets = [];
       const errors = [];
@@ -75,7 +82,7 @@ try {
         if (!pathname.startsWith(`${base}/api/`)) return route.continue();
         const path = pathname.slice(base.length);
         // Authentication, cookies and streams go through the real backend.
-        if (path.startsWith('/api/auth/') || ['/api/operations', '/api/operations/stream', '/api/terminals/task-stops'].includes(path)) return route.continue();
+        if (path.startsWith('/api/auth/') || path.startsWith('/api/aow/settings/configuration') || ['/api/operations/active', '/api/events/ws', '/api/aow/worktree-removals'].includes(path)) return route.continue();
         let data = [];
         if (path === '/api/aow/projects') data = [project];
         else if (path === '/api/aow/settings') data = { notes_base: '/notes', execution_path: ['/usr/bin'], node_addresses: [] };
@@ -100,11 +107,25 @@ try {
         });
       });
       const page = await context.newPage();
+      const eventSockets = [];
+      page.on('websocket', socket => { if (socket.url().endsWith('/api/events/ws')) eventSockets.push(socket); });
       page.setDefaultTimeout(15000);
       page.on('pageerror', error => errors.push(error.message));
       page.on('request', request => requests.add(new URL(request.url()).pathname));
+      page.on('request', request => {
+        if (new URL(request.url()).pathname === `${base}/api/auth/login`) {
+          assert.equal(request.postDataJSON().method, 'password');
+        }
+      });
       await page.goto(`${origin}${base}/aow/tabs/terminal/target?ui=desktop`);
-      await page.getByLabel('PIN 码').fill('123456');
+      await page.getByLabel('账号').fill('admin');
+      await page.getByLabel('密码', { exact: true }).fill('wrong-password');
+      await page.getByRole('button', { name: '登录', exact: true }).click();
+      await page.getByRole('alert').filter({ hasText: '账号或密码不正确' }).waitFor();
+      assert.equal(await page.getByLabel('账号').inputValue(), 'admin');
+      assert.equal(await page.getByLabel('密码', { exact: true }).inputValue(), '');
+      await page.getByLabel('密码', { exact: true }).fill('test-password');
+      await page.getByLabel('密码', { exact: true }).press('Enter');
       const activeTab = page.locator('.project-aow-surface:not([hidden]) .project-aow-center-tab.active').filter({ hasText: 'Prefix Terminal' });
       await activeTab.waitFor();
       await page.locator('.terminal-emulator-shell:not(.restore-pending)').first().waitFor();
@@ -116,18 +137,54 @@ try {
       assert.equal((await context.cookies()).find(cookie => cookie.name.startsWith('aow_session'))?.path, `${base}/`);
       assert.ok(sockets.length > 0);
       assert.ok(sockets.every(path => path === `${base}/api/terminals/target/panes/pane/ws`));
-      assert.ok(requests.has(`${base}/api/terminals/task-stops`));
-      assert.ok(requests.has(`${base}/api/operations/stream`));
+      assert.ok(eventSockets.length > 0);
+      assert.ok(eventSockets.every(socket => new URL(socket.url()).pathname === `${base}/api/events/ws`));
+      assert.equal(requests.has(`${base}/api/terminals/task-stops`), false);
+      assert.equal(requests.has(`${base}/api/operations/stream`), false);
+      assert.equal(requests.has(`${base}/api/workspace/events`), false);
+      // Four pages used to consume twelve SSE connections in the six-slot HTTP/1.1 pool.
+      const extraPages = [];
+      for (let index = 0; index < 3; index++) {
+        const extra = await context.newPage();
+        extraPages.push(extra);
+        await extra.goto(`${origin}${base}/aow/tabs/terminal/target?ui=desktop`);
+        await extra.locator('.project-aow-center-tab.active').filter({ hasText: 'Prefix Terminal' }).waitFor();
+      }
+      for (const openPage of [page, ...extraPages]) {
+        const statuses = await openPage.evaluate(async base => Promise.all([
+          '/api/operations/active', '/api/aow/worktree-removals', '/api/aow/settings/configuration',
+        ].map(async path => {
+          const response = await fetch(base + path, { signal: AbortSignal.timeout(3000) });
+          await response.json();
+          return response.status;
+        })), base);
+        assert.deepEqual(statuses, [200, 200, 200]);
+      }
+      await page.bringToFront();
+      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      const settingsDialog = page.getByRole('dialog', { name: '设置', exact: true });
+      await settingsDialog.getByRole('button', { name: /^Configuration/ }).click();
+      await settingsDialog.getByRole('radio').first().waitFor();
+      assert.equal(await settingsDialog.getByRole('button', { name: '保存', exact: true }).isEnabled(), true);
+      await settingsDialog.getByRole('button', { name: '关闭', exact: true }).click();
+      await Promise.all(extraPages.map(page => page.close()));
       assert.ok([...requests].some(path => path.startsWith(`${base}/assets/`) && path.endsWith('.js')));
       assert.ok(await page.evaluate(() => Object.keys(localStorage).some(key => key.endsWith('aow-active')
         && key.startsWith(document.querySelector('meta[name="aow-base-path"]').content ? 'aow@' : 'aow-active'))));
+      await context.clearCookies();
+      await page.setViewportSize({ width: 390, height: 844 });
       await page.goto(`${origin}${base}/m/`);
+      await page.getByLabel('账号').fill('admin');
+      await page.getByLabel('密码', { exact: true }).fill('test-password');
+      assert.equal(await page.getByLabel('账号').getAttribute('autocomplete'), 'username');
+      assert.equal(await page.getByLabel('密码', { exact: true }).getAttribute('autocomplete'), 'current-password');
+      await page.getByRole('button', { name: '登录', exact: true }).click();
       await page.getByRole('link', { name: '打开桌面版' }).waitFor();
       assert.equal(await page.getByRole('link', { name: '打开桌面版' }).getAttribute('href'), `${base}/?ui=desktop`);
       await context.clearCookies();
       await page.goto(`${origin}${base}/share/token`);
       await page.getByText('会话分享 · 只读').waitFor();
-      assert.equal(await page.getByLabel('PIN 码').count(), 0);
+      assert.equal(await page.getByLabel('账号').count(), 0);
       assert.ok(requests.has(`${base}/api/public/session-shares/token`));
       assert.deepEqual(errors, []);
       if (base) assert.deepEqual([...requests].filter(path => /^\/(api|assets|aow|m|share)(\/|$)/.test(path)), []);

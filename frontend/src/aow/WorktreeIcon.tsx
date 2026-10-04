@@ -18,7 +18,7 @@ export const worktreeColors: { id: WorktreeColor; label: string; value?: string 
   { id: 'gray', label: '灰色', value: '#a3aab6' },
 ];
 export const worktreeColorValues = Object.fromEntries(
-  worktreeColors.map((color) => [color.id, color.value ?? '#79a9eb']),
+  worktreeColors.map((color) => [color.id, color.value ?? 'var(--aow-icon)']),
 ) as Record<WorktreeColor, string>;
 
 // Match Lucide's 24px viewBox, rounded strokes and currentColor for the remaining fruits.

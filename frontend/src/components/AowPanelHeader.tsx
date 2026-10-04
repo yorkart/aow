@@ -12,6 +12,7 @@ export interface AowPanelHeaderProps {
   controlsId?: string;
   onToggle?: () => void;
   onNavigate?: () => void;
+  togglePosition?: 'start' | 'end';
   details?: ReactNode;
   actions?: ReactNode;
   children?: ReactNode;
@@ -47,7 +48,7 @@ function PanelHeaderTooltip({ id, anchor, children, onClose }: {
   </div>, document.body);
 }
 
-export function AowPanelHeader({ title, tooltip, icon, className, collapsed = false, controlsId, onToggle, onNavigate, details, actions, children }: AowPanelHeaderProps) {
+export function AowPanelHeader({ title, tooltip, icon, className, collapsed = false, controlsId, onToggle, onNavigate, togglePosition = 'start', details, actions, children }: AowPanelHeaderProps) {
   const tooltipId = useId();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const closeTooltip = useCallback(() => setAnchor(null), []);
@@ -59,18 +60,23 @@ export function AowPanelHeader({ title, tooltip, icon, className, collapsed = fa
     onFocus: event => { if (event.currentTarget.matches(':focus-visible')) setAnchor(event.currentTarget); },
     onBlur: closeTooltip,
   } : {};
-  const content = <>{onToggle && !onNavigate ? <ChevronRight className={collapsed ? undefined : 'expanded'} /> : null}{icon}<strong>{title}</strong>{details}</>;
+  const content = <>{onToggle && !onNavigate && togglePosition === 'start' ? <ChevronRight className={collapsed ? undefined : 'expanded'} /> : null}{icon}<strong>{title}</strong>{details}</>;
+  const toggle = onToggle && (onNavigate || togglePosition === 'end') ? <AowIconButton className="aow-panel-toggle" aria-label={`${collapsed ? '展开' : '收起'} ${title}`} aria-expanded={!collapsed} aria-controls={controlsId}
+    onClick={() => { closeTooltip(); onToggle(); }}><ChevronRight className={collapsed ? undefined : 'expanded'} /></AowIconButton> : null;
 
-  return <header className={`side-title aow-panel-header${className ? ` ${className}` : ''}`}>
-    {onNavigate && onToggle ? <AowIconButton className="aow-panel-toggle" aria-label={`${collapsed ? '展开' : '收起'} ${title}`} aria-expanded={!collapsed} aria-controls={controlsId}
-      onClick={() => { closeTooltip(); onToggle(); }}><ChevronRight className={collapsed ? undefined : 'expanded'} /></AowIconButton> : null}
+  return <header className={`side-title aow-panel-header${className ? ` ${className}` : ''}`} onClick={togglePosition === 'end' && onToggle ? event => {
+    if (event.defaultPrevented || (event.target instanceof Element && event.target.closest('button, a, input, select, textarea, [role="button"]'))) return;
+    closeTooltip();
+    onToggle();
+  } : undefined}>
+    {togglePosition === 'start' ? toggle : null}
     {onNavigate
       ? <button className="aow-panel-header-title" type="button" aria-label={`定位 ${title}`} {...tooltipProps} onClick={() => { closeTooltip(); onNavigate(); }}>{content}</button>
       : onToggle
-      ? <button className="aow-panel-header-title" type="button" aria-expanded={!collapsed} aria-controls={controlsId}
+      ? <button className="aow-panel-header-title" type="button" aria-label={togglePosition === 'end' ? title : undefined} aria-expanded={!collapsed} aria-controls={controlsId}
         {...tooltipProps} onClick={() => { closeTooltip(); onToggle(); }}>{content}</button>
       : <span className="aow-panel-header-title" {...tooltipProps} tabIndex={tooltip ? 0 : undefined}>{content}</span>}
-    {actions ? <span className="aow-panel-header-actions">{actions}</span> : null}
+    {actions || (togglePosition === 'end' && toggle) ? <span className="aow-panel-header-actions">{togglePosition === 'end' ? toggle : null}{actions}</span> : null}
     {children}
     {tooltip && anchor ? <PanelHeaderTooltip id={tooltipId} anchor={anchor} onClose={closeTooltip}>{tooltip}</PanelHeaderTooltip> : null}
   </header>;

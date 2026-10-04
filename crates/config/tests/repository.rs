@@ -37,7 +37,7 @@ fn migration_copies_only_configuration_and_preserves_originals() {
     )
     .unwrap();
     for path in [
-        "pin.md5",
+        "credentials.json",
         "terminals.json",
         "session-shares.json",
         "clipboard-images/image.png",
@@ -69,7 +69,7 @@ fn migration_copies_only_configuration_and_preserves_originals() {
     let files = git(repo, &["ls-files"]);
     assert_eq!(files.lines().count(), 4, "{files}");
     for forbidden in [
-        "pin.md5",
+        "credentials.json",
         "terminals",
         "shares",
         "clipboard",
@@ -284,10 +284,13 @@ fn runtime_paths_and_symlink_destinations_are_rejected() {
     let outside = tempfile::tempdir().unwrap();
     let config = ConfigRepository::initialize(state.path()).unwrap();
     for path in [
-        "pin.md5",
+        "credentials.json",
         "terminals.json",
         "automations/runs/test.json",
         "../aow-settings.json",
+        "inbox.json",
+        "inbox/requirements/active/../requirement.json",
+        "inbox/requirements/active/test/other.json",
     ] {
         assert!(config.save(Path::new(path), b"{}").is_err());
     }
@@ -301,22 +304,137 @@ fn runtime_paths_and_symlink_destinations_are_rejected() {
 }
 
 #[test]
-fn repository_discovery_validates_roots_and_selects_uuid_input() {
+fn inbox_directory_updates_commit_moves_and_reject_symlinks() {
+    let state = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    let config = ConfigRepository::initialize(state.path()).unwrap();
+    config.save(Path::new("inbox/labels.json"), b"{}").unwrap();
+    config
+        .update_directory(Path::new("inbox"), |root| {
+            let directory = root.join("requirements/active/test");
+            fs::create_dir_all(&directory)?;
+            fs::write(directory.join("requirement.json"), b"{}")?;
+            fs::write(
+                directory.join("comments.jsonl"),
+                b"{\"content\":\"keep\"}\n",
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    config
+        .update_directory(Path::new("inbox"), |root| {
+            fs::create_dir_all(root.join("requirements/deleted"))?;
+            fs::rename(
+                root.join("requirements/active/test"),
+                root.join("requirements/deleted/test"),
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    let tracked = git(config.directory(), &["ls-files"]);
+    assert!(tracked.contains("inbox/requirements/deleted/test/requirement.json"));
+    assert!(tracked.contains("inbox/requirements/deleted/test/comments.jsonl"));
+    assert!(!tracked.contains("inbox/requirements/active/test"));
+    assert_eq!(git(config.directory(), &["status", "--porcelain"]), "");
+    std::os::unix::fs::symlink(
+        outside.path(),
+        config
+            .directory()
+            .join("inbox/requirements/active/external"),
+    )
+    .unwrap();
+    assert!(
+        config
+            .update_directory(Path::new("inbox"), |_| panic!(
+                "symlink must be rejected before callback"
+            ))
+            .is_err()
+    );
+    assert!(
+        config
+            .update_directory(Path::new("../inbox"), |_| Ok(()))
+            .is_err()
+    );
+}
+
+#[test]
+fn repository_discovery_uses_configuration_contents_and_opaque_ids() {
     let root = tempfile::tempdir().unwrap();
     let config = ConfigRepository::initialize(root.path()).unwrap();
     let selection = config.selection();
-    let second = "550e8400-e29b-41d4-a716-446655440000";
-    fs::create_dir(selection.config_repo.join(second)).unwrap();
-    fs::create_dir(selection.config_repo.join("not-a-version")).unwrap();
+    assert!(aow_id::is_valid_id(&selection.config_id));
+    let ids = [
+        "g123456789ab",
+        "550e8400-e29b-41d4-a716-446655440000",
+        "Config_v2-A",
+        "0",
+        "0001",
+        "zzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+    ];
+    for id in ids {
+        let directory = selection.config_repo.join(id);
+        fs::create_dir(&directory).unwrap();
+        fs::write(
+            directory.join("aow-projects.json"),
+            b"{\"version\":1,\"items\":[]}",
+        )
+        .unwrap();
+        let selected = ConfigSelection {
+            config_id: id.into(),
+            ..selection.clone()
+        };
+        assert_eq!(
+            ConfigRepository::from_selection(&selected)
+                .unwrap()
+                .selection(),
+            selected
+        );
+        assert_eq!(
+            inspect_repository(&directory)
+                .unwrap()
+                .selected_id
+                .as_deref(),
+            Some(id)
+        );
+    }
+    let invalid_id = "invalid.name";
+    fs::create_dir(selection.config_repo.join(invalid_id)).unwrap();
     fs::write(
         selection
             .config_repo
-            .join("550e8400-e29b-41d4-a716-446655440001"),
-        "file",
+            .join(invalid_id)
+            .join("aow-projects.json"),
+        b"{}",
     )
     .unwrap();
+    for id in [
+        "",
+        "../escape",
+        "a/b",
+        "a\\b",
+        "a b",
+        invalid_id,
+        &"x".repeat(129),
+    ] {
+        let invalid = ConfigSelection {
+            config_id: id.into(),
+            ..selection.clone()
+        };
+        assert_eq!(
+            ConfigRepository::from_selection(&invalid)
+                .err()
+                .unwrap()
+                .to_string(),
+            "配置 ID 不合法"
+        );
+    }
+    // Folder names alone do not identify configuration versions.
+    fs::create_dir(selection.config_repo.join("g123456789ad")).unwrap();
+    fs::create_dir(selection.config_repo.join("docs")).unwrap();
+    fs::write(selection.config_repo.join("g123456789ac"), "file").unwrap();
     let choices = inspect_repository(&selection.config_repo).unwrap();
-    let mut expected = vec![selection.config_id.clone(), second.to_owned()];
+    let mut expected = vec![selection.config_id.clone()];
+    expected.extend(ids.map(str::to_owned));
     expected.sort();
     assert_eq!(choices.config_ids, expected);
     assert_eq!(choices.selected_id, None);
@@ -327,12 +445,15 @@ fn repository_discovery_validates_roots_and_selects_uuid_input() {
         Some(selection.config_id.as_str())
     );
     assert_eq!(direct.config_ids, choices.config_ids);
-    let orphan = root.path().join(second);
+    let orphan = root.path().join("Config_v2-A");
     fs::create_dir(&orphan).unwrap();
+    fs::write(orphan.join("aow-projects.json"), b"{}").unwrap();
     for invalid in [
         root.path().to_path_buf(),
         orphan,
-        selection.config_repo.join("not-a-version"),
+        selection.config_repo.join("g123456789ad"),
+        selection.config_repo.join("docs"),
+        selection.config_repo.join(invalid_id),
         root.path().join("missing"),
         Path::new("relative").to_path_buf(),
     ] {
@@ -342,7 +463,9 @@ fn repository_discovery_validates_roots_and_selects_uuid_input() {
             invalid.display()
         );
     }
-    fs::remove_dir(selection.config_repo.join(second)).unwrap();
+    for id in ids {
+        fs::remove_dir_all(selection.config_repo.join(id)).unwrap();
+    }
     fs::remove_dir_all(config.directory()).unwrap();
     assert!(
         inspect_repository(&selection.config_repo)
@@ -394,7 +517,7 @@ fn toml_selection_switches_on_reopen_preserves_extra_fields_and_skips_noops() {
             ..selection.clone()
         },
         ConfigSelection {
-            config_id: "550e8400-e29b-41d4-a716-446655440000".into(),
+            config_id: "missing-version".into(),
             ..selection.clone()
         },
         ConfigSelection {
@@ -430,7 +553,7 @@ fn invalid_toml_never_falls_back_to_old_selector_or_initializes_a_repository() {
         "",
         "bad = [",
         "config-repo = 42",
-        "config-repo = '/tmp'\nconfig-id = 'invalid'",
+        "config-repo = '/tmp'\nconfig-id = 'invalid/id'",
         "config-repo = 'relative'\nconfig-id = '550e8400-e29b-41d4-a716-446655440000'",
     ] {
         fs::write(state.join(CONFIG_FILE), text).unwrap();

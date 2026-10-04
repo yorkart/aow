@@ -22,3 +22,11 @@ export function builtinAgentType(id?: string): AowAgentType | undefined {
 export function aowAgentType(agent: AowAgent): AowAgentType | undefined {
   return agent.agent_type ?? builtinAgentType(agent.id);
 }
+
+export function suggestedAgentExecutable(agents: AowAgent[], type: AowAgentType | '' | null): string {
+  if (!type) return '';
+  const detected = agents.find(agent => aowAgentType(agent) === type && agent.source === 'detected' && agent.executable);
+  if (detected?.executable) return detected.executable;
+  const configured = agents.find(agent => aowAgentType(agent) === type && agent.source === 'configured');
+  return configured?.executable ?? configured?.command ?? '';
+}

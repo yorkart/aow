@@ -130,6 +130,7 @@ test('snapshot ANSI restores normal/alternate screens and terminal modes', async
     const snapshot = await service.dispatch('snapshot', request('snapshot'));
     const ansi = snapshot.data.toString('utf8');
     assert.match(ansi, /alternate/);
+    // eslint-disable-next-line no-control-regex -- Validate or match literal protocol control bytes intentionally.
     assert.match(ansi, /\u001b\[\?1049h/);
     assert.equal(snapshot.applied_offset, bytes.byteLength);
 

@@ -1,5 +1,15 @@
-use super::*;
-use std::{collections::HashMap, time::Instant};
+use serde_json::{Value, json};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
+use tokio::time::timeout;
+
+use super::{
+    ProviderManager, PullRequestError, Result, absolute, git, invalid_json, parse_remote, web_link,
+};
 
 type AvatarResult = std::result::Result<Option<String>, String>;
 type AvatarEntry = Arc<tokio::sync::Mutex<Option<CachedAvatar>>>;

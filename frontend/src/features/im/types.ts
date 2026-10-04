@@ -10,5 +10,10 @@ export interface WechatLogin {
 }
 
 export interface WechatStatus {
-  connection: { receiving: boolean; context_ready: boolean; error: string | null } | null;
+  connection: { receiving: boolean; context_ready: boolean; error: string | null; verification: WechatVerification | null } | null;
+}
+
+export interface WechatVerification {
+  test_id: string;
+  receipt: 'sent' | 'confirmed' | 'missing';
 }

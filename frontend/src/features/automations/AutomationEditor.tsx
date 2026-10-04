@@ -7,7 +7,10 @@ import type { AowProject } from '../../aow/types';
 import { notificationsApi } from '../notifications/api';
 import { agentNames, errorMessage } from './presentation';
 import { automationApi } from './api';
-import type { AutomationAgent, AutomationTask, TaskInput, TaskKind, WorkspaceMode } from './types';
+import type { AutomationAgent, AutomationTask, TaskInput, TaskKind } from './types';
+
+import { WorkspaceSelect } from '../workspaces/WorkspaceSelect';
+import { workspaceConfig } from '../workspaces/types';
 
 import { identifyVariables, variableNames } from './variables';
 
@@ -39,7 +42,7 @@ export function AutomationEditor({ task, kind = 'scheduled', project, agents, ti
   const [draft, setDraft] = useState<TaskInput>(() => task ? { ...task, kind: task.kind ?? 'scheduled', prompt_bindings: task.prompt_bindings ?? [], failure_notification: task.failure_notification ?? null } : {
     kind, prompt_bindings: [], name: '', prompt: '', agent: (agents.find((agent) => agent.available && Object.hasOwn(agentNames, agent.id))?.id as AutomationAgent | undefined) ?? 'codex',
     project_id: project.id, workspace_mode: 'new_worktree', workspace_path: initialWorktree?.path ?? '',
-    cleanup_worktree: true, base_branch: initialWorktree?.branch || 'HEAD', cron: '0 9 * * *', interval_seconds: null, max_concurrent_runs: 1, enabled: true, yolo: true, precheck_command: '', precheck_timeout_seconds: 60, failure_notification: null,
+    cleanup_worktree: true, base_branch: '', cron: '0 9 * * *', interval_seconds: null, max_concurrent_runs: 1, enabled: true, yolo: true, precheck_command: '', precheck_timeout_seconds: 60, failure_notification: null,
   });
   const [schedule, setSchedule] = useState(() => ({ ...parseSchedule(draft.cron), ...(draft.interval_seconds ? { cadence: 'interval' as Cadence } : {}) }));
   const [lastConcurrentRuns, setLastConcurrentRuns] = useState(() => draft.max_concurrent_runs > 1 ? draft.max_concurrent_runs : 3);
@@ -49,6 +52,7 @@ export function AutomationEditor({ task, kind = 'scheduled', project, agents, ti
   const [intervalAmount, setIntervalAmount] = useState(initialSeconds ? String(initialSeconds / initialUnit) : '');
   const [customCron, setCustomCron] = useState(draft.cron);
   const [busy, setBusy] = useState(false);
+  const [workspaceReady, setWorkspaceReady] = useState(false);
   const [error, setError] = useState('');
   const manual = draft.kind === 'manual';
   const names = variableNames(draft.prompt_bindings);
@@ -78,7 +82,7 @@ export function AutomationEditor({ task, kind = 'scheduled', project, agents, ti
 
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (busy) return;
+    if (busy || !workspaceReady) return;
     if (!draft.prompt.trim()) {
       setError('请输入任务内容。');
       promptEditorRef.current?.focus();
@@ -93,7 +97,7 @@ export function AutomationEditor({ task, kind = 'scheduled', project, agents, ti
     const cron = schedule.cadence === 'custom' ? customCron.trim()
       : schedule.cadence === 'hourly' ? `${Number(schedule.minute)} * * * *`
         : `${minute} ${hour} * * ${schedule.cadence === 'daily' ? '*' : schedule.cadence === 'weekdays' ? '1-5' : schedule.weekday}`;
-    const input = { ...draft, enabled: manual ? true : draft.enabled, project_id: project.id, name: draft.name.trim(), cleanup_worktree: draft.workspace_mode === 'new_worktree' ? true : draft.cleanup_worktree, cron: manual || schedule.cadence === 'interval' ? '' : cron, interval_seconds: !manual && schedule.cadence === 'interval' ? Number(intervalAmount) * intervalUnit : null };
+    const input = { ...draft, ...workspaceConfig(draft), enabled: manual ? true : draft.enabled, project_id: project.id, name: draft.name.trim(), cleanup_worktree: draft.workspace_mode === 'new_worktree' ? true : draft.cleanup_worktree, cron: manual || schedule.cadence === 'interval' ? '' : cron, interval_seconds: !manual && schedule.cadence === 'interval' ? Number(intervalAmount) * intervalUnit : null };
     setBusy(true); setError('');
     try { onSaved(task ? await automationApi.update(task.id, input, task.revision) : await automationApi.create(input)); }
     catch (reason) { setError(errorMessage(reason)); setBusy(false); }
@@ -136,17 +140,10 @@ export function AutomationEditor({ task, kind = 'scheduled', project, agents, ti
           <div className="automation-agent-setting"><span>Agent</span><div className="automation-agent-row"><select aria-label="Agent" value={draft.agent} onChange={(event) => update('agent', event.target.value as AutomationAgent)}>
             {Object.entries(agentNames).map(([id, name]) => <option key={id} value={id} disabled={!agents.some((agent) => agent.id === id && agent.available)}>{name}{agents.some((agent) => agent.id === id && agent.available) ? '' : ' · 未安装'}</option>)}
           </select><label className="automation-yolo-option"><input type="checkbox" checked={draft.yolo} onChange={(event) => update('yolo', event.target.checked)} />Yolo</label></div></div>
-          <label><span>工作区方式</span><select aria-label="工作区" value={draft.workspace_mode} onChange={(event) => { const mode = event.target.value as WorkspaceMode; setDraft((current) => ({ ...current, workspace_mode: mode, cleanup_worktree: mode === 'new_worktree' ? true : current.cleanup_worktree })); }}>
-            <option value="new_worktree">每次新建 Worktree</option><option value="new_branch">在现有工作区新建分支</option><option value="existing">使用现有工作区</option><option value="temporary">每次新建临时目录（TMP）</option>
-          </select></label>
-          <label><span>{draft.workspace_mode === 'temporary' ? '关联项目工作区' : draft.workspace_mode === 'new_worktree' ? '参考工作区' : '执行工作区'}</span><select aria-label={draft.workspace_mode === 'temporary' ? '关联项目工作区' : draft.workspace_mode === 'new_worktree' ? '参考工作区' : '执行工作区'} required value={draft.workspace_path} onChange={(event) => update('workspace_path', event.target.value)}>
-            <option value="" disabled>选择工作区</option>
-            {project.worktrees.map((worktree) => <option key={worktree.path} value={worktree.path}>{worktree.branch || 'detached'} · {worktree.path.split('/').pop()}</option>)}
-          </select></label>
-          {draft.workspace_mode === 'temporary' ? <p className="automation-hint">每次运行会在系统临时目录中创建空工作区，结束后自动删除；该任务的 Agent 会话不会出现在项目的普通会话列表中。</p> : null}
-          {draft.workspace_mode !== 'existing' && draft.workspace_mode !== 'temporary' ? <label><span>基础分支</span><input aria-label="基础分支" required list="automation-branches" value={draft.base_branch} onChange={(event) => update('base_branch', event.target.value)} /><datalist id="automation-branches">{[...new Set(project.worktrees.map((worktree) => worktree.branch).filter(Boolean))].map((branch) => <option key={branch} value={branch} />)}</datalist></label> : null}
+          <WorkspaceSelect project={project} value={draft} disabled={busy} allowDynamic={manual}
+            onChange={workspace => setDraft(current => ({ ...current, ...workspace }))} onValidityChange={setWorkspaceReady} />
+          {draft.workspace_mode === 'temporary' ? <p className="automation-hint">任务结束后自动删除临时工作区；该任务的 Agent 会话不会出现在项目的普通会话列表中。</p> : null}
           {draft.workspace_mode === 'new_worktree' ? <p className="automation-hint">任务结束时会强制清理 Worktree，丢弃其中的未提交改动；自动创建的分支仍会保留。</p> : null}
-          {draft.workspace_mode === 'new_branch' ? <p className="automation-hint">执行时会创建并切换到新分支；工作区须无未提交修改。</p> : null}
           <div className="automation-settings-divider" />
           <div className="automation-schedule-heading"><h3>{manual ? <MousePointerClick /> : <CalendarClock />}{manual ? '手动执行' : '运行计划'}</h3><label className="automation-checkbox"><input type="checkbox" checked={draft.max_concurrent_runs === 1} onChange={(event) => { if (event.target.checked) { if (draft.max_concurrent_runs > 1) setLastConcurrentRuns(draft.max_concurrent_runs); update('max_concurrent_runs', 1); } else update('max_concurrent_runs', lastConcurrentRuns); }} />禁止重叠执行</label></div>
           {draft.max_concurrent_runs > 1 ? <label><span>最大同时执行数</span><input aria-label="最大同时执行数" type="number" required min="2" max="10" step="1" value={draft.max_concurrent_runs} onChange={(event) => { const value = Number(event.target.value); setLastConcurrentRuns(value); update('max_concurrent_runs', value); }} /><small>达到上限时跳过本次触发，不排队。</small></label> : null}
@@ -178,7 +175,7 @@ export function AutomationEditor({ task, kind = 'scheduled', project, agents, ti
         </aside>
       </div>
       {error ? <div className="automation-error" role="alert">{error}</div> : null}
-      <footer>{!manual ? <label className="automation-checkbox"><input type="checkbox" checked={draft.enabled} onChange={(event) => update('enabled', event.target.checked)} />启用自动化</label> : <span />}<div><button type="button" disabled={busy} onClick={onClose}>取消</button><button className="automation-primary" type="submit" disabled={busy || !draft.workspace_path || !agents.some((agent) => agent.id === draft.agent && agent.available)}>{busy ? <LoaderCircle className="automation-spin" /> : null}{busy ? '保存中…' : task ? '保存更改' : manual ? '创建手动任务' : '创建自动化'}</button></div></footer>
+      <footer>{!manual ? <label className="automation-checkbox"><input type="checkbox" checked={draft.enabled} onChange={(event) => update('enabled', event.target.checked)} />启用自动化</label> : <span />}<div><button type="button" disabled={busy} onClick={onClose}>取消</button><button className="automation-primary" type="submit" disabled={busy || !workspaceReady || !agents.some((agent) => agent.id === draft.agent && agent.available)}>{busy ? <LoaderCircle className="automation-spin" /> : null}{busy ? '保存中…' : task ? '保存更改' : manual ? '创建手动任务' : '创建自动化'}</button></div></footer>
     </form>
   </dialog>, document.body);
 }

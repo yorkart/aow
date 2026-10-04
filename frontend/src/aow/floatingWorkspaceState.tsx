@@ -7,7 +7,7 @@ import type { AowAgent } from '../features/agents/types';
 import { isWorkspaceTabKind, type WorkspaceTab, type TabRevealRequest } from './WorkspaceTabs';
 import { WorkspaceMenuLabel } from './WorkspaceMenuLabel';
 
-export interface FloatingTab extends WorkspaceTab { workspace: string }
+export interface FloatingTab extends WorkspaceTab { workspace: string; external?: boolean }
 export interface HostedTab extends FloatingTab { host: string }
 interface WorkspaceHost { portal: HTMLDivElement | null; activeId?: string; visible: boolean }
 export interface WorkspaceCommands {
@@ -100,9 +100,10 @@ function useFloatingController() {
     setShowRequest(value => value + 1);
     setOpen(true);
   }, []);
+  const openInbox = useCallback(() => { setActiveKey('inbox'); show(); }, [show]);
   const minimize = useCallback(() => { setOpen(false); setAutoHidden(false); returnFocus.current?.focus({ preventScroll: true }); }, []);
   const togglePinned = useCallback(() => { setPinned(value => !value); setAutoHidden(false); }, []);
-  const add = useCallback((workspace: string, id: string, initial?: WorkspaceTab) => {
+  const add = useCallback((workspace: string, id: string, initial?: WorkspaceTab & { external?: boolean }) => {
     removeHosted(workspace, id);
     const descriptor = sources.current.get(workspace)?.tabs.find(tab => tab.id === id) ?? initial;
     const tab: FloatingTab = { workspace, ...(descriptor ?? { id, label: '正在打开…', kind: 'file', pending: true, targetId: id.slice(id.indexOf(':') + 1) }) };
@@ -134,7 +135,7 @@ function useFloatingController() {
     setActiveKey(key => key === tabKey(before) ? tabKey(after) : key);
   }, []);
   const retainWorkspaces = useCallback((paths: string[]) => {
-    setTabs(items => items.filter(tab => paths.includes(tab.workspace)));
+    setTabs(items => items.filter(tab => tab.external || paths.includes(tab.workspace)));
     setHostedTabs(items => items.filter(tab => paths.includes(tab.workspace) && paths.includes(tab.host)));
     setTerminalRequests(items => items.filter(tab => paths.includes(tab.workspace_root)));
   }, []);
@@ -156,7 +157,7 @@ function useFloatingController() {
   }, []);
   useEffect(() => persist(hostedStorageKey, hostedTabs), [hostedTabs]);
   useEffect(() => {
-    if (!tabs.some(tab => tabKey(tab) === activeKey)) setActiveKey(tabs.length ? tabKey(tabs[tabs.length - 1]) : '');
+    if (activeKey !== 'inbox' && !tabs.some(tab => tabKey(tab) === activeKey)) setActiveKey(tabs.length ? tabKey(tabs[tabs.length - 1]) : '');
     persist(storageKey, tabs);
   }, [tabs, activeKey]);
   useEffect(() => persist('aow-floating-active', activeKey), [activeKey]);
@@ -169,7 +170,7 @@ function useFloatingController() {
     if (source) source.close(tab.id);
     else remove(tab.workspace, tab.id);
   };
-  return { tabs, tabRevealRequest, contains, active, open, visible, pinned, togglePinned, autoHidden, setAutoHidden, showRequest, portal, setPortal, sidebar, setSidebar, sidebarOpen, setSidebarOpen,
+  return { inboxOpen: activeKey === 'inbox', openInbox, tabs, tabRevealRequest, contains, active, open, visible, pinned, togglePinned, autoHidden, setAutoHidden, showRequest, portal, setPortal, sidebar, setSidebar, sidebarOpen, setSidebarOpen,
     globalRoot, setGlobalRoot, notesMoves, setNotesMoves, sources, show, minimize, add, restore, remove, replaceDocument, retainWorkspaces, publish, select, close,
     hostedTabs, hosts, publishHost, hostTerminal, removeHosted, terminalRequests, requestTerminal, acknowledgeTerminal, cancelTerminalRequest };
 }

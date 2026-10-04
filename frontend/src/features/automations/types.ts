@@ -1,6 +1,7 @@
 export type AutomationAgent = 'codex' | 'traecli' | 'claude' | 'hermes';
 
-export type WorkspaceMode = 'existing' | 'new_worktree' | 'new_branch' | 'temporary';
+import type { WorkspaceConfig } from '../workspaces/types';
+export type { WorkspaceMode } from '../workspaces/types';
 
 export type TaskKind = 'scheduled' | 'manual';
 
@@ -12,17 +13,14 @@ export interface PromptBinding {
   end: number;
 }
 
-export interface TaskInput {
+export interface TaskInput extends WorkspaceConfig {
   name: string;
   prompt: string;
   kind: TaskKind;
   prompt_bindings: PromptBinding[];
   agent: AutomationAgent;
   project_id: string;
-  workspace_mode: WorkspaceMode;
-  workspace_path: string;
   cleanup_worktree: boolean;
-  base_branch: string;
   cron: string;
   interval_seconds: number | null;
   max_concurrent_runs: number;

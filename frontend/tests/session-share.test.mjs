@@ -2,17 +2,19 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
 import { makeTurn, session, snapshot } from './fixtures/session-snapshot.mjs';
 
+const screenshotDir = process.env.AOW_TEST_SCREENSHOT_DIR || '/tmp/aow-session-share';
 const server = await createServer({ root: fileURLToPath(new URL('../', import.meta.url)), server: { host: '127.0.0.1', port: 0, proxy: {}, watch: { usePolling: true } } });
 let browser;
 try {
   await server.listen();
   const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
-  await mkdir('/tmp/aow-session-share', { recursive: true });
+  await mkdir(screenshotDir, { recursive: true });
 
   async function pageFor(t, mobile = false) {
     const context = await browser.newContext({ viewport: { width: mobile ? 390 : 1280, height: mobile ? 844 : 900 }, permissions: ['clipboard-read', 'clipboard-write'] });
@@ -54,7 +56,7 @@ try {
       assert.equal(await page.getByLabel('分享链接', { exact: true }).inputValue(), `${origin}/share/token-1`);
       assert.equal(await page.evaluate(() => navigator.clipboard.readText()), `${origin}/share/token-1`);
       assert.equal(await page.locator('.session-share-dialog').evaluate(node => node.getBoundingClientRect().width <= innerWidth), true);
-      await page.screenshot({ path: `/tmp/aow-session-share/dialog-${mobile ? 'mobile' : 'desktop'}.png` });
+      await page.screenshot({ path: join(screenshotDir, `dialog-${mobile ? 'mobile' : 'desktop'}.png`) });
       await page.getByRole('button', { name: '关闭分享窗口' }).click();
       await page.getByRole('button', { name: '分享会话', exact: true }).click();
       await page.getByRole('button', { name: '复制链接', exact: true }).click();
@@ -93,7 +95,7 @@ try {
       assert.equal(await page.locator('.aow-auth').count(), 0);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       assert.equal(await page.evaluate(() => window.__unsafe), undefined);
-      await page.screenshot({ path: `/tmp/aow-session-share/public-${mobile ? 'mobile' : 'desktop'}.png` });
+      await page.screenshot({ path: join(screenshotDir, `public-${mobile ? 'mobile' : 'desktop'}.png`) });
       current.turns.push(makeTurn('shared-new', '分享后的新问题', '分享后的新回复', []));
       await page.clock.runFor(10_100);
       await page.getByText('分享后的新回复', { exact: true }).waitFor();
@@ -112,7 +114,7 @@ try {
     });
   }
 
-  await test('public reading retries transient errors and an ordinary entry still requires PIN', async t => {
+  await test('public reading retries transient errors and an ordinary entry still requires login', async t => {
     const page = await pageFor(t);
     let failed = true;
     await page.route('**/api/**', async route => {
@@ -128,7 +130,7 @@ try {
     await page.getByRole('button', { name: '重试', exact: true }).click();
     await page.locator('.project-aow-snapshot-conclusion').first().waitFor();
     await page.goto(`${origin}/aow/?token=retry-token`);
-    await page.getByRole('heading', { name: '输入访问 PIN' }).waitFor();
+    await page.getByRole('heading', { name: '登录 AoW' }).waitFor();
   });
 
   await test('a fast visibility change replaces an in-flight read immediately', async t => {

@@ -4,8 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
 
-const first = '550e8400-e29b-41d4-a716-446655440000';
-const second = '550e8400-e29b-41d4-a716-446655440001';
+const first = 'g123456789ab';
+const second = 'g123456789ac';
 const endpoint = '/api/aow/settings/configuration';
 const server = await createServer({ root: fileURLToPath(new URL('../', import.meta.url)), logLevel: 'error',
   server: { host: '127.0.0.1', port: 0, proxy: {}, watch: { usePolling: true } } });
@@ -75,7 +75,7 @@ try {
     await reopened.getByRole('status').filter({ hasText: '已保存的配置与当前运行版本不同' }).waitFor();
   });
 
-  await test('UUID paths normalize and preselect, while invalid and empty repositories prevent saving', async t => {
+  await test('configuration paths normalize and preselect, while invalid and empty repositories prevent saving', async t => {
     const { page, state, dialog } = await fixture(t, 760);
     const input = dialog.getByRole('textbox', { name: '配置仓库目录' });
     const read = dialog.getByRole('button', { name: '读取版本', exact: true });
@@ -84,7 +84,7 @@ try {
     await dialog.getByRole('alert').filter({ hasText: '路径不是 Git 仓库' }).waitFor();
     assert.equal(await save.isDisabled(), true);
     await input.fill('/empty'); await read.click();
-    await dialog.getByRole('status').filter({ hasText: '没有 UUID 版本目录' }).waitFor();
+    await dialog.getByRole('status').filter({ hasText: '没有配置版本目录' }).waitFor();
     assert.equal(await save.isDisabled(), true);
     await input.fill('/other'); await read.click();
     await dialog.getByRole('radio').first().waitFor();

@@ -12,6 +12,51 @@ struct Fixture {
 }
 
 #[test]
+fn completed_run_reads_native_reply_and_rejects_resumed_history() {
+    let fixture = Fixture::new();
+    fixture.session("review", "cli", "/repo");
+    fixture.message("review", "user", "Review", None, None, None);
+    fixture.message(
+        "review",
+        "assistant",
+        "<think>PRIVATE</think>P1\nP2",
+        Some("stop"),
+        None,
+        None,
+    );
+    let locator = fixture.locator("review");
+    assert_eq!(
+        Agent::Hermes
+            .session_tracking()
+            .unwrap()
+            .completed_run_result(&locator, Utc::now())
+            .unwrap()
+            .as_deref(),
+        Some("P1\nP2")
+    );
+    fixture.message("review", "user", "Another task", None, None, None);
+    fixture.message(
+        "review",
+        "assistant",
+        "Later reply",
+        Some("stop"),
+        None,
+        None,
+    );
+    assert!(
+        Agent::Hermes
+            .session_tracking()
+            .unwrap()
+            .completed_run_result(
+                &locator,
+                DateTime::from_timestamp(1_700_000_001, 515_000_000).unwrap()
+            )
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
 #[ignore = "requires AOW_HERMES_TEST_HOME and AOW_HERMES_TEST_CWD from an installed Hermes smoke run"]
 fn reads_the_store_created_by_installed_hermes() {
     let root = PathBuf::from(std::env::var_os("AOW_HERMES_TEST_HOME").expect("test profile"));

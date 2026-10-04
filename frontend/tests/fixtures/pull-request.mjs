@@ -22,3 +22,10 @@ export const detail = {
   threads, unresolved_threads: [threads[0]], warnings: [],
   merge_checks: [{ name: 'checkNoConflict', passed: true, reason: '' }, { name: 'checkReviewPassed', passed: false, reason: '需要至少 1 位审阅人通过。' }, { name: 'checkCheckRun', passed: false, reason: 'Rust unit tests 尚未通过，请查看检查详情。' }],
 };
+
+export const pullRequests = [
+  detail,
+  { ...detail, number: 43, title: 'docs: 补充手机站说明', draft: true, source_branch: 'docs/mobile-guide', updated_at: '2026-09-13T03:45:00Z' },
+  { ...detail, number: 44, title: 'fix: 修复终端会话恢复', status: 'merged', source_branch: 'fix/session-restore', updated_at: '2026-09-14T03:45:00Z' },
+  { ...detail, number: 45, title: 'chore: 清理旧版构建配置', status: 'closed', draft: true, source_branch: 'chore/old-build', updated_at: '2026-09-15T03:45:00Z' },
+];

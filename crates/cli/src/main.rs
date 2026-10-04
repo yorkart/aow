@@ -1,4 +1,6 @@
 mod agent;
+mod automation;
+mod inbox;
 mod project;
 
 use std::{
@@ -8,14 +10,15 @@ use std::{
 };
 
 use anyhow::Result;
-use aow_automations::{AutomationQuery, store::valid_component};
-use clap::{Args, Parser, Subcommand, error::ErrorKind};
+use aow_automations::store::valid_component;
+use clap::{Parser, Subcommand, error::ErrorKind};
 use serde::Serialize;
 
 const CONTEXT: &str =
-    "Local access: uses the current OS user and filesystem permissions. No PIN, Cookie,
-token, or running AoW server is required for automation queries. Project queries
-require a running server; agent commands also require terminald, via the local Unix socket.
+    "Local access: uses the current OS user and filesystem permissions. No web login, Cookie,
+token, or running AoW server is required for automation queries. Automation creation
+and project/Inbox operations require a running server via the local Unix socket;
+agent commands also require terminald.
 Queries do not initialize, migrate,
 repair, or clean state. Help and version work without a state directory.
 
@@ -24,7 +27,7 @@ State directory precedence:
   > $HOME/.local/state/aow (normally ~/.local/state/aow).
   Without these environment variables: the OS temp directory/aow-<pid>.
   A server started with a custom --state-dir requires the same path here.
-  config.toml selects a Git repository (config-repo) and UUID directory (config-id).
+  config.toml selects a Git repository (config-repo) and configuration directory (config-id).
   Run history stays in the local state directory. Without config.toml, queries
   read configuration in the state directory without initializing a repository.
 
@@ -43,8 +46,12 @@ Only the current data model is supported; no historical compatibility or migrati
 Examples (replace IDs with values returned by list commands):
   aow-cli project list
   aow-cli project get PROJECT-ID
+  aow-cli inbox list
+  aow-cli inbox get REQUIREMENT-ID
+  aow-cli inbox comments list REQUIREMENT-ID
   aow-cli agent create --project-id PROJECT-ID --cwd /worktrees/fix
   aow-cli automation list
+  aow-cli automation create --file task.json --project-id PROJECT-ID
   aow-cli automation get 12345678
   aow-cli automation runs list 12345678 --limit 20
   aow-cli automation runs get 12345678 20260913T090000000Z_1234
@@ -67,70 +74,13 @@ struct Cli {
 enum Command {
     /// Query registered project IDs, names and repository paths through the local server.
     Project(project::ProjectArgs),
-    /// Inspect local automation task configurations and execution records.
+    /// Create, update and query Inbox requirements and append immutable comments.
+    Inbox(inbox::InboxArgs),
+    /// Create paused automation tasks and inspect local configurations and execution records.
     #[command(after_help = CONTEXT)]
-    Automation(Automation),
+    Automation(automation::Automation),
     /// Create hidden interactive agents and submit tasks through the local AoW server.
     Agent(agent::AgentArgs),
-}
-
-#[derive(Args)]
-struct Automation {
-    #[command(subcommand)]
-    command: AutomationCommand,
-}
-
-#[derive(Subcommand)]
-enum AutomationCommand {
-    /// List all tasks, newest created first (ID descending breaks ties).
-    #[command(after_help = CONTEXT)]
-    List {
-        /// Filter by the exact project ID.
-        #[arg(long)]
-        project_id: Option<String>,
-        /// Include deleted task tombstones; otherwise they are hidden.
-        #[arg(long)]
-        include_deleted: bool,
-    },
-    /// Get the current saved configuration and observed status, including tombstones.
-    #[command(after_help = CONTEXT)]
-    Get {
-        #[arg(value_parser = parse_id)]
-        task_id: String,
-    },
-    /// Inspect execution history, including history retained for deleted tasks.
-    #[command(after_help = CONTEXT)]
-    Runs(Runs),
-}
-
-#[derive(Args)]
-struct Runs {
-    #[command(subcommand)]
-    command: RunsCommand,
-}
-
-#[derive(Subcommand)]
-enum RunsCommand {
-    /// List runs by run ID descending; pass next_cursor as --before for the next page.
-    #[command(after_help = CONTEXT)]
-    List {
-        #[arg(value_parser = parse_id)]
-        task_id: String,
-        /// Maximum number of records in this page (1-500).
-        #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u16).range(1..=500))]
-        limit: u16,
-        /// Exclusive run ID cursor from the previous page; need not still exist.
-        #[arg(long, value_parser = parse_id)]
-        before: Option<String>,
-    },
-    /// Get a run and its captured configuration, session ID, and output file paths.
-    #[command(after_help = CONTEXT)]
-    Get {
-        #[arg(value_parser = parse_id)]
-        task_id: String,
-        #[arg(value_parser = parse_id)]
-        run_id: String,
-    },
 }
 
 fn parse_id(value: &str) -> std::result::Result<String, String> {
@@ -172,39 +122,11 @@ fn execute(cli: Cli) -> Result<()> {
     let state_dir = cli
         .state_dir
         .unwrap_or_else(aow_filesystem::default_state_dir);
-    if let Command::Agent(args) = cli.command {
-        let value = agent::execute(args, state_dir)?;
-        return write_json(&mut io::stdout().lock(), &value, cli.compact);
-    }
-    if let Command::Project(args) = cli.command {
-        let value = project::execute(args, state_dir)?;
-        return write_json(&mut io::stdout().lock(), &value, cli.compact);
-    }
-    let query = AutomationQuery::open(state_dir)?;
-    // Build a complete result before touching stdout, so failed queries never emit partial JSON.
     let value = match cli.command {
-        Command::Agent(_) | Command::Project(_) => unreachable!(),
-        Command::Automation(automation) => match automation.command {
-            AutomationCommand::List {
-                project_id,
-                include_deleted,
-            } => {
-                serde_json::json!({ "items": query.tasks(project_id.as_deref(), include_deleted)? })
-            }
-            AutomationCommand::Get { task_id } => serde_json::to_value(query.task(&task_id)?)?,
-            AutomationCommand::Runs(runs) => match runs.command {
-                RunsCommand::List {
-                    task_id,
-                    limit,
-                    before,
-                } => {
-                    serde_json::to_value(query.runs(&task_id, before.as_deref(), limit.into())?)?
-                }
-                RunsCommand::Get { task_id, run_id } => {
-                    serde_json::to_value(query.run(&task_id, &run_id)?)?
-                }
-            },
-        },
+        Command::Agent(args) => agent::execute(args, state_dir)?,
+        Command::Project(args) => project::execute(args, state_dir)?,
+        Command::Inbox(args) => inbox::execute(args, state_dir)?,
+        Command::Automation(args) => automation::execute(args, state_dir)?,
     };
     write_json(&mut io::stdout().lock(), &value, cli.compact)
 }

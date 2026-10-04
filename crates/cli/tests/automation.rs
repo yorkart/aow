@@ -193,7 +193,9 @@ fn configuration_snapshots_pagination_and_deleted_history() {
     assert_eq!(first["items"][0]["status"], "failed");
     let cursor = first["next_cursor"].as_str().unwrap();
     // A cursor remains usable after that record has been cleaned up.
-    fs::remove_dir_all(store.run_path(&task.id, cursor).unwrap()).unwrap();
+    let cursor_id = first["items"][1]["id"].as_str().unwrap();
+    assert_ne!(cursor, cursor_id);
+    fs::remove_dir_all(store.run_path(&task.id, cursor_id).unwrap()).unwrap();
     let second = success(
         &store.state_dir,
         &[

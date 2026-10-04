@@ -4,6 +4,7 @@ import { terminalApi } from './terminalApi';
 import type { TerminalAgentProcess, TerminalLayout, TerminalPane, TerminalPaneStatus, TerminalSplitAxis, TerminalTab } from './types';
 import { TerminalInputPane } from './TerminalInputPane';
 import { TerminalAgentPane } from './TerminalAgentPane';
+import { TerminalHostingButton } from './TerminalHostingButton';
 import { AgentIcon } from '../agents/AgentIcon';
 import { terminalPaneAgent, terminalPaneTitle } from './terminalPresentation';
 import { terminalPaneLifecycle } from './terminalState';
@@ -253,18 +254,19 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
     } catch (reason) {
       if (saveEpochRef.current === saveEpoch) setError(`布局保存失败：${message(reason)}`);
     } finally {
-      if (saveEpochRef.current !== saveEpoch) return;
-      savingRef.current = false;
-      if (pendingLayoutRef.current) {
-        if (flushRequestedRef.current) {
-          flushRequestedRef.current = false;
-          void runLayoutSave();
+      if (saveEpochRef.current === saveEpoch) {
+        savingRef.current = false;
+        if (pendingLayoutRef.current) {
+          if (flushRequestedRef.current) {
+            flushRequestedRef.current = false;
+            void runLayoutSave();
+          } else {
+            const delay = Math.max(0, 250 - (Date.now() - lastSaveRef.current));
+            saveTimerRef.current = window.setTimeout(() => void runLayoutSave(), delay);
+          }
         } else {
-          const delay = Math.max(0, 250 - (Date.now() - lastSaveRef.current));
-          saveTimerRef.current = window.setTimeout(() => void runLayoutSave(), delay);
+          flushRequestedRef.current = false;
         }
-      } else {
-        flushRequestedRef.current = false;
       }
     }
   };
@@ -420,7 +422,7 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
   }, [activePaneId, operation, tab, visible]);
 
   const togglePaneMaximized = (pane: TerminalPane) => {
-    if (!tab || operation) return;
+    if (!tab || tab.panes.length <= 1 || operation) return;
     setActivePaneId(pane.id);
     setDraggingPaneId(undefined);
     draggingPaneIdRef.current = undefined;
@@ -535,6 +537,10 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
             draggable={paneDraggable}
             onDragStart={(event) => startPaneDrag(event, pane.id)}
             onDragEnd={finishPaneDrag}
+            onDoubleClick={(event) => {
+              if (event.target instanceof Element && event.target.closest('button')) return;
+              togglePaneMaximized(pane);
+            }}
           >
             <GripVertical className="terminal-pane-drag-handle" aria-label="拖动 pane 调整布局" />
             <TerminalLifecycleDot className="terminal-pane-status" state={terminalPaneLifecycle(pane)} />
@@ -544,6 +550,7 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
             </span>
             <span className="terminal-pane-shell">{pane.shell}</span>
             {sessionButton}
+            {agentId && <TerminalHostingButton tab={tab!} pane={pane} onChange={onTabChange} />}
             <button title={`向右分屏（${splitShortcutLabel('row')}）`} aria-label="向右分屏" disabled={paneBusy} onClick={() => void split(pane, 'row')}><Columns2 /></button>
             <button title={`向下分屏（${splitShortcutLabel('column')}）`} aria-label="向下分屏" disabled={paneBusy} onClick={() => void split(pane, 'column')}><Rows2 /></button>
             {tab!.panes.length > 1 ? (

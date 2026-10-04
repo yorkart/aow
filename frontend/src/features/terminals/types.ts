@@ -3,6 +3,18 @@ export type TerminalSplitAxis = 'row' | 'column';
 
 export type TerminalPaneStatus = 'running' | 'exited' | 'interrupted';
 
+export interface TerminalHosting {
+  id: string;
+  task_id: string;
+  task_name: string;
+  workspace_root: string;
+  phase: 'waiting' | 'reviewing' | 'collecting' | 'submitting' | 'completed' | 'limit_reached' | 'failed';
+  max_inputs: number;
+  input_count: number;
+  run_id: string | null;
+  error: string | null;
+}
+
 export interface TerminalPane {
   id: string;
   name: string;
@@ -11,6 +23,7 @@ export interface TerminalPane {
   arguments?: string[];
   kind?: 'terminal' | 'agent';
   agent_id?: string | null;
+  hosting?: TerminalHosting | null;
   agent_terminal?: {
     phase: 'starting' | 'ready' | 'failed';
     error: string | null;

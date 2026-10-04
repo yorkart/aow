@@ -32,6 +32,11 @@ export interface AowProject {
   error?: string;
 }
 
+export interface ProjectBranches {
+  branches: string[];
+  default_branch: string;
+}
+
 export interface AowSettings {
   notes_base: string;
   node_addresses: string[];

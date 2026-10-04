@@ -6,6 +6,10 @@ pub(super) struct ProjectAvatar {
     avatar_url: Option<String>,
 }
 
+#[expect(
+    clippy::result_large_err,
+    reason = "HTTP route errors return Axum responses directly without an extra heap allocation"
+)]
 pub(super) async fn get_avatar(
     State(state): State<AppState>,
     AxumPath(id): AxumPath<String>,

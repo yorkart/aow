@@ -6,11 +6,14 @@
 mod claude;
 mod codex;
 mod codex_like;
+mod completed;
 mod hermes;
 mod traecli;
 
 use std::{future::Future, path::Path};
 
+use super::snapshot::SnapshotError;
+use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -45,12 +48,19 @@ pub struct TaskStopped {
     pub turn_id: Option<String>,
     /// Final assistant reply captured at this boundary, never read from a later turn.
     pub conclusion: Option<String>,
+    /// Only usage observed by this reader before the native completion boundary.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage: Option<super::usage::TokenUsage>,
 }
 
-/// Per-transcript protocol state. Created fresh on every EOF attachment.
+/// Per-transcript protocol state. Each live reader or completed run owns an instance.
 pub trait TaskStopParser: Send {
     fn consume(&mut self, session_id: &str, record: &Value) -> Option<TaskStopped>;
     fn reset(&mut self);
+    /// Read the pending reply only after a headless process has exited successfully.
+    fn take_conclusion(&mut self) -> Option<String> {
+        None
+    }
 }
 
 pub trait AgentSessionTracker {
@@ -68,6 +78,17 @@ pub trait AgentSessionTracker {
     ) -> Vec<AgentSessionLocator>;
 
     fn task_stop_parser(&self) -> Box<dyn TaskStopParser>;
+
+    /// Read the result immediately after a newly created automation process exits
+    /// successfully. The runner must persist it before publishing run completion.
+    /// This is not a live completion detector or a resumed-session history query.
+    fn completed_run_result(
+        &self,
+        locator: &AgentSessionLocator,
+        exited_at: DateTime<Utc>,
+    ) -> Result<Option<String>, SnapshotError> {
+        completed::read_jsonl(self.task_stop_parser(), locator, exited_at)
+    }
 }
 
 /// Only adapters implementing live session tracking belong in this capability.
@@ -132,6 +153,25 @@ impl AgentSessionTracker for TrackingAgent {
             Self::Codex => codex::Codex.task_stop_parser(),
             Self::TraeCli => traecli::TraeCli.task_stop_parser(),
             Self::Hermes => hermes::Hermes.task_stop_parser(),
+        }
+    }
+
+    fn completed_run_result(
+        &self,
+        locator: &AgentSessionLocator,
+        exited_at: DateTime<Utc>,
+    ) -> Result<Option<String>, SnapshotError> {
+        if locator.agent != self.agent().id() {
+            return Err(SnapshotError::Invalid(
+                "session identity does not match its agent adapter".into(),
+            ));
+        }
+        super::snapshot::validate_locator(locator)?;
+        match self {
+            Self::Claude => claude::Claude.completed_run_result(locator, exited_at),
+            Self::Codex => codex::Codex.completed_run_result(locator, exited_at),
+            Self::TraeCli => traecli::TraeCli.completed_run_result(locator, exited_at),
+            Self::Hermes => hermes::Hermes.completed_run_result(locator, exited_at),
         }
     }
 }

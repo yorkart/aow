@@ -59,11 +59,30 @@ class AdapterTests(unittest.TestCase):
 
     def test_list_filters_author_after_pagination(self):
         other = dict(PR, user={"id": 2})
-        with patch.object(self.client, "api", side_effect=[PR["user"], [other, PR]]), patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, "feature\n", "")):
+        with patch.object(self.client, "api", side_effect=[PR["user"], [other, PR]]) as api, patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, "feature\n", "")):
             result = self.client.list()
+        api.assert_called_with("repos/team/project/pulls?state=open&sort=updated&direction=desc&per_page=100", pages=True)
         self.assertEqual([p["number"] for p in result["pull_requests"]], [42])
         self.assertEqual(result["current_branch"], "feature")
         self.assertEqual(result["current_user"]["username"], "alice")
+
+    def test_list_all_includes_merged_and_closed_without_other_authors(self):
+        self.client.request["params"] = {"state": "all"}
+        merged = dict(PR, number=43, state="closed", merged_at="2026-09-26T01:00:00Z")
+        closed = dict(PR, number=44, state="closed", draft=True, merged_at=None)
+        other = dict(merged, number=45, user={"id": 2})
+        with patch.object(self.client, "api", side_effect=[PR["user"], [closed, merged, other, PR]]) as api, patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, "feature\n", "")):
+            result = self.client.list()
+        api.assert_called_with("repos/team/project/pulls?state=all&sort=updated&direction=desc&per_page=100", pages=True)
+        self.assertEqual([(p["number"], p["status"]) for p in result["pull_requests"]], [(44, "closed"), (43, "merged"), (42, "open")])
+        self.assertTrue(result["pull_requests"][0]["draft"])
+
+    def test_list_rejects_invalid_state_before_calling_github(self):
+        self.client.request["params"] = {"state": "unknown"}
+        with patch.object(self.client, "api") as api:
+            with self.assertRaisesRegex(ValueError, "list state"):
+                self.client.list()
+        api.assert_not_called()
 
     def test_detail_failure_in_optional_sections_is_visible(self):
         with patch.object(self.client, "api", side_effect=[PR, RuntimeError("comments unavailable")]), patch.object(self.client, "files", side_effect=RuntimeError("files unavailable")), patch.object(self.client, "command", side_effect=RuntimeError("checks unavailable")), patch.object(self.client, "review_threads", side_effect=RuntimeError("threads unavailable")):

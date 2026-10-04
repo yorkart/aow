@@ -6,13 +6,13 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { credentials, assertCredentials } from './account-fixture.mjs';
 import { publishTestRelease } from './github-fixture.mjs';
 import { platforms, prepareGitHubRelease } from '../prepare-github-release.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const installer = join(root, 'scripts/install-release.sh');
 const quote = value => `'${value.replaceAll("'", "'\\''")}'`;
-const digest = pin => `${createHash('md5').update(pin).digest('hex')}\n`;
 const platform = 'linux-x86_64';
 
 function write(path, content, executable = false) {
@@ -20,7 +20,7 @@ function write(path, content, executable = false) {
   writeFileSync(path, content, { mode: executable ? 0o755 : 0o644 });
 }
 
-function fixture(t, { symlinkHome = false, withPin = true } = {}) {
+function fixture(t, { symlinkHome = false, withAccount = true } = {}) {
   const temp = mkdtempSync(join(tmpdir(), 'aow-download-install-'));
   t.after(() => rmSync(temp, { recursive: true, force: true }));
   const home = join(temp, 'home with spaces');
@@ -95,8 +95,8 @@ esac
     SERVICE_LOG: serviceLog,
     INITIALIZE_LOG: initializeLog,
   };
-  const pinFile = join(env.AOW_STATE_DIR, 'pin.md5');
-  if (withPin) write(pinFile, digest('654321'));
+  const accountFile = join(env.AOW_STATE_DIR, 'credentials.json');
+  if (withAccount) write(accountFile, credentials('old-password'));
   function pack(version = '1.2.3', customize = () => {}) {
     const bundle = join(temp, `bundle-${version}`);
     for (const name of ['aow-cli', 'aow-terminald', 'aow-automation-runner']) {
@@ -127,7 +127,7 @@ esac
     const fds = [openSync(stdin, 'r'), openSync(stdout, 'w'), openSync(stderr, 'w')];
     const options = { env: { ...env, ...extra }, timeout: 30000, detached: true, stdio: fds };
     try {
-      // A portable PTY keeps PIN/confirmation input separate from the pipe.
+      // A portable PTY keeps account/password confirmation input separate from the pipe.
       const result = reply !== undefined
         ? spawnSync('python3', [join(root, 'scripts/tests/pty-command.py'), command], options)
         : spawnSync('bash', ['-c', command], options);
@@ -147,7 +147,7 @@ esac
     if (existsSync(runtime)) assert.equal(readdirSync(runtime).some(name => name.startsWith('.download.')), false);
     if (existsSync(runtime)) assert.equal(readdirSync(runtime).some(name => name.startsWith('.update.')), false);
   }
-  return { temp, home, runtime, userBin, downloads, env, pinFile, serviceLog, downloadLog, initializeLog, pack, run, runCommand, manager, log, assertClean };
+  return { temp, home, runtime, userBin, downloads, env, accountFile, serviceLog, downloadLog, initializeLog, pack, run, runCommand, manager, log, assertClean };
 }
 
 async function githubRelease(f, version) {
@@ -181,23 +181,23 @@ function localPackage(f, version = 'local-1', customize) {
   return archive;
 }
 
-test('local install uses the same PIN, upgrade and terminald lifecycle and preserves GitHub update settings', t => {
-  const f = fixture(t, { withPin: false, symlinkHome: true });
+test('local install uses the same account, upgrade and terminald lifecycle and preserves GitHub update settings', t => {
+  const f = fixture(t, { withAccount: false, symlinkHome: true });
   const archive = localPackage(f);
   const latest = join(f.downloads, 'local latest');
   symlinkSync(basename(archive), latest);
   const local = (file, args = [], extra = {}, reply) => f.runCommand(
     `bash ${quote(installer)} --package ${quote(file)} ${args.map(quote).join(' ')}`, { FAIL_DOWNLOAD: '1', ...extra }, reply);
-  const missingPin = local(latest);
-  assert.notEqual(missingPin.status, 0);
+  const missingAccount = local(latest);
+  assert.notEqual(missingAccount.status, 0);
   assert.equal(existsSync(join(f.runtime, 'latest')), false);
   const customBin = join(f.home, 'custom bin');
-  const result = local(latest, ['--repo', 'example/fork'], { AOW_USER_BIN_DIR: customBin }, '012345\n012345\ny\n');
+  const result = local(latest, ['--repo', 'example/fork'], { AOW_USER_BIN_DIR: customBin }, 'admin\nnew-password\nnew-password\ny\n');
   assert.equal(result.status, 0, result.stdout + result.stderr);
   for (const component of ['server', 'terminald']) {
     assert.equal(readlinkSync(join(f.runtime, `active/${component}`)), '../releases/local-1');
   }
-  assert.equal(f.log(f.pinFile), digest('012345'));
+  assertCredentials(f.log(f.accountFile), 'new-password');
   const settings = f.log(join(f.runtime, 'update.json'));
   assert.deepEqual(JSON.parse(settings), { repository: 'example/fork', user_bin_dir: customBin });
   const config = join(f.home, '.config/aow/server.env');
@@ -212,7 +212,7 @@ test('local install uses the same PIN, upgrade and terminald lifecycle and prese
   assert.equal(readlinkSync(join(customBin, 'aow-cli')), join(f.runtime, 'releases/local-2/bin/aow-cli'));
   assert.equal(f.log(join(f.runtime, 'update.json')), settings);
   assert.equal(f.log(config), 'AOW_SERVER_PORT=8283\n');
-  assert.equal(f.log(f.pinFile), digest('012345'));
+  assertCredentials(f.log(f.accountFile), 'new-password');
   assert.equal(f.log(f.downloadLog), '');
   const reinstalled = local(next, [], { AOW_USER_BIN_DIR: '' });
   assert.equal(reinstalled.status, 0, reinstalled.stdout + reinstalled.stderr);
@@ -373,7 +373,7 @@ test('GitHub latest resolution rejects an unexpected redirect before requesting 
   }
 });
 
-test('piped install with an existing PIN uses its pinned GitHub release and skips terminald without a TTY', t => {
+test('piped install with an existing account uses its pinned GitHub release and skips terminald without a TTY', t => {
   const f = fixture(t);
   f.pack();
   const result = f.run([], { SERVICE_INACTIVE: '1' });
@@ -395,113 +395,134 @@ test('piped install with an existing PIN uses its pinned GitHub release and skip
   assert.match(f.log(f.serviceLog), /enable --now aow-server/);
   assert.doesNotMatch(f.log(f.serviceLog), /terminald|restart/);
   assert.equal(existsSync(join(f.runtime, 'active/terminald')), false);
-  assert.equal(f.log(f.pinFile), digest('654321'));
-  assert.doesNotMatch(result.stdout + result.stderr, /请输入.*PIN/);
+  assert.equal(f.log(f.accountFile), credentials('old-password'));
+  assert.doesNotMatch(result.stdout + result.stderr, /请输入登录账号|请输入登录密码/);
   assert.match(result.stdout, /Skipped terminald/);
   f.assertClean();
 });
 
-test('first piped install requires a confirmed PIN before starting services', t => {
-  const f = fixture(t, { withPin: false });
+test('first piped install requires an account and confirmed password before starting services', t => {
+  const f = fixture(t, { withAccount: false });
   f.pack();
-  const result = f.run([], { SERVICE_INACTIVE: '1' }, '012345\n012345\ny\n');
+  const result = f.run([], { SERVICE_INACTIVE: '1' }, 'admin\nnew-password\nnew-password\ny\n');
   assert.ifError(result.error);
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.equal(f.log(f.pinFile), digest('012345'));
-  assert.equal(statSync(f.pinFile).mode & 0o777, 0o600);
-  assert.doesNotMatch(result.stdout + result.stderr, /012345/);
-  assert.ok(result.stdout.indexOf('PIN 已保存') < result.stdout.indexOf('aow-server is active'));
-  assert.equal((result.stdout.match(/请输入 6 位数字 PIN/g) ?? []).length, 1);
+  assertCredentials(f.log(f.accountFile), 'new-password');
+  assert.equal(statSync(f.accountFile).mode & 0o777, 0o600);
+  assert.doesNotMatch(result.stdout + result.stderr, /new-password/);
+  assert.ok(result.stdout.indexOf('账号和密码已保存') < result.stdout.indexOf('aow-server is active'));
+  assert.equal((result.stdout.match(/请输入登录账号/g) ?? []).length, 1);
   assert.match(f.log(f.serviceLog), /enable --now aow-server/);
   assert.match(f.log(f.serviceLog), /enable --now aow-terminald/);
-  assert.deepEqual(readdirSync(dirname(f.pinFile)), ['pin.md5']);
+  assert.deepEqual(readdirSync(dirname(f.accountFile)), ['credentials.json']);
   f.assertClean();
 });
 
-test('PIN setup retries empty, malformed and mismatched input before activation', t => {
-  const f = fixture(t, { withPin: false });
+test('account setup retries empty, malformed and mismatched input before activation', t => {
+  const f = fixture(t, { withAccount: false });
   f.pack();
-  const result = f.run([], {}, '\n12345\n1234567\n12a456\n123456\n654321\n012345\n012345\nn\n');
+  const result = f.run([], {}, '\ninvalid account\nadmin\n\nfirst-password\nmismatch\nnew-password\nnew-password\nn\n');
   assert.ifError(result.error);
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.equal(f.log(f.pinFile), digest('012345'));
-  assert.equal((result.stdout.match(/PIN 必须恰好为 6 位数字/g) ?? []).length, 4);
-  assert.match(result.stdout, /两次输入的 PIN 不一致/);
-  assert.doesNotMatch(result.stdout + result.stderr, /123456|654321|012345/);
+  assertCredentials(f.log(f.accountFile), 'new-password');
+  assert.equal((result.stdout.match(/账号不能为空/g) ?? []).length, 2);
+  assert.match(result.stdout, /密码不能为空/);
+  assert.match(result.stdout, /两次输入的密码不一致/);
+  assert.doesNotMatch(result.stdout + result.stderr, /first-password|mismatch|new-password/);
   f.assertClean();
 });
 
-test('missing PIN without a terminal blocks activation', t => {
-  const f = fixture(t, { withPin: false });
+test('missing account without a terminal blocks activation', t => {
+  const f = fixture(t, { withAccount: false });
   f.pack();
   const result = f.run();
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /PIN 设置需要交互终端/);
-  assert.equal(existsSync(f.pinFile), false);
+  assert.match(result.stderr, /账户设置需要交互终端/);
+  assert.equal(existsSync(f.accountFile), false);
   assert.equal(existsSync(join(f.runtime, 'active/server')), false);
   assert.equal(existsSync(join(f.runtime, 'latest')), false);
   assert.equal(f.log(f.initializeLog), '');
   f.assertClean();
 });
 
-test('EOF during PIN confirmation cancels first installation without starting the server', t => {
-  const f = fixture(t, { withPin: false });
+test('legacy PIN installation requires account setup and preserves the old file', t => {
+  const f = fixture(t, { withAccount: false });
+  const legacy = join(f.env.AOW_STATE_DIR, 'pin.md5');
+  write(legacy, 'e10adc3949ba59abbe56e057f20f883e\n');
   f.pack();
-  const result = f.run([], {}, '012345\n\x04');
+  assert.notEqual(f.run().status, 0);
+  assert.equal(existsSync(join(f.runtime, 'active/server')), false);
+  const password = ' 密码 $value `literal` \\ ';
+  const installed = f.run([], {}, `本地用户\n${password}\n${password}\nn\n`);
+  assert.equal(installed.status, 0, installed.stdout + installed.stderr);
+  assertCredentials(f.log(f.accountFile), password, '本地用户');
+  assert.doesNotMatch(installed.stdout + installed.stderr, /literal/);
+  assert.equal(f.log(legacy), 'e10adc3949ba59abbe56e057f20f883e\n');
+  const before = JSON.parse(f.log(f.accountFile));
+  const changed = f.manager(['account'], {}, `本地用户\n${password}\n${password}\n`);
+  assert.equal(changed.status, 0, changed.stdout + changed.stderr);
+  assertCredentials(f.log(f.accountFile), password, '本地用户');
+  assert.notEqual(JSON.parse(f.log(f.accountFile)).salt, before.salt);
+});
+
+test('EOF during account confirmation cancels first installation without starting the server', t => {
+  const f = fixture(t, { withAccount: false });
+  f.pack();
+  const result = f.run([], {}, 'admin\nnew-password\n\x04');
   assert.ifError(result.error);
   assert.notEqual(result.status, 0);
-  assert.match(result.stdout, /PIN 输入已取消/);
-  assert.equal(existsSync(f.pinFile), false);
+  assert.match(result.stdout, /账户输入已取消/);
+  assert.equal(existsSync(f.accountFile), false);
   assert.equal(existsSync(join(f.runtime, 'active/server')), false);
   assert.equal(f.log(f.serviceLog), '--user show-environment\n');
   f.assertClean();
 });
 
-test('aow pin changes an existing PIN without downloading or touching services', t => {
+test('aow account changes an existing account without downloading or touching services', t => {
   const f = fixture(t);
   f.pack();
   assert.equal(f.run().status, 0);
   const services = f.log(f.serviceLog);
   const downloads = f.log(f.downloadLog);
-  // A release URL and the update configuration are unnecessary for PIN changes.
+  // A release URL and the update configuration are unnecessary for account changes.
   write(join(f.runtime, 'update.json'), 'not JSON');
-  const result = f.manager(['pin'], { FAIL_DOWNLOAD: '1', FAIL_MANAGER: '1' }, '012345\n012345\n');
+  const result = f.manager(['account'], { FAIL_DOWNLOAD: '1', FAIL_MANAGER: '1' }, 'admin\nnew-password\nnew-password\n');
   assert.ifError(result.error);
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.equal(f.log(f.pinFile), digest('012345'));
-  assert.equal(statSync(f.pinFile).mode & 0o777, 0o600);
-  assert.doesNotMatch(result.stdout + result.stderr, /012345/);
+  assertCredentials(f.log(f.accountFile), 'new-password');
+  assert.equal(statSync(f.accountFile).mode & 0o777, 0o600);
+  assert.doesNotMatch(result.stdout + result.stderr, /new-password/);
   assert.equal(f.log(f.serviceLog), services);
   assert.equal(f.log(f.downloadLog), downloads);
-  assert.deepEqual(readdirSync(dirname(f.pinFile)), ['pin.md5']);
+  assert.deepEqual(readdirSync(dirname(f.accountFile)), ['credentials.json']);
 });
 
-test('aow pin cancellation, no terminal, help and invalid arguments preserve the PIN', t => {
+test('aow account cancellation, no terminal, help and invalid arguments preserve the account', t => {
   const f = fixture(t);
   f.pack();
   assert.equal(f.run().status, 0);
   const services = f.log(f.serviceLog);
-  const before = f.log(f.pinFile);
-  const cancelled = f.manager(['pin'], {}, '012345\n\x04');
+  const before = f.log(f.accountFile);
+  const cancelled = f.manager(['account'], {}, 'admin\nnew-password\n\x04');
   assert.ifError(cancelled.error);
   assert.notEqual(cancelled.status, 0);
-  assert.match(cancelled.stdout, /PIN 输入已取消/);
-  const noTerminal = f.manager(['pin']);
+  assert.match(cancelled.stdout, /账户输入已取消/);
+  const noTerminal = f.manager(['account']);
   assert.notEqual(noTerminal.status, 0);
   assert.match(noTerminal.stderr, /交互终端/);
-  assert.notEqual(f.manager(['pin', '123456']).status, 0);
-  const help = f.manager(['pin', '--help']);
+  assert.notEqual(f.manager(['account', '123456']).status, 0);
+  const help = f.manager(['account', '--help']);
   assert.equal(help.status, 0, help.stderr);
-  assert.match(help.stdout, /Usage: aow pin/);
-  assert.equal(f.manager(['pin', '--if-missing']).status, 0);
-  assert.equal(f.log(f.pinFile), before);
+  assert.match(help.stdout, /Usage: aow account/);
+  assert.equal(f.manager(['account', '--if-missing']).status, 0);
+  assert.equal(f.log(f.accountFile), before);
   assert.equal(f.log(f.serviceLog), services);
-  assert.deepEqual(readdirSync(dirname(f.pinFile)), ['pin.md5']);
+  assert.deepEqual(readdirSync(dirname(f.accountFile)), ['credentials.json']);
 });
 
 for (const source of ['default', 'xdg', 'state environment', 'server.env', 'server environment']) {
-  test(`install and aow pin share the ${source} state directory`, t => {
-    const f = fixture(t, { withPin: false });
+  test(`install and aow account share the ${source} state directory`, t => {
+    const f = fixture(t, { withAccount: false });
     const state = source === 'default' ? join(f.home, '.local/state/aow')
       : source === 'xdg' ? join(f.temp, 'xdg state/aow') : join(f.temp, 'chosen state');
     const extra = { AOW_STATE_DIR: '', XDG_STATE_HOME: '' };
@@ -514,26 +535,26 @@ for (const source of ['default', 'xdg', 'state environment', 'server.env', 'serv
       if (source === 'server environment') extra.AOW_SERVER_STATE_DIR = state;
     }
     f.pack();
-    const installed = f.run([], extra, '012345\n012345\nn\n');
+    const installed = f.run([], extra, 'admin\nnew-password\nnew-password\nn\n');
     assert.ifError(installed.error);
     assert.equal(installed.status, 0, installed.stdout + installed.stderr);
-    assert.equal(f.log(join(state, 'pin.md5')), digest('012345'));
+    assertCredentials(f.log(join(state, 'credentials.json')), 'new-password');
     assert.ok(f.log(f.initializeLog).includes(`--state-dir\n${state}\n`));
-    const changed = f.manager(['pin'], extra, '987654\n987654\n');
+    const changed = f.manager(['account'], extra, 'renamed\nchanged-password\nchanged-password\n');
     assert.ifError(changed.error);
     assert.equal(changed.status, 0, changed.stdout + changed.stderr);
-    assert.equal(f.log(join(state, 'pin.md5')), digest('987654'));
+    assertCredentials(f.log(join(state, 'credentials.json')), 'changed-password', 'renamed');
     assert.equal(existsSync(join(f.temp, 'unused state')), false);
     assert.equal(existsSync(join(f.temp, 'unused configured state')), false);
     f.assertClean();
   });
 }
 
-test('start-server checks PIN using its packaged command even without the user command link', t => {
+test('start-server checks account using its packaged command even without the user command link', t => {
   const f = fixture(t);
   f.pack();
   assert.equal(f.run().status, 0);
-  rmSync(f.pinFile);
+  rmSync(f.accountFile);
   rmSync(join(f.userBin, 'aow'));
   const before = f.log(f.serviceLog);
   const command = `sh ${quote(join(f.runtime, 'releases/1.2.3/scripts/start-server.sh'))}`;
@@ -542,10 +563,10 @@ test('start-server checks PIN using its packaged command even without the user c
   assert.match(blocked.stderr, /交互终端/);
   assert.equal(f.log(f.serviceLog), `${before}--user show-environment\n`);
   assert.equal(readlinkSync(join(f.runtime, 'active/server')), '../releases/1.2.3');
-  const restarted = f.runCommand(command, {}, '012345\n012345\n');
+  const restarted = f.runCommand(command, {}, 'admin\nnew-password\nnew-password\n');
   assert.ifError(restarted.error);
   assert.equal(restarted.status, 0, restarted.stdout + restarted.stderr);
-  assert.equal(f.log(f.pinFile), digest('012345'));
+  assertCredentials(f.log(f.accountFile), 'new-password');
   assert.match(f.log(f.serviceLog).slice(before.length), /restart aow-server/);
 });
 
@@ -589,15 +610,15 @@ test('upgrade retains configuration, old releases and unconfirmed terminald stat
   const config = join(f.home, '.config/aow/server.env');
   const state = join(f.temp, 'existing state path');
   write(config, `AOW_SERVER_PORT=8283\nAOW_SERVER_STATE_DIR="${state}"\n`);
-  const pin = join(state, 'pin.md5');
-  write(pin, 'existing PIN digest');
+  const account = join(state, 'credentials.json');
+  write(account, 'existing account digest');
   f.pack('1.2.3');
   const result = f.run();
   assert.equal(result.status, 0, result.stderr);
   assert.equal(readlinkSync(join(f.runtime, 'active/server')), '../releases/1.2.3');
   assert.equal(readlinkSync(join(f.runtime, 'active/terminald')), '../releases/1.0.0');
   assert.equal(readlinkSync(join(f.runtime, 'node')), '/previous/node');
-  assert.equal(readFileSync(pin, 'utf8'), 'existing PIN digest');
+  assert.equal(readFileSync(account, 'utf8'), 'existing account digest');
   assert.match(readFileSync(config, 'utf8'), /AOW_SERVER_PORT=8283/);
   assert.ok(f.log(f.initializeLog).includes(`--state-dir\n${state}\n`));
   assert.equal(existsSync(join(f.runtime, 'releases/1.0.0/bin/aow-cli')), true);
@@ -724,8 +745,8 @@ test('aow update uses the saved repository and refreshed installer while preserv
   symlinkSync('../releases/1.0.0', join(f.runtime, 'active/terminald'));
   const config = join(f.home, '.config/aow/server.env');
   write(config, 'AOW_SERVER_PORT=8283\n');
-  const pin = join(f.env.AOW_STATE_DIR, 'pin.md5');
-  write(pin, 'keep-pin');
+  const account = join(f.env.AOW_STATE_DIR, 'credentials.json');
+  write(account, 'keep-account');
   f.pack('2.0.0');
   writeFileSync(join(f.downloads, 'aow-install.sh'), readFileSync(join(f.downloads, 'aow-install.sh'), 'utf8')
     .replace('Installed AoW %s in %s', 'Updated by refreshed installer %s in %s'));
@@ -739,7 +760,7 @@ test('aow update uses the saved repository and refreshed installer while preserv
   assert.equal(readlinkSync(join(f.runtime, 'active/terminald')), '../releases/1.0.0');
   assert.equal(readlinkSync(join(f.userBin, 'aow-cli')), join(f.runtime, 'releases/2.0.0/bin/aow-cli'));
   assert.equal(readFileSync(config, 'utf8'), 'AOW_SERVER_PORT=8283\n');
-  assert.equal(readFileSync(pin, 'utf8'), 'keep-pin');
+  assert.equal(readFileSync(account, 'utf8'), 'keep-account');
   assert.doesNotMatch(f.log(f.serviceLog), /terminald/);
   f.assertClean();
 });

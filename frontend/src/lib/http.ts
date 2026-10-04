@@ -11,7 +11,7 @@ export async function fetchWithTimeout(url: string, init?: RequestInit, timeoutM
   } catch (error) {
     init?.signal?.throwIfAborted();
     if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new Error(`请求超时（${Math.round(timeoutMs / 1000)} 秒）`);
+      throw new Error(`请求超时（${Math.round(timeoutMs / 1000)} 秒）`, { cause: error });
     }
     throw error;
   } finally {

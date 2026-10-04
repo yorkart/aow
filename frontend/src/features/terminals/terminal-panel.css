@@ -7,8 +7,8 @@
 .terminal-panel-empty { margin: 0; padding: 10px; color: var(--muted); font-size: 12px; }
 .terminal-panel-error { margin: 0; padding: 8px; color: var(--aow-error); font-size: 12px; }
 .terminal-panel-count { flex: none; margin-left: auto; padding: 0 5px; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
-.terminal-worktree-heading { display: flex; align-items: center; gap: 4px; width: 100%; min-height: 27px; padding: 4px 8px; color: var(--muted); text-align: left; cursor: pointer; }
-.terminal-worktree-heading:hover { color: var(--text); background: var(--hover); }
+.terminal-worktree-heading { display: flex; align-items: center; gap: 4px; width: 100%; min-height: 27px; padding: 4px 8px; color: var(--aow-text); text-align: left; cursor: pointer; }
+.terminal-worktree-heading:hover { color: var(--aow-text-hover); background: var(--hover); }
 .terminal-worktree-heading:focus-visible { outline: 1px solid var(--aow-accent); outline-offset: -1px; }
 .terminal-worktree-heading > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .terminal-worktree-heading > svg { flex: 0 0 12px; width: 12px; height: 12px; }
@@ -23,4 +23,4 @@
 .terminal-panel-status > svg { flex: 0 0 13px; width: 13px; height: 13px; }
 .terminal-panel-status > .terminal-panel-state-active { color: #73c991; }
 .project-aow-terminal-menu .danger { margin-top: 3px; color: #d99a94; border-top: 1px solid var(--aow-line); border-radius: 0 0 3px 3px; }
-.project-aow-terminal-menu .danger:hover, .project-aow-terminal-menu .danger:focus-visible { color: #fff; background: #7a302b; }
+.project-aow-terminal-menu .danger:hover, .project-aow-terminal-menu .danger:focus-visible { color: var(--aow-text-hover); background: #7a302b; }

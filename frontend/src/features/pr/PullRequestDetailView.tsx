@@ -184,7 +184,7 @@ function PullRequestContent({ repository, provider, remote, number, visible, mob
     { id: 'discussion', label: '讨论', icon: <MessageSquareMore />, count: threads.length },
   ];
   const tabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    let next = index;
+    let next: number;
     if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
     else if (event.key === 'ArrowLeft') next = (index + tabs.length - 1) % tabs.length;
     else if (event.key === 'Home') next = 0;

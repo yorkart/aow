@@ -1,0 +1,14 @@
+{
+  "globs": ["**/*.md"],
+  "ignores": ["**/node_modules/**", "**/dist/**", "target/**", "website/_site/**", "website/_snapshot/**"],
+  "config": {
+    "default": false,
+    "MD009": true,
+    "MD010": true,
+    "MD011": true,
+    "MD034": true,
+    "MD037": true,
+    "MD039": true,
+    "MD042": true
+  }
+}

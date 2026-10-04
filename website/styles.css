@@ -42,13 +42,11 @@ a {
 }
 button {
   cursor: pointer;
+  color: inherit;
 }
 a {
   color: inherit;
   text-decoration: none;
-}
-button {
-  color: inherit;
 }
 img {
   display: block;

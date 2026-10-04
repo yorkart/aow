@@ -8,9 +8,9 @@ script_path=$(node -e 'process.stdout.write(require("node:fs").realpathSync(proc
 # shellcheck source=../../scripts/server-state-dir.sh
 source "$(dirname -- "$script_path")/../../scripts/server-state-dir.sh"
 stage=
-pin_pending_file=
+account_pending_file=
 cleanup() {
-    [[ -z "$pin_pending_file" ]] || rm -f -- "$pin_pending_file"
+    [[ -z "$account_pending_file" ]] || rm -f -- "$account_pending_file"
     [[ -z "$stage" ]] || rm -rf -- "$stage"
 }
 trap cleanup EXIT
@@ -21,9 +21,9 @@ fail() { printf 'error: %s\n' "$*" >&2; exit 1; }
 usage() {
     cat <<'HELP'
 Usage: aow update [--version VERSION] [--repo OWNER/REPO]
-       aow pin
+       aow account
 
-pin               Set or change the six-digit access PIN; no server restart needed.
+account           Set or change the local login account and password; no server restart needed.
 
 Update from the saved GitHub repository, following its latest release.
 --version VERSION  Install a specific GitHub release tag.
@@ -34,64 +34,87 @@ Repository priority: --repo > AOW_RELEASE_REPOSITORY > saved repository > yorkar
 Only a lowercase y entered at the terminal permits starting/restarting terminald.
 HELP
 }
-pin_command() {
+account_command() {
     local if_missing=0
     while (( $# )); do
         case "$1" in
             --if-missing) if_missing=1; shift ;;
             -h|--help)
-                printf '%s\n' 'Usage: aow pin [--if-missing]' \
-                    'Set a six-digit PIN using hidden input and confirmation.' \
-                    '--if-missing  Keep an existing pin.md5 (used during installation/startup).'
+                printf '%s\n' 'Usage: aow account [--if-missing]' \
+                    'Set a local login account and password. Password input is hidden and confirmed.' \
+                    '--if-missing  Keep existing credentials.json (used during installation/startup).'
                 return ;;
-            *) fail "unknown pin argument: $1" ;;
+            *) fail "unknown account argument: $1" ;;
         esac
     done
-    local state_dir pin_file pin_tty=9 pin confirm
+    local state_dir account_file account_tty=9 username password confirm
     state_dir=$(server_state_dir)
-    pin_file=$state_dir/pin.md5
-    if (( if_missing )) && [[ -f "$pin_file" ]]; then return; fi
-    [[ ! -d "$pin_file" ]] || fail "PIN destination is a directory: $pin_file"
+    account_file=$state_dir/credentials.json
+    if (( if_missing )) && [[ -f "$account_file" ]]; then return; fi
+    [[ ! -d "$account_file" ]] || fail "Account destination is a directory: $account_file"
     if ! { exec 9<>/dev/tty; } 2>/dev/null; then
-        fail 'PIN 设置需要交互终端；请在终端重新运行安装，或执行 aow pin。'
+        fail '账户设置需要交互终端；请在终端重新运行安装，或执行 aow account。'
     fi
-    [[ -t "$pin_tty" ]] || fail 'PIN 设置需要交互终端。'
+    [[ -t "$account_tty" ]] || fail '账户设置需要交互终端。'
     if (( if_missing )); then
-        printf '%s\n' '尚未配置访问 PIN，必须先创建 PIN 才能启动 server。' >&"$pin_tty"
+        printf '%s\n' '首次使用必须先设置 AoW 登录账号和密码，保存后才能启动 server。' >&"$account_tty"
     fi
     while :; do
-        printf '%s' '请输入 6 位数字 PIN: ' >&"$pin_tty"
-        if ! IFS= read -r -s -u "$pin_tty" pin; then
-            printf '\n' >&"$pin_tty"
-            fail 'PIN 输入已取消，未保存 PIN。'
+        printf '%s' '请输入登录账号: ' >&"$account_tty"
+        if ! IFS= read -r -u "$account_tty" username; then
+            printf '\n' >&"$account_tty"
+            fail '账户输入已取消，未保存账号和密码。'
         fi
-        printf '\n' >&"$pin_tty"
-        if [[ ! "$pin" =~ ^[0-9]{6}$ ]]; then
-            printf '%s\n' 'PIN 必须恰好为 6 位数字，不能为空，请重新输入。' >&"$pin_tty"
+        if printf '%s' "$username" | node -e '
+            const value = require("node:fs").readFileSync(0, "utf8");
+            process.exit(value.length > 0 && Buffer.byteLength(value) <= 256 && !/[\p{White_Space}\p{Cc}]/u.test(value) ? 0 : 1);
+        '; then break; fi
+        printf '%s\n' '账号不能为空、不能包含空白或控制字符，且不能超过 256 字节，请重新输入。' >&"$account_tty"
+    done
+    while :; do
+        printf '%s' '请输入登录密码: ' >&"$account_tty"
+        if ! IFS= read -r -s -u "$account_tty" password; then
+            printf '\n' >&"$account_tty"
+            fail '账户输入已取消，未保存账号和密码。'
+        fi
+        printf '\n' >&"$account_tty"
+        if ! printf '%s' "$password" | node -e '
+            const size = require("node:fs").readFileSync(0).length;
+            process.exit(size > 0 && size <= 1024 ? 0 : 1);
+        '; then
+            printf '%s\n' '密码不能为空，且不能超过 1024 字节，请重新输入。' >&"$account_tty"
             continue
         fi
-        printf '%s' '请再次输入 PIN: ' >&"$pin_tty"
-        if ! IFS= read -r -s -u "$pin_tty" confirm; then
-            printf '\n' >&"$pin_tty"
-            fail 'PIN 输入已取消，未保存 PIN。'
+        printf '%s' '请再次输入密码: ' >&"$account_tty"
+        if ! IFS= read -r -s -u "$account_tty" confirm; then
+            printf '\n' >&"$account_tty"
+            fail '账户输入已取消，未保存账号和密码。'
         fi
-        printf '\n' >&"$pin_tty"
-        if [[ "$pin" == "$confirm" ]]; then break; fi
-        printf '%s\n' '两次输入的 PIN 不一致，请重新输入。' >&"$pin_tty"
+        printf '\n' >&"$account_tty"
+        if [[ "$password" == "$confirm" ]]; then break; fi
+        printf '%s\n' '两次输入的密码不一致，请重新输入。' >&"$account_tty"
     done
     exec 9>&-
     mkdir -p -- "$state_dir"
-    pin_pending_file=$(mktemp "$state_dir/.pin.md5.XXXXXX")
-    printf '%s' "$pin" | node -e '
-        const { createHash } = require("node:crypto");
-        const { readFileSync } = require("node:fs");
-        process.stdout.write(createHash("md5").update(readFileSync(0)).digest("hex") + "\n");
-    ' >"$pin_pending_file"
-    unset pin confirm
-    chmod 0600 "$pin_pending_file"
-    node -e 'require("node:fs").renameSync(process.argv[1], process.argv[2])' "$pin_pending_file" "$pin_file"
-    pin_pending_file=
-    printf 'PIN 已保存到 %s；无需重启 server。\n' "$pin_file"
+    account_pending_file=$(mktemp "$state_dir/.credentials.json.XXXXXX")
+    # Credentials travel only over stdin, never process arguments or environment.
+    printf '%s\0%s' "$username" "$password" | node -e '
+        const { pbkdf2Sync, randomBytes } = require("node:crypto");
+        const input = require("node:fs").readFileSync(0);
+        const separator = input.indexOf(0);
+        const salt = randomBytes(16);
+        process.stdout.write(JSON.stringify({
+            version: 1,
+            username: input.subarray(0, separator).toString("utf8"),
+            salt: salt.toString("hex"),
+            password_hash: pbkdf2Sync(input.subarray(separator + 1), salt, 600000, 32, "sha256").toString("hex"),
+        }) + "\n");
+    ' >"$account_pending_file"
+    unset username password confirm
+    chmod 0600 "$account_pending_file"
+    node -e 'require("node:fs").renameSync(process.argv[1], process.argv[2])' "$account_pending_file" "$account_file"
+    account_pending_file=
+    printf '账号和密码已保存到 %s；请使用账号和密码登录网页，无需重启 server。\n' "$account_file"
 }
 config_value() {
     node --input-type=module - "$runtime_root/update.json" "$1" <<'JS'
@@ -112,9 +135,9 @@ JS
 main() {
     case "${1:-}" in
         ''|-h|--help) usage; return ;;
-        pin) shift; pin_command "$@"; return ;;
+        account) shift; account_command "$@"; return ;;
         update) shift ;;
-        *) fail "unknown command: $1 (use: aow update / aow pin)" ;;
+        *) fail "unknown command: $1 (use: aow update / aow account)" ;;
     esac
     local repository=${AOW_RELEASE_REPOSITORY:-} version=''
     while (( $# )); do

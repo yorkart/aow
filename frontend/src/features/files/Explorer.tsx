@@ -10,6 +10,7 @@ import { DirectoryTypeIcon, FileTypeIcon } from './FileTypeIcon';
 import { AowIconButton } from '../../components/AowIconButton';
 import { AowPanel, usePanelCollapsed, usePanelListViewport } from '../../components/AowPanel';
 import { isEditableTarget, pastedFiles, readClipboardImages } from './explorerClipboard';
+import { writeExplorerPath } from './explorerDrag';
 import { useExplorerUploads } from './useExplorerUploads';
 import type { FileEntry } from './types';
 
@@ -441,6 +442,8 @@ export function Explorer({ root, activePath, onRootChange, onOpenFile, onRenameF
         className="tree-row workspace-root-node"
         data-tree-path={root} data-tree-directory={root}
         title={root}
+        draggable
+        onDragStart={(event) => writeExplorerPath(event.dataTransfer, root)}
         onClick={() => setRootExpanded((value) => !value)}
         onContextMenu={(event) => showContextMenu(event, { path: root, displayPath: root, directory: true, renameable: false })}
       >
@@ -499,6 +502,11 @@ export function Explorer({ root, activePath, onRootChange, onOpenFile, onRenameF
         className={`tree-row${node.ignored ? ' git-ignored' : ''}${(selection?.path ?? activePath) === node.path ? ' selected' : ''}${revealedPath === node.path ? ' uploaded' : ''}`}
         data-tree-path={node.path} data-tree-directory={directory ? node.path : node.path.slice(0, node.path.lastIndexOf('/')) || '/'}
         title={node.path}
+        draggable={rename?.path !== node.path}
+        onDragStart={(event) => {
+          if (rename?.path === node.path || isEditableTarget(event.target)) { event.preventDefault(); return; }
+          writeExplorerPath(event.dataTransfer, node.path);
+        }}
         onClick={() => toggle(node)}
         onContextMenu={(event) => showContextMenu(event, { path: node.path, displayPath: node.path, directory, renameable: node.kind === 'file' || (renameDirectories && directory) })}
       >

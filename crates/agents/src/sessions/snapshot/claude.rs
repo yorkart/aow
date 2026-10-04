@@ -1,4 +1,5 @@
 use super::*;
+use crate::sessions::usage::{ClaudeUsage, TokenUsage};
 
 const MAX_CLAUDE_ANCESTRY: usize = 100_000;
 
@@ -89,6 +90,7 @@ pub(super) fn claude_turns(rows: impl Iterator<Item = Value>) -> Vec<SnapshotTur
     let mut turns = Vec::new();
     let mut current: Option<TurnDraft> = None;
     let mut fallback_id = 0usize;
+    let mut token_events = ClaudeUsage::default();
 
     for record in rows {
         let Some(record) = record.as_object() else {
@@ -131,6 +133,7 @@ pub(super) fn claude_turns(rows: impl Iterator<Item = Value>) -> Vec<SnapshotTur
                 }
                 push_draft(&mut turns, current.take());
                 fallback_id += 1;
+                token_events = ClaudeUsage::default();
                 let id = string(record, "uuid")
                     .map(str::to_owned)
                     .unwrap_or_else(|| format!("turn-{fallback_id}"));
@@ -140,6 +143,12 @@ pub(super) fn claude_turns(rows: impl Iterator<Item = Value>) -> Vec<SnapshotTur
             }
             Some("assistant") => {
                 let draft = ensure_draft(&mut current, &mut fallback_id);
+                if let Some(usage) = record
+                    .get("message")
+                    .and_then(|message| token_events.consume(message))
+                {
+                    TokenUsage::accumulate(&mut draft.usage, usage);
+                }
                 let response = claude_assistant_text(record);
                 if let Some((text, terminal)) = response {
                     add_assistant_message(

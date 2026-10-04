@@ -21,6 +21,52 @@ fn parse_records(records: Vec<Value>) -> Vec<SnapshotTurn> {
 }
 
 #[test]
+fn codex_usage_is_per_display_turn_and_never_the_session_cumulative_count() {
+    use crate::sessions::usage::tests::codex_event;
+    use serde_json::json;
+    let first = codex_event(100, 20, 10_100, 1_020);
+    let turns = parse_records(vec![
+        json!({"type":"event_msg","payload":{"type":"task_started","turn_id":"task-1"}}),
+        json!({"type":"response_item","payload":{"type":"message","role":"user","content":"first"}}),
+        first.clone(),
+        first,
+        codex_event(200, 30, 10_300, 1_050),
+        json!({"type":"response_item","payload":{"type":"message","role":"user","content":"additional instruction"}}),
+        codex_event(10, 2, 10_310, 1_052),
+        json!({"type":"event_msg","payload":{"type":"task_complete","turn_id":"task-1"}}),
+        json!({"type":"event_msg","payload":{"type":"task_started","turn_id":"task-2"}}),
+        json!({"type":"response_item","payload":{"type":"message","role":"user","content":"next"}}),
+        codex_event(30, 4, 10_340, 1_056),
+        json!({"type":"event_msg","payload":{"type":"task_complete","turn_id":"task-2"}}),
+        json!({"type":"response_item","payload":{"type":"message","role":"user","content":"no usage"}}),
+    ]);
+    assert_eq!(turns.len(), 4);
+    assert_eq!(turns[0].usage.unwrap().total_tokens, 350);
+    assert_eq!(turns[1].usage.unwrap().total_tokens, 12);
+    assert_eq!(turns[2].usage.unwrap().total_tokens, 34);
+    assert_eq!(turns[3].usage, None);
+    let serialized = serde_json::to_value(&turns).unwrap();
+    assert!(serialized[3].get("usage").is_none());
+}
+
+#[test]
+fn claude_usage_includes_tool_calls_without_counting_repeated_message_blocks() {
+    use serde_json::json;
+    let message = json!({"type":"assistant","message":{"id":"one","usage":{"input_tokens":100,"output_tokens":10,"cache_read_input_tokens":50},"content":[{"type":"tool_use","id":"tool","name":"Read"}]}});
+    let turns = claude_turns(vec![
+        json!({"type":"user","message":{"content":"first"}}),
+        message.clone(), message,
+        json!({"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"tool","content":"ok"}]}}),
+        json!({"type":"assistant","message":{"id":"two","usage":{"input_tokens":200,"output_tokens":20},"content":[{"type":"text","text":"done"}]}}),
+        json!({"type":"user","message":{"content":"next"}}),
+        json!({"type":"assistant","message":{"id":"three","usage":{"input_tokens":10,"output_tokens":2},"content":[{"type":"text","text":"next done"}]}}),
+    ].into_iter());
+    assert_eq!(turns.len(), 2);
+    assert_eq!(turns[0].usage.unwrap().total_tokens, 380);
+    assert_eq!(turns[1].usage.unwrap().total_tokens, 12);
+}
+
+#[test]
 fn command_categories_and_input_survive_completion_projections() {
     use serde_json::json;
     let turns = parse_records(vec![
@@ -108,6 +154,97 @@ fn codex_keeps_ordered_progress_and_tool_details_without_reasoning() {
     );
     let serialized = serde_json::to_string(turn).unwrap();
     assert!(!serialized.contains("PRIVATE_REASONING"));
+}
+
+#[test]
+fn traecli_canonical_history_keeps_messages_and_tools_without_legacy_projections() {
+    use serde_json::json;
+    let turns = parse_records(vec![
+        json!({"type":"session_meta","payload":{"history_format":"canonical_v1","history_mode":"paginated"}}),
+        json!({"type":"event_msg","payload":{"type":"task_started","turn_id":"canonical-turn"}}),
+        json!({"type":"history_mutation","payload":{"version":1,"operation":"append","items":[
+            {"type":"message","role":"developer","content":[{"type":"input_text","text":"DEVELOPER_INSTRUCTIONS"}]},
+            {"type":"message","role":"user","content":[{"type":"input_text","text":"# AGENTS.md instructions for /workspace"},{"type":"input_text","text":"<environment_context>INJECTED_CONTEXT</environment_context>"}]}
+        ]}}),
+        json!({"timestamp":"2026-09-28T12:03:45.154Z","type":"history_mutation","payload":{"version":1,"commit_id":"commit-1","turn_id":"canonical-turn","operation":"append","items":[
+            {"type":"message","id":"user-1","role":"user","content":[{"type":"input_text","text":"统计当前项代码量"}],"internal_chat_message_metadata_passthrough":{"content_item_kinds":["user.text"]}}
+        ]}}),
+        json!({"type":"history_mutation","payload":{"version":1,"operation":"append","items":[
+            {"type":"reasoning","content":[{"type":"reasoning_text","text":"PRIVATE_REASONING"}]},
+            {"type":"message","role":"assistant","phase":"commentary","content":[{"type":"output_text","text":"Counting the code"}]},
+            {"type":"custom_tool_call","call_id":"exec-1","name":"exec","input":"run checks"},
+            {"type":"custom_tool_call_output","call_id":"exec-1","output":[{"type":"input_text","text":"42 lines"}]},
+            {"type":"function_call","call_id":"exec-2","name":"exec_command","arguments":"{\"cmd\":\"wc -l main.rs\"}"},
+            {"type":"function_call_output","call_id":"exec-2","output":"Process exited with code 0\n42 main.rs"},
+            {"type":"trae_extra_info","extra_info":{"content":"PRIVATE_EXTRA_INFO"}}
+        ]}}),
+        json!({"timestamp":"2026-09-28T12:06:14.415Z","type":"history_mutation","payload":{"version":1,"operation":"append","items":[
+            {"type":"message","role":"assistant","phase":"final_answer","content":[{"type":"output_text","text":"The project has 42 lines of code."}]}
+        ]}}),
+        json!({"type":"event_msg","payload":{"type":"task_complete","turn_id":"canonical-turn"}}),
+    ]);
+    assert_eq!(turns.len(), 1);
+    let turn = &turns[0];
+    assert_eq!(turn.id, "canonical-turn");
+    assert_eq!(turn.status, "completed");
+    assert_eq!(turn.user.text, "统计当前项代码量");
+    assert_eq!(
+        turn.user.timestamp.as_deref(),
+        Some("2026-09-28T12:03:45.154Z")
+    );
+    let final_message = turn.final_message.as_ref().unwrap();
+    assert_eq!(final_message.text, "The project has 42 lines of code.");
+    assert_eq!(
+        final_message.timestamp.as_deref(),
+        Some("2026-09-28T12:06:14.415Z")
+    );
+    assert_eq!(turn.activities.len(), 3);
+    assert_eq!(turn.activities[0].text, "Counting the code");
+    assert_eq!(turn.activities[1].status, Some("completed"));
+    assert_eq!(turn.activities[2].status, Some("completed"));
+    assert_eq!(
+        turn.activities[1]
+            .details
+            .as_ref()
+            .unwrap()
+            .output
+            .as_ref()
+            .unwrap()
+            .text,
+        "42 lines"
+    );
+    let serialized = serde_json::to_string(turn).unwrap();
+    for hidden in [
+        "DEVELOPER_INSTRUCTIONS",
+        "INJECTED_CONTEXT",
+        "PRIVATE_REASONING",
+        "PRIVATE_EXTRA_INFO",
+    ] {
+        assert!(!serialized.contains(hidden));
+    }
+}
+
+#[test]
+fn traecli_canonical_appends_preserve_live_turns_and_skip_context_replacements() {
+    let (_directory, path) = write(
+        r#"{"type":"event_msg","payload":{"type":"task_started","turn_id":"live-turn"}}
+{"type":"history_mutation","payload":{"version":1,"operation":"append","items":[{"type":"message","role":"user","content":"first request"}]}}
+{"type":"response_item","payload":{"type":"message","role":"user","content":"first request"}}
+{"type":"history_mutation","payload":{"version":1,"operation":"append","items":[{"type":"message","role":"assistant","phase":"commentary","content":"Working"}]}}
+{"type":"history_mutation","payload":{"version":1,"operation":"replace","items":[{"type":"message","role":"user","content":"COMPACTED_CONTEXT"}]}}
+{"type":"history_mutation","payload":{"version":2,"operation":"append","items":[{"type":"message","role":"user","content":"UNKNOWN_SCHEMA"}]}}
+{"type":"history_mutation","payload":{"version":1,"operation":"append","items":null}}
+{"type":"history_mutation","payload":{"version":1,"operation":"append","items":[{"type":"message","role":"user","content":"additional instruction"}]}}
+{"type":"history_mutation","payload":
+"#,
+    );
+    let turns = parse_codex_like(&path).unwrap();
+    assert_eq!(turns.len(), 2);
+    assert_eq!(turns[0].user.text, "first request");
+    assert_eq!(turns[0].activities[0].text, "Working");
+    assert_eq!(turns[1].user.text, "additional instruction");
+    assert!(turns.iter().all(|turn| turn.status == "in_progress"));
+    assert!(turns.iter().all(|turn| turn.final_message.is_none()));
 }
 
 #[test]
@@ -439,7 +576,10 @@ fn codex_task_completion_settles_all_inputs_received_during_the_task() {
         assert!(turns[0].final_message.is_none());
         assert_eq!(turns[0].activities[0].status, Some(tool_status));
         if expected == "completed" {
-            assert_eq!(turns[1].final_message.as_ref().unwrap().text, "Combined answer");
+            assert_eq!(
+                turns[1].final_message.as_ref().unwrap().text,
+                "Combined answer"
+            );
         }
 
         records.extend([
@@ -473,7 +613,10 @@ fn codex_closes_previous_turn_when_next_turn_starts_without_completion() {
         ]);
         assert_eq!(turns.len(), 3);
         assert!(turns.iter().all(|turn| turn.status == "completed"));
-        assert_eq!(turns[0].final_message.as_ref().unwrap().text, "First answer");
+        assert_eq!(
+            turns[0].final_message.as_ref().unwrap().text,
+            "First answer"
+        );
         assert_eq!(turns[0].activities[0].status, Some("unknown"));
     }
 }
@@ -497,8 +640,14 @@ fn codex_next_turn_interrupts_unfinished_work_and_preserves_failures() {
             records.push(json!({"type":"event_msg","payload":{"type":"user_message","message":"second request"}}));
             let turns = parse_records(records);
             assert_eq!(turns.len(), 2);
-            assert_eq!(turns[0].status, if failed { "failed" } else { "interrupted" });
-            assert_eq!(turns[0].activities[0].status, Some(if failed { "unknown" } else { "interrupted" }));
+            assert_eq!(
+                turns[0].status,
+                if failed { "failed" } else { "interrupted" }
+            );
+            assert_eq!(
+                turns[0].activities[0].status,
+                Some(if failed { "unknown" } else { "interrupted" })
+            );
             assert_eq!(turns[1].status, "in_progress");
         }
     }

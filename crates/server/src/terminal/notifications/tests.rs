@@ -1,5 +1,13 @@
+use super::registry::{Identity, Registry, SessionKey, Target};
 use super::*;
-use std::fs::{File, OpenOptions};
+use aow_agents::sessions::{AgentSessionLocator, SessionEnvironment};
+use aow_protocol::TerminalAgentProcess;
+use std::{
+    fs::{File, OpenOptions},
+    io::Write,
+    path::Path,
+    time::{Duration, SystemTime},
+};
 
 fn identity(title: &str) -> Identity {
     Identity {
@@ -39,6 +47,33 @@ fn stop(locator: &AgentSessionLocator) {
         "{{\"type\":\"event_msg\",\"payload\":{{\"type\":\"task_complete\",\"turn_id\":\"one\",\"last_agent_message\":\"本轮完整结论\"}}}}"
     )
     .unwrap();
+}
+
+#[test]
+fn completion_notifications_forward_only_their_readers_observed_usage() {
+    let root = tempfile::tempdir().unwrap();
+    let locator = fixture(root.path(), "usage", 1);
+    let mut registry = Registry::default();
+    registry.register("pane".into(), identity("title"), vec![locator.clone()]);
+    writeln!(
+        OpenOptions::new()
+            .append(true)
+            .open(&locator.transcript_path)
+            .unwrap(),
+        "{}",
+        serde_json::json!({"type":"event_msg","payload":{"type":"token_count","info":{
+            "last_token_usage":{"input_tokens":100,"output_tokens":20},
+            "total_token_usage":{"input_tokens":10000,"output_tokens":2000}
+        }}})
+    )
+    .unwrap();
+    stop(&locator);
+    let events = registry.poll();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].usage.unwrap().total_tokens, 120);
+    assert_eq!(events[0].session_id, "usage");
+    stop(&locator);
+    assert_eq!(registry.poll()[0].usage, None);
 }
 
 #[test]
@@ -248,13 +283,9 @@ async fn source_labels_identify_each_owning_tab_once_and_follow_renames() {
 async fn event_endpoint_requires_aow_login() {
     use tower::ServiceExt;
     let root = tempfile::tempdir().unwrap();
-    std::fs::write(
-        root.path().join(crate::auth::PIN_HASH_FILE),
-        format!("{:x}", md5::compute("123456")),
-    )
-    .unwrap();
+    crate::auth::write_credentials(root.path(), "admin", "test-password");
     let mut state = AppState::new(root.path().join("frontend"));
-    state.auth = crate::auth::PinAuth::persistent(root.path());
+    state.auth = crate::auth::AuthService::persistent(root.path());
     let response = crate::build_router(state)
         .oneshot(
             axum::http::Request::get("/api/terminals/task-stops")
@@ -279,6 +310,7 @@ async fn event_endpoint_streams_only_new_callbacks() {
         cwd: "/workspace".into(),
         turn_id: None,
         conclusion: Some("本轮结论".into()),
+        usage: None,
         instance_ids: vec!["pane".into()],
         sources: Vec::new(),
     };
@@ -375,7 +407,7 @@ async fn codex_like_stops_use_the_expected_environment(with_process: bool) {
                 .args([
                     "--ignored",
                     "--exact",
-                    "terminal::sessions::tests::native_environment_fixture",
+                    "terminal::sessions::process::tests::native_environment_fixture",
                 ])
                 .env("AOW_NATIVE_ENV_FIXTURE", "1")
                 .envs(&environment)

@@ -72,6 +72,7 @@ test('review API preserves provider and remote on list, detail and diff with a m
   await api.myPullRequests('/repo space', target);
   await api.myPullRequest('/repo space', 42, target);
   await api.myPullRequestDiff('/repo space', 42, 'src/file #中文.py', true, target);
+  await api.myPullRequests('/repo space', target, 'all');
   for (const url of requests) {
     assert.equal(url.searchParams.get('repo'), '/repo space');
     assert.equal(url.searchParams.get('provider'), 'custom');
@@ -79,7 +80,9 @@ test('review API preserves provider and remote on list, detail and diff with a m
   }
   assert.equal(requests[2].searchParams.get('path'), 'src/file #中文.py');
   assert.equal(requests[2].searchParams.get('patch_only'), 'true');
-  assert.deepEqual(timeouts, [65000, 65000, 65000]);
+  assert.equal(requests[0].searchParams.get('state'), null);
+  assert.equal(requests[3].searchParams.get('state'), 'all');
+  assert.deepEqual(timeouts, [65000, 65000, 65000, 65000]);
 });
 
 test('review scripts are not silently retried when transport fails', async t => {
@@ -142,4 +145,120 @@ test('desktop review diffs release models after detaching and reopen without sta
   await page.getByRole('button', { name: '收起全部' }).click();
   await waitForModels(0);
   assert.deepEqual(errors, []);
+});
+
+async function panelFixture(t, { fail = false } = {}) {
+  const { chromium } = await import('playwright');
+  const { detail, pullRequests } = await import('./fixtures/pull-request.mjs');
+  if (!server.httpServer?.listening) await server.listen();
+  const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'],
+    ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
+  const page = await browser.newPage({ viewport: { width: 1100, height: 720 }, reducedMotion: 'reduce' });
+  page.setDefaultTimeout(10000);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  t.after(async () => { await browser.close(); assert.deepEqual(errors, []); });
+  const state = { items: structuredClone(pullRequests), fail, queries: [] };
+  await page.route('**/api/**', route => {
+    const url = new URL(route.request().url());
+    if (url.pathname === '/api/review-targets') return route.fulfill({ json: [
+      { provider: 'github', provider_name: 'GitHub', remote: 'origin', host: 'github.com', repository: 'example/aow' },
+    ] });
+    if (url.pathname === '/api/my-pull-requests') {
+      state.queries.push(url.searchParams);
+      if (state.fail) return route.fulfill({ status: 503, json: { message: 'PR provider unavailable' } });
+      return route.fulfill({ json: { repository: '/fixtures/default', current_branch: detail.source_branch,
+        current_user: detail.author, pull_requests: state.items.map(pr => ({ ...pr, provider: 'github', remote: 'origin' })) } });
+    }
+    const pr = state.items.find(pr => url.pathname === `/api/my-pull-requests/${pr.number}`);
+    return pr ? route.fulfill({ json: pr }) : route.fulfill({ status: 404, json: { message: 'Missing PR fixture' } });
+  });
+  await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/tests/pull-request-preview.html?panel`);
+  const panel = title => page.getByRole('region', { name: title, exact: true });
+  const rows = title => panel(title).locator('.aow-list-row-title');
+  return { page, panel, rows, state };
+}
+
+test('PR panels group by status, sort recent updates first and open finished PR details', async t => {
+  const { page, panel, rows, state } = await panelFixture(t);
+  await rows('Closed PRs').waitFor();
+  assert.deepEqual(await page.locator('.pull-requests-pr-section').evaluateAll(elements => elements.map(element => element.getAttribute('aria-label'))), ['Open PRs', 'Merged PRs', 'Closed PRs']);
+  assert.deepEqual((await rows('Open PRs').allTextContents()).map(title => title.match(/#\d+/)[0]), ['#43', '#42']);
+  assert.match(await rows('Merged PRs').textContent(), /#44/);
+  assert.match(await rows('Closed PRs').textContent(), /#45/);
+  assert.ok(state.queries.length > 0);
+  for (const query of state.queries) {
+    assert.equal(query.get('state'), 'all');
+    assert.equal(query.get('provider'), 'github');
+    assert.equal(query.get('remote'), 'origin');
+  }
+  if (process.env.AOW_PR_PANEL_SCREENSHOT) await page.locator('aside').screenshot({ path: process.env.AOW_PR_PANEL_SCREENSHOT });
+  for (const [title, number] of [['Merged PRs', 44], ['Closed PRs', 45]]) {
+    await panel(title).locator('.aow-list-row-open').click();
+    await page.getByRole('article', { name: `PR #${number} 详情`, exact: true }).waitFor();
+    assert.equal(await panel(title).locator('.my-pr-row.selected').count(), 1);
+  }
+
+  await panel('Open PRs').getByRole('button', { name: '收起 Open PRs', exact: true }).click();
+  state.items = state.items.map(pr => pr.number === 42 ? { ...pr, status: 'merged', updated_at: '2026-09-26T03:45:00Z' } : pr);
+  await panel('Merged PRs').getByRole('button', { name: '刷新 Merged PRs', exact: true }).click();
+  await panel('Merged PRs').getByText(/#42 ·/).waitFor();
+  assert.equal(await panel('Open PRs').getByRole('button', { name: '展开 Open PRs', exact: true }).getAttribute('aria-expanded'), 'false');
+  assert.deepEqual((await rows('Merged PRs').allTextContents()).map(title => title.match(/#\d+/)[0]), ['#42', '#44']);
+  await panel('Open PRs').getByRole('button', { name: '展开 Open PRs', exact: true }).click();
+  assert.equal(await rows('Open PRs').count(), 1);
+});
+
+test('Open PR menu only filters drafts, supports dismissal and remembers the preference', async t => {
+  const { page, panel, rows, state } = await panelFixture(t);
+  await rows('Closed PRs').waitFor();
+  const trigger = panel('Open PRs').getByRole('button', { name: 'Open PRs 过滤选项', exact: true });
+  assert.equal(await panel('Open PRs').locator('.aow-panel-header-actions > button').last().getAttribute('aria-label'), 'Open PRs 过滤选项');
+  const menu = page.getByRole('menu', { name: 'Open PRs 过滤选项', exact: true });
+  const checkbox = menu.getByRole('menuitemcheckbox', { name: '过滤 Draft', exact: true });
+  const requestsBeforeFilter = state.queries.length;
+  await trigger.click();
+  assert.equal(await menu.locator('button').count(), 1);
+  assert.equal(await checkbox.getAttribute('aria-checked'), 'false');
+  await checkbox.click();
+  await menu.waitFor({ state: 'hidden' });
+  assert.equal(await rows('Open PRs').count(), 1);
+  assert.match(await rows('Open PRs').textContent(), /#42/);
+  assert.match(await rows('Closed PRs').textContent(), /Draft #45/);
+  assert.equal(await rows('Merged PRs').count(), 1);
+  assert.equal(state.queries.length, requestsBeforeFilter);
+
+  await trigger.press('Enter');
+  assert.equal(await checkbox.getAttribute('aria-checked'), 'true');
+  await page.keyboard.press('Escape');
+  await menu.waitFor({ state: 'hidden' });
+  assert.equal(await trigger.evaluate(element => element === document.activeElement), true);
+  await trigger.click();
+  await page.locator('main').click();
+  await menu.waitFor({ state: 'hidden' });
+
+  await page.reload();
+  await rows('Closed PRs').waitFor();
+  assert.equal(await rows('Open PRs').count(), 1);
+  await trigger.click();
+  assert.equal(await checkbox.getAttribute('aria-checked'), 'true');
+  await checkbox.click();
+  assert.equal(await rows('Open PRs').count(), 2);
+});
+
+test('all three PR panels recover from errors and retain accessible empty headers', async t => {
+  const { page, panel, rows, state } = await panelFixture(t, { fail: true });
+  await panel('Open PRs').getByRole('alert').waitFor();
+  for (const title of ['Open PRs', 'Merged PRs', 'Closed PRs']) {
+    assert.match(await panel(title).getByRole('alert').textContent(), /PR provider unavailable/);
+  }
+  state.fail = false;
+  state.items = [];
+  await panel('Closed PRs').getByRole('button', { name: '刷新 Closed PRs', exact: true }).click();
+  await page.getByText('@chen.yu · 当前用户', { exact: true }).waitFor();
+  for (const title of ['Open PRs', 'Merged PRs', 'Closed PRs']) {
+    assert.equal(await rows(title).count(), 0);
+    await panel(title).getByRole('button', { name: `展开 ${title}`, exact: true }).click();
+    await panel(title).getByText(`当前仓库没有该用户创建的 ${title}。`, { exact: true }).waitFor();
+  }
 });

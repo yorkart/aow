@@ -17,6 +17,7 @@ try {
     t.after(() => page.close());
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
+    await page.route('**/api/aow/projects/*/branches', route => route.fulfill({ json: { branches: ['main', 'origin/main', 'origin/release'], default_branch: 'origin/main' } }));
     await page.route('**/api/aow/notification-settings', route => route.fulfill({
       status: unavailable ? 503 : 200,
       json: unavailable ? { message: 'unavailable' } : { im: { providers: [...(bot ? [{ provider: 'feishu', app_id: 'test', secret_configured: true }] : []), ...(wechat ? [{ provider: 'wechat', account_id: 'bot', user_id: 'owner' }] : [])] }, notifications: { agent_task_completed: { enabled: false, channels: [] } } },
@@ -26,6 +27,31 @@ try {
     await page.getByLabel('失败提醒').waitFor();
     await page.getByText('正在检查 IM Bot 配置…', { exact: true }).waitFor({ state: 'hidden' });
     return { page, errors };
+  }
+
+  for (const mode of ['new_worktree', 'temporary']) {
+    await test(`shared workspace selector saves Automation ${mode} configuration`, async t => {
+      const { page, errors } = await fixture(t);
+      const choices = page.getByRole('group', { name: '工作区方式', exact: true });
+      assert.equal(await choices.getByRole('button').count(), 3);
+      await choices.getByRole('button', { name: mode === 'temporary' ? '动态工作区' : '新建 Worktree', exact: true }).click();
+      if (mode === 'new_worktree') {
+        const branch = page.getByRole('combobox', { name: '分支来自', exact: true });
+        await branch.getByRole('option', { name: 'origin/main（默认）', exact: true }).waitFor({ state: 'attached' });
+        await branch.selectOption('origin/release');
+      } else {
+        assert.equal(await page.getByRole('radio', { name: '动态指定', exact: true }).isDisabled(), true);
+        assert.equal(await page.getByRole('radio', { name: '临时工作区', exact: true }).isChecked(), true);
+        assert.equal(await page.getByRole('combobox', { name: /已有 Worktree|分支来自/ }).count(), 0);
+        await page.getByText('任务结束后自动删除临时工作区；该任务的 Agent 会话不会出现在项目的普通会话列表中。', { exact: true }).waitFor();
+      }
+      await page.getByRole('button', { name: '保存更改' }).click();
+      const saved = JSON.parse(await page.getByTestId('saved').textContent());
+      assert.equal(saved.workspace_mode, mode);
+      assert.equal(saved.workspace_path, '');
+      assert.equal(saved.base_branch, mode === 'new_worktree' ? 'origin/release' : '');
+      assert.deepEqual(errors, []);
+    });
   }
 
   await test('configured bot can be selected even when interactive notifications are disabled', async t => {

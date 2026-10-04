@@ -112,17 +112,17 @@ fn scan(sessions: &BTreeMap<String, Option<i32>>) -> std::io::Result<TerminalAge
         );
         // A background process can supply the old agent badge, but must never
         // be treated as the conversation the user is interacting with.
-        if let Some((process, true)) = selected {
-            if let Ok(cwd) = aow_process::cwd(process.info.pid) {
-                detected.processes.insert(
-                    id.clone(),
-                    TerminalAgentProcess {
-                        pid: process.info.pid,
-                        start_time: process.info.start_time.clone(),
-                        cwd: cwd.to_string_lossy().into_owned(),
-                    },
-                );
-            }
+        if let Some((process, true)) = selected
+            && let Ok(cwd) = aow_process::cwd(process.info.pid)
+        {
+            detected.processes.insert(
+                id.clone(),
+                TerminalAgentProcess {
+                    pid: process.info.pid,
+                    start_time: process.info.start_time.clone(),
+                    cwd: cwd.to_string_lossy().into_owned(),
+                },
+            );
         }
     }
     Ok(detected)

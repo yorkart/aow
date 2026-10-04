@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+aow-id = { path = "../id" }
 anyhow.workspace = true
 axum.workspace = true
 bytes.workspace = true
@@ -16,8 +17,10 @@ mime_guess.workspace = true
 md5.workspace = true
 percent-encoding.workspace = true
 reqwest.workspace = true
+ring = "0.17"
 aow-agents = { path = "../agents", features = ["launch", "sessions", "automation"] }
 aow-automations = { path = "../automations" }
+aow-workspaces = { path = "../workspaces" }
 aow-im = { path = "../im" }
 aow-config = { path = "../config" }
 aow-filesystem = { path = "../filesystem" }

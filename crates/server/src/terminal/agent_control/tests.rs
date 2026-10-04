@@ -9,9 +9,25 @@ use tower::ServiceExt;
 const FAKE_AGENT: &str = r#"
 import os, sys, tty, time, json
 tty.setraw(0)
-log, mode = sys.argv[1:]
+log, mode = sys.argv[1:3]
+if mode == 'update':
+    options = sys.argv[3:]
+    if '--' in options: options = options[:options.index('--')]
+    checks = [value.split('=', 1)[1].strip()
+              for flag, value in zip(options, options[1:])
+              if flag in ('-c', '--config') and value.split('=', 1)[0].strip() == 'check_for_update_on_startup']
+    if not checks or checks[-1] != 'false':
+        os.write(1, b'Update available\r\n1. Update now\r\n2. Skip')
+        while True: time.sleep(1)
 def show(text):
-    os.write(1, ('\x1b[2J\x1b[H' + text + '\x1b[47;1H> \x1b[48;1Hfixture-model · /workspace · ready').encode())
+    if mode in ('compact', 'compact_warning'):
+        row = 47 if mode == 'compact_warning' else 48
+        footer = f'\x1b[45;1H› Ask Codex to do anything\x1b[{row};1H  GPT-6-Astra xhigh · ~/workspace/.aow-inbox-task'
+        if mode == 'compact_warning':
+            footer += '\x1b[48;1H  ? for shortcuts\x1b[48;135H⚠ 1 warning · f2 to view'
+    else:
+        footer = '\x1b[47;1H> \x1b[48;1Hfixture-model · /workspace · ready'
+    os.write(1, ('\x1b[2J\x1b[H' + text + footer).encode())
 os.write(1, b'\x1b[2J\x1b[Hmodel: loading\r\n> Ask anything')
 time.sleep(1)
 if mode == 'exit': sys.exit(9)
@@ -32,6 +48,7 @@ while True:
 
 struct Fixture {
     directory: tempfile::TempDir,
+    state_dir: PathBuf,
     repo: PathBuf,
     project_id: String,
     log: PathBuf,
@@ -46,7 +63,16 @@ struct Fixture {
 
 impl Fixture {
     async fn new(mode: &str) -> Self {
+        Self::with_storage(mode, false).await
+    }
+
+    async fn with_storage(mode: &str, persistent: bool) -> Self {
         let directory = tempfile::tempdir().unwrap();
+        let state_dir = if persistent {
+            directory.path().join("state ' &")
+        } else {
+            directory.path().to_path_buf()
+        };
         let socket = directory.path().join("terminald/daemon.sock");
         let (shutdown, receiver) = tokio::sync::oneshot::channel();
         let daemon_socket = socket.clone();
@@ -97,7 +123,14 @@ impl Fixture {
                 String::from_utf8_lossy(&output.stderr)
             );
         }
-        let mut state = AppState::with_terminald_socket(PathBuf::new(), socket);
+        let mut state = if persistent {
+            let mut state =
+                AppState::with_state_dir(PathBuf::new(), state_dir.clone(), socket).unwrap();
+            state.auth = crate::auth::AuthService::disabled();
+            state
+        } else {
+            AppState::with_terminald_socket(PathBuf::new(), socket)
+        };
         state.operations = crate::operations::OperationService::persistent(
             &directory.path().join("operation-logs"),
         )
@@ -116,12 +149,13 @@ impl Fixture {
         let web = tokio::spawn(async move {
             axum::serve(listener, app).await.unwrap();
         });
-        let cli = crate::start_local_cli(state.clone(), directory.path())
+        let cli = crate::start_local_cli(state.clone(), &state_dir)
             .await
             .unwrap();
-        let client = TerminaldClient::new(directory.path().join("cli/cli.sock"));
+        let client = TerminaldClient::new(state_dir.join("cli/cli.sock"));
         Self {
             directory,
+            state_dir,
             repo,
             project_id,
             log,
@@ -198,7 +232,7 @@ async fn post(app: &Router, path: &str, body: Value) -> Value {
 
 #[tokio::test]
 async fn session_resume_launches_selected_profiles_without_changing_registration() {
-    let fixture = Fixture::new("ready").await;
+    let fixture = Fixture::with_storage("ready", true).await;
     let app = crate::build_router(fixture.state.clone());
     let session_cwd = fixture.repo.join("session subdirectory");
     std::fs::create_dir(&session_cwd).unwrap();
@@ -207,7 +241,7 @@ async fn session_resume_launches_selected_profiles_without_changing_registration
         &script,
         r#"import json, os, sys, time
 with open(sys.argv[1], 'w') as log:
-    json.dump({'args': sys.argv[2:], 'cwd': os.getcwd(), 'profile': os.environ['RESUME_PROFILE']}, log)
+    json.dump({'args': sys.argv[2:], 'cwd': os.getcwd(), 'profile': os.environ['RESUME_PROFILE'], 'state_dir': os.environ['AOW_STATE_DIR']}, log)
 time.sleep(30)
 "#,
     )
@@ -222,7 +256,7 @@ time.sleep(30)
             .path()
             .join(format!("resume-{index}.json"));
         let args = json!([script, log, "--profile", format!("profile {index}")]);
-        let env = json!({"RESUME_PROFILE": id});
+        let env = json!({"RESUME_PROFILE": id, "AOW_STATE_DIR": "/another-aow-instance"});
         post(
             &app,
             "/api/aow/agents",
@@ -252,10 +286,10 @@ time.sleep(30)
         assert_eq!(tab["panes"][0]["agent_profile_id"], id);
         let invocation: Value = tokio::time::timeout(Duration::from_secs(5), async {
             loop {
-                if let Ok(bytes) = std::fs::read(&log) {
-                    if let Ok(value) = serde_json::from_slice(&bytes) {
-                        break value;
-                    }
+                if let Ok(bytes) = std::fs::read(&log)
+                    && let Ok(value) = serde_json::from_slice(&bytes)
+                {
+                    break value;
                 }
                 tokio::time::sleep(Duration::from_millis(20)).await;
             }
@@ -265,7 +299,8 @@ time.sleep(30)
         assert_eq!(
             invocation,
             json!({"args": ["--profile", format!("profile {index}"), resume_arg, session_id],
-            "cwd": session_cwd.canonicalize().unwrap(), "profile": id})
+            "cwd": session_cwd.canonicalize().unwrap(), "profile": id,
+            "state_dir": fixture.state_dir.canonicalize().unwrap()})
         );
         let launch = fixture
             .state
@@ -307,10 +342,10 @@ time.sleep(30)
         assert_eq!(rebuilt["panes"][0]["arguments"], json!(expected_args));
         let replay: Value = tokio::time::timeout(Duration::from_secs(5), async {
             loop {
-                if let Ok(bytes) = std::fs::read(&log) {
-                    if let Ok(value) = serde_json::from_slice(&bytes) {
-                        break value;
-                    }
+                if let Ok(bytes) = std::fs::read(&log)
+                    && let Ok(value) = serde_json::from_slice(&bytes)
+                {
+                    break value;
                 }
                 tokio::time::sleep(Duration::from_millis(20)).await;
             }
@@ -378,12 +413,11 @@ async fn control(
         .unwrap();
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
-            if let Some(Ok(tungstenite::Message::Text(text))) = socket.next().await {
-                if let Ok(TerminalAttachServerMessage::Control { state }) =
+            if let Some(Ok(tungstenite::Message::Text(text))) = socket.next().await
+                && let Ok(TerminalAttachServerMessage::Control { state }) =
                     serde_json::from_str(&text)
-                {
-                    return state;
-                }
+            {
+                return state;
             }
         }
     })
@@ -394,6 +428,17 @@ async fn control(
 #[tokio::test]
 async fn hidden_agent_readiness_observation_takeover_and_repeated_submission() {
     let fixture = Fixture::new("ready").await;
+    let events = crate::build_router(fixture.state.clone())
+        .oneshot(
+            Request::get("/api/workspace/events")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let mut events = events.into_body().into_data_stream();
+    let first = events.next().await.unwrap().unwrap();
+    assert!(String::from_utf8_lossy(&first).contains("\"terminals\":0"));
     let client = fixture.client.clone();
     let mut request = fixture.request();
     request.task = Some("first task\n保持多行 $HOME `literal`".into());
@@ -415,6 +460,21 @@ async fn hidden_agent_readiness_observation_takeover_and_repeated_submission() {
     })
     .await
     .unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let frame = events.next().await.unwrap().unwrap();
+            let text = String::from_utf8_lossy(&frame);
+            let Some(data) = text.lines().find_map(|line| line.strip_prefix("data: ")) else {
+                continue;
+            };
+            let snapshot: Value = serde_json::from_str(data).unwrap();
+            if snapshot["terminals"].as_u64().unwrap() > 0 {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("CLI creation must notify browsers without relying on Git writes");
     let pane = &initial.panes[0];
     assert_eq!(initial.name_is_custom, Some(false));
     assert_eq!(
@@ -866,6 +926,67 @@ async fn create_rejects_unregistered_or_mismatched_project_worktrees() {
 }
 
 #[tokio::test]
+async fn cli_codex_skips_update_menu_without_changing_profile_or_manual_launch() {
+    let fixture = Fixture::new("update").await;
+    let app = crate::build_router(fixture.state.clone());
+    let id = "custom-codex";
+    let args = json!([
+        fixture.directory.path().join("agent.py"),
+        fixture.log,
+        "update",
+        "-c",
+        "check_for_update_on_startup=true",
+        "--"
+    ]);
+    post(
+        &app,
+        "/api/aow/agents",
+        json!({"id": id, "agent_type": "codex", "display_name": id,
+            "command": "/usr/bin/python3", "args": args}),
+    )
+    .await;
+    let mut request = fixture.request();
+    request.agent = id.into();
+    request.task = Some("task after skipping update".into());
+    let created: AgentTerminalInfo = fixture
+        .client
+        .post_json("/v1/agents", &request)
+        .await
+        .unwrap();
+    assert_eq!(
+        created.state.phase,
+        AgentTerminalPhase::Ready,
+        "{created:?}"
+    );
+    assert!(created.state.task_submitted);
+    tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            if let Ok(input) = std::fs::read_to_string(&fixture.log) {
+                let inputs: Vec<String> = input
+                    .lines()
+                    .map(|line| serde_json::from_str(line).unwrap())
+                    .collect();
+                assert_eq!(inputs, vec![request.task.as_deref().unwrap()]);
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let profile = fixture.state.aow.resolve_agent_profile(id).await.unwrap();
+    assert_eq!(json!(profile.args), args);
+    let manual = post(
+        &app,
+        "/api/terminals",
+        json!({"workspace_root": fixture.repo, "cwd": fixture.repo, "agent_id": id}),
+    )
+    .await;
+    assert_eq!(manual["panes"][0]["arguments"], args);
+    fixture.stop().await;
+}
+
+#[tokio::test]
 async fn startup_without_task_is_ready_without_writing_any_input() {
     let fixture = Fixture::new("ready").await;
     for agent in ["codex", "traecli"] {
@@ -1087,4 +1208,279 @@ async fn native_startup_probes() {
             .unwrap();
     }
     fixture.stop().await;
+}
+
+#[tokio::test]
+async fn hosting_owns_input_and_explicit_takeover_cancels_feedback() {
+    use aow_protocol::{TerminalAgentProcess, TerminalHosting, TerminalHostingPhase};
+    let fixture = Fixture::new("ready").await;
+    let info: AgentTerminalInfo = fixture
+        .client
+        .post_json("/v1/agents", &fixture.request())
+        .await
+        .unwrap();
+    let manager = &fixture.state.terminals;
+    let hosting = TerminalHosting {
+        id: "hosting-one".into(),
+        task_id: "review".into(),
+        task_revision: 1,
+        task_name: "Code Review".into(),
+        workspace_root: fixture.repo.to_string_lossy().into_owned(),
+        agent: "codex".into(),
+        session_id: "source".into(),
+        process: TerminalAgentProcess {
+            pid: 1,
+            start_time: "start".into(),
+            cwd: fixture.repo.to_string_lossy().into_owned(),
+        },
+        phase: TerminalHostingPhase::Collecting,
+        phase_started_at: timestamp(),
+        source_turn_id: Some("one".into()),
+        max_inputs: 3,
+        input_count: 0,
+        run_id: Some("run-one".into()),
+        error: None,
+    };
+    manager
+        .set_hosting(&info.pane_id, None, Some(hosting.clone()))
+        .unwrap();
+    let mut host = AgentConnection::claim_with_force(&manager.inner.terminald, &info.pane_id, true)
+        .await
+        .unwrap();
+    let mut browser = fixture.browser(&info.tab_id, &info.pane_id).await;
+    assert_eq!(
+        control(&mut browser, false).await,
+        TerminalControlState::Observing
+    );
+    browser
+        .send(tungstenite::Message::Binary(b"forbidden\r".to_vec().into()))
+        .await
+        .unwrap();
+    browser
+        .send(tungstenite::Message::Text(
+            json!({"type":"write","request_id":"blocked","data":"also forbidden\r"})
+                .to_string()
+                .into(),
+        ))
+        .await
+        .unwrap();
+    let submitted = fixture
+        .client
+        .post_json::<_, AgentTerminalInfo>(
+            &format!("/v1/agents/{}/submit", info.pane_id),
+            &AgentTerminalSubmit {
+                task: "CLI must not bypass hosting".into(),
+            },
+        )
+        .await;
+    assert!(submitted.is_err());
+    // Serialize the full paste + Enter against a concurrent user takeover.
+    let mut changes = fixture.state.workspace_events.subscribe();
+    changes.borrow_and_update();
+    let gate = manager.hosting_gate(&info.pane_id).unwrap();
+    let guard = gate.lock().await;
+    let takeover = tokio::spawn(async move {
+        assert_eq!(
+            control(&mut browser, true).await,
+            TerminalControlState::Claimed
+        );
+        browser
+    });
+    let feedback = "Review: fix the test\n保持多行 $HOME `literal`";
+    host.submit(feedback).await.unwrap();
+    drop(guard);
+    let mut browser = takeover.await.unwrap();
+    assert!(
+        changes.has_changed().unwrap(),
+        "takeover must refresh every console"
+    );
+    assert!(manager.hosting(&info.pane_id).unwrap().is_none());
+    assert!(
+        !manager
+            .set_hosting(&info.pane_id, Some(&hosting.id), Some(hosting.clone()))
+            .unwrap()
+    );
+    assert!(host.submit("stale feedback").await.is_err());
+    browser
+        .send(tungstenite::Message::Binary(
+            b"manual after takeover\r".to_vec().into(),
+        ))
+        .await
+        .unwrap();
+    let inputs = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let text = std::fs::read_to_string(&fixture.log).unwrap_or_default();
+            let lines: Vec<String> = text
+                .lines()
+                .map(|line| serde_json::from_str(line).unwrap())
+                .collect();
+            if lines.len() >= 2 {
+                break lines;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(inputs, [feedback, "manual after takeover"]);
+    drop(browser);
+    fixture.stop().await;
+}
+
+#[tokio::test]
+async fn inbox_execution_submits_xml_context_and_original_task_once_and_retains_terminal_link() {
+    for (mode, startup) in [
+        ("new_worktree", "compact_warning"),
+        ("existing", "compact"),
+        ("temporary", "ready"),
+    ] {
+        let fixture = Fixture::with_storage(startup, true).await;
+        let client = reqwest::Client::new();
+        let base = format!("http://{}", fixture.address);
+        let markdown =
+            "# 保留原始输入\n\n- [ ] 完成需求\n\n```sh\nprintf '%s' '$HOME `literal`'\n```";
+        let item: Value = client
+            .post(format!("{base}/api/inbox/items"))
+            .json(&json!({"request_key":"inbox-capture", "markdown":markdown}))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let path = format!("{base}/api/inbox/items/{}", item["id"].as_str().unwrap());
+        let item: Value = client.put(&path).json(&json!({"expected_revision":item["revision"], "markdown":markdown, "project_id":fixture.project_id, "label_ids":["todo"]})).send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
+        let input = json!({"expected_revision":item["revision"], "request_key":"inbox-launch", "agent":"codex", "append_prompt":"先分析，再实现。", "workspace_mode":mode, "workspace_path":if mode == "existing" { fixture.repo.to_str().unwrap() } else { "" }});
+        let request = || client.post(format!("{path}/execute")).json(&input).send();
+        let (first, second) = tokio::join!(request(), request());
+        let first: Value = first
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let second: Value = second
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(first["id"], second["id"]);
+        let execution = tokio::time::timeout(Duration::from_secs(25), async {
+            loop {
+                let snapshot: Value = client
+                    .get(format!("{base}/api/inbox"))
+                    .send()
+                    .await
+                    .unwrap()
+                    .json()
+                    .await
+                    .unwrap();
+                let run = &snapshot["executions"][0];
+                if run["phase"] != "starting" {
+                    break run.clone();
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(execution["phase"], "submitted", "{execution}");
+        assert!(execution["tab_id"].is_string());
+        assert!(execution["pane_id"].is_string());
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let input = std::fs::read_to_string(&fixture.log).unwrap_or_default();
+                if input.ends_with('\n') {
+                    let lines: Vec<_> = input.lines().collect();
+                    assert_eq!(lines.len(), 1);
+                    let received: String = serde_json::from_str(lines[0]).unwrap();
+                    assert_eq!(received, execution["markdown"].as_str().unwrap());
+                    assert!(received.starts_with("<aow-inbox>\n"));
+                    assert!(received.contains(&format!(
+                        "<requirement id=\"{}\" />",
+                        item["id"].as_str().unwrap()
+                    )));
+                    assert!(received.contains(&format!(
+                        "<execution id=\"{}\" />",
+                        execution["id"].as_str().unwrap()
+                    )));
+                    assert!(
+                        received
+                            .ends_with(&format!("</aow-inbox>\n\n{markdown}\n\n先分析，再实现。"))
+                    );
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .unwrap();
+        let retry: Value = request()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(retry["id"], execution["id"]);
+        assert_eq!(
+            fixture.state.terminals.list(None).await.unwrap().tabs.len(),
+            1
+        );
+        let response = client
+            .delete(&path)
+            .json(&json!({"expected_revision":item["revision"]}))
+            .send()
+            .await
+            .unwrap();
+        assert!(response.status().is_success());
+        assert_eq!(
+            fixture.state.terminals.list(None).await.unwrap().tabs.len(),
+            1
+        );
+        let cwd = PathBuf::from(execution["cwd"].as_str().unwrap());
+        assert_eq!(execution["workspace_mode"], mode);
+        if mode == "temporary" {
+            assert!(cwd.is_dir());
+            assert!(!cwd.starts_with(&fixture.repo));
+            // Trust is retained in the local run journal after the item is deleted
+            // and after the Inbox store is reopened.
+            assert!(
+                crate::inbox::InboxStore::persistent(&fixture.state_dir)
+                    .unwrap()
+                    .is_temporary_workspace(cwd.to_str().unwrap())
+                    .unwrap()
+            );
+            let tab_id = execution["tab_id"].as_str().unwrap();
+            fixture
+                .state
+                .terminals
+                .inner
+                .terminald
+                .delete(execution["pane_id"].as_str().unwrap())
+                .await
+                .unwrap();
+            let rebuilt = post(
+                &crate::build_router(fixture.state.clone()),
+                &format!("/api/terminals/{tab_id}/rebuild"),
+                json!({}),
+            )
+            .await;
+            assert_eq!(rebuilt["workspace_root"], cwd.to_str().unwrap());
+        }
+        fixture.stop().await;
+        if mode == "temporary" {
+            assert!(
+                cwd.is_dir(),
+                "Inbox never automatically removes temporary workspaces"
+            );
+            std::fs::remove_dir_all(cwd).unwrap();
+        }
+    }
 }

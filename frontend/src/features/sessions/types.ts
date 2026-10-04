@@ -1,3 +1,5 @@
+import type { TokenUsage } from '../../lib/tokenUsage';
+
 export interface AowAgentSession {
   id: string;
   agent: 'claude' | 'codex' | 'traecli' | 'hermes';
@@ -50,6 +52,7 @@ export interface AgentSessionSnapshotTurn {
   final: AgentSessionSnapshotMessage | null;
   activities?: AgentSessionActivity[];
   activities_truncated?: boolean;
+  usage?: TokenUsage;
 }
 
 export interface AgentSessionSnapshot {

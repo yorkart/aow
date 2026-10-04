@@ -47,7 +47,7 @@ export function OperationLogPanel({ initialOperationId, operations, revision, bo
   const refresh = () => { setCursors([undefined]); setPageIndex(0); setReload(value => value + 1); setNewRecords(false); };
   const operation = operations.find(operation => operation.id === filters.operation_id);
   const latest = page?.items[0];
-  const sourceLabel = (value: string) => ({ web: '页面', cli: 'CLI', automation: '自动化', system: '系统' }[value] ?? value);
+  const sourceLabel = (value: string) => ({ web: '页面', cli: 'CLI', automation: '自动化', system: '系统', auth: '认证' }[value] ?? value);
   const resizeTo = (value: number) => setHeight(Math.max(180, Math.min(window.innerHeight * 0.75, value)));
   return <section ref={panel} tabIndex={-1} className="operation-log-panel" aria-label="操作日志" style={{ height }} onKeyDown={event => {
     if (event.key === 'Escape') { event.stopPropagation(); onClose(); }
@@ -63,14 +63,14 @@ export function OperationLogPanel({ initialOperationId, operations, revision, bo
     <form className="operation-log-filters" onSubmit={event => { event.preventDefault(); changeFilters({ query: query.trim() }); }}>
       <label><Search size={13} /><input aria-label="搜索操作日志" placeholder="搜索描述或资源…" value={query} maxLength={1024} onChange={event => setQuery(event.target.value)} /></label>
       <button type="submit">搜索</button>
-      <select aria-label="操作类型" value={filters.kind} onChange={event => changeFilters({ kind: event.target.value })}><option value="">全部类型</option><option value="worktree.remove">删除 Worktree</option><option value="agent.create">创建 Agent</option></select>
-      <select aria-label="操作来源" value={filters.source} onChange={event => changeFilters({ source: event.target.value })}><option value="">全部来源</option><option value="web">页面</option><option value="cli">CLI</option><option value="automation">自动化</option><option value="system">系统</option></select>
+      <select aria-label="操作类型" value={filters.kind} onChange={event => changeFilters({ kind: event.target.value })}><option value="">全部类型</option><option value="worktree.remove">删除 Worktree</option><option value="agent.create">创建 Agent</option><option value="auth.login">登录</option><option value="auth.access">未登录访问</option><option value="auth.notification">认证通知</option></select>
+      <select aria-label="操作来源" value={filters.source} onChange={event => changeFilters({ source: event.target.value })}><option value="">全部来源</option><option value="web">页面</option><option value="cli">CLI</option><option value="automation">自动化</option><option value="system">系统</option><option value="auth">认证</option></select>
       <select aria-label="日志级别" value={filters.level} onChange={event => changeFilters({ level: event.target.value })}><option value="">全部级别</option><option value="info">信息</option><option value="warn">警告</option><option value="error">错误</option></select>
     </form>
     {operation && <div className="operation-log-current">{!operation.outcome && <LoaderCircle size={13} className="spinning" />}<strong>{operation.title} · {operation.outcome ? operationOutcomeLabels[operation.outcome] : '进行中'}</strong><span>{operation.message}</span>
       {operation.kind === 'agent.create' && operation.resource?.startsWith('/aow/tabs/terminal/') && <a href={appUrl(operation.resource)}>查看 Terminal</a>}
     </div>}
-    {pageIndex === 0 && filters.operation_id && !operation && latest && latest.boot_id !== bootId && latest.event !== 'finished' && !filters.query && !filters.kind && !filters.source && !filters.level && <div className="operation-log-warning">这次操作尚未找到结束记录，结果未确认。</div>}
+    {pageIndex === 0 && filters.operation_id && !operation && latest && latest.boot_id !== bootId && latest.event !== 'finished' && !latest.outcome && !filters.query && !filters.kind && !filters.source && !filters.level && <div className="operation-log-warning">这次操作尚未找到结束记录，结果未确认。</div>}
     {(error || logError) && <div className="operation-log-error" role="alert">{error || logError}<button onClick={refresh}>刷新</button></div>}
     <div className="operation-log-rows" ref={list} aria-busy={loading}>
       {loading && <div className="operation-log-empty"><LoaderCircle size={14} className="spinning" />正在读取…</div>}

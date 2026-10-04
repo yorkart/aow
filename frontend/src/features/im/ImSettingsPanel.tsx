@@ -5,7 +5,7 @@ import { imApi } from './api';
 import { WechatSettings } from './WechatSettings';
 import './im-settings.css';
 
-export function ImSettingsPanel({ onBusyChange }: { onBusyChange: (busy: boolean) => void }) {
+export function ImSettingsPanel({ onBusyChange, onDirtyChange }: { onBusyChange: (busy: boolean) => void; onDirtyChange?: (dirty: boolean) => void }) {
   const [settings, setSettings] = useState<NotificationSettings>();
   const [appId, setAppId] = useState('');
   const [secret, setSecret] = useState('');
@@ -16,6 +16,8 @@ export function ImSettingsPanel({ onBusyChange }: { onBusyChange: (busy: boolean
   const [saved, setSaved] = useState('');
   const feishu = settings?.im.providers.find(provider => provider.provider === 'feishu');
   const wechat = settings?.im.providers.find(provider => provider.provider === 'wechat');
+  const dirty = !!settings && (appId !== (feishu?.app_id ?? '') || !!secret);
+  useEffect(() => { onDirtyChange?.(dirty); return () => onDirtyChange?.(false); }, [dirty, onDirtyChange]);
   useEffect(() => {
     let active = true;
     void notificationsApi.notificationSettings().then(next => {

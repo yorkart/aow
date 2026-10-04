@@ -1,4 +1,5 @@
 use super::*;
+use crate::sessions::usage::{CodexUsage, TokenUsage};
 
 pub(super) fn parse_codex_like(path: &Path) -> Result<Vec<SnapshotTurn>, SnapshotError> {
     let file = File::open(path)?;
@@ -8,15 +9,10 @@ pub(super) fn parse_codex_like(path: &Path) -> Result<Vec<SnapshotTurn>, Snapsho
     // A running task can receive several user inputs, each displayed as a turn.
     // Keep those drafts together until the task's terminal event settles them.
     let mut task_start = None;
+    let mut token_events = CodexUsage::default();
 
-    for line in BufReader::new(file).lines() {
-        let line = line?;
-        if !codex_candidate_line(&line) {
-            continue;
-        }
-        let Ok(record) = serde_json::from_str::<Value>(&line) else {
-            continue;
-        };
+    for record in BufReader::new(file).lines().flat_map(codex_records) {
+        let record = record?;
         let Some(record) = record.as_object() else {
             continue;
         };
@@ -30,6 +26,15 @@ pub(super) fn parse_codex_like(path: &Path) -> Result<Vec<SnapshotTurn>, Snapsho
         };
 
         match (string(record, "type"), event_type) {
+            (Some("event_msg"), "token_count") => {
+                if let Some(usage) = record
+                    .get("payload")
+                    .and_then(|payload| token_events.consume(payload))
+                    && let Some(draft) = current.as_mut()
+                {
+                    TokenUsage::accumulate(&mut draft.usage, usage);
+                }
+            }
             (Some("event_msg"), "task_started" | "turn_started") => {
                 finish_task(&mut turns, &mut current, &mut task_start);
                 task_start = Some(turns.len());
@@ -263,9 +268,50 @@ fn finish_task(
 
 fn codex_candidate_line(line: &str) -> bool {
     // Match JSON tokens, allowing whitespace used by older transcript writers.
-    ["\"event_msg\"", "\"response_item\"", "\"message\""]
-        .iter()
-        .any(|token| line.contains(token))
+    [
+        "\"event_msg\"",
+        "\"response_item\"",
+        "\"message\"",
+        "\"history_mutation\"",
+    ]
+    .iter()
+    .any(|token| line.contains(token))
+}
+
+fn codex_records(line: std::io::Result<String>) -> Vec<std::io::Result<Value>> {
+    let line = match line {
+        Ok(line) if codex_candidate_line(&line) => line,
+        Ok(_) => return Vec::new(),
+        Err(error) => return vec![Err(error)],
+    };
+    let Ok(mut record) = serde_json::from_str::<Value>(&line) else {
+        return Vec::new();
+    };
+    if record.get("type").and_then(Value::as_str) != Some("history_mutation") {
+        return vec![Ok(record)];
+    }
+    // Trae's canonical_v1 history stores response items in append mutations,
+    // without legacy user/agent message projections. Context replacements are
+    // model-history rewrites, not new messages in the conversation timeline.
+    if record["payload"]["version"].as_u64() != Some(1)
+        || record["payload"]["operation"].as_str() != Some("append")
+    {
+        return Vec::new();
+    }
+    let timestamp = record.get("timestamp").cloned();
+    let Some(Value::Array(items)) = record["payload"].get_mut("items") else {
+        return Vec::new();
+    };
+    std::mem::take(items)
+        .into_iter()
+        .map(|item| {
+            Ok(serde_json::json!({
+                "type": "response_item",
+                "timestamp": timestamp,
+                "payload": item,
+            }))
+        })
+        .collect()
 }
 
 fn add_codex_user(
@@ -282,9 +328,7 @@ fn add_codex_user(
             .as_ref()
             .is_some_and(|user| user.text != message.text)
     }) {
-        if !task_active
-            && let Some(draft) = current.as_mut()
-        {
+        if !task_active && let Some(draft) = current.as_mut() {
             draft.status = terminal_status(draft);
         }
         push_codex_draft(turns, current.take());

@@ -1,5 +1,5 @@
 import { appLocalStorage } from '../../lib/basePath';
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type RefObject } from 'react';
 import { Base64, ClipboardAddon, type ClipboardSelectionType, type IBase64, type IClipboardProvider } from '@xterm/addon-clipboard';
 import { FitAddon } from '@xterm/addon-fit';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
@@ -8,12 +8,14 @@ import { Terminal } from '@xterm/xterm';
 import { ClipboardCopy, ExternalLink, RefreshCw, X } from 'lucide-react';
 import { ConfirmationDialog } from '../../components/ConfirmationDialog';
 import { terminalApi } from './terminalApi';
+import { TerminalHostingDetails, hostingStatus } from './TerminalHostingStatus';
 import type { TerminalPane, TerminalPaneStatus } from './types';
 import { savedTerminalDimensions, type TerminalFrame, type TerminalPaneControls } from './terminalPresentation';
 import { terminalPaneStatusMessage, type TerminalConnectionState } from './terminalState';
 import { installMobileTerminalInput } from './terminalMobileInput';
 import { installMobileTerminalRendering } from './terminalMobileRendering';
 import { usePublishTerminalConnection } from './terminalViewState';
+import { EXPLORER_PATH_MIME, readExplorerPath } from '../files/explorerDrag';
 import '@xterm/xterm/css/xterm.css';
 import './terminal.css';
 
@@ -44,6 +46,7 @@ const MAX_VT_SNAPSHOT_BYTES = 2 * 1024 * 1024;
 const WAITING_RETRY_MIN_MS = 100;
 const WAITING_RETRY_MAX_MS = 1000;
 const DEFAULT_TERMINAL_LINE_HEIGHT = 1.15;
+const TERMINAL_SCROLLBAR_WIDTH = 8;
 const MAX_OSC52_TEXT_BYTES = 256 * 1024;
 const MAX_OSC52_BASE64_CHARS = Math.ceil(MAX_OSC52_TEXT_BYTES / 3) * 4;
 const CLIPBOARD_COPY_REQUEST_TTL_MS = 30_000;
@@ -386,8 +389,9 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
   const shellRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | undefined>(undefined);
-  const inputSuspendedRef = useRef(inputSuspended);
-  inputSuspendedRef.current = inputSuspended;
+  const stdinDisabled = inputSuspended || Boolean(pane.hosting);
+  const inputSuspendedRef = useRef(stdinDisabled);
+  inputSuspendedRef.current = stdinDisabled;
   const fitRef = useRef<FitAddon | undefined>(undefined);
   const socketRef = useRef<WebSocket | undefined>(undefined);
   const inputReadySocketRef = useRef<WebSocket | undefined>(undefined);
@@ -414,6 +418,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
   const [clipboardImageState, setClipboardImageState] = useState<ClipboardImageState>(null);
   const [clipboardCopyState, setClipboardCopyState] = useState<ClipboardCopyState>(null);
   const [pendingLink, setPendingLink] = useState<{ identity: string; url: URL } | null>(null);
+  const [pathDropActive, setPathDropActive] = useState(false);
   const setRestorePending = (pending: boolean) => {
     // Apply visibility synchronously before feeding reset/replay bytes into
     // xterm. React will retain the class on the next render.
@@ -465,13 +470,38 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
       && socket.readyState === WebSocket.OPEN;
   };
 
+  const canDropPath = () => visible && !inputSuspended && pane.status === 'running' && terminalCanMutate();
+  const dragExplorerPath = (event: DragEvent<HTMLDivElement>) => {
+    // Drag data is protected until drop; inspect only the type while hovering.
+    if (!event.dataTransfer.types.includes(EXPLORER_PATH_MIME)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const ready = canDropPath();
+    event.dataTransfer.dropEffect = ready ? 'copy' : 'none';
+    setPathDropActive(ready);
+  };
+  const dropExplorerPath = (event: DragEvent<HTMLDivElement>) => {
+    if (!event.dataTransfer.types.includes(EXPLORER_PATH_MIME)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setPathDropActive(false);
+    const path = readExplorerPath(event.dataTransfer);
+    const terminal = terminalRef.current;
+    if (!path || !terminal || !canDropPath()) return;
+    onFocus();
+    terminal.focus();
+    terminal.paste(`${quotePastedPath(path)} `);
+  };
+
+  useEffect(() => { setPathDropActive(false); }, [visible, inputSuspended, connection, paneIdentity]);
+
   const reportFrame = () => {
     if (presentationRef.current.sizing !== 'saved' && !presentationRef.current.onFrameChange) return;
     const terminal = terminalRef.current;
     const host = hostRef.current;
     const screen = host?.querySelector<HTMLElement>('.xterm-screen');
     if (!terminal || !host || !screen || !screen.offsetWidth || !screen.offsetHeight) return;
-    const width = screen.offsetWidth + 14;
+    const width = screen.offsetWidth + TERMINAL_SCROLLBAR_WIDTH;
     const height = screen.offsetHeight;
     if (presentationRef.current.sizing === 'saved') {
       host.style.width = `${width}px`;
@@ -506,6 +536,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
           || document.visibilityState !== 'visible') return false;
         if (paste) terminalRef.current?.paste(text);
         else {
+          // eslint-disable-next-line no-control-regex -- Validate or match literal protocol control bytes intentionally.
           const data = terminalRef.current?.modes.applicationCursorKeysMode && /^\u001b\[[ABCD]$/.test(text)
             ? text.replace('[', 'O') : text;
           socketRef.current!.send(new TextEncoder().encode(data));
@@ -662,6 +693,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
+    host.style.setProperty('--terminal-scrollbar-width', `${TERMINAL_SCROLLBAR_WIDTH}px`);
     const terminal = new Terminal({
       ...(sizing === 'saved' ? savedSizeRef.current : {}),
       // Match VS Code's browser terminal width/rendering path. Unicode 11
@@ -674,14 +706,15 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
       fontFamily: "'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace",
       fontSize,
       lineHeight: DEFAULT_TERMINAL_LINE_HEIGHT,
-      overviewRuler: { width: 8 },
+      overviewRuler: { width: TERMINAL_SCROLLBAR_WIDTH },
       rescaleOverlappingGlyphs: true,
       scrollback: 5000,
       rightClickSelectsWord: false,
       linkHandler: {
         activate(event, uri) {
           event.preventDefault();
-          event.stopPropagation();
+          // Let mouseup reach xterm's document listeners so selection drags end
+          // and mouse-reporting applications receive the button release.
           if (!clipboardContextRef.current.visible) return;
           let url: URL;
           try { url = new URL(uri); } catch { return; }
@@ -819,8 +852,8 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
   }, []);
 
   useLayoutEffect(() => {
-    if (terminalRef.current) terminalRef.current.options.disableStdin = inputSuspended;
-  }, [inputSuspended]);
+    if (terminalRef.current) terminalRef.current.options.disableStdin = stdinDisabled;
+  }, [stdinDisabled]);
 
   useEffect(() => {
     if (!active || !visible || restorePending) return;
@@ -1803,6 +1836,12 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
       data-terminal-sizing={sizing}
       aria-busy={restorePending}
       onPointerDown={onFocus}
+      onDragEnter={dragExplorerPath}
+      onDragOver={dragExplorerPath}
+      onDragLeave={(event) => {
+        if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setPathDropActive(false);
+      }}
+      onDrop={dropExplorerPath}
     >
       {visible && pendingLink?.identity === paneIdentity ? (
         <ConfirmationDialog
@@ -1819,6 +1858,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
         />
       ) : null}
       <div ref={hostRef} className="terminal-emulator" />
+      {pathDropActive ? <div className="terminal-path-drop-overlay">松开以输入路径</div> : null}
       {restorePending ? (
         <div className="terminal-restore-status" role="status" aria-live="polite">
           <span aria-hidden="true" />
@@ -1849,8 +1889,8 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
           </button>
         </div>
       ) : null}
-      <div className={`terminal-connection ${connection}${connectionMessage ? ' has-message' : ''}`} role="status" aria-live="polite">
-        <span title={connectionMessage || pane.agent_terminal?.error || undefined}>{terminalPaneStatusMessage(pane, connection, connectionMessage)}</span>
+      <div className={`terminal-connection ${connection}${connectionMessage ? ' has-message' : ''}${pane.hosting ? ' hosting' : ''}`} role="status" aria-live="polite">
+        <span title={connectionMessage || pane.agent_terminal?.error || undefined}>{pane.hosting ? hostingStatus(pane.hosting) : terminalPaneStatusMessage(pane, connection, connectionMessage)}</span>
         {onRebuild && (pane.status === 'interrupted' || connection === 'interrupted') ? (
           <button
             type="button"
@@ -1860,7 +1900,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
           >
             {rebuilding ? '重建中…' : '重建'}
           </button>
-        ) : connection === 'observing' || connection === 'waiting' ? (
+        ) : pane.hosting || connection === 'observing' || connection === 'waiting' ? (
           <button
             type="button"
             className="terminal-takeover-action"
@@ -1878,6 +1918,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
             <RefreshCw />
           </button>
         ) : null}
+        {pane.hosting && <TerminalHostingDetails hosting={pane.hosting} />}
       </div>
     </div>
   );

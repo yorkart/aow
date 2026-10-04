@@ -1,7 +1,7 @@
 //! Interactive terminal capability and built-in adapter dispatch.
 
 mod codex;
-mod codex_like;
+mod footer;
 mod hermes;
 mod traecli;
 

@@ -1,6 +1,7 @@
 import { appUrl } from '../../lib/basePath';
 import { terminalApi } from '../../features/terminals/terminalApi';
 import { aowApi } from '../aowApi';
+import { inboxApi } from '../../features/inbox/api';
 import type { ResolvedTab, TabContext, TabOpenActions, TabRouteAdapter, TabTarget } from './types';
 import { terminalRoute } from './terminal';
 import { fileRoute, filesRoute } from './files';
@@ -36,6 +37,13 @@ export async function resolveTabTarget(target: TabTarget, signal: AbortSignal): 
   signal.throwIfAborted();
   const contexts = projects.flatMap(project => project.worktrees.map(worktree => ({ project, worktree })));
   const context = contexts.find(({ worktree }) => terminal ? worktree.path === terminal.workspace_root : worktree.id === (target as Exclude<TabTarget, { type: 'terminal' }>).workspace);
+  if (!context && terminal) {
+    const inbox = await inboxApi.list().catch(() => undefined);
+    signal.throwIfAborted();
+    if (inbox?.executions.some(run => run.workspace_mode === 'temporary' && run.tab_id === terminal.id && run.cwd === terminal.workspace_root)) {
+      return { target, workspacePath: terminal.workspace_root, terminal };
+    }
+  }
   if (!context) throw new Error('目标 Tab 所属工作区不存在或已被移除。');
   const resolved = await registry.get(target.type)!.resolve(target, context, signal);
   signal.throwIfAborted();

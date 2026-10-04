@@ -56,6 +56,7 @@ test('native Unified Logging preserves severity, fields, Unicode, long errors an
   assert.match(event(`info marker ${marker}`).eventMessage, /fixture\{run=/);
   event(`UTF-8 中文 🦀 NUL:\\0 END ${marker}`);
   event(`tail ${marker}`);
+  // eslint-disable-next-line no-control-regex -- Validate or match literal protocol control bytes intentionally.
   assert.doesNotMatch(entries.map(entry => entry.eventMessage).join('\n'), /\x1b\[|�/);
 });
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { gitApi } from './api';
 import type { GitLog, GitStatus } from './types';
+import { subscribeWorkspaceChanges } from '../../lib/workspaceEvents';
 
 type RefreshTarget = 'all' | 'changes' | 'commits';
 interface Callbacks {
@@ -55,7 +56,9 @@ export function useSourceControlPolling(repository: string, visible: boolean, ge
         const next = pending; pending = 0;
         void refresh(next);
       } else {
-        timer = window.setTimeout(() => void refresh(3), 5_000);
+        // Working files can change without touching Git metadata. History is
+        // refreshed by metadata events (or retried after a failed log request).
+        timer = window.setTimeout(() => void refresh(errors.has(2) ? 3 : 1), 5_000);
       }
     };
     const onVisibilityChange = () => {
@@ -64,10 +67,14 @@ export function useSourceControlPolling(repository: string, visible: boolean, ge
       else { pending = 0; controller?.abort(); }
     };
     refreshRef.current = (mask) => void refresh(mask);
+    const unsubscribe = subscribeWorkspaceChanges(change => {
+      if (change.reset || change.repositories.has(repository)) void refresh(3);
+    });
     document.addEventListener('visibilitychange', onVisibilityChange);
     void refresh(3);
     return () => {
       disposed = true;
+      unsubscribe();
       refreshRef.current = () => {};
       clearTimer();
       controller?.abort();
@@ -76,7 +83,7 @@ export function useSourceControlPolling(repository: string, visible: boolean, ge
   }, [repository, visible]);
 
   useEffect(() => {
-    if (previousGeneration.current !== generation) refreshRef.current(3);
+    if (previousGeneration.current !== generation) refreshRef.current(1);
     previousGeneration.current = generation;
   }, [generation]);
 

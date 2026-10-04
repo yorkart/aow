@@ -46,7 +46,7 @@ export function requestHealth(config, timeout = 1000) {
   });
 }
 
-export async function waitForHealth(config, runningPid, timeout = 10000) {
+export async function waitForHealth(config, runningPid, timeout = 10000, previousPid = null) {
   if (!['server', 'terminald'].includes(config.component)) throw new Error('invalid service component');
   const deadline = Date.now() + timeout;
   let last;
@@ -54,6 +54,7 @@ export async function waitForHealth(config, runningPid, timeout = 10000) {
     try {
       const pid = runningPid();
       if (!Number.isSafeInteger(pid) || pid <= 1) throw new Error('launchd job is not running');
+      if (pid === previousPid) throw new Error('launchd has not restarted the previous process yet');
       const health = await requestHealth(config, Math.max(1, Math.min(1000, deadline - Date.now())));
       if (health.pid !== pid || runningPid() !== pid) {
         throw new Error('health endpoint does not belong to the active launchd process');
@@ -74,7 +75,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
       });
       if (!/^\s*state = running\s*$/m.test(status)) return null;
       return Number(status.match(/^\s*pid = (\d+)\s*$/m)?.[1]);
-    });
+    }, process.argv[3].startsWith('system/') ? 30000 : 10000, Number(process.argv[4]) || null);
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;

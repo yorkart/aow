@@ -83,8 +83,11 @@ class GitHub:
         return result["data"]
 
     def list(self):
+        state = self.request.get("params", {}).get("state", "open")
+        if state not in ("open", "all"):
+            raise ValueError("list state must be open or all")
         current = self.api("user")
-        items = self.api(self.prefix + "/pulls?state=open&per_page=100", pages=True)
+        items = self.api(self.prefix + f"/pulls?state={state}&sort=updated&direction=desc&per_page=100", pages=True)
         branch = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True, check=False).stdout.strip()
         return {"repository": self.repo["root"], "current_branch": branch or "HEAD", "current_user": user(current),
                 "pull_requests": [summary(pr) for pr in items if pr["user"]["id"] == current["id"]]}

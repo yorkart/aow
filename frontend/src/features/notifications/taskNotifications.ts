@@ -1,4 +1,5 @@
 import { storageKey } from '../../lib/basePath';
+import { parseTokenUsage, type TokenUsage } from '../../lib/tokenUsage';
 import { useMemo, useSyncExternalStore } from 'react';
 
 interface TaskStopSource {
@@ -14,6 +15,7 @@ export interface TaskStop {
   title: string;
   cwd: string;
   sources: TaskStopSource[];
+  usage?: TokenUsage;
 }
 
 export interface TaskNotice extends TaskStop {
@@ -34,7 +36,9 @@ export function parseTaskStop(value: unknown): TaskStop | undefined {
     return [{ project_name: source.project_name, workspace_root: source.workspace_root,
       tab_id: source.tab_id, tab_name: source.tab_name }];
   });
-  return { agent: data.agent, session_id: data.session_id, title: data.title, cwd: data.cwd, sources };
+  const usage = parseTokenUsage(data.usage);
+  return { agent: data.agent, session_id: data.session_id, title: data.title, cwd: data.cwd, sources,
+    ...(usage ? { usage } : {}) };
 }
 
 const storeName = 'pending';

@@ -70,14 +70,14 @@ export function ConfigurationSettings({ active, onBusyChange, onDirtyChange }: {
         }} /></label>
         <button type="submit" className="project-aow-dialog-button" disabled={busy || !path.trim()}>读取版本</button>
       </form>
-      <p className="project-aow-form-intro">填写服务所在机器上的 Git 仓库目录，支持 ~/。也可以填写仓库下的 UUID 版本目录，读取后会自动选中该版本。</p>
+      <p className="project-aow-form-intro">填写服务所在机器上的 Git 仓库目录，支持 ~/。也可以填写仓库下的配置版本目录，读取后会自动选中该版本。</p>
       {versions ? versions.config_ids.length ? <fieldset className="configuration-versions" disabled={busy}>
         <legend>配置版本（单选）</legend>
         {versions.config_ids.map(id => <label className="configuration-version" key={id}>
           <input type="radio" name="config-version" value={id} checked={selected === id} onChange={() => { setSelected(id); setStatus(''); setError(''); }} />
           <span><code>{id}</code>{saved?.selection.config_repo === versions.config_repo && saved.selection.config_id === id ? <small>已保存</small> : null}</span>
         </label>)}
-      </fieldset> : <p role="status">仓库中没有 UUID 版本目录，请选择包含配置版本的仓库。</p> : null}
+      </fieldset> : <p role="status">仓库中没有配置版本目录，请选择包含配置版本的仓库。</p> : null}
       {saved ? <small className="project-aow-dialog-path-hint">当前运行版本：<code>{saved.active_selection.config_repo}/{saved.active_selection.config_id}</code></small> : null}
       {saved?.restart_required && !status ? <p role="status">已保存的配置与当前运行版本不同，重启服务后生效。</p> : null}
       {status ? <p role="status">{status}</p> : null}

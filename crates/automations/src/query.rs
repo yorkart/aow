@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
+use crate::store::RunCursor;
 use crate::{Run, Schedule, Store, Task, TaskInput};
 
 #[derive(Debug, Serialize)]
@@ -130,9 +131,6 @@ impl AutomationQuery {
             (1..=500).contains(&limit),
             "limit must be between 1 and 500"
         );
-        if let Some(before) = before {
-            crate::store::valid_component(before)?;
-        }
         self.store.get_task(task_id)?;
         let mut items = Vec::new();
         for id in self.store.run_ids(task_id, before)? {
@@ -149,7 +147,9 @@ impl AutomationQuery {
         }
         let next_cursor = if items.len() > limit {
             items.pop();
-            items.last().map(|detail| detail.run.id.clone())
+            items
+                .last()
+                .map(|detail| RunCursor::from(&detail.run).to_string())
         } else {
             None
         };

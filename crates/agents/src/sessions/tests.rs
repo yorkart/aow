@@ -320,6 +320,22 @@ fn path_matching_observes_component_boundaries() {
 }
 
 #[test]
+fn session_roots_respect_effective_home_with_agent_overrides_taking_precedence() {
+    let mut environment =
+        std::collections::BTreeMap::from([("HOME".into(), PathBuf::from("/reviewer-home"))]);
+    let roots = SessionRoots::from_configuration(Path::new("/server-home"), &environment);
+    assert_eq!(roots.claude, Path::new("/reviewer-home/.claude"));
+    assert_eq!(roots.codex, Path::new("/reviewer-home/.codex"));
+    assert_eq!(roots.traecli, Path::new("/reviewer-home/.trae/cli"));
+    assert_eq!(roots.hermes, Path::new("/reviewer-home/.hermes"));
+    environment.insert("CODEX_HOME".into(), PathBuf::from("/explicit-codex"));
+    assert_eq!(
+        SessionRoots::from_configuration(Path::new("/server-home"), &environment).codex,
+        Path::new("/explicit-codex")
+    );
+}
+
+#[test]
 fn resolves_agent_home_overrides_with_traecli_precedence() {
     let process_home = Path::new("/home/tester");
     let roots = SessionRoots::from_values(

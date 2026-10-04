@@ -1,7 +1,7 @@
 import { useEffect, useRef, type RefObject } from 'react';
 
 const hideDelay = 200;
-const overlaySelector = '[role="menu"],[role="dialog"]:not([data-floating-workspace]),[role="alertdialog"],dialog[open],.project-aow-new-menu,.layout-menu,.monaco-menu-container';
+const overlaySelector = '[role="menu"],[role="dialog"]:not([data-floating-workspace]),[role="alertdialog"],dialog[open],.project-aow-new-menu,.layout-menu,.monaco-menu-container,.inbox-row-menu';
 
 function hasOpenOverlay() {
   return [...document.querySelectorAll<HTMLElement>(overlaySelector)].some(element =>
@@ -45,7 +45,7 @@ export function useFloatingAutoHide(panel: RefObject<HTMLDivElement | null>, {
       // Menus can be portals outside the panel; native pickers can take browser focus.
       // Retry only while an overlay blocks hiding/revealing, including after Escape.
       if (!document.hasFocus() || hasOpenOverlay()
-        || document.activeElement?.matches('.project-aow-tab-rename-input')) { schedule(); return; }
+        || document.activeElement?.matches('.project-aow-tab-rename-input,.inbox-editor textarea,.inbox-label-editor input')) { schedule(); return; }
       if (inside) {
         entered = true;
         clear();

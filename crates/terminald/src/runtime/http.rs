@@ -3,7 +3,7 @@
 use super::websocket::runtime_socket;
 use super::*;
 
-pub(crate) fn build_router() -> Router {
+pub fn build_router() -> Router {
     router_with_state(DaemonState::new())
 }
 

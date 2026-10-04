@@ -25,6 +25,67 @@ const COMPLETE: &[u8] =
     b"{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_complete\",\"turn_id\":\"turn-1\"}}\n";
 
 #[test]
+fn usage_counts_only_eof_events_and_is_frozen_and_reset_at_each_completion() {
+    use crate::sessions::usage::tests::codex_event;
+    use serde_json::json;
+    for agent in ["codex", "traecli"] {
+        let root = tempfile::tempdir().unwrap();
+        let locator = locator(root.path(), agent);
+        let historical = codex_event(1_000, 100, 1_000, 100);
+        std::fs::write(&locator.transcript_path, format!("{historical}\n")).unwrap();
+        let mut tail = SessionTail::from_eof(locator.clone()).unwrap();
+        let first = codex_event(100, 20, 1_100, 120);
+        append(&locator.transcript_path, format!("{first}\n").as_bytes());
+        assert!(tail.poll().unwrap().is_empty());
+        // Additional user input and tools must not clear earlier calls in this task.
+        for event in [
+            json!({"type":"response_item","payload":{"type":"message","role":"user","content":"continue"}}),
+            json!({"type":"response_item","payload":{"type":"function_call","name":"exec_command"}}),
+            first,
+            codex_event(200, 30, 1_300, 150),
+            json!({"type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-1"}}),
+            json!({"type":"event_msg","payload":{"type":"task_started","turn_id":"turn-2"}}),
+            codex_event(10, 2, 1_310, 152),
+            json!({"type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-2"}}),
+            json!({"type":"event_msg","payload":{"type":"task_started","turn_id":"turn-3"}}),
+            json!({"type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-3"}}),
+        ] {
+            append(&locator.transcript_path, format!("{event}\n").as_bytes());
+        }
+        let events = tail.poll().unwrap();
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[0].usage.unwrap().total_tokens, 350);
+        assert_eq!(events[1].usage.unwrap().total_tokens, 12);
+        assert_eq!(events[2].usage, None);
+        assert!(tail.poll().unwrap().is_empty());
+    }
+}
+
+#[test]
+fn claude_usage_survives_tools_and_is_reset_after_the_main_loop_boundary() {
+    use serde_json::json;
+    let root = tempfile::tempdir().unwrap();
+    let locator = locator(root.path(), "claude");
+    std::fs::write(&locator.transcript_path, "").unwrap();
+    let mut tail = SessionTail::from_eof(locator.clone()).unwrap();
+    for event in [
+        json!({"type":"assistant","isSidechain":true,"message":{"id":"side","usage":{"input_tokens":999,"output_tokens":99}}}),
+        json!({"type":"assistant","message":{"id":"tool","stop_reason":"tool_use","usage":{"input_tokens":100,"output_tokens":10},"content":[{"type":"tool_use"}]}}),
+        json!({"type":"user","message":{"content":[{"type":"tool_result"}]}}),
+        json!({"type":"assistant","message":{"id":"final","usage":{"input_tokens":200,"output_tokens":20},"content":[{"type":"text","text":"Done"}]}}),
+        json!({"type":"assistant","message":{"id":"final","usage":{"input_tokens":200,"output_tokens":20},"content":[]}}),
+        json!({"type":"system","subtype":"turn_duration","uuid":"first"}),
+        json!({"type":"system","subtype":"turn_duration","uuid":"second"}),
+    ] {
+        append(&locator.transcript_path, format!("{event}\n").as_bytes());
+    }
+    let events = tail.poll().unwrap();
+    assert_eq!(events[0].usage.unwrap().total_tokens, 330);
+    assert_eq!(events[0].conclusion.as_deref(), Some("Done"));
+    assert_eq!(events[1].usage, None);
+}
+
+#[test]
 fn starts_at_eof_and_consumes_each_appended_record_once() {
     for agent in ["codex", "traecli"] {
         let root = tempfile::tempdir().unwrap();

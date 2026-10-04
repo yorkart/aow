@@ -80,22 +80,53 @@ test('server health follows the configured Base Path and normalizes its trailing
   await requestHealth({ ...root, basePath: '/' });
 });
 
-test('health requires the PID advertised by a new release and detects restarts during the probe', async t => {
-  const config = await endpoint(t, 'server', (_, response) => {
-    response.end(JSON.stringify({ service: 'aow', ok: true, pid: 1234 }));
-  });
-  // Allow a real HTTP round trip under CI load before asserting PID ownership.
-  // The separate unresponsive-endpoint test covers the request deadline.
-  await assert.rejects(waitForHealth(config, () => 1235, 1000), /active launchd process/);
+test('health requires the PID advertised by a new release and detects restarts during the probe', { timeout: 5000 }, async t => {
+  const timeout = 1000;
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  let completedResponses = 0;
+  const respond = body => (_, response) => {
+    response.once('finish', () => { completedResponses++; });
+    // End the retry window after the real HTTP probe reaches this listener.
+    // Only the retry clock is mocked; the HTTP request timer still runs normally.
+    now += timeout;
+    response.end(body);
+  };
+  const expectRejectedProbe = async (config, runningPid) => {
+    const previousResponses = completedResponses;
+    await assert.rejects(
+      waitForHealth(config, runningPid, timeout),
+      /active launchd process|health request timed out/,
+    );
+    assert.ok(completedResponses > previousResponses,
+      'the health endpoint should complete a response before the probe deadline');
+  };
+  const config = await endpoint(t, 'server', respond(
+    JSON.stringify({ service: 'aow', ok: true, pid: 1234 }),
+  ));
+  // Allow a real HTTP round trip before asserting PID ownership.
+  await expectRejectedProbe(config, () => 1235);
   let calls = 0;
-  await assert.rejects(waitForHealth(config, () => ++calls % 2 ? 1234 : 1235, 1000), /active launchd process/);
-  const old = await endpoint(t, 'server', (_, response) => response.end('{"service":"aow","ok":true}'));
-  await assert.rejects(waitForHealth(old, () => 1234, 1000), /active launchd process/);
+  await expectRejectedProbe(config, () => ++calls % 2 ? 1234 : 1235);
+  assert.equal(calls, 2);
+  const old = await endpoint(t, 'server', respond('{"service":"aow","ok":true}'));
+  await expectRejectedProbe(old, () => 1234);
 });
-
 test('unresponsive health checks have a total deadline', async t => {
   const config = await endpoint(t, 'server', () => {});
   const started = Date.now();
   await assert.rejects(waitForHealth(config, () => 1234, 100), /timed out/);
   assert.ok(Date.now() - started < 1000);
+});
+
+test('daemon restart health never accepts the previous healthy process', async t => {
+  let requests = 0;
+  const config = await endpoint(t, 'server', (_, response) => {
+    requests++;
+    response.end(JSON.stringify({ service: 'aow', ok: true, pid: 1234 }));
+  });
+  await assert.rejects(waitForHealth(config, () => 1234, 150, 1234), /not restarted/);
+  assert.equal(requests, 0);
+  await waitForHealth(config, () => 1234, 1000, 999);
+  assert.equal(requests, 1);
 });

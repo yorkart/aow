@@ -5,13 +5,13 @@ import type { NotificationChannel, NotificationSettings, NotificationSettingsUpd
 import './notification-settings.css';
 import { ImSettingsPanel } from '../im/ImSettingsPanel';
 
-export function NotificationSettingsPanel({ section, onBusyChange }: {
-  section: 'im' | 'notifications'; onBusyChange: (busy: boolean) => void;
+export function NotificationSettingsPanel({ section, onBusyChange, onDirtyChange }: {
+  section: 'im' | 'notifications'; onBusyChange: (busy: boolean) => void; onDirtyChange?: (dirty: boolean) => void;
 }) {
-  return section === 'im' ? <ImSettingsPanel onBusyChange={onBusyChange} /> : <NotificationPreferences onBusyChange={onBusyChange} />;
+  return section === 'im' ? <ImSettingsPanel onBusyChange={onBusyChange} onDirtyChange={onDirtyChange} /> : <NotificationPreferences onBusyChange={onBusyChange} onDirtyChange={onDirtyChange} />;
 }
 
-function NotificationPreferences({ onBusyChange }: { onBusyChange: (busy: boolean) => void }) {
+function NotificationPreferences({ onBusyChange, onDirtyChange }: { onBusyChange: (busy: boolean) => void; onDirtyChange?: (dirty: boolean) => void }) {
   const [settings, setSettings] = useState<NotificationSettings>();
   const [task, setTask] = useState<TaskCompletedSettings>({ enabled: true, channels: ['page'] });
   const [publicBaseUrl, setPublicBaseUrl] = useState('');
@@ -21,6 +21,9 @@ function NotificationPreferences({ onBusyChange }: { onBusyChange: (busy: boolea
   const [saved, setSaved] = useState('');
   const feishu = settings?.im.providers.find(provider => provider.provider === 'feishu');
   const wechat = settings?.im.providers.find(provider => provider.provider === 'wechat');
+  const dirty = !!settings && (JSON.stringify(task) !== JSON.stringify(settings.notifications.agent_task_completed)
+    || publicBaseUrl !== (settings.notifications.public_base_url ?? ''));
+  useEffect(() => { onDirtyChange?.(dirty); return () => onDirtyChange?.(false); }, [dirty, onDirtyChange]);
 
   useEffect(() => {
     let active = true;

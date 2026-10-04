@@ -1,4 +1,5 @@
 import { SessionMessageContent } from './SessionMessageContent';
+import { TokenUsageBadge } from '../../components/TokenUsageBadge';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AlertCircle, ArrowDownToLine, History, LoaderCircle, RefreshCw, UserRound } from 'lucide-react';
 import type { AgentSessionSnapshot, AgentSessionTurnStatus, AowAgentSession } from './types';
@@ -128,7 +129,10 @@ export function SessionSnapshotView({ session, snapshot, loading, error, onRefre
             </section>
             <section className={`project-aow-snapshot-message assistant ${session.agent}`}>
               <div className="project-aow-snapshot-bubble">
-                <header className="project-aow-snapshot-message-header"><AgentIcon agentId={session.agent} /><strong>{agentName}</strong>{turn.final?.timestamp && <time dateTime={turn.final.timestamp}>{time(turn.final.timestamp)}</time>}</header>
+                <header className="project-aow-snapshot-message-header">
+                  <AgentIcon agentId={session.agent} /><strong>{agentName}</strong>
+                  <span className="project-aow-snapshot-message-meta"><TokenUsageBadge usage={turn.usage} split />{turn.final?.timestamp && <time dateTime={turn.final.timestamp}>{time(turn.final.timestamp)}</time>}</span>
+                </header>
                 <SessionTurnProcess key={`${session.id}:${turn.id}:${index === turnCount - 1}`} turn={turn} isLatest={index === turnCount - 1} />
                 {turn.final && <div className="project-aow-snapshot-conclusion"><SessionMessageContent text={turn.final.text} imageReferenceText={turn.user.text} previewImages={!publicView} /></div>}
                 <SessionTurnPending turn={turn} />

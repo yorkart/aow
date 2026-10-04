@@ -40,6 +40,32 @@ impl AgentSessionTracker for Hermes {
     fn task_stop_parser(&self) -> Box<dyn TaskStopParser> {
         Box::new(Parser)
     }
+
+    fn completed_run_result(
+        &self,
+        locator: &AgentSessionLocator,
+        exited_at: DateTime<Utc>,
+    ) -> Result<Option<String>, SnapshotError> {
+        let mut connection = store::open_db(&locator.transcript_path)?;
+        let transaction = connection.transaction()?;
+        let mut parser = self.task_stop_parser();
+        let mut conclusion = None;
+        for record in store::snapshot_records(&transaction, &locator.session_id)? {
+            let timestamp = record["timestamp"]
+                .as_str()
+                .and_then(|value| DateTime::parse_from_rfc3339(value).ok());
+            if timestamp.is_none_or(|timestamp| timestamp > exited_at) {
+                return Ok(None);
+            }
+            // Use the same native compression lineage and completion parser as
+            // live notifications, including replies archived during compaction.
+            let session = record["session_id"].as_str().unwrap_or(&locator.session_id);
+            if let Some(event) = parser.consume(session, &record) {
+                conclusion = event.conclusion;
+            }
+        }
+        Ok(conclusion.filter(|text| !text.trim().is_empty()))
+    }
 }
 
 fn resolve(root: &Path, cwd: &str, pid: Option<i32>) -> SessionResolution {
@@ -94,6 +120,7 @@ impl TaskStopParser for Parser {
         Some(TaskStopped {
             turn_id: record["id"].as_i64().map(|id| format!("hermes-{id}")),
             conclusion: store::public_text(record),
+            usage: None,
         })
     }
 

@@ -1,7 +1,7 @@
 // Capture this project's committed repository data through the real AoW server.
 // This never reads an existing AoW state directory or any user's Agent sessions.
 import { spawn, execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { pbkdf2Sync, randomBytes } from "node:crypto";
 import {
   mkdtemp,
   mkdir,
@@ -80,9 +80,12 @@ try {
     "https://github.com/yorkart/aow.git",
   );
   await mkdir(stateDir);
+  const salt = randomBytes(16);
   await writeFile(
-    join(stateDir, "pin.md5"),
-    createHash("md5").update("123456").digest("hex"),
+    join(stateDir, "credentials.json"),
+    JSON.stringify({ version: 1, username: "snapshot", salt: salt.toString("hex"),
+      password_hash: pbkdf2Sync("snapshot-password", salt, 600000, 32, "sha256").toString("hex") }),
+    { mode: 0o600 },
   );
   await writeFile(
     join(stateDir, "aow-settings.json"),
@@ -132,7 +135,7 @@ try {
   const auth = await fetch(serverUrl + "/api/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pin: "123456" }),
+    body: JSON.stringify({ username: "snapshot", password: "snapshot-password" }),
   });
   if (!auth.ok) throw new Error("Snapshot authentication failed");
   cookie = auth.headers.get("set-cookie").split(";")[0];
