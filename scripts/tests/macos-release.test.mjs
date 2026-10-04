@@ -22,6 +22,10 @@ function write(path, data, executable = false) {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, data, { mode: executable ? 0o755 : 0o600 });
 }
+function isolateLaunchdMode(content, directory) {
+  return content.replace("'/Library/LaunchDaemons'", JSON.stringify(directory))
+    .replace('const daemonOwner = 0;', `const daemonOwner = ${process.getuid()};`);
+}
 function fixture(t, arch = 'aarch64') {
   const temp = realpathSync(mkdtempSync(join(tmpdir(), 'aow-macos-release-')));
   t.after(() => rmSync(temp, { recursive: true, force: true }));
@@ -38,8 +42,7 @@ function fixture(t, arch = 'aarch64') {
     let content = readFileSync(join(root, path), 'utf8');
     if (path === 'scripts/launchd-mode.mjs') {
       // Isolated stand-ins for root-owned plists; never touch system jobs.
-      content = content.replace("'/Library/LaunchDaemons'", JSON.stringify(daemonDirectory))
-        .replace('const daemonOwner = 0;', `const daemonOwner = ${process.getuid()};`);
+      content = isolateLaunchdMode(content, daemonDirectory);
     }
     write(join(repo, path), content, !path.endsWith('.mjs'));
   }
@@ -56,9 +59,14 @@ case "$1" in
       case "$(readlink "$AOW_RUNTIME_ROOT/active/$component")" in *2.0.0) exit 1;; esac
     fi
     exit 0;;
+  */start-launchdaemon.mjs)
+    exec ${quote(process.execPath)} --import ${quote(join(root, 'scripts/tests/virtual-clock.mjs'))} "$@";;
 esac
 exec ${quote(process.execPath)} "$@"
 `, true);
+  // The launchctl fixture advances on polls, so no wall-clock sleep is needed.
+  // Keep the production retry counts and deadlines intact.
+  write(join(tools, 'sleep'), '#!/bin/sh\nexit 0\n', true);
   write(join(tools, 'uname'), `#!/bin/sh\ncase "$1" in -s) echo Darwin;; -m) echo ${arch === 'aarch64' ? 'arm64' : arch};; esac\n`, true);
   write(join(tools, 'lipo'), `#!/bin/sh\necho "\${MOCK_BINARY_ARCH:-${arch === 'aarch64' ? 'arm64' : arch}}"\n`, true);
   write(join(tools, 'otool'), `#!/bin/sh
@@ -210,8 +218,6 @@ test('launchd removal has a bounded wait and never loads over a job that is stil
   succeeds(f.pack('1.0.0')); succeeds(f.publish('1.0.0')); succeeds(f.install());
   const previousPlist = f.log(f.plist('server'));
   succeeds(f.pack('2.0.0')); succeeds(f.publish('2.0.0'));
-  // Skip the delay, retaining the same bounded poll count.
-  write(join(f.tools, 'sleep'), '#!/bin/sh\nexit 0\n', true);
   writeFileSync(f.serviceLog, '');
   const failed = f.install([], { BOOTOUT_POLLS: '10000' });
   assert.notEqual(failed.status, 0);
@@ -723,7 +729,16 @@ test('real AoW macOS release installs with isolated mocked services', {
 }, t => {
   const f = fixture(t, process.arch === 'arm64' ? 'aarch64' : 'x86_64');
   const manifest = JSON.parse(f.run('tar', ['-xOf', process.env.AOW_NATIVE_TEST_PACKAGE, './manifest.json']).stdout);
-  succeeds(f.publish(manifest.release_id, process.env.AOW_NATIVE_TEST_PACKAGE));
+  // Apply the same service isolation as the source fixtures. Keep the real
+  // binaries and web assets, and leave the original release archive untouched.
+  const extracted = join(f.temp, 'native-package');
+  mkdirSync(extracted);
+  succeeds(f.run('tar', ['-xzf', process.env.AOW_NATIVE_TEST_PACKAGE, '-C', extracted]));
+  const mode = join(extracted, 'scripts/launchd-mode.mjs');
+  write(mode, isolateLaunchdMode(readFileSync(mode, 'utf8'), f.daemonDirectory));
+  const isolated = join(f.temp, 'native-package.tar.gz');
+  succeeds(f.run('tar', ['-czf', isolated, '-C', extracted, '.']));
+  succeeds(f.publish(manifest.release_id, isolated));
   succeeds(f.install());
   assert.equal(existsSync(f.plist('server')), true);
   assert.equal(existsSync(join(f.runtime, 'active/terminald')), false);

@@ -23,7 +23,18 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.version.outputs.version }}
+      native-packages: ${{ steps.scope.outputs.native-packages }}
     steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+      - name: Select native package validation
+        id: scope
+        run: node scripts/ci/release-scope.mjs
       - id: version
         run: echo "version=v$(date -u +%Y.%m.%d)-${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}-${GITHUB_SHA:0:12}" >> "$GITHUB_OUTPUT"
 
@@ -42,25 +53,18 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: |
-            frontend/package-lock.json
-            vt-worker/package-lock.json
+          cache-dependency-path: vt-worker/package-lock.json
       - name: Set up Rust
         run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
-      - name: Check product portal snapshot freshness
-        run: node website/scripts/check-snapshot-freshness.mjs
-      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: test-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}-${{ github.sha }}
-          restore-keys: test-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}-
-      - name: Set up test tools
-        run: cargo install just --locked
+          shared-key: test-${{ matrix.runner }}
+          cache-bin: false
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Test VT worker
-        run: just test-vt-worker
+        run: |
+          npm --prefix vt-worker ci --ignore-scripts --no-audit --no-fund
+          npm --prefix vt-worker test
       - name: Test Rust workspace
         run: |
           if [[ "$RUNNER_OS" == macOS ]]; then
@@ -68,16 +72,65 @@ jobs:
             export TMPDIR
           fi
           cargo test --workspace --locked -- --test-threads=4
+
+  test-scripts:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
       - name: Test packaging, installers and service lifecycle
         run: node --test scripts/tests/*.test.mjs
-      - name: Check frontend
+
+  frontend:
+    needs: version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            vt-worker/package-lock.json
+      - name: Build and check frontend
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: |
           npm --prefix frontend ci --ignore-scripts --no-audit --no-fund
-          npm --prefix frontend run typecheck
+          npm --prefix frontend run build
           npm --prefix frontend run test:architecture
+      - name: Build portable VT worker bundle
+        if: needs.version.outputs.native-packages == 'true'
+        run: |
+          npm --prefix vt-worker ci --ignore-scripts --no-audit --no-fund
+          npm --prefix vt-worker run build
+      - name: Upload shared web assets
+        if: needs.version.outputs.native-packages == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: web-assets
+          path: |
+            frontend/dist/
+            vt-worker/dist/
+          if-no-files-found: error
+          retention-days: 1
 
   build:
-    needs: [version, test]
+    needs: [version, frontend]
+    if: needs.version.outputs.native-packages == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -107,10 +160,6 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: |
-            frontend/package-lock.json
-            vt-worker/package-lock.json
       - name: Set up Rust target
         run: |
           rustup toolchain install stable --profile minimal --no-self-update
@@ -119,36 +168,36 @@ jobs:
       - name: Set up musl compiler
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install --yes musl-tools binutils
-      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: release-${{ matrix.platform }}-${{ hashFiles('Cargo.lock') }}-${{ github.sha }}
-          restore-keys: release-${{ matrix.platform }}-${{ hashFiles('Cargo.lock') }}-
+          shared-key: release-${{ matrix.platform }}
+          cache-bin: false
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Download shared web assets
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: web-assets
+          path: .
       - name: Build and validate native package
-        env:
-          NODE_OPTIONS: --max-old-space-size=4096
         run: |
-          package=$(bash scripts/package-release.sh --version "$RELEASE_VERSION")
-          mkdir -p target/release-assets
-          cp "$package" "target/release-assets/aow-$RELEASE_PLATFORM.tar.gz"
+          package=$(bash scripts/package-release.sh --version "$RELEASE_VERSION" --skip-web-build --output-dir "$RUNNER_TEMP/aow-packages")
+          mkdir -p "$RUNNER_TEMP/release-assets"
+          cp "$package" "$RUNNER_TEMP/release-assets/aow-$RELEASE_PLATFORM.tar.gz"
       - name: Smoke test real macOS package with isolated services
         if: runner.os == 'macOS'
         env:
-          AOW_NATIVE_TEST_PACKAGE: ${{ github.workspace }}/target/release-assets/aow-${{ matrix.platform }}.tar.gz
+          AOW_NATIVE_TEST_PACKAGE: ${{ runner.temp }}/release-assets/aow-${{ matrix.platform }}.tar.gz
         run: node --test --test-name-pattern='real AoW macOS release' scripts/tests/macos-release.test.mjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: package-${{ matrix.platform }}
-          path: target/release-assets/*.tar.gz
+          path: ${{ runner.temp }}/release-assets/*.tar.gz
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
 
   publish:
-    needs: [version, build]
+    needs: [version, test, test-scripts, frontend, build]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 15

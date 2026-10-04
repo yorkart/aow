@@ -20,7 +20,7 @@ fail() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
 usage() {
     cat <<'EOF'
-Usage: package-release.sh [--version VERSION] [--output-dir DIRECTORY] [--skip-build]
+Usage: package-release.sh [--version VERSION] [--output-dir DIRECTORY] [--skip-build | --skip-web-build]
 
 Build native Linux/musl or macOS binaries and frontend, then create an installable package.
 Does not install, publish or touch services. Prints the package's absolute path.
@@ -28,18 +28,20 @@ Does not install, publish or touch services. Prints the package's absolute path.
   --version VERSION       Default: UTC timestamp + Git SHA.
   --output-dir DIRECTORY  Default: <repository>/target/packages.
   --skip-build            Use target/<native Rust target>/release and frontend/dist.
+  --skip-web-build        Build Rust binaries using existing frontend/dist and vt-worker/dist.
   -h, --help              Show help.
 
 Creates an adjacent .sha256 file for installation with just install.
 The output directory's latest symlink selects the last successfully built package.
 Requires x86_64/aarch64 Linux or macOS, Node.js 20+, Git and tar.
-Building requires npm and Cargo. Linux also needs musl-gcc, the Rust musl target
+Building requires Cargo and, unless --skip-web-build is used, npm.
+Linux also needs musl-gcc, the Rust musl target
 and readelf. macOS needs Xcode Command Line Tools (clang, lipo and otool).
 EOF
 }
 
 main() {
-    local version='' output_dir=$repo_root/target/packages skip_build=0
+    local version='' output_dir=$repo_root/target/packages skip_build=0 skip_web_build=0
     while (( $# )); do
         case "$1" in
             --version|--output-dir)
@@ -47,6 +49,7 @@ main() {
                 if [[ "$1" == --version ]]; then version=$2; else output_dir=$2; fi
                 shift 2 ;;
             --skip-build) skip_build=1; shift ;;
+            --skip-web-build) skip_web_build=1; shift ;;
             -h|--help) usage; return ;;
             *) fail "unknown argument: $1" ;;
         esac
@@ -100,7 +103,6 @@ main() {
     [[ ! -e "$archive.sha256" && ! -L "$archive.sha256" ]] || fail "package checksum already exists: $version"
     [[ ! -e "$output_dir/latest" || -L "$output_dir/latest" ]] || fail 'latest must be a symlink'
     if (( ! skip_build )); then
-        command -v npm >/dev/null || fail 'npm is required'
         command -v cargo >/dev/null || fail 'Cargo is required'
         command -v rustc >/dev/null || fail 'rustc is required'
         local target_libdir compiler_variable compiler
@@ -117,22 +119,27 @@ main() {
             command -v clang >/dev/null || fail 'clang is required (install Xcode Command Line Tools)'
             export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-11.0}
         fi
-        (
-            cd "$repo_root/frontend"
-            npm ci --ignore-scripts --no-audit --no-fund
-            npm run build
-        ) >&2
-        (
-            cd "$repo_root/vt-worker"
-            npm ci --ignore-scripts --no-audit --no-fund
-            npm run build
-        ) >&2
+        if (( skip_web_build )); then
+            [[ -f "$repo_root/frontend/dist/index.html" ]] || fail 'missing frontend/dist/index.html'
+            [[ -f "$repo_root/vt-worker/dist/vt-worker.mjs" ]] || fail 'missing vt-worker/dist/vt-worker.mjs'
+        else
+            command -v npm >/dev/null || fail 'npm is required'
+            (
+                cd "$repo_root/frontend"
+                npm ci --ignore-scripts --no-audit --no-fund
+                npm run build
+            ) >&2
+            (
+                cd "$repo_root/vt-worker"
+                npm ci --ignore-scripts --no-audit --no-fund
+                npm run build
+            ) >&2
+        fi
         (
             cd "$repo_root"
-            cargo build --locked --release --target "$target" --target-dir "$repo_root/target" -p aow-server
-            cargo build --locked --release --target "$target" --target-dir "$repo_root/target" -p aow-terminald
-            cargo build --locked --release --target "$target" --target-dir "$repo_root/target" -p aow-automations --bin aow-automation-runner
-            cargo build --locked --release --target "$target" --target-dir "$repo_root/target" -p aow-cli
+            cargo build --locked --release --target "$target" --target-dir "$repo_root/target" \
+                -p aow-server -p aow-terminald -p aow-automations -p aow-cli \
+                --bin aow-server --bin aow-terminald --bin aow-automation-runner --bin aow-cli
         ) >&2
     fi
     stage=$(mktemp -d "$output_dir/.package-$version.XXXXXX")
@@ -190,11 +197,11 @@ JS
     done
     chmod 0755 "$bundle/packaging/bin/"* "$bundle/scripts/"*.sh
     printf '%s' "$git_status" >"$stage/git-status"
-    node --input-type=module - "$bundle" "$version" "$revision" "$stage/git-status" "$skip_build" "$target" "$machine" "$os" "$stage/macos-minimums" <<'JS'
+    node --input-type=module - "$bundle" "$version" "$revision" "$stage/git-status" "$skip_build" "$target" "$machine" "$os" "$stage/macos-minimums" "$skip_web_build" <<'JS'
 import { createHash } from 'node:crypto';
 import { lstatSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-const [root, version, revision, statusPath, skipBuild, target, arch, os, minimums] = process.argv.slice(2);
+const [root, version, revision, statusPath, skipBuild, target, arch, os, minimums, skipWebBuild] = process.argv.slice(2);
 const compareVersions = (a, b) => {
     const left = a.split('.').map(Number), right = b.split('.').map(Number);
     for (let i = 0; i < 3; i++) { const difference = (left[i] || 0) - (right[i] || 0); if (difference) return difference; }
@@ -216,6 +223,7 @@ writeFileSync(join(root, 'manifest.json'), JSON.stringify({
     release_id: version, created_at: new Date().toISOString(), git_revision: revision,
     git_dirty: status.length > 0, git_status_sha256: createHash('sha256').update(status).digest('hex'),
     reused_build_artifacts: skipBuild === '1',
+    reused_web_assets: skipBuild === '1' || skipWebBuild === '1',
     platform: os === 'linux' ? { os, arch, target, libc: 'musl', linkage: 'static' }
         : { os, arch, target, linkage: 'dynamic', minimum_os_version: minimumOsVersion },
     components: { server: 'bin/aow-server', terminald: 'bin/aow-terminald',
