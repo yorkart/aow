@@ -1,6 +1,6 @@
 use super::*;
 use serde_json::json;
-use std::io::Write;
+use std::{fs::FileTimes, io::Write};
 
 fn fixture(agent: &'static str, records: Vec<Value>) -> (tempfile::TempDir, AgentSessionLocator) {
     let root = tempfile::tempdir().unwrap();
@@ -100,12 +100,24 @@ fn codex_like_uses_native_completion_and_ignores_trailing_metadata() {
                 json!({"type":"event_msg","payload":{"type":"token_count"}}),
             ],
         );
-        assert_eq!(collect(&locator).as_deref(), Some("P1\nP2"));
-        let exited_at = Utc::now();
+        // A write immediately after Utc::now() need not have a later mtime:
+        // filesystem timestamps can have lower precision than the wall clock.
+        // Set both sides of the exit boundary instead of racing that clock.
+        let exited_at = DateTime::from_timestamp(1_700_000_000, 0).unwrap();
         let mut file = std::fs::OpenOptions::new()
             .append(true)
             .open(&locator.transcript_path)
             .unwrap();
+        file.set_times(
+            FileTimes::new().set_modified((exited_at - chrono::Duration::seconds(1)).into()),
+        )
+        .unwrap();
+        assert_eq!(
+            read_completed_run(locator.clone(), exited_at)
+                .unwrap()
+                .as_deref(),
+            Some("P1\nP2")
+        );
         writeln!(
             file,
             "{}",
@@ -113,6 +125,10 @@ fn codex_like_uses_native_completion_and_ignores_trailing_metadata() {
         )
         .unwrap();
         writeln!(file,"{}",json!({"type":"event_msg","payload":{"type":"task_complete","turn_id":"two","last_agent_message":"Later"}})).unwrap();
+        file.set_times(
+            FileTimes::new().set_modified((exited_at + chrono::Duration::seconds(1)).into()),
+        )
+        .unwrap();
         assert!(read_completed_run(locator, exited_at).unwrap().is_none());
     }
 }
