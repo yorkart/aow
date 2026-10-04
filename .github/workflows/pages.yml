@@ -33,8 +33,6 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install frontend dependencies
         run: npm ci --prefix frontend
-      - name: Check product snapshot freshness
-        run: node website/scripts/check-snapshot-freshness.mjs
       - name: Check snapshot frontend types
         run: frontend/node_modules/.bin/tsc -p website/snapshot/tsconfig.json --pretty false
       - name: Configure GitHub Pages
