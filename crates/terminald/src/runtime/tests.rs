@@ -952,15 +952,120 @@ fn dropping_uncommitted_spawn_kills_and_reaps_shell() {
     assert_uncommitted_spawn_is_reaped(spawned, &tracker);
 }
 
-// Keep the immediate-cancellation regression on Linux. On macOS it can leave
-// child.wait() blocked in wait4 even after the shell disappears from process
-// enumeration (release run 37166846322, also reproduced without parallel tests).
-// The ready-shell test above covers kill/reap/permit release on every platform.
 #[test]
-#[cfg_attr(
-    target_os = "macos",
-    ignore = "macOS interactive PTY startup cancellation can hang in child.wait(); use the ready-shell regression until this race is fixed"
-)]
+fn dropping_uncommitted_spawn_with_unread_output() {
+    let directory = tempfile::tempdir().unwrap();
+    let ready = directory.path().join("ready");
+    let tracker = Arc::new(SpawnTracker::default());
+    let spawned = spawn_runtime_blocking(
+        "canceled-unread-output".to_owned(),
+        uncommitted_shell_with_unread_output_spec(&ready),
+        tracker.begin(),
+        None,
+    )
+    .unwrap();
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while !ready.exists() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "shell did not write its PTY output"
+        );
+        thread::sleep(Duration::from_millis(10));
+    }
+    // Keep the master's owning runtime alive independently of the spawn guard.
+    // No worker has read the output: the file is an out-of-band readiness signal.
+    let runtime = spawned.runtime.clone();
+    assert_uncommitted_spawn_is_reaped(spawned, &tracker);
+    assert!(*runtime.reap_state.lock().unwrap());
+    assert!(runtime.output.lock().unwrap().scrollback.is_empty());
+}
+
+fn uncommitted_shell_with_unread_output_spec(ready: &Path) -> TerminalRuntimeSpec {
+    TerminalRuntimeSpec {
+        cwd: "/".to_owned(),
+        shell: "/bin/sh".to_owned(),
+        arguments: vec![
+            "-c".to_owned(),
+            "printf 'pending PTY output'; printf ready > \"$AOW_TEST_READY\"; read -r line"
+                .to_owned(),
+        ],
+        environment: std::collections::BTreeMap::from([(
+            "AOW_TEST_READY".to_owned(),
+            ready.to_string_lossy().into_owned(),
+        )]),
+        rows: 24,
+        cols: 80,
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn dropping_uncommitted_spawn_cleans_other_process_groups_with_unread_output() {
+    struct Cleanup(aow_process::ProcessInfo);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            if aow_process::same_process(self.0.pid, &self.0.start_time) {
+                unsafe { libc::kill(self.0.pid, libc::SIGKILL) };
+            }
+        }
+    }
+
+    let directory = tempfile::tempdir().unwrap();
+    let ready = directory.path().join("ready");
+    let child_file = directory.path().join("child");
+    let mut spec = uncommitted_shell_with_unread_output_spec(&ready);
+    // Job control gives the background child its own process group. Ignore
+    // SIGHUP so that only the post-wait session cleanup can remove it. Its
+    // stdout/stderr retain the PTY slave even after the leader is killed.
+    spec.arguments[1] = format!(
+        "set -m; /bin/sh -c 'trap \"\" HUP; printf %s $$ > \"$AOW_TEST_CHILD\"; exec sleep 60' & {}",
+        spec.arguments[1]
+    );
+    spec.environment.insert(
+        "AOW_TEST_CHILD".to_owned(),
+        child_file.to_string_lossy().into_owned(),
+    );
+    let tracker = Arc::new(SpawnTracker::default());
+    let spawned = spawn_runtime_blocking(
+        "canceled-background-job".to_owned(),
+        spec,
+        tracker.begin(),
+        None,
+    )
+    .unwrap();
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    let child_pid = loop {
+        if ready.exists()
+            && let Some(pid) = std::fs::read_to_string(&child_file)
+                .ok()
+                .and_then(|contents| contents.parse::<i32>().ok())
+        {
+            break pid;
+        }
+        assert!(std::time::Instant::now() < deadline, "job did not start");
+        thread::sleep(Duration::from_millis(10));
+    };
+    let child = Cleanup(aow_process::info(child_pid).unwrap());
+    let leader_pid = spawned.runtime.child_pid.unwrap() as i32;
+    assert_eq!(child.0.session, leader_pid);
+    assert_ne!(child.0.group, leader_pid);
+
+    assert_uncommitted_spawn_is_reaped(spawned, &tracker);
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while aow_process::info(child_pid)
+        .is_ok_and(|info| info.start_time == child.0.start_time && info.state != 'Z')
+    {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "background job survived canceled spawn cleanup"
+        );
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
+// Race cancellation against the real interactive shell's startup and prompt.
+// The unread-output test above also covers output draining deterministically.
+#[test]
 fn dropping_uncommitted_spawn_during_interactive_shell_startup() {
     let tracker = Arc::new(SpawnTracker::default());
     let spawned = spawn_runtime_blocking(
@@ -1010,6 +1115,65 @@ fn assert_uncommitted_spawn_is_reaped(spawned: SpawnedRuntime, tracker: &SpawnTr
         !aow_process::info(pid).is_ok_and(|info| info.start_time == original_start_time),
         "original shell process {pid} still exists after cleanup"
     );
+}
+
+#[tokio::test]
+async fn graceful_shutdown_reaps_canceled_spawn_with_unread_output() {
+    let directory = tempfile::tempdir().unwrap();
+    let ready = directory.path().join("ready");
+    let state = DaemonState::new();
+    let permit = state.inner.in_flight_spawns.begin();
+    let spec = uncommitted_shell_with_unread_output_spec(&ready);
+    let (spawned_tx, spawned_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    // Reproduce create's ownership boundary: abort the awaiting task while
+    // spawn_blocking still owns the uncommitted result and its permit.
+    let request = tokio::spawn(async move {
+        tokio::task::spawn_blocking(move || {
+            let spawned =
+                spawn_runtime_blocking("canceled-shutdown".to_owned(), spec, permit, None).unwrap();
+            spawned_tx.send(spawned.runtime.child_pid.unwrap()).ok();
+            let _ = release_rx.recv();
+            spawned
+        })
+        .await
+        .unwrap()
+    });
+    let pid = tokio::time::timeout(Duration::from_secs(10), spawned_rx)
+        .await
+        .unwrap()
+        .unwrap() as i32;
+    let original_start_time = aow_process::info(pid).unwrap().start_time;
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while !ready.exists() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("shell did not write its PTY output");
+    request.abort();
+    assert!(request.await.err().unwrap().is_cancelled());
+
+    let shutdown_state = state.clone();
+    let shutdown = tokio::spawn(async move { shutdown_state.shutdown_all().await });
+    tokio::task::yield_now().await;
+    assert!(!shutdown.is_finished());
+    assert!(state.inner.shutting_down.load(Ordering::Acquire));
+    assert_eq!(
+        state.inner.in_flight_spawns.count.load(Ordering::Acquire),
+        1
+    );
+    release_tx.send(()).unwrap();
+    tokio::time::timeout(Duration::from_secs(10), shutdown)
+        .await
+        .expect("shutdown did not reap the canceled spawn")
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        state.inner.in_flight_spawns.count.load(Ordering::Acquire),
+        0
+    );
+    assert!(!aow_process::info(pid).is_ok_and(|info| info.start_time == original_start_time));
 }
 
 #[tokio::test]
