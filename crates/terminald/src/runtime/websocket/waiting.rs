@@ -3,6 +3,10 @@ use futures_util::{Sink, Stream, StreamExt};
 use super::attachment::ActiveStream;
 use super::*;
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Pass both socket halves and attachment state explicitly during the waiting phase"
+)]
 pub(super) async fn handle_waiting_attachment_event<S, R, E>(
     sender: &mut S,
     receiver: &mut R,

@@ -101,14 +101,12 @@ fn apply_index_names(home: &Path, sessions: &mut [AgentSession]) {
             .get("id")
             .and_then(Value::as_str)
             .and_then(|id| positions.get(id))
-        {
-            if let Some(title) = entry
+            && let Some(title) = entry
                 .get("thread_name")
                 .and_then(Value::as_str)
                 .and_then(normalize_title)
-            {
-                sessions[*index].title = title;
-            }
+        {
+            sessions[*index].title = title;
         }
     }
 }

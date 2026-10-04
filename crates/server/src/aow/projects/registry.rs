@@ -110,10 +110,10 @@ impl AowManager {
                     || (!project.common_git_dir.is_empty()
                         && project.common_git_dir == common_git_dir)
             }) {
-                if let Some(name) = requested_name {
-                    if !existing.builtin {
-                        existing.name = name;
-                    }
+                if let Some(name) = requested_name
+                    && !existing.builtin
+                {
+                    existing.name = name;
                 }
                 if request.notes_path.is_some() {
                     existing.notes_identity = None;

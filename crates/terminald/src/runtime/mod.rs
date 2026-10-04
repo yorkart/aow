@@ -64,6 +64,10 @@ mod agents;
 mod http;
 mod output;
 mod process;
+#[expect(
+    clippy::module_inception,
+    reason = "Keep the runtime implementation beside its focused sibling modules"
+)]
 mod runtime;
 mod server;
 mod socket;

@@ -153,6 +153,10 @@ impl OperationService {
         Handle::new(self.clone(), spec.id)
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Operation updates carry independent event, progress, outcome and resource fields"
+    )]
     pub(super) fn update(
         &self,
         id: &str,

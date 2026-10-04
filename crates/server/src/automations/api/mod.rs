@@ -1,3 +1,8 @@
+#![expect(
+    clippy::result_large_err,
+    reason = "Automation routes return Axum error responses directly without an extra heap allocation"
+)]
+
 use super::*;
 
 fn error(error: impl std::fmt::Display) -> Response {

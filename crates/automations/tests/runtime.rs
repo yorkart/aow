@@ -1213,10 +1213,10 @@ async fn native_launchd_hosted_run_uses_available_user_domain() {
         .unwrap();
     let run = tokio::time::timeout(Duration::from_secs(30), async {
         loop {
-            if let Ok(Some(run)) = store.read_run(&task.id, &id) {
-                if run.status.terminal() {
-                    break run;
-                }
+            if let Ok(Some(run)) = store.read_run(&task.id, &id)
+                && run.status.terminal()
+            {
+                break run;
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }

@@ -71,26 +71,25 @@ impl AowManager {
                 });
             let previous_color = state.projects[index].worktree_colors.remove(&worktree.path);
             let previous_icon = state.projects[index].worktree_icons.remove(&worktree.path);
-            if previous_registered_path.is_some()
+            if (previous_registered_path.is_some()
                 || previous_color.is_some()
-                || previous_icon.is_some()
+                || previous_icon.is_some())
+                && let Err(error) = self.persist_projects(&state.projects)
             {
-                if let Err(error) = self.persist_projects(&state.projects) {
-                    if let Some(previous) = previous_registered_path {
-                        state.projects[index].registered_path = previous;
-                    }
-                    if let Some(color) = previous_color {
-                        state.projects[index]
-                            .worktree_colors
-                            .insert(worktree.path.clone(), color);
-                    }
-                    if let Some(icon) = previous_icon {
-                        state.projects[index]
-                            .worktree_icons
-                            .insert(worktree.path.clone(), icon);
-                    }
-                    return Err(error);
+                if let Some(previous) = previous_registered_path {
+                    state.projects[index].registered_path = previous;
                 }
+                if let Some(color) = previous_color {
+                    state.projects[index]
+                        .worktree_colors
+                        .insert(worktree.path.clone(), color);
+                }
+                if let Some(icon) = previous_icon {
+                    state.projects[index]
+                        .worktree_icons
+                        .insert(worktree.path.clone(), icon);
+                }
+                return Err(error);
             }
             (previous_registered_path, previous_color, previous_icon)
         };

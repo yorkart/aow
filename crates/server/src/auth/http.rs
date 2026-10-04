@@ -146,7 +146,7 @@ fn login_response(
     headers: &HeaderMap,
     token: &str,
 ) -> Result<Response, HttpError> {
-    if let Some(previous) = session_token(&headers, &state.base_path.cookie_name()) {
+    if let Some(previous) = session_token(headers, &state.base_path.cookie_name()) {
         state.auth.sessions.revoke(previous)?;
     }
     let mut response = Json(state.auth.status(Some(token))).into_response();

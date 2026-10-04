@@ -45,7 +45,7 @@ async function request(url: string, init?: RequestInit, timeoutMs = 15_000, exte
     return payload;
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
-      if (timedOut) throw new Error(`终端请求超时（${Math.round(timeoutMs / 1000)} 秒）`);
+      if (timedOut) throw new Error(`终端请求超时（${Math.round(timeoutMs / 1000)} 秒）`, { cause: error });
     }
     throw error;
   } finally {
@@ -198,7 +198,7 @@ export const terminalApi = {
       if (!tab) throw new Error('服务器返回了无效的终端数据');
       return tab;
     } catch (reason) {
-      if (reason instanceof TerminalHttpError && reason.status === 404) throw new Error('该 Tab 已关闭或不存在。');
+      if (reason instanceof TerminalHttpError && reason.status === 404) throw new Error('该 Tab 已关闭或不存在。', { cause: reason });
       throw reason;
     }
   },

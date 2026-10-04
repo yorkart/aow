@@ -1,3 +1,8 @@
+#![expect(
+    clippy::result_large_err,
+    reason = "Removal routes return Axum error responses directly without an extra heap allocation"
+)]
+
 use super::*;
 use crate::operations::Spec;
 use std::collections::HashSet;

@@ -174,7 +174,7 @@ async function main() {
       const failedPid = await restartOwnJob();
       if (previous !== null) { waitForHealth(failedPid); restored = true; }
     } catch { console.error(`error: failed to restore previous ${component} LaunchDaemon; inspect system/${daemonLabel(component)}`); }
-    throw new Error(`aow-${component} activation failed; ${restored ? 'restored previous release' : 'restored previous release link, but service recovery was not verified'} (${error.message})`);
+    throw new Error(`aow-${component} activation failed; ${restored ? 'restored previous release' : 'restored previous release link, but service recovery was not verified'} (${error.message})`, { cause: error });
   }
   clearRequest();
   console.log(`aow-${component} is active on release ${release.split('/').at(-1)} (LaunchDaemon)`);

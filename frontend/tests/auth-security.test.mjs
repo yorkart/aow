@@ -109,7 +109,7 @@ for (const action of ['password', 'password-with-immediate-input', 'logout']) {
     }
     await bounded(closed, 'revoked WebSocket was not closed');
     assert.equal((await bounded(liveClosed, 'revoked event WebSocket was not closed'))[0], 1008);
-    await bounded((async () => { while (!(await reader.read()).done) {} })(), 'revoked SSE did not end');
+    await bounded((async () => { while (!(await reader.read()).done) { /* Drain until the revoked stream closes. */ } })(), 'revoked SSE did not end');
     assert.equal(await exists(marker), false);
     assert.equal((await fetch(f.url('/api/fs/tree'), { headers: { cookie } })).status, 401);
     const fresh = await f.login(action === 'logout' ? 'test-password' : 'replacement-password');

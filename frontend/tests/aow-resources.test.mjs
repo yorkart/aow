@@ -3958,7 +3958,7 @@ try {
           modifiedMatches: model.modified === diff.getModifiedEditor().getModel(),
           original: diff.getOriginalEditor().getValue(),
           modified: diff.getModifiedEditor().getValue(),
-          changes: diff.getLineChanges().map(({ charChanges, ...lines }) => lines),
+          changes: diff.getLineChanges().map(({ charChanges: _charChanges, ...lines }) => lines),
           cached: monaco.editor.getModels().map(model => ({ path: model.uri.toString(), content: model.getValue() })),
         };
       }, index);

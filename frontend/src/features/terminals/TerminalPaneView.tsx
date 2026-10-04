@@ -536,6 +536,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
           || document.visibilityState !== 'visible') return false;
         if (paste) terminalRef.current?.paste(text);
         else {
+          // eslint-disable-next-line no-control-regex -- Validate or match literal protocol control bytes intentionally.
           const data = terminalRef.current?.modes.applicationCursorKeysMode && /^\u001b\[[ABCD]$/.test(text)
             ? text.replace('[', 'O') : text;
           socketRef.current!.send(new TextEncoder().encode(data));

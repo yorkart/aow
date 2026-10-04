@@ -1030,7 +1030,9 @@ try {
     await swipe(0, 35);
     const mouseInput = inputs().slice(mouseStart);
     assert.ok(mouseInput.length > 0);
+    // eslint-disable-next-line no-control-regex -- Validate or match literal protocol control bytes intentionally.
     assert.ok(mouseInput.every((data) => /^\x1b\[<64;\d+;\d+M$/.test(data)), 'mouse-aware applications receive SGR scroll even on the normal buffer');
+    // eslint-disable-next-line no-control-regex -- Validate or match literal protocol control bytes intentionally.
     const last = mouseInput.at(-1).match(/^\x1b\[<64;(\d+);(\d+)M$/);
     assert.ok(Math.abs(Number(last[1]) - (Math.floor(size.cols / 2) + 1)) <= 1, 'mouse coordinates match the fitted mobile grid');
     const expectedRow = Math.floor((y + 35 - screen.y) / screen.height * size.rows) + 1;
@@ -1716,6 +1718,7 @@ try {
       const mouseInput = state.messages.slice(mouseMessageStart)
         .filter(({ url, message }) => url === socket.url() && Buffer.isBuffer(message))
         .map(({ message }) => message.toString()).join('');
+      // eslint-disable-next-line no-control-regex -- Validate or match literal protocol control bytes intentionally.
       const press = mouseInput.match(/\x1b\[<0;\d+;\d+M/);
       assert.ok(press, 'the terminal receives the link click press');
       assert.equal(mouseInput, press[0] + press[0].replace(/M$/, 'm'), 'the terminal receives a matching release before dialog interaction');

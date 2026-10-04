@@ -79,6 +79,7 @@ if (component === 'terminald') {
 }
 function xml(value) {
   const text = String(value);
+  // eslint-disable-next-line no-control-regex -- Validate or match literal protocol control bytes intentionally.
   if (/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(text)) throw new Error('Invalid control character in launchd configuration');
   return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;').replaceAll("'", '&apos;');

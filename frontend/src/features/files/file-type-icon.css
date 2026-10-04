@@ -29,7 +29,7 @@
 .file-type-icon::before {
   content: attr(data-icon);
   /* Seti's glyphs use 150% of VS Code's 16px icon slot. */
-  font: normal normal calc(var(--file-icon-size, 16px) * 1.5)/1 'Aow Seti';
+  font: normal normal calc(var(--file-icon-size, 16px) * 1.5)/1 'Aow Seti', sans-serif;
   text-transform: none;
   letter-spacing: normal;
   -webkit-font-smoothing: antialiased;

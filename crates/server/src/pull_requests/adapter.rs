@@ -134,10 +134,10 @@ pub(super) async fn run_command(
     timeout(deadline, async {
         let (_, out, err, status) = tokio::try_join!(
             async {
-                if let Err(error) = stdin.write_all(input).await {
-                    if error.kind() != std::io::ErrorKind::BrokenPipe {
-                        return Err(error.into());
-                    }
+                if let Err(error) = stdin.write_all(input).await
+                    && error.kind() != std::io::ErrorKind::BrokenPipe
+                {
+                    return Err(error.into());
                 }
                 drop(stdin);
                 Ok::<_, PullRequestError>(())

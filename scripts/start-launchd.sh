@@ -6,8 +6,8 @@ umask 077
 component=${1:?service component is required}
 requested=${2:-latest}
 case "$component" in server|terminald) ;; *) exit 1 ;; esac
-script_dir=$(CDPATH= cd -P "$(dirname "$0")" && pwd)
-repo_root=$(CDPATH= cd -P "$script_dir/.." && pwd)
+script_dir=$(CDPATH='' cd -P "$(dirname "$0")" && pwd)
+repo_root=$(CDPATH='' cd -P "$script_dir/.." && pwd)
 runtime_root=${AOW_RUNTIME_ROOT:-${HOME:?HOME must be set}/.local/lib/aow}
 service_mode=$(node "$script_dir/launchd-mode.mjs" resolve "$runtime_root")
 if [ "$service_mode" = launchdaemon ]; then
@@ -28,16 +28,17 @@ rename() { node -e 'require("node:fs").renameSync(process.argv[1], process.argv[
 cleanup() { [ -z "$stage" ] || rm -rf -- "$stage"; }
 trap cleanup 0
 
-command -v launchctl >/dev/null && launchctl print "$domain" >/dev/null 2>&1 \
-    || fail 'a logged-in macOS graphical user session is required (launchd gui domain)'
+if ! command -v launchctl >/dev/null || ! launchctl print "$domain" >/dev/null 2>&1; then
+    fail 'a logged-in macOS graphical user session is required (launchd gui domain)'
+fi
 case "$requested" in
     latest) candidate=$runtime_root/latest ;;
     ''|[!A-Za-z0-9]*|*[!A-Za-z0-9._-]*) fail "invalid release id: $requested" ;;
     *) candidate=$runtime_root/releases/$requested ;;
 esac
 [ -d "$candidate" ] || fail "AoW release is unavailable: $candidate"
-release=$(CDPATH= cd -P "$candidate" && pwd)
-releases=$(CDPATH= cd -P "$runtime_root/releases" && pwd)
+release=$(CDPATH='' cd -P "$candidate" && pwd)
+releases=$(CDPATH='' cd -P "$runtime_root/releases" && pwd)
 case "$release" in "$releases"/*) ;; *) fail 'release resolves outside the releases directory' ;; esac
 [ -x "$release/bin/aow-$component" ] && [ -x "$runtime_root/bin/aow-$component" ] \
     || fail 'AoW binary or launcher is unavailable; run the installer first'

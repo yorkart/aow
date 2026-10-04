@@ -71,6 +71,10 @@ async fn info(
         .map(Json)
 }
 
+#[expect(
+    clippy::result_large_err,
+    reason = "HTTP route errors return Axum responses directly without an extra heap allocation"
+)]
 async fn create(
     State(state): State<AppState>,
     AxumPath(session_id): AxumPath<String>,

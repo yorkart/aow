@@ -1,3 +1,8 @@
+#![expect(
+    clippy::result_large_err,
+    reason = "HTTP route errors return Axum responses directly without an extra heap allocation"
+)]
+
 use super::*;
 use axum::{
     Router,

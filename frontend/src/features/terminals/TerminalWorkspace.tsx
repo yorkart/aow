@@ -254,18 +254,19 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
     } catch (reason) {
       if (saveEpochRef.current === saveEpoch) setError(`布局保存失败：${message(reason)}`);
     } finally {
-      if (saveEpochRef.current !== saveEpoch) return;
-      savingRef.current = false;
-      if (pendingLayoutRef.current) {
-        if (flushRequestedRef.current) {
-          flushRequestedRef.current = false;
-          void runLayoutSave();
+      if (saveEpochRef.current === saveEpoch) {
+        savingRef.current = false;
+        if (pendingLayoutRef.current) {
+          if (flushRequestedRef.current) {
+            flushRequestedRef.current = false;
+            void runLayoutSave();
+          } else {
+            const delay = Math.max(0, 250 - (Date.now() - lastSaveRef.current));
+            saveTimerRef.current = window.setTimeout(() => void runLayoutSave(), delay);
+          }
         } else {
-          const delay = Math.max(0, 250 - (Date.now() - lastSaveRef.current));
-          saveTimerRef.current = window.setTimeout(() => void runLayoutSave(), delay);
+          flushRequestedRef.current = false;
         }
-      } else {
-        flushRequestedRef.current = false;
       }
     }
   };

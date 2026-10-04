@@ -36,23 +36,24 @@ pub(super) fn spawn(
     }
     drop(workers);
     tokio::spawn(async move {
-        if let Err(error) = run(&state, &pane_id, &hosting.id, connection, completions).await {
-            if let Ok(gate) = state.terminals.hosting_gate(&pane_id) {
-                let _gate = gate.lock().await;
-                if let Ok(Some(mut current)) = state.terminals.hosting(&pane_id) {
-                    if current.id == hosting.id && !current.phase.stopped() {
-                        transition(&mut current, TerminalHostingPhase::Failed);
-                        current.error = Some(format!("{error:#}"));
-                        if let Err(error) =
-                            state
-                                .terminals
-                                .set_hosting(&pane_id, Some(&hosting.id), Some(current))
-                        {
-                            tracing::error!(%error, %pane_id, "cannot persist hosting failure");
-                        }
-                        state.workspace_events.terminals_changed();
-                    }
+        if let Err(error) = run(&state, &pane_id, &hosting.id, connection, completions).await
+            && let Ok(gate) = state.terminals.hosting_gate(&pane_id)
+        {
+            let _gate = gate.lock().await;
+            if let Ok(Some(mut current)) = state.terminals.hosting(&pane_id)
+                && current.id == hosting.id
+                && !current.phase.stopped()
+            {
+                transition(&mut current, TerminalHostingPhase::Failed);
+                current.error = Some(format!("{error:#}"));
+                if let Err(error) =
+                    state
+                        .terminals
+                        .set_hosting(&pane_id, Some(&hosting.id), Some(current))
+                {
+                    tracing::error!(%error, %pane_id, "cannot persist hosting failure");
                 }
+                state.workspace_events.terminals_changed();
             }
         }
         if let Ok(mut workers) = state.terminals.inner.hosting_workers.lock() {

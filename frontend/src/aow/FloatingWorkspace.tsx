@@ -82,9 +82,9 @@ export function FloatingWorkspace({ agents, projects, activeLocation = true }: {
       onPointerMove={event => { const start = launcherDrag.current; if (!start) return;
         if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 4) start.moved = true;
         if (start.moved) setLauncher({ left: Math.max(8, Math.min(window.innerWidth - 54, start.left + event.clientX - start.x)), top: Math.max(8, Math.min(window.innerHeight - 54, start.top + event.clientY - start.y)) }); }}
-      onPointerUp={() => { if (!launcherDrag.current?.moved) floating.visible ? floating.minimize() : floating.show(); launcherDrag.current = undefined; }}
+      onPointerUp={() => { if (!launcherDrag.current?.moved) { if (floating.visible) floating.minimize(); else floating.show(); } launcherDrag.current = undefined; }}
       onPointerCancel={() => { launcherDrag.current = undefined; }}
-      onClick={event => { if (event.detail === 0) floating.visible ? floating.minimize() : floating.show(); }}><PanelsTopLeft /></button>
+      onClick={event => { if (event.detail === 0) { if (floating.visible) floating.minimize(); else floating.show(); } }}><PanelsTopLeft /></button>
     <div ref={panelRef} data-floating-workspace className={`floating-workspace${maximized ? ' maximized' : ''}`} role="dialog" aria-label="浮动工作区" aria-hidden={!floating.visible} inert={!floating.visible}
       tabIndex={-1} style={{ ...(maximized ? { left: 8, top: 8, width: window.innerWidth - 16, height: window.innerHeight - 16 } : bounds), visibility: floating.visible ? 'visible' : 'hidden', pointerEvents: floating.visible ? undefined : 'none' }}>
       <WorkspaceTabs workspaceKey="floating" revealRequest={floating.tabRevealRequest} tabs={tabs} activeId={floating.active ? tabKey(floating.active) : undefined} visible={floating.visible} agents={agents}
