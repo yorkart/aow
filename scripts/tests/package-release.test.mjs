@@ -31,7 +31,7 @@ function fixture(t) {
   write(join(tools, 'uname'), `#!/bin/sh\ncase "$1" in -s) echo Linux;; -m) echo ${machine};; esac\n`, true);
   mkdirSync(join(repo, 'vt-worker'), { recursive: true });
   for (const path of [
-    'justfile', 'scripts/package-release.sh', 'scripts/install-release.sh', 'scripts/install-local.sh',
+    'scripts/package-release.sh', 'scripts/install-release.sh', 'scripts/install-local.sh',
     'scripts/start-server.sh', 'scripts/start-terminald.sh', 'scripts/replace-symlink.mjs', 'scripts/server-state-dir.sh',
     'scripts/start-launchd.sh', 'scripts/launchd-service.mjs', 'scripts/activate-terminald.mjs', 'scripts/service-health.mjs',
     'scripts/launchd-mode.mjs', 'scripts/start-launchdaemon.mjs', 'scripts/register-launchdaemon.py',
@@ -47,6 +47,7 @@ function fixture(t) {
   }
   write(join(repo, 'frontend/dist/index.html'), '<html>release frontend</html>');
   write(join(repo, 'frontend/dist/assets/app.js'), 'console.log("release")');
+  write(join(repo, 'vt-worker/dist/vt-worker.mjs'), '// bundled worker');
   for (const name of ['cargo', 'npm']) {
     write(join(tools, name), `#!/bin/sh
 printf '%s %s\\n' '${name}' "$*" >> "$BUILD_LOG"
@@ -96,11 +97,14 @@ printf '%s %s\\n' '${name}' "$*" >> "$BUILD_LOG"
 
 test('full native packaging builds four binaries and both frontends without installing services', t => {
   const f = fixture(t);
-  const packed = f.run('just', ['package', '--version', '1.2.0']);
+  const packed = f.pack(['--version', '1.2.0']);
   assert.equal(packed.status, 0, packed.stderr);
   assert.equal(packed.stdout.trim(), join(f.repo, 'target/packages/aow-1.2.0.tar.gz'));
   const builds = f.log(f.buildLog);
-  assert.equal((builds.match(/^cargo /gm) ?? []).length, 4);
+  assert.equal((builds.match(/^cargo /gm) ?? []).length, 1);
+  for (const binary of ['aow-server', 'aow-terminald', 'aow-automation-runner', 'aow-cli']) {
+    assert.ok(builds.includes(`--bin ${binary}`), builds);
+  }
   for (const line of builds.split('\n').filter(line => line.startsWith('cargo '))) {
     assert.ok(line.includes(`--target ${target}`), line);
     assert.ok(line.includes(`--target-dir ${join(f.repo, 'target')}`), line);
@@ -137,15 +141,42 @@ test('default version and skip-build create a complete package without invoking 
   assert.equal(existsSync(f.runtime), false);
 });
 
-test('just install deploys the latest local package or an explicit path without downloads', t => {
+test('shared web assets still build and validate all native binaries without npm', t => {
+  const f = fixture(t);
+  write(join(f.tools, 'npm'), '#!/bin/sh\necho unexpected npm >&2\nexit 99\n', true);
+  const result = f.pack(['--version', 'shared-web', '--skip-web-build']);
+  assert.equal(result.status, 0, result.stderr);
+  const builds = f.log(f.buildLog);
+  assert.equal((builds.match(/^cargo /gm) ?? []).length, 1);
+  assert.equal(f.log(join(f.temp, 'elf.log')).trim().split('\n').length, 4);
+  const manifest = JSON.parse(f.run('tar', ['-xOf', result.stdout.trim(), './manifest.json']).stdout);
+  assert.equal(manifest.reused_build_artifacts, false);
+  assert.equal(manifest.reused_web_assets, true);
+  f.assertClean();
+});
+
+for (const asset of ['frontend/dist/index.html', 'vt-worker/dist/vt-worker.mjs']) {
+  test(`missing shared asset ${asset} fails before compiling`, t => {
+    const f = fixture(t);
+    rmSync(join(f.repo, asset));
+    const result = f.pack(['--skip-web-build']);
+    assert.notEqual(result.status, 0);
+    assert.ok(result.stderr.includes(`missing ${asset}`), result.stderr);
+    assert.equal(f.log(f.buildLog), '');
+    assert.equal(existsSync(join(f.repo, 'target/packages/latest')), false);
+    f.assertClean();
+  });
+}
+
+test('local install deploys the latest package or an explicit path without downloads', t => {
   const f = fixture(t);
   write(join(f.tools, 'curl'), '#!/bin/sh\necho unexpected download >&2\nexit 99\n', true);
-  const missing = f.run('just', ['install']);
+  const missing = f.run('bash', ['scripts/install-local.sh']);
   assert.notEqual(missing.status, 0);
   assert.match(missing.stderr, /Build it with just package first/);
   assert.equal(existsSync(join(f.runtime, 'latest')), false);
   assert.equal(f.pack(['--version', 'local-1']).status, 0);
-  const installed = f.run('just', ['install']);
+  const installed = f.run('bash', ['scripts/install-local.sh']);
   assert.equal(installed.status, 0, installed.stdout + installed.stderr);
   assert.equal(readlinkSync(join(f.runtime, 'active/server')), '../releases/local-1');
   assert.match(installed.stdout, /Skipped terminald/);
@@ -153,7 +184,7 @@ test('just install deploys the latest local package or an explicit path without 
   const output = join(f.temp, 'custom packages');
   const packed = f.pack(['--version', 'local-2', '--output-dir', output]);
   assert.equal(packed.status, 0, packed.stderr);
-  const explicit = f.run('just', ['install', packed.stdout.trim()]);
+  const explicit = f.run('bash', ['scripts/install-local.sh', packed.stdout.trim()]);
   assert.equal(explicit.status, 0, explicit.stdout + explicit.stderr);
   assert.equal(readlinkSync(join(f.runtime, 'active/server')), '../releases/local-2');
   assert.equal(existsSync(join(f.runtime, '.install.lock')), false);

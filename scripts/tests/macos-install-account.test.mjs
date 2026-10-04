@@ -6,12 +6,11 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-test('just install forwards its optional user and keeps positional package compatibility', t => {
+test('local install forwards its optional user and keeps positional package compatibility', t => {
   const directory = mkdtempSync(join(tmpdir(), 'aow-install-entry-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   mkdirSync(join(directory, 'scripts'));
   mkdirSync(join(directory, 'tools'));
-  copyFileSync(new URL('../../justfile', import.meta.url), join(directory, 'justfile'));
   copyFileSync(new URL('../install-local.sh', import.meta.url), join(directory, 'scripts/install-local.sh'));
   writeFileSync(join(directory, 'tools/uname'), '#!/bin/sh\necho Darwin\n', { mode: 0o755 });
   writeFileSync(join(directory, 'scripts/install-macos.py'), 'import json,sys\nprint(json.dumps(sys.argv[1:]))\n');
@@ -21,7 +20,7 @@ test('just install forwards its optional user and keeps positional package compa
     [['a package.tar.gz', '--user', 'aow-service'], ['--package', 'a package.tar.gz', '--user', 'aow-service']],
     [['--user', 'aow-service', '--package', 'a package.tar.gz'], ['--package', 'a package.tar.gz', '--user', 'aow-service']],
   ]) {
-    const result = spawnSync('just', ['install', ...args], { cwd: directory, encoding: 'utf8', timeout: 10000,
+    const result = spawnSync('bash', ['scripts/install-local.sh', ...args], { cwd: directory, encoding: 'utf8', timeout: 10000,
       env: { ...process.env, PATH: `${join(directory, 'tools')}:${process.env.PATH}` } });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.deepEqual(JSON.parse(result.stdout), expected);
