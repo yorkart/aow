@@ -31,14 +31,14 @@ impl TextInput {
         } else {
             self.content
         };
-        if let Some(text) = &text {
-            if text.trim().is_empty() || text.len() > 128 * 1024 || text.contains('\0') {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "Inbox text must contain 1-131072 bytes without NUL",
-                )
-                .into());
-            }
+        if let Some(text) = &text
+            && (text.trim().is_empty() || text.len() > 128 * 1024 || text.contains('\0'))
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Inbox text must contain 1-131072 bytes without NUL",
+            )
+            .into());
         }
         Ok(text)
     }

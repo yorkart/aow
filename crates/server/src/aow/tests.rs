@@ -702,8 +702,8 @@ async fn pinned_directories_roll_back_when_config_write_fails() {
         .await
         .unwrap();
     let settings_path = manager.inner.settings_path.as_ref().unwrap();
-    std::fs::remove_file(&settings_path).unwrap();
-    std::fs::create_dir(&settings_path).unwrap();
+    std::fs::remove_file(settings_path).unwrap();
+    std::fs::create_dir(settings_path).unwrap();
     assert!(
         manager
             .update_pinned_directories(UpdatePinnedDirectoriesRequest {
@@ -869,8 +869,8 @@ fn pinned_worktrees_roll_back_when_config_write_fails() {
         })
         .unwrap();
     let settings_path = manager.inner.settings_path.as_ref().unwrap();
-    std::fs::remove_file(&settings_path).unwrap();
-    std::fs::create_dir(&settings_path).unwrap();
+    std::fs::remove_file(settings_path).unwrap();
+    std::fs::create_dir(settings_path).unwrap();
     assert!(
         manager
             .update_pinned_worktrees(UpdatePinnedWorktreesRequest {
@@ -1366,7 +1366,7 @@ async fn detected_agent_configuration_persists_launches_and_resets() {
         .into_iter()
         .next()
         .unwrap()
-        .into_launch(&[bin.clone()])
+        .into_launch(std::slice::from_ref(&bin))
         .unwrap();
     let output = StdCommand::new(&launch.executable)
         .args(&launch.args)
@@ -1437,8 +1437,8 @@ async fn agent_configuration_rejects_invalid_environment_and_failed_writes() {
         .await
         .unwrap();
     let registry = manager.inner.agents_path.as_ref().unwrap();
-    std::fs::remove_file(&registry).unwrap();
-    std::fs::create_dir(&registry).unwrap();
+    std::fs::remove_file(registry).unwrap();
+    std::fs::create_dir(registry).unwrap();
     let mut update = request.clone();
     update["args"] = serde_json::json!(["--changed"]);
     assert!(

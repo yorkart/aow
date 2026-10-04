@@ -286,10 +286,10 @@ time.sleep(30)
         assert_eq!(tab["panes"][0]["agent_profile_id"], id);
         let invocation: Value = tokio::time::timeout(Duration::from_secs(5), async {
             loop {
-                if let Ok(bytes) = std::fs::read(&log) {
-                    if let Ok(value) = serde_json::from_slice(&bytes) {
-                        break value;
-                    }
+                if let Ok(bytes) = std::fs::read(&log)
+                    && let Ok(value) = serde_json::from_slice(&bytes)
+                {
+                    break value;
                 }
                 tokio::time::sleep(Duration::from_millis(20)).await;
             }
@@ -342,10 +342,10 @@ time.sleep(30)
         assert_eq!(rebuilt["panes"][0]["arguments"], json!(expected_args));
         let replay: Value = tokio::time::timeout(Duration::from_secs(5), async {
             loop {
-                if let Ok(bytes) = std::fs::read(&log) {
-                    if let Ok(value) = serde_json::from_slice(&bytes) {
-                        break value;
-                    }
+                if let Ok(bytes) = std::fs::read(&log)
+                    && let Ok(value) = serde_json::from_slice(&bytes)
+                {
+                    break value;
                 }
                 tokio::time::sleep(Duration::from_millis(20)).await;
             }
@@ -413,12 +413,11 @@ async fn control(
         .unwrap();
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
-            if let Some(Ok(tungstenite::Message::Text(text))) = socket.next().await {
-                if let Ok(TerminalAttachServerMessage::Control { state }) =
+            if let Some(Ok(tungstenite::Message::Text(text))) = socket.next().await
+                && let Ok(TerminalAttachServerMessage::Control { state }) =
                     serde_json::from_str(&text)
-                {
-                    return state;
-                }
+            {
+                return state;
             }
         }
     })

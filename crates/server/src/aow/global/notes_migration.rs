@@ -12,31 +12,31 @@ impl AowManager {
         let previous = self.settings()?;
         let mut projects = self.lock()?.projects.clone();
         let mut moves = Vec::new();
-        if let Some(base) = &base {
-            if base != Path::new(&previous.notes_base) {
-                for project in &mut projects {
-                    if project.notes_custom {
-                        continue;
+        if let Some(base) = &base
+            && base != Path::new(&previous.notes_base)
+        {
+            for project in &mut projects {
+                if project.notes_custom {
+                    continue;
+                }
+                let identity = match &project.notes_identity {
+                    Some(identity) => Some(identity.clone()),
+                    None => notes::default_notes_identity(Path::new(&project.registered_path))
+                        .await
+                        .ok()
+                        .filter(|identity| {
+                            Path::new(&previous.notes_base).join(identity)
+                                == Path::new(&project.notes_path)
+                        }),
+                };
+                if let Some(identity) = identity {
+                    let target = base.join(&identity);
+                    let source = PathBuf::from(&project.notes_path);
+                    if target != source {
+                        moves.push((source, target.clone()));
                     }
-                    let identity = match &project.notes_identity {
-                        Some(identity) => Some(identity.clone()),
-                        None => notes::default_notes_identity(Path::new(&project.registered_path))
-                            .await
-                            .ok()
-                            .filter(|identity| {
-                                Path::new(&previous.notes_base).join(identity)
-                                    == Path::new(&project.notes_path)
-                            }),
-                    };
-                    if let Some(identity) = identity {
-                        let target = base.join(&identity);
-                        let source = PathBuf::from(&project.notes_path);
-                        if target != source {
-                            moves.push((source, target.clone()));
-                        }
-                        project.notes_identity = Some(identity);
-                        project.notes_path = target.to_string_lossy().into_owned();
-                    }
+                    project.notes_identity = Some(identity);
+                    project.notes_path = target.to_string_lossy().into_owned();
                 }
             }
         }
@@ -107,11 +107,10 @@ impl AowManager {
                 for (alias, target) in aliases { let _ = std::os::unix::fs::symlink(target, alias); }
             } else {
                 for moved in &completed {
-                    if let Some(backup) = &moved.backup {
-                        if let Err(error) = std::fs::remove_dir_all(backup) {
+                    if let Some(backup) = &moved.backup
+                        && let Err(error) = std::fs::remove_dir_all(backup) {
                             tracing::warn!(%error, path = %backup.display(), "Notes migration retained backup");
                         }
-                    }
                 }
             }
             result

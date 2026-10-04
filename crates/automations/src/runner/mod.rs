@@ -53,17 +53,16 @@ pub async fn run(
     let deleted = task.deleted;
     let mut variables = Default::default();
     let mut hosted = false;
-    if source == RunSource::Manual {
-        if let Some(request) = id
+    if source == RunSource::Manual
+        && let Some(request) = id
             .as_deref()
             .map(|id| store.take_manual_request(task_id, id))
             .transpose()?
             .flatten()
-        {
-            task = request.task;
-            variables = request.variables;
-            hosted = request.hosted;
-        }
+    {
+        task = request.task;
+        variables = request.variables;
+        hosted = request.hosted;
     }
     task.launch.environment.remove("PATH");
     let mut run = initial_run(&task, id.unwrap_or_else(new_run_id), source);

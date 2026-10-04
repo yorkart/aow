@@ -12,12 +12,12 @@ import { prTabId } from './tabRoutes/pr';
 import { FloatingWorkspaceProvider, FloatingOpenMenu, useFloatingWorkspace, openingInFloatingWorkspace, withFloatingOpen, readStored, persist } from './floatingWorkspaceState';
 import type { SetStateAction, CSSProperties, DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from 'react';
 import {
-  ArrowUp, CalendarClock, Check, ChevronDown, ChevronRight, CircleHelp, CornerDownLeft, FileText, Files, FolderGit2, FolderOpen, GitBranch, GitBranchPlus, GitPullRequest, MessageSquare, MoreHorizontal,
-  LoaderCircle, NotebookPen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pencil, Pin, PinOff, Plus, RefreshCw, Settings, SquareTerminal, Trash2, X,
+  ArrowUp, CalendarClock, Check, ChevronRight, CircleHelp, CornerDownLeft, FileText, Files, FolderGit2, FolderOpen, GitBranch, GitBranchPlus, GitPullRequest, MessageSquare, MoreHorizontal,
+  LoaderCircle, NotebookPen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pin, PinOff, Plus, RefreshCw, Settings, SquareTerminal, Trash2, X,
 } from 'lucide-react';
 import { gitApi } from '../features/git/api';
 import { filesApi } from '../features/files/api';
-import { EditorSettingsProvider, useEditorSettings, useWordWrapOverrides } from '../features/editor/editorSettings';
+import { EditorSettingsProvider, useWordWrapOverrides } from '../features/editor/editorSettings';
 import { AutomationDetail } from '../features/automations/AutomationDetail';
 import { AutomationPanel } from '../features/automations/AutomationPanel';
 import type { AutomationRun, AutomationTask } from '../features/automations/types';
@@ -25,8 +25,6 @@ import { TerminalPanel } from '../features/terminals/TerminalPanel';
 import type { TerminalSort } from '../features/terminals/TerminalScopeMenu';
 import { isCliTerminal, terminalTabPresentation } from '../features/terminals/terminalPresentation';
 import { AgentSessions } from '../features/sessions/AgentSessions';
-import { AgentIcon } from '../features/agents/AgentIcon';
-import { aowAgentType } from '../features/agents/agentTypes';
 import { SessionShareButton } from '../features/sessions/SessionShareButton';
 import { Explorer } from '../features/files/Explorer';
 import { SystemFileBrowser } from '../features/files/SystemFileBrowser';
@@ -1381,7 +1379,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
 
   const renameExplorerEntry = async (source: 'project' | 'notes', path: string, requestedName: string) => {
     const name = requestedName.trim();
-    if (!name || name === '.' || name === '..' || /[\/\\\0]/.test(name) || new TextEncoder().encode(name).length > 255) {
+    if (!name || name === '.' || name === '..' || /[/\\\0]/.test(name) || new TextEncoder().encode(name).length > 255) {
       throw new Error('名称无效：请输入不含路径分隔符且不超过 255 字节的名称。');
     }
     const existingDocument = documents.find((document) => document.explorerSource === source && document.path === path);
@@ -1674,7 +1672,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     try {
       await renameAowFile(tab.targetId, name);
     } catch (reason) {
-      throw new Error(`文件重命名失败：${message(reason)}`);
+      throw new Error(`文件重命名失败：${message(reason)}`, { cause: reason });
     }
   };
 

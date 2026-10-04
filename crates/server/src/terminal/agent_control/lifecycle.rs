@@ -125,9 +125,8 @@ impl TerminalManager {
             tokio::select! {
                 message = connection.socket.next() => { AgentConnection::check(message)?; }
                 _ = interval.tick() => {
-                    if let Some(screen) = self.inner.terminald.screen(pane_id).await.map_err(map_client_error)? {
-                        if predicate(&screen) { return Ok(screen); }
-                    }
+                    if let Some(screen) = self.inner.terminald.screen(pane_id).await.map_err(map_client_error)?
+                        && predicate(&screen) { return Ok(screen); }
                     let runtime = self.inner.terminald.get(pane_id).await.map_err(map_client_error)?;
                     if runtime.is_none_or(|runtime| runtime.status != TerminalPaneStatus::Running) {
                         return Err(TerminalError::Conflict("agent exited before becoming ready".into()));

@@ -104,15 +104,15 @@ impl InboxStore {
         let result = change(&mut next)?;
         next.revision += 1;
         validate_document(&next)?;
-        if let Some(persistence) = &self.0.persistence {
-            if let Err(error) = persistence.save_document(&next) {
-                // ConfigRepository may save successfully before a Git commit fails.
-                // Reflect that durable write instead of accepting stale revisions.
-                if let Ok(durable) = persistence.document() {
-                    state.document = durable;
-                }
-                return Err(internal(error));
+        if let Some(persistence) = &self.0.persistence
+            && let Err(error) = persistence.save_document(&next)
+        {
+            // ConfigRepository may save successfully before a Git commit fails.
+            // Reflect that durable write instead of accepting stale revisions.
+            if let Ok(durable) = persistence.document() {
+                state.document = durable;
             }
+            return Err(internal(error));
         }
         state.document = next;
         Ok(result)
@@ -152,14 +152,14 @@ impl InboxStore {
             }
         };
         validate_comment(&comment)?;
-        if let Some(persistence) = &self.0.persistence {
-            if let Err(error) = persistence.append_comment(id, &comment) {
-                // An append can be durable even if committing it failed.
-                if let Ok(comments) = persistence.comments(id) {
-                    state.comments.insert(id.to_owned(), comments);
-                }
-                return Err(internal(error));
+        if let Some(persistence) = &self.0.persistence
+            && let Err(error) = persistence.append_comment(id, &comment)
+        {
+            // An append can be durable even if committing it failed.
+            if let Ok(comments) = persistence.comments(id) {
+                state.comments.insert(id.to_owned(), comments);
             }
+            return Err(internal(error));
         }
         let comments = state.comments.entry(id.to_owned()).or_default();
         if !comments.iter().any(|existing| existing.id == comment.id) {

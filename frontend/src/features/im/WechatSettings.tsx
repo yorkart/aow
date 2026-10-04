@@ -88,7 +88,6 @@ export function WechatSettings({ provider, disabled, onChanged, onBusyChange }: 
     void poll();
     return () => { active = false; controller.abort(); clearTimeout(timer); };
     // The loop owns status changes; cycle explicitly resumes after verification/retry.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [login?.id, cycle, onChanged]);
 
   const operation = async (work: () => Promise<void>) => {

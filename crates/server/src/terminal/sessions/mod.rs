@@ -104,15 +104,13 @@ pub(super) async fn list(
     let sessions = tokio::task::spawn_blocking(move || {
         let mut sessions =
             aow_agents::sessions::list_sessions(&scan_cwd, Some(&scan_agent), roots.clone());
-        if let Some(id) = exact_id {
-            if !sessions
+        if let Some(id) = exact_id
+            && !sessions
                 .iter()
                 .any(|session| session.locator().session_id == id)
-            {
-                if let Some(session) = aow_agents::sessions::find_session(&scan_agent, &id, roots) {
-                    sessions.insert(0, session);
-                }
-            }
+            && let Some(session) = aow_agents::sessions::find_session(&scan_agent, &id, roots)
+        {
+            sessions.insert(0, session);
         }
         sessions
     })

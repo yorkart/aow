@@ -15,6 +15,31 @@
 - Do not run installation and release script regression tests (`node --test scripts/tests/*.test.mjs`) during normal development. Run them only when developing or modifying installation or release script functionality. Since `just test` includes these tests, run its remaining validation steps individually for unrelated changes.
 - If validation cannot be run because of environment or dependency issues, state that clearly; do not claim it passed.
 
+## Lint and Static Analysis
+
+- Before committing, run the checks below for every language changed. Changes to shared lint configuration require the full affected language check. Include source code, tests, build scripts, and extensionless launchers; exclude generated output and third-party dependencies.
+- Treat lint warnings as failures. Inspect compiler output as well as the exit status. Fix findings before submitting a PR; use a narrowly scoped suppression with a concrete reason only when the code intentionally requires the flagged behavior. Do not disable a rule globally to bypass a new finding.
+- Run commands from the repository root. Use Node.js 22.16+ (22.x) or a newer supported LTS, install Node lint dependencies with `npm ci --ignore-scripts --no-audit --no-fund`, and install `scripts/lint/requirements.txt` into a Python virtual environment on `PATH`. Use actionlint 1.7.12 for workflow checks. Tool versions and lint rules are maintained in the repository configuration files.
+- Rust checks require the VT bundle first: `npm --prefix vt-worker ci --ignore-scripts --no-audit --no-fund` and `npm --prefix vt-worker run build`. Install the `rustfmt` and `clippy` components for the active stable Rust toolchain.
+
+| Language or format | Required checks |
+| --- | --- |
+| Rust | `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets --locked -- -D warnings`. CI checks both Linux and macOS conditional code. |
+| TypeScript / TSX | `npm run lint:js`, `npm --prefix frontend run typecheck`, and `frontend/node_modules/.bin/tsc -p website/snapshot/tsconfig.json --pretty false`. Install frontend dependencies before type checking. |
+| JavaScript / MJS | `npm run lint:js`; ESLint covers the frontend, VT worker, portal, scripts, and tests, including React Hook call-order checks. |
+| CSS | `npm run lint:css`. Preserve intentional cascade ordering and the existing compact style. |
+| HTML | `npm run lint:html`, including browser preview fixtures and the static portal. |
+| Python | `npm run lint:python` (Ruff), including installers, adapters, and test helpers. |
+| Shell | `npm run lint:shell`; this checks syntax with the declared shell and runs ShellCheck on scripts and `packaging/bin` launchers. |
+| C | On macOS, run `clang -Wall -Wextra -Werror -fsyntax-only crates/macos-log/src/os_log.c` and `clang --analyze -Xanalyzer -analyzer-output=text -Xanalyzer -analyzer-werror -Wall -Wextra -Werror crates/macos-log/src/os_log.c`. Other hosts must disclose that the macOS SDK check was not run. |
+| JSON / TOML / YAML | `npm run lint:config` validates repository configuration, including duplicate YAML keys; also run `npm run lint:yaml` for YAML style and structure. |
+| GitHub Actions | `npm run lint:workflows` (actionlint with ShellCheck available on `PATH`). |
+| Markdown | `npm run lint:markdown` for the configured markup checks. |
+
+- `npm run lint` runs the Node-based language and document checks together. Python, shell, workflow, Rust, and C checks remain explicit commands as listed above.
+- CI must invoke Cargo, npm, Python, ShellCheck, Clang, and actionlint directly or through the checked-in scripts; CI must not install or depend on `just`. All applicable lint jobs must pass before publishing a release.
+- Lint and type checks complement the build and test requirements above; a passing formatter alone does not satisfy lint requirements. Do not regenerate portal snapshots merely to run lint.
+
 ## Pull Request Requirements
 
 - Both the pull request title and description must be written in English. This requirement does not apply to code, commit messages, or other discussion.

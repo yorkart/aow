@@ -218,7 +218,7 @@ fn persistent_load_preserves_running_desired_state() {
         })
         .unwrap()
         .into_iter()
-        .chain([b'\n'])
+        .chain(*b"\n")
         .collect::<Vec<_>>()
     );
 }
@@ -1596,7 +1596,7 @@ async fn pane_sessions_use_live_cwd_and_config_and_cache_readable_claude_snapsho
     .expect("native process completion was not delivered");
     assert_eq!(event.agent, "claude");
     assert_eq!(event.session_id, id);
-    assert_eq!(event.instance_ids, [pane_id.clone()]);
+    assert_eq!(event.instance_ids, std::slice::from_ref(pane_id));
     assert_eq!(manager.get_snapshot(&tab.id).unwrap(), tab);
     drop(stream);
     stop_daemon(shutdown, daemon).await;

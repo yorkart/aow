@@ -16,7 +16,7 @@ pub(super) async fn request<T: Serialize + ?Sized>(
     path: &str,
     body: Option<&T>,
 ) -> Result<(StatusCode, Bytes), TerminaldClientError> {
-    let stream = UnixStream::connect(&*socket).await?;
+    let stream = UnixStream::connect(socket).await?;
     let (mut sender, connection) = http1::handshake(TokioIo::new(stream)).await?;
     tokio::spawn(async move {
         if let Err(error) = connection.await {

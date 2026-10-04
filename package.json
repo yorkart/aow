@@ -1,0 +1,32 @@
+{
+  "name": "aow-repository-tools",
+  "private": true,
+  "type": "module",
+  "engines": { "node": "^22.16.0 || >=24.0.0" },
+  "scripts": {
+    "lint": "npm run lint:js && npm run lint:css && npm run lint:html && npm run lint:config && npm run lint:markdown",
+    "lint:js": "eslint . --max-warnings 0",
+    "lint:css": "stylelint 'frontend/**/*.css' 'website/**/*.css' --max-warnings 0",
+    "lint:html": "html-validate 'frontend/**/*.html' 'website/**/*.html' --max-warnings 0",
+    "lint:config": "node scripts/lint/config.mjs",
+    "lint:markdown": "markdownlint-cli2",
+    "lint:shell": "node scripts/lint/shell.mjs",
+    "lint:python": "ruff check .",
+    "lint:yaml": "node scripts/lint/yaml.mjs",
+    "lint:workflows": "actionlint"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.12.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "16.5.0",
+    "html-validate": "10.17.0",
+    "markdownlint-cli2": "0.20.0",
+    "smol-toml": "1.9.0",
+    "stylelint": "16.26.1",
+    "stylelint-config-recommended": "16.0.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.71.0",
+    "yaml": "2.9.1"
+  }
+}

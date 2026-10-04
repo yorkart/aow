@@ -1,3 +1,8 @@
+#![expect(
+    clippy::result_large_err,
+    reason = "Configuration routes return Axum error responses directly without an extra heap allocation"
+)]
+
 use super::*;
 use aow_config::{ConfigRepository, ConfigSelection, RepositoryVersions};
 

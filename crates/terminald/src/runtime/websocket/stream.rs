@@ -84,11 +84,8 @@ where
                 expected_offset = current.expected_offset,
                 "terminal attachment lagged; catching up from scrollback"
             );
-            let Some((expected_offset, events, output_closed)) =
-                catch_up_stream(sender, runtime, current.owner, current.expected_offset).await
-            else {
-                return None;
-            };
+            let (expected_offset, events, output_closed) =
+                catch_up_stream(sender, runtime, current.owner, current.expected_offset).await?;
             current.expected_offset = expected_offset;
             current.events = events;
             current.output_closed |= output_closed;

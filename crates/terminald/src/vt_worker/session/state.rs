@@ -62,7 +62,7 @@ impl SessionState {
     }
 
     pub(in crate::vt_worker) fn invalidate_for_resize(&self) -> Option<u64> {
-        let revision = match self.geometry_revision.fetch_update(
+        let revision = match self.geometry_revision.try_update(
             Ordering::AcqRel,
             Ordering::Acquire,
             |revision| revision.checked_add(1),

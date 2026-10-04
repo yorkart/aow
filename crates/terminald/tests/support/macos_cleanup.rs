@@ -134,6 +134,10 @@ async fn cleanup_reaches_other_process_groups_without_touching_other_sessions() 
 
 #[test]
 #[ignore = "subprocess fixture for macOS session cleanup"]
+#[expect(
+    clippy::zombie_processes,
+    reason = "The fixture deliberately leaves an orphan for terminald's natural-exit cleanup test"
+)]
 fn session_cleanup_fixture() {
     let Some(directory) = std::env::var_os("AOW_CLEANUP_FIXTURE") else {
         return;

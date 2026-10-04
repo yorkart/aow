@@ -52,11 +52,11 @@ impl TerminalManager {
             for pane in &mut tab.panes {
                 // Pane names are generated. Legacy custom labels are discarded.
                 pane.name = default_pane_name(&pane.cwd, &pane.shell);
-                if let Some(agent) = &mut pane.agent_terminal {
-                    if agent.phase == aow_protocol::AgentTerminalPhase::Starting {
-                        agent.phase = aow_protocol::AgentTerminalPhase::Failed;
-                        agent.error = Some("AoW restarted during agent initialization".into());
-                    }
+                if let Some(agent) = &mut pane.agent_terminal
+                    && agent.phase == aow_protocol::AgentTerminalPhase::Starting
+                {
+                    agent.phase = aow_protocol::AgentTerminalPhase::Failed;
+                    agent.error = Some("AoW restarted during agent initialization".into());
                 }
             }
             migrate_terminal_names(tab);

@@ -1,8 +1,10 @@
 @import './components/aow-text.css';
 @import './components/aow-icons.css';
 
-:root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; --bg:#1e1e1e; --panel:#252526; --panel2:#181818; --line:#3b3b3b; --accent:#007acc; --hover:#2a2d2e; }
-:root { --aow-surface:#181a1f; --aow-panel:#1b1e23; --aow-sidebar-background:#292c32; --aow-sidebar-selection:#d3def00e; --aow-header:#202329; --aow-input:#16181c; --aow-line:#30343c; --aow-control-line:#474e59; --aow-hover:#292d35; --aow-list-highlight:#3d4044; --aow-accent:#6ca8f1; --aow-selection:#243b59; --aow-primary:#3569a6; --aow-primary-hover:#437dbe; --aow-success:#4ec9b0; --aow-error:#f48771; }
+:root {
+  color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; --bg:#1e1e1e; --panel:#252526; --panel2:#181818; --line:#3b3b3b; --accent:#007acc; --hover:#2a2d2e;
+  --aow-surface:#181a1f; --aow-panel:#1b1e23; --aow-sidebar-background:#292c32; --aow-sidebar-selection:#d3def00e; --aow-header:#202329; --aow-input:#16181c; --aow-line:#30343c; --aow-control-line:#474e59; --aow-hover:#292d35; --aow-list-highlight:#3d4044; --aow-accent:#6ca8f1; --aow-selection:#243b59; --aow-primary:#3569a6; --aow-primary-hover:#437dbe; --aow-success:#4ec9b0; --aow-error:#f48771;
+}
 * { box-sizing: border-box; }
 html, body, #root { width:100%; height:100%; margin:0; overflow:hidden; }
 button, select { font:inherit; color:inherit; }
@@ -296,6 +298,7 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .project-aow-worktrees > button.compact > .project-aow-worktree-branch { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:400; }
 .project-aow-worktrees > button > .project-aow-worktree-unread,.project-aow-pinned > button > .project-aow-worktree-unread { flex:0 0 auto; min-width:17px; height:17px; display:inline-flex; align-items:center; justify-content:center; margin-left:auto; padding:0 5px; border-radius:8px; color:#dce8fa; background:#48596f; font-size:9px; font-weight:600; line-height:17px; font-variant-numeric:tabular-nums; }
 .project-aow-worktrees > button.compact > .project-aow-worktree-unread { background:#3e4857; }
+/* stylelint-disable-next-line no-duplicate-selectors -- Drag affordances follow the shared button states to preserve their cascade. */
 .project-aow-pinned > button { position:relative; cursor:grab; user-select:none; }
 .project-aow-pinned > button:active { cursor:grabbing; }
 .project-aow-pinned > button.dragging { opacity:.42; }
@@ -714,6 +717,7 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .project-aow-register-preview code { color:var(--aow-muted); font-size:10px; }
 .project-aow-register-error { border:1px solid #6f332d; border-radius:4px; overflow-wrap:anywhere; }
 .project-aow-dialog .project-aow-dialog-footer { flex:0 0 auto; align-items:center; flex-wrap:wrap; gap:7px; margin:0; padding:10px 16px; border-top:1px solid var(--aow-line); }
+/* stylelint-disable-next-line no-duplicate-selectors -- Header layout overrides follow the shared dialog sizing rules. */
 .project-aow-dialog > header strong { flex:0 0 auto; }
 .project-aow-dialog > header span { min-width:0; overflow:hidden; font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
 .project-aow-dialog .project-aow-dialog-body > .project-aow-dialog-button { align-self:flex-start; }

@@ -19,6 +19,38 @@ defaults:
     shell: bash
 
 jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install lint tools
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          python3 -m venv "$RUNNER_TEMP/lint-venv"
+          "$RUNNER_TEMP/lint-venv/bin/python" -m pip install --disable-pip-version-check -r scripts/lint/requirements.txt
+          echo "$RUNNER_TEMP/lint-venv/bin" >> "$GITHUB_PATH"
+          curl --fail --silent --show-error --location --retry 3 https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz --output "$RUNNER_TEMP/actionlint.tar.gz"
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP/lint-venv/bin" actionlint
+      - name: Lint TypeScript, JavaScript, CSS, HTML, configuration and Markdown
+        run: npm run lint
+      - name: Lint Python
+        run: npm run lint:python
+      - name: Lint shell scripts and extensionless launchers
+        run: npm run lint:shell
+      - name: Lint YAML and GitHub Actions
+        run: |
+          npm run lint:yaml
+          npm run lint:workflows
+
   version:
     runs-on: ubuntu-24.04
     outputs:
@@ -55,7 +87,7 @@ jobs:
           cache: npm
           cache-dependency-path: vt-worker/package-lock.json
       - name: Set up Rust
-        run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
+        run: rustup toolchain install stable --profile minimal --component clippy --component rustfmt --no-self-update && rustup default stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           shared-key: test-${{ matrix.runner }}
@@ -72,6 +104,15 @@ jobs:
             export TMPDIR
           fi
           cargo test --workspace --locked -- --test-threads=4
+      - name: Check Rust formatting and lint
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Check macOS C bridge
+        if: runner.os == 'macOS'
+        run: |
+          clang -Wall -Wextra -Werror -fsyntax-only crates/macos-log/src/os_log.c
+          clang --analyze -Xanalyzer -analyzer-output=text -Xanalyzer -analyzer-werror -Wall -Wextra -Werror crates/macos-log/src/os_log.c
 
   test-scripts:
     strategy:
@@ -111,6 +152,7 @@ jobs:
         run: |
           npm --prefix frontend ci --ignore-scripts --no-audit --no-fund
           npm --prefix frontend run build
+          frontend/node_modules/.bin/tsc -p website/snapshot/tsconfig.json --pretty false
           npm --prefix frontend run test:architecture
       - name: Build portable VT worker bundle
         if: needs.version.outputs.native-packages == 'true'
@@ -197,7 +239,7 @@ jobs:
           compression-level: 0
 
   publish:
-    needs: [version, test, test-scripts, frontend, build]
+    needs: [version, lint, test, test-scripts, frontend, build]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 15

@@ -497,7 +497,7 @@ async fn run_hosting_case(
     assert!(!prompt.contains("hosting-context.json"));
     assert!(!prompt.contains("Terminal"));
     let run_id = &runs[0];
-    let run = store.read_run(task_id, &run_id).unwrap().unwrap();
+    let run = store.read_run(task_id, run_id).unwrap().unwrap();
     assert_eq!(
         run.workspace_path.unwrap(),
         source_cwd.canonicalize().unwrap()

@@ -10,8 +10,8 @@ if [ ! -d "$active_release" ]; then
     exit 1
 fi
 
-release=$(CDPATH= cd -P "$active_release" && pwd)
-releases_dir=$(CDPATH= cd -P "$runtime_root/releases" && pwd)
+release=$(CDPATH='' cd -P "$active_release" && pwd)
+releases_dir=$(CDPATH='' cd -P "$runtime_root/releases" && pwd)
 case "$release" in
     "$releases_dir"/*) ;;
     *)

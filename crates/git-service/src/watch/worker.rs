@@ -113,13 +113,14 @@ pub(super) async fn run(
                     false
                 });
                 for (path, mode) in desired {
-                    if !watching.contains_key(&path) {
-                        match paths.add(&path, mode) {
+                    if let std::collections::btree_map::Entry::Vacant(entry) = watching.entry(path)
+                    {
+                        match paths.add(entry.key(), mode) {
                             Ok(()) => {
-                                watching.insert(path, mode);
+                                entry.insert(mode);
                             }
                             Err(error) => {
-                                tracing::debug!(%error, path = %path.display(), "Will retry Git metadata watch")
+                                tracing::debug!(%error, path = %entry.key().display(), "Will retry Git metadata watch")
                             }
                         }
                     }
