@@ -3,6 +3,61 @@ use std::path::{Path, PathBuf};
 use super::super::*;
 
 impl AowManager {
+    pub(crate) async fn execution_reference_path(
+        &self,
+        project_id: &str,
+        config: &aow_workspaces::WorkspaceConfig,
+    ) -> Result<String, AowError> {
+        config
+            .validate()
+            .map_err(|error| AowError::Invalid(error.to_string()))?;
+        if config.workspace_mode == aow_workspaces::WorkspaceMode::Existing {
+            return self
+                .agent_worktree_path(project_id, &config.workspace_path.to_string_lossy())
+                .await;
+        }
+        let project = self.project(project_id).await?;
+        let main = project
+            .worktrees
+            .iter()
+            .find(|tree| tree.is_main)
+            .or_else(|| project.worktrees.first())
+            .ok_or_else(|| AowError::Invalid("项目没有可用的 Worktree。".into()))?;
+        self.agent_worktree_path(project_id, &main.path).await
+    }
+
+    pub(crate) async fn prepare_workspace(
+        &self,
+        project_id: &str,
+        config: &aow_workspaces::WorkspaceConfig,
+        name: &str,
+    ) -> Result<aow_workspaces::PreparedWorkspace, AowError> {
+        let project_lock = self.inner.removals.project_lock(project_id)?;
+        let _project = project_lock.lock().await;
+        let project = self.project(project_id).await?;
+        aow_workspaces::prepare(
+            config,
+            Path::new(&project.registered_path),
+            name,
+            &WorkspaceGit,
+        )
+        .await
+        .map_err(|error| AowError::Invalid(format!("{error:#}")))
+    }
+
+    pub(crate) async fn automation_project_for_cwd(
+        &self,
+        id: &str,
+        cwd: &Path,
+    ) -> Result<(String, PathBuf), AowError> {
+        let cwd = paths::canonical_directory(cwd).await?;
+        // Resolve Git ownership rather than accepting any path beneath a registered
+        // root: a subdirectory may itself be a different repository or submodule.
+        let root = git_output(&cwd, &["rev-parse", "--show-toplevel"]).await?;
+        self.automation_project(id, Path::new(root.trim_end()))
+            .await
+    }
+
     pub(crate) async fn automation_project(
         &self,
         id: &str,
@@ -41,6 +96,10 @@ impl AowManager {
                 requested.display()
             )));
         }
+        self.resolve_agent_profile(id).await
+    }
+
+    pub(crate) async fn resolve_agent_profile(&self, id: &str) -> Result<AgentLaunch, AowError> {
         let path = self.execution_path().await?;
         let agent = self
             .agents_in_path(&path)?
@@ -63,6 +122,7 @@ impl AowManager {
         &self,
         pane: &aow_protocol::TerminalPane,
         workspace_root: &str,
+        temporary_workspace: bool,
     ) -> Result<AgentLaunch, AowError> {
         let profile_id =
             if let Some(id) = &pane.agent_profile_id {
@@ -94,9 +154,13 @@ impl AowManager {
                 }
                 candidates[0].id.clone()
             };
-        let launch = self
-            .resolve_agent_launch(&profile_id, workspace_root)
-            .await?;
+        let launch = if temporary_workspace {
+            paths::canonical_directory(Path::new(workspace_root)).await?;
+            self.resolve_agent_profile(&profile_id).await?
+        } else {
+            self.resolve_agent_launch(&profile_id, workspace_root)
+                .await?
+        };
         if Some(launch.agent_type.id()) != pane.agent_id.as_deref() {
             return Err(AowError::Invalid(
                 "原 Agent 配置的类型已改变，无法重建".into(),
@@ -123,5 +187,12 @@ impl AowManager {
             )));
         }
         Ok(requested.to_string_lossy().into_owned())
+    }
+}
+
+struct WorkspaceGit;
+impl aow_workspaces::GitExecutor for WorkspaceGit {
+    async fn output(&self, cwd: &Path, args: &[&str]) -> anyhow::Result<String> {
+        git_output(cwd, args).await.map_err(Into::into)
     }
 }

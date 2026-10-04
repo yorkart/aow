@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Bell, Bot, ChevronRight, FileText, GitPullRequest, MessageSquare, Network, NotebookPen, Pencil, RefreshCw, Settings, SquareTerminal, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Bell, Bot, ChevronRight, Copy, FileText, GitPullRequest, MessageSquare, Network, NotebookPen, Pencil, RefreshCw, Settings, SquareTerminal, Trash2, X } from 'lucide-react';
 import { aowApi } from '../../aow/aowApi';
 import { parseNodeAddresses } from '../../aow/aowNodes';
 import type { AowSettings } from '../../aow/types';
@@ -8,7 +8,8 @@ import { agentsApi } from '../agents/api';
 import { AgentIcon } from '../agents/AgentIcon';
 import { AgentArgumentsInput } from '../agents/AgentArgumentsInput';
 import { argumentsDraft, normalizeArguments } from '../agents/arguments';
-import { agentTypes, builtinAgentType, aowAgentType } from '../agents/agentTypes';
+import { environmentDraft, parseEnvironment } from '../agents/environment';
+import { agentTypes, builtinAgentType, aowAgentType, suggestedAgentExecutable } from '../agents/agentTypes';
 import { defaultEditorSettings, useEditorSettings } from '../editor/editorSettings';
 import { ReviewProviderSettings } from '../pr/ReviewProviderSettings';
 import { ConfigurationSettings } from '../configuration/ConfigurationSettings';
@@ -16,6 +17,7 @@ import { NotificationSettingsPanel } from '../notifications/NotificationSettings
 import { LogoutButton } from '../auth/LogoutButton';
 
 const message = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
+const emptyAgentBaseline = JSON.stringify(['', '', '', '', '']);
 
 const sections = [
   { id: 'configuration', label: 'Configuration', description: '选择配置仓库和版本', icon: Settings },
@@ -55,9 +57,9 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
   const [displayName, setDisplayName] = useState('');
   const [command, setCommand] = useState('');
   const [args, setArgs] = useState(() => argumentsDraft());
-  const [env, setEnv] = useState('{}');
+  const [env, setEnv] = useState(() => environmentDraft());
   const [agentSaved, setAgentSaved] = useState('');
-  const [agentBaseline, setAgentBaseline] = useState(() => JSON.stringify(['', '', '', argumentsDraft().text, '{}']));
+  const [agentBaseline, setAgentBaseline] = useState(emptyAgentBaseline);
   const agentForm = useRef<HTMLFormElement>(null);
   const dialog = useRef<HTMLElement>(null);
   const [busy, setBusy] = useState(false);
@@ -65,7 +67,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
   const dirty = reviewDirty || configurationDirty || mobile && (notificationDirty
     || !!settings && (notesBase !== settings.notes_base || nodeAddresses !== (settings.node_addresses ?? []).join('\n')
       || executionPath !== (settings.execution_path ?? []).join('\n') || editorWordWrap !== (settings.editor?.word_wrap ?? false))
-    || JSON.stringify([agentType, displayName, command, args.text, env]) !== agentBaseline);
+    || JSON.stringify([agentType, displayName, command, args.text, env.text]) !== agentBaseline);
   const onClose = () => {
     if (busy || settingsBusy) return;
     if (!dirty || window.confirm('设置有未保存的修改，是否放弃并关闭？')) closeDialog();
@@ -191,23 +193,37 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
     setDisplayName('');
     setCommand('');
     setArgs(argumentsDraft());
-    setEnv('{}');
-    setAgentBaseline(JSON.stringify(['', '', '', argumentsDraft().text, '{}']));
+    setEnv(environmentDraft());
+    setAgentBaseline(emptyAgentBaseline);
     setAgentSaved('');
     setError('');
   };
 
-  const editAgent = (agent: AowAgent) => {
-    setEditingAgentId(agent.id);
+  const loadAgent = (agent: AowAgent, copy = false) => {
+    const name = copy ? `${agent.display_name}（副本）` : agent.display_name;
+    const nextArgs = argumentsDraft(agent.args);
+    const nextEnv = environmentDraft(agent.env);
+    setEditingAgentId(copy ? undefined : agent.id);
     setAgentType(aowAgentType(agent) ?? '');
-    setDisplayName(agent.display_name);
+    setDisplayName(name);
     setCommand(agent.command ?? agent.executable ?? '');
-    setArgs(argumentsDraft(agent.args));
-    setEnv(JSON.stringify(agent.env ?? {}, null, 2));
-    setAgentBaseline(JSON.stringify([aowAgentType(agent) ?? '', agent.display_name, agent.command ?? agent.executable ?? '', argumentsDraft(agent.args).text, JSON.stringify(agent.env ?? {}, null, 2)]));
+    setArgs(nextArgs);
+    setEnv(nextEnv);
+    setAgentBaseline(copy ? emptyAgentBaseline : JSON.stringify([aowAgentType(agent) ?? '', name, agent.command ?? agent.executable ?? '', nextArgs.text, nextEnv.text]));
     setAgentSaved('');
     setError('');
     agentForm.current?.querySelector('select')?.scrollIntoView({ block: 'nearest' });
+    if (copy) agentForm.current?.querySelector('input')?.focus({ preventScroll: true });
+  };
+
+  const selectAgentType = (value: string) => {
+    const nextType = builtinAgentType(value) ?? '';
+    if (!command.trim() || command === suggestedAgentExecutable(agents, agentType)) {
+      setCommand(suggestedAgentExecutable(agents, nextType));
+    }
+    setAgentType(nextType);
+    setAgentSaved('');
+    setError('');
   };
 
   const removeAgent = async (id: string) => {
@@ -235,16 +251,12 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
     setAgentSaved('');
     try {
       const parsed = normalizeArguments(args, command).values;
-      const environment = JSON.parse(env.trim() || '{}') as unknown;
-      if (!environment || typeof environment !== 'object' || Array.isArray(environment)
-        || Object.entries(environment).some(([key, value]) => !/^[A-Za-z0-9_]+$/.test(key) || typeof value !== 'string' || value.includes('\0'))) {
-        throw new Error('Environment variables 必须是变量名到字符串值的 JSON 对象');
-      }
+      const environment = parseEnvironment(env);
       await agentsApi.registerAgent({
         id: editingAgentId,
         agentType,
         displayName, command, args: parsed,
-        env: environment as Record<string, string>,
+        env: environment,
       });
       resetAgentForm();
       setAgentSaved(`${displayName} 配置已保存。`);
@@ -340,19 +352,20 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
                     <AgentIcon agentId={aowAgentType(agent)} />
                     <div><strong>{agent.display_name}</strong><small>{agentTypes.find(type => type.id === aowAgentType(agent))?.label ?? '未设置类型，请编辑补选'}</small><code>{agent.executable ?? '未找到 executable'}</code></div>
                     <small>{agent.source === 'detected' ? 'Auto detected' : 'Configured'}</small>
-                    <button type="button" className="project-aow-agent-edit" title={`编辑 ${agent.display_name}`} aria-pressed={editingAgentId === agent.id} disabled={busy} onClick={() => editAgent(agent)}><Pencil /></button>
+                    <button type="button" className="project-aow-agent-edit" title={`编辑 ${agent.display_name}`} aria-pressed={editingAgentId === agent.id} disabled={busy} onClick={() => loadAgent(agent)}><Pencil /></button>
+                    <button type="button" className="project-aow-agent-copy" title={`复制 ${agent.display_name}`} aria-label={`复制 ${agent.display_name}`} disabled={busy} onClick={() => loadAgent(agent, true)}><Copy /></button>
                     {agent.source === 'configured' ? <button type="button" title="移除配置" disabled={busy} onClick={() => void removeAgent(agent.id)}><Trash2 /></button> : null}
                   </div>)}
                   {!agents.length ? <p className="project-aow-empty">尚未发现本地 Agent，可在下方注册。</p> : null}
                 </div>
                 <h3>{editingAgentId ? '编辑 Agent 配置' : '注册 Agent 配置'}</h3>
-                <label className="project-aow-dialog-field"><span>Agent 类型 <em>必填</em></span><div className="project-aow-agent-type"><AgentIcon agentId={agentType} /><select aria-label="Agent 类型" value={agentType ?? ''} disabled={busy || !!builtinAgentType(editingAgentId)} onChange={(event) => { setAgentType(builtinAgentType(event.target.value) ?? ''); setError(''); }} required><option value="" disabled>请选择 Agent 类型</option>{agentTypes.map(type => <option key={type.id} value={type.id}>{type.label}</option>)}</select></div></label>
-                <p className="project-aow-form-intro">选择类型后，可自由配置名称、启动命令、参数和环境变量。</p>
+                <label className="project-aow-dialog-field"><span>Agent 类型 <em>必填</em></span><div className="project-aow-agent-type"><AgentIcon agentId={agentType} /><select aria-label="Agent 类型" value={agentType ?? ''} disabled={busy || !!builtinAgentType(editingAgentId)} onChange={(event) => selectAgentType(event.target.value)} required><option value="" disabled>请选择 Agent 类型</option>{agentTypes.map(type => <option key={type.id} value={type.id}>{type.label}</option>)}</select></div></label>
+                <p className="project-aow-form-intro">选择类型后，优先填入自动探测的可执行文件路径，否则使用第一条同类配置的路径。名称、启动命令、参数和环境变量均可编辑。</p>
                 <label className="project-aow-dialog-field"><span>Display name</span><input value={displayName} disabled={busy} onChange={(event) => setDisplayName(event.target.value)} placeholder="例如：工作用 Codex" required /></label>
                 <label className="project-aow-dialog-field"><span>Executable</span><input className="project-aow-dialog-monospace" spellCheck={false} value={command} disabled={busy} onChange={(event) => setCommand(event.target.value)} placeholder="命令名或 /absolute/path" required /></label>
                 <AgentArgumentsInput value={args} onChange={setArgs} executable={command} disabled={busy} onError={setError} />
-                <label className="project-aow-dialog-field"><span>Environment variables</span><textarea aria-label="Environment variables" spellCheck={false} rows={4} value={env} disabled={busy} onChange={(event) => setEnv(event.target.value)} placeholder={'{\n  "BASE_URL": "https://example.com"\n}'} /></label>
-                <p className="project-aow-form-intro">自动继承启动环境。这里只填写需要新增或覆盖的变量（JSON 对象）；留空或填写 {'{}'} 即可保留继承的环境。</p>
+                <label className="project-aow-dialog-field"><span>Environment variables</span><textarea aria-label="Environment variables" spellCheck={false} rows={4} value={env.text} disabled={busy} onChange={(event) => setEnv({ ...env, text: event.target.value })} placeholder={'BASE_URL=https://example.com\nAPI_KEY=your-key'} /></label>
+                <p className="project-aow-form-intro">自动继承启动环境。每行填写一个 key=value，只填写需要新增或覆盖的变量；留空即可保留继承的环境。值按原文保存，无需加引号。</p>
                 <p className="project-aow-form-intro">保存后用于新启动的终端 Agent。PATH 统一在 Environment 中配置。移除内置 Agent 的配置后会恢复自动探测。</p>
                 {agentSaved ? <p role="status">{agentSaved}</p> : null}
                 {error ? <div className="project-aow-error" role="alert">{error}</div> : null}

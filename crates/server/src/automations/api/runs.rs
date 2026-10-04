@@ -5,6 +5,7 @@ struct ManualRunInput {
     revision: Option<u64>,
     #[serde(default)]
     variables: BTreeMap<String, String>,
+    workspace_path: Option<PathBuf>,
 }
 
 pub(super) async fn run(
@@ -14,7 +15,7 @@ pub(super) async fn run(
 ) -> Result<(StatusCode, Json<serde_json::Value>), Response> {
     let manager = manager(&state).map_err(IntoResponse::into_response)?;
     let _operation = manager.operation.lock().await;
-    let task = manager.task(&id).map_err(error)?;
+    let mut task = manager.task(&id).map_err(error)?;
     let request: ManualRunInput = if body.is_empty() {
         ManualRunInput::default()
     } else {
@@ -26,6 +27,20 @@ pub(super) async fn run(
             .is_some_and(|revision| revision != task.revision)
     {
         return Err(error("任务已被修改，请刷新后重新填写变量"));
+    }
+    let dynamic = task.input.workspace.workspace_mode == WorkspaceMode::Dynamic;
+    task.input
+        .resolve_workspace(request.workspace_path)
+        .map_err(error)?;
+    if dynamic {
+        state
+            .aow
+            .automation_project_for_cwd(
+                &task.input.project_id,
+                &task.input.workspace.workspace_path,
+            )
+            .await
+            .map_err(error)?;
     }
     let run_id = manager
         .scheduler

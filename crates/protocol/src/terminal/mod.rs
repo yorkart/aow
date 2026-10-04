@@ -1,5 +1,6 @@
 mod agent;
 mod attach;
+mod hosting;
 mod model;
 mod runtime;
 
@@ -8,6 +9,7 @@ pub use agent::{
     AgentTerminalSubmit, TerminalAgentList, TerminalAgentProcess,
 };
 pub use attach::{TerminalAttachClientMessage, TerminalAttachServerMessage, TerminalControlState};
+pub use hosting::{TerminalHosting, TerminalHostingPhase};
 pub use model::{
     TerminalLayout, TerminalPane, TerminalPaneKind, TerminalPaneStatus, TerminalSplitAxis,
     TerminalTab, TerminalTabList,

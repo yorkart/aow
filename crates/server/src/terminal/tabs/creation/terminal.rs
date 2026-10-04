@@ -41,6 +41,7 @@ impl TerminalManager {
             agent_id: None,
             agent_profile_id: None,
             agent_terminal: None,
+            hosting: None,
             restart_on_daemon_restart: true,
             status: TerminalPaneStatus::Running,
             rows,

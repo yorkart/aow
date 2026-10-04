@@ -1,4 +1,5 @@
 import { LiveEvents } from '../../lib/liveEvents';
+import { TokenUsageBadge } from '../../components/TokenUsageBadge';
 import { useEffect, useId, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Layers, X } from 'lucide-react';
 import './agent-task-notifications.css';
@@ -47,6 +48,7 @@ function TaskNoticeCard({ notice }: { notice: TaskNotice }) {
           </time>
         </span>
         <span className="agent-task-notice-tab" title={tabName}>{tabName}</span>
+        <TokenUsageBadge usage={notice.usage} />
       </span>
     </button>
     <button type="button" className="agent-task-notice-close" aria-label={`关闭通知：${projectName} · ${tabName}`}

@@ -1,0 +1,4 @@
+.token-usage { display:inline-block; flex-shrink:0; color:var(--aow-text-secondary); font-size:11px; font-weight:400; line-height:1.5; font-variant-numeric:tabular-nums; }
+.token-usage-split { display:inline-flex; align-items:center; gap:12px; }
+.token-usage-split > span { display:inline-flex; align-items:center; gap:4px; white-space:nowrap; }
+.token-usage-split svg { flex-shrink:0; }

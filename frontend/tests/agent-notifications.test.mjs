@@ -98,6 +98,27 @@ try {
   await server.listen();
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
   const base = `http://127.0.0.1:${server.httpServer.address().port}`;
+  await test('per-turn token usage is displayed and retained across notification restoration', async t => {
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    t.after(() => page.close());
+    await page.goto(`${base}/tests/agent-notifications-preview.html`);
+    await waitConnections(1);
+    const usage = { input_tokens: 1000, output_tokens: 200, total_tokens: 1200, cached_input_tokens: 500,
+      cache_write_input_tokens: 0, reasoning_output_tokens: 100 };
+    send({ ...notice('usage'), usage });
+    await page.getByText('本轮 1.2K tokens', { exact: true }).waitFor();
+    assert.match(await page.locator('.token-usage').getAttribute('title'), /推理（包含在输出中）：100/);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await page.screenshot({ path: '/tmp/aow-token-notification.png' });
+    await page.reload();
+    await waitConnections(1);
+    await page.getByText('本轮 1.2K tokens', { exact: true }).waitFor();
+    send({ ...notice('invalid-usage'), usage: { ...usage, total_tokens: -1 } });
+    send(notice('legacy-usage'));
+    await page.waitForFunction(() => document.querySelectorAll('.agent-task-notice').length === 3);
+    assert.equal(await page.locator('.token-usage').count(), 1);
+  });
+
   await test('live stops produce independent, dismissible notices without stealing focus', async t => {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     t.after(() => page.close());

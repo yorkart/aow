@@ -4,6 +4,7 @@ import { terminalApi } from './terminalApi';
 import type { TerminalAgentProcess, TerminalLayout, TerminalPane, TerminalPaneStatus, TerminalSplitAxis, TerminalTab } from './types';
 import { TerminalInputPane } from './TerminalInputPane';
 import { TerminalAgentPane } from './TerminalAgentPane';
+import { TerminalHostingButton } from './TerminalHostingButton';
 import { AgentIcon } from '../agents/AgentIcon';
 import { terminalPaneAgent, terminalPaneTitle } from './terminalPresentation';
 import { terminalPaneLifecycle } from './terminalState';
@@ -548,6 +549,7 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
             </span>
             <span className="terminal-pane-shell">{pane.shell}</span>
             {sessionButton}
+            {agentId && <TerminalHostingButton tab={tab!} pane={pane} onChange={onTabChange} />}
             <button title={`向右分屏（${splitShortcutLabel('row')}）`} aria-label="向右分屏" disabled={paneBusy} onClick={() => void split(pane, 'row')}><Columns2 /></button>
             <button title={`向下分屏（${splitShortcutLabel('column')}）`} aria-label="向下分屏" disabled={paneBusy} onClick={() => void split(pane, 'column')}><Rows2 /></button>
             {tab!.panes.length > 1 ? (

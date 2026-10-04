@@ -134,6 +134,7 @@ dependencies = [
  "aow-agents",
  "aow-config",
  "aow-id",
+ "aow-workspaces",
  "chrono",
  "libc",
  "serde",
@@ -151,6 +152,7 @@ dependencies = [
  "aow-automations",
  "aow-config",
  "aow-filesystem",
+ "aow-id",
  "aow-protocol",
  "aow-terminald-client",
  "chrono",
@@ -284,6 +286,7 @@ dependencies = [
  "aow-protocol",
  "aow-terminald",
  "aow-terminald-client",
+ "aow-workspaces",
  "axum",
  "bytes",
  "chrono",
@@ -356,6 +359,17 @@ dependencies = [
  "thiserror 2.0.19",
  "tokio",
  "tokio-tungstenite",
+]
+
+[[package]]
+name = "aow-workspaces"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]

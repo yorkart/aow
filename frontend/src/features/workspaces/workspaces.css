@@ -1,0 +1,22 @@
+.workspace-field { display:flex; min-width:0; flex-direction:column; gap:5px; }
+.workspace-field > span { color:var(--aow-muted,#89909b); font-size:11px; }
+.workspace-field .workspace-modes { display:flex; gap:3px; padding:3px; background:var(--aow-panel,#1e2228); border:1px solid var(--aow-control-line,#ffffff15); border-radius:5px; }
+.workspace-field .workspace-modes > button { display:inline-flex; align-items:center; justify-content:center; flex:1; min-width:0; min-height:32px; padding:4px; border:1px solid transparent; border-radius:4px; color:var(--aow-muted,#89909b); background:transparent; font:inherit; font-size:11px; cursor:pointer; }
+.workspace-field .workspace-modes > button.selected { color:var(--aow-text-hover,#eef3fa); background:var(--aow-hover,#ffffff09); border-color:var(--aow-control-line,#ffffff15); }
+.workspace-field button:disabled { opacity:.5; cursor:default; }
+.workspace-field .workspace-dynamic-options { display:flex; flex-wrap:wrap; gap:8px 20px; padding:5px 2px; }
+.workspace-field .workspace-dynamic-options > label { display:inline-flex; flex-direction:row; align-items:center; gap:6px; margin:0; color:var(--aow-text,#d5d7dd); font-size:12px; cursor:pointer; }
+.workspace-field .workspace-dynamic-options input[type="radio"] { flex:0 0 14px; width:14px; height:14px; min-height:0; margin:0; padding:0; accent-color:var(--aow-accent,#9fc5ef); cursor:inherit; }
+.workspace-field .workspace-dynamic-options > label:has(input:disabled) { opacity:.5; cursor:default; }
+.workspace-field .workspace-dynamic-options input:focus-visible { outline:1px solid var(--aow-accent,#9fc5ef); outline-offset:3px; }
+.workspace-field .workspace-select { display:flex; min-width:0; flex-direction:row; align-items:center; gap:8px; padding:0 10px; background:var(--aow-panel,#1e2228); border:1px solid var(--aow-control-line,#ffffff15); border-radius:4px; }
+.workspace-field .workspace-select > span { flex:none; color:var(--aow-muted,#89909b); font-size:11px; }
+.workspace-field .workspace-select > svg { flex:none; color:var(--aow-muted,#89909b); pointer-events:none; }
+.workspace-field .workspace-select select { flex:1; width:0; min-width:0; min-height:36px; padding:6px 0; border:0; color:var(--aow-text,#d5d7dd); background:transparent; border-radius:0; font:inherit; font-size:12px; appearance:none; cursor:pointer; text-overflow:ellipsis; }
+.workspace-field .workspace-select select:focus { outline:none; }
+.workspace-select:focus-within { outline:1px solid var(--aow-accent,#9fc5ef); outline-offset:1px; }
+.workspace-select:has(select:disabled) { opacity:.6; }
+.workspace-error { display:flex; align-items:center; gap:8px; font-size:11px; }
+.workspace-error p { flex:1; min-width:0; margin:0; color:#edaa9f; overflow-wrap:anywhere; }
+.workspace-error button { flex:none; padding:4px 8px; color:var(--aow-text,#d5d7dd); background:transparent; border:1px solid var(--aow-control-line,#ffffff15); border-radius:4px; cursor:pointer; }
+.workspace-hint { margin:3px 0 0; color:var(--aow-muted,#89909b); font-size:11px; line-height:1.6; }

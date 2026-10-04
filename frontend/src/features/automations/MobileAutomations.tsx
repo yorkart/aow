@@ -52,8 +52,8 @@ function MobileAutomationTask({ route, navigate, back }: { route: MobileRoute; n
         <div><dt>最大并发</dt><dd>{task.data.max_concurrent_runs === 1 ? '1（禁止重叠执行）' : task.data.max_concurrent_runs}</dd></div>
         {task.data.kind !== 'manual' ? <div><dt>下次运行</dt><dd>{task.data.enabled ? dateTime(task.data.next_run_at) : '已暂停'}</dd></div> : null}
         <div><dt>工作区方式</dt><dd>{workspaceNames[task.data.workspace_mode]}</dd></div>
-        <div><dt>{task.data.workspace_mode === 'temporary' ? '关联项目工作区' : '工作区'}</dt><dd><code>{task.data.workspace_path}</code></dd></div>
-        <div><dt>基础分支</dt><dd>{task.data.workspace_mode === 'existing' || task.data.workspace_mode === 'temporary' ? '—' : <code>{task.data.base_branch}</code>}</dd></div>
+        {task.data.workspace_mode === 'existing' && <div><dt>工作区</dt><dd><code>{task.data.workspace_path}</code></dd></div>}
+        <div><dt>基础分支</dt><dd>{task.data.workspace_mode !== 'new_worktree' ? '—' : <code>{task.data.base_branch}</code>}</dd></div>
         <div><dt>结束后清理</dt><dd>{task.data.workspace_mode === 'new_worktree' ? '强制清理 Worktree' : task.data.workspace_mode === 'temporary' ? '自动清理临时目录' : '—'}</dd></div>
         <div><dt>创建时间</dt><dd>{dateTime(task.data.created_at)}</dd></div>
         <div><dt>更新时间</dt><dd>{dateTime(task.data.updated_at)}</dd></div>

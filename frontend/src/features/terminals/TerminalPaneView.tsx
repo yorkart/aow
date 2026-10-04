@@ -8,6 +8,7 @@ import { Terminal } from '@xterm/xterm';
 import { ClipboardCopy, ExternalLink, RefreshCw, X } from 'lucide-react';
 import { ConfirmationDialog } from '../../components/ConfirmationDialog';
 import { terminalApi } from './terminalApi';
+import { TerminalHostingDetails, hostingStatus } from './TerminalHostingStatus';
 import type { TerminalPane, TerminalPaneStatus } from './types';
 import { savedTerminalDimensions, type TerminalFrame, type TerminalPaneControls } from './terminalPresentation';
 import { terminalPaneStatusMessage, type TerminalConnectionState } from './terminalState';
@@ -45,6 +46,7 @@ const MAX_VT_SNAPSHOT_BYTES = 2 * 1024 * 1024;
 const WAITING_RETRY_MIN_MS = 100;
 const WAITING_RETRY_MAX_MS = 1000;
 const DEFAULT_TERMINAL_LINE_HEIGHT = 1.15;
+const TERMINAL_SCROLLBAR_WIDTH = 8;
 const MAX_OSC52_TEXT_BYTES = 256 * 1024;
 const MAX_OSC52_BASE64_CHARS = Math.ceil(MAX_OSC52_TEXT_BYTES / 3) * 4;
 const CLIPBOARD_COPY_REQUEST_TTL_MS = 30_000;
@@ -387,8 +389,9 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
   const shellRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | undefined>(undefined);
-  const inputSuspendedRef = useRef(inputSuspended);
-  inputSuspendedRef.current = inputSuspended;
+  const stdinDisabled = inputSuspended || Boolean(pane.hosting);
+  const inputSuspendedRef = useRef(stdinDisabled);
+  inputSuspendedRef.current = stdinDisabled;
   const fitRef = useRef<FitAddon | undefined>(undefined);
   const socketRef = useRef<WebSocket | undefined>(undefined);
   const inputReadySocketRef = useRef<WebSocket | undefined>(undefined);
@@ -498,7 +501,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
     const host = hostRef.current;
     const screen = host?.querySelector<HTMLElement>('.xterm-screen');
     if (!terminal || !host || !screen || !screen.offsetWidth || !screen.offsetHeight) return;
-    const width = screen.offsetWidth + 14;
+    const width = screen.offsetWidth + TERMINAL_SCROLLBAR_WIDTH;
     const height = screen.offsetHeight;
     if (presentationRef.current.sizing === 'saved') {
       host.style.width = `${width}px`;
@@ -689,6 +692,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
+    host.style.setProperty('--terminal-scrollbar-width', `${TERMINAL_SCROLLBAR_WIDTH}px`);
     const terminal = new Terminal({
       ...(sizing === 'saved' ? savedSizeRef.current : {}),
       // Match VS Code's browser terminal width/rendering path. Unicode 11
@@ -701,7 +705,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
       fontFamily: "'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace",
       fontSize,
       lineHeight: DEFAULT_TERMINAL_LINE_HEIGHT,
-      overviewRuler: { width: 8 },
+      overviewRuler: { width: TERMINAL_SCROLLBAR_WIDTH },
       rescaleOverlappingGlyphs: true,
       scrollback: 5000,
       rightClickSelectsWord: false,
@@ -847,8 +851,8 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
   }, []);
 
   useLayoutEffect(() => {
-    if (terminalRef.current) terminalRef.current.options.disableStdin = inputSuspended;
-  }, [inputSuspended]);
+    if (terminalRef.current) terminalRef.current.options.disableStdin = stdinDisabled;
+  }, [stdinDisabled]);
 
   useEffect(() => {
     if (!active || !visible || restorePending) return;
@@ -1884,8 +1888,8 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
           </button>
         </div>
       ) : null}
-      <div className={`terminal-connection ${connection}${connectionMessage ? ' has-message' : ''}`} role="status" aria-live="polite">
-        <span title={connectionMessage || pane.agent_terminal?.error || undefined}>{terminalPaneStatusMessage(pane, connection, connectionMessage)}</span>
+      <div className={`terminal-connection ${connection}${connectionMessage ? ' has-message' : ''}${pane.hosting ? ' hosting' : ''}`} role="status" aria-live="polite">
+        <span title={connectionMessage || pane.agent_terminal?.error || undefined}>{pane.hosting ? hostingStatus(pane.hosting) : terminalPaneStatusMessage(pane, connection, connectionMessage)}</span>
         {onRebuild && (pane.status === 'interrupted' || connection === 'interrupted') ? (
           <button
             type="button"
@@ -1895,7 +1899,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
           >
             {rebuilding ? '重建中…' : '重建'}
           </button>
-        ) : connection === 'observing' || connection === 'waiting' ? (
+        ) : pane.hosting || connection === 'observing' || connection === 'waiting' ? (
           <button
             type="button"
             className="terminal-takeover-action"
@@ -1913,6 +1917,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
             <RefreshCw />
           </button>
         ) : null}
+        {pane.hosting && <TerminalHostingDetails hosting={pane.hosting} />}
       </div>
     </div>
   );

@@ -71,6 +71,8 @@ pub struct TerminalPane {
     /// Present only for CLI-created, initially hidden interactive agents.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_terminal: Option<AgentTerminalState>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hosting: Option<super::TerminalHosting>,
     #[serde(default = "default_true", skip_serializing_if = "is_true")]
     pub restart_on_daemon_restart: bool,
     pub status: TerminalPaneStatus,

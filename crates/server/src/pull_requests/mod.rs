@@ -4,7 +4,6 @@
 mod adapter;
 mod api;
 mod error;
-mod issues;
 mod manager;
 mod repository_info;
 mod request;
@@ -21,8 +20,7 @@ pub(crate) use settings_api::routes;
 use adapter::{OUTPUT_LIMIT, read_limited, run_command};
 use adapter::{git, run_adapter};
 use error::Result;
-pub(crate) use request::ReviewQuery;
-use request::{CommitLinks, DiffQuery, PullRequestListQuery, Target};
+use request::{CommitLinks, DiffQuery, PullRequestListQuery, ReviewQuery, Target};
 #[cfg(test)]
 use settings::{CONFIG, Document};
 #[cfg(test)]

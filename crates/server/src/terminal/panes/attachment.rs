@@ -26,7 +26,8 @@ impl TerminalManager {
         options: AttachOptions<'_>,
     ) -> Result<TerminaldAttachStream, TerminalError> {
         self.ensure_pane(tab_id, pane_id)?;
-        let controlled = options.controlled || self.cli_agent(pane_id).is_ok();
+        let hosted = self.hosting(pane_id)?.is_some();
+        let controlled = options.controlled || self.cli_agent(pane_id).is_ok() || hosted;
         let attachment = if controlled {
             self.inner
                 .terminald
@@ -35,7 +36,7 @@ impl TerminalManager {
                     options.epoch,
                     options.after,
                     options.vt_snapshot,
-                    options.observer,
+                    options.observer || hosted,
                 )
                 .await
         } else {
@@ -68,7 +69,7 @@ impl TerminalManager {
                     None,
                     None,
                     options.vt_snapshot,
-                    options.observer,
+                    options.observer || self.hosting(pane_id)?.is_some(),
                 )
                 .await
         } else {

@@ -153,33 +153,12 @@ impl ProviderManager {
             .into_iter()
             .find(|p| p.id == target.provider && p.enabled)
             .ok_or_else(|| PullRequestError::Unavailable("Provider 已停用，请刷新。".into()))?;
-        if matches!(operation, "issues" | "issue_labels") {
-            let description = self
-                .run_provider(
-                    &provider,
-                    json!({"version":2,"operation":"describe","repository":null,"params":{}}),
-                    None,
-                    paths,
-                )
-                .await?;
-            let operations = description
-                .get("operations")
-                .and_then(Value::as_array)
-                .ok_or_else(|| invalid_json("describe requires operations"))?;
-            if !operations.iter().any(|op| op.as_str() == Some(operation)) {
-                return Err(PullRequestError::Unavailable(format!(
-                    "{} 尚未支持 Issue 来源（缺少 {operation}），请在 Settings → Pull Requests 更新 Provider 脚本。",
-                    provider.name
-                )));
-            }
-        }
         let request = json!({"version":2,"operation":operation,
             "repository":{"root":query.repo,"host":target.host,"path":target.repository,"remote":target.remote},"params":params});
         let result = self
             .run_provider(&provider, request, Some(Path::new(&query.repo)), paths)
             .await?;
         let mut result = match operation {
-            "issues" | "issue_labels" => super::issues::validate(operation, result)?,
             "list" => {
                 let mut data: MyPullRequests = decode(result)?;
                 data.repository = query.repo.clone();

@@ -53,8 +53,8 @@ pub(crate) use projects::ProjectSummary;
 use projects::{BindNotesRequest, Project, RegisterProjectRequest};
 use sessions::{AgentSessionSnapshotQuery, AgentSessionsQuery, AutomationRunSessionQuery};
 use worktrees::{
-    CreateWorktreeRequest, SetWorktreeColorRequest, SetWorktreeIconRequest, Worktree,
-    WorktreeColor, WorktreeIcon, WorktreeRemovalPreview, WorktreeRemovalQuery,
+    CreateWorktreeRequest, ProjectBranches, SetWorktreeColorRequest, SetWorktreeIconRequest,
+    Worktree, WorktreeColor, WorktreeIcon, WorktreeRemovalPreview, WorktreeRemovalQuery,
 };
 
 use settings::{
@@ -91,10 +91,6 @@ struct AowInner {
 }
 
 impl AowManager {
-    pub(crate) fn task_configuration(&self) -> Option<aow_config::ConfigRepository> {
-        self.inner.config.clone()
-    }
-
     pub(crate) fn repository_roots(&self) -> Result<Vec<PathBuf>, AowError> {
         Ok(self
             .lock()?

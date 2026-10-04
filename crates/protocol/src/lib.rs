@@ -1,10 +1,7 @@
 mod filesystem;
 mod git;
 mod pull_request;
-mod task;
 mod terminal;
-
-pub use task::*;
 
 pub use filesystem::{
     ApiError, DirectoryListing, FileEntry, FileKind, RenameResult, TextFile, WriteResult,
@@ -20,10 +17,10 @@ pub use pull_request::{
 pub use terminal::{
     AgentTerminalCreate, AgentTerminalInfo, AgentTerminalPhase, AgentTerminalState,
     AgentTerminalSubmit, TerminalAgentList, TerminalAgentProcess, TerminalAttachClientMessage,
-    TerminalAttachServerMessage, TerminalControlState, TerminalLayout, TerminalPane,
-    TerminalPaneKind, TerminalPaneStatus, TerminalRuntime, TerminalRuntimeList,
-    TerminalRuntimeSpec, TerminalRuntimeStatus, TerminalScreen, TerminalSplitAxis, TerminalTab,
-    TerminalTabList, TerminaldHealth,
+    TerminalAttachServerMessage, TerminalControlState, TerminalHosting, TerminalHostingPhase,
+    TerminalLayout, TerminalPane, TerminalPaneKind, TerminalPaneStatus, TerminalRuntime,
+    TerminalRuntimeList, TerminalRuntimeSpec, TerminalRuntimeStatus, TerminalScreen,
+    TerminalSplitAxis, TerminalTab, TerminalTabList, TerminaldHealth,
 };
 
 #[cfg(test)]

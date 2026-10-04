@@ -90,7 +90,12 @@ export function AowPanelStack({ children, className = '', ...props }: HTMLAttrib
     <div {...props} className={`aow-panel-stack ${className}`}>
       {overflowPanels.length ? <select className="aow-panel-jump" aria-label="快速定位面板" value="" onChange={event => {
         const anchor = document.getElementById(event.target.value);
-        anchor?.querySelector<HTMLButtonElement>('.aow-panel-header-title')?.click();
+        if (!anchor) return;
+        // Titles may toggle or be plain labels; jumping only opens a collapsed panel.
+        if (anchor.closest('.aow-panel')?.hasAttribute('data-collapsed')) {
+          anchor.querySelector<HTMLButtonElement>('.aow-panel-toggle, .aow-panel-header-title[aria-expanded]')?.click();
+        }
+        navigate(anchor);
       }}><option value="" disabled>快速定位面板</option>{overflowPanels.map(panel => <option key={panel.id} value={panel.id}>{panel.title}</option>)}</select> : null}
       <div ref={viewport} className="aow-panel-viewport">
         <div ref={content} className="aow-panel-content">{children}</div>
@@ -106,6 +111,8 @@ interface Props extends Omit<AowPanelHeaderProps, 'onToggle' | 'onNavigate' | 'c
   bodyClassName?: string;
   bodyRole?: 'list';
   empty?: boolean;
+  collapsible?: boolean;
+  headerBehavior?: 'navigate' | 'toggle';
   onCollapsedChange?: (collapsed: boolean) => void;
 }
 
@@ -116,12 +123,12 @@ export function usePanelCollapsed(empty: boolean, controlled?: boolean, onChange
   return [collapsed, change] as const;
 }
 
-export function AowPanel({ children, className = '', headerClassName, bodyClassName, bodyRole, empty = false,
+export function AowPanel({ children, className = '', headerClassName, bodyClassName, bodyRole, empty = false, collapsible = true, headerBehavior = 'navigate',
   collapsed: controlled, onCollapsedChange, controlsId, ...header }: Props) {
   const id = useId();
   const anchor = useRef<HTMLDivElement>(null);
   const navigate = useContext(PanelStackContext);
-  const [collapsed, change] = usePanelCollapsed(empty, controlled, onCollapsedChange);
+  const [collapsed, change] = usePanelCollapsed(empty, collapsible ? controlled : false, onCollapsedChange);
   useLayoutEffect(() => {
     const header = anchor.current!.firstElementChild as HTMLElement;
     const scroller = header.closest<HTMLElement>('.aow-panel-viewport');
@@ -142,7 +149,8 @@ export function AowPanel({ children, className = '', headerClassName, bodyClassN
   return <section className={`aow-panel ${className}`} aria-label={header.title} data-collapsed={collapsed || undefined}>
     <div ref={anchor} id={`${id}-anchor`} data-panel-anchor data-panel-title={header.title}>
       <AowPanelHeader {...header} className={headerClassName} collapsed={collapsed} controlsId={bodyId}
-        onToggle={() => change(!collapsed)} onNavigate={() => { if (collapsed) change(false); if (anchor.current) navigate?.(anchor.current); }} />
+        onToggle={collapsible ? () => change(!collapsed) : undefined}
+        onNavigate={collapsible && headerBehavior === 'navigate' ? () => { if (collapsed) change(false); if (anchor.current) navigate?.(anchor.current); } : undefined} />
     </div>
     <div id={bodyId} className={`aow-panel-body ${bodyClassName ?? ''}`} role={bodyRole} hidden={collapsed}>{children}</div>
   </section>;

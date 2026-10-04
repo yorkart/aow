@@ -21,6 +21,52 @@ fn parse_records(records: Vec<Value>) -> Vec<SnapshotTurn> {
 }
 
 #[test]
+fn codex_usage_is_per_display_turn_and_never_the_session_cumulative_count() {
+    use crate::sessions::usage::tests::codex_event;
+    use serde_json::json;
+    let first = codex_event(100, 20, 10_100, 1_020);
+    let turns = parse_records(vec![
+        json!({"type":"event_msg","payload":{"type":"task_started","turn_id":"task-1"}}),
+        json!({"type":"response_item","payload":{"type":"message","role":"user","content":"first"}}),
+        first.clone(),
+        first,
+        codex_event(200, 30, 10_300, 1_050),
+        json!({"type":"response_item","payload":{"type":"message","role":"user","content":"additional instruction"}}),
+        codex_event(10, 2, 10_310, 1_052),
+        json!({"type":"event_msg","payload":{"type":"task_complete","turn_id":"task-1"}}),
+        json!({"type":"event_msg","payload":{"type":"task_started","turn_id":"task-2"}}),
+        json!({"type":"response_item","payload":{"type":"message","role":"user","content":"next"}}),
+        codex_event(30, 4, 10_340, 1_056),
+        json!({"type":"event_msg","payload":{"type":"task_complete","turn_id":"task-2"}}),
+        json!({"type":"response_item","payload":{"type":"message","role":"user","content":"no usage"}}),
+    ]);
+    assert_eq!(turns.len(), 4);
+    assert_eq!(turns[0].usage.unwrap().total_tokens, 350);
+    assert_eq!(turns[1].usage.unwrap().total_tokens, 12);
+    assert_eq!(turns[2].usage.unwrap().total_tokens, 34);
+    assert_eq!(turns[3].usage, None);
+    let serialized = serde_json::to_value(&turns).unwrap();
+    assert!(serialized[3].get("usage").is_none());
+}
+
+#[test]
+fn claude_usage_includes_tool_calls_without_counting_repeated_message_blocks() {
+    use serde_json::json;
+    let message = json!({"type":"assistant","message":{"id":"one","usage":{"input_tokens":100,"output_tokens":10,"cache_read_input_tokens":50},"content":[{"type":"tool_use","id":"tool","name":"Read"}]}});
+    let turns = claude_turns(vec![
+        json!({"type":"user","message":{"content":"first"}}),
+        message.clone(), message,
+        json!({"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"tool","content":"ok"}]}}),
+        json!({"type":"assistant","message":{"id":"two","usage":{"input_tokens":200,"output_tokens":20},"content":[{"type":"text","text":"done"}]}}),
+        json!({"type":"user","message":{"content":"next"}}),
+        json!({"type":"assistant","message":{"id":"three","usage":{"input_tokens":10,"output_tokens":2},"content":[{"type":"text","text":"next done"}]}}),
+    ].into_iter());
+    assert_eq!(turns.len(), 2);
+    assert_eq!(turns[0].usage.unwrap().total_tokens, 380);
+    assert_eq!(turns[1].usage.unwrap().total_tokens, 12);
+}
+
+#[test]
 fn command_categories_and_input_survive_completion_projections() {
     use serde_json::json;
     let turns = parse_records(vec![

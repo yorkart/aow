@@ -10,8 +10,9 @@ path = "src/main.rs"
 
 [dependencies]
 aow-id = { path = "../id" }
-aow-agents = { path = "../agents", features = ["automation"] }
+aow-agents = { path = "../agents", features = ["automation", "sessions"] }
 aow-config = { path = "../config" }
+aow-workspaces = { path = "../workspaces" }
 anyhow.workspace = true
 chrono.workspace = true
 libc.workspace = true

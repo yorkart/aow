@@ -36,7 +36,13 @@ pub(super) async fn rebuild_terminal(
                 // keep the saved command/arguments (including explicit resume).
                 spec.environment = state
                     .aow
-                    .resolve_terminal_rebuild_launch(pane, &previous.workspace_root)
+                    .resolve_terminal_rebuild_launch(
+                        pane,
+                        &previous.workspace_root,
+                        state
+                            .inbox
+                            .is_temporary_workspace(&previous.workspace_root)?,
+                    )
                     .await
                     .map_err(crate::aow::aow_http_error)?
                     .env;

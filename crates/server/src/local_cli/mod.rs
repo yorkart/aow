@@ -104,7 +104,8 @@ pub async fn start_local_cli(state: AppState, state_dir: &Path) -> anyhow::Resul
     };
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
     let router = Router::new()
-        .nest("/v1/tasks", crate::tasks::routes())
+        .merge(crate::automations::cli_routes())
+        .merge(crate::inbox::cli_routes())
         .route("/v1/projects", get(list_projects))
         .route("/v1/projects/{project_id}", get(get_project))
         .route(

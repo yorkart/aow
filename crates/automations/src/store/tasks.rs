@@ -70,7 +70,16 @@ impl Store {
             Err(error) => return Err(error.into()),
         };
         fs::remove_file(path)?;
-        let request: crate::ManualRunRequest = serde_json::from_slice(&bytes)?;
+        let mut request: serde_json::Value = serde_json::from_slice(&bytes)?;
+        if let Some(fields) = request.as_object_mut() {
+            // Preserve Autopilot routing for requests queued before the flag
+            // replaced the context snapshot; discard the old payload immediately.
+            let hosted = fields
+                .remove("hosting_context")
+                .is_some_and(|context| !context.is_null());
+            fields.entry("hosted").or_insert(hosted.into());
+        }
+        let request: crate::ManualRunRequest = serde_json::from_value(request)?;
         ensure!(request.task.id == task_id, "手动执行配置的任务 ID 不匹配");
         Ok(Some(request))
     }

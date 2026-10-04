@@ -11,6 +11,7 @@ const DEFAULT_INPUT_HEIGHT = 80;
 type Props = Pick<ComponentProps<typeof TerminalPaneView>, 'visible' | 'tabId' | 'pane' | 'active' | 'onFocus' | 'onStatus' | 'onRebuild' | 'rebuilding'>;
 
 export function TerminalInputPane(props: Props) {
+  const isMacOS = navigator.userAgent.includes('Macintosh');
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const [height, setHeight] = useState(DEFAULT_INPUT_HEIGHT);
@@ -23,7 +24,7 @@ export function TerminalInputPane(props: Props) {
   const composer = useRef<HTMLDivElement>(null);
   const composing = useRef(false);
   const drag = useRef<{ y: number; height: number } | null>(null);
-  const ready = props.visible && props.pane.status === 'running' && connection === 'connected';
+  const ready = props.visible && props.pane.status === 'running' && connection === 'connected' && !props.pane.hosting;
   const shown = open && ready && props.active;
   const maxHeight = Math.max(0, availableHeight - 40);
   const minHeight = Math.min(DEFAULT_INPUT_HEIGHT, maxHeight);
@@ -98,11 +99,11 @@ export function TerminalInputPane(props: Props) {
       onBlurCapture={event => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) dismiss();
       }}
-      onCompositionStartCapture={() => { composing.current = true; }}
-      onCompositionEndCapture={() => { composing.current = false; }}
       onKeyDownCapture={event => {
         if (event.nativeEvent.isComposing || composing.current || event.keyCode === 229) return;
-        if (event.key === 'Enter' && event.shiftKey && event.target instanceof HTMLTextAreaElement
+        const submitShortcutPressed = isMacOS ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+        if (event.key === 'Enter' && submitShortcutPressed && !event.shiftKey && !event.altKey
+          && event.target instanceof HTMLElement && event.target.matches('[role="textbox"]')
           && event.target.closest('.monaco-editor')) {
           event.preventDefault();
           event.stopPropagation();
@@ -142,9 +143,10 @@ export function TerminalInputPane(props: Props) {
         onLostPointerCapture={() => { drag.current = null; setDragging(false); }} />
       <div className="terminal-input-editor">
         <Suspense fallback={<span className="terminal-input-loading">正在加载编辑器…</span>}>
-          <TerminalInputEditor value={draft} onChange={setDraft} />
+          <TerminalInputEditor value={draft} onChange={setDraft} onComposing={active => { composing.current = active; }} />
         </Suspense>
       </div>
+      <div className="terminal-input-hint">Enter 换行 · {isMacOS ? '⌘ + Enter' : 'Ctrl + Enter'} 提交</div>
       {error ? <div className="terminal-input-error" role="alert">{error}</div> : null}
     </div> : null}
   </div>;

@@ -20,6 +20,7 @@ reqwest.workspace = true
 ring = "0.17"
 aow-agents = { path = "../agents", features = ["launch", "sessions", "automation"] }
 aow-automations = { path = "../automations" }
+aow-workspaces = { path = "../workspaces" }
 aow-im = { path = "../im" }
 aow-config = { path = "../config" }
 aow-filesystem = { path = "../filesystem" }

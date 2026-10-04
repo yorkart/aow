@@ -31,6 +31,19 @@ pub(super) fn task_completed(event: &TaskStopNotification) -> Message {
         value: format!("{}\nSession ID：{}", event.title, event.session_id),
         url: None,
     });
+    if let Some(usage) = event.usage {
+        fields.push(Field {
+            label: "本轮 Token".into(),
+            value: format!(
+                "合计：{}\n输入：{} · 输出：{}\n缓存命中：{}（包含在输入中）",
+                format_token_count(usage.total_tokens),
+                format_token_count(usage.input_tokens),
+                format_token_count(usage.output_tokens),
+                format_token_count(usage.cached_input_tokens),
+            ),
+            url: None,
+        });
+    }
     Message {
         title: format!("{project}·{}·{agent}·完成", event.title),
         fields,
@@ -44,6 +57,28 @@ pub(super) fn task_completed(event: &TaskStopNotification) -> Message {
         markdown: true,
         error: false,
     }
+}
+
+fn format_token_count(count: u64) -> String {
+    if count < 1_000 {
+        return format!("{count} tokens");
+    }
+    let units = ["K", "M", "B", "T"];
+    let count = u128::from(count);
+    let mut scale = 1_000;
+    let mut unit = 0;
+    let mut tenths = (count * 10 + scale / 2) / scale;
+    while tenths >= 10_000 && unit + 1 < units.len() {
+        scale *= 1_000;
+        unit += 1;
+        tenths = (count * 10 + scale / 2) / scale;
+    }
+    let value = if tenths % 10 == 0 {
+        (tenths / 10).to_string()
+    } else {
+        format!("{}.{}", tenths / 10, tenths % 10)
+    };
+    format!("{value}{} tokens", units[unit])
 }
 
 pub(super) fn automation_failure(event: &AutomationFailureNotification) -> Message {

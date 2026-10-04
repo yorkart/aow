@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
 import { installLiveEvents } from './fixtures/live-events.mjs';
+import { fillInboxEditor } from './fixtures/inbox-editor.mjs';
 
 const screenshotDir = process.env.AOW_TEST_SCREENSHOT_DIR || '/tmp';
 await mkdir(screenshotDir, { recursive: true });
@@ -23,40 +24,44 @@ function terminal(id, root, name) {
     panes: [{ id: `${id}-pane`, name, name_is_custom: true, cwd: root, kind: 'terminal',
       shell: '/bin/bash', status: 'running', rows: 24, cols: 80 }] };
 }
+async function assertInboxAutosave(scope) {
+  assert.equal(await scope.getByRole('button', { name: /^(提交|保存|取消)$/ }).count(), 0);
+}
+
 let browser;
 try {
   await server.listen();
   const base = `http://127.0.0.1:${server.httpServer.address().port}`;
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
 
-  async function fixture(t, { mobile = false, login = false, floating = false, extraFloatingTabs = [], global = false, missing = false, removedWorkspace = false, entry = 'target', editable = false, tabUrl, sessionAgent = false, pinned = [], reviewTargets = [] } = {}) {
+  async function fixture(t, { mobile = false, login = false, floating = false, extraFloatingTabs = [], global = false, missing = false, removedWorkspace = false, temporary = false, entry = 'target', editable = false, tabUrl, sessionAgent = false, pinned = [], reviewTargets = [], preserveFloating = false } = {}) {
     const context = await browser.newContext({ viewport: mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 } });
-    const root = global ? '/global' : worktrees[1].path;
+    const root = temporary ? '/private/tmp/aow-inbox-link' : global ? '/global' : worktrees[1].path;
     const target = terminal('target', root, 'Target Tab');
     const other = terminal('other', root, 'Other Tab');
     const tabs = [terminal('main-tab', worktrees[0].path, 'Main Tab'), other, target];
     const projects = removedWorkspace ? [] : [project];
     if (global) projects.push({ ...project, id: '__aow_floating', name: '浮动工作区', builtin: true,
       registered_path: root, worktrees: [{ ...worktrees[0], id: 'global-main', project_id: '__aow_floating', path: root }] });
-    const state = { authenticated: !login, targetReads: 0, mutations: [], errors: [], reads: [] };
+    const state = { authenticated: !login, targetReads: 0, mutations: [], errors: [], reads: [], inbox: [] };
     const session = { id: 'codex:session-one', session_id: 'session-one', agent: 'codex', title: 'Linked Conversation', cwd: '/actual-session', created_at: '', updated_at: '' };
     const task = { id: 'task-one', name: 'Linked Automation', project_id: 'project', project_name: project.name, revision: 1, agent: 'codex', workspace_mode: 'existing', workspace_path: root, prompt: 'Task prompt', cron: '0 9 * * *', interval_seconds: null, max_concurrent_runs: 1, enabled: true, yolo: false, base_branch: '', cleanup_worktree: false, precheck_command: '', precheck_timeout_seconds: 30, is_running: false, scheduler_error: null, last_run: null, next_run_at: null };
     const run = { id: 'run-old', task_id: task.id, task_name: task.name, agent: 'codex', source: 'manual', status: 'completed', started_at: '2026-09-19T00:00:00Z', finished_at: '2026-09-19T00:01:00Z', workspace_path: root, branch: 'dev', session_id: null, duration_ms: 60000, exit_code: 0 };
     const pr = { number: 42, title: 'Linked PR', source_branch: 'dev', target_branch: 'main', status: 'open', draft: false, created_at: '', updated_at: '', url: null, description: 'PR description', files: [], checks: [], reviewers: [], threads: [], unresolved_threads: [], changes_count: 0, commits_count: 1 };
     t.after(async () => { await context.close(); assert.deepEqual(state.errors, []); if (!editable) assert.deepEqual(state.mutations, []); });
     await installLiveEvents(context);
-    await context.addInitScript(({ root, floating, extraFloatingTabs }) => {
+    await context.addInitScript(({ root, floating, extraFloatingTabs, preserveFloating }) => {
       window.sendTaskStop = data => window.emitLiveEvent('task-stopped', data);
       window.taskStopReady = () => window.liveEventSockets.some(socket => socket.readyState === 1);
       localStorage.setItem('aow-active', '/workspace/main');
       localStorage.setItem(`aow-workspace-tabs:${root}`, JSON.stringify({ active: 'terminal:other' }));
       sessionStorage.setItem(`aow.mobile.terminal.${root}`, 'other:other-pane');
-      if (floating) {
+      if (floating && (!preserveFloating || !localStorage.getItem('aow-floating-tabs-v1'))) {
         localStorage.setItem('aow-floating-tabs-v1', JSON.stringify([{ workspace: root,
           id: 'terminal:target', targetId: 'target', kind: 'terminal', label: 'Target Tab' }, ...extraFloatingTabs]));
         localStorage.setItem('aow-floating-open', 'false');
       }
-    }, { root, floating, extraFloatingTabs });
+    }, { root, floating, extraFloatingTabs, preserveFloating });
     await context.route('**/api/**', async route => {
       const request = route.request();
       const url = new URL(request.url());
@@ -66,8 +71,12 @@ try {
       if (url.pathname === '/api/auth/status') data = { configured: true, authenticated: state.authenticated };
       else if (url.pathname === '/api/auth/login') { state.authenticated = true; data = { configured: true, authenticated: true }; }
       else if (!state.authenticated) { await route.fulfill({ status: 401, json: { message: 'Login required' } }); return; }
-      else if (url.pathname === '/api/tasks') data = { version: 1, status_revision: 1, tasks: [], statuses: [{ id: 'todo', name: 'Todo', color: '#888888' }] };
-      else if (url.pathname === '/api/tasks/inbox') data = { items: [], total: 0, next_cursor: null };
+      else if (url.pathname === '/api/inbox') data = { revision: state.inbox.length, items: state.inbox, labels: [], executions: temporary ? [{ id: 'inbox-run', workspace_mode: 'temporary', tab_id: 'target', cwd: root }] : [] };
+      else if (url.pathname === '/api/inbox/items' && request.method() === 'POST') {
+        const input = request.postDataJSON();
+        data = { id: `inbox-${state.inbox.length}`, markdown: input.markdown, project_id: null, label_ids: [], revision: 1, created_at: '', updated_at: '' };
+        state.inbox.push(data);
+      }
       else if (url.pathname === '/api/aow/projects') data = projects;
       else if (url.pathname === '/api/aow/agents') data = sessionAgent ? [{ id: 'codex', display_name: 'Codex', available: true, args: [], env: {} }] : [];
       else if (url.pathname === '/api/aow/settings') data = { notes_base: '/notes', execution_path: ['/usr/bin'] };
@@ -132,24 +141,62 @@ try {
     return { page, state, root };
   }
 
-  await test('Tasks navigation opens Inbox and a normal workspace tab that survives refresh', async t => {
-    const { page, state } = await fixture(t);
-    await page.getByRole('button', { name: 'Tasks', exact: true }).filter({ visible: true }).click();
-    const tab = page.locator('.project-aow-surface:not([hidden]) .project-aow-center-tab.active').filter({ hasText: 'Task Board' });
-    await tab.waitFor();
-    await page.getByRole('region', { name: 'Inbox', exact: true }).filter({ visible: true }).waitFor();
-    await page.getByRole('region', { name: 'Todo', exact: true }).waitFor();
-    assert.match(page.url(), /\/aow\/tabs\/tasks\?/);
-    await page.reload(); await tab.waitFor();
-    await page.getByRole('region', { name: 'Todo', exact: true }).waitFor();
-    await page.screenshot({ path: join(screenshotDir, 'aow-tasks-workspace.png') });
+  await test('Inbox opens in the floating workspace, survives refresh and leaves existing terminals intact', async t => {
+    const { page, state } = await fixture(t, { floating: true, preserveFloating: true });
+    const floating = page.getByRole('dialog', { name: '浮动工作区', exact: true });
+    await floating.getByRole('tab', { name: /Target Tab/ }).waitFor();
+    await floating.getByRole('button', { name: 'Inbox', exact: true }).click();
+    const panel = floating.getByRole('region', { name: 'Inbox', exact: true });
+    await panel.getByRole('button', { name: '添加需求', exact: true }).click();
+    await fillInboxEditor(panel.getByRole('textbox', { name: '新需求 Markdown' }), '全局需求，无需项目');
+    await assertInboxAutosave(panel);
+    await panel.getByRole('textbox', { name: '新需求 Markdown' }).press('Meta+Enter');
+    const row = panel.getByRole('article', { name: '全局需求，无需项目' });
+    await row.waitFor();
+    const before = await row.locator('.inbox-row-meta').boundingBox();
+    await row.locator('.inbox-edit-target').dblclick();
+    assert.equal((await row.locator('.inbox-row-meta').boundingBox()).height, before.height);
+    await assertInboxAutosave(row);
+    await page.screenshot({ path: join(screenshotDir, 'inbox-desktop-autosave.png') });
+    await row.getByRole('textbox', { name: '需求 Markdown', exact: true }).press('Escape');
+    await floating.getByRole('button', { name: '固定显示浮动工作区', exact: true }).click();
+    await row.getByRole('button', { name: '选择标签', exact: true }).click();
+    const labels = page.getByRole('dialog', { name: '选择需求标签', exact: true });
+    await labels.waitFor();
+    await page.mouse.move(1, 1);
+    await page.waitForTimeout(300);
+    assert.equal(await floating.isVisible(), true, 'a portaled label menu keeps the floating workspace open');
+    assert.ok(!page.url().includes('/aow/tabs/'), 'menu focus remains in the Inbox workspace');
+    await page.mouse.move(before.x + 10, before.y + 10);
+    await page.keyboard.press('Escape');
+    assert.equal(await labels.count(), 0);
+    assert.equal(state.inbox[0].project_id, null);
+    await page.reload();
+    await floating.getByRole('region', { name: 'Inbox', exact: true }).getByRole('article', { name: '全局需求，无需项目' }).waitFor();
+    await floating.getByRole('tab', { name: /Target Tab/ }).click();
+    await floating.locator('.floating-workspace-host:not([hidden]) .terminal-pane').waitFor();
     assert.deepEqual(state.errors, []); assert.deepEqual(state.mutations, []);
   });
-  await test('Tasks deep link opens on mobile with Inbox capture', async t => {
-    const { page, state } = await fixture(t, { mobile: true, tabUrl: '/aow/tabs/tasks?workspace=wt-1' });
-    await page.getByRole('button', { name: 'Task Board', exact: true }).click();
-    await page.getByRole('region', { name: 'Todo', exact: true }).waitFor();
-    assert.deepEqual(state.errors, []); assert.deepEqual(state.mutations, []);
+  await test('Inbox mobile entry captures globally, restores after refresh and returns to projects', async t => {
+    const { page, state } = await fixture(t, { mobile: true, entry: '' });
+    await page.getByRole('button', { name: 'Inbox', exact: true }).click();
+    await page.getByRole('button', { name: '添加需求', exact: true }).click();
+    await fillInboxEditor(page.getByRole('textbox', { name: '新需求 Markdown' }), '手机上的想法');
+    await assertInboxAutosave(page.locator('.inbox-panel'));
+    await page.getByRole('textbox', { name: '新需求 Markdown' }).press('Control+Enter');
+    const row = page.getByRole('article', { name: '手机上的想法' });
+    await row.waitFor();
+    const before = await row.locator('.inbox-row-meta').boundingBox();
+    await row.locator('.inbox-edit-target').dblclick();
+    assert.equal((await row.locator('.inbox-row-meta').boundingBox()).height, before.height);
+    await assertInboxAutosave(row);
+    await page.screenshot({ path: join(screenshotDir, 'inbox-mobile-autosave.png') });
+    await row.getByRole('textbox', { name: '需求 Markdown', exact: true }).press('Escape');
+    await page.reload();
+    await page.getByRole('article', { name: '手机上的想法' }).waitFor();
+    await page.getByRole('button', { name: '返回项目列表', exact: true }).click();
+    await page.getByRole('heading', { name: '你的项目', exact: true }).waitFor();
+    assert.equal(state.inbox[0].project_id, null);
   });
 
   const desktopTarget = page => page.locator('.project-aow-surface:not([hidden]) .project-aow-center-tab.active').filter({ hasText: 'Target Tab' });
@@ -197,6 +244,17 @@ try {
       await page.reload();
       await page.locator('.mobile-terminal-tabs [aria-selected="true"]').filter({ hasText: 'Target Tab' }).waitFor();
     }
+  });
+
+  await test('temporary Inbox terminal links open without a registered Worktree and survive reload', async t => {
+    const { page } = await fixture(t, { temporary: true });
+    const floating = page.getByRole('dialog', { name: '浮动工作区', exact: true });
+    await floating.locator('.terminal-pane').waitFor();
+    await page.waitForURL(url => url.pathname === '/aow/tabs/terminal/target');
+    assert.equal(await floating.isVisible(), true);
+    await page.reload();
+    await floating.locator('.terminal-pane').waitFor();
+    assert.equal(await floating.isVisible(), true);
   });
 
   await test('deleted tabs and removed workspaces show errors without creating a replacement', async t => {
@@ -254,8 +312,12 @@ try {
       const row = page.locator(`.project-aow-${pinned ? 'pinned' : 'worktrees'} button[title="${root}"]`);
       const rowBox = await row.boundingBox();
       const badgeBox = await row.locator('.project-aow-worktree-unread').boundingBox();
+      const rightInset = await row.evaluate(element => {
+        const style = getComputedStyle(element);
+        return parseFloat(style.paddingRight) + parseFloat(style.borderRightWidth);
+      });
       assert.ok(badgeBox.x > rowBox.x + rowBox.width / 2);
-      assert.ok(Math.abs(rowBox.x + rowBox.width - badgeBox.x - badgeBox.width - 8) <= 1);
+      assert.ok(Math.abs(rowBox.x + rowBox.width - badgeBox.x - badgeBox.width - rightInset) <= 1);
       assert.ok(badgeBox.y >= rowBox.y && badgeBox.y + badgeBox.height <= rowBox.y + rowBox.height);
     }
     await page.screenshot({ path: join(screenshotDir, 'aow-worktree-unread.png') });

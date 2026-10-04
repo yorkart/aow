@@ -79,13 +79,15 @@ impl Drop for SpawnedRuntime {
             return;
         };
         self.runtime.notify_deleted();
-        self.runtime.kill_best_effort();
+        self.runtime.kill_uncommitted_spawn_best_effort();
         drop(self.reader.take());
         let runtime = self.runtime.clone();
         let spawn_permit = self.spawn_permit.take();
         // A spawn_blocking result is dropped when its awaiting HTTP request is
         // canceled. Reap on a detached native thread so that cancellation can
-        // never leak the just-spawned shell or leave a zombie.
+        // never leak the just-spawned shell or leave a zombie. Kill the leader
+        // before starting this thread; descendant session cleanup runs after
+        // wait() in mark_reaped.
         thread::spawn(move || {
             let _spawn_permit = spawn_permit;
             let result = child.wait();

@@ -50,6 +50,7 @@ impl TerminalManager {
             agent_id: Some(launch.agent_type.id().to_owned()),
             agent_profile_id: request.agent_id,
             agent_terminal,
+            hosting: None,
             restart_on_daemon_restart: false,
             status: TerminalPaneStatus::Running,
             rows,

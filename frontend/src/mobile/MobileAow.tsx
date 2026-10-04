@@ -3,7 +3,7 @@ import { LogoutButton } from '../features/auth/LogoutButton';
 import type { ResolvedTab } from '../aow/tabRoutes';
 import { mobileTabTarget } from '../aow/tabRoutes/mobile';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { ListTodo, ArrowLeft, ArrowUpRight, CalendarClock, ChevronRight, FolderOpen, GitBranch, GitPullRequest, Home, MessageSquare, Pin, PinOff, Search, Settings, TerminalSquare, X } from 'lucide-react';
+import { Inbox, ArrowLeft, ArrowUpRight, CalendarClock, ChevronRight, FolderOpen, GitBranch, GitPullRequest, Home, MessageSquare, Pin, PinOff, Search, Settings, TerminalSquare, X } from 'lucide-react';
 import { aowApi } from '../aow/aowApi';
 import { ProjectIcon } from '../aow/ProjectIcon';
 import { usePinnedWorktrees } from '../aow/usePinnedWorktrees';
@@ -16,7 +16,7 @@ import { mobileRouteUrl, saveMobileValue, storedMobileValue, useMobileResource, 
 import type { MobileNavigate } from './mobileState';
 import './mobile.css';
 
-const MobileTasks = lazy(() => import('../features/tasks/MobileTasks').then(module => ({ default: module.MobileTasks })));
+const MobileInbox = lazy(() => import('../features/inbox/MobileInbox').then(module => ({ default: module.MobileInbox })));
 const MobileTerminals = lazy(() => import('../features/terminals/MobileTerminals').then((module) => ({ default: module.MobileTerminals })));
 const MobileSessions = lazy(() => import('../features/sessions/MobileSessions').then((module) => ({ default: module.MobileSessions })));
 const MobileFiles = lazy(() => import('../features/files/MobileFiles').then((module) => ({ default: module.MobileFiles })));
@@ -28,7 +28,6 @@ const MobileSettings = lazy(() => import('./MobileSettings').then(module => ({ d
 const navigation = [
   { id: 'terminal', label: '终端', icon: TerminalSquare },
   { id: 'sessions', label: 'Conversation', icon: MessageSquare },
-  { id: 'tasks', label: 'Tasks', icon: ListTodo },
   { id: 'automations', label: '自动化', icon: CalendarClock },
   { id: 'files', label: '文件', icon: FolderOpen },
   { id: 'git', label: 'Git', icon: GitBranch },
@@ -56,15 +55,16 @@ export function MobileAow({ initialEntry }: { initialEntry?: ResolvedTab } = {})
   return <div className="mobile-app">
     <div className="mobile-main" inert={showSettings}>
       <header className="mobile-app-header">
-        {worktree ? <>
+        {route.view === 'inbox' ? <><button className="mobile-icon-button" aria-label="返回项目列表" onClick={goHome}><ArrowLeft size={21} /></button><strong>Inbox</strong></> : worktree ? <>
           <button className="mobile-icon-button" aria-label="返回项目列表" onClick={goHome}><ArrowLeft size={21} /></button>
           <button className="mobile-brand-title" onClick={goHome}><strong>{project?.name}</strong><span>{worktree.branch || 'Detached HEAD'}</span></button>
         </> : <MobileNodeSwitcher addresses={nodeAddresses} />}
         <div className="mobile-header-actions" ref={setHeaderActions} />
+        {route.view !== 'inbox' && <button className="mobile-icon-button" aria-label="Inbox" title="Inbox" onClick={() => navigate({ view: 'inbox' })}><Inbox size={20} /></button>}
         {!worktree && <button ref={settingsButton} className="mobile-icon-button" aria-label="设置" title="设置" onClick={() => setShowSettings(true)}><Settings size={20} /></button>}
         {!worktree && <LogoutButton className="mobile-icon-button" compact />}
       </header>
-      {route.workspace ? project && worktree ? <MobileWorkspace initialTabId={route.terminal} key={worktree.path} project={project} worktree={worktree} route={route} navigate={navigate} back={() => back(fallback)} headerActions={headerActions} />
+      {route.view === 'inbox' ? <Suspense fallback={<MobileState loading />}><MobileInbox projects={projects.data ?? []} navigate={navigate} /></Suspense> : route.workspace ? project && worktree ? <MobileWorkspace initialTabId={route.terminal} key={worktree.path} project={project} worktree={worktree} route={route} navigate={navigate} back={() => back(fallback)} headerActions={headerActions} />
         : <div className="mobile-home"><MobileState loading={projects.loading} error={projects.error} retry={projects.reload} empty="工作区不存在或已被移除。" /><button className="mobile-button" onClick={goHome}><Home size={17} />返回项目</button></div>
         : <MobileHome projects={projects.data?.filter(project => !project.builtin) ?? []} loading={projects.loading} error={projects.error} reload={projects.reload} navigate={navigate} />}
     </div>
@@ -157,7 +157,6 @@ function MobileWorkspace({ project, worktree, route, navigate, back, headerActio
           {id === 'files' && <MobileFiles route={route} notesPath={project.notes_path} visible={route.view === id} navigate={navigate} back={back} />}
           {id === 'git' && <MobileGit route={route} visible={route.view === id} navigate={navigate} back={back} />}
           {id === 'pull-requests' && <MobilePullRequests route={route} visible={route.view === id} navigate={navigate} back={back} />}
-          {id === 'tasks' && <MobileTasks project={project} worktree={worktree} visible={route.view === id} navigate={navigate} />}
           {id === 'automations' && <MobileAutomations route={route} projectId={project.id} visible={route.view === id} navigate={navigate} back={back} />}
         </Suspense>
       </div>)}

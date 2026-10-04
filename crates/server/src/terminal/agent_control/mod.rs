@@ -2,8 +2,8 @@
 //! exclusive lease; browsers may observe, or explicitly acquire a read lease
 //! after initialization before claiming terminal input.
 
-mod api;
-mod connection;
+pub(in crate::terminal) mod api;
+pub(in crate::terminal) mod connection;
 mod lifecycle;
 mod model;
 
@@ -21,7 +21,7 @@ use aow_protocol::{
     AgentTerminalCreate, AgentTerminalInfo, AgentTerminalPhase, AgentTerminalState,
     AgentTerminalSubmit, TerminalAttachServerMessage, TerminalControlState,
 };
-pub(crate) use api::{create, create_for_task, get, list, submit};
+pub(crate) use api::{create, create_in_workspace, get, list, submit};
 #[cfg(test)]
 use connection::AgentConnection;
 #[cfg(test)]

@@ -6,7 +6,11 @@ pub(super) async fn bridge_terminal_socket(
     manager: TerminalManager,
     pane_id: String,
     access: Option<crate::auth::SessionAccess>,
+    events: crate::workspace_events::WorkspaceEvents,
 ) {
+    let Ok(hosting_gate) = manager.hosting_gate(&pane_id) else {
+        return;
+    };
     let (mut browser_tx, mut browser_rx) = browser.split();
     let (mut daemon_tx, mut daemon_rx) = daemon.split();
     let mut resize_syncs = FuturesUnordered::new();
@@ -37,6 +41,34 @@ pub(super) async fn bridge_terminal_socket(
                     }
                     let close = matches!(message, Message::Close(_));
                     let mut message = axum_to_tungstenite(message);
+                    // Serialize takeover with the entire paste + Enter submission.
+                    // Revalidate on every frame so previously connected controllers
+                    // cannot write after another client enables hosting.
+                    let _hosting_gate = hosting_gate.lock().await;
+                    if !close {
+                        use aow_protocol::TerminalAttachClientMessage as ClientMessage;
+                        let command = if let tungstenite::Message::Text(text) = &message {
+                            serde_json::from_str::<ClientMessage>(text).ok()
+                        } else { None };
+                        let hosted = match manager.hosting(&pane_id) {
+                            Ok(hosting) => hosting.is_some(),
+                            Err(_) => break,
+                        };
+                        if hosted {
+                            match command {
+                                Some(ClientMessage::Claim { force: true }) => {
+                                    if manager.set_hosting(&pane_id, None, None).is_err() { break; }
+                                    events.terminals_changed();
+                                }
+                                Some(ClientMessage::Claim { force: false }) => {
+                                    message = tungstenite::Message::Text(serde_json::to_string(&ClientMessage::Observe).unwrap().into());
+                                }
+                                Some(ClientMessage::Observe) => {}
+                                _ if matches!(message, tungstenite::Message::Ping(_) | tungstenite::Message::Pong(_)) => {}
+                                _ => continue,
+                            }
+                        }
+                    }
                     if cli_pane && !close {
                         use aow_protocol::TerminalAttachClientMessage as ClientMessage;
                         let command = if let tungstenite::Message::Text(text) = &message {

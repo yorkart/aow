@@ -74,6 +74,9 @@ impl TerminalManager {
                     break;
                 };
                 registry = next;
+                for event in &events {
+                    let _ = manager.inner.task_completions.send(event.clone());
+                }
                 let detected = manager.agents(None).await;
                 let mut events = events;
                 // Resolve names at delivery time so renaming a project/tab

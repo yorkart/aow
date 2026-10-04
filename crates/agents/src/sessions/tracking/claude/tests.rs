@@ -1,5 +1,24 @@
 use super::*;
 
+#[test]
+fn interrupted_or_failed_reply_is_not_a_completion_conclusion() {
+    for error in [
+        serde_json::json!({"type":"assistant", "isApiErrorMessage":true, "message":{"content":"API failure"}}),
+        serde_json::json!({"type":"assistant", "interruptedMessageId":"reply", "message":{"content":"Interrupted"}}),
+    ] {
+        let mut parser = Parser::default();
+        parser.consume("s", &serde_json::json!({"type":"assistant", "message":{"id":"reply", "content":"Earlier reply"}}));
+        parser.consume("s", &error);
+        let event = parser
+            .consume(
+                "s",
+                &serde_json::json!({"type":"system", "subtype":"turn_duration"}),
+            )
+            .unwrap();
+        assert!(event.conclusion.is_none());
+    }
+}
+
 #[cfg(unix)]
 fn cli_fixture(root: &Path, response: &str) -> SessionEnvironment {
     use std::os::unix::fs::PermissionsExt;

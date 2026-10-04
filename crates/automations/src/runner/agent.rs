@@ -4,7 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result};
 use tokio::{io::AsyncWriteExt, process::Command, sync::mpsc};
 use uuid::Uuid;
 
@@ -32,7 +32,7 @@ pub(super) async fn execute(
     concurrency_slot: &ConcurrencySlot,
 ) -> Result<Outcome> {
     task.input.validate()?;
-    let workspace = workspace::prepare(store, task, id, concurrency_slot).await?;
+    let workspace = workspace::prepare(task, id, concurrency_slot).await?;
     let directory = &workspace.directory;
     writer.append(&RunEvent::Workspace {
         path: directory.clone(),
@@ -79,6 +79,7 @@ pub(super) async fn execute(
     let mut command = agent::command(task, agent_environment, directory, specified_id.as_deref())?;
     concurrency_slot.register(&mut command);
     let agent_command = command_argv(&command);
+    store.capture_session_roots(&task.id, id, command.as_std())?;
     let mut child = command.spawn().context("无法启动 Agent")?;
     let _group = ProcessGroup(child.id().unwrap());
     writer.append(&RunEvent::AgentStarted {
@@ -111,20 +112,21 @@ pub(super) async fn execute(
     let output = tokio::spawn(agent::capture_stdout(stdout, stdout_file, stdout_reporter));
     let errors = tokio::spawn(agent::capture_stderr(stderr, stderr_file, reporter));
     drop(tx);
-    let mut session_received = specified_id.is_some();
+    let mut received_session = specified_id;
     let mut channel_open = true;
     let session_deadline = tokio::time::sleep(Duration::from_secs(60));
     tokio::pin!(session_deadline);
     let status: Result<ExitStatus> = loop {
         tokio::select! {
             session = rx.recv(), if channel_open => match session {
-                Some(session_id) => { writer.append(&RunEvent::Session { session_id, elapsed_ms: millis(started) })?; session_received = true; }
+                Some(session_id) => { received_session = Some(session_id.clone()); writer.append(&RunEvent::Session { session_id, elapsed_ms: millis(started) })?; }
                 None => channel_open = false,
             },
             status = child.wait() => break status.map_err(Into::into),
-            _ = &mut session_deadline, if !session_received && session_mode == SessionIdMode::FromOutput => break Err(anyhow::anyhow!("Agent 启动 60 秒内未返回会话 ID")),
+            _ = &mut session_deadline, if received_session.is_none() && session_mode == SessionIdMode::FromOutput => break Err(anyhow::anyhow!("Agent 启动 60 秒内未返回会话 ID")),
         }
     };
+    let exited_at = chrono::Utc::now();
     // Descendants must not keep inherited pipes open after the agent exits or
     // after the session-ID deadline aborts the run.
     drop(_group);
@@ -133,11 +135,11 @@ pub(super) async fn execute(
     // consuming the channel, otherwise the final session line races validation.
     let stderr = errors.await??;
     while let Ok(session_id) = rx.try_recv() {
+        received_session = Some(session_id.clone());
         writer.append(&RunEvent::Session {
             session_id,
             elapsed_ms: millis(started),
         })?;
-        session_received = true;
     }
     if output.truncated {
         writer.append(&RunEvent::OutputTruncated {
@@ -175,6 +177,7 @@ pub(super) async fn execute(
         ));
     }
     input_result.context("无法将任务内容发送给 Agent")?;
-    ensure!(session_received, "Agent 已退出，但没有返回会话 ID");
+    let session_id = received_session.context("Agent 已退出，但没有返回会话 ID")?;
+    super::result::capture(store, task, id, session_id, exited_at).await?;
     Ok((RunStatus::Completed, status.code(), None))
 }

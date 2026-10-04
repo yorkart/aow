@@ -39,7 +39,7 @@
 .mobile-settings .project-aow-dialog-path-hint code { display:block; white-space:normal; overflow-wrap:anywhere; font-size:12px; }
 .mobile-settings p[role="status"],.mobile-settings .project-aow-error { font-size:13px; }
 .mobile-settings .project-aow-agent-list { display:flex; flex-direction:column; gap:8px; }
-.mobile-settings .project-aow-agent-row { display:grid; grid-template-columns:8px 22px minmax(0,1fr) 44px 44px; gap:4px; padding:10px 6px; background:var(--m-panel); border:1px solid var(--m-line); border-radius:12px; }
+.mobile-settings .project-aow-agent-row { display:grid; grid-template-columns:8px 22px minmax(0,1fr) 44px 44px 44px; gap:4px; padding:10px 6px; background:var(--m-panel); border:1px solid var(--m-line); border-radius:12px; }
 .mobile-settings .project-aow-agent-row > div { grid-column:3 / -1; }
 .mobile-settings .project-aow-agent-row strong { font-size:14px; }
 .mobile-settings .project-aow-agent-row small,.mobile-settings .project-aow-agent-row code { font-size:12px; }

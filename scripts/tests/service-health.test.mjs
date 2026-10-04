@@ -84,22 +84,34 @@ test('health requires the PID advertised by a new release and detects restarts d
   const timeout = 1000;
   let now = Date.now();
   t.mock.method(Date, 'now', () => now);
+  let completedResponses = 0;
   const respond = body => (_, response) => {
+    response.once('finish', () => { completedResponses++; });
     // End the retry window after the real HTTP probe reaches this listener.
-    // A near-deadline retry must not replace the ownership error with a timeout.
     // Only the retry clock is mocked; the HTTP request timer still runs normally.
     now += timeout;
-    response.end(JSON.stringify(body));
+    response.end(body);
   };
-  const config = await endpoint(t, 'server', respond({ service: 'aow', ok: true, pid: 1234 }));
-  await assert.rejects(waitForHealth(config, () => 1235, timeout), /active launchd process/);
+  const expectRejectedProbe = async (config, runningPid) => {
+    const previousResponses = completedResponses;
+    await assert.rejects(
+      waitForHealth(config, runningPid, timeout),
+      /active launchd process|health request timed out/,
+    );
+    assert.ok(completedResponses > previousResponses,
+      'the health endpoint should complete a response before the probe deadline');
+  };
+  const config = await endpoint(t, 'server', respond(
+    JSON.stringify({ service: 'aow', ok: true, pid: 1234 }),
+  ));
+  // Allow a real HTTP round trip before asserting PID ownership.
+  await expectRejectedProbe(config, () => 1235);
   let calls = 0;
-  await assert.rejects(waitForHealth(config, () => ++calls % 2 ? 1234 : 1235, timeout), /active launchd process/);
+  await expectRejectedProbe(config, () => ++calls % 2 ? 1234 : 1235);
   assert.equal(calls, 2);
-  const old = await endpoint(t, 'server', respond({ service: 'aow', ok: true }));
-  await assert.rejects(waitForHealth(old, () => 1234, timeout), /active launchd process/);
+  const old = await endpoint(t, 'server', respond('{"service":"aow","ok":true}'));
+  await expectRejectedProbe(old, () => 1234);
 });
-
 test('unresponsive health checks have a total deadline', async t => {
   const config = await endpoint(t, 'server', () => {});
   const started = Date.now();

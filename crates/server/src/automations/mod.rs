@@ -23,8 +23,9 @@ use serde::Deserialize;
 use crate::{AppState, PROCESS_HOME};
 
 mod api;
+mod hosting;
 mod notifications;
-pub(crate) use api::routes;
+pub(crate) use api::{cli_routes, routes};
 
 const RUN_HISTORY_RETENTION: usize = 200;
 const RUN_HISTORY_CLEANUP_INTERVAL: Duration = Duration::from_secs(5 * 60);
@@ -123,7 +124,13 @@ impl AutomationManager {
             .read_run(task_id, run_id)?
             .context("执行记录尚未生成")
     }
+
+    pub(crate) fn run_result(&self, run: &Run) -> Result<String> {
+        self.store.read_run_result(run)
+    }
 }
 
+#[cfg(test)]
+mod hosting_tests;
 #[cfg(test)]
 mod tests;

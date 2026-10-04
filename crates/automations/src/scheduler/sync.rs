@@ -34,15 +34,7 @@ impl Scheduler {
                     .await?;
                 }
             } else {
-                let target = format!("gui/{}/{label}", unsafe { libc::geteuid() });
-                if self
-                    .command(&self.manager_command, &["print".into(), target.clone()])
-                    .await
-                    .is_ok()
-                {
-                    self.command(&self.manager_command, &["bootout".into(), target])
-                        .await?;
-                }
+                self.bootout_launchd(&label).await?;
             }
             for path in paths {
                 if path.exists() {
@@ -60,11 +52,13 @@ impl Scheduler {
         }
         let files = self.render(store, task)?;
         let enabled = task.input.enabled && !task.deleted;
-        if enabled {
-            self.check_ready().await?;
+        let domain = if enabled {
+            self.check_ready().await?
         } else if files.iter().all(|(path, _)| !path.exists()) {
             return Ok(());
-        }
+        } else {
+            None
+        };
         let label = self.label(&task.id);
         if self.platform == Platform::Systemd {
             // Only the short-lived trigger is replaced; actual runs have separate units.
@@ -97,24 +91,24 @@ impl Scheduler {
                 .await?;
             }
         } else {
-            let domain = format!("gui/{}", unsafe { libc::geteuid() });
-            let target = format!("{domain}/{label}");
-            if self
-                .command(&self.manager_command, &["print".into(), target.clone()])
-                .await
-                .is_ok()
-            {
-                self.command(&self.manager_command, &["bootout".into(), target])
-                    .await?;
-            }
-            for (path, content) in files {
+            self.bootout_launchd(&label).await?;
+            for (path, _) in files {
                 if enabled {
+                    let domain = domain.as_deref().context("缺少 launchd 用户域")?;
+                    // A Background timer must not also load when the user later
+                    // logs into Aqua and launchd scans ~/Library/LaunchAgents.
+                    let content = render::launchd_schedule(
+                        &label,
+                        &self.arguments(store, task, "trigger", RunSource::Scheduled),
+                        task,
+                        domain.starts_with("user/"),
+                    )?;
                     atomic_write(&path, content.as_bytes())?;
                     self.command(
                         &self.manager_command,
                         &[
                             "bootstrap".into(),
-                            domain.clone(),
+                            domain.into(),
                             path.to_string_lossy().into_owned(),
                         ],
                     )

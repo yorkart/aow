@@ -15,7 +15,6 @@ pub(super) const SCRIPT_LIMIT: usize = 1024 * 1024;
 pub(super) const GITHUB_SCRIPT: &str = include_str!("../review_adapters/github.py");
 // Upgrade only exact previous bundled scripts, preserving customized adapters.
 const PREVIOUS_GITHUB_SCRIPT_MD5: &[&str] = &[
-    "d2342adb2ce4965309d78843a8527f7d",
     "d1e903f22605a41bf437bf77bc85a981",
     "28fea8f4f7673254cca56a6122bfd0a2",
     "135515472a8c25185cf5a81a35b89138",

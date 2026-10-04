@@ -9,9 +9,25 @@ use tower::ServiceExt;
 const FAKE_AGENT: &str = r#"
 import os, sys, tty, time, json
 tty.setraw(0)
-log, mode = sys.argv[1:]
+log, mode = sys.argv[1:3]
+if mode == 'update':
+    options = sys.argv[3:]
+    if '--' in options: options = options[:options.index('--')]
+    checks = [value.split('=', 1)[1].strip()
+              for flag, value in zip(options, options[1:])
+              if flag in ('-c', '--config') and value.split('=', 1)[0].strip() == 'check_for_update_on_startup']
+    if not checks or checks[-1] != 'false':
+        os.write(1, b'Update available\r\n1. Update now\r\n2. Skip')
+        while True: time.sleep(1)
 def show(text):
-    os.write(1, ('\x1b[2J\x1b[H' + text + '\x1b[47;1H> \x1b[48;1Hfixture-model · /workspace · ready').encode())
+    if mode in ('compact', 'compact_warning'):
+        row = 47 if mode == 'compact_warning' else 48
+        footer = f'\x1b[45;1H› Ask Codex to do anything\x1b[{row};1H  GPT-6-Astra xhigh · ~/workspace/.aow-inbox-task'
+        if mode == 'compact_warning':
+            footer += '\x1b[48;1H  ? for shortcuts\x1b[48;135H⚠ 1 warning · f2 to view'
+    else:
+        footer = '\x1b[47;1H> \x1b[48;1Hfixture-model · /workspace · ready'
+    os.write(1, ('\x1b[2J\x1b[H' + text + footer).encode())
 os.write(1, b'\x1b[2J\x1b[Hmodel: loading\r\n> Ask anything')
 time.sleep(1)
 if mode == 'exit': sys.exit(9)
@@ -911,6 +927,67 @@ async fn create_rejects_unregistered_or_mismatched_project_worktrees() {
 }
 
 #[tokio::test]
+async fn cli_codex_skips_update_menu_without_changing_profile_or_manual_launch() {
+    let fixture = Fixture::new("update").await;
+    let app = crate::build_router(fixture.state.clone());
+    let id = "custom-codex";
+    let args = json!([
+        fixture.directory.path().join("agent.py"),
+        fixture.log,
+        "update",
+        "-c",
+        "check_for_update_on_startup=true",
+        "--"
+    ]);
+    post(
+        &app,
+        "/api/aow/agents",
+        json!({"id": id, "agent_type": "codex", "display_name": id,
+            "command": "/usr/bin/python3", "args": args}),
+    )
+    .await;
+    let mut request = fixture.request();
+    request.agent = id.into();
+    request.task = Some("task after skipping update".into());
+    let created: AgentTerminalInfo = fixture
+        .client
+        .post_json("/v1/agents", &request)
+        .await
+        .unwrap();
+    assert_eq!(
+        created.state.phase,
+        AgentTerminalPhase::Ready,
+        "{created:?}"
+    );
+    assert!(created.state.task_submitted);
+    tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            if let Ok(input) = std::fs::read_to_string(&fixture.log) {
+                let inputs: Vec<String> = input
+                    .lines()
+                    .map(|line| serde_json::from_str(line).unwrap())
+                    .collect();
+                assert_eq!(inputs, vec![request.task.as_deref().unwrap()]);
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let profile = fixture.state.aow.resolve_agent_profile(id).await.unwrap();
+    assert_eq!(json!(profile.args), args);
+    let manual = post(
+        &app,
+        "/api/terminals",
+        json!({"workspace_root": fixture.repo, "cwd": fixture.repo, "agent_id": id}),
+    )
+    .await;
+    assert_eq!(manual["panes"][0]["arguments"], args);
+    fixture.stop().await;
+}
+
+#[tokio::test]
 async fn startup_without_task_is_ready_without_writing_any_input() {
     let fixture = Fixture::new("ready").await;
     for agent in ["codex", "traecli"] {
@@ -1135,195 +1212,276 @@ async fn native_startup_probes() {
 }
 
 #[tokio::test]
-async fn board_conversion_prepares_once_and_start_does_not_change_status() {
-    let fixture = Fixture::with_storage("ready", true).await;
-    let environment_log = fixture.directory.path().join("task-environment.json");
-    let script = format!(
-        "import os, sys, json, subprocess\n\
-         state_dir = subprocess.check_output([sys.executable, '-c', 'import os; print(os.environ[\"AOW_STATE_DIR\"])'], text=True).strip()\n\
-         with open({}, 'w') as file: json.dump(state_dir, file)\n{}",
-        serde_json::to_string(&environment_log).unwrap(),
-        FAKE_AGENT,
-    );
-    std::fs::write(fixture.directory.path().join("agent.py"), script).unwrap();
-    let app = crate::build_router(fixture.state.clone());
-    post(&app, "/api/aow/agents", json!({"id":"task-codex","agent_type":"codex","display_name":"Task Codex","command":"/usr/bin/python3","args":[fixture.directory.path().join("agent.py"),fixture.log,"ready"]})).await;
-    let inbox = json!({"request_key":"requirement", "project_id":fixture.project_id, "title":"Implement idea", "description":"Discuss acceptance criteria"});
-    let source = post(&app, "/api/tasks/inbox", inbox).await;
-    let inbox_id = source["id"].as_str().unwrap();
-    let convert_path = format!("/api/tasks/inbox/{inbox_id}/convert");
-    let input = json!({"request_key":"board-task", "expected_revision":1,"title":"Implement idea","description":"Discuss acceptance criteria","status_id":"in-review","project_id":fixture.project_id,"cwd":fixture.repo,"agent":"task-codex","start_now":false});
-    let created = post(&app, &convert_path, input.clone()).await;
-    assert_eq!(created["execution"], "preparing");
-    let task_id = created["id"].as_str().unwrap();
-    assert!(aow_id::is_valid_id(task_id));
-    assert_ne!(task_id, "board-task");
-    post(&app, &convert_path, input).await;
-    let ready = tokio::time::timeout(Duration::from_secs(25), async {
-        loop {
-            let task: Value = fixture
-                .client
-                .get_json(&format!("/v1/tasks/items/{task_id}"))
-                .await
-                .unwrap();
-            if task["execution"] != "preparing" {
-                break task;
-            }
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
-    })
-    .await
-    .unwrap();
-    assert_eq!(ready["execution"], "ready", "{ready}");
-    let inherited: PathBuf =
-        serde_json::from_slice(&std::fs::read(&environment_log).unwrap()).unwrap();
-    assert_eq!(inherited, fixture.state_dir.canonicalize().unwrap());
-    let child_client = TerminaldClient::new(inherited.join("cli/cli.sock"));
-    let observed: Value = child_client
-        .get_json(&format!("/v1/tasks/items/{task_id}"))
+async fn hosting_owns_input_and_explicit_takeover_cancels_feedback() {
+    use aow_protocol::{TerminalAgentProcess, TerminalHosting, TerminalHostingPhase};
+    let fixture = Fixture::new("ready").await;
+    let info: AgentTerminalInfo = fixture
+        .client
+        .post_json("/v1/agents", &fixture.request())
         .await
         .unwrap();
-    assert_eq!(observed["id"], task_id);
-    assert_eq!(ready["status_id"], "in-review");
-    assert!(
-        !fixture.log.exists(),
-        "prepare-only must not submit the requirement"
-    );
+    let manager = &fixture.state.terminals;
+    let hosting = TerminalHosting {
+        id: "hosting-one".into(),
+        task_id: "review".into(),
+        task_revision: 1,
+        task_name: "Code Review".into(),
+        workspace_root: fixture.repo.to_string_lossy().into_owned(),
+        agent: "codex".into(),
+        session_id: "source".into(),
+        process: TerminalAgentProcess {
+            pid: 1,
+            start_time: "start".into(),
+            cwd: fixture.repo.to_string_lossy().into_owned(),
+        },
+        phase: TerminalHostingPhase::Collecting,
+        phase_started_at: timestamp(),
+        source_turn_id: Some("one".into()),
+        max_inputs: 3,
+        input_count: 0,
+        run_id: Some("run-one".into()),
+        error: None,
+    };
+    manager
+        .set_hosting(&info.pane_id, None, Some(hosting.clone()))
+        .unwrap();
+    let mut host = AgentConnection::claim_with_force(&manager.inner.terminald, &info.pane_id, true)
+        .await
+        .unwrap();
+    let mut browser = fixture.browser(&info.tab_id, &info.pane_id).await;
     assert_eq!(
-        fixture.state.terminals.list(None).await.unwrap().tabs.len(),
-        1
+        control(&mut browser, false).await,
+        TerminalControlState::Observing
     );
-    let board: Value = fixture.client.get_json("/v1/tasks").await.unwrap();
-    assert_eq!(board["tasks"].as_array().unwrap().len(), 1);
-    let inbox: Value = fixture
-        .client
-        .get_json("/v1/tasks/inbox?include_converted=true")
+    browser
+        .send(tungstenite::Message::Binary(b"forbidden\r".to_vec().into()))
         .await
         .unwrap();
-    assert_eq!(inbox["items"][0]["task_ids"], json!([task_id]));
-    let input = json!({"expected_revision":ready["revision"]});
-    let _: Value = fixture
-        .client
-        .post_json(&format!("/v1/tasks/items/{task_id}/start"), &input)
+    browser
+        .send(tungstenite::Message::Text(
+            json!({"type":"write","request_id":"blocked","data":"also forbidden\r"})
+                .to_string()
+                .into(),
+        ))
         .await
         .unwrap();
-    assert!(
-        fixture
-            .client
-            .post_json::<_, Value>(&format!("/v1/tasks/items/{task_id}/start"), &input)
-            .await
-            .is_err()
-    );
-    let submitted = tokio::time::timeout(Duration::from_secs(20), async {
-        loop {
-            let task: Value = fixture
-                .client
-                .get_json(&format!("/v1/tasks/items/{task_id}"))
-                .await
-                .unwrap();
-            if task["execution"] != "submitting" {
-                break task;
-            }
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
-    })
-    .await
-    .unwrap();
-    assert_eq!(submitted["execution"], "submitted", "{submitted}");
-    assert_eq!(submitted["status_id"], "in-review");
-    assert_eq!(submitted["pane_id"], ready["pane_id"]);
-    let input = tokio::time::timeout(Duration::from_secs(5), async {
-        loop {
-            if let Ok(text) = std::fs::read_to_string(&fixture.log)
-                && text.ends_with('\n')
-            {
-                break text;
-            }
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
-    })
-    .await
-    .unwrap();
-    assert!(input.contains("Discuss acceptance criteria"));
-    assert!(input.contains(&format!("aow-cli task set-status {task_id}")));
-    let prompt: String = serde_json::from_str(input.trim()).unwrap();
-    assert!(prompt.starts_with("<aow_task_context>\n"));
-    assert!(
-        prompt.ends_with("</aow_task_context>\n\nImplement idea\n\nDiscuss acceptance criteria")
-    );
-    assert!(!prompt.contains("--state-dir"));
-    assert!(!prompt.contains(fixture.state_dir.to_str().unwrap()));
-    let _: Value = fixture
+    let submitted = fixture
         .client
-        .post_json(
-            &format!("/v1/tasks/items/{task_id}/status"),
-            &json!({"expected_revision":submitted["revision"],"status_id":"todo"}),
+        .post_json::<_, AgentTerminalInfo>(
+            &format!("/v1/agents/{}/submit", info.pane_id),
+            &AgentTerminalSubmit {
+                task: "CLI must not bypass hosting".into(),
+            },
         )
+        .await;
+    assert!(submitted.is_err());
+    // Serialize the full paste + Enter against a concurrent user takeover.
+    let mut changes = fixture.state.workspace_events.subscribe();
+    changes.borrow_and_update();
+    let gate = manager.hosting_gate(&info.pane_id).unwrap();
+    let guard = gate.lock().await;
+    let takeover = tokio::spawn(async move {
+        assert_eq!(
+            control(&mut browser, true).await,
+            TerminalControlState::Claimed
+        );
+        browser
+    });
+    let feedback = "Review: fix the test\n保持多行 $HOME `literal`";
+    host.submit(feedback).await.unwrap();
+    drop(guard);
+    let mut browser = takeover.await.unwrap();
+    assert!(
+        changes.has_changed().unwrap(),
+        "takeover must refresh every console"
+    );
+    assert!(manager.hosting(&info.pane_id).unwrap().is_none());
+    assert!(
+        !manager
+            .set_hosting(&info.pane_id, Some(&hosting.id), Some(hosting.clone()))
+            .unwrap()
+    );
+    assert!(host.submit("stale feedback").await.is_err());
+    browser
+        .send(tungstenite::Message::Binary(
+            b"manual after takeover\r".to_vec().into(),
+        ))
         .await
         .unwrap();
-    assert_eq!(
-        std::fs::read_to_string(&fixture.log).unwrap(),
-        input,
-        "moving status must not submit more input"
-    );
-    let source: Value = fixture
-        .client
-        .get_json(&format!("/v1/tasks/inbox/{inbox_id}"))
-        .await
-        .unwrap();
-    assert_eq!(
-        source["revision"], 1,
-        "Conversion does not modify the requirement file"
-    );
-    let input = json!({"request_key":"board-immediate", "expected_revision":source["revision"],"title":"Immediate task","description":"Fresh worktree","status_id":"done","project_id":fixture.project_id,"cwd":"","agent":"task-codex","start_now":true,"worktree":{"branch":"","base_ref":"main"}});
-    let accepted = post(&app, &convert_path, input.clone()).await;
-    let immediate_id = accepted["id"].as_str().unwrap();
-    let new_path = PathBuf::from(accepted["cwd"].as_str().unwrap());
-    assert_eq!(
-        new_path,
-        PathBuf::from(format!("{}-task-{immediate_id}", fixture.repo.display()))
-    );
-    let immediate = tokio::time::timeout(Duration::from_secs(25), async {
+    let inputs = tokio::time::timeout(Duration::from_secs(5), async {
         loop {
-            let task: Value = fixture
-                .client
-                .get_json(&format!("/v1/tasks/items/{immediate_id}"))
-                .await
-                .unwrap();
-            if task["execution"] != "preparing" {
-                break task;
-            }
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
-    })
-    .await
-    .unwrap();
-    assert_eq!(immediate["execution"], "submitted", "{immediate}");
-    assert_eq!(immediate["status_id"], "done");
-    assert!(new_path.join(".git").is_file());
-    tokio::time::timeout(Duration::from_secs(5), async {
-        loop {
-            let text = std::fs::read_to_string(&fixture.log).unwrap();
-            let lines: Vec<_> = text.lines().collect();
-            if lines.len() == 2 && text.ends_with('\n') {
-                let prompt: String = serde_json::from_str(lines[1]).unwrap();
-                assert!(prompt.starts_with("<aow_task_context>\n"));
-                assert!(prompt.contains(&format!("<task_id>{immediate_id}</task_id>")));
-                assert!(
-                    prompt.ends_with("</aow_task_context>\n\nImmediate task\n\nFresh worktree")
-                );
-                assert!(!prompt.contains("--state-dir"));
-                break;
+            let text = std::fs::read_to_string(&fixture.log).unwrap_or_default();
+            let lines: Vec<String> = text
+                .lines()
+                .map(|line| serde_json::from_str(line).unwrap())
+                .collect();
+            if lines.len() >= 2 {
+                break lines;
             }
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
     })
     .await
     .unwrap();
-    post(&app, &convert_path, input).await;
-    assert_eq!(
-        fixture.state.terminals.list(None).await.unwrap().tabs.len(),
-        2
-    );
+    assert_eq!(inputs, [feedback, "manual after takeover"]);
+    drop(browser);
     fixture.stop().await;
+}
+
+#[tokio::test]
+async fn inbox_execution_submits_xml_context_and_original_task_once_and_retains_terminal_link() {
+    for (mode, startup) in [
+        ("new_worktree", "compact_warning"),
+        ("existing", "compact"),
+        ("temporary", "ready"),
+    ] {
+        let fixture = Fixture::with_storage(startup, true).await;
+        let client = reqwest::Client::new();
+        let base = format!("http://{}", fixture.address);
+        let markdown =
+            "# 保留原始输入\n\n- [ ] 完成需求\n\n```sh\nprintf '%s' '$HOME `literal`'\n```";
+        let item: Value = client
+            .post(format!("{base}/api/inbox/items"))
+            .json(&json!({"request_key":"inbox-capture", "markdown":markdown}))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let path = format!("{base}/api/inbox/items/{}", item["id"].as_str().unwrap());
+        let item: Value = client.put(&path).json(&json!({"expected_revision":item["revision"], "markdown":markdown, "project_id":fixture.project_id, "label_ids":["todo"]})).send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
+        let input = json!({"expected_revision":item["revision"], "request_key":"inbox-launch", "agent":"codex", "append_prompt":"先分析，再实现。", "workspace_mode":mode, "workspace_path":if mode == "existing" { fixture.repo.to_str().unwrap() } else { "" }});
+        let request = || client.post(format!("{path}/execute")).json(&input).send();
+        let (first, second) = tokio::join!(request(), request());
+        let first: Value = first
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let second: Value = second
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(first["id"], second["id"]);
+        let execution = tokio::time::timeout(Duration::from_secs(25), async {
+            loop {
+                let snapshot: Value = client
+                    .get(format!("{base}/api/inbox"))
+                    .send()
+                    .await
+                    .unwrap()
+                    .json()
+                    .await
+                    .unwrap();
+                let run = &snapshot["executions"][0];
+                if run["phase"] != "starting" {
+                    break run.clone();
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(execution["phase"], "submitted", "{execution}");
+        assert!(execution["tab_id"].is_string());
+        assert!(execution["pane_id"].is_string());
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let input = std::fs::read_to_string(&fixture.log).unwrap_or_default();
+                if input.ends_with('\n') {
+                    let lines: Vec<_> = input.lines().collect();
+                    assert_eq!(lines.len(), 1);
+                    let received: String = serde_json::from_str(lines[0]).unwrap();
+                    assert_eq!(received, execution["markdown"].as_str().unwrap());
+                    assert!(received.starts_with("<aow-inbox>\n"));
+                    assert!(received.contains(&format!(
+                        "<requirement id=\"{}\" />",
+                        item["id"].as_str().unwrap()
+                    )));
+                    assert!(received.contains(&format!(
+                        "<execution id=\"{}\" />",
+                        execution["id"].as_str().unwrap()
+                    )));
+                    assert!(
+                        received
+                            .ends_with(&format!("</aow-inbox>\n\n{markdown}\n\n先分析，再实现。"))
+                    );
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .unwrap();
+        let retry: Value = request()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(retry["id"], execution["id"]);
+        assert_eq!(
+            fixture.state.terminals.list(None).await.unwrap().tabs.len(),
+            1
+        );
+        let response = client
+            .delete(&path)
+            .json(&json!({"expected_revision":item["revision"]}))
+            .send()
+            .await
+            .unwrap();
+        assert!(response.status().is_success());
+        assert_eq!(
+            fixture.state.terminals.list(None).await.unwrap().tabs.len(),
+            1
+        );
+        let cwd = PathBuf::from(execution["cwd"].as_str().unwrap());
+        assert_eq!(execution["workspace_mode"], mode);
+        if mode == "temporary" {
+            assert!(cwd.is_dir());
+            assert!(!cwd.starts_with(&fixture.repo));
+            // Trust is retained in the local run journal after the item is deleted
+            // and after the Inbox store is reopened.
+            assert!(
+                crate::inbox::InboxStore::persistent(&fixture.state_dir)
+                    .unwrap()
+                    .is_temporary_workspace(cwd.to_str().unwrap())
+                    .unwrap()
+            );
+            let tab_id = execution["tab_id"].as_str().unwrap();
+            fixture
+                .state
+                .terminals
+                .inner
+                .terminald
+                .delete(execution["pane_id"].as_str().unwrap())
+                .await
+                .unwrap();
+            let rebuilt = post(
+                &crate::build_router(fixture.state.clone()),
+                &format!("/api/terminals/{tab_id}/rebuild"),
+                json!({}),
+            )
+            .await;
+            assert_eq!(rebuilt["workspace_root"], cwd.to_str().unwrap());
+        }
+        fixture.stop().await;
+        if mode == "temporary" {
+            assert!(
+                cwd.is_dir(),
+                "Inbox never automatically removes temporary workspaces"
+            );
+            std::fs::remove_dir_all(cwd).unwrap();
+        }
+    }
 }

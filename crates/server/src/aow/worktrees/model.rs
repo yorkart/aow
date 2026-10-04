@@ -79,6 +79,12 @@ pub(in crate::aow) struct CreateWorktreeRequest {
 }
 
 #[derive(Debug, Serialize)]
+pub(in crate::aow) struct ProjectBranches {
+    pub(in crate::aow) branches: Vec<String>,
+    pub(in crate::aow) default_branch: String,
+}
+
+#[derive(Debug, Serialize)]
 pub(in crate::aow) struct CreateWorktreeResponse {
     pub(in crate::aow) project: Project,
     pub(in crate::aow) worktree: Worktree,

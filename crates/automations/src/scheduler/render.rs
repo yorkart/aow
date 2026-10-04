@@ -20,6 +20,44 @@ pub(super) fn unit_arg(value: &str) -> String {
     )
 }
 
+pub(super) fn launchd_plist(
+    label: &str,
+    args: &[String],
+    trigger: &str,
+    background: bool,
+) -> String {
+    let session = if background { "Background" } else { "Aqua" };
+    format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\"><dict><key>Label</key><string>{}</string><key>ProgramArguments</key><array>{}</array>{trigger}<key>LimitLoadToSessionType</key><string>{session}</string><key>KeepAlive</key><false/><key>StandardOutPath</key><string>/dev/null</string><key>StandardErrorPath</key><string>/dev/null</string></dict></plist>\n",
+        xml(label),
+        args.iter()
+            .map(|arg| format!("<string>{}</string>", xml(arg)))
+            .collect::<String>(),
+    )
+}
+
+pub(super) fn launchd_schedule(
+    label: &str,
+    args: &[String],
+    task: &Task,
+    background: bool,
+) -> Result<String> {
+    let trigger = format!(
+        "<key>RunAtLoad</key><false/>{}",
+        if let Some(seconds) = task.input.interval_seconds {
+            format!(
+                "<key>StartInterval</key><integer>{seconds}</integer><key>ThrottleInterval</key><integer>1</integer>"
+            )
+        } else {
+            format!(
+                "<key>StartCalendarInterval</key>{}",
+                Schedule::parse(&task.input.cron)?.launchd_calendar_xml()?
+            )
+        }
+    );
+    Ok(launchd_plist(label, args, &trigger, background))
+}
+
 impl Scheduler {
     pub fn render(&self, store: &Store, task: &Task) -> Result<Vec<(PathBuf, String)>> {
         valid_component(&task.id)?;
@@ -59,22 +97,7 @@ impl Scheduler {
                 ])
             }
             Platform::Launchd => {
-                let plist = format!(
-                    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\"><dict><key>Label</key><string>{label}</string><key>ProgramArguments</key><array>{}</array>{}<key>RunAtLoad</key><false/><key>KeepAlive</key><false/><key>StandardOutPath</key><string>/dev/null</string><key>StandardErrorPath</key><string>/dev/null</string></dict></plist>\n",
-                    args.iter()
-                        .map(|arg| format!("<string>{}</string>", xml(arg)))
-                        .collect::<String>(),
-                    if let Some(seconds) = task.input.interval_seconds {
-                        format!(
-                            "<key>StartInterval</key><integer>{seconds}</integer><key>ThrottleInterval</key><integer>1</integer>"
-                        )
-                    } else {
-                        format!(
-                            "<key>StartCalendarInterval</key>{}",
-                            Schedule::parse(&task.input.cron)?.launchd_calendar_xml()?
-                        )
-                    }
-                );
+                let plist = launchd_schedule(&label, &args, task, false)?;
                 Ok(vec![(self.directory.join(format!("{label}.plist")), plist)])
             }
             Platform::Unsupported => anyhow::bail!("不支持的系统定时器"),

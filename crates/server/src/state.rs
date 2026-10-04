@@ -9,8 +9,8 @@ use crate::{
 
 #[derive(Clone)]
 pub struct AppState {
+    pub(crate) inbox: crate::inbox::InboxStore,
     pub(crate) base_path: BasePath,
-    pub(crate) tasks: crate::tasks::TaskStore,
     pub(crate) frontend_dist: PathBuf,
     pub(crate) auth: auth::AuthService,
     pub(crate) session_shares: session_shares::SessionShares,
@@ -30,10 +30,8 @@ impl AppState {
     }
 
     pub fn with_terminald_socket(frontend_dist: PathBuf, terminald_socket: PathBuf) -> Self {
-        let events = workspace_events::WorkspaceEvents::new();
         Self {
-            tasks: crate::tasks::TaskStore::new(None, None, events.clone())
-                .expect("in-memory task store"),
+            inbox: crate::inbox::InboxStore::in_memory(),
             base_path: BasePath::default(),
             frontend_dist,
             auth: auth::AuthService::disabled(),
@@ -43,7 +41,7 @@ impl AppState {
             automations: None,
             review_providers: pull_requests::ProviderManager::default(),
             operations: operations::OperationService::in_memory(),
-            workspace_events: events,
+            workspace_events: workspace_events::WorkspaceEvents::new(),
         }
     }
 
@@ -63,15 +61,10 @@ impl AppState {
         let aow = aow::AowManager::persistent(&state_dir).map_err(|error| {
             TerminalError::Invalid(format!("failed to initialize aow: {error}"))
         })?;
-        let events = workspace_events::WorkspaceEvents::new();
         Ok(Self {
-            tasks: crate::tasks::TaskStore::new(
-                Some(&state_dir),
-                aow.task_configuration(),
-                events.clone(),
-            )
-            .map_err(|e| TerminalError::Invalid(e.to_string()))?,
-            workspace_events: events,
+            inbox: crate::inbox::InboxStore::persistent(&state_dir)
+                .map_err(|e| TerminalError::Invalid(format!("failed to initialize inbox: {e}")))?,
+            workspace_events: workspace_events::WorkspaceEvents::new(),
             review_providers: pull_requests::ProviderManager::persistent(&state_dir)
                 .map_err(|e| TerminalError::Invalid(e.to_string()))?,
             base_path: BasePath::default(),
@@ -117,6 +110,7 @@ impl AppState {
 
     pub fn start_agent_notifications(&self) {
         self.terminals.start_agent_notifications(self.aow.clone());
+        terminal::hosting::recover(self.clone());
     }
 
     pub async fn initialize_global_workspace(&self) -> anyhow::Result<()> {

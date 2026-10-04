@@ -8,6 +8,8 @@ pub(crate) struct TaskStopNotification {
     pub(crate) cwd: String,
     pub(crate) turn_id: Option<String>,
     pub(crate) conclusion: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) usage: Option<aow_agents::sessions::usage::TokenUsage>,
     pub(crate) instance_ids: Vec<String>,
     pub(crate) sources: Vec<TaskStopSource>,
 }

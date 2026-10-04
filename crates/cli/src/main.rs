@@ -1,7 +1,7 @@
 mod agent;
 mod automation;
+mod inbox;
 mod project;
-mod task;
 
 use std::{
     io::{self, Write},
@@ -16,8 +16,9 @@ use serde::Serialize;
 
 const CONTEXT: &str =
     "Local access: uses the current OS user and filesystem permissions. No web login, Cookie,
-token, or running AoW server is required for automation queries. Project queries
-require a running server; agent commands also require terminald, via the local Unix socket.
+token, or running AoW server is required for automation queries. Automation creation
+and project/Inbox operations require a running server via the local Unix socket;
+agent commands also require terminald.
 Queries do not initialize, migrate,
 repair, or clean state. Help and version work without a state directory.
 
@@ -45,8 +46,12 @@ Only the current data model is supported; no historical compatibility or migrati
 Examples (replace IDs with values returned by list commands):
   aow-cli project list
   aow-cli project get PROJECT-ID
+  aow-cli inbox list
+  aow-cli inbox get REQUIREMENT-ID
+  aow-cli inbox comments list REQUIREMENT-ID
   aow-cli agent create --project-id PROJECT-ID --cwd /worktrees/fix
   aow-cli automation list
+  aow-cli automation create --file task.json --project-id PROJECT-ID
   aow-cli automation get 12345678
   aow-cli automation runs list 12345678 --limit 20
   aow-cli automation runs get 12345678 20260913T090000000Z_1234
@@ -67,11 +72,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Manage Inbox requirements and user-defined task states.
-    Task(task::TaskArgs),
     /// Query registered project IDs, names and repository paths through the local server.
     Project(project::ProjectArgs),
-    /// Inspect local automation task configurations and execution records.
+    /// Create, update and query Inbox requirements and append immutable comments.
+    Inbox(inbox::InboxArgs),
+    /// Create paused automation tasks and inspect local configurations and execution records.
     #[command(after_help = CONTEXT)]
     Automation(automation::Automation),
     /// Create hidden interactive agents and submit tasks through the local AoW server.
@@ -117,22 +122,12 @@ fn execute(cli: Cli) -> Result<()> {
     let state_dir = cli
         .state_dir
         .unwrap_or_else(aow_filesystem::default_state_dir);
-    if let Command::Task(args) = cli.command {
-        let value = task::execute(args, state_dir)?;
-        return write_json(&mut io::stdout().lock(), &value, cli.compact);
-    }
-    if let Command::Agent(args) = cli.command {
-        let value = agent::execute(args, state_dir)?;
-        return write_json(&mut io::stdout().lock(), &value, cli.compact);
-    }
-    if let Command::Project(args) = cli.command {
-        let value = project::execute(args, state_dir)?;
-        return write_json(&mut io::stdout().lock(), &value, cli.compact);
-    }
-    let Command::Automation(automation) = cli.command else {
-        unreachable!();
+    let value = match cli.command {
+        Command::Agent(args) => agent::execute(args, state_dir)?,
+        Command::Project(args) => project::execute(args, state_dir)?,
+        Command::Inbox(args) => inbox::execute(args, state_dir)?,
+        Command::Automation(args) => automation::execute(args, state_dir)?,
     };
-    let value = automation::execute(automation, state_dir)?;
     write_json(&mut io::stdout().lock(), &value, cli.compact)
 }
 

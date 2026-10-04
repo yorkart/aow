@@ -37,6 +37,7 @@ pub(super) async fn attach_terminal_pane(
                         manager,
                         pane_id,
                         access.map(|access| access.0),
+                        state.workspace_events,
                     )
                     .await
                 }

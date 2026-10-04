@@ -43,7 +43,7 @@ async function fixture(t, width = 390, mobile = true, virtualViewport = false) {
     } else if (path === '/api/aow/settings/discovered-path') data = ['/opt/bin', '/usr/bin', '/bin'];
     else if (path === '/api/aow/agents') {
       if (writing) {
-        const agent = { ...body, id: body.id || 'custom-agent', available: true, source: 'configured', executable: body.command };
+        const agent = { ...body, id: body.id || `custom-agent-${state.agents.length}`, available: true, source: 'configured', executable: body.command };
         state.agents = [...state.agents.filter(item => item.id !== agent.id), agent];
         data = agent;
       } else data = state.agents;
@@ -111,6 +111,7 @@ async function layout(page, dialog, name) {
   }
   if (process.env.MOBILE_TEST_SCREENSHOTS) {
     await mkdir(process.env.MOBILE_TEST_SCREENSHOTS, { recursive: true });
+    if (name.startsWith('agents')) await dialog.locator('.project-aow-agent-list').scrollIntoViewIfNeeded();
     await page.screenshot({ path: `${process.env.MOBILE_TEST_SCREENSHOTS}/settings-${page.viewportSize().width}-${name}.png` });
   }
 }
@@ -156,15 +157,35 @@ try {
 
     await choose('Agents');
     await dialog.getByRole('combobox', { name: 'Agent 类型' }).selectOption('codex');
+    assert.equal(await dialog.getByRole('textbox', { name: 'Executable' }).inputValue(), '/usr/bin/codex');
     await dialog.getByRole('textbox', { name: 'Display name' }).fill('手机 Codex');
     await dialog.getByRole('textbox', { name: 'Executable' }).fill('/usr/bin/codex');
     await dialog.getByRole('textbox', { name: 'Arguments', exact: true }).fill('--model\ngpt-6');
-    await dialog.getByRole('textbox', { name: 'Environment variables' }).fill('{"MODE":"mobile"}');
+    await dialog.getByRole('textbox', { name: 'Environment variables' }).fill('MODE=mobile');
     await dialog.getByRole('button', { name: '注册', exact: true }).click();
     await dialog.getByRole('status').filter({ hasText: '手机 Codex 配置已保存' }).waitFor();
     assert.deepEqual(state.agents.at(-1).args, ['--model', 'gpt-6']);
     assert.deepEqual(state.agents.at(-1).env, { MODE: 'mobile' });
     await layout(page, dialog, 'agents');
+
+    const original = structuredClone(state.agents.at(-1));
+    const copy = dialog.getByRole('button', { name: '复制 手机 Codex', exact: true });
+    assert.equal(await copy.evaluate(element => element.getBoundingClientRect().width), 44);
+    await copy.click();
+    assert.equal(await dialog.getByRole('textbox', { name: 'Display name' }).inputValue(), '手机 Codex（副本）');
+    assert.equal(await dialog.getByRole('textbox', { name: 'Arguments', exact: true }).inputValue(), '--model\ngpt-6');
+    assert.equal(await dialog.getByRole('textbox', { name: 'Environment variables' }).inputValue(), 'MODE=mobile');
+    page.once('dialog', prompt => prompt.dismiss());
+    await dialog.getByRole('button', { name: '关闭设置' }).click();
+    assert.equal(await dialog.getByRole('textbox', { name: 'Display name' }).inputValue(), '手机 Codex（副本）', 'copied drafts retain unsaved-change protection');
+    await dialog.getByRole('textbox', { name: 'Environment variables' }).fill('MODE=copied');
+    await dialog.getByRole('button', { name: '注册', exact: true }).click();
+    await dialog.getByRole('status').filter({ hasText: '手机 Codex（副本） 配置已保存' }).waitFor();
+    assert.equal(state.agents.length, 3);
+    assert.deepEqual(state.agents.find(agent => agent.id === original.id), original);
+    assert.deepEqual(state.agents.at(-1).env, { MODE: 'copied' });
+    assert.equal(Object.hasOwn(state.writes.at(-1).body, 'id'), false);
+    await layout(page, dialog, 'agents-copy');
 
     await choose('IM');
     await dialog.getByRole('button', { name: '重新扫码绑定' }).waitFor();

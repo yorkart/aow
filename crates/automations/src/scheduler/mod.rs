@@ -42,6 +42,8 @@ pub struct SchedulerStatus {
 }
 
 mod dispatch;
+mod hosting;
+mod launchd;
 mod render;
 mod sync;
 
@@ -114,7 +116,8 @@ impl Scheduler {
         }
     }
 
-    async fn check_ready(&self) -> Result<()> {
+    /// Returns the explicit launchd domain used by the operation, when applicable.
+    async fn check_ready(&self) -> Result<Option<String>> {
         ensure!(
             self.platform != Platform::Unsupported,
             "自动化支持 Linux systemd 和 macOS launchd"
@@ -125,16 +128,15 @@ impl Scheduler {
                     .is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0),
             "请先通过 GitHub Releases 安装 AoW"
         );
-        let args = if self.platform == Platform::Systemd {
-            vec!["--user".into(), "show-environment".into()]
-        } else {
-            vec![
-                "print".into(),
-                format!("gui/{}", unsafe { libc::geteuid() }),
-            ]
-        };
-        self.command(&self.manager_command, &args).await?;
-        Ok(())
+        if self.platform == Platform::Launchd {
+            return self.launchd_domain().await.map(Some);
+        }
+        self.command(
+            &self.manager_command,
+            &["--user".into(), "show-environment".into()],
+        )
+        .await?;
+        Ok(None)
     }
 
     fn label(&self, id: &str) -> String {
