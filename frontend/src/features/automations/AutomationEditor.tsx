@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { editor } from 'monaco-editor';
-import { CalendarClock, LoaderCircle, MousePointerClick, Settings2, Terminal, X } from 'lucide-react';
+import { CalendarClock, LoaderCircle, MousePointerClick, Settings2, X } from 'lucide-react';
 import type { AowAgent } from '../agents/types';
 import type { AowProject } from '../../aow/types';
 import { notificationsApi } from '../notifications/api';
@@ -42,7 +42,7 @@ export function AutomationEditor({ task, kind = 'scheduled', project, agents, ti
   const [draft, setDraft] = useState<TaskInput>(() => task ? { ...task, kind: task.kind ?? 'scheduled', prompt_bindings: task.prompt_bindings ?? [], failure_notification: task.failure_notification ?? null } : {
     kind, prompt_bindings: [], name: '', prompt: '', agent: (agents.find((agent) => agent.available && Object.hasOwn(agentNames, agent.id))?.id as AutomationAgent | undefined) ?? 'codex',
     project_id: project.id, workspace_mode: 'new_worktree', workspace_path: initialWorktree?.path ?? '',
-    cleanup_worktree: true, base_branch: '', cron: '0 9 * * *', interval_seconds: null, max_concurrent_runs: 1, enabled: true, yolo: true, precheck_command: '', precheck_timeout_seconds: 60, failure_notification: null,
+    cleanup_worktree: true, base_branch: '', cron: '0 9 * * *', interval_seconds: null, max_concurrent_runs: 1, enabled: true, yolo: true, failure_notification: null,
   });
   const [schedule, setSchedule] = useState(() => ({ ...parseSchedule(draft.cron), ...(draft.interval_seconds ? { cadence: 'interval' as Cadence } : {}) }));
   const [lastConcurrentRuns, setLastConcurrentRuns] = useState(() => draft.max_concurrent_runs > 1 ? draft.max_concurrent_runs : 3);
@@ -162,11 +162,6 @@ export function AutomationEditor({ task, kind = 'scheduled', project, agents, ti
           </> : <p className="automation-hint">点击运行后填写变量，即可执行任务。</p>}
           <div className="automation-settings-divider" />
           <p className="automation-hint">{draft.max_concurrent_runs === 1 ? '上次执行未结束时跳过本次触发。' : `最多同时执行 ${draft.max_concurrent_runs} 个任务；达到上限时跳过本次触发。`}</p>
-          <details open={!!task?.precheck_command}><summary><Terminal />执行前检查<span>可选</span></summary>
-            <label><span>检查命令</span><textarea aria-label="检查命令" rows={3} value={draft.precheck_command} onChange={(event) => update('precheck_command', event.target.value)} placeholder="退出码为 0 时继续执行" /></label>
-            <label><span>超时时间</span><select aria-label="超时时间" value={draft.precheck_timeout_seconds} onChange={(event) => update('precheck_timeout_seconds', Number(event.target.value))}>{[30, 60, 120, 300, 600].map((seconds) => <option key={seconds} value={seconds}>{seconds} 秒</option>)}</select></label>
-          </details>
-          <div className="automation-settings-divider" />
           <label><span>失败提醒</span><select aria-label="失败提醒" value={draft.failure_notification ?? ''} disabled={busy} onChange={event => update('failure_notification', event.target.value === 'feishu' || event.target.value === 'wechat' ? event.target.value : null)}>
             <option value="">不提醒</option>
             {(['feishu', 'wechat'] as const).map(provider => <option key={provider} value={provider} disabled={!availableBots.includes(provider)}>{provider === 'feishu' ? '飞书' : '微信'} Bot{botStatus === 'ready' && !availableBots.includes(provider) ? ' · 当前环境未配置' : ''}</option>)}

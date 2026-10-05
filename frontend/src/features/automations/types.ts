@@ -26,8 +26,6 @@ export interface TaskInput extends WorkspaceConfig {
   max_concurrent_runs: number;
   enabled: boolean;
   yolo: boolean;
-  precheck_command: string;
-  precheck_timeout_seconds: number;
   failure_notification: 'feishu' | 'wechat' | null;
 }
 

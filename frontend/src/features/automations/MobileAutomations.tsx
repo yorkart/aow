@@ -59,7 +59,7 @@ function MobileAutomationTask({ route, navigate, back }: { route: MobileRoute; n
         <div><dt>更新时间</dt><dd>{dateTime(task.data.updated_at)}</dd></div>
       </dl>{task.data.scheduler_error && <p className="mobile-inline-error">{task.data.scheduler_error}</p>}</section>
       <section className="mobile-automation-card"><h3>任务内容</h3><MarkdownContent readOnly text={task.data.prompt} className="mobile-markdown mobile-automation-markdown" /></section>
-      {task.data.precheck_command && <section className="mobile-automation-card"><h3>执行前检查 <small>{task.data.precheck_timeout_seconds} 秒超时</small></h3><pre className="mobile-automation-command">{task.data.precheck_command}</pre></section>}</>}
+      </>}
       <h3 className="mobile-section-label">执行历史</h3>
       <MobileState loading={runs.loading && !runs.data} error={runs.error} retry={runs.reload} empty={runs.data?.length === 0 ? '暂无执行记录。' : undefined} />
       <div className="mobile-list">{runs.data?.map((run) => <button className="mobile-list-row" key={run.id}

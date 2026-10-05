@@ -76,10 +76,6 @@ fn fixture(script: &str) -> (TempDir, Store, Task) {
             max_concurrent_runs: 3,
             enabled: true,
             yolo: true,
-            precheck_command: String::new(),
-            // Functional prechecks spawn real processes on shared CI runners.
-            // Only the timeout regression below needs a one-second deadline.
-            precheck_timeout_seconds: 10,
             failure_notification: None,
         },
         project_name: "Project".into(),
@@ -209,10 +205,8 @@ head -c 200000 /dev/zero
 "#;
 
 #[tokio::test]
-async fn global_path_is_reloaded_between_runs_and_shared_by_precheck_and_agent_children() {
-    let (directory, store, mut task) = fixture(
-        "printf 'session id: environment-session\\n' >&2\ncat >/dev/null\n/bin/sh -c python3 > agent-python",
-    );
+async fn global_path_is_reloaded_between_runs_and_used_by_agent_children() {
+    let (directory, store, mut task) = fixture("cat >/dev/null");
     let settings_path = store
         .config_dir
         .join(aow_agents::environment::SETTINGS_FILE);
@@ -232,12 +226,12 @@ async fn global_path_is_reloaded_between_runs_and_shared_by_precheck_and_agent_c
         )
         .unwrap();
     }
-    // Changing global Settings during precheck must not change this run's snapshot.
-    task.input.precheck_command = format!(
-        "python3 > precheck-python && cp '{}' '{}'",
+    let script = format!(
+        "printf 'session id: environment-session\\n' >&2\ncat >/dev/null\n/bin/sh -c 'python3 > agent-python && cp \"{}\" \"{}\"'",
         next_settings.display(),
         settings_path.display(),
     );
+    executable(&task.launch.executable, &script);
     task.launch
         .environment
         .insert("PATH".into(), "/obsolete/task/path".into());
@@ -250,12 +244,10 @@ async fn global_path_is_reloaded_between_runs_and_shared_by_precheck_and_agent_c
             .unwrap();
         let run = store.read_run(&task.id, &id).unwrap().unwrap();
         assert_eq!(status, RunStatus::Completed, "{:?}", run.message);
-        for output in ["precheck-python", "agent-python"] {
-            assert_eq!(
-                fs::read_to_string(task.repository_path.join(output)).unwrap(),
-                version
-            );
-        }
+        assert_eq!(
+            fs::read_to_string(task.repository_path.join("agent-python")).unwrap(),
+            version
+        );
     }
     assert_eq!(
         fs::read(store.task_path(&task.id).unwrap()).unwrap(),
@@ -269,7 +261,6 @@ async fn registered_agent_environment_is_reloaded_between_runs_and_snapshotted_p
         "printf 'session id: environment-session\n' >&2\ncat >/dev/null\nprintf '%s' \"$DYNAMIC_AGENT_ENV\" > agent-environment",
     );
     let registry_path = store.config_dir.join(aow_agents::environment::AGENTS_FILE);
-    let next_registry = directory.path().join("next agents.json");
     let registry = |value: &str| {
         serde_json::to_vec(&serde_json::json!({
             "version": 1,
@@ -283,12 +274,6 @@ async fn registered_agent_environment_is_reloaded_between_runs_and_snapshotted_p
         .unwrap()
     };
     fs::write(&registry_path, registry("first")).unwrap();
-    fs::write(&next_registry, registry("second")).unwrap();
-    task.input.precheck_command = format!(
-        "printf '%s' \"$DYNAMIC_AGENT_ENV\" > precheck-environment && cp '{}' '{}'",
-        next_registry.display(),
-        registry_path.display(),
-    );
     task.launch
         .environment
         .insert("DYNAMIC_AGENT_ENV".into(), "task-snapshot".into());
@@ -299,6 +284,9 @@ async fn registered_agent_environment_is_reloaded_between_runs_and_snapshotted_p
     let task_before = fs::read(store.task_path(&task.id).unwrap()).unwrap();
 
     for expected in ["first", "second"] {
+        if expected == "second" {
+            fs::write(&registry_path, registry(expected)).unwrap();
+        }
         let id = new_run_id();
         let status = runner::run(&store, &task.id, Some(id.clone()), RunSource::Scheduled)
             .await
@@ -318,10 +306,6 @@ async fn registered_agent_environment_is_reloaded_between_runs_and_snapshotted_p
         assert!(roots.get("DYNAMIC_AGENT_ENV").is_none());
         assert!(roots.get("PATH").is_none());
         assert_eq!(
-            fs::read_to_string(task.repository_path.join("precheck-environment")).unwrap(),
-            "task-snapshot"
-        );
-        assert_eq!(
             fs::read_to_string(task.repository_path.join("agent-environment")).unwrap(),
             expected
         );
@@ -333,9 +317,8 @@ async fn registered_agent_environment_is_reloaded_between_runs_and_snapshotted_p
 }
 
 #[tokio::test]
-async fn invalid_global_path_fails_before_precheck_or_agent_instead_of_using_legacy_path() {
+async fn invalid_global_path_fails_before_agent_instead_of_using_legacy_path() {
     let (_directory, store, mut task) = fixture("touch agent-started");
-    task.input.precheck_command = "touch precheck-started".into();
     task.launch
         .environment
         .insert("PATH".into(), std::env::var("PATH").unwrap());
@@ -350,7 +333,6 @@ async fn invalid_global_path_fails_before_precheck_or_agent_instead_of_using_leg
     assert_eq!(run.status, RunStatus::Failed);
     assert!(run.message.unwrap().contains("PATH"));
     assert!(run.agent_pid.is_none());
-    assert!(!task.repository_path.join("precheck-started").exists());
     assert!(!task.repository_path.join("agent-started").exists());
 }
 
@@ -607,12 +589,10 @@ async fn worktrees_are_always_cleaned_and_preserve_dirty_main_workspaces() {
 #[tokio::test]
 async fn temporary_workspace_runs_outside_the_repository_and_is_removed_afterwards() {
     let (_directory, store, mut task) = fixture(
-        "printf 'session id: temporary-session\n' >&2\ncat >/dev/null\nprintf '%s' \"$PWD\" > executed-cwd",
+        "test ! -d .git\nprintf 'session id: temporary-session\n' >&2\ncat >/dev/null\nprintf '%s' \"$PWD\" > executed-cwd",
     );
     task.input.workspace.workspace_mode = WorkspaceMode::Temporary;
     task.input.workspace.base_branch.clear();
-    task.input.precheck_command = "test ! -d .git".into();
-
     let run = execute(&store, &task).await;
 
     assert_eq!(run.status, RunStatus::Completed, "{:?}", run.message);
@@ -629,7 +609,7 @@ async fn temporary_workspace_runs_outside_the_repository_and_is_removed_afterwar
 }
 
 #[tokio::test]
-async fn cleanup_removes_dirty_worktrees_after_failed_and_skipped_runs() {
+async fn cleanup_removes_dirty_worktrees_after_failed_runs() {
     let (_directory, store, mut task) = fixture(
         "printf 'session id: failed-session\n'\ncat >/dev/null\ntouch generated.txt\nexit 17",
     );
@@ -639,16 +619,10 @@ async fn cleanup_removes_dirty_worktrees_after_failed_and_skipped_runs() {
     assert_eq!(failed.status, RunStatus::Failed);
     assert_eq!(failed.exit_code, Some(17));
     assert!(!failed.workspace_path.unwrap().exists());
-
-    task.input.precheck_command = "exit 1".into();
-    let skipped = execute(&store, &task).await;
-    assert_eq!(skipped.status, RunStatus::Skipped);
-    assert!(skipped.agent_pid.is_none());
-    assert!(!skipped.workspace_path.unwrap().exists());
 }
 
 #[tokio::test]
-async fn missing_session_nonzero_exit_precheck_and_paused_tasks_have_distinct_results() {
+async fn missing_session_nonzero_exit_and_paused_tasks_have_distinct_results() {
     let (_directory, store, mut task) = fixture("cat >/dev/null");
     let missing = execute(&store, &task).await;
     assert_eq!(missing.status, RunStatus::Failed);
@@ -660,15 +634,6 @@ async fn missing_session_nonzero_exit_precheck_and_paused_tasks_have_distinct_re
     let failed = execute(&store, &task).await;
     assert_eq!(failed.exit_code, Some(17));
     assert_eq!(failed.message.as_deref(), Some("authentication failed"));
-    task.input.precheck_command = "exit 1".into();
-    let skipped = execute(&store, &task).await;
-    assert_eq!(skipped.status, RunStatus::Skipped);
-    assert!(skipped.agent_pid.is_none());
-    task.input.precheck_command = "sleep 5".into();
-    task.input.precheck_timeout_seconds = 1;
-    let timeout = execute(&store, &task).await;
-    assert_eq!(timeout.status, RunStatus::Failed);
-    assert!(timeout.message.unwrap().contains("超时"));
     task.input.enabled = false;
     store.save_task(&task).unwrap();
     let id = new_run_id();
@@ -2074,14 +2039,10 @@ fn pending_manual_requests_discard_legacy_context_without_losing_hosted_routing(
 }
 
 #[tokio::test]
-async fn temporary_workspaces_are_cleaned_after_failure_and_precheck_skip() {
+async fn temporary_workspaces_are_cleaned_after_failure() {
     let (_directory, store, mut task) = fixture("cat >/dev/null; exit 17");
     task.input.workspace.workspace_mode = WorkspaceMode::Temporary;
     let failed = execute(&store, &task).await;
     assert_eq!(failed.status, RunStatus::Failed);
     assert!(!failed.workspace_path.unwrap().exists());
-    task.input.precheck_command = "exit 1".into();
-    let skipped = execute(&store, &task).await;
-    assert_eq!(skipped.status, RunStatus::Skipped);
-    assert!(!skipped.workspace_path.unwrap().exists());
 }

@@ -11,7 +11,7 @@ try {
   const base = `http://127.0.0.1:${server.httpServer.address().port}`;
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
   const common = { revision: 1, agent: 'codex', project_id: 'project', project_name: 'Project', workspace_mode: 'existing', workspace_path: '/repo', cleanup_worktree: false,
-    base_branch: 'main', interval_seconds: null, max_concurrent_runs: 1, enabled: true, yolo: true, precheck_command: '', precheck_timeout_seconds: 60, failure_notification: null,
+    base_branch: 'main', interval_seconds: null, max_concurrent_runs: 1, enabled: true, yolo: true, failure_notification: null,
     created_at: '2026-09-23T00:00:00Z', updated_at: '2026-09-23T00:00:00Z', scheduler_error: null, next_run_at: null, last_run: null, is_running: false };
   async function fixture(t, { history = [], dynamic = false } = {}) {
     const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });

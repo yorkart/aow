@@ -15,7 +15,7 @@ const agents = [{ id: 'codex', agent_type: 'codex', display_name: 'Codex', sourc
 const task: AutomationTask = {
   id: '12345678', revision: 1, kind: 'scheduled', prompt_bindings: [], name: '每日检查', prompt: '检查任务', agent: 'codex', project_id: 'project', project_name: 'Project',
   workspace_mode: 'existing', workspace_path: '/repo', cleanup_worktree: false, base_branch: 'main', cron: '0 9 * * *',
-  interval_seconds: null, max_concurrent_runs: 1, enabled: true, yolo: true, precheck_command: '', precheck_timeout_seconds: 60,
+  interval_seconds: null, max_concurrent_runs: 1, enabled: true, yolo: true,
   failure_notification: new URLSearchParams(location.search).has('feishu') ? 'feishu' : null,
   created_at: '', updated_at: '', scheduler_error: null, next_run_at: null, last_run: null, is_running: false,
 };

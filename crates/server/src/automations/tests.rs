@@ -140,7 +140,7 @@ async fn cli_import_rebinds_saved_tasks_and_isolates_failures() {
         "workspace_path":"/old/worktree", "workspace_mode":"new_worktree", "base_branch":"main",
         "cleanup_worktree":false, "cron":"0 9 * * 1-5", "interval_seconds":null,
         "max_concurrent_runs":3, "enabled":true, "yolo":false,
-        "precheck_command":"git status --porcelain", "precheck_timeout_seconds":42, "failure_notification":"feishu",
+        "failure_notification":"feishu",
         "launch":{"executable":"/old/codex", "args":["old-argument"], "environment":{"OLD_MACHINE_ONLY":"old"}},
         "deleted":true, "scheduler_error":"old error", "is_running":true,
     });
@@ -172,8 +172,6 @@ async fn cli_import_rebinds_saved_tasks_and_isolates_failures() {
         "interval_seconds",
         "max_concurrent_runs",
         "yolo",
-        "precheck_command",
-        "precheck_timeout_seconds",
         "failure_notification",
     ] {
         assert_eq!(created[field], source[field], "{field}");

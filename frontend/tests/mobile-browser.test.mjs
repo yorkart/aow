@@ -25,7 +25,7 @@ const automationRun = { id: 'run-one', task_id: 'task-one', task_revision: 1, ta
   agent_pid: 1234, agent_command: ['codex'], exit_code: 0, message: '执行完成', preparation_ms: 100, session_acquired_ms: 200, duration_ms: 123000 };
 const automation = { id: 'task-one', revision: 1, name: '每日代码巡检', prompt: '# 巡检要求\n\n检查项目构建和测试结果。', agent: 'codex', project_id: 'project', project_name: 'AoW',
   workspace_mode: 'existing', workspace_path: workspace, cleanup_worktree: false, base_branch: '', cron: '0 9 * * *', interval_seconds: null, max_concurrent_runs: 1, enabled: true, yolo: true,
-  precheck_command: 'git status --short', precheck_timeout_seconds: 30, is_running: false, scheduler_error: null, last_run: automationRun, next_run_at: '2026-09-12T01:00:00Z',
+  is_running: false, scheduler_error: null, last_run: automationRun, next_run_at: '2026-09-12T01:00:00Z',
   created_at: '2026-09-11T01:00:00Z', updated_at: '2026-09-11T02:00:00Z' };
 const automationSession = { ...session, id: 'codex:automation-session', session_id: 'automation-session', title: automation.name };
 
@@ -612,6 +612,21 @@ try {
     assert.deepEqual(state.errors, []);
     assert.deepEqual(state.mutations, []);
     await context.close();
+  });
+
+  await test('mobile automation history remains available when task details are missing', async t => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    t.after(() => context.close());
+    const state = await fixture(context);
+    await context.route('**/api/aow/automations/task-one', route => route.fulfill({ status: 404, json: { message: '自动化任务已删除' } }));
+    const page = await context.newPage();
+    await page.goto(`${baseURL}/m#workspace=${encodeURIComponent(workspace)}&view=automations&task=task-one`);
+    await visible(page, '.mobile-state.error');
+    await visible(page, '.mobile-section-label');
+    await page.getByRole('button', { name: /已完成/ }).waitFor({ state: 'visible' });
+    assert.equal(await page.locator('.mobile-list-row').count(), 1);
+    assert.deepEqual(state.errors, []);
+    assert.deepEqual(state.mutations, []);
   });
 
   await test('terminal control, bytes, responsive geometry, keyboard and pane switching', async () => {

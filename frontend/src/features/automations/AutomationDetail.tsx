@@ -1,7 +1,7 @@
 import { newestRunFirst } from './runOrder';
 import type { AutomationLocation } from '../../aow/tabRoutes';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CalendarClock, Check, ChevronDown, ChevronRight, Clock3, Copy, FileText, History, LoaderCircle, MousePointerClick, Pause, Pencil, Play, RefreshCw, Terminal, Trash2, X, Zap } from 'lucide-react';
+import { CalendarClock, Check, ChevronDown, ChevronRight, Clock3, Copy, FileText, History, LoaderCircle, MousePointerClick, Pause, Pencil, Play, RefreshCw, Trash2, X, Zap } from 'lucide-react';
 import type { AowAgent } from '../agents/types';
 import type { AowProject } from '../../aow/types';
 import { AgentIcon } from '../agents/AgentIcon';
@@ -277,7 +277,7 @@ export function AutomationDetail({ taskId, visible, refreshKey: taskRefreshKey =
           </div>
           {task.kind === 'manual' && task.prompt_bindings?.length ? <section className="automation-variables" aria-label="任务变量"><strong>执行时填写的变量</strong><div className="automation-variable-list">{variableNames(task.prompt_bindings).map(name => <code key={name}>{name}</code>)}</div></section> : null}
           <dl className="automation-configuration"><div><dt>Agent</dt><dd><AgentIcon agentId={task.agent} />{agentNames[task.agent]}</dd></div><div><dt>执行权限</dt><dd>{task.yolo ? 'Yolo / Full Access' : '标准权限'}</dd></div><div><dt>失败提醒</dt><dd>{task.failure_notification === 'feishu' ? '飞书 Bot' : task.failure_notification === 'wechat' ? '微信 Bot' : '不提醒'}</dd></div><div><dt>工作区方式</dt><dd>{workspaceNames[task.workspace_mode]}</dd></div><div><dt>任务结束清理</dt><dd>{task.workspace_mode === 'new_worktree' ? '强制清理 Worktree' : task.workspace_mode === 'temporary' ? '自动清理临时目录' : '—'}</dd></div><div><dt>基础分支</dt><dd>{task.workspace_mode !== 'new_worktree' ? '—' : <code>{task.base_branch}</code>}</dd></div><div><dt>更新时间</dt><dd>{dateTime(task.updated_at)}</dd></div><div className="automation-full-width"><dt>任务 ID</dt><dd><code>{task.id}</code></dd></div>{task.workspace_mode === 'existing' && <div className="automation-full-width"><dt>工作区</dt><dd><code>{task.workspace_path}</code></dd></div>}</dl>
-          <section className="automation-prompt-preview"><h3><FileText />任务内容</h3><MarkdownContent readOnly text={task.prompt} className="automation-prompt-markdown" /></section>{task.precheck_command ? <section className="automation-prompt-preview automation-command-preview"><h3><Terminal />执行前检查<small>{task.precheck_timeout_seconds} 秒超时</small></h3><pre>{task.precheck_command}</pre></section> : null}
+          <section className="automation-prompt-preview"><h3><FileText />任务内容</h3><MarkdownContent readOnly text={task.prompt} className="automation-prompt-markdown" /></section>
         </div>}
       </div></div>
     </> : null}
