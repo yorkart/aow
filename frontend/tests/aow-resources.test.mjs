@@ -93,6 +93,7 @@ try {
     state.agentUpdates = [];
     state.failAgentSave = false;
     state.removalJobs = [];
+    state.creationJobs = [];
     state.removalSubmissions = [];
     state.dirtyWorktrees = [];
     state.otherOperations = [];
@@ -100,7 +101,12 @@ try {
     state.logQueries = [];
     state.operationRevision = 0;
     const operationSnapshot = () => {
-      const operations = [...state.otherOperations, ...state.removalJobs.map(job => {
+      const operations = [...state.otherOperations, ...state.creationJobs.map(job => ({
+        id: job.id, kind: 'worktree.create', source: 'web', title: `创建 Worktree · ${job.branch}`, project_id: job.project_id,
+        resource: job.path, created_at: '2026-09-15T00:00:00Z', message: job.error || '正在创建',
+        completed: job.steps.filter(step => ['succeeded', 'skipped'].includes(step.status)).length, total: job.steps.length,
+        outcome: ['pending', 'running'].includes(job.status) ? null : job.status === 'succeeded' ? 'succeeded' : 'failed',
+      })), ...state.removalJobs.map(job => {
         const active = job.items.some(item => ['queued', 'running'].includes(item.status));
         const succeeded = job.items.filter(item => item.status === 'succeeded').length;
         return { id: job.id, kind: 'worktree.remove', source: 'web', title: '删除 Worktree', project_id: job.project_id,
@@ -143,6 +149,7 @@ try {
         data = { avatar_url: state.avatarUrl ?? null };
       }
       else if (url.pathname === '/api/aow/worktree-removals') data = state.removalJobs;
+      else if (url.pathname === '/api/aow/worktree-creations') data = state.creationJobs;
       else if (url.pathname.endsWith('/worktrees/removals') || (url.pathname.endsWith('/worktrees/removal') && request.method() === 'DELETE')) {
         const items = request.method() === 'DELETE' ? [{ path: url.searchParams.get('path'), force: url.searchParams.get('force') === 'true' }] : request.postDataJSON().items;
         state.removalSubmissions.push(items);
@@ -351,58 +358,108 @@ try {
     await beforeOpen?.({ context, state });
     await page.goto(`${baseURL}/?ui=desktop`);
     await surface(page).locator('.terminal-emulator-shell:not(.restore-pending)').first().waitFor();
-    return { page, state };
+    return { page, state, operationSnapshot };
   }
 
   const groupButton = (root, name) => root.getByRole('button', { name: new RegExp(`^(展开|收起) ${name} 分组`) });
 
-  await test('worktree creation reports a pull timeout and allows retrying without updating the main repository', async t => {
-    let release;
-    const gate = new Promise(resolve => { release = resolve; });
-    t.after(() => release());
+  const creationJob = (input, id = 'create-one') => ({
+    id, project_id: project.id, ...input, status: 'running', error: null,
+    steps: ['等待仓库可用', '检查分支和目标路径', '更新主仓库（git pull）', '创建 Worktree', '刷新项目列表'].map((title, index) => ({
+      title, status: index < 2 ? 'succeeded' : index === 2 ? 'running' : 'pending',
+      started_at: index < 3 ? new Date().toISOString() : null, duration_ms: index < 2 ? 12 : null, timeout_ms: 120000, message: null,
+    })),
+  });
+
+  await test('worktree creation continues after closing, restores progress after reload and reports step timeout before retry', async t => {
     const submissions = [];
-    const { page } = await fixture(t, { beforeOpen: async ({ context, state }) => {
+    const { page, state } = await fixture(t, { beforeOpen: async ({ context, state }) => {
       await context.route('**/api/aow/projects/project/worktrees', async route => {
         const input = route.request().postDataJSON();
         submissions.push(input);
-        if (input.pull_first) {
-          await gate;
-          await route.fulfill({ status: 400, json: { message: 'git pull failed in main worktree /workspace/wt-0: git pull timed out after 120 seconds' } });
-          return;
+        const job = creationJob(input, `create-${submissions.length}`);
+        if (!input.pull_first) {
+          job.steps[2].status = 'skipped';
+          job.steps[2].started_at = null;
+          job.steps[3].status = 'running';
+          job.steps[3].started_at = new Date().toISOString();
         }
-        const worktree = { ...worktrees[0], id: 'created', path: input.path, branch: input.branch, is_main: false };
-        const updated = { ...project, worktrees: [...worktrees, worktree] };
-        state.projects = [updated];
-        await route.fulfill({ json: { project: updated, worktree } });
+        state.creationJobs.push(job);
+        await route.fulfill({ status: 202, json: job });
       });
     } });
     await page.getByRole('button', { name: 'Resource Fixture Project 操作', exact: true }).click();
     await page.getByRole('menuitem', { name: '创建 Worktree', exact: true }).click();
-    const dialog = page.getByRole('dialog', { name: '创建 Worktree', exact: true });
-    await dialog.getByLabel('新分支', { exact: true }).fill('feat/tab-style');
-    const path = await dialog.getByLabel('Worktree 路径', { exact: true }).inputValue();
-    await dialog.getByRole('button', { name: '创建 Worktree', exact: true }).click();
-    await dialog.getByRole('status').waitFor();
-    assert.match(await dialog.getByRole('status').textContent(), /正在更新主仓库并创建 Worktree.*2 分钟/);
-    assert.equal(await dialog.getByRole('button', { name: '创建中…', exact: true }).isDisabled(), true);
-    assert.equal(submissions.length, 1);
-    release();
-    await dialog.getByRole('alert').waitFor();
-    assert.match(await dialog.getByRole('alert').textContent(), /git pull timed out after 120 seconds/);
-    assert.equal(await dialog.getByLabel('新分支', { exact: true }).inputValue(), 'feat/tab-style');
-    assert.equal(await dialog.getByLabel('Worktree 路径', { exact: true }).inputValue(), path);
-    assert.equal(await dialog.getByRole('button', { name: '取消', exact: true }).isEnabled(), true);
-    assert.equal(await dialog.getByRole('status').count(), 0);
-    await dialog.getByRole('checkbox', { name: '创建前更新主仓库（git pull）', exact: true }).uncheck();
-    await dialog.getByText('查看 Git 命令', { exact: true }).click();
-    assert.doesNotMatch(await dialog.locator('.project-aow-command-preview code').textContent(), /pull/);
-    await dialog.getByRole('button', { name: '创建 Worktree', exact: true }).click();
-    await dialog.waitFor({ state: 'hidden' });
+    const form = page.getByRole('dialog', { name: '创建 Worktree', exact: true });
+    await form.getByLabel('新分支', { exact: true }).fill('feat/tab-style');
+    const path = await form.getByLabel('Worktree 路径', { exact: true }).inputValue();
+    await form.getByRole('button', { name: '创建 Worktree', exact: true }).click();
+    const progress = page.getByRole('dialog', { name: '创建 Worktree 进度', exact: true });
+    await progress.waitFor();
+    assert.equal(await progress.locator('li').count(), 5);
+    assert.match(await progress.locator('li').nth(2).textContent(), /git pull.*执行中.*耗时.*超时上限 120/);
+    assert.equal(await progress.locator('li').nth(3).getAttribute('class'), 'pending');
+    if (process.env.AOW_CREATION_SCREENSHOT) await page.screenshot({ path: process.env.AOW_CREATION_SCREENSHOT });
+    await progress.getByRole('button', { name: '关闭（后台继续）', exact: true }).click();
+    await progress.waitFor({ state: 'hidden' });
+    await page.locator('.operation-status-task').filter({ hasText: '创建 Worktree' }).waitFor();
+    await page.reload();
+    await page.locator('.operation-status-task').filter({ hasText: '创建 Worktree' }).click();
+    await progress.locator('li.running').waitFor();
+    assert.equal(submissions.length, 1, 'reload does not resubmit a background job');
+    const failed = state.creationJobs[0];
+    failed.status = 'timed_out';
+    failed.error = '更新主仓库（git pull）超时（120 秒），已停止执行';
+    failed.steps[2] = { ...failed.steps[2], status: 'timed_out', duration_ms: 120000, message: failed.error };
+    for (const step of failed.steps.slice(3)) { step.status = 'skipped'; step.message = '前序步骤未完成，未执行'; }
+    await progress.getByRole('alert').waitFor();
+    assert.match(await progress.getByRole('alert').textContent(), /git pull.*超时/);
+    assert.match(await progress.locator('li').nth(2).textContent(), /超时.*耗时 120/);
+    assert.match(await progress.locator('li').nth(3).textContent(), /已跳过.*前序步骤未完成/);
+    assert.equal(await page.locator('.project-aow-worktrees').getByRole('button').filter({ hasText: 'feat/tab-style' }).count(), 0);
+    await progress.getByRole('button', { name: '重新填写', exact: true }).click();
+    assert.equal(await form.getByLabel('新分支', { exact: true }).inputValue(), 'feat/tab-style');
+    assert.equal(await form.getByLabel('Worktree 路径', { exact: true }).inputValue(), path);
+    await form.getByRole('checkbox', { name: '创建前更新主仓库（git pull）', exact: true }).uncheck();
+    await form.getByRole('button', { name: '创建 Worktree', exact: true }).click();
+    await progress.waitFor();
+    assert.match(await progress.locator('li').nth(2).textContent(), /已跳过/);
+    await progress.getByRole('button', { name: '关闭（后台继续）', exact: true }).click();
+    const completed = state.creationJobs[1];
+    completed.status = 'succeeded';
+    for (const step of completed.steps) if (step.status !== 'skipped') { step.status = 'succeeded'; step.duration_ms = 22; }
+    const worktree = { ...worktrees[0], id: 'created', path, branch: 'feat/tab-style', is_main: false };
+    state.projects = [{ ...project, worktrees: [...worktrees, worktree] }];
     await page.locator('.project-aow-worktrees').getByRole('button').filter({ hasText: 'feat/tab-style' }).waitFor();
-    assert.deepEqual(submissions, [
-      { branch: 'feat/tab-style', base_ref: 'branch-0', path, pull_first: true },
-      { branch: 'feat/tab-style', base_ref: 'branch-0', path, pull_first: false },
-    ]);
+    await page.locator('.operation-notice.success').getByRole('button', { name: '查看进度', exact: true }).click();
+    await progress.getByRole('button', { name: '打开 Worktree', exact: true }).waitFor();
+    assert.equal(submissions.length, 2);
+    assert.deepEqual(submissions.map(item => item.pull_first), [true, false]);
+  });
+
+  await test('worktree creation submission can close before acknowledgement without reopening the dialog', async t => {
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    t.after(() => release());
+    const { page, state } = await fixture(t, { beforeOpen: async ({ context, state }) => {
+      await context.route('**/api/aow/projects/project/worktrees', async route => {
+        const job = creationJob(route.request().postDataJSON());
+        await gate;
+        state.creationJobs.push(job);
+        await route.fulfill({ status: 202, json: job });
+      });
+    } });
+    await page.getByRole('button', { name: 'Resource Fixture Project 操作', exact: true }).click();
+    await page.getByRole('menuitem', { name: '创建 Worktree', exact: true }).click();
+    const form = page.getByRole('dialog', { name: '创建 Worktree', exact: true });
+    await form.getByLabel('新分支', { exact: true }).fill('feat/background');
+    await form.getByRole('button', { name: '创建 Worktree', exact: true }).click();
+    await form.getByRole('button', { name: '提交中…', exact: true }).waitFor();
+    await form.getByRole('button', { name: '关闭', exact: true }).last().click();
+    release();
+    await page.locator('.operation-status-task').filter({ hasText: '创建 Worktree' }).waitFor();
+    assert.equal(state.creationJobs.length, 1);
+    assert.equal(await page.getByRole('dialog', { name: '创建 Worktree 进度', exact: true }).count(), 0);
   });
 
   await test('project avatars load independently, directly reference the image and recover from broken or unsupported providers', async t => {
@@ -803,7 +860,7 @@ try {
   });
 
   await test('worktree cleanup filters only in the dialog, confirms dirty items and tracks mixed background results after closing', async t => {
-    const { page, state } = await fixture(t, { beforeOpen: ({ state }) => {
+    const { page, state, operationSnapshot } = await fixture(t, { beforeOpen: ({ state }) => {
       state.projects = [{ ...project, worktrees: [...worktrees, { ...worktrees[1], id: 'wt-2', path: '/workspace/wt-2', branch: 'branch-2' }] }];
       state.dirtyWorktrees = [worktrees[1].path];
       state.defaultTerminalRoots = [worktrees[0].path, '/workspace/wt-2'];
@@ -832,6 +889,7 @@ try {
     assert.deepEqual(state.removalSubmissions[0], [{ path: '/workspace/wt-1', force: true }, { path: '/workspace/wt-2', force: false }]);
     await dialog.getByRole('button', { name: '关闭', exact: true }).first().click();
     assert.equal(await page.locator('.project-aow-worktrees button[title="/workspace/wt-1"]').isDisabled(), true);
+    await page.evaluate(snapshot => window.emitLiveEvent('operations', snapshot), operationSnapshot());
     await page.getByRole('button', { name: '删除 Worktree · 0/2', exact: true }).click();
     await dialog.waitFor();
     state.removalJobs[0].items[0].status = 'succeeded';

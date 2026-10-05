@@ -57,6 +57,9 @@ import { usePinnedWorktrees } from './usePinnedWorktrees';
 import { useWorktreeResources } from './useWorktreeResources';
 import { removalActive, useWorktreeRemovals } from './useWorktreeRemovals';
 import { WorktreeCleanupDialog } from './WorktreeCleanupDialog';
+import { WorktreeCreationProgress } from './WorktreeCreationProgress';
+import { creationActive, useWorktreeCreations } from './useWorktreeCreations';
+import type { WorktreeCreationJob } from './types';
 import { useOperations } from '../features/operations/operations';
 import { OperationStatus } from '../features/operations/OperationStatus';
 import { OperationLogPanel } from '../features/operations/OperationLogPanel';
@@ -594,23 +597,27 @@ function RegisterProjectDialog({ onClose, onRegistered }: {
   </div>;
 }
 
-function CreateWorktreeDialog({ project, onClose, onCreated }: {
+function CreateWorktreeDialog({ project, initial, onClose, onSubmitted }: {
   project: AowProject;
+  initial?: WorktreeCreationJob;
   onClose: () => void;
-  onCreated: (project: AowProject, worktree: AowWorktree) => void;
+  onSubmitted: (job: WorktreeCreationJob, showProgress: boolean) => void;
 }) {
   const defaultBase = project.worktrees.find((worktree) => worktree.is_main)?.branch
     || project.worktrees.find((worktree) => !worktree.detached)?.branch
     || 'HEAD';
-  const [branch, setBranch] = useState('');
-  const [baseRef, setBaseRef] = useState(defaultBase);
-  const [pullFirst, setPullFirst] = useState(true);
-  const [path, setPath] = useState(() => suggestedWorktreePath(project, ''));
-  const [pathEdited, setPathEdited] = useState(false);
+  const [branch, setBranch] = useState(initial?.branch ?? '');
+  const [baseRef, setBaseRef] = useState(initial?.base_ref ?? defaultBase);
+  const [pullFirst, setPullFirst] = useState(initial?.pull_first ?? true);
+  const [path, setPath] = useState(() => initial?.path ?? suggestedWorktreePath(project, ''));
+  const [pathEdited, setPathEdited] = useState(!!initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const mounted = useRef(true);
+  const submitting = useRef(false);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const mainPath = project.worktrees.find((worktree) => worktree.is_main)?.path ?? project.registered_path;
-  const command = `${pullFirst ? `git -C ${shellQuote(mainPath)} pull && ` : ''}git -C ${shellQuote(project.registered_path)} worktree add -b ${shellQuote(branch || '<new-branch>')} -- ${shellQuote(path || '<absolute-path>')} ${shellQuote(baseRef || 'HEAD')}`;
+  const command = `${pullFirst ? `git -C ${shellQuote(mainPath)} pull\n` : ''}git -C ${shellQuote(project.registered_path)} worktree add -b ${shellQuote(branch || '<new-branch>')} -- ${shellQuote(path || '<absolute-path>')} ${shellQuote(baseRef || 'HEAD')}`;
 
   const changeBranch = (value: string) => {
     setBranch(value);
@@ -618,20 +625,22 @@ function CreateWorktreeDialog({ project, onClose, onCreated }: {
   };
 
   const create = async () => {
+    if (submitting.current) return;
+    submitting.current = true;
     setBusy(true);
     setError('');
     try {
       const result = await aowApi.createWorktree(project.id, { branch, baseRef, path, pullFirst });
-      onCreated(result.project, result.worktree);
+      onSubmitted(result, mounted.current);
     } catch (reason) {
-      setError(`Worktree 创建失败：${message(reason)}`);
-      setBusy(false);
+      if (mounted.current) { setError(`创建任务提交失败：${message(reason)}`); setBusy(false); }
+      submitting.current = false;
     }
   };
 
-  return <div className="project-aow-modal-backdrop" onPointerDown={() => { if (!busy) onClose(); }}>
+  return <div className="project-aow-modal-backdrop" onPointerDown={onClose}>
     <section className="project-aow-modal project-aow-dialog project-aow-create-worktree" role="dialog" aria-modal="true" aria-labelledby="create-worktree-title" onPointerDown={(event) => event.stopPropagation()}>
-      <header><div><GitBranchPlus /><strong id="create-worktree-title">创建 Worktree</strong><span title={project.name}>{project.name}</span></div><button type="button" title="关闭" aria-label="关闭" disabled={busy} onClick={onClose}><X /></button></header>
+      <header><div><GitBranchPlus /><strong id="create-worktree-title">创建 Worktree</strong><span title={project.name}>{project.name}</span></div><button type="button" title="关闭" aria-label="关闭" onClick={onClose}><X /></button></header>
       <form className="project-aow-dialog-form" onSubmit={(event) => { event.preventDefault(); void create(); }}>
         <div className="project-aow-dialog-body">
           <p className="project-aow-form-intro">从指定分支或提交创建新的 Worktree。</p>
@@ -644,10 +653,10 @@ function CreateWorktreeDialog({ project, onClose, onCreated }: {
             <small id="create-worktree-path-hint">目标路径必须是尚不存在的绝对路径。</small>
           </div>
           <details className="project-aow-command-preview"><summary>查看 Git 命令</summary><code>{command}</code></details>
-          {busy ? <p className="project-aow-form-intro" role="status">{pullFirst ? '正在更新主仓库并创建 Worktree…' : '正在创建 Worktree…'}单个 Git 步骤最多等待 2 分钟，超时会显示错误。</p> : null}
+          <p className="project-aow-form-intro" role="status">{busy ? '正在提交后台任务…' : '提交后可关闭弹框，从底部状态栏查看每一步进度。每步最多等待 2 分钟。'}</p>
           {error ? <div className="project-aow-error" role="alert">{error}</div> : null}
         </div>
-        <footer className="project-aow-dialog-footer"><button type="button" className="project-aow-dialog-button" disabled={busy} onClick={onClose}>取消</button><button type="submit" className="project-aow-dialog-button primary" disabled={busy || !branch.trim() || !baseRef.trim() || !path.trim()}>{busy ? '创建中…' : '创建 Worktree'}</button></footer>
+        <footer className="project-aow-dialog-footer"><button type="button" className="project-aow-dialog-button" onClick={onClose}>关闭</button><button type="submit" className="project-aow-dialog-button primary" disabled={busy || !branch.trim() || !baseRef.trim() || !path.trim()}>{busy ? '提交中…' : '创建 Worktree'}</button></footer>
       </form>
     </section>
   </div>;
@@ -2098,6 +2107,10 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
   const operations = useOperations();
   const [logPanel, setLogPanel] = useState<{ operationId?: string }>();
   const removals = useWorktreeRemovals();
+  const creations = useWorktreeCreations();
+  const [creationJobId, setCreationJobId] = useState<string>();
+  const [creationRetry, setCreationRetry] = useState<WorktreeCreationJob>();
+  const handledCreations = useRef(new Set<string>());
   const [cleanupProjectId, setCleanupProjectId] = useState<string>();
   const busyWorktrees = useMemo(() => new Set(removals.jobs.flatMap(job => job.items.filter(removalActive).map(item => item.path))), [removals.jobs]);
   const handledRemovals = useRef(new Set<string>());
@@ -2511,11 +2524,18 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
     setCleanupProjectId(job.project_id);
   };
 
-  const worktreeCreated = (project: AowProject, worktree: AowWorktree) => {
-    setProjects((items) => items.map((item) => item.id === project.id ? project : item));
-    setCollapsedProjects(current => ({ ...current, [project.id]: false }));
-    setActiveWorktreePath(worktree.path);
-    setCreateWorktreeProject(undefined);
+  useEffect(() => {
+    const finished = creations.jobs.filter(job => !creationActive(job) && !handledCreations.current.has(job.id));
+    if (!finished.length) return;
+    for (const job of finished) handledCreations.current.add(job.id);
+    // Read current inventory instead of replaying a possibly stale job result.
+    void loadProjects(false, true);
+  }, [creations.jobs, loadProjects]);
+
+  const creationSubmitted = (job: WorktreeCreationJob, showProgress: boolean) => {
+    creations.submitted(job);
+    operations.refresh();
+    if (showProgress) { setCreateWorktreeProject(undefined); setCreationJobId(job.id); }
   };
 
   const notesBound = (project: AowProject) => {
@@ -2625,6 +2645,8 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
         onOpenOperation={operation => {
           if (operation.kind === 'worktree.remove' && operation.project_id && projects.some(project => project.id === operation.project_id)) {
             setCleanupProjectId(operation.project_id); void removals.refresh();
+          } else if (operation.kind === 'worktree.create') {
+            setCreationJobId(operation.id); void creations.refresh();
           } else setLogPanel({ operationId: operation.id });
         }}
         onOpenLogs={operationId => setLogPanel(current => operationId ? { operationId } : current && !current.operationId ? undefined : {})} />
@@ -2634,11 +2656,24 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
       revision={operations.revision} bootId={operations.boot_id} logError={operations.log_error} onClose={() => setLogPanel(undefined)} />}
     {worktreeContextMenu && contextMenuEntry ? <WorktreeContextMenu state={{ ...worktreeContextMenu, ...contextMenuEntry }} savingAppearance={savingWorktreeAppearance} pinned={pinnedWorktrees.has(worktreeContextMenu.worktree.path)} onClose={() => setWorktreeContextMenu(undefined)} onTogglePin={() => togglePinnedWorktree(worktreeContextMenu.worktree.path)} onColorChange={(color) => void changeWorktreeAppearance(contextMenuEntry, { color })} onIconChange={(icon) => void changeWorktreeAppearance(contextMenuEntry, { icon })} onRemove={() => void inspectWorktreeRemoval(worktreeContextMenu)} /> : null}
     {removeWorktreeState ? <RemoveWorktreeDialog state={removeWorktreeState} onClose={() => setRemoveWorktreeState(undefined)} onSubmitted={removalSubmitted} /> : null}
-    {projectMenu ? <ProjectMenu state={projectMenu} onClose={() => setProjectMenu(undefined)} onCreateWorktree={() => setCreateWorktreeProject(projectMenu.project)} onCleanup={() => { setCleanupProjectId(projectMenu.project.id); void removals.refresh(); }} onBindNotes={() => setBindNotesProject(projectMenu.project)} onRemove={() => void removeProject(projectMenu.project)} /> : null}
+    {projectMenu ? <ProjectMenu state={projectMenu} onClose={() => setProjectMenu(undefined)} onCreateWorktree={() => { setCreationRetry(undefined); setCreateWorktreeProject(projectMenu.project); }} onCleanup={() => { setCleanupProjectId(projectMenu.project.id); void removals.refresh(); }} onBindNotes={() => setBindNotesProject(projectMenu.project)} onRemove={() => void removeProject(projectMenu.project)} /> : null}
     {confirmationDialog}
     {cleanupProjectId && projects.find(project => project.id === cleanupProjectId) ? <WorktreeCleanupDialog key={cleanupProjectId} project={projects.find(project => project.id === cleanupProjectId)!} isUnallocated={isUnallocated} jobs={removals.jobs.filter(job => job.project_id === cleanupProjectId)} progressError={removals.error} onRefresh={() => void removals.refresh()} onSubmitted={removals.submitted} onClose={() => { removals.dismiss(cleanupProjectId); setCleanupProjectId(undefined); }} /> : null}
     {showRegisterProject ? <RegisterProjectDialog onClose={() => setShowRegisterProject(false)} onRegistered={projectRegistered} /> : null}
-    {createWorktreeProject ? <CreateWorktreeDialog project={createWorktreeProject} onClose={() => setCreateWorktreeProject(undefined)} onCreated={worktreeCreated} /> : null}
+    {createWorktreeProject ? <CreateWorktreeDialog project={createWorktreeProject} initial={creationRetry} onClose={() => setCreateWorktreeProject(undefined)} onSubmitted={creationSubmitted} /> : null}
+    {creationJobId && <WorktreeCreationProgress job={creations.jobs.find(job => job.id === creationJobId)} error={creations.error}
+      onRefresh={() => void creations.refresh()} onClose={() => setCreationJobId(undefined)}
+      onLogs={() => { setLogPanel({ operationId: creationJobId }); setCreationJobId(undefined); }}
+      onRetry={job => {
+        const project = projects.find(project => project.id === job.project_id);
+        if (project) { setCreationRetry(job); setCreateWorktreeProject(project); setCreationJobId(undefined); }
+      }}
+      onOpen={job => {
+        if (projects.some(project => project.worktrees.some(worktree => worktree.path === job.path))) {
+          setCollapsedProjects(current => ({ ...current, [job.project_id]: false }));
+          setActiveWorktreePath(job.path); setCreationJobId(undefined);
+        } else { void loadProjects(false, true); setError('正在刷新项目，请确认 Worktree 仍存在后重试。'); }
+      }} /> }
     {bindNotesProject ? <BindNotesDialog project={bindNotesProject} onClose={() => setBindNotesProject(undefined)} onBound={notesBound} /> : null}
     {showSettings ? <SettingsDialog agents={agents} onClose={() => setShowSettings(false)} onNodesChange={setNodeAddresses} onReload={async notesMoved => { await Promise.all([loadAgents(), loadProjects(notesMoved)]); }} /> : null}
     <FloatingWorkspace agents={agents} projects={projects} activeLocation={locationInFloating} />
