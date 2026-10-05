@@ -23,6 +23,7 @@ use git::git_output;
 mod agents;
 mod api;
 mod configuration;
+mod creation;
 mod error;
 mod git;
 mod global;
@@ -88,6 +89,7 @@ struct AowInner {
     project_operation: Arc<tokio::sync::Mutex<()>>,
     filesystem_operation: Arc<tokio::sync::RwLock<()>>,
     removals: removal::RemovalJobs,
+    creations: creation::CreationJobs,
 }
 
 impl AowManager {
@@ -116,6 +118,7 @@ impl AowManager {
                 project_operation: Arc::new(tokio::sync::Mutex::new(())),
                 filesystem_operation: Arc::new(tokio::sync::RwLock::new(())),
                 removals: removal::RemovalJobs::in_memory(),
+                creations: creation::CreationJobs::default(),
             }),
         }
     }
@@ -153,6 +156,7 @@ impl AowManager {
                 project_operation: Arc::new(tokio::sync::Mutex::new(())),
                 filesystem_operation: Arc::new(tokio::sync::RwLock::new(())),
                 removals,
+                creations: creation::CreationJobs::default(),
             }),
         })
     }

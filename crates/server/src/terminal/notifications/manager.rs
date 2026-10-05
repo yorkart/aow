@@ -7,7 +7,7 @@ use std::{
 
 use aow_agents::sessions::{
     AgentSessionProvider, SessionEnvironment, SessionRoots,
-    tracking::{AgentSessionTracker, LiveSessionContext, SessionResolution},
+    tracking::{LiveSessionContext, SessionResolution},
 };
 
 use super::super::*;
@@ -134,12 +134,15 @@ impl TerminalManager {
                             .map_or(crate::PROCESS_HOME.as_path(), PathBuf::as_path);
                         let source_root = provider.session_root(home, &environment);
                         let target = match tracker
-                            .resolve_live_session(LiveSessionContext {
-                                pid: process.map(|process| process.pid),
-                                cwd,
-                                title: detected.titles.get(&pane.id).map_or("", String::as_str),
-                                environment: &environment,
-                            })
+                            .resolve_live_session_with_timeout(
+                                LiveSessionContext {
+                                    pid: process.map(|process| process.pid),
+                                    cwd,
+                                    title: detected.titles.get(&pane.id).map_or("", String::as_str),
+                                    environment: &environment,
+                                },
+                                manager.inner.session_query_timeout,
+                            )
                             .await
                         {
                             SessionResolution::Resolved(target) => target,

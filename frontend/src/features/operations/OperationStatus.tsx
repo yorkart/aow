@@ -43,6 +43,7 @@ export function OperationStatus({ operations, ready, error, logOpen, onOpenOpera
     {notice && <div className={`operation-notice ${notice.outcome === 'succeeded' ? 'success' : 'warning'}`} role="status">
       {notice.outcome === 'succeeded' ? <Check size={16} /> : <TriangleAlert size={16} />}
       <div><strong>{notice.title} · {operationOutcomeLabels[notice.outcome!]}</strong><p>{notice.message}</p>
+        {notice.kind === 'worktree.create' && <button onClick={() => { onOpenOperation(notice); setNotice(undefined); }}>查看进度</button>}
         <button onClick={() => { onOpenLogs(notice.id); setNotice(undefined); }}>查看日志</button></div>
       <button aria-label="关闭操作提示" onClick={() => setNotice(undefined)}><X size={14} /></button>
     </div>}

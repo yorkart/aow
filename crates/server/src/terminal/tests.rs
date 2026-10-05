@@ -1448,6 +1448,7 @@ async fn pane_sessions_use_live_cwd_and_config_and_cache_readable_claude_snapsho
     let config = root.join("custom-claude");
     let bin = root.join("bin");
     let executable = root.join(".local/share/claude/versions/test");
+    let ready = root.join("environment.ready");
     for path in [
         &cwd,
         &config.join("projects/demo"),
@@ -1466,7 +1467,7 @@ async fn pane_sessions_use_live_cwd_and_config_and_cache_readable_claude_snapsho
     } else {
         (
             PathBuf::from("/bin/sh"),
-            "-c 'while read -r line; do :; done'",
+            "-c 'printf ready > \"$AOW_NATIVE_ENV_READY\"; while read -r line; do :; done'",
         )
     };
     std::fs::copy(fixture, &executable).unwrap();
@@ -1481,7 +1482,13 @@ async fn pane_sessions_use_live_cwd_and_config_and_cache_readable_claude_snapsho
     let socket = root.join("terminald/terminald.sock");
     let (shutdown, daemon) = start_daemon(socket.clone()).await;
     let client = TerminaldClient::new(socket);
-    let manager = TerminalManager::in_memory(client.clone());
+    // This test verifies session association and delivery, not native CLI speed.
+    // Keep the production deadline at three seconds; the adapter separately
+    // tests deadline enforcement. Loaded macOS hosts need more startup time.
+    let manager = TerminalManager::in_memory_with_session_query_timeout(
+        client.clone(),
+        Duration::from_secs(15),
+    );
     let tab = manager
         .create(CreateTerminalRequest {
             name: None,
@@ -1498,9 +1505,18 @@ async fn pane_sessions_use_live_cwd_and_config_and_cache_readable_claude_snapsho
     let pane_id = &tab.panes[0].id;
     let mut stream = client.attach(pane_id).await.unwrap();
     stream.send(tungstenite::Message::Binary(format!(
-        "cd '{}'; HOME='{}' CLAUDE_CONFIG_DIR='{}' PATH='{}:/usr/bin:/bin' AOW_NATIVE_ENV_FIXTURE=1 '{}' {arguments}\n",
-        cwd.display(), root.display(), config.display(), bin.display(), executable.display()
+        "cd '{}'; HOME='{}' CLAUDE_CONFIG_DIR='{}' PATH='{}:/usr/bin:/bin' AOW_NATIVE_ENV_FIXTURE=1 AOW_NATIVE_ENV_READY='{}' '{}' {arguments}\n",
+        cwd.display(), root.display(), config.display(), bin.display(), ready.display(), executable.display()
     ).into_bytes().into())).await.unwrap();
+    // Observing a PID does not guarantee that exec has exposed its environment.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+    while !ready.exists() {
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "native environment fixture did not become ready"
+        );
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
     let process = loop {
         if let Some(process) = manager.agents(None).await.unwrap().processes.get(pane_id) {
@@ -1546,7 +1562,7 @@ async fn pane_sessions_use_live_cwd_and_config_and_cache_readable_claude_snapsho
     let body = response_json(response).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["cwd"], cwd.to_string_lossy().as_ref());
-    assert_eq!(body["live_session_id"], id);
+    assert_eq!(body["live_session_id"], id, "{body}");
     assert_eq!(body["sessions"][0]["title"], "Native session name");
     assert_eq!(body["sessions"][0]["session_id"], id);
     let response = app

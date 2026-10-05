@@ -10,7 +10,7 @@ mod completed;
 mod hermes;
 mod traecli;
 
-use std::{future::Future, path::Path};
+use std::{future::Future, path::Path, time::Duration};
 
 use super::snapshot::SnapshotError;
 use chrono::{DateTime, Utc};
@@ -19,6 +19,8 @@ use serde_json::Value;
 
 use super::{AgentSessionLocator, SessionEnvironment, SessionRoots};
 use crate::Agent;
+
+pub const DEFAULT_QUERY_TIMEOUT: Duration = Duration::from_secs(3);
 
 pub struct LiveSessionContext<'a> {
     /// Foreground PID, if supplied by the terminal daemon and validated by the caller.
@@ -101,6 +103,23 @@ pub enum TrackingAgent {
 }
 
 impl TrackingAgent {
+    /// Resolve a session with the caller's timeout for uncached native CLI queries.
+    /// Adapters without a CLI query and cached results do not consume this budget.
+    pub async fn resolve_live_session_with_timeout(
+        &self,
+        context: LiveSessionContext<'_>,
+        query_timeout: Duration,
+    ) -> SessionResolution {
+        match self {
+            Self::Claude => {
+                claude::Claude
+                    .resolve_live_session_with_timeout(context, query_timeout)
+                    .await
+            }
+            _ => self.resolve_live_session(context).await,
+        }
+    }
+
     pub fn agent(self) -> Agent {
         match self {
             Self::Claude => Agent::Claude,

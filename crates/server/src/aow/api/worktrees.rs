@@ -21,6 +21,7 @@ pub(super) fn routes() -> Router<AppState> {
             post(removal::submit_batch),
         )
         .route("/api/aow/worktree-removals", get(removal::list_jobs))
+        .route("/api/aow/worktree-creations", get(creation::list_jobs))
 }
 async fn project_branches(
     State(state): State<AppState>,
@@ -39,12 +40,8 @@ async fn create_worktree(
     AxumPath(id): AxumPath<String>,
     Json(request): Json<CreateWorktreeRequest>,
 ) -> Result<impl IntoResponse, Response> {
-    let result = state
-        .aow
-        .create_worktree(&id, request)
-        .await
-        .map_err(aow_response)?;
-    Ok((StatusCode::CREATED, Json(result)))
+    let job = creation::submit(state, id, request).map_err(aow_response)?;
+    Ok((StatusCode::ACCEPTED, Json(job)))
 }
 
 async fn set_worktree_color(

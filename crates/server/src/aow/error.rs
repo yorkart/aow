@@ -20,6 +20,10 @@ pub(crate) enum AowError {
     AgentNotFound(String),
     #[error("git command failed: {0}")]
     Git(String),
+    #[error("{0}")]
+    Timeout(String),
+    #[error("{0}")]
+    CreationConflict(String),
     #[error("configuration repository: {0:#}")]
     Configuration(#[source] anyhow::Error),
     #[error("AoW state lock is poisoned")]
@@ -41,6 +45,12 @@ impl From<aow_agents::launch::LaunchError> for AowError {
 
 pub(crate) fn aow_http_error(error: AowError) -> HttpError {
     match error {
+        AowError::CreationConflict(_) => HttpError::new(
+            StatusCode::CONFLICT,
+            "worktree_creating",
+            error.to_string(),
+            None,
+        ),
         AowError::RemovalConflict(_) => HttpError::new(
             StatusCode::CONFLICT,
             "worktree_removing",
@@ -53,7 +63,7 @@ pub(crate) fn aow_http_error(error: AowError) -> HttpError {
             error.to_string(),
             None,
         ),
-        AowError::Invalid(_) | AowError::Git(_) => HttpError::new(
+        AowError::Invalid(_) | AowError::Git(_) | AowError::Timeout(_) => HttpError::new(
             StatusCode::BAD_REQUEST,
             "invalid_aow_request",
             error.to_string(),
