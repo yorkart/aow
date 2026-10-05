@@ -220,6 +220,7 @@ try {
       else if (url.pathname === '/api/aow/review-providers/test') { state.reviewTests.push(request.postDataJSON()); data = { operations: ['list', 'detail', 'diff'] }; }
       else if (url.pathname === '/api/review-targets') data = state.reviewTargets;
       else if (url.pathname === '/api/aow/settings/discovered-path') data = ['/discovered/bin', '/usr/bin', '/bin'];
+      else if (url.pathname === '/api/aow/settings/server-environment') data = { path: '/home/aow/.config/aow/server.env', content: '', revision: 'missing', exists: false, platform: 'linux' };
       else if (url.pathname === '/api/aow/pinned-worktrees') {
         if (request.method() === 'PATCH') {
           const update = request.postDataJSON();
@@ -3032,8 +3033,8 @@ try {
     const input = dialog.getByRole('textbox', { name: 'PATH 目录', exact: true });
     await eventually(async () => await input.inputValue() === '/usr/local/bin\n/usr/bin\n/bin');
     await input.fill('/opt/python/bin\n/usr/bin\n/bin');
-    await dialog.getByRole('button', { name: '保存', exact: true }).click();
-    await dialog.getByRole('status').waitFor();
+    await dialog.getByRole('button', { name: '保存 PATH', exact: true }).click();
+    await dialog.getByRole('status').filter({ hasText: '执行环境已保存' }).waitFor();
     assert.deepEqual(state.settingsUpdates, [{ execution_path: ['/opt/python/bin', '/usr/bin', '/bin'] }]);
     assert.equal(state.settings.notes_base, '/notes');
     await dialog.getByRole('button', { name: '关闭', exact: true }).click();
@@ -3044,7 +3045,7 @@ try {
     await eventually(async () => await input.inputValue() === '/discovered/bin\n/usr/bin\n/bin');
     assert.equal(state.settingsUpdates.length, 1, 'discovery only edits the draft until Save');
     await input.fill('python3.11');
-    await dialog.getByRole('button', { name: '保存', exact: true }).click();
+    await dialog.getByRole('button', { name: '保存 PATH', exact: true }).click();
     await dialog.getByText('PATH 每行填写一个服务端绝对目录路径，不使用冒号分隔。', { exact: true }).waitFor();
     assert.equal(state.settingsUpdates.length, 1);
   });

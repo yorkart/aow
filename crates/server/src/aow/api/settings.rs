@@ -2,6 +2,7 @@ use super::*;
 
 pub(super) fn routes() -> Router<AppState> {
     Router::new()
+        .merge(super::super::settings::server_environment_routes())
         .route("/api/aow/settings", get(get_settings).put(update_settings))
         .route(
             "/api/aow/settings/discovered-path",
