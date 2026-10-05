@@ -16,7 +16,8 @@ async function fixture(t, width = 390, mobile = true, virtualViewport = false) {
     Object.defineProperty(window, 'visualViewport', { value: Object.assign(new EventTarget(), { height: 844, width: 390, offsetTop: 0 }) });
   });
   const state = {
-    errors: [], writes: [], failSave: false, holdSave: undefined,
+    errors: [], writes: [], failSave: false, failEnvironmentRead: false, holdSave: undefined,
+    serverEnvironment: { path: '/home/aow/.config/aow/server.env', content: '# Existing comment\nAOW_SERVER_PORT=8282\n', revision: 'first', exists: true, platform: 'linux' },
     settings: { notes_base: '/notes', execution_path: ['/usr/bin', '/bin'], node_addresses: [], editor: { word_wrap: false } },
     agents: [{ id: 'codex', agent_type: 'codex', display_name: 'Codex', source: 'detected', available: true, command: 'codex', executable: '/usr/bin/codex', args: [], env: {} }],
     notifications: { im: { providers: [{ provider: 'wechat', account_id: 'account', user_id: 'user' }] }, notifications: { agent_task_completed: { enabled: true, channels: ['page'] }, public_base_url: '' } },
@@ -40,6 +41,17 @@ async function fixture(t, width = 390, mobile = true, virtualViewport = false) {
     else if (path === '/api/aow/settings') {
       if (writing) Object.assign(state.settings, body);
       data = state.settings;
+    } else if (path === '/api/aow/settings/server-environment') {
+      if (!writing && state.failEnvironmentRead) {
+        await route.fulfill({ status: 403, json: { message: 'server.env 读取失败' } }); return;
+      }
+      if (writing) {
+        if (body.revision !== state.serverEnvironment.revision) {
+          await route.fulfill({ status: 409, json: { message: 'server.env 已被外部程序修改，请重新读取文件后再保存。' } }); return;
+        }
+        Object.assign(state.serverEnvironment, { content: body.content, revision: `${state.writes.length}`, exists: true });
+      }
+      data = state.serverEnvironment;
     } else if (path === '/api/aow/settings/discovered-path') data = ['/opt/bin', '/usr/bin', '/bin'];
     else if (path === '/api/aow/agents') {
       if (writing) {
@@ -117,6 +129,74 @@ async function layout(page, dialog, name) {
 }
 
 try {
+  await test('server.env read failures can be retried and macOS files retain CRLF line endings', async t => {
+    const { page, state, dialog, choose } = await fixture(t);
+    state.failEnvironmentRead = true;
+    state.serverEnvironment.platform = 'macos';
+    state.serverEnvironment.content = '# Comment\r\nAOW_SERVER_PORT=8282\r\n';
+    await choose('Environment');
+    await dialog.getByRole('alert').filter({ hasText: 'server.env 读取失败' }).waitFor();
+    assert.equal(await dialog.getByRole('button', { name: '保存 server.env', exact: true }).isDisabled(), true);
+    state.failEnvironmentRead = false;
+    await dialog.getByRole('button', { name: '重新读取文件', exact: true }).click();
+    await dialog.getByText(/LaunchDaemon 模式需按安装器提示/).waitFor();
+    const editor = dialog.getByRole('textbox', { name: 'server.env 文件内容', exact: true });
+    await page.waitForFunction(() => document.querySelector('textarea[aria-label="server.env 文件内容"]')?.value.includes('8282'));
+    await editor.fill('# Comment\nAOW_SERVER_PORT=8283\n');
+    await dialog.getByRole('button', { name: '保存 server.env', exact: true }).click();
+    await dialog.getByRole('status').filter({ hasText: 'server.env 已保存' }).waitFor();
+    assert.equal(state.serverEnvironment.content, '# Comment\r\nAOW_SERVER_PORT=8283\r\n');
+  });
+
+  for (const mobile of [false, true]) await test(`${mobile ? 'mobile' : 'desktop'} server.env edits preserve drafts and save the file independently of PATH`, async t => {
+    const { page, state, dialog, choose, trigger } = await fixture(t, mobile ? 320 : 1280, mobile);
+    const close = () => dialog.getByRole('button', { name: mobile ? '关闭设置' : '关闭', exact: true });
+    await choose('Environment');
+    const editor = dialog.getByRole('textbox', { name: 'server.env 文件内容', exact: true });
+    await page.waitForFunction(() => document.querySelector('textarea[aria-label="server.env 文件内容"]')?.value.includes('8282'));
+    await dialog.getByText('systemctl --user restart aow-server.service', { exact: true }).waitFor();
+    const content = '# Keep comment\n\nAOW_SERVER_PORT="8283"\nCUSTOM=$HOME=a=b\n';
+    await editor.fill(content);
+    await choose('Editor');
+    await choose('Environment');
+    assert.equal(await editor.inputValue(), content, 'category changes retain drafts');
+    page.once('dialog', prompt => prompt.dismiss());
+    await close().click();
+    assert.equal(await editor.inputValue(), content, 'cancelled close retains draft');
+    state.failSave = true;
+    await dialog.getByRole('button', { name: '保存 server.env', exact: true }).click();
+    await dialog.getByRole('alert').filter({ hasText: '配置写入失败' }).waitFor();
+    assert.equal(await editor.inputValue(), content);
+    assert.equal(state.serverEnvironment.content.includes('8282'), true);
+    state.failSave = false;
+    await dialog.getByRole('button', { name: '保存 server.env', exact: true }).click();
+    await dialog.getByRole('status').filter({ hasText: 'server.env 已保存' }).waitFor();
+    assert.equal(state.serverEnvironment.content, content);
+    assert.deepEqual(state.writes.at(-1).body, { content, revision: 'first' });
+    assert.deepEqual(state.settings.execution_path, ['/usr/bin', '/bin']);
+    await layout(page, dialog, 'server-environment');
+    await close().click();
+    await trigger.click();
+    await choose('Environment');
+    await page.waitForFunction(() => document.querySelector('textarea[aria-label="server.env 文件内容"]')?.value.includes('8283'));
+    await editor.fill('LOCAL=draft\n');
+    state.serverEnvironment.content = 'EXTERNAL=updated\n';
+    state.serverEnvironment.revision = 'external';
+    await dialog.getByRole('button', { name: '保存 server.env', exact: true }).click();
+    await dialog.getByRole('alert').filter({ hasText: '已被外部程序修改' }).waitFor();
+    assert.equal(await editor.inputValue(), 'LOCAL=draft\n');
+    page.once('dialog', prompt => prompt.dismiss());
+    await dialog.getByRole('button', { name: '重新读取文件', exact: true }).click();
+    assert.equal(await editor.inputValue(), 'LOCAL=draft\n');
+    page.once('dialog', prompt => prompt.accept());
+    await dialog.getByRole('button', { name: '重新读取文件', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('textarea[aria-label="server.env 文件内容"]')?.value === 'EXTERNAL=updated\n');
+    await editor.fill('');
+    await dialog.getByRole('button', { name: '保存 server.env', exact: true }).click();
+    await dialog.getByRole('status').filter({ hasText: 'server.env 已保存' }).waitFor();
+    assert.equal(state.serverEnvironment.content, '', 'blank content clears the file');
+  });
+
   for (const width of [320, 390]) await test(`mobile ${width}px exposes and saves every desktop settings category`, async t => {
     const { page, state, dialog, choose, save, trigger } = await fixture(t, width);
     assert.deepEqual(await dialog.locator('nav strong').allTextContents(), categories);
@@ -151,7 +231,8 @@ try {
     await choose('Environment');
     await dialog.getByRole('button', { name: '从本机环境读取' }).click();
     await page.waitForFunction(() => document.querySelector('textarea[aria-label="PATH 目录"]')?.value.startsWith('/opt/bin'));
-    await save('执行环境已保存');
+    await dialog.getByRole('button', { name: '保存 PATH', exact: true }).click();
+    await dialog.getByRole('status').filter({ hasText: '执行环境已保存' }).waitFor();
     assert.deepEqual(state.settings.execution_path, ['/opt/bin', '/usr/bin', '/bin']);
     await layout(page, dialog, 'environment');
 

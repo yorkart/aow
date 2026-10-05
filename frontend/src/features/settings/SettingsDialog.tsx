@@ -15,6 +15,7 @@ import { ReviewProviderSettings } from '../pr/ReviewProviderSettings';
 import { ConfigurationSettings } from '../configuration/ConfigurationSettings';
 import { NotificationSettingsPanel } from '../notifications/NotificationSettingsPanel';
 import { LogoutButton } from '../auth/LogoutButton';
+import { ServerEnvironmentFields, useServerEnvironment } from './ServerEnvironmentFields';
 
 const message = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
 const emptyAgentBaseline = JSON.stringify(['', '', '', '', '']);
@@ -24,7 +25,7 @@ const sections = [
   { id: 'nodes', label: 'Nodes', description: '配置其他 AoW 节点', icon: Network },
   { id: 'editor', label: 'Editor', description: '配置文件编辑器', icon: FileText },
   { id: 'notes', label: 'Notes', description: '设置默认 Notes 根目录', icon: NotebookPen },
-  { id: 'environment', label: 'Environment', description: '配置全局执行 PATH', icon: SquareTerminal },
+  { id: 'environment', label: 'Environment', description: '配置执行 PATH 和服务环境变量', icon: SquareTerminal },
   { id: 'agents', label: 'Agents', description: '配置 Agent 启动方式', icon: Bot },
   { id: 'im', label: 'IM', description: '配置飞书和微信机器人', icon: MessageSquare },
   { id: 'notifications', label: '通知', description: '选择任务完成通知方式', icon: Bell },
@@ -52,6 +53,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
   const [environmentSaved, setEnvironmentSaved] = useState(false);
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [settingsBusy, setSettingsBusy] = useState(false);
+  const serverEnvironment = useServerEnvironment(section === 'environment' && !overview, setSettingsBusy);
   const [editingAgentId, setEditingAgentId] = useState<string>();
   const [agentType, setAgentType] = useState<AowAgent['agent_type'] | ''>('');
   const [displayName, setDisplayName] = useState('');
@@ -64,7 +66,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
   const dialog = useRef<HTMLElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const dirty = reviewDirty || configurationDirty || mobile && (notificationDirty
+  const dirty = reviewDirty || configurationDirty || serverEnvironment.dirty || mobile && (notificationDirty
     || !!settings && (notesBase !== settings.notes_base || nodeAddresses !== (settings.node_addresses ?? []).join('\n')
       || executionPath !== (settings.execution_path ?? []).join('\n') || editorWordWrap !== (settings.editor?.word_wrap ?? false))
     || JSON.stringify([agentType, displayName, command, args.text, env.text]) !== agentBaseline);
@@ -332,14 +334,15 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
           </> : section === 'environment' ? <>
             <form className="project-aow-dialog-form" onSubmit={(event) => { event.preventDefault(); void saveEnvironment(); }}>
               <div className="project-aow-dialog-body">
-                <div className="project-aow-settings-heading"><div><h2>Environment</h2><p>统一配置新启动的 Agent 和自动化任务使用的命令搜索路径。</p></div></div>
+                <div className="project-aow-settings-heading"><div><h2>Environment</h2><p>配置执行 PATH，编辑 AoW 服务的环境变量文件。</p></div></div>
                 <label className="project-aow-dialog-field"><span>PATH 目录（从上到下优先）</span><textarea aria-label="PATH 目录" spellCheck={false} rows={10} value={executionPath} disabled={settingsLoading || settingsBusy} onChange={(event) => { setExecutionPath(event.target.value); setEnvironmentSaved(false); setError(''); }} placeholder={'/opt/python/3.11/bin\n/usr/local/bin\n/usr/bin\n/bin'} required /></label>
                 <p className="project-aow-form-intro">每行一个服务器上的绝对目录。要优先使用某个 Python，请把包含 python3 的目录放在前面；这里不填写可执行文件，也不展开 ~、$HOME 或 $PATH。</p>
                 <p className="project-aow-form-intro">保存后对后续执行生效，已有任务无需重新保存。正在运行的任务保持原环境。</p>
                 {environmentSaved ? <p role="status">执行环境已保存。</p> : null}
                 {error ? <div className="project-aow-error" role="alert">{error}</div> : null}
+                <ServerEnvironmentFields environment={serverEnvironment} busy={settingsBusy} />
               </div>
-              <footer className="project-aow-dialog-footer"><button type="button" className="project-aow-dialog-button" disabled={settingsLoading || settingsBusy} onClick={() => void readEnvironment()}><RefreshCw size={14} />从本机环境读取</button><button type="submit" className="project-aow-dialog-button primary" disabled={settingsLoading || settingsBusy || !executionPath.trim()}>{settingsBusy ? '处理中…' : '保存'}</button></footer>
+              <footer className="project-aow-dialog-footer"><button type="button" className="project-aow-dialog-button" disabled={settingsLoading || settingsBusy} onClick={() => void readEnvironment()}><RefreshCw size={14} />从本机环境读取</button><button type="submit" className="project-aow-dialog-button primary" disabled={settingsLoading || settingsBusy || !executionPath.trim()}>{settingsBusy ? '处理中…' : '保存 PATH'}</button></footer>
             </form>
           </> : <>
             <form className="project-aow-dialog-form" ref={agentForm} onSubmit={(event) => { event.preventDefault(); void save(); }}>
