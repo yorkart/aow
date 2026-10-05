@@ -10,18 +10,29 @@ use tokio::io::AsyncReadExt;
 
 pub(super) struct Claude;
 
-impl AgentSessionTracker for Claude {
-    async fn resolve_live_session(&self, context: LiveSessionContext<'_>) -> SessionResolution {
+impl Claude {
+    pub(super) async fn resolve_live_session_with_timeout(
+        &self,
+        context: LiveSessionContext<'_>,
+        query_timeout: Duration,
+    ) -> SessionResolution {
         let Some(pid) = context.pid else {
             return SessionResolution::NotFound;
         };
-        let Some(sessions) = claude_sessions(context.environment).await else {
+        let Some(sessions) = claude_sessions(context.environment, query_timeout).await else {
             return SessionResolution::Unavailable;
         };
         match claude_session_id(&sessions, pid) {
             Some(id) => SessionResolution::Resolved(SessionTarget::Id(id)),
             None => SessionResolution::NotFound,
         }
+    }
+}
+
+impl AgentSessionTracker for Claude {
+    async fn resolve_live_session(&self, context: LiveSessionContext<'_>) -> SessionResolution {
+        self.resolve_live_session_with_timeout(context, DEFAULT_QUERY_TIMEOUT)
+            .await
     }
 
     fn candidate_sessions(
@@ -173,16 +184,16 @@ struct ClaudeSessionCache {
 static CLAUDE_CACHE: LazyLock<tokio::sync::Mutex<ClaudeSessionCache>> =
     LazyLock::new(Default::default);
 
-async fn claude_sessions(environment: &SessionEnvironment) -> Option<Vec<ClaudeSession>> {
+async fn claude_sessions(
+    environment: &SessionEnvironment,
+    query_timeout: Duration,
+) -> Option<Vec<ClaudeSession>> {
     // Share one CLI query across panes and clients. Cache unsupported versions
     // and failures longer; this is never run by the frequent agent badge poll.
     CLAUDE_CACHE
         .lock()
         .await
-        .sessions(
-            environment,
-            query_claude(environment, Duration::from_secs(3)),
-        )
+        .sessions(environment, query_claude(environment, query_timeout))
         .await
 }
 

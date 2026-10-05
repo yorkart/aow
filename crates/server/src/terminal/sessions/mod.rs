@@ -3,7 +3,7 @@
 use super::*;
 use aow_agents::sessions::{
     AgentSession, SessionRoots,
-    tracking::{AgentSessionTracker, LiveSessionContext, SessionResolution, SessionTarget},
+    tracking::{LiveSessionContext, SessionResolution, SessionTarget},
 };
 use aow_protocol::TerminalAgentProcess;
 
@@ -84,12 +84,15 @@ pub(super) async fn list(
         (tracker, &process, &environment)
     {
         match tracker
-            .resolve_live_session(LiveSessionContext {
-                pid: Some(process.pid),
-                cwd: &cwd,
-                title: &title,
-                environment,
-            })
+            .resolve_live_session_with_timeout(
+                LiveSessionContext {
+                    pid: Some(process.pid),
+                    cwd: &cwd,
+                    title: &title,
+                    environment,
+                },
+                state.terminals.inner.session_query_timeout,
+            )
             .await
         {
             SessionResolution::Resolved(SessionTarget::Id(id)) => Some(id),

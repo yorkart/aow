@@ -28,12 +28,15 @@ pub(super) async fn read(manager: &TerminalManager, pane_id: &str) -> Result<Sou
         .and_then(aow_agents::Agent::session_tracking)
         .context("该 Agent 暂不支持托管")?;
     let target = match tracker
-        .resolve_live_session(LiveSessionContext {
-            pid: Some(process.pid),
-            cwd: &process.cwd,
-            title: detected.titles.get(pane_id).map_or("", String::as_str),
-            environment: &environment,
-        })
+        .resolve_live_session_with_timeout(
+            LiveSessionContext {
+                pid: Some(process.pid),
+                cwd: &process.cwd,
+                title: detected.titles.get(pane_id).map_or("", String::as_str),
+                environment: &environment,
+            },
+            manager.inner.session_query_timeout,
+        )
         .await
     {
         SessionResolution::Resolved(target) => target,
