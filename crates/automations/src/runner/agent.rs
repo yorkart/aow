@@ -1,6 +1,6 @@
 use aow_agents::automation::{AgentAutomation, SessionIdMode};
 use std::{
-    process::{ExitStatus, Stdio},
+    process::ExitStatus,
     time::{Duration, Instant},
 };
 
@@ -39,34 +39,6 @@ pub(super) async fn execute(
         branch: workspace.branch.clone(),
         elapsed_ms: millis(started),
     })?;
-    if !task.input.precheck_command.trim().is_empty() {
-        let mut command = Command::new("/bin/sh");
-        command
-            .args(["-c", &task.input.precheck_command])
-            .current_dir(directory)
-            .envs(&task.launch.environment)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .kill_on_drop(true)
-            .process_group(0);
-        concurrency_slot.register(&mut command);
-        let mut child = command.spawn()?;
-        let _group = ProcessGroup(child.id().unwrap());
-        let status = tokio::time::timeout(
-            Duration::from_secs(task.input.precheck_timeout_seconds),
-            child.wait(),
-        )
-        .await
-        .context("执行前检查超时")??;
-        if !status.success() {
-            return Ok((
-                RunStatus::Skipped,
-                status.code(),
-                Some("执行前检查未通过".into()),
-            ));
-        }
-    }
     let session_mode = task.input.agent.session_id_mode();
     let specified_id =
         (session_mode == SessionIdMode::GeneratedUuid).then(|| Uuid::new_v4().to_string());

@@ -62,17 +62,9 @@ pub struct TaskInput {
     /// Run the agent with its native Full Access / Yolo switch.
     #[serde(default = "default_yolo")]
     pub yolo: bool,
-    #[serde(default)]
-    pub precheck_command: String,
-    #[serde(default = "default_precheck_timeout")]
-    pub precheck_timeout_seconds: u64,
     /// Delivery preference only. The server handles notifications independently.
     #[serde(default)]
     pub failure_notification: Option<FailureNotification>,
-}
-
-fn default_precheck_timeout() -> u64 {
-    60
 }
 
 fn default_cleanup_worktree() -> bool {
@@ -117,11 +109,6 @@ impl TaskInput {
             self.workspace.workspace_mode != WorkspaceMode::Dynamic
                 || self.kind == TaskKind::Manual,
             "仅手动任务支持动态指定工作区"
-        );
-        ensure!(self.precheck_command.len() <= 8192, "执行前检查命令过长");
-        ensure!(
-            (1..=3600).contains(&self.precheck_timeout_seconds),
-            "检查超时必须为 1–3600 秒"
         );
         ensure!(
             (1..=10).contains(&self.max_concurrent_runs),

@@ -198,7 +198,7 @@ async fn review_environment_case(home_only: bool) {
     let task = request(&app, "POST", "/api/aow/automations", json!({
         "project_id":project["id"],"name":"Review","kind":"manual","prompt":"Review",
         "agent":"codex","workspace_mode":"existing","workspace_path":repo,"base_branch":"","cron":"",
-        "max_concurrent_runs":1,"enabled":true,"precheck_command":"","precheck_timeout_seconds":60
+        "max_concurrent_runs":1,"enabled":true
     })).await;
     let task_id = task["id"].as_str().unwrap();
     let run_id = aow_automations::store::new_run_id();
@@ -301,7 +301,7 @@ async fn run_hosting_case(
         "project_id":project["id"],"name":"Review","kind":"manual","prompt":"Review {{conclusion}} in {{workspace}}",
         "prompt_bindings":[{"name":"conclusion","placeholder":"{{conclusion}}","start":7,"end":21},{"name":"workspace","placeholder":"{{workspace}}","start":25,"end":38}],
         "agent":"codex","workspace_mode":"dynamic","workspace_path":"","base_branch":"","cron":"",
-        "max_concurrent_runs":1,"enabled":true,"precheck_command":"","precheck_timeout_seconds":60
+        "max_concurrent_runs":1,"enabled":true
     })).await;
     let tab = request(
         &app,
