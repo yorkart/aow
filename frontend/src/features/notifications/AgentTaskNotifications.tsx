@@ -7,7 +7,7 @@ import { useAowTerminalTabActivity, useAowTabNavigation } from '../../aow/AowTab
 import { parseTaskStop, taskNotifications, useTaskNotifications, type TaskNotice } from './taskNotifications';
 import { AgentIcon } from '../agents/AgentIcon';
 
-const agentNames: Record<string, string> = { codex: 'Codex', traecli: 'TraeCode CLI', claude: 'Claude Code', hermes: 'Hermes' };
+const agentNames: Record<string, string> = { codex: 'Codex', traecli: 'TraeCode CLI', claude: 'Claude Code', hermes: 'Hermes', pi: 'Pi' };
 const visibleNoticeCount = 5;
 
 function TaskNoticeCard({ notice }: { notice: TaskNotice }) {

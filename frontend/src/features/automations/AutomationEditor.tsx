@@ -139,7 +139,8 @@ export function AutomationEditor({ task, kind = 'scheduled', project, agents, ti
           <h3><Settings2 />执行配置</h3>
           <div className="automation-agent-setting"><span>Agent</span><div className="automation-agent-row"><select aria-label="Agent" value={draft.agent} onChange={(event) => update('agent', event.target.value as AutomationAgent)}>
             {Object.entries(agentNames).map(([id, name]) => <option key={id} value={id} disabled={!agents.some((agent) => agent.id === id && agent.available)}>{name}{agents.some((agent) => agent.id === id && agent.available) ? '' : ' · 未安装'}</option>)}
-          </select><label className="automation-yolo-option"><input type="checkbox" checked={draft.yolo} onChange={(event) => update('yolo', event.target.checked)} />Yolo</label></div></div>
+          </select><label className="automation-yolo-option"><input type="checkbox" checked={draft.yolo} onChange={(event) => update('yolo', event.target.checked)} />{draft.agent === 'pi' ? '信任项目配置' : 'Yolo'}</label></div></div>
+          {draft.agent === 'pi' ? <p className="automation-hint">允许 Pi 加载项目配置和扩展；工具权限仍由 Pi 配置的扩展控制。</p> : null}
           <WorkspaceSelect project={project} value={draft} disabled={busy} allowDynamic={manual}
             onChange={workspace => setDraft(current => ({ ...current, ...workspace }))} onValidityChange={setWorkspaceReady} />
           {draft.workspace_mode === 'temporary' ? <p className="automation-hint">任务结束后自动删除临时工作区；该任务的 Agent 会话不会出现在项目的普通会话列表中。</p> : null}

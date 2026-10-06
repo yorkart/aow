@@ -65,4 +65,8 @@ pub struct TerminalAgentProcess {
     /// clock ticks; macOS uses seconds and microseconds. Compare as a string.
     pub start_time: String,
     pub cwd: String,
+    /// AoW's per-launch Pi identity file. Pi can rewrite its native environment
+    /// when setting the process title, so terminald retains this one safe path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pi_binding: Option<String>,
 }

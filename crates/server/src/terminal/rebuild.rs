@@ -55,7 +55,7 @@ impl TerminalManager {
         }
 
         let now = timestamp();
-        let panes: Vec<_> = current
+        let mut panes: Vec<_> = current
             .panes
             .iter()
             .map(|pane| TerminalPane {
@@ -73,7 +73,27 @@ impl TerminalManager {
                 ..pane.clone()
             })
             .collect();
-        for (index, (pane, spec)) in panes.iter().zip(specs).enumerate() {
+        let mut specs = specs.to_vec();
+        for (pane, spec) in panes.iter_mut().zip(&mut specs) {
+            if pane.kind == TerminalPaneKind::Agent && pane.agent_id.as_deref() == Some("pi") {
+                let directory = spec
+                    .environment
+                    .get("AOW_STATE_DIR")
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| {
+                        std::env::temp_dir().join(format!("aow-{}", std::process::id()))
+                    })
+                    .join("agents/pi");
+                aow_agents::pi_bridge::prepare(
+                    &directory,
+                    &pane.id,
+                    &mut spec.arguments,
+                    &mut spec.environment,
+                )?;
+                pane.arguments.clone_from(&spec.arguments);
+            }
+        }
+        for (index, (pane, spec)) in panes.iter().zip(&specs).enumerate() {
             if let Err(error) = self
                 .inner
                 .terminald

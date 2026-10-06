@@ -45,6 +45,7 @@ pub enum SessionAgent {
     Codex,
     TraeCli,
     Hermes,
+    Pi,
 }
 
 impl SessionAgent {
@@ -54,6 +55,7 @@ impl SessionAgent {
             Self::Codex => Agent::Codex,
             Self::TraeCli => Agent::TraeCli,
             Self::Hermes => Agent::Hermes,
+            Self::Pi => Agent::Pi,
         }
     }
 }
@@ -65,6 +67,7 @@ impl Agent {
             Self::Codex => Some(SessionAgent::Codex),
             Self::TraeCli => Some(SessionAgent::TraeCli),
             Self::Hermes => Some(SessionAgent::Hermes),
+            Self::Pi => Some(SessionAgent::Pi),
             _ => None,
         }
     }
@@ -77,6 +80,7 @@ impl AgentSessionProvider for SessionAgent {
             Self::Codex => codex::Codex.session_root(process_home, environment),
             Self::TraeCli => traecli::TraeCli.session_root(process_home, environment),
             Self::Hermes => hermes::Hermes.session_root(process_home, environment),
+            Self::Pi => pi::Pi.session_root(process_home, environment),
         }
     }
     fn list_sessions(&self, roots: &SessionRoots, workspace_path: &Path) -> Vec<AgentSession> {
@@ -85,6 +89,7 @@ impl AgentSessionProvider for SessionAgent {
             Self::Codex => codex::Codex.list_sessions(roots, workspace_path),
             Self::TraeCli => traecli::TraeCli.list_sessions(roots, workspace_path),
             Self::Hermes => hermes::Hermes.list_sessions(roots, workspace_path),
+            Self::Pi => pi::Pi.list_sessions(roots, workspace_path),
         }
     }
     fn find_session(&self, roots: &SessionRoots, session_id: &str) -> Option<AgentSession> {
@@ -93,6 +98,7 @@ impl AgentSessionProvider for SessionAgent {
             Self::Codex => codex::Codex.find_session(roots, session_id),
             Self::TraeCli => traecli::TraeCli.find_session(roots, session_id),
             Self::Hermes => hermes::Hermes.find_session(roots, session_id),
+            Self::Pi => pi::Pi.find_session(roots, session_id),
         }
     }
     fn current_title(&self, locator: &AgentSessionLocator) -> Option<String> {
@@ -105,6 +111,7 @@ impl AgentSessionProvider for SessionAgent {
             Self::Codex => codex::Codex.current_title(locator),
             Self::TraeCli => traecli::TraeCli.current_title(locator),
             Self::Hermes => hermes::Hermes.current_title(locator),
+            Self::Pi => pi::Pi.current_title(locator),
         }
     }
     fn read_snapshot(
@@ -121,6 +128,7 @@ impl AgentSessionProvider for SessionAgent {
             Self::Codex => codex::Codex.read_snapshot(locator),
             Self::TraeCli => traecli::TraeCli.read_snapshot(locator),
             Self::Hermes => hermes::Hermes.read_snapshot(locator),
+            Self::Pi => pi::Pi.read_snapshot(locator),
         }
     }
 }

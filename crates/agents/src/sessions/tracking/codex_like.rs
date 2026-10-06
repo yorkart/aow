@@ -1,5 +1,5 @@
 use super::*;
-use crate::sessions::usage::{CodexUsage, TokenUsage};
+use crate::sessions::usage::{CodexUsage, TokenUsage, TokenUsageParser};
 
 pub(super) fn resolve(context: LiveSessionContext<'_>) -> SessionResolution {
     let title = normalized_title(context.title, context.cwd);

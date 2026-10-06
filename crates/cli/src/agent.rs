@@ -46,7 +46,7 @@ enum AgentCommand {
     /// Create a hidden agent pane, wait until ready, optionally submit its first task.
     #[command(after_help = HELP)]
     Create {
-        #[arg(long, default_value = "codex", value_parser = ["codex", "traecli", "hermes"])]
+        #[arg(long, default_value = "codex", value_parser = ["codex", "traecli", "hermes", "pi"])]
         agent: String,
         /// Registered project that owns the worktree.
         #[arg(long, value_parser = crate::parse_id)]

@@ -1,6 +1,6 @@
 import { CalendarClock, ChevronRight, MousePointerClick } from 'lucide-react';
 import { automationApi } from './api';
-import { agentNames, dateTime, duration, runNames, scheduleName, workspaceNames } from './presentation';
+import { agentNames, dateTime, duration, executionPermission, runNames, scheduleName, workspaceNames } from './presentation';
 import type { AutomationRun } from './types';
 import { sessionsApi } from '../sessions/api';
 import { AgentIcon } from '../agents/AgentIcon';
@@ -46,7 +46,7 @@ function MobileAutomationTask({ route, navigate, back }: { route: MobileRoute; n
         <div><dt>项目</dt><dd>{task.data.project_name}<small><code>{task.data.project_id}</code></small></dd></div>
         <div><dt>状态</dt><dd>{taskState(task.data)}</dd></div>
         <div><dt>Agent</dt><dd>{agentNames[task.data.agent]}</dd></div>
-        <div><dt>执行权限</dt><dd>{task.data.yolo ? 'Yolo / Full Access' : '标准权限'}</dd></div>
+        <div><dt>执行权限</dt><dd>{executionPermission(task.data.agent, task.data.yolo)}</dd></div>
         <div><dt>失败提醒</dt><dd>{task.data.failure_notification === 'feishu' ? '飞书 Bot' : task.data.failure_notification === 'wechat' ? '微信 Bot' : '不提醒'}</dd></div>
         {task.data.kind === 'manual' ? <div><dt>执行方式</dt><dd>手动运行</dd></div> : <div><dt>运行计划</dt><dd>{scheduleName(task.data.cron, task.data.interval_seconds)}<small><code>{task.data.interval_seconds ? `${task.data.interval_seconds} 秒` : task.data.cron}</code></small></dd></div>}
         <div><dt>最大并发</dt><dd>{task.data.max_concurrent_runs === 1 ? '1（禁止重叠执行）' : task.data.max_concurrent_runs}</dd></div>

@@ -45,6 +45,7 @@ mod lifecycle;
 pub(crate) mod notifications;
 mod panes;
 mod persistence;
+mod pi_detection;
 mod rebuild;
 mod requests;
 mod runtime;
