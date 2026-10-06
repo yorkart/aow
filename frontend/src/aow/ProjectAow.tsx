@@ -2023,6 +2023,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
             detectedAgents={terminals.detectedAgents}
             terminalTitles={terminals.terminalTitles}
             agentProcesses={terminals.agentProcesses}
+            terminalActivity={terminals.terminalActivity}
             onTabChange={terminals.replace}
             onTabClosed={terminals.remove}
             onPaneStatus={terminals.updatePaneStatus}

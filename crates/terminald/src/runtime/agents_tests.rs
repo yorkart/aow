@@ -46,6 +46,7 @@ fn process(
             start_time: "123".to_owned(),
         },
         agent,
+        command_name: None,
     }
 }
 

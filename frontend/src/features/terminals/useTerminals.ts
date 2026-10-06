@@ -268,7 +268,7 @@ export function useTerminals(workspaceRoot: string, enabled: boolean) {
   }, []);
 
   const currentTabs = stateRootRef.current === workspaceRoot ? tabs : [];
-  const { agents: detectedAgents, titles: terminalTitles, processes: agentProcesses } = useTerminalAgents(workspaceRoot, enabled && currentTabs.length > 0);
+  const { agents: detectedAgents, titles: terminalTitles, processes: agentProcesses, activity: terminalActivity } = useTerminalAgents(workspaceRoot, enabled && currentTabs.length > 0);
   const currentActiveId = stateRootRef.current === workspaceRoot ? activeId : undefined;
   const activeTab = useMemo(
     () => currentTabs.find((tab) => tab.id === currentActiveId),
@@ -276,7 +276,7 @@ export function useTerminals(workspaceRoot: string, enabled: boolean) {
   );
 
   return {
-    tabs: currentTabs, activeId: currentActiveId, activeTab, loaded, loading, busy, error, detectedAgents, terminalTitles, agentProcesses,
+    tabs: currentTabs, activeId: currentActiveId, activeTab, loaded, loading, busy, error, detectedAgents, terminalTitles, agentProcesses, terminalActivity,
     activate: setActiveId, create, rename, reorder, close, remove, replace, updatePaneStatus, reload: load,
   };
 }

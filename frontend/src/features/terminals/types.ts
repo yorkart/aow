@@ -67,6 +67,12 @@ export interface TerminalAgentList {
   agents: Record<string, string | null>;
   titles: Record<string, string>;
   processes: Record<string, TerminalAgentProcess>;
+  activity: Record<string, TerminalPaneActivity>;
+}
+
+export interface TerminalPaneActivity {
+  cwd?: string;
+  foreground_command?: string;
 }
 
 export interface TerminalAgentProcess {

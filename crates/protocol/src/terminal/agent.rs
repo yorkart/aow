@@ -56,6 +56,18 @@ pub struct TerminalAgentList {
     /// without process inspection; title-based selection remains available.
     #[serde(default)]
     pub processes: BTreeMap<String, TerminalAgentProcess>,
+    /// Live shell state used to label panes when no OSC title is available.
+    /// Missing on older daemons and platforms without process inspection.
+    #[serde(default)]
+    pub activity: BTreeMap<String, TerminalPaneActivity>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TerminalPaneActivity {
+    /// Current working directory of the shell process.
+    pub cwd: Option<String>,
+    /// Executable name of the foreground process, absent at the shell prompt.
+    pub foreground_command: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
