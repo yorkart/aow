@@ -20,10 +20,17 @@ pub enum AgentType {
     Codex,
     TraeCli,
     Hermes,
+    Pi,
 }
 
 impl AgentType {
-    pub const ALL: [Self; 4] = [Self::Claude, Self::Codex, Self::TraeCli, Self::Hermes];
+    pub const ALL: [Self; 5] = [
+        Self::Claude,
+        Self::Codex,
+        Self::TraeCli,
+        Self::Hermes,
+        Self::Pi,
+    ];
 
     pub fn agent(self) -> Agent {
         match self {
@@ -31,6 +38,7 @@ impl AgentType {
             Self::Codex => Agent::Codex,
             Self::TraeCli => Agent::TraeCli,
             Self::Hermes => Agent::Hermes,
+            Self::Pi => Agent::Pi,
         }
     }
 
@@ -79,6 +87,7 @@ impl AgentLaunch {
         let argument = match self.agent_type {
             AgentType::Claude | AgentType::Hermes => "--resume",
             AgentType::Codex | AgentType::TraeCli => "resume",
+            AgentType::Pi => "--session",
         };
         self.args
             .extend([argument.to_owned(), session_id.to_owned()]);

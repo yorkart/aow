@@ -13,6 +13,7 @@ fn hosting(id: &str) -> TerminalHosting {
         process: TerminalAgentProcess {
             pid: 1,
             start_time: "start".into(),
+            pi_binding: None,
             cwd: "/tmp".into(),
         },
         phase: TerminalHostingPhase::Waiting,

@@ -2,7 +2,7 @@ import type { TokenUsage } from '../../lib/tokenUsage';
 
 export interface AowAgentSession {
   id: string;
-  agent: 'claude' | 'codex' | 'traecli' | 'hermes';
+  agent: 'claude' | 'codex' | 'traecli' | 'hermes' | 'pi';
   session_id: string;
   title: string;
   cwd: string;

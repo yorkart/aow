@@ -1,5 +1,9 @@
 import type { AutomationAgent, RunStatus } from './types';
-export const agentNames: Record<AutomationAgent, string> = { codex: 'Codex', traecli: 'TraeCode CLI', claude: 'Claude Code', hermes: 'Hermes' };
+export const agentNames: Record<AutomationAgent, string> = { codex: 'Codex', traecli: 'TraeCode CLI', claude: 'Claude Code', hermes: 'Hermes', pi: 'Pi' };
+export function executionPermission(agent: AutomationAgent, yolo: boolean) {
+  if (agent === 'pi') return yolo ? '信任项目配置' : '忽略项目配置';
+  return yolo ? 'Yolo / Full Access' : '标准权限';
+}
 export { workspaceNames } from '../workspaces/types';
 export const runNames: Record<RunStatus, string> = { preparing: '准备中', running: '执行中', completed: '已完成', failed: '失败', skipped: '已跳过', interrupted: '已中断' };
 export const errorMessage = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);

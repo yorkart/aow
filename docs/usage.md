@@ -108,7 +108,7 @@ IM 消息由后台发送，需要在 **Settings → 通知 → AoW 访问地址*
 
 TraeCode CLI 适配面向 **2.0**。
 
-会话详情按轮次展示用户输入、Agent 处理过程和最终结论。处理过程包含公开进度说明、工具名称和执行状态，工具详情可展开查看已记录的命令、参数和执行输出，不展示内部推理。支持 Codex、TraeCode CLI、Claude 和 Hermes 的本地会话记录。
+会话详情按轮次展示用户输入、Agent 处理过程和最终结论。处理过程包含公开进度说明、工具名称和执行状态，工具详情可展开查看已记录的命令、参数和执行输出，不展示内部推理。支持 Codex、TraeCode CLI、Claude、Hermes 和 Pi 的本地会话记录。
 
 连续工具调用默认合并为英文概要，例如 `Read files, edited files, ran commands`；结合工具名称和会话记录中的命令分类去重汇总，保留调用次数及失败/执行中状态。点击概要可展开工具列表，Agent 的进度说明会分隔前后两组调用。
 
@@ -144,6 +144,20 @@ Hermes 经典 CLI 不发送动态任务标题。AoW 在精确关联当前进程�
 
 真实会话检查：在已打开的 Hermes 终端显示 `/status` 并保持空闲，设置 `AOW_HERMES_TEST_PID`、`AOW_HERMES_TEST_SESSION_ID` 和 `AOW_HERMES_TEST_RUNTIME_ID` 后，运行 `cargo test -p aow-server --test hermes_live -- --ignored --nocapture`。它只读核对进程、会话关联、原生消息、工具结果和屏幕；完成提醒通过临时数据库重放该会话验证。原生前台进程识别可用 `cargo test -p aow-terminald native_scan_matches_an_existing_hermes_process -- --ignored --nocapture` 检查。若同时设置 `AOW_HERMES_TEST_EXPORT` 为临时目录，可在前端目录使用同一变量运行 `node --test --test-name-pattern='exported native Hermes' tests/session-snapshot.test.mjs`，验证这份真实快照的桌面和手机展示。导出内容包含该会话的公开消息和工具输出，仅应保存在本机私有目录。
 
+## Pi
+
+Pi 适配已在 **1.0.2** 验证。将 `pi` 所在目录加入 Settings 的执行 PATH 后，可自动发现或手动注册 Pi；支持独立可执行文件与 npm CLI 入口。普通 Terminal 使用原生 TUI，`aow-cli agent create --agent pi` 支持等待默认编辑器就绪并提交任务。改变编辑器布局的自定义扩展可能影响就绪检测，此时可使用普通 Terminal。
+
+Pi 原生终端标题默认为 `π - 目录名`，使用 `/name 会话名` 后显示会话名。AoW 根据运行中的 Agent 身份显示标题、Conversation 和 Autopilot。旧 terminald 尚不认识 Pi 时，Web 服务可通过 AoW 创建的桥接绑定核对实际 Pi 进程；重建终端会为新窗格重新生成绑定。升级前已经重建且丢失绑定的 Pi 窗格，需要在退出 Pi 后单独重建一次。
+
+Conversation、手机及分享页读取 Pi v2/v3 JSONL 会话树，按 `parentId` 选择当前分支，显示用户输入、公开回复、工具调用和 token 用量；保留压缩前的原始历史，不显示内部推理。恢复指定会话使用 `--session <session-id>`，不是打开选择器的 `--resume`。默认读取 `~/.pi/agent/sessions`；支持 `PI_CODING_AGENT_DIR`、`PI_CODING_AGENT_SESSION_DIR` 和全局 `settings.json` 的 `sessionDir`。自定义配置建议使用绝对路径。
+
+由 AoW 创建的 Pi 终端会通过 `--extension` 加载随 AoW 提供的桥接模块，不修改用户的 Pi 设置。模块记录当前进程与原生会话的精确绑定，跟随会话切换，并在 `agent_settled` 时追加不进入模型上下文的完成标记。完成提醒只读取订阅之后的记录；中间工具调用、重试、失败和取消不触发成功提醒。手动在 shell 中启动且未加载该模块的 Pi，可以手动选择历史会话，但不猜测实时会话归属。
+
+自动化使用 `pi --print --session-id <新UUID>`，通过 stdin 发送任务，保留原生会话并根据退出码判断失败，再从会话提取最终结果。启用“信任项目配置”传入 `--approve`，关闭时传入 `--no-approve`；这控制项目配置和扩展的加载，工具权限由 Pi 自身的扩展控制。自动化自定义存储位置请使用 `PI_CODING_AGENT_SESSION_DIR`，不要在参数中覆盖执行模式或会话身份。
+
+验证：`cargo test -p aow-agents --all-features`、`node --test crates/agents/tests/pi-cli.test.mjs`。原生离线回归设置 `AOW_PI_TEST_CLI` 为 Pi 可执行文件路径，然后运行 `cargo test -p aow-agents --all-features --test pi_native -- --ignored` 和上述 Node 测试；运行 `cargo test -p aow-server native_pi_submits_through_terminald_and_resolves_its_session -- --ignored` 可检查真实终端提交、会话绑定和完成事件。测试使用临时配置及本地模拟 provider，不调用模型服务。
+
 ## 手机访问
 
 手机打开同一个服务地址即可进入移动界面，也可以直接访问 `/m` 或 `/m/`。
@@ -158,6 +172,6 @@ Terminal 的分割窗格会展开为独立标签。若已有其他窗口控制�
 
 GitHub 安装器和 `aow update` 会把 Runner 的稳定入口更新为所选 release；后续计划任务和手动任务自动使用新 Runner，已开始运行的任务不受影响。Runner 不是常驻进程，因此不需要单独的 start 命令。
 
-点击左侧 Pinned 上方的“自动化”，创建任务并设置 Agent、项目、工作区和运行计划。支持 Codex、TraeCode CLI、Claude Code、Hermes；每次运行都会创建新会话。详情页显示概述和执行历史，可复制每次运行的 session ID。
+点击左侧 Pinned 上方的“自动化”，创建任务并设置 Agent、项目、工作区和运行计划。支持 Codex、TraeCode CLI、Claude Code、Hermes、Pi；每次运行都会创建新会话。详情页显示概述和执行历史，可复制每次运行的 session ID。
 
 Linux 使用 systemd user timer，macOS 使用当前登录用户的 launchd。定时器触发独立 Runner，前端或 Web 服务重启不会影响任务触发及已启动的执行。未实现应用层补跑或重试，也不读取 Agent rollout。

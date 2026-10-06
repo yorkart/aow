@@ -23,7 +23,7 @@ impl DaemonState {
         let runtimes: Vec<_> = self.lock_runtimes()?.values().cloned().collect();
         let mut sessions = BTreeMap::new();
         let mut titles = BTreeMap::new();
-        for runtime in runtimes {
+        for runtime in &runtimes {
             if runtime.is_deleted() {
                 continue;
             }
@@ -61,11 +61,28 @@ impl DaemonState {
             cache.sessions = sessions;
             cache.captured = Some(Instant::now());
         }
-        Ok(TerminalAgentList {
+        let mut detected = TerminalAgentList {
             agents: cache.detected.agents.clone(),
             titles,
             processes: cache.detected.processes.clone(),
-        })
+        };
+        for runtime in runtimes {
+            if detected
+                .agents
+                .get(&runtime.id)
+                .and_then(|agent| agent.as_deref())
+                == Some("pi")
+                && let Some(process) = detected.processes.get_mut(&runtime.id)
+            {
+                process.pi_binding = runtime
+                    .creation_spec
+                    .environment
+                    .get("AOW_PI_BINDING")
+                    .filter(|path| !path.is_empty())
+                    .cloned();
+            }
+        }
+        Ok(detected)
     }
 }
 
@@ -121,6 +138,7 @@ fn scan(sessions: &BTreeMap<String, Option<i32>>) -> std::io::Result<TerminalAge
                     pid: process.info.pid,
                     start_time: process.info.start_time.clone(),
                     cwd: cwd.to_string_lossy().into_owned(),
+                    pi_binding: None,
                 },
             );
         }

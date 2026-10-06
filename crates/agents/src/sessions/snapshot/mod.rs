@@ -4,6 +4,7 @@ mod codex_like;
 mod content;
 mod hermes;
 mod model;
+mod pi;
 mod tool_details;
 mod turn;
 use activity::{add_assistant_message, output_status, tool_status};
@@ -37,6 +38,16 @@ pub fn read(locator: AgentSessionLocator) -> Result<AgentSessionSnapshot, Snapsh
         .and_then(Agent::sessions)
         .ok_or_else(|| SnapshotError::Invalid(format!("unsupported agent {}", locator.agent)))?;
     provider.read_snapshot(locator)
+}
+
+pub(crate) fn read_pi(locator: AgentSessionLocator) -> Result<AgentSessionSnapshot, SnapshotError> {
+    validate_locator(&locator)?;
+    let transcript = super::pi::Transcript::read(&locator.transcript_path)?;
+    if transcript.id != locator.session_id || transcript.cwd != locator.cwd {
+        return Err(SnapshotError::Invalid("Pi session identity changed".into()));
+    }
+    let turns = pi::parse(&transcript)?;
+    Ok(snapshot(locator, turns))
 }
 
 pub(crate) fn read_claude(

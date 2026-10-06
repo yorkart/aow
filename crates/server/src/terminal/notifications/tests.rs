@@ -15,6 +15,7 @@ fn identity(title: &str) -> Identity {
         process: Some(TerminalAgentProcess {
             pid: 123,
             start_time: "1000".into(),
+            pi_binding: None,
             cwd: "/workspace/demo".into(),
         }),
         cwd: "/workspace/demo".into(),
@@ -424,6 +425,7 @@ async fn codex_like_stops_use_the_expected_environment(with_process: bool) {
         TerminalAgentProcess {
             pid: info.pid,
             start_time: info.start_time,
+            pi_binding: None,
             cwd: aow_process::cwd(info.pid)
                 .unwrap()
                 .to_string_lossy()

@@ -38,6 +38,21 @@ impl TerminalManager {
         validate_directory(&workspace_root).await?;
         let (rows, cols) = terminal_size(request.rows, request.cols)?;
         let pane_id = aow_id::new_id();
+        if launch.agent_type == aow_agents::launch::AgentType::Pi {
+            let state = launch
+                .env
+                .get("AOW_STATE_DIR")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| {
+                    std::env::temp_dir().join(format!("aow-{}", std::process::id()))
+                });
+            aow_agents::pi_bridge::prepare(
+                &state.join("agents/pi"),
+                &pane_id,
+                &mut launch.args,
+                &mut launch.env,
+            )?;
+        }
         let tab_id = aow_id::new_id();
         let now = timestamp();
         let pane = TerminalPane {

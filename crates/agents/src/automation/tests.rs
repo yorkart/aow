@@ -1,12 +1,54 @@
 use super::*;
 
 #[test]
+fn pi_uses_print_exit_status_and_a_generated_persistent_session() {
+    let agent = AutomationAgent::Pi;
+    assert_eq!(agent.session_id_mode(), SessionIdMode::GeneratedUuid);
+    assert_eq!(agent.prompt_mode(), PromptMode::Stdin);
+    assert!(agent.automation_arguments(true, None).is_err());
+    assert_eq!(
+        agent
+            .automation_arguments(false, Some("fresh-uuid"))
+            .unwrap(),
+        ["--print", "--session-id", "fresh-uuid", "--no-approve"]
+    );
+    for flag in [
+        "--mode=rpc",
+        "--session=old",
+        "--no-session",
+        "--fork=old",
+        "--export",
+        "--session-dir=/elsewhere",
+        "--",
+        "-c",
+        "-r",
+        "-p",
+        "--list-models",
+    ] {
+        assert!(agent.validate_arguments(&[flag.into()]).is_err(), "{flag}");
+    }
+    assert!(
+        agent
+            .validate_arguments(&[
+                "--provider".into(),
+                "example".into(),
+                "--model".into(),
+                "model".into(),
+                "--thinking".into(),
+                "high".into()
+            ])
+            .is_ok()
+    );
+}
+
+#[test]
 fn saved_agent_ids_match_registered_agents_and_supported_capabilities() {
     for (id, agent) in [
         ("codex", Agent::Codex),
         ("traecli", Agent::TraeCli),
         ("claude", Agent::Claude),
         ("hermes", Agent::Hermes),
+        ("pi", Agent::Pi),
     ] {
         let saved = format!("\"{id}\"");
         let adapter: AutomationAgent = serde_json::from_str(&saved).unwrap();
@@ -27,6 +69,7 @@ fn each_adapter_enforces_new_sessions_and_uses_its_own_session_protocol() {
         AutomationAgent::TraeCli,
         AutomationAgent::Claude,
         AutomationAgent::Hermes,
+        AutomationAgent::Pi,
     ] {
         assert!(
             agent
