@@ -13,6 +13,7 @@ import { WorkspaceSelect } from '../workspaces/WorkspaceSelect';
 import { workspaceConfig } from '../workspaces/types';
 
 import { identifyVariables, variableNames } from './variables';
+import './automations.css';
 
 const Editor = lazy(() => import('../editor/MonacoEditor'));
 
@@ -29,9 +30,10 @@ function parseSchedule(cron: string): { cadence: Cadence; time: string; weekday:
   return { cadence: 'custom', time: '09:00', weekday: '1', minute: '0' };
 }
 
-export function AutomationEditor({ task, kind = 'scheduled', project, agents, timezone, onClose, onSaved }: {
+export function AutomationEditor({ task, kind = 'scheduled', initialWorkspaceMode = 'new_worktree', project, agents, timezone, onClose, onSaved }: {
   task?: AutomationTask;
   kind?: TaskKind;
+  initialWorkspaceMode?: TaskInput['workspace_mode'];
   project: AowProject;
   agents: AowAgent[];
   timezone?: string;
@@ -41,7 +43,7 @@ export function AutomationEditor({ task, kind = 'scheduled', project, agents, ti
   const initialWorktree = project.worktrees.find((worktree) => worktree.is_main) ?? project.worktrees[0];
   const [draft, setDraft] = useState<TaskInput>(() => task ? { ...task, kind: task.kind ?? 'scheduled', prompt_bindings: task.prompt_bindings ?? [], failure_notification: task.failure_notification ?? null } : {
     kind, prompt_bindings: [], name: '', prompt: '', agent: (agents.find((agent) => agent.available && Object.hasOwn(agentNames, agent.id))?.id as AutomationAgent | undefined) ?? 'codex',
-    project_id: project.id, workspace_mode: 'new_worktree', workspace_path: initialWorktree?.path ?? '',
+    project_id: project.id, workspace_mode: initialWorkspaceMode, workspace_path: initialWorktree?.path ?? '',
     cleanup_worktree: true, base_branch: '', cron: '0 9 * * *', interval_seconds: null, max_concurrent_runs: 1, enabled: true, yolo: true, failure_notification: null,
   });
   const [schedule, setSchedule] = useState(() => ({ ...parseSchedule(draft.cron), ...(draft.interval_seconds ? { cadence: 'interval' as Cadence } : {}) }));
@@ -104,7 +106,8 @@ export function AutomationEditor({ task, kind = 'scheduled', project, agents, ti
   };
 
   return createPortal(<dialog ref={dialogRef} className="automation-editor" aria-labelledby="automation-editor-title"
-    onCancel={(event) => { event.preventDefault(); if (!busy) onClose(); }} onKeyDown={(event) => event.stopPropagation()}>
+    onCancel={(event) => { event.preventDefault(); if (!busy) onClose(); }} onKeyDown={(event) => event.stopPropagation()}
+    onDoubleClick={(event) => event.stopPropagation()} onDragStart={(event) => event.stopPropagation()}>
     <form onSubmit={(event) => void save(event)}>
       <header><div>{manual ? <MousePointerClick /> : <CalendarClock />}<h2 id="automation-editor-title">{task ? manual ? '编辑手动任务' : '编辑自动化' : manual ? '创建手动任务' : '创建自动化'}</h2></div><button type="button" disabled={busy} aria-label="关闭" onClick={onClose}><X /></button></header>
       <div className="automation-editor-body">
