@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent as ReactDragEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { Columns2, GripVertical, LoaderCircle, Maximize2, Minimize2, Rows2, SquareTerminal, X } from 'lucide-react';
 import { terminalApi } from './terminalApi';
-import type { TerminalAgentProcess, TerminalLayout, TerminalPane, TerminalPaneStatus, TerminalSplitAxis, TerminalTab } from './types';
+import type { TerminalAgentProcess, TerminalLayout, TerminalPane, TerminalPaneActivity, TerminalPaneStatus, TerminalSplitAxis, TerminalTab } from './types';
 import { TerminalInputPane } from './TerminalInputPane';
 import { TerminalAgentPane } from './TerminalAgentPane';
 import { TerminalHostingButton } from './TerminalHostingButton';
@@ -18,6 +18,7 @@ interface Props {
   detectedAgents: Record<string, string | null>;
   terminalTitles: Record<string, string>;
   agentProcesses?: Record<string, TerminalAgentProcess>;
+  terminalActivity?: Record<string, TerminalPaneActivity>;
   onTabChange: (tab: TerminalTab) => void;
   onTabClosed: (tabId: string) => void;
   onPaneStatus: (tabId: string, paneId: string, status: TerminalPaneStatus, exitCode?: number | null) => void;
@@ -151,7 +152,7 @@ function splitShortcutLabel(axis: TerminalSplitAxis) {
   return axis === 'row' ? 'Ctrl+Shift+E' : 'Ctrl+Shift+O';
 }
 
-export function TerminalWorkspace({ visible, tab, loading, detectedAgents, terminalTitles, agentProcesses = {}, onTabChange, onTabClosed, onPaneStatus, onReload }: Props) {
+export function TerminalWorkspace({ visible, tab, loading, detectedAgents, terminalTitles, agentProcesses = {}, terminalActivity = {}, onTabChange, onTabClosed, onPaneStatus, onReload }: Props) {
   const { confirm, confirmationDialog } = useConfirmation();
   const [layout, setLayout] = useState<TerminalLayout | null>(() => tab ? fallbackLayout(tab) : null);
   const [activePaneId, setActivePaneId] = useState<string>();
@@ -444,7 +445,7 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
       description: closingLastPane
         ? `这是“${tab.name}”的最后一个窗口，关闭后也会关闭对应的终端标签页。`
         : '将关闭以下终端窗口。',
-      items: [{ id: pane.id, label: terminalPaneTitle(pane, detectedAgents, terminalTitles), detail: pane.cwd, icon: <SquareTerminal /> }],
+      items: [{ id: pane.id, label: terminalPaneTitle(pane, detectedAgents, terminalTitles, terminalActivity, agentProcesses), detail: terminalActivity[pane.id]?.cwd || pane.cwd, icon: <SquareTerminal /> }],
       warning: '此窗口中仍在运行的命令将被终止，此操作无法撤销。',
       confirmLabel: closingLastPane ? '关闭终端' : '关闭窗口',
       danger: true,
@@ -506,7 +507,7 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
       const pane = tab?.panes.find((item) => item.id === node.pane_id);
       if (!pane) return <div className="terminal-pane-missing">Pane {node.pane_id} 不存在</div>;
       const agentId = terminalPaneAgent(pane, detectedAgents);
-      const title = terminalPaneTitle(pane, detectedAgents, terminalTitles);
+      const title = terminalPaneTitle(pane, detectedAgents, terminalTitles, terminalActivity, agentProcesses);
       const paneBusy = operation === 'rebuild' || operation.endsWith(`:${pane.id}`);
       const paneMaximized = maximizedPaneId === pane.id;
       const paneObscured = Boolean(maximizedPaneId && !paneMaximized);
@@ -545,10 +546,9 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
             <GripVertical className="terminal-pane-drag-handle" aria-label="拖动 pane 调整布局" />
             <TerminalLifecycleDot className="terminal-pane-status" state={terminalPaneLifecycle(pane)} />
             {agentId ? <AgentIcon agentId={agentId} /> : <SquareTerminal />}
-            <span className="terminal-pane-name" title={`${title}\n路径：${pane.cwd || '未知'}`}>
+            <span className="terminal-pane-name" title={`${title}\n路径：${terminalActivity[pane.id]?.cwd || pane.cwd || '未知'}`}>
               {title}
             </span>
-            <span className="terminal-pane-shell">{pane.shell}</span>
             {sessionButton}
             {agentId && <TerminalHostingButton tab={tab!} pane={pane} onChange={onTabChange} />}
             <button title={`向右分屏（${splitShortcutLabel('row')}）`} aria-label="向右分屏" disabled={paneBusy} onClick={() => void split(pane, 'row')}><Columns2 /></button>
@@ -615,7 +615,7 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
               const pane = tab.panes.find((item) => item.id === paneId);
               if (!pane) return null;
               const agentId = terminalPaneAgent(pane, detectedAgents);
-              const title = terminalPaneTitle(pane, detectedAgents, terminalTitles);
+              const title = terminalPaneTitle(pane, detectedAgents, terminalTitles, terminalActivity, agentProcesses);
               const selected = pane.id === maximizedPaneId;
               return (
                 <button
@@ -624,7 +624,7 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
                   role="tab"
                   className={selected ? 'active' : ''}
                   aria-selected={selected}
-                  title={`${title}\n${pane.cwd || '未知路径'}`}
+                  title={`${title}\n${terminalActivity[pane.id]?.cwd || pane.cwd || '未知路径'}`}
                   onClick={() => selectMaximizedPane(pane.id)}
                 >
                   <TerminalLifecycleDot className="terminal-pane-status" state={terminalPaneLifecycle(pane)} />

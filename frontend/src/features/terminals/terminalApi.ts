@@ -168,6 +168,14 @@ export const terminalApi = {
           && typeof process.start_time === 'string' && typeof process.cwd === 'string'
           ? [[id, process as unknown as TerminalAgentProcess]] : [];
       })),
+      activity: Object.fromEntries(Object.entries(asRecord(payload?.activity) ?? {}).flatMap(([id, value]) => {
+        const activity = asRecord(value);
+        if (!activity) return [];
+        const cwd = typeof activity.cwd === 'string' ? activity.cwd : undefined;
+        const foreground_command = typeof activity.foreground_command === 'string'
+          ? activity.foreground_command : undefined;
+        return cwd || foreground_command ? [[id, { cwd, foreground_command }]] : [];
+      })),
     };
   },
 

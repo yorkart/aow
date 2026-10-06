@@ -59,10 +59,12 @@ export function MobileTerminals({ project, worktree, visible, headerActions, ini
   const projectTerminals = useProjectTerminals(project.worktrees, visible && (catalogOpen && showAll || hasHostedTabs));
   const detectedAgents = useMemo(() => ({ ...projectTerminals.agents, ...terminals.detectedAgents }), [projectTerminals.agents, terminals.detectedAgents]);
   const titles = useMemo(() => ({ ...projectTerminals.titles, ...terminals.terminalTitles }), [projectTerminals.titles, terminals.terminalTitles]);
+  const activity = useMemo(() => ({ ...projectTerminals.activity, ...terminals.terminalActivity }), [projectTerminals.activity, terminals.terminalActivity]);
+  const processes = useMemo(() => ({ ...projectTerminals.processes, ...terminals.agentProcesses }), [projectTerminals.processes, terminals.agentProcesses]);
   const entries = useMemo(() => flattenTerminalTabs([
     ...terminals.tabs.filter(tab => !isCliTerminal(tab) || openedIds.has(tab.id) || tab.id === initialTabId),
     ...projectTerminals.tabs.filter(tab => canShowAll && tab.workspace_root !== workspace && openedIds.has(tab.id)),
-  ], detectedAgents, titles), [terminals.tabs, projectTerminals.tabs, openedIds, initialTabId, canShowAll, workspace, detectedAgents, titles]);
+  ], detectedAgents, titles, activity, processes), [terminals.tabs, projectTerminals.tabs, openedIds, initialTabId, canShowAll, workspace, detectedAgents, titles, activity, processes]);
   const panelTabs = showAll ? [...terminals.tabs, ...projectTerminals.tabs.filter(tab => tab.workspace_root !== workspace
     && preferences.scopes[isCliTerminal(tab) ? 'cli' : 'user'])] : terminals.tabs;
   const [selected, setSelected] = useState(() => storedMobileValue(`terminal.${workspace}`));
@@ -125,7 +127,7 @@ export function MobileTerminals({ project, worktree, visible, headerActions, ini
   const reload = () => { void terminals.reload(); if (showAll || hasHostedTabs) projectTerminals.reload(); };
   const open = (tab: TerminalTab) => {
     const target = entries.find(entry => entry.tab.id === tab.id && entry.key === selected)
-      ?? entries.find(entry => entry.tab.id === tab.id) ?? flattenTerminalTabs([tab], detectedAgents, titles)[0];
+      ?? entries.find(entry => entry.tab.id === tab.id) ?? flattenTerminalTabs([tab], detectedAgents, titles, activity, processes)[0];
     if (!target) { setOperationError('该终端没有可打开的窗格，请刷新列表。'); return; }
     setOperationError('');
     setOpenedIds(ids => ids.has(tab.id) ? ids : new Set([...ids, tab.id]));
