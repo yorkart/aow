@@ -24,6 +24,7 @@ export function TerminalHostingButton({ tab, pane, onChange }: {
   const [editor, setEditor] = useState<{ project: AowProject; agents: AowAgent[] }>();
   const [search, setSearch] = useState('');
   const [maxInputs, setMaxInputs] = useState('3');
+  const [runOnEnable, setRunOnEnable] = useState(true);
   const validLimit = Number.isInteger(Number(maxInputs)) && Number(maxInputs) > 0 && Number(maxInputs) <= 4_294_967_295;
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -69,7 +70,7 @@ export function TerminalHostingButton({ tab, pane, onChange }: {
   const select = async (task: AutomationTask) => {
     if (!validLimit) return;
     setBusy(true); setError('');
-    try { onChange(await terminalApi.host(tab.id, pane.id, task.id, task.revision, Number(maxInputs))); setPosition(undefined); }
+    try { onChange(await terminalApi.host(tab.id, pane.id, task.id, task.revision, Number(maxInputs), runOnEnable)); setPosition(undefined); }
     catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
     finally { setBusy(false); }
   };
@@ -87,6 +88,8 @@ export function TerminalHostingButton({ tab, pane, onChange }: {
       <p className="terminal-hosting-limit-hint">仅支持<button type="button" className="terminal-hosting-create" title="创建手动任务" disabled={!project || busy || creating} onClick={() => setCreating(true)}><strong>动态指定工作区</strong></button>的手动任务</p>
       <label className="terminal-hosting-limit">最多自动输入次数<input type="number" min="1" step="1" aria-label="最多自动输入次数" value={maxInputs} disabled={busy} onChange={event => setMaxInputs(event.target.value)} /></label>
       <p className="terminal-hosting-limit-hint">达到上限后仍会做最后一次审查，不再自动输入。</p>
+      <label className="terminal-hosting-run-on-enable"><input type="checkbox" checked={runOnEnable} disabled={busy} onChange={event => setRunOnEnable(event.target.checked)} />开启托管后立即执行一次</label>
+      <p className="terminal-hosting-limit-hint">不等待当前任务结束；取消勾选则等待下一次完成事件。</p>
       {!validLimit && <p className="terminal-hosting-menu-error" role="alert">请输入有效的正整数</p>}
       <label className="terminal-hosting-search"><Search /><input autoFocus placeholder="搜索手动任务…" aria-label="搜索手动任务" value={search} onChange={event => setSearch(event.target.value)} /></label>
       <div className="terminal-hosting-tasks">
