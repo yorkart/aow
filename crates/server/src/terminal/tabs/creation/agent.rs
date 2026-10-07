@@ -38,6 +38,7 @@ impl TerminalManager {
         validate_directory(&workspace_root).await?;
         let (rows, cols) = terminal_size(request.rows, request.cols)?;
         let pane_id = aow_id::new_id();
+        launch.prepare_terminal(&pane_id, Path::new(&cwd)).await;
         if launch.agent_type == aow_agents::launch::AgentType::Pi {
             let state = launch
                 .env

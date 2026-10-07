@@ -75,6 +75,17 @@ impl TerminalManager {
             .collect();
         let mut specs = specs.to_vec();
         for (pane, spec) in panes.iter_mut().zip(&mut specs) {
+            if pane.kind == TerminalPaneKind::Agent && pane.agent_id.as_deref() == Some("codex") {
+                aow_agents::launch::prepare_codex_terminal(
+                    &spec.shell,
+                    &pane.id,
+                    Path::new(&spec.cwd),
+                    &mut spec.arguments,
+                    &mut spec.environment,
+                )
+                .await;
+                pane.arguments.clone_from(&spec.arguments);
+            }
             if pane.kind == TerminalPaneKind::Agent && pane.agent_id.as_deref() == Some("pi") {
                 let directory = spec
                     .environment

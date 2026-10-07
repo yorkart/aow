@@ -3,6 +3,10 @@
 
 #[cfg(feature = "automation")]
 pub mod automation;
+#[cfg(any(feature = "launch", feature = "sessions"))]
+mod codex_command;
+#[cfg(feature = "launch")]
+mod codex_terminal;
 #[cfg(any(feature = "launch", feature = "automation"))]
 pub mod environment;
 #[cfg(feature = "launch")]

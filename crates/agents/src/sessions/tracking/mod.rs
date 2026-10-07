@@ -105,6 +105,20 @@ pub enum TrackingAgent {
 }
 
 impl TrackingAgent {
+    /// Refresh candidates without treating a temporarily unavailable store as empty.
+    /// None means retain the existing subscription and retry; Some([]) means absent.
+    pub fn try_candidate_sessions(
+        &self,
+        target: &SessionTarget,
+        cwd: &Path,
+        roots: SessionRoots,
+    ) -> Option<Vec<AgentSessionLocator>> {
+        match self {
+            Self::Codex => codex::Codex.try_candidate_sessions(target, cwd, roots),
+            _ => Some(self.candidate_sessions(target, cwd, roots)),
+        }
+    }
+
     /// Resolve a session with the caller's timeout for uncached native CLI queries.
     /// Adapters without a CLI query and cached results do not consume this budget.
     pub async fn resolve_live_session_with_timeout(

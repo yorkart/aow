@@ -26,3 +26,6 @@ pub(crate) fn start_time(_: i32) -> io::Result<String> {
 pub(crate) fn environment(_: i32) -> io::Result<Vec<u8>> {
     unsupported()
 }
+pub(crate) fn open_files(_: i32) -> io::Result<Vec<crate::OpenFile>> {
+    unsupported()
+}

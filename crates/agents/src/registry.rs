@@ -21,7 +21,7 @@ pub const CODEX: AgentDefinition = AgentDefinition {
     display_name: "Codex",
     commands: &["codex"],
     args: &[],
-    configuration_env: &["CODEX_HOME"],
+    configuration_env: &["CODEX_HOME", "AOW_CODEX_TERMINAL"],
 };
 
 pub const TRAECLI: AgentDefinition = AgentDefinition {

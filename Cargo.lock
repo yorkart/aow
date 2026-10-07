@@ -116,6 +116,7 @@ dependencies = [
  "anyhow",
  "aow-config",
  "aow-id",
+ "aow-process",
  "chrono",
  "rusqlite",
  "serde",

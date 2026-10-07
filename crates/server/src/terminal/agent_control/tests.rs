@@ -232,6 +232,7 @@ async fn post(app: &Router, path: &str, body: Value) -> Value {
 
 #[tokio::test]
 async fn session_resume_launches_selected_profiles_without_changing_registration() {
+    use std::os::unix::fs::PermissionsExt;
     let fixture = Fixture::with_storage("ready", true).await;
     let app = crate::build_router(fixture.state.clone());
     let session_cwd = fixture.repo.join("session subdirectory");
@@ -239,13 +240,18 @@ async fn session_resume_launches_selected_profiles_without_changing_registration
     let script = fixture.directory.path().join("resume.py");
     std::fs::write(
         &script,
-        r#"import json, os, sys, time
+        r#"#!/usr/bin/python3
+import json, os, sys, time
+if sys.argv[1:] == ['--help']:
+    print(os.environ['CODEX_HELP'])
+    sys.exit(0)
 with open(sys.argv[1], 'w') as log:
-    json.dump({'args': sys.argv[2:], 'cwd': os.getcwd(), 'profile': os.environ['RESUME_PROFILE'], 'state_dir': os.environ['AOW_STATE_DIR']}, log)
+    json.dump({'args': sys.argv[2:], 'cwd': os.getcwd(), 'profile': os.environ['RESUME_PROFILE'], 'state_dir': os.environ['AOW_STATE_DIR'], 'codex_terminal': os.environ.get('AOW_CODEX_TERMINAL')}, log)
 time.sleep(30)
 "#,
     )
     .unwrap();
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).unwrap();
     for (index, agent_type) in ["codex", "codex", "claude", "traecli", "hermes", "pi"]
         .iter()
         .enumerate()
@@ -255,13 +261,26 @@ time.sleep(30)
             .directory
             .path()
             .join(format!("resume-{index}.json"));
-        let args = json!([script, log, "--profile", format!("profile {index}")]);
-        let env = json!({"RESUME_PROFILE": id, "AOW_STATE_DIR": "/another-aow-instance"});
+        let (command, args) = if *agent_type == "codex" {
+            (
+                script.to_str().unwrap(),
+                json!([log, "--profile", format!("profile {index}")]),
+            )
+        } else {
+            (
+                "/usr/bin/python3",
+                json!([script, log, "--profile", format!("profile {index}")]),
+            )
+        };
+        // Exercise both an older CLI and a CLI advertising embedded TUI support.
+        let supports_isolation = index == 1;
+        let env = json!({"RESUME_PROFILE": id, "AOW_STATE_DIR": "/another-aow-instance",
+            "CODEX_HELP": if supports_isolation {"  --no-daemon"} else {"  --no-alt-screen"}});
         post(
             &app,
             "/api/aow/agents",
             json!({"id": id, "agent_type": agent_type, "display_name": id,
-                "command": "/usr/bin/python3", "args": args, "env": env}),
+                "command": command, "args": args, "env": env}),
         )
         .await;
         let session_id = "a49342f2-e4c3-4bab-b333-6d7d6c961a29";
@@ -288,6 +307,10 @@ time.sleep(30)
             json!(resume_arg),
             json!(session_id),
         ];
+        if supports_isolation {
+            expected_args.push(json!("--no-daemon"));
+            invocation_args.push(json!("--no-daemon"));
+        }
         if *agent_type == "pi" {
             let extension = tab["panes"][0]["arguments"]
                 .as_array()
@@ -312,7 +335,7 @@ time.sleep(30)
         assert_eq!(tab["panes"][0]["kind"], "agent");
         assert_eq!(tab["panes"][0]["agent_id"], *agent_type);
         assert_eq!(tab["panes"][0]["agent_profile_id"], id);
-        let invocation: Value = tokio::time::timeout(Duration::from_secs(5), async {
+        let mut invocation: Value = tokio::time::timeout(Duration::from_secs(5), async {
             loop {
                 if let Ok(bytes) = std::fs::read(&log)
                     && let Ok(value) = serde_json::from_slice(&bytes)
@@ -324,6 +347,16 @@ time.sleep(30)
         })
         .await
         .unwrap();
+        let marker = invocation
+            .as_object_mut()
+            .unwrap()
+            .remove("codex_terminal")
+            .unwrap();
+        if supports_isolation {
+            assert_eq!(marker, tab["panes"][0]["id"]);
+        } else if *agent_type == "codex" {
+            assert!(marker.is_null());
+        }
         assert_eq!(
             invocation,
             json!({"args": invocation_args,
@@ -368,7 +401,7 @@ time.sleep(30)
         assert_eq!(rebuilt["id"], tab.id);
         assert_ne!(rebuilt["panes"][0]["id"], tab.panes[0].id);
         assert_eq!(rebuilt["panes"][0]["arguments"], json!(expected_args));
-        let replay: Value = tokio::time::timeout(Duration::from_secs(5), async {
+        let mut replay: Value = tokio::time::timeout(Duration::from_secs(5), async {
             loop {
                 if let Ok(bytes) = std::fs::read(&log)
                     && let Ok(value) = serde_json::from_slice(&bytes)
@@ -380,6 +413,16 @@ time.sleep(30)
         })
         .await
         .unwrap();
+        let marker = replay
+            .as_object_mut()
+            .unwrap()
+            .remove("codex_terminal")
+            .unwrap();
+        if supports_isolation {
+            assert_eq!(marker, rebuilt["panes"][0]["id"]);
+        } else if *agent_type == "codex" {
+            assert!(marker.is_null());
+        }
         assert_eq!(
             replay, invocation,
             "rebuild must use the original profile environment and resume arguments"
@@ -1010,6 +1053,7 @@ async fn cli_codex_skips_update_menu_without_changing_profile_or_manual_launch()
         json!({"workspace_root": fixture.repo, "cwd": fixture.repo, "agent_id": id}),
     )
     .await;
+    // This custom Python entrypoint does not advertise Codex CLI options.
     assert_eq!(manual["panes"][0]["arguments"], args);
     fixture.stop().await;
 }
