@@ -37,6 +37,28 @@ try {
     assert.equal(terminalSessionCandidates({ ...hermes, live_session_id: 'hermes-one' }).automatic.session_id, 'hermes-one');
     assert.equal(terminalSessionCandidates({ ...hermes, live_session_id: 'not-yet-written' }).automatic, undefined);
   });
+  await test('a truncated project suffix does not prevent a complete conversation title from matching', () => {
+    const projectCwd = '/workspace/aow-autopilot-run-on-enable';
+    const title = '实现 AoW Autopilot 开启托管即执行一次';
+    const candidate = { ...session('one', title), cwd: projectCwd };
+    const input = { ...data([candidate]), cwd: projectCwd, process: { ...data().process, cwd: projectCwd } };
+    for (const suffix of ['aow-autopilot-run-on-...', 'aow-autopilot-run-on-…']) {
+      const raw = `${title} | ${suffix}`;
+      assert.equal(terminalSessionTitle(raw, projectCwd), title);
+      assert.equal(terminalSessionTitle(`⠙ ${raw}`, projectCwd), title);
+      assert.equal(terminalSessionCandidates({ ...input, title: raw }).automatic.session_id, 'one');
+      assert.equal(terminalSessionCandidates({ ...input, title: suffix }).automatic, undefined);
+      assert.equal(terminalSessionTitle(suffix, projectCwd), '');
+      const partial = terminalSessionCandidates({ ...input, title: `实现 AoW Autopilot... | ${suffix}` });
+      assert.equal(partial.matches.length, 1);
+      assert.equal(partial.automatic, undefined);
+    }
+    for (const suffix of ['aow...', 'another-project...']) {
+      const raw = `${title} | ${suffix}`;
+      assert.equal(terminalSessionTitle(raw, projectCwd), raw);
+      assert.equal(terminalSessionCandidates({ ...input, title: raw }).automatic, undefined);
+    }
+  });
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
   const url = `http://127.0.0.1:${server.httpServer.address().port}/tests/terminal-session-preview.html`;
 
@@ -90,6 +112,20 @@ try {
     };
   }
   async function update(page, patch) { await page.evaluate(patch => window.terminalSessionPreview.update(patch), patch); }
+
+  await test('Conversation opens the matching session when only the project suffix is truncated', async t => {
+    const projectCwd = '/workspace/aow-autopilot-run-on-enable';
+    const title = '实现 AoW Autopilot 开启托管即执行一次';
+    const input = { ...data([{ ...session('one', title), cwd: projectCwd }]), cwd: projectCwd,
+      title: `${title} | aow-autopilot-run-on-...`, process: { ...data().process, cwd: projectCwd } };
+    const { page, pane, snapshots } = await open(t, input);
+    await update(page, { terminalTitles: { one: input.title }, agentProcesses: { one: input.process } });
+    await pane.getByRole('button', { name: '切换到会话详情' }).click();
+    await pane.getByRole('heading', { name: title }).waitFor();
+    assert.match(await pane.locator('.terminal-agent-session-toolbar').innerText(), /标题匹配 · one/);
+    assert.equal(await pane.locator('.terminal-agent-session-list').count(), 0);
+    assert.ok(snapshots.includes('one'));
+  });
 
   await test('Pi metadata shows its title, Conversation and Autopilot and opens the bound session', async t => {
     const pi = { ...data([session('pi-one', 'Pi task', 'pi')]), agent: 'pi', title: 'π - demo', live_session_id: 'pi-one' };
