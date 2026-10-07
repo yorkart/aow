@@ -32,7 +32,7 @@ impl DaemonState {
             service: SERVICE_NAME.to_owned(),
             instance_id: self.inner.instance_id.clone(),
             version: env!("CARGO_PKG_VERSION").to_owned(),
-            pid: cfg!(target_os = "macos").then(std::process::id),
+            pid: Some(std::process::id()),
         }
     }
 

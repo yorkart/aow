@@ -444,6 +444,59 @@ async fn hermes_without_a_durable_session_id_does_not_claim_success() {
 }
 
 #[tokio::test]
+async fn pi_freezes_its_native_result_and_propagates_print_failures() {
+    for (code, expected) in [(0, RunStatus::Completed), (1, RunStatus::Failed)] {
+        let (directory, store, mut task) = fixture("exit 99");
+        let script = directory.path().join("pi.py");
+        fs::write(&script, r#"
+import json, os, sys
+from pathlib import Path
+assert '--print' in sys.argv
+assert 'AOW_PI_BINDING' not in os.environ
+sid = sys.argv[sys.argv.index('--session-id') + 1]
+prompt = sys.stdin.read()
+Path(os.environ['TEST_PROMPT']).write_text(prompt)
+root = Path(os.environ['PI_CODING_AGENT_SESSION_DIR'])
+root.mkdir(parents=True)
+code = int(os.environ['TEST_EXIT'])
+records = [
+    {'type':'session','version':3,'id':sid,'cwd':os.getcwd(),'timestamp':'2026-10-01T00:00:00Z'},
+    {'type':'message','id':'u','parentId':None,'message':{'role':'user','content':prompt}},
+    {'type':'message','id':'a','parentId':'u','message':{'role':'assistant','stopReason':'stop' if code == 0 else 'error','content':[{'type':'text','text':'Pi result'}]}}
+]
+(root / (sid + '.jsonl')).write_text('\n'.join(json.dumps(record) for record in records) + '\n')
+if code: print('Pi provider failed', file=sys.stderr)
+sys.exit(code)
+"#).unwrap();
+        task.input.agent = AgentKind::Pi;
+        task.input.prompt = "--hello\n$(literal) 'quoted' 中文".into();
+        task.launch.executable = "/usr/bin/python3".into();
+        task.launch.args = vec![script.to_string_lossy().into_owned()];
+        let history = directory.path().join("pi sessions");
+        let prompt = directory.path().join("prompt");
+        task.launch.environment.extend([
+            (
+                "PI_CODING_AGENT_SESSION_DIR".into(),
+                history.to_string_lossy().into_owned(),
+            ),
+            ("TEST_PROMPT".into(), prompt.to_string_lossy().into_owned()),
+            ("TEST_EXIT".into(), code.to_string()),
+            ("AOW_PI_BINDING".into(), "/another/terminal.json".into()),
+        ]);
+        let run = execute(&store, &task).await;
+        assert_eq!(run.status, expected, "{:?}", run.message);
+        assert_eq!(fs::read_to_string(prompt).unwrap(), task.input.prompt);
+        assert!(run.session_id.is_some());
+        if code == 0 {
+            fs::remove_dir_all(history).unwrap();
+            assert_eq!(store.read_run_result(&run).unwrap(), "Pi result");
+        } else {
+            assert!(run.message.unwrap().contains("Pi provider failed"));
+        }
+    }
+}
+
+#[tokio::test]
 async fn captures_codex_and_traecli_sessions_and_persists_raw_output() {
     let (_directory, store, mut task) = fixture(CODEX);
     let mut ids = Vec::new();

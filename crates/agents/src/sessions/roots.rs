@@ -12,6 +12,8 @@ pub struct SessionRoots {
     pub(crate) codex: PathBuf,
     pub(crate) traecli: PathBuf,
     pub(crate) hermes: PathBuf,
+    #[serde(default)]
+    pub(crate) pi: PathBuf,
 }
 
 impl SessionRoots {
@@ -35,6 +37,7 @@ impl SessionRoots {
             codex: SessionAgent::Codex.session_root(process_home, environment),
             traecli: SessionAgent::TraeCli.session_root(process_home, environment),
             hermes: SessionAgent::Hermes.session_root(process_home, environment),
+            pi: SessionAgent::Pi.session_root(process_home, environment),
         }
     }
 

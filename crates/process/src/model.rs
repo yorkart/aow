@@ -22,3 +22,10 @@ pub struct ProcessCommand {
     /// NUL-separated arguments, with their original boundaries preserved.
     pub arguments: Vec<u8>,
 }
+
+/// An open filesystem descriptor; ownership is only valid for this process snapshot.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpenFile {
+    pub path: PathBuf,
+    pub writable: bool,
+}

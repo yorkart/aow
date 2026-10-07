@@ -347,7 +347,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
           </> : <>
             <form className="project-aow-dialog-form" ref={agentForm} onSubmit={(event) => { event.preventDefault(); void save(); }}>
               <div className="project-aow-dialog-body">
-                <div className="project-aow-settings-heading"><div><h2>Agents</h2><p>目前支持 Claude Code、Codex、TraeCode CLI 和 Hermes。每种类型可注册多个配置。</p></div><button type="button" className="project-aow-dialog-button" title="重新探测本地 Agent" disabled={busy} onClick={() => void onReload().catch((reason) => setError(message(reason)))}><RefreshCw />刷新</button></div>
+                <div className="project-aow-settings-heading"><div><h2>Agents</h2><p>目前支持 Claude Code、Codex、TraeCode CLI、Hermes 和 Pi。每种类型可注册多个配置。</p></div><button type="button" className="project-aow-dialog-button" title="重新探测本地 Agent" disabled={busy} onClick={() => void onReload().catch((reason) => setError(message(reason)))}><RefreshCw />刷新</button></div>
                 {agentsError && <div className="project-aow-error" role="alert">{agentsError}</div>}
                 <div className="project-aow-agent-list">
                   {agents.map((agent) => <div className="project-aow-agent-row" key={agent.id}>

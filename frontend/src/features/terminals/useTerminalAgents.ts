@@ -2,11 +2,17 @@ import { useEffect, useState } from 'react';
 import { terminalApi } from './terminalApi';
 import type { TerminalAgentList } from './types';
 
-const emptyMetadata: TerminalAgentList = { agents: {}, titles: {}, processes: {} };
+const emptyMetadata: TerminalAgentList = { agents: {}, titles: {}, processes: {}, activity: {} };
 
 function sameValues(a: Record<string, string | null>, b: Record<string, string | null>) {
   return Object.keys(a).length === Object.keys(b).length
     && Object.entries(a).every(([id, value]) => b[id] === value);
+}
+
+function sameActivity(a: TerminalAgentList['activity'], b: TerminalAgentList['activity']) {
+  return Object.keys(a).length === Object.keys(b).length
+    && Object.entries(a).every(([id, activity]) => b[id]?.cwd === activity.cwd
+      && b[id]?.foreground_command === activity.foreground_command);
 }
 
 export function useTerminalAgents(workspaceRoot: string, enabled: boolean) {
@@ -21,6 +27,7 @@ export function useTerminalAgents(workspaceRoot: string, enabled: boolean) {
       setSnapshot(previous => previous.root === workspaceRoot
         && sameValues(previous.metadata.agents, metadata.agents)
         && sameValues(previous.metadata.titles, metadata.titles)
+        && sameActivity(previous.metadata.activity, metadata.activity)
         && Object.keys(previous.metadata.processes).length === Object.keys(metadata.processes).length
         && Object.entries(previous.metadata.processes).every(([id, process]) => {
           const next = metadata.processes[id];

@@ -12,7 +12,12 @@ fn info(phase: &str) -> Value {
 
 #[test]
 fn create_reports_ready_and_preserves_failed_pane_identity() {
-    for (phase, agent) in [("ready", "codex"), ("failed", "codex"), ("ready", "hermes")] {
+    for (phase, agent) in [
+        ("ready", "codex"),
+        ("failed", "codex"),
+        ("ready", "hermes"),
+        ("ready", "pi"),
+    ] {
         let mut expected = info(phase);
         expected["agent"] = json!(agent);
         let (output, header, body) = run(

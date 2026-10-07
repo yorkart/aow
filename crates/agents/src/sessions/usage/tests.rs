@@ -66,3 +66,37 @@ fn claude_counts_cache_tokens_once_and_deduplicates_content_block_usage() {
         }
     );
 }
+
+#[test]
+fn pi_reports_each_calls_cache_inclusive_usage_and_distinguishes_unknown_from_zero() {
+    let mut events = PiUsage;
+    for record in [
+        json!({}),
+        json!({"usage":null}),
+        json!({"usage":{"input":-1,"output":2}}),
+        json!({"usage":{"input":10}}),
+    ] {
+        assert!(events.consume(&record).is_none());
+    }
+    assert_eq!(
+        events.consume(&json!({"usage":{"input":0,"output":0}})),
+        Some(TokenUsage::default())
+    );
+    let call = json!({"usage":{"input":10,"output":5,"cacheRead":100,"cacheWrite":20}});
+    let mut usage = None;
+    // Equal counts from distinct Pi calls are not cumulative projections.
+    for _ in 0..2 {
+        TokenUsage::accumulate(&mut usage, events.consume(&call).unwrap());
+    }
+    assert_eq!(
+        usage.unwrap(),
+        TokenUsage {
+            input_tokens: 260,
+            output_tokens: 10,
+            cached_input_tokens: 200,
+            cache_write_input_tokens: 40,
+            reasoning_output_tokens: 0,
+            total_tokens: 270,
+        }
+    );
+}

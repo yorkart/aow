@@ -13,7 +13,12 @@ export function terminalSessionTitle(raw: string, cwd: string) {
   const parts = whitespace(raw).replace(decoration, '')
     .replace(/^\[ [!.] \] Action Required\s*(?:\|\s*)?/iu, '').split(/\s+\|\s+/u)
     .map(part => part.replace(decoration, '').trim()).filter(Boolean);
-  if (parts.at(-1) === project) parts.pop();
+  const suffix = parts.at(-1);
+  const prefix = suffix?.replace(/(?:\.\.\.|…)$/u, '');
+  // Codex also truncates the project suffix in OSC titles. Match the backend's
+  // minimum prefix length before removing it from the conversation title.
+  const truncatedProject = suffix !== prefix && prefix && Array.from(prefix).length >= 8 && project?.startsWith(prefix);
+  if (suffix === project || truncatedProject) parts.pop();
   return parts.filter(part => !status.test(part) && !isAgentDisplayName(part)).join(' | ');
 }
 

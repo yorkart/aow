@@ -2,7 +2,6 @@ use super::TaskStopNotification;
 pub(super) use aow_agents::sessions::tracking::SessionTarget as Target;
 use aow_agents::sessions::{
     AgentSessionLocator, AgentSessionProvider, SessionRoots, tail::SessionTail,
-    tracking::AgentSessionTracker,
 };
 use aow_protocol::TerminalAgentProcess;
 use std::{
@@ -51,10 +50,42 @@ pub(super) struct Registry {
 }
 
 impl Registry {
+    pub(super) fn refresh(
+        &mut self,
+        instance: String,
+        identity: Identity,
+        candidates: Option<Vec<AgentSessionLocator>>,
+    ) {
+        let Some(candidates) = candidates else {
+            // Preserve the reader and its cursor across temporary store failures.
+            return;
+        };
+        if self.unchanged(&instance, &identity) && self.same_candidates(&instance, &candidates) {
+            // Keep budget evictions and avoid logging an unchanged registration.
+            return;
+        }
+        self.register(instance, identity, candidates);
+    }
+
     pub(super) fn unchanged(&self, instance: &str, identity: &Identity) -> bool {
         self.bindings
             .get(instance)
             .is_some_and(|binding| binding.identity == *identity)
+    }
+
+    pub(super) fn same_candidates(
+        &self,
+        instance: &str,
+        candidates: &[AgentSessionLocator],
+    ) -> bool {
+        self.bindings.get(instance).is_some_and(|binding| {
+            binding.sessions
+                == candidates
+                    .iter()
+                    .take(MAX_CANDIDATES)
+                    .map(SessionKey::from)
+                    .collect()
+        })
     }
 
     pub(super) fn unregister(&mut self, instance: &str) {
@@ -77,7 +108,7 @@ impl Registry {
     }
 
     // Calling register again is an explicit refresh, even for the same title.
-    // Automatic discovery calls it only after an identity change.
+    // Automatic discovery refreshes changed identities or Codex rollout paths.
     pub(super) fn register(
         &mut self,
         instance: String,
@@ -198,15 +229,16 @@ impl Registry {
     }
 }
 
-pub(super) fn candidates(identity: &Identity, roots: SessionRoots) -> Vec<AgentSessionLocator> {
-    aow_agents::Agent::from_id(&identity.agent)
-        .and_then(aow_agents::Agent::session_tracking)
-        .map(|tracker| {
-            tracker
-                .candidate_sessions(&identity.target, Path::new(&identity.cwd), roots)
-                .into_iter()
-                .take(MAX_CANDIDATES)
-                .collect()
-        })
-        .unwrap_or_default()
+pub(super) fn candidates(
+    identity: &Identity,
+    roots: SessionRoots,
+) -> Option<Vec<AgentSessionLocator>> {
+    let Some(tracker) =
+        aow_agents::Agent::from_id(&identity.agent).and_then(aow_agents::Agent::session_tracking)
+    else {
+        return Some(Vec::new());
+    };
+    tracker
+        .try_candidate_sessions(&identity.target, Path::new(&identity.cwd), roots)
+        .map(|candidates| candidates.into_iter().take(MAX_CANDIDATES).collect())
 }

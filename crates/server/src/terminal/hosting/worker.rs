@@ -13,7 +13,7 @@ pub(crate) fn recover(state: AppState) {
     for pane in tabs.tabs.into_iter().flat_map(|tab| tab.panes) {
         if let Some(hosting) = pane.hosting {
             let completions = state.terminals.subscribe_task_completions();
-            spawn(state.clone(), pane.id, hosting, None, completions);
+            spawn(state.clone(), pane.id, hosting, None, completions, false);
         }
     }
 }
@@ -24,6 +24,7 @@ pub(super) fn spawn(
     hosting: TerminalHosting,
     connection: Option<AgentConnection>,
     completions: broadcast::Receiver<TaskStopNotification>,
+    run_on_enable: bool,
 ) {
     if hosting.phase.stopped() {
         return;
@@ -36,7 +37,15 @@ pub(super) fn spawn(
     }
     drop(workers);
     tokio::spawn(async move {
-        if let Err(error) = run(&state, &pane_id, &hosting.id, connection, completions).await
+        if let Err(error) = run(
+            &state,
+            &pane_id,
+            &hosting.id,
+            connection,
+            completions,
+            run_on_enable,
+        )
+        .await
             && let Ok(gate) = state.terminals.hosting_gate(&pane_id)
         {
             let _gate = gate.lock().await;
@@ -68,6 +77,7 @@ async fn run(
     id: &str,
     connection: Option<AgentConnection>,
     mut completions: broadcast::Receiver<TaskStopNotification>,
+    run_on_enable: bool,
 ) -> Result<()> {
     let manager = &state.terminals;
     let gate = manager.hosting_gate(pane_id)?;
@@ -98,6 +108,17 @@ async fn run(
             .context("恢复托管控制权超时")??
         }
     };
+    // Only a new enable passes this flag. Persist the first run before polling
+    // completions so concurrent events cannot start another review. Recovery
+    // follows any persisted run but never retries an interrupted initial start.
+    if run_on_enable {
+        let Some(hosting) = manager.hosting(pane_id)?.filter(|hosting| hosting.id == id) else {
+            return Ok(());
+        };
+        if hosting.phase == TerminalHostingPhase::Waiting {
+            start_review(state, pane_id, hosting, None).await?;
+        }
+    }
     let mut interval = tokio::time::interval(Duration::from_millis(1500));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     loop {
@@ -116,9 +137,7 @@ async fn run(
             event = completions.recv() => {
                 let event = event.context("任务完成事件订阅中断或积压丢失，请接管后重新启用托管")?;
                 if accepts(&hosting, pane_id, &event) {
-                    let source = source::read(manager, pane_id).await?;
-                    ensure!(source::matches(&hosting, &source), "Agent 进程或会话已变化，请接管后重新配置托管");
-                    start_review(state, pane_id, hosting, event).await?;
+                    start_review(state, pane_id, hosting, Some(event)).await?;
                 }
             }
             _ = interval.tick() => {
@@ -148,18 +167,25 @@ async fn start_review(
     state: &AppState,
     pane_id: &str,
     mut hosting: TerminalHosting,
-    event: TaskStopNotification,
+    event: Option<TaskStopNotification>,
 ) -> Result<()> {
+    let source = source::read(&state.terminals, pane_id).await?;
+    ensure!(
+        source::matches(&hosting, &source),
+        "Agent 进程或会话已变化，请接管后重新配置托管"
+    );
     let automation = state
         .automations
         .as_ref()
         .context("Automation 服务不可用")?;
     let task = automation.hosting_task(&hosting.task_id, hosting.task_revision)?;
-    hosting.source_turn_id = event.turn_id.clone();
+    hosting.source_turn_id = event.as_ref().and_then(|event| event.turn_id.clone());
     hosting.run_id = Some(aow_automations::store::new_run_id());
     transition(&mut hosting, TerminalHostingPhase::Reviewing);
     save(state, pane_id, &hosting)?;
-    automation.dispatch_hosted(task, &hosting, &event).await
+    automation
+        .dispatch_hosted(task, &hosting, event.as_ref())
+        .await
 }
 
 async fn step(

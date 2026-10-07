@@ -232,6 +232,7 @@ async fn post(app: &Router, path: &str, body: Value) -> Value {
 
 #[tokio::test]
 async fn session_resume_launches_selected_profiles_without_changing_registration() {
+    use std::os::unix::fs::PermissionsExt;
     let fixture = Fixture::with_storage("ready", true).await;
     let app = crate::build_router(fixture.state.clone());
     let session_cwd = fixture.repo.join("session subdirectory");
@@ -239,14 +240,19 @@ async fn session_resume_launches_selected_profiles_without_changing_registration
     let script = fixture.directory.path().join("resume.py");
     std::fs::write(
         &script,
-        r#"import json, os, sys, time
+        r#"#!/usr/bin/python3
+import json, os, sys, time
+if sys.argv[1:] == ['--help']:
+    print(os.environ['CODEX_HELP'])
+    sys.exit(0)
 with open(sys.argv[1], 'w') as log:
-    json.dump({'args': sys.argv[2:], 'cwd': os.getcwd(), 'profile': os.environ['RESUME_PROFILE'], 'state_dir': os.environ['AOW_STATE_DIR']}, log)
+    json.dump({'args': sys.argv[2:], 'cwd': os.getcwd(), 'profile': os.environ['RESUME_PROFILE'], 'state_dir': os.environ['AOW_STATE_DIR'], 'codex_terminal': os.environ.get('AOW_CODEX_TERMINAL')}, log)
 time.sleep(30)
 "#,
     )
     .unwrap();
-    for (index, agent_type) in ["codex", "codex", "claude", "traecli", "hermes"]
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).unwrap();
+    for (index, agent_type) in ["codex", "codex", "claude", "traecli", "hermes", "pi"]
         .iter()
         .enumerate()
     {
@@ -255,13 +261,26 @@ time.sleep(30)
             .directory
             .path()
             .join(format!("resume-{index}.json"));
-        let args = json!([script, log, "--profile", format!("profile {index}")]);
-        let env = json!({"RESUME_PROFILE": id, "AOW_STATE_DIR": "/another-aow-instance"});
+        let (command, args) = if *agent_type == "codex" {
+            (
+                script.to_str().unwrap(),
+                json!([log, "--profile", format!("profile {index}")]),
+            )
+        } else {
+            (
+                "/usr/bin/python3",
+                json!([script, log, "--profile", format!("profile {index}")]),
+            )
+        };
+        // Exercise both an older CLI and a CLI advertising embedded TUI support.
+        let supports_isolation = index == 1;
+        let env = json!({"RESUME_PROFILE": id, "AOW_STATE_DIR": "/another-aow-instance",
+            "CODEX_HELP": if supports_isolation {"  --no-daemon"} else {"  --no-alt-screen"}});
         post(
             &app,
             "/api/aow/agents",
             json!({"id": id, "agent_type": agent_type, "display_name": id,
-                "command": "/usr/bin/python3", "args": args, "env": env}),
+                "command": command, "args": args, "env": env}),
         )
         .await;
         let session_id = "a49342f2-e4c3-4bab-b333-6d7d6c961a29";
@@ -275,16 +294,48 @@ time.sleep(30)
         .await;
         let resume_arg = if matches!(*agent_type, "claude" | "hermes") {
             "--resume"
+        } else if *agent_type == "pi" {
+            "--session"
         } else {
             "resume"
         };
         let mut expected_args = args.as_array().unwrap().clone();
         expected_args.extend([json!(resume_arg), json!(session_id)]);
+        let mut invocation_args = vec![
+            json!("--profile"),
+            json!(format!("profile {index}")),
+            json!(resume_arg),
+            json!(session_id),
+        ];
+        if supports_isolation {
+            expected_args.push(json!("--no-daemon"));
+            invocation_args.push(json!("--no-daemon"));
+        }
+        if *agent_type == "pi" {
+            let extension = tab["panes"][0]["arguments"]
+                .as_array()
+                .unwrap()
+                .last()
+                .unwrap()
+                .clone();
+            let extension_path = Path::new(extension.as_str().unwrap());
+            assert!(
+                extension_path
+                    .starts_with(fixture.state_dir.canonicalize().unwrap().join("agents/pi"))
+            );
+            assert!(
+                std::fs::read_to_string(extension_path)
+                    .unwrap()
+                    .contains("agent_settled")
+            );
+            expected_args.extend([json!("--extension"), extension.clone()]);
+            invocation_args.extend([json!("--extension"), extension]);
+        }
         assert_eq!(tab["panes"][0]["arguments"], json!(expected_args));
         assert_eq!(tab["panes"][0]["kind"], "agent");
         assert_eq!(tab["panes"][0]["agent_id"], *agent_type);
         assert_eq!(tab["panes"][0]["agent_profile_id"], id);
-        let invocation: Value = tokio::time::timeout(Duration::from_secs(5), async {
+        let mut invocation: Value = tokio::time::timeout(Duration::from_secs(5), async {
             loop {
                 if let Ok(bytes) = std::fs::read(&log)
                     && let Ok(value) = serde_json::from_slice(&bytes)
@@ -296,9 +347,19 @@ time.sleep(30)
         })
         .await
         .unwrap();
+        let marker = invocation
+            .as_object_mut()
+            .unwrap()
+            .remove("codex_terminal")
+            .unwrap();
+        if supports_isolation {
+            assert_eq!(marker, tab["panes"][0]["id"]);
+        } else if *agent_type == "codex" {
+            assert!(marker.is_null());
+        }
         assert_eq!(
             invocation,
-            json!({"args": ["--profile", format!("profile {index}"), resume_arg, session_id],
+            json!({"args": invocation_args,
             "cwd": session_cwd.canonicalize().unwrap(), "profile": id,
             "state_dir": fixture.state_dir.canonicalize().unwrap()})
         );
@@ -340,7 +401,7 @@ time.sleep(30)
         assert_eq!(rebuilt["id"], tab.id);
         assert_ne!(rebuilt["panes"][0]["id"], tab.panes[0].id);
         assert_eq!(rebuilt["panes"][0]["arguments"], json!(expected_args));
-        let replay: Value = tokio::time::timeout(Duration::from_secs(5), async {
+        let mut replay: Value = tokio::time::timeout(Duration::from_secs(5), async {
             loop {
                 if let Ok(bytes) = std::fs::read(&log)
                     && let Ok(value) = serde_json::from_slice(&bytes)
@@ -352,6 +413,16 @@ time.sleep(30)
         })
         .await
         .unwrap();
+        let marker = replay
+            .as_object_mut()
+            .unwrap()
+            .remove("codex_terminal")
+            .unwrap();
+        if supports_isolation {
+            assert_eq!(marker, rebuilt["panes"][0]["id"]);
+        } else if *agent_type == "codex" {
+            assert!(marker.is_null());
+        }
         assert_eq!(
             replay, invocation,
             "rebuild must use the original profile environment and resume arguments"
@@ -982,6 +1053,7 @@ async fn cli_codex_skips_update_menu_without_changing_profile_or_manual_launch()
         json!({"workspace_root": fixture.repo, "cwd": fixture.repo, "agent_id": id}),
     )
     .await;
+    // This custom Python entrypoint does not advertise Codex CLI options.
     assert_eq!(manual["panes"][0]["arguments"], args);
     fixture.stop().await;
 }
@@ -1211,6 +1283,165 @@ async fn native_startup_probes() {
 }
 
 #[tokio::test]
+#[ignore = "requires AOW_PI_TEST_CLI and PTY/process access; uses an isolated offline provider"]
+async fn native_pi_submits_through_terminald_and_resolves_its_session() {
+    use aow_agents::sessions::{
+        SessionRoots,
+        tracking::{AgentSessionTracker, LiveSessionContext, SessionResolution, SessionTarget},
+    };
+    let fixture = Fixture::with_storage("ready", true).await;
+    let app = crate::build_router(fixture.state.clone());
+    let cli = std::env::var("AOW_PI_TEST_CLI").expect("AOW_PI_TEST_CLI");
+    let profile = fixture.directory.path().join("pi profile");
+    let provider = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../agents/tests/fixtures/pi-provider.mjs")
+        .canonicalize()
+        .unwrap();
+    post(&app, "/api/aow/agents", json!({
+        "id":"pi", "agent_type":"pi", "display_name":"Pi", "command":cli,
+        "args":["--offline", "--no-extensions", "--no-skills", "--no-prompt-templates", "--no-context-files", "--no-approve", "--model", "aow-test/fixture", "--extension", provider],
+        "env":{"PI_CODING_AGENT_DIR":profile,"PI_CODING_AGENT_SESSION_DIR":profile.join("sessions"),"PI_OFFLINE":"1"}
+    })).await;
+    let mut request = fixture.request();
+    request.agent = "pi".into();
+    request.task = Some("Offline Pi terminal integration".into());
+    let created: AgentTerminalInfo = fixture
+        .client
+        .post_json("/v1/agents", &request)
+        .await
+        .unwrap();
+    assert_eq!(
+        created.state.phase,
+        AgentTerminalPhase::Ready,
+        "{created:?}"
+    );
+    assert!(created.state.task_submitted);
+    let tracker = Agent::Pi.session_tracking().unwrap();
+    let (snapshot, session_id) = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            let detected = fixture
+                .state
+                .terminals
+                .agents(Some(fixture.repo.to_str().unwrap()))
+                .await
+                .unwrap();
+            if let Some(process) = detected.processes.get(&created.pane_id)
+                && let Some(environment) = crate::terminal::sessions::process_environment(process)
+                && let SessionResolution::Resolved(SessionTarget::Id(id)) = tracker
+                    .resolve_live_session(LiveSessionContext {
+                        pid: Some(process.pid),
+                        cwd: &process.cwd,
+                        title: "",
+                        environment: &environment,
+                    })
+                    .await
+                && let Some(session) = aow_agents::sessions::find_session(
+                    "pi",
+                    &id,
+                    SessionRoots::from_configuration(&profile, &environment),
+                )
+                && let Ok(snapshot) = aow_agents::sessions::snapshot::read(session.locator())
+            {
+                let value = serde_json::to_value(snapshot).unwrap();
+                if value["status"] == "completed" {
+                    assert!(process.pi_binding.is_some());
+                    break (value, id);
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        snapshot["turns"][0]["user"]["text"],
+        "Offline Pi terminal integration"
+    );
+    assert_eq!(snapshot["turns"][0]["final"]["text"], "Pi fixture reply");
+    let tabs = fixture.state.terminals.list_snapshot(None).unwrap().tabs;
+    let mut legacy = aow_protocol::TerminalAgentList {
+        agents: [(created.pane_id.clone(), None)].into(),
+        titles: [(created.pane_id.clone(), "π - repo".into())].into(),
+        ..Default::default()
+    };
+    crate::terminal::pi_detection::enrich(
+        &fixture.state.terminals.inner.terminald,
+        &tabs,
+        &mut legacy,
+    )
+    .await;
+    assert_eq!(legacy.agents[&created.pane_id].as_deref(), Some("pi"));
+    assert!(legacy.processes.contains_key(&created.pane_id));
+    let mut completions = fixture.state.terminals.subscribe_task_completions();
+    fixture.state.start_agent_notifications();
+    // Allow two discovery ticks to attach at EOF; the first reply is history.
+    tokio::time::sleep(Duration::from_millis(3200)).await;
+    assert!(completions.try_recv().is_err());
+    fixture
+        .client
+        .post_json::<_, AgentTerminalInfo>(
+            &format!("/v1/agents/{}/submit", created.pane_id),
+            &AgentTerminalSubmit {
+                task: "Second offline task".into(),
+            },
+        )
+        .await
+        .unwrap();
+    let event = tokio::time::timeout(Duration::from_secs(10), completions.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(event.agent, "pi");
+    assert_eq!(event.session_id, session_id);
+    assert_eq!(event.conclusion.as_deref(), Some("Pi fixture reply"));
+    assert_eq!(event.usage.unwrap().total_tokens, 20);
+    assert_eq!(event.instance_ids, std::slice::from_ref(&created.pane_id));
+    fixture
+        .state
+        .terminals
+        .inner
+        .terminald
+        .delete(&created.pane_id)
+        .await
+        .unwrap();
+    let rebuilt: TerminalTab = serde_json::from_value(
+        post(
+            &app,
+            &format!("/api/terminals/{}/rebuild", created.tab_id),
+            json!({}),
+        )
+        .await,
+    )
+    .unwrap();
+    let pane = &rebuilt.panes[0];
+    assert_ne!(pane.id, created.pane_id);
+    assert_eq!(
+        pane.arguments
+            .iter()
+            .filter(|arg| *arg == "--extension")
+            .count(),
+        2
+    );
+    let binding = aow_agents::pi_bridge::binding_path(&pane.arguments, &pane.id).unwrap();
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if let Ok(bytes) = std::fs::read(&binding)
+                && let Ok(value) = serde_json::from_slice::<Value>(&bytes)
+                && value["session_id"]
+                    .as_str()
+                    .is_some_and(|id| id != session_id)
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    fixture.stop().await;
+}
+
+#[tokio::test]
 async fn hosting_owns_input_and_explicit_takeover_cancels_feedback() {
     use aow_protocol::{TerminalAgentProcess, TerminalHosting, TerminalHostingPhase};
     let fixture = Fixture::new("ready").await;
@@ -1231,6 +1462,7 @@ async fn hosting_owns_input_and_explicit_takeover_cancels_feedback() {
         process: TerminalAgentProcess {
             pid: 1,
             start_time: "start".into(),
+            pi_binding: None,
             cwd: fixture.repo.to_string_lossy().into_owned(),
         },
         phase: TerminalHostingPhase::Collecting,

@@ -51,6 +51,46 @@ pub(crate) fn environment(pid: i32) -> io::Result<Vec<u8>> {
     Ok(bytes)
 }
 
+pub(crate) fn open_files(pid: i32) -> io::Result<Vec<crate::OpenFile>> {
+    let mut files = Vec::new();
+    for (index, entry) in fs::read_dir(format!("/proc/{pid}/fd"))?.enumerate() {
+        if index >= 16_384 {
+            return Err(io::Error::other("too many process descriptors"));
+        }
+        let entry = entry?;
+        let read = || -> io::Result<Option<crate::OpenFile>> {
+            let path = fs::read_link(entry.path())?;
+            if !path.is_absolute() {
+                return Ok(None);
+            }
+            let metadata = fs::read_to_string(
+                PathBuf::from(format!("/proc/{pid}/fdinfo")).join(entry.file_name()),
+            )?;
+            let writable = descriptor_writable(&metadata).ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "missing descriptor flags")
+            })?;
+            Ok(Some(crate::OpenFile { path, writable }))
+        };
+        match read() {
+            Ok(Some(file)) => files.push(file),
+            Ok(None) => {}
+            // Descriptors can close between the directory snapshot and readlink.
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(files)
+}
+
+fn descriptor_writable(metadata: &str) -> Option<bool> {
+    let flags = metadata
+        .lines()
+        .find_map(|line| line.strip_prefix("flags:"))?;
+    let flags = u32::from_str_radix(flags.trim(), 8).ok()?;
+    // Linux O_ACCMODE and O_PATH, including when these parsers are tested on macOS.
+    Some(matches!(flags & 0o3, 1 | 2) && flags & 0o10000000 == 0)
+}
+
 fn parse_stat(pid: i32, stat: &str) -> Option<ProcessInfo> {
     let mut fields = stat.rsplit_once(')')?.1.split_whitespace();
     Some(ProcessInfo {
@@ -68,6 +108,15 @@ fn parse_stat(pid: i32, stat: &str) -> Option<ProcessInfo> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn descriptor_flags_distinguish_readers_and_writers() {
+        assert_eq!(descriptor_writable("flags:\t02102002\n"), Some(true));
+        assert_eq!(descriptor_writable("flags:\t0100001\n"), Some(true));
+        assert_eq!(descriptor_writable("flags:\t0100000\n"), Some(false));
+        assert_eq!(descriptor_writable("flags:\t010000002\n"), Some(false));
+        assert_eq!(descriptor_writable("pos:\t0\n"), None);
+    }
 
     #[test]
     fn parses_stat_with_spaces_and_parentheses_in_process_name() {

@@ -1,4 +1,4 @@
-export type AutomationAgent = 'codex' | 'traecli' | 'claude' | 'hermes';
+export type AutomationAgent = 'codex' | 'traecli' | 'claude' | 'hermes' | 'pi';
 
 import type { WorkspaceConfig } from '../workspaces/types';
 export type { WorkspaceMode } from '../workspaces/types';

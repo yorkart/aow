@@ -16,7 +16,7 @@ try {
   async function fixture(t, mobile = false) {
     const page = await browser.newPage({ viewport: { width: mobile ? 390 : 1100, height: 750 } });
     page.setDefaultTimeout(15000);
-    const errors = [], starts = [], claims = [], inputs = [], requests = [];
+    const errors = [], starts = [], claims = [], inputs = [], requests = [], saves = [], createdTasks = [];
     let hosted = false, socket, events, revision = 1;
     const notify = () => events?.send(JSON.stringify({ event: 'workspace', data: { boot_id: 'boot', revision: ++revision, projects: 0, terminals: revision, tasks: 0, repositories: {} } }));
     let currentHosting = mobile ? { ...hosting, phase: 'failed', error: 'Agent 异常退出' } : hosting;
@@ -29,9 +29,17 @@ try {
       if (url.pathname === '/api/terminals') return route.fulfill({ json: { tabs: [currentTab()] } });
       if (url.pathname === '/api/terminals/agents') return route.fulfill({ json: { agents: { pane: 'codex' }, titles: { pane: '实现登录功能' }, processes: {} } });
       if (url.pathname === '/api/aow/projects') return route.fulfill({ json: [{ id: 'project', worktrees: [{ id: 'worktree', path: '/repo' }] }] });
+      if (url.pathname === '/api/aow/agents') return route.fulfill({ json: [{ id: 'codex', available: true }] });
+      if (url.pathname === '/api/aow/projects/project/branches') return route.fulfill({ json: { branches: ['main'], default_branch: 'main' } });
+      if (url.pathname === '/api/aow/notification-settings') return route.fulfill({ json: { im: { providers: [] } } });
       if (url.pathname === '/api/aow/automations') {
+        if (route.request().method() === 'POST') {
+          const input = route.request().postDataJSON(); saves.push(input);
+          const created = { ...task, ...input, id: 'created', revision: 1 }; createdTasks.push(created);
+          return route.fulfill({ json: created });
+        }
         assert.equal(url.searchParams.get('project_id'), 'project');
-        return route.fulfill({ json: [task, { ...task, id: 'schedule', kind: 'scheduled', name: '定时任务' }, ...['existing', 'new_worktree', 'temporary'].map(mode => ({ ...task, id: mode, workspace_mode: mode, name: `非动态任务 ${mode}` }))] });
+        return route.fulfill({ json: [...createdTasks, task, { ...task, id: 'schedule', kind: 'scheduled', name: '定时任务' }, ...['existing', 'new_worktree', 'temporary'].map(mode => ({ ...task, id: mode, workspace_mode: mode, name: `非动态任务 ${mode}` }))] });
       }
       if (url.pathname === '/api/aow/automations/review') return route.fulfill({ json: task });
       if (url.pathname === '/api/aow/automations/review/runs/run-one') return route.fulfill({ json: { id: 'run-one', task_id: 'review', status: 'failed' } });
@@ -60,10 +68,74 @@ try {
     await page.routeWebSocket('**/api/events/ws', current => { events = current; notify(); });
     await page.goto(`${base}/tests/terminal-hosting-preview.html${mobile ? '?mobile' : ''}`);
     await page.getByRole('button', { name: 'Autopilot', exact: true }).waitFor();
-    return { page, starts, claims, inputs, requests, updateHosting: async patch => {
+    return { page, starts, claims, inputs, requests, saves, updateHosting: async patch => {
       currentHosting = { ...currentHosting, ...patch }; notify();
       if (!mobile) await page.evaluate(value => window.hostingPreview.update(value), currentHosting);
     } };
+  }
+  for (const mobile of [false, true]) {
+    await test(`${mobile ? 'mobile' : 'desktop'} creates a dynamic manual task from Autopilot and returns it to the picker`, async t => {
+      const { page, saves, starts } = await fixture(t, mobile);
+      const autopilot = page.getByRole('button', { name: 'Autopilot', exact: true });
+      const menu = page.getByRole('dialog', { name: '选择托管任务' });
+      const dialog = page.getByRole('dialog', { name: '创建手动任务' });
+      await autopilot.click();
+      await menu.getByRole('button', { name: '动态指定工作区', exact: true }).click();
+      await dialog.waitFor();
+      assert.equal(await menu.count(), 0);
+      assert.equal(await dialog.getByRole('button', { name: '动态工作区', exact: true }).getAttribute('aria-pressed'), 'true');
+      assert.equal(await dialog.getByRole('radio', { name: '动态指定', exact: true }).isChecked(), true);
+      await dialog.getByRole('button', { name: '取消', exact: true }).click();
+      await dialog.waitFor({ state: 'hidden' });
+      assert.deepEqual(saves, []);
+      await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Autopilot');
+      await autopilot.click();
+      await menu.getByLabel('最多自动输入次数').fill('2');
+      assert.equal(await menu.getByRole('checkbox', { name: '开启托管后立即执行一次' }).isChecked(), true);
+      await menu.getByRole('button', { name: /代码 Review/ }).waitFor();
+      if (process.env.AOW_HOSTING_SCREENSHOT_DIR) await page.screenshot({ path: `${process.env.AOW_HOSTING_SCREENSHOT_DIR}/aow-hosting-${mobile ? 'mobile' : 'desktop'}-picker.png` });
+      await menu.getByRole('button', { name: '动态指定工作区', exact: true }).click();
+      await dialog.getByRole('textbox', { name: '名称', exact: true }).fill('新建代码检查');
+      const prompt = dialog.getByRole('textbox', { name: '任务内容', exact: true });
+      await prompt.focus();
+      await page.keyboard.insertText('检查当前工作区的代码变更');
+      if (process.env.AOW_HOSTING_SCREENSHOT_DIR) await page.screenshot({ path: `${process.env.AOW_HOSTING_SCREENSHOT_DIR}/aow-hosting-${mobile ? 'mobile' : 'desktop'}-create.png` });
+      await dialog.getByRole('button', { name: '创建手动任务', exact: true }).click();
+      await dialog.waitFor({ state: 'hidden' });
+      assert.equal(saves.length, 1);
+      assert.equal(saves[0].kind, 'manual');
+      assert.equal(saves[0].workspace_mode, 'dynamic');
+      assert.equal(saves[0].workspace_path, '');
+      assert.equal(saves[0].base_branch, '');
+      assert.equal(saves[0].project_id, 'project');
+      assert.equal(saves[0].prompt, '检查当前工作区的代码变更');
+      await menu.getByRole('button', { name: /新建代码检查/ }).click();
+      assert.deepEqual(starts, [{ task_id: 'created', revision: 1, max_inputs: 2, run_on_enable: true }]);
+    });
+  }
+  for (const mobile of [false, true]) {
+    await test(`${mobile ? 'mobile' : 'desktop'} can opt out of immediate review and reopen without enabling again`, async t => {
+      const { page, starts } = await fixture(t, mobile);
+      await page.getByRole('button', { name: 'Autopilot', exact: true }).click();
+      const menu = page.getByRole('dialog', { name: '选择托管任务' });
+      const immediate = menu.getByRole('checkbox', { name: '开启托管后立即执行一次' });
+      assert.equal(await immediate.isChecked(), true);
+      await menu.getByText('不等待当前任务结束；取消勾选则等待下一次完成事件。').waitFor();
+      const bounds = await menu.boundingBox();
+      assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= page.viewportSize().width);
+      assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= page.viewportSize().height);
+      await immediate.uncheck();
+      await menu.getByRole('button', { name: /代码 Review/ }).click();
+      const expected = [{ task_id: 'review', revision: 3, max_inputs: 3, run_on_enable: false }];
+      assert.deepEqual(starts, expected);
+      const status = page.locator(mobile ? '.mobile-terminal-hosting' : '.terminal-connection.hosting');
+      await status.waitFor();
+      // Mobile navigation replaces the preview URL with the production route.
+      if (mobile) await page.goto(`${base}/tests/terminal-hosting-preview.html?mobile`);
+      else await page.reload();
+      await status.waitFor();
+      assert.deepEqual(starts, expected);
+    });
   }
   await test('selecting a manual task hosts the pane, displays state beside takeover, and blocks input', async t => {
     const { page, starts, claims, inputs } = await fixture(t);
@@ -84,7 +156,7 @@ try {
     await limit.fill('3');
     await menu.getByRole('button', { name: /代码 Review/ }).click();
     await page.locator('.terminal-connection.hosting').getByText(/托管中 · 代码 Review/).waitFor();
-    assert.deepEqual(starts, [{ task_id: 'review', revision: 3, max_inputs: 3 }]);
+    assert.deepEqual(starts, [{ task_id: 'review', revision: 3, max_inputs: 3, run_on_enable: true }]);
     assert.equal(await page.locator('.terminal-pane-header').getByText(/托管中/).count(), 0);
     assert.equal(await page.getByRole('button', { name: 'Autopilot', exact: true }).isDisabled(), true);
     await page.locator('.xterm-helper-textarea').focus(); await page.keyboard.type('do not send');
@@ -151,7 +223,7 @@ try {
       const menu = page.getByRole('dialog', { name: '选择托管任务' });
       await menu.getByLabel('最多自动输入次数').fill('2');
       await menu.getByRole('button', { name: /代码 Review/ }).click();
-      assert.deepEqual(starts, [{ task_id: 'review', revision: 3, max_inputs: 2 }]);
+      assert.deepEqual(starts, [{ task_id: 'review', revision: 3, max_inputs: 2, run_on_enable: true }]);
       const status = page.locator(mobile ? '.mobile-terminal-hosting' : '.terminal-connection.hosting');
       await status.getByText(/已输入 0\/2 次/).waitFor();
       for (const [phase, label] of [['completed', '托管已结束'], ['limit_reached', '托管已停止']]) {

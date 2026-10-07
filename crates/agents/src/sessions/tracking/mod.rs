@@ -8,6 +8,7 @@ mod codex;
 mod codex_like;
 mod completed;
 mod hermes;
+mod pi;
 mod traecli;
 
 use std::{future::Future, path::Path, time::Duration};
@@ -100,9 +101,24 @@ pub enum TrackingAgent {
     Codex,
     TraeCli,
     Hermes,
+    Pi,
 }
 
 impl TrackingAgent {
+    /// Refresh candidates without treating a temporarily unavailable store as empty.
+    /// None means retain the existing subscription and retry; Some([]) means absent.
+    pub fn try_candidate_sessions(
+        &self,
+        target: &SessionTarget,
+        cwd: &Path,
+        roots: SessionRoots,
+    ) -> Option<Vec<AgentSessionLocator>> {
+        match self {
+            Self::Codex => codex::Codex.try_candidate_sessions(target, cwd, roots),
+            _ => Some(self.candidate_sessions(target, cwd, roots)),
+        }
+    }
+
     /// Resolve a session with the caller's timeout for uncached native CLI queries.
     /// Adapters without a CLI query and cached results do not consume this budget.
     pub async fn resolve_live_session_with_timeout(
@@ -126,6 +142,7 @@ impl TrackingAgent {
             Self::Codex => Agent::Codex,
             Self::TraeCli => Agent::TraeCli,
             Self::Hermes => Agent::Hermes,
+            Self::Pi => Agent::Pi,
         }
     }
 }
@@ -137,6 +154,7 @@ impl Agent {
             Self::Codex => Some(TrackingAgent::Codex),
             Self::TraeCli => Some(TrackingAgent::TraeCli),
             Self::Hermes => Some(TrackingAgent::Hermes),
+            Self::Pi => Some(TrackingAgent::Pi),
             _ => None,
         }
     }
@@ -149,6 +167,7 @@ impl AgentSessionTracker for TrackingAgent {
             Self::Codex => codex::Codex.resolve_live_session(context).await,
             Self::TraeCli => traecli::TraeCli.resolve_live_session(context).await,
             Self::Hermes => hermes::Hermes.resolve_live_session(context).await,
+            Self::Pi => pi::Pi.resolve_live_session(context).await,
         }
     }
 
@@ -163,6 +182,7 @@ impl AgentSessionTracker for TrackingAgent {
             Self::Codex => codex::Codex.candidate_sessions(target, cwd, roots),
             Self::TraeCli => traecli::TraeCli.candidate_sessions(target, cwd, roots),
             Self::Hermes => hermes::Hermes.candidate_sessions(target, cwd, roots),
+            Self::Pi => pi::Pi.candidate_sessions(target, cwd, roots),
         }
     }
 
@@ -172,6 +192,7 @@ impl AgentSessionTracker for TrackingAgent {
             Self::Codex => codex::Codex.task_stop_parser(),
             Self::TraeCli => traecli::TraeCli.task_stop_parser(),
             Self::Hermes => hermes::Hermes.task_stop_parser(),
+            Self::Pi => pi::Pi.task_stop_parser(),
         }
     }
 
@@ -191,6 +212,7 @@ impl AgentSessionTracker for TrackingAgent {
             Self::Codex => codex::Codex.completed_run_result(locator, exited_at),
             Self::TraeCli => traecli::TraeCli.completed_run_result(locator, exited_at),
             Self::Hermes => hermes::Hermes.completed_run_result(locator, exited_at),
+            Self::Pi => pi::Pi.completed_run_result(locator, exited_at),
         }
     }
 }

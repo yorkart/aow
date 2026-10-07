@@ -6,7 +6,7 @@ mod runtime;
 
 pub use agent::{
     AgentTerminalCreate, AgentTerminalInfo, AgentTerminalPhase, AgentTerminalState,
-    AgentTerminalSubmit, TerminalAgentList, TerminalAgentProcess,
+    AgentTerminalSubmit, TerminalAgentList, TerminalAgentProcess, TerminalPaneActivity,
 };
 pub use attach::{TerminalAttachClientMessage, TerminalAttachServerMessage, TerminalControlState};
 pub use hosting::{TerminalHosting, TerminalHostingPhase};

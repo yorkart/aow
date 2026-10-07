@@ -168,6 +168,14 @@ export const terminalApi = {
           && typeof process.start_time === 'string' && typeof process.cwd === 'string'
           ? [[id, process as unknown as TerminalAgentProcess]] : [];
       })),
+      activity: Object.fromEntries(Object.entries(asRecord(payload?.activity) ?? {}).flatMap(([id, value]) => {
+        const activity = asRecord(value);
+        if (!activity) return [];
+        const cwd = typeof activity.cwd === 'string' ? activity.cwd : undefined;
+        const foreground_command = typeof activity.foreground_command === 'string'
+          ? activity.foreground_command : undefined;
+        return cwd || foreground_command ? [[id, { cwd, foreground_command }]] : [];
+      })),
     };
   },
 
@@ -176,9 +184,9 @@ export const terminalApi = {
       { cache: 'no-store' }, 15_000, signal) as TerminalPaneSessions;
   },
 
-  async host(tabId: string, paneId: string, taskId: string, revision: number, maxInputs: number): Promise<TerminalTab> {
+  async host(tabId: string, paneId: string, taskId: string, revision: number, maxInputs: number, runOnEnable = true): Promise<TerminalTab> {
     const tab = tabFromPayload(await request(terminalPath(tabId, `/panes/${encodeURIComponent(paneId)}/hosting`), {
-      method: 'PUT', body: JSON.stringify({ task_id: taskId, revision, max_inputs: maxInputs }),
+      method: 'PUT', body: JSON.stringify({ task_id: taskId, revision, max_inputs: maxInputs, run_on_enable: runOnEnable }),
     }, 30_000));
     if (!tab) throw new Error('服务器返回了无效的托管状态');
     return tab;

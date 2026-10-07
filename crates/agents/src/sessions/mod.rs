@@ -4,6 +4,7 @@ mod codex_like;
 mod helpers;
 mod hermes;
 mod model;
+pub(crate) mod pi;
 mod provider;
 mod roots;
 pub mod snapshot;

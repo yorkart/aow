@@ -41,6 +41,19 @@ try {
   }
 
   for (const mobile of [false, true]) {
+    await test(`${mobile ? 'mobile' : 'desktop'} renders Pi session identity and conversation`, async (t) => {
+      const { page, updateSnapshot } = await open(t, mobile);
+      const piSession = { ...session, id: 'pi:pi-session', session_id: 'pi-session', agent: 'pi', title: 'Pi session' };
+      const piSnapshot = { ...snapshot, session_id: 'pi-session', agent: 'pi', title: 'Pi session',
+        turns: [makeTurn('pi-turn', 'Pi prompt', 'Pi final reply', [])] };
+      updateSnapshot(piSnapshot);
+      await update(page, { session: piSession, snapshot: piSnapshot });
+      await page.getByText('Pi final reply', { exact: true }).waitFor();
+      assert.equal(await page.getByText('Pi', { exact: true }).count() > 0, true);
+      assert.equal(await page.locator('svg.lucide-pi').count() > 0, true);
+      await noOverflow(page);
+    });
+
     await test(`${mobile ? 'mobile' : 'desktop'} shows per-turn input and output tokens before the agent timestamp`, async (t) => {
       const { page, updateSnapshot } = await open(t, mobile);
       const usage = (input, output) => ({ input_tokens: input, output_tokens: output, total_tokens: input + output,

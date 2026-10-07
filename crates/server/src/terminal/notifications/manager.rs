@@ -159,7 +159,11 @@ impl TerminalManager {
                             source_root,
                             target,
                         };
-                        if registry.unchanged(&pane.id, &identity) {
+                        // Codex revert can replace the rollout while keeping the thread ID.
+                        // Re-registering the same locator preserves its reader and cursor.
+                        let refresh_codex_path =
+                            agent == "codex" && matches!(identity.target, registry::Target::Id(_));
+                        if registry.unchanged(&pane.id, &identity) && !refresh_codex_path {
                             continue;
                         }
                         let roots = SessionRoots::from_configuration(home, &environment);
@@ -169,21 +173,14 @@ impl TerminalManager {
                         })
                         .await;
                         let Ok(candidates) = candidates else {
-                            registry.unregister(&pane.id);
                             continue;
                         };
-                        // Title/PID can precede the first persisted transcript.
-                        // No candidates have been locked yet; retry discovery.
-                        if candidates.is_empty() {
-                            registry.unregister(&pane.id);
-                            continue;
-                        }
                         if process.is_some_and(|process| !sessions::same_process(process)) {
                             continue;
                         }
                         let instance = pane.id.clone();
                         let result = tokio::task::spawn_blocking(move || {
-                            registry.register(instance, identity, candidates);
+                            registry.refresh(instance, identity, candidates);
                             registry
                         })
                         .await;

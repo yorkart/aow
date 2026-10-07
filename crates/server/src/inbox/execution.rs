@@ -61,7 +61,7 @@ async fn execute_inner(
         .map_err(crate::aow::aow_http_error)?;
     if launch.agent_type.agent().interactive().is_none() {
         return Err(invalid(
-            "该 Agent 暂不支持自动提交任务，请选择 Codex、Trae CLI 或 Hermes。",
+            "该 Agent 暂不支持自动提交任务，请选择 Codex、Trae CLI、Hermes 或 Pi。",
         ));
     }
     let markdown = input.final_task(&item.markdown);

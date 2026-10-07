@@ -8,6 +8,12 @@ pub(in crate::terminal) struct EnableHosting {
     revision: u64,
     #[serde(default = "TerminalHosting::default_max_inputs")]
     max_inputs: u32,
+    #[serde(default = "default_run_on_enable")]
+    run_on_enable: bool,
+}
+
+fn default_run_on_enable() -> bool {
+    true
 }
 
 pub(in crate::terminal) async fn enable(
@@ -100,6 +106,7 @@ async fn enable_inner(
             hosting,
             Some(connection),
             completions,
+            request.run_on_enable,
         ),
         result => {
             let mut failed = hosting;

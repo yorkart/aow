@@ -22,7 +22,7 @@ def session(sid, title, prompt, conclusion):
     path = root / 'sessions' / (sid + '.jsonl')
     event(path, 'task_started', turn_id='turn-one')
     event(path, 'user_message', message=prompt)
-    event(path, 'task_complete', turn_id='turn-one', last_agent_message=conclusion)
+    if conclusion is not None: event(path, 'task_complete', turn_id='turn-one', last_agent_message=conclusion)
     db.execute('INSERT INTO threads VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)', (sid,str(path),os.getcwd(),title,1,1,1,0,prompt,'cli','cli','',''))
     db.commit()
     return path
@@ -39,6 +39,7 @@ if 'exec' in sys.argv:
     count = int(counter.read_text()) + 1 if counter.exists() else 1
     counter.write_text(str(count))
     (root / 'review-prompt').write_text(prompt)
+    if config.get('fail_review'): sys.exit(1)
     conclusion = 'Review feedback: fix the missing assertion.\n保持多行。'
     if config['finish_on_review'] == count: conclusion = '审查通过。\n[AOW_HOSTING_DONE]\n'
     session(sid, 'Review run', prompt, conclusion)
@@ -47,7 +48,7 @@ if 'exec' in sys.argv:
     sys.exit(0)
 tty.setraw(0)
 os.chdir('frontend')
-path = session('source-session', 'Hosting integration source', 'Implement feature', 'Implementation finished')
+path = session('source-session', 'Hosting integration source', 'Implement feature', None if config.get('source_running') else 'Implementation finished')
 os.write(1, b'\x1b]2;Hosting integration source\x07Ready\r\n> ')
 buf = b''
 turn_index = 1
@@ -104,22 +105,78 @@ impl Drop for DaemonGuard {
 
 #[tokio::test]
 async fn hosting_executes_review_in_source_subdirectory_and_feeds_original_terminal_once() {
-    run_hosting_case(None, None, false).await;
+    run_hosting_case(HostingCase::default()).await;
 }
 
 #[tokio::test]
 async fn hosting_finish_marker_stops_without_feedback_and_survives_restart() {
-    run_hosting_case(Some(2), Some(1), true).await;
+    run_hosting_case(HostingCase {
+        max_inputs: Some(2),
+        finish_on_review: Some(1),
+        complete_feedback: true,
+        run_on_enable: Some(true),
+        ..HostingCase::default()
+    })
+    .await;
 }
 
 #[tokio::test]
 async fn hosting_limits_feedback_but_runs_a_final_review() {
-    run_hosting_case(Some(2), None, true).await;
+    run_hosting_case(HostingCase {
+        max_inputs: Some(2),
+        complete_feedback: true,
+        ..HostingCase::default()
+    })
+    .await;
 }
 
 #[tokio::test]
 async fn hosting_final_review_can_pass_after_all_inputs_are_used() {
-    run_hosting_case(Some(2), Some(3), true).await;
+    run_hosting_case(HostingCase {
+        max_inputs: Some(2),
+        finish_on_review: Some(3),
+        complete_feedback: true,
+        run_on_enable: Some(true),
+        ..HostingCase::default()
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn hosting_can_wait_for_a_new_completion_without_replaying_history() {
+    run_hosting_case(HostingCase {
+        run_on_enable: Some(false),
+        ..HostingCase::default()
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn hosting_recovers_initial_review_without_dispatching_it_again() {
+    run_hosting_case(HostingCase {
+        restart: true,
+        ..HostingCase::default()
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn hosting_recovers_waiting_without_starting_an_initial_review() {
+    run_hosting_case(HostingCase {
+        run_on_enable: Some(false),
+        restart: true,
+        ..HostingCase::default()
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn hosting_initial_review_failure_stops_without_feedback() {
+    run_hosting_case(HostingCase {
+        fail_review: true,
+        ..HostingCase::default()
+    })
+    .await;
 }
 
 #[tokio::test]
@@ -225,11 +282,26 @@ async fn review_environment_case(home_only: bool) {
     assert_eq!(manager.store.read_run_result(&run).unwrap(), expected);
 }
 
-async fn run_hosting_case(
+#[derive(Default)]
+struct HostingCase {
     max_inputs: Option<u32>,
     finish_on_review: Option<u32>,
     complete_feedback: bool,
-) {
+    run_on_enable: Option<bool>,
+    restart: bool,
+    fail_review: bool,
+}
+
+async fn run_hosting_case(case: HostingCase) {
+    let HostingCase {
+        max_inputs,
+        finish_on_review,
+        complete_feedback,
+        run_on_enable,
+        restart,
+        fail_review,
+    } = case;
+    let immediate = run_on_enable.unwrap_or(true);
     let directory = tempfile::tempdir().unwrap();
     let repo = directory.path().join("repo");
     std::fs::create_dir(&repo).unwrap();
@@ -284,13 +356,13 @@ async fn run_hosting_case(
         manager_command: "/usr/bin/true".into(),
         dispatch_command: "/usr/bin/true".into(),
     };
-    let app = crate::build_router(state.clone());
+    let mut app = crate::build_router(state.clone());
     let project = request(&app, "POST", "/api/aow/projects", json!({"path":repo})).await;
     let home = directory.path().join("codex-home");
     std::fs::create_dir_all(&home).unwrap();
     std::fs::write(
         home.join("test-config.json"),
-        json!({"finish_on_review": finish_on_review, "complete_feedback": complete_feedback})
+        json!({"finish_on_review": finish_on_review, "complete_feedback": complete_feedback, "fail_review": fail_review, "source_running": run_on_enable.is_none()})
             .to_string(),
     )
     .unwrap();
@@ -298,8 +370,8 @@ async fn run_hosting_case(
     std::fs::write(&script, AGENT).unwrap();
     request(&app, "POST", "/api/aow/agents", json!({"id":"codex","agent_type":"codex","display_name":"Codex fixture","command":"/usr/bin/python3","args":[script],"env":{"CODEX_HOME":home}})).await;
     let task = request(&app, "POST", "/api/aow/automations", json!({
-        "project_id":project["id"],"name":"Review","kind":"manual","prompt":"Review {{conclusion}} in {{workspace}}",
-        "prompt_bindings":[{"name":"conclusion","placeholder":"{{conclusion}}","start":7,"end":21},{"name":"workspace","placeholder":"{{workspace}}","start":25,"end":38}],
+        "project_id":project["id"],"name":"Review","kind":"manual","prompt":"Review {{conclusion}} in {{workspace}} session {{session_id}} turn {{turn_id}}",
+        "prompt_bindings":[{"name":"conclusion","placeholder":"{{conclusion}}","start":7,"end":21},{"name":"workspace","placeholder":"{{workspace}}","start":25,"end":38},{"name":"session_id","placeholder":"{{session_id}}","start":47,"end":61},{"name":"turn_id","placeholder":"{{turn_id}}","start":67,"end":78}],
         "agent":"codex","workspace_mode":"dynamic","workspace_path":"","base_branch":"","cron":"",
         "max_concurrent_runs":1,"enabled":true
     })).await;
@@ -331,14 +403,16 @@ async fn run_hosting_case(
     .await
     .unwrap();
     let endpoint = format!("/api/terminals/{tab_id}/panes/{pane_id}/hosting");
-    // Autopilot consumes the existing detector's native events even with all
-    // user-facing notifications disabled.
+    // With no future native completions, enable page notifications to catch any
+    // fabricated first-review event. Other cases verify hosting still consumes
+    // real completions when all user-facing notifications are disabled.
+    let notify_page = run_on_enable.is_none() && !complete_feedback;
     request(
         &app,
         "PUT",
         "/api/aow/notification-settings",
         json!({
-            "section":"notifications", "agent_task_completed":{"enabled":false,"channels":[]}
+            "section":"notifications", "agent_task_completed":{"enabled":notify_page,"channels":if notify_page { vec!["page"] } else { vec![] }}
         }),
     )
     .await;
@@ -364,15 +438,71 @@ async fn run_hosting_case(
     if let Some(limit) = max_inputs {
         body["max_inputs"] = json!(limit);
     }
-    let hosted = request(&app, "PUT", &endpoint, body).await;
-    assert_eq!(hosted["panes"][0]["hosting"]["phase"], "waiting");
+    if let Some(immediate) = run_on_enable {
+        body["run_on_enable"] = json!(immediate);
+    }
+    let task_id = task["id"].as_str().unwrap();
+    let store = state.automations.as_ref().unwrap().store.clone();
+    // Enable on a disposable runtime to simulate a real server restart: dropping
+    // it aborts the worker, while terminald and the persisted state survive.
+    let hosted = if restart {
+        let enable_app = app.clone();
+        let endpoint = endpoint.clone();
+        let tab_endpoint = format!("/api/terminals/{tab_id}");
+        let pending = store.root.join("pending").join(task_id);
+        let hosted = tokio::task::spawn_blocking(move || {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(async {
+                    request(&enable_app, "PUT", &endpoint, body).await;
+                    if immediate {
+                        tokio::time::timeout(Duration::from_secs(10), async {
+                            while !pending.exists()
+                                || std::fs::read_dir(&pending).unwrap().count() == 0
+                            {
+                                tokio::time::sleep(Duration::from_millis(50)).await;
+                            }
+                        })
+                        .await
+                        .unwrap();
+                    }
+                    request(&enable_app, "GET", &tab_endpoint, Value::Null).await
+                })
+        })
+        .await
+        .unwrap();
+        let mut restored = AppState::with_state_dir(
+            PathBuf::new(),
+            state_dir.clone(),
+            directory.path().join("terminald/terminal.sock"),
+        )
+        .unwrap();
+        restored.auth = crate::auth::AuthService::disabled();
+        restored.automations.as_mut().unwrap().scheduler =
+            state.automations.as_ref().unwrap().scheduler.clone();
+        state = restored;
+        page_notifications = state.terminals.subscribe_task_stops();
+        state.start_agent_notifications();
+        crate::terminal::hosting::recover(state.clone());
+        app = crate::build_router(state.clone());
+        hosted
+    } else {
+        request(&app, "PUT", &endpoint, body).await
+    };
+    assert!(matches!(
+        hosted["panes"][0]["hosting"]["phase"].as_str(),
+        Some("waiting" | "reviewing")
+    ));
     assert_eq!(hosted["panes"][0]["hosting"]["input_count"], 0);
     assert_eq!(
         hosted["panes"][0]["hosting"]["max_inputs"],
         max_inputs.unwrap_or(3)
     );
-    // The source already wrote a completed turn before enabling. Neither the
-    // worker nor the shared notification reader may replay that history.
+    // Omitted run_on_enable leaves the source task running. Explicit options
+    // have an old completion: neither the worker nor the shared notification
+    // reader may replay it or use its values for the initial review.
     tokio::time::sleep(Duration::from_millis(3300)).await;
     let waiting = request(
         &app,
@@ -381,11 +511,22 @@ async fn run_hosting_case(
         Value::Null,
     )
     .await;
-    assert_eq!(waiting["panes"][0]["hosting"]["phase"], "waiting");
-    assert!(waiting["panes"][0]["hosting"]["run_id"].is_null());
+    let initial = &waiting["panes"][0]["hosting"];
+    assert_eq!(
+        initial["phase"],
+        if immediate { "reviewing" } else { "waiting" }
+    );
+    assert_eq!(initial["run_id"].is_string(), immediate);
+    assert!(initial["source_turn_id"].is_null());
+    assert_eq!(initial["input_count"], 0);
+    if restart {
+        assert_eq!(*initial, hosted["panes"][0]["hosting"]);
+    }
     assert!(!home.join("review-count").exists());
-    // A new completion after enable is the only trigger for the first review.
-    {
+    // Explicit false needs a new completion; explicit true receives the same
+    // event during its initial review and must not dispatch a second run.
+    // Omitted run_on_enable completes the first review with no new event at all.
+    if run_on_enable.is_some() {
         use std::io::Write;
         let mut transcript = std::fs::OpenOptions::new()
             .append(true)
@@ -394,6 +535,7 @@ async fn run_hosting_case(
         for payload in [
             json!({"type":"task_started","turn_id":"after-enable"}),
             json!({"type":"user_message","message":"Implement the next change"}),
+            json!({"type":"task_complete","turn_id":"after-enable","last_agent_message":"Implementation finished"}),
             json!({"type":"task_complete","turn_id":"after-enable","last_agent_message":"Implementation finished"}),
         ] {
             writeln!(
@@ -404,8 +546,19 @@ async fn run_hosting_case(
             .unwrap();
         }
     }
-    let task_id = task["id"].as_str().unwrap();
-    let store = state.automations.as_ref().unwrap().store.clone();
+    // Let the shared detector deliver concurrent/duplicate events before the
+    // first review completes, exercising the worker's Reviewing guard.
+    if run_on_enable == Some(true) {
+        tokio::time::sleep(Duration::from_millis(3300)).await;
+        let current = request(
+            &app,
+            "GET",
+            &format!("/api/terminals/{tab_id}"),
+            Value::Null,
+        )
+        .await;
+        assert_eq!(current["panes"][0]["hosting"], *initial);
+    }
     let received = home.join("received.jsonl");
     let mut runs = Vec::new();
     let final_hosting = tokio::time::timeout(Duration::from_secs(45), async {
@@ -418,6 +571,9 @@ async fn run_hosting_case(
             )
             .await;
             let hosting = &current["panes"][0]["hosting"];
+            if fail_review && hosting["phase"] == "failed" {
+                break hosting.clone();
+            }
             assert!(hosting["error"].is_null(), "{hosting}");
             assert!(hosting["input_count"].as_u64().unwrap() <= u64::from(max_inputs.unwrap_or(3)));
             if hosting["phase"] == "completed"
@@ -433,10 +589,38 @@ async fn run_hosting_case(
                     .join(task_id)
                     .join(format!("{run_id}.json"));
                 if !runs.iter().any(|id| id == run_id) && pending.exists() {
+                    assert_eq!(
+                        std::fs::read_dir(pending.parent().unwrap())
+                            .unwrap()
+                            .count(),
+                        1
+                    );
                     let request: Value =
                         serde_json::from_slice(&std::fs::read(&pending).unwrap()).unwrap();
                     assert_eq!(request["hosted"], true);
                     assert!(request.get("hosting_context").is_none());
+                    if runs.is_empty() {
+                        assert_eq!(request["variables"]["session_id"], "source-session");
+                        assert_eq!(
+                            request["variables"]["turn_id"],
+                            if immediate {
+                                "（无）"
+                            } else {
+                                "after-enable"
+                            }
+                        );
+                        assert_eq!(
+                            request["variables"]["conclusion"],
+                            if immediate {
+                                "（无）"
+                            } else {
+                                "Implementation finished"
+                            }
+                        );
+                        if immediate {
+                            assert_eq!(initial["run_id"], run_id);
+                        }
+                    }
                     runs.push(run_id.to_owned());
                     assert_eq!(
                         aow_automations::runner::run(
@@ -447,11 +631,24 @@ async fn run_hosting_case(
                         )
                         .await
                         .unwrap(),
-                        aow_automations::RunStatus::Completed
+                        if fail_review {
+                            aow_automations::RunStatus::Failed
+                        } else {
+                            aow_automations::RunStatus::Completed
+                        }
                     );
                     if runs.len() == 1 {
                         let prompt = std::fs::read_to_string(home.join("review-prompt")).unwrap();
-                        assert!(prompt.contains("Review Implementation finished in "));
+                        assert!(prompt.contains(if immediate {
+                            "Review （无） in "
+                        } else {
+                            "Review Implementation finished in "
+                        }));
+                        assert!(prompt.contains(if immediate {
+                            "session source-session turn （无）"
+                        } else {
+                            "session source-session turn after-enable"
+                        }));
                     }
                 }
             }
@@ -460,6 +657,16 @@ async fn run_hosting_case(
     })
     .await
     .unwrap();
+    if fail_review {
+        assert_eq!(final_hosting["input_count"], 0);
+        assert!(final_hosting["error"].is_string());
+        assert!(!received.exists());
+        assert_eq!(runs.len(), 1);
+        assert_eq!(store.runs(task_id, None, 10).unwrap().len(), 1);
+        drop(_guard);
+        daemon.await.unwrap().unwrap();
+        return;
+    }
     let expected_inputs = if complete_feedback {
         finish_on_review
             .map(|count| count - 1)
@@ -559,6 +766,12 @@ async fn run_hosting_case(
         } else {
             1
         }
+    );
+    assert_eq!(
+        std::fs::read_dir(store.root.join("pending").join(task_id))
+            .unwrap()
+            .count(),
+        0
     );
     drop(_guard);
     daemon.await.unwrap().unwrap();

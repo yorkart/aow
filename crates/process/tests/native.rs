@@ -29,6 +29,31 @@ fn wait_for(mut condition: impl FnMut() -> bool) {
 }
 
 #[test]
+fn open_file_snapshot_tracks_writers_and_close_without_taking_locks() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().canonicalize().unwrap().join("thread.lock");
+    let writer = std::fs::File::create(&path).unwrap();
+    writer.try_lock().unwrap();
+    let reader = std::fs::File::open(&path).unwrap();
+    let pid = std::process::id() as i32;
+    let process = info(pid).unwrap();
+    let files = aow_process::open_files(pid, &process.start_time).unwrap();
+    assert!(files.iter().any(|file| file.path == path && file.writable));
+    assert!(files.iter().any(|file| file.path == path && !file.writable));
+    assert!(
+        reader.try_lock().is_err(),
+        "inspection must not release the writer's lock"
+    );
+    drop(writer);
+    let files = aow_process::open_files(pid, &process.start_time).unwrap();
+    assert!(!files.iter().any(|file| file.path == path && file.writable));
+    drop(reader);
+    let files = aow_process::open_files(pid, &process.start_time).unwrap();
+    assert!(!files.iter().any(|file| file.path == path));
+    assert!(aow_process::open_files(pid, "stale process").is_err());
+}
+
+#[test]
 fn inspects_native_pty_identity_arguments_environment_and_changing_cwd() {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path().canonicalize().unwrap();
