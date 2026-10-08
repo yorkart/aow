@@ -463,7 +463,7 @@ try {
     assert.equal(await page.getByRole('dialog', { name: '创建 Worktree 进度', exact: true }).count(), 0);
   });
 
-  await test('project avatars load independently, directly reference the image and recover from broken or unsupported providers', async t => {
+  await test('sidebar projects use folders while worktrees inherit avatars and recover from broken or unsupported providers', async t => {
     let releaseAvatar;
     const gate = new Promise(resolve => { releaseAvatar = resolve; });
     t.after(() => releaseAvatar());
@@ -477,16 +477,24 @@ try {
       });
     } });
     const header = page.locator('.project-aow-project-row').first();
-    assert.equal(await header.locator('svg.project-icon').isVisible(), true, 'project and terminals render while avatar metadata is pending');
+    const row = page.locator(`.project-aow-worktrees button[title="${worktrees[0].path}"]`);
+    assert.equal(await header.locator('svg.lucide-folder').isVisible(), true);
+    assert.equal(await row.locator('svg.lucide-folder-git2').isVisible(), true, 'worktrees and terminals render while avatar metadata is pending');
     releaseAvatar();
-    const avatar = header.locator('img.project-icon');
+    const avatar = row.locator('img.project-icon');
     await avatar.waitFor();
     await eventually(() => avatar.evaluate(image => image.complete && image.naturalWidth > 0));
     assert.equal(await avatar.getAttribute('src'), state.avatarUrl);
     assert.equal(await avatar.getAttribute('referrerpolicy'), 'no-referrer');
     assert.equal(imageRequests[0].resourceType(), 'image');
     assert.equal(imageRequests[0].headers().referer, undefined);
-    assert.deepEqual(await avatar.evaluate(image => [image.clientWidth, image.clientHeight]), [14, 14]);
+    assert.deepEqual(await avatar.evaluate(image => [image.clientWidth, image.clientHeight]), [15, 15]);
+    assert.equal(await header.locator('img').count(), 0, 'project headers keep their folder icon');
+    await row.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Pin to top', exact: true }).click();
+    const pinnedAvatar = page.locator('.project-aow-pinned img.project-icon');
+    await pinnedAvatar.waitFor();
+    assert.equal(await pinnedAvatar.getAttribute('src'), state.avatarUrl);
     if (process.env.AOW_PROJECT_ICON_SCREENSHOT) await page.screenshot({ path: process.env.AOW_PROJECT_ICON_SCREENSHOT });
 
     state.projects = state.projects.map(project => ({ ...project, avatar_url: state.avatarUrl }));
@@ -498,14 +506,14 @@ try {
     state.avatarUrl = 'https://avatars.example.com/broken.svg';
     await page.evaluate(() => window.dispatchEvent(new Event('aow-review-providers-changed')));
     await eventually(() => Promise.resolve(imageRequests.some(request => request.url().includes('broken'))));
-    await header.locator('svg.project-icon').waitFor();
+    await row.locator('svg.lucide-folder-git2').waitFor();
     assert.equal(await avatar.count(), 0, 'a broken image returns to the folder icon');
 
     state.avatarUrl = null;
     const refreshed = page.waitForResponse(response => response.url().endsWith('/projects/project/avatar'));
     await page.evaluate(() => window.dispatchEvent(new Event('aow-review-providers-changed')));
     await refreshed;
-    await header.locator('svg.project-icon').waitFor();
+    await row.locator('svg.lucide-folder-git2').waitFor();
     assert.deepEqual(state.errors, []);
   });
 
@@ -980,10 +988,15 @@ try {
     await eventually(async () => await isCompact(1) && await isCompact(3));
     assert.deepEqual(await order(), [paths[0], paths[2], paths[4], paths[1], paths[3]]);
     assert.equal(await row(1).textContent(), 'branch-1');
-    assert.equal(await row(1).locator('svg, strong, small').count(), 0);
-    assert.equal(await row(1).evaluate(element => element.getBoundingClientRect().height), 27);
+    assert.equal(await row(1).locator('strong, small').count(), 0);
+    assert.equal(await row(1).locator('svg.lucide-cat').count(), 1);
+    const heights = await list.locator(':scope > button').evaluateAll(rows => rows.map(row => row.getBoundingClientRect().height));
+    assert.ok(heights.every(height => height < 43), 'worktrees no longer reserve oversized rows');
+    assert.ok((await row(1).boundingBox()).height < 27, 'empty worktrees shrink to one line');
+    assert.ok((await row(1).boundingBox()).height < (await row(2).boundingBox()).height, 'resource rows retain their metadata hierarchy');
+    assert.ok((await list.boundingBox()).height <= heights.reduce((sum, height) => sum + height, 0) + 4, 'the worktree list follows its content without blank filler');
     assert.equal(await row(1).locator('.project-aow-worktree-branch').evaluate(element => getComputedStyle(element).fontWeight), '400');
-    assert.equal(await row(1).locator('.project-aow-worktree-dot').evaluate(element => getComputedStyle(element, '::before').backgroundColor), 'rgb(104, 118, 139)');
+    assert.equal(await row(1).locator('svg').evaluate(element => getComputedStyle(element).color), 'rgb(168, 85, 247)');
     assert.equal(await page.locator('.project-aow-surface').count(), 1, 'inventory must not mount unopened workspaces');
     assert.ok(state.terminalSockets.every(socket => socket.url().includes('/terminals/wt-0-tab/')), 'inventory must not attach to unopened terminals');
 
@@ -1192,7 +1205,7 @@ try {
     const pinned = page.locator(`.project-aow-pinned button[title="${worktrees[0].path}"]`);
     const menu = page.getByRole('menu', { name: `${worktrees[0].path} 操作`, exact: true });
     const openMenu = (target = row) => target.click({ button: 'right' });
-    await row.locator('svg.lucide-git-branch').waitFor();
+    await row.locator('svg.lucide-folder-git2').waitFor();
     await row.click({ button: 'right' });
     await menu.getByRole('menuitemradio', { name: '紫色', exact: true }).click();
     await eventually(() => row.locator('svg').evaluate(svg => getComputedStyle(svg).color === 'rgb(168, 85, 247)'));
@@ -1233,9 +1246,9 @@ try {
     assert.equal(await pinned.locator('svg').evaluate(svg => getComputedStyle(svg).color), 'rgb(34, 197, 94)');
     await openMenu();
     await menu.getByRole('menuitemradio', { name: '默认图标', exact: true }).click();
-    await pinned.locator('svg.lucide-git-branch').waitFor();
+    await pinned.locator('svg.lucide-folder-git2').waitFor();
     assert.equal(await row.locator('svg').evaluate(svg => getComputedStyle(svg).color), 'rgb(34, 197, 94)');
-    assert.equal(await page.locator(`.project-aow-worktrees button[title="${worktrees[1].path}"] svg`).getAttribute('class'), 'lucide lucide-git-branch');
+    assert.equal(await page.locator(`.project-aow-worktrees button[title="${worktrees[1].path}"] svg.lucide-folder-git2`).count(), 1);
     assert.deepEqual(state.appearanceWrites, [
       { path: worktrees[0].path, color: 'purple' }, { path: worktrees[0].path, icon: 'cat' },
       { path: worktrees[0].path, color: 'green' }, { path: worktrees[0].path, icon: 'pear' }, { path: worktrees[0].path, icon: 'default' },

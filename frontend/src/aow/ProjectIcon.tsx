@@ -12,7 +12,7 @@ function imageUrl(value: string | null | undefined) {
   } catch { return undefined; }
 }
 
-export function ProjectIcon({ project, size = 14 }: { project: AowProject; size?: number }) {
+export function ProjectIcon({ project, size = 14, color }: { project: AowProject; size?: number; color?: string }) {
   const [revision, setRevision] = useState(0);
   const [resolved, setResolved] = useState<{ key: string; url: string | null }>();
   const [failed, setFailed] = useState<string>();
@@ -35,7 +35,7 @@ export function ProjectIcon({ project, size = 14 }: { project: AowProject; size?
   }, [key, project.id, project.builtin]);
   const url = project.builtin ? undefined : imageUrl(resolved?.key === key ? resolved.url : project.avatar_url);
   const imageKey = `${key}:${url}`;
-  const style = { width: size, height: size, flexBasis: size };
+  const style = { width: size, height: size, flexBasis: size, color };
   return url && failed !== imageKey
     ? <img key={imageKey} className="project-icon" src={url} alt="" aria-hidden="true" draggable={false}
       referrerPolicy="no-referrer" decoding="async" style={style} onError={() => setFailed(imageKey)} />
