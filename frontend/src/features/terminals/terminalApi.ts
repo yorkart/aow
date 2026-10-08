@@ -82,6 +82,7 @@ function normalizePane(value: unknown): TerminalPane | null {
   const hosting = asRecord(item.hosting);
   return {
     id: item.id,
+    ...(typeof item.parent_pane_id === 'string' ? { parent_pane_id: item.parent_pane_id } : {}),
     // Pane names are generated; ignore legacy custom names from stored metadata
     // and older servers, including when no OSC title is available.
     name: defaultTerminalPaneName({ cwd, shell }),

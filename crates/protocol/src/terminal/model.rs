@@ -55,6 +55,9 @@ pub enum TerminalLayout {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TerminalPane {
     pub id: String,
+    /// Pane that created this agent. Retained even after the parent is removed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_pane_id: Option<String>,
     #[serde(default)]
     pub name: String,
     pub cwd: String,

@@ -173,6 +173,7 @@ impl Fixture {
         AgentTerminalCreate {
             agent: "codex".into(),
             project_id: self.project_id.clone(),
+            parent_pane_id: None,
             cwd: self.repo.to_string_lossy().into_owned(),
             task: None,
             timeout_seconds: 8,
@@ -494,6 +495,104 @@ async fn control(
     })
     .await
     .unwrap()
+}
+
+#[tokio::test]
+async fn agent_parentage_is_validated_returned_and_survives_parent_removal() {
+    let fixture = Fixture::with_storage("ready", true).await;
+    let manager = &fixture.state.terminals;
+    let parent = manager
+        .create(
+            serde_json::from_value(json!({
+                "cwd": fixture.repo, "workspace_root": fixture.repo, "shell": "/bin/sh",
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let mut request = fixture.request();
+    request.parent_pane_id = Some("missing-pane".into());
+    let error = fixture
+        .client
+        .post_json::<_, AgentTerminalInfo>("/v1/agents", &request)
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        TerminaldClientError::HttpStatus {
+            status: StatusCode::NOT_FOUND,
+            ..
+        }
+    ));
+    assert_eq!(manager.list_snapshot(None).unwrap().tabs.len(), 1);
+
+    request.parent_pane_id = Some(parent.panes[0].id.clone());
+    let child: AgentTerminalInfo = fixture
+        .client
+        .post_json("/v1/agents", &request)
+        .await
+        .unwrap();
+    assert_eq!(child.parent_pane_id, request.parent_pane_id);
+    request.parent_pane_id = Some(child.pane_id.clone());
+    let grandchild: AgentTerminalInfo = fixture
+        .client
+        .post_json("/v1/agents", &request)
+        .await
+        .unwrap();
+    assert_eq!(
+        grandchild.parent_pane_id.as_deref(),
+        Some(child.pane_id.as_str())
+    );
+    assert_eq!(
+        manager.get_snapshot(&child.tab_id).unwrap().panes[0].parent_pane_id,
+        child.parent_pane_id
+    );
+
+    let app = crate::build_router(fixture.state.clone());
+    let response = app
+        .oneshot(
+            Request::delete(format!("/api/terminals/{}", parent.id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert!(response.status().is_success());
+    let loaded: AgentTerminalInfo = fixture
+        .client
+        .get_json(&format!("/v1/agents/{}", child.pane_id))
+        .await
+        .unwrap();
+    assert_eq!(loaded.parent_pane_id, child.parent_pane_id);
+    let listed: Value = fixture.client.get_json("/v1/agents").await.unwrap();
+    assert_eq!(listed["items"].as_array().unwrap().len(), 2);
+    assert!(
+        listed["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["pane_id"] == grandchild.pane_id
+                && item["parent_pane_id"] == child.pane_id)
+    );
+
+    let path = manager.inner.metadata_path.as_ref().unwrap();
+    let reloaded = TerminalManager::persistent(
+        path.parent().unwrap().to_path_buf(),
+        manager.inner.terminald.clone(),
+    )
+    .unwrap();
+    assert_eq!(
+        reloaded.cli_agent(&child.pane_id).unwrap().parent_pane_id,
+        child.parent_pane_id
+    );
+    assert_eq!(
+        reloaded
+            .cli_agent(&grandchild.pane_id)
+            .unwrap()
+            .parent_pane_id,
+        grandchild.parent_pane_id
+    );
+    fixture.stop().await;
 }
 
 #[tokio::test]
@@ -1247,6 +1346,7 @@ async fn native_startup_probes() {
                     error: None,
                     task_submitted: false,
                 }),
+                None,
             )
             .await
             .unwrap();

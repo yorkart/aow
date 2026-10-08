@@ -1950,15 +1950,16 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
         <AgentSessions key={`sessions:${worktree.path}`} worktreePath={sessionRoot} agents={agents} activeSessionId={activeSessionId} visible={active && rightSidebarVisible && rightView === 'sessions'} onOpen={openSession} onResume={(session, agent) => void createTerminal(agent, session, sessionRoot)} />
       </div>
       <div className="project-aow-right-content" hidden={rightView !== 'terminals'}>
-        <TerminalPanel tabs={panelTerminals} activeId={activeTerminalId} activeWorktreePath={worktree.path}
-          detectedAgents={showAllTerminals ? { ...projectTerminals.agents, ...terminals.detectedAgents } : terminals.detectedAgents}
-          titles={showAllTerminals ? { ...projectTerminals.titles, ...terminals.terminalTitles } : terminals.terminalTitles}
+        <TerminalPanel tabs={panelTerminals} descendantTabs={[...localPanelTerminals, ...projectTerminals.tabs.filter(tab => tab.workspace_root !== worktree.path)]}
+          activeId={activeTerminalId} activeWorktreePath={worktree.path}
+          detectedAgents={{ ...projectTerminals.agents, ...terminals.detectedAgents }}
+          titles={{ ...projectTerminals.titles, ...terminals.terminalTitles }}
           worktrees={canShowAllTerminals ? project.worktrees : undefined} showAll={canShowAllTerminals ? terminalScopes : undefined}
           onShowAllChange={setScope}
           sortBy={terminalSorts} onSortChange={setSort}
           loading={showAllTerminals && projectTerminals.loading} error={showAllTerminals ? projectTerminals.error : undefined}
           openedIds={new Set([...openedTerminals.map(tab => tab.id), ...hostedTabs.map(tab => tab.targetId)])}
-          onReload={() => { void terminals.reload(); if (showAllTerminals) projectTerminals.reload(); }}
+          onReload={() => { void terminals.reload(); projectTerminals.reload(); }}
           onRebuild={async id => {
             const tab = await terminalApi.rebuild(id);
             terminals.replace(tab);

@@ -193,6 +193,7 @@ body { position:fixed; inset:0; }
 .mobile-terminal-catalog .aow-panel-header-actions>button>svg { width:17px; height:17px; }
 .mobile-terminal-catalog .aow-panel-header-actions>.terminal-scope-active { color:var(--m-accent); }
 .mobile-terminal-catalog .terminal-worktree-heading { min-height:40px; padding:8px 12px; color:var(--m-muted); }
+.mobile-terminal-catalog .terminal-worktree-heading>svg { left:-8px; }
 .mobile-terminal-catalog .terminal-worktree-heading>span { font-size:12px; }
 .mobile-terminal-catalog .terminal-panel-count { font-size:11px; }
 .mobile-terminal-catalog .terminal-panel-row { border-bottom:1px solid #ffffff06; }

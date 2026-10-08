@@ -20,6 +20,7 @@
     "test:terminal-sessions": "node --test tests/terminal-session.test.mjs",
     "test:terminal-hosting": "node --test tests/terminal-hosting.test.mjs",
     "test:terminal-input": "node --test tests/terminal-input.test.mjs",
+    "test:terminal-hierarchy": "node --test tests/terminal-hierarchy.test.mjs",
     "test:notifications": "node --test tests/agent-notifications.test.mjs",
     "test:manual-tasks": "node --test tests/manual-tasks.test.mjs",
     "test:automation-notifications": "node --test tests/automation-notifications.test.mjs",

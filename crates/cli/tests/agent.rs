@@ -4,6 +4,44 @@ use serde_json::{Value, json};
 use std::process::Command;
 use support::run;
 
+#[test]
+fn create_records_explicit_or_inherited_parent_and_returns_it() {
+    for (inherited, explicit, expected) in [
+        (None, None, None),
+        (Some("parent-one"), None, Some("parent-one")),
+        (None, Some("parent-two"), Some("parent-two")),
+        (Some("parent-one"), Some("parent-two"), Some("parent-two")),
+    ] {
+        let mut args = vec![
+            "agent",
+            "create",
+            "--project-id",
+            "project-one",
+            "--cwd",
+            "/repo",
+        ];
+        if let Some(parent) = explicit {
+            args.extend(["--parent-pane-id", parent]);
+        }
+        let environment: Vec<_> = inherited
+            .map(|parent| ("AOW_PANE_ID", parent))
+            .into_iter()
+            .collect();
+        let mut reply = info("ready");
+        if let Some(parent) = expected {
+            reply["parent_pane_id"] = json!(parent);
+        }
+        let (output, _, body) =
+            support::run_with_env(&args, None, 200, reply.clone(), &environment);
+        assert!(output.status.success(), "{output:?}");
+        assert_eq!(body["parent_pane_id"], json!(expected));
+        assert_eq!(
+            serde_json::from_slice::<Value>(&output.stdout).unwrap(),
+            reply
+        );
+    }
+}
+
 fn info(phase: &str) -> Value {
     json!({"pane_id":"pane-one", "tab_id":"tab-one", "cwd":"/repo", "agent":"codex",
         "status":"running", "phase":phase, "task_submitted":false,

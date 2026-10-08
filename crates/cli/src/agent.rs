@@ -19,6 +19,9 @@ The caller must prepare the worktree before creating an agent. --project-id and
 --cwd are required; the existing worktree root must belong to that registered project.
 No worktrees or branches are created, switched, or reset. Worktrees and sessions
 remain after tasks finish. Output includes pane_id, tab_id and phase.
+Parentage is recorded from --parent-pane-id, or AOW_PANE_ID inside an AoW terminal.
+Without either, the new agent has no parent. create/get/list include parent_pane_id
+when present. Terminals opened before this support need an explicit --parent-pane-id.
 CLI-created tabs use automatic titles and cannot be renamed.
 create waits until the agent's terminal UI is ready for input, not task completion.
 Commands address the pane; users may change the session inside it at any time.
@@ -51,6 +54,9 @@ enum AgentCommand {
         /// Registered project that owns the worktree.
         #[arg(long, value_parser = crate::parse_id)]
         project_id: String,
+        /// Creating pane; defaults to AOW_PANE_ID inside an AoW terminal.
+        #[arg(long, value_parser = crate::parse_id)]
+        parent_pane_id: Option<String>,
         /// Existing worktree root belonging to --project-id.
         #[arg(long)]
         cwd: PathBuf,
@@ -139,9 +145,13 @@ pub fn execute(args: AgentArgs, state_dir: PathBuf) -> Result<Value> {
         let timeout = match &args.command { AgentCommand::Create { timeout, .. } => *timeout + 20, _ => 20 };
         tokio::time::timeout(Duration::from_secs(timeout), async {
             match args.command {
-                AgentCommand::Create { agent, project_id, cwd, timeout, task } => {
+                AgentCommand::Create { agent, project_id, parent_pane_id, cwd, timeout, task } => {
+                    let parent_pane_id = parent_pane_id.or_else(|| std::env::var("AOW_PANE_ID").ok())
+                        .map(|id| crate::parse_id(&id).map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, format!("invalid parent pane ID: {error}"))))
+                        .transpose()?;
                     let request = AgentTerminalCreate {
                         agent, project_id, cwd: absolute(cwd).to_string_lossy().into_owned(),
+                        parent_pane_id,
                         timeout_seconds: timeout, task: task.read()?,
                     };
                     let info: AgentTerminalInfo = client.post_json("/v1/agents", &request).await?;

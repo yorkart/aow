@@ -113,6 +113,19 @@ try {
   }
   async function update(page, patch) { await page.evaluate(patch => window.terminalSessionPreview.update(patch), patch); }
 
+  await test('opening a descendant selects its pane even when a different split is maximized', async t => {
+    const { page, inputs } = await open(t);
+    const panes = page.locator('.terminal-pane');
+    await panes.first().getByRole('button', { name: '最大化 shell 窗口', exact: true }).click();
+    await page.evaluate(async () => {
+      const { requestTerminalPaneSelection } = await import('/src/features/terminals/terminalViewState.ts');
+      requestTerminalPaneSelection('tab', 'two');
+    });
+    await page.waitForFunction(() => document.querySelectorAll('.terminal-pane')[1]?.matches('.active.maximized'));
+    assert.equal(await panes.first().getAttribute('aria-hidden'), 'true');
+    assert.deepEqual(inputs, []);
+  });
+
   await test('Conversation opens the matching session when only the project suffix is truncated', async t => {
     const projectCwd = '/workspace/aow-autopilot-run-on-enable';
     const title = '实现 AoW Autopilot 开启托管即执行一次';

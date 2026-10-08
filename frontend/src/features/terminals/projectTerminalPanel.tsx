@@ -35,7 +35,7 @@ export function ProjectTerminalPanelProvider({ project, children }: { project: A
     setSubscribers(count => count + 1);
     return () => setSubscribers(count => count - 1);
   }, []);
-  const inventory = useProjectTerminals(project.worktrees, !project.builtin && subscribers > 0 && (scopes.user || scopes.cli));
+  const inventory = useProjectTerminals(project.worktrees, !project.builtin && subscribers > 0);
   useEffect(() => persist(scopeKey, scopes), [scopeKey, scopes]);
   useEffect(() => persist(sortKey, sorts), [sortKey, sorts]);
   return <ProjectTerminalPanelContext.Provider value={{ inventory, scopes, sorts, subscribe,

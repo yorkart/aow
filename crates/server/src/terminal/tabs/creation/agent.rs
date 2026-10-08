@@ -6,7 +6,8 @@ impl TerminalManager {
         request: CreateTerminalRequest,
         launch: AgentLaunch,
     ) -> Result<TerminalTab, TerminalError> {
-        self.create_agent_with_state(request, launch, None).await
+        self.create_agent_with_state(request, launch, None, None)
+            .await
     }
 
     pub(in crate::terminal) async fn create_agent_with_state(
@@ -14,6 +15,7 @@ impl TerminalManager {
         request: CreateTerminalRequest,
         mut launch: AgentLaunch,
         agent_terminal: Option<aow_protocol::AgentTerminalState>,
+        parent_pane_id: Option<String>,
     ) -> Result<TerminalTab, TerminalError> {
         self.ensure_creation_available(&request)?;
         if let Some(session_id) = request.resume_session_id.as_deref() {
@@ -23,6 +25,17 @@ impl TerminalManager {
         }
         self.reconcile().await?;
         let _operation = self.inner.operation.lock().await;
+        if let Some(parent) = &parent_pane_id {
+            let state = self.lock_state()?;
+            if !state
+                .tabs
+                .iter()
+                .flat_map(|tab| &tab.panes)
+                .any(|pane| &pane.id == parent)
+            {
+                return Err(TerminalError::PaneNotFound(parent.clone()));
+            }
+        }
         if request.shell.is_some() {
             return Err(TerminalError::Invalid(
                 "shell cannot be combined with agent_id".to_owned(),
@@ -58,6 +71,7 @@ impl TerminalManager {
         let now = timestamp();
         let pane = TerminalPane {
             id: pane_id.clone(),
+            parent_pane_id,
             name: launch.display_name.clone(),
             cwd,
             shell: launch.executable,

@@ -9,6 +9,7 @@ import { AgentIcon } from '../agents/AgentIcon';
 import { terminalPaneAgent, terminalPaneTitle } from './terminalPresentation';
 import { terminalPaneLifecycle } from './terminalState';
 import { TerminalLifecycleDot } from './TerminalLifecycleDot';
+import { useTerminalPaneSelection } from './terminalViewState';
 import { useConfirmation } from '../../components/ConfirmationDialog';
 
 interface Props {
@@ -177,6 +178,8 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
   layoutRef.current = layout;
   tabRef.current = tab;
   const maximizedPaneId = tab ? maximizedPaneIds[tab.id] : undefined;
+  const selection = useTerminalPaneSelection();
+  const appliedSelection = useRef<typeof selection>(undefined);
 
   const setMaximizedPaneId = (
     tabId: string,
@@ -208,6 +211,14 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
     setPaneDropTarget(undefined);
     setError('');
   }, [tab?.id, tab?.layout, tab?.revision]);
+
+  useEffect(() => {
+    if (!visible || !selection || appliedSelection.current === selection || tab?.id !== selection.tabId
+      || !tab.panes.some(pane => pane.id === selection.paneId)) return;
+    appliedSelection.current = selection;
+    setActivePaneId(selection.paneId);
+    if (maximizedPaneId) setMaximizedPaneId(tab.id, selection.paneId);
+  }, [visible, selection, tab, maximizedPaneId]);
 
   useEffect(() => {
     saveEpochRef.current += 1;
