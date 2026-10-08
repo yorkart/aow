@@ -20,7 +20,7 @@ const terminalGroups = [
   { id: 'cli', cli: true, title: 'CLI Terminals', icon: SquareTerminal, tooltip: <><code>aow-cli agent</code> 创建</> },
 ] as const;
 
-type TerminalGroup = typeof terminalGroups[number]['id'];
+export type TerminalGroup = typeof terminalGroups[number]['id'];
 const terminalDisplayIcons = { shown: Eye, hidden: EyeOff };
 const terminalControlIcons = { observing: Glasses, controlled: ShieldCheck, disconnected: Unplug };
 
@@ -35,7 +35,7 @@ function terminalCreatedAt(tab: TerminalTab) {
 }
 
 export function TerminalPanel({ tabs, detectedAgents, titles, openedIds, activeId, onOpen, onOpenFloating, onTerminate, onRebuild, onReload,
-  worktrees, showAll = { user: false, cli: false }, onShowAllChange,
+  worktrees, activeWorktreePath, showAll = { user: false, cli: false }, onShowAllChange,
   sortBy = { user: 'branch', cli: 'branch' }, onSortChange, loading = false, error, menuContainer }: {
   tabs: TerminalTab[];
   detectedAgents: Record<string, string | null>;
@@ -48,6 +48,7 @@ export function TerminalPanel({ tabs, detectedAgents, titles, openedIds, activeI
   onRebuild: (id: string) => Promise<void>;
   onReload: () => void;
   worktrees?: AowWorktree[];
+  activeWorktreePath?: string;
   showAll?: Record<TerminalGroup, boolean>;
   onShowAllChange?: (group: TerminalGroup, showAll: boolean) => void;
   sortBy?: Record<TerminalGroup, TerminalSort>;
@@ -154,8 +155,10 @@ export function TerminalPanel({ tabs, detectedAgents, titles, openedIds, activeI
                 const collapsed = collapsedWorktrees[key] ?? false;
                 const groupId = `${bodyId}-worktree-${index}`;
                 const name = worktreeName(worktree);
-                return <section className="terminal-worktree-group" key={sectionKey} aria-label={worktree.path}>
+                const active = worktree.path === activeWorktreePath;
+                return <section className={`terminal-worktree-group${active ? ' active' : ''}`} key={sectionKey} aria-label={worktree.path}>
                   <button className="terminal-worktree-heading" title={`${worktree.path}${worktree.branch ? `\n${worktree.branch}` : ''}`}
+                    aria-current={active ? 'true' : undefined}
                     aria-expanded={!collapsed} aria-controls={groupId}
                     onClick={() => setCollapsedWorktrees(groups => ({ ...groups, [key]: !groups[key] }))}>
                     <ChevronRight className={collapsed ? undefined : 'expanded'} />

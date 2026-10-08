@@ -7,6 +7,7 @@
 .terminal-panel-empty { margin: 0; padding: 10px; color: var(--muted); font-size: 12px; }
 .terminal-panel-error { margin: 0; padding: 8px; color: var(--aow-error); font-size: 12px; }
 .terminal-panel-count { flex: none; margin-left: auto; padding: 0 5px; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.terminal-worktree-group.active { background: var(--aow-sidebar-selection); }
 .terminal-worktree-heading { display: flex; align-items: center; gap: 4px; width: 100%; min-height: 27px; padding: 4px 8px; color: var(--aow-text); text-align: left; cursor: pointer; }
 .terminal-worktree-heading:hover { color: var(--aow-text-hover); background: var(--hover); }
 .terminal-worktree-heading:focus-visible { outline: 1px solid var(--aow-accent); outline-offset: -1px; }
