@@ -12,7 +12,7 @@ import { prTabId } from './tabRoutes/pr';
 import { FloatingWorkspaceProvider, FloatingOpenMenu, useFloatingWorkspace, openingInFloatingWorkspace, withFloatingOpen, readStored, persist } from './floatingWorkspaceState';
 import type { SetStateAction, CSSProperties, DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from 'react';
 import {
-  ArrowUp, CalendarClock, Check, ChevronRight, CircleHelp, CornerDownLeft, FileText, Files, FolderGit2, FolderOpen, GitBranch, GitBranchPlus, GitPullRequest, MessageSquare, MoreHorizontal,
+  ArrowUp, CalendarClock, Check, ChevronRight, CircleHelp, CornerDownLeft, FileText, Files, Folder, FolderGit2, FolderOpen, GitBranch, GitBranchPlus, GitPullRequest, MessageSquare, MoreHorizontal,
   LoaderCircle, NotebookPen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pin, PinOff, Plus, RefreshCw, Settings, SquareTerminal, Trash2, X,
 } from 'lucide-react';
 import { gitApi } from '../features/git/api';
@@ -197,6 +197,16 @@ function terminalCenterTab(tab: TerminalTab, detected: Record<string, string | n
   return { id: `terminal:${tab.id}`, kind: agent ? 'agent' : 'terminal', label: terminal.title, targetId: tab.id, terminal, renameable: !cli };
 }
 
+function SidebarWorktreeIcon({ project, icon = 'default', color = 'default' }: {
+  project: AowProject;
+  icon?: WorktreeIconId;
+  color?: WorktreeColor;
+}) {
+  return icon === 'default'
+    ? <ProjectIcon project={project} size={15} color={worktreeColorValues[color]} />
+    : <WorktreeIcon icon={icon} style={{ color: worktreeColorValues[color] }} />;
+}
+
 function WorktreeContextMenu({
   state, pinned, savingAppearance, onClose, onTogglePin, onColorChange, onIconChange, onRemove,
 }: {
@@ -242,7 +252,7 @@ function WorktreeContextMenu({
     <div className="project-aow-worktree-icon-picker" role="group" aria-label="Worktree 图标">
       <div className="project-aow-worktree-icon-label">图标</div>
       <button className="project-aow-worktree-icon-default" role="menuitemradio" aria-checked={(state.worktree.icon ?? 'default') === 'default'} disabled={savingAppearance} onClick={() => { onIconChange('default'); onClose(); }}>
-        <WorktreeIcon style={{ color: worktreeColorValues[state.worktree.color ?? 'default'] }} />默认图标{(state.worktree.icon ?? 'default') === 'default' ? <Check /> : null}
+        <SidebarWorktreeIcon project={state.project} color={state.worktree.color} />默认图标{(state.worktree.icon ?? 'default') === 'default' ? <Check /> : null}
       </button>
       {worktreeIconGroups.map((group) => <div key={group.label} className="project-aow-worktree-icons" role="group" aria-label={group.label}>
         {group.icons.map((icon) => <button key={icon} className={`project-aow-worktree-icon${state.worktree.icon === icon ? ' selected' : ''}`}
@@ -2589,7 +2599,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
               onDrop={(event) => dropPinnedWorktree(event, entry.worktree.path)}
               onDragEnd={finishPinnedDrag}
               title={entry.worktree.path}
-            ><WorktreeIcon icon={entry.worktree.icon} style={{ color: worktreeColorValues[entry.worktree.color ?? 'default'] }} /><span><strong>{entry.worktree.detached ? 'detached' : entry.worktree.branch || basename(entry.worktree.path)}</strong><small>{entry.project.name} · {basename(entry.worktree.path)}</small></span>{entry.worktree.locked ? <i>locked</i> : null}<WorktreeUnreadBadge count={unreadCounts.get(entry.worktree.path)} /></button>)}
+            ><SidebarWorktreeIcon project={entry.project} icon={entry.worktree.icon} color={entry.worktree.color} /><span><strong>{entry.worktree.detached ? 'detached' : entry.worktree.branch || basename(entry.worktree.path)}</strong><small>{entry.project.name} · {basename(entry.worktree.path)}</small></span>{entry.worktree.locked ? <i>locked</i> : null}<WorktreeUnreadBadge count={unreadCounts.get(entry.worktree.path)} /></button>)}
           </section>
           </AowPanel> : null}
           <AowPanel headerClassName="project-aow-section-title project-aow-project-list-title" title="Projects" collapsible={false} actions={<><AowIconButton title="刷新全部" aria-label="刷新全部" onClick={() => void loadProjects()}><RefreshCw /></AowIconButton><AowIconButton title="注册项目" aria-label="注册项目" onClick={() => setShowRegisterProject(true)}><Plus /></AowIconButton></>}>
@@ -2602,7 +2612,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
             ];
             return <AowPanel key={project.id} className="project-aow-project" headerClassName="project-aow-project-row"
               headerBehavior="toggle" togglePosition="end"
-              title={project.name} tooltip={project.registered_path} icon={<ProjectIcon project={project} />} collapsed={collapsedProjects[project.id]}
+              title={project.name} tooltip={project.registered_path} icon={<Folder />} collapsed={collapsedProjects[project.id]}
               empty={!project.worktrees.length && !project.error} onCollapsedChange={collapsed => setCollapsedProjects(current => ({ ...current, [project.id]: collapsed }))}
               actions={<><AowIconButton title="刷新 Worktree" aria-label={`刷新 ${project.name} Worktree`} onClick={() => {
                 void aowApi.refreshProject(project.id).then(updated => setProjects(items => items.map(item => item.id === project.id ? updated : item)))
@@ -2616,8 +2626,9 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
                 return <button key={worktree.id} disabled={busyWorktrees.has(worktree.path)} className={[
                   worktree.path === activeWorktreePath ? 'active' : '', compact ? 'compact' : '',
                 ].filter(Boolean).join(' ')} onClick={() => setActiveWorktreePath(worktree.path)} onContextMenu={(event) => openWorktreeContextMenu(event, { project, worktree })} title={worktree.path}>
-                  {compact ? <><span className="project-aow-worktree-dot" aria-hidden="true" /><span className="project-aow-worktree-branch">{branch}</span></>
-                    : <><WorktreeIcon icon={worktree.icon} style={{ color: worktreeColorValues[worktree.color ?? 'default'] }} /><span><strong>{branch}</strong><small>{basename(worktree.path)}{worktree.is_main ? ' · main worktree' : ''}</small></span>{worktree.locked ? <i>locked</i> : null}</>}
+                  <SidebarWorktreeIcon project={project} icon={worktree.icon} color={worktree.color} />
+                  {compact ? <span className="project-aow-worktree-branch">{branch}</span>
+                    : <><span><strong>{branch}</strong><small>{basename(worktree.path)}{worktree.is_main ? ' · main worktree' : ''}</small></span>{worktree.locked ? <i>locked</i> : null}</>}
                   <WorktreeUnreadBadge count={unreadCounts.get(worktree.path)} />
                 </button>;
               })}</div> : null}
