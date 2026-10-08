@@ -477,7 +477,7 @@ try {
       });
     } });
     const header = page.locator('.project-aow-project-row').first();
-    assert.equal(await header.locator('svg.project-icon').isVisible(), true, 'project and terminals render while avatar metadata is pending');
+    assert.equal(await header.locator('svg.project-icon.lucide-folder').isVisible(), true, 'project and terminals render while avatar metadata is pending');
     releaseAvatar();
     const avatar = header.locator('img.project-icon');
     await avatar.waitFor();
@@ -498,14 +498,14 @@ try {
     state.avatarUrl = 'https://avatars.example.com/broken.svg';
     await page.evaluate(() => window.dispatchEvent(new Event('aow-review-providers-changed')));
     await eventually(() => Promise.resolve(imageRequests.some(request => request.url().includes('broken'))));
-    await header.locator('svg.project-icon').waitFor();
+    await header.locator('svg.project-icon.lucide-folder').waitFor();
     assert.equal(await avatar.count(), 0, 'a broken image returns to the folder icon');
 
     state.avatarUrl = null;
     const refreshed = page.waitForResponse(response => response.url().endsWith('/projects/project/avatar'));
     await page.evaluate(() => window.dispatchEvent(new Event('aow-review-providers-changed')));
     await refreshed;
-    await header.locator('svg.project-icon').waitFor();
+    await header.locator('svg.project-icon.lucide-folder').waitFor();
     assert.deepEqual(state.errors, []);
   });
 
@@ -1192,7 +1192,7 @@ try {
     const pinned = page.locator(`.project-aow-pinned button[title="${worktrees[0].path}"]`);
     const menu = page.getByRole('menu', { name: `${worktrees[0].path} 操作`, exact: true });
     const openMenu = (target = row) => target.click({ button: 'right' });
-    await row.locator('svg.lucide-git-branch').waitFor();
+    await row.locator('svg.lucide-folder-git2').waitFor();
     await row.click({ button: 'right' });
     await menu.getByRole('menuitemradio', { name: '紫色', exact: true }).click();
     await eventually(() => row.locator('svg').evaluate(svg => getComputedStyle(svg).color === 'rgb(168, 85, 247)'));
@@ -1233,9 +1233,9 @@ try {
     assert.equal(await pinned.locator('svg').evaluate(svg => getComputedStyle(svg).color), 'rgb(34, 197, 94)');
     await openMenu();
     await menu.getByRole('menuitemradio', { name: '默认图标', exact: true }).click();
-    await pinned.locator('svg.lucide-git-branch').waitFor();
+    await pinned.locator('svg.lucide-folder-git2').waitFor();
     assert.equal(await row.locator('svg').evaluate(svg => getComputedStyle(svg).color), 'rgb(34, 197, 94)');
-    assert.equal(await page.locator(`.project-aow-worktrees button[title="${worktrees[1].path}"] svg`).getAttribute('class'), 'lucide lucide-git-branch');
+    assert.equal(await page.locator(`.project-aow-worktrees button[title="${worktrees[1].path}"] svg`).getAttribute('class'), 'lucide lucide-folder-git2');
     assert.deepEqual(state.appearanceWrites, [
       { path: worktrees[0].path, color: 'purple' }, { path: worktrees[0].path, icon: 'cat' },
       { path: worktrees[0].path, color: 'green' }, { path: worktrees[0].path, icon: 'pear' }, { path: worktrees[0].path, icon: 'default' },
