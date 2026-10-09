@@ -125,7 +125,7 @@ config-id = "g123456789ab"
 
 ## Notes 目录与登录账户
 
-- **Notes 目录**：在 **Settings → Notes** 中修改，默认 `~/aow`。保存后迁移使用默认路径的 Notes，自定义绑定的 Notes 路径保持不变。
+- **Notes 目录**：在 **Settings → Notes** 中修改，默认 `~/aow`。保存后仅更新新注册项目使用的默认根目录，已有项目仍使用原 Notes 路径。如需切换，请在项目菜单中使用「绑定 Notes 目录」：目录已存在时直接使用，不存在时自动创建；两处操作均不迁移笔记。
 - **登录账户**：在服务器终端执行 `aow account`。手动使用自定义数据目录时，执行 `AOW_SERVER_STATE_DIR=/path/to/state aow account`；按提示输入账号、密码并确认密码，修改后重新登录网页。
 
 账户仅保存在服务所在机器的数据目录中（默认 `~/.local/state/aow/credentials.json`），权限为 `0600`。当前使用一个本地账户，保存账号、随机盐和 PBKDF2-HMAC-SHA256 密码哈希，不保存明文密码。账户不进入配置 Git 仓库。首次安装必须设置，后续升级保留；忘记密码可在服务器终端重新运行 `aow account`，无需重启服务。旧 `pin.md5` 不再读取，也不会自动转换成账户。

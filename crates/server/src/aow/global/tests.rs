@@ -125,7 +125,7 @@ async fn restored_configuration_replaces_stale_builtin_identity_and_uses_the_loc
 }
 
 #[tokio::test]
-async fn notes_root_moves_default_projects_and_preserves_custom_bindings_and_old_file_paths() {
+async fn notes_root_preserves_builtin_and_custom_bindings_and_files() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().canonicalize().unwrap();
     let base = root.join("notes");
@@ -162,12 +162,9 @@ async fn notes_root_moves_default_projects_and_preserves_custom_bindings_and_old
         .await
         .unwrap();
     let global = manager.project(FLOATING_PROJECT_ID).await.unwrap();
-    assert!(
-        Path::new(&global.notes_path)
-            .canonicalize()
-            .unwrap()
-            .starts_with(next.canonicalize().unwrap())
-    );
+    assert_eq!(global.notes_path, before[0].notes_path);
+    assert!(!Path::new(&global.notes_path).is_symlink());
+    assert_eq!(std::fs::read_dir(&next).unwrap().count(), 0);
     assert_eq!(global.registered_path, before[0].registered_path);
     assert_eq!(
         Path::new(&manager.project(&normal.id).await.unwrap().notes_path)
@@ -179,6 +176,11 @@ async fn notes_root_moves_default_projects_and_preserves_custom_bindings_and_old
         std::fs::read_to_string(Path::new(&before[0].notes_path).join("note.md")).unwrap(),
         FLOATING_PROJECT_ID
     );
+    assert_eq!(
+        std::fs::read_to_string(Path::new(&normal.notes_path).join("note.md")).unwrap(),
+        normal.id
+    );
+    assert_eq!(std::fs::read_dir(&custom).unwrap().count(), 0);
     manager
         .update_settings(UpdateSettingsRequest {
             notes_base: Some(base.to_string_lossy().into_owned()),
@@ -202,7 +204,7 @@ async fn notes_root_moves_default_projects_and_preserves_custom_bindings_and_old
 }
 
 #[tokio::test]
-async fn notes_conflict_preserves_files_and_settings() {
+async fn notes_root_accepts_existing_notes_without_changing_project_bindings_or_files() {
     let temp = tempfile::tempdir().unwrap();
     let manager = AowManager::persistent_with_notes_base(
         &temp.path().join("state"),
@@ -218,15 +220,18 @@ async fn notes_conflict_preserves_files_and_settings() {
         .join(FLOATING_PROJECT_ID);
     std::fs::create_dir_all(&target).unwrap();
     std::fs::write(target.join("keep.md"), "keep").unwrap();
-    assert!(
-        manager
-            .update_settings(UpdateSettingsRequest {
-                notes_base: Some(next.to_string_lossy().into_owned()),
-                execution_path: Some(vec![PathBuf::from("/usr/bin")]),
-                ..Default::default()
-            })
-            .await
-            .is_err()
+    assert_eq!(std::fs::read_dir(&before.notes_path).unwrap().count(), 0);
+    let settings = manager
+        .update_settings(UpdateSettingsRequest {
+            notes_base: Some(next.to_string_lossy().into_owned()),
+            execution_path: Some(vec![PathBuf::from("/usr/bin")]),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        Path::new(&settings.notes_base),
+        next.canonicalize().unwrap()
     );
     assert_eq!(
         manager
@@ -241,9 +246,11 @@ async fn notes_conflict_preserves_files_and_settings() {
         "keep"
     );
     assert!(Path::new(&before.notes_path).is_dir());
+    assert!(!Path::new(&before.notes_path).is_symlink());
+    assert_eq!(std::fs::read_dir(&before.notes_path).unwrap().count(), 0);
 }
 #[tokio::test]
-async fn notes_root_migrates_ordinary_and_legacy_default_bindings() {
+async fn notes_root_preserves_default_and_legacy_bindings_after_restart() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().canonicalize().unwrap();
     let base = root.join("notes");
@@ -274,6 +281,9 @@ async fn notes_root_migrates_ordinary_and_legacy_default_bindings() {
             manager.persist_projects(&state.projects).unwrap();
         }
     }
+    let before = manager.lock().unwrap().projects.clone();
+    let registry_path = manager.inner.projects_path.as_ref().unwrap();
+    let registry_before = std::fs::read(registry_path).unwrap();
     let next = root.join("new-notes");
     manager
         .update_settings(UpdateSettingsRequest {
@@ -283,15 +293,16 @@ async fn notes_root_migrates_ordinary_and_legacy_default_bindings() {
         })
         .await
         .unwrap();
-    let reloaded = AowManager::persistent_with_notes_base(&state_dir, base).unwrap();
+    assert_eq!(std::fs::read(registry_path).unwrap(), registry_before);
+    let reloaded = AowManager::persistent_with_notes_base(&state_dir, base.clone()).unwrap();
+    reloaded.initialize_global().await.unwrap();
+    assert_eq!(Path::new(&reloaded.settings().unwrap().notes_base), next);
     for project in reloaded.projects().await.unwrap() {
         let project_notes = Path::new(&project.notes_path).canonicalize().unwrap();
-        let new_base = next.canonicalize().unwrap();
-        assert!(
-            project_notes.starts_with(&new_base),
-            "{}: {project_notes:?} is outside {new_base:?}",
-            project.id
-        );
+        let previous = before.iter().find(|item| item.id == project.id).unwrap();
+        assert_eq!(project.notes_path, previous.notes_path);
+        assert!(project_notes.starts_with(&base));
+        assert!(!Path::new(&project.notes_path).is_symlink());
         if !project.builtin {
             assert_eq!(
                 std::fs::read_to_string(Path::new(&project.notes_path).join("note.md")).unwrap(),
@@ -299,15 +310,17 @@ async fn notes_root_migrates_ordinary_and_legacy_default_bindings() {
             );
         }
     }
+    assert_eq!(std::fs::read_dir(&next).unwrap().count(), 0);
 }
 
 #[tokio::test]
-async fn failed_settings_persistence_rolls_back_notes_and_project_bindings() {
+async fn failed_settings_persistence_preserves_settings_notes_and_project_bindings() {
     let temp = tempfile::tempdir().unwrap();
     let state_dir = temp.path().join("state");
     let manager =
         AowManager::persistent_with_notes_base(&state_dir, temp.path().join("notes")).unwrap();
     manager.initialize_global().await.unwrap();
+    let previous_settings = manager.settings().unwrap();
     let before = manager.project(FLOATING_PROJECT_ID).await.unwrap();
     let source = Path::new(&before.notes_path);
     std::fs::write(source.join("note.md"), "unsaved work").unwrap();
@@ -322,6 +335,14 @@ async fn failed_settings_persistence_rolls_back_notes_and_project_bindings() {
             })
             .await
             .is_err()
+    );
+    assert_eq!(
+        manager.settings().unwrap().notes_base,
+        previous_settings.notes_base
+    );
+    assert_eq!(
+        manager.settings().unwrap().execution_path,
+        previous_settings.execution_path
     );
     assert!(!source.is_symlink());
     assert_eq!(
@@ -345,5 +366,69 @@ async fn failed_settings_persistence_rolls_back_notes_and_project_bindings() {
             .join(notes::process_account_name().unwrap())
             .join(FLOATING_PROJECT_ID)
             .exists()
+    );
+}
+
+#[tokio::test]
+async fn binding_notes_uses_existing_contents_or_creates_an_empty_directory_without_moving_files() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    let state_dir = root.join("state");
+    let base = root.join("notes");
+    let manager = AowManager::persistent_with_notes_base(&state_dir, base.clone()).unwrap();
+    manager.initialize_global().await.unwrap();
+    let before = manager.project(FLOATING_PROJECT_ID).await.unwrap();
+    let source = Path::new(&before.notes_path);
+    std::fs::write(source.join("note.md"), "original note").unwrap();
+    std::fs::write(source.join("old-only.md"), "keep in old directory").unwrap();
+    let existing = root.join("existing");
+    std::fs::create_dir(&existing).unwrap();
+    std::fs::write(existing.join("note.md"), "existing note").unwrap();
+
+    let bound = manager
+        .bind_notes(&before.id, existing.to_str().unwrap())
+        .await
+        .unwrap();
+    assert_eq!(Path::new(&bound.notes_path), existing);
+    assert_eq!(
+        std::fs::read_to_string(existing.join("note.md")).unwrap(),
+        "existing note"
+    );
+    assert!(!existing.join("old-only.md").exists());
+    assert_eq!(
+        std::fs::read_to_string(source.join("note.md")).unwrap(),
+        "original note"
+    );
+    assert_eq!(
+        std::fs::read_to_string(source.join("old-only.md")).unwrap(),
+        "keep in old directory"
+    );
+    assert!(!source.is_symlink());
+
+    let missing = root.join("new/nested/notes");
+    let bound = manager
+        .bind_notes(&before.id, missing.to_str().unwrap())
+        .await
+        .unwrap();
+    assert_eq!(Path::new(&bound.notes_path), missing);
+    assert_eq!(std::fs::read_dir(&missing).unwrap().count(), 0);
+    assert_eq!(
+        std::fs::read_to_string(existing.join("note.md")).unwrap(),
+        "existing note"
+    );
+    let reloaded = AowManager::persistent_with_notes_base(&state_dir, base).unwrap();
+    assert_eq!(
+        reloaded.project(&before.id).await.unwrap().notes_path,
+        bound.notes_path
+    );
+    assert!(
+        manager
+            .bind_notes(&before.id, existing.join("note.md").to_str().unwrap())
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        manager.project(&before.id).await.unwrap().notes_path,
+        bound.notes_path
     );
 }

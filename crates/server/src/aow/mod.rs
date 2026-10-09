@@ -58,10 +58,11 @@ use worktrees::{
     Worktree, WorktreeColor, WorktreeIcon, WorktreeRemovalPreview, WorktreeRemovalQuery,
 };
 
+#[cfg(test)]
+use settings::EditorSettings;
 use settings::{
-    AowSettings, EditorSettings, PinnedDirectories, PinnedWorktrees,
-    UpdatePinnedDirectoriesRequest, UpdatePinnedWorktreesRequest, UpdateSettingsRequest,
-    default_notes_base, load_settings,
+    AowSettings, PinnedDirectories, PinnedWorktrees, UpdatePinnedDirectoriesRequest,
+    UpdatePinnedWorktreesRequest, UpdateSettingsRequest, default_notes_base, load_settings,
 };
 
 pub(crate) use error::{AowError, aow_http_error};

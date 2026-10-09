@@ -197,13 +197,6 @@ try {
           const update = request.postDataJSON();
           state.settingsUpdates.push(update);
           if (state.failSettingsSave) { await route.fulfill({ status: 500, json: { message: 'Settings write failed' } }); return; }
-          if (update.notes_base && update.notes_base !== state.settings.notes_base) {
-            const previous = state.settings.notes_base;
-            state.projects = state.projects.map(item => ({ ...item, notes_path: update.notes_base + item.notes_path.slice(previous.length) }));
-            for (const [path, file] of Object.entries(state.textFiles)) if (path.startsWith(previous + '/')) {
-              state.textFiles[update.notes_base + path.slice(previous.length)] = { ...file, version: 'migrated-version' };
-            }
-          }
           Object.assign(state.settings, update);
         }
         data = state.settings;
@@ -2695,7 +2688,7 @@ try {
     assert.ok(await page.evaluate(async () => { const { monaco } = await import('/src/features/editor/monaco.ts'); return monaco.editor.getModels().some(model => model.getValue() === 'Shared buffer'); }));
   });
 
-  await test('floating creation keeps project context and notes root migration refreshes open file versions', async t => {
+  await test('changing notes root preserves project bindings and open floating notes', async t => {
     const { page, state } = await fixture(t, { floating: true });
     const panel = page.getByRole('dialog', { name: '浮动工作区', exact: true });
     await surface(page).getByRole('button', { name: '新建窗体', exact: true }).click();
@@ -2709,23 +2702,29 @@ try {
     const sourcePath = '/notes/localhost/test/__aow_floating/.tmp-fixture.md';
     const editor = panel.locator('.monaco-editor [role="textbox"]').first();
     await editor.focus();
-    await editor.pressSequentially('Before migration');
-    await eventually(() => Promise.resolve(state.textFiles[sourcePath].content === 'Before migration'));
+    await editor.pressSequentially('Before root change');
+    await eventually(() => Promise.resolve(state.textFiles[sourcePath].content === 'Before root change'));
+    const previousVersion = state.textFiles[sourcePath].version;
+    const previousProjects = structuredClone(state.projects);
     await panel.getByRole('button', { name: '最小化浮动工作区' }).click();
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     const settings = page.locator('.project-aow-settings');
     await settings.getByRole('textbox', { name: 'Notes root', exact: true }).fill('/new-notes');
     await settings.getByRole('button', { name: '保存', exact: true }).click();
     await eventually(() => Promise.resolve(state.settings.notes_base === '/new-notes'));
+    await settings.getByRole('status').filter({ hasText: 'Notes root 已保存' }).waitFor();
+    assert.match(await settings.getByRole('status').textContent(), /已有项目仍使用原 Notes 路径.*绑定 Notes 目录/);
+    assert.deepEqual(state.projects, previousProjects);
     await settings.getByRole('button', { name: '关闭', exact: true }).click();
-    assert.equal(await panel.isVisible(), false, 'migration does not reopen a minimized workspace');
+    assert.equal(await panel.isVisible(), false, 'changing the root does not reopen a minimized workspace');
     await page.getByRole('button', { name: '浮动工作区', exact: true }).click();
-    await panel.locator('.editor-toolbar code').filter({ hasText: '/new-notes/localhost/test/__aow_floating/.tmp-fixture.md' }).waitFor();
+    await panel.locator('.editor-toolbar code').filter({ hasText: sourcePath }).waitFor();
     await editor.focus();
     await editor.press('ControlOrMeta+A');
-    await editor.pressSequentially('After migration');
-    await eventually(() => Promise.resolve(state.writes.some(write => write.path === '/new-notes/localhost/test/__aow_floating/.tmp-fixture.md' && write.content === 'After migration')));
-    assert.equal(state.writes.at(-1).version, '"migrated-version"');
+    await editor.pressSequentially('After root change');
+    await eventually(() => Promise.resolve(state.writes.some(write => write.path === sourcePath && write.content === 'After root change')));
+    assert.equal(state.writes.at(-1).version, `"${previousVersion}"`);
+    assert.equal(Object.keys(state.textFiles).some(path => path.startsWith('/new-notes/')), false);
     assert.equal(await panel.getByRole('tab').filter({ hasText: '.tmp-fixture.md' }).count(), 2);
     assert.ok(state.projects.find(item => item.builtin).registered_path === '/global');
   });
