@@ -8,8 +8,6 @@
 
 在一个界面中管理 Git 仓库和 Worktree、浏览和编辑文件、使用 Terminal、查看 Agent 会话与执行自动化任务。支持 Codex、Claude Code 等主流Agent，提供桌面和手机界面。
 
-详细功能见 [使用说明](docs/usage.md)。
-
 产品门户：[yorkart.github.io/aow](https://yorkart.github.io/aow/)。门户独立通过 GitHub Pages 发布，源码、预览与部署说明见 [website/README.md](website/README.md)。
 
 ## 安装 / 升级

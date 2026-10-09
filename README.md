@@ -8,8 +8,6 @@ English | [简体中文](README.zh-CN.md)
 
 Manage Git repositories and worktrees, browse and edit files, use terminals, review agent conversations, and run automation tasks in one interface. AoW supports popular agents such as Codex and Claude Code, with desktop and mobile interfaces.
 
-For details, see the [Usage guide](docs/usage.md).
-
 Product website: [yorkart.github.io/aow](https://yorkart.github.io/aow/). The website is published separately through GitHub Pages. See [website/README.md](website/README.md) for its source, preview, and deployment instructions.
 
 ## Installation and upgrades
