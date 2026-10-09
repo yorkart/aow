@@ -24,7 +24,7 @@ export function TerminalHostingButton({ tab, pane, onChange }: {
   const [editor, setEditor] = useState<{ project: AowProject; agents: AowAgent[] }>();
   const [search, setSearch] = useState('');
   const [maxInputs, setMaxInputs] = useState('3');
-  const [runOnEnable, setRunOnEnable] = useState(true);
+  const [runOnEnable, setRunOnEnable] = useState(false);
   const validLimit = Number.isInteger(Number(maxInputs)) && Number(maxInputs) > 0 && Number(maxInputs) <= 4_294_967_295;
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
