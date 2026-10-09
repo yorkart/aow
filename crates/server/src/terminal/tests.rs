@@ -59,6 +59,7 @@ use tower::ServiceExt;
 pub(super) fn pane(id: &str, status: TerminalPaneStatus) -> TerminalPane {
     TerminalPane {
         id: id.to_owned(),
+        parent_pane_id: None,
         name: "tmp".to_owned(),
         cwd: "/tmp".to_owned(),
         shell: "/bin/sh".to_owned(),
@@ -196,6 +197,7 @@ fn persistent_load_preserves_running_desired_state() {
     );
     // Current metadata includes naming intent; legacy migration has its own test.
     original.name_is_custom = Some(true);
+    original.panes[0].parent_pane_id = Some("previous-parent".into());
     atomic_save(
         &state_path,
         &PersistedState {

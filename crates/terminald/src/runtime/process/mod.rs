@@ -162,6 +162,9 @@ pub(super) fn spawn_runtime_blocking(
     command.env("COLORTERM", "truecolor");
     command.env("TERM_PROGRAM", "aow-web");
     command.env("AOW_WEB_TERMINAL", "1");
+    // Always identify this pane, overriding any inherited or profile identity.
+    // CLI-created descendants use it as their direct parent, including after rebuilds.
+    command.env("AOW_PANE_ID", &id);
     // This PTY is a remote terminal from the user's point of view. Programs
     // such as TraeCode CLI must use terminal-mediated clipboard protocols (OSC 52)
     // instead of writing to terminald's host clipboard. Keep the standard

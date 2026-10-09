@@ -56,7 +56,7 @@ export function MobileTerminals({ project, worktree, visible, headerActions, ini
   const canShowAll = worktree.is_main && !project.builtin;
   const showAll = canShowAll && (preferences.scopes.user || preferences.scopes.cli);
   const hasHostedTabs = canShowAll && [...openedIds].some(id => !terminals.tabs.some(tab => tab.id === id));
-  const projectTerminals = useProjectTerminals(project.worktrees, visible && (catalogOpen && showAll || hasHostedTabs));
+  const projectTerminals = useProjectTerminals(project.worktrees, visible && (catalogOpen && canShowAll || hasHostedTabs));
   const detectedAgents = useMemo(() => ({ ...projectTerminals.agents, ...terminals.detectedAgents }), [projectTerminals.agents, terminals.detectedAgents]);
   const titles = useMemo(() => ({ ...projectTerminals.titles, ...terminals.terminalTitles }), [projectTerminals.titles, terminals.terminalTitles]);
   const activity = useMemo(() => ({ ...projectTerminals.activity, ...terminals.terminalActivity }), [projectTerminals.activity, terminals.terminalActivity]);
@@ -124,9 +124,10 @@ export function MobileTerminals({ project, worktree, visible, headerActions, ini
     const tab = await terminals.create(agentId);
     if (tab?.panes[0]) setSelected(`${tab.id}:${tab.panes[0].id}`);
   };
-  const reload = () => { void terminals.reload(); if (showAll || hasHostedTabs) projectTerminals.reload(); };
-  const open = (tab: TerminalTab) => {
-    const target = entries.find(entry => entry.tab.id === tab.id && entry.key === selected)
+  const reload = () => { void terminals.reload(); projectTerminals.reload(); };
+  const open = (tab: TerminalTab, paneId?: string) => {
+    const target = (paneId ? flattenTerminalTabs([tab], detectedAgents, titles, activity, processes).find(entry => entry.pane.id === paneId) : undefined)
+      ?? entries.find(entry => entry.tab.id === tab.id && entry.key === selected)
       ?? entries.find(entry => entry.tab.id === tab.id) ?? flattenTerminalTabs([tab], detectedAgents, titles, activity, processes)[0];
     if (!target) { setOperationError('该终端没有可打开的窗格，请刷新列表。'); return; }
     setOperationError('');
@@ -154,7 +155,8 @@ export function MobileTerminals({ project, worktree, visible, headerActions, ini
     {error && <div className="mobile-inline-error" role="alert">{error}</div>}
     {visible && catalogOpen && <MobileTerminalCatalog id={catalogId} onClose={closeCatalog} returnFocus={catalogButton.current}>{container => <>
       {(operationError || terminals.error) && <div className="mobile-inline-error" role="alert">{operationError || terminals.error}</div>}
-      <TerminalPanel menuContainer={container} tabs={panelTabs} activeId={active?.tab.id} detectedAgents={detectedAgents} titles={titles}
+      <TerminalPanel menuContainer={container} tabs={panelTabs} descendantTabs={[...terminals.tabs, ...projectTerminals.tabs.filter(tab => tab.workspace_root !== workspace)]}
+        activeId={active?.tab.id} detectedAgents={detectedAgents} titles={titles} onOpenPane={open}
         openedIds={new Set(entries.map(entry => entry.tab.id))} onReload={reload} onTerminate={terminate} onOpen={open}
         onRebuild={async id => {
           const tab = await terminalApi.rebuild(id);

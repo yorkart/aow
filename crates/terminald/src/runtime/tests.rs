@@ -162,18 +162,20 @@ fn runtime_environment_inherits_and_applies_additions_and_overrides() {
                 "value with spaces=equals".to_owned(),
             ),
             ("AOW_TEST_EMPTY".to_owned(), String::new()),
+            ("AOW_PANE_ID".to_owned(), "inherited-parent".to_owned()),
         ]);
         if let Some(path) = override_path {
             environment.insert("PATH".to_owned(), path.to_owned());
         }
         let tracker = Arc::new(SpawnTracker::default());
+        let pane_id = format!("environment-test-{}", aow_id::new_id());
         let mut spawned = spawn_runtime_blocking(
-            format!("environment-test-{}", aow_id::new_id()),
+            pane_id.clone(),
             TerminalRuntimeSpec {
                 cwd: directory.path().to_string_lossy().into_owned(),
                 shell: "/bin/sh".to_owned(),
                 arguments: vec!["-c".to_owned(),
-                    "printf '%s\\n' \"$PATH\" \"$AOW_TEST_ADDED\" \"${AOW_TEST_EMPTY-unset}\" > \"$AOW_TEST_OUTPUT\"".to_owned()],
+                    "printf '%s\\n' \"$PATH\" \"$AOW_TEST_ADDED\" \"${AOW_TEST_EMPTY-unset}\" \"$AOW_PANE_ID\" > \"$AOW_TEST_OUTPUT\"".to_owned()],
                 environment,
                 rows: 24,
                 cols: 80,
@@ -188,7 +190,7 @@ fn runtime_environment_inherits_and_applies_additions_and_overrides() {
             .unwrap_or_else(|| std::env::var("PATH").unwrap());
         assert_eq!(
             std::fs::read_to_string(&output_path).unwrap(),
-            format!("{expected_path}\nvalue with spaces=equals\n\n")
+            format!("{expected_path}\nvalue with spaces=equals\n\n{pane_id}\n")
         );
         // The child was already reaped, so the guard only releases its handles.
         spawned.child.take();

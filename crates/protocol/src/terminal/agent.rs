@@ -23,6 +23,8 @@ pub struct AgentTerminalState {
 pub struct AgentTerminalCreate {
     pub agent: String,
     pub project_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_pane_id: Option<String>,
     pub cwd: String,
     pub task: Option<String>,
     pub timeout_seconds: u64,
@@ -36,6 +38,8 @@ pub struct AgentTerminalSubmit {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentTerminalInfo {
     pub pane_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_pane_id: Option<String>,
     pub tab_id: String,
     pub cwd: String,
     pub agent: String,

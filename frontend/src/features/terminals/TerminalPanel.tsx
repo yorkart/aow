@@ -1,10 +1,11 @@
-import { useCallback, useId, useRef, useState } from 'react';
+import { useCallback, useId, useMemo, useRef, useState } from 'react';
 import { ChevronRight, Eye, EyeOff, Glasses, MoreHorizontal, RefreshCw, ShieldCheck, SquareTerminal, Unplug, UserRound } from 'lucide-react';
 import type { TerminalTab } from './types';
 import type { AowWorktree } from '../../aow/types';
 import { isCliTerminal, terminalTabPresentation } from './terminalPresentation';
 import { terminalControlLabels, terminalDisplayLabels, terminalLifecycleLabels } from './terminalState';
-import { useTerminalStates } from './terminalViewState';
+import { requestTerminalPaneSelection, useTerminalStates } from './terminalViewState';
+import { indexTerminalChildren, TerminalDescendants } from './TerminalDescendants';
 import { TerminalLifecycleDot } from './TerminalLifecycleDot';
 import { AgentIcon } from '../agents/AgentIcon';
 import { AowIconButton } from '../../components/AowIconButton';
@@ -20,7 +21,7 @@ const terminalGroups = [
   { id: 'cli', cli: true, title: 'CLI Terminals', icon: SquareTerminal, tooltip: <><code>aow-cli agent</code> 创建</> },
 ] as const;
 
-type TerminalGroup = typeof terminalGroups[number]['id'];
+export type TerminalGroup = typeof terminalGroups[number]['id'];
 const terminalDisplayIcons = { shown: Eye, hidden: EyeOff };
 const terminalControlIcons = { observing: Glasses, controlled: ShieldCheck, disconnected: Unplug };
 
@@ -34,20 +35,23 @@ function terminalCreatedAt(tab: TerminalTab) {
   return Number.isFinite(timestamp) ? timestamp : Number.MAX_SAFE_INTEGER;
 }
 
-export function TerminalPanel({ tabs, detectedAgents, titles, openedIds, activeId, onOpen, onOpenFloating, onTerminate, onRebuild, onReload,
-  worktrees, showAll = { user: false, cli: false }, onShowAllChange,
+export function TerminalPanel({ tabs, descendantTabs = tabs, detectedAgents, titles, openedIds, activeId, onOpen, onOpenPane, onOpenFloating, onTerminate, onRebuild, onReload,
+  worktrees, activeWorktreePath, showAll = { user: false, cli: false }, onShowAllChange,
   sortBy = { user: 'branch', cli: 'branch' }, onSortChange, loading = false, error, menuContainer }: {
   tabs: TerminalTab[];
+  descendantTabs?: TerminalTab[];
   detectedAgents: Record<string, string | null>;
   titles: Record<string, string>;
   openedIds: Set<string>;
   activeId?: string;
   onOpen: (tab: TerminalTab) => void;
+  onOpenPane?: (tab: TerminalTab, paneId: string) => void;
   onOpenFloating?: (tab: TerminalTab) => void;
   onTerminate: (id: string) => Promise<void>;
   onRebuild: (id: string) => Promise<void>;
   onReload: () => void;
   worktrees?: AowWorktree[];
+  activeWorktreePath?: string;
   showAll?: Record<TerminalGroup, boolean>;
   onShowAllChange?: (group: TerminalGroup, showAll: boolean) => void;
   sortBy?: Record<TerminalGroup, TerminalSort>;
@@ -58,6 +62,11 @@ export function TerminalPanel({ tabs, detectedAgents, titles, openedIds, activeI
 }) {
   const panelId = useId();
   const terminalState = useTerminalStates();
+  const childrenIndex = useMemo(() => indexTerminalChildren(descendantTabs), [descendantTabs]);
+  const openChild = (tab: TerminalTab, paneId: string) => {
+    if (onOpenPane) onOpenPane(tab, paneId);
+    else { requestTerminalPaneSelection(tab.id, paneId); onOpen(tab); }
+  };
   const [collapsedGroups, setCollapsedGroups] = useState<Partial<Record<TerminalGroup, boolean>>>({});
   const [collapsedWorktrees, setCollapsedWorktrees] = useState<Record<string, boolean>>({});
   const [scopeMenu, setScopeMenu] = useState<{ anchor: HTMLButtonElement; group: TerminalGroup }>();
@@ -96,7 +105,9 @@ export function TerminalPanel({ tabs, detectedAgents, titles, openedIds, activeI
     const ControlIcon = terminalControlIcons[state.control];
     const displayLabel = terminalDisplayLabels[state.display];
     const controlLabel = terminalControlLabels[state.control];
-    return <AowListRow className={`terminal-panel-row${tab.id === activeId ? ' active' : ''}`}
+    return <TerminalDescendants key={tab.id} tab={tab} title={presentation.title} index={childrenIndex}
+      worktrees={worktrees} detectedAgents={detectedAgents} titles={titles} activeId={activeId} onOpen={openChild}>
+      <AowListRow className={`terminal-panel-row${tab.id === activeId ? ' active' : ''}`}
       openClassName="terminal-panel-open" key={tab.id}
       title={presentation.title} tooltip={presentation.title}
       icon={<AgentIcon agentId={presentation.agentId ?? pane?.agent_id} />} onOpen={() => onOpen(tab)}
@@ -112,7 +123,7 @@ export function TerminalPanel({ tabs, detectedAgents, titles, openedIds, activeI
         <ControlIcon className={state.control === 'controlled' ? 'terminal-panel-state-active' : undefined}
           role="img" aria-label={controlLabel}><title>{controlLabel}</title></ControlIcon>
       </small>
-    </AowListRow>;
+    </AowListRow></TerminalDescendants>;
   };
   return <section className="terminal-panel">
     {rebuildError ? <p className="terminal-panel-error" role="alert">{rebuildError}</p> : null}
@@ -154,8 +165,10 @@ export function TerminalPanel({ tabs, detectedAgents, titles, openedIds, activeI
                 const collapsed = collapsedWorktrees[key] ?? false;
                 const groupId = `${bodyId}-worktree-${index}`;
                 const name = worktreeName(worktree);
-                return <section className="terminal-worktree-group" key={sectionKey} aria-label={worktree.path}>
+                const active = worktree.path === activeWorktreePath;
+                return <section className={`terminal-worktree-group${active ? ' active' : ''}`} key={sectionKey} aria-label={worktree.path}>
                   <button className="terminal-worktree-heading" title={`${worktree.path}${worktree.branch ? `\n${worktree.branch}` : ''}`}
+                    aria-current={active ? 'true' : undefined}
                     aria-expanded={!collapsed} aria-controls={groupId}
                     onClick={() => setCollapsedWorktrees(groups => ({ ...groups, [key]: !groups[key] }))}>
                     <ChevronRight className={collapsed ? undefined : 'expanded'} />

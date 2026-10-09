@@ -13,7 +13,21 @@ pub fn run(
     status: u16,
     reply: Value,
 ) -> (Output, String, Value) {
-    let (output, mut requests) = run_many(args, input, vec![(status, reply)]);
+    run_with_env(args, input, status, reply, &[])
+}
+
+pub fn run_with_env(
+    args: &[&str],
+    input: Option<&str>,
+    status: u16,
+    reply: Value,
+    environment: &[(&str, &str)],
+) -> (Output, String, Value) {
+    let (output, mut requests) = if environment.is_empty() {
+        run_many(args, input, vec![(status, reply)])
+    } else {
+        run_many_with_env(args, input, vec![(status, reply)], environment)
+    };
     let (header, body) = requests.remove(0);
     (output, header, body)
 }
@@ -22,6 +36,15 @@ pub fn run_many(
     args: &[&str],
     input: Option<&str>,
     replies: Vec<(u16, Value)>,
+) -> (Output, Vec<(String, Value)>) {
+    run_many_with_env(args, input, replies, &[])
+}
+
+fn run_many_with_env(
+    args: &[&str],
+    input: Option<&str>,
+    replies: Vec<(u16, Value)>,
+    environment: &[(&str, &str)],
 ) -> (Output, Vec<(String, Value)>) {
     let directory = tempfile::tempdir().unwrap();
     std::fs::create_dir(directory.path().join("cli")).unwrap();
@@ -70,6 +93,8 @@ pub fn run_many(
         requests
     });
     let mut child = Command::new(env!("CARGO_BIN_EXE_aow-cli"))
+        .env_remove("AOW_PANE_ID")
+        .envs(environment.iter().copied())
         .arg("--state-dir")
         .arg(directory.path())
         .args(args)

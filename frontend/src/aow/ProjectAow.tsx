@@ -22,7 +22,6 @@ import { AutomationDetail } from '../features/automations/AutomationDetail';
 import { AutomationPanel } from '../features/automations/AutomationPanel';
 import type { AutomationRun, AutomationTask } from '../features/automations/types';
 import { TerminalPanel } from '../features/terminals/TerminalPanel';
-import type { TerminalSort } from '../features/terminals/TerminalScopeMenu';
 import { isCliTerminal, terminalTabPresentation } from '../features/terminals/terminalPresentation';
 import { AgentSessions } from '../features/sessions/AgentSessions';
 import { SessionShareButton } from '../features/sessions/SessionShareButton';
@@ -52,7 +51,7 @@ import type { TerminalTab } from '../features/terminals/types';
 import type { AowAgent } from '../features/agents/types';
 import type { AowProject, AowWorktree, WorktreeColor, WorktreeIconId } from './types';
 import { useTerminals } from '../features/terminals/useTerminals';
-import { useProjectTerminals } from '../features/terminals/useProjectTerminals';
+import { ProjectTerminalPanelProvider, useProjectTerminalPanel } from '../features/terminals/projectTerminalPanel';
 import { usePinnedWorktrees } from './usePinnedWorktrees';
 import { useWorktreeResources } from './useWorktreeResources';
 import { removalActive, useWorktreeRemovals } from './useWorktreeRemovals';
@@ -761,24 +760,14 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   }, [floating.publishHost, worktree.path, hostPortal, activeCenterId, active]);
   useEffect(() => () => floating.publishHost(worktree.path), [floating.publishHost, worktree.path]);
   const [rightView, setRightView] = useState<RightView>('terminals');
-  const canShowAllTerminals = worktree.is_main && !project.builtin;
-  const terminalScopeKey = `aow-terminal-scope:${worktree.path}`;
-  const [terminalScopes, setTerminalScopes] = useState(() => {
-    const stored = readStored<boolean | { user?: boolean; cli?: boolean }>(terminalScopeKey, false);
-    return {
-      user: typeof stored === 'boolean' ? stored : stored.user === true,
-      cli: typeof stored === 'boolean' ? stored : stored.cli === true,
-    };
-  });
-  const terminalSortKey = `aow-terminal-sort:${worktree.path}`;
-  const [terminalSorts, setTerminalSorts] = useState<Record<'user' | 'cli', TerminalSort>>(() => {
-    const stored = readStored<{ user?: TerminalSort; cli?: TerminalSort } | null>(terminalSortKey, null);
-    return { user: stored?.user === 'createdAt' ? 'createdAt' : 'branch', cli: stored?.cli === 'createdAt' ? 'createdAt' : 'branch' };
-  });
+  const canShowAllTerminals = !project.builtin;
+  const { inventory: projectTerminals, scopes: terminalScopes, sorts: terminalSorts, setScope, setSort } = useProjectTerminalPanel(
+    active && rightSidebarVisible && rightView === 'terminals',
+  );
   const showAllTerminals = canShowAllTerminals && (terminalScopes.user || terminalScopes.cli);
-  const projectTerminals = useProjectTerminals(project.worktrees, showAllTerminals && active && rightSidebarVisible && rightView === 'terminals');
+  const localPanelTerminals = terminals.loaded ? terminals.tabs : projectTerminals.tabs.filter(tab => tab.workspace_root === worktree.path);
   const panelTerminals = showAllTerminals
-    ? [...terminals.tabs, ...projectTerminals.tabs.filter(tab => tab.workspace_root !== worktree.path
+    ? [...localPanelTerminals, ...projectTerminals.tabs.filter(tab => tab.workspace_root !== worktree.path
       && terminalScopes[isCliTerminal(tab) ? 'cli' : 'user'])]
     : terminals.tabs;
   const [filesExplorerCollapsed, setFilesExplorerCollapsed] = useState<boolean>();
@@ -1961,21 +1950,16 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
         <AgentSessions key={`sessions:${worktree.path}`} worktreePath={sessionRoot} agents={agents} activeSessionId={activeSessionId} visible={active && rightSidebarVisible && rightView === 'sessions'} onOpen={openSession} onResume={(session, agent) => void createTerminal(agent, session, sessionRoot)} />
       </div>
       <div className="project-aow-right-content" hidden={rightView !== 'terminals'}>
-        <TerminalPanel tabs={panelTerminals} activeId={activeTerminalId}
-          detectedAgents={showAllTerminals ? { ...projectTerminals.agents, ...terminals.detectedAgents } : terminals.detectedAgents}
-          titles={showAllTerminals ? { ...projectTerminals.titles, ...terminals.terminalTitles } : terminals.terminalTitles}
+        <TerminalPanel tabs={panelTerminals} descendantTabs={[...localPanelTerminals, ...projectTerminals.tabs.filter(tab => tab.workspace_root !== worktree.path)]}
+          activeId={activeTerminalId} activeWorktreePath={worktree.path}
+          detectedAgents={{ ...projectTerminals.agents, ...terminals.detectedAgents }}
+          titles={{ ...projectTerminals.titles, ...terminals.terminalTitles }}
           worktrees={canShowAllTerminals ? project.worktrees : undefined} showAll={canShowAllTerminals ? terminalScopes : undefined}
-          onShowAllChange={(group, value) => {
-            const next = { ...terminalScopes, [group]: value };
-            setTerminalScopes(next); persist(terminalScopeKey, next);
-          }}
-          sortBy={terminalSorts} onSortChange={(group, value) => {
-            const next = { ...terminalSorts, [group]: value };
-            setTerminalSorts(next); persist(terminalSortKey, next);
-          }}
+          onShowAllChange={setScope}
+          sortBy={terminalSorts} onSortChange={setSort}
           loading={showAllTerminals && projectTerminals.loading} error={showAllTerminals ? projectTerminals.error : undefined}
           openedIds={new Set([...openedTerminals.map(tab => tab.id), ...hostedTabs.map(tab => tab.targetId)])}
-          onReload={() => { void terminals.reload(); if (showAllTerminals) projectTerminals.reload(); }}
+          onReload={() => { void terminals.reload(); projectTerminals.reload(); }}
           onRebuild={async id => {
             const tab = await terminalApi.rebuild(id);
             terminals.replace(tab);
@@ -2075,7 +2059,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
           <button type="button" onClick={() => floating.remove(worktree.path, activeCenterId)}><CornerDownLeft aria-hidden="true" />移回当前工作区</button>
         </div> : null}
         {activeCenterId && hostedLocation(activeCenterId) ? <div className="project-aow-empty project-aow-tab-away">
-          <span>此 Tab 正在主仓库工作区显示。</span>
+          <span>此 Tab 正在其他工作区显示。</span>
           <button type="button" onClick={() => floating.removeHosted(worktree.path, activeCenterId)}><CornerDownLeft aria-hidden="true" />移回当前工作区</button>
         </div> : null}
         {!activeCenterId ? <div className="project-aow-welcome"><ProjectIcon project={project} size={32} /><h2>{project.name}</h2><p>{worktree.path}</p><span>点击 + 新建 Terminal 或启动本地 Agent；从右侧打开文件和 Git Diff。</span></div> : null}
@@ -2633,9 +2617,11 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
       </aside>
       <div className="project-aow-left-resizer" role="separator" aria-label="调整项目栏宽度" aria-orientation="vertical" onPointerDown={(event) => startSidebarResize('left', event)} />
       <div className="project-aow-surfaces">
-        {worktreeEntries.filter(({ worktree }) => !busyWorktrees.has(worktree.path)).filter(({ worktree }) => visitedWorktrees.has(worktree.path) || floating.tabs.some(tab => tab.workspace === worktree.path)
-          || floating.hostedTabs.some(tab => tab.workspace === worktree.path || tab.host === worktree.path)).map(({ project, worktree }) => <WorkspaceSurface locationSource={locationSource(worktree.path)} initialEntry={initialEntry && (initialEntry.workspacePath === worktree.path
-            || floating.hostedTabs.some(tab => tab.host === worktree.path && tab.workspace === initialEntry.workspacePath && tab.id === tabCenterId(initialEntry.target))) ? initialEntry : undefined} key={worktree.path} project={project} worktree={worktree} active={worktree.path === activeWorktreePath} agents={agents} onShowLeftSidebar={leftSidebarVisible ? undefined : showLeftSidebar} rightSidebarVisible={rightSidebarVisible} onHideRightSidebar={hideRightSidebar} onShowRightSidebar={showRightSidebar} onStartRightResize={startRightResize} notesRefresh={notesRefreshByProject[project.id] ?? initialExplorerRefresh} onNotesChanged={notesChanged} onResourcesChanged={reportResources} />)}
+        {projects.map(project => <ProjectTerminalPanelProvider key={project.id} project={project}>
+          {project.worktrees.filter(worktree => !busyWorktrees.has(worktree.path)).filter(worktree => visitedWorktrees.has(worktree.path) || floating.tabs.some(tab => tab.workspace === worktree.path)
+            || floating.hostedTabs.some(tab => tab.workspace === worktree.path || tab.host === worktree.path)).map(worktree => <WorkspaceSurface locationSource={locationSource(worktree.path)} initialEntry={initialEntry && (initialEntry.workspacePath === worktree.path
+              || floating.hostedTabs.some(tab => tab.host === worktree.path && tab.workspace === initialEntry.workspacePath && tab.id === tabCenterId(initialEntry.target))) ? initialEntry : undefined} key={worktree.path} project={project} worktree={worktree} active={worktree.path === activeWorktreePath} agents={agents} onShowLeftSidebar={leftSidebarVisible ? undefined : showLeftSidebar} rightSidebarVisible={rightSidebarVisible} onHideRightSidebar={hideRightSidebar} onShowRightSidebar={showRightSidebar} onStartRightResize={startRightResize} notesRefresh={notesRefreshByProject[project.id] ?? initialExplorerRefresh} onNotesChanged={notesChanged} onResourcesChanged={reportResources} />)}
+        </ProjectTerminalPanelProvider>)}
         {activeEntry && busyWorktrees.has(activeEntry.worktree.path) ? <div className="project-aow-no-context"><LoaderCircle className="spinning" /><p>该 Worktree 正在清理，可继续使用其他工作区。</p><button onClick={() => setCleanupProjectId(activeEntry.project.id)}>查看清理进度</button></div> : null}
         {!activeEntry && !leftSidebarVisible ? <nav className="project-aow-center-tabs project-aow-empty-toolbar"><LeftSidebarToggle onClick={showLeftSidebar} /></nav> : null}
         {!activeEntry ? <div className="project-aow-no-context"><FolderGit2 /><h1>Project AoW</h1><p>从左侧注册并选择一个 Project Worktree。</p></div> : null}
@@ -2678,7 +2664,9 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
     {bindNotesProject ? <BindNotesDialog project={bindNotesProject} onClose={() => setBindNotesProject(undefined)} onBound={notesBound} /> : null}
     {showSettings ? <SettingsDialog agents={agents} onClose={() => setShowSettings(false)} onNodesChange={setNodeAddresses} onReload={async notesMoved => { await Promise.all([loadAgents(), loadProjects(notesMoved)]); }} /> : null}
     <FloatingWorkspace agents={agents} projects={projects} activeLocation={locationInFloating} />
-    {globalProject && globalProject.worktrees[0] && (floating.open || floating.tabs.length > 0) ? <WorkspaceSurface locationSource={locationSource(floating.globalRoot)} initialEntry={globalProject.worktrees.some(worktree => worktree.path === initialEntry?.workspacePath) ? initialEntry : undefined} key={globalProject.id} project={globalProject} worktree={globalProject.worktrees.find(worktree => worktree.is_main) ?? globalProject.worktrees[0]} active={floating.visible} agents={agents} rightSidebarVisible={floating.sidebarOpen} onHideRightSidebar={() => floating.setSidebarOpen(false)} onShowRightSidebar={() => floating.setSidebarOpen(true)} onStartRightResize={() => undefined} notesRefresh={notesRefreshByProject[globalProject.id] ?? initialExplorerRefresh} onNotesChanged={notesChanged} /> : null}
+    {globalProject && globalProject.worktrees[0] && (floating.open || floating.tabs.length > 0) ? <ProjectTerminalPanelProvider key={globalProject.id} project={globalProject}>
+      <WorkspaceSurface locationSource={locationSource(floating.globalRoot)} initialEntry={globalProject.worktrees.some(worktree => worktree.path === initialEntry?.workspacePath) ? initialEntry : undefined} project={globalProject} worktree={globalProject.worktrees.find(worktree => worktree.is_main) ?? globalProject.worktrees[0]} active={floating.visible} agents={agents} rightSidebarVisible={floating.sidebarOpen} onHideRightSidebar={() => floating.setSidebarOpen(false)} onShowRightSidebar={() => floating.setSidebarOpen(true)} onStartRightResize={() => undefined} notesRefresh={notesRefreshByProject[globalProject.id] ?? initialExplorerRefresh} onNotesChanged={notesChanged} />
+    </ProjectTerminalPanelProvider> : null}
   </div>;
 }
 

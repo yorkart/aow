@@ -123,6 +123,7 @@ async fn execute_inner(
                     AgentTerminalCreate {
                         agent: background.agent.clone(),
                         project_id: background.project_id.clone(),
+                        parent_pane_id: None,
                         cwd,
                         task: Some(background.markdown.clone()),
                         timeout_seconds: 120,
