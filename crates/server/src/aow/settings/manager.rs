@@ -57,13 +57,30 @@ impl AowManager {
             self.execution_path().await?;
         }
         let operation = self.inner.project_operation.clone().lock_owned().await;
-        self.update_notes_settings(
-            notes_base,
-            execution_path,
-            request.editor,
-            node_addresses,
-            operation,
-        )
+        let manager = self.clone();
+        tokio::task::spawn_blocking(move || {
+            // Finish persistence even if the HTTP request is cancelled.
+            let _operation = operation;
+            let mut settings = manager.lock_settings()?;
+            let mut next = settings.clone();
+            if let Some(base) = notes_base {
+                next.notes_base = base.to_string_lossy().into_owned();
+            }
+            if let Some(path) = execution_path {
+                next.execution_path = Some(path);
+            }
+            if let Some(editor) = request.editor {
+                next.editor = editor;
+            }
+            if let Some(addresses) = node_addresses {
+                next.node_addresses = addresses;
+            }
+            // The root is a default for new projects; existing bindings stay unchanged.
+            manager.persist_settings(&next)?;
+            *settings = next.clone();
+            Ok(next)
+        })
         .await
+        .map_err(|error| AowError::Invalid(error.to_string()))?
     }
 }

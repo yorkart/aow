@@ -223,7 +223,8 @@ try {
     const notes = dialog.getByRole('textbox', { name: 'Notes root' });
     assert.equal(await notes.evaluate(element => element === document.activeElement), false, 'opening a category does not pop up the keyboard');
     await notes.fill('/notes/mobile');
-    await save();
+    await save('Notes root 已保存');
+    assert.match(await dialog.getByRole('status').textContent(), /已有项目仍使用原 Notes 路径.*绑定 Notes 目录/);
     await dialog.locator('code').filter({ hasText: '/notes/mobile' }).waitFor();
     assert.equal(state.settings.notes_base, '/notes/mobile');
     await layout(page, dialog, 'notes');

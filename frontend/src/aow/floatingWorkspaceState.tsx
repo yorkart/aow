@@ -93,7 +93,6 @@ function useFloatingController() {
   const sources = useRef(new Map<string, WorkspaceCommands>());
   const returnFocus = useRef<HTMLElement | null>(null);
   const [globalRoot, setGlobalRoot] = useState('');
-  const [notesMoves, setNotesMoves] = useState<{ from: string; to: string }[]>([]);
   const show = useCallback(() => {
     if (document.activeElement instanceof HTMLElement && !document.activeElement.closest('[data-floating-workspace]')) returnFocus.current = document.activeElement;
     setAutoHidden(false);
@@ -171,7 +170,7 @@ function useFloatingController() {
     else remove(tab.workspace, tab.id);
   };
   return { inboxOpen: activeKey === 'inbox', openInbox, tabs, tabRevealRequest, contains, active, open, visible, pinned, togglePinned, autoHidden, setAutoHidden, showRequest, portal, setPortal, sidebar, setSidebar, sidebarOpen, setSidebarOpen,
-    globalRoot, setGlobalRoot, notesMoves, setNotesMoves, sources, show, minimize, add, restore, remove, replaceDocument, retainWorkspaces, publish, select, close,
+    globalRoot, setGlobalRoot, sources, show, minimize, add, restore, remove, replaceDocument, retainWorkspaces, publish, select, close,
     hostedTabs, hosts, publishHost, hostTerminal, removeHosted, terminalRequests, requestTerminal, acknowledgeTerminal, cancelTerminalRequest };
 }
 const FloatingContext = createContext<ReturnType<typeof useFloatingController> | null>(null);

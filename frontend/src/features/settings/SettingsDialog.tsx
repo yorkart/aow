@@ -35,7 +35,7 @@ type Section = typeof sections[number]['id'];
 
 export function SettingsDialog({ agents, agentsError, mobile = false, onClose: closeDialog, onReload, onNodesChange }: {
   agents: AowAgent[]; agentsError?: string; mobile?: boolean; onClose: () => void;
-  onReload: (notesMoved?: boolean) => Promise<void>; onNodesChange: (addresses: string[]) => void;
+  onReload: () => Promise<void>; onNodesChange: (addresses: string[]) => void;
 }) {
   const [section, setSection] = useState<Section>('notes');
   const [overview, setOverview] = useState(mobile);
@@ -49,6 +49,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
   const [nodeAddresses, setNodeAddresses] = useState('');
   const [nodesSaved, setNodesSaved] = useState(false);
   const [notesBase, setNotesBase] = useState('');
+  const [notesSaved, setNotesSaved] = useState(false);
   const [executionPath, setExecutionPath] = useState('');
   const [environmentSaved, setEnvironmentSaved] = useState(false);
   const [settingsLoading, setSettingsLoading] = useState(true);
@@ -135,6 +136,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
   };
 
   const saveNotesRoot = async () => {
+    setNotesSaved(false);
     const target = notesBase.trim();
     if (!target.startsWith('/')) {
       setError('Notes 根目录必须是服务端上的绝对路径。');
@@ -146,7 +148,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
       const next = await aowApi.updateSettings({ notesBase: target });
       setSettings(next);
       setNotesBase(next.notes_base);
-      await onReload(true);
+      setNotesSaved(true);
     } catch (reason) {
       setError(message(reason));
     } finally {
@@ -324,9 +326,10 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
             <form className="project-aow-dialog-form" onSubmit={(event) => { event.preventDefault(); void saveNotesRoot(); }}>
               <div className="project-aow-dialog-body">
                 <div className="project-aow-settings-heading"><div><h2>Notes</h2><p>新注册项目在未指定 Notes path 时，会以仓库地址映射到这个根目录下。</p></div></div>
-                <label className="project-aow-dialog-field"><span>Notes root</span><input className="project-aow-dialog-monospace" autoFocus={!mobile} spellCheck={false} value={notesBase} disabled={settingsLoading || settingsBusy} onChange={(event) => { setNotesBase(event.target.value); setError(''); }} placeholder="/absolute/path/to/aow" required /></label>
+                <label className="project-aow-dialog-field"><span>Notes root</span><input className="project-aow-dialog-monospace" autoFocus={!mobile} spellCheck={false} value={notesBase} disabled={settingsLoading || settingsBusy} onChange={(event) => { setNotesBase(event.target.value); setNotesSaved(false); setError(''); }} placeholder="/absolute/path/to/aow" required /></label>
                 <small className="project-aow-dialog-path-hint">当前根目录：<code title={settings?.notes_base}>{settings?.notes_base ?? '加载中…'}</code></small>
-                <p className="project-aow-form-intro">保存后，使用默认映射的项目会迁移已有 Notes；显式绑定的自定义目录保持原位置。目标目录冲突时会保留原绑定并提示。</p>
+                <p className="project-aow-form-intro">仅修改默认根目录，不迁移笔记。已有项目保持原 Notes 路径；如需切换，请在项目菜单中使用「绑定 Notes 目录」。</p>
+                {notesSaved ? <p role="status">Notes root 已保存。已有项目仍使用原 Notes 路径，如需切换，请在项目菜单中使用「绑定 Notes 目录」。</p> : null}
                 {error ? <div className="project-aow-error" role="alert">{error}</div> : null}
               </div>
               <footer className="project-aow-dialog-footer"><button type="submit" className="project-aow-dialog-button primary" disabled={settingsLoading || settingsBusy || !notesBase.trim()}>{settingsBusy ? '保存中…' : '保存'}</button></footer>

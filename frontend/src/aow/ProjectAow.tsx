@@ -396,7 +396,7 @@ function BindNotesDialog({ project, onClose, onBound }: {
       <header><div><NotebookPen /><strong id="bind-notes-title">绑定 Notes 目录</strong><span title={project.name}>{project.name}</span></div><button type="button" title="关闭" aria-label="关闭" disabled={busy} onClick={onClose}><X /></button></header>
       <form className="project-aow-dialog-form" onSubmit={(event) => { event.preventDefault(); void bind(); }}>
         <div className="project-aow-dialog-body">
-          <p className="project-aow-form-intro">绑定已有目录或输入新目录。目录不存在时会自动创建。</p>
+          <p className="project-aow-form-intro">绑定已有目录并使用其中的笔记，目录不存在时会自动创建。仅切换路径，不迁移笔记。</p>
           <label className="project-aow-dialog-field"><span>Notes 路径</span><input className="project-aow-dialog-monospace" aria-describedby="bind-notes-current" autoFocus autoComplete="off" spellCheck={false} value={path} disabled={busy} onChange={(event) => { setPath(event.target.value); setError(''); }} placeholder="/absolute/path/to/project-notes" required /></label>
           <small id="bind-notes-current" className="project-aow-dialog-path-hint">当前目录：<code title={project.notes_path}>{project.notes_path}</code></small>
           {error ? <div className="project-aow-error" role="alert">{error}</div> : null}
@@ -1794,28 +1794,6 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     syncTabLocation(target, '', locationTabVisible);
   }, [initialEntry, locationSource, locationCenterId, locationTabVisible, restored, terminals.loaded, terminals.loading, centerTabs,
     documents, sessionPreviews, openPullRequests, browserPath, automationLocations, worktree.id, worktree.path, syncTabLocation]);
-  useEffect(() => {
-    if (!floating.notesMoves.length) return;
-    const remap = (path: string) => {
-      const move = floating.notesMoves.find(move => path.startsWith(move.from + '/'));
-      return move ? move.to + path.slice(move.from.length) : path;
-    };
-    const targets = documentsRef.current.filter(item => !item.diffSource && remap(item.path) !== item.path);
-    if (!targets.length) return;
-    setDocuments(items => items.map(item => !item.diffSource && remap(item.path) !== item.path
-      ? { ...item, id: remap(item.id), path: remap(item.path), refreshing: true, refreshError: undefined } : item));
-    // A cross-filesystem move changes file versions. Reconcile them before auto-save resumes.
-    for (const target of targets) void filesApi.readText(remap(target.path)).then(text => {
-      updateSharedDocument(target, item => {
-        if (item.path !== remap(target.path)) return item;
-        const conflict = item.dirty && text.content !== item.content && text.content !== item.savedContent;
-        return { ...item, refreshing: false, version: text.version, pendingExternal: conflict ? text : undefined,
-          savedContent: conflict ? item.savedContent : text.content,
-          content: item.dirty ? item.content : text.content, dirty: item.dirty && item.content !== text.content };
-      });
-    }).catch(reason => updateSharedDocument(target, item => ({ ...item, refreshing: false, refreshError: message(reason) })));
-  }, [floating.notesMoves]);
-
   const commandsRef = useRef({ createTerminal, createTemporaryNote, closeTab, closeTabsInGroup, centerTabs, canRenameTab, renameTab });
   commandsRef.current = { createTerminal, createTemporaryNote, closeTab, closeTabsInGroup, centerTabs, canRenameTab, renameTab };
   useEffect(() => {
@@ -2132,17 +2110,15 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
   const draggingPinnedPathRef = useRef<string | undefined>(undefined);
   const suppressPinnedClickRef = useRef(false);
 
-  const projectNotesPaths = useRef(new Map<string, string>());
   const projectRequest = useRef<Promise<void> | undefined>(undefined);
-  const projectReload = useRef({ requested: false, notesMoved: false });
+  const projectReload = useRef({ requested: false });
   const projectsMounted = useRef(true);
   useEffect(() => {
     projectsMounted.current = true;
     return () => { projectsMounted.current = false; };
   }, []);
-  const loadProjects = useCallback(async (notesMoved = false, quiet = false) => {
+  const loadProjects = useCallback(async (quiet = false) => {
     projectReload.current.requested = true;
-    projectReload.current.notesMoved ||= notesMoved;
     if (!quiet) { setLoading(true); setError(''); }
     if (projectRequest.current) return projectRequest.current;
     const request = (async () => {
@@ -2160,12 +2136,6 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
           const previous = new Map(projectsRef.current.map(project => [project.id, project]));
           const all = fetched.map(project => project.error && previous.has(project.id)
             ? { ...project, worktrees: previous.get(project.id)!.worktrees } : project);
-          if (projectReload.current.notesMoved) floating.setNotesMoves(all.flatMap(project => {
-            const from = projectNotesPaths.current.get(project.id);
-            return from && from !== project.notes_path ? [{ from, to: project.notes_path }] : [];
-          }));
-          projectReload.current.notesMoved = false;
-          projectNotesPaths.current = new Map(all.map(project => [project.id, project.notes_path]));
           const builtin = all.find(project => project.builtin);
           setGlobalProject(current => builtin?.error && current ? { ...builtin, worktrees: current.worktrees } : builtin);
           // A failed scan is not evidence that workspaces disappeared.
@@ -2196,7 +2166,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
     const refresh = () => {
       if (document.visibilityState !== 'visible') return;
       clearTimeout(timer);
-      timer = setTimeout(() => { void loadProjects(false, true); }, 100);
+      timer = setTimeout(() => { void loadProjects(true); }, 100);
     };
     const unsubscribe = subscribeWorkspaceChanges(change => { if (change.reset || change.projects) refresh(); });
     document.addEventListener('visibilitychange', refresh);
@@ -2514,7 +2484,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
     if (!finished.length) return;
     for (const job of finished) handledCreations.current.add(job.id);
     // Read current inventory instead of replaying a possibly stale job result.
-    void loadProjects(false, true);
+    void loadProjects(true);
   }, [creations.jobs, loadProjects]);
 
   const creationSubmitted = (job: WorktreeCreationJob, showProgress: boolean) => {
@@ -2524,7 +2494,6 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
   };
 
   const notesBound = (project: AowProject) => {
-    projectNotesPaths.current.set(project.id, project.notes_path);
     setProjects((items) => items.map((item) => item.id === project.id ? project : item));
     setBindNotesProject(undefined);
   };
@@ -2658,10 +2627,10 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
         if (projects.some(project => project.worktrees.some(worktree => worktree.path === job.path))) {
           setCollapsedProjects(current => ({ ...current, [job.project_id]: false }));
           setActiveWorktreePath(job.path); setCreationJobId(undefined);
-        } else { void loadProjects(false, true); setError('正在刷新项目，请确认 Worktree 仍存在后重试。'); }
+        } else { void loadProjects(true); setError('正在刷新项目，请确认 Worktree 仍存在后重试。'); }
       }} /> }
     {bindNotesProject ? <BindNotesDialog project={bindNotesProject} onClose={() => setBindNotesProject(undefined)} onBound={notesBound} /> : null}
-    {showSettings ? <SettingsDialog agents={agents} onClose={() => setShowSettings(false)} onNodesChange={setNodeAddresses} onReload={async notesMoved => { await Promise.all([loadAgents(), loadProjects(notesMoved)]); }} /> : null}
+    {showSettings ? <SettingsDialog agents={agents} onClose={() => setShowSettings(false)} onNodesChange={setNodeAddresses} onReload={async () => { await Promise.all([loadAgents(), loadProjects()]); }} /> : null}
     <FloatingWorkspace agents={agents} projects={projects} activeLocation={locationInFloating} />
     {globalProject && globalProject.worktrees[0] && (floating.open || floating.tabs.length > 0) ? <ProjectTerminalPanelProvider key={globalProject.id} project={globalProject}>
       <WorkspaceSurface locationSource={locationSource(floating.globalRoot)} initialEntry={globalProject.worktrees.some(worktree => worktree.path === initialEntry?.workspacePath) ? initialEntry : undefined} project={globalProject} worktree={globalProject.worktrees.find(worktree => worktree.is_main) ?? globalProject.worktrees[0]} active={floating.visible} agents={agents} rightSidebarVisible={floating.sidebarOpen} onHideRightSidebar={() => floating.setSidebarOpen(false)} onShowRightSidebar={() => floating.setSidebarOpen(true)} onStartRightResize={() => undefined} notesRefresh={notesRefreshByProject[globalProject.id] ?? initialExplorerRefresh} onNotesChanged={notesChanged} />
