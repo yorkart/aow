@@ -8,8 +8,6 @@ English | [简体中文](README.zh-CN.md)
 
 Manage Git repositories and worktrees, browse and edit files, use terminals, review agent conversations, and run automation tasks in one interface. AoW supports popular agents such as Codex and Claude Code, with desktop and mobile interfaces.
 
-Product website: [yorkart.github.io/aow](https://yorkart.github.io/aow/). The website is published separately through GitHub Pages. See [website/README.md](website/README.md) for its source, preview, and deployment instructions.
-
 ## Installation and upgrades
 
 Supports **Linux and macOS on x86_64 and ARM64**. Runtime requirements are Bash, Node.js 20+, Git, tar, and curl. Linux requires working systemd user services. On first installation, macOS selects LaunchAgent if the installing account has a graphical session, otherwise LaunchDaemon; updates retain that choice. Existing LaunchAgent installations keep their mode.
