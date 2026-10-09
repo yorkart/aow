@@ -25,10 +25,10 @@
 | Language or format | Required checks |
 | --- | --- |
 | Rust | `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets --locked -- -D warnings`. CI checks both Linux and macOS conditional code. |
-| TypeScript / TSX | `npm run lint:js`, `npm --prefix frontend run typecheck`, and `frontend/node_modules/.bin/tsc -p website/snapshot/tsconfig.json --pretty false`. Install frontend dependencies before type checking. |
-| JavaScript / MJS | `npm run lint:js`; ESLint covers the frontend, VT worker, portal, scripts, and tests, including React Hook call-order checks. |
+| TypeScript / TSX | `npm run lint:js` and `npm --prefix frontend run typecheck`. Install frontend dependencies before type checking. |
+| JavaScript / MJS | `npm run lint:js`; ESLint covers the frontend, VT worker, scripts, and tests, including React Hook call-order checks. |
 | CSS | `npm run lint:css`. Preserve intentional cascade ordering and the existing compact style. |
-| HTML | `npm run lint:html`, including browser preview fixtures and the static portal. |
+| HTML | `npm run lint:html`, including browser preview fixtures. |
 | Python | `npm run lint:python` (Ruff), including installers, adapters, and test helpers. |
 | Shell | `npm run lint:shell`; this checks syntax with the declared shell and runs ShellCheck on scripts and `packaging/bin` launchers. |
 | C | On macOS, run `clang -Wall -Wextra -Werror -fsyntax-only crates/macos-log/src/os_log.c` and `clang --analyze -Xanalyzer -analyzer-output=text -Xanalyzer -analyzer-werror -Wall -Wextra -Werror crates/macos-log/src/os_log.c`. Other hosts must disclose that the macOS SDK check was not run. |
@@ -38,7 +38,7 @@
 
 - `npm run lint` runs the Node-based language and document checks together. Python, shell, workflow, Rust, and C checks remain explicit commands as listed above.
 - CI must invoke Cargo, npm, Python, ShellCheck, Clang, and actionlint directly or through the checked-in scripts; CI must not install or depend on `just`. All applicable lint jobs must pass before publishing a release.
-- Lint and type checks complement the build and test requirements above; a passing formatter alone does not satisfy lint requirements. Do not regenerate portal snapshots merely to run lint.
+- Lint and type checks complement the build and test requirements above; a passing formatter alone does not satisfy lint requirements.
 
 ## Pull Request Requirements
 
