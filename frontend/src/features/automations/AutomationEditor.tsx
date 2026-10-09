@@ -3,11 +3,12 @@ import { createPortal } from 'react-dom';
 import type { editor } from 'monaco-editor';
 import { CalendarClock, LoaderCircle, MousePointerClick, Settings2, X } from 'lucide-react';
 import type { AowAgent } from '../agents/types';
+import { aowAgentType } from '../agents/agentTypes';
 import type { AowProject } from '../../aow/types';
 import { notificationsApi } from '../notifications/api';
 import { agentNames, errorMessage } from './presentation';
 import { automationApi } from './api';
-import type { AutomationAgent, AutomationTask, TaskInput, TaskKind } from './types';
+import type { AutomationTask, TaskInput, TaskKind } from './types';
 
 import { WorkspaceSelect } from '../workspaces/WorkspaceSelect';
 import { workspaceConfig } from '../workspaces/types';
@@ -40,9 +41,10 @@ export function AutomationEditor({ task, kind = 'scheduled', initialWorkspaceMod
   onClose: () => void;
   onSaved: (task: AutomationTask) => void;
 }) {
+  const initialAgent = agents.find(agent => agent.available && aowAgentType(agent));
   const initialWorktree = project.worktrees.find((worktree) => worktree.is_main) ?? project.worktrees[0];
   const [draft, setDraft] = useState<TaskInput>(() => task ? { ...task, kind: task.kind ?? 'scheduled', prompt_bindings: task.prompt_bindings ?? [], failure_notification: task.failure_notification ?? null } : {
-    kind, prompt_bindings: [], name: '', prompt: '', agent: (agents.find((agent) => agent.available && Object.hasOwn(agentNames, agent.id))?.id as AutomationAgent | undefined) ?? 'codex',
+    kind, prompt_bindings: [], name: '', prompt: '', agent: initialAgent ? aowAgentType(initialAgent)! : 'codex', agent_profile_id: initialAgent?.id,
     project_id: project.id, workspace_mode: initialWorkspaceMode, workspace_path: initialWorktree?.path ?? '',
     cleanup_worktree: true, base_branch: '', cron: '0 9 * * *', interval_seconds: null, max_concurrent_runs: 1, enabled: true, yolo: true, failure_notification: null,
   });
@@ -140,8 +142,13 @@ export function AutomationEditor({ task, kind = 'scheduled', initialWorkspaceMod
         </section>
         <aside className="automation-settings">
           <h3><Settings2 />执行配置</h3>
-          <div className="automation-agent-setting"><span>Agent</span><div className="automation-agent-row"><select aria-label="Agent" value={draft.agent} onChange={(event) => update('agent', event.target.value as AutomationAgent)}>
-            {Object.entries(agentNames).map(([id, name]) => <option key={id} value={id} disabled={!agents.some((agent) => agent.id === id && agent.available)}>{name}{agents.some((agent) => agent.id === id && agent.available) ? '' : ' · 未安装'}</option>)}
+          <div className="automation-agent-setting"><span>Agent</span><div className="automation-agent-row"><select aria-label="Agent" value={draft.agent_profile_id ?? draft.agent} onChange={event => {
+            const selected = agents.find(agent => agent.id === event.target.value);
+            const type = selected && aowAgentType(selected);
+            if (selected && type) setDraft(current => ({ ...current, agent: type, agent_profile_id: selected.id }));
+          }}>
+            {!agents.some(agent => agent.id === (draft.agent_profile_id ?? draft.agent)) && <option value={draft.agent_profile_id ?? draft.agent} disabled>{draft.agent_profile_id ?? agentNames[draft.agent]} · 不可用</option>}
+            {agents.filter(agent => aowAgentType(agent)).map(agent => <option key={agent.id} value={agent.id} disabled={!agent.available}>{agent.display_name}{agent.available ? '' : ' · 未安装'}</option>)}
           </select><label className="automation-yolo-option"><input type="checkbox" checked={draft.yolo} onChange={(event) => update('yolo', event.target.checked)} />{draft.agent === 'pi' ? '信任项目配置' : 'Yolo'}</label></div></div>
           {draft.agent === 'pi' ? <p className="automation-hint">允许 Pi 加载项目配置和扩展；工具权限仍由 Pi 配置的扩展控制。</p> : null}
           <WorkspaceSelect project={project} value={draft} disabled={busy} allowDynamic={manual}
@@ -174,7 +181,7 @@ export function AutomationEditor({ task, kind = 'scheduled', initialWorkspaceMod
         </aside>
       </div>
       {error ? <div className="automation-error" role="alert">{error}</div> : null}
-      <footer>{!manual ? <label className="automation-checkbox"><input type="checkbox" checked={draft.enabled} onChange={(event) => update('enabled', event.target.checked)} />启用自动化</label> : <span />}<div><button type="button" disabled={busy} onClick={onClose}>取消</button><button className="automation-primary" type="submit" disabled={busy || !workspaceReady || !agents.some((agent) => agent.id === draft.agent && agent.available)}>{busy ? <LoaderCircle className="automation-spin" /> : null}{busy ? '保存中…' : task ? '保存更改' : manual ? '创建手动任务' : '创建自动化'}</button></div></footer>
+      <footer>{!manual ? <label className="automation-checkbox"><input type="checkbox" checked={draft.enabled} onChange={(event) => update('enabled', event.target.checked)} />启用自动化</label> : <span />}<div><button type="button" disabled={busy} onClick={onClose}>取消</button><button className="automation-primary" type="submit" disabled={busy || !workspaceReady || !agents.some((agent) => agent.id === (draft.agent_profile_id ?? draft.agent) && agent.available)}>{busy ? <LoaderCircle className="automation-spin" /> : null}{busy ? '保存中…' : task ? '保存更改' : manual ? '创建手动任务' : '创建自动化'}</button></div></footer>
     </form>
   </dialog>, document.body);
 }

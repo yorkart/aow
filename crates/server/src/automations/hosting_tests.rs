@@ -233,6 +233,13 @@ async fn review_environment_case(home_only: bool) {
     };
     let manager = state.automations.clone().unwrap();
     let app = crate::build_router(state);
+    request(
+        &app,
+        "PUT",
+        "/api/aow/settings",
+        json!({"execution_path":["/usr/bin", "/bin"]}),
+    )
+    .await;
     let project = request(&app, "POST", "/api/aow/projects", json!({"path":repo})).await;
     let home = directory.path().join("reviewer-home");
     let root = if home_only {
@@ -357,6 +364,13 @@ async fn run_hosting_case(case: HostingCase) {
         dispatch_command: "/usr/bin/true".into(),
     };
     let mut app = crate::build_router(state.clone());
+    request(
+        &app,
+        "PUT",
+        "/api/aow/settings",
+        json!({"execution_path":["/usr/bin", "/bin"]}),
+    )
+    .await;
     let project = request(&app, "POST", "/api/aow/projects", json!({"path":repo})).await;
     let home = directory.path().join("codex-home");
     std::fs::create_dir_all(&home).unwrap();

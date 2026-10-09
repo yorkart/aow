@@ -59,6 +59,7 @@ fn fixture(script: &str) -> (TempDir, Store, Task) {
         created_at: Utc::now(),
         updated_at: Utc::now(),
         input: TaskInput {
+            agent_profile_id: None,
             kind: Default::default(),
             prompt_bindings: Vec::new(),
             name: "Test task".into(),
@@ -260,12 +261,13 @@ async fn registered_agent_environment_is_reloaded_between_runs_and_snapshotted_p
     let (directory, store, mut task) = fixture(
         "printf 'session id: environment-session\n' >&2\ncat >/dev/null\nprintf '%s' \"$DYNAMIC_AGENT_ENV\" > agent-environment",
     );
+    task.input.agent_profile_id = Some("Work_codex-2".into());
     let registry_path = store.config_dir.join(aow_agents::environment::AGENTS_FILE);
     let registry = |value: &str| {
         serde_json::to_vec(&serde_json::json!({
             "version": 1,
             "items": [{
-                "id": "codex",
+                "id": "Work_codex-2",
                 "display_name": "Codex",
                 "command": "codex",
                 "env": {"DYNAMIC_AGENT_ENV": value, "PATH": "/ignored/agent/path", "CODEX_HOME": format!("history-{value}"), "HOME": directory.path().join(format!("home-{value}"))}

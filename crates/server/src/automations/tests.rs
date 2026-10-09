@@ -9,7 +9,7 @@ use axum::{
 use std::{fs, os::unix::fs::PermissionsExt};
 use tower::ServiceExt;
 
-async fn call(
+pub(super) async fn call(
     router: &Router,
     method: &str,
     path: &str,
@@ -115,6 +115,13 @@ async fn cli_import_rebinds_saved_tasks_and_isolates_failures() {
     };
     let manager = state.automations.clone().unwrap();
     let router = crate::build_router(state.clone());
+    call(
+        &router,
+        "PUT",
+        "/api/aow/settings",
+        serde_json::json!({"execution_path":["/usr/bin", "/bin"]}),
+    )
+    .await;
     let (code, project) = call(&router, "POST", "/api/aow/projects", json!({
         "path": repository, "name":"Target project", "notes_path":directory.path().join("notes"),
     })).await;
@@ -806,6 +813,13 @@ async fn api_validates_temporary_and_dynamic_workspace_tasks() {
     };
     let manager = state.automations.clone().unwrap();
     let router = crate::build_router(state);
+    call(
+        &router,
+        "PUT",
+        "/api/aow/settings",
+        serde_json::json!({"execution_path":["/usr/bin", "/bin"]}),
+    )
+    .await;
     let (code, project) = call(
         &router,
         "POST",

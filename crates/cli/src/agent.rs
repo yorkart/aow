@@ -31,8 +31,8 @@ controller causes a conflict. Do not automatically retry an ambiguous submission
 Examples:
   aow-cli project list
   aow-cli project get PROJECT-ID
-  aow-cli agent create --project-id PROJECT-ID --agent codex --cwd /repo
-  aow-cli agent create --project-id PROJECT-ID --agent traecli --cwd /worktrees/fix --task-file task.md
+  aow-cli agent create --project-id PROJECT-ID --agent-id codex --cwd /repo
+  aow-cli agent create --project-id PROJECT-ID --agent-id work-codex --cwd /worktrees/fix --task-file task.md
   aow-cli agent submit --pane-id PANE-ID --task 'Continue with the confirmed review feedback'
   aow-cli agent get --pane-id PANE-ID
   aow-cli agent list";
@@ -49,8 +49,9 @@ enum AgentCommand {
     /// Create a hidden agent pane, wait until ready, optionally submit its first task.
     #[command(after_help = HELP)]
     Create {
-        #[arg(long, default_value = "codex", value_parser = ["codex", "traecli", "hermes", "pi"])]
-        agent: String,
+        /// Saved Agent configuration ID from Settings → Agents.
+        #[arg(long, default_value = "codex", allow_hyphen_values = true, value_parser = parse_agent_id)]
+        agent_id: String,
         /// Registered project that owns the worktree.
         #[arg(long, value_parser = crate::parse_id)]
         project_id: String,
@@ -145,12 +146,12 @@ pub fn execute(args: AgentArgs, state_dir: PathBuf) -> Result<Value> {
         let timeout = match &args.command { AgentCommand::Create { timeout, .. } => *timeout + 20, _ => 20 };
         tokio::time::timeout(Duration::from_secs(timeout), async {
             match args.command {
-                AgentCommand::Create { agent, project_id, parent_pane_id, cwd, timeout, task } => {
+                AgentCommand::Create { agent_id, project_id, parent_pane_id, cwd, timeout, task } => {
                     let parent_pane_id = parent_pane_id.or_else(|| std::env::var("AOW_PANE_ID").ok())
                         .map(|id| crate::parse_id(&id).map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, format!("invalid parent pane ID: {error}"))))
                         .transpose()?;
                     let request = AgentTerminalCreate {
-                        agent, project_id, cwd: absolute(cwd).to_string_lossy().into_owned(),
+                        agent: agent_id, project_id, cwd: absolute(cwd).to_string_lossy().into_owned(),
                         parent_pane_id,
                         timeout_seconds: timeout, task: task.read()?,
                     };
@@ -167,6 +168,18 @@ pub fn execute(args: AgentArgs, state_dir: PathBuf) -> Result<Value> {
             }
         }).await.context("AoW CLI request timed out; operation may still be running, inspect agent list before retrying")?
     }).with_context(|| format!("local agent API at {}; ensure AoW server and terminald are running with this state directory", client.socket_path().display()))
+}
+
+fn parse_agent_id(value: &str) -> Result<String, String> {
+    if value.is_empty()
+        || value.len() > 80
+        || !value
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_'))
+    {
+        return Err("agent ID must contain 1-80 letters, numbers, '-' or '_'".into());
+    }
+    Ok(value.to_owned())
 }
 
 pub fn failure_json(failure: &StartupFailure) -> Value {

@@ -16,6 +16,8 @@ pub(crate) enum AowError {
     DirtyWorktree(usize),
     #[error("{0}")]
     RemovalConflict(String),
+    #[error("Agent ID 已存在：{0}")]
+    AgentIdConflict(String),
     #[error("agent not found or unavailable: {0}")]
     AgentNotFound(String),
     #[error("git command failed: {0}")]
@@ -45,6 +47,12 @@ impl From<aow_agents::launch::LaunchError> for AowError {
 
 pub(crate) fn aow_http_error(error: AowError) -> HttpError {
     match error {
+        AowError::AgentIdConflict(_) => HttpError::new(
+            StatusCode::CONFLICT,
+            "agent_id_exists",
+            error.to_string(),
+            None,
+        ),
         AowError::CreationConflict(_) => HttpError::new(
             StatusCode::CONFLICT,
             "worktree_creating",

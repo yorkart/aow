@@ -55,6 +55,8 @@ fn create_reports_ready_and_preserves_failed_pane_identity() {
         ("failed", "codex"),
         ("ready", "hermes"),
         ("ready", "pi"),
+        ("ready", "Work_codex-2"),
+        ("ready", "-Work_2"),
     ] {
         let mut expected = info(phase);
         expected["agent"] = json!(agent);
@@ -64,7 +66,7 @@ fn create_reports_ready_and_preserves_failed_pane_identity() {
                 "create",
                 "--project-id",
                 "project-one",
-                "--agent",
+                "--agent-id",
                 agent,
                 "--cwd",
                 "/repo",
@@ -163,7 +165,10 @@ fn agent_help_and_invalid_arguments_do_not_initialize_state() {
             "custom",
         ],
         vec!["agent", "create", "--timeout", "0"],
-        vec!["agent", "create", "--agent", "unknown"],
+        vec!["agent", "create", "--agent", "codex"],
+        vec!["agent", "create", "--agent-id", "bad.id"],
+        vec!["agent", "create", "--agent-id", "含中文"],
+        vec!["agent", "create", "--agent-id", "with space"],
         vec!["agent", "create", "--repo", "/repo"],
         vec!["agent", "create", "--project-id", "project"],
         vec!["agent", "create", "--cwd", "/repo"],

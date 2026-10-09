@@ -19,6 +19,7 @@ export interface TaskInput extends WorkspaceConfig {
   kind: TaskKind;
   prompt_bindings: PromptBinding[];
   agent: AutomationAgent;
+  agent_profile_id?: string;
   project_id: string;
   cleanup_worktree: boolean;
   cron: string;

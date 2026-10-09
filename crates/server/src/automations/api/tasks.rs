@@ -62,8 +62,12 @@ async fn resolve(state: &AppState, input: &TaskInput) -> Result<(String, PathBuf
         .aow
         .automation_project(&input.project_id, std::path::Path::new(&reference))
         .await?;
-    let agent_id = input.agent.id();
+    let agent_id = input.agent_profile_id();
     let launch = state.aow.resolve_agent_launch(agent_id, &reference).await?;
+    ensure!(
+        launch.agent_type.id() == input.agent.id(),
+        "Agent 配置的类型与任务不一致"
+    );
     let environment = aow_agents::automation::configuration_environment();
     let launch = AgentLaunch {
         executable: launch.executable.into(),
