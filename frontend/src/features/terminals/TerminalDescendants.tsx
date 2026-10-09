@@ -4,6 +4,7 @@ import type { AowWorktree } from '../../aow/types';
 import { AgentIcon } from '../agents/AgentIcon';
 import { terminalPaneAgent, terminalPaneTitle, terminalTabPresentation } from './terminalPresentation';
 import type { TerminalPane, TerminalTab } from './types';
+import { TerminalTaskCompletion } from './TerminalTaskCompletion';
 
 interface Entry { tab: TerminalTab; pane: TerminalPane }
 export type TerminalChildren = Map<string, Entry[]>;
@@ -25,6 +26,7 @@ interface Props {
   detectedAgents: Record<string, string | null>;
   titles: Record<string, string>;
   activeId?: string;
+  unreadTerminalIds: ReadonlySet<string>;
   onOpen: (tab: TerminalTab, paneId: string) => void;
 }
 
@@ -52,6 +54,7 @@ function Descendant({ entry, ancestors, ...props }: Props & { entry: Entry; ance
       <button type="button" className="terminal-descendant-open" title={`${label}\n${tab.workspace_root}`}
         onClick={() => props.onOpen(tab, pane.id)}>
         <AgentIcon agentId={terminalPaneAgent(pane, props.detectedAgents) ?? pane.agent_id} /><span>{label}</span>
+        {props.unreadTerminalIds.has(tab.id) && <TerminalTaskCompletion />}
       </button>
     </div>
     {children.length ? <ul id={bodyId} className="terminal-descendants" hidden={!expanded}>

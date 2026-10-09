@@ -7,6 +7,8 @@ import { terminalControlLabels, terminalDisplayLabels, terminalLifecycleLabels }
 import { requestTerminalPaneSelection, useTerminalStates } from './terminalViewState';
 import { indexTerminalChildren, TerminalDescendants } from './TerminalDescendants';
 import { TerminalLifecycleDot } from './TerminalLifecycleDot';
+import { TerminalTaskCompletion } from './TerminalTaskCompletion';
+import { useUnreadTerminalIds } from '../notifications/taskNotifications';
 import { AgentIcon } from '../agents/AgentIcon';
 import { AowIconButton } from '../../components/AowIconButton';
 import { AowPanel, AowPanelStack } from '../../components/AowPanel';
@@ -62,6 +64,7 @@ export function TerminalPanel({ tabs, descendantTabs = tabs, detectedAgents, tit
 }) {
   const panelId = useId();
   const terminalState = useTerminalStates();
+  const unreadTerminalIds = useUnreadTerminalIds();
   const childrenIndex = useMemo(() => indexTerminalChildren(descendantTabs), [descendantTabs]);
   const openChild = (tab: TerminalTab, paneId: string) => {
     if (onOpenPane) onOpenPane(tab, paneId);
@@ -106,7 +109,8 @@ export function TerminalPanel({ tabs, descendantTabs = tabs, detectedAgents, tit
     const displayLabel = terminalDisplayLabels[state.display];
     const controlLabel = terminalControlLabels[state.control];
     return <TerminalDescendants key={tab.id} tab={tab} title={presentation.title} index={childrenIndex}
-      worktrees={worktrees} detectedAgents={detectedAgents} titles={titles} activeId={activeId} onOpen={openChild}>
+      worktrees={worktrees} detectedAgents={detectedAgents} titles={titles} activeId={activeId} onOpen={openChild}
+      unreadTerminalIds={unreadTerminalIds}>
       <AowListRow className={`terminal-panel-row${tab.id === activeId ? ' active' : ''}`}
       openClassName="terminal-panel-open" key={tab.id}
       title={presentation.title} tooltip={presentation.title}
@@ -123,6 +127,7 @@ export function TerminalPanel({ tabs, descendantTabs = tabs, detectedAgents, tit
         <ControlIcon className={state.control === 'controlled' ? 'terminal-panel-state-active' : undefined}
           role="img" aria-label={controlLabel}><title>{controlLabel}</title></ControlIcon>
       </small>
+      {unreadTerminalIds.has(tab.id) && <TerminalTaskCompletion />}
     </AowListRow></TerminalDescendants>;
   };
   return <section className="terminal-panel">
