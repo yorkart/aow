@@ -12,7 +12,7 @@ import { prTabId } from './tabRoutes/pr';
 import { FloatingWorkspaceProvider, FloatingOpenMenu, useFloatingWorkspace, openingInFloatingWorkspace, withFloatingOpen, readStored, persist } from './floatingWorkspaceState';
 import type { SetStateAction, CSSProperties, DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from 'react';
 import {
-  ArrowUp, CalendarClock, Check, ChevronRight, CircleHelp, CornerDownLeft, FileText, Files, FolderGit2, FolderOpen, GitBranch, GitBranchPlus, GitPullRequest, MessageSquare, MoreHorizontal,
+  ArrowUp, CalendarClock, Check, ChevronRight, CornerDownLeft, FileText, Files, FolderGit2, FolderOpen, GitBranch, GitBranchPlus, GitPullRequest, MessageSquare, MoreHorizontal,
   LoaderCircle, NotebookPen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pin, PinOff, Plus, RefreshCw, Settings, SquareTerminal, Trash2, X,
 } from 'lucide-react';
 import { gitApi } from '../features/git/api';
@@ -2612,7 +2612,6 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
         </AowPanelStack>
         <div className="project-aow-sidebar-footer">
           <button title="Settings" aria-label="Settings" onClick={() => setShowSettings(true)}><Settings /></button>
-          <a href="https://yorkart.github.io/aow/" target="_blank" rel="noopener noreferrer" title="产品介绍（新窗口打开）" aria-label="产品介绍（新窗口打开）"><CircleHelp aria-hidden="true" /></a>
         </div>
       </aside>
       <div className="project-aow-left-resizer" role="separator" aria-label="调整项目栏宽度" aria-orientation="vertical" onPointerDown={(event) => startSidebarResize('left', event)} />
