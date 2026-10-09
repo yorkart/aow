@@ -91,7 +91,9 @@ try {
       await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Autopilot');
       await autopilot.click();
       await menu.getByLabel('最多自动输入次数').fill('2');
-      assert.equal(await menu.getByRole('checkbox', { name: '开启托管后立即执行一次' }).isChecked(), true);
+      const immediate = menu.getByRole('checkbox', { name: '开启托管后立即执行一次' });
+      assert.equal(await immediate.isChecked(), false);
+      await immediate.check();
       await menu.getByRole('button', { name: /代码 Review/ }).waitFor();
       if (process.env.AOW_HOSTING_SCREENSHOT_DIR) await page.screenshot({ path: `${process.env.AOW_HOSTING_SCREENSHOT_DIR}/aow-hosting-${mobile ? 'mobile' : 'desktop'}-picker.png` });
       await menu.getByRole('button', { name: '动态指定工作区', exact: true }).click();
@@ -114,17 +116,16 @@ try {
     });
   }
   for (const mobile of [false, true]) {
-    await test(`${mobile ? 'mobile' : 'desktop'} can opt out of immediate review and reopen without enabling again`, async t => {
+    await test(`${mobile ? 'mobile' : 'desktop'} waits for completion by default and reopens without enabling again`, async t => {
       const { page, starts } = await fixture(t, mobile);
       await page.getByRole('button', { name: 'Autopilot', exact: true }).click();
       const menu = page.getByRole('dialog', { name: '选择托管任务' });
       const immediate = menu.getByRole('checkbox', { name: '开启托管后立即执行一次' });
-      assert.equal(await immediate.isChecked(), true);
+      assert.equal(await immediate.isChecked(), false);
       await menu.getByText('不等待当前任务结束；取消勾选则等待下一次完成事件。').waitFor();
       const bounds = await menu.boundingBox();
       assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= page.viewportSize().width);
       assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= page.viewportSize().height);
-      await immediate.uncheck();
       await menu.getByRole('button', { name: /代码 Review/ }).click();
       const expected = [{ task_id: 'review', revision: 3, max_inputs: 3, run_on_enable: false }];
       assert.deepEqual(starts, expected);
@@ -156,7 +157,7 @@ try {
     await limit.fill('3');
     await menu.getByRole('button', { name: /代码 Review/ }).click();
     await page.locator('.terminal-connection.hosting').getByText(/托管中 · 代码 Review/).waitFor();
-    assert.deepEqual(starts, [{ task_id: 'review', revision: 3, max_inputs: 3, run_on_enable: true }]);
+    assert.deepEqual(starts, [{ task_id: 'review', revision: 3, max_inputs: 3, run_on_enable: false }]);
     assert.equal(await page.locator('.terminal-pane-header').getByText(/托管中/).count(), 0);
     assert.equal(await page.getByRole('button', { name: 'Autopilot', exact: true }).isDisabled(), true);
     await page.locator('.xterm-helper-textarea').focus(); await page.keyboard.type('do not send');
@@ -223,7 +224,7 @@ try {
       const menu = page.getByRole('dialog', { name: '选择托管任务' });
       await menu.getByLabel('最多自动输入次数').fill('2');
       await menu.getByRole('button', { name: /代码 Review/ }).click();
-      assert.deepEqual(starts, [{ task_id: 'review', revision: 3, max_inputs: 2, run_on_enable: true }]);
+      assert.deepEqual(starts, [{ task_id: 'review', revision: 3, max_inputs: 2, run_on_enable: false }]);
       const status = page.locator(mobile ? '.mobile-terminal-hosting' : '.terminal-connection.hosting');
       await status.getByText(/已输入 0\/2 次/).waitFor();
       for (const [phase, label] of [['completed', '托管已结束'], ['limit_reached', '托管已停止']]) {
