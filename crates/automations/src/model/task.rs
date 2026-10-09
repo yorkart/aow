@@ -41,6 +41,9 @@ pub struct TaskInput {
     #[serde(default)]
     pub prompt_bindings: Vec<PromptBinding>,
     pub agent: AgentKind,
+    /// Saved configuration ID; older tasks select the built-in configuration for their type.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_id: Option<String>,
     pub project_id: String,
     #[serde(flatten)]
     pub workspace: WorkspaceConfig,
@@ -76,6 +79,10 @@ fn default_yolo() -> bool {
 }
 
 impl TaskInput {
+    pub fn agent_id(&self) -> &str {
+        self.agent_id.as_deref().unwrap_or_else(|| self.agent.id())
+    }
+
     pub fn validate_schedule(&self) -> Result<()> {
         if self.kind == TaskKind::Manual {
             ensure!(

@@ -139,6 +139,13 @@ impl Fixture {
         std::fs::write(&script, FAKE_AGENT).unwrap();
         let log = directory.path().join("input.jsonl");
         let app = crate::build_router(state.clone());
+        request(
+            &app,
+            "PUT",
+            "/api/aow/settings",
+            json!({"execution_path":["/usr/bin", "/bin"]}),
+        )
+        .await;
         let project = post(&app, "/api/aow/projects", json!({"path":repo})).await;
         let project_id = project["id"].as_str().unwrap().to_owned();
         for agent in ["codex", "traecli"] {
@@ -211,10 +218,16 @@ impl Drop for Fixture {
 }
 
 async fn post(app: &Router, path: &str, body: Value) -> Value {
+    request(app, "POST", path, body).await
+}
+
+async fn request(app: &Router, method: &str, path: &str, body: Value) -> Value {
     let response = app
         .clone()
         .oneshot(
-            Request::post(path)
+            Request::builder()
+                .method(method)
+                .uri(path)
                 .header("content-type", "application/json")
                 .body(Body::from(body.to_string()))
                 .unwrap(),
@@ -228,7 +241,11 @@ async fn post(app: &Router, path: &str, body: Value) -> Value {
         "{status}: {}",
         String::from_utf8_lossy(&bytes)
     );
-    serde_json::from_slice(&bytes).unwrap()
+    if bytes.is_empty() {
+        Value::Null
+    } else {
+        serde_json::from_slice(&bytes).unwrap()
+    }
 }
 
 #[tokio::test]
@@ -1815,4 +1832,40 @@ async fn inbox_execution_submits_xml_context_and_original_task_once_and_retains_
             std::fs::remove_dir_all(cwd).unwrap();
         }
     }
+}
+
+#[tokio::test]
+async fn recreated_profile_is_used_by_cli_without_rebinding_existing_terminals() {
+    let fixture = Fixture::with_storage("ready", true).await;
+    let app = crate::build_router(fixture.state.clone());
+    let created: AgentTerminalInfo = fixture
+        .client
+        .post_json("/v1/agents", &fixture.request())
+        .await
+        .unwrap();
+    let agents = request(&app, "GET", "/api/aow/agents", Value::Null).await;
+    let mut profile = agents
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|agent| agent["id"] == "codex")
+        .unwrap()
+        .clone();
+    request(&app, "DELETE", "/api/aow/agents/codex", Value::Null).await;
+    profile["id"] = json!("Work_codex-2");
+    let saved = request(&app, "POST", "/api/aow/agents", profile).await;
+    assert_eq!(saved["id"], "Work_codex-2");
+    let before = fixture.state.terminals.get(&created.tab_id).await.unwrap();
+    assert_eq!(before.panes[0].agent_profile_id.as_deref(), Some("codex"));
+    assert_eq!(before.panes[0].agent_id.as_deref(), Some("codex"));
+    let mut next = fixture.request();
+    next.agent = "Work_codex-2".into();
+    let created: AgentTerminalInfo = fixture.client.post_json("/v1/agents", &next).await.unwrap();
+    assert_eq!(created.state.phase, AgentTerminalPhase::Ready);
+    let tab = fixture.state.terminals.get(&created.tab_id).await.unwrap();
+    assert_eq!(
+        tab.panes[0].agent_profile_id.as_deref(),
+        Some("Work_codex-2")
+    );
+    fixture.stop().await;
 }

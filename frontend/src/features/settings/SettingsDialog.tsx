@@ -18,7 +18,7 @@ import { LogoutButton } from '../auth/LogoutButton';
 import { ServerEnvironmentFields, useServerEnvironment } from './ServerEnvironmentFields';
 
 const message = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
-const emptyAgentBaseline = JSON.stringify(['', '', '', '', '']);
+const emptyAgentBaseline = JSON.stringify(['', '', '', '', '', '']);
 
 const sections = [
   { id: 'configuration', label: 'Configuration', description: '选择配置仓库和版本', icon: Settings },
@@ -56,6 +56,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
   const [settingsBusy, setSettingsBusy] = useState(false);
   const serverEnvironment = useServerEnvironment(section === 'environment' && !overview, setSettingsBusy);
   const [editingAgentId, setEditingAgentId] = useState<string>();
+  const [agentId, setAgentId] = useState('');
   const [agentType, setAgentType] = useState<AowAgent['agent_type'] | ''>('');
   const [displayName, setDisplayName] = useState('');
   const [command, setCommand] = useState('');
@@ -70,7 +71,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
   const dirty = reviewDirty || configurationDirty || serverEnvironment.dirty || mobile && (notificationDirty
     || !!settings && (notesBase !== settings.notes_base || nodeAddresses !== (settings.node_addresses ?? []).join('\n')
       || executionPath !== (settings.execution_path ?? []).join('\n') || editorWordWrap !== (settings.editor?.word_wrap ?? false))
-    || JSON.stringify([agentType, displayName, command, args.text, env.text]) !== agentBaseline);
+    || JSON.stringify([agentId, agentType, displayName, command, args.text, env.text]) !== agentBaseline);
   const onClose = () => {
     if (busy || settingsBusy) return;
     if (!dirty || window.confirm('设置有未保存的修改，是否放弃并关闭？')) closeDialog();
@@ -193,6 +194,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
 
   const resetAgentForm = () => {
     setEditingAgentId(undefined);
+    setAgentId('');
     setAgentType('');
     setDisplayName('');
     setCommand('');
@@ -208,12 +210,13 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
     const nextArgs = argumentsDraft(agent.args);
     const nextEnv = environmentDraft(agent.env);
     setEditingAgentId(copy ? undefined : agent.id);
+    setAgentId(copy ? '' : agent.id);
     setAgentType(aowAgentType(agent) ?? '');
     setDisplayName(name);
     setCommand(agent.command ?? agent.executable ?? '');
     setArgs(nextArgs);
     setEnv(nextEnv);
-    setAgentBaseline(copy ? emptyAgentBaseline : JSON.stringify([aowAgentType(agent) ?? '', name, agent.command ?? agent.executable ?? '', nextArgs.text, nextEnv.text]));
+    setAgentBaseline(copy ? emptyAgentBaseline : JSON.stringify([agent.id, aowAgentType(agent) ?? '', name, agent.command ?? agent.executable ?? '', nextArgs.text, nextEnv.text]));
     setAgentSaved('');
     setError('');
     agentForm.current?.querySelector('select')?.scrollIntoView({ block: 'nearest' });
@@ -246,6 +249,14 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
   };
 
   const save = async () => {
+    if (!/^[A-Za-z0-9_-]{1,80}$/.test(agentId)) {
+      setError('Agent ID 必填，限 1–80 个字母、数字、- 或 _。');
+      return;
+    }
+    if (agents.some(agent => agent.id === agentId && agent.id !== editingAgentId)) {
+      setError('Agent ID 已存在，请使用其他 ID。');
+      return;
+    }
     if (!agentType) {
       setError('请选择 Agent 类型。');
       return;
@@ -257,11 +268,11 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
       const parsed = normalizeArguments(args, command).values;
       const environment = parseEnvironment(env);
       await agentsApi.registerAgent({
-        id: editingAgentId,
+        id: agentId,
         agentType,
         displayName, command, args: parsed,
         env: environment,
-      });
+      }, editingAgentId);
       resetAgentForm();
       setAgentSaved(`${displayName} 配置已保存。`);
       await onReload();
@@ -356,7 +367,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
                   {agents.map((agent) => <div className="project-aow-agent-row" key={agent.id}>
                     <span className={`project-aow-agent-dot ${agent.available ? 'available' : ''}`} />
                     <AgentIcon agentId={aowAgentType(agent)} />
-                    <div><strong>{agent.display_name}</strong><small>{agentTypes.find(type => type.id === aowAgentType(agent))?.label ?? '未设置类型，请编辑补选'}</small><code>{agent.executable ?? '未找到 executable'}</code></div>
+                    <div><strong>{agent.display_name}</strong><code>{agent.id}</code><small>{agentTypes.find(type => type.id === aowAgentType(agent))?.label ?? '未设置类型，请编辑补选'}</small><code>{agent.executable ?? '未找到 executable'}</code></div>
                     <small>{agent.source === 'detected' ? 'Auto detected' : 'Configured'}</small>
                     <button type="button" className="project-aow-agent-edit" title={`编辑 ${agent.display_name}`} aria-pressed={editingAgentId === agent.id} disabled={busy} onClick={() => loadAgent(agent)}><Pencil /></button>
                     <button type="button" className="project-aow-agent-copy" title={`复制 ${agent.display_name}`} aria-label={`复制 ${agent.display_name}`} disabled={busy} onClick={() => loadAgent(agent, true)}><Copy /></button>
@@ -365,6 +376,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
                   {!agents.length ? <p className="project-aow-empty">尚未发现本地 Agent，可在下方注册。</p> : null}
                 </div>
                 <h3>{editingAgentId ? '编辑 Agent 配置' : '注册 Agent 配置'}</h3>
+                <label className="project-aow-dialog-field"><span>Agent ID <em>必填</em></span><input aria-label="Agent ID" value={agentId} readOnly={!!editingAgentId} disabled={busy} onChange={event => { setAgentId(event.target.value); setAgentSaved(''); setError(''); }} placeholder="例如：work-codex" pattern={'[A-Za-z0-9_\\-]+'} maxLength={80} autoCapitalize="none" spellCheck={false} required /><small>唯一标识，限字母、数字、- 和 _，创建后不可修改；如需调整，请删除后重新创建。CLI 使用 --agent-id 指定此配置。</small></label>
                 <label className="project-aow-dialog-field"><span>Agent 类型 <em>必填</em></span><div className="project-aow-agent-type"><AgentIcon agentId={agentType} /><select aria-label="Agent 类型" value={agentType ?? ''} disabled={busy || !!builtinAgentType(editingAgentId)} onChange={(event) => selectAgentType(event.target.value)} required><option value="" disabled>请选择 Agent 类型</option>{agentTypes.map(type => <option key={type.id} value={type.id}>{type.label}</option>)}</select></div></label>
                 <p className="project-aow-form-intro">选择类型后，优先填入自动探测的可执行文件路径，否则使用第一条同类配置的路径。名称、启动命令、参数和环境变量均可编辑。</p>
                 <label className="project-aow-dialog-field"><span>Display name</span><input value={displayName} disabled={busy} onChange={(event) => setDisplayName(event.target.value)} placeholder="例如：工作用 Codex" required /></label>

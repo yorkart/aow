@@ -7,7 +7,7 @@ use super::super::*;
 
 #[derive(Debug, Deserialize)]
 pub(in crate::aow) struct RegisterAgentRequest {
-    pub(in crate::aow) id: Option<String>,
+    pub(in crate::aow) id: String,
     pub(in crate::aow) agent_type: AgentType,
     pub(in crate::aow) display_name: String,
     pub(in crate::aow) command: String,
@@ -102,6 +102,16 @@ impl AowManager {
         &self,
         request: RegisterAgentRequest,
     ) -> Result<AgentRegistration, AowError> {
+        self.save_agent(None, request).await
+    }
+
+    pub(in crate::aow) async fn save_agent(
+        &self,
+        existing_id: Option<&str>,
+        request: RegisterAgentRequest,
+    ) -> Result<AgentRegistration, AowError> {
+        let _operation = self.inner.agent_operation.lock().await;
+        let path = self.execution_path().await?;
         let display_name = validation::validate_display_name(&request.display_name)?;
         let command = validation::validate_command(&request.command)?;
         validation::validate_arguments(&request.args)?;
@@ -115,12 +125,22 @@ impl AowManager {
                 "agent environment values are invalid".to_owned(),
             ));
         }
-        let id = request
-            .id
-            .as_deref()
-            .map(validation::validate_id)
-            .transpose()?
-            .unwrap_or_else(aow_id::new_id);
+        let id = validation::validate_id(&request.id)?;
+        let current = self.agents_in_path(&path)?;
+        if let Some(existing_id) = existing_id {
+            validation::validate_id(existing_id)?;
+            if !current.iter().any(|agent| agent.id == existing_id) {
+                return Err(AowError::AgentNotFound(existing_id.to_owned()));
+            }
+            if id != existing_id {
+                return Err(AowError::Invalid(
+                    "Agent ID 创建后不可修改；如需调整，请删除后重新创建".to_owned(),
+                ));
+            }
+        }
+        if existing_id.is_none() && current.iter().any(|agent| agent.id == id) {
+            return Err(AowError::AgentIdConflict(id));
+        }
         if AgentType::from_id(&id).is_some_and(|agent_type| agent_type != request.agent_type) {
             return Err(AowError::Invalid(
                 "内置 Agent 的类型必须与其 ID 一致；其他类型请注册为新配置".to_owned(),
@@ -137,7 +157,10 @@ impl AowManager {
         {
             let mut state = self.lock()?;
             let mut agents = state.agents.clone();
-            if let Some(existing) = agents.iter_mut().find(|agent| agent.id == id) {
+            if let Some(existing) = agents
+                .iter_mut()
+                .find(|agent| Some(agent.id.as_str()) == existing_id)
+            {
                 *existing = stored;
             } else {
                 agents.push(stored);
@@ -152,7 +175,8 @@ impl AowManager {
             .ok_or(AowError::AgentNotFound(id))
     }
 
-    pub(in crate::aow) fn remove_agent(&self, id: &str) -> Result<(), AowError> {
+    pub(in crate::aow) async fn remove_agent(&self, id: &str) -> Result<(), AowError> {
+        let _operation = self.inner.agent_operation.lock().await;
         let mut state = self.lock()?;
         let index = state
             .agents

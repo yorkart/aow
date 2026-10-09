@@ -105,7 +105,7 @@ pub async fn run(
                 }
                 let mut agent_environment = environment::load_agent_environment_from(
                     &store.config_dir,
-                    task.input.agent.id(),
+                    task.input.agent_id(),
                 ).await?;
                 // PATH is always loaded from the shared execution settings, even
                 // when an Agent registration contains its own PATH override.
