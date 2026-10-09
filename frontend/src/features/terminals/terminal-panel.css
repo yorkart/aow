@@ -17,6 +17,9 @@
 .terminal-worktree-heading > svg.expanded { transform: rotate(90deg); }
 /* Reuse the worktree inset for the disclosure control, including ungrouped rows. */
 .terminal-panel-row { padding-left: 12px; }
+.terminal-panel-row .aow-list-row-title { padding-right: 46px; }
+.terminal-task-completion { position: absolute; top: 8px; right: 32px; display: flex; align-items: center; justify-content: center; width: 14px; height: 14px; color: #73c991; }
+.terminal-task-completion > svg { flex: none; color: inherit; }
 .aow-panel-header-actions > .terminal-scope-active { color: var(--aow-accent); }
 .terminal-scope-menu-separator { margin: 4px 0; border-top: 1px solid var(--aow-line); }
 .terminal-panel-status { display: flex; align-items: center; gap: 5px; overflow: hidden; font-size: 11px; color: var(--muted); white-space: nowrap; }
@@ -38,7 +41,8 @@
 .terminal-descendants[hidden] { display: none; }
 .terminal-descendant-row { display: flex; align-items: center; min-width: 0; }
 .terminal-descendant-row:is(:hover,.active) { background: var(--aow-list-highlight); }
-.terminal-descendant-open { display: flex; flex: 1; align-items: center; gap: 6px; min-width: 0; padding: 6px 8px 6px 0; color: var(--aow-text); text-align: left; font-size: 12px; line-height: 18px; cursor: pointer; }
+.terminal-descendant-open { position: relative; display: flex; flex: 1; align-items: center; gap: 6px; min-width: 0; padding: 6px 28px 6px 0; color: var(--aow-text); text-align: left; font-size: 12px; line-height: 18px; cursor: pointer; }
+.terminal-descendant-open > .terminal-task-completion { right: 8px; }
 .terminal-descendant-open > svg,.terminal-descendant-open > img { flex: none; width: 16px; height: 16px; }
 .terminal-descendant-open > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .project-aow-terminal-menu .danger { margin-top: 3px; color: #d99a94; border-top: 1px solid var(--aow-line); border-radius: 0 0 3px 3px; }

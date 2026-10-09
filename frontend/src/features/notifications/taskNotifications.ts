@@ -146,6 +146,11 @@ function createNotificationQueue() {
 export const taskNotifications = createNotificationQueue();
 export const useTaskNotifications = () => useSyncExternalStore(taskNotifications.subscribe, taskNotifications.getSnapshot);
 
+export function useUnreadTerminalIds() {
+  const { notices } = useTaskNotifications();
+  return useMemo(() => new Set(notices.flatMap(notice => notice.sources.map(source => source.tab_id).filter(Boolean))), [notices]);
+}
+
 export function useWorktreeUnreadCounts() {
   const { notices } = useTaskNotifications();
   return useMemo(() => {

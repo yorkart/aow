@@ -89,7 +89,7 @@ try {
         data = tabs.find(tab => tab.id === id);
         if (!data || missing) { await route.fulfill({ status: 404, json: { message: 'Tab not found' } }); return; }
       }
-      else if (url.pathname === '/api/terminals' && request.method() === 'GET') data = tabs.filter(tab => tab.workspace_root === url.searchParams.get('workspace_root'));
+      else if (url.pathname === '/api/terminals' && request.method() === 'GET') data = tabs.filter(tab => !url.searchParams.has('workspace_root') || tab.workspace_root === url.searchParams.get('workspace_root'));
       else if (editable && url.pathname === '/api/terminals' && request.method() === 'POST') {
         data = terminal('created', request.postDataJSON().workspace_root, 'Created Tab');
         tabs.push(data); state.mutations.push('create');
@@ -271,6 +271,12 @@ try {
 
   const expectPath = (page, id) => page.waitForURL(url => url.pathname === (id ? `/aow/tabs/terminal/${id}` : '/aow/'));
   const desktopTab = (page, name) => page.locator('.project-aow-surface:not([hidden]) .project-aow-center-tab').filter({ hasText: name });
+  const terminalRow = (page, id) => page.locator(`.project-aow-surface:not([hidden]) .terminal-family[data-tab-id="${id}"] > .terminal-family-root > .terminal-panel-row`);
+  async function expectTerminalCompletion(page, id, completed) {
+    const row = terminalRow(page, id);
+    await row.waitFor();
+    await row.getByRole('img', { name: '任务已完成，点击查看', exact: true }).waitFor({ state: completed ? 'visible' : 'detached' });
+  }
   async function notifyTab(page, tabId = 'target', root = worktrees[1].path, extra = {}) {
     await page.waitForFunction(() => window.taskStopReady());
     await page.evaluate(({ tabId, root, extra }) => window.sendTaskStop({ agent: 'codex', session_id: 'notification-session',
@@ -339,7 +345,7 @@ try {
     await expectUnreadCount(page, worktrees[0].path, 1);
   });
 
-  await test('closing popups preserves unread badges after reload until their source tabs activate', async t => {
+  await test('closing popups preserves worktree badges and terminal completion icons until their source tabs activate', async t => {
     const { page, root } = await fixture(t, { entry: '', pinned: [worktrees[1].path] });
     await expectPath(page, 'main-tab');
     const expectCounts = async count => {
@@ -348,15 +354,21 @@ try {
     await (await notifyTab(page, 'target', root)).waitFor();
     await (await notifyTab(page, 'other', root)).waitFor();
     await expectCounts(2);
+    await expectTerminalCompletion(page, 'target', true);
+    await expectTerminalCompletion(page, 'other', true);
+    await expectTerminalCompletion(page, 'main-tab', false);
     await page.getByRole('button', { name: '关闭通知：Link Fixture · target', exact: true }).click();
     await page.getByRole('button', { name: '打开通知：Link Fixture · target', exact: true }).waitFor({ state: 'detached' });
     await expectCounts(2);
+    await expectTerminalCompletion(page, 'target', true);
     assert.equal(new URL(page.url()).pathname, '/aow/tabs/terminal/main-tab');
     assert.equal(await page.locator('.agent-task-notice-tab').textContent(), 'other');
 
     await page.reload();
     await expectPath(page, 'main-tab');
     await expectCounts(2);
+    await expectTerminalCompletion(page, 'target', true);
+    await expectTerminalCompletion(page, 'other', true);
     assert.deepEqual(await page.locator('.agent-task-notice-tab').allTextContents(), ['other']);
     // A later turn in the same tab gets a new popup and a new unread entry.
     await (await notifyTab(page, 'target', root)).waitFor();
@@ -370,16 +382,33 @@ try {
     await expectPath(page, 'main-tab');
     await expectCounts(3);
     assert.equal(await page.locator('.agent-task-notice').count(), 0);
+    await expectTerminalCompletion(page, 'target', true);
+    await expectTerminalCompletion(page, 'other', true);
+    const row = terminalRow(page, 'target');
+    const icon = row.getByRole('img', { name: '任务已完成，点击查看', exact: true });
+    const iconBox = await icon.boundingBox();
+    const menuBox = await row.getByRole('button', { name: 'Target Tab 终端操作', exact: true }).boundingBox();
+    assert.equal(iconBox.width, 14);
+    assert.equal(iconBox.height, 14);
+    assert.equal(await icon.locator('svg').evaluate(element => getComputedStyle(element).color), 'rgb(115, 201, 145)');
+    assert.ok(iconBox.x + iconBox.width < menuBox.x);
+    assert.ok(Math.abs(iconBox.y + iconBox.height / 2 - menuBox.y - menuBox.height / 2) <= 1);
+    assert.equal(await icon.getAttribute('title'), '任务已完成，点击查看');
+    await page.screenshot({ path: join(screenshotDir, 'aow-terminal-completion.png') });
 
     await page.locator(`.project-aow-pinned button[title="${root}"]`).click();
     await expectPath(page, 'other');
     await expectCounts(2);
-    await desktopTab(page, 'Target Tab').click();
+    await expectTerminalCompletion(page, 'other', false);
+    await expectTerminalCompletion(page, 'target', true);
+    await terminalRow(page, 'target').locator('.terminal-panel-open').click();
     await expectPath(page, 'target');
     await expectCounts(0);
+    await expectTerminalCompletion(page, 'target', false);
     await page.reload();
     await expectPath(page, 'target');
     await expectCounts(0);
+    await expectTerminalCompletion(page, 'target', false);
     assert.equal(await page.locator('.agent-task-notice').count(), 0);
   });
 
