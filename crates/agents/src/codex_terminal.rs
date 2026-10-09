@@ -43,22 +43,28 @@ async fn supports_no_daemon(
 ) -> bool {
     // Probe the selected executable, with its launch environment, at each launch.
     // Do not pass profile arguments: these may contain prompts or non-TUI commands.
-    let Ok(mut child) = tokio::process::Command::new(executable)
-        .arg("--help")
-        .current_dir(cwd)
-        .envs(environment)
-        .stdin(Stdio::null())
-        .stderr(Stdio::null())
-        .stdout(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-    else {
-        return false;
-    };
-    let Some(stdout) = child.stdout.take() else {
-        return false;
-    };
     tokio::time::timeout(timeout, async {
+        let mut command = tokio::process::Command::new(executable);
+        command
+            .arg("--help")
+            .current_dir(cwd)
+            .envs(environment)
+            .stdin(Stdio::null())
+            .stderr(Stdio::null())
+            .stdout(Stdio::piped())
+            .kill_on_drop(true);
+        let mut child = loop {
+            match command.spawn() {
+                Ok(child) => break child,
+                // Linux can briefly retain a writer in a concurrently forked process.
+                // Retry only this transient error, within the same probe deadline.
+                Err(error) if error.kind() == std::io::ErrorKind::ExecutableFileBusy => {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+                Err(_) => return None,
+            }
+        };
+        let stdout = child.stdout.take()?;
         let mut bytes = Vec::new();
         stdout
             .take(HELP_LIMIT as u64 + 1)
@@ -185,5 +191,45 @@ mod tests {
             )
             .await
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn probe_retries_a_busy_executable_until_the_writer_closes() {
+        let directory = tempfile::tempdir().unwrap();
+        let selected = executable(directory.path(), "printf '%s\\n' '  --no-daemon'");
+        let writer = std::fs::OpenOptions::new()
+            .write(true)
+            .open(&selected)
+            .unwrap();
+        let environment = BTreeMap::new();
+        let probe = supports_no_daemon(&selected, directory.path(), &environment, HELP_TIMEOUT);
+        tokio::pin!(probe);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), &mut probe)
+                .await
+                .is_err()
+        );
+        drop(writer);
+        assert!(probe.await);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn probe_bounds_retries_when_the_executable_remains_busy() {
+        let directory = tempfile::tempdir().unwrap();
+        let selected = executable(directory.path(), "printf '%s\\n' '  --no-daemon'");
+        let _writer = std::fs::OpenOptions::new()
+            .write(true)
+            .open(&selected)
+            .unwrap();
+        let environment = BTreeMap::new();
+        let probe = supports_no_daemon(
+            &selected,
+            directory.path(),
+            &environment,
+            Duration::from_millis(50),
+        );
+        assert!(!tokio::time::timeout(HELP_TIMEOUT, probe).await.unwrap());
     }
 }
