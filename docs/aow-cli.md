@@ -157,7 +157,7 @@ aow-cli automation create --file - --project-id TARGET-PROJECT-ID < task.json
 }
 ```
 
-`agent` 表示 Agent 类型；可选的 `agent_profile_id` 指定 **Settings → Agents** 中的配置 ID，配置类型须与 `agent` 一致。省略时使用与类型同名的配置。
+`agent` 表示 Agent 类型；可选的 `agent_id` 指定 **Settings → Agents** 中的配置 ID，配置类型须与 `agent` 一致。省略时使用与类型同名的配置。
 
 其他配置沿用网页创建接口：`kind`（默认 `scheduled`）、`prompt_bindings`、`base_branch`、`interval_seconds`、`cleanup_worktree`、`yolo` 和 `failure_notification`。工作区方式支持 `new_worktree`（新建 Worktree）、`existing`（已有 Worktree）、`temporary`（动态工作区 → 临时工作区）和 `dynamic`（动态工作区 → 动态指定）。`new_worktree` 使用 `base_branch` 作为基准，新 Worktree 创建在主仓库的同级目录，任务结束后清理；`temporary` 创建空目录，Automation 在任务结束后删除。`interval_seconds` 有值时按间隔运行，否则使用 `cron`；cron 按目标机器本地时区解释。手动任务使用 `kind: "manual"`，不填写 cron 或间隔。`dynamic` 仅供手动任务使用，模板的 `workspace_path` 留空；Web 手动执行时必须填写工作区目录，Autopilot 绑定时自动提供当前 Agent 的实际工作目录。
 

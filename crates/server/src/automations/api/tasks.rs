@@ -62,7 +62,7 @@ async fn resolve(state: &AppState, input: &TaskInput) -> Result<(String, PathBuf
         .aow
         .automation_project(&input.project_id, std::path::Path::new(&reference))
         .await?;
-    let agent_id = input.agent_profile_id();
+    let agent_id = input.agent_id();
     let launch = state.aow.resolve_agent_launch(agent_id, &reference).await?;
     ensure!(
         launch.agent_type.id() == input.agent.id(),

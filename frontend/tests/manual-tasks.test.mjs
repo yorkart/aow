@@ -183,7 +183,7 @@ try {
 
   await test('editor preserves existing bindings until prompt changes and displays the saved replacements', async t => {
     const { page, saves, errors, tasks } = await fixture(t);
-    tasks[1].agent_profile_id = 'Work_codex-2';
+    tasks[1].agent_id = 'Work_codex-2';
     await page.getByTitle('分支检查 · ID: 87654321', { exact: true }).click();
     await page.getByRole('button', { name: '编辑', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: '编辑手动任务' });
@@ -196,7 +196,7 @@ try {
     await dialog.getByRole('button', { name: '保存更改' }).click();
     await dialog.waitFor({ state: 'hidden' });
     assert.equal(saves[0].prompt_bindings.length, 2);
-    assert.equal(saves[0].agent_profile_id, 'Work_codex-2');
+    assert.equal(saves[0].agent_id, 'Work_codex-2');
     assert.equal(saves[0].agent, 'codex');
     await page.getByRole('button', { name: '编辑', exact: true }).click();
     await dialog.locator('.monaco-editor [role="textbox"]').focus();
