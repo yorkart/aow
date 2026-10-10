@@ -33,6 +33,7 @@ pub(crate) fn routes() -> Router<AppState> {
             get(remote_sessions).post(new_session),
         )
         .route("/api/zed/connections/{id}/load", post(load_session))
+        .route("/api/zed/connections/{id}/import", post(import_sessions))
         .route("/api/zed/connections/{id}/logs", get(connection_logs))
         .route("/api/zed/sessions", get(sessions))
         .route(
@@ -183,6 +184,17 @@ async fn remote_sessions(
         .zed
         .remote_sessions(&id, query.cursor)
         .await
+        .map(Json)
+        .map_err(error)
+}
+async fn import_sessions(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(sessions): Json<Vec<aow_zed::SessionImport>>,
+) -> Result<Json<Vec<aow_zed::SessionInfo>>, HttpError> {
+    state
+        .zed
+        .import_sessions(&id, sessions)
         .map(Json)
         .map_err(error)
 }

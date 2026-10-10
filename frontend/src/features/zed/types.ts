@@ -12,6 +12,7 @@ export interface SessionSnapshot {
   id: string; remote_id: string; agent_id: string; cwd: string; title: string; status: string; revision: number;
   updated_at: string; entries: ThreadEntry[]; permissions: Permission[]; modes: Data; config_options: Data[];
   commands: Data[]; usage: Data | null; error?: string; stop_reason?: string;
+  needs_load?: boolean;
   config_options_supported?: boolean; auth_required?: boolean;
   terminals?: Record<string, Data>;
   plan?: Data; notices?: ThreadEntry[];
@@ -20,3 +21,5 @@ export interface SettingsFile { path: string; content: string; revision: string 
 export interface DebugMessage { timestamp: string; direction: string; message: string }
 
 export type SessionInfo = Pick<SessionSnapshot, 'id' | 'remote_id' | 'agent_id' | 'cwd' | 'title' | 'status' | 'updated_at'>;
+
+export interface SessionImport { remote_id: string; cwd: string; title?: string; updated_at?: string }

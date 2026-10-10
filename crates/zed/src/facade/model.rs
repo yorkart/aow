@@ -63,6 +63,9 @@ pub struct SessionSnapshot {
     pub cwd: String,
     pub title: String,
     pub status: String,
+    /// Imported metadata is hydrated only when the user opens this conversation.
+    #[serde(default)]
+    pub needs_load: bool,
     pub revision: u64,
     pub updated_at: String,
     pub entries: Vec<ThreadEntry>,
@@ -114,4 +117,13 @@ impl From<&SessionSnapshot> for SessionInfo {
             updated_at: thread.updated_at.clone(),
         }
     }
+}
+
+/// Metadata selected explicitly in the external-agent import dialog.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SessionImport {
+    pub remote_id: String,
+    pub cwd: String,
+    pub title: Option<String>,
+    pub updated_at: Option<String>,
 }

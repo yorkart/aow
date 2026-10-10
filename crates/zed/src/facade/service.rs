@@ -48,6 +48,13 @@ impl AcpService {
     pub async fn remote_sessions(&self, id: &str, cursor: Option<String>) -> Result<Value> {
         self.0.remote_sessions(id, cursor).await
     }
+    pub fn import_sessions(
+        &self,
+        id: &str,
+        sessions: Vec<super::SessionImport>,
+    ) -> Result<Vec<SessionInfo>> {
+        self.0.import_sessions(id, sessions)
+    }
     pub async fn new_session(&self, id: &str) -> Result<SessionSnapshot> {
         self.0.new_session(id).await
     }

@@ -9,6 +9,6 @@ mod settings;
 
 pub use facade::{
     AcpHost, AcpService, AgentInfo, ConnectionInfo, ConnectionStatus, Content, Permission,
-    SessionInfo, SessionSnapshot, ThreadEntry, is_auth_required,
+    SessionImport, SessionInfo, SessionSnapshot, ThreadEntry, is_auth_required,
 };
 pub use settings::{SETTINGS_PATH, SettingsDocument, validate_settings};

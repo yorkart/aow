@@ -172,6 +172,7 @@ impl AcpThread {
             cwd,
             title: "New conversation".into(),
             status: "idle".into(),
+            needs_load: false,
             revision: 0,
             updated_at: chrono::Utc::now().to_rfc3339(),
             entries: Vec::new(),

@@ -12,7 +12,8 @@ relative to `frontend/src/features/zed/agent_ui` unless stated otherwise.
 
 | Upstream behavior | Local counterpart | Preserved rules |
 | --- | --- | --- |
-| `threads_archive_view.rs`, `agent_panel.rs` | `AgentPanel.tsx` | Session search and navigation, compact relative timestamps, agent selection. AoW places the archive in its right sidebar and opens conversations in workspace tabs. |
+| `threads_archive_view.rs::update_items`, `thread_metadata_store.rs`, `agent_panel.rs` | `AgentPanel.tsx`, `crates/zed/src/acp_thread/history.rs` | Search/navigation read only registered local history; no agent connection or `session/list` on sidebar refresh. AoW places the archive in its right sidebar and opens conversations in workspace tabs. |
+| `thread_import.rs::refresh`, `collect_all_sessions`, `collect_importable_threads`, `import_threads` | `thread_import.tsx`, `crates/zed/src/agent_servers/imports.rs` | Explicit dialog discovers paginated external sessions, selects agents and saves metadata only after confirmation. Missing work directories and duplicate sessions are excluded. Opening an imported record loads it lazily; failed loading retains metadata for retry. |
 | `conversation_view.rs::load_thread` | `SessionTab.tsx`, `config_options.tsx` | Config provider presence replaces legacy controls, including an empty advertised provider. New, loaded and resumed sessions preserve this distinction. |
 | `conversation_view.rs::handle_auth_required`, `render_auth_required_state`, `authenticate` | `authentication.tsx`, `SessionTab.tsx` | Login appears for typed AuthRequired; supported methods appear in reverse order; pending login can request input; successful login dismisses the controls. No automatic prompt replay. |
 | `config_options.rs` | `config_options.tsx` | Current selection in the trigger, grouped choices, favorites ahead of all choices, search at five choices, Boolean switches, automatic default persistence. Unknown config types are hidden. |
@@ -36,8 +37,17 @@ infer authentication from an English error message.
 - `popover.tsx` provides DOM focus, keyboard navigation, outside-click dismissal
   and viewport placement. The host owns theme colors and workspace tab placement.
 - `request.ts` preserves typed HTTP errors. AoW polling and serializable snapshots
-  replace GPUI entities and subscriptions. Local snapshots and advertised remote
-  history merge by agent and remote ID; they never create a session during discovery.
+  replace GPUI entities and subscriptions. Unlike Zed's SQLite metadata store,
+  AoW persists imported metadata alongside local JSON snapshots, with an additive
+  `needs_load` flag. Imports preserve timestamps and existing snapshots. A record
+  is hydrated through the existing resume/load facade only when explicitly opened.
+- AoW scopes import and history to the current workspace. Zed's import modal can
+  discover threads across worktrees and initially marks them archived; AoW has one
+  workspace history list and no separate archive state. Deduplication uses agent,
+  cwd and remote ID, since remote IDs are not globally unique across adapters.
+  Unsupported listing, authentication and discovery errors stay in the explicit
+  import dialog. Partial import failures can be retried without duplicating or
+  replacing already registered records.
 - `workspace_tabs.ts` generates IDs with random bytes supported on LAN HTTP.
   `composer_drafts.ts` stores transient drafts by workspace and tab ID across
   portal remounts, not in component state or persisted history. Closing a tab
@@ -71,7 +81,7 @@ infer authentication from an English error message.
 
 `frontend/tests/zed.test.mjs` exercises the public facade in Chromium, including
 sidebar/tab separation, session deduplication, portal remounts, reload restoration,
-history scoping and authentication, config-provider precedence, default/favorite
+local-only history refresh, explicit import and authentication, config-provider precedence, default/favorite
 persistence, thinking transitions, tool expansion/permissions, inline diffs and
 slash command selection. Authentication tests cover retained drafts and no prompt
 replay, including authentication completed elsewhere on a shared connection.
@@ -97,7 +107,14 @@ tab regressions are exercised by the session snapshot and tab-link suites.
 `crates/zed/tests/integration.rs` covers typed authentication, request-scoped
 elicitation, empty versus absent/null config providers and the adapter lifecycle.
 It also verifies that composer defaults/favorites reuse the adapter connection
-while updated defaults apply to newly created sessions.
+while updated defaults apply to newly created sessions. Import tests check that
+browsing, canceling and saving metadata never load/create/prompt a conversation;
+workspace filtering, repeated pagination cursors, selection, duplicates,
+unsupported agents, slow-agent isolation, authentication and retryable errors are
+covered in Chromium.
+The stdio tests verify durable metadata and timestamps across service restarts,
+load-on-open, recovery from failed replay, whole-selection validation and
+reimporting an active conversation without replacing it.
 These tests use a protocol fixture; they do not establish full live-agent or GPUI
 feature parity. Authenticated live Codex and Claude prompts remain unverified.
 

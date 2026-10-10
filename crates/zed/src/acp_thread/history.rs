@@ -53,6 +53,18 @@ impl ThreadStore {
         self.threads.insert(id.clone(), thread);
         self.update(&id, |_| {})
     }
+    // Unlike activity updates, importing metadata preserves its original timestamp.
+    pub(crate) fn insert_metadata(&mut self, mut thread: SessionSnapshot) -> Result<()> {
+        thread.revision += 1;
+        if let Some(directory) = &self.directory {
+            atomic_write(
+                &directory.join(format!("{}.json", thread.id)),
+                &serde_json::to_vec(&thread)?,
+            )?;
+        }
+        self.threads.insert(thread.id.clone(), thread);
+        Ok(())
+    }
     pub(crate) fn remove(&mut self, id: &str) -> Result<()> {
         if self.threads.remove(id).is_some()
             && let Some(directory) = &self.directory

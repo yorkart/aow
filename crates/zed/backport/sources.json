@@ -12,7 +12,7 @@
   },
   "last_sync": {
     "date": "2026-10-10",
-    "kind": "ACP frontend behavior alignment against the pinned baseline",
+    "kind": "ACP rendering and explicit history import alignment against the pinned baseline",
     "validated_by": [
       "upstream conversion tests",
       "stdio adapter fixture including authentication, config providers, permission previews, compaction state and notice dismissal",
@@ -28,7 +28,7 @@
     "Tokio and HTTP replace GPUI entities and callbacks",
     "React components replace GPUI views",
     "Terminal execution and terminal authentication are not advertised; legacy terminal_output metadata is supported for display-only output",
-    "History merges private local snapshots with workspace-scoped adapter history",
+    "History reads registered local snapshots; external sessions require explicit metadata import, scoped to the current workspace",
     "Protocol logs are bounded per-connection buffers",
     "Unknown session updates remain in snapshots and protocol logs without conversation cards",
     "AoW Settings save events refresh the panel; configuration and execution PATH are read before connection reuse",
@@ -101,7 +101,7 @@
           "sha256": "7e78b4dcde4ba3a329f35237ed1e0641ef793d3c58825f79a5382758e2f386fe"
         }
       ],
-      "local_sha256": "8a24e47e9842bb9b45fff32d3a7a9fc702f3820769e8db4b7f5b90e5289563e4"
+      "local_sha256": "cb1838dbdbf3cd708239fb06d471b056376a0880388d8573813805e772fb848d"
     },
     {
       "local": "crates/zed/src/acp_thread/defaults.rs",
@@ -125,7 +125,7 @@
           "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
         }
       ],
-      "local_sha256": "61e7033d2724f7f7ce64a15dc04ec756a30ed77d9565f8bd25cfd60305b1cb95"
+      "local_sha256": "5ee2185635567528167c48595ebc83bf9d2b80a23c73f5b6c38a87b1424702bf"
     },
     {
       "local": "crates/zed/src/agent_servers/mod.rs",
@@ -141,7 +141,7 @@
           "sha256": "7bed9ea8c55ec5cd3ab35a1661cac89f059c013bb18f341c0f5892de1f83c906"
         }
       ],
-      "local_sha256": "f4c4dcbffaf274022bad424ccf55f163670cb82f1ba7e906e6a67fc512e510d3"
+      "local_sha256": "3778a1b1a5a6d021078c9dae452f8d850ea2ebf55fc7ba169b4fd56badbe54f9"
     },
     {
       "local": "crates/zed/src/agent_servers/acp/mod.rs",
@@ -230,7 +230,7 @@
     {
       "local": "frontend/src/features/zed/agent_ui/AgentPanel.tsx",
       "kind": "presentation",
-      "reason": "Workspace-scoped local and advertised remote history, deduplication, archive navigation, relative timestamps and installed-agent dropdown",
+      "reason": "Local metadata archive, workspace-scoped search and navigation; explicit external history import entry",
       "sources": [
         {
           "path": "crates/agent_ui/src/agent_panel.rs",
@@ -239,9 +239,13 @@
         {
           "path": "crates/agent_ui/src/threads_archive_view.rs",
           "sha256": "7ac83d61e6bae05911f947ed316f339f3109f91e1651d55ff9d0cdae7ff0ade8"
+        },
+        {
+          "path": "crates/agent_ui/src/thread_metadata_store.rs",
+          "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
         }
       ],
-      "local_sha256": "5a6e08d6dc031bbaf1b573d9655b78b8e6a57e1feaee87aa23866f37efffe627"
+      "local_sha256": "64d1efd0909d7289e7d3bf51b120012abfd0c92e415530596716678f2112cb1e"
     },
     {
       "local": "frontend/src/features/zed/agent_ui/config_options.tsx",
@@ -352,7 +356,7 @@
     {
       "local": "frontend/src/features/zed/agent_ui/SessionTab.tsx",
       "kind": "presentation",
-      "reason": "Connection and explicit authentication state in a central workspace tab; history discovery is owned by AgentPanel",
+      "reason": "Connection and explicit authentication state in a central workspace tab; imported metadata loads only when opened",
       "sources": [
         {
           "path": "crates/agent_ui/src/conversation_view.rs",
@@ -363,7 +367,7 @@
           "sha256": "87c68918effbadf9e9922bc9572890d65eba79ab85c35be12111c0782c1f0a0e"
         }
       ],
-      "local_sha256": "5263529ba59fc3d7d538ad3a62baf614275ede586b40aa6a0e3348c268ea7c55"
+      "local_sha256": "d660c8acbaba04e4b96750f1c354bff16e27f369cc88caffb0aba136060034bd"
     },
     {
       "local": "frontend/src/features/zed/agent_ui/workspace_tabs.ts",
@@ -449,7 +453,7 @@
       "kind": "local",
       "reason": "AoW HTTP operations and internal change notifications; successful authentication is shared across views of one connection",
       "sources": [],
-      "local_sha256": "8865dd04a030cb6c715c1822607ecd8ee6e64942544f003b75447fcee14ca1da"
+      "local_sha256": "f4d9acbb6e6ab0462d25599c3880f5df50c2217063ee6165e9b70ebad916ccb1"
     },
     {
       "local": "crates/zed/src/acp_thread/terminals.rs",
@@ -538,6 +542,38 @@
         }
       ],
       "local_sha256": "b757083e6bc1a130168bf180e16d446ddda96661bd1138821a8e61f97b62e73d"
+    },
+    {
+      "local": "frontend/src/features/zed/agent_ui/thread_import.tsx",
+      "kind": "presentation",
+      "reason": "Explicit external-agent import dialog: capability-gated paginated discovery, agent selection, authentication and metadata-only confirmation",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/thread_import.rs",
+          "sha256": "63726d9a4f29a4350814603af3d638bd4716cd1691c0286e345956a5198d7b6b"
+        },
+        {
+          "path": "crates/agent_ui/src/thread_metadata_store.rs",
+          "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
+        }
+      ],
+      "local_sha256": "54447c13449f6a9dfbe13a09552f0d1d03654f4d36d7192ed44077ca00f54d10"
+    },
+    {
+      "local": "crates/zed/src/agent_servers/imports.rs",
+      "kind": "host-port",
+      "reason": "Register imported metadata without protocol loading; validate workspace, preserve timestamps and deduplicate existing conversations",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/thread_import.rs",
+          "sha256": "63726d9a4f29a4350814603af3d638bd4716cd1691c0286e345956a5198d7b6b"
+        },
+        {
+          "path": "crates/agent_ui/src/thread_metadata_store.rs",
+          "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
+        }
+      ],
+      "local_sha256": "d130ca359f49e5f14df85f7dedb2edd9a8e7f8e525a62764e85ed32b3751d5bf"
     }
   ],
   "coverage": [

@@ -18,6 +18,17 @@ import '../zed.css';
 // Keep that request with the draft descriptor so remounting cannot create another session.
 const drafts = new WeakMap<AcpTab, { connection: Promise<ConnectionInfo>; session: Promise<SessionSnapshot> }>();
 
+// Share a metadata-only import's first load across portal remounts.
+const imports = new Map<string, Promise<SessionSnapshot>>();
+function loadImported(id: string) {
+  let pending = imports.get(id);
+  if (!pending) {
+    pending = acpApi.action(id, { action: 'resume' }).finally(() => imports.delete(id));
+    imports.set(id, pending);
+  }
+  return pending;
+}
+
 export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenFile }: {
   tab: AcpTab; workspace: string; visible: boolean;
   onSessionChange: (id: string, session: SessionInfo) => void; onOpenSession: (session: SessionInfo) => void; onOpenFile: OpenFile;
@@ -65,7 +76,11 @@ export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenFil
     let cancelled = false;
     setBusy(true); setError('');
     let pending: Promise<SessionSnapshot>;
-    if (initialTab.sessionId) pending = acpApi.snapshot(initialTab.sessionId);
+    if (initialTab.sessionId) pending = acpApi.snapshot(initialTab.sessionId).then(snapshot => {
+      if (!snapshot.needs_load) return snapshot;
+      if (!cancelled) { accept(snapshot); setBusyMessage('正在加载会话…'); }
+      return loadImported(snapshot.id);
+    });
     else {
       setConnecting(true); setBusyMessage('正在连接 Agent…');
       let opening = drafts.get(initialTab);
@@ -121,7 +136,10 @@ export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenFil
       const next = await ensureConnection();
       await acpApi.authenticate(next.id, method);
       setRequestAuthRequired(false);
-      if (sessionId) accept(await acpApi.snapshot(sessionId)); else retry();
+      if (sessionId) {
+        const snapshot = await acpApi.snapshot(sessionId);
+        if (snapshot.needs_load) retry(); else accept(snapshot);
+      } else retry();
     })().catch(recordFailure).finally(() => setAuthBusy(false));
   };
   return <section className="zed-panel zed-session-tab" aria-label="ACP 会话内容">
@@ -131,10 +149,10 @@ export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenFil
       </Popover>}
     </header>
     {error && !authRequired && <p className="zed-error" role="alert">{error}</p>}
-    {busy && (!session || connecting) && !authRequired && <ConnectionProgress status={connecting ? status : undefined} message={busyMessage} />}
+    {busy && (!session || session.needs_load || connecting) && !authRequired && <ConnectionProgress status={connecting ? status : undefined} message={busyMessage} />}
     {!authBusy && requests.map(request => <PermissionRequest key={request.id} permission={request} busy={answerBusy} onAnswer={response => { if (!connectionId) return; setAnswerBusy(true); void acpApi.answerConnection(connectionId, request.id, response).catch(recordFailure).finally(() => setAnswerBusy(false)); }} />)}
     {logs && <div className="zed-logs"><button type="button" onClick={() => setLogs(undefined)}>返回会话</button>{logs.map((entry, index) => <details key={index}><summary>{entry.timestamp} {entry.direction}</summary><pre>{entry.message}</pre></details>)}</div>}
-    {session && <div className="zed-thread-host" hidden={!!logs || authRequired}><ThreadView session={session} workspace={workspace} tabId={tab.id} busy={busy} onAction={action} onOpenFile={onOpenFile} /></div>}
+    {session && <div className="zed-thread-host" hidden={!!logs || authRequired || busy && !!session.needs_load}><ThreadView session={session} workspace={workspace} tabId={tab.id} busy={busy} onAction={action} onOpenFile={onOpenFile} /></div>}
     {authRequired && connection && <div className="zed-auth-state">{error && <p className="zed-error" role="alert">{error}</p>}<Authentication connection={connection} pending={authBusy} onAuthenticate={authenticate} /></div>}
     {!session && !busy && !authRequired && <div className="zed-empty"><button type="button" onClick={retry}>重试打开会话</button></div>}
   </section>;

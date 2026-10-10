@@ -19,7 +19,7 @@ try {
     page.on('pageerror', error => errors.push(error.message));
     t.after(async () => { await page.close(); assert.deepEqual(errors, []); });
     const session = { id: 'local', remote_id: 'remote', agent_id: 'test', cwd: '/repo', title: 'Conversation', status: 'idle', revision: 1, updated_at: '', entries: [], permissions: [], modes: {}, config_options: [], commands: [], usage: null };
-    const state = { session, created: false, actions: [], saved: '', connectionGate: undefined, connectionError: '', connectionStatus: null, installGate: undefined, installError: '', installStatus: null, installed: false, installCalls: 0, connections: 0, deletes: 0, authRequired: false, authenticated: false, sessions: [], content: '// keep comment\n{ "agent_servers": {}, "future": { "keep": true }, }\n' };
+    const state = { session, created: false, actions: [], saved: '', connectionGate: undefined, connectionError: '', connectionStatus: null, installGate: undefined, installError: '', installStatus: null, installed: false, installCalls: 0, connections: 0, listCalls: [], imports: [], loads: 0, deletes: 0, authRequired: false, authenticated: false, sessions: [], content: '// keep comment\n{ "agent_servers": {}, "future": { "keep": true }, }\n' };
     Object.assign(state, initial);
     const origin = initial.insecure ? `http://acp.test:${server.httpServer.address().port}` : base;
     if (initial.insecure) await page.route(`${origin}/**`, async route => {
@@ -29,7 +29,7 @@ try {
     });
     await page.route('**/api/zed/**', async route => {
       const request = route.request(); const url = new URL(request.url()); const path = url.pathname; let data = [];
-      if (path.endsWith('/agents')) data = [{ id: 'test', name: 'Test Agent', supported: true, configured: true, installed: true }, ...(state.saved ? [{ id: 'codex-acp', name: 'Codex ACP', supported: true, configured: true, installed: state.installed }] : [])];
+      if (path.endsWith('/agents')) data = state.agents || [{ id: 'test', name: 'Test Agent', supported: true, configured: true, installed: true }, ...(state.saved ? [{ id: 'codex-acp', name: 'Codex ACP', supported: true, configured: true, installed: state.installed }] : [])];
       else if (path.endsWith('/registry')) data = [{ id: 'codex-acp', name: 'Codex ACP', description: 'Registry agent', supported: true }];
       else if (path.endsWith('/settings')) {
         if (request.method() === 'PUT') { state.saved = request.postDataJSON().content; state.content = state.saved; }
@@ -48,7 +48,7 @@ try {
         state.connections++;
         if (state.connectionGate) await state.connectionGate;
         if (state.connectionError) { await route.fulfill({ status: 400, json: { message: state.connectionError } }); return; }
-        data = { id: 'connection', agent_id: 'test', cwd: '/repo', auth_methods: state.authRequired || state.advertiseAuth ? [{ id: 'login', name: '登录 Agent', type: 'agent' }] : [], capabilities: { loadSession: true, sessionCapabilities: { list: {} } } };
+        data = { id: 'connection', agent_id: 'test', cwd: '/repo', auth_methods: state.authRequired || state.advertiseAuth ? [{ id: 'login', name: '登录 Agent', type: 'agent' }] : [], capabilities: state.capabilities || { loadSession: true, sessionCapabilities: { list: {} } } };
       }
       else if (path === '/api/zed/connections/connection/authenticate') { state.authenticating = true; if (state.authGate) await state.authGate; state.authenticated = true; state.authenticating = false; for (const item of state.sessions) { item.auth_required = false; item.error = null; item.revision++; } data = {}; }
       else if (path === '/api/zed/connections/connection/requests') {
@@ -56,8 +56,20 @@ try {
         else data = state.authenticating ? state.authRequests || [] : [];
       }
       else if (path === '/api/zed/connections/connection/sessions' && request.method() === 'GET') {
+        state.listCalls.push(url.searchParams.get('cursor'));
+        if (state.historyError) { await route.fulfill({ status: 400, json: { message: state.historyError } }); return; }
         if (state.historyAuthRequired && !state.authenticated) { await route.fulfill({ status: 400, json: { code: 'acp_auth_required', message: 'Sign in to read history' } }); return; }
-        data = { sessions: state.history || [{ sessionId: 'remote-old', title: 'Earlier conversation', cwd: '/repo' }] };
+        data = state.pages?.[url.searchParams.get('cursor') || 'first'] || { sessions: state.history || [{ sessionId: 'remote-old', title: 'Earlier conversation', cwd: '/repo' }] };
+      }
+      else if (path === '/api/zed/connections/connection/import') {
+        const selected = request.postDataJSON(); state.imports.push(selected);
+        if (state.importError) { await route.fulfill({ status: 400, json: { message: state.importError } }); return; }
+        data = [];
+        for (const item of selected) {
+          if (state.sessions.some(saved => saved.agent_id === 'test' && saved.cwd === item.cwd && saved.remote_id === item.remote_id)) continue;
+          const imported = { ...session, ...item, id: `imported-${state.sessions.length}`, agent_id: 'test', title: item.title || 'New conversation', entries: [], status: 'disconnected', needs_load: true };
+          state.sessions.push(imported); data.push(imported);
+        }
       }
       else if (path === '/api/zed/connections/connection/load') {
         data = state.sessions.find(item => item.remote_id === request.postDataJSON().remote_id);
@@ -70,14 +82,17 @@ try {
         data = state.sessions.length ? { ...session, id: `local-${state.sessions.length + 1}`, title: `Conversation ${state.sessions.length + 1}` } : session;
         state.sessions.push(data);
       }
-      else if (path === '/api/zed/sessions') data = state.sessions;
+      else if (path === '/api/zed/sessions') data = state.sessions.filter(item => item.cwd === url.searchParams.get('cwd'));
       else if (/^\/api\/zed\/sessions\/[^/]+$/.test(path)) {
         if (request.method() === 'DELETE') { state.deletes++; state.sessions = state.sessions.filter(item => item.id !== path.split('/').at(-1)); }
         else { state.snapshots = (state.snapshots || 0) + 1; data = state.sessions.find(item => item.id === path.split('/').at(-1)); }
       }
       else if (path.endsWith('/actions')) {
+        const session = state.sessions.find(item => item.id === path.split('/').at(-2));
         const action = request.postDataJSON(); state.actions.push(action);
         if (action.action === 'resume' && state.resumeAuthRequired && !state.authenticated) { await route.fulfill({ status: 400, json: { code: 'acp_auth_required', message: 'Sign in to restore this session' } }); return; }
+        if (action.action === 'resume' && state.resumeGate) await state.resumeGate;
+        if (action.action === 'resume' && state.resumeError) { await route.fulfill({ status: 400, json: { message: state.resumeError } }); return; }
         if (action.action === 'prompt' && state.promptGate) await state.promptGate;
         session.revision++;
         if (action.action === 'prompt') {
@@ -87,17 +102,17 @@ try {
         else if (action.action === 'dismiss_notice') session.notices = session.notices.filter(notice => notice.id !== action.notice_id);
         else if (action.action === 'set_config') session.config_options = session.config_options.map(option => (option.configId || option.id) === action.config_id ? { ...option, currentValue: action.value } : option);
         else if (action.action === 'set_mode') session.modes.currentModeId = action.mode_id;
-        else if (action.action === 'resume') session.status = 'idle';
+        else if (action.action === 'resume') { session.status = 'idle'; if (session.needs_load) { session.needs_load = false; state.loads++; session.entries = [{ id: 'loaded', kind: 'assistant', content: { type: 'text', text: 'Imported conversation content' } }]; } }
         data = session;
       }
       await route.fulfill({ json: data });
     });
     await page.goto(`${origin}/tests/zed-preview.html${settings ? '?settings' : ''}`);
-    if (!settings) await page.getByRole('button', { name: '打开 ACP 会话 Earlier conversation', exact: true }).waitFor();
-    state.connections = 0;
+    if (!settings) await page.waitForFunction(() => document.querySelector('[aria-label="刷新 ACP"]')?.disabled === false);
     return { page, state };
   }
   const newSession = async page => { await page.getByLabel('新建 ACP 会话', { exact: true }).click(); await page.getByRole('menuitem', { name: 'Test Agent', exact: true }).click(); };
+  const importHistory = async page => { await page.getByRole('button', { name: '导入 ACP 会话', exact: true }).click(); const dialog = page.getByRole('dialog', { name: '导入外部 Agent 会话' }); await dialog.getByRole('button', { name: '导入 1 个会话', exact: true }).click(); await dialog.waitFor({ state: 'detached' }); };
   await test('new ACP tabs work on LAN HTTP without secure-context APIs', async t => {
     const { page, state } = await fixture(t, false, { insecure: true });
     assert.deepEqual(await page.evaluate(() => [isSecureContext, typeof crypto.randomUUID, typeof crypto.getRandomValues]), [false, 'undefined', 'function']);
@@ -138,15 +153,16 @@ try {
     await page.waitForFunction(() => !document.querySelector('[aria-label="ACP 消息"]')?.disabled);
     assert.equal(state.sessions.length, 1);
     assert.deepEqual(state.actions.map(action => action.action), ['resume', 'resume']);
-    // A successful login in the sidebar must also release this request-only auth state.
+    // A successful login in the import dialog must also release this request-only auth state.
     state.authenticated = false; state.historyAuthRequired = true;
     state.session.status = 'disconnected'; state.session.revision++;
     await content.getByRole('button', { name: '恢复会话', exact: true }).click();
     await login.waitFor();
     const sidebar = page.getByRole('region', { name: 'ACP 会话列表', exact: true });
-    await sidebar.getByRole('button', { name: '刷新 ACP', exact: true }).click();
-    await sidebar.getByRole('button', { name: '登录 Agent', exact: true }).click();
+    await sidebar.getByRole('button', { name: '导入 ACP 会话', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: '登录 Agent', exact: true }).click();
     await login.waitFor({ state: 'detached' });
+    await page.getByRole('dialog').getByRole('button', { name: '取消', exact: true }).click();
     assert.equal(await input.inputValue(), 'Keep my recovery draft');
     assert.deepEqual(state.actions.map(action => action.action), ['resume', 'resume', 'resume']);
   });
@@ -195,6 +211,7 @@ try {
   });
   await test('closing an ACP tab discards its view draft without deleting the session', async t => {
     const { page, state } = await fixture(t);
+    await importHistory(page);
     const history = page.getByRole('button', { name: '打开 ACP 会话 Earlier conversation', exact: true });
     await history.click();
     const input = page.getByRole('textbox', { name: 'ACP 消息', exact: true });
@@ -279,8 +296,8 @@ try {
     await page.reload();
     await page.getByRole('tab').filter({ hasText: 'Conversation' }).click();
     await page.getByLabel('ACP 消息', { exact: true }).waitFor();
-    await page.getByRole('button', { name: '打开 ACP 会话 Earlier conversation', exact: true }).waitFor();
-    assert.equal(state.connections, 2, 'history discovery reconnects without creating a session');
+    assert.equal(await page.getByRole('button', { name: '打开 ACP 会话 Earlier conversation', exact: true }).count(), 0);
+    assert.equal(state.connections, 1, 'restoring local history does not connect to agents');
     assert.equal(state.sessions.length, 1);
     await newSession(page);
     await page.getByRole('tab').filter({ hasText: 'Conversation 2' }).waitFor();
@@ -341,6 +358,7 @@ try {
   });
   await test('Agent history opens a separate tab and reuses it when opened again', async t => {
     const { page, state } = await fixture(t);
+    await importHistory(page);
     await newSession(page);
     await page.getByLabel('ACP 消息', { exact: true }).waitFor();
     const openHistory = async () => {
@@ -706,13 +724,16 @@ try {
     t.after(() => state.finishAuth());
     state.authRequests = [{ id: 'login-form', kind: 'elicitation', request: { mode: 'form', message: 'Login code', requestedSchema: { type: 'object', required: ['code'], properties: { code: { type: 'string', title: 'Code' } } } } }];
     const sidebar = page.getByRole('region', { name: 'ACP 会话列表', exact: true });
-    await sidebar.getByRole('button', { name: '刷新 ACP', exact: true }).click();
-    await sidebar.getByRole('button', { name: '登录 Agent', exact: true }).click();
-    const form = sidebar.getByRole('form', { name: 'Agent 信息请求', exact: true });
+    await sidebar.getByRole('button', { name: '导入 ACP 会话', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('button', { name: '登录 Agent', exact: true }).click();
+    const form = dialog.getByRole('form', { name: 'Agent 信息请求', exact: true });
     await form.getByLabel('Code', { exact: true }).fill('1234');
     await form.getByRole('button', { name: '确认', exact: true }).click();
-    await sidebar.getByRole('region', { name: 'Agent 登录', exact: true }).waitFor({ state: 'detached' });
-    await sidebar.getByRole('button', { name: '打开 ACP 会话 Earlier conversation', exact: true }).waitFor();
+    await dialog.getByRole('region', { name: 'Agent 登录', exact: true }).waitFor({ state: 'detached' });
+    await dialog.getByText('1 个可导入会话', { exact: true }).waitFor();
+    await dialog.getByRole('button', { name: '取消', exact: true }).click();
+    assert.equal(await sidebar.getByRole('button', { name: '打开 ACP 会话 Earlier conversation', exact: true }).count(), 0);
     assert.deepEqual(state.authAnswer.response, { action: 'accept', content: { code: '1234' } });
     assert.equal(state.sessions.length, 0);
   });
@@ -737,16 +758,145 @@ try {
     assert.equal(await input.inputValue(), 'Keep this unsent draft');
     assert.deepEqual(state.actions, []);
   });
-  await test('history is scoped to the workspace and merges remote entries with local sessions', async t => {
+  await test('history refresh and reload use only local records even when the agent is offline', async t => {
+    const { page, state } = await fixture(t);
+    assert.equal(state.connections, 0); assert.deepEqual(state.listCalls, []);
+    await newSession(page);
+    await page.getByLabel('ACP 消息', { exact: true }).waitFor();
+    state.connectionError = 'Offline';
+    const sidebar = page.getByRole('region', { name: 'ACP 会话列表', exact: true });
+    await sidebar.getByRole('button', { name: '刷新 ACP', exact: true }).click();
+    await sidebar.getByRole('button', { name: '打开 ACP 会话 Conversation', exact: true }).waitFor();
+    await page.reload();
+    await sidebar.getByRole('button', { name: '打开 ACP 会话 Conversation', exact: true }).waitFor();
+    assert.equal(state.connections, 1); assert.deepEqual(state.listCalls, []);
+    assert.equal(await sidebar.getByRole('button', { name: '打开 ACP 会话 Earlier conversation', exact: true }).count(), 0);
+  });
+  await test('explicit import paginates, scopes, deduplicates and persists metadata before lazy loading', async t => {
     const { page, state } = await fixture(t);
     await newSession(page);
     await page.getByLabel('ACP 消息', { exact: true }).waitFor();
-    state.history = [{ sessionId: 'remote', title: 'Conversation', cwd: '/repo' }, { sessionId: 'elsewhere', title: 'Another workspace', cwd: '/other' }];
-    const sidebar = page.getByRole('region', { name: 'ACP 会话列表', exact: true });
-    await sidebar.getByRole('button', { name: '刷新 ACP', exact: true }).click();
-    await sidebar.getByRole('button', { name: '打开 ACP 会话 Earlier conversation', exact: true }).waitFor({ state: 'detached' });
-    assert.equal(await sidebar.getByRole('button', { name: '打开 ACP 会话 Conversation', exact: true }).count(), 1);
-    assert.equal(await sidebar.getByText('Another workspace', { exact: true }).count(), 0);
+    state.pages = {
+      first: { sessions: [{ sessionId: 'remote', title: 'Do not overwrite', cwd: '/repo' }, { sessionId: 'remote-old', title: 'Earlier conversation', cwd: '/repo', updatedAt: '2020-01-01T00:00:00Z' }], nextCursor: 'page2' },
+      page2: { sessions: [{ sessionId: 'remote-old', title: 'Earlier conversation', cwd: '/repo' }, { sessionId: 'elsewhere', title: 'Other workspace', cwd: '/other' }, { sessionId: 'missing-cwd', title: 'Unknown workspace' }], nextCursor: 'page2' },
+    };
+    await page.getByRole('button', { name: '导入 ACP 会话', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByText('1 个可导入会话', { exact: true }).waitFor();
+    assert.deepEqual(state.listCalls, [null, 'page2']);
+    assert.equal(state.sessions.length, 1); assert.equal(state.loads, 0); assert.deepEqual(state.actions, []);
+    await dialog.getByLabel('导入 Test Agent', { exact: true }).uncheck();
+    assert.equal(await dialog.getByRole('button', { name: '导入 0 个会话', exact: true }).isDisabled(), true);
+    await dialog.getByRole('button', { name: '取消', exact: true }).click();
+    assert.equal(state.imports.length, 0);
+    await importHistory(page);
+    assert.equal(state.sessions.length, 2); assert.equal(state.loads, 0); assert.deepEqual(state.actions, []);
+    assert.equal(state.session.title, 'Conversation');
+    assert.equal(state.sessions[1].needs_load, true);
+    assert.equal(state.sessions[1].updated_at, '2020-01-01T00:00:00Z');
+    await page.reload();
+    const history = page.getByRole('button', { name: '打开 ACP 会话 Earlier conversation', exact: true });
+    await history.waitFor();
+    assert.equal(state.loads, 0); assert.equal(state.listCalls.length, 4);
+    await history.click();
+    await page.getByText('Imported conversation content', { exact: true }).waitFor();
+    assert.equal(state.loads, 1); assert.equal(state.sessions.length, 2);
+    await page.getByRole('button', { name: '导入 ACP 会话', exact: true }).click();
+    await dialog.getByText('0 个可导入会话', { exact: true }).waitFor();
+    assert.equal(await dialog.getByRole('button', { name: '导入 0 个会话', exact: true }).isDisabled(), true);
+  });
+  await test('opening imported history survives authentication and portal moves without duplicate loads', async t => {
+    const { page, state } = await fixture(t, false, { advertiseAuth: true, resumeAuthRequired: true });
+    await importHistory(page);
+    await page.getByRole('button', { name: '打开 ACP 会话 Earlier conversation', exact: true }).click();
+    const content = page.getByRole('region', { name: 'ACP 会话内容', exact: true });
+    await content.getByRole('region', { name: 'Agent 登录', exact: true }).waitFor();
+    assert.equal(state.sessions.length, 1); assert.equal(state.loads, 0);
+    state.resumeGate = new Promise(resolve => { state.finishResume = resolve; });
+    t.after(() => state.finishResume());
+    const resuming = page.waitForRequest(request => request.url().endsWith('/actions') && request.postDataJSON().action === 'resume');
+    await content.getByRole('button', { name: '登录 Agent', exact: true }).click();
+    await resuming;
+    await page.getByRole('button', { name: '移动会话视图', exact: true }).click();
+    await content.getByRole('status').getByText(/正在加载会话…/).waitFor();
+    assert.equal(state.actions.length, 2);
+    state.finishResume();
+    await content.getByText('Imported conversation content', { exact: true }).waitFor();
+    assert.equal(state.loads, 1);
+    assert.deepEqual(state.actions.map(action => action.action), ['resume', 'resume']);
     assert.equal(state.sessions.length, 1);
+  });
+  await test('failed imported history loading can be retried without losing the registered record', async t => {
+    const { page, state } = await fixture(t);
+    await importHistory(page);
+    state.resumeError = 'Cannot load transcript';
+    await page.getByRole('button', { name: '打开 ACP 会话 Earlier conversation', exact: true }).click();
+    const content = page.getByRole('region', { name: 'ACP 会话内容', exact: true });
+    await content.getByRole('alert').getByText('Cannot load transcript', { exact: true }).waitFor();
+    assert.equal(state.sessions[0].needs_load, true);
+    state.resumeError = '';
+    await content.getByRole('button', { name: '恢复会话', exact: true }).click();
+    await content.getByText('Imported conversation content', { exact: true }).waitFor();
+    assert.equal(state.sessions.length, 1); assert.equal(state.loads, 1);
+  });
+  await test('an unavailable agent does not prevent importing another agent', async t => {
+    const { page, state } = await fixture(t, false, { agents: ['test', 'offline'].map(id => ({ id, name: id === 'test' ? 'Test Agent' : 'Offline Agent', supported: true, installed: true })) });
+    await page.route('**/api/zed/connections', async route => {
+      if (route.request().postDataJSON().agent_id === 'offline') await route.fulfill({ status: 400, json: { message: 'Agent unavailable' } });
+      else await route.fallback();
+    });
+    await page.getByRole('button', { name: '导入 ACP 会话', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('alert').getByText('Agent unavailable', { exact: true }).waitFor();
+    assert.equal(await dialog.getByLabel('导入 Offline Agent', { exact: true }).isDisabled(), true);
+    await dialog.getByRole('button', { name: '导入 1 个会话', exact: true }).click();
+    await dialog.waitFor({ state: 'detached' });
+    assert.equal(state.sessions.length, 1); assert.equal(state.loads, 0);
+    assert.equal(state.sessions[0].agent_id, 'test');
+  });
+  await test('ready imports do not wait for a slow agent and late discovery cannot register history', async t => {
+    const { page, state } = await fixture(t, false, { agents: ['test', 'slow'].map(id => ({ id, name: id === 'test' ? 'Test Agent' : 'Slow Agent', supported: true, installed: true })) });
+    let finish;
+    const gate = new Promise(resolve => { finish = resolve; });
+    t.after(() => finish());
+    await page.route('**/api/zed/connections', async route => {
+      if (route.request().postDataJSON().agent_id !== 'slow') { await route.fallback(); return; }
+      await gate;
+      await route.fulfill({ json: { id: 'connection', agent_id: 'slow', cwd: '/repo', capabilities: { sessionCapabilities: { list: {} } } } });
+    });
+    await page.getByRole('button', { name: '导入 ACP 会话', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('status').getByText('正在查找会话…', { exact: true }).waitFor();
+    await dialog.getByRole('button', { name: '导入 1 个会话', exact: true }).click();
+    await dialog.waitFor({ state: 'detached' });
+    const connected = page.waitForResponse(response => response.url().endsWith('/connections') && response.request().postDataJSON().agent_id === 'slow');
+    finish(); await connected;
+    await page.getByRole('button', { name: '打开 ACP 会话 Earlier conversation', exact: true }).waitFor();
+    assert.equal(state.sessions.length, 1); assert.equal(state.loads, 0);
+    assert.deepEqual(state.listCalls, [null]);
+    assert.equal(state.imports.length, 1);
+  });
+  await test('import handles unsupported listing and retries discovery and persistence failures', async t => {
+    const { page, state } = await fixture(t);
+    state.capabilities = { loadSession: true };
+    const open = page.getByRole('button', { name: '导入 ACP 会话', exact: true });
+    await open.click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByText('不支持列出会话', { exact: true }).waitFor();
+    assert.deepEqual(state.listCalls, []);
+    await dialog.getByRole('button', { name: '取消', exact: true }).click();
+    state.capabilities = undefined; state.historyError = 'Cannot list';
+    await open.click();
+    await dialog.getByRole('alert').getByText('Cannot list', { exact: true }).waitFor();
+    state.historyError = '';
+    await dialog.getByRole('button', { name: '重试 Test Agent', exact: true }).click();
+    state.importError = 'Cannot save';
+    await dialog.getByRole('button', { name: '导入 1 个会话', exact: true }).click();
+    await dialog.getByRole('alert').getByText('Cannot save', { exact: true }).waitFor();
+    assert.equal(state.sessions.length, 0);
+    state.importError = '';
+    await dialog.getByRole('button', { name: '导入 1 个会话', exact: true }).click();
+    await dialog.waitFor({ state: 'detached' });
+    assert.equal(state.sessions.length, 1); assert.equal(state.loads, 0);
   });
 } finally { await browser?.close(); await server.close(); }

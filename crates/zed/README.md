@@ -21,9 +21,16 @@ implementation behind these boundaries without changing AoW callers.
 - `frontend/src/features/zed/agent_ui`: React counterparts of the upstream panel,
   conversation, tool, configuration and elicitation views.
 
-The ACP panel follows Terminal in the right sidebar and combines saved sessions
-with adapter history when the adapter advertises session listing. History is
-scoped to the workspace and deduplicated by agent and remote session ID. The
+The ACP panel follows Terminal in the right sidebar and reads only locally
+registered sessions for the current workspace. Opening or refreshing this list
+does not connect to agents or call `session/list`. Like Zed's metadata archive,
+it includes conversations created/opened in AoW and explicitly imported history.
+The separate **Import ACP sessions** dialog connects installed agents, checks
+listing support, paginates their history and lets the user select agents to import.
+Canceling discovery saves nothing. Confirmation saves only metadata; opening an
+imported record loads its conversation. Import deduplicates by agent, workspace
+and remote session ID, preserving existing transcripts and active prompts.
+Records without a matching workspace are excluded. The
 panel's `+` menu lists installed, supported agents. Selecting one opens a new
 central conversation tab; selecting history loads it into a central tab. Reopening a
 session selects its existing tab; closing a tab closes only the view, leaving
@@ -66,7 +73,7 @@ installation completes. Entries added through raw JSONC can be installed from
 the configured-agent list. Custom commands do not require Registry installation.
 
 Session tabs show connection progress and conversations, with protocol logs in
-the overflow menu. History discovery and navigation live only in the sidebar.
+the overflow menu. History navigation lives in the sidebar; external discovery runs only in the import dialog.
 Authentication controls appear only for the protocol's explicit AuthRequired
 state and disappear after authentication, including authentication completed in
 another view sharing the connection. Pending authentication supports request-scoped

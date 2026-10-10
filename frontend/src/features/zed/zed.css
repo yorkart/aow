@@ -143,3 +143,12 @@
 .zed-spinner { animation:zed-spin 1.2s linear infinite; }
 @keyframes zed-spin { to { transform:rotate(360deg); } }
 @media (prefers-reduced-motion:reduce) { .zed-spinner { animation:none; } }
+.zed-import-dialog { width:min(520px,calc(100vw - 40px)); max-height:calc(100dvh - 64px); box-sizing:border-box; overflow:auto; padding:20px; border:1px solid var(--zed-border); border-radius:8px; color:inherit; background:var(--zed-editor); }
+.zed-import-dialog::backdrop { background:#0008; }
+.zed-import-dialog h2 { margin:0 0 12px; font-size:16px; }
+.zed-import-dialog p { line-height:1.6; }
+.zed-import-agents { margin:16px 0; }
+.zed-import-agent { padding:12px 0; border-top:1px solid var(--zed-border); }
+.zed-import-agent > label { display:flex; align-items:center; gap:8px; }
+.zed-import-agent > label > span { display:flex; align-items:center; gap:6px; margin-left:auto; color:var(--aow-muted); }
+.zed-import-dialog footer { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }

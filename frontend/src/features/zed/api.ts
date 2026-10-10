@@ -1,5 +1,5 @@
 import { acpRequest } from './request';
-import type { AgentInfo, ConnectionInfo, ConnectionStatus, Data, DebugMessage, Permission, SessionInfo, SessionSnapshot, SettingsFile } from './types';
+import type { AgentInfo, ConnectionInfo, ConnectionStatus, Data, DebugMessage, Permission, SessionImport, SessionInfo, SessionSnapshot, SettingsFile } from './types';
 const root = '/api/zed';
 export const settingsChanged = 'aow:zed-settings-changed';
 export const sessionsChanged = 'aow:zed-sessions-changed';
@@ -29,6 +29,7 @@ export const acpApi = {
   },
   create: (connection: string) => acpRequest<SessionSnapshot>(`${root}/connections/${encodeURIComponent(connection)}/sessions`, post()),
   remoteSessions: (connection: string, cursor?: string) => acpRequest<{ sessions: Data[]; nextCursor?: string }>(`${root}/connections/${encodeURIComponent(connection)}/sessions${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
+  importSessions: (connection: string, sessions: SessionImport[]) => acpRequest<SessionInfo[]>(`${root}/connections/${encodeURIComponent(connection)}/import`, post(sessions)),
   load: (connection: string, remote_id: string) => acpRequest<SessionSnapshot>(`${root}/connections/${encodeURIComponent(connection)}/load`, post({ remote_id })),
   sessions: (cwd: string, signal?: AbortSignal) => acpRequest<SessionInfo[]>(`${root}/sessions?cwd=${encodeURIComponent(cwd)}`, { signal }),
   snapshot: (id: string, signal?: AbortSignal) => acpRequest<SessionSnapshot>(`${root}/sessions/${encodeURIComponent(id)}`, { signal }),

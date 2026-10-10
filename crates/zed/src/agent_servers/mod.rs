@@ -1,4 +1,5 @@
 pub(crate) mod acp;
+mod imports;
 mod installation;
 pub(crate) mod progress;
 
@@ -490,6 +491,7 @@ impl AgentServerStore {
         )?;
         self.inner.threads.lock().unwrap().update(id, |thread| {
             thread.status = "idle".into();
+            thread.needs_load = false;
             thread.error = None;
             thread.active_prompt = None;
             thread.modes = result.get("modes").cloned().unwrap_or(json!({}));

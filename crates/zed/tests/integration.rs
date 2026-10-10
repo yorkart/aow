@@ -1,5 +1,5 @@
 use anyhow::Result;
-use aow_zed::{AcpHost, AcpService, Content, SessionSnapshot};
+use aow_zed::{AcpHost, AcpService, Content, SessionImport, SessionSnapshot};
 use serde_json::{Value, json};
 use std::{
     path::{Path, PathBuf},
@@ -502,5 +502,113 @@ fn ensure_authentication_required(message: &str) -> Result<()> {
         message.to_lowercase().contains("auth"),
         "Unexpected session error: {message}"
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn imported_metadata_persists_without_loading_until_opened() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let workspace = directory.path().canonicalize()?;
+    let state = directory.path().join("state");
+    let service = AcpService::new(host(false), Some(state.clone()))?;
+    let connection = service.connect("test", workspace.clone()).await?;
+    let remote = service.remote_sessions(&connection.id, None).await?;
+    let metadata = SessionImport {
+        remote_id: remote["sessions"][0]["sessionId"].as_str().unwrap().into(),
+        cwd: connection.cwd.clone(),
+        title: Some("Imported title".into()),
+        updated_at: Some("2020-01-01T08:00:00+08:00".into()),
+    };
+    assert!(
+        service.sessions(None).is_empty(),
+        "discovery cannot register history"
+    );
+    let before = service.logs(&connection.id)?;
+    let imported =
+        service.import_sessions(&connection.id, vec![metadata.clone(), metadata.clone()])?;
+    assert_eq!(imported.len(), 1);
+    assert_eq!(
+        service.logs(&connection.id)?,
+        before,
+        "import must send no protocol requests"
+    );
+    let id = &imported[0].id;
+    let snapshot = service.snapshot(id)?;
+    assert!(snapshot.needs_load);
+    assert!(snapshot.entries.is_empty());
+    assert_eq!(snapshot.updated_at, "2020-01-01T00:00:00+00:00");
+    assert_eq!(snapshot.status, "disconnected");
+    assert!(service.sessions(Some("/other-workspace")).is_empty());
+    service.disconnect(&connection.id)?;
+    let restored = AcpService::new(host(false), Some(state))?;
+    assert_eq!(
+        serde_json::to_value(restored.snapshot(id)?)?,
+        serde_json::to_value(snapshot)?
+    );
+    let loaded = restored.resume(id).await?;
+    assert!(!loaded.needs_load);
+    assert_eq!(loaded.title, "Imported title");
+    assert!(
+        loaded
+            .entries
+            .iter()
+            .any(|entry| entry.content["text"] == "previous answer")
+    );
+    let connection = restored.connect("test", workspace).await?;
+    restored.start_prompt(id, prompt("cancel"))?;
+    let working = restored.snapshot(id)?;
+    assert_eq!(working.status, "working");
+    assert!(
+        restored
+            .import_sessions(&connection.id, vec![metadata])?
+            .is_empty()
+    );
+    assert_eq!(
+        serde_json::to_value(restored.snapshot(id)?)?,
+        serde_json::to_value(working)?
+    );
+    restored.cancel(id)?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn import_validates_workspace_and_ids_before_saving_and_can_retry_load() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let service = AcpService::new(host(false), None)?;
+    let connection = service.connect("test", directory.path().into()).await?;
+    let metadata = SessionImport {
+        remote_id: "session-1".into(),
+        cwd: connection.cwd.clone(),
+        title: None,
+        updated_at: None,
+    };
+    for invalid in [
+        SessionImport {
+            cwd: "/other".into(),
+            ..metadata.clone()
+        },
+        SessionImport {
+            remote_id: " ".into(),
+            ..metadata.clone()
+        },
+    ] {
+        assert!(
+            service
+                .import_sessions(&connection.id, vec![metadata.clone(), invalid])
+                .is_err()
+        );
+        assert!(service.sessions(None).is_empty());
+    }
+    let imported = service.import_sessions(&connection.id, vec![metadata])?;
+    let id = &imported[0].id;
+    std::fs::write(directory.path().join("fail-load"), "")?;
+    assert!(service.resume(id).await.is_err());
+    assert!(service.snapshot(id)?.needs_load);
+    assert!(service.snapshot(id)?.entries.is_empty());
+    std::fs::remove_file(directory.path().join("fail-load"))?;
+    let loaded = service.resume(id).await?;
+    assert!(!loaded.needs_load);
+    assert_eq!(loaded.entries.len(), 2);
+    assert_eq!(service.sessions(None).len(), 1);
     Ok(())
 }
