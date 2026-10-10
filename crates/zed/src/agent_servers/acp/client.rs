@@ -162,10 +162,9 @@ impl ClientContext {
                     .unwrap()
                     .insert(request_id.clone(), (remote_id, permission.clone(), sender));
                 if let Some(id) = &id {
-                    self.threads
-                        .lock()
-                        .unwrap()
-                        .update(id, |thread| thread.permissions.push(permission))?;
+                    self.threads.lock().unwrap().update(id, |thread| {
+                        AcpThread::request_permission(thread, permission)
+                    })?;
                 }
                 let cancelled = || {
                     if kind == "permission" {

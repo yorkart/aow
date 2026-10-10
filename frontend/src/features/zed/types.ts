@@ -13,6 +13,8 @@ export interface SessionSnapshot {
   updated_at: string; entries: ThreadEntry[]; permissions: Permission[]; modes: Data; config_options: Data[];
   commands: Data[]; usage: Data | null; error?: string; stop_reason?: string;
   config_options_supported?: boolean; auth_required?: boolean;
+  terminals?: Record<string, Data>;
+  plan?: Data; notices?: ThreadEntry[];
 }
 export interface SettingsFile { path: string; content: string; revision: string }
 export interface DebugMessage { timestamp: string; direction: string; message: string }

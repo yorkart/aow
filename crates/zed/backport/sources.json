@@ -15,7 +15,7 @@
     "kind": "ACP frontend behavior alignment against the pinned baseline",
     "validated_by": [
       "upstream conversion tests",
-      "stdio adapter fixture including authentication and config provider presence",
+      "stdio adapter fixture including authentication, config providers, permission previews, compaction state and notice dismissal",
       "JSONC persistence tests",
       "Chromium conversation and history interaction tests",
       "Rust workspace tests",
@@ -27,7 +27,7 @@
     "AoW owns independent JSONC configuration and file policy",
     "Tokio and HTTP replace GPUI entities and callbacks",
     "React components replace GPUI views",
-    "Terminal and terminal authentication are not advertised",
+    "Terminal execution and terminal authentication are not advertised; legacy terminal_output metadata is supported for display-only output",
     "History merges private local snapshots with workspace-scoped adapter history",
     "Protocol logs are bounded per-connection buffers",
     "Unknown session updates remain in snapshots and protocol logs without conversation cards",
@@ -39,7 +39,8 @@
     "The right ACP panel lists sessions; conversation content lives in central workspace tabs, with view-only close and reload restoration",
     "React rendering ports the supported ACP branches from the pinned conversation, configuration and entry-state views; see frontend-behavior.md for function correspondence",
     "DOM popovers, AoW Markdown and Monaco inline diffs replace native GPUI views; config search uses subsequence matching rather than upstream fuzzy ranking",
-    "Editor context/attachment pickers and local prompt queueing are outside this port; authenticated live Codex and Claude prompts remain unverified"
+    "Editor context/attachment pickers and local prompt queueing are outside this port; authenticated live Codex and Claude prompts remain unverified",
+    "Out-of-band plan and notice snapshots preserve streamed message boundaries; notice dismissal persists across HTTP polling and reload, while old snapshots migrate on load"
   ],
   "files": [
     {
@@ -100,7 +101,7 @@
           "sha256": "7e78b4dcde4ba3a329f35237ed1e0641ef793d3c58825f79a5382758e2f386fe"
         }
       ],
-      "local_sha256": "d255791e940b9984e6674f45aa7a0e98532b674b47d9bee5a391a09d95aade35"
+      "local_sha256": "8a24e47e9842bb9b45fff32d3a7a9fc702f3820769e8db4b7f5b90e5289563e4"
     },
     {
       "local": "crates/zed/src/acp_thread/defaults.rs",
@@ -124,7 +125,7 @@
           "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
         }
       ],
-      "local_sha256": "ac3dd6c6e57fb2c43d7285fbbac415d9f22ea8b4e2f3ed4a93f36ad903d093ef"
+      "local_sha256": "61e7033d2724f7f7ce64a15dc04ec756a30ed77d9565f8bd25cfd60305b1cb95"
     },
     {
       "local": "crates/zed/src/agent_servers/mod.rs",
@@ -140,7 +141,7 @@
           "sha256": "7bed9ea8c55ec5cd3ab35a1661cac89f059c013bb18f341c0f5892de1f83c906"
         }
       ],
-      "local_sha256": "1d7606db75b535309242e99c621c81f9f299b2773065a510ae4b03460fa7973c"
+      "local_sha256": "f4c4dcbffaf274022bad424ccf55f163670cb82f1ba7e906e6a67fc512e510d3"
     },
     {
       "local": "crates/zed/src/agent_servers/acp/mod.rs",
@@ -152,7 +153,7 @@
           "sha256": "7bed9ea8c55ec5cd3ab35a1661cac89f059c013bb18f341c0f5892de1f83c906"
         }
       ],
-      "local_sha256": "ae3bbad537d8588e5922d8ecfedd731e9b653c422ef7f9cd5db20b60de1b17a3"
+      "local_sha256": "f5e8f5665b9b35983c0bcbe42deb79c00189837e4f6d8d0ee6cc6d8372c2de08"
     },
     {
       "local": "crates/zed/src/agent_servers/acp/client.rs",
@@ -164,7 +165,7 @@
           "sha256": "7bed9ea8c55ec5cd3ab35a1661cac89f059c013bb18f341c0f5892de1f83c906"
         }
       ],
-      "local_sha256": "ed8c0060648cecbc20b9f153f3f95d2e3fe7c51f106662aaa6dfa6cec765ceac"
+      "local_sha256": "f12cbc511764d8c5a2f6efece24d02d9c100d0a23f846651da263e71cc56ad2b"
     },
     {
       "local": "crates/zed/src/agent_servers/acp/transport.rs",
@@ -276,7 +277,7 @@
           "sha256": "d072e0555e4e1fac22239d6b82bd57a3839beb0643c721b5a748621f52bb01ea"
         }
       ],
-      "local_sha256": "23e983bd7928566e0000e5f8775bfe16170e5d2aa656be94cc32096f5fb73322"
+      "local_sha256": "2ceb17471842defed6b4f5e409170c12daea2699fb4984b5ffc4cc1409833591"
     },
     {
       "local": "frontend/src/features/zed/agent_ui/conversation_view/content.tsx",
@@ -292,7 +293,7 @@
           "sha256": "fdb15530f447638b5f0d75c9a9d2be2edae4a37cfed3be03184b384c48577cd2"
         }
       ],
-      "local_sha256": "eb40702cc26c2dfb10c910d79c918fb1e2d345d801def95b224e144cdf8a2c77"
+      "local_sha256": "7de4b680f19da9aa88a1c78ebe0426f3cacfb21e7cbf8618322b4484fae49891"
     },
     {
       "local": "frontend/src/features/zed/agent_ui/conversation_view/elicitation.tsx",
@@ -381,7 +382,7 @@
     {
       "local": "frontend/src/features/zed/agent_ui/conversation_view/entry_view_state.ts",
       "kind": "presentation",
-      "reason": "Supported-content visibility and grouped entries; thinking display states and manual expansion rules",
+      "reason": "Supported-content visibility and grouped entries; thinking display states and manual expansion rules; finalized turn-end controls and ToolCall raw-output fallback",
       "sources": [
         {
           "path": "crates/agent_ui/src/entry_view_state.rs",
@@ -390,9 +391,13 @@
         {
           "path": "crates/agent_ui/src/conversation_view/thread_view.rs",
           "sha256": "d072e0555e4e1fac22239d6b82bd57a3839beb0643c721b5a748621f52bb01ea"
+        },
+        {
+          "path": "crates/acp_thread/src/acp_thread.rs",
+          "sha256": "7e78b4dcde4ba3a329f35237ed1e0641ef793d3c58825f79a5382758e2f386fe"
         }
       ],
-      "local_sha256": "d0808a2fe3073414546ca241521ba948f99526fe9f5dc5d31478dca924a6da08"
+      "local_sha256": "b9aedff068634818a4b8ccf304717ccceeff43cb2c23665e8f4ddb55eb7a202f"
     },
     {
       "local": "frontend/src/features/zed/agent_ui/authentication.tsx",
@@ -445,6 +450,94 @@
       "reason": "AoW HTTP operations and internal change notifications; successful authentication is shared across views of one connection",
       "sources": [],
       "local_sha256": "8865dd04a030cb6c715c1822607ecd8ee6e64942544f003b75447fcee14ca1da"
+    },
+    {
+      "local": "crates/zed/src/acp_thread/terminals.rs",
+      "kind": "host-port",
+      "reason": "Legacy display terminal metadata accumulation and persistence; terminal execution remains unavailable",
+      "sources": [
+        {
+          "path": "crates/agent_servers/src/acp.rs",
+          "sha256": "7bed9ea8c55ec5cd3ab35a1661cac89f059c013bb18f341c0f5892de1f83c906"
+        },
+        {
+          "path": "crates/acp_thread/src/acp_thread.rs",
+          "sha256": "7e78b4dcde4ba3a329f35237ed1e0641ef793d3c58825f79a5382758e2f386fe"
+        }
+      ],
+      "local_sha256": "b9e3afbc77ff490b71f6d15918380bbffbf88cb0f3e5f28166f77c4952815a03"
+    },
+    {
+      "local": "frontend/src/features/zed/agent_ui/conversation_view/terminal_output.tsx",
+      "kind": "host-port",
+      "reason": "Read-only Xterm view replaces the GPUI display terminal; incremental ANSI output, resize, cwd and exit status",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/conversation_view/thread_view.rs",
+          "sha256": "d072e0555e4e1fac22239d6b82bd57a3839beb0643c721b5a748621f52bb01ea"
+        }
+      ],
+      "local_sha256": "67d05b86ad239567f13514ddfbdb007e235c4e3218696f39fc68e4b61a1a5b71"
+    },
+    {
+      "local": "crates/zed/src/acp_thread/compaction.rs",
+      "kind": "host-port",
+      "reason": "Compaction upsert, in-progress summary accumulation and absent/null/replacement patches",
+      "sources": [
+        {
+          "path": "crates/acp_thread/src/acp_thread.rs",
+          "sha256": "7e78b4dcde4ba3a329f35237ed1e0641ef793d3c58825f79a5382758e2f386fe"
+        }
+      ],
+      "local_sha256": "411fb2ec97c8d226ded72bcfde2ed60f6f522363225695093b9c5f430e5e97cb"
+    },
+    {
+      "local": "frontend/src/features/zed/agent_ui/conversation_view/activity.tsx",
+      "kind": "presentation",
+      "reason": "Compaction lifecycle and details, notice severity, plain-text guidance and dismissal",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/conversation_view/thread_view.rs",
+          "sha256": "d072e0555e4e1fac22239d6b82bd57a3839beb0643c721b5a748621f52bb01ea"
+        }
+      ],
+      "local_sha256": "a1b300a429c05ef14e5fa65b802dbe342cec2fbc1665582672f3436d204bb319"
+    },
+    {
+      "local": "frontend/src/features/zed/agent_ui/conversation_view/file_links.ts",
+      "kind": "presentation",
+      "reason": "Markdown and resource file paths resolve against the session cwd with optional line navigation",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/conversation_view/thread_view.rs",
+          "sha256": "d072e0555e4e1fac22239d6b82bd57a3839beb0643c721b5a748621f52bb01ea"
+        }
+      ],
+      "local_sha256": "69f45ca60f61ac35df41bdefde0c1e6434275b3bb1a2130d578a6fdf7e4d66d1"
+    },
+    {
+      "local": "frontend/src/features/zed/agent_ui/conversation_view/reply_actions.tsx",
+      "kind": "presentation",
+      "reason": "Whole-turn copy and prompt navigation; browser clipboard fallback and failure feedback",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/conversation_view/thread_view.rs",
+          "sha256": "d072e0555e4e1fac22239d6b82bd57a3839beb0643c721b5a748621f52bb01ea"
+        }
+      ],
+      "local_sha256": "084abc5c1d74c52dbad9c5b43c7ce049205c2721bcc317f73467aab39b3df7ad"
+    },
+    {
+      "local": "frontend/src/components/MarkdownContent.tsx",
+      "kind": "host-port",
+      "reason": "Shared DOM Markdown renderer with opt-in ACP local file links and unchanged URL sanitization",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/conversation_view/thread_view.rs",
+          "sha256": "d072e0555e4e1fac22239d6b82bd57a3839beb0643c721b5a748621f52bb01ea"
+        }
+      ],
+      "local_sha256": "b757083e6bc1a130168bf180e16d446ddda96661bd1138821a8e61f97b62e73d"
     }
   ],
   "coverage": [
@@ -485,7 +578,7 @@
       ]
     },
     {
-      "behavior": "ACP terminal and terminal authentication",
+      "behavior": "ACP terminal execution and terminal authentication",
       "status": "not advertised or implemented"
     },
     {
@@ -559,6 +652,14 @@
     {
       "behavior": "LAN HTTP creation without secure-context APIs; request-only resume authentication across stale snapshots and pending/shared login; drafts across portal/title changes, multiple tabs, close/reopen and late prompt responses",
       "tests": [
+        "frontend/tests/zed.test.mjs"
+      ]
+    },
+    {
+      "behavior": "Completed-turn response controls, prompt navigation, raw output fallback and persisted display-only terminal streams",
+      "tests": [
+        "crates/zed/src/acp_thread/terminals.rs",
+        "crates/zed/tests/integration.rs::display_terminal_output_is_accumulated_and_persisted",
         "frontend/tests/zed.test.mjs"
       ]
     }

@@ -1,8 +1,11 @@
 // React rendering of the ACP branches in thread_view.rs, with independent view state.
 import { useEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, Brain, Check, ChevronDown, ChevronRight, Copy, LoaderCircle, Maximize2, Minimize2, Send, Square } from 'lucide-react';
+import { ArrowDown, Brain, Check, ChevronDown, ChevronRight, LoaderCircle, Maximize2, Minimize2, Send, Square } from 'lucide-react';
 import { ContentBlock, ToolCall, type OpenFile } from './content';
 import { PermissionRequest } from './elicitation';
+import { Compaction, Notice } from './activity';
+import { ReplyActions } from './reply_actions';
+import { absoluteFilePath } from './file_links';
 import { ConfigOptions } from '../config_options';
 import { useComposerDraft } from '../composer_drafts';
 import { messageGroups, useEntryViewState } from './entry_view_state';
@@ -16,17 +19,18 @@ function TokenUsage({ usage }: { usage: Data | null }) {
   const title = `Context: ${percent}% · ${used.toLocaleString()} / ${size.toLocaleString()}${typeof cost.amount === 'number' ? `\nCost: ${cost.amount.toFixed(cost.amount > 0 && cost.amount < .01 ? 4 : 2)} ${text(cost.currency)}` : ''}`;
   return <span className={`zed-token-usage${percent >= 85 ? ' warning' : ''}`} role="img" aria-label={title} title={title}><svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" opacity=".25" /><circle cx="8" cy="8" r="6" pathLength="100" strokeDasharray={`${Math.min(100, Math.max(0, percent))} 100`} transform="rotate(-90 8 8)" /></svg></span>;
 }
-export function ThreadView({ session, workspace, tabId, busy, onAction, onOpenFile }: { session: SessionSnapshot; workspace: string; tabId: string; busy: boolean; onAction: (action: Data) => Promise<boolean>; onOpenFile: OpenFile }) {
+export function ThreadView({ session, workspace, tabId, busy, onAction, onOpenFile: openHostFile }: { session: SessionSnapshot; workspace: string; tabId: string; busy: boolean; onAction: (action: Data) => Promise<boolean>; onOpenFile: OpenFile }) {
   const [prompt, setPrompt] = useComposerDraft(workspace, tabId);
   const [expanded, setExpanded] = useState(false);
   const [commandIndex, setCommandIndex] = useState(0);
-  const [copied, setCopied] = useState('');
   const [following, setFollowing] = useState(true);
   const conversation = useRef<HTMLDivElement>(null);
   const end = useRef<HTMLDivElement>(null);
   const editor = useRef<HTMLTextAreaElement>(null);
   const working = session.status === 'working';
-  const groups = messageGroups(session.entries);
+  const onOpenFile: OpenFile = (path, line) => openHostFile(absoluteFilePath(path, session.cwd || workspace), line);
+  const toolId = (permission: typeof session.permissions[number]) => text(object(permission.request.toolCall).toolCallId);
+  const groups = messageGroups(session.entries, working, session.permissions.length > 0, new Set(session.permissions.map(toolId)));
   const views = useEntryViewState(session.entries, working);
   useEffect(() => { if (following) end.current?.scrollIntoView({ block: 'nearest' }); }, [session.revision, following]);
   const submit = async () => {
@@ -38,12 +42,11 @@ export function ThreadView({ session, workspace, tabId, busy, onAction, onOpenFi
   const commands = /^\/[^\s]*$/.test(prompt) ? session.commands.filter(command => text(command.name).toLocaleLowerCase().includes(prompt.slice(1).toLocaleLowerCase())) : [];
   const chooseCommand = (name: string) => { setPrompt(`/${name} `); setCommandIndex(0); editor.current?.focus(); };
   const tools = new Set(session.entries.filter(entry => entry.kind === 'tool').map(entry => entry.id));
-  const toolId = (permission: typeof session.permissions[number]) => text(object(permission.request.toolCall).toolCallId);
-  const plan = list([...session.entries].reverse().find(entry => entry.kind === 'plan')?.content.entries);
+  const plan = list(session.plan?.entries);
   const hasMessages = groups.length > 0;
   return <>
     {hasMessages && <div className="zed-conversation" ref={conversation} onScroll={event => { const element = event.currentTarget; setFollowing(element.scrollHeight - element.scrollTop - element.clientHeight < 60); }}>
-      {groups.map(group => <article key={group.id} className={`zed-entry zed-entry-${group.kind}`}>
+      {groups.map(group => <article key={group.id} data-entry-id={group.id} className={`zed-entry zed-entry-${group.kind}`}>
         {group.kind === 'user' ? <div className="zed-user-message">{group.entries.map(entry => <ContentBlock key={entry.id} content={entry.content} onOpenFile={onOpenFile} user />)}</div>
           : group.kind === 'assistant' ? <>{group.entries.map(entry => {
             if (entry.kind !== 'thought') return <div className="zed-message-chunk" key={entry.id}><ContentBlock content={entry.content} onOpenFile={onOpenFile} /></div>;
@@ -51,15 +54,17 @@ export function ThreadView({ session, workspace, tabId, busy, onAction, onOpenFi
             return <section key={entry.id} className="zed-thinking"><button type="button" aria-label="思考过程" aria-expanded={state.open} onClick={() => views.toggleThinking(entry.id)}><Brain size={14} /><span>Thinking</span>{state.open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</button>
               {state.open && <div className={`zed-thinking-content${state.constrained ? ' constrained' : ''}`} ref={element => { if (element && state.following) element.scrollTop = element.scrollHeight; }}><ContentBlock content={entry.content} onOpenFile={onOpenFile} /></div>}
             </section>;
-          })}{group.entries.some(entry => entry.kind === 'assistant') && <div className="zed-message-actions"><button type="button" aria-label="复制回复" title="复制回复" onClick={() => { void navigator.clipboard.writeText(group.entries.filter(entry => entry.kind === 'assistant').map(entry => text(entry.content.text)).join('\n\n')).then(() => setCopied(group.id)); }}>{copied === group.id ? <Check size={14} /> : <Copy size={14} />}</button><button type="button" aria-label="跳到上一条消息" title="跳到上一条消息" onClick={event => event.currentTarget.closest('article')?.previousElementSibling?.scrollIntoView({ block: 'start', behavior: 'smooth' })}><ArrowUp size={14} /></button></div>}</>
-            : group.kind === 'tool' ? <ToolCall content={group.entries[0].content} onOpenFile={onOpenFile} busy={busy} permission={session.permissions.find(permission => toolId(permission) === group.id)} onAnswer={response => { const permission = session.permissions.find(item => toolId(item) === group.id); if (permission) void onAction({ action: 'answer', request_id: permission.id, response }); }} />
-              : group.kind === 'notice' ? <p className="zed-notice" role="status">{text(group.entries[0].content.message) || text(group.entries[0].content.title)}</p>
-                : <details className="zed-compaction"><summary>上下文压缩{group.entries[0].content.status === 'in_progress' ? '中…' : ''}</summary>{group.entries.map(entry => <ContentBlock key={entry.id} content={entry.content} onOpenFile={onOpenFile} />)}</details>}
+          })}</>
+            : group.kind === 'tool' ? <ToolCall content={group.entries[0].content} terminals={session.terminals} onOpenFile={onOpenFile} busy={busy} permission={session.permissions.find(permission => toolId(permission) === group.id)} onAnswer={response => { const permission = session.permissions.find(item => toolId(item) === group.id); if (permission) void onAction({ action: 'answer', request_id: permission.id, response }); }} />
+              : group.kind === 'summary' ? <ContentBlock content={group.entries[0].content} onOpenFile={onOpenFile} />
+                : <Compaction content={group.entries[0].content} onOpenFile={onOpenFile} />}
+        {!!group.reply && <ReplyActions content={group.reply} onJump={() => Array.from(conversation.current?.querySelectorAll<HTMLElement>('[data-entry-id]') ?? []).find(element => element.dataset.entryId === group.userMessageId)?.scrollIntoView({ block: 'start', behavior: 'smooth' })} />}
       </article>)}
       <div ref={end} />
     </div>}
     {!following && hasMessages && <button type="button" className="zed-follow" onClick={() => { setFollowing(true); end.current?.scrollIntoView({ block: 'end', behavior: 'smooth' }); }}><ArrowDown size={13} />跳到最新消息</button>}
     <div className="zed-activity">
+      {session.notices?.map(notice => <Notice key={notice.id} notice={notice} busy={busy} onDismiss={() => { void onAction({ action: 'dismiss_notice', notice_id: notice.id }); }} />)}
       {session.permissions.filter(permission => !tools.has(toolId(permission))).map(permission => <PermissionRequest key={permission.id} permission={permission} busy={busy} onAnswer={response => { void onAction({ action: 'answer', request_id: permission.id, response }); }} />)}
       {session.error && !session.auth_required && <p className="zed-error" role="alert">{session.error}</p>}
       {working && <p className="zed-working" role="status"><LoaderCircle className="zed-spinner" size={13} />Agent 正在处理…</p>}

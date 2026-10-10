@@ -24,6 +24,7 @@ impl ThreadStore {
                         })?;
                     thread.status = "disconnected".into();
                     thread.permissions.clear();
+                    super::AcpThread::restore_history(&mut thread);
                     threads.insert(thread.id.clone(), thread);
                 }
             }

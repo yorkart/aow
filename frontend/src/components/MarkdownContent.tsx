@@ -1,5 +1,5 @@
 import DOMPurify from 'dompurify';
-import { marked } from 'marked';
+import { marked, Renderer } from 'marked';
 import { useEffect, useMemo, useRef } from 'react';
 import { linkImageReferences } from './markdownImageReferences';
 
@@ -15,23 +15,37 @@ function isMermaidCodeBlock(code: HTMLElement) {
   });
 }
 
-export function MarkdownContent({ text, className = 'project-aow-snapshot-markdown', readOnly = false, imageReferences }: { text: string; className?: string; readOnly?: boolean; imageReferences?: ReadonlyMap<string, string> }) {
+export function MarkdownContent({ text, className = 'project-aow-snapshot-markdown', readOnly = false, imageReferences, onOpenLink }: { text: string; className?: string; readOnly?: boolean; imageReferences?: ReadonlyMap<string, string>; onOpenLink?: (href: string) => boolean }) {
   const markdownRef = useRef<HTMLDivElement>(null);
+  const handlesLinks = !!onOpenLink;
   const html = useMemo(() => {
-    if (!readOnly) return DOMPurify.sanitize(marked.parse(text) as string);
+    // Preserve file destinations as inert data only when a host handles clicks.
+    // DOMPurify still applies its normal URL policy to every actual href.
+    const renderer = new Renderer();
+    if (handlesLinks) renderer.link = function (token) {
+      if (!/^file:\/\//i.test(token.href)) return Renderer.prototype.link.call(this, token);
+      return `<a href="#" data-local-file="${encodeURIComponent(token.href)}">${this.parser.parseInline(token.tokens)}</a>`;
+    };
+    const source = marked.parse(text, { renderer }) as string;
+    if (!readOnly) return DOMPurify.sanitize(source);
     const content = document.createElement('div');
-    content.append(DOMPurify.sanitize(marked.parse(text) as string, {
+    content.append(DOMPurify.sanitize(source, {
       RETURN_DOM_FRAGMENT: true,
       FORBID_TAGS: ['form', 'button', 'textarea', 'select', 'option'],
       FORBID_ATTR: ['contenteditable', 'autofocus'],
     }));
+    if (handlesLinks) content.querySelectorAll('a[href]').forEach(link => {
+      if (/^https?:\/\//i.test(link.getAttribute('href') ?? '')) {
+        link.setAttribute('target', '_blank'); link.setAttribute('rel', 'noreferrer');
+      }
+    });
     content.querySelectorAll('input').forEach((input) => {
       if (input.type === 'checkbox') input.disabled = true;
       else input.remove();
     });
     if (imageReferences?.size) linkImageReferences(content, imageReferences);
     return content.innerHTML;
-  }, [readOnly, text, imageReferences]);
+  }, [readOnly, text, imageReferences, handlesLinks]);
 
   useEffect(() => {
     const markdown = markdownRef.current;
@@ -77,5 +91,12 @@ export function MarkdownContent({ text, className = 'project-aow-snapshot-markdo
     return () => { cancelled = true; };
   }, [html]);
 
-  return <div ref={markdownRef} className={className} />;
+  return <div ref={markdownRef} className={className} onClick={event => {
+    if (!onOpenLink || !(event.target instanceof Element)) return;
+    const link = event.target.closest('a');
+    if (!link || !event.currentTarget.contains(link)) return;
+    let href = link.getAttribute('href');
+    try { if (link.dataset.localFile) href = decodeURIComponent(link.dataset.localFile); } catch { return; }
+    if (href && onOpenLink(href)) event.preventDefault();
+  }} />;
 }

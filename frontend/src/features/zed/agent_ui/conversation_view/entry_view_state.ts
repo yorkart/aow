@@ -11,19 +11,51 @@ export function visibleContent(content: Data): boolean {
   return content.type === 'resource_link' && !!text(content.uri);
 }
 export function visibleTool(content: Data) {
-  return !['cancelled', 'canceled'].includes(text(content.status)) || list(content.content).some(part => part.type === 'content' ? visibleContent(object(part.content)) : ['diff', 'terminal'].includes(text(part.type)));
+  return !['cancelled', 'canceled'].includes(text(content.status)) || toolContent(content).some(part => part.type === 'content' ? visibleContent(object(part.content)) : ['diff', 'terminal'].includes(text(part.type)));
 }
-export function messageGroups(entries: ThreadEntry[]) {
-  const groups: { id: string; kind: string; entries: ThreadEntry[] }[] = [];
+// Zed's ToolCall::content prefers structured content, falling back to rawOutput.
+export function toolContent(content: Data): Data[] {
+  const parts = list(content.content);
+  if (parts.length || content.rawOutput == null) return parts;
+  const output = typeof content.rawOutput === 'object' ? `\`\`\`json\n${JSON.stringify(content.rawOutput, null, 2)}\n\`\`\`` : String(content.rawOutput);
+  return [{ type: 'content', content: { type: 'text', text: output } }];
+}
+function contentMarkdown(content: Data): string {
+  if (content.type === 'text') return text(content.text);
+  if (content.type === 'image') return '`Image`';
+  if (content.type === 'resource_link') return text(content.uri);
+  if (content.type === 'resource') { const resource = object(content.resource); return text(resource.text) || text(resource.uri); }
+  return '';
+}
+export function messageGroups(entries: ThreadEntry[], working: boolean, waiting: boolean, permissionTools = new Set<string>()) {
+  const groups: { id: string; kind: string; entries: ThreadEntry[]; reply: string; userMessageId?: string }[] = [];
+  let userMessageId: string | undefined;
   for (const entry of entries) {
-    if (entry.kind === 'tool' && !visibleTool(entry.content)) continue;
+    if (entry.kind === 'tool' && !permissionTools.has(entry.id) && !visibleTool(entry.content)) continue;
     if (['assistant', 'thought', 'user'].includes(entry.kind) && !visibleContent(entry.content)) continue;
-    if (!['assistant', 'thought', 'user', 'tool', 'notice', 'summary', 'compaction_update'].includes(entry.kind)) continue;
+    if (!['assistant', 'thought', 'user', 'tool', 'summary', 'compaction_update'].includes(entry.kind)) continue;
     const kind = entry.kind === 'thought' ? 'assistant' : entry.kind;
     const last = groups.at(-1);
     if (last && last.kind === kind && ['assistant', 'user'].includes(kind)) last.entries.push(entry);
-    else groups.push({ id: entry.id, kind, entries: [entry] });
+    else {
+      if (kind === 'user') userMessageId = entry.id;
+      groups.push({ id: entry.id, kind, entries: [entry], reply: '', userMessageId });
+    }
   }
+  // The controls belong to the whole completed turn, including a tool-only ending.
+  let turn: typeof groups = [];
+  const finish = () => {
+    const last = turn.at(-1);
+    if (last && last.kind !== 'user') last.reply = turn.flatMap(group => group.entries)
+      .filter(entry => entry.kind === 'assistant').map(entry => contentMarkdown(entry.content))
+      .filter(value => value.trim()).join('\n\n');
+    turn = [];
+  };
+  for (const group of groups) {
+    if (group.kind === 'user') finish();
+    turn.push(group);
+  }
+  if (!working && !waiting) finish();
   return groups;
 }
 type ThinkingDisplay = 'auto' | 'preview' | 'always_expanded' | 'always_collapsed';
@@ -41,7 +73,7 @@ export function useEntryViewState(entries: ThreadEntry[], working: boolean) {
     refresh(); window.addEventListener(settingsChanged, refresh);
     return () => { cancelled = true; window.removeEventListener(settingsChanged, refresh); };
   }, []);
-  const last = entries.at(-1);
+  const last = [...entries].reverse().find(entry => !['plan', 'notice'].includes(entry.kind));
   useEffect(() => {
     if (!['auto', 'preview'].includes(display)) return;
     if (last?.kind === 'thought' && working && auto !== last.id) { setAuto(last.id); setExpanded(values => new Set([...values, last.id])); }

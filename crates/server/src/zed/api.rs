@@ -245,6 +245,7 @@ async fn delete_session(
 enum SessionAction {
     Prompt { content: Vec<aow_zed::Content> },
     Cancel,
+    DismissNotice { notice_id: String },
     Resume,
     Close,
     SetMode { mode_id: String },
@@ -259,6 +260,7 @@ async fn session_action(
     let result = match action {
         SessionAction::Prompt { content } => state.zed.start_prompt(&id, content),
         SessionAction::Cancel => state.zed.cancel(&id),
+        SessionAction::DismissNotice { notice_id } => state.zed.dismiss_notice(&id, &notice_id),
         SessionAction::Resume => return state.zed.resume(&id).await.map(Json).map_err(error),
         SessionAction::Close => state.zed.close_session(&id).await,
         SessionAction::SetMode { mode_id } => state.zed.set_mode(&id, &mode_id).await,

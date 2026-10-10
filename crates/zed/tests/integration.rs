@@ -57,6 +57,25 @@ async fn wait_for(
 }
 
 #[tokio::test]
+async fn display_terminal_output_is_accumulated_and_persisted() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let workspace = directory.path().canonicalize()?;
+    let state = directory.path().join("state");
+    let service = AcpService::new(host(false), Some(state.clone()))?;
+    let connection = service.connect("test", workspace.clone()).await?;
+    let session = service.new_session(&connection.id).await?;
+    service.start_prompt(&session.id, prompt("terminal"))?;
+    let session = wait_for(&service, &session.id, |value| value.status == "idle").await;
+    let terminal = &session.terminals["terminal-1"];
+    assert_eq!(terminal["output"], "first line\nsecond line\n");
+    assert_eq!(terminal["cwd"], workspace.to_string_lossy().as_ref());
+    assert_eq!(terminal["exit_status"]["exitCode"], 0);
+    let restored = AcpService::new(host(false), Some(state))?;
+    assert_eq!(restored.snapshot(&session.id)?.terminals, session.terminals);
+    Ok(())
+}
+
+#[tokio::test]
 async fn lifecycle_defaults_events_permissions_files_cancel_and_reload() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let workspace = directory.path().canonicalize()?;
@@ -120,6 +139,13 @@ async fn lifecycle_defaults_events_permissions_files_cancel_and_reload() -> Resu
     );
     service.start_prompt(&session.id, prompt("permission"))?;
     let pending = wait_for(&service, &session.id, |value| !value.permissions.is_empty()).await;
+    let preview = pending
+        .entries
+        .iter()
+        .find(|entry| entry.id == "tool-1")
+        .unwrap();
+    assert_eq!(preview.content["title"], "Write file");
+    assert_eq!(preview.content["content"][0]["newText"], "after");
     let request_id = &pending.permissions[0].id;
     assert!(
         service
@@ -176,6 +202,39 @@ async fn lifecycle_defaults_events_permissions_files_cancel_and_reload() -> Resu
     let restored = AcpService::new(host(false), Some(state))?;
     assert_eq!(restored.snapshot(&session.id)?.status, "disconnected");
     assert!(restored.snapshot(&session.id)?.permissions.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn activity_streams_and_dismissed_notices_survive_reload() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let workspace = directory.path().canonicalize()?;
+    let state = directory.path().join("state");
+    let service = AcpService::new(host(false), Some(state.clone()))?;
+    let connection = service.connect("test", workspace).await?;
+    let session = service.new_session(&connection.id).await?;
+    service.start_prompt(&session.id, prompt("activity"))?;
+    let snapshot = wait_for(&service, &session.id, |value| value.status == "idle").await;
+    assert_eq!(snapshot.entries.len(), 3);
+    assert_eq!(snapshot.entries[1].content["text"], "**Hello**");
+    assert_eq!(
+        snapshot.entries[2].content["summary"][0]["text"],
+        "**Summary**"
+    );
+    assert_eq!(snapshot.entries[2].content["status"], "completed");
+    assert_eq!(snapshot.notices.len(), 1);
+    let restored = AcpService::new(host(false), Some(state.clone()))?;
+    assert_eq!(
+        restored.snapshot(&session.id)?.notices[0].id,
+        snapshot.notices[0].id
+    );
+    service.dismiss_notice(&session.id, &snapshot.notices[0].id)?;
+    assert!(service.snapshot(&session.id)?.notices.is_empty());
+    let restored = AcpService::new(host(false), Some(state))?;
+    let snapshot = restored.snapshot(&session.id)?;
+    assert!(snapshot.notices.is_empty());
+    assert_eq!(snapshot.entries.len(), 3);
+    assert_eq!(snapshot.plan["entries"][0]["status"], "completed");
     Ok(())
 }
 

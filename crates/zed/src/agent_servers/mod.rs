@@ -535,6 +535,11 @@ impl AgentServerStore {
     pub fn logs(&self, connection_id: &str) -> Result<Vec<Value>> {
         Ok(self.connection(connection_id)?.debug_log.messages())
     }
+    pub fn dismiss_notice(&self, id: &str, notice_id: &str) -> Result<()> {
+        self.inner.threads.lock().unwrap().update(id, |thread| {
+            thread.notices.retain(|notice| notice.id != notice_id);
+        })
+    }
     pub fn session_logs(&self, id: &str) -> Result<Vec<Value>> {
         Ok(self.session_connection(id)?.debug_log.messages())
     }

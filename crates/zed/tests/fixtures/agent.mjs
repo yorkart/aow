@@ -21,6 +21,7 @@ input.on('line', line => {
   const { id, method, params } = message;
   if (method === 'initialize') {
     if (params.clientCapabilities.terminal) throw new Error('Must not advertise terminal capability');
+    if (!params.clientCapabilities._meta?.terminal_output) throw new Error('Must advertise display-only terminal output');
     reply(id, { protocolVersion: 1, agentInfo: { name: 'test-agent', version: process.env.MARKER || '1' }, agentCapabilities: { loadSession: process.env.NO_LOAD !== '1', sessionCapabilities: { list: {}, close: {}, delete: {}, ...(process.env.RESUME_ONLY === '1' ? { resume: {} } : {}) } }, authMethods: [{ id: 'login', name: 'Login' }] });
   } else if (method === 'session/new') {
     reply(id, { sessionId: 'session-1', modes: { currentModeId: 'ask', availableModes: [{ id: 'ask', name: 'Ask' }, { id: 'code', name: 'Code' }] }, ...(process.env.LEGACY_MODES === '1' ? {} : { configOptions: process.env.EMPTY_CONFIG === '1' ? [] : process.env.NULL_CONFIG === '1' ? null : options }) });
@@ -46,9 +47,25 @@ input.on('line', line => {
     const text = params.prompt[0].text;
     if (text === 'auth-required') { write({ id, error: { code: -32000, message: '请重新登录' } }); return; }
     if (text === 'cancel') { prompt = id; return; }
+    if (text === 'terminal') {
+      update({ sessionUpdate: 'tool_call', toolCallId: 'command', title: 'pwd', kind: 'execute', status: 'in_progress', content: [{ type: 'terminal', terminalId: 'terminal-1' }], _meta: { terminal_info: { terminal_id: 'terminal-1', cwd: process.cwd() } } });
+      for (const data of ['first line\n', 'second line\n']) update({ sessionUpdate: 'tool_call_update', toolCallId: 'command', _meta: { terminal_output: { terminal_id: 'terminal-1', data } } });
+      update({ sessionUpdate: 'tool_call_update', toolCallId: 'command', status: 'completed', _meta: { terminal_exit: { terminal_id: 'terminal-1', exit_code: 0 } } });
+      chunk('agent_message_chunk', 'Command completed'); finish(id); return;
+    }
     if (text === 'exit') { chunk('agent_message_chunk', 'last output'); process.exitCode = 7; input.close(); process.stdin.destroy(); return; }
     if (text === 'permission') {
-      request('session/request_permission', { sessionId: 'session-1', toolCall: { toolCallId: 'tool-1', title: 'Write file', status: 'pending' }, options: [{ optionId: 'allow', name: 'Allow once', kind: 'allow_once' }, { optionId: 'reject', name: 'Reject', kind: 'reject_once' }] }, response => { chunk('agent_message_chunk', JSON.stringify(response.result)); finish(id); }); return;
+      request('session/request_permission', { sessionId: 'session-1', toolCall: { toolCallId: 'tool-1', title: 'Write file', kind: 'edit', status: 'pending', content: [{ type: 'diff', path: path.join(process.cwd(), 'source.txt'), oldText: 'before', newText: 'after' }] }, options: [{ optionId: 'allow', name: 'Allow once', kind: 'allow_once' }, { optionId: 'reject', name: 'Reject', kind: 'reject_once' }] }, response => { chunk('agent_message_chunk', JSON.stringify(response.result)); finish(id); }); return;
+    }
+    if (text === 'activity') {
+      chunk('agent_message_chunk', '**Hel');
+      update({ sessionUpdate: 'plan', entries: [{ content: 'Read file', priority: 'high', status: 'completed' }] });
+      update({ sessionUpdate: 'notice', severity: 'warning', title: 'Rate limit', description: 'Please **wait** before retrying.' });
+      chunk('agent_message_chunk', 'lo**');
+      update({ sessionUpdate: 'compaction_update', compactionId: 'compact-1', status: 'in_progress' });
+      for (const text of ['**Sum', 'mary**']) update({ sessionUpdate: 'compaction_summary_chunk', compactionId: 'compact-1', content: { type: 'text', text } });
+      update({ sessionUpdate: 'compaction_update', compactionId: 'compact-1', status: 'completed' });
+      finish(id); return;
     }
     if (text === 'files') {
       request('fs/read_text_file', { sessionId: 'session-1', path: path.join(process.cwd(), 'source.txt'), line: 2, limit: 1 }, response => {

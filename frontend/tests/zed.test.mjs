@@ -84,6 +84,7 @@ try {
           session.entries = [{ id: 'user', kind: 'user', content: action.content[0] }, { id: 'assistant', kind: 'assistant', content: { type: 'text', text: 'Hello from ACP' } }, { id: 'tool', kind: 'tool', content: { title: 'Read source', status: 'in_progress', locations: [{ path: '/repo/main.rs', line: 12 }], content: [{ type: 'diff', path: '/repo/main.rs', oldText: 'old', newText: 'new' }] } }];
           session.permissions = [{ id: 'permission', kind: 'permission', request: { toolCall: { title: 'Write source' }, options: [{ optionId: 'yes', name: 'Allow once' }] } }];
         } else if (action.action === 'answer') session.permissions = [];
+        else if (action.action === 'dismiss_notice') session.notices = session.notices.filter(notice => notice.id !== action.notice_id);
         else if (action.action === 'set_config') session.config_options = session.config_options.map(option => (option.configId || option.id) === action.config_id ? { ...option, currentValue: action.value } : option);
         else if (action.action === 'set_mode') session.modes.currentModeId = action.mode_id;
         else if (action.action === 'resume') session.status = 'idle';
@@ -465,6 +466,217 @@ try {
     await tool.getByText('Tool result', { exact: true }).waitFor();
     await tool.getByRole('button', { name: 'Allow once', exact: true }).click();
     assert.equal(state.actions.at(-1).request_id, 'p');
+  });
+  await test('reply controls appear only at completed turn ends and jump to the user prompt', async t => {
+    const { page, state } = await fixture(t);
+    const entry = (id, kind, value) => ({ id, kind, content: { type: 'text', text: value } });
+    Object.assign(state.session, { status: 'working', entries: [entry('u1', 'user', 'First prompt'), entry('a1', 'assistant', 'First answer'), entry('u2', 'user', 'Second prompt'), entry('a2', 'assistant', 'Checking files')] });
+    await newSession(page);
+    await page.getByText('Checking files', { exact: true }).waitFor();
+    const actions = page.locator('.zed-message-actions');
+    assert.equal(await actions.count(), 1, 'only the previous completed turn has controls');
+    state.session.entries.push({ id: 'command', kind: 'tool', content: { title: 'Read files', kind: 'execute', status: 'completed', content: [] } }, entry('a3', 'assistant', 'Final answer'));
+    state.session.revision++;
+    await page.getByText('Final answer', { exact: true }).waitFor();
+    assert.equal(await actions.count(), 1, 'streamed final text is still generating');
+    state.session.status = 'idle'; state.session.revision++;
+    await page.waitForFunction(() => document.querySelectorAll('.zed-message-actions').length === 2);
+    assert.equal(await page.locator('[data-entry-id="a2"] .zed-message-actions').count(), 0);
+    await page.evaluate(() => {
+      navigator.clipboard.writeText = async value => { window.copiedReply = value; };
+      Element.prototype.scrollIntoView = function () { window.scrolledEntry = this.getAttribute('data-entry-id'); };
+    });
+    await actions.last().getByRole('button', { name: '复制回复', exact: true }).click();
+    assert.equal(await page.evaluate(() => window.copiedReply), 'Checking files\n\nFinal answer');
+    await actions.last().getByRole('button', { name: '跳到用户消息', exact: true }).click();
+    assert.equal(await page.evaluate(() => window.scrolledEntry), 'u2', 'skip intervening tool and commentary');
+    state.session.permissions = [{ id: 'pending', kind: 'permission', request: { toolCall: { title: 'Confirmation' }, options: [] } }]; state.session.revision++;
+    await page.getByRole('region', { name: 'Agent 权限请求', exact: true }).waitFor();
+    await page.waitForFunction(() => document.querySelectorAll('.zed-message-actions').length === 1);
+    state.session.permissions = []; state.session.status = 'working';
+    state.session.entries.push(entry('u3', 'user', 'Third prompt'), entry('a4', 'assistant', 'Next response')); state.session.revision++;
+    await page.getByText('Next response', { exact: true }).waitFor();
+    assert.equal(await actions.count(), 2, 'historical turn controls remain while the next turn runs');
+    state.session.status = 'idle'; state.session.stop_reason = 'cancelled'; state.session.revision++;
+    await page.waitForFunction(() => document.querySelectorAll('.zed-message-actions').length === 3);
+  });
+  await test('tool endings retain turn controls and copy only assistant content', async t => {
+    const { page, state } = await fixture(t);
+    Object.assign(state.session, { status: 'working', entries: [
+      { id: 'u', kind: 'user', content: { type: 'text', text: 'Inspect files' } },
+      { id: 'a', kind: 'assistant', content: { type: 'text', text: 'Checking README' } },
+      { id: 'thought', kind: 'thought', content: { type: 'text', text: 'Private reasoning' } },
+      { id: 'link', kind: 'assistant', content: { type: 'resource_link', uri: 'file:///repo/README.md' } },
+      { id: 'tool', kind: 'tool', content: { title: 'Read files', status: 'completed', rawOutput: 'Tool output' } },
+    ] });
+    await newSession(page);
+    await page.getByText('Checking README', { exact: true }).waitFor();
+    assert.equal(await page.locator('.zed-message-actions').count(), 0);
+    state.session.status = 'idle'; state.session.revision++;
+    const actions = page.locator('.zed-message-actions');
+    await actions.waitFor();
+    assert.equal(await page.locator('[data-entry-id="tool"] .zed-message-actions').count(), 1);
+    await page.evaluate(() => {
+      navigator.clipboard.writeText = async value => { window.copiedReply = value; };
+      Element.prototype.scrollIntoView = function () { window.scrolledEntry = this.getAttribute('data-entry-id'); };
+    });
+    await actions.getByRole('button', { name: '复制回复', exact: true }).click();
+    assert.equal(await page.evaluate(() => window.copiedReply), 'Checking README\n\nfile:///repo/README.md');
+    await actions.getByRole('button', { name: '跳到用户消息', exact: true }).click();
+    assert.equal(await page.evaluate(() => window.scrolledEntry), 'u');
+    state.session.entries.at(-1).content = { title: 'Read files', status: 'cancelled' };
+    state.session.stop_reason = 'cancelled'; state.session.revision++;
+    await page.locator('[data-entry-id="tool"]').waitFor({ state: 'detached' });
+    assert.equal(await actions.count(), 1, 'hidden canceled tools still leave a completed turn footer');
+  });
+  await test('permission previews stay expanded and canceled pending tools remain actionable', async t => {
+    const { page, state } = await fixture(t);
+    const content = { toolCallId: 'edit', title: 'Review file changes', kind: 'edit', status: 'pending', content: [{ type: 'diff', path: '/repo/main.rs', oldText: 'const before = 1;', newText: 'const after = 2;' }] };
+    // The adapter upserts the request's toolCall before exposing the permission.
+    state.session.entries = [{ id: 'edit', kind: 'tool', content }];
+    state.session.permissions = [{ id: 'permission', kind: 'permission', request: { toolCall: content, options: [{ optionId: 'allow', name: 'Allow once', kind: 'allow_once' }] } }];
+    await newSession(page);
+    const tool = page.getByRole('region', { name: 'Review file changes', exact: true });
+    await tool.locator('.zed-diff .modified-in-monaco-diff-editor').waitFor();
+    assert.match(await tool.locator('.zed-diff .modified-in-monaco-diff-editor').textContent(), /const\s+after\s*=\s*2/);
+    assert.equal(await tool.getByRole('button', { name: 'Review file changes', exact: true }).getAttribute('aria-expanded'), 'true');
+    assert.equal(await page.locator('.zed-message-actions').count(), 0);
+    state.session.entries[0].content = { ...content, status: 'cancelled', content: [] }; state.session.revision++;
+    await tool.locator('.zed-diff').waitFor({ state: 'detached' });
+    await tool.getByRole('button', { name: 'Allow once', exact: true }).click();
+    assert.equal(state.actions.at(-1).request_id, 'permission');
+  });
+  await test('out-of-band plans and notices preserve streamed Markdown and thought expansion', async t => {
+    const { page, state } = await fixture(t);
+    Object.assign(state.session, { status: 'working', entries: [
+      { id: 'u', kind: 'user', content: { type: 'text', text: 'Inspect' } },
+      { id: 'thought', kind: 'thought', content: { type: 'text', text: 'Thinking about files' } },
+    ] });
+    await newSession(page);
+    const thinking = page.getByRole('button', { name: '思考过程', exact: true });
+    await page.getByText('Thinking about files', { exact: true }).waitFor();
+    state.session.plan = { entries: [{ content: 'Read file', status: 'in_progress' }] };
+    state.session.notices = [{ id: 'n', kind: 'notice', content: { severity: 'warning', title: 'Rate limit', description: 'Please **wait** before retrying.' } }];
+    state.session.revision++;
+    const notice = page.getByRole('alert', { name: 'Rate limit', exact: true });
+    await notice.getByText('Please **wait** before retrying.', { exact: true }).waitFor();
+    assert.equal(await thinking.getAttribute('aria-expanded'), 'true');
+    assert.equal(await notice.getAttribute('data-severity'), 'warning');
+    state.session.entries.push({ id: 'a', kind: 'assistant', content: { type: 'text', text: '**Hel' } }); state.session.revision++;
+    await page.getByText('**Hel', { exact: true }).waitFor();
+    state.session.entries.at(-1).content.text += 'lo**';
+    state.session.plan.entries[0].status = 'completed'; state.session.revision++;
+    await page.locator('.zed-message-chunk strong').filter({ hasText: /^Hello$/ }).waitFor();
+    assert.equal(await page.locator('.zed-message-chunk').count(), 1);
+    await page.getByText('1 / 1 项计划已完成', { exact: true }).waitFor();
+    await notice.getByRole('button', { name: '关闭通知：Rate limit', exact: true }).click();
+    await notice.waitFor({ state: 'detached' });
+    assert.deepEqual(state.actions.at(-1), { action: 'dismiss_notice', notice_id: 'n' });
+    await page.reload();
+    await page.getByRole('tab').filter({ hasText: 'Conversation' }).click();
+    await page.locator('.zed-message-chunk strong').filter({ hasText: /^Hello$/ }).waitFor();
+    assert.equal(await notice.count(), 0);
+  });
+  await test('compaction cards follow lifecycle and expose only available details', async t => {
+    const { page, state } = await fixture(t);
+    const content = { compactionId: 'c', status: 'in_progress', summary: [] };
+    Object.assign(state.session, { status: 'working', entries: [{ id: 'c', kind: 'compaction_update', content }] });
+    await newSession(page);
+    await page.getByText('上下文压缩中…', { exact: true }).waitFor();
+    assert.equal(await page.locator('details.zed-compaction').count(), 0, 'empty state has no expansion');
+    content.summary = [{ type: 'text', text: '**Retained summary**' }]; state.session.revision++;
+    const card = page.locator('details.zed-compaction');
+    await card.locator('summary').click();
+    await card.locator('strong').filter({ hasText: 'Retained summary' }).waitFor();
+    content.status = 'failed'; content.error = 'Context limit reached'; state.session.revision++;
+    await card.getByText('上下文压缩失败', { exact: true }).waitFor();
+    await card.getByRole('alert').filter({ hasText: 'Context limit reached' }).waitFor();
+    assert.equal(await card.getAttribute('open'), '');
+    assert.equal(await page.locator('.zed-compaction').count(), 1);
+    content.status = 'completed'; content.error = null;
+    content.summary = [{ type: 'text', text: 'Replacement summary' }]; state.session.revision++;
+    await card.getByText('Replacement summary', { exact: true }).waitFor();
+    assert.equal(await card.getByRole('alert').count(), 0);
+    content.status = 'cancelled'; content.summary = []; state.session.revision++;
+    await page.getByText('上下文压缩已取消', { exact: true }).waitFor();
+    assert.equal(await card.count(), 0);
+  });
+  await test('Markdown file links resolve through the host without weakening URL sanitization', async t => {
+    const { page, state } = await fixture(t);
+    state.session.cwd = '/repo/sub';
+    state.session.entries = [{ id: 'a', kind: 'assistant', content: { type: 'text', text: '[File](file:///repo/a%20b.rs#L12) [Relative](../README.md:8) [Absolute](/repo/main.rs#L3) [Web](https://example.com) [Unsafe](javascript:alert%281%29) <a data-local-file="%zz" href="#">Malformed</a>' } }];
+    await newSession(page);
+    const opened = page.getByLabel('Opened file', { exact: true });
+    const url = page.url();
+    for (const [label, expected] of [['File', '/repo/a b.rs:12'], ['Relative', '/repo/README.md:8'], ['Absolute', '/repo/main.rs:3']]) {
+      await page.getByRole('link', { name: label, exact: true }).click();
+      assert.equal(await opened.textContent(), expected);
+      assert.equal(page.url(), url);
+    }
+    const web = page.getByRole('link', { name: 'Web', exact: true });
+    assert.equal(await web.getAttribute('target'), '_blank');
+    assert.equal(await web.getAttribute('rel'), 'noreferrer');
+    assert.equal(await page.getByText('Unsafe', { exact: true }).getAttribute('href'), null);
+    await page.getByRole('link', { name: 'Malformed', exact: true }).click();
+  });
+  await test('reply copying supports LAN HTTP and handles denied clipboard operations', async t => {
+    const { page, state } = await fixture(t, false, { insecure: true });
+    state.session.entries = [{ id: 'a', kind: 'assistant', content: { type: 'text', text: 'LAN reply' } }];
+    await newSession(page);
+    assert.equal(await page.evaluate(() => typeof navigator.clipboard), 'undefined');
+    await page.evaluate(() => {
+      const original = document.execCommand.bind(document);
+      document.execCommand = (...args) => { window.copiedReply = document.querySelector('.zed-clipboard-input')?.value; return original(...args); };
+    });
+    const copy = page.getByRole('button', { name: '复制回复', exact: true });
+    await copy.click();
+    await copy.locator('.lucide-check').waitFor();
+    assert.equal(await page.evaluate(() => window.copiedReply), 'LAN reply');
+    assert.equal(await page.locator('.zed-clipboard-input').count(), 0);
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText: async () => { throw new Error('denied'); } }, configurable: true });
+      document.execCommand = () => false;
+    });
+    await copy.click();
+    await page.getByRole('alert').filter({ hasText: '复制失败，请选择文本后手动复制。' }).waitFor();
+    assert.equal(await page.locator('.zed-clipboard-input').count(), 0);
+  });
+  await test('execute tools display streamed terminals, retained output and raw-output fallback', async t => {
+    const { page, state } = await fixture(t);
+    Object.assign(state.session, { status: 'working', terminals: { term: { output: 'first line\r\n', cwd: '/repo' } }, entries: [
+      { id: 'u', kind: 'user', content: { type: 'text', text: 'Run commands' } },
+      { id: 'command', kind: 'tool', content: { title: 'pwd', kind: 'execute', status: 'in_progress', content: [{ type: 'terminal', terminalId: 'term' }] } },
+      { id: 'raw', kind: 'tool', content: { title: 'Raw command', kind: 'execute', status: 'completed', rawOutput: 'raw result', content: [] } },
+    ] });
+    await newSession(page);
+    const tool = page.getByRole('region', { name: 'pwd', exact: true });
+    await tool.getByRole('button', { name: 'pwd', exact: true }).click();
+    await tool.getByText('first line', { exact: true }).waitFor();
+    const screen = await tool.locator('.xterm').elementHandle();
+    state.session.terminals.term.output += '\u001b[32msecond line\u001b[0m\r\n'; state.session.revision++;
+    await tool.getByText('second line', { exact: true }).waitFor();
+    assert.equal(await tool.locator('.xterm').evaluate((element, previous) => element === previous, screen), true);
+    state.session.entries[1].content.status = 'completed';
+    state.session.terminals.term.exit_status = { exitCode: 0 }; state.session.status = 'idle'; state.session.revision++;
+    await tool.getByText('退出码：0', { exact: true }).waitFor();
+    await tool.getByRole('button', { name: 'pwd', exact: true }).click();
+    await tool.getByRole('button', { name: 'pwd', exact: true }).click();
+    await tool.getByText('first line', { exact: true }).waitFor();
+    await tool.getByText('second line', { exact: true }).waitFor();
+    const raw = page.getByRole('region', { name: 'Raw command', exact: true });
+    await raw.getByRole('button', { name: 'Raw command', exact: true }).click();
+    await raw.getByText('raw result', { exact: true }).waitFor();
+    state.session.entries[2].content.content = [{ type: 'content', content: { type: 'text', text: 'structured result' } }]; state.session.revision++;
+    await raw.getByText('structured result', { exact: true }).waitFor();
+    assert.equal(await raw.getByText('raw result', { exact: true }).count(), 0, 'structured output takes precedence');
+    state.session.entries[2].content.content = []; state.session.entries[2].content.rawOutput = { exitCode: 1, stderr: 'command failed' }; state.session.revision++;
+    await raw.getByText('command failed', { exact: false }).waitFor();
+    await page.reload();
+    await page.getByRole('tab').filter({ hasText: 'Conversation' }).click();
+    await tool.getByRole('button', { name: 'pwd', exact: true }).click();
+    await tool.getByText('first line', { exact: true }).waitFor();
+    await tool.getByText('second line', { exact: true }).waitFor();
+    await tool.getByText('退出码：0', { exact: true }).waitFor();
   });
   await test('slash commands use advertised suggestions and do not submit until explicitly sent', async t => {
     const { page, state } = await fixture(t);

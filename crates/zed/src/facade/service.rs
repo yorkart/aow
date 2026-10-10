@@ -75,6 +75,9 @@ impl AcpService {
     pub fn cancel(&self, id: &str) -> Result<()> {
         self.0.cancel(id)
     }
+    pub fn dismiss_notice(&self, id: &str, notice_id: &str) -> Result<()> {
+        self.0.dismiss_notice(id, notice_id)
+    }
     pub async fn set_mode(&self, id: &str, mode: &str) -> Result<()> {
         self.0.set_mode(id, mode).await
     }

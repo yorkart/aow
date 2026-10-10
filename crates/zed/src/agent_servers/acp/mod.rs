@@ -218,7 +218,7 @@ fn client_capabilities() -> acp::ClientCapabilities {
     serde_json::from_value(
         json!({"fs":{"readTextFile":true,"writeTextFile":true},"terminal":false,
         "session":{"configOptions":{"boolean":{}},"compaction":{},"notices":{}},
-        "elicitation":{"form":{},"url":{}}}),
+        "elicitation":{"form":{},"url":{}},"_meta":{"terminal_output":true}}),
     )
     .expect("static ACP capabilities are valid")
 }

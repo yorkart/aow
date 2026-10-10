@@ -17,11 +17,14 @@ relative to `frontend/src/features/zed/agent_ui` unless stated otherwise.
 | `conversation_view.rs::handle_auth_required`, `render_auth_required_state`, `authenticate` | `authentication.tsx`, `SessionTab.tsx` | Login appears for typed AuthRequired; supported methods appear in reverse order; pending login can request input; successful login dismisses the controls. No automatic prompt replay. |
 | `config_options.rs` | `config_options.tsx` | Current selection in the trigger, grouped choices, favorites ahead of all choices, search at five choices, Boolean switches, automatic default persistence. Unknown config types are hidden. |
 | `conversation_view/thread_view.rs::render_message_editor` | `conversation_view/thread_view.tsx` | Empty conversation input fills the view; existing conversations keep the composer below messages. Expand input, config toolbar, usage indicator, send and cancel. |
-| `conversation_view/thread_view.rs::render_entry`, `render_message_content` | `conversation_view/thread_view.tsx`, `entry_view_state.ts` | Plain user input, Markdown assistant output, assistant chunk grouping, whitespace-only message suppression. |
+| `conversation_view/thread_view.rs::render_entry`, `render_message_content`, `entry_is_finalized_turn_end`, `get_agent_message_content` | `conversation_view/thread_view.tsx`, `entry_view_state.ts`, `reply_actions.tsx` | Plain user input, Markdown assistant output, assistant chunk grouping, whitespace-only message suppression. Reply controls appear at completed turn ends, including tool endings, stay hidden while generating or awaiting permission, and navigate to the corresponding user prompt. Copy includes assistant content from the entire turn, excluding thoughts and tool output. |
 | `entry_view_state.rs` | `conversation_view/entry_view_state.ts` | Auto/preview/always-expanded/always-collapsed thinking states and manual override; tool expansion is independent and permissions expose content. |
-| `conversation_view/thread_view.rs::render_output_content_block` | `conversation_view/content.tsx` | Text, image, embedded-resource URI and resource-link rendering; file links navigate through the host callback. Unsupported output content has no fabricated message view. |
-| `conversation_view/thread_view.rs::render_tool_call`, `agent_diff.rs` | `conversation_view/content.tsx` | Collapsed tools, edit/execute/permission cards, generic raw input, canceled tools without visible output hidden, inline old/new file diff. |
-| `conversation_view/elicitation.rs` | `conversation_view/elicitation.tsx` | Explicit permission choices and typed form/URL responses. |
+| `conversation_view/thread_view.rs::render_output_content_block`, `render_markdown` | `conversation_view/content.tsx`, `file_links.ts` | Text, image, embedded-resource URI and resource-link rendering. Markdown file URLs, absolute and relative paths use the host callback, with line numbers and the session cwd. Unsupported output content has no fabricated message view. |
+| `conversation_view/thread_view.rs::render_tool_call`, `agent_diff.rs`, `acp_thread::ToolCall::content` | `conversation_view/content.tsx`, `entry_view_state.ts` | Collapsed tools, edit/execute/permission cards, generic raw input, raw output fallback when structured content is empty, canceled tools without visible output hidden, inline old/new file diff. |
+| `agent_servers::acp::handle_session_notification`, `conversation_view/thread_view.rs::render_terminal_tool_call` | `crates/zed/src/acp_thread/terminals.rs`, `conversation_view/terminal_output.tsx` | Legacy `terminal_info`, `terminal_output` and `terminal_exit` metadata feed per-session display terminals. Output survives metadata patches, collapse/reopen and snapshot reload. Xterm renders ANSI output without an input channel. |
+| `conversation_view/elicitation.rs`, `acp_thread::request_tool_call_authorization_with_id` | `conversation_view/elicitation.tsx`, `crates/zed/src/agent_servers/acp/client.rs` | Explicit permission choices and typed form/URL responses. Permission requests upsert tool content before rendering, including request-only diffs and tools without an earlier notification. Pending permission cards remain visible even if the tool was canceled. |
+| `acp_thread::replace_plan`, `push_notice`, `dismiss_notice`, `conversation_view/thread_view.rs::render_session_notices` | `crates/zed/src/acp_thread/mod.rs`, `conversation_view/activity.tsx` | Plans and notices live outside transcript entries and cannot split streaming Markdown or thoughts. Notices preserve plain-text titles and descriptions, severity and explicit dismissal. |
+| `acp_thread::upsert_context_compaction_update`, `append_context_compaction_summary`, `conversation_view/thread_view.rs::render_context_compaction` | `crates/zed/src/acp_thread/compaction.rs`, `conversation_view/activity.tsx` | One entry per compaction ID, append-only in-progress summary chunks, replacement/null/omitted patch semantics, lifecycle labels and failure details. Cards without details do not offer expansion. |
 
 The backend preserves typed authentication errors in
 `crates/zed/src/facade/error.rs` and config provider presence in the session
@@ -45,11 +48,23 @@ infer authentication from an English error message.
   pending authentication keeps its request inputs mounted through polling.
 - Markdown uses AoW's shared renderer; file diffs use its Monaco editor. This does
   not reuse the native GPUI editor or guarantee identical typography and layout.
+- File links use opt-in host handling without relaxing the shared Markdown URL
+  sanitizer. Reply copying tries the Clipboard API and then a selection-based
+  fallback for LAN HTTP; a failed copy reports an error in the view.
+- Plans and notices use additive snapshot fields. Old history moves activity out
+  of transcript entries and merges compaction updates. AoW persists notice
+  dismissal across polling and reloads; these remain advisory UI state, not
+  replayed agent messages. Older standalone summary chunks remain visible, but
+  their discarded compaction IDs cannot be recovered.
+- ACP diff previews detach their Monaco models before disposal, so streamed
+  content removal and permission transitions do not race the diff worker.
 - Choice search uses case-insensitive subsequence matching, not Zed's native
   fuzzy-ranking implementation. Slash completion uses advertised ACP commands.
 - Editor context/attachment pickers, local prompt queueing, built-in model agents,
   collaboration, ACP terminal execution and terminal authentication are not part
-  of this port. Terminal capabilities are not advertised. Unknown protocol data
+  of this port. Terminal execution capabilities are not advertised; the legacy
+  `_meta.terminal_output` display capability is advertised. V2 terminal updates
+  are still retained as protocol data, not interpreted as legacy text chunks. Unknown protocol data
   remains available in snapshots/logs without raw JSON cards in the conversation.
 
 ## Verification
@@ -64,6 +79,19 @@ LAN HTTP tests use a real insecure browser origin. Recovery tests leave the
 snapshot's authentication flag false while the resume request fails and while
 login is pending. Draft tests cover both portal directions, title updates,
 multiple tabs, close/reopen and prompt responses arriving after a move.
+Turn tests cover commentary/tools/final text, pending permissions, cancellation,
+historical controls during later turns and navigation across intervening tools.
+They also check whole-turn copying after tool endings, permission-only diff
+previews, canceled tools awaiting approval, notice details and dismissal, and
+compaction summary/error transitions. Markdown file navigation retains URL
+sanitization, and clipboard tests cover both insecure origins and denied writes.
+Tool tests cover ANSI output updates, collapse/reopen, page reload and structured
+content precedence over raw output. The stdio fixture also verifies display-output
+capability negotiation, chunk accumulation, exit status and persisted snapshots.
+Reducer tests cover out-of-band activity during Markdown streaming, permission
+upserts, compaction patch semantics and old snapshot migration; stdio tests cover
+the resulting snapshots and durable notice dismissal. Shared Markdown and host
+tab regressions are exercised by the session snapshot and tab-link suites.
 
 `frontend/tests/tab-links.test.mjs` checks ACP tabs in the actual AoW host.
 `crates/zed/tests/integration.rs` covers typed authentication, request-scoped

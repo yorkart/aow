@@ -66,6 +66,14 @@ pub struct SessionSnapshot {
     pub revision: u64,
     pub updated_at: String,
     pub entries: Vec<ThreadEntry>,
+    /// Out-of-band activity must not split streaming message content.
+    #[serde(default)]
+    pub plan: Value,
+    #[serde(default)]
+    pub notices: Vec<ThreadEntry>,
+    /// Display-only terminal state, accumulated independently of tool metadata patches.
+    #[serde(default)]
+    pub terminals: std::collections::BTreeMap<String, Value>,
     pub permissions: Vec<Permission>,
     pub modes: Value,
     pub config_options: Value,

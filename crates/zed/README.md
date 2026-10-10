@@ -108,6 +108,11 @@ adapter process; these preferences do not alter its launch configuration.
 File read/write requests use the AoW filesystem host. Permission and elicitation
 requests wait for an explicit UI answer. Terminal execution and terminal login
 capabilities are not advertised. Authentication managed by the adapter is supported.
+Adapter-owned terminals can stream display-only output through Zed's legacy
+`_meta.terminal_output` capability. Terminal metadata, accumulated output and exit
+status are saved in session snapshots and rendered with Xterm in expanded tool
+cards. This does not enable terminal execution requests or terminal authentication.
+Tools without structured content display `rawOutput`, following Zed's fallback.
 Session recovery uses the adapter's advertised load/resume capability and never
 replays a prompt or tool operation automatically.
 
@@ -121,6 +126,17 @@ and unsupported content do not produce message cards. Thinking expansion follows
 authorization requests expose the tool and its explicit permission choices.
 File changes use an inline Monaco diff. Unknown protocol events remain in the
 snapshot and protocol log rather than appearing as raw JSON conversation cards.
+Reply controls appear only after a turn completes, including turns ending in a
+tool call. Copy includes all assistant content in that turn, excluding thoughts
+and tool output, and supports LAN HTTP. Markdown file links open through AoW's
+editor using the session cwd and optional line number.
+
+Permission requests merge their tool preview before presenting choices. Plans
+and notices are separate from the transcript so they cannot interrupt streamed
+Markdown. Notices show severity and plain-text details and can be dismissed;
+dismissal survives refresh. Context compactions update one card per ID, retaining
+streamed summaries and displaying failure details. Saved snapshots from earlier
+versions migrate their activity and compaction entries on load.
 
 The composer stays at the bottom once messages exist and fills the empty
 conversation otherwise. Its toolbar renders the adapter's config options,
