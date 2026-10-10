@@ -114,6 +114,12 @@ impl AppState {
         self.terminals.reconcile().await
     }
 
+    /// The ACP writer runs outside Tokio; explicitly drain it before the runtime exits.
+    pub async fn flush_acp_history(&self) -> anyhow::Result<()> {
+        let service = self.zed.clone();
+        tokio::task::spawn_blocking(move || service.flush_threads_on_quit()).await?
+    }
+
     pub fn start_agent_notifications(&self) {
         self.terminals.start_agent_notifications(self.aow.clone());
         terminal::hosting::recover(self.clone());

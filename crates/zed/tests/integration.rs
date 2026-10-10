@@ -612,3 +612,74 @@ async fn import_validates_workspace_and_ids_before_saving_and_can_retry_load() -
     assert_eq!(service.sessions(None).len(), 1);
     Ok(())
 }
+
+#[tokio::test]
+async fn shutdown_flush_commits_streamed_content_without_waiting_for_prompt_completion()
+-> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let state = directory.path().join("state");
+    let service = AcpService::new(host(false), Some(state.clone()))?;
+    let connection = service.connect("test", directory.path().into()).await?;
+    let session = service.new_session(&connection.id).await?;
+    service.start_prompt(&session.id, prompt("checkpoint"))?;
+    wait_for(&service, &session.id, |snapshot| {
+        snapshot
+            .entries
+            .iter()
+            .any(|entry| entry.content["text"] == "Unfinished streamed response")
+    })
+    .await;
+    service.flush_threads_on_quit()?;
+    let restored = AcpService::new(host(false), Some(state.clone()))?;
+    let snapshot = restored.snapshot(&session.id)?;
+    assert_eq!(snapshot.status, "disconnected");
+    assert!(
+        snapshot
+            .entries
+            .iter()
+            .any(|entry| entry.content["text"] == "Unfinished streamed response")
+    );
+    assert!(state.join("threads.sqlite").is_file());
+    assert!(!state.join("history").exists());
+    service.cancel(&session.id)?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn failed_prompt_persistence_does_not_send_or_leave_the_session_working() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let state = directory.path().join("state");
+    let service = AcpService::new(host(false), Some(state.clone()))?;
+    let connection = service.connect("test", directory.path().into()).await?;
+    let session = service.new_session(&connection.id).await?;
+    let database = rusqlite::Connection::open(state.join("threads.sqlite"))?;
+    database.execute_batch("CREATE TRIGGER reject_writes BEFORE INSERT ON acp_thread_snapshots BEGIN SELECT RAISE(ABORT, 'test disk failure'); END;")?;
+    assert!(service.start_prompt(&session.id, prompt("echo")).is_err());
+    let failed = service.snapshot(&session.id)?;
+    assert_eq!(failed.status, "idle");
+    assert!(failed.entries.is_empty());
+    assert!(
+        failed
+            .error
+            .as_deref()
+            .is_some_and(|error| error.contains("test disk failure"))
+    );
+    assert!(!directory.path().join("prompts.log").exists());
+    database.execute_batch("DROP TRIGGER reject_writes")?;
+    service.flush_threads_on_quit()?;
+    service.start_prompt(&session.id, prompt("echo"))?;
+    let finished = wait_for(&service, &session.id, |snapshot| snapshot.status == "idle").await;
+    assert_eq!(
+        finished
+            .entries
+            .iter()
+            .filter(|entry| entry.kind == "user")
+            .count(),
+        1
+    );
+    assert_eq!(
+        std::fs::read_to_string(directory.path().join("prompts.log"))?,
+        "echo\n"
+    );
+    Ok(())
+}

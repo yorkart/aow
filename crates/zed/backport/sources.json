@@ -12,7 +12,7 @@
   },
   "last_sync": {
     "date": "2026-10-10",
-    "kind": "ACP rendering and explicit history import alignment against the pinned baseline",
+    "kind": "SQLite metadata storage, queued writes and legacy JSON migration against the pinned baseline",
     "validated_by": [
       "upstream conversion tests",
       "stdio adapter fixture including authentication, config providers, permission previews, compaction state and notice dismissal",
@@ -20,7 +20,8 @@
       "Chromium conversation and history interaction tests",
       "Rust workspace tests",
       "workspace build, typecheck and lint",
-      "backport source hashes"
+      "backport source hashes",
+      "SQLite migration, lazy loading, transactional failure/retry, coalescing and shutdown tests"
     ]
   },
   "local_differences": [
@@ -28,7 +29,7 @@
     "Tokio and HTTP replace GPUI entities and callbacks",
     "React components replace GPUI views",
     "Terminal execution and terminal authentication are not advertised; legacy terminal_output metadata is supported for display-only output",
-    "History reads registered local snapshots; external sessions require explicit metadata import, scoped to the current workspace",
+    "History reads Zed-shaped SQLite metadata; AoW retains an independent SQLite offline transcript cache and migrates legacy JSON snapshots once",
     "Protocol logs are bounded per-connection buffers",
     "Unknown session updates remain in snapshots and protocol logs without conversation cards",
     "AoW Settings save events refresh the panel; configuration and execution PATH are read before connection reuse",
@@ -40,7 +41,8 @@
     "React rendering ports the supported ACP branches from the pinned conversation, configuration and entry-state views; see frontend-behavior.md for function correspondence",
     "DOM popovers, AoW Markdown and Monaco inline diffs replace native GPUI views; config search uses subsequence matching rather than upstream fuzzy ranking",
     "Editor context/attachment pickers and local prompt queueing are outside this port; authenticated live Codex and Claude prompts remain unverified",
-    "Out-of-band plan and notice snapshots preserve streamed message boundaries; notice dismissal persists across HTTP polling and reload, while old snapshots migrate on load"
+    "Out-of-band plan and notice snapshots preserve streamed message boundaries; notice dismissal persists across HTTP polling and reload, while old snapshots migrate on load",
+    "rusqlite and a dedicated coalescing writer replace sqlez/GPUI; facade string IDs and one-workspace paths remain host adaptations, documented in persistence.md"
   ],
   "files": [
     {
@@ -101,7 +103,7 @@
           "sha256": "7e78b4dcde4ba3a329f35237ed1e0641ef793d3c58825f79a5382758e2f386fe"
         }
       ],
-      "local_sha256": "cb1838dbdbf3cd708239fb06d471b056376a0880388d8573813805e772fb848d"
+      "local_sha256": "4ab783068519ab741e5ff66e8c8d765a2a00f72388ec0b40ecb1ec0439f1c7c3"
     },
     {
       "local": "crates/zed/src/acp_thread/defaults.rs",
@@ -118,14 +120,18 @@
     {
       "local": "crates/zed/src/acp_thread/history.rs",
       "kind": "host-port",
-      "reason": "AoW durable snapshots and session index replace editor database",
+      "reason": "AoW live snapshot cache and lazy body loading backed by the ported SQLite ThreadMetadataStore; lifecycle and permission flush boundaries",
       "sources": [
         {
           "path": "crates/agent_ui/src/thread_metadata_store.rs",
           "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
+        },
+        {
+          "path": "crates/agent/src/thread_store.rs",
+          "sha256": "44c97689232357b8d0ac22e080dd57c4e5cd46c663c0eb6251f083742ad15b3e"
         }
       ],
-      "local_sha256": "5ee2185635567528167c48595ebc83bf9d2b80a23c73f5b6c38a87b1424702bf"
+      "local_sha256": "4996aac9a41db3391e4da455f1a31bc6314a315450942ad6e9e6022e52a21894"
     },
     {
       "local": "crates/zed/src/agent_servers/mod.rs",
@@ -139,9 +145,13 @@
         {
           "path": "crates/agent_servers/src/acp.rs",
           "sha256": "7bed9ea8c55ec5cd3ab35a1661cac89f059c013bb18f341c0f5892de1f83c906"
+        },
+        {
+          "path": "crates/agent/src/agent.rs",
+          "sha256": "21207d34f8c5d00db683bf2a92d4ac202eebeaf32c6427fe82c5856ced743c48"
         }
       ],
-      "local_sha256": "3778a1b1a5a6d021078c9dae452f8d850ea2ebf55fc7ba169b4fd56badbe54f9"
+      "local_sha256": "949572f8935b6b803b67cec3935c36ff1bd0d7bd867ec967cf93babadc80398a"
     },
     {
       "local": "crates/zed/src/agent_servers/acp/mod.rs",
@@ -573,7 +583,101 @@
           "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
         }
       ],
-      "local_sha256": "d130ca359f49e5f14df85f7dedb2edd9a8e7f8e525a62764e85ed32b3751d5bf"
+      "local_sha256": "02bbaf8033fd060f27d14c73d6e6cf4a182b1d7c972a89404e51b8e19f8ccf91"
+    },
+    {
+      "local": "crates/zed/src/agent_ui/mod.rs",
+      "kind": "local",
+      "reason": "Module boundary for non-GPUI agent_ui persistence services",
+      "sources": [],
+      "local_sha256": "bef8ce7f295c074e954d468d4dcb43f4c0e91e54dbd14ef9c683b4e895eca3ca"
+    },
+    {
+      "local": "crates/zed/src/agent_ui/thread_metadata_store/mod.rs",
+      "kind": "host-port",
+      "reason": "ThreadMetadata, ThreadMetadataStore cache and entry/save/save_all/reload/delete/dedup operation boundaries",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/thread_metadata_store.rs",
+          "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
+        }
+      ],
+      "local_sha256": "95400ef8fcc6c3058dbd2898c6332cd073a597b82ab437f24682faaa52459d90"
+    },
+    {
+      "local": "crates/zed/src/agent_ui/thread_metadata_store/db.rs",
+      "kind": "host-port",
+      "reason": "ThreadMetadataDb schema, LIST_QUERY and upsert/delete SQL; facade string IDs and single-cwd path encoding",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/thread_metadata_store.rs",
+          "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
+        }
+      ],
+      "local_sha256": "7d3762f7d3f244ba6bbfa7613bf6d83d8928be4eda598dbcc0350e4bbc383a88"
+    },
+    {
+      "local": "crates/zed/src/agent_ui/thread_metadata_store/operations.rs",
+      "kind": "host-port",
+      "reason": "DbOperation coalescing and background drain; bounded latest-state queue, atomic snapshot extension and explicit flush replies",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/thread_metadata_store.rs",
+          "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
+        },
+        {
+          "path": "crates/agent/src/agent.rs",
+          "sha256": "21207d34f8c5d00db683bf2a92d4ac202eebeaf32c6427fe82c5856ced743c48"
+        }
+      ],
+      "local_sha256": "6e0bd4486e42be0d21472b2d98a0021323e03e4cd43e3ce1c38990a8fc193f70"
+    },
+    {
+      "local": "crates/zed/src/agent_ui/thread_metadata_store/migration.rs",
+      "kind": "local",
+      "reason": "One-time transactional AoW JSON snapshot migration with retained backups and durable completion marker",
+      "sources": [],
+      "local_sha256": "168e5db4f21a8cbc7775fa7633192622cd18c65f122b11e8936016fd6c480455"
+    },
+    {
+      "local": "crates/zed/src/agent_ui/thread_metadata_store/tests.rs",
+      "kind": "host-port",
+      "reason": "Upstream operation-deduplication cases plus AoW SQLite migration, recovery and failure-ordering regressions",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/thread_metadata_store.rs",
+          "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
+        }
+      ],
+      "local_sha256": "c203afd19a74d5c07f242e6fb4850237d4cfa1884e6ab847b3290604380b9fc0"
+    },
+    {
+      "local": "crates/zed/src/db/mod.rs",
+      "kind": "host-port",
+      "reason": "Thin rusqlite host equivalent of ThreadSafeConnection and domain migrations; WAL/private file creation",
+      "sources": [
+        {
+          "path": "crates/db/src/db.rs",
+          "sha256": "784711f3bfd1e46b5c1a0474b7c4cc13f9d62d3ed0cd7193c89642b91e2e8f42"
+        },
+        {
+          "path": "crates/sqlez/src/connection.rs",
+          "sha256": "f1bfc7e3fefa3409ce32f50d40ef41d338cf0427c4114e709c5fafb62152cd8e"
+        }
+      ],
+      "local_sha256": "562341d2029671951dfaaee77e0b74ba2d6968ddbdaa32440fb3ed0c34f2ccd9"
+    },
+    {
+      "local": "crates/zed/src/acp_thread/snapshot_store.rs",
+      "kind": "host-port",
+      "reason": "AoW offline body cache using the native-agent versioned JSON and load_thread/save_thread/delete_thread boundary; no native-agent schema or execution state",
+      "sources": [
+        {
+          "path": "crates/agent/src/db.rs",
+          "sha256": "3fb7a86484a3eec7747d09f6e219bf7fd65f0e71451e72be27c0b2dc39e15772"
+        }
+      ],
+      "local_sha256": "50244e1784982ffe685e49462cb0896780016ffd2c7fc84a51bcb88534ebe728"
     }
   ],
   "coverage": [
@@ -697,6 +801,14 @@
         "crates/zed/src/acp_thread/terminals.rs",
         "crates/zed/tests/integration.rs::display_terminal_output_is_accumulated_and_persisted",
         "frontend/tests/zed.test.mjs"
+      ]
+    },
+    {
+      "behavior": "SQLite metadata/cache persistence, lazy transcript hydration, idempotent transactional JSON migration, deduplicated writes, failure rollback/retry and shutdown flushing",
+      "tests": [
+        "crates/zed/src/agent_ui/thread_metadata_store/tests.rs",
+        "crates/zed/tests/integration.rs::shutdown_flush_commits_streamed_content_without_waiting_for_prompt_completion",
+        "crates/zed/tests/integration.rs::failed_prompt_persistence_does_not_send_or_leave_the_session_working"
       ]
     }
   ],

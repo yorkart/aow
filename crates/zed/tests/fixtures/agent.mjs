@@ -46,6 +46,7 @@ input.on('line', line => {
     appendFileSync(path.join(process.cwd(), 'prompts.log'), `${params.prompt[0].text}\n`);
     const text = params.prompt[0].text;
     if (text === 'auth-required') { write({ id, error: { code: -32000, message: '请重新登录' } }); return; }
+    if (text === 'checkpoint') { chunk('agent_message_chunk', 'Unfinished streamed response'); prompt = id; return; }
     if (text === 'cancel') { prompt = id; return; }
     if (text === 'terminal') {
       update({ sessionUpdate: 'tool_call', toolCallId: 'command', title: 'pwd', kind: 'execute', status: 'in_progress', content: [{ type: 'terminal', terminalId: 'terminal-1' }], _meta: { terminal_info: { terminal_id: 'terminal-1', cwd: process.cwd() } } });

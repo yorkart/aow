@@ -64,6 +64,10 @@ impl AcpService {
     pub async fn resume(&self, id: &str) -> Result<SessionSnapshot> {
         self.0.resume(id).await
     }
+    /// Finish queued SQLite writes before shutting down the host runtime.
+    pub fn flush_threads_on_quit(&self) -> Result<()> {
+        self.0.flush_threads_on_quit()
+    }
     pub fn sessions(&self, cwd: Option<&str>) -> Vec<SessionInfo> {
         self.0.sessions(cwd)
     }

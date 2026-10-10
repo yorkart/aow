@@ -227,6 +227,7 @@ mod compaction;
 pub(crate) mod content;
 pub(crate) mod defaults;
 pub(crate) mod prompt_capabilities;
+pub(crate) mod snapshot_store;
 mod terminals;
 #[cfg(test)]
 mod tests;

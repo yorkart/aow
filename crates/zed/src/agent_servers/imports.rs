@@ -31,14 +31,15 @@ impl AgentServerStore {
         }
         let mut store = self.inner.threads.lock().unwrap();
         let mut existing: HashSet<_> = store
-            .threads
-            .values()
+            .metadata
+            .entries()
             .filter(|thread| {
-                thread.agent_id == connection.info.agent_id && thread.cwd == connection.info.cwd
+                thread.agent_id == connection.info.agent_id && thread.cwd() == connection.info.cwd
             })
-            .map(|thread| thread.remote_id.clone())
+            .filter_map(|thread| thread.session_id.clone())
             .collect();
         let mut imported = Vec::new();
+        let mut snapshots = Vec::new();
         for session in sessions {
             if !existing.insert(session.remote_id.clone()) {
                 continue;
@@ -61,9 +62,10 @@ impl AgentServerStore {
                 thread.updated_at = updated_at.with_timezone(&chrono::Utc).to_rfc3339();
             }
             let info = SessionInfo::from(&thread);
-            store.insert_metadata(thread)?;
+            snapshots.push(thread);
             imported.push(info);
         }
+        store.insert_metadata_all(snapshots)?;
         Ok(imported)
     }
 }

@@ -2,6 +2,8 @@
 
 mod acp_thread;
 mod agent_servers;
+mod agent_ui;
+mod db;
 mod facade;
 mod node_runtime;
 mod project;

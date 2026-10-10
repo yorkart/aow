@@ -53,9 +53,7 @@ impl AgentServerStore {
                         .map(|path| path.join("registry.json")),
                 ),
                 cache,
-                threads: Arc::new(Mutex::new(ThreadStore::new(
-                    state_directory.map(|path| path.join("history")),
-                )?)),
+                threads: Arc::new(Mutex::new(ThreadStore::new(state_directory)?)),
                 connections: Mutex::new(HashMap::new()),
                 configurations: Mutex::new(HashMap::new()),
                 sessions: Mutex::new(HashMap::new()),
@@ -402,14 +400,9 @@ impl AgentServerStore {
             .threads
             .lock()
             .unwrap()
-            .threads
-            .values()
-            .find(|thread| {
-                thread.agent_id == connection.info.agent_id
-                    && thread.cwd == connection.info.cwd
-                    && thread.remote_id == remote_id
-            })
-            .map(|thread| thread.id.clone());
+            .metadata
+            .entry_by_session(&connection.info.agent_id, &connection.info.cwd, remote_id)
+            .map(|thread| thread.thread_id.clone());
         if let Some(id) = &existing {
             ensure!(
                 self.snapshot(id)?.status != "working",
@@ -510,29 +503,15 @@ impl AgentServerStore {
         self.apply_defaults(id).await?;
         self.snapshot(id)
     }
+    // agent::NativeAgentServer::flush_threads_on_quit, adapted to the host snapshot cache.
+    pub fn flush_threads_on_quit(&self) -> Result<()> {
+        self.inner.threads.lock().unwrap().metadata.flush()
+    }
     pub fn sessions(&self, cwd: Option<&str>) -> Vec<SessionInfo> {
-        let mut threads: Vec<_> = self
-            .inner
-            .threads
-            .lock()
-            .unwrap()
-            .threads
-            .values()
-            .filter(|thread| cwd.is_none_or(|cwd| cwd == thread.cwd))
-            .map(SessionInfo::from)
-            .collect();
-        threads.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-        threads
+        self.inner.threads.lock().unwrap().sessions(cwd)
     }
     pub fn snapshot(&self, id: &str) -> Result<SessionSnapshot> {
-        self.inner
-            .threads
-            .lock()
-            .unwrap()
-            .threads
-            .get(id)
-            .cloned()
-            .context("ACP session not found")
+        self.inner.threads.lock().unwrap().snapshot(id)
     }
     pub fn logs(&self, connection_id: &str) -> Result<Vec<Value>> {
         Ok(self.connection(connection_id)?.debug_log.messages())
@@ -567,8 +546,9 @@ impl AgentServerStore {
                 blocks,
             ),
         )?;
+        let previous = thread.clone();
         let turn_id = uuid::Uuid::new_v4().to_string();
-        threads.update(id, |thread| {
+        if let Err(error) = threads.update(id, |thread| {
             thread.active_prompt = Some(turn_id.clone());
             thread.status = "working".into();
             thread.error = None;
@@ -590,7 +570,18 @@ impl AgentServerStore {
                     .take(80)
                     .collect();
             }
-        })?;
+        }) {
+            // No prompt was sent. Replace the failed pending save so retrying cannot leave
+            // an unsent user message or a permanently working session in memory/on disk.
+            let message = format!("{error:#}");
+            let _ = threads.update(id, |thread| {
+                let revision = thread.revision;
+                *thread = previous;
+                thread.revision = revision;
+                thread.error = Some(message);
+            });
+            return Err(error);
+        }
         drop(threads);
         // Enqueue before returning so an immediate cancel cannot overtake this prompt.
         let pending = connection.begin_prompt(prompt_request);

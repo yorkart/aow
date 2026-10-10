@@ -12,6 +12,9 @@ implementation behind these boundaries without changing AoW callers.
 - `src/acp_thread`: conversation state, event reduction and upstream protocol
   conversions. The content, config option, authentication and prompt capability
   conversions retain the upstream implementation and tests.
+- `src/agent_ui/thread_metadata_store`: the SQLite metadata store and queued
+  upsert/delete operations, corresponding to Zed's module of the same name.
+- `src/db`: the small SQLite connection/migration host adapter.
 - `src/project`: ACP Registry discovery, platform selection and adapter installation.
 - `src/node_runtime`: Node.js/npm discovery, isolated npm installation and package
   executable resolution.
@@ -55,8 +58,15 @@ and preference controls use structural JSONC edits rather than JSON serializatio
 The file participates in AoW's existing configuration Git history.
 
 Adapter downloads and conversation history live under `<state directory>/zed`.
-They are runtime state, not configuration. Protocol logs are bounded per-connection
-buffers. Registry npm entries require Node.js 22+ and npm. Discovery follows
+They are runtime state, not configuration. Session metadata and the offline
+conversation cache use `zed/threads.sqlite`, with `sidebar_threads` following Zed's
+metadata store and `acp_thread_snapshots` retaining AoW's display snapshots.
+Streaming updates coalesce on a background SQLite writer; lifecycle boundaries
+and server shutdown flush pending writes. Listing history reads metadata only.
+Existing `zed/history/*.json` files migrate once, transactionally, and remain
+unchanged as backups. See [the persistence map](backport/persistence.md) for the
+upstream code correspondence, migration and recovery rules.
+Protocol logs remain bounded per-connection memory buffers. Registry npm entries require Node.js 22+ and npm. Discovery follows
 AoW's configured execution PATH, resolves its Node launcher symlink, and locates
 npm beside the real Node executable before checking PATH. Packages are installed
 in versioned ACP cache directories and launched with absolute Node and package

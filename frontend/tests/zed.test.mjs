@@ -866,7 +866,7 @@ try {
     });
     await page.getByRole('button', { name: '导入 ACP 会话', exact: true }).click();
     const dialog = page.getByRole('dialog');
-    await dialog.getByRole('status').getByText('正在查找会话…', { exact: true }).waitFor();
+    await dialog.locator('label').filter({ hasText: 'Slow Agent' }).getByRole('status').waitFor();
     await dialog.getByRole('button', { name: '导入 1 个会话', exact: true }).click();
     await dialog.waitFor({ state: 'detached' });
     const connected = page.waitForResponse(response => response.url().endsWith('/connections') && response.request().postDataJSON().agent_id === 'slow');

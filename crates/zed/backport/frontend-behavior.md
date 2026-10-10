@@ -37,10 +37,12 @@ infer authentication from an English error message.
 - `popover.tsx` provides DOM focus, keyboard navigation, outside-click dismissal
   and viewport placement. The host owns theme colors and workspace tab placement.
 - `request.ts` preserves typed HTTP errors. AoW polling and serializable snapshots
-  replace GPUI entities and subscriptions. Unlike Zed's SQLite metadata store,
-  AoW persists imported metadata alongside local JSON snapshots, with an additive
-  `needs_load` flag. Imports preserve timestamps and existing snapshots. A record
-  is hydrated through the existing resume/load facade only when explicitly opened.
+  replace GPUI entities and subscriptions. The SQLite `ThreadMetadataStore` follows
+  Zed's metadata/operation boundary. AoW's separate SQLite body cache retains the
+  additive `needs_load` placeholder for imports and existing offline transcripts.
+  Imports preserve timestamps and existing snapshots. A record is hydrated through
+  the existing resume/load facade only when explicitly opened. See the
+  [persistence map](persistence.md) for source correspondence and JSON migration.
 - AoW scopes import and history to the current workspace. Zed's import modal can
   discover threads across worktrees and initially marks them archived; AoW has one
   workspace history list and no separate archive state. Deduplication uses agent,
