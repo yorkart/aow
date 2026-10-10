@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "crates/config",
+  "crates/zed",
   "crates/id",
   "crates/operation-log",
   "crates/macos-log",

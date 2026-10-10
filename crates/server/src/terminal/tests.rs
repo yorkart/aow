@@ -870,14 +870,16 @@ fn manager_with_pane() -> TerminalManager {
 }
 
 fn clipboard_app(manager: TerminalManager) -> Router {
+    let aow = crate::aow::AowManager::in_memory();
     routes().with_state(AppState {
+        zed: crate::zed::service(aow.clone(), None).unwrap(),
         inbox: crate::inbox::InboxStore::in_memory(),
         base_path: crate::BasePath::default(),
         frontend_dist: PathBuf::new(),
         auth: crate::auth::AuthService::disabled(),
         session_shares: crate::session_shares::SessionShares::in_memory(),
         terminals: manager,
-        aow: crate::aow::AowManager::in_memory(),
+        aow,
         automations: None,
         operations: crate::operations::OperationService::in_memory(),
         workspace_events: crate::workspace_events::WorkspaceEvents::new(),
@@ -1535,14 +1537,16 @@ async fn pane_sessions_use_live_cwd_and_config_and_cache_readable_claude_snapsho
         .to_string(),
     )
     .unwrap();
+    let aow = crate::aow::AowManager::in_memory();
     let app = crate::build_router(AppState {
+        zed: crate::zed::service(aow.clone(), None).unwrap(),
         inbox: crate::inbox::InboxStore::in_memory(),
         base_path: crate::BasePath::default(),
         frontend_dist: PathBuf::new(),
         auth: crate::auth::AuthService::disabled(),
         session_shares: crate::session_shares::SessionShares::in_memory(),
         terminals: manager.clone(),
-        aow: crate::aow::AowManager::in_memory(),
+        aow,
         automations: None,
         operations: crate::operations::OperationService::in_memory(),
         workspace_events: crate::workspace_events::WorkspaceEvents::new(),

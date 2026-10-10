@@ -78,6 +78,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(crate::inbox::routes())
         .merge(terminal::routes())
         .merge(aow::routes())
+        .merge(crate::zed::routes())
         .merge(pull_requests::routes())
         .merge(notifications::routes())
         .merge(im_api::routes())

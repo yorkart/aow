@@ -12,6 +12,7 @@ import { environmentDraft, parseEnvironment } from '../agents/environment';
 import { agentTypes, builtinAgentType, aowAgentType, suggestedAgentExecutable } from '../agents/agentTypes';
 import { defaultEditorSettings, useEditorSettings } from '../editor/editorSettings';
 import { ReviewProviderSettings } from '../pr/ReviewProviderSettings';
+import { AcpSettings } from '../zed';
 import { ConfigurationSettings } from '../configuration/ConfigurationSettings';
 import { NotificationSettingsPanel } from '../notifications/NotificationSettingsPanel';
 import { LogoutButton } from '../auth/LogoutButton';
@@ -26,6 +27,7 @@ const sections = [
   { id: 'editor', label: 'Editor', description: '配置文件编辑器', icon: FileText },
   { id: 'notes', label: 'Notes', description: '设置默认 Notes 根目录', icon: NotebookPen },
   { id: 'environment', label: 'Environment', description: '配置执行 PATH 和服务环境变量', icon: SquareTerminal },
+  { id: 'acp', label: 'ACP', description: '配置 ACP Agent', icon: Bot },
   { id: 'agents', label: 'Agents', description: '配置 Agent 启动方式', icon: Bot },
   { id: 'im', label: 'IM', description: '配置飞书和微信机器人', icon: MessageSquare },
   { id: 'notifications', label: '通知', description: '选择任务完成通知方式', icon: Bell },
@@ -40,6 +42,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
   const [section, setSection] = useState<Section>('notes');
   const [overview, setOverview] = useState(mobile);
   const [reviewDirty, setReviewDirty] = useState(false);
+  const [acpDirty, setAcpDirty] = useState(false);
   const [configurationDirty, setConfigurationDirty] = useState(false);
   const [notificationDirty, setNotificationDirty] = useState(false);
   const { updateEditorSettings } = useEditorSettings();
@@ -68,7 +71,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
   const dialog = useRef<HTMLElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const dirty = reviewDirty || configurationDirty || serverEnvironment.dirty || mobile && (notificationDirty
+  const dirty = acpDirty || reviewDirty || configurationDirty || serverEnvironment.dirty || mobile && (notificationDirty
     || !!settings && (notesBase !== settings.notes_base || nodeAddresses !== (settings.node_addresses ?? []).join('\n')
       || executionPath !== (settings.execution_path ?? []).join('\n') || editorWordWrap !== (settings.editor?.word_wrap ?? false))
     || JSON.stringify([agentId, agentType, displayName, command, args.text, env.text]) !== agentBaseline);
@@ -311,7 +314,8 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
         <div className="project-aow-settings-content" hidden={mobile && overview}>
           <div className="review-provider-settings-host" hidden={section !== 'review'}><ReviewProviderSettings active={section === 'review'} onBusyChange={setSettingsBusy} onDirtyChange={setReviewDirty} /></div>
           <div className="configuration-settings-host" hidden={section !== 'configuration'}><ConfigurationSettings active={section === 'configuration'} onBusyChange={setSettingsBusy} onDirtyChange={setConfigurationDirty} /></div>
-          {section === 'review' || section === 'configuration' ? null : section === 'nodes' ? (
+          <div className="configuration-settings-host" hidden={section !== 'acp'}><AcpSettings active={section === 'acp'} onBusyChange={setSettingsBusy} onDirtyChange={setAcpDirty} /></div>
+          {section === 'review' || section === 'configuration' || section === 'acp' ? null : section === 'nodes' ? (
             <form className="project-aow-dialog-form" onSubmit={event => { event.preventDefault(); void saveNodes(); }}>
               <div className="project-aow-dialog-body">
                 <div className="project-aow-settings-heading"><div><h2>Nodes</h2><p>配置其他机器上部署的 AoW，点击左上角 Logo 或 AoW 文字即可切换。</p></div></div>

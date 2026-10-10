@@ -639,17 +639,52 @@ test('daemon config changes require registration without replacing active releas
   f.registerDaemons();
   succeeds(f.install([], {}, 'y\n'));
   succeeds(f.pack('2.0.0')); succeeds(f.publish('2.0.0'));
-  write(join(f.home, '.config/aow/server.env'), 'AOW_SERVER_PORT=8283\n');
+  write(join(f.home, '.config/aow/server.env'), 'AOW_SERVER_PORT=8283\nHTTP_PROXY=http://127.0.0.1:7890\nHTTPS_PROXY=http://127.0.0.1:7890\nNO_PROXY=localhost,127.0.0.1,::1\n');
   writeFileSync(f.serviceLog, '');
   assert.equal(f.install([], {}, 'n\n').status, 78);
   assert.equal(realpathSync(join(f.runtime, 'active/server')), join(f.runtime, 'releases/1.0.0'));
   assert.doesNotMatch(f.log(f.serviceLog), /signal|bootstrap|bootout/);
+  const environment = JSON.parse(f.log(join(f.runtime, 'pending-launchdaemon.json'))).components.server.EnvironmentVariables;
+  assert.equal(environment.AOW_SERVER_PORT, '8283');
+  assert.equal(environment.HTTP_PROXY, undefined);
+  assert.equal(environment.HTTPS_PROXY, undefined);
+  assert.equal(environment.NO_PROXY, undefined);
   f.registerDaemons();
   const refused = f.install([], { MOCK_PROCESS_UID: String(process.getuid() + 1) }, 'n\n');
   assert.notEqual(refused.status, 0);
   assert.match(refused.stdout + refused.stderr, /different account/);
   assert.doesNotMatch(f.log(f.serviceLog), /signal/);
   assert.equal(realpathSync(join(f.runtime, 'active/server')), join(f.runtime, 'releases/1.0.0'));
+});
+
+test('proxy-only changes activate an existing daemon and clear stale registration requests without administrator access', {
+  skip: process.getuid() === 0,
+}, t => {
+  const f = fixture(t);
+  succeeds(f.pack('1.0.0')); succeeds(f.publish('1.0.0'));
+  assert.equal(f.install([], { FAIL_GUI: '1' }, 'y\n').status, 78);
+  const request = JSON.parse(f.log(join(f.runtime, 'pending-launchdaemon.json')));
+  f.registerDaemons();
+  succeeds(f.install([], {}, 'y\n'));
+  const plist = join(f.daemonDirectory, 'org.aow.service.server.plist');
+  const previousPlist = f.log(plist);
+  succeeds(f.pack('2.0.0')); succeeds(f.publish('2.0.0'));
+  const proxy = { HTTP_PROXY: 'http://127.0.0.1:7890', HTTPS_PROXY: 'http://127.0.0.1:7890', NO_PROXY: 'localhost,127.0.0.1,::1' };
+  write(join(f.home, '.config/aow/server.env'), Object.entries(proxy).map(([key, value]) => `${key}=${value}\n`).join(''));
+  // Reproduce the pending request created by versions that put proxies in the plist.
+  delete request.components.terminald;
+  Object.assign(request.components.server.EnvironmentVariables, proxy);
+  write(join(f.runtime, 'pending-launchdaemon.json'), JSON.stringify(request));
+  writeFileSync(f.serviceLog, '');
+  const result = f.install(['--package', join(f.repo, 'target/packages/aow-2.0.0.tar.gz')], {}, 'n\n');
+  succeeds(result);
+  assert.doesNotMatch(result.stdout + result.stderr, /registration is required|registration is pending/);
+  assert.equal(f.log(plist), previousPlist);
+  assert.equal(realpathSync(join(f.runtime, 'active/server')), join(f.runtime, 'releases/2.0.0'));
+  assert.equal(realpathSync(join(f.runtime, 'active/terminald')), join(f.runtime, 'releases/1.0.0'));
+  assert.equal(existsSync(join(f.runtime, 'pending-launchdaemon.json')), false);
+  assert.match(f.log(f.serviceLog), /signal-component server/);
+  assert.doesNotMatch(f.log(f.serviceLog), /bootstrap|bootout|signal-component terminald/);
 });
 
 test('pending headless installation retains its mode before registration and leaves unconfirmed terminald untouched', {

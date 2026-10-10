@@ -34,9 +34,19 @@ IPv6 浏览器地址使用方括号，例如 `http://[::1]:8282/`。若改为 IP
 - **Linux**：执行 `systemctl --user restart aow-server.service`。
 - **macOS**：重新执行对应的安装命令（GitHub 安装命令或 `just install`），重新加载配置；只改 Web 服务配置时可跳过 terminald 重启。
 
-macOS **LaunchDaemon** 模式会将配置写入由 root 管理的系统 plist。配置变化时，安装器先准备请求并以退出码 78 提示本地管理员登记；登记后回到服务账户重跑安装验证。仅程序版本变化不需要重新登记，步骤见 [安装说明](release-installation.md)。
+macOS **LaunchDaemon** 模式会将监听地址等服务配置写入由 root 管理的系统 plist。这些配置变化时，安装器先准备请求并以退出码 78 提示本地管理员登记；登记后回到服务账户重跑安装验证。仅程序版本或下方代理变量变化不需要重新登记，步骤见 [安装说明](release-installation.md)。
 
 LaunchDaemon 的 `server.env` 仅接受服务配置和基本运行环境：`AOW_SERVER_HOST`、`AOW_SERVER_PORT`、`AOW_SERVER_STATE_DIR`、`AOW_STATE_DIR`、`AOW_TERMINALD_SOCKET`、`AOW_BASE_PATH`、`AOW_AUTH_SECURE_COOKIE`、`XDG_STATE_HOME`、`XDG_RUNTIME_DIR`、`PATH`、`SHELL`、`LANG`、`LC_ALL`、`LC_CTYPE`。账户身份、HOME、运行目录和日志模式由安装器固定。系统 plist 可被其他本机账户读取，不要在其中填写 API 密钥或口令；其他环境变量会被拒绝。
+
+另外支持标准代理变量 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY` 及其小写形式，例如：
+
+```dotenv
+HTTP_PROXY=http://127.0.0.1:7890
+HTTPS_PROXY=http://127.0.0.1:7890
+NO_PROXY=localhost,127.0.0.1,::1
+```
+
+安装后的 Web 服务启动脚本每次启动时从 `server.env` 读取代理变量，传给服务器及其子进程（包括 ACP 的 npm 安装）。代理值按文本读取，不执行 shell 表达式，也不写入系统 plist。仅修改代理时，已有 LaunchDaemon 的服务账户可直接运行 `just install` 更新并重启 Web 服务，无需 sudo 或重新登记；使用本地源码更新时先执行 `just package`。保存文件不会改变正在运行的进程，terminald 的环境也不会随之改变。
 
 LaunchDaemon 默认 PATH 包含 `~/.local/bin`、AoW 管理的 Node 入口、`~/.cargo/bin` 和常用系统/Homebrew 目录，不继承安装终端的完整 PATH；开发 shell 可在服务账户自己的 `.zprofile` / `.zshrc` 中初始化 Node 和其他工具链。
 

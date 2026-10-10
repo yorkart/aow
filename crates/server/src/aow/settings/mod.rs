@@ -3,6 +3,9 @@ mod manager;
 mod model;
 mod pinned;
 mod server_environment;
+mod zed;
+
+pub(crate) use zed::ZedSettingsFile;
 
 pub(in crate::aow) use server_environment::routes as server_environment_routes;
 

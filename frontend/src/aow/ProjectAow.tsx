@@ -13,7 +13,7 @@ import { FloatingWorkspaceProvider, FloatingOpenMenu, useFloatingWorkspace, open
 import type { SetStateAction, CSSProperties, DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from 'react';
 import {
   ArrowUp, CalendarClock, Check, ChevronRight, CornerDownLeft, FileText, Files, FolderGit2, FolderOpen, GitBranch, GitBranchPlus, GitPullRequest, MessageSquare, MoreHorizontal,
-  LoaderCircle, NotebookPen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pin, PinOff, Plus, RefreshCw, Settings, SquareTerminal, Trash2, X,
+  Bot, LoaderCircle, NotebookPen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pin, PinOff, Plus, RefreshCw, Settings, SquareTerminal, Trash2, X,
 } from 'lucide-react';
 import { gitApi } from '../features/git/api';
 import { filesApi } from '../features/files/api';
@@ -21,6 +21,7 @@ import { EditorSettingsProvider, useWordWrapOverrides } from '../features/editor
 import { AutomationDetail } from '../features/automations/AutomationDetail';
 import { AutomationPanel } from '../features/automations/AutomationPanel';
 import type { AutomationRun, AutomationTask } from '../features/automations/types';
+import { AcpPanel, AcpSessionTab, useAcpTabs } from '../features/zed';
 import { TerminalPanel } from '../features/terminals/TerminalPanel';
 import { isCliTerminal, terminalTabPresentation } from '../features/terminals/terminalPresentation';
 import { AgentSessions } from '../features/sessions/AgentSessions';
@@ -85,7 +86,7 @@ const minRightSidebarWidth = 220;
 const maxRightSidebarWidth = 640;
 const minCenterWidth = 360;
 
-type RightView = 'files' | 'git' | 'pullRequests' | 'sessions' | 'automations' | 'terminals';
+type RightView = 'files' | 'git' | 'pullRequests' | 'sessions' | 'automations' | 'terminals' | 'acp';
 type AutomationSessionReference = { taskId: string; runId: string };
 type SessionPreview = { session: AowAgentSession; workspacePath: string; snapshot?: AgentSessionSnapshot; loading: boolean; error?: string; automationRun?: AutomationSessionReference };
 type WorktreeEntry = { project: AowProject; worktree: AowWorktree };
@@ -748,6 +749,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const [documents, setDocuments] = useWorkspaceDocuments(worktree.path);
   const { wordWrapFor, setWordWrap } = useWordWrapOverrides(documents);
   const [sessionPreviews, setSessionPreviews] = useState<SessionPreview[]>([]);
+  const acp = useAcpTabs(worktree.path);
   const [openPullRequests, setOpenPullRequests] = useState<(PullRequestSummary & { repository?: string })[]>([]);
   const [automationTasks, setAutomationTasks] = useState<Record<string, AutomationTask>>({});
   const [openAutomationTaskIds, setOpenAutomationTaskIds] = useState<string[]>([]);
@@ -806,13 +808,16 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     id: `automation:${id}`, kind: 'automation', label: automationTasks[id]?.name ?? '自动化任务', targetId: id,
     automationKind: automationTasks[id]?.kind,
   })), [automationTasks, openAutomationTaskIds]);
+  const acpTabs = useMemo<CenterTab[]>(() => acp.tabs.map(tab => ({
+    id: `acp:${tab.id}`, kind: 'acp', label: tab.title, targetId: tab.id,
+  })), [acp.tabs]);
   const pullRequestTabs = useMemo<CenterTab[]>(() => openPullRequests.map((pr) => ({
     id: prTabId(pr.repository ?? worktree.path, pr.number, pr), kind: 'pullRequest', label: `PR #${pr.number}`, targetId: prTabId(pr.repository ?? worktree.path, pr.number, pr),
   })), [openPullRequests]);
   const ownedCenterTabs = useMemo(() => groupWorkspaceTabs([
     ...(browserTab ? [{ id: 'system-files', kind: 'browser' as const, label: '系统文件浏览器', targetId: 'system-files' }] : []),
-    ...terminalTabs, ...sessionTabs, ...automationTabs, ...pullRequestTabs, ...documentTabs,
-  ]).flatMap(group => group.tabs), [automationTabs, documentTabs, pullRequestTabs, sessionTabs, terminalTabs, browserTab]);
+    ...terminalTabs, ...acpTabs, ...sessionTabs, ...automationTabs, ...pullRequestTabs, ...documentTabs,
+  ]).flatMap(group => group.tabs), [automationTabs, acpTabs, documentTabs, pullRequestTabs, sessionTabs, terminalTabs, browserTab]);
   const centerTabs = useMemo(() => groupWorkspaceTabs([...ownedCenterTabs, ...hostedTabs])
     .flatMap(group => group.tabs), [ownedCenterTabs, hostedTabs]);
   const hasFrontendTabs = centerTabs.length > 0 ? true : restored ? false : undefined;
@@ -913,6 +918,9 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     if ((tab.kind === 'terminal' || tab.kind === 'agent') && !hostedTab(tab.id)) terminals.activate(tab.targetId);
     else if (tab.kind === 'file' || tab.kind === 'diff') setActiveDocumentId(tab.targetId);
     else setActiveDocumentId(undefined);
+  };
+  const activateAcp = (id: string) => {
+    setRightView('acp'); setActiveDocumentId(undefined); setActiveCenterId(`acp:${id}`); routeToFloating(`acp:${id}`);
   };
 
   const openTerminal = (tab: TerminalTab, targetFloating = openingInFloatingWorkspace()) => {
@@ -1523,6 +1531,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
       hideTerminalTabs([tab]);
     }
     else if (tab.kind === 'session') closeSession(tab.targetId);
+    else if (tab.kind === 'acp') await closeTabsInGroup(tab, [tab.id]);
     else if (tab.kind === 'automation') closeAutomation(tab.targetId);
     else if (tab.kind === 'pullRequest') closePullRequest(tab.targetId);
     else closeDocument(tab.targetId);
@@ -1561,7 +1570,8 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     } else {
       setActiveDocumentId((current) => current && targetIds.has(current) ? undefined : current);
     }
-    if (group === 'session') setSessionPreviews((items) => items.filter((item) => !targetIds.has(item.session.id)));
+    if (group === 'acp') acp.close([...targetIds]);
+    else if (group === 'session') setSessionPreviews((items) => items.filter((item) => !targetIds.has(item.session.id)));
     else if (group === 'automation') {
       setOpenAutomationTaskIds((items) => items.filter((taskId) => !targetIds.has(taskId)));
       setAutomationTasks((items) => Object.fromEntries(Object.entries(items).filter(([taskId]) => !targetIds.has(taskId))));
@@ -1789,8 +1799,9 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     if (locationCenterId && !tab) return;
     const target = captureTabTarget({ workspace: worktree.id, workspacePath: worktree.path, tab, documents,
       sessions: sessionPreviews, pullRequests: openPullRequests, browserPath, automationLocations });
-    // A browser or async resource may still be acquiring its identity.
-    if (tab && !target) return;
+    // ACP restores its own tabs; clear the previous resource URL when it takes focus.
+    // A browser or other async resource may still be acquiring its identity.
+    if (tab && !target && tab.kind !== 'acp') return;
     syncTabLocation(target, '', locationTabVisible);
   }, [initialEntry, locationSource, locationCenterId, locationTabVisible, restored, terminals.loaded, terminals.loading, centerTabs,
     documents, sessionPreviews, openPullRequests, browserPath, automationLocations, worktree.id, worktree.path, syncTabLocation]);
@@ -1886,6 +1897,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     <aside className="project-aow-right" hidden={!rightSidebarVisible}>
       <nav aria-label="AoW side views">
         <button className={rightView === 'terminals' ? 'active' : ''} title="Terminal" aria-label="Terminal 面板" onClick={() => setRightView('terminals')}><SquareTerminal /></button>
+        <button className={rightView === 'acp' ? 'active' : ''} title="ACP" aria-label="ACP 面板" onClick={() => setRightView('acp')}><Bot /></button>
         <button className={rightView === 'sessions' ? 'active' : ''} title="Conversation" aria-label="Conversation" onClick={() => setRightView('sessions')}><MessageSquare /></button>
         <button className={rightView === 'automations' ? 'active' : ''} title="Automation" aria-label="Automation" onClick={() => setRightView('automations')}><CalendarClock /></button>
         <span className="project-aow-view-separator" aria-hidden="true" />
@@ -1952,6 +1964,9 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
           }}
           onOpen={openTerminal} onOpenFloating={tab => openTerminal(tab, true)} />
       </div>
+      <div className="project-aow-right-content" hidden={rightView !== 'acp'}>
+        <AcpPanel key={`acp:${worktree.path}`} workspace={worktree.path} visible={active && rightSidebarVisible && rightView === 'acp'} activeSessionId={acp.tabs.find(tab => `acp:${tab.id}` === sidebarActiveId)?.sessionId} onNew={agentId => activateAcp(acp.create(agentId))} onOpen={session => activateAcp(acp.open(session))} onDeleted={acp.removed} />
+      </div>
       <div className="project-aow-right-content" hidden={rightView !== 'automations'}>
         <AutomationPanel project={project} agents={agents} activeTaskId={activeCenterId?.startsWith('automation:') ? activeCenterId.slice('automation:'.length) : undefined} refreshKey={automationRefreshKey} onOpenTask={openAutomation} onTaskChanged={taskChanged} onTaskDeleted={taskDeleted} />
       </div>
@@ -1996,6 +2011,9 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
           {documents.length > 0 ? renderEditor(isFloating(activeCenterId ?? '') ? undefined : activeDocumentId) : null}
         </div>
         {floatingId?.startsWith('document:') && floating.portal ? createPortal(<div className="floating-workspace-host">{renderEditor(floatingId.slice(9))}</div>, floating.portal, worktree.path + ':editor') : null}
+        {acp.tabs.map(tab => <Fragment key={tab.id}>{projectContent(`acp:${tab.id}`, <div className="zed-tab-host" hidden={!tabVisible(`acp:${tab.id}`)}>
+          <AcpSessionTab tab={tab} workspace={worktree.path} visible={tabLive(`acp:${tab.id}`)} onSessionChange={acp.changed} onOpenSession={session => activateAcp(acp.open(session))} onOpenFile={(path, line) => { void openExternalFile(path).then(() => { setRightView('acp'); if (line && Number.isFinite(line)) setDocuments(items => items.map(document => document.path === path ? { ...document, revealLocation: { line, revision: Date.now() } } : document)); }).catch(reason => setOperationError(message(reason))); }} />
+        </div>)}</Fragment>)}
         {sessionPreviews.map((preview) => <Fragment key={preview.session.id}>{projectContent(`session:${preview.session.id}`, <div className="project-aow-session-host" hidden={!tabVisible(`session:${preview.session.id}`)}>
           <SessionSnapshotView
             session={preview.session}

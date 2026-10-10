@@ -9,6 +9,7 @@ use crate::{
 
 #[derive(Clone)]
 pub struct AppState {
+    pub(crate) zed: aow_zed::AcpService,
     pub(crate) inbox: crate::inbox::InboxStore,
     pub(crate) base_path: BasePath,
     pub(crate) frontend_dist: PathBuf,
@@ -30,14 +31,16 @@ impl AppState {
     }
 
     pub fn with_terminald_socket(frontend_dist: PathBuf, terminald_socket: PathBuf) -> Self {
+        let aow = aow::AowManager::in_memory();
         Self {
+            zed: crate::zed::service(aow.clone(), None).expect("in-memory ACP service"),
             inbox: crate::inbox::InboxStore::in_memory(),
             base_path: BasePath::default(),
             frontend_dist,
             auth: auth::AuthService::disabled(),
             session_shares: session_shares::SessionShares::in_memory(),
             terminals: terminal::TerminalManager::in_memory(TerminaldClient::new(terminald_socket)),
-            aow: aow::AowManager::in_memory(),
+            aow,
             automations: None,
             review_providers: pull_requests::ProviderManager::default(),
             operations: operations::OperationService::in_memory(),
@@ -62,6 +65,9 @@ impl AppState {
             TerminalError::Invalid(format!("failed to initialize aow: {error}"))
         })?;
         Ok(Self {
+            zed: crate::zed::service(aow.clone(), Some(state_dir.clone())).map_err(|error| {
+                TerminalError::Invalid(format!("failed to initialize ACP: {error:#}"))
+            })?,
             inbox: crate::inbox::InboxStore::persistent(&state_dir)
                 .map_err(|e| TerminalError::Invalid(format!("failed to initialize inbox: {e}")))?,
             workspace_events: workspace_events::WorkspaceEvents::new(),

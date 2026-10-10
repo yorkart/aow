@@ -34,7 +34,7 @@ try {
   const base = `http://127.0.0.1:${server.httpServer.address().port}`;
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
 
-  async function fixture(t, { mobile = false, login = false, floating = false, extraFloatingTabs = [], global = false, missing = false, removedWorkspace = false, temporary = false, entry = 'target', editable = false, tabUrl, sessionAgent = false, pinned = [], reviewTargets = [], preserveFloating = false } = {}) {
+  async function fixture(t, { mobile = false, login = false, floating = false, extraFloatingTabs = [], global = false, missing = false, removedWorkspace = false, temporary = false, entry = 'target', editable = false, tabUrl, sessionAgent = false, pinned = [], reviewTargets = [], preserveFloating = false, acp = false } = {}) {
     const context = await browser.newContext({ viewport: mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 } });
     const root = temporary ? '/private/tmp/aow-inbox-link' : global ? '/global' : worktrees[1].path;
     const target = terminal('target', root, 'Target Tab');
@@ -43,25 +43,25 @@ try {
     const projects = removedWorkspace ? [] : [project];
     if (global) projects.push({ ...project, id: '__aow_floating', name: '浮动工作区', builtin: true,
       registered_path: root, worktrees: [{ ...worktrees[0], id: 'global-main', project_id: '__aow_floating', path: root }] });
-    const state = { authenticated: !login, targetReads: 0, mutations: [], errors: [], reads: [], inbox: [] };
+    const state = { authenticated: !login, targetReads: 0, mutations: [], errors: [], reads: [], inbox: [], acpSessions: [], acpConnections: 0 };
     const session = { id: 'codex:session-one', session_id: 'session-one', agent: 'codex', title: 'Linked Conversation', cwd: '/actual-session', created_at: '', updated_at: '' };
     const task = { id: 'task-one', name: 'Linked Automation', project_id: 'project', project_name: project.name, revision: 1, agent: 'codex', workspace_mode: 'existing', workspace_path: root, prompt: 'Task prompt', cron: '0 9 * * *', interval_seconds: null, max_concurrent_runs: 1, enabled: true, yolo: false, base_branch: '', cleanup_worktree: false, is_running: false, scheduler_error: null, last_run: null, next_run_at: null };
     const run = { id: 'run-old', task_id: task.id, task_name: task.name, agent: 'codex', source: 'manual', status: 'completed', started_at: '2026-09-19T00:00:00Z', finished_at: '2026-09-19T00:01:00Z', workspace_path: root, branch: 'dev', session_id: null, duration_ms: 60000, exit_code: 0 };
     const pr = { number: 42, title: 'Linked PR', source_branch: 'dev', target_branch: 'main', status: 'open', draft: false, created_at: '', updated_at: '', url: null, description: 'PR description', files: [], checks: [], reviewers: [], threads: [], unresolved_threads: [], changes_count: 0, commits_count: 1 };
     t.after(async () => { await context.close(); assert.deepEqual(state.errors, []); if (!editable) assert.deepEqual(state.mutations, []); });
     await installLiveEvents(context);
-    await context.addInitScript(({ root, floating, extraFloatingTabs, preserveFloating }) => {
+    await context.addInitScript(({ root, floating, extraFloatingTabs, preserveFloating, acp }) => {
       window.sendTaskStop = data => window.emitLiveEvent('task-stopped', data);
       window.taskStopReady = () => window.liveEventSockets.some(socket => socket.readyState === 1);
-      localStorage.setItem('aow-active', '/workspace/main');
-      localStorage.setItem(`aow-workspace-tabs:${root}`, JSON.stringify({ active: 'terminal:other' }));
+      if (!acp || !localStorage.getItem('aow-active')) localStorage.setItem('aow-active', '/workspace/main');
+      if (!acp || !localStorage.getItem(`aow-workspace-tabs:${root}`)) localStorage.setItem(`aow-workspace-tabs:${root}`, JSON.stringify({ active: 'terminal:other' }));
       sessionStorage.setItem(`aow.mobile.terminal.${root}`, 'other:other-pane');
       if (floating && (!preserveFloating || !localStorage.getItem('aow-floating-tabs-v1'))) {
         localStorage.setItem('aow-floating-tabs-v1', JSON.stringify([{ workspace: root,
           id: 'terminal:target', targetId: 'target', kind: 'terminal', label: 'Target Tab' }, ...extraFloatingTabs]));
         localStorage.setItem('aow-floating-open', 'false');
       }
-    }, { root, floating, extraFloatingTabs, preserveFloating });
+    }, { root, floating, extraFloatingTabs, preserveFloating, acp });
     await context.route('**/api/**', async route => {
       const request = route.request();
       const url = new URL(request.url());
@@ -71,6 +71,18 @@ try {
       if (url.pathname === '/api/auth/status') data = { configured: true, authenticated: state.authenticated };
       else if (url.pathname === '/api/auth/login') { state.authenticated = true; data = { configured: true, authenticated: true }; }
       else if (!state.authenticated) { await route.fulfill({ status: 401, json: { message: 'Login required' } }); return; }
+      else if (acp && url.pathname === '/api/zed/agents') data = [{ id: 'test', name: 'Test Agent', supported: true, configured: true, installed: true }];
+      else if (acp && url.pathname === '/api/zed/sessions') data = state.acpSessions;
+      else if (acp && url.pathname === '/api/zed/connections') {
+        state.acpConnections++; data = { id: 'acp-connection', agent_id: 'test', cwd: root, auth_methods: [], capabilities: {} };
+      }
+      else if (acp && url.pathname === '/api/zed/connections/acp-connection/sessions' && request.method() === 'POST') {
+        data = { id: 'acp-local', remote_id: 'acp-remote', agent_id: 'test', cwd: root, title: 'ACP Conversation', status: 'idle', revision: 1, updated_at: '', entries: [], permissions: [], modes: {}, config_options: [], commands: [], usage: null };
+        state.acpSessions.push(data);
+      }
+      else if (acp && url.pathname === '/api/zed/sessions/acp-local') data = state.acpSessions[0];
+      else if (acp && url.pathname === '/api/zed/connection-status') data = null;
+      else if (acp && url.pathname === '/api/zed/connections/acp-connection/requests') data = [];
       else if (url.pathname === '/api/inbox') data = { revision: state.inbox.length, items: state.inbox, labels: [], executions: temporary ? [{ id: 'inbox-run', workspace_mode: 'temporary', tab_id: 'target', cwd: root }] : [] };
       else if (url.pathname === '/api/inbox/items' && request.method() === 'POST') {
         const input = request.postDataJSON();
@@ -140,6 +152,28 @@ try {
     await page.goto(destination.href);
     return { page, state, root };
   }
+
+  await test('ACP sessions open in the workspace center and restore independently of the previous terminal link', async t => {
+    const { page, state } = await fixture(t, { acp: true });
+    await page.locator('.project-aow-surface:not([hidden]) .project-aow-center-tab.active').filter({ hasText: 'Target Tab' }).waitFor();
+    await page.getByRole('button', { name: 'ACP 面板', exact: true }).click();
+    await page.getByRole('button', { name: '新建 ACP 会话', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Test Agent', exact: true }).click();
+    const active = page.locator('.project-aow-surface:not([hidden]) .project-aow-center-tab.active').filter({ hasText: 'ACP Conversation' });
+    await active.waitFor();
+    await page.getByLabel('ACP 消息', { exact: true }).waitFor();
+    assert.ok(!page.url().includes('/aow/tabs/'), 'ACP views clear the previous resource URL before reload');
+    await page.reload();
+    await active.waitFor();
+    await page.getByLabel('ACP 消息', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'ACP 面板', exact: true }).click();
+    await page.getByRole('button', { name: '打开 ACP 会话 ACP Conversation', exact: true }).click();
+    assert.equal(await page.getByRole('tab', { name: /^ACP Conversation/ }).count(), 1);
+    await page.getByRole('button', { name: '关闭 ACP Conversation', exact: true }).click();
+    assert.ok(state.acpConnections >= 1);
+    assert.equal(state.acpSessions.length, 1);
+    assert.deepEqual(state.mutations, []);
+  });
 
   await test('Inbox opens in the floating workspace, survives refresh and leaves existing terminals intact', async t => {
     const { page, state } = await fixture(t, { floating: true, preserveFloating: true });

@@ -1,0 +1,658 @@
+{
+  "repository": "https://github.com/zed-industries/zed",
+  "commit": "dc3fb21676457b84d2233ac4c6bec5cebc698ec3",
+  "source_date": "2026-10-08",
+  "sdk": {
+    "package": "agent-client-protocol",
+    "version": "2.2.0",
+    "features": [
+      "unstable",
+      "unstable_protocol_v2"
+    ]
+  },
+  "last_sync": {
+    "date": "2026-10-10",
+    "kind": "ACP frontend behavior alignment against the pinned baseline",
+    "validated_by": [
+      "upstream conversion tests",
+      "stdio adapter fixture including authentication and config provider presence",
+      "JSONC persistence tests",
+      "Chromium conversation and history interaction tests",
+      "Rust workspace tests",
+      "workspace build, typecheck and lint",
+      "backport source hashes"
+    ]
+  },
+  "local_differences": [
+    "AoW owns independent JSONC configuration and file policy",
+    "Tokio and HTTP replace GPUI entities and callbacks",
+    "React components replace GPUI views",
+    "Terminal and terminal authentication are not advertised",
+    "History merges private local snapshots with workspace-scoped adapter history",
+    "Protocol logs are bounded per-connection buffers",
+    "Unknown session updates remain in snapshots and protocol logs without conversation cards",
+    "AoW Settings save events refresh the panel; configuration and execution PATH are read before connection reuse",
+    "Adapter launchers and their descendants share a dedicated process group for cleanup",
+    "AoW connection progress reports install phases, elapsed time and npm network retry codes through an additive facade query",
+    "The installed server launcher reads proxy variables from server.env at startup; Registry downloads and npm inherit them without changing macOS system plists",
+    "Settings Registry add saves JSONC and explicitly installs the adapter before new sessions are offered",
+    "The right ACP panel lists sessions; conversation content lives in central workspace tabs, with view-only close and reload restoration",
+    "React rendering ports the supported ACP branches from the pinned conversation, configuration and entry-state views; see frontend-behavior.md for function correspondence",
+    "DOM popovers, AoW Markdown and Monaco inline diffs replace native GPUI views; config search uses subsequence matching rather than upstream fuzzy ranking",
+    "Editor context/attachment pickers and local prompt queueing are outside this port; authenticated live Codex and Claude prompts remain unverified"
+  ],
+  "files": [
+    {
+      "local": "crates/zed/src/acp_thread/content.rs",
+      "kind": "import",
+      "reason": "Content conversion and original tests",
+      "sources": [
+        {
+          "path": "crates/acp_thread/src/content.rs",
+          "sha256": "3245d3ef648f3943de24ffd7f00e2604c01b02bac3e2e2c4cea6d2d980865cd1"
+        }
+      ],
+      "local_sha256": "3245d3ef648f3943de24ffd7f00e2604c01b02bac3e2e2c4cea6d2d980865cd1"
+    },
+    {
+      "local": "crates/zed/src/acp_thread/config_options.rs",
+      "kind": "import",
+      "reason": "Config value conversion and original tests",
+      "sources": [
+        {
+          "path": "crates/acp_thread/src/config_options.rs",
+          "sha256": "4e4d01438ce431378d8ee1c8ed9a39360ba5aa0b17805cfe39f067a4e7749891"
+        }
+      ],
+      "local_sha256": "4e4d01438ce431378d8ee1c8ed9a39360ba5aa0b17805cfe39f067a4e7749891"
+    },
+    {
+      "local": "crates/zed/src/acp_thread/auth_methods.rs",
+      "kind": "import",
+      "reason": "Authentication conversion and original tests",
+      "sources": [
+        {
+          "path": "crates/acp_thread/src/auth_methods.rs",
+          "sha256": "b898c12e70032c81cb9244c7ed081c4b442ba81dd9c11a322d42438493899459"
+        }
+      ],
+      "local_sha256": "b898c12e70032c81cb9244c7ed081c4b442ba81dd9c11a322d42438493899459"
+    },
+    {
+      "local": "crates/zed/src/acp_thread/prompt_capabilities.rs",
+      "kind": "import",
+      "reason": "Prompt capability conversion and original tests",
+      "sources": [
+        {
+          "path": "crates/acp_thread/src/prompt_capabilities.rs",
+          "sha256": "906809db85645b56ad007de56c7a392f00db36c0352cfa68228aa6289919d6f5"
+        }
+      ],
+      "local_sha256": "906809db85645b56ad007de56c7a392f00db36c0352cfa68228aa6289919d6f5"
+    },
+    {
+      "local": "crates/zed/src/acp_thread/mod.rs",
+      "kind": "host-port",
+      "reason": "AcpThread::handle_session_update; serializable snapshots replace GPUI entities",
+      "sources": [
+        {
+          "path": "crates/acp_thread/src/acp_thread.rs",
+          "sha256": "7e78b4dcde4ba3a329f35237ed1e0641ef793d3c58825f79a5382758e2f386fe"
+        }
+      ],
+      "local_sha256": "d255791e940b9984e6674f45aa7a0e98532b674b47d9bee5a391a09d95aade35"
+    },
+    {
+      "local": "crates/zed/src/acp_thread/defaults.rs",
+      "kind": "host-port",
+      "reason": "apply_default_config_options; dependent retry and conflict termination",
+      "sources": [
+        {
+          "path": "crates/agent_servers/src/acp.rs",
+          "sha256": "7bed9ea8c55ec5cd3ab35a1661cac89f059c013bb18f341c0f5892de1f83c906"
+        }
+      ],
+      "local_sha256": "3e9b3db948ffef9089daba1775119ac984145e55ca69bd307d28b015394810de"
+    },
+    {
+      "local": "crates/zed/src/acp_thread/history.rs",
+      "kind": "host-port",
+      "reason": "AoW durable snapshots and session index replace editor database",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/thread_metadata_store.rs",
+          "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
+        }
+      ],
+      "local_sha256": "ac3dd6c6e57fb2c43d7285fbbac415d9f22ea8b4e2f3ed4a93f36ad903d093ef"
+    },
+    {
+      "local": "crates/zed/src/agent_servers/mod.rs",
+      "kind": "host-port",
+      "reason": "Server/session lifecycle; Tokio ownership and stable facade integration",
+      "sources": [
+        {
+          "path": "crates/agent_servers/src/agent_servers.rs",
+          "sha256": "8be850db3dffae627929da9f0a5667c531637232d72b87f51e1540a3799149ab"
+        },
+        {
+          "path": "crates/agent_servers/src/acp.rs",
+          "sha256": "7bed9ea8c55ec5cd3ab35a1661cac89f059c013bb18f341c0f5892de1f83c906"
+        }
+      ],
+      "local_sha256": "1d7606db75b535309242e99c621c81f9f299b2773065a510ae4b03460fa7973c"
+    },
+    {
+      "local": "crates/zed/src/agent_servers/acp/mod.rs",
+      "kind": "host-port",
+      "reason": "AcpConnection::stdio, builder, initialization, capability gating and exit drain",
+      "sources": [
+        {
+          "path": "crates/agent_servers/src/acp.rs",
+          "sha256": "7bed9ea8c55ec5cd3ab35a1661cac89f059c013bb18f341c0f5892de1f83c906"
+        }
+      ],
+      "local_sha256": "ae3bbad537d8588e5922d8ecfedd731e9b653c422ef7f9cd5db20b60de1b17a3"
+    },
+    {
+      "local": "crates/zed/src/agent_servers/acp/client.rs",
+      "kind": "host-port",
+      "reason": "Client dispatch and request-scoped elicitations; Send callbacks replace GPUI foreground bridge",
+      "sources": [
+        {
+          "path": "crates/agent_servers/src/acp.rs",
+          "sha256": "7bed9ea8c55ec5cd3ab35a1661cac89f059c013bb18f341c0f5892de1f83c906"
+        }
+      ],
+      "local_sha256": "ed8c0060648cecbc20b9f153f3f95d2e3fe7c51f106662aaa6dfa6cec765ceac"
+    },
+    {
+      "local": "crates/zed/src/agent_servers/acp/transport.rs",
+      "kind": "host-port",
+      "reason": "spawn_stdio and StdioProcess; Tokio process ownership, literal args, no PTY",
+      "sources": [
+        {
+          "path": "crates/agent_servers/src/acp/transport.rs",
+          "sha256": "5285e811ad777321735fc2efc2bb6d53f2593e2141ff2a11f8dc98aac2415dbb"
+        }
+      ],
+      "local_sha256": "97bd50ade69987adb9301d8136810e222219ea1a06e5f5182dec7ab7c418c15e"
+    },
+    {
+      "local": "crates/zed/src/agent_servers/acp/debug_log.rs",
+      "kind": "host-port",
+      "reason": "AcpDebugLog; bounded wire/stderr buffers exposed through facade",
+      "sources": [
+        {
+          "path": "crates/agent_servers/src/acp/debug_log.rs",
+          "sha256": "c8f0e0adca5611e02e31346b6fe55f1031aee344f6a89b91b8b40a1462f7f0cb"
+        }
+      ],
+      "local_sha256": "904c657fa21459a335c9ff99f764e03318e8114b7bcdb0b30c928b31b993b6ea"
+    },
+    {
+      "local": "crates/zed/src/project/agent_registry_store.rs",
+      "kind": "host-port",
+      "reason": "Registry schema, endpoint and platform selection; reqwest and local cache",
+      "sources": [
+        {
+          "path": "crates/project/src/agent_registry_store.rs",
+          "sha256": "506cf7d2bd59560a8c08e8bb2d1ff9ec89a55cc4d970cddec2e1eb3fbc43c9a8"
+        }
+      ],
+      "local_sha256": "44831e6068a8ffd914f0d0324d72556cb8f531284c0487dcab05f86e7a8787a1"
+    },
+    {
+      "local": "crates/zed/src/project/agent_server_store.rs",
+      "kind": "host-port",
+      "reason": "Registry binary/npx resolution; independent adapter installation",
+      "sources": [
+        {
+          "path": "crates/project/src/agent_server_store.rs",
+          "sha256": "744931678ec66a62bbc63382c066b470d55b4cdda7c1c2c4f46515960f677cfe"
+        }
+      ],
+      "local_sha256": "4da93095f8996e58c7fd0a70b4ddd57538c3877da9c4efda035237681da34dc8"
+    },
+    {
+      "local": "crates/zed/src/settings/agent.rs",
+      "kind": "host-port",
+      "reason": "CustomAgentServerSettings and value types; Extension alias excluded",
+      "sources": [
+        {
+          "path": "crates/settings_content/src/agent.rs",
+          "sha256": "c73b0054b545920f2b00ef56e6edcc9144c4723499f1df2e46cac97f4832f02e"
+        }
+      ],
+      "local_sha256": "800db0387fceab82d4e74a78dee91b97d483bddc3b2476d7a5d1f38718bdb010"
+    },
+    {
+      "local": "frontend/src/features/zed/agent_ui/AgentPanel.tsx",
+      "kind": "presentation",
+      "reason": "Workspace-scoped local and advertised remote history, deduplication, archive navigation, relative timestamps and installed-agent dropdown",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/agent_panel.rs",
+          "sha256": "7e2f206d637bfa316aa265b6d88efa8f5cde430d55502512d0f94d91ad29276f"
+        },
+        {
+          "path": "crates/agent_ui/src/threads_archive_view.rs",
+          "sha256": "7ac83d61e6bae05911f947ed316f339f3109f91e1651d55ff9d0cdae7ff0ade8"
+        }
+      ],
+      "local_sha256": "5a6e08d6dc031bbaf1b573d9655b78b8e6a57e1feaee87aa23866f37efffe627"
+    },
+    {
+      "local": "frontend/src/features/zed/agent_ui/config_options.tsx",
+      "kind": "presentation",
+      "reason": "Config-provider precedence, grouped current-value menus, search, favorites, Boolean controls and automatic default persistence",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/config_options.rs",
+          "sha256": "22b6d7945e246b939051c43ba5367dffb12dff894cc9c7c2101c05b8d500f1f4"
+        },
+        {
+          "path": "crates/agent_ui/src/mode_selector.rs",
+          "sha256": "830f8ab97eb1d58720bcffe0a048bbf2a2a228a83a97bcff44048355babf921e"
+        },
+        {
+          "path": "crates/agent_ui/src/conversation_view.rs",
+          "sha256": "7be4ec6768ea1d9fcb04567e573e190cd7c7ebcb1030e85799beef1ee8e63ab9"
+        },
+        {
+          "path": "crates/agent_servers/src/custom.rs",
+          "sha256": "adceaf225a0eb21ac0f5416210d2288d82483a6b6bd47fa22e3f639286fafca4"
+        }
+      ],
+      "local_sha256": "49f4fdc9058a98a108900e1a7e9b6f208cc9159af23a377397a54d3e46bbee05"
+    },
+    {
+      "local": "frontend/src/features/zed/agent_ui/conversation_view/thread_view.tsx",
+      "kind": "presentation",
+      "reason": "Message grouping, thinking and tool presentation, plan summary, bottom composer, config toolbar, usage and advertised command suggestions",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/conversation_view/thread_view.rs",
+          "sha256": "d072e0555e4e1fac22239d6b82bd57a3839beb0643c721b5a748621f52bb01ea"
+        }
+      ],
+      "local_sha256": "23e983bd7928566e0000e5f8775bfe16170e5d2aa656be94cc32096f5fb73322"
+    },
+    {
+      "local": "frontend/src/features/zed/agent_ui/conversation_view/content.tsx",
+      "kind": "presentation",
+      "reason": "Plain user text, Markdown output, resources, collapsed tools with permission expansion and Monaco inline diffs",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/conversation_view/thread_view.rs",
+          "sha256": "d072e0555e4e1fac22239d6b82bd57a3839beb0643c721b5a748621f52bb01ea"
+        },
+        {
+          "path": "crates/agent_ui/src/agent_diff.rs",
+          "sha256": "fdb15530f447638b5f0d75c9a9d2be2edae4a37cfed3be03184b384c48577cd2"
+        }
+      ],
+      "local_sha256": "eb40702cc26c2dfb10c910d79c918fb1e2d345d801def95b224e144cdf8a2c77"
+    },
+    {
+      "local": "frontend/src/features/zed/agent_ui/conversation_view/elicitation.tsx",
+      "kind": "presentation",
+      "reason": "Permission options and form/URL elicitations",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/conversation_view/elicitation.rs",
+          "sha256": "49093882ec7f62fab57d4ad09228a2bcddd6da9dffef0d54555d9e5614f5a1e4"
+        }
+      ],
+      "local_sha256": "5b99aca99a968755b212dc527d60284db7c5c0d261b4b7267ad286eb8abda3ad"
+    },
+    {
+      "local": "crates/zed/src/node_runtime/mod.rs",
+      "kind": "host-port",
+      "reason": "NodeRuntime system discovery, npm installation, bounded_npm_package_spec and read_package_executable; resolve AoW node launcher symlinks before locating npm",
+      "sources": [
+        {
+          "path": "crates/node_runtime/src/node_runtime.rs",
+          "sha256": "df97d2c53d4dbf4e36fa0b51b64b72622709c449e2dd7f5228710377e58a7460"
+        },
+        {
+          "path": "crates/project/src/agent_server_store.rs",
+          "sha256": "744931678ec66a62bbc63382c066b470d55b4cdda7c1c2c4f46515960f677cfe"
+        }
+      ],
+      "local_sha256": "6346abacd02e5696dcf71ba33f28ce827dfb66941019a0d530915afb9482b2d3"
+    },
+    {
+      "local": "crates/zed/src/agent_servers/progress.rs",
+      "kind": "local",
+      "reason": "AoW connection progress for the HTTP facade; local status tracking with no direct upstream counterpart",
+      "sources": [],
+      "local_sha256": "3bd3330f36122e3fb7337e717d0ff361deb90b3496f6890ac40a01a7a0043b8e"
+    },
+    {
+      "local": "frontend/src/features/zed/agent_ui/connection_progress.tsx",
+      "kind": "local",
+      "reason": "AoW presentation of connection phases, elapsed time and service proxy guidance; no direct upstream counterpart",
+      "sources": [],
+      "local_sha256": "a62a81ba42ea46d6896515516048b24b8d96f406532b2d12cb61bbc96f3f1df9"
+    },
+    {
+      "local": "crates/zed/src/agent_servers/installation.rs",
+      "kind": "host-port",
+      "reason": "Explicit preparation via the existing Registry installer; AoW installation receipts and progress queries without creating ACP connections",
+      "sources": [
+        {
+          "path": "crates/project/src/agent_server_store.rs",
+          "sha256": "744931678ec66a62bbc63382c066b470d55b4cdda7c1c2c4f46515960f677cfe"
+        }
+      ],
+      "local_sha256": "c354800a674816c50e4259447919f1e3812f58dcc28fe53313cd8877b26213e3"
+    },
+    {
+      "local": "frontend/src/features/zed/agent_ui/SessionTab.tsx",
+      "kind": "presentation",
+      "reason": "Connection and explicit authentication state in a central workspace tab; history discovery is owned by AgentPanel",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/conversation_view.rs",
+          "sha256": "7be4ec6768ea1d9fcb04567e573e190cd7c7ebcb1030e85799beef1ee8e63ab9"
+        },
+        {
+          "path": "crates/agent_ui/src/agent_connection_store.rs",
+          "sha256": "87c68918effbadf9e9922bc9572890d65eba79ab85c35be12111c0782c1f0a0e"
+        }
+      ],
+      "local_sha256": "5263529ba59fc3d7d538ad3a62baf614275ede586b40aa6a0e3348c268ea7c55"
+    },
+    {
+      "local": "frontend/src/features/zed/agent_ui/workspace_tabs.ts",
+      "kind": "local",
+      "reason": "AoW workspace tab descriptors, deduplication, view persistence and closing without deleting sessions",
+      "sources": [],
+      "local_sha256": "2ff08a94c6a3def4ff8a58286fba147ed9de890b8ecc1e3a9ddebb57c936202d"
+    },
+    {
+      "local": "frontend/src/features/zed/agent_ui/use_progress.ts",
+      "kind": "local",
+      "reason": "Shared HTTP polling of installation or connection progress",
+      "sources": [],
+      "local_sha256": "b601b1d223ac1abb190df6a575d548bf9aaf38d9cbf6919896244049b4d0dd59"
+    },
+    {
+      "local": "frontend/src/features/zed/agent_ui/conversation_view/entry_view_state.ts",
+      "kind": "presentation",
+      "reason": "Supported-content visibility and grouped entries; thinking display states and manual expansion rules",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/entry_view_state.rs",
+          "sha256": "67f916b88920ba9c2bf58763b909cd2842f11436c37976a91f41da851569bb56"
+        },
+        {
+          "path": "crates/agent_ui/src/conversation_view/thread_view.rs",
+          "sha256": "d072e0555e4e1fac22239d6b82bd57a3839beb0643c721b5a748621f52bb01ea"
+        }
+      ],
+      "local_sha256": "d0808a2fe3073414546ca241521ba948f99526fe9f5dc5d31478dca924a6da08"
+    },
+    {
+      "local": "frontend/src/features/zed/agent_ui/authentication.tsx",
+      "kind": "presentation",
+      "reason": "Explicit AuthRequired presentation, supported-method order, pending state and request-scoped elicitation",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/conversation_view.rs",
+          "sha256": "7be4ec6768ea1d9fcb04567e573e190cd7c7ebcb1030e85799beef1ee8e63ab9"
+        }
+      ],
+      "local_sha256": "f406e2962632e9b13d960b3be8e23ac5ed1978e1dbcc91e841fb0345945a76f1"
+    },
+    {
+      "local": "frontend/src/features/zed/agent_ui/popover.tsx",
+      "kind": "local",
+      "reason": "DOM focus, keyboard navigation and viewport-clamped anchored menus replace GPUI popovers",
+      "sources": [],
+      "local_sha256": "0b01c74e24455de71c5262f3dd1fe6a9c9c424be2db73cfd40fbe254a58aa1cb"
+    },
+    {
+      "local": "frontend/src/features/zed/request.ts",
+      "kind": "local",
+      "reason": "Independent HTTP adapter retains error codes for protocol-based authentication state",
+      "sources": [],
+      "local_sha256": "c9ccec79975dfba92301525608fcd5b83a18c45855017cbedd7c8df9d178d9ab"
+    },
+    {
+      "local": "crates/zed/src/facade/error.rs",
+      "kind": "host-port",
+      "reason": "Classify wrapped SDK AuthRequired errors without string matching; exported as an additive facade helper",
+      "sources": [
+        {
+          "path": "crates/agent_servers/src/acp.rs",
+          "sha256": "7bed9ea8c55ec5cd3ab35a1661cac89f059c013bb18f341c0f5892de1f83c906"
+        }
+      ],
+      "local_sha256": "b9e35caa1bb1b16d8f36684e6c50158f9631e9c0cc851e6aa0a37201f009184d"
+    },
+    {
+      "local": "frontend/src/features/zed/agent_ui/composer_drafts.ts",
+      "kind": "local",
+      "reason": "Transient composer store keyed by workspace and tab ID; portal remounts, close cleanup and late prompt response handling",
+      "sources": [],
+      "local_sha256": "0a129d0ac9defe9a5d9126b33e7ef797980375cf895af7712cfbd5598ed5e46f"
+    },
+    {
+      "local": "frontend/src/features/zed/api.ts",
+      "kind": "local",
+      "reason": "AoW HTTP operations and internal change notifications; successful authentication is shared across views of one connection",
+      "sources": [],
+      "local_sha256": "8865dd04a030cb6c715c1822607ecd8ee6e64942544f003b75447fcee14ca1da"
+    }
+  ],
+  "coverage": [
+    {
+      "behavior": "v1/v2 content, authentication, config and prompt capability conversion",
+      "tests": [
+        "crates/zed/src/acp_thread/content.rs",
+        "crates/zed/src/acp_thread/config_options.rs",
+        "crates/zed/src/acp_thread/auth_methods.rs",
+        "crates/zed/src/acp_thread/prompt_capabilities.rs"
+      ]
+    },
+    {
+      "behavior": "connection, dependent defaults, streamed events, file callbacks, explicit permission, cancel, history, load/resume, failed load, environment reload and process exit",
+      "tests": [
+        "crates/zed/tests/integration.rs",
+        "crates/zed/tests/fixtures/agent.mjs"
+      ]
+    },
+    {
+      "behavior": "independent JSONC file, unknown fields, comments, revision conflicts and Git history",
+      "tests": [
+        "crates/server/src/aow/settings/zed.rs",
+        "frontend/tests/zed.test.mjs"
+      ]
+    },
+    {
+      "behavior": "sidebar ordering, file location callback, permission interaction, typed elicitation and structural Registry configuration edits",
+      "tests": [
+        "frontend/tests/zed.test.mjs"
+      ]
+    },
+    {
+      "behavior": "Live Registry npm installation and codex-acp 2.1.1 initialization with node-only launcher PATH",
+      "status": "passed; isolated profile reports authentication required for session/new; authenticated prompts and Claude remain untested",
+      "tests": [
+        "crates/zed/tests/integration.rs::live_registry_adapter_initializes_with_node_only_path"
+      ]
+    },
+    {
+      "behavior": "ACP terminal and terminal authentication",
+      "status": "not advertised or implemented"
+    },
+    {
+      "behavior": "Node-only launcher PATH, local npm installation, package bin selection, literal arguments, working-directory independence and offline cache reuse",
+      "tests": [
+        "crates/zed/src/node_runtime/tests.rs"
+      ]
+    },
+    {
+      "behavior": "Live npm network retry progress, completed connection status and browser install progress/failure recovery",
+      "tests": [
+        "crates/zed/src/node_runtime/tests.rs",
+        "crates/zed/tests/integration.rs",
+        "frontend/tests/zed.test.mjs"
+      ]
+    },
+    {
+      "behavior": "Legacy proxy variables are accepted by privileged registration validation; generated service plists exclude runtime proxy settings",
+      "tests": [
+        "scripts/tests/launchdaemon-registration.test.mjs",
+        "scripts/tests/macos-release.test.mjs"
+      ]
+    },
+    {
+      "behavior": "Installed server reloads literal proxy variables on each start; proxy-only changes activate an existing LaunchDaemon and clear stale pending requests without administrator registration",
+      "tests": [
+        "scripts/tests/server-launcher.test.mjs",
+        "scripts/tests/macos-release.test.mjs"
+      ]
+    },
+    {
+      "behavior": "Explicit Registry install without starting adapters or sessions, persistent readiness, cache reuse, missing-entrypoint detection and failed-install retry",
+      "tests": [
+        "crates/zed/tests/installation.rs"
+      ]
+    },
+    {
+      "behavior": "Immediate Registry installation with JSONC preservation; session list, central workspace tabs, duplicate-open prevention, view-only close, reload restoration, login, connection retry, pending portal moves and remote history tabs",
+      "tests": [
+        "frontend/tests/zed.test.mjs",
+        "frontend/tests/zed-preview.tsx",
+        "frontend/tests/tab-links.test.mjs"
+      ]
+    },
+    {
+      "behavior": "Typed AuthRequired classification, request-scoped authentication input, successful login state clearing without prompt replay, config provider presence including empty lists",
+      "tests": [
+        "crates/zed/src/facade/error.rs",
+        "crates/zed/tests/integration.rs"
+      ]
+    },
+    {
+      "behavior": "Zed config provider precedence, grouped choices, Boolean switches, favorites/default persistence, message visibility, plain user input, thinking auto/manual state, collapsed tools, permission expansion, inline diff and slash suggestions",
+      "tests": [
+        "frontend/tests/zed.test.mjs"
+      ]
+    },
+    {
+      "behavior": "Sidebar-only history with workspace filtering and deduplication; authentication forms without session creation; login dismissal, retained drafts and no replay for existing/shared connections",
+      "tests": [
+        "frontend/tests/zed.test.mjs"
+      ]
+    },
+    {
+      "behavior": "Composer default/favorite saves reuse the adapter process; subsequent sessions apply updated defaults while launch environment changes still create a new connection",
+      "tests": [
+        "crates/zed/tests/integration.rs::composer_preferences_reuse_the_adapter_and_apply_to_new_sessions",
+        "crates/zed/tests/integration.rs::changed_configuration_starts_a_fresh_adapter_and_resume_keeps_local_history"
+      ]
+    },
+    {
+      "behavior": "LAN HTTP creation without secure-context APIs; request-only resume authentication across stale snapshots and pending/shared login; drafts across portal/title changes, multiple tabs, close/reopen and late prompt responses",
+      "tests": [
+        "frontend/tests/zed.test.mjs"
+      ]
+    }
+  ],
+  "local_fixes": [
+    {
+      "date": "2026-10-09",
+      "reason": "Registry npm adapters failed to spawn when AoW exposed only its node launcher symlink, without npm/npx on PATH",
+      "changes": [
+        "Resolve Node.js and sibling npm from the selected execution PATH",
+        "Install adapters in private versioned directories and launch package bin scripts with the absolute Node.js path",
+        "Preserve upstream bounded npm version specs and package executable selection",
+        "Report executable and working directory on spawn failures"
+      ],
+      "tests": [
+        "crates/zed/src/node_runtime/tests.rs",
+        "crates/zed/tests/integration.rs::live_registry_adapter_initializes_with_node_only_path"
+      ]
+    },
+    {
+      "date": "2026-10-09",
+      "reason": "Registry npm installation appeared stuck while npm retried network timeouts; LaunchDaemon rejected service-level proxy variables",
+      "changes": [
+        "Expose connection status through an additive facade query without changing connect or session interfaces",
+        "Show installation phases, elapsed time and safe npm network retry codes; preserve bounded failure output and installation timeout",
+        "Allow standard upper- and lowercase proxy variables in LaunchDaemon generation and registration",
+        "Keep proxy configuration in Environment server.env and document platform-specific activation steps"
+      ],
+      "tests": [
+        "crates/zed/src/node_runtime/tests.rs",
+        "crates/zed/tests/integration.rs",
+        "frontend/tests/zed.test.mjs",
+        "scripts/tests/launchdaemon-registration.test.mjs",
+        "scripts/tests/macos-release.test.mjs"
+      ]
+    },
+    {
+      "date": "2026-10-10",
+      "reason": "Putting proxy variables into the root-owned LaunchDaemon plist made ordinary service-account updates require administrator registration",
+      "changes": [
+        "Load only standard proxy variables as literal data in the installed server launcher on every start",
+        "Keep proxy settings out of generated system plists; preserve administrator registration for actual service configuration changes",
+        "Verify pending requests from the previous proxy implementation clear after successful ordinary activation",
+        "Update Environment guidance and packaging instructions"
+      ],
+      "tests": [
+        "scripts/tests/server-launcher.test.mjs",
+        "scripts/tests/macos-release.test.mjs"
+      ]
+    },
+    {
+      "date": "2026-10-10",
+      "reason": "Agent installation and conversation content were incorrectly deferred to and embedded in the right panel",
+      "changes": [
+        "Install Registry agents from Settings through additive facade methods; record readiness without starting a connection",
+        "Keep the sidebar focused on session navigation and render conversations in central workspace tabs",
+        "Preserve active sessions when views close and restore existing session views without creating sessions or replaying prompts",
+        "Reuse pending session creation when a tab changes portal host; clear the previous resource URL when ACP takes focus"
+      ],
+      "tests": [
+        "crates/zed/tests/installation.rs",
+        "frontend/tests/zed.test.mjs",
+        "frontend/tests/tab-links.test.mjs"
+      ]
+    },
+    {
+      "date": "2026-10-10",
+      "reason": "The initial form-based conversation view did not follow Zed frontend state and rendering rules",
+      "changes": [
+        "Port config provider precedence and compact composer menus from the pinned Zed baseline",
+        "Port supported content visibility, thinking state and tool authorization rendering; use the host inline diff editor",
+        "Move all history discovery to the sidebar and open selected agents/history in workspace tabs",
+        "Preserve typed authentication state across HTTP and session snapshots; hide login after success without replaying prompts",
+        "Document upstream function mappings and host/capability differences for future backports",
+        "Exclude session defaults/favorites from adapter connection identity so composer settings changes do not spawn extra processes"
+      ],
+      "tests": [
+        "frontend/tests/zed.test.mjs",
+        "frontend/tests/tab-links.test.mjs",
+        "crates/zed/tests/integration.rs"
+      ]
+    },
+    {
+      "date": "2026-10-10",
+      "reason": "Review found secure-context-only tab IDs, request authentication overwritten by polling, and drafts lost during portal remounts",
+      "changes": [
+        "Generate tab IDs with crypto.getRandomValues, supported on LAN HTTP",
+        "Separate request authentication from snapshot flags and broadcast successful login for the same connection; retain pending authentication inputs",
+        "Keep transient composer drafts by workspace and tab ID, discard them on close/delete and publish late prompt acceptance without overwriting newer input"
+      ],
+      "tests": [
+        "frontend/tests/zed.test.mjs",
+        "frontend/tests/tab-links.test.mjs"
+      ]
+    }
+  ]
+}

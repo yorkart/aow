@@ -20,6 +20,7 @@ mod state;
 mod terminal;
 mod web;
 mod workspace_events;
+mod zed;
 
 pub use base_path::BasePath;
 pub use error::HttpError;

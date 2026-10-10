@@ -7,6 +7,7 @@ license.workspace = true
 [dependencies]
 aow-id = { path = "../id" }
 anyhow.workspace = true
+async-trait.workspace = true
 axum.workspace = true
 bytes.workspace = true
 chrono.workspace = true
@@ -23,6 +24,7 @@ aow-automations = { path = "../automations" }
 aow-workspaces = { path = "../workspaces" }
 aow-im = { path = "../im" }
 aow-config = { path = "../config" }
+aow-zed = { path = "../zed" }
 aow-filesystem = { path = "../filesystem" }
 aow-git-service = { path = "../git-service" }
 aow-operation-log = { path = "../operation-log" }

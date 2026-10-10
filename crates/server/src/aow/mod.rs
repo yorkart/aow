@@ -67,6 +67,7 @@ use settings::{
 
 pub(crate) use error::{AowError, aow_http_error};
 use error::{aow_response, snapshot_response};
+pub(crate) use settings::ZedSettingsFile;
 
 pub(crate) use agents::resolve_executable;
 pub(crate) use api::{resolve_session_locator, routes};

@@ -27,6 +27,31 @@ if [ ! -x "$server" ] || [ ! -f "$frontend/index.html" ]; then
     exit 1
 fi
 
+# Proxy settings belong to this user process, not the system LaunchDaemon plist.
+# Read them on every start as literal data; never source server.env as shell code.
+load_proxy_environment() {
+    proxy_file=${HOME:?HOME must be set}/.config/aow/server.env
+    [ -f "$proxy_file" ] || return 0
+    while IFS= read -r proxy_line || [ -n "$proxy_line" ]; do
+        case "$proxy_line" in *=*) ;; *) continue ;; esac
+        proxy_key=${proxy_line%%=*}
+        proxy_key=${proxy_key#"${proxy_key%%[![:space:]]*}"}
+        proxy_key=${proxy_key%"${proxy_key##*[![:space:]]}"}
+        case "$proxy_key" in
+            HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|NO_PROXY|http_proxy|https_proxy|all_proxy|no_proxy) ;;
+            *) continue ;;
+        esac
+        proxy_value=${proxy_line#*=}
+        proxy_value=${proxy_value#"${proxy_value%%[![:space:]]*}"}
+        proxy_value=${proxy_value%"${proxy_value##*[![:space:]]}"}
+        case "$proxy_value" in
+            \"*\"|\'*\') proxy_value=${proxy_value#?}; proxy_value=${proxy_value%?} ;;
+        esac
+        export "$proxy_key=$proxy_value"
+    done < "$proxy_file"
+}
+load_proxy_environment
+
 server_host=${AOW_SERVER_HOST:-127.0.0.1}
 set -- "$server" --frontend "$frontend" --host "$server_host"
 if [ -n "${AOW_SERVER_PORT:-}" ]; then

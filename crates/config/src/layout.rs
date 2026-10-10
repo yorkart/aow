@@ -7,6 +7,7 @@ pub(super) fn is_configuration(path: &Path) -> bool {
     if REGISTRIES.iter().any(|name| path == Path::new(name))
         || path == Path::new("review-providers.json")
         || path == Path::new("inbox/labels.json")
+        || path == Path::new("zed/settings.json")
     {
         return true;
     }
