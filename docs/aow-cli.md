@@ -69,7 +69,7 @@ aow-cli project get PROJECT-ID
 ```bash
 # 启动 Agent，并提交首个任务
 aow-cli agent create --project-id PROJECT-ID --cwd /repo \
-  --task '检查项目并修复测试失败'
+  --agent-id work-codex --task '检查项目并修复测试失败'
 
 # 查看已有 Agent 终端
 aow-cli agent list
@@ -79,7 +79,11 @@ aow-cli agent get --pane-id PANE-ID
 aow-cli agent submit --pane-id PANE-ID --task '继续处理剩余问题'
 ```
 
-`PANE-ID` 使用创建结果中的 `pane_id`。当前支持 `--agent codex`（默认）和 `--agent traecli`，启动配置沿用网页 **Settings → Agents**。项目须已注册，`--cwd` 须是该项目已存在的仓库或 worktree 根目录；需要新 worktree 时请先用 Git 创建。
+`PANE-ID` 使用创建结果中的 `pane_id`。使用 `--agent-id <配置ID>` 选择网页 **Settings → Agents** 中的配置，省略时使用 ID 为 `codex` 的配置。
+
+配置 ID 必填、区分大小写且唯一，限 1–80 个字母、数字、`-` 或 `_`；新建和复制配置时需自行填写，创建后不可修改。显示名称及其他配置仍可编辑；如需调整 ID，请删除旧配置后重新创建，并在使用该配置的地方重新选择新 ID。已有终端和自动化的配置引用不会自动替换。CLI 不再接受 `--agent`。
+
+交互式启动支持 Codex、TraeCode CLI、Hermes 和 Pi 类型的配置。项目须已注册，`--cwd` 须是该项目已存在的仓库或 worktree 根目录；需要新 worktree 时请先用 Git 创建。
 
 通过 `agent create` 启动 Codex（包括自定义 Codex 配置）时，AoW 会为本次启动追加 `-c check_for_update_on_startup=false`，关闭启动更新检查，避免升级选择阻塞输入就绪和任务提交。Inbox 执行共用此流程，也会生效；Agent 注册配置和 Codex 全局配置不变，网页手动创建的普通 Agent 终端仍沿用原配置。Agent 版本更新可在任务执行之外单独进行。
 
@@ -138,7 +142,7 @@ aow-cli automation create --file - --project-id TARGET-PROJECT-ID < task.json
 - 服务端重新生成任务 ID、时间和 revision，不复用原任务身份或执行历史。
 - 项目归属和 `workspace_path` 使用目标项目及其仓库根目录，忽略文件中的原值；`workspace_mode` 保留，因此选择新 Worktree 或临时工作区的任务仍按原模式执行；`dynamic` 任务的 `workspace_path` 清空，由执行入口提供。
 - 强制 `enabled: false`，定时任务以暂停状态保存，随后在网页确认配置并启用；手动任务保留手动类型，不产生定时计划。
-- 保留名称、提示词、Agent 类型、运行计划、并发数、提示词变量绑定、执行前检查及通知等任务配置。Agent 启动路径、启动参数和配置环境由目标机器重新解析；忽略源文件中的 `launch`、删除标记及运行状态。
+- 保留名称、提示词、Agent 类型、运行计划、并发数、提示词变量绑定及通知等任务配置。Agent 启动路径、启动参数和配置环境由目标机器重新解析；忽略源文件中的 `launch`、删除标记及运行状态。
 
 从零创建时可以使用下面的最小定时任务配置，无需填写项目、路径或启用状态：
 
@@ -153,7 +157,9 @@ aow-cli automation create --file - --project-id TARGET-PROJECT-ID < task.json
 }
 ```
 
-其他配置沿用网页创建接口：`kind`（默认 `scheduled`）、`prompt_bindings`、`base_branch`、`interval_seconds`、`cleanup_worktree`、`yolo`、`precheck_command`、`precheck_timeout_seconds` 和 `failure_notification`。工作区方式支持 `new_worktree`（新建 Worktree）、`existing`（已有 Worktree）、`temporary`（动态工作区 → 临时工作区）和 `dynamic`（动态工作区 → 动态指定）。`new_worktree` 使用 `base_branch` 作为基准，新 Worktree 创建在主仓库的同级目录，任务结束后清理；`temporary` 创建空目录，Automation 在任务结束后删除。`interval_seconds` 有值时按间隔运行，否则使用 `cron`；cron 按目标机器本地时区解释。手动任务使用 `kind: "manual"`，不填写 cron 或间隔。`dynamic` 仅供手动任务使用，模板的 `workspace_path` 留空；Web 手动执行时必须填写工作区目录，Autopilot 绑定时自动提供当前 Agent 的实际工作目录。
+`agent` 表示 Agent 类型；可选的 `agent_id` 指定 **Settings → Agents** 中的配置 ID，配置类型须与 `agent` 一致。省略时使用与类型同名的配置。
+
+其他配置沿用网页创建接口：`kind`（默认 `scheduled`）、`prompt_bindings`、`base_branch`、`interval_seconds`、`cleanup_worktree`、`yolo` 和 `failure_notification`。工作区方式支持 `new_worktree`（新建 Worktree）、`existing`（已有 Worktree）、`temporary`（动态工作区 → 临时工作区）和 `dynamic`（动态工作区 → 动态指定）。`new_worktree` 使用 `base_branch` 作为基准，新 Worktree 创建在主仓库的同级目录，任务结束后清理；`temporary` 创建空目录，Automation 在任务结束后删除。`interval_seconds` 有值时按间隔运行，否则使用 `cron`；cron 按目标机器本地时区解释。手动任务使用 `kind: "manual"`，不填写 cron 或间隔。`dynamic` 仅供手动任务使用，模板的 `workspace_path` 留空；Web 手动执行时必须填写工作区目录，Autopilot 绑定时自动提供当前 Agent 的实际工作目录。
 
 批量迁移时逐文件调用，失败后继续处理其他文件。下面的脚本适用于 Bash，结束时输出成功／失败数量；有文件失败则返回非零状态：
 

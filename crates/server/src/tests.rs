@@ -956,6 +956,10 @@ async fn aow_is_served_and_workspace_route_is_not_served() {
         "/aow/tabs/example/",
         "/aow/tabs/example?ui=mobile",
         "/aow/tabs/terminal/example",
+        "/aow/tabs/acp/f76b0ccc-fc72-4dea-abcf-8b81858cd764?workspace=%2FUsers%2Faow-service%2Fworkspace%2Fgithub.com%2Fyorkart%2Faow",
+        "/aow/tabs/acp/example?workspace=w&ui=mobile",
+        "/aow/tabs/acp/thread-id",
+        "/aow/tabs/acp/thread-id?ui=mobile",
         "/aow/tabs/files?workspace=w&path=%2Ftmp",
         "/aow/tabs/file?workspace=w&path=%2Ftmp%2Freadme.md",
         "/aow/tabs/diff?workspace=w&source=staged",
@@ -969,8 +973,9 @@ async fn aow_is_served_and_workspace_route_is_not_served() {
             .oneshot(Request::get(path).body(Body::empty()).unwrap())
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::OK, "{path}");
         assert_eq!(response.headers()[CACHE_CONTROL], "no-cache");
+        assert_eq!(response.headers()[CONTENT_TYPE], "text/html; charset=utf-8");
         assert!(
             String::from_utf8(to_bytes(response.into_body(), 1024).await.unwrap().to_vec())
                 .unwrap()

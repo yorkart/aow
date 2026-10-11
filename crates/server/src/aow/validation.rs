@@ -11,7 +11,6 @@ pub(super) fn validate_display_name(value: &str) -> Result<String, AowError> {
 }
 
 pub(super) fn validate_id(value: &str) -> Result<String, AowError> {
-    let value = value.trim();
     if value.is_empty()
         || value.len() > 80
         || !value
@@ -19,7 +18,7 @@ pub(super) fn validate_id(value: &str) -> Result<String, AowError> {
             .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
     {
         return Err(AowError::Invalid(
-            "agent id may only contain letters, numbers, '-' and '_'".to_owned(),
+            "Agent ID 必填，限 1–80 个字母、数字、- 或 _".to_owned(),
         ));
     }
     Ok(value.to_owned())

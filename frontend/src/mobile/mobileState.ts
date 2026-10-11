@@ -7,7 +7,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 
 export type MobileNavigate = (route: Partial<MobileRoute>, replace?: boolean) => void;
 
-export type MobileView = 'terminal' | 'sessions' | 'files' | 'git' | 'pull-requests' | 'automations' | 'inbox';
+export type MobileView = 'terminal' | 'sessions' | 'files' | 'git' | 'pull-requests' | 'automations' | 'inbox' | 'acp';
 export interface MobileRoute {
   workspace: string;
   view: MobileView;
@@ -15,6 +15,7 @@ export interface MobileRoute {
   file?: string;
   notes?: string;
   session?: string;
+  acpSession?: string;
   agent?: string;
   diff?: string;
   staged?: string;
@@ -38,7 +39,7 @@ export function readMobileRoute(hash = window.location.hash): MobileRoute {
   const view = params.get('view');
   return {
     ...Object.fromEntries(params), workspace: params.get('workspace') ?? '',
-    view: ['terminal', 'sessions', 'files', 'git', 'pull-requests', 'automations', 'inbox'].includes(view ?? '') ? view as MobileView : 'terminal',
+    view: ['terminal', 'sessions', 'files', 'git', 'pull-requests', 'automations', 'inbox', 'acp'].includes(view ?? '') ? view as MobileView : 'terminal',
   };
 }
 

@@ -63,6 +63,7 @@ impl Fixture {
         TerminalAgentProcess {
             pid,
             start_time: aow_process::info(pid).unwrap().start_time,
+            pi_binding: None,
             cwd: self
                 .directory
                 .path()
@@ -203,6 +204,7 @@ async fn native_process_title_matches_the_live_session() {
     let process = TerminalAgentProcess {
         pid,
         start_time: aow_process::info(pid).unwrap().start_time,
+        pi_binding: None,
         cwd: aow_process::cwd(pid)
             .unwrap()
             .to_string_lossy()

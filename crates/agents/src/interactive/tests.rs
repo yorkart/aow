@@ -5,6 +5,27 @@ fn lines(text: &str) -> Vec<String> {
 }
 
 #[test]
+fn pi_accepts_its_empty_editor_but_not_working_dialog_or_unconfigured_screens() {
+    for screen in [
+        "Welcome to Pi\n────────\n\n────────\n/workspace\n0.0%/200k (auto)   model",
+        "────────\n  \n────────\n~/repo (main) • Session\n?/200k (auto)    model • high\nstatus",
+    ] {
+        assert!(InteractiveAgent::Pi.input_ready(&lines(screen)), "{screen}");
+    }
+    for screen in [
+        "── Working ──\n\n────────\n/workspace\n0.0%/200k model",
+        "────────\nTrust this project?\n────────\n/workspace\n0.0%/200k model",
+        "────────\n\n────────\n/workspace\n0.0%/0 no-model",
+        "────────\nExisting input\n────────\n/workspace\n0.0%/200k model",
+    ] {
+        assert!(
+            !InteractiveAgent::Pi.input_ready(&lines(screen)),
+            "{screen}"
+        );
+    }
+}
+
+#[test]
 fn hermes_accepts_idle_cli_prompts_but_not_approval_clarification_or_working_states() {
     let agent = InteractiveAgent::Hermes;
     for screen in [

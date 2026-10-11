@@ -494,6 +494,7 @@ async fn uds_rest_is_idempotent_and_socket_is_private() {
     let health = daemon.client.health().await.unwrap();
     assert_eq!(health.service, "aow-terminald");
     assert!(!health.instance_id.is_empty());
+    assert_eq!(health.pid, Some(std::process::id()));
 
     let parent_mode = std::fs::metadata(daemon.socket.parent().unwrap())
         .unwrap()

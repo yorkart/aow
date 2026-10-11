@@ -11,7 +11,7 @@ try {
   const base = `http://127.0.0.1:${server.httpServer.address().port}`;
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
   const common = { revision: 1, agent: 'codex', project_id: 'project', project_name: 'Project', workspace_mode: 'existing', workspace_path: '/repo', cleanup_worktree: false,
-    base_branch: 'main', interval_seconds: null, max_concurrent_runs: 1, enabled: true, yolo: true, precheck_command: '', precheck_timeout_seconds: 60, failure_notification: null,
+    base_branch: 'main', interval_seconds: null, max_concurrent_runs: 1, enabled: true, yolo: true, failure_notification: null,
     created_at: '2026-09-23T00:00:00Z', updated_at: '2026-09-23T00:00:00Z', scheduler_error: null, next_run_at: null, last_run: null, is_running: false };
   async function fixture(t, { history = [], dynamic = false } = {}) {
     const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
@@ -182,11 +182,13 @@ try {
   });
 
   await test('editor preserves existing bindings until prompt changes and displays the saved replacements', async t => {
-    const { page, saves, errors } = await fixture(t);
+    const { page, saves, errors, tasks } = await fixture(t);
+    tasks[1].agent_id = 'Work_codex-2';
     await page.getByTitle('分支检查 · ID: 87654321', { exact: true }).click();
     await page.getByRole('button', { name: '编辑', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: '编辑手动任务' });
     await dialog.locator('.monaco-editor').waitFor();
+    assert.equal(await dialog.getByRole('combobox', { name: 'Agent', exact: true }).inputValue(), 'Work_codex-2');
     assert.deepEqual(await dialog.getByRole('region', { name: '任务变量' }).locator('code').allTextContents(), ['分支']);
     assert.equal(await dialog.getByLabel('运行计划', { exact: true }).count(), 0);
     assert.equal(await dialog.getByLabel('启用自动化', { exact: true }).count(), 0);
@@ -194,6 +196,8 @@ try {
     await dialog.getByRole('button', { name: '保存更改' }).click();
     await dialog.waitFor({ state: 'hidden' });
     assert.equal(saves[0].prompt_bindings.length, 2);
+    assert.equal(saves[0].agent_id, 'Work_codex-2');
+    assert.equal(saves[0].agent, 'codex');
     await page.getByRole('button', { name: '编辑', exact: true }).click();
     await dialog.locator('.monaco-editor [role="textbox"]').focus();
     await page.keyboard.press('ControlOrMeta+a');

@@ -1164,8 +1164,7 @@ async fn agent_registration_api_requires_a_supported_type() {
         Some(serde_json::json!("gemini")),
         Some(serde_json::json!("custom")),
     ] {
-        let mut request =
-            serde_json::json!({"display_name": "Custom wrapper", "command": "/bin/sh"});
+        let mut request = serde_json::json!({"id": "custom-wrapper", "display_name": "Custom wrapper", "command": "/bin/sh"});
         if let Some(agent_type) = agent_type {
             request["agent_type"] = agent_type;
         }
@@ -1209,7 +1208,7 @@ async fn agent_types_persist_for_multiple_custom_launch_configurations() {
         AgentType::Codex,
     ] {
         let registration = manager.register_agent(serde_json::from_value(serde_json::json!({
-            "agent_type": agent_type, "display_name": "My wrapper", "command": "/bin/sh",
+            "id": format!("wrapper-{}", registrations.len()), "agent_type": agent_type, "display_name": "My wrapper", "command": "/bin/sh",
             "args": ["-c", "printf configured"], "env": {"CUSTOM_ENDPOINT": "value with spaces", "EMPTY": ""}
         })).unwrap()).await.unwrap();
         assert_eq!(registration.agent_type, Some(agent_type));
@@ -1243,7 +1242,7 @@ async fn agent_types_persist_for_multiple_custom_launch_configurations() {
         assert_eq!(launch.env["CUSTOM_ENDPOINT"], "value with spaces");
         assert_eq!(launch.env["EMPTY"], "");
     }
-    let updated = manager.register_agent(serde_json::from_value(serde_json::json!({
+    let updated = manager.save_agent(Some(&registrations[0].id), serde_json::from_value(serde_json::json!({
         "id": registrations[0].id, "agent_type": "traecli", "display_name": "Another wrapper",
         "command": "/bin/sh", "args": ["--custom"]
     })).unwrap()).await.unwrap();
@@ -1279,7 +1278,10 @@ async fn legacy_agent_configuration_requires_type_only_when_identity_is_unknown(
     let mut update = serde_json::to_value(legacy).unwrap();
     update["agent_type"] = serde_json::json!("claude");
     let saved = manager
-        .register_agent(serde_json::from_value(update).unwrap())
+        .save_agent(
+            Some(update["id"].as_str().unwrap()),
+            serde_json::from_value(update.clone()).unwrap(),
+        )
         .await
         .unwrap();
     assert_eq!(saved.id, "custom-wrapper");
@@ -1287,7 +1289,7 @@ async fn legacy_agent_configuration_requires_type_only_when_identity_is_unknown(
     assert_eq!(saved.args, legacy.args);
     assert_eq!(saved.env, legacy.env);
     assert!(saved.available);
-    let mismatch = manager.register_agent(serde_json::from_value(serde_json::json!({
+    let mismatch = manager.save_agent(Some("codex"), serde_json::from_value(serde_json::json!({
         "id": "codex", "agent_type": "claude", "display_name": "Mismatch", "command": "/bin/sh"
     })).unwrap()).await;
     assert!(matches!(mismatch, Err(AowError::Invalid(_))));
@@ -1336,7 +1338,10 @@ async fn detected_agent_configuration_persists_launches_and_resets() {
         "env": {"AOW_AGENT_TEST": "value with spaces=equals", "EMPTY": "", "HOME": "/agent/home"}
     });
     manager
-        .register_agent(serde_json::from_value(request.clone()).unwrap())
+        .save_agent(
+            Some("codex"),
+            serde_json::from_value(request.clone()).unwrap(),
+        )
         .await
         .unwrap();
 
@@ -1384,14 +1389,17 @@ async fn detected_agent_configuration_persists_launches_and_resets() {
     update["args"] = serde_json::json!([]);
     update["env"] = serde_json::json!({});
     manager
-        .register_agent(serde_json::from_value(update).unwrap())
+        .save_agent(
+            Some(update["id"].as_str().unwrap()),
+            serde_json::from_value(update.clone()).unwrap(),
+        )
         .await
         .unwrap();
     let updated = manager.agents().await.unwrap();
     assert_eq!(updated.len(), 1);
     assert!(updated[0].args.is_empty());
     assert!(updated[0].env.is_empty());
-    manager.remove_agent("codex").unwrap();
+    manager.remove_agent("codex").await.unwrap();
     let restored = AowManager::persistent(directory.path())
         .unwrap()
         .agents()
@@ -1443,7 +1451,10 @@ async fn agent_configuration_rejects_invalid_environment_and_failed_writes() {
     update["args"] = serde_json::json!(["--changed"]);
     assert!(
         manager
-            .register_agent(serde_json::from_value(update).unwrap())
+            .save_agent(
+                Some(update["id"].as_str().unwrap()),
+                serde_json::from_value(update.clone()).unwrap(),
+            )
             .await
             .is_err()
     );

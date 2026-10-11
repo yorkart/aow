@@ -5,6 +5,7 @@ export const agentTypes: { id: AowAgentType; label: string; sessionTitleSource: 
   { id: 'codex', label: 'Codex', sessionTitleSource: 'terminal' },
   { id: 'traecli', label: 'TraeCode CLI', sessionTitleSource: 'terminal' },
   { id: 'hermes', label: 'Hermes', sessionTitleSource: 'native' },
+  { id: 'pi', label: 'Pi', sessionTitleSource: 'terminal' },
 ];
 
 export function agentSessionTitleSource(id?: string | null) {

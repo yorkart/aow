@@ -6,7 +6,7 @@ mod limits;
 mod model;
 mod platform;
 
-pub use identity::{environment, same_process};
+pub use identity::{environment, open_files, same_process};
 pub(crate) use limits::{COMMAND_LIMIT, ENVIRONMENT_LIMIT};
-pub use model::{ProcessCommand, ProcessInfo};
+pub use model::{OpenFile, ProcessCommand, ProcessInfo};
 pub use platform::{command, cwd, info, list_pids};

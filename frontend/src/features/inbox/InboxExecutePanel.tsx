@@ -7,7 +7,7 @@ import type { InboxExecuteOptions, InboxItem } from './types';
 import { WorkspaceSelect } from '../workspaces/WorkspaceSelect';
 import { workspaceConfig, type WorkspaceConfig } from '../workspaces/types';
 
-const interactiveAgent = (agent: AowAgent) => ['codex', 'traecli', 'hermes'].includes(agent.agent_type ?? agent.id);
+const interactiveAgent = (agent: AowAgent) => ['codex', 'traecli', 'hermes', 'pi'].includes(agent.agent_type ?? agent.id);
 
 export function InboxExecutePanel({ item, project, agents, busy, error, container, onClose, onSubmit }: {
   item: InboxItem;

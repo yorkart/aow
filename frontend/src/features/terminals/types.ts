@@ -17,6 +17,7 @@ export interface TerminalHosting {
 
 export interface TerminalPane {
   id: string;
+  parent_pane_id?: string | null;
   name: string;
   cwd: string;
   shell: string;
@@ -67,6 +68,12 @@ export interface TerminalAgentList {
   agents: Record<string, string | null>;
   titles: Record<string, string>;
   processes: Record<string, TerminalAgentProcess>;
+  activity: Record<string, TerminalPaneActivity>;
+}
+
+export interface TerminalPaneActivity {
+  cwd?: string;
+  foreground_command?: string;
 }
 
 export interface TerminalAgentProcess {

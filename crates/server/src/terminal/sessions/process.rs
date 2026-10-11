@@ -10,8 +10,21 @@ pub(in crate::terminal) fn same_process(process: &TerminalAgentProcess) -> bool 
 pub(in crate::terminal) fn process_environment(
     process: &TerminalAgentProcess,
 ) -> Option<SessionEnvironment> {
-    let bytes = aow_process::environment(process.pid, &process.start_time).ok()?;
-    Some(configuration_environment(&bytes))
+    let mut environment = match aow_process::environment(process.pid, &process.start_time) {
+        Ok(bytes) => configuration_environment(&bytes),
+        Err(_) if process.pi_binding.is_some() && same_process(process) => {
+            SessionEnvironment::new()
+        }
+        Err(_) => return None,
+    };
+    if let Some(binding) = process.pi_binding.as_ref().filter(|path| !path.is_empty()) {
+        // Use the original launch path if Pi's process title hid its environment.
+        // The adapter still verifies the binding's PID and cwd before using it.
+        environment
+            .entry("AOW_PI_BINDING".into())
+            .or_insert_with(|| PathBuf::from(binding));
+    }
+    Some(environment)
 }
 
 fn configuration_environment(bytes: &[u8]) -> SessionEnvironment {
@@ -57,6 +70,17 @@ mod tests {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]
     fn native_process_environment_uses_the_agents_config_and_rejects_stale_identity() {
+        check_native_environment(true);
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn pi_binding_survives_empty_native_environment_but_not_stale_process_identity() {
+        check_native_environment(false);
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn check_native_environment(include_configuration: bool) {
         use std::process::{Command, Stdio};
         struct ChildGuard(std::process::Child);
         impl Drop for ChildGuard {
@@ -69,6 +93,7 @@ mod tests {
         let root = directory.path().canonicalize().unwrap();
         let ready = root.join("environment.ready");
         let mut command = Command::new(std::env::current_exe().unwrap());
+        command.env_clear();
         command.args([
             "--ignored",
             "--exact",
@@ -81,8 +106,10 @@ mod tests {
             .flat_map(|agent| agent.definition().configuration_env.iter().copied())
             .chain(["HOME", "PATH"])
             .collect();
-        for key in &keys {
-            command.env(key, root.join(format!("{key} with spaces")));
+        if include_configuration {
+            for key in &keys {
+                command.env(key, root.join(format!("{key} with spaces")));
+            }
         }
         let mut child = ChildGuard(
             command
@@ -112,12 +139,18 @@ mod tests {
             pid: info.pid,
             start_time: info.start_time,
             cwd: root.to_string_lossy().into_owned(),
+            pi_binding: Some(root.join("binding.json").to_string_lossy().into_owned()),
         };
         assert!(same_process(&process));
         let environment = process_environment(&process).unwrap();
-        assert_eq!(environment.len(), keys.len());
-        for key in keys {
-            assert_eq!(environment[key], root.join(format!("{key} with spaces")));
+        if include_configuration {
+            assert_eq!(environment.len(), keys.len());
+            for key in keys {
+                assert_eq!(environment[key], root.join(format!("{key} with spaces")));
+            }
+        } else {
+            assert_eq!(environment.len(), 1);
+            assert_eq!(environment["AOW_PI_BINDING"], root.join("binding.json"));
         }
         assert!(!environment.contains_key("AOW_TEST_SECRET"));
         let original = process.start_time.clone();

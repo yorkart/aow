@@ -9,7 +9,7 @@ import type { AowAgentSession } from './types';
 import { MobilePageHeader, MobileRefresh, MobileState, mobileTime } from '../../mobile/MobilePrimitives';
 import { useMobileResource, useMobileScroll, type MobileRoute, type MobileNavigate } from '../../mobile/mobileState';
 
-const agents = ['codex', 'claude', 'traecli', 'hermes'] as const;
+const agents = ['codex', 'claude', 'traecli', 'hermes', 'pi'] as const;
 const statusNames = { completed: '已完成', failed: '失败', interrupted: '已中断', in_progress: '进行中' };
 
 export function MobileSessions({ route, visible, navigate, back }: { route: MobileRoute; visible: boolean; navigate: MobileNavigate; back: () => void }) {
@@ -50,11 +50,10 @@ export function MobileSessionReader({ session, workspace, back }: { session: Aow
       <MobileState error={snapshot.error} loading={snapshot.loading && !snapshot.data} retry={snapshot.reload} empty={snapshot.data?.turns.length === 0 ? '这个会话还没有可展示的对话。' : undefined} />
       {snapshot.data && <p className="mobile-reader-meta"><MessageSquare size={13} />快照更新于 {mobileTime(snapshot.data.captured_at)}{snapshot.data.truncated && ' · 仅展示最近 200 轮'}</p>}
       {snapshot.data?.turns.map((turn, index) => <article className="mobile-turn" key={turn.id}>
-        <div className="mobile-turn-label">第 {index + 1} 轮 · {statusNames[turn.status]}{index === snapshot.data!.turns.length - 1 && <span>最新一轮</span>}</div>
         <section className="mobile-message user"><SessionMessageContent text={turn.user.text} className="mobile-markdown" /></section>
         <section className="mobile-message assistant">
           <header className="mobile-session-agent">
-            <AgentIcon agentId={session.agent} /><strong>{{ codex: 'Codex', claude: 'Claude', traecli: 'TraeCode CLI', hermes: 'Hermes' }[session.agent]}</strong>
+            <AgentIcon agentId={session.agent} /><strong>{{ codex: 'Codex', claude: 'Claude', traecli: 'TraeCode CLI', hermes: 'Hermes', pi: 'Pi' }[session.agent]}</strong>
             <span className="mobile-session-agent-meta"><TokenUsageBadge usage={turn.usage} split />{turn.final?.timestamp && <time dateTime={turn.final.timestamp}>{mobileTime(turn.final.timestamp)}</time>}</span>
           </header>
           <SessionTurnProcess key={`${session.id}:${turn.id}:${index === snapshot.data!.turns.length - 1}`} turn={turn} isLatest={index === snapshot.data!.turns.length - 1} />

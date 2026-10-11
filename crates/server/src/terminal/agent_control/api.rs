@@ -163,6 +163,7 @@ async fn create_inner(
                 error: None,
                 task_submitted: false,
             }),
+            request.parent_pane_id,
         )
         .await
         .map_err(terminal_http_error)?;

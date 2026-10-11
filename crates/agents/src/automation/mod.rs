@@ -4,6 +4,7 @@ mod claude;
 mod codex;
 mod codex_like;
 mod hermes;
+mod pi;
 mod traecli;
 
 use crate::Agent;
@@ -44,6 +45,7 @@ pub enum AutomationAgent {
     TraeCli,
     Claude,
     Hermes,
+    Pi,
 }
 
 impl AutomationAgent {
@@ -53,6 +55,7 @@ impl AutomationAgent {
             Self::TraeCli => Agent::TraeCli,
             Self::Claude => Agent::Claude,
             Self::Hermes => Agent::Hermes,
+            Self::Pi => Agent::Pi,
         }
     }
     pub fn id(self) -> &'static str {
@@ -67,6 +70,7 @@ impl Agent {
             Self::TraeCli => Some(AutomationAgent::TraeCli),
             Self::Claude => Some(AutomationAgent::Claude),
             Self::Hermes => Some(AutomationAgent::Hermes),
+            Self::Pi => Some(AutomationAgent::Pi),
             _ => None,
         }
     }
@@ -79,6 +83,7 @@ impl AgentAutomation for AutomationAgent {
             Self::TraeCli => traecli::TraeCli.session_id_mode(),
             Self::Claude => claude::Claude.session_id_mode(),
             Self::Hermes => hermes::Hermes.session_id_mode(),
+            Self::Pi => pi::Pi.session_id_mode(),
         }
     }
     fn prompt_mode(&self) -> PromptMode {
@@ -93,6 +98,7 @@ impl AgentAutomation for AutomationAgent {
             Self::TraeCli => traecli::TraeCli.validate_arguments(arguments),
             Self::Claude => claude::Claude.validate_arguments(arguments),
             Self::Hermes => hermes::Hermes.validate_arguments(arguments),
+            Self::Pi => pi::Pi.validate_arguments(arguments),
         }
     }
     fn automation_arguments(&self, yolo: bool, session_id: Option<&str>) -> Result<Vec<String>> {
@@ -101,6 +107,7 @@ impl AgentAutomation for AutomationAgent {
             Self::TraeCli => traecli::TraeCli.automation_arguments(yolo, session_id),
             Self::Claude => claude::Claude.automation_arguments(yolo, session_id),
             Self::Hermes => hermes::Hermes.automation_arguments(yolo, session_id),
+            Self::Pi => pi::Pi.automation_arguments(yolo, session_id),
         }
     }
     fn session_from_line(&self, line: &[u8]) -> Option<String> {
@@ -109,6 +116,7 @@ impl AgentAutomation for AutomationAgent {
             Self::TraeCli => traecli::TraeCli.session_from_line(line),
             Self::Claude => claude::Claude.session_from_line(line),
             Self::Hermes => hermes::Hermes.session_from_line(line),
+            Self::Pi => pi::Pi.session_from_line(line),
         }
     }
 }

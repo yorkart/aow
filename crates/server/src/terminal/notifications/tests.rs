@@ -15,6 +15,7 @@ fn identity(title: &str) -> Identity {
         process: Some(TerminalAgentProcess {
             pid: 123,
             start_time: "1000".into(),
+            pi_binding: None,
             cwd: "/workspace/demo".into(),
         }),
         cwd: "/workspace/demo".into(),
@@ -97,6 +98,118 @@ fn refresh_keeps_existing_positions_and_new_candidates_start_at_eof() {
     stop(&a);
     registry.register("pane".into(), identity("title"), vec![a]);
     assert!(registry.poll().is_empty()); // re-entry has no historical cursor
+}
+
+#[test]
+fn codex_candidate_refresh_preserves_unread_completions_across_database_failure() {
+    use aow_agents::sessions::SessionRoots;
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().canonicalize().unwrap();
+    let sessions = root.join("sessions");
+    std::fs::create_dir(&sessions).unwrap();
+    let locator = fixture(&sessions, "session", 1);
+    let db = rusqlite::Connection::open(root.join("state_5.sqlite")).unwrap();
+    db.execute_batch(
+        "CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT,
+        cwd TEXT, title TEXT, name TEXT, created_at INTEGER, updated_at INTEGER);",
+    )
+    .unwrap();
+    db.execute(
+        "INSERT INTO threads VALUES (?1, ?2, ?3, 'Task', NULL, 1, 1)",
+        rusqlite::params![
+            locator.session_id,
+            locator.transcript_path.to_str(),
+            locator.cwd.to_str()
+        ],
+    )
+    .unwrap();
+    let mut identity = identity("Task");
+    identity.target = Target::Id(locator.session_id.clone());
+    identity.cwd = locator.cwd.to_string_lossy().into_owned();
+    identity.source_root = root.clone();
+    let roots = SessionRoots::from_configuration(
+        &root,
+        &SessionEnvironment::from([("CODEX_HOME".into(), root.clone())]),
+    );
+    let mut registry = Registry::default();
+    registry.refresh(
+        "pane".into(),
+        identity.clone(),
+        registry::candidates(&identity, roots.clone()),
+    );
+    assert_eq!(registry.readers.len(), 1);
+
+    db.execute_batch("BEGIN EXCLUSIVE").unwrap();
+    let unavailable = registry::candidates(&identity, roots.clone());
+    assert!(unavailable.is_none());
+    registry.refresh("pane".into(), identity.clone(), unavailable);
+    stop(&locator);
+    assert_eq!(registry.readers.len(), 1);
+    db.execute_batch("ROLLBACK").unwrap();
+    registry.refresh(
+        "pane".into(),
+        identity.clone(),
+        registry::candidates(&identity, roots.clone()),
+    );
+    let events = registry.poll();
+    assert_eq!(
+        events.len(),
+        1,
+        "recovery must not reattach at EOF and skip this completion"
+    );
+    assert_eq!(events[0].instance_ids, ["pane"]);
+    assert!(registry.poll().is_empty());
+
+    db.execute("DELETE FROM threads", []).unwrap();
+    registry.refresh(
+        "pane".into(),
+        identity.clone(),
+        registry::candidates(&identity, roots),
+    );
+    assert!(registry.readers.is_empty());
+    assert!(registry.bindings.is_empty());
+}
+
+#[test]
+fn concrete_codex_ids_keep_same_titles_separate_and_follow_rollout_replacement() {
+    let root = tempfile::tempdir().unwrap();
+    let a = fixture(root.path(), "a", 1);
+    let b = fixture(root.path(), "b", 2);
+    let mut first = identity("Same title");
+    first.target = Target::Id("a".into());
+    let mut second = identity("Same title");
+    second.target = Target::Id("b".into());
+    second.process.as_mut().unwrap().pid = 456;
+    let mut registry = Registry::default();
+    registry.register("pane-a".into(), first.clone(), vec![a.clone()]);
+    registry.register("pane-b".into(), second, vec![b.clone()]);
+    assert!(registry.same_candidates("pane-a", std::slice::from_ref(&a)));
+    stop(&a);
+    stop(&b);
+    let events = registry.poll();
+    assert_eq!(events.len(), 2);
+    for event in events {
+        assert_eq!(event.instance_ids, [format!("pane-{}", event.session_id)]);
+    }
+
+    let mut replacement = fixture(root.path(), "a-reverted", 3);
+    replacement.session_id = "a".into();
+    stop(&replacement); // Reverted history must not replay on attachment.
+    assert!(registry.unchanged("pane-a", &first));
+    assert!(!registry.same_candidates("pane-a", std::slice::from_ref(&replacement)));
+    registry.register("pane-a".into(), first, vec![replacement.clone()]);
+    assert!(!registry.readers.contains_key(&SessionKey::from(&a)));
+    assert_eq!(registry.readers.len(), 2);
+    assert!(registry.poll().is_empty());
+    stop(&a); // Old rollout no longer belongs to this pane.
+    stop(&replacement);
+    let events = registry.poll();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].session_id, "a");
+    assert_eq!(events[0].instance_ids, ["pane-a"]);
+
+    registry.readers.clear(); // Unchanged paths must preserve budget eviction.
+    assert!(registry.same_candidates("pane-a", &[replacement]));
 }
 
 #[test]
@@ -424,6 +537,7 @@ async fn codex_like_stops_use_the_expected_environment(with_process: bool) {
         TerminalAgentProcess {
             pid: info.pid,
             start_time: info.start_time,
+            pi_binding: None,
             cwd: aow_process::cwd(info.pid)
                 .unwrap()
                 .to_string_lossy()

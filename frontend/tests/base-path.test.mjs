@@ -133,7 +133,6 @@ try {
       await activeTab.waitFor();
       assert.equal(await page.locator('base').getAttribute('href'), `${base}/`);
       assert.equal(await page.locator('meta[name="aow-base-path"]').getAttribute('content'), base);
-      assert.equal(await page.locator('[aria-label="产品介绍（新窗口打开）"]').getAttribute('href'), 'https://yorkart.github.io/aow/');
       assert.equal((await context.cookies()).find(cookie => cookie.name.startsWith('aow_session'))?.path, `${base}/`);
       assert.ok(sockets.length > 0);
       assert.ok(sockets.every(path => path === `${base}/api/terminals/target/panes/pane/ws`));

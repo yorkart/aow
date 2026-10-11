@@ -4,7 +4,7 @@ import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
 
 export default tseslint.config(
-  { ignores: ['**/node_modules/**', '**/dist/**', 'target/**', 'website/_site/**', 'website/_snapshot/**'] },
+  { ignores: ['**/node_modules/**', '**/dist/**', 'target/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -15,7 +15,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['frontend/src/**/*.{ts,tsx}', 'website/snapshot/*.{ts,tsx}'],
+    files: ['frontend/src/**/*.{ts,tsx}'],
     plugins: { 'react-hooks': reactHooks },
     rules: {
       'react-hooks/rules-of-hooks': 'error',

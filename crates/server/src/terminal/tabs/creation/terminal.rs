@@ -33,6 +33,7 @@ impl TerminalManager {
         let now = timestamp();
         let pane = TerminalPane {
             id: pane_id.clone(),
+            parent_pane_id: None,
             name: default_pane_name(&cwd, &shell),
             cwd,
             shell,

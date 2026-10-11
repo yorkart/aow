@@ -44,6 +44,8 @@ function sessionAgent(id: string): AgentSection | undefined {
       return { id: 'codex', title: 'Codex' };
     case 'traecli':
       return { id: 'traecli', title: 'TraeCode CLI' };
+    case 'pi':
+      return { id: 'pi', title: 'Pi' };
     case 'hermes':
       return { id: 'hermes', title: 'Hermes' };
     default:
@@ -159,7 +161,7 @@ export function AgentSessions({ worktreePath, agents, activeSessionId, visible, 
           </AowListRow>)}
       </AowPanel>;
     })}
-    {!sections.length ? <div className="project-aow-session-empty"><History /><strong>暂无可用的 Session Agent</strong><span>请先注册 Claude Code、Codex、TraeCode CLI 或 Hermes。</span></div> : null}
+    {!sections.length ? <div className="project-aow-session-empty"><History /><strong>暂无可用的 Session Agent</strong><span>请先注册 Claude Code、Codex、TraeCode CLI、Hermes 或 Pi。</span></div> : null}
     {visible && menu ? <AgentSessionMenu {...menu} agents={agents} onOpen={onOpen} onResume={onResume} onClose={closeMenu} /> : null}
   </AowPanelStack>;
 }

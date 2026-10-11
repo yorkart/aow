@@ -25,6 +25,8 @@ const environment = {
 const daemonKeys = new Set(['HOME', 'USER', 'LOGNAME', 'SHELL', 'PATH', 'LANG', 'LC_ALL', 'LC_CTYPE',
   'AOW_RUNTIME_ROOT', 'AOW_SERVER_HOST', 'AOW_SERVER_PORT', 'AOW_SERVER_STATE_DIR', 'AOW_STATE_DIR',
   'AOW_TERMINALD_SOCKET', 'AOW_BASE_PATH', 'AOW_AUTH_SECURE_COOKIE', 'XDG_STATE_HOME', 'XDG_RUNTIME_DIR', 'AOW_LOG_MODE']);
+const proxyKeys = new Set(['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY',
+  'http_proxy', 'https_proxy', 'all_proxy', 'no_proxy']);
 if (process.env.USER) environment.USER = process.env.USER;
 // Match server_state_dir's environment > server.env > state-dir defaults.
 try {
@@ -33,6 +35,9 @@ try {
     const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
     if (!match) throw new Error('Unsupported server.env line; use KEY=value or KEY="value"');
     const [, key, raw] = match;
+    // The server launcher reads proxies on each start as the service account.
+    // Editing them must not change the root-owned plist or require registration.
+    if (proxyKeys.has(key)) continue;
     if (daemon && !daemonKeys.has(key)) {
       throw new Error(`Unsupported LaunchDaemon server.env key: ${key}; keep credentials out of system plists`);
     }

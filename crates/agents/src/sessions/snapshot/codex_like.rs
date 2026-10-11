@@ -1,5 +1,5 @@
 use super::*;
-use crate::sessions::usage::{CodexUsage, TokenUsage};
+use crate::sessions::usage::{CodexUsage, TokenUsage, TokenUsageParser};
 
 pub(super) fn parse_codex_like(path: &Path) -> Result<Vec<SnapshotTurn>, SnapshotError> {
     let file = File::open(path)?;

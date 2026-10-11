@@ -46,6 +46,7 @@ fn process(
             start_time: "123".to_owned(),
         },
         agent,
+        command_name: None,
     }
 }
 
@@ -91,7 +92,7 @@ fn native_scan_recognizes_all_agents_and_tracks_the_live_cwd_and_exit() {
     let root = directory.path().canonicalize().unwrap();
     let cwd = root.join("project with spaces");
     std::fs::create_dir(&cwd).unwrap();
-    for agent in ["claude", "codex", "traecli", "hermes"] {
+    for agent in ["claude", "codex", "traecli", "hermes", "pi"] {
         let ready = root.join(format!("{agent}-ready"));
         let tracker = Arc::new(SpawnTracker::default());
         // Give a harmless shell the Agent's argv[0]. This exercises native

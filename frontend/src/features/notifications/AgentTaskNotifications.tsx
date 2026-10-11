@@ -3,44 +3,20 @@ import { TokenUsageBadge } from '../../components/TokenUsageBadge';
 import { useEffect, useId, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Layers, X } from 'lucide-react';
 import './agent-task-notifications.css';
-import { useAowTerminalTabActivity, useAowTabNavigation } from '../../aow/AowTabEntry';
-import { parseTaskStop, taskNotifications, useTaskNotifications, type TaskNotice } from './taskNotifications';
+import { useAowTaskTabActivity } from '../../aow/AowTabEntry';
+import { noticeMatchesTarget, parseTaskStop, taskNotifications, useTaskNotifications, type TaskNotice } from './taskNotifications';
+import { useTaskNotice } from './useTaskNotice';
 import { AgentIcon } from '../agents/AgentIcon';
 
-const agentNames: Record<string, string> = { codex: 'Codex', traecli: 'TraeCode CLI', claude: 'Claude Code', hermes: 'Hermes' };
+const agentNames: Record<string, string> = { codex: 'Codex', traecli: 'TraeCode CLI', claude: 'Claude Code', hermes: 'Hermes', pi: 'Pi' };
 const visibleNoticeCount = 5;
 
 function TaskNoticeCard({ notice }: { notice: TaskNotice }) {
-  const navigateTab = useAowTabNavigation();
-  const [error, setError] = useState('');
-  const [opening, setOpening] = useState(false);
-  const sources = notice.sources.filter(source => source.tab_id);
-  const projectName = [...new Set(sources.map(source => source.project_name || source.workspace_root.split('/').filter(Boolean).pop() || '未命名项目'))].join('、')
-    || notice.cwd.split('/').filter(Boolean).pop() || '未命名项目';
-  const tabName = [...new Set(sources.map(source => source.tab_name || '未命名 Tab'))].join('、') || 'Tab 不可用';
-  const failure = error || (!sources.length ? '无法定位对应 Tab。' : '');
-  const dismiss = () => taskNotifications.dismiss(item => item.key === notice.key);
-  const open = async () => {
-    if (opening) return;
-    setOpening(true);
-    setError('');
-    // A session may have several source tabs. Open the first one still available.
-    let message = '';
-    for (const source of sources) {
-      try {
-        await navigateTab({ type: 'terminal', tabId: source.tab_id });
-        dismiss();
-        setOpening(false);
-        return;
-      } catch (reason) { message = reason instanceof Error ? reason.message : String(reason); }
-    }
-    setError(message);
-    setOpening(false);
-  };
+  const { projectName, tabName, failure, opening, canOpen, open, dismiss } = useTaskNotice(notice);
   return <article className="agent-task-notice" role="status">
     <button type="button" className="agent-task-notice-open" aria-label={`打开通知：${projectName} · ${tabName}`}
-      disabled={opening || !sources.length} aria-busy={opening} onClick={() => void open()}>
-      <span className="agent-task-notice-agent" title={agentNames[notice.agent] ?? notice.agent}><AgentIcon agentId={notice.agent} /></span>
+      disabled={opening || !canOpen} aria-busy={opening} onClick={() => void open()}>
+      <span className="agent-task-notice-agent" title={agentNames[notice.agent] ?? notice.agent}><AgentIcon agentId={notice.agent.replace(/-acp$/, '').replace(/^claude-agent$/, 'claude')} /></span>
       <span className="agent-task-notice-content">
         <span className="agent-task-notice-heading"><strong title={projectName}>{projectName}</strong>
           <time dateTime={new Date(notice.receivedAt).toISOString()} title={new Date(notice.receivedAt).toLocaleString()}>
@@ -65,7 +41,7 @@ export function AgentTaskNotifications() {
   const { notices: unreadNotices, storageError } = useTaskNotifications();
   const notices = unreadNotices.filter(notice => !notice.popupClosed);
   const [expanded, setExpanded] = useState(false);
-  const tabActivity = useAowTerminalTabActivity();
+  const tabActivity = useAowTaskTabActivity();
   const listId = useId();
   const list = useRef<HTMLDivElement>(null);
 
@@ -73,8 +49,8 @@ export function AgentTaskNotifications() {
 
   useEffect(() => {
     const dismissActive = () => {
-      const tabId = tabActivity.getCurrent();
-      if (tabId) taskNotifications.dismiss(notice => notice.sources.some(source => source.tab_id === tabId));
+      const target = tabActivity.getCurrent();
+      if (target) taskNotifications.dismiss(notice => !!noticeMatchesTarget(notice, target));
     };
     dismissActive();
     return tabActivity.subscribe(dismissActive);
@@ -86,7 +62,7 @@ export function AgentTaskNotifications() {
       let notice;
       try { notice = parseTaskStop(JSON.parse((event as MessageEvent<string>).data)); } catch { return; }
       if (!notice) return;
-      if (notice.sources.some(source => source.tab_id === tabActivity.getCurrent())) return;
+      if (noticeMatchesTarget(notice, tabActivity.getCurrent())) return;
       // This is a live callback, not session-level deduplication: every newly
       // consumed stop record gets its own notice, including subsequent turns.
       taskNotifications.add(notice);

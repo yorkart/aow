@@ -4,6 +4,44 @@ use serde_json::{Value, json};
 use std::process::Command;
 use support::run;
 
+#[test]
+fn create_records_explicit_or_inherited_parent_and_returns_it() {
+    for (inherited, explicit, expected) in [
+        (None, None, None),
+        (Some("parent-one"), None, Some("parent-one")),
+        (None, Some("parent-two"), Some("parent-two")),
+        (Some("parent-one"), Some("parent-two"), Some("parent-two")),
+    ] {
+        let mut args = vec![
+            "agent",
+            "create",
+            "--project-id",
+            "project-one",
+            "--cwd",
+            "/repo",
+        ];
+        if let Some(parent) = explicit {
+            args.extend(["--parent-pane-id", parent]);
+        }
+        let environment: Vec<_> = inherited
+            .map(|parent| ("AOW_PANE_ID", parent))
+            .into_iter()
+            .collect();
+        let mut reply = info("ready");
+        if let Some(parent) = expected {
+            reply["parent_pane_id"] = json!(parent);
+        }
+        let (output, _, body) =
+            support::run_with_env(&args, None, 200, reply.clone(), &environment);
+        assert!(output.status.success(), "{output:?}");
+        assert_eq!(body["parent_pane_id"], json!(expected));
+        assert_eq!(
+            serde_json::from_slice::<Value>(&output.stdout).unwrap(),
+            reply
+        );
+    }
+}
+
 fn info(phase: &str) -> Value {
     json!({"pane_id":"pane-one", "tab_id":"tab-one", "cwd":"/repo", "agent":"codex",
         "status":"running", "phase":phase, "task_submitted":false,
@@ -12,7 +50,14 @@ fn info(phase: &str) -> Value {
 
 #[test]
 fn create_reports_ready_and_preserves_failed_pane_identity() {
-    for (phase, agent) in [("ready", "codex"), ("failed", "codex"), ("ready", "hermes")] {
+    for (phase, agent) in [
+        ("ready", "codex"),
+        ("failed", "codex"),
+        ("ready", "hermes"),
+        ("ready", "pi"),
+        ("ready", "Work_codex-2"),
+        ("ready", "-Work_2"),
+    ] {
         let mut expected = info(phase);
         expected["agent"] = json!(agent);
         let (output, header, body) = run(
@@ -21,7 +66,7 @@ fn create_reports_ready_and_preserves_failed_pane_identity() {
                 "create",
                 "--project-id",
                 "project-one",
-                "--agent",
+                "--agent-id",
                 agent,
                 "--cwd",
                 "/repo",
@@ -120,7 +165,10 @@ fn agent_help_and_invalid_arguments_do_not_initialize_state() {
             "custom",
         ],
         vec!["agent", "create", "--timeout", "0"],
-        vec!["agent", "create", "--agent", "unknown"],
+        vec!["agent", "create", "--agent", "codex"],
+        vec!["agent", "create", "--agent-id", "bad.id"],
+        vec!["agent", "create", "--agent-id", "含中文"],
+        vec!["agent", "create", "--agent-id", "with space"],
         vec!["agent", "create", "--repo", "/repo"],
         vec!["agent", "create", "--project-id", "project"],
         vec!["agent", "create", "--cwd", "/repo"],

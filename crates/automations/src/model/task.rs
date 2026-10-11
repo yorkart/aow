@@ -41,6 +41,9 @@ pub struct TaskInput {
     #[serde(default)]
     pub prompt_bindings: Vec<PromptBinding>,
     pub agent: AgentKind,
+    /// Saved configuration ID; older tasks select the built-in configuration for their type.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_id: Option<String>,
     pub project_id: String,
     #[serde(flatten)]
     pub workspace: WorkspaceConfig,
@@ -62,17 +65,9 @@ pub struct TaskInput {
     /// Run the agent with its native Full Access / Yolo switch.
     #[serde(default = "default_yolo")]
     pub yolo: bool,
-    #[serde(default)]
-    pub precheck_command: String,
-    #[serde(default = "default_precheck_timeout")]
-    pub precheck_timeout_seconds: u64,
     /// Delivery preference only. The server handles notifications independently.
     #[serde(default)]
     pub failure_notification: Option<FailureNotification>,
-}
-
-fn default_precheck_timeout() -> u64 {
-    60
 }
 
 fn default_cleanup_worktree() -> bool {
@@ -84,6 +79,10 @@ fn default_yolo() -> bool {
 }
 
 impl TaskInput {
+    pub fn agent_id(&self) -> &str {
+        self.agent_id.as_deref().unwrap_or_else(|| self.agent.id())
+    }
+
     pub fn validate_schedule(&self) -> Result<()> {
         if self.kind == TaskKind::Manual {
             ensure!(
@@ -117,11 +116,6 @@ impl TaskInput {
             self.workspace.workspace_mode != WorkspaceMode::Dynamic
                 || self.kind == TaskKind::Manual,
             "仅手动任务支持动态指定工作区"
-        );
-        ensure!(self.precheck_command.len() <= 8192, "执行前检查命令过长");
-        ensure!(
-            (1..=3600).contains(&self.precheck_timeout_seconds),
-            "检查超时必须为 1–3600 秒"
         );
         ensure!(
             (1..=10).contains(&self.max_concurrent_runs),

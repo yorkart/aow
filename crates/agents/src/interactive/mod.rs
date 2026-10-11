@@ -3,6 +3,7 @@
 mod codex;
 mod footer;
 mod hermes;
+mod pi;
 mod traecli;
 
 use crate::Agent;
@@ -20,6 +21,7 @@ pub enum InteractiveAgent {
     Codex,
     TraeCli,
     Hermes,
+    Pi,
 }
 
 impl Agent {
@@ -28,6 +30,7 @@ impl Agent {
             Self::Codex => Some(InteractiveAgent::Codex),
             Self::TraeCli => Some(InteractiveAgent::TraeCli),
             Self::Hermes => Some(InteractiveAgent::Hermes),
+            Self::Pi => Some(InteractiveAgent::Pi),
             _ => None,
         }
     }
@@ -39,6 +42,7 @@ impl AgentInteractive for InteractiveAgent {
             Self::Codex => codex::Codex.input_ready(lines),
             Self::TraeCli => traecli::TraeCli.input_ready(lines),
             Self::Hermes => hermes::Hermes.input_ready(lines),
+            Self::Pi => pi::Pi.input_ready(lines),
         }
     }
 }

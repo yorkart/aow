@@ -3,10 +3,16 @@
 
 #[cfg(feature = "automation")]
 pub mod automation;
+#[cfg(any(feature = "launch", feature = "sessions"))]
+mod codex_command;
+#[cfg(feature = "launch")]
+mod codex_terminal;
 #[cfg(any(feature = "launch", feature = "automation"))]
 pub mod environment;
 #[cfg(feature = "launch")]
 pub mod launch;
+#[cfg(feature = "launch")]
+pub mod pi_bridge;
 #[cfg(feature = "sessions")]
 pub mod sessions;
 
@@ -15,4 +21,4 @@ pub mod process;
 mod registry;
 
 pub use process::{AgentProcessMatcher, ProcessInfo, recognize_process};
-pub use registry::{Agent, AgentDefinition, CLAUDE, CODEX, HERMES, KNOWN_AGENTS, TRAECLI};
+pub use registry::{Agent, AgentDefinition, CLAUDE, CODEX, HERMES, KNOWN_AGENTS, PI, TRAECLI};

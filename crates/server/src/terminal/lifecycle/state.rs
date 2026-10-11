@@ -4,12 +4,23 @@ use super::super::*;
 
 impl TerminalManager {
     pub(crate) fn in_memory(terminald: TerminaldClient) -> Self {
+        Self::in_memory_with_session_query_timeout(
+            terminald,
+            aow_agents::sessions::tracking::DEFAULT_QUERY_TIMEOUT,
+        )
+    }
+
+    pub(in crate::terminal) fn in_memory_with_session_query_timeout(
+        terminald: TerminaldClient,
+        session_query_timeout: Duration,
+    ) -> Self {
         let clipboard = clipboard::ClipboardStorage::temporary();
         let manager = Self {
             inner: Arc::new(ManagerInner {
                 metadata_path: None,
                 state: Mutex::new(ManagerState::default()),
                 terminald,
+                session_query_timeout,
                 daemon_instance_id: Mutex::new(None),
                 operation: tokio::sync::Mutex::new(()),
                 runtime_sync: tokio::sync::Mutex::new(()),
@@ -70,6 +81,7 @@ impl TerminalManager {
                     ..ManagerState::default()
                 }),
                 terminald,
+                session_query_timeout: aow_agents::sessions::tracking::DEFAULT_QUERY_TIMEOUT,
                 daemon_instance_id: Mutex::new(None),
                 operation: tokio::sync::Mutex::new(()),
                 runtime_sync: tokio::sync::Mutex::new(()),

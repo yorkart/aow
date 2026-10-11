@@ -9,7 +9,7 @@ use axum::{
 use std::{fs, os::unix::fs::PermissionsExt};
 use tower::ServiceExt;
 
-async fn call(
+pub(super) async fn call(
     router: &Router,
     method: &str,
     path: &str,
@@ -115,6 +115,13 @@ async fn cli_import_rebinds_saved_tasks_and_isolates_failures() {
     };
     let manager = state.automations.clone().unwrap();
     let router = crate::build_router(state.clone());
+    call(
+        &router,
+        "PUT",
+        "/api/aow/settings",
+        serde_json::json!({"execution_path":["/usr/bin", "/bin"]}),
+    )
+    .await;
     let (code, project) = call(&router, "POST", "/api/aow/projects", json!({
         "path": repository, "name":"Target project", "notes_path":directory.path().join("notes"),
     })).await;
@@ -140,7 +147,7 @@ async fn cli_import_rebinds_saved_tasks_and_isolates_failures() {
         "workspace_path":"/old/worktree", "workspace_mode":"new_worktree", "base_branch":"main",
         "cleanup_worktree":false, "cron":"0 9 * * 1-5", "interval_seconds":null,
         "max_concurrent_runs":3, "enabled":true, "yolo":false,
-        "precheck_command":"git status --porcelain", "precheck_timeout_seconds":42, "failure_notification":"feishu",
+        "failure_notification":"feishu",
         "launch":{"executable":"/old/codex", "args":["old-argument"], "environment":{"OLD_MACHINE_ONLY":"old"}},
         "deleted":true, "scheduler_error":"old error", "is_running":true,
     });
@@ -172,8 +179,6 @@ async fn cli_import_rebinds_saved_tasks_and_isolates_failures() {
         "interval_seconds",
         "max_concurrent_runs",
         "yolo",
-        "precheck_command",
-        "precheck_timeout_seconds",
         "failure_notification",
     ] {
         assert_eq!(created[field], source[field], "{field}");
@@ -808,6 +813,13 @@ async fn api_validates_temporary_and_dynamic_workspace_tasks() {
     };
     let manager = state.automations.clone().unwrap();
     let router = crate::build_router(state);
+    call(
+        &router,
+        "PUT",
+        "/api/aow/settings",
+        serde_json::json!({"execution_path":["/usr/bin", "/bin"]}),
+    )
+    .await;
     let (code, project) = call(
         &router,
         "POST",

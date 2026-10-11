@@ -47,7 +47,7 @@ async fn command_output(cwd: &Path, args: &[&str], deadline: Duration) -> Result
     let output = timeout(deadline, child.wait_with_output())
         .await
         .map_err(|_| {
-            AowError::Git(format!(
+            AowError::Timeout(format!(
                 "git {} timed out after {} seconds in {}",
                 args.join(" "),
                 deadline.as_secs(),

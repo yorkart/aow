@@ -1,4 +1,4 @@
-export type AutomationAgent = 'codex' | 'traecli' | 'claude' | 'hermes';
+export type AutomationAgent = 'codex' | 'traecli' | 'claude' | 'hermes' | 'pi';
 
 import type { WorkspaceConfig } from '../workspaces/types';
 export type { WorkspaceMode } from '../workspaces/types';
@@ -19,6 +19,7 @@ export interface TaskInput extends WorkspaceConfig {
   kind: TaskKind;
   prompt_bindings: PromptBinding[];
   agent: AutomationAgent;
+  agent_id?: string;
   project_id: string;
   cleanup_worktree: boolean;
   cron: string;
@@ -26,8 +27,6 @@ export interface TaskInput extends WorkspaceConfig {
   max_concurrent_runs: number;
   enabled: boolean;
   yolo: boolean;
-  precheck_command: string;
-  precheck_timeout_seconds: number;
   failure_notification: 'feishu' | 'wechat' | null;
 }
 

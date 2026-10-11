@@ -309,6 +309,7 @@ export function EditorArea({ documents, activeId, wordWrapOverride, onWordWrapCh
             {!active.loading && (active.kind === 'text' || active.kind === 'json') ? (
               <Editor
                 path={documentEditorModelPath(active)}
+                revealLocation={active.revealLocation}
                 keepCurrentModel
                 language={active.language}
                 value={active.content ?? ''}
@@ -322,6 +323,7 @@ export function EditorArea({ documents, activeId, wordWrapOverride, onWordWrapCh
                 <div className={`markdown-source-editor${active.markdownView === 'editor' ? '' : ' preview-hidden'}`} aria-hidden={active.markdownView !== 'editor'}>
                   <Editor
                     path={documentEditorModelPath(active)}
+                    revealLocation={active.revealLocation}
                     language={active.language ?? 'markdown'}
                     value={active.content ?? ''}
                     theme="vs-dark"

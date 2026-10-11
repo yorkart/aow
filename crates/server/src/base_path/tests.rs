@@ -75,6 +75,10 @@ async fn one_frontend_build_serves_root_and_subpath_including_deep_links() {
         for path in [
             "/aow/",
             "/aow/tabs/terminal/tab-1",
+            "/aow/tabs/acp/session-1?workspace=%2Frepo",
+            "/aow/tabs/acp/thread-id",
+            "/aow/tabs/acp/thread-id?ui=mobile",
+            "/aow/tabs/acp/session-1?workspace=%2Frepo&ui=mobile",
             "/m/",
             "/share/token",
             "/index.html",

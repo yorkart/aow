@@ -20,7 +20,8 @@ pub struct TerminaldHealth {
     pub service: String,
     pub instance_id: String,
     pub version: String,
-    /// Optional for compatibility with older daemons; used by launchd activation.
+    /// Used for process ownership checks and launchd activation.
+    /// Optional for compatibility with older daemons that omit their PID.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pid: Option<u32>,
 }

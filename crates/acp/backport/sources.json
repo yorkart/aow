@@ -1,0 +1,1347 @@
+{
+  "repository": "https://github.com/zed-industries/zed",
+  "commit": "dc3fb21676457b84d2233ac4c6bec5cebc698ec3",
+  "source_date": "2026-10-08",
+  "sdk": {
+    "package": "agent-client-protocol",
+    "version": "2.2.0",
+    "features": [
+      "unstable",
+      "unstable_protocol_v2"
+    ]
+  },
+  "last_sync": {
+    "date": "2026-10-10",
+    "kind": "SQLite metadata storage and queued writes against the pinned baseline",
+    "validated_by": [
+      "upstream conversion tests",
+      "stdio adapter fixture including authentication, config providers, permission previews, compaction state and notice dismissal",
+      "JSONC persistence tests",
+      "Chromium conversation and history interaction tests",
+      "Rust workspace tests",
+      "workspace build, typecheck and lint",
+      "backport source hashes",
+      "SQLite schema management, lazy loading, transactional failure/retry, coalescing and shutdown tests"
+    ]
+  },
+  "local_differences": [
+    "AoW owns independent JSONC configuration and file policy",
+    "AoW host modules own exclusive per-view session control, automatic restore, read-only observation and explicit takeover; ownership tokens stay outside the Rust ACP facade",
+    "Tokio and HTTP replace GPUI entities and callbacks",
+    "React components replace GPUI views",
+    "Terminal execution and terminal authentication are not advertised; legacy terminal_output metadata is supported for display-only output",
+    "History reads Zed-shaped SQLite metadata; AoW retains an independent SQLite offline transcript cache and ignores standalone JSON history",
+    "Protocol logs have service-wide count/byte limits and ended-connection eviction, thread_id/session_id/request/elicitation correlation, shared connection scope, per-thread queries across reconnections and deletion cleanup",
+    "Unknown session updates remain in snapshots and protocol logs without conversation cards",
+    "AoW Settings save events refresh the panel; configuration and execution PATH are read before connection reuse",
+    "Adapter launchers and their descendants share a dedicated process group for cleanup",
+    "AoW connection progress reports install phases, elapsed time and npm network retry codes through an additive facade query",
+    "The installed server launcher reads proxy variables from server.env at startup; Registry downloads and npm inherit them without changing macOS system plists",
+    "Settings Registry add saves JSONC and explicitly installs the adapter before new sessions are offered",
+    "The right ACP panel lists sessions; conversation content lives in central workspace tabs, with view-only close and reload restoration",
+    "Sidebar controls reuse AoW panel/list styles and conversations share its Conversation palette; persisted session links use the host tab router, with fresh-browser/mobile opening and reuse of existing floating views",
+    "React rendering ports the supported ACP branches from the pinned conversation, configuration and entry-state views; see frontend-behavior.md for function correspondence",
+    "DOM popovers, AoW Markdown and Monaco inline diffs replace native GPUI views; config search uses subsequence matching rather than upstream fuzzy ranking",
+    "Clipboard image mentions use browser editing, PNG/Base64 conversion and a bounded HTTP prompt body; file/context and attachment pickers and local prompt queueing are outside this port; authenticated live Codex and Claude prompts remain unverified",
+    "Out-of-band plan and notice snapshots preserve streamed message boundaries; notice dismissal persists across HTTP polling and reload; loading cached transcripts preserves their stored entry structure",
+    "rusqlite and a dedicated coalescing writer replace sqlez/GPUI; facade string IDs and one-workspace paths remain host adaptations, documented in persistence.md",
+    "ACP and Conversation share the host header, scrolling transcript, user/agent frames and turn navigation; an ACP-local turn adapter preserves entry rendering and its live composer",
+    "AoW API and view identity use thread_id and nullable session_id; durable preparation precedes adapter initialization, and thread metadata resolves workspace-free tab links. Snapshots use the current identity fields without aliases; saved tab descriptors require thread_id",
+    "AoW packages, module paths, CSS and DOM events use ACP names. Configuration and runtime storage are read only from the active ACP paths; former directories are not migrated. The facade, SQLite schema and thread identity are unchanged; upstream provenance is retained in this manifest.",
+    "Plan and request cards follow the pinned Zed structure with AoW Conversation colors, typography and a shared 900px content column; owner-controlled plan clearing persists through snapshot polling and reload without canceling execution",
+    "Successful live ACP prompts invoke the optional host turn-completed callback once; AoW shares its Terminal notification dispatcher, page/IM settings and unread queue, with ACP thread destinations and conservative response-usage deltas",
+    "Streaming persistence queues shared session references and captures bodies after a one-second coalescing window; generation/revision HTTP deltas carry entry replacements and text/terminal appends, while old terminal-output metadata is normalized on load. Zed uses GPUI events and virtual lists; AoW retains its offline body cache and React layout.",
+    "Browser history defaults to turn overviews; process bodies use scoped lazy reads and deltas only while expanded. Collapse unmounts details and releases their data and requests. Virtual lists and database repartitioning remain deferred."
+  ],
+  "files": [
+    {
+      "local": "frontend/src/features/acp/agent_ui/ui/command.tsx",
+      "kind": "host-port",
+      "reason": "Literal command rendering and copy behavior from render_collapsible_command, with scoped Bash syntax colors through Refractor and React text tokens",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/conversation_view/thread_view.rs",
+          "sha256": "d072e0555e4e1fac22239d6b82bd57a3839beb0643c721b5a748621f52bb01ea"
+        }
+      ],
+      "local_sha256": "15b631a6729528b3702bf8aa580fac00ccb7d7792a6b4948e19370834e3b6db7"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/ui/spinner_label.tsx",
+      "kind": "host-port",
+      "reason": "Generating and confirmation character frames and cycle durations from SpinnerLabel; DOM timers respect reduced motion",
+      "sources": [
+        {
+          "path": "crates/ui/src/components/label/spinner_label.rs",
+          "sha256": "61254b70d16d7a4b7166e0c20746b1ab40f765a12d22363e2b34f78af7863a20"
+        }
+      ],
+      "local_sha256": "6419e00045d0e3e039ae309489212929284cadb54e801c9b494ff6cc5ae18c03"
+    },
+    {
+      "local": "crates/acp/src/acp_thread/content.rs",
+      "kind": "import",
+      "reason": "Content conversion and original tests",
+      "sources": [
+        {
+          "path": "crates/acp_thread/src/content.rs",
+          "sha256": "3245d3ef648f3943de24ffd7f00e2604c01b02bac3e2e2c4cea6d2d980865cd1"
+        }
+      ],
+      "local_sha256": "3245d3ef648f3943de24ffd7f00e2604c01b02bac3e2e2c4cea6d2d980865cd1"
+    },
+    {
+      "local": "crates/acp/src/acp_thread/config_options.rs",
+      "kind": "import",
+      "reason": "Config value conversion and original tests",
+      "sources": [
+        {
+          "path": "crates/acp_thread/src/config_options.rs",
+          "sha256": "4e4d01438ce431378d8ee1c8ed9a39360ba5aa0b17805cfe39f067a4e7749891"
+        }
+      ],
+      "local_sha256": "4e4d01438ce431378d8ee1c8ed9a39360ba5aa0b17805cfe39f067a4e7749891"
+    },
+    {
+      "local": "crates/acp/src/acp_thread/auth_methods.rs",
+      "kind": "import",
+      "reason": "Authentication conversion and original tests",
+      "sources": [
+        {
+          "path": "crates/acp_thread/src/auth_methods.rs",
+          "sha256": "b898c12e70032c81cb9244c7ed081c4b442ba81dd9c11a322d42438493899459"
+        }
+      ],
+      "local_sha256": "b898c12e70032c81cb9244c7ed081c4b442ba81dd9c11a322d42438493899459"
+    },
+    {
+      "local": "crates/acp/src/acp_thread/prompt_capabilities.rs",
+      "kind": "import",
+      "reason": "Prompt capability conversion and original tests",
+      "sources": [
+        {
+          "path": "crates/acp_thread/src/prompt_capabilities.rs",
+          "sha256": "906809db85645b56ad007de56c7a392f00db36c0352cfa68228aa6289919d6f5"
+        }
+      ],
+      "local_sha256": "906809db85645b56ad007de56c7a392f00db36c0352cfa68228aa6289919d6f5"
+    },
+    {
+      "local": "crates/acp/src/acp_thread/mod.rs",
+      "kind": "host-port",
+      "reason": "AcpThread::handle_session_update and can_merge_message_chunks; persisted protocol IDs preserve message boundaries in serializable snapshots replacing GPUI entities",
+      "sources": [
+        {
+          "path": "crates/acp_thread/src/acp_thread.rs",
+          "sha256": "7e78b4dcde4ba3a329f35237ed1e0641ef793d3c58825f79a5382758e2f386fe"
+        }
+      ],
+      "local_sha256": "e200460cd53522984c4740a238c8ce709b8d6b1fad0abec750d022850b8cc92c"
+    },
+    {
+      "local": "crates/acp/src/acp_thread/defaults.rs",
+      "kind": "host-port",
+      "reason": "apply_default_config_options; dependent retry and conflict termination",
+      "sources": [
+        {
+          "path": "crates/agent_servers/src/acp.rs",
+          "sha256": "7bed9ea8c55ec5cd3ab35a1661cac89f059c013bb18f341c0f5892de1f83c906"
+        }
+      ],
+      "local_sha256": "a06b4a18fc0112e5ccbb8498f0f6ebac1ce25abf30fd0aabd7d28f4f57689241"
+    },
+    {
+      "local": "crates/acp/src/acp_thread/history.rs",
+      "kind": "host-port",
+      "reason": "AoW live snapshot cache and lazy body loading backed by the ported SQLite ThreadMetadataStore; lifecycle and permission flush boundaries",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/thread_metadata_store.rs",
+          "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
+        },
+        {
+          "path": "crates/agent/src/thread_store.rs",
+          "sha256": "44c97689232357b8d0ac22e080dd57c4e5cd46c663c0eb6251f083742ad15b3e"
+        }
+      ],
+      "local_sha256": "731e90725e98ffb57bd2a5053598d9a9a079d13de4f951a38ca2af6d755703d6"
+    },
+    {
+      "local": "crates/acp/src/agent_servers/mod.rs",
+      "kind": "host-port",
+      "reason": "Server/session lifecycle; Tokio ownership and stable facade integration",
+      "sources": [
+        {
+          "path": "crates/agent_servers/src/agent_servers.rs",
+          "sha256": "8be850db3dffae627929da9f0a5667c531637232d72b87f51e1540a3799149ab"
+        },
+        {
+          "path": "crates/agent_servers/src/acp.rs",
+          "sha256": "7bed9ea8c55ec5cd3ab35a1661cac89f059c013bb18f341c0f5892de1f83c906"
+        },
+        {
+          "path": "crates/agent/src/agent.rs",
+          "sha256": "21207d34f8c5d00db683bf2a92d4ac202eebeaf32c6427fe82c5856ced743c48"
+        }
+      ],
+      "local_sha256": "c21ffa054f0729d783816cd86344b8422e3eb8f6e170bef51ac1a2604c69a42c"
+    },
+    {
+      "local": "crates/acp/src/agent_servers/acp/mod.rs",
+      "kind": "host-port",
+      "reason": "AcpConnection::stdio, builder, initialization, capability gating and exit drain",
+      "sources": [
+        {
+          "path": "crates/agent_servers/src/acp.rs",
+          "sha256": "7bed9ea8c55ec5cd3ab35a1661cac89f059c013bb18f341c0f5892de1f83c906"
+        }
+      ],
+      "local_sha256": "c3333d89b2a60b8c24fc147b5b9cdacb7f7b3ee37cb9f1c4b4fb66a7e55c1ee7"
+    },
+    {
+      "local": "crates/acp/src/agent_servers/acp/client.rs",
+      "kind": "host-port",
+      "reason": "Client dispatch and request-scoped elicitations; Send callbacks replace GPUI foreground bridge",
+      "sources": [
+        {
+          "path": "crates/agent_servers/src/acp.rs",
+          "sha256": "7bed9ea8c55ec5cd3ab35a1661cac89f059c013bb18f341c0f5892de1f83c906"
+        }
+      ],
+      "local_sha256": "b42812689951be57bfb53c9a27830f8a94b81a99dbc578e525604c75d57bf4ad"
+    },
+    {
+      "local": "crates/acp/src/agent_servers/acp/transport.rs",
+      "kind": "host-port",
+      "reason": "spawn_stdio and StdioProcess; Tokio process ownership, literal args, no PTY",
+      "sources": [
+        {
+          "path": "crates/agent_servers/src/acp/transport.rs",
+          "sha256": "5285e811ad777321735fc2efc2bb6d53f2593e2141ff2a11f8dc98aac2415dbb"
+        }
+      ],
+      "local_sha256": "6c5078ca1eaf85bd7d21af5ac30cb314ae1ce3350bdeb77652056430c3b4fc1c"
+    },
+    {
+      "local": "crates/acp/src/agent_servers/acp/debug_log/mod.rs",
+      "kind": "host-port",
+      "reason": "AcpDebugLog bounded wire/stderr buffers; AoW adds direction-scoped request correlation, early thread identity and shared connection context",
+      "sources": [
+        {
+          "path": "crates/agent_servers/src/acp/debug_log.rs",
+          "sha256": "c8f0e0adca5611e02e31346b6fe55f1031aee344f6a89b91b8b40a1462f7f0cb"
+        }
+      ],
+      "local_sha256": "d3f3cd2be1999a180f776612d336d68f81fb2dfded5a568e09c5a84fd641085c"
+    },
+    {
+      "local": "crates/acp/src/project/agent_registry_store.rs",
+      "kind": "host-port",
+      "reason": "Registry schema, endpoint and platform selection; reqwest and local cache",
+      "sources": [
+        {
+          "path": "crates/project/src/agent_registry_store.rs",
+          "sha256": "506cf7d2bd59560a8c08e8bb2d1ff9ec89a55cc4d970cddec2e1eb3fbc43c9a8"
+        }
+      ],
+      "local_sha256": "cd38e60860feb32cb3522dfbe26b1f112359e3281920640fd185754532fea6e3"
+    },
+    {
+      "local": "crates/acp/src/project/agent_server_store.rs",
+      "kind": "host-port",
+      "reason": "Registry binary/npx resolution; independent adapter installation",
+      "sources": [
+        {
+          "path": "crates/project/src/agent_server_store.rs",
+          "sha256": "744931678ec66a62bbc63382c066b470d55b4cdda7c1c2c4f46515960f677cfe"
+        }
+      ],
+      "local_sha256": "295f0412e9d08b3d593ea586fa10100c29942bdabeb727b2abdc31fc7f5de8e2"
+    },
+    {
+      "local": "crates/acp/src/settings/agent.rs",
+      "kind": "host-port",
+      "reason": "CustomAgentServerSettings and value types; Extension alias excluded",
+      "sources": [
+        {
+          "path": "crates/settings_content/src/agent.rs",
+          "sha256": "c73b0054b545920f2b00ef56e6edcc9144c4723499f1df2e46cac97f4832f02e"
+        }
+      ],
+      "local_sha256": "9af4abff546e4d527a0805d122a39cd14c1fcd797cfe541fa17992b09e7c3eed"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/AgentPanel.tsx",
+      "kind": "presentation",
+      "reason": "Local metadata archive, workspace-scoped search and navigation; explicit external history import entry",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/agent_panel.rs",
+          "sha256": "7e2f206d637bfa316aa265b6d88efa8f5cde430d55502512d0f94d91ad29276f"
+        },
+        {
+          "path": "crates/agent_ui/src/threads_archive_view.rs",
+          "sha256": "7ac83d61e6bae05911f947ed316f339f3109f91e1651d55ff9d0cdae7ff0ade8"
+        },
+        {
+          "path": "crates/agent_ui/src/thread_metadata_store.rs",
+          "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
+        }
+      ],
+      "local_sha256": "b2303e67d703f090c7418a4ec53136a28a6e8defc9f34c39790b8526a96ce2bd"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/config_options.tsx",
+      "kind": "presentation",
+      "reason": "Config-provider precedence, grouped current-value menus, search, favorites, Boolean controls and automatic default persistence",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/config_options.rs",
+          "sha256": "22b6d7945e246b939051c43ba5367dffb12dff894cc9c7c2101c05b8d500f1f4"
+        },
+        {
+          "path": "crates/agent_ui/src/mode_selector.rs",
+          "sha256": "830f8ab97eb1d58720bcffe0a048bbf2a2a228a83a97bcff44048355babf921e"
+        },
+        {
+          "path": "crates/agent_ui/src/conversation_view.rs",
+          "sha256": "7be4ec6768ea1d9fcb04567e573e190cd7c7ebcb1030e85799beef1ee8e63ab9"
+        },
+        {
+          "path": "crates/agent_servers/src/custom.rs",
+          "sha256": "adceaf225a0eb21ac0f5416210d2288d82483a6b6bd47fa22e3f639286fafca4"
+        }
+      ],
+      "local_sha256": "981b11c73f6510c5654124230cbb03e99a0b93f25bbad3f1d6ffb0fe00cec95b"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/conversation_view/thread_view.tsx",
+      "kind": "presentation",
+      "reason": "Message grouping, thinking and tool presentation, plan summary, bottom composer, config toolbar, usage and advertised command suggestions",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/conversation_view/thread_view.rs",
+          "sha256": "d072e0555e4e1fac22239d6b82bd57a3839beb0643c721b5a748621f52bb01ea"
+        }
+      ],
+      "local_sha256": "309009827cbe753fda27f66ef460689551723622d351415c378b0b547d63dd58"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/conversation_view/plan.tsx",
+      "kind": "presentation",
+      "reason": "Collapsed plan state, current-task and completion summaries, status rows, bounded scrolling and explicit clearing from the pinned Zed plan views",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/conversation_view/thread_view.rs",
+          "sha256": "d072e0555e4e1fac22239d6b82bd57a3839beb0643c721b5a748621f52bb01ea"
+        },
+        {
+          "path": "crates/agent_ui/src/conversation_view.rs",
+          "sha256": "7be4ec6768ea1d9fcb04567e573e190cd7c7ebcb1030e85799beef1ee8e63ab9"
+        },
+        {
+          "path": "crates/acp_thread/src/acp_thread.rs",
+          "sha256": "7e78b4dcde4ba3a329f35237ed1e0641ef793d3c58825f79a5382758e2f386fe"
+        }
+      ],
+      "local_sha256": "bc944d802aac19b5c1daadf6be40af4145dfef45b352e830b05ae4b943dec30f"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/conversation_view/content.tsx",
+      "kind": "presentation",
+      "reason": "Plain user text, Agent Markdown output, resources and content-sized Monaco inline diffs with shared code typography",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/conversation_view/thread_view.rs",
+          "sha256": "d072e0555e4e1fac22239d6b82bd57a3839beb0643c721b5a748621f52bb01ea"
+        },
+        {
+          "path": "crates/agent_ui/src/agent_diff.rs",
+          "sha256": "fdb15530f447638b5f0d75c9a9d2be2edae4a37cfed3be03184b384c48577cd2"
+        }
+      ],
+      "local_sha256": "ae6a95fa386f71edd8069904ae22f2123415c8b561687daa52f1456d57418424"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/conversation_view/elicitation.tsx",
+      "kind": "presentation",
+      "reason": "ElicitationCard header, labeled form and radio/checkbox choices; flat permission options and explicit typed form/URL responses using the host theme",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/conversation_view/elicitation.rs",
+          "sha256": "49093882ec7f62fab57d4ad09228a2bcddd6da9dffef0d54555d9e5614f5a1e4"
+        },
+        {
+          "path": "crates/agent_ui/src/conversation_view/thread_view.rs",
+          "sha256": "d072e0555e4e1fac22239d6b82bd57a3839beb0643c721b5a748621f52bb01ea"
+        }
+      ],
+      "local_sha256": "171e03110811a4a6f883115aadf94464938237c5f7b9df03fb64ce6d6c18f06d"
+    },
+    {
+      "local": "crates/acp/src/node_runtime/mod.rs",
+      "kind": "host-port",
+      "reason": "NodeRuntime system discovery, npm installation, bounded_npm_package_spec and read_package_executable; resolve AoW node launcher symlinks before locating npm",
+      "sources": [
+        {
+          "path": "crates/node_runtime/src/node_runtime.rs",
+          "sha256": "df97d2c53d4dbf4e36fa0b51b64b72622709c449e2dd7f5228710377e58a7460"
+        },
+        {
+          "path": "crates/project/src/agent_server_store.rs",
+          "sha256": "744931678ec66a62bbc63382c066b470d55b4cdda7c1c2c4f46515960f677cfe"
+        }
+      ],
+      "local_sha256": "506326c71733bd18ca4705011e15a7b5d00cc883881c5f9eaedbd9d26da700c7"
+    },
+    {
+      "local": "crates/acp/src/agent_servers/progress.rs",
+      "kind": "local",
+      "reason": "AoW connection progress for the HTTP facade; local status tracking with no direct upstream counterpart",
+      "sources": [],
+      "local_sha256": "3bd3330f36122e3fb7337e717d0ff361deb90b3496f6890ac40a01a7a0043b8e"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/connection_progress.tsx",
+      "kind": "local",
+      "reason": "AoW presentation of connection phases, elapsed time and service proxy guidance; no direct upstream counterpart",
+      "sources": [],
+      "local_sha256": "77b6198fe2949eb584c6262a49505a3d9cbbecee7dcabf93228d50b103ef5bbc"
+    },
+    {
+      "local": "crates/acp/src/agent_servers/installation.rs",
+      "kind": "host-port",
+      "reason": "Explicit preparation via the existing Registry installer; AoW installation receipts and progress queries without creating ACP connections",
+      "sources": [
+        {
+          "path": "crates/project/src/agent_server_store.rs",
+          "sha256": "744931678ec66a62bbc63382c066b470d55b4cdda7c1c2c4f46515960f677cfe"
+        }
+      ],
+      "local_sha256": "c354800a674816c50e4259447919f1e3812f58dcc28fe53313cd8877b26213e3"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/SessionTab.tsx",
+      "kind": "presentation",
+      "reason": "Connection and explicit authentication state in a central workspace tab; the AoW owner automatically resumes saved or imported sessions",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/conversation_view.rs",
+          "sha256": "7be4ec6768ea1d9fcb04567e573e190cd7c7ebcb1030e85799beef1ee8e63ab9"
+        },
+        {
+          "path": "crates/agent_ui/src/agent_connection_store.rs",
+          "sha256": "87c68918effbadf9e9922bc9572890d65eba79ab85c35be12111c0782c1f0a0e"
+        }
+      ],
+      "local_sha256": "9f51d7b4d114c4085c24598866173c8901e658bf2f54b3f74139f402f1deb403"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/workspace_tabs.ts",
+      "kind": "local",
+      "reason": "AoW workspace tab descriptors, deduplication, view persistence and closing without deleting sessions",
+      "sources": [],
+      "local_sha256": "0cbb95aa42e1aa050182cecdeaeefb0073fac52ff6ec958a24f66291569b2c00"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/use_progress.ts",
+      "kind": "local",
+      "reason": "Shared HTTP polling of installation or connection progress",
+      "sources": [],
+      "local_sha256": "b601b1d223ac1abb190df6a575d548bf9aaf38d9cbf6919896244049b4d0dd59"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/conversation_view/entry_view_state.ts",
+      "kind": "presentation",
+      "reason": "Supported-content visibility and grouped entries; thinking display states and manual expansion rules; finalized turn-end controls and ToolCall raw-output fallback",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/entry_view_state.rs",
+          "sha256": "67f916b88920ba9c2bf58763b909cd2842f11436c37976a91f41da851569bb56"
+        },
+        {
+          "path": "crates/agent_ui/src/conversation_view/thread_view.rs",
+          "sha256": "d072e0555e4e1fac22239d6b82bd57a3839beb0643c721b5a748621f52bb01ea"
+        },
+        {
+          "path": "crates/acp_thread/src/acp_thread.rs",
+          "sha256": "7e78b4dcde4ba3a329f35237ed1e0641ef793d3c58825f79a5382758e2f386fe"
+        }
+      ],
+      "local_sha256": "203fcb3d23af94ee2a31dc836b0900e6c5936922ce3968613131174ee12bda1a"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/authentication.tsx",
+      "kind": "presentation",
+      "reason": "Explicit AuthRequired presentation, supported-method order, pending state and request-scoped elicitation",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/conversation_view.rs",
+          "sha256": "7be4ec6768ea1d9fcb04567e573e190cd7c7ebcb1030e85799beef1ee8e63ab9"
+        }
+      ],
+      "local_sha256": "e5f808e6af6b68b6e4e4fa999fc296c554c54cd07d339c60e24880c6d3e0876b"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/popover.tsx",
+      "kind": "local",
+      "reason": "DOM focus, keyboard navigation and viewport-clamped anchored menus replace GPUI popovers",
+      "sources": [],
+      "local_sha256": "85451d822ad33fc838160a3b08ba3dd62205481a011a973a8fa95b7495eff44e"
+    },
+    {
+      "local": "frontend/src/features/acp/request.ts",
+      "kind": "local",
+      "reason": "Independent HTTP adapter retains error codes for protocol-based authentication state",
+      "sources": [],
+      "local_sha256": "c9ccec79975dfba92301525608fcd5b83a18c45855017cbedd7c8df9d178d9ab"
+    },
+    {
+      "local": "crates/acp/src/facade/error.rs",
+      "kind": "host-port",
+      "reason": "Classify wrapped SDK AuthRequired errors without string matching; exported as an additive facade helper",
+      "sources": [
+        {
+          "path": "crates/agent_servers/src/acp.rs",
+          "sha256": "7bed9ea8c55ec5cd3ab35a1661cac89f059c013bb18f341c0f5892de1f83c906"
+        }
+      ],
+      "local_sha256": "b9e35caa1bb1b16d8f36684e6c50158f9631e9c0cc851e6aa0a37201f009184d"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/composer_drafts.ts",
+      "kind": "local",
+      "reason": "Transient composer store keyed by workspace and tab ID; portal remounts, close cleanup and late prompt response handling",
+      "sources": [],
+      "local_sha256": "a97ee08fab32dc8af53d0808f218999db7e432c7117a07c25f9aa536d8e3cc5d"
+    },
+    {
+      "local": "frontend/src/features/acp/api.ts",
+      "kind": "local",
+      "reason": "AoW HTTP operations with per-session control tokens and internal change notifications; successful authentication is shared across views of one connection",
+      "sources": [],
+      "local_sha256": "1205b85025bb71cec85bc6c0103df87bd3181b75deb98d02b20d8bd96e57553d"
+    },
+    {
+      "local": "crates/acp/src/acp_thread/terminals.rs",
+      "kind": "host-port",
+      "reason": "Legacy display terminal metadata accumulation and persistence; terminal execution remains unavailable",
+      "sources": [
+        {
+          "path": "crates/agent_servers/src/acp.rs",
+          "sha256": "7bed9ea8c55ec5cd3ab35a1661cac89f059c013bb18f341c0f5892de1f83c906"
+        },
+        {
+          "path": "crates/acp_thread/src/acp_thread.rs",
+          "sha256": "7e78b4dcde4ba3a329f35237ed1e0641ef793d3c58825f79a5382758e2f386fe"
+        }
+      ],
+      "local_sha256": "0aa627ac90035ad9b24603bd99a129ec4521ca8e1a22605f4e9e1890e8f246c3"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/conversation_view/terminal_output.tsx",
+      "kind": "host-port",
+      "reason": "Read-only Xterm output with shared code typography, ANSI updates, content sizing and bounded scrolling",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/conversation_view/thread_view.rs",
+          "sha256": "d072e0555e4e1fac22239d6b82bd57a3839beb0643c721b5a748621f52bb01ea"
+        }
+      ],
+      "local_sha256": "e713b4f3524ed2004a77a57daea3aea6d6f702f08c934e30506cab192ff6ec23"
+    },
+    {
+      "local": "crates/acp/src/acp_thread/compaction.rs",
+      "kind": "host-port",
+      "reason": "Compaction upsert, in-progress summary accumulation and absent/null/replacement patches",
+      "sources": [
+        {
+          "path": "crates/acp_thread/src/acp_thread.rs",
+          "sha256": "7e78b4dcde4ba3a329f35237ed1e0641ef793d3c58825f79a5382758e2f386fe"
+        }
+      ],
+      "local_sha256": "604330329e9b2695b109785ceb7fdba86e819850a0f7288bf914ed98fc6d7fb3"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/conversation_view/activity.tsx",
+      "kind": "presentation",
+      "reason": "Compaction lifecycle and details, notice severity, plain-text guidance and dismissal",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/conversation_view/thread_view.rs",
+          "sha256": "d072e0555e4e1fac22239d6b82bd57a3839beb0643c721b5a748621f52bb01ea"
+        }
+      ],
+      "local_sha256": "1066a60ca749bfa1aeca01d0929f285ffea214deb6c371e06c96d87cc5145c03"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/conversation_view/file_links.ts",
+      "kind": "presentation",
+      "reason": "Markdown and resource file paths resolve against the session cwd with optional line navigation",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/conversation_view/thread_view.rs",
+          "sha256": "d072e0555e4e1fac22239d6b82bd57a3839beb0643c721b5a748621f52bb01ea"
+        }
+      ],
+      "local_sha256": "69f45ca60f61ac35df41bdefde0c1e6434275b3bb1a2130d578a6fdf7e4d66d1"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/conversation_view/reply_actions.tsx",
+      "kind": "presentation",
+      "reason": "Whole-turn copy, prompt navigation and bottom-only scroll to top with upstream English tooltips; browser clipboard fallback and failure feedback",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/conversation_view/thread_view.rs",
+          "sha256": "d072e0555e4e1fac22239d6b82bd57a3839beb0643c721b5a748621f52bb01ea"
+        }
+      ],
+      "local_sha256": "e4057a00ed0fc40b14e9a7cc2f154275c4e4dae8cfbc3e60619310254897ab55"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/conversation_view/reply_action_icons.tsx",
+      "kind": "presentation",
+      "reason": "Pinned Zed reply control SVG paths with currentColor and Small (14px) sizing",
+      "sources": [
+        {
+          "path": "assets/icons/copy.svg",
+          "sha256": "91a44e5c8af0e9b0fed70c22483b55d5de5a8cbeb5682b9a0c976cefec374c8b"
+        },
+        {
+          "path": "assets/icons/user_arrow_up.svg",
+          "sha256": "d2db3edebf6cb1582e01a6558beecc1759abf9c5aef36ce490920f15e5fa90e6"
+        },
+        {
+          "path": "assets/icons/arrow_up.svg",
+          "sha256": "468699331d84f162ea0f6da4b81d0896fb8a4d7996d5de0c8aeeb0db585ede1f"
+        }
+      ],
+      "local_sha256": "79f06efccad2ef2e953e895cf1609287852902c9be0f57c2218414fff589e60b"
+    },
+    {
+      "local": "frontend/src/components/MarkdownContent.tsx",
+      "kind": "host-port",
+      "reason": "Shared DOM Markdown renderer with opt-in ACP local file links and unchanged URL sanitization",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/conversation_view/thread_view.rs",
+          "sha256": "d072e0555e4e1fac22239d6b82bd57a3839beb0643c721b5a748621f52bb01ea"
+        }
+      ],
+      "local_sha256": "5e33914686f4b616c6b50da9e7573fcdd660ba62fe8b07dfd0ae6d60ffe6f047"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/thread_import.tsx",
+      "kind": "presentation",
+      "reason": "Explicit external-agent import dialog: capability-gated paginated discovery, agent selection, authentication and metadata-only confirmation",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/thread_import.rs",
+          "sha256": "63726d9a4f29a4350814603af3d638bd4716cd1691c0286e345956a5198d7b6b"
+        },
+        {
+          "path": "crates/agent_ui/src/thread_metadata_store.rs",
+          "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
+        }
+      ],
+      "local_sha256": "1054a99263161adbb637722e054e2ff928adcd5bb19b8aa0a93953d79debb296"
+    },
+    {
+      "local": "crates/acp/src/agent_servers/imports.rs",
+      "kind": "host-port",
+      "reason": "Register imported metadata without protocol loading; validate workspace, preserve timestamps and deduplicate existing conversations",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/thread_import.rs",
+          "sha256": "63726d9a4f29a4350814603af3d638bd4716cd1691c0286e345956a5198d7b6b"
+        },
+        {
+          "path": "crates/agent_ui/src/thread_metadata_store.rs",
+          "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
+        }
+      ],
+      "local_sha256": "836dbeef93aa2db408dc7a3edb890f0209bb029b8e326b1d8dacd6d653ea88ab"
+    },
+    {
+      "local": "crates/acp/src/agent_ui/mod.rs",
+      "kind": "local",
+      "reason": "Module boundary for non-GPUI agent_ui persistence services",
+      "sources": [],
+      "local_sha256": "ae71ef0cff85da7353bc4eba9b78c052e843a7dc9e02a12ddfb26ed189c2139c"
+    },
+    {
+      "local": "crates/acp/src/agent_ui/thread_metadata_store/mod.rs",
+      "kind": "host-port",
+      "reason": "ThreadMetadata, ThreadMetadataStore cache and entry/save/save_all/reload/delete/dedup operation boundaries",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/thread_metadata_store.rs",
+          "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
+        }
+      ],
+      "local_sha256": "9cc3d16ad6e6112bac61d05a1570a083ea4373a9fcca20413bb11b5b83f7260b"
+    },
+    {
+      "local": "crates/acp/src/agent_ui/thread_metadata_store/db.rs",
+      "kind": "host-port",
+      "reason": "ThreadMetadataDb schema, LIST_QUERY and upsert/delete SQL; facade string IDs and single-cwd path encoding",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/thread_metadata_store.rs",
+          "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
+        }
+      ],
+      "local_sha256": "0ab532bfbf9920472477d706209e637d9785faf4b1c423884acb98ff8ecc7065"
+    },
+    {
+      "local": "crates/acp/src/agent_ui/thread_metadata_store/operations.rs",
+      "kind": "host-port",
+      "reason": "DbOperation coalescing and background drain; bounded latest-state queue, atomic snapshot extension and explicit flush replies",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/thread_metadata_store.rs",
+          "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
+        },
+        {
+          "path": "crates/agent/src/agent.rs",
+          "sha256": "21207d34f8c5d00db683bf2a92d4ac202eebeaf32c6427fe82c5856ced743c48"
+        }
+      ],
+      "local_sha256": "fa3826cdc402d999b2dfe5aae2df52bbbea956f157a972c2ca06fb2e6e0c25ed"
+    },
+    {
+      "local": "crates/acp/src/agent_ui/thread_metadata_store/tests.rs",
+      "kind": "host-port",
+      "reason": "Upstream operation-deduplication cases plus AoW SQLite persistence, ignored JSON history, recovery and failure-ordering regressions",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/thread_metadata_store.rs",
+          "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
+        }
+      ],
+      "local_sha256": "96298a576f7e7a7bfc1c86d9615875bf1c75a3b5c4af045483086df5706bb98c"
+    },
+    {
+      "local": "crates/acp/src/db/mod.rs",
+      "kind": "host-port",
+      "reason": "Thin rusqlite host equivalent of ThreadSafeConnection and domain migrations; WAL/private file creation",
+      "sources": [
+        {
+          "path": "crates/db/src/db.rs",
+          "sha256": "784711f3bfd1e46b5c1a0474b7c4cc13f9d62d3ed0cd7193c89642b91e2e8f42"
+        },
+        {
+          "path": "crates/sqlez/src/connection.rs",
+          "sha256": "f1bfc7e3fefa3409ce32f50d40ef41d338cf0427c4114e709c5fafb62152cd8e"
+        }
+      ],
+      "local_sha256": "b12661d086452cad14c1c020070e6e2c86e88d19cad30638a5a7993aca9d01b1"
+    },
+    {
+      "local": "crates/acp/src/acp_thread/snapshot_store.rs",
+      "kind": "host-port",
+      "reason": "AoW offline body cache using the native-agent versioned JSON and load_thread/save_thread/delete_thread boundary; no native-agent schema or execution state",
+      "sources": [
+        {
+          "path": "crates/agent/src/db.rs",
+          "sha256": "3fb7a86484a3eec7747d09f6e219bf7fd65f0e71451e72be27c0b2dc39e15772"
+        }
+      ],
+      "local_sha256": "8e407857f3b489593fed05bbd9266da74eaf17923fdb5241f867698d1b9c49f9"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/conversation_view/tool_call.tsx",
+      "kind": "presentation",
+      "reason": "Tool-kind labels, literal command cards, terminal cards, independent file navigation, raw input/output sections and permission preview ordering",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/conversation_view/thread_view.rs",
+          "sha256": "d072e0555e4e1fac22239d6b82bd57a3839beb0643c721b5a748621f52bb01ea"
+        }
+      ],
+      "local_sha256": "dfd3c71a353a0cffc9a799eb4a304bc4b369ba16f1fd8217f3baef24376aeccd"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/conversation_view/markdown.tsx",
+      "kind": "host-port",
+      "reason": "Agent soft breaks and sanitized host Markdown with copy/wrap controls that survive streaming replacements",
+      "sources": [
+        {
+          "path": "crates/markdown/src/markdown.rs",
+          "sha256": "5f434772735bc56b91ffca991fbb9026d3a950e251a4ef443ad7a02c1a268380"
+        }
+      ],
+      "local_sha256": "6c1842be01a4ca226692cfed6f96b3ce0c600f2e6ab5ac8083da26600c7c8ce1"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/conversation_view/clipboard.ts",
+      "kind": "local",
+      "reason": "Shared DOM clipboard fallback preserves selection and focus on HTTP origins",
+      "sources": [],
+      "local_sha256": "5f6ffb88d23ac264f43e74167c4805e01d21e8348b3c0c8359c213308b7a2037"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/ui/terminal_tool_header.tsx",
+      "kind": "presentation",
+      "reason": "Separate directory and status row with terminal disclosure; execution controls require an owned process",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/ui/terminal_tool_header.rs",
+          "sha256": "ec1ebda09796ea69feb148260643aacc0330a70407f816aa03e10c22bc1f9b03"
+        }
+      ],
+      "local_sha256": "39975827c3d7fb7fae3ab8da518ee603941a95a1733ce7af5f3e155622b43460"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/ui/copy_button.tsx",
+      "kind": "host-port",
+      "reason": "Accessible DOM copy action with explicit error feedback",
+      "sources": [
+        {
+          "path": "crates/ui/src/components/button/copy_button.rs",
+          "sha256": "3fec6dd13af5d466519df0aaa55ca4ff98da3b5a32a0ab1a6e93bd9ac9edea90"
+        }
+      ],
+      "local_sha256": "c0486493d58508298510ac80af02340702668a846fa2c05d7993cf5be5e6c56e"
+    },
+    {
+      "local": "frontend/src/components/conversation-theme.css",
+      "kind": "local",
+      "reason": "Shared Conversation palette and semantic font scale; ACP and session details consume the same base typography",
+      "sources": [],
+      "local_sha256": "fffab40ba2979c6c2956057cb475d26a79de4585d9dbed31de0070090d6197ae"
+    },
+    {
+      "local": "frontend/src/features/acp/acp.css",
+      "kind": "host-port",
+      "reason": "ACP tools, composer and activity-card styles; Zed plan/request structure with shared Conversation width, theme, typography and responsive scrolling",
+      "sources": [
+        {
+          "path": "crates/markdown/src/markdown.rs",
+          "sha256": "5f434772735bc56b91ffca991fbb9026d3a950e251a4ef443ad7a02c1a268380"
+        },
+        {
+          "path": "crates/ui/src/styles/typography.rs",
+          "sha256": "acff24b99d600f5d88f3550db0fde329fb7357c2f1da2cd07cd3456ba2438adf"
+        },
+        {
+          "path": "crates/agent_ui/src/conversation_view/thread_view.rs",
+          "sha256": "d072e0555e4e1fac22239d6b82bd57a3839beb0643c721b5a748621f52bb01ea"
+        },
+        {
+          "path": "crates/agent_ui/src/conversation_view/elicitation.rs",
+          "sha256": "49093882ec7f62fab57d4ad09228a2bcddd6da9dffef0d54555d9e5614f5a1e4"
+        }
+      ],
+      "local_sha256": "2db03f7f129e5ba924c2e4498f316527610f16833ed73d9a8ea7757520a224aa"
+    },
+    {
+      "local": "frontend/src/components/conversation/ConversationLayout.tsx",
+      "kind": "local",
+      "reason": "Host-owned shared conversation header, turn frames, navigation and scrolling; content slots preserve independent native and ACP process rendering",
+      "sources": [],
+      "local_sha256": "b522b6be78cc2e2e7e4423fe33570bc1a814ec42168280e11bc991e1d4738612"
+    },
+    {
+      "local": "frontend/src/components/conversation/conversation-layout.css",
+      "kind": "local",
+      "reason": "Shared page typography, header and navigation controls, responsive layout and ordinary message prose; process styles stay local to each renderer",
+      "sources": [],
+      "local_sha256": "091aa2646ec5f4ef396de983b1f0a7f338db76ee96ee54e33b25ade2d1e572a9"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/conversation_view/conversation_turns.ts",
+      "kind": "local",
+      "reason": "Host presentation adapter groups existing ACP message groups into user turns and preserves leading history without synthesizing prompts or historical statuses",
+      "sources": [],
+      "local_sha256": "86d7c4d66b980d67d7bd82cf35a33bccc270887b366f128a1767b913eb4707db"
+    },
+    {
+      "local": "crates/acp/src/agent_servers/lifecycle.rs",
+      "kind": "local",
+      "reason": "AoW durable thread preparation before adapter startup, retry identity and connection lookup during request-scoped elicitation",
+      "sources": [],
+      "local_sha256": "b4813c6fe25ab21179d50171f8b2c16a5484ad9cd5ea21631ab7acc903d4a139"
+    },
+    {
+      "local": "crates/acp/src/agent_servers/acp/debug_log/store.rs",
+      "kind": "local",
+      "reason": "AoW service-wide log retention with global record and byte budgets, ended-connection eviction and thread deletion cleanup; live transports hold only store handles",
+      "sources": [],
+      "local_sha256": "eda329c1c2c2d22bf98db1853f39866d0f6db938a641ee027d51fa124e2818bc"
+    },
+    {
+      "local": "crates/acp/src/agent_servers/acp/debug_log/contexts.rs",
+      "kind": "local",
+      "reason": "Bounded request and URL elicitation correlation retained independently of message buffers",
+      "sources": [],
+      "local_sha256": "d20b851da0eea94b142c6dba600f5ac70164fa42c3224de4915c1eb900c2dfd8"
+    },
+    {
+      "local": "frontend/src/features/acp/acp_tools/index.tsx",
+      "kind": "host-port",
+      "reason": "AcpTools log rows with direction colors, method and request chips, compact JSON previews, expandable highlighted bodies, copy and view clearing",
+      "sources": [
+        {
+          "path": "crates/acp_tools/src/acp_tools.rs",
+          "sha256": "be34274ff1a94f4ceaf96b382926e207a65a67521d6341046547911e7ce8dfc4"
+        }
+      ],
+      "local_sha256": "b6bebcff1c6a2ac2b67dd8ed184bdbd70ef14a7ce90ba6d3080e475e1efdec3c"
+    },
+    {
+      "local": "frontend/src/features/acp/acp_tools/messages.ts",
+      "kind": "host-port",
+      "reason": "Request/response method lookup scoped by connection and direction, JSON payload formatting and raw/truncated-record fallback",
+      "sources": [
+        {
+          "path": "crates/acp_tools/src/acp_tools.rs",
+          "sha256": "be34274ff1a94f4ceaf96b382926e207a65a67521d6341046547911e7ce8dfc4"
+        }
+      ],
+      "local_sha256": "772c6eda8a09683ef5f0b5c9e59f997ade891432336fdc90aa70a086cee42922"
+    },
+    {
+      "local": "frontend/src/features/acp/acp_tools/acp_tools.css",
+      "kind": "host-port",
+      "reason": "AcpTools row spacing, code palette, hover chips and horizontal JSON scrolling using shared Conversation typography",
+      "sources": [
+        {
+          "path": "crates/acp_tools/src/acp_tools.rs",
+          "sha256": "be34274ff1a94f4ceaf96b382926e207a65a67521d6341046547911e7ce8dfc4"
+        }
+      ],
+      "local_sha256": "182cb7398520f6eab23c149d6727183b4643f557292e3c40295f6ca3c9946c97"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/message_editor/model.ts",
+      "kind": "host-port",
+      "reason": "Clipboard image mentions, ordered prompt content and browser adaptation of native editor/image behavior",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/message_editor.rs",
+          "sha256": "1973b3080f665bac9bf7e2accdc2567eaaff511caa1a67d30d5495acd1fba7d0"
+        }
+      ],
+      "local_sha256": "899ca24fbdfe8a7e69e07e2e11968833c9538fd2bf744251ce53ca5bc4a9a3d7"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/message_editor/image.ts",
+      "kind": "host-port",
+      "reason": "Clipboard image mentions, ordered prompt content and browser adaptation of native editor/image behavior",
+      "sources": [
+        {
+          "path": "crates/language_model/src/request.rs",
+          "sha256": "0319d12d6dfc37e1fcc1457e2b88279ccaa6e50b37f5c777d44a70d9bb21e90e"
+        }
+      ],
+      "local_sha256": "7e85d5920851aca32c41aa187158dd0aa34767de0bd1cbb6664577f5fd350de5"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/message_editor/dom.ts",
+      "kind": "host-port",
+      "reason": "Clipboard image mentions, ordered prompt content and browser adaptation of native editor/image behavior",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/mention_set.rs",
+          "sha256": "dde8bdaeffe8503e8ab2814d7f971d6bd117dfb5314a60eefb6fb29d900f5649"
+        }
+      ],
+      "local_sha256": "a2070be7ddaa3ea178b3be8e9238226b4868f055ebf28c8b7dce021061be332c"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/message_editor/index.tsx",
+      "kind": "host-port",
+      "reason": "Clipboard image mentions, ordered prompt content and browser adaptation of native editor/image behavior",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/message_editor.rs",
+          "sha256": "1973b3080f665bac9bf7e2accdc2567eaaff511caa1a67d30d5495acd1fba7d0"
+        },
+        {
+          "path": "crates/agent_ui/src/mention_set.rs",
+          "sha256": "dde8bdaeffe8503e8ab2814d7f971d6bd117dfb5314a60eefb6fb29d900f5649"
+        },
+        {
+          "path": "crates/agent_ui/src/ui/mention_crease.rs",
+          "sha256": "039014b2642d3958800774bd50491fbe041a9d6ee392e101ad5a823e3575f7fe"
+        }
+      ],
+      "local_sha256": "2d477be8d5f17bfd66fa91461dfb4145472af394f37347b6615b4dda043553b7"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/message_editor/message_editor.css",
+      "kind": "host-port",
+      "reason": "Clipboard image mentions, ordered prompt content and browser adaptation of native editor/image behavior",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/ui/mention_crease.rs",
+          "sha256": "039014b2642d3958800774bd50491fbe041a9d6ee392e101ad5a823e3575f7fe"
+        }
+      ],
+      "local_sha256": "771c46eee449b0c741fb187d4abf18d847dfb1f248cab712a0e76caf2f98134a"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/message_editor/clipboard.ts",
+      "kind": "local",
+      "reason": "Browser clipboard serialization of selected text and Base64 images across editors; unlike upstream pasted-image mention URIs, carries the complete image payload",
+      "sources": [],
+      "local_sha256": "3578c3ddf0d541f3375c68ad9ed7d4aa31d2b20b6121a5b0b87eaf33982eb9d1"
+    },
+    {
+      "local": "crates/acp/src/agent_servers/completion.rs",
+      "kind": "local",
+      "reason": "AoW host completion callback payload and conservative per-turn deltas from cumulative ACP response usage; no upstream notification implementation is imported",
+      "sources": [],
+      "local_sha256": "b36727a25147adce963b035f1a28037a047ed8bcbac2a578d4d4f8756ff9df89"
+    },
+    {
+      "local": "crates/acp/src/acp_thread/updates/mod.rs",
+      "kind": "host-port",
+      "reason": "AoW generation/revision cursors and incremental browser updates adapted from ACP entry events, with bounded retention and snapshot fallback",
+      "sources": [
+        {
+          "path": "crates/acp_thread/src/acp_thread.rs",
+          "sha256": "7e78b4dcde4ba3a329f35237ed1e0641ef793d3c58825f79a5382758e2f386fe"
+        }
+      ],
+      "local_sha256": "2da50df45786d8a92e61f030a49e04fe4c455da6d1316b97af19136eaefd8312"
+    },
+    {
+      "local": "frontend/src/features/acp/session_updates.ts",
+      "kind": "host-port",
+      "reason": "AoW generation/revision cursors and incremental browser updates adapted from ACP entry events, with bounded retention and snapshot fallback",
+      "sources": [
+        {
+          "path": "crates/acp_thread/src/acp_thread.rs",
+          "sha256": "7e78b4dcde4ba3a329f35237ed1e0641ef793d3c58825f79a5382758e2f386fe"
+        }
+      ],
+      "local_sha256": "9a305693cba2af370718a575d90de01a981668d20fa65e47de1c1db55809e0b9"
+    },
+    {
+      "local": "crates/acp/src/acp_thread/overview/mod.rs",
+      "kind": "local",
+      "reason": "AoW browser turn overviews, live range indexes and scoped lazy process reads; canonical offline storage is unchanged",
+      "sources": [],
+      "local_sha256": "46a9278a41af88c9c5d27e369ad8c0f15f0fae12f1b3e816f6f9e19f0c7a9fee"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/conversation_view/entry_renderer.tsx",
+      "kind": "local",
+      "reason": "Shared ACP entry rendering mounted only for visible conclusions or expanded process details",
+      "sources": [],
+      "local_sha256": "825966835fb032f7634d90ec0ef3e74b06f5d89702894a5105f1c6af7a506748"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/conversation_view/process_details.tsx",
+      "kind": "local",
+      "reason": "AoW expanded-process request and cursor lifetime; collapse aborts requests and releases downloaded bodies",
+      "sources": [],
+      "local_sha256": "76d88e6b072c7779ddb08c16500d114b62ec537dfe4a0efc1013150128d54919"
+    },
+    {
+      "local": "frontend/src/features/acp/agent_ui/conversation_view/process_timeline.tsx",
+      "kind": "local",
+      "reason": "AoW process timeline and tool grouping; collapsed groups unmount heavy descendants",
+      "sources": [],
+      "local_sha256": "94c9d5f6dfb4e73f615ecb97652d7ba6401bd2d1bc71f8329cf3c33724262a87"
+    }
+  ],
+  "coverage": [
+    {
+      "behavior": "v1/v2 content, authentication, config and prompt capability conversion",
+      "tests": [
+        "crates/acp/src/acp_thread/content.rs",
+        "crates/acp/src/acp_thread/config_options.rs",
+        "crates/acp/src/acp_thread/auth_methods.rs",
+        "crates/acp/src/acp_thread/prompt_capabilities.rs"
+      ]
+    },
+    {
+      "behavior": "connection, dependent defaults, streamed events, file callbacks, explicit permission, cancel, history, load/resume, failed load, environment reload and process exit",
+      "tests": [
+        "crates/acp/tests/integration.rs",
+        "crates/acp/tests/fixtures/agent.mjs"
+      ]
+    },
+    {
+      "behavior": "independent JSONC file, unknown fields, comments, revision conflicts and Git history",
+      "tests": [
+        "crates/server/src/aow/settings/acp.rs",
+        "frontend/tests/acp.test.mjs"
+      ]
+    },
+    {
+      "behavior": "sidebar ordering, file location callback, permission interaction, typed elicitation and structural Registry configuration edits",
+      "tests": [
+        "frontend/tests/acp.test.mjs"
+      ]
+    },
+    {
+      "behavior": "Live Registry npm installation and codex-acp 2.1.1 initialization with node-only launcher PATH",
+      "status": "passed; isolated profile reports authentication required for session/new; authenticated prompts and Claude remain untested",
+      "tests": [
+        "crates/acp/tests/integration.rs::live_registry_adapter_initializes_with_node_only_path"
+      ]
+    },
+    {
+      "behavior": "ACP terminal execution and terminal authentication",
+      "status": "not advertised or implemented"
+    },
+    {
+      "behavior": "Node-only launcher PATH, local npm installation, package bin selection, literal arguments, working-directory independence and offline cache reuse",
+      "tests": [
+        "crates/acp/src/node_runtime/tests.rs"
+      ]
+    },
+    {
+      "behavior": "Live npm network retry progress, completed connection status and browser install progress/failure recovery",
+      "tests": [
+        "crates/acp/src/node_runtime/tests.rs",
+        "crates/acp/tests/integration.rs",
+        "frontend/tests/acp.test.mjs"
+      ]
+    },
+    {
+      "behavior": "Legacy proxy variables are accepted by privileged registration validation; generated service plists exclude runtime proxy settings",
+      "tests": [
+        "scripts/tests/launchdaemon-registration.test.mjs",
+        "scripts/tests/macos-release.test.mjs"
+      ]
+    },
+    {
+      "behavior": "Installed server reloads literal proxy variables on each start; proxy-only changes activate an existing LaunchDaemon and clear stale pending requests without administrator registration",
+      "tests": [
+        "scripts/tests/server-launcher.test.mjs",
+        "scripts/tests/macos-release.test.mjs"
+      ]
+    },
+    {
+      "behavior": "Explicit Registry install without starting adapters or sessions, persistent readiness, cache reuse, missing-entrypoint detection and failed-install retry",
+      "tests": [
+        "crates/acp/tests/installation.rs"
+      ]
+    },
+    {
+      "behavior": "Immediate Registry installation with JSONC preservation; session list, central workspace tabs, duplicate-open prevention, view-only close, reload restoration, login, connection retry, pending portal moves, explicit imports and persisted session links across fresh browsers, mobile, history navigation and floating views",
+      "tests": [
+        "frontend/tests/acp.test.mjs",
+        "frontend/tests/acp-preview.tsx",
+        "frontend/tests/tab-links.test.mjs"
+      ]
+    },
+    {
+      "behavior": "Typed AuthRequired classification, request-scoped authentication input, successful login state clearing without prompt replay, config provider presence including empty lists",
+      "tests": [
+        "crates/acp/src/facade/error.rs",
+        "crates/acp/tests/integration.rs"
+      ]
+    },
+    {
+      "behavior": "Zed config provider precedence, grouped choices, Boolean switches, favorites/default persistence, message visibility, plain user input, thinking auto/manual state, collapsed tools, permission expansion, inline diff and slash suggestions",
+      "tests": [
+        "frontend/tests/acp.test.mjs"
+      ]
+    },
+    {
+      "behavior": "Sidebar-only history with workspace filtering and deduplication; authentication forms without session creation; login dismissal, retained drafts and no replay for existing/shared connections",
+      "tests": [
+        "frontend/tests/acp.test.mjs"
+      ]
+    },
+    {
+      "behavior": "Composer default/favorite saves reuse the adapter process; subsequent sessions apply updated defaults while launch environment changes still create a new connection",
+      "tests": [
+        "crates/acp/tests/integration.rs::composer_preferences_reuse_the_adapter_and_apply_to_new_sessions",
+        "crates/acp/tests/integration.rs::changed_configuration_starts_a_fresh_adapter_and_resume_keeps_local_history"
+      ]
+    },
+    {
+      "behavior": "LAN HTTP creation without secure-context APIs; request-only resume authentication across stale snapshots and pending/shared login; drafts across portal/title changes, multiple tabs, close/reopen and late prompt responses",
+      "tests": [
+        "frontend/tests/acp.test.mjs"
+      ]
+    },
+    {
+      "behavior": "Completed-turn response controls, prompt navigation, raw output fallback and persisted display-only terminal streams",
+      "tests": [
+        "crates/acp/src/acp_thread/terminals.rs",
+        "crates/acp/tests/integration.rs::display_terminal_output_is_accumulated_and_persisted",
+        "frontend/tests/acp.test.mjs"
+      ]
+    },
+    {
+      "behavior": "SQLite metadata/cache persistence, lazy transcript hydration, ignored JSON history, deduplicated writes, failure rollback/retry and shutdown flushing",
+      "tests": [
+        "crates/acp/src/agent_ui/thread_metadata_store/tests.rs",
+        "crates/acp/tests/integration.rs::shutdown_flush_commits_streamed_content_without_waiting_for_prompt_completion",
+        "crates/acp/tests/integration.rs::failed_prompt_persistence_does_not_send_or_leave_the_session_working"
+      ]
+    },
+    {
+      "behavior": "Shared session/ACP base typography, literal wrapping commands and HTTP copy, tool-kind Markdown labels and file navigation, input/output ordering, permission preview deduplication, code controls across streaming and terminal failure states",
+      "tests": [
+        "frontend/tests/acp.test.mjs",
+        "frontend/tests/session-snapshot.test.mjs"
+      ]
+    },
+    {
+      "behavior": "Explicit thread_id/session_id API identity, durable pre-initialization creation, current saved tab fields, shared-connection log isolation and workspace-free links",
+      "tests": [
+        "crates/acp/src/agent_servers/acp/debug_log/tests.rs",
+        "crates/acp/tests/integration.rs::thread_identity_is_durable_before_initialization_and_survives_creation_failures",
+        "crates/acp/tests/integration.rs::reused_connection_logs_isolate_concurrent_threads_and_follow_recovery",
+        "crates/server/src/acp/control/http_tests.rs",
+        "crates/server/src/acp/control/tests.rs::deletion_waits_for_creation_and_rechecks_control_after_takeover",
+        "frontend/tests/acp.test.mjs",
+        "frontend/tests/tab-links.test.mjs"
+      ]
+    },
+    {
+      "behavior": "Zed-shaped ACP log rows, compact and expanded literal JSON, scoped response methods, copying, refresh, view clearing and narrow viewports",
+      "tests": [
+        "frontend/tests/acp.test.mjs"
+      ]
+    },
+    {
+      "behavior": "Default-collapsed plans, current/completed/canceled summaries, message-column alignment, scrolling, persisted clearing and new updates; question/permission card keyboard and explicit response behavior at desktop and mobile widths",
+      "tests": [
+        "frontend/tests/acp.test.mjs",
+        "crates/acp/tests/integration.rs",
+        "crates/server/src/acp/control/tests.rs"
+      ]
+    },
+    {
+      "behavior": "ACP per-prompt completion callbacks, cumulative usage baselines and history/no-replay exclusions; server notification dispatch preferences and encoded thread links; page notifications, ACP/Terminal identity isolation, unread persistence and desktop/mobile navigation",
+      "tests": [
+        "crates/acp/tests/integration.rs",
+        "crates/server/src/acp/notifications/tests.rs",
+        "frontend/tests/agent-notifications.test.mjs",
+        "frontend/tests/tab-links.test.mjs"
+      ]
+    }
+  ],
+  "local_fixes": [
+    {
+      "date": "2026-10-09",
+      "reason": "Registry npm adapters failed to spawn when AoW exposed only its node launcher symlink, without npm/npx on PATH",
+      "changes": [
+        "Resolve Node.js and sibling npm from the selected execution PATH",
+        "Install adapters in private versioned directories and launch package bin scripts with the absolute Node.js path",
+        "Preserve upstream bounded npm version specs and package executable selection",
+        "Report executable and working directory on spawn failures"
+      ],
+      "tests": [
+        "crates/acp/src/node_runtime/tests.rs",
+        "crates/acp/tests/integration.rs::live_registry_adapter_initializes_with_node_only_path"
+      ]
+    },
+    {
+      "date": "2026-10-09",
+      "reason": "Registry npm installation appeared stuck while npm retried network timeouts; LaunchDaemon rejected service-level proxy variables",
+      "changes": [
+        "Expose connection status through an additive facade query without changing connect or session interfaces",
+        "Show installation phases, elapsed time and safe npm network retry codes; preserve bounded failure output and installation timeout",
+        "Allow standard upper- and lowercase proxy variables in LaunchDaemon generation and registration",
+        "Keep proxy configuration in Environment server.env and document platform-specific activation steps"
+      ],
+      "tests": [
+        "crates/acp/src/node_runtime/tests.rs",
+        "crates/acp/tests/integration.rs",
+        "frontend/tests/acp.test.mjs",
+        "scripts/tests/launchdaemon-registration.test.mjs",
+        "scripts/tests/macos-release.test.mjs"
+      ]
+    },
+    {
+      "date": "2026-10-10",
+      "reason": "Putting proxy variables into the root-owned LaunchDaemon plist made ordinary service-account updates require administrator registration",
+      "changes": [
+        "Load only standard proxy variables as literal data in the installed server launcher on every start",
+        "Keep proxy settings out of generated system plists; preserve administrator registration for actual service configuration changes",
+        "Verify pending requests from the previous proxy implementation clear after successful ordinary activation",
+        "Update Environment guidance and packaging instructions"
+      ],
+      "tests": [
+        "scripts/tests/server-launcher.test.mjs",
+        "scripts/tests/macos-release.test.mjs"
+      ]
+    },
+    {
+      "date": "2026-10-10",
+      "reason": "Agent installation and conversation content were incorrectly deferred to and embedded in the right panel",
+      "changes": [
+        "Install Registry agents from Settings through additive facade methods; record readiness without starting a connection",
+        "Keep the sidebar focused on session navigation and render conversations in central workspace tabs",
+        "Preserve active sessions when views close and restore existing session views without creating sessions or replaying prompts",
+        "Reuse pending session creation when a tab changes portal host; clear the previous resource URL when ACP takes focus"
+      ],
+      "tests": [
+        "crates/acp/tests/installation.rs",
+        "frontend/tests/acp.test.mjs",
+        "frontend/tests/tab-links.test.mjs"
+      ]
+    },
+    {
+      "date": "2026-10-10",
+      "reason": "The initial form-based conversation view did not follow Zed frontend state and rendering rules",
+      "changes": [
+        "Port config provider precedence and compact composer menus from the pinned Zed baseline",
+        "Port supported content visibility, thinking state and tool authorization rendering; use the host inline diff editor",
+        "Move all history discovery to the sidebar and open selected agents/history in workspace tabs",
+        "Preserve typed authentication state across HTTP and session snapshots; hide login after success without replaying prompts",
+        "Document upstream function mappings and host/capability differences for future backports",
+        "Exclude session defaults/favorites from adapter connection identity so composer settings changes do not spawn extra processes"
+      ],
+      "tests": [
+        "frontend/tests/acp.test.mjs",
+        "frontend/tests/tab-links.test.mjs",
+        "crates/acp/tests/integration.rs"
+      ]
+    },
+    {
+      "date": "2026-10-10",
+      "reason": "Review found secure-context-only tab IDs, request authentication overwritten by polling, and drafts lost during portal remounts",
+      "changes": [
+        "Generate tab IDs with crypto.getRandomValues, supported on LAN HTTP",
+        "Separate request authentication from snapshot flags and broadcast successful login for the same connection; retain pending authentication inputs",
+        "Keep transient composer drafts by workspace and tab ID, discard them on close/delete and publish late prompt acceptance without overwriting newer input"
+      ],
+      "tests": [
+        "frontend/tests/acp.test.mjs",
+        "frontend/tests/tab-links.test.mjs"
+      ]
+    },
+    {
+      "date": "2026-10-10",
+      "reason": "Unified plain tool headers lost Zed command typography and tool-specific expanded details",
+      "changes": [
+        "Separate command, terminal and ordinary tool rendering behind the unchanged ACP facade",
+        "Share Conversation base typography and give code, tool labels and metadata explicit font roles",
+        "Follow Zed raw-input visibility and permission preview ordering; preserve Markdown/file interactions",
+        "Provide copy/wrap actions and content-sized terminal/diff output"
+      ],
+      "tests": [
+        "frontend/tests/acp.test.mjs",
+        "frontend/tests/session-snapshot.test.mjs",
+        "frontend/tests/architecture.test.mjs"
+      ]
+    },
+    {
+      "date": "2026-10-11",
+      "reason": "Name AoW-owned ACP modules and storage consistently while retaining the pinned upstream backport source map",
+      "changes": [
+        "Rename the Rust crate, server modules, frontend directory, CSS identifiers, events and test fixtures to ACP",
+        "Read configuration and runtime state directly from ACP paths; initialization starts fresh when no ACP state exists",
+        "Keep public facade behavior, protocol identity, session URLs, SQLite schema and browser storage keys unchanged"
+      ],
+      "tests": [
+        "crates/acp/tests/installation.rs",
+        "crates/acp/tests/integration.rs",
+        "frontend/tests/acp.test.mjs",
+        "frontend/tests/tab-links.test.mjs"
+      ]
+    }
+  ]
+}

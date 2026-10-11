@@ -1,0 +1,15 @@
+.worktree-creation-progress .project-aow-dialog-body { overflow:auto; }
+.worktree-creation-target { display:flex; flex-direction:column; gap:5px; margin:0; }
+.worktree-creation-target code { overflow-wrap:anywhere; color:var(--aow-text-secondary); font-size:12px; }
+.worktree-creation-steps { display:flex; flex-direction:column; gap:10px; list-style:none; padding:0; margin:16px 0; }
+.worktree-creation-steps li { display:flex; align-items:flex-start; gap:10px; padding:10px; border:1px solid #3b414b; border-radius:5px; }
+.worktree-creation-steps li > svg { flex-shrink:0; margin-top:2px; }
+.worktree-creation-steps li > div { display:flex; flex-direction:column; gap:5px; min-width:0; }
+.worktree-creation-steps strong { font-size:13px; }
+.worktree-creation-steps span { color:var(--aow-text-secondary); font-size:12px; }
+.worktree-creation-steps p { white-space:pre-wrap; overflow-wrap:anywhere; margin:0; font-size:12px; }
+.worktree-creation-steps .running { border-color:var(--aow-accent); }
+.worktree-creation-steps .succeeded > svg { color:#82c99b; }
+.worktree-creation-steps .failed,.worktree-creation-steps .timed_out,.worktree-creation-steps .interrupted { color:#edaaa4; }
+.worktree-creation-steps .pending,.worktree-creation-steps .skipped { color:var(--aow-text-secondary); }
+.worktree-creation-progress .project-aow-error { white-space:pre-wrap; overflow-wrap:anywhere; }

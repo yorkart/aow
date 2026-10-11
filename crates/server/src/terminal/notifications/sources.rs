@@ -44,6 +44,7 @@ pub(super) async fn add_sources(
                 tab_id: tab.id.clone(),
                 tab_name: displayed_tab_name(tab, detected),
                 tab_url: None,
+                thread_id: None,
             });
         }
     }

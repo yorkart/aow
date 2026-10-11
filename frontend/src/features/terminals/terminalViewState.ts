@@ -13,6 +13,23 @@ const subscribe = (listener: () => void) => {
 };
 const snapshot = () => connections;
 
+const selectionListeners = new Set<() => void>();
+let requestedPane: { tabId: string; paneId: string } | undefined;
+const selectionSnapshot = () => requestedPane;
+const subscribeSelection = (listener: () => void) => {
+  selectionListeners.add(listener);
+  return () => { selectionListeners.delete(listener); };
+};
+
+export function requestTerminalPaneSelection(tabId: string, paneId: string) {
+  requestedPane = { tabId, paneId };
+  for (const listener of selectionListeners) listener();
+}
+
+export function useTerminalPaneSelection() {
+  return useSyncExternalStore(subscribeSelection, selectionSnapshot);
+}
+
 function update(key: string, state?: TerminalConnectionState) {
   if (connections.get(key) === state) return;
   const next = new Map(connections);

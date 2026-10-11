@@ -4,6 +4,7 @@ mod claude;
 mod codex;
 mod hermes;
 mod info;
+mod pi;
 mod traecli;
 
 pub use info::ProcessInfo;
@@ -19,7 +20,7 @@ impl Agent {
     pub fn detects_processes(self) -> bool {
         matches!(
             self,
-            Self::Codex | Self::Claude | Self::TraeCli | Self::Hermes
+            Self::Codex | Self::Claude | Self::TraeCli | Self::Hermes | Self::Pi
         )
     }
 }
@@ -31,6 +32,7 @@ impl AgentProcessMatcher for Agent {
             Self::Claude => claude::Claude.matches_process(process),
             Self::TraeCli => traecli::TraeCli.matches_process(process),
             Self::Hermes => hermes::Hermes.matches_process(process),
+            Self::Pi => pi::Pi.matches_process(process),
             _ => false,
         }
     }

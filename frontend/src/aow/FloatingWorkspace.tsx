@@ -106,6 +106,7 @@ export function FloatingWorkspace({ agents, projects, activeLocation = true }: {
         }}
         onOpenBrowser={() => create('files')} onCreateNote={kind => create(kind === 'md' ? 'markdown' : 'text')}
         onCreateTerminal={agent => create('terminal', agent)} newLabel="浮动工作区新建" tabListLabel="浮动工作区标签"
+        onCreateAcp={floating.globalRoot ? agentId => floating.sources.current.get(floating.globalRoot)?.createAcp(agentId) : undefined}
         leadingControls={<button className={`floating-workspace-inbox-tab${floating.inboxOpen ? ' active' : ''}`} aria-label="Inbox" aria-pressed={floating.inboxOpen} onClick={() => { floating.openInbox(); syncLocation(undefined); }}><Inbox size={15} />Inbox</button>}
         controls={<div className="floating-workspace-window-actions">
           <button title="全局项目面板" aria-label="全局项目面板" aria-pressed={floating.sidebarOpen} onClick={() => floating.setSidebarOpen(!floating.sidebarOpen)}><PanelRight /></button>

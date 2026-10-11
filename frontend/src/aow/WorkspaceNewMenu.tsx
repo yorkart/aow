@@ -2,13 +2,15 @@ import { Files, FileText, NotebookPen, SquareTerminal } from 'lucide-react';
 import type { AowAgent } from '../features/agents/types';
 import { AgentIcon } from '../features/agents/AgentIcon';
 import { aowAgentType } from '../features/agents/agentTypes';
+import { AcpNewSessionMenu } from '../features/acp';
 
-export function WorkspaceNewMenu({ agents, onOpenFile, onOpenBrowser, onCreateNote, onCreateTerminal, onSelect }: {
+export function WorkspaceNewMenu({ agents, onOpenFile, onOpenBrowser, onCreateNote, onCreateTerminal, onCreateAcp, onSelect }: {
   agents: AowAgent[];
   onOpenFile?: () => void;
   onOpenBrowser?: () => void;
   onCreateNote: (kind: 'md' | 'txt') => void;
   onCreateTerminal: (agent?: AowAgent) => void;
+  onCreateAcp?: (agentId: string) => void;
   onSelect?: () => void;
 }) {
   const action = (callback: () => void) => () => { onSelect?.(); callback(); };
@@ -18,6 +20,7 @@ export function WorkspaceNewMenu({ agents, onOpenFile, onOpenBrowser, onCreateNo
     <div className="project-aow-menu-label">Agents</div>
     {agents.filter(agent => agent.available).map(agent => <button data-workspace-open key={agent.id} title={agent.source === 'detected' ? 'Auto detected' : 'Configured'} onClick={action(() => onCreateTerminal(agent))}><AgentIcon agentId={aowAgentType(agent)} /><span>{agent.display_name}</span></button>)}
     {!agents.some(agent => agent.available) ? <div className="project-aow-menu-empty">未发现可用 Agent</div> : null}
+    {onCreateAcp ? <AcpNewSessionMenu onCreate={agentId => { onSelect?.(); onCreateAcp(agentId); }} /> : null}
     <div className="project-aow-menu-label">Notes</div>
     <button data-workspace-open title="在 Project Notes 根目录创建临时笔记" onClick={action(() => onCreateNote('md'))}><NotebookPen /><span>新建 Markdown</span></button>
     <div className="project-aow-menu-label">Files</div>

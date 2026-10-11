@@ -1,7 +1,5 @@
 use super::*;
 
-mod notes_migration;
-
 const FLOATING_PROJECT_ID: &str = "__aow_floating";
 
 impl AowManager {

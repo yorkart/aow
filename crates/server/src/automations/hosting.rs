@@ -27,7 +27,7 @@ impl AutomationManager {
         &self,
         mut task: Task,
         hosting: &aow_protocol::TerminalHosting,
-        event: &TaskStopNotification,
+        event: Option<&TaskStopNotification>,
     ) -> Result<()> {
         let run_id = hosting.run_id.as_deref().context("托管运行 ID 缺失")?;
         ensure!(
@@ -44,8 +44,12 @@ impl AutomationManager {
                 let value: &str = match binding.name.as_str() {
                     "workspace" => &hosting.process.cwd,
                     "session_id" => &hosting.session_id,
-                    "turn_id" => event.turn_id.as_deref().unwrap_or_default(),
-                    "conclusion" => event.conclusion.as_deref().unwrap_or_default(),
+                    "turn_id" => event
+                        .and_then(|event| event.turn_id.as_deref())
+                        .unwrap_or_default(),
+                    "conclusion" => event
+                        .and_then(|event| event.conclusion.as_deref())
+                        .unwrap_or_default(),
                     _ => unreachable!("validated hosting variables"),
                 };
                 (

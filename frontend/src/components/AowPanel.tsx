@@ -113,6 +113,7 @@ interface Props extends Omit<AowPanelHeaderProps, 'onToggle' | 'onNavigate' | 'c
   empty?: boolean;
   collapsible?: boolean;
   headerBehavior?: 'navigate' | 'toggle';
+  expandOnNavigate?: boolean;
   onCollapsedChange?: (collapsed: boolean) => void;
 }
 
@@ -123,7 +124,7 @@ export function usePanelCollapsed(empty: boolean, controlled?: boolean, onChange
   return [collapsed, change] as const;
 }
 
-export function AowPanel({ children, className = '', headerClassName, bodyClassName, bodyRole, empty = false, collapsible = true, headerBehavior = 'navigate',
+export function AowPanel({ children, className = '', headerClassName, bodyClassName, bodyRole, empty = false, collapsible = true, headerBehavior = 'navigate', expandOnNavigate = true,
   collapsed: controlled, onCollapsedChange, controlsId, ...header }: Props) {
   const id = useId();
   const anchor = useRef<HTMLDivElement>(null);
@@ -150,7 +151,7 @@ export function AowPanel({ children, className = '', headerClassName, bodyClassN
     <div ref={anchor} id={`${id}-anchor`} data-panel-anchor data-panel-title={header.title}>
       <AowPanelHeader {...header} className={headerClassName} collapsed={collapsed} controlsId={bodyId}
         onToggle={collapsible ? () => change(!collapsed) : undefined}
-        onNavigate={collapsible && headerBehavior === 'navigate' ? () => { if (collapsed) change(false); if (anchor.current) navigate?.(anchor.current); } : undefined} />
+        onNavigate={collapsible && headerBehavior === 'navigate' ? () => { if (expandOnNavigate && collapsed) change(false); if (anchor.current) navigate?.(anchor.current); } : undefined} />
     </div>
     <div id={bodyId} className={`aow-panel-body ${bodyClassName ?? ''}`} role={bodyRole} hidden={collapsed}>{children}</div>
   </section>;

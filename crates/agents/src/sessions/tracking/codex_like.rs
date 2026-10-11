@@ -1,5 +1,5 @@
 use super::*;
-use crate::sessions::usage::{CodexUsage, TokenUsage};
+use crate::sessions::usage::{CodexUsage, TokenUsage, TokenUsageParser};
 
 pub(super) fn resolve(context: LiveSessionContext<'_>) -> SessionResolution {
     let title = normalized_title(context.title, context.cwd);
@@ -105,7 +105,7 @@ impl Parser {
     }
 }
 
-fn title_matches(title: &str, candidate: &str) -> bool {
+pub(super) fn title_matches(title: &str, candidate: &str) -> bool {
     let candidate = candidate.split_whitespace().collect::<Vec<_>>().join(" ");
     if let Some(prefix) = title
         .strip_suffix("...")
@@ -117,7 +117,7 @@ fn title_matches(title: &str, candidate: &str) -> bool {
     }
 }
 
-fn normalized_title(raw: &str, cwd: &str) -> String {
+pub(super) fn normalized_title(raw: &str, cwd: &str) -> String {
     fn trim(value: &str) -> &str {
         value.trim_matches(|c: char| c.is_whitespace() || "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏●✳✶✻✽✢·".contains(c))
     }
@@ -133,7 +133,11 @@ fn normalized_title(raw: &str, cwd: &str) -> String {
         .map(trim)
         .filter(|p| !p.is_empty())
         .collect();
-    if parts.last().copied() == Path::new(cwd).file_name().and_then(|p| p.to_str()) {
+    if parts
+        .last()
+        .zip(Path::new(cwd).file_name().and_then(|p| p.to_str()))
+        .is_some_and(|(part, project)| title_matches(part, project))
+    {
         parts.pop();
     }
     parts
@@ -173,6 +177,14 @@ mod tests {
         for raw in ["demo", "⠋ demo", "Working | demo", "Codex | demo", ""] {
             assert_eq!(normalized_title(raw, "/workspace/demo"), "");
         }
+        assert_eq!(
+            normalized_title("long-project...", "/workspace/long-project-name"),
+            ""
+        );
+        assert_eq!(
+            normalized_title("Task | long-project...", "/workspace/long-project-name"),
+            "Task"
+        );
         assert!(title_matches(
             "A long conversation...",
             "A long conversation with details"

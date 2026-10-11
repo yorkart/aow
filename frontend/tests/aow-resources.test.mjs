@@ -93,6 +93,7 @@ try {
     state.agentUpdates = [];
     state.failAgentSave = false;
     state.removalJobs = [];
+    state.creationJobs = [];
     state.removalSubmissions = [];
     state.dirtyWorktrees = [];
     state.otherOperations = [];
@@ -100,7 +101,12 @@ try {
     state.logQueries = [];
     state.operationRevision = 0;
     const operationSnapshot = () => {
-      const operations = [...state.otherOperations, ...state.removalJobs.map(job => {
+      const operations = [...state.otherOperations, ...state.creationJobs.map(job => ({
+        id: job.id, kind: 'worktree.create', source: 'web', title: `创建 Worktree · ${job.branch}`, project_id: job.project_id,
+        resource: job.path, created_at: '2026-09-15T00:00:00Z', message: job.error || '正在创建',
+        completed: job.steps.filter(step => ['succeeded', 'skipped'].includes(step.status)).length, total: job.steps.length,
+        outcome: ['pending', 'running'].includes(job.status) ? null : job.status === 'succeeded' ? 'succeeded' : 'failed',
+      })), ...state.removalJobs.map(job => {
         const active = job.items.some(item => ['queued', 'running'].includes(item.status));
         const succeeded = job.items.filter(item => item.status === 'succeeded').length;
         return { id: job.id, kind: 'worktree.remove', source: 'web', title: '删除 Worktree', project_id: job.project_id,
@@ -143,6 +149,7 @@ try {
         data = { avatar_url: state.avatarUrl ?? null };
       }
       else if (url.pathname === '/api/aow/worktree-removals') data = state.removalJobs;
+      else if (url.pathname === '/api/aow/worktree-creations') data = state.creationJobs;
       else if (url.pathname.endsWith('/worktrees/removals') || (url.pathname.endsWith('/worktrees/removal') && request.method() === 'DELETE')) {
         const items = request.method() === 'DELETE' ? [{ path: url.searchParams.get('path'), force: url.searchParams.get('force') === 'true' }] : request.postDataJSON().items;
         state.removalSubmissions.push(items);
@@ -190,13 +197,6 @@ try {
           const update = request.postDataJSON();
           state.settingsUpdates.push(update);
           if (state.failSettingsSave) { await route.fulfill({ status: 500, json: { message: 'Settings write failed' } }); return; }
-          if (update.notes_base && update.notes_base !== state.settings.notes_base) {
-            const previous = state.settings.notes_base;
-            state.projects = state.projects.map(item => ({ ...item, notes_path: update.notes_base + item.notes_path.slice(previous.length) }));
-            for (const [path, file] of Object.entries(state.textFiles)) if (path.startsWith(previous + '/')) {
-              state.textFiles[update.notes_base + path.slice(previous.length)] = { ...file, version: 'migrated-version' };
-            }
-          }
           Object.assign(state.settings, update);
         }
         data = state.settings;
@@ -213,6 +213,7 @@ try {
       else if (url.pathname === '/api/aow/review-providers/test') { state.reviewTests.push(request.postDataJSON()); data = { operations: ['list', 'detail', 'diff'] }; }
       else if (url.pathname === '/api/review-targets') data = state.reviewTargets;
       else if (url.pathname === '/api/aow/settings/discovered-path') data = ['/discovered/bin', '/usr/bin', '/bin'];
+      else if (url.pathname === '/api/aow/settings/server-environment') data = { path: '/home/aow/.config/aow/server.env', content: '', revision: 'missing', exists: false, platform: 'linux' };
       else if (url.pathname === '/api/aow/pinned-worktrees') {
         if (request.method() === 'PATCH') {
           const update = request.postDataJSON();
@@ -351,58 +352,108 @@ try {
     await beforeOpen?.({ context, state });
     await page.goto(`${baseURL}/?ui=desktop`);
     await surface(page).locator('.terminal-emulator-shell:not(.restore-pending)').first().waitFor();
-    return { page, state };
+    return { page, state, operationSnapshot };
   }
 
   const groupButton = (root, name) => root.getByRole('button', { name: new RegExp(`^(展开|收起) ${name} 分组`) });
 
-  await test('worktree creation reports a pull timeout and allows retrying without updating the main repository', async t => {
-    let release;
-    const gate = new Promise(resolve => { release = resolve; });
-    t.after(() => release());
+  const creationJob = (input, id = 'create-one') => ({
+    id, project_id: project.id, ...input, status: 'running', error: null,
+    steps: ['等待仓库可用', '检查分支和目标路径', '更新主仓库（git pull）', '创建 Worktree', '刷新项目列表'].map((title, index) => ({
+      title, status: index < 2 ? 'succeeded' : index === 2 ? 'running' : 'pending',
+      started_at: index < 3 ? new Date().toISOString() : null, duration_ms: index < 2 ? 12 : null, timeout_ms: 120000, message: null,
+    })),
+  });
+
+  await test('worktree creation continues after closing, restores progress after reload and reports step timeout before retry', async t => {
     const submissions = [];
-    const { page } = await fixture(t, { beforeOpen: async ({ context, state }) => {
+    const { page, state } = await fixture(t, { beforeOpen: async ({ context, state }) => {
       await context.route('**/api/aow/projects/project/worktrees', async route => {
         const input = route.request().postDataJSON();
         submissions.push(input);
-        if (input.pull_first) {
-          await gate;
-          await route.fulfill({ status: 400, json: { message: 'git pull failed in main worktree /workspace/wt-0: git pull timed out after 120 seconds' } });
-          return;
+        const job = creationJob(input, `create-${submissions.length}`);
+        if (!input.pull_first) {
+          job.steps[2].status = 'skipped';
+          job.steps[2].started_at = null;
+          job.steps[3].status = 'running';
+          job.steps[3].started_at = new Date().toISOString();
         }
-        const worktree = { ...worktrees[0], id: 'created', path: input.path, branch: input.branch, is_main: false };
-        const updated = { ...project, worktrees: [...worktrees, worktree] };
-        state.projects = [updated];
-        await route.fulfill({ json: { project: updated, worktree } });
+        state.creationJobs.push(job);
+        await route.fulfill({ status: 202, json: job });
       });
     } });
     await page.getByRole('button', { name: 'Resource Fixture Project 操作', exact: true }).click();
     await page.getByRole('menuitem', { name: '创建 Worktree', exact: true }).click();
-    const dialog = page.getByRole('dialog', { name: '创建 Worktree', exact: true });
-    await dialog.getByLabel('新分支', { exact: true }).fill('feat/tab-style');
-    const path = await dialog.getByLabel('Worktree 路径', { exact: true }).inputValue();
-    await dialog.getByRole('button', { name: '创建 Worktree', exact: true }).click();
-    await dialog.getByRole('status').waitFor();
-    assert.match(await dialog.getByRole('status').textContent(), /正在更新主仓库并创建 Worktree.*2 分钟/);
-    assert.equal(await dialog.getByRole('button', { name: '创建中…', exact: true }).isDisabled(), true);
-    assert.equal(submissions.length, 1);
-    release();
-    await dialog.getByRole('alert').waitFor();
-    assert.match(await dialog.getByRole('alert').textContent(), /git pull timed out after 120 seconds/);
-    assert.equal(await dialog.getByLabel('新分支', { exact: true }).inputValue(), 'feat/tab-style');
-    assert.equal(await dialog.getByLabel('Worktree 路径', { exact: true }).inputValue(), path);
-    assert.equal(await dialog.getByRole('button', { name: '取消', exact: true }).isEnabled(), true);
-    assert.equal(await dialog.getByRole('status').count(), 0);
-    await dialog.getByRole('checkbox', { name: '创建前更新主仓库（git pull）', exact: true }).uncheck();
-    await dialog.getByText('查看 Git 命令', { exact: true }).click();
-    assert.doesNotMatch(await dialog.locator('.project-aow-command-preview code').textContent(), /pull/);
-    await dialog.getByRole('button', { name: '创建 Worktree', exact: true }).click();
-    await dialog.waitFor({ state: 'hidden' });
+    const form = page.getByRole('dialog', { name: '创建 Worktree', exact: true });
+    await form.getByLabel('新分支', { exact: true }).fill('feat/tab-style');
+    const path = await form.getByLabel('Worktree 路径', { exact: true }).inputValue();
+    await form.getByRole('button', { name: '创建 Worktree', exact: true }).click();
+    const progress = page.getByRole('dialog', { name: '创建 Worktree 进度', exact: true });
+    await progress.waitFor();
+    assert.equal(await progress.locator('li').count(), 5);
+    assert.match(await progress.locator('li').nth(2).textContent(), /git pull.*执行中.*耗时.*超时上限 120/);
+    assert.equal(await progress.locator('li').nth(3).getAttribute('class'), 'pending');
+    if (process.env.AOW_CREATION_SCREENSHOT) await page.screenshot({ path: process.env.AOW_CREATION_SCREENSHOT });
+    await progress.getByRole('button', { name: '关闭（后台继续）', exact: true }).click();
+    await progress.waitFor({ state: 'hidden' });
+    await page.locator('.operation-status-task').filter({ hasText: '创建 Worktree' }).waitFor();
+    await page.reload();
+    await page.locator('.operation-status-task').filter({ hasText: '创建 Worktree' }).click();
+    await progress.locator('li.running').waitFor();
+    assert.equal(submissions.length, 1, 'reload does not resubmit a background job');
+    const failed = state.creationJobs[0];
+    failed.status = 'timed_out';
+    failed.error = '更新主仓库（git pull）超时（120 秒），已停止执行';
+    failed.steps[2] = { ...failed.steps[2], status: 'timed_out', duration_ms: 120000, message: failed.error };
+    for (const step of failed.steps.slice(3)) { step.status = 'skipped'; step.message = '前序步骤未完成，未执行'; }
+    await progress.getByRole('alert').waitFor();
+    assert.match(await progress.getByRole('alert').textContent(), /git pull.*超时/);
+    assert.match(await progress.locator('li').nth(2).textContent(), /超时.*耗时 120/);
+    assert.match(await progress.locator('li').nth(3).textContent(), /已跳过.*前序步骤未完成/);
+    assert.equal(await page.locator('.project-aow-worktrees').getByRole('button').filter({ hasText: 'feat/tab-style' }).count(), 0);
+    await progress.getByRole('button', { name: '重新填写', exact: true }).click();
+    assert.equal(await form.getByLabel('新分支', { exact: true }).inputValue(), 'feat/tab-style');
+    assert.equal(await form.getByLabel('Worktree 路径', { exact: true }).inputValue(), path);
+    await form.getByRole('checkbox', { name: '创建前更新主仓库（git pull）', exact: true }).uncheck();
+    await form.getByRole('button', { name: '创建 Worktree', exact: true }).click();
+    await progress.waitFor();
+    assert.match(await progress.locator('li').nth(2).textContent(), /已跳过/);
+    await progress.getByRole('button', { name: '关闭（后台继续）', exact: true }).click();
+    const completed = state.creationJobs[1];
+    completed.status = 'succeeded';
+    for (const step of completed.steps) if (step.status !== 'skipped') { step.status = 'succeeded'; step.duration_ms = 22; }
+    const worktree = { ...worktrees[0], id: 'created', path, branch: 'feat/tab-style', is_main: false };
+    state.projects = [{ ...project, worktrees: [...worktrees, worktree] }];
     await page.locator('.project-aow-worktrees').getByRole('button').filter({ hasText: 'feat/tab-style' }).waitFor();
-    assert.deepEqual(submissions, [
-      { branch: 'feat/tab-style', base_ref: 'branch-0', path, pull_first: true },
-      { branch: 'feat/tab-style', base_ref: 'branch-0', path, pull_first: false },
-    ]);
+    await page.locator('.operation-notice.success').getByRole('button', { name: '查看进度', exact: true }).click();
+    await progress.getByRole('button', { name: '打开 Worktree', exact: true }).waitFor();
+    assert.equal(submissions.length, 2);
+    assert.deepEqual(submissions.map(item => item.pull_first), [true, false]);
+  });
+
+  await test('worktree creation submission can close before acknowledgement without reopening the dialog', async t => {
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    t.after(() => release());
+    const { page, state } = await fixture(t, { beforeOpen: async ({ context, state }) => {
+      await context.route('**/api/aow/projects/project/worktrees', async route => {
+        const job = creationJob(route.request().postDataJSON());
+        await gate;
+        state.creationJobs.push(job);
+        await route.fulfill({ status: 202, json: job });
+      });
+    } });
+    await page.getByRole('button', { name: 'Resource Fixture Project 操作', exact: true }).click();
+    await page.getByRole('menuitem', { name: '创建 Worktree', exact: true }).click();
+    const form = page.getByRole('dialog', { name: '创建 Worktree', exact: true });
+    await form.getByLabel('新分支', { exact: true }).fill('feat/background');
+    await form.getByRole('button', { name: '创建 Worktree', exact: true }).click();
+    await form.getByRole('button', { name: '提交中…', exact: true }).waitFor();
+    await form.getByRole('button', { name: '关闭', exact: true }).last().click();
+    release();
+    await page.locator('.operation-status-task').filter({ hasText: '创建 Worktree' }).waitFor();
+    assert.equal(state.creationJobs.length, 1);
+    assert.equal(await page.getByRole('dialog', { name: '创建 Worktree 进度', exact: true }).count(), 0);
   });
 
   await test('project avatars load independently, directly reference the image and recover from broken or unsupported providers', async t => {
@@ -419,7 +470,7 @@ try {
       });
     } });
     const header = page.locator('.project-aow-project-row').first();
-    assert.equal(await header.locator('svg.project-icon').isVisible(), true, 'project and terminals render while avatar metadata is pending');
+    assert.equal(await header.locator('svg.project-icon.lucide-folder').isVisible(), true, 'project and terminals render while avatar metadata is pending');
     releaseAvatar();
     const avatar = header.locator('img.project-icon');
     await avatar.waitFor();
@@ -440,14 +491,14 @@ try {
     state.avatarUrl = 'https://avatars.example.com/broken.svg';
     await page.evaluate(() => window.dispatchEvent(new Event('aow-review-providers-changed')));
     await eventually(() => Promise.resolve(imageRequests.some(request => request.url().includes('broken'))));
-    await header.locator('svg.project-icon').waitFor();
+    await header.locator('svg.project-icon.lucide-folder').waitFor();
     assert.equal(await avatar.count(), 0, 'a broken image returns to the folder icon');
 
     state.avatarUrl = null;
     const refreshed = page.waitForResponse(response => response.url().endsWith('/projects/project/avatar'));
     await page.evaluate(() => window.dispatchEvent(new Event('aow-review-providers-changed')));
     await refreshed;
-    await header.locator('svg.project-icon').waitFor();
+    await header.locator('svg.project-icon.lucide-folder').waitFor();
     assert.deepEqual(state.errors, []);
   });
 
@@ -803,7 +854,7 @@ try {
   });
 
   await test('worktree cleanup filters only in the dialog, confirms dirty items and tracks mixed background results after closing', async t => {
-    const { page, state } = await fixture(t, { beforeOpen: ({ state }) => {
+    const { page, state, operationSnapshot } = await fixture(t, { beforeOpen: ({ state }) => {
       state.projects = [{ ...project, worktrees: [...worktrees, { ...worktrees[1], id: 'wt-2', path: '/workspace/wt-2', branch: 'branch-2' }] }];
       state.dirtyWorktrees = [worktrees[1].path];
       state.defaultTerminalRoots = [worktrees[0].path, '/workspace/wt-2'];
@@ -832,6 +883,7 @@ try {
     assert.deepEqual(state.removalSubmissions[0], [{ path: '/workspace/wt-1', force: true }, { path: '/workspace/wt-2', force: false }]);
     await dialog.getByRole('button', { name: '关闭', exact: true }).first().click();
     assert.equal(await page.locator('.project-aow-worktrees button[title="/workspace/wt-1"]').isDisabled(), true);
+    await page.evaluate(snapshot => window.emitLiveEvent('operations', snapshot), operationSnapshot());
     await page.getByRole('button', { name: '删除 Worktree · 0/2', exact: true }).click();
     await dialog.waitFor();
     state.removalJobs[0].items[0].status = 'succeeded';
@@ -932,7 +984,7 @@ try {
     await surface(page).locator('.project-aow-welcome').waitFor();
     state.defaultTerminalRoots = paths.slice(1);
     await surface(page).getByRole('button', { name: '刷新 User Terminals', exact: true }).click();
-    await eventually(async () => await surface(page).locator('.terminal-panel-open').count() === 0);
+    await eventually(async () => await surface(page).getByRole('region', { name: worktrees[0].path, exact: true }).locator('.terminal-panel-open').count() === 0);
     assert.equal(await isCompact(0), false, 'the empty main worktree keeps its full row');
     await row(4).locator('svg.lucide-cat').waitFor();
     await page.locator('.project-aow-pinned').locator('svg.lucide-cat').waitFor();
@@ -1020,7 +1072,7 @@ try {
     await list.locator(`button[title="${paths[2]}"]`).click();
     await surface(page).locator('.project-aow-welcome').waitFor();
     assert.equal(await surface(page).getByRole('tab').count(), 0, 'a hidden terminal remains closed when switching worktrees');
-    await surface(page).locator('.terminal-panel-open').filter({ hasText: 'Shell' }).click();
+    await surface(page).getByRole('region', { name: paths[2], exact: true }).locator('.terminal-panel-open').filter({ hasText: 'Shell' }).click();
     await tab(page, 'Shell').waitFor();
     await eventually(async () => !(await compactPaths()).includes(paths[2]));
     await surface(page).getByRole('button', { name: '关闭 Shell', exact: true }).click();
@@ -1087,7 +1139,7 @@ try {
       await eventually(isCompact);
       const globalRequests = state.terminalListScopes.filter(scope => scope === null).length;
       await refresh();
-      assert.equal(state.terminalListScopes.filter(scope => scope === null).length, globalRequests, 'mounted workspaces reuse their existing terminal polling');
+      assert.equal(state.terminalListScopes.filter(scope => scope === null).length, globalRequests + 1, 'mounted workspaces share one project terminal inventory poll');
     });
   }
 
@@ -1133,7 +1185,7 @@ try {
     const pinned = page.locator(`.project-aow-pinned button[title="${worktrees[0].path}"]`);
     const menu = page.getByRole('menu', { name: `${worktrees[0].path} 操作`, exact: true });
     const openMenu = (target = row) => target.click({ button: 'right' });
-    await row.locator('svg.lucide-git-branch').waitFor();
+    await row.locator('svg.lucide-folder-git2').waitFor();
     await row.click({ button: 'right' });
     await menu.getByRole('menuitemradio', { name: '紫色', exact: true }).click();
     await eventually(() => row.locator('svg').evaluate(svg => getComputedStyle(svg).color === 'rgb(168, 85, 247)'));
@@ -1174,9 +1226,9 @@ try {
     assert.equal(await pinned.locator('svg').evaluate(svg => getComputedStyle(svg).color), 'rgb(34, 197, 94)');
     await openMenu();
     await menu.getByRole('menuitemradio', { name: '默认图标', exact: true }).click();
-    await pinned.locator('svg.lucide-git-branch').waitFor();
+    await pinned.locator('svg.lucide-folder-git2').waitFor();
     assert.equal(await row.locator('svg').evaluate(svg => getComputedStyle(svg).color), 'rgb(34, 197, 94)');
-    assert.equal(await page.locator(`.project-aow-worktrees button[title="${worktrees[1].path}"] svg`).getAttribute('class'), 'lucide lucide-git-branch');
+    assert.equal(await page.locator(`.project-aow-worktrees button[title="${worktrees[1].path}"] svg`).getAttribute('class'), 'lucide lucide-folder-git2');
     assert.deepEqual(state.appearanceWrites, [
       { path: worktrees[0].path, color: 'purple' }, { path: worktrees[0].path, icon: 'cat' },
       { path: worktrees[0].path, color: 'green' }, { path: worktrees[0].path, icon: 'pear' }, { path: worktrees[0].path, icon: 'default' },
@@ -1444,7 +1496,7 @@ try {
       await route.fulfill({ json: [current] });
     });
     const list = surface(page).locator('.terminal-panel');
-    const row = list.locator('.terminal-panel-row').filter({ hasText: 'Shell' });
+    const row = list.getByRole('region', { name: worktrees[0].path, exact: true }).locator('.terminal-panel-row').filter({ hasText: 'Shell' });
     const refresh = () => list.getByRole('button', { name: '刷新 User Terminals', exact: true }).click();
     await refresh();
     await surface(page).locator('.terminal-pane-status.exited').waitFor();
@@ -1593,6 +1645,57 @@ try {
     assert.deepEqual(state.closedTerminalIds, []);
   });
 
+  await test('project terminal inventory defaults to all worktrees and reuses cached data when the active worktree changes', async t => {
+    const { page, state } = await fixture(t, { clock: true, cliTerminals: 1, beforeOpen: async ({ context, state }) => {
+      state.createdTerminalTabs.push({ ...structuredClone(state.createdTerminalTabs[0]), id: 'foreign-cli', name: 'Worktree agent', workspace_root: worktrees[1].path });
+      await context.addInitScript(path => {
+        localStorage.setItem('aow-active', path);
+        localStorage.setItem(`aow-terminal-scope:${path}`, 'false');
+      }, worktrees[1].path);
+    } });
+    const list = surface(page).locator('.terminal-panel');
+    await eventually(async () => await list.locator('.terminal-worktree-heading').count() === 4);
+    const activePaths = () => list.locator('.terminal-worktree-group.active').evaluateAll(groups => groups.map(group => group.getAttribute('aria-label')));
+    assert.deepEqual(await activePaths(), [worktrees[1].path, worktrees[1].path]);
+    for (const group of ['User', 'CLI']) {
+      await list.getByRole('button', { name: `${group} Terminals 显示范围`, exact: true }).click();
+      assert.equal(await page.getByRole('menuitemcheckbox').getAttribute('aria-checked'), 'true');
+      await page.keyboard.press('Escape');
+    }
+    assert.equal(await list.locator('.terminal-worktree-heading[aria-current="true"]').count(), 2);
+    const backgrounds = await list.locator('.terminal-worktree-group').evaluateAll(groups => groups.map(group => ({
+      active: group.classList.contains('active'), color: getComputedStyle(group).backgroundColor,
+    })));
+    assert.notEqual(backgrounds.find(group => group.active).color, backgrounds.find(group => !group.active).color);
+    assert.ok(state.terminalSockets.every(socket => socket.url().includes('/terminals/wt-1-tab/')), 'listing terminals does not connect to other worktrees or hidden CLI terminals');
+    let release;
+    state.allTerminalsGate = new Promise(resolve => { release = resolve; });
+    t.after(() => release());
+    await switchWorktree(page, 0);
+    await eventually(async () => (await activePaths()).every(path => path === worktrees[0].path) && await list.locator('.terminal-worktree-heading').count() === 4);
+    assert.equal(await list.getByRole('status').count(), 0, 'switching worktrees reuses the loaded project inventory');
+    release();
+    state.allTerminalsGate = null;
+    await list.getByRole('button', { name: 'User Terminals 显示范围', exact: true }).click();
+    await page.getByRole('menuitemradio', { name: '按创建时间', exact: true }).click();
+    await switchWorktree(page, 1);
+    await list.getByRole('button', { name: 'User Terminals 显示范围', exact: true }).click();
+    assert.equal(await page.getByRole('menuitemradio', { name: '按创建时间', exact: true }).getAttribute('aria-checked'), 'true', 'sorting is shared across worktrees');
+    await page.keyboard.press('Escape');
+    assert.deepEqual(await activePaths(), [worktrees[1].path, worktrees[1].path]);
+    if (process.env.TERMINAL_SCOPE_SCREENSHOT) await page.screenshot({ path: process.env.TERMINAL_SCOPE_SCREENSHOT });
+    await list.getByRole('region', { name: worktrees[0].path, exact: true }).first().locator('.terminal-panel-open').click();
+    await surface(page).locator('[data-workspace-tab-id="terminal:wt-0-tab"]').waitFor();
+    await surface(page).locator('.terminal-emulator-shell:not(.restore-pending):visible').waitFor();
+    assert.equal(await page.evaluate(() => localStorage.getItem('aow-active')), worktrees[1].path, 'opening the main terminal keeps the sibling worktree selected');
+    assert.deepEqual(await activePaths(), [worktrees[1].path, worktrees[1].path], 'group highlighting follows the selected worktree, not the open terminal');
+    assert.equal(state.createdTerminals.length, 0);
+    await switchWorktree(page, 0);
+    await surface(page).getByText('此 Tab 正在其他工作区显示。').waitFor();
+    await surface(page).getByRole('button', { name: '移回当前工作区', exact: true }).click();
+    await surface(page).locator('.terminal-emulator-shell:not(.restore-pending):visible').waitFor();
+  });
+
   await test('repository terminal scope persists independent list choices with main first and no extra terminal connections', async t => {
     const { page, state } = await fixture(t, { cliTerminals: 1 });
     const list = surface(page).locator('.terminal-panel');
@@ -1603,19 +1706,9 @@ try {
     state.projects[0] = { ...project, worktrees: [worktrees[1], worktrees[0], { ...worktrees[1], id: 'empty', path: '/workspace/empty' }] };
     await page.getByRole('button', { name: '刷新全部', exact: true }).click();
     await eventually(() => state.terminalListScopes.filter(scope => scope === null).length >= 2);
-    assert.equal(await list.locator('.terminal-worktree-heading').count(), 0);
-    const connectionCount = state.terminalMessages.filter(item => typeof item.message === 'string' && JSON.parse(item.message).type === 'claim').length;
-    await users.getByRole('button', { name: 'User Terminals 显示范围', exact: true }).click();
-    const option = page.getByRole('menuitemcheckbox', { name: '显示所有Worktree', exact: true });
-    assert.equal(await option.getAttribute('aria-checked'), 'false');
-    await option.click();
-    await eventually(async () => await users.locator('.terminal-worktree-heading').count() === 2);
-    assert.equal(await agents.locator('.terminal-worktree-heading').count(), 0);
-    assert.equal(await agents.locator('.terminal-panel-row').count(), 1, 'enabling user terminals keeps CLI terminals local');
-    await agents.getByRole('button', { name: 'CLI Terminals 显示范围', exact: true }).click();
-    assert.equal(await option.getAttribute('aria-checked'), 'false');
-    await option.click();
     await eventually(async () => await list.locator('.terminal-worktree-heading').count() === 4);
+    const connectionCount = state.terminalMessages.filter(item => typeof item.message === 'string' && JSON.parse(item.message).type === 'claim').length;
+    const option = page.getByRole('menuitemcheckbox', { name: '显示所有Worktree', exact: true });
     for (const group of [users, agents]) {
       assert.deepEqual(await group.locator('.terminal-worktree-heading > span').allTextContents(), ['主仓库 · branch-0', 'branch-1']);
       assert.deepEqual(await group.locator('.terminal-worktree-heading .terminal-panel-count').allTextContents(), ['1', '1']);
@@ -1649,11 +1742,13 @@ try {
     assert.equal(await option.getAttribute('aria-checked'), 'false', 'the user terminal choice survives reload');
     await page.keyboard.press('Escape');
     await switchWorktree(page, 1);
-    assert.equal(await surface(page).getByRole('button', { name: /Terminals 显示范围/ }).count(), 0);
-    assert.equal(await surface(page).locator('.terminal-worktree-heading').count(), 0);
-    await switchWorktree(page, 0);
+    assert.equal(await surface(page).getByRole('button', { name: /Terminals 显示范围/ }).count(), 2);
+    assert.equal(await users.locator('.terminal-worktree-heading').count(), 0);
+    assert.equal(await agents.locator('.terminal-worktree-heading').count(), 2);
     await users.getByRole('button', { name: 'User Terminals 显示范围', exact: true }).click();
+    assert.equal(await option.getAttribute('aria-checked'), 'false', 'the scope is shared with sibling worktrees');
     await option.click();
+    await switchWorktree(page, 0);
     await agents.getByRole('button', { name: 'CLI Terminals 显示范围', exact: true }).click();
     assert.equal(await option.getAttribute('aria-checked'), 'true', 'the CLI terminal choice survives reload and worktree switches');
     await option.click();
@@ -1682,8 +1777,6 @@ try {
     state.names['wt-1-tab'] = 'Remote shell';
     state.agents['wt-1-pane'] = 'codex';
     const list = surface(page).locator('.terminal-panel');
-    await list.getByRole('button', { name: 'User Terminals 显示范围', exact: true }).click();
-    await page.getByRole('menuitemcheckbox').click();
     const remote = () => list.locator('.terminal-panel-open').filter({ hasText: 'Remote shell' });
     await remote().waitFor();
     await remote().getByRole('img', { name: '已隐藏', exact: true }).waitFor();
@@ -1726,8 +1819,6 @@ try {
     const { page, state } = await fixture(t);
     state.names['wt-1-tab'] = 'Remote shell';
     const list = surface(page).locator('.terminal-panel');
-    await list.getByRole('button', { name: 'User Terminals 显示范围', exact: true }).click();
-    await page.getByRole('menuitemcheckbox').click();
     const openRemote = () => list.locator('.terminal-panel-open').filter({ hasText: 'Remote shell' }).click();
     const ready = () => surface(page).locator('.terminal-emulator-shell:not(.restore-pending):visible').waitFor();
     await openRemote();
@@ -1738,7 +1829,7 @@ try {
     assert.equal(await tab(page, 'Remote shell').count(), 1);
     assert.equal(await page.locator('.terminal-emulator-shell').count(), 2, 'the main and remote shells each have one renderer');
     await switchWorktree(page, 1);
-    await surface(page).getByText('此 Tab 正在主仓库工作区显示。').waitFor();
+    await surface(page).getByText('此 Tab 正在其他工作区显示。').waitFor();
     assert.equal(await surface(page).locator('.terminal-emulator-shell:visible').count(), 0);
     await surface(page).getByRole('button', { name: '移回当前工作区', exact: true }).click();
     await ready();
@@ -1787,8 +1878,6 @@ try {
 
   async function openHostedSibling(page) {
     const list = surface(page).locator('.terminal-panel');
-    await list.getByRole('button', { name: 'User Terminals 显示范围', exact: true }).click();
-    await page.getByRole('menuitemcheckbox').click();
     await list.locator('.terminal-panel-open').filter({ hasText: 'Remote shell' }).click();
     await tab(page, 'Remote shell').waitFor();
   }
@@ -1981,8 +2070,6 @@ try {
     state.names['wt-1-tab'] = 'Remote shell';
     state.names['wt-1-background'] = 'Remote background';
     const list = surface(page).locator('.terminal-panel');
-    await list.getByRole('button', { name: 'User Terminals 显示范围', exact: true }).click();
-    await page.getByRole('menuitemcheckbox').click();
     const remote = list.locator('.terminal-panel-open').filter({ hasText: 'Remote shell' });
     await remote.click({ button: 'right' });
     await page.getByRole('menuitem', { name: '打开 · 浮动工作区', exact: true }).click();
@@ -2000,7 +2087,7 @@ try {
     await eventually(async () => await surface(page).getByRole('tab').count() === 1);
     await switchWorktree(page, 1);
     assert.equal(await surface(page).getByRole('tab').count(), 1);
-    await surface(page).getByText('此 Tab 正在主仓库工作区显示。').waitFor();
+    await surface(page).getByText('此 Tab 正在其他工作区显示。').waitFor();
     await surface(page).getByRole('button', { name: '关闭 Remote shell', exact: true }).click();
     await switchWorktree(page, 0);
     await eventually(async () => await surface(page).getByRole('tab').count() === 0);
@@ -2012,8 +2099,6 @@ try {
     const { page, state } = await fixture(t);
     state.names['wt-1-tab'] = 'Remote shell';
     const list = surface(page).locator('.terminal-panel');
-    await list.getByRole('button', { name: 'User Terminals 显示范围', exact: true }).click();
-    await page.getByRole('menuitemcheckbox').click();
     await list.locator('.terminal-panel-open').filter({ hasText: 'Remote shell' }).click();
     await surface(page).locator('.terminal-emulator-shell:not(.restore-pending):visible').waitFor();
     await surface(page).locator('[data-workspace-tab-id="terminal:wt-0-tab"]').click();
@@ -2042,8 +2127,7 @@ try {
     remote.panes[0].cwd = worktrees[1].path;
     remote.layout.pane_id = 'new-cli-pane';
     state.createdTerminalTabs.push(remote);
-    await surface(page).getByRole('button', { name: 'CLI Terminals 显示范围', exact: true }).click();
-    await page.getByRole('menuitemcheckbox').click();
+    await surface(page).getByRole('button', { name: '刷新 CLI Terminals', exact: true }).click();
     await surface(page).locator('.terminal-panel-open').filter({ hasText: remote.name }).click();
     await surface(page).getByRole('tab').filter({ hasText: remote.name }).waitFor();
     await surface(page).locator('.terminal-connection.observing').waitFor();
@@ -2063,7 +2147,9 @@ try {
   });
 
   await test('repository terminal scope ignores disabled in-flight loads and recovers from refresh errors', async t => {
-    const { page, state } = await fixture(t);
+    const { page, state } = await fixture(t, { beforeOpen: async ({ context }) => {
+      await context.addInitScript(() => localStorage.setItem('aow-project-terminal-scope:project', JSON.stringify({ user: false, cli: false })));
+    } });
     const list = surface(page).locator('.terminal-panel');
     const toggle = async () => {
       await list.getByRole('button', { name: 'User Terminals 显示范围', exact: true }).click();
@@ -2096,7 +2182,7 @@ try {
   await test('terminal panel reopens hidden instances, reuses tabs and destroys only after confirmation', async t => {
     const { page, state } = await fixture(t, { splitTerminal: true, floating: true });
     const list = surface(page).locator('.terminal-panel');
-    const row = list.locator('.terminal-panel-open').filter({ hasText: 'Shell' });
+    const row = list.getByRole('region', { name: worktrees[0].path, exact: true }).locator('.terminal-panel-open').filter({ hasText: 'Shell' });
     const floating = page.getByRole('dialog', { name: '浮动工作区', exact: true });
     const panes = surface(page).locator('.terminal-emulator-shell');
     await eventually(async () => await surface(page).locator('.terminal-emulator-shell:not(.restore-pending)').count() === 3);
@@ -2120,7 +2206,7 @@ try {
     assert.deepEqual(await menu.getByRole('menuitem').allTextContents(), ['打开', '打开 · 浮动工作区', '销毁']);
     await page.keyboard.press('Escape');
     await menu.waitFor({ state: 'detached' });
-    await list.getByRole('button', { name: 'Shell 终端操作', exact: true }).click();
+    await list.getByRole('region', { name: worktrees[0].path, exact: true }).getByRole('button', { name: 'Shell 终端操作', exact: true }).click();
     await menu.getByRole('menuitem', { name: '打开', exact: true }).click();
     await surface(page).locator('.terminal-emulator-shell:not(.restore-pending)').first().waitFor();
     assert.equal(await panes.count(), 3, 'all panes reconnect to the existing layout');
@@ -2310,7 +2396,7 @@ try {
     assert.deepEqual(state.closedTerminalIds, []);
     assert.equal(await surface(page).getByRole('tab').count(), 0);
     assert.equal(await surface(page).locator('.terminal-emulator-shell').count(), 0);
-    assert.equal(await surface(page).locator('.terminal-panel-row').count(), 10);
+    assert.equal(await surface(page).getByRole('region', { name: worktrees[0].path, exact: true }).locator('.terminal-panel-row').count(), 10);
     await surface(page).getByRole('button', { name: '新建窗体', exact: true }).waitFor();
   });
 
@@ -2408,7 +2494,7 @@ try {
     assert.equal(await panel.isVisible(), true, 'a portal menu is still part of the interaction');
     await page.mouse.click(5, 5);
     await menu.waitFor({ state: 'detached' });
-    await surface(page).locator('.terminal-panel-open').filter({ hasText: 'Shell' }).dispatchEvent('contextmenu', { clientX: menuBounds.x, clientY: menuBounds.y });
+    await surface(page).getByRole('region', { name: worktrees[0].path, exact: true }).locator('.terminal-panel-open').filter({ hasText: 'Shell' }).dispatchEvent('contextmenu', { clientX: menuBounds.x, clientY: menuBounds.y });
     await page.getByRole('menuitem', { name: '销毁', exact: true }).dispatchEvent('click');
     const dialog = page.getByRole('alertdialog', { name: '销毁终端？', exact: true });
     await dialog.waitFor();
@@ -2602,7 +2688,7 @@ try {
     assert.ok(await page.evaluate(async () => { const { monaco } = await import('/src/features/editor/monaco.ts'); return monaco.editor.getModels().some(model => model.getValue() === 'Shared buffer'); }));
   });
 
-  await test('floating creation keeps project context and notes root migration refreshes open file versions', async t => {
+  await test('changing notes root preserves project bindings and open floating notes', async t => {
     const { page, state } = await fixture(t, { floating: true });
     const panel = page.getByRole('dialog', { name: '浮动工作区', exact: true });
     await surface(page).getByRole('button', { name: '新建窗体', exact: true }).click();
@@ -2616,23 +2702,29 @@ try {
     const sourcePath = '/notes/localhost/test/__aow_floating/.tmp-fixture.md';
     const editor = panel.locator('.monaco-editor [role="textbox"]').first();
     await editor.focus();
-    await editor.pressSequentially('Before migration');
-    await eventually(() => Promise.resolve(state.textFiles[sourcePath].content === 'Before migration'));
+    await editor.pressSequentially('Before root change');
+    await eventually(() => Promise.resolve(state.textFiles[sourcePath].content === 'Before root change'));
+    const previousVersion = state.textFiles[sourcePath].version;
+    const previousProjects = structuredClone(state.projects);
     await panel.getByRole('button', { name: '最小化浮动工作区' }).click();
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     const settings = page.locator('.project-aow-settings');
     await settings.getByRole('textbox', { name: 'Notes root', exact: true }).fill('/new-notes');
     await settings.getByRole('button', { name: '保存', exact: true }).click();
     await eventually(() => Promise.resolve(state.settings.notes_base === '/new-notes'));
+    await settings.getByRole('status').filter({ hasText: 'Notes root 已保存' }).waitFor();
+    assert.match(await settings.getByRole('status').textContent(), /已有项目仍使用原 Notes 路径.*绑定 Notes 目录/);
+    assert.deepEqual(state.projects, previousProjects);
     await settings.getByRole('button', { name: '关闭', exact: true }).click();
-    assert.equal(await panel.isVisible(), false, 'migration does not reopen a minimized workspace');
+    assert.equal(await panel.isVisible(), false, 'changing the root does not reopen a minimized workspace');
     await page.getByRole('button', { name: '浮动工作区', exact: true }).click();
-    await panel.locator('.editor-toolbar code').filter({ hasText: '/new-notes/localhost/test/__aow_floating/.tmp-fixture.md' }).waitFor();
+    await panel.locator('.editor-toolbar code').filter({ hasText: sourcePath }).waitFor();
     await editor.focus();
     await editor.press('ControlOrMeta+A');
-    await editor.pressSequentially('After migration');
-    await eventually(() => Promise.resolve(state.writes.some(write => write.path === '/new-notes/localhost/test/__aow_floating/.tmp-fixture.md' && write.content === 'After migration')));
-    assert.equal(state.writes.at(-1).version, '"migrated-version"');
+    await editor.pressSequentially('After root change');
+    await eventually(() => Promise.resolve(state.writes.some(write => write.path === sourcePath && write.content === 'After root change')));
+    assert.equal(state.writes.at(-1).version, `"${previousVersion}"`);
+    assert.equal(Object.keys(state.textFiles).some(path => path.startsWith('/new-notes/')), false);
     assert.equal(await panel.getByRole('tab').filter({ hasText: '.tmp-fixture.md' }).count(), 2);
     assert.ok(state.projects.find(item => item.builtin).registered_path === '/global');
   });
@@ -2704,7 +2796,7 @@ try {
     assert.equal(await tabs.getByRole('tab').count(), 2, 'closing terminals preserves the file group');
     // Reopen the second source's existing instance, then hide both sources together.
     await panel.getByRole('button', { name: '最小化浮动工作区' }).click();
-    await surface(page).locator('.terminal-panel-open').filter({ hasText: 'Shell' }).click({ button: 'right' });
+    await surface(page).getByRole('region', { name: worktrees[1].path, exact: true }).locator('.terminal-panel-open').filter({ hasText: 'Shell' }).click({ button: 'right' });
     await page.getByRole('menuitem', { name: '打开 · 浮动工作区', exact: true }).click();
     await eventually(async () => await shells.count() === 2);
     await shells.first().click({ button: 'right' });
@@ -2974,8 +3066,8 @@ try {
     const input = dialog.getByRole('textbox', { name: 'PATH 目录', exact: true });
     await eventually(async () => await input.inputValue() === '/usr/local/bin\n/usr/bin\n/bin');
     await input.fill('/opt/python/bin\n/usr/bin\n/bin');
-    await dialog.getByRole('button', { name: '保存', exact: true }).click();
-    await dialog.getByRole('status').waitFor();
+    await dialog.getByRole('button', { name: '保存 PATH', exact: true }).click();
+    await dialog.getByRole('status').filter({ hasText: '执行环境已保存' }).waitFor();
     assert.deepEqual(state.settingsUpdates, [{ execution_path: ['/opt/python/bin', '/usr/bin', '/bin'] }]);
     assert.equal(state.settings.notes_base, '/notes');
     await dialog.getByRole('button', { name: '关闭', exact: true }).click();
@@ -2986,7 +3078,7 @@ try {
     await eventually(async () => await input.inputValue() === '/discovered/bin\n/usr/bin\n/bin');
     assert.equal(state.settingsUpdates.length, 1, 'discovery only edits the draft until Save');
     await input.fill('python3.11');
-    await dialog.getByRole('button', { name: '保存', exact: true }).click();
+    await dialog.getByRole('button', { name: '保存 PATH', exact: true }).click();
     await dialog.getByText('PATH 每行填写一个服务端绝对目录路径，不使用冒号分隔。', { exact: true }).waitFor();
     assert.equal(state.settingsUpdates.length, 1);
   });
@@ -3652,8 +3744,6 @@ try {
   await test('workspace events discover an external worktree and its CLI agent without changing selection', async t => {
     const { page, state } = await fixture(t, { clock: true });
     const panel = surface(page).locator('.terminal-panel');
-    await panel.getByRole('button', { name: 'CLI Terminals 显示范围', exact: true }).click();
-    await page.getByRole('menuitemcheckbox').click();
     await delay(100);
     await page.clock.pauseAt('2026-09-15T01:00:00Z');
     const external = { ...worktrees[1], id: 'external', path: '/outside/new-worktree', branch: 'external-feature' };

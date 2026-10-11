@@ -124,36 +124,35 @@ impl AowManager {
         workspace_root: &str,
         temporary_workspace: bool,
     ) -> Result<AgentLaunch, AowError> {
-        let profile_id =
-            if let Some(id) = &pane.agent_profile_id {
-                id.clone()
-            } else {
-                // Older metadata only saved the product type. Recover the profile
-                // only when its executable and full launch arguments identify it.
-                let candidates: Vec<_> = self.agents().await?.into_iter().filter(|agent| {
-                let Some(kind) = agent.agent_type else {
-                    return false;
-                };
-                if !agent.available
-                    || Some(kind.id()) != pane.agent_id.as_deref()
-                    || agent.executable.as_deref() != Some(pane.shell.as_str())
-                {
-                    return false;
-                }
-                if agent.args == pane.arguments {
-                    return true;
-                }
-                let suffix = pane.arguments.strip_prefix(agent.args.as_slice());
-                let resume = if kind.id() == "claude" { "--resume" } else { "resume" };
-                matches!(suffix, Some([flag, session]) if flag == resume && !session.is_empty())
-            }).collect();
-                if candidates.len() != 1 {
-                    return Err(AowError::Invalid(
-                        "无法唯一确定该终端原来的 Agent 配置，请检查 Agent 配置后重试".into(),
-                    ));
-                }
-                candidates[0].id.clone()
-            };
+        let profile_id = if let Some(id) = &pane.agent_profile_id {
+            id.clone()
+        } else {
+            // Older metadata only saved the product type. Recover the profile
+            // only when its executable and full launch arguments identify it.
+            let candidates: Vec<_> = self
+                .agents()
+                .await?
+                .into_iter()
+                .filter(|agent| {
+                    let Some(kind) = agent.agent_type else {
+                        return false;
+                    };
+                    if !agent.available
+                        || Some(kind.id()) != pane.agent_id.as_deref()
+                        || agent.executable.as_deref() != Some(pane.shell.as_str())
+                    {
+                        return false;
+                    }
+                    agent.matches_terminal_arguments(&pane.arguments)
+                })
+                .collect();
+            if candidates.len() != 1 {
+                return Err(AowError::Invalid(
+                    "无法唯一确定该终端原来的 Agent 配置，请检查 Agent 配置后重试".into(),
+                ));
+            }
+            candidates[0].id.clone()
+        };
         let launch = if temporary_workspace {
             paths::canonical_directory(Path::new(workspace_root)).await?;
             self.resolve_agent_profile(&profile_id).await?

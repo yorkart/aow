@@ -1,3 +1,4 @@
+import type { TaskTabTarget } from '../../aow/AowTabEntry';
 import { storageKey } from '../../lib/basePath';
 import { parseTokenUsage, type TokenUsage } from '../../lib/tokenUsage';
 import { useMemo, useSyncExternalStore } from 'react';
@@ -6,6 +7,7 @@ interface TaskStopSource {
   project_name: string;
   workspace_root: string;
   tab_id: string;
+  thread_id?: string;
   tab_name: string;
 }
 
@@ -16,6 +18,16 @@ export interface TaskStop {
   cwd: string;
   sources: TaskStopSource[];
   usage?: TokenUsage;
+}
+
+export function noticeTarget(source: TaskStopSource): TaskTabTarget | undefined {
+  return source.thread_id ? { type: 'acp', thread_id: source.thread_id }
+    : source.tab_id ? { type: 'terminal', tabId: source.tab_id } : undefined;
+}
+
+export function noticeMatchesTarget(notice: TaskStop, target?: TaskTabTarget) {
+  return target && notice.sources.some(source => target.type === 'acp'
+    ? source.thread_id === target.thread_id : !source.thread_id && source.tab_id === target.tabId);
 }
 
 export interface TaskNotice extends TaskStop {
@@ -34,7 +46,8 @@ export function parseTaskStop(value: unknown): TaskStop | undefined {
     if (!source || typeof source.project_name !== 'string' || typeof source.workspace_root !== 'string'
       || typeof source.tab_id !== 'string' || typeof source.tab_name !== 'string') return [];
     return [{ project_name: source.project_name, workspace_root: source.workspace_root,
-      tab_id: source.tab_id, tab_name: source.tab_name }];
+      tab_id: source.tab_id, tab_name: source.tab_name,
+      ...(typeof source.thread_id === 'string' && source.thread_id ? { thread_id: source.thread_id } : {}) }];
   });
   const usage = parseTokenUsage(data.usage);
   return { agent: data.agent, session_id: data.session_id, title: data.title, cwd: data.cwd, sources,
@@ -145,6 +158,16 @@ function createNotificationQueue() {
 
 export const taskNotifications = createNotificationQueue();
 export const useTaskNotifications = () => useSyncExternalStore(taskNotifications.subscribe, taskNotifications.getSnapshot);
+
+export function useUnreadTerminalIds() {
+  const { notices } = useTaskNotifications();
+  return useMemo(() => new Set(notices.flatMap(notice => notice.sources.filter(source => !source.thread_id).map(source => source.tab_id).filter(Boolean))), [notices]);
+}
+
+export function useUnreadAcpThreadIds() {
+  const { notices } = useTaskNotifications();
+  return useMemo(() => new Set(notices.flatMap(notice => notice.sources.flatMap(source => source.thread_id ? [source.thread_id] : []))), [notices]);
+}
 
 export function useWorktreeUnreadCounts() {
   const { notices } = useTaskNotifications();

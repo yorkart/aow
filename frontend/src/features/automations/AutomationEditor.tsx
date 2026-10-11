@@ -1,18 +1,20 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { editor } from 'monaco-editor';
-import { CalendarClock, LoaderCircle, MousePointerClick, Settings2, Terminal, X } from 'lucide-react';
+import { CalendarClock, LoaderCircle, MousePointerClick, Settings2, X } from 'lucide-react';
 import type { AowAgent } from '../agents/types';
+import { aowAgentType } from '../agents/agentTypes';
 import type { AowProject } from '../../aow/types';
 import { notificationsApi } from '../notifications/api';
 import { agentNames, errorMessage } from './presentation';
 import { automationApi } from './api';
-import type { AutomationAgent, AutomationTask, TaskInput, TaskKind } from './types';
+import type { AutomationTask, TaskInput, TaskKind } from './types';
 
 import { WorkspaceSelect } from '../workspaces/WorkspaceSelect';
 import { workspaceConfig } from '../workspaces/types';
 
 import { identifyVariables, variableNames } from './variables';
+import './automations.css';
 
 const Editor = lazy(() => import('../editor/MonacoEditor'));
 
@@ -29,20 +31,22 @@ function parseSchedule(cron: string): { cadence: Cadence; time: string; weekday:
   return { cadence: 'custom', time: '09:00', weekday: '1', minute: '0' };
 }
 
-export function AutomationEditor({ task, kind = 'scheduled', project, agents, timezone, onClose, onSaved }: {
+export function AutomationEditor({ task, kind = 'scheduled', initialWorkspaceMode = 'new_worktree', project, agents, timezone, onClose, onSaved }: {
   task?: AutomationTask;
   kind?: TaskKind;
+  initialWorkspaceMode?: TaskInput['workspace_mode'];
   project: AowProject;
   agents: AowAgent[];
   timezone?: string;
   onClose: () => void;
   onSaved: (task: AutomationTask) => void;
 }) {
+  const initialAgent = agents.find(agent => agent.available && aowAgentType(agent));
   const initialWorktree = project.worktrees.find((worktree) => worktree.is_main) ?? project.worktrees[0];
   const [draft, setDraft] = useState<TaskInput>(() => task ? { ...task, kind: task.kind ?? 'scheduled', prompt_bindings: task.prompt_bindings ?? [], failure_notification: task.failure_notification ?? null } : {
-    kind, prompt_bindings: [], name: '', prompt: '', agent: (agents.find((agent) => agent.available && Object.hasOwn(agentNames, agent.id))?.id as AutomationAgent | undefined) ?? 'codex',
-    project_id: project.id, workspace_mode: 'new_worktree', workspace_path: initialWorktree?.path ?? '',
-    cleanup_worktree: true, base_branch: '', cron: '0 9 * * *', interval_seconds: null, max_concurrent_runs: 1, enabled: true, yolo: true, precheck_command: '', precheck_timeout_seconds: 60, failure_notification: null,
+    kind, prompt_bindings: [], name: '', prompt: '', agent: initialAgent ? aowAgentType(initialAgent)! : 'codex', agent_id: initialAgent?.id,
+    project_id: project.id, workspace_mode: initialWorkspaceMode, workspace_path: initialWorktree?.path ?? '',
+    cleanup_worktree: true, base_branch: '', cron: '0 9 * * *', interval_seconds: null, max_concurrent_runs: 1, enabled: true, yolo: true, failure_notification: null,
   });
   const [schedule, setSchedule] = useState(() => ({ ...parseSchedule(draft.cron), ...(draft.interval_seconds ? { cadence: 'interval' as Cadence } : {}) }));
   const [lastConcurrentRuns, setLastConcurrentRuns] = useState(() => draft.max_concurrent_runs > 1 ? draft.max_concurrent_runs : 3);
@@ -104,7 +108,8 @@ export function AutomationEditor({ task, kind = 'scheduled', project, agents, ti
   };
 
   return createPortal(<dialog ref={dialogRef} className="automation-editor" aria-labelledby="automation-editor-title"
-    onCancel={(event) => { event.preventDefault(); if (!busy) onClose(); }} onKeyDown={(event) => event.stopPropagation()}>
+    onCancel={(event) => { event.preventDefault(); if (!busy) onClose(); }} onKeyDown={(event) => event.stopPropagation()}
+    onDoubleClick={(event) => event.stopPropagation()} onDragStart={(event) => event.stopPropagation()}>
     <form onSubmit={(event) => void save(event)}>
       <header><div>{manual ? <MousePointerClick /> : <CalendarClock />}<h2 id="automation-editor-title">{task ? manual ? '编辑手动任务' : '编辑自动化' : manual ? '创建手动任务' : '创建自动化'}</h2></div><button type="button" disabled={busy} aria-label="关闭" onClick={onClose}><X /></button></header>
       <div className="automation-editor-body">
@@ -137,9 +142,15 @@ export function AutomationEditor({ task, kind = 'scheduled', project, agents, ti
         </section>
         <aside className="automation-settings">
           <h3><Settings2 />执行配置</h3>
-          <div className="automation-agent-setting"><span>Agent</span><div className="automation-agent-row"><select aria-label="Agent" value={draft.agent} onChange={(event) => update('agent', event.target.value as AutomationAgent)}>
-            {Object.entries(agentNames).map(([id, name]) => <option key={id} value={id} disabled={!agents.some((agent) => agent.id === id && agent.available)}>{name}{agents.some((agent) => agent.id === id && agent.available) ? '' : ' · 未安装'}</option>)}
-          </select><label className="automation-yolo-option"><input type="checkbox" checked={draft.yolo} onChange={(event) => update('yolo', event.target.checked)} />Yolo</label></div></div>
+          <div className="automation-agent-setting"><span>Agent</span><div className="automation-agent-row"><select aria-label="Agent" value={draft.agent_id ?? draft.agent} onChange={event => {
+            const selected = agents.find(agent => agent.id === event.target.value);
+            const type = selected && aowAgentType(selected);
+            if (selected && type) setDraft(current => ({ ...current, agent: type, agent_id: selected.id }));
+          }}>
+            {!agents.some(agent => agent.id === (draft.agent_id ?? draft.agent)) && <option value={draft.agent_id ?? draft.agent} disabled>{draft.agent_id ?? agentNames[draft.agent]} · 不可用</option>}
+            {agents.filter(agent => aowAgentType(agent)).map(agent => <option key={agent.id} value={agent.id} disabled={!agent.available}>{agent.display_name}{agent.available ? '' : ' · 未安装'}</option>)}
+          </select><label className="automation-yolo-option"><input type="checkbox" checked={draft.yolo} onChange={(event) => update('yolo', event.target.checked)} />{draft.agent === 'pi' ? '信任项目配置' : 'Yolo'}</label></div></div>
+          {draft.agent === 'pi' ? <p className="automation-hint">允许 Pi 加载项目配置和扩展；工具权限仍由 Pi 配置的扩展控制。</p> : null}
           <WorkspaceSelect project={project} value={draft} disabled={busy} allowDynamic={manual}
             onChange={workspace => setDraft(current => ({ ...current, ...workspace }))} onValidityChange={setWorkspaceReady} />
           {draft.workspace_mode === 'temporary' ? <p className="automation-hint">任务结束后自动删除临时工作区；该任务的 Agent 会话不会出现在项目的普通会话列表中。</p> : null}
@@ -162,11 +173,6 @@ export function AutomationEditor({ task, kind = 'scheduled', project, agents, ti
           </> : <p className="automation-hint">点击运行后填写变量，即可执行任务。</p>}
           <div className="automation-settings-divider" />
           <p className="automation-hint">{draft.max_concurrent_runs === 1 ? '上次执行未结束时跳过本次触发。' : `最多同时执行 ${draft.max_concurrent_runs} 个任务；达到上限时跳过本次触发。`}</p>
-          <details open={!!task?.precheck_command}><summary><Terminal />执行前检查<span>可选</span></summary>
-            <label><span>检查命令</span><textarea aria-label="检查命令" rows={3} value={draft.precheck_command} onChange={(event) => update('precheck_command', event.target.value)} placeholder="退出码为 0 时继续执行" /></label>
-            <label><span>超时时间</span><select aria-label="超时时间" value={draft.precheck_timeout_seconds} onChange={(event) => update('precheck_timeout_seconds', Number(event.target.value))}>{[30, 60, 120, 300, 600].map((seconds) => <option key={seconds} value={seconds}>{seconds} 秒</option>)}</select></label>
-          </details>
-          <div className="automation-settings-divider" />
           <label><span>失败提醒</span><select aria-label="失败提醒" value={draft.failure_notification ?? ''} disabled={busy} onChange={event => update('failure_notification', event.target.value === 'feishu' || event.target.value === 'wechat' ? event.target.value : null)}>
             <option value="">不提醒</option>
             {(['feishu', 'wechat'] as const).map(provider => <option key={provider} value={provider} disabled={!availableBots.includes(provider)}>{provider === 'feishu' ? '飞书' : '微信'} Bot{botStatus === 'ready' && !availableBots.includes(provider) ? ' · 当前环境未配置' : ''}</option>)}
@@ -175,7 +181,7 @@ export function AutomationEditor({ task, kind = 'scheduled', project, agents, ti
         </aside>
       </div>
       {error ? <div className="automation-error" role="alert">{error}</div> : null}
-      <footer>{!manual ? <label className="automation-checkbox"><input type="checkbox" checked={draft.enabled} onChange={(event) => update('enabled', event.target.checked)} />启用自动化</label> : <span />}<div><button type="button" disabled={busy} onClick={onClose}>取消</button><button className="automation-primary" type="submit" disabled={busy || !workspaceReady || !agents.some((agent) => agent.id === draft.agent && agent.available)}>{busy ? <LoaderCircle className="automation-spin" /> : null}{busy ? '保存中…' : task ? '保存更改' : manual ? '创建手动任务' : '创建自动化'}</button></div></footer>
+      <footer>{!manual ? <label className="automation-checkbox"><input type="checkbox" checked={draft.enabled} onChange={(event) => update('enabled', event.target.checked)} />启用自动化</label> : <span />}<div><button type="button" disabled={busy} onClick={onClose}>取消</button><button className="automation-primary" type="submit" disabled={busy || !workspaceReady || !agents.some((agent) => agent.id === (draft.agent_id ?? draft.agent) && agent.available)}>{busy ? <LoaderCircle className="automation-spin" /> : null}{busy ? '保存中…' : task ? '保存更改' : manual ? '创建手动任务' : '创建自动化'}</button></div></footer>
     </form>
   </dialog>, document.body);
 }

@@ -26,6 +26,10 @@ pub fn command(
         .stderr(Stdio::piped())
         .kill_on_drop(true)
         .process_group(0);
+    if task.input.agent.agent() == aow_agents::Agent::Pi {
+        // A scheduled process must not inherit the launching terminal's binding.
+        command.env_remove("AOW_PI_BINDING");
+    }
     command
         .args(
             task.input

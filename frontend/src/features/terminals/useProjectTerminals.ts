@@ -4,7 +4,7 @@ import type { TerminalAgentList, TerminalPaneStatus, TerminalTab } from './types
 import type { AowWorktree } from '../../aow/types';
 import { subscribeWorkspaceChanges } from '../../lib/workspaceEvents';
 
-const empty = { tabs: [] as TerminalTab[], agents: {}, titles: {}, processes: {} };
+const empty = { tabs: [] as TerminalTab[], agents: {}, titles: {}, processes: {}, activity: {} };
 
 // Listing a repository's terminals must not mount their emulators or attach to PTYs.
 export function useProjectTerminals(worktrees: AowWorktree[], enabled: boolean) {

@@ -14,6 +14,10 @@ const adapters: Record<TabTarget['type'], MobileAdapter> = {
     restore: t => t.type === 'terminal' ? { view: 'terminal', terminal: t.tabId } : {},
     capture: () => undefined, // The terminal pane reports its active Tab after loading.
   },
+  acp: {
+    restore: t => t.type === 'acp' ? { view: 'acp', acpSession: t.thread_id } : {},
+    capture: ({ route: r }) => r.view === 'acp' && r.acpSession ? { type: 'acp', thread_id: r.acpSession } : undefined,
+  },
   files: {
     restore: t => t.type === 'files' ? { view: 'files', directory: t.path, fileSource: 'external' } : {},
     capture: ({ route: r, worktree: w, project: p }) => r.view === 'files' && !r.file ? { type: 'files', workspace: w.id, path: r.directory ?? (r.notes === '1' ? p.notes_path : w.path) } : undefined,

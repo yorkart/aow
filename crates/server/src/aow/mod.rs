@@ -23,6 +23,7 @@ use git::git_output;
 mod agents;
 mod api;
 mod configuration;
+mod creation;
 mod error;
 mod git;
 mod global;
@@ -47,7 +48,7 @@ use registry::{
     load_registry,
 };
 
-use agents::{AgentsQuery, RegisterAgentRequest};
+use agents::{AgentsQuery, RegisterAgentRequest, ReorderAgentsRequest};
 use notes::{CreateTemporaryNoteRequest, TemporaryNoteResult};
 pub(crate) use projects::ProjectSummary;
 use projects::{BindNotesRequest, Project, RegisterProjectRequest};
@@ -57,14 +58,16 @@ use worktrees::{
     Worktree, WorktreeColor, WorktreeIcon, WorktreeRemovalPreview, WorktreeRemovalQuery,
 };
 
+#[cfg(test)]
+use settings::EditorSettings;
 use settings::{
-    AowSettings, EditorSettings, PinnedDirectories, PinnedWorktrees,
-    UpdatePinnedDirectoriesRequest, UpdatePinnedWorktreesRequest, UpdateSettingsRequest,
-    default_notes_base, load_settings,
+    AowSettings, PinnedDirectories, PinnedWorktrees, UpdatePinnedDirectoriesRequest,
+    UpdatePinnedWorktreesRequest, UpdateSettingsRequest, default_notes_base, load_settings,
 };
 
 pub(crate) use error::{AowError, aow_http_error};
 use error::{aow_response, snapshot_response};
+pub(crate) use settings::AcpSettingsFile;
 
 pub(crate) use agents::resolve_executable;
 pub(crate) use api::{resolve_session_locator, routes};
@@ -86,8 +89,10 @@ struct AowInner {
     settings: Mutex<AowSettings>,
     session_locators: Mutex<HashMap<String, CachedSessionLocator>>,
     project_operation: Arc<tokio::sync::Mutex<()>>,
+    agent_operation: tokio::sync::Mutex<()>,
     filesystem_operation: Arc<tokio::sync::RwLock<()>>,
     removals: removal::RemovalJobs,
+    creations: creation::CreationJobs,
 }
 
 impl AowManager {
@@ -114,8 +119,10 @@ impl AowManager {
                 settings: Mutex::new(AowSettings::with_notes_base(default_notes_base())),
                 session_locators: Mutex::new(HashMap::new()),
                 project_operation: Arc::new(tokio::sync::Mutex::new(())),
+                agent_operation: tokio::sync::Mutex::new(()),
                 filesystem_operation: Arc::new(tokio::sync::RwLock::new(())),
                 removals: removal::RemovalJobs::in_memory(),
+                creations: creation::CreationJobs::default(),
             }),
         }
     }
@@ -151,8 +158,10 @@ impl AowManager {
                 settings: Mutex::new(settings),
                 session_locators: Mutex::new(HashMap::new()),
                 project_operation: Arc::new(tokio::sync::Mutex::new(())),
+                agent_operation: tokio::sync::Mutex::new(()),
                 filesystem_operation: Arc::new(tokio::sync::RwLock::new(())),
                 removals,
+                creations: creation::CreationJobs::default(),
             }),
         })
     }

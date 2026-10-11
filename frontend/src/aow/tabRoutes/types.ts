@@ -5,9 +5,11 @@ import type { PullRequestSummary } from '../../features/pr/types';
 import type { TerminalTab } from '../../features/terminals/types';
 import type { AowAgentSession } from '../../features/sessions/types';
 import type { AowProject, AowWorktree } from '../types';
+import type { AcpSessionInfo, AcpTab } from '../../features/acp';
 
 export type TabTarget =
   | { type: 'terminal'; tabId: string }
+  | { type: 'acp'; thread_id: string }
   | { type: 'files'; workspace: string; path: string }
   | { type: 'file'; workspace: string; path: string; source: DocumentSource }
   | { type: 'diff'; workspace: string; repository: string; path: string; source: 'working' | 'staged' | 'commit'; commit?: string; originalPath?: string; untracked?: boolean }
@@ -18,6 +20,7 @@ export interface AutomationLocation { view: 'overview' | 'runs'; runId?: string 
 export interface TabContext {
   workspace: string; workspacePath: string; tab?: WorkspaceTab;
   documents: OpenDocument[];
+  acpTabs: AcpTab[];
   sessions: { session: AowAgentSession; workspacePath: string; automationRun?: { taskId: string; runId: string } }[];
   pullRequests: (PullRequestSummary & { repository?: string })[];
   browserPath: string;
@@ -26,10 +29,12 @@ export interface TabContext {
 export interface ResolvedTab {
   target: TabTarget; workspacePath: string;
   terminal?: TerminalTab; session?: AowAgentSession;
+  acpSession?: AcpSessionInfo; centerId?: string;
   pullRequest?: PullRequestSummary; task?: AutomationTask;
 }
 export interface TabOpenActions {
   terminal: (id: string) => void;
+  acp: (session: AcpSessionInfo) => void;
   files: (path: string) => void;
   file: (path: string, source: DocumentSource) => void | Promise<void>;
   diff: (target: Extract<TabTarget, { type: 'diff' }>) => void | Promise<void>;
@@ -44,6 +49,7 @@ export interface TabRouteAdapter<T extends TabTarget = TabTarget> {
   parse: (segments: string[], query: URLSearchParams) => T;
   url: (target: T) => string;
   capture: (context: TabContext) => T | undefined;
+  locate?: (target: T, signal: AbortSignal) => Promise<Partial<ResolvedTab> & { workspacePath: string }>;
   resolve: (target: T, context: ResolveContext, signal: AbortSignal) => Promise<Partial<ResolvedTab>>;
   open: (target: T, resolved: ResolvedTab, actions: TabOpenActions) => void | Promise<void>;
 }

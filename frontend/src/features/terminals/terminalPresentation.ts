@@ -1,4 +1,5 @@
-import type { TerminalLayout, TerminalPane, TerminalTab } from './types';
+import type { TerminalAgentProcess, TerminalLayout, TerminalPane, TerminalPaneActivity, TerminalTab } from './types';
+import { agentTypes } from '../agents/agentTypes';
 
 export function isCliTerminal(tab: TerminalTab) {
   return tab.panes.some(pane => pane.agent_terminal !== undefined);
@@ -19,8 +20,26 @@ export function defaultTerminalPaneName(pane: Pick<TerminalPane, 'cwd' | 'shell'
     || pane.shell.split(/[\\/]/).filter(Boolean).at(-1) || 'Shell';
 }
 
-export function terminalPaneTitle(pane: TerminalPane, detected: Record<string, string | null>, titles: Record<string, string>) {
-  return agentTitle(pane, detected, titles) || defaultTerminalPaneName(pane);
+function agentFallbackTitle(agentId: string) {
+  return agentTypes.find(agent => agent.id === agentId)?.label ?? agentId;
+}
+
+export function terminalPaneTitle(
+  pane: TerminalPane,
+  detected: Record<string, string | null>,
+  titles: Record<string, string>,
+  activity: Record<string, TerminalPaneActivity> = {},
+  processes: Record<string, TerminalAgentProcess> = {},
+) {
+  const agentId = terminalPaneAgent(pane, detected);
+  if (pane.status === 'running' && agentId && processes[pane.id]) {
+    return titles[pane.id] || agentFallbackTitle(agentId);
+  }
+  const foregroundCommand = pane.status === 'running' ? activity[pane.id]?.foreground_command : undefined;
+  if (foregroundCommand) return foregroundCommand;
+  const cwd = activity[pane.id]?.cwd;
+  if (pane.status === 'running' && !cwd && titles[pane.id]) return titles[pane.id];
+  return defaultTerminalPaneName({ ...pane, cwd: cwd || pane.cwd });
 }
 
 function orderedTerminalPanes(tab: TerminalTab) {
@@ -59,6 +78,20 @@ export function terminalTabPresentation(tab: TerminalTab, detected: Record<strin
   return { title, agentCount, agentId: agentIds.size === 1 ? agents[0].agentId : undefined, panes };
 }
 
+function flattenedPaneTitle(
+  tab: TerminalTab,
+  pane: TerminalPane,
+  paneCount: number,
+  detected: Record<string, string | null>,
+  titles: Record<string, string>,
+  activity: Record<string, TerminalPaneActivity>,
+  processes: Record<string, TerminalAgentProcess>,
+) {
+  const title = terminalPaneTitle(pane, detected, titles, activity, processes);
+  if (paneCount > 1) return `${tab.name} · ${title}`;
+  return tab.name_is_custom === false ? title : tab.name;
+}
+
 export type TerminalTabPresentation = ReturnType<typeof terminalTabPresentation>;
 
 export interface TerminalDimensions { cols: number; rows: number }
@@ -76,13 +109,18 @@ export function savedTerminalDimensions(pane: Pick<TerminalPane, 'cols' | 'rows'
   return { cols: valid(pane.cols) ? pane.cols! : 80, rows: valid(pane.rows) ? pane.rows! : 24 };
 }
 
-export function flattenTerminalTabs(tabs: TerminalTab[], detected: Record<string, string | null> = {}, titles: Record<string, string> = {}) {
+export function flattenTerminalTabs(
+  tabs: TerminalTab[],
+  detected: Record<string, string | null> = {},
+  titles: Record<string, string> = {},
+  activity: Record<string, TerminalPaneActivity> = {},
+  processes: Record<string, TerminalAgentProcess> = {},
+) {
   return tabs.flatMap((tab) => {
     const ordered = orderedTerminalPanes(tab);
     return ordered.map((pane) => ({
       key: `${tab.id}:${pane.id}`, tab, pane,
-      title: agentTitle(pane, detected, titles)
-        || (ordered.length > 1 ? `${tab.name} · ${defaultTerminalPaneName(pane)}` : tab.name),
+      title: flattenedPaneTitle(tab, pane, ordered.length, detected, titles, activity, processes),
     }));
   });
 }

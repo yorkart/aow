@@ -58,7 +58,14 @@ ORDER BY updated_at_ms DESC, id DESC
     }
 
     pub(crate) fn find_session(&self, session_id: &str) -> Option<AgentSession> {
-        let connection = open_state_db(&self.home).ok()?;
+        self.find_sessions([session_id]).ok()?.into_iter().next()
+    }
+
+    pub(crate) fn find_sessions<'a>(
+        &self,
+        session_ids: impl IntoIterator<Item = &'a str>,
+    ) -> rusqlite::Result<Vec<AgentSession>> {
+        let connection = open_state_db(&self.home)?;
         let sql = r#"
 SELECT id, rollout_path, cwd, title, created_at, updated_at
 FROM threads
@@ -68,17 +75,22 @@ WHERE id = ?1
             "cwd, title,",
             &format!("cwd, {},", display_title_column(&connection)),
         );
-        let mut session = connection
-            .query_row(&sql, params![session_id], |row| {
-                Self::row_session(self.definition, &self.home, row)
-            })
-            .optional()
-            .ok()
-            .flatten()?;
-        if display_title_column(&connection) == "title" {
-            apply_index_names(&self.home, std::slice::from_mut(&mut session));
+        let mut statement = connection.prepare(&sql)?;
+        let mut sessions = Vec::new();
+        for session_id in session_ids {
+            if let Some(session) = statement
+                .query_row(params![session_id], |row| {
+                    Self::row_session(self.definition, &self.home, row)
+                })
+                .optional()?
+            {
+                sessions.push(session);
+            }
         }
-        Some(session)
+        if display_title_column(&connection) == "title" {
+            apply_index_names(&self.home, &mut sessions);
+        }
+        Ok(sessions)
     }
 }
 

@@ -80,7 +80,20 @@ impl Drop for SpawnedRuntime {
         };
         self.runtime.notify_deleted();
         self.runtime.kill_uncommitted_spawn_best_effort();
-        drop(self.reader.take());
+        if let Some(mut reader) = self.reader.take() {
+            // macOS can wait for controlling-terminal output to drain while
+            // exiting, even after SIGKILL. The runtime keeps master/writer
+            // handles open until reaping, so discarding the only reader here
+            // would leave child.wait() waiting on output nobody consumes.
+            // Drain concurrently: descendants may keep the slave open until
+            // mark_reaped removes them after the leader's wait completes.
+            let runtime_id = self.runtime.id.clone();
+            thread::spawn(move || {
+                if let Err(error) = std::io::copy(&mut reader, &mut std::io::sink()) {
+                    tracing::debug!(%error, %runtime_id, "uncommitted terminal PTY drain stopped");
+                }
+            });
+        }
         let runtime = self.runtime.clone();
         let spawn_permit = self.spawn_permit.take();
         // A spawn_blocking result is dropped when its awaiting HTTP request is
@@ -149,6 +162,9 @@ pub(super) fn spawn_runtime_blocking(
     command.env("COLORTERM", "truecolor");
     command.env("TERM_PROGRAM", "aow-web");
     command.env("AOW_WEB_TERMINAL", "1");
+    // Always identify this pane, overriding any inherited or profile identity.
+    // CLI-created descendants use it as their direct parent, including after rebuilds.
+    command.env("AOW_PANE_ID", &id);
     // This PTY is a remote terminal from the user's point of view. Programs
     // such as TraeCode CLI must use terminal-mediated clipboard protocols (OSC 52)
     // instead of writing to terminald's host clipboard. Keep the standard

@@ -9,6 +9,8 @@ use crate::{
 
 #[derive(Clone)]
 pub struct AppState {
+    pub(crate) acp: aow_acp::AcpService,
+    pub(crate) acp_controls: crate::acp::Controls,
     pub(crate) inbox: crate::inbox::InboxStore,
     pub(crate) base_path: BasePath,
     pub(crate) frontend_dist: PathBuf,
@@ -30,14 +32,20 @@ impl AppState {
     }
 
     pub fn with_terminald_socket(frontend_dist: PathBuf, terminald_socket: PathBuf) -> Self {
+        let aow = aow::AowManager::in_memory();
+        let terminals =
+            terminal::TerminalManager::in_memory(TerminaldClient::new(terminald_socket));
         Self {
+            acp: crate::acp::service(aow.clone(), None, terminals.task_stop_sender())
+                .expect("in-memory ACP service"),
+            acp_controls: crate::acp::Controls::default(),
             inbox: crate::inbox::InboxStore::in_memory(),
             base_path: BasePath::default(),
             frontend_dist,
             auth: auth::AuthService::disabled(),
             session_shares: session_shares::SessionShares::in_memory(),
-            terminals: terminal::TerminalManager::in_memory(TerminaldClient::new(terminald_socket)),
-            aow: aow::AowManager::in_memory(),
+            terminals,
+            aow,
             automations: None,
             review_providers: pull_requests::ProviderManager::default(),
             operations: operations::OperationService::in_memory(),
@@ -61,7 +69,20 @@ impl AppState {
         let aow = aow::AowManager::persistent(&state_dir).map_err(|error| {
             TerminalError::Invalid(format!("failed to initialize aow: {error}"))
         })?;
+        let terminals = terminal::TerminalManager::persistent(
+            state_dir.clone(),
+            TerminaldClient::new(terminald_socket),
+        )?;
         Ok(Self {
+            acp_controls: crate::acp::Controls::default(),
+            acp: crate::acp::service(
+                aow.clone(),
+                Some(state_dir.clone()),
+                terminals.task_stop_sender(),
+            )
+            .map_err(|error| {
+                TerminalError::Invalid(format!("failed to initialize ACP: {error:#}"))
+            })?,
             inbox: crate::inbox::InboxStore::persistent(&state_dir)
                 .map_err(|e| TerminalError::Invalid(format!("failed to initialize inbox: {e}")))?,
             workspace_events: workspace_events::WorkspaceEvents::new(),
@@ -83,10 +104,7 @@ impl AppState {
                         TerminalError::Invalid(format!("failed to initialize automations: {error}"))
                     })?,
             ),
-            terminals: terminal::TerminalManager::persistent(
-                state_dir.clone(),
-                TerminaldClient::new(terminald_socket),
-            )?,
+            terminals,
             aow,
         })
     }
@@ -106,6 +124,12 @@ impl AppState {
     /// while the daemon is unavailable.
     pub async fn reconcile_terminals(&self) -> Result<(), TerminalError> {
         self.terminals.reconcile().await
+    }
+
+    /// The ACP writer runs outside Tokio; explicitly drain it before the runtime exits.
+    pub async fn flush_acp_history(&self) -> anyhow::Result<()> {
+        let service = self.acp.clone();
+        tokio::task::spawn_blocking(move || service.flush_threads_on_quit()).await?
     }
 
     pub fn start_agent_notifications(&self) {

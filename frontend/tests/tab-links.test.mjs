@@ -7,6 +7,7 @@ import { createServer } from 'vite';
 import { chromium } from 'playwright';
 import { installLiveEvents } from './fixtures/live-events.mjs';
 import { fillInboxEditor } from './fixtures/inbox-editor.mjs';
+import { acpControlFixture } from './fixtures/acp-control.mjs';
 
 const screenshotDir = process.env.AOW_TEST_SCREENSHOT_DIR || '/tmp';
 await mkdir(screenshotDir, { recursive: true });
@@ -24,6 +25,12 @@ function terminal(id, root, name) {
     panes: [{ id: `${id}-pane`, name, name_is_custom: true, cwd: root, kind: 'terminal',
       shell: '/bin/bash', status: 'running', rows: 24, cols: 80 }] };
 }
+function acpSession(id = 'acp-local', cwd = '/workspace/linked') {
+  return { thread_id: id, session_id: `remote-${id}`, agent_id: 'test', cwd, title: `Saved ACP ${id}`, status: 'disconnected', revision: 1, updated_at: '',
+    entries: [{ id: 'user', kind: 'user', content: { type: 'text', text: 'Read the workspace' } },
+      { id: 'reply', kind: 'assistant', content: { type: 'text', text: `Retained reply for ${id}` } }],
+    permissions: [], modes: {}, config_options: [], commands: [], usage: null };
+}
 async function assertInboxAutosave(scope) {
   assert.equal(await scope.getByRole('button', { name: /^(提交|保存|取消)$/ }).count(), 0);
 }
@@ -34,7 +41,7 @@ try {
   const base = `http://127.0.0.1:${server.httpServer.address().port}`;
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
 
-  async function fixture(t, { mobile = false, login = false, floating = false, extraFloatingTabs = [], global = false, missing = false, removedWorkspace = false, temporary = false, entry = 'target', editable = false, tabUrl, sessionAgent = false, pinned = [], reviewTargets = [], preserveFloating = false } = {}) {
+  async function fixture(t, { mobile = false, login = false, floating = false, extraFloatingTabs = [], global = false, missing = false, removedWorkspace = false, temporary = false, entry = 'target', editable = false, tabUrl, sessionAgent = false, pinned = [], reviewTargets = [], preserveFloating = false, acp = false, acpHistory = [], acpSavedTabs = [] } = {}) {
     const context = await browser.newContext({ viewport: mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 } });
     const root = temporary ? '/private/tmp/aow-inbox-link' : global ? '/global' : worktrees[1].path;
     const target = terminal('target', root, 'Target Tab');
@@ -43,35 +50,72 @@ try {
     const projects = removedWorkspace ? [] : [project];
     if (global) projects.push({ ...project, id: '__aow_floating', name: '浮动工作区', builtin: true,
       registered_path: root, worktrees: [{ ...worktrees[0], id: 'global-main', project_id: '__aow_floating', path: root }] });
-    const state = { authenticated: !login, targetReads: 0, mutations: [], errors: [], reads: [], inbox: [] };
+    const state = { authenticated: !login, targetReads: 0, mutations: [], errors: [], reads: [], inbox: [], acpSessions: structuredClone(acpHistory), acpListError: '', acpConnections: 0, acpWrites: [] };
     const session = { id: 'codex:session-one', session_id: 'session-one', agent: 'codex', title: 'Linked Conversation', cwd: '/actual-session', created_at: '', updated_at: '' };
-    const task = { id: 'task-one', name: 'Linked Automation', project_id: 'project', project_name: project.name, revision: 1, agent: 'codex', workspace_mode: 'existing', workspace_path: root, prompt: 'Task prompt', cron: '0 9 * * *', interval_seconds: null, max_concurrent_runs: 1, enabled: true, yolo: false, base_branch: '', cleanup_worktree: false, precheck_command: '', precheck_timeout_seconds: 30, is_running: false, scheduler_error: null, last_run: null, next_run_at: null };
+    const task = { id: 'task-one', name: 'Linked Automation', project_id: 'project', project_name: project.name, revision: 1, agent: 'codex', workspace_mode: 'existing', workspace_path: root, prompt: 'Task prompt', cron: '0 9 * * *', interval_seconds: null, max_concurrent_runs: 1, enabled: true, yolo: false, base_branch: '', cleanup_worktree: false, is_running: false, scheduler_error: null, last_run: null, next_run_at: null };
     const run = { id: 'run-old', task_id: task.id, task_name: task.name, agent: 'codex', source: 'manual', status: 'completed', started_at: '2026-09-19T00:00:00Z', finished_at: '2026-09-19T00:01:00Z', workspace_path: root, branch: 'dev', session_id: null, duration_ms: 60000, exit_code: 0 };
     const pr = { number: 42, title: 'Linked PR', source_branch: 'dev', target_branch: 'main', status: 'open', draft: false, created_at: '', updated_at: '', url: null, description: 'PR description', files: [], checks: [], reviewers: [], threads: [], unresolved_threads: [], changes_count: 0, commits_count: 1 };
     t.after(async () => { await context.close(); assert.deepEqual(state.errors, []); if (!editable) assert.deepEqual(state.mutations, []); });
     await installLiveEvents(context);
-    await context.addInitScript(({ root, floating, extraFloatingTabs, preserveFloating }) => {
+    const controls = acpControlFixture();
+    if (acp) await controls.install(context);
+    await context.addInitScript(({ root, floating, extraFloatingTabs, preserveFloating, acp, acpSavedTabs }) => {
       window.sendTaskStop = data => window.emitLiveEvent('task-stopped', data);
       window.taskStopReady = () => window.liveEventSockets.some(socket => socket.readyState === 1);
-      localStorage.setItem('aow-active', '/workspace/main');
-      localStorage.setItem(`aow-workspace-tabs:${root}`, JSON.stringify({ active: 'terminal:other' }));
+      if (!acp || !localStorage.getItem('aow-active')) localStorage.setItem('aow-active', '/workspace/main');
+      if (!acp || !localStorage.getItem(`aow-workspace-tabs:${root}`)) localStorage.setItem(`aow-workspace-tabs:${root}`, JSON.stringify({ active: 'terminal:other' }));
+      if (acpSavedTabs.length && !localStorage.getItem(`aow-acp-tabs:${root}`)) localStorage.setItem(`aow-acp-tabs:${root}`, JSON.stringify(acpSavedTabs));
       sessionStorage.setItem(`aow.mobile.terminal.${root}`, 'other:other-pane');
       if (floating && (!preserveFloating || !localStorage.getItem('aow-floating-tabs-v1'))) {
         localStorage.setItem('aow-floating-tabs-v1', JSON.stringify([{ workspace: root,
           id: 'terminal:target', targetId: 'target', kind: 'terminal', label: 'Target Tab' }, ...extraFloatingTabs]));
         localStorage.setItem('aow-floating-open', 'false');
       }
-    }, { root, floating, extraFloatingTabs, preserveFloating });
+    }, { root, floating, extraFloatingTabs, preserveFloating, acp, acpSavedTabs });
     await context.route('**/api/**', async route => {
       const request = route.request();
       const url = new URL(request.url());
       let data;
       if (request.method() === 'GET') state.reads.push(url.pathname + url.search);
+      if (url.pathname.startsWith('/api/acp/') && request.method() !== 'GET') state.acpWrites.push(request.method() + ' ' + url.pathname);
       if (request.method() !== 'GET' && /\/api\/(fs|aow\/automations)\//.test(url.pathname)) state.mutations.push(request.method() + url.pathname);
       if (url.pathname === '/api/auth/status') data = { configured: true, authenticated: state.authenticated };
       else if (url.pathname === '/api/auth/login') { state.authenticated = true; data = { configured: true, authenticated: true }; }
       else if (!state.authenticated) { await route.fulfill({ status: 401, json: { message: 'Login required' } }); return; }
-      else if (url.pathname === '/api/inbox') data = { revision: state.inbox.length, items: state.inbox, labels: [], executions: temporary ? [{ id: 'inbox-run', workspace_mode: 'temporary', tab_id: 'target', cwd: root }] : [] };
+      else if (acp && url.pathname === '/api/acp/agents') data = [{ id: 'test', name: 'Test Agent', supported: true, configured: true, installed: true }];
+      else if (acp && url.pathname === '/api/acp/settings') data = { content: '{}', revision: '1', path: '/config/acp/settings.json' };
+      else if (acp && url.pathname === '/api/acp/sessions' && request.method() === 'GET') {
+        if (state.acpListError) { await route.fulfill({ status: 503, json: { message: state.acpListError } }); return; }
+        data = state.acpSessions.filter(session => session.cwd === url.searchParams.get('cwd'));
+      }
+      else if (acp && url.pathname === '/api/acp/connections') {
+        state.acpConnections++; data = { id: 'acp-connection', agent_id: 'test', cwd: root, auth_methods: [], capabilities: {} };
+      }
+      else if (acp && url.pathname === '/api/acp/sessions' && request.method() === 'POST') {
+        assert.deepEqual(request.postDataJSON(), { agent_id: 'test', cwd: root });
+        data = { thread_id: 'acp-local', session_id: null, agent_id: 'test', cwd: root, title: 'ACP Conversation', status: 'disconnected', revision: 1, updated_at: '', entries: [], permissions: [], modes: {}, config_options: [], commands: [], usage: null };
+        state.acpSessions.push(data);
+      }
+      else if (acp && /^\/api\/acp\/sessions\/[^/]+\/actions$/.test(url.pathname)) {
+        const id = decodeURIComponent(url.pathname.split('/').at(-2));
+        assert.equal(controls.authorized(id, request), true);
+        assert.equal(request.postDataJSON().action, 'resume');
+        data = state.acpSessions.find(session => session.thread_id === id);
+        if (!data.session_id) { state.acpConnections++; data.session_id = 'acp-remote'; }
+        data.status = 'idle'; data.revision++;
+      }
+      else if (acp && /^\/api\/acp\/sessions\/[^/]+\/connection$/.test(url.pathname)) data = null;
+      else if (acp && /^\/api\/acp\/sessions\/[^/]+\/metadata$/.test(url.pathname)) {
+        data = state.acpSessions.find(session => session.thread_id === decodeURIComponent(url.pathname.split('/').at(-2)));
+        if (!data) { await route.fulfill({ status: 404, json: { message: '该 ACP 会话已不存在。' } }); return; }
+      }
+      else if (acp && /^\/api\/acp\/sessions\/[^/]+$/.test(url.pathname)) {
+        data = state.acpSessions.find(session => session.thread_id === decodeURIComponent(url.pathname.split('/').at(-1)));
+        if (!data) { await route.fulfill({ status: 404, json: { message: 'ACP session not found' } }); return; }
+      }
+      else if (acp && url.pathname === '/api/acp/connection-status') data = null;
+      else if (acp && url.pathname === '/api/acp/connections/acp-connection/requests') data = [];
+      else if (url.pathname === '/api/inbox') data = { revision: state.inbox.length, items: state.inbox, labels: [], comment_counts: Object.fromEntries(state.inbox.map(item => [item.id, 0])), executions: temporary ? [{ id: 'inbox-run', workspace_mode: 'temporary', tab_id: 'target', cwd: root }] : [] };
       else if (url.pathname === '/api/inbox/items' && request.method() === 'POST') {
         const input = request.postDataJSON();
         data = { id: `inbox-${state.inbox.length}`, markdown: input.markdown, project_id: null, label_ids: [], revision: 1, created_at: '', updated_at: '' };
@@ -89,7 +133,7 @@ try {
         data = tabs.find(tab => tab.id === id);
         if (!data || missing) { await route.fulfill({ status: 404, json: { message: 'Tab not found' } }); return; }
       }
-      else if (url.pathname === '/api/terminals' && request.method() === 'GET') data = tabs.filter(tab => tab.workspace_root === url.searchParams.get('workspace_root'));
+      else if (url.pathname === '/api/terminals' && request.method() === 'GET') data = tabs.filter(tab => !url.searchParams.has('workspace_root') || tab.workspace_root === url.searchParams.get('workspace_root'));
       else if (editable && url.pathname === '/api/terminals' && request.method() === 'POST') {
         data = terminal('created', request.postDataJSON().workspace_root, 'Created Tab');
         tabs.push(data); state.mutations.push('create');
@@ -140,6 +184,210 @@ try {
     await page.goto(destination.href);
     return { page, state, root };
   }
+
+  await test('ACP sessions publish their persisted identity and restore without creating a duplicate', async t => {
+    const { page, state } = await fixture(t, { acp: true });
+    await page.locator('.project-aow-surface:not([hidden]) .project-aow-center-tab.active').filter({ hasText: 'Target Tab' }).waitFor();
+    await page.getByRole('button', { name: '隐藏右侧栏', exact: true }).click();
+    await page.getByRole('button', { name: '新建窗体', exact: true }).click();
+    await page.getByRole('button', { name: '新建 ACP 会话：Test Agent', exact: true }).click();
+    const active = page.locator('.project-aow-surface:not([hidden]) .project-aow-center-tab.active').filter({ hasText: 'ACP Conversation' });
+    await active.waitFor();
+    await page.getByLabel('ACP 消息', { exact: true }).waitFor();
+    await page.waitForURL(url => url.pathname === '/aow/tabs/acp/acp-local' && !url.searchParams.has('workspace'));
+    assert.equal(await page.locator('.project-aow-new-menu').count(), 0);
+    await page.getByRole('button', { name: '显示右侧栏', exact: true }).click();
+    assert.equal(await page.getByRole('button', { name: '新建 ACP 会话', exact: true }).count(), 0);
+    const link = page.url();
+    await page.screenshot({ path: join(screenshotDir, 'aow-acp-panel-theme.png') });
+    await page.reload();
+    await active.waitFor();
+    await page.getByLabel('ACP 消息', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'ACP 面板', exact: true }).click();
+    await page.getByRole('button', { name: '打开 ACP 会话 ACP Conversation', exact: true }).click();
+    assert.equal(await page.getByRole('tab', { name: /^ACP Conversation/ }).count(), 1);
+    await page.getByRole('button', { name: '关闭 ACP Conversation', exact: true }).click();
+    assert.equal(state.acpConnections, 1);
+    assert.equal(state.acpWrites.filter(path => path.endsWith('/sessions')).length, 1);
+    await page.goto(link);
+    await active.waitFor();
+    assert.equal(await page.getByRole('tab', { name: /^ACP Conversation/ }).count(), 1);
+    assert.equal(state.acpSessions.length, 1);
+    assert.deepEqual(state.mutations, []);
+  });
+
+  await test('floating workspace creates ACP sessions in the global workspace with its sidebar closed', async t => {
+    const { page, state } = await fixture(t, { acp: true, global: true, floating: true, preserveFloating: true });
+    const floating = page.locator('[data-floating-workspace]');
+    await floating.getByRole('tab', { name: /^Target Tab/ }).waitFor();
+    const sidebarToggle = floating.getByRole('button', { name: '全局项目面板', exact: true });
+    if (await sidebarToggle.getAttribute('aria-pressed') === 'true') await sidebarToggle.click();
+    await floating.getByRole('button', { name: '浮动工作区新建', exact: true }).click();
+    await floating.getByRole('button', { name: '新建 ACP 会话：Test Agent', exact: true }).click();
+    await floating.getByLabel('ACP 消息', { exact: true }).waitFor();
+    await floating.getByRole('tab', { name: /^ACP Conversation/ }).waitFor();
+    await page.waitForURL(url => url.pathname === '/aow/tabs/acp/acp-local');
+    assert.equal(await sidebarToggle.getAttribute('aria-pressed'), 'false');
+    assert.equal(await floating.locator('.project-aow-new-menu').count(), 0);
+    assert.equal(state.acpSessions[0].cwd, '/global');
+    assert.equal(state.acpSessions.length, 1);
+    await page.reload();
+    await floating.getByLabel('ACP 消息', { exact: true }).waitFor();
+    assert.equal(state.acpWrites.filter(path => path.endsWith('/sessions')).length, 1);
+  });
+
+  await test('ACP links open saved sessions in a fresh browser after login on desktop and mobile', async t => {
+    for (const mobile of [false, true]) {
+      const { page, state } = await fixture(t, { acp: true, mobile, login: true, acpHistory: [acpSession()], tabUrl: '/aow/tabs/acp/acp-local' });
+      await page.getByLabel('账号').fill('admin');
+      await page.getByLabel('密码', { exact: true }).fill('test-password');
+      await page.getByRole('button', { name: '登录', exact: true }).click();
+      await page.getByText('Retained reply for acp-local', { exact: true }).waitFor();
+      await page.getByLabel('ACP 消息', { exact: true }).waitFor();
+      await page.waitForURL(url => url.pathname === '/aow/tabs/acp/acp-local' && !url.searchParams.has('workspace'));
+      await page.screenshot({ path: join(screenshotDir, `aow-acp-link-${mobile ? 'mobile' : 'desktop'}.png`) });
+      await page.reload();
+      await page.getByText('Retained reply for acp-local', { exact: true }).waitFor();
+      assert.deepEqual(state.acpWrites, ['POST /api/acp/sessions/acp-local/actions'], 'the owner restores once without creating or prompting');
+      assert.equal(state.acpConnections, 0);
+      assert.deepEqual(state.errors, []);
+    }
+  });
+
+  await test('mobile ACP navigation lists workspace sessions and opens the shared conversation page', async t => {
+    const older = { ...acpSession('older'), title: '检查项目配置', agent_id: 'codex-acp', updated_at: '2026-10-13T09:00:00Z' };
+    const newer = { ...acpSession('newer'), title: '优化手机端会话导航', agent_id: 'claude-agent-acp', updated_at: '2026-10-13T10:00:00Z' };
+    const { page, state } = await fixture(t, { acp: true, mobile: true, acpHistory: [older, acpSession('elsewhere', '/workspace/main'), newer] });
+    const navigation = page.getByRole('navigation', { name: '工作区导航' });
+    const entry = navigation.getByRole('button', { name: 'ACP', exact: true });
+    await entry.click();
+    const list = page.getByRole('region', { name: 'ACP 会话列表', exact: true });
+    await list.getByRole('button', { name: '打开 ACP 会话 检查项目配置', exact: true }).waitFor();
+    assert.equal(await entry.getAttribute('aria-current'), 'page');
+    assert.deepEqual(await list.locator('.mobile-list-row strong').allTextContents(), [newer.title, older.title]);
+    assert.equal(await list.locator('.mobile-row-icon .agent-icon').count(), 2);
+    assert.deepEqual(state.acpWrites, [], 'browsing history does not create, resume or prompt an agent');
+    assert.equal(state.acpConnections, 0);
+    assert.equal(state.reads.some(path => /^\/api\/acp\/sessions\/[^/]+$/.test(path)), false, 'the list only reads session metadata');
+    for (const width of [390, 320]) {
+      await page.setViewportSize({ width, height: 844 });
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+      for (const button of await navigation.getByRole('button').all()) {
+        const box = await button.boundingBox();
+        assert.ok(box.x >= 0 && box.x + box.width <= width && box.width >= 44, 'all seven navigation buttons remain reachable');
+      }
+      await page.screenshot({ path: join(screenshotDir, `aow-mobile-acp-list-${width}.png`) });
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    await list.getByRole('button', { name: '打开 ACP 会话 检查项目配置', exact: true }).click();
+    await page.waitForURL(url => url.pathname === '/aow/tabs/acp/older');
+    await page.getByText('Retained reply for older', { exact: true }).waitFor();
+    const editor = page.getByLabel('ACP 消息', { exact: true });
+    await editor.fill('保留手机端草稿');
+    await page.screenshot({ path: join(screenshotDir, 'aow-mobile-acp-conversation.png') });
+    await page.getByRole('button', { name: '返回 ACP 会话列表', exact: true }).click();
+    await list.waitFor();
+    await list.getByRole('button', { name: '打开 ACP 会话 检查项目配置', exact: true }).click();
+    await editor.waitFor();
+    assert.equal(await editor.innerText(), '保留手机端草稿');
+    await page.reload();
+    await page.getByText('Retained reply for older', { exact: true }).waitFor();
+    assert.equal(await entry.getAttribute('aria-current'), 'page');
+    await entry.click();
+    await list.waitFor();
+    await list.getByRole('button', { name: '打开 ACP 会话 优化手机端会话导航', exact: true }).click();
+    await page.getByText('Retained reply for newer', { exact: true }).waitFor();
+    await page.goBack();
+    await list.waitFor();
+    await page.reload();
+    await list.waitFor();
+    assert.equal(await list.locator('.mobile-list-row').count(), 2);
+    assert.deepEqual(state.acpWrites, ['POST /api/acp/sessions/older/actions', 'POST /api/acp/sessions/newer/actions'], 'opening restores existing sessions once without creating duplicates');
+    assert.equal(state.acpSessions.length, 3);
+  });
+
+  await test('mobile ACP lists handle empty workspaces, refresh failures and workspace changes', async t => {
+    const { page, state, root } = await fixture(t, { acp: true, mobile: true });
+    await page.getByRole('navigation', { name: '工作区导航' }).getByRole('button', { name: 'ACP', exact: true }).click();
+    const list = page.getByRole('region', { name: 'ACP 会话列表', exact: true });
+    await list.getByText('这个工作区还没有 ACP 会话记录。', { exact: true }).waitFor();
+    state.acpListError = '读取 ACP 会话失败';
+    await list.getByRole('button', { name: '刷新', exact: true }).click();
+    await list.getByRole('alert').getByText(state.acpListError, { exact: true }).waitFor();
+    state.acpListError = '';
+    state.acpSessions.push(acpSession('linked', root), acpSession('main', '/workspace/main'));
+    await list.getByRole('button', { name: '重新加载', exact: true }).click();
+    await list.getByRole('button', { name: '打开 ACP 会话 Saved ACP linked', exact: true }).waitFor();
+    assert.equal(await list.getByRole('alert').count(), 0);
+    await page.goto(`${base}/aow?ui=mobile#workspace=%2Fworkspace%2Fmain&view=acp`);
+    await list.getByRole('button', { name: '打开 ACP 会话 Saved ACP main', exact: true }).waitFor();
+    assert.equal(await list.locator('.mobile-list-row').count(), 1);
+    await page.getByRole('navigation', { name: '工作区导航' }).getByRole('button', { name: '终端', exact: true }).click();
+    state.acpSessions.find(session => session.thread_id === 'main').title = 'Updated from desktop';
+    await page.getByRole('navigation', { name: '工作区导航' }).getByRole('button', { name: 'ACP', exact: true }).click();
+    await list.getByRole('button', { name: '打开 ACP 会话 Updated from desktop', exact: true }).waitFor();
+    assert.deepEqual(state.acpWrites, []);
+    assert.equal(state.acpConnections, 0);
+  });
+
+  await test('ACP URL navigation reuses open tabs and preserves their independent drafts', async t => {
+    const first = { ...acpSession('one'), status: 'idle' };
+    const second = { ...acpSession('two'), status: 'idle' };
+    const { page, state } = await fixture(t, { acp: true, acpHistory: [first, second], tabUrl: '/aow/tabs/acp/one?workspace=wt-1' });
+    const composer = page.locator('.acp-tab-host:visible').getByLabel('ACP 消息', { exact: true });
+    await composer.fill('First draft');
+    await page.evaluate(() => { history.pushState({}, '', '/aow/tabs/acp/two?workspace=wt-1&ui=desktop'); window.dispatchEvent(new PopStateEvent('popstate')); });
+    await page.getByText('Retained reply for two', { exact: true }).waitFor();
+    await composer.fill('Second draft');
+    await page.goBack();
+    await page.getByText('Retained reply for one', { exact: true }).waitFor();
+    assert.equal(await composer.innerText(), 'First draft');
+    await page.goForward();
+    await page.getByText('Retained reply for two', { exact: true }).waitFor();
+    assert.equal(await composer.innerText(), 'Second draft');
+    assert.equal(await page.getByRole('tab', { name: /^Saved ACP one/ }).count(), 1);
+    assert.equal(await page.getByRole('tab', { name: /^Saved ACP two/ }).count(), 1);
+    assert.deepEqual(state.acpWrites, []);
+    assert.deepEqual(state.errors, []);
+  });
+
+  await test('ACP links ignore obsolete tab records and reuse a floating draft view across reload', async t => {
+    const session = acpSession();
+    const viewId = 'new:existing-draft';
+    const { page, state } = await fixture(t, { acp: true, floating: true, preserveFloating: true, acpHistory: [session],
+      acpSavedTabs: [
+        { id: 'old-view', sessionId: 'old-thread', agentId: session.agent_id, title: 'Obsolete tab' },
+        { id: viewId, thread_id: session.thread_id, agentId: session.agent_id, title: session.title },
+      ],
+      extraFloatingTabs: [{ workspace: session.cwd, id: `acp:${viewId}`, targetId: viewId, kind: 'acp', label: session.title }],
+      tabUrl: '/aow/tabs/acp/acp-local' });
+    const floating = page.getByRole('dialog', { name: '浮动工作区', exact: true });
+    await floating.getByText('Retained reply for acp-local', { exact: true }).waitFor();
+    await floating.getByLabel('ACP 消息', { exact: true }).waitFor();
+    await page.reload();
+    await floating.getByText('Retained reply for acp-local', { exact: true }).waitFor();
+    await page.waitForURL(url => url.pathname === '/aow/tabs/acp/acp-local');
+    const tabs = await page.evaluate(() => JSON.parse(localStorage.getItem('aow-acp-tabs:/workspace/linked')));
+    assert.equal(tabs.length, 1); assert.equal(tabs[0].id, viewId);
+    assert.deepEqual(state.acpWrites, ['POST /api/acp/sessions/acp-local/actions']);
+    assert.deepEqual(state.errors, []);
+  });
+
+  await test('missing ACP threads and removed workspaces fail without starting an agent', async t => {
+    for (const missing of [true, false]) {
+      const { page, state } = await fixture(t, { acp: true, acpHistory: [acpSession('acp-local', missing ? '/workspace/linked' : '/removed')], tabUrl: '/aow/tabs/acp/' + (missing ? 'missing' : 'acp-local') });
+      await page.getByRole('alert').filter({ hasText: missing ? '该 ACP 会话已不存在。' : '目标 Tab 所属工作区不存在或已被移除。' }).waitFor();
+      assert.deepEqual(state.acpWrites, []);
+      assert.equal(state.acpConnections, 0);
+    }
+  });
+
+  await test('legacy ACP links derive workspace from thread metadata and discard the old query', async t => {
+    const { page, state } = await fixture(t, { acp: true, acpHistory: [acpSession()], tabUrl: '/aow/tabs/acp/acp-local?workspace=wt-0' });
+    await page.getByText('Retained reply for acp-local', { exact: true }).waitFor();
+    await page.waitForURL(url => url.pathname === '/aow/tabs/acp/acp-local' && !url.searchParams.has('workspace'));
+    assert.deepEqual(state.errors, []);
+  });
 
   await test('Inbox opens in the floating workspace, survives refresh and leaves existing terminals intact', async t => {
     const { page, state } = await fixture(t, { floating: true, preserveFloating: true });
@@ -271,6 +519,12 @@ try {
 
   const expectPath = (page, id) => page.waitForURL(url => url.pathname === (id ? `/aow/tabs/terminal/${id}` : '/aow/'));
   const desktopTab = (page, name) => page.locator('.project-aow-surface:not([hidden]) .project-aow-center-tab').filter({ hasText: name });
+  const terminalRow = (page, id) => page.locator(`.project-aow-surface:not([hidden]) .terminal-family[data-tab-id="${id}"] > .terminal-family-root > .terminal-panel-row`);
+  async function expectTerminalCompletion(page, id, completed) {
+    const row = terminalRow(page, id);
+    await row.waitFor();
+    await row.getByRole('img', { name: '任务已完成，点击查看', exact: true }).waitFor({ state: completed ? 'visible' : 'detached' });
+  }
   async function notifyTab(page, tabId = 'target', root = worktrees[1].path, extra = {}) {
     await page.waitForFunction(() => window.taskStopReady());
     await page.evaluate(({ tabId, root, extra }) => window.sendTaskStop({ agent: 'codex', session_id: 'notification-session',
@@ -290,6 +544,119 @@ try {
       assert.equal(await badge.textContent(), String(count));
     }
   }
+
+  await test('the status bar reminder icon opens a resizable panel beside operation logs without a count', async t => {
+    const { page } = await fixture(t, { entry: '' });
+    await expectPath(page, 'main-tab');
+    await page.route('**/api/operation-logs**', route => route.fulfill({ json: { items: [], next_cursor: null, budget_exhausted: false, scanned_bytes: 0 } }));
+    const button = page.locator('.project-aow-status').getByRole('button', { name: '提醒', exact: true });
+    const panel = page.getByRole('region', { name: '提醒', exact: true });
+    const logs = page.getByRole('region', { name: '操作日志', exact: true });
+    assert.equal(await button.textContent(), '');
+    assert.equal(await button.locator('svg').count(), 1);
+    const logBox = await page.getByRole('button', { name: '操作日志', exact: true }).boundingBox();
+    const reminderBox = await button.boundingBox();
+    assert.ok(reminderBox.x >= logBox.x + logBox.width && reminderBox.x - logBox.x - logBox.width <= 8);
+    await button.click();
+    await panel.getByText('暂无待处理提醒', { exact: true }).waitFor();
+    assert.equal(await panel.getByRole('button', { name: '清空全部', exact: true }).isDisabled(), true);
+    assert.equal(await button.getAttribute('aria-expanded'), 'true');
+    const original = await panel.boundingBox();
+    const resize = panel.getByRole('separator', { name: '调整提醒面板高度', exact: true });
+    await resize.press('ArrowUp');
+    assert.equal((await panel.boundingBox()).height, original.height + 20);
+    await panel.press('Escape');
+    await panel.waitFor({ state: 'detached' });
+    assert.equal(await button.evaluate(element => document.activeElement === element), true);
+    await button.press('Enter');
+    await panel.waitFor();
+    await page.getByRole('button', { name: '操作日志', exact: true }).click();
+    await logs.waitFor();
+    await panel.waitFor({ state: 'detached' });
+    await button.click();
+    await panel.waitFor();
+    await logs.waitFor({ state: 'detached' });
+    await button.click();
+    await panel.waitFor({ state: 'detached' });
+  });
+
+  await test('the reminder panel recovers hidden notices, opens their sources and permanently clears orphaned reminders', async t => {
+    const mainRoot = worktrees[0].path;
+    const { page, root } = await fixture(t, { entry: '', pinned: [mainRoot], acp: true, acpHistory: [acpSession()] });
+    await expectPath(page, 'main-tab');
+    await (await notifyTab(page, 'deleted-tab', mainRoot)).waitFor();
+    await (await notifyTab(page, 'target', root)).waitFor();
+    await (await notifyTab(page, 'ACP task', root, { agent: 'test', sources: [{ tab_id: '', thread_id: 'acp-local', tab_name: 'ACP task', project_name: 'Link Fixture', workspace_root: root }] })).waitFor();
+    await notifyTab(page, '', root, { title: 'Legacy reminder', sources: [] });
+    await page.getByRole('button', { name: '全部关闭', exact: true }).click();
+    await page.locator('.agent-task-notifications').waitFor({ state: 'detached' });
+    await page.reload();
+    await expectPath(page, 'main-tab');
+    for (const pinned of [false, true]) await expectUnreadCount(page, mainRoot, 1, pinned);
+    await expectUnreadCount(page, root, 2);
+
+    const button = page.locator('.project-aow-status').getByRole('button', { name: '提醒', exact: true });
+    const panel = page.getByRole('region', { name: '提醒', exact: true });
+    assert.equal(await button.textContent(), '', 'the icon stays count-free even with unread notices');
+    await button.click();
+    await panel.getByText('4 条待处理提醒 · 包含已关闭弹框的提醒', { exact: true }).waitFor();
+    assert.equal(await page.locator('.agent-task-notice').count(), 0, 'opening the panel does not reopen popups');
+    assert.equal(await panel.locator('article').count(), 4);
+    assert.equal(new URL(page.url()).pathname, '/aow/tabs/terminal/main-tab');
+    await panel.getByRole('button', { name: '打开提醒：Link Fixture · deleted-tab', exact: true }).click();
+    await panel.getByRole('alert').filter({ hasText: '该 Tab 已关闭或不存在。' }).waitFor();
+    for (const pinned of [false, true]) await expectUnreadCount(page, mainRoot, 1, pinned);
+    await page.screenshot({ path: join(screenshotDir, 'aow-reminder-panel.png') });
+    await panel.getByRole('button', { name: '移除提醒：Link Fixture · deleted-tab', exact: true }).click();
+    for (const pinned of [false, true]) await expectUnreadCount(page, mainRoot, 0, pinned);
+
+    await panel.getByRole('button', { name: '打开提醒：Link Fixture · target', exact: true }).click();
+    await expectPath(page, 'target');
+    await panel.getByText('2 条待处理提醒 · 包含已关闭弹框的提醒', { exact: true }).waitFor();
+    await expectUnreadCount(page, root, 1);
+    await panel.getByRole('button', { name: '打开提醒：Link Fixture · ACP task', exact: true }).click();
+    await page.waitForURL(url => url.pathname === '/aow/tabs/acp/acp-local');
+    await panel.getByText('1 条待处理提醒 · 包含已关闭弹框的提醒', { exact: true }).waitFor();
+    await expectUnreadCount(page, root, 0);
+
+    await (await notifyTab(page, 'other', root)).waitFor();
+    await (await notifyTab(page, 'deleted-tab', mainRoot)).waitFor();
+    await panel.getByText('3 条待处理提醒 · 包含已关闭弹框的提醒', { exact: true }).waitFor();
+    await panel.getByRole('button', { name: '清空全部', exact: true }).click();
+    await panel.getByText('暂无待处理提醒', { exact: true }).waitFor();
+    await page.locator('.agent-task-notifications').waitFor({ state: 'detached' });
+    await expectUnreadCount(page, root, 0);
+    for (const pinned of [false, true]) await expectUnreadCount(page, mainRoot, 0, pinned);
+    await page.reload();
+    await page.getByText('Retained reply for acp-local', { exact: true }).waitFor();
+    await button.click();
+    await panel.getByText('暂无待处理提醒', { exact: true }).waitFor();
+    await expectUnreadCount(page, root, 0);
+    for (const pinned of [false, true]) await expectUnreadCount(page, mainRoot, 0, pinned);
+    assert.equal(await page.locator('.agent-task-notice').count(), 0);
+  });
+
+  await test('ACP completion notifications open the original conversation and acknowledge its turns on desktop and mobile', async t => {
+    for (const mobile of [false, true]) await t.test(mobile ? 'mobile' : 'desktop', async t => {
+      const { page, root, state } = await fixture(t, { acp: true, mobile, acpHistory: [acpSession()] });
+      await expectPath(page, 'target');
+      const extra = { agent: 'test', sources: [{ tab_id: '', thread_id: 'acp-local', tab_name: 'ACP task', project_name: 'Link Fixture', workspace_root: root }] };
+      await (await notifyTab(page, 'ACP task', root, extra)).waitFor();
+      if (!mobile) await expectUnreadCount(page, root, 1);
+      await (await notifyTab(page, 'ACP task', root, extra)).click();
+      await page.getByText('Retained reply for acp-local', { exact: true }).waitFor();
+      await page.waitForURL(url => url.pathname === '/aow/tabs/acp/acp-local');
+      await page.locator('.agent-task-notice').waitFor({ state: 'detached' });
+      if (!mobile) await expectUnreadCount(page, root, 0);
+      await notifyTab(page, 'ACP task', root, extra);
+      await (await notifyTab(page, 'target', root)).waitFor();
+      assert.equal(await page.getByRole('button', { name: '打开通知：Link Fixture · ACP task', exact: true }).count(), 0);
+      await page.reload();
+      await page.getByText('Retained reply for acp-local', { exact: true }).waitFor();
+      assert.equal(await page.getByRole('button', { name: '打开通知：Link Fixture · ACP task', exact: true }).count(), 0);
+      assert.equal(state.acpWrites.filter(value => value === 'POST /api/acp/sessions').length, 0);
+    });
+  });
 
   await test('worktree unread badges stay in sync in Projects and Pinned through reload and tab activation', async t => {
     const { page, root } = await fixture(t, { entry: '', pinned: [worktrees[1].path] });
@@ -339,7 +706,7 @@ try {
     await expectUnreadCount(page, worktrees[0].path, 1);
   });
 
-  await test('closing popups preserves unread badges after reload until their source tabs activate', async t => {
+  await test('closing popups preserves worktree badges and terminal completion icons until their source tabs activate', async t => {
     const { page, root } = await fixture(t, { entry: '', pinned: [worktrees[1].path] });
     await expectPath(page, 'main-tab');
     const expectCounts = async count => {
@@ -348,15 +715,21 @@ try {
     await (await notifyTab(page, 'target', root)).waitFor();
     await (await notifyTab(page, 'other', root)).waitFor();
     await expectCounts(2);
+    await expectTerminalCompletion(page, 'target', true);
+    await expectTerminalCompletion(page, 'other', true);
+    await expectTerminalCompletion(page, 'main-tab', false);
     await page.getByRole('button', { name: '关闭通知：Link Fixture · target', exact: true }).click();
     await page.getByRole('button', { name: '打开通知：Link Fixture · target', exact: true }).waitFor({ state: 'detached' });
     await expectCounts(2);
+    await expectTerminalCompletion(page, 'target', true);
     assert.equal(new URL(page.url()).pathname, '/aow/tabs/terminal/main-tab');
     assert.equal(await page.locator('.agent-task-notice-tab').textContent(), 'other');
 
     await page.reload();
     await expectPath(page, 'main-tab');
     await expectCounts(2);
+    await expectTerminalCompletion(page, 'target', true);
+    await expectTerminalCompletion(page, 'other', true);
     assert.deepEqual(await page.locator('.agent-task-notice-tab').allTextContents(), ['other']);
     // A later turn in the same tab gets a new popup and a new unread entry.
     await (await notifyTab(page, 'target', root)).waitFor();
@@ -370,16 +743,33 @@ try {
     await expectPath(page, 'main-tab');
     await expectCounts(3);
     assert.equal(await page.locator('.agent-task-notice').count(), 0);
+    await expectTerminalCompletion(page, 'target', true);
+    await expectTerminalCompletion(page, 'other', true);
+    const row = terminalRow(page, 'target');
+    const icon = row.getByRole('img', { name: '任务已完成，点击查看', exact: true });
+    const iconBox = await icon.boundingBox();
+    const menuBox = await row.getByRole('button', { name: 'Target Tab 终端操作', exact: true }).boundingBox();
+    assert.equal(iconBox.width, 14);
+    assert.equal(iconBox.height, 14);
+    assert.equal(await icon.locator('svg').evaluate(element => getComputedStyle(element).color), 'rgb(115, 201, 145)');
+    assert.ok(iconBox.x + iconBox.width < menuBox.x);
+    assert.ok(Math.abs(iconBox.y + iconBox.height / 2 - menuBox.y - menuBox.height / 2) <= 1);
+    assert.equal(await icon.getAttribute('title'), '任务已完成，点击查看');
+    await page.screenshot({ path: join(screenshotDir, 'aow-terminal-completion.png') });
 
     await page.locator(`.project-aow-pinned button[title="${root}"]`).click();
     await expectPath(page, 'other');
     await expectCounts(2);
-    await desktopTab(page, 'Target Tab').click();
+    await expectTerminalCompletion(page, 'other', false);
+    await expectTerminalCompletion(page, 'target', true);
+    await terminalRow(page, 'target').locator('.terminal-panel-open').click();
     await expectPath(page, 'target');
     await expectCounts(0);
+    await expectTerminalCompletion(page, 'target', false);
     await page.reload();
     await expectPath(page, 'target');
     await expectCounts(0);
+    await expectTerminalCompletion(page, 'target', false);
     assert.equal(await page.locator('.agent-task-notice').count(), 0);
   });
 

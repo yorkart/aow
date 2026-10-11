@@ -3,7 +3,7 @@ import { LogoutButton } from '../features/auth/LogoutButton';
 import type { ResolvedTab } from '../aow/tabRoutes';
 import { mobileTabTarget } from '../aow/tabRoutes/mobile';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { Inbox, ArrowLeft, ArrowUpRight, CalendarClock, ChevronRight, FolderOpen, GitBranch, GitPullRequest, Home, MessageSquare, Pin, PinOff, Search, Settings, TerminalSquare, X } from 'lucide-react';
+import { Inbox, ArrowLeft, ArrowUpRight, CalendarClock, ChevronRight, FolderOpen, GitBranch, GitPullRequest, Home, MessageSquare, Pin, PinOff, Search, Settings, Sparkles, TerminalSquare, X } from 'lucide-react';
 import { aowApi } from '../aow/aowApi';
 import { ProjectIcon } from '../aow/ProjectIcon';
 import { usePinnedWorktrees } from '../aow/usePinnedWorktrees';
@@ -19,6 +19,7 @@ import './mobile.css';
 const MobileInbox = lazy(() => import('../features/inbox/MobileInbox').then(module => ({ default: module.MobileInbox })));
 const MobileTerminals = lazy(() => import('../features/terminals/MobileTerminals').then((module) => ({ default: module.MobileTerminals })));
 const MobileSessions = lazy(() => import('../features/sessions/MobileSessions').then((module) => ({ default: module.MobileSessions })));
+const MobileAcpSessions = lazy(() => import('../features/acp').then(module => ({ default: module.MobileAcpSessions })));
 const MobileFiles = lazy(() => import('../features/files/MobileFiles').then((module) => ({ default: module.MobileFiles })));
 const MobileGit = lazy(() => import('../features/git/MobileGit').then((module) => ({ default: module.MobileGit })));
 const MobileAutomations = lazy(() => import('../features/automations/MobileAutomations').then((module) => ({ default: module.MobileAutomations })));
@@ -28,6 +29,7 @@ const MobileSettings = lazy(() => import('./MobileSettings').then(module => ({ d
 const navigation = [
   { id: 'terminal', label: '终端', icon: TerminalSquare },
   { id: 'sessions', label: 'Conversation', icon: MessageSquare },
+  { id: 'acp', label: 'ACP', icon: Sparkles },
   { id: 'automations', label: '自动化', icon: CalendarClock },
   { id: 'files', label: '文件', icon: FolderOpen },
   { id: 'git', label: 'Git', icon: GitBranch },
@@ -154,6 +156,7 @@ function MobileWorkspace({ project, worktree, route, navigate, back, headerActio
         <Suspense fallback={<MobileState loading />}>
           {id === 'terminal' && <MobileTerminals initialTabId={initialTabId} project={project} worktree={worktree} visible={route.view === id} headerActions={headerActions} />}
           {id === 'sessions' && <MobileSessions route={route} visible={route.view === id} navigate={navigate} back={back} />}
+          {id === 'acp' && <MobileAcpSessions workspace={worktree.path} route={route} visible={route.view === id} navigate={navigate} headerActions={headerActions} />}
           {id === 'files' && <MobileFiles route={route} notesPath={project.notes_path} visible={route.view === id} navigate={navigate} back={back} />}
           {id === 'git' && <MobileGit route={route} visible={route.view === id} navigate={navigate} back={back} />}
           {id === 'pull-requests' && <MobilePullRequests route={route} visible={route.view === id} navigate={navigate} back={back} />}

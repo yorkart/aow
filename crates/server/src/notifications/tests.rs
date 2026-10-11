@@ -208,6 +208,7 @@ fn event() -> TaskStopNotification {
             workspace_root: "/repo".into(),
             tab_id: "tab".into(),
             tab_url: None,
+            thread_id: None,
         }],
     }
 }

@@ -19,6 +19,8 @@ pub(crate) struct TaskStopSource {
     pub(crate) project_name: String,
     pub(crate) workspace_root: String,
     pub(crate) tab_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) thread_id: Option<String>,
     pub(crate) tab_name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) tab_url: Option<String>,

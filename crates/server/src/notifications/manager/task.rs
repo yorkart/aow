@@ -73,7 +73,10 @@ impl NotificationManager {
                 if let Ok(mut segments) = url.path_segments_mut() {
                     segments
                         .pop_if_empty()
-                        .extend(["aow", "tabs", "terminal", &source.tab_id]);
+                        .extend(match source.thread_id.as_deref() {
+                            Some(thread_id) => ["aow", "tabs", "acp", thread_id],
+                            None => ["aow", "tabs", "terminal", &source.tab_id],
+                        });
                 }
                 source.tab_url = Some(url.into());
             }

@@ -1,4 +1,25 @@
 import type { EditorSettings } from '../features/editor/types';
+
+export type WorktreeCreationStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'timed_out' | 'interrupted' | 'skipped';
+export interface WorktreeCreationStep {
+  title: string;
+  status: WorktreeCreationStatus;
+  started_at: string | null;
+  duration_ms: number | null;
+  timeout_ms: number;
+  message: string | null;
+}
+export interface WorktreeCreationJob {
+  id: string;
+  project_id: string;
+  branch: string;
+  base_ref: string;
+  path: string;
+  pull_first: boolean;
+  status: WorktreeCreationStatus;
+  steps: WorktreeCreationStep[];
+  error: string | null;
+}
 export interface AowWorktree {
   id: string;
   project_id: string;

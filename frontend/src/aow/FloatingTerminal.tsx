@@ -20,7 +20,7 @@ export function FloatingTerminal({ entry, activeLocation }: { entry: FloatingTab
   return <div className="floating-workspace-host" hidden={!active}>
     {terminals.error && <p role="alert">{terminals.error}</p>}
     <TerminalWorkspace visible={active && floating.visible} tab={tab} loading={terminals.loading}
-      detectedAgents={terminals.detectedAgents} terminalTitles={terminals.terminalTitles} agentProcesses={terminals.agentProcesses}
+      detectedAgents={terminals.detectedAgents} terminalTitles={terminals.terminalTitles} agentProcesses={terminals.agentProcesses} terminalActivity={terminals.terminalActivity}
       onTabChange={terminals.replace} onTabClosed={id => { terminals.remove(id); floating.remove(entry.workspace, entry.id); }}
       onPaneStatus={terminals.updatePaneStatus} onReload={() => void terminals.reload()} />
   </div>;

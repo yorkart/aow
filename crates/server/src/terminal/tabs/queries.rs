@@ -58,6 +58,7 @@ impl TerminalManager {
         detected.agents.retain(|id, _| panes.contains(id));
         detected.titles.retain(|id, _| panes.contains(id));
         detected.processes.retain(|id, _| panes.contains(id));
+        super::super::pi_detection::enrich(&self.inner.terminald, &tabs, &mut detected).await;
         session_titles::enrich(&mut detected).await;
         Ok(detected)
     }

@@ -88,7 +88,7 @@ aow account                        # 修改登录账号和密码
 编辑 `~/.config/aow/server.env`，按需设置监听地址、端口、数据目录或访问路径，具体选项见 [配置说明](configuration.md)。默认仅监听 `127.0.0.1:8282`。
 
 - **Linux**：保存后重启 Web 服务。
-- **macOS**：保存后重新执行安装命令；LaunchDaemon 配置发生变化时需按提示由管理员重新登记，再重跑安装验证。只改 Web 配置时可跳过 terminald 重启。
+- **macOS**：保存后重新执行安装命令；`HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY`（含小写形式）由 Web 启动脚本读取，已有服务只改代理无需管理员登记。其他 LaunchDaemon 配置发生变化时需按提示由管理员重新登记，再重跑安装验证。只改 Web 配置时可跳过 terminald 重启。本地源码有改动时先执行 `just package`，因为 `just install` 只安装已有包。
 
 ## 服务管理与系统日志
 

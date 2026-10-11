@@ -39,6 +39,16 @@ with tempfile.TemporaryDirectory(prefix='aow-registration-') as temporary:
                'components': {name: config(name) for name in ['server', 'terminald']}}
     valid = m.validate_request(request, account)
     assert [name for name, _ in valid] == ['terminald', 'server']
+    proxied = copy.deepcopy(request)
+    proxy_environment = {
+        'HTTP_PROXY': 'http://127.0.0.1:7890', 'HTTPS_PROXY': 'http://127.0.0.1:7890',
+        'ALL_PROXY': 'socks5://127.0.0.1:7890', 'NO_PROXY': 'localhost,127.0.0.1,::1',
+        'http_proxy': 'http://127.0.0.1:7890', 'https_proxy': 'http://127.0.0.1:7890',
+        'all_proxy': 'socks5://127.0.0.1:7890', 'no_proxy': 'localhost,127.0.0.1,::1',
+    }
+    proxied['components']['server']['EnvironmentVariables'].update(proxy_environment)
+    validated = dict(m.validate_request(proxied, account))['server']['EnvironmentVariables']
+    assert all(validated[key] == value for key, value in proxy_environment.items())
 
     def rejects(document, expected_account=account):
         try:

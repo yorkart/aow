@@ -23,6 +23,8 @@ pub struct AgentTerminalState {
 pub struct AgentTerminalCreate {
     pub agent: String,
     pub project_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_pane_id: Option<String>,
     pub cwd: String,
     pub task: Option<String>,
     pub timeout_seconds: u64,
@@ -36,6 +38,8 @@ pub struct AgentTerminalSubmit {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentTerminalInfo {
     pub pane_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_pane_id: Option<String>,
     pub tab_id: String,
     pub cwd: String,
     pub agent: String,
@@ -56,6 +60,18 @@ pub struct TerminalAgentList {
     /// without process inspection; title-based selection remains available.
     #[serde(default)]
     pub processes: BTreeMap<String, TerminalAgentProcess>,
+    /// Live shell state used to label panes when no OSC title is available.
+    /// Missing on older daemons and platforms without process inspection.
+    #[serde(default)]
+    pub activity: BTreeMap<String, TerminalPaneActivity>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TerminalPaneActivity {
+    /// Current working directory of the shell process.
+    pub cwd: Option<String>,
+    /// Executable name of the foreground process, absent at the shell prompt.
+    pub foreground_command: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -65,4 +81,8 @@ pub struct TerminalAgentProcess {
     /// clock ticks; macOS uses seconds and microseconds. Compare as a string.
     pub start_time: String,
     pub cwd: String,
+    /// AoW's per-launch Pi identity file. Pi can rewrite its native environment
+    /// when setting the process title, so terminald retains this one safe path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pi_binding: Option<String>,
 }

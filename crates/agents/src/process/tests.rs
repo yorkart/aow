@@ -59,6 +59,26 @@ fn recognizes_managed_python_relaunch_without_matching_arbitrary_inline_code() {
 fn recognizes_native_agents_and_interpreter_entrypoints_only() {
     for (executable, args, expected) in [
         ("/usr/bin/codex", vec!["codex"], Some("codex")),
+        ("/home/me/.pi/agent/bin/pi", vec!["pi"], Some("pi")),
+        (
+            "/usr/bin/node",
+            vec![
+                "node",
+                "/opt/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js",
+            ],
+            Some("pi"),
+        ),
+        (
+            "/usr/bin/node",
+            vec![
+                "node",
+                "/opt/node_modules/@mariozechner/pi-coding-agent/dist/cli.js",
+            ],
+            Some("pi"),
+        ),
+        ("/usr/bin/node", vec!["node", "server.js", "pi"], None),
+        ("/usr/bin/node", vec!["node", "/project/pi.js"], None),
+        ("/usr/bin/echo", vec!["echo", "pi"], None),
         ("/usr/bin/codex", vec!["claude"], Some("codex")),
         ("/usr/bin/claude", vec!["traecli"], Some("claude")),
         ("/usr/bin/codex (deleted)", vec!["codex"], Some("codex")),

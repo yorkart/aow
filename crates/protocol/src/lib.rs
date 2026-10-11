@@ -18,9 +18,9 @@ pub use terminal::{
     AgentTerminalCreate, AgentTerminalInfo, AgentTerminalPhase, AgentTerminalState,
     AgentTerminalSubmit, TerminalAgentList, TerminalAgentProcess, TerminalAttachClientMessage,
     TerminalAttachServerMessage, TerminalControlState, TerminalHosting, TerminalHostingPhase,
-    TerminalLayout, TerminalPane, TerminalPaneKind, TerminalPaneStatus, TerminalRuntime,
-    TerminalRuntimeList, TerminalRuntimeSpec, TerminalRuntimeStatus, TerminalScreen,
-    TerminalSplitAxis, TerminalTab, TerminalTabList, TerminaldHealth,
+    TerminalLayout, TerminalPane, TerminalPaneActivity, TerminalPaneKind, TerminalPaneStatus,
+    TerminalRuntime, TerminalRuntimeList, TerminalRuntimeSpec, TerminalRuntimeStatus,
+    TerminalScreen, TerminalSplitAxis, TerminalTab, TerminalTabList, TerminaldHealth,
 };
 
 #[cfg(test)]

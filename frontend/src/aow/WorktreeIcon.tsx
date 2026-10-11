@@ -1,6 +1,6 @@
 import {
-  Apple, Banana, Bird, Bug, Cat, Cherry, Citrus, Clover, Dog, Fish, Flower, Flower2,
-  GitBranch, Grape, Leaf, Rabbit, Rat, Snail, Sprout, Squirrel, TreeDeciduous, TreePalm,
+  Apple, Banana, Bird, Bug, Cat, Cherry, Citrus, Clover, Dog, Fish, Flower, Flower2, FolderGit2,
+  Grape, Leaf, Rabbit, Rat, Snail, Sprout, Squirrel, TreeDeciduous, TreePalm,
   TreePine, Trees, Turtle, Wheat, createLucideIcon, type LucideIcon, type LucideProps,
 } from 'lucide-react';
 import type { WorktreeColor, WorktreeIconId } from './types';
@@ -45,7 +45,7 @@ const Pineapple = createLucideIcon('Pineapple', [
 ]);
 
 const icons: Record<WorktreeIconId, { label: string; component: LucideIcon }> = {
-  default: { label: '默认图标', component: GitBranch },
+  default: { label: '默认图标', component: FolderGit2 },
   cat: { label: '猫', component: Cat },
   dog: { label: '狗', component: Dog },
   rabbit: { label: '兔子', component: Rabbit },

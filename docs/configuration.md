@@ -2,7 +2,9 @@
 
 ## 监听地址与服务配置
 
-编辑 `~/.config/aow/server.env`，文件不存在时先创建。每行写 `KEY=value`，不写 `export`；路径使用绝对路径，修改时保留其他配置。
+在 **Settings → Environment → AoW 服务环境变量** 中直接编辑并保存 `~/.config/aow/server.env`，也可以在服务器上编辑该文件。文件不存在时，页面保存会创建它；注释、引号和空行按原文保留。每行写 `KEY=value`，不写 `export`；路径使用绝对路径，修改时保留其他配置。
+
+页面保存只更新本机文件，不写入配置 Git 仓库，也不会自动重启服务。按下方“使配置生效”的步骤加载配置。文件被其他窗口或外部程序修改时，保存会提示冲突并保留草稿，请重新读取后再编辑。Environment 中的执行 PATH 仍单独保存，对后续启动的 Agent 和自动化任务生效。
 
 ```dotenv
 AOW_SERVER_HOST=127.0.0.1
@@ -32,9 +34,19 @@ IPv6 浏览器地址使用方括号，例如 `http://[::1]:8282/`。若改为 IP
 - **Linux**：执行 `systemctl --user restart aow-server.service`。
 - **macOS**：重新执行对应的安装命令（GitHub 安装命令或 `just install`），重新加载配置；只改 Web 服务配置时可跳过 terminald 重启。
 
-macOS **LaunchDaemon** 模式会将配置写入由 root 管理的系统 plist。配置变化时，安装器先准备请求并以退出码 78 提示本地管理员登记；登记后回到服务账户重跑安装验证。仅程序版本变化不需要重新登记，步骤见 [安装说明](release-installation.md)。
+macOS **LaunchDaemon** 模式会将监听地址等服务配置写入由 root 管理的系统 plist。这些配置变化时，安装器先准备请求并以退出码 78 提示本地管理员登记；登记后回到服务账户重跑安装验证。仅程序版本或下方代理变量变化不需要重新登记，步骤见 [安装说明](release-installation.md)。
 
 LaunchDaemon 的 `server.env` 仅接受服务配置和基本运行环境：`AOW_SERVER_HOST`、`AOW_SERVER_PORT`、`AOW_SERVER_STATE_DIR`、`AOW_STATE_DIR`、`AOW_TERMINALD_SOCKET`、`AOW_BASE_PATH`、`AOW_AUTH_SECURE_COOKIE`、`XDG_STATE_HOME`、`XDG_RUNTIME_DIR`、`PATH`、`SHELL`、`LANG`、`LC_ALL`、`LC_CTYPE`。账户身份、HOME、运行目录和日志模式由安装器固定。系统 plist 可被其他本机账户读取，不要在其中填写 API 密钥或口令；其他环境变量会被拒绝。
+
+另外支持标准代理变量 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY` 及其小写形式，例如：
+
+```dotenv
+HTTP_PROXY=http://127.0.0.1:7890
+HTTPS_PROXY=http://127.0.0.1:7890
+NO_PROXY=localhost,127.0.0.1,::1
+```
+
+安装后的 Web 服务启动脚本每次启动时从 `server.env` 读取代理变量，传给服务器及其子进程（包括 ACP 的 npm 安装）。代理值按文本读取，不执行 shell 表达式，也不写入系统 plist。仅修改代理时，已有 LaunchDaemon 的服务账户可直接运行 `just install` 更新并重启 Web 服务，无需 sudo 或重新登记；使用本地源码更新时先执行 `just package`。保存文件不会改变正在运行的进程，terminald 的环境也不会随之改变。
 
 LaunchDaemon 默认 PATH 包含 `~/.local/bin`、AoW 管理的 Node 入口、`~/.cargo/bin` 和常用系统/Homebrew 目录，不继承安装终端的完整 PATH；开发 shell 可在服务账户自己的 `.zprofile` / `.zshrc` 中初始化 Node 和其他工具链。
 
@@ -123,7 +135,7 @@ config-id = "g123456789ab"
 
 ## Notes 目录与登录账户
 
-- **Notes 目录**：在 **Settings → Notes** 中修改，默认 `~/aow`。保存后迁移使用默认路径的 Notes，自定义绑定的 Notes 路径保持不变。
+- **Notes 目录**：在 **Settings → Notes** 中修改，默认 `~/aow`。保存后仅更新新注册项目使用的默认根目录，已有项目仍使用原 Notes 路径。如需切换，请在项目菜单中使用「绑定 Notes 目录」：目录已存在时直接使用，不存在时自动创建；两处操作均不迁移笔记。
 - **登录账户**：在服务器终端执行 `aow account`。手动使用自定义数据目录时，执行 `AOW_SERVER_STATE_DIR=/path/to/state aow account`；按提示输入账号、密码并确认密码，修改后重新登录网页。
 
 账户仅保存在服务所在机器的数据目录中（默认 `~/.local/state/aow/credentials.json`），权限为 `0600`。当前使用一个本地账户，保存账号、随机盐和 PBKDF2-HMAC-SHA256 密码哈希，不保存明文密码。账户不进入配置 Git 仓库。首次安装必须设置，后续升级保留；忘记密码可在服务器终端重新运行 `aow account`，无需重启服务。旧 `pin.md5` 不再读取，也不会自动转换成账户。

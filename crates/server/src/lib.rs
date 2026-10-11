@@ -1,5 +1,6 @@
 //! AoW HTTP server library and public entry points.
 
+mod acp;
 mod aow;
 mod auth;
 mod automations;

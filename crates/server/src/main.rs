@@ -67,15 +67,15 @@ async fn run() -> Result<()> {
     }
     state.start_agent_notifications();
     let cli = aow_server::start_local_cli(state.clone(), &options.state_dir).await?;
-    axum::serve(
+    let result = axum::serve(
         listener,
-        build_router(state).into_make_service_with_connect_info::<SocketAddr>(),
+        build_router(state.clone()).into_make_service_with_connect_info::<SocketAddr>(),
     )
     .with_graceful_shutdown(shutdown_signal())
-    .await
-    .map_err(anyhow::Error::from)?;
+    .await;
     cli.shutdown().await;
-    Ok(())
+    state.flush_acp_history().await?;
+    result.map_err(anyhow::Error::from)
 }
 
 fn listen_address(host: &str, port: u16) -> Result<SocketAddr> {

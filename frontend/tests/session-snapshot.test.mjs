@@ -41,6 +41,19 @@ try {
   }
 
   for (const mobile of [false, true]) {
+    await test(`${mobile ? 'mobile' : 'desktop'} renders Pi session identity and conversation`, async (t) => {
+      const { page, updateSnapshot } = await open(t, mobile);
+      const piSession = { ...session, id: 'pi:pi-session', session_id: 'pi-session', agent: 'pi', title: 'Pi session' };
+      const piSnapshot = { ...snapshot, session_id: 'pi-session', agent: 'pi', title: 'Pi session',
+        turns: [makeTurn('pi-turn', 'Pi prompt', 'Pi final reply', [])] };
+      updateSnapshot(piSnapshot);
+      await update(page, { session: piSession, snapshot: piSnapshot });
+      await page.getByText('Pi final reply', { exact: true }).waitFor();
+      assert.equal(await page.getByText('Pi', { exact: true }).count() > 0, true);
+      assert.equal(await page.locator('svg.lucide-pi').count() > 0, true);
+      await noOverflow(page);
+    });
+
     await test(`${mobile ? 'mobile' : 'desktop'} shows per-turn input and output tokens before the agent timestamp`, async (t) => {
       const { page, updateSnapshot } = await open(t, mobile);
       const usage = (input, output) => ({ input_tokens: input, output_tokens: output, total_tokens: input + output,
@@ -57,7 +70,7 @@ try {
       assert.deepEqual(await page.locator('.token-usage-input').allTextContents(), ['1K tokens', '2K tokens']);
       assert.deepEqual(await page.locator('.token-usage-output').allTextContents(), ['200 tokens', '300 tokens']);
       assert.match(await page.locator('.token-usage').first().getAttribute('title'), /本轮：1,200 tokens\n输入：1,000\n输出：200/);
-      assert.equal(await page.locator('.project-aow-snapshot-turn-label .token-usage, .mobile-turn-label .token-usage').count(), 0);
+      assert.equal(await page.locator('.project-aow-snapshot-turn-label, .mobile-turn-label').count(), 0);
       const headers = page.locator(mobile ? '.mobile-session-agent' : '.project-aow-snapshot-message.assistant .project-aow-snapshot-message-header');
       assert.equal(await headers.locator('.token-usage').count(), 2);
       assert.equal(await headers.locator('.token-usage + time').count(), 2);

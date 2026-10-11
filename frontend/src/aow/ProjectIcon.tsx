@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { FolderGit2 } from 'lucide-react';
+import { Folder } from 'lucide-react';
 import { aowApi } from './aowApi';
 import type { AowProject } from './types';
 import './project-icon.css';
@@ -39,5 +39,5 @@ export function ProjectIcon({ project, size = 14 }: { project: AowProject; size?
   return url && failed !== imageKey
     ? <img key={imageKey} className="project-icon" src={url} alt="" aria-hidden="true" draggable={false}
       referrerPolicy="no-referrer" decoding="async" style={style} onError={() => setFailed(imageKey)} />
-    : <FolderGit2 className="project-icon" aria-hidden="true" size={size} style={style} />;
+    : <Folder className="project-icon" aria-hidden="true" size={size} style={style} />;
 }

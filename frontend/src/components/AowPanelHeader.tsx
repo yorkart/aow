@@ -67,7 +67,7 @@ export function AowPanelHeader({ title, tooltip, icon, className, collapsed = fa
   return <header className={`side-title aow-panel-header${className ? ` ${className}` : ''}`} onClick={togglePosition === 'end' && onToggle ? event => {
     if (event.defaultPrevented || (event.target instanceof Element && event.target.closest('button, a, input, select, textarea, [role="button"]'))) return;
     closeTooltip();
-    onToggle();
+    (onNavigate ?? onToggle)();
   } : undefined}>
     {togglePosition === 'start' ? toggle : null}
     {onNavigate

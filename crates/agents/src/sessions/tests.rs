@@ -15,6 +15,7 @@ fn roots(directory: &tempfile::TempDir) -> SessionRoots {
         codex: directory.path().join("codex"),
         traecli: directory.path().join("traecli"),
         hermes: directory.path().join("hermes"),
+        pi: directory.path().join("pi"),
     }
 }
 

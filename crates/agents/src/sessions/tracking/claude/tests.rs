@@ -176,11 +176,19 @@ async fn native_lookup_enforces_its_deadline() {
     .unwrap();
     let result = tokio::time::timeout(
         Duration::from_secs(5),
-        query_claude(&environment, Duration::from_millis(20)),
+        TrackingAgent::Claude.resolve_live_session_with_timeout(
+            LiveSessionContext {
+                pid: Some(123),
+                cwd: directory.path().to_str().unwrap(),
+                title: "",
+                environment: &environment,
+            },
+            Duration::from_millis(20),
+        ),
     )
     .await
     .expect("the query did not enforce its deadline");
-    assert!(result.is_none());
+    assert_eq!(result, SessionResolution::Unavailable);
 }
 
 #[test]

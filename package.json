@@ -6,8 +6,8 @@
   "scripts": {
     "lint": "npm run lint:js && npm run lint:css && npm run lint:html && npm run lint:config && npm run lint:markdown",
     "lint:js": "eslint . --max-warnings 0",
-    "lint:css": "stylelint 'frontend/**/*.css' 'website/**/*.css' --max-warnings 0",
-    "lint:html": "html-validate 'frontend/**/*.html' 'website/**/*.html' --max-warnings 0",
+    "lint:css": "stylelint 'frontend/**/*.css' --max-warnings 0",
+    "lint:html": "html-validate 'frontend/**/*.html' --max-warnings 0",
     "lint:config": "node scripts/lint/config.mjs",
     "lint:markdown": "markdownlint-cli2",
     "lint:shell": "node scripts/lint/shell.mjs",

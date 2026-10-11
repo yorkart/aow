@@ -5,8 +5,8 @@
 .workspace-field .workspace-modes > button.selected { color:var(--aow-text-hover,#eef3fa); background:var(--aow-hover,#ffffff09); border-color:var(--aow-control-line,#ffffff15); }
 .workspace-field button:disabled { opacity:.5; cursor:default; }
 .workspace-field .workspace-dynamic-options { display:flex; flex-wrap:wrap; gap:8px 20px; padding:5px 2px; }
-.workspace-field .workspace-dynamic-options > label { display:inline-flex; flex-direction:row; align-items:center; gap:6px; margin:0; color:var(--aow-text,#d5d7dd); font-size:12px; cursor:pointer; }
-.workspace-field .workspace-dynamic-options input[type="radio"] { flex:0 0 14px; width:14px; height:14px; min-height:0; margin:0; padding:0; accent-color:var(--aow-accent,#9fc5ef); cursor:inherit; }
+.workspace-field .workspace-dynamic-options > label { display:inline-flex; flex:0 0 auto; flex-direction:row; align-items:center; gap:6px; width:auto; margin:0; padding:0; color:var(--aow-text,#d5d7dd); font-size:12px; cursor:pointer; }
+.workspace-field .workspace-dynamic-options input[type="radio"] { appearance:auto; -webkit-appearance:radio; flex:0 0 14px; width:14px; min-width:14px; height:14px; min-height:0; margin:0; padding:0; border:0; border-radius:50%; background:transparent; accent-color:var(--aow-accent,#9fc5ef); cursor:inherit; }
 .workspace-field .workspace-dynamic-options > label:has(input:disabled) { opacity:.5; cursor:default; }
 .workspace-field .workspace-dynamic-options input:focus-visible { outline:1px solid var(--aow-accent,#9fc5ef); outline-offset:3px; }
 .workspace-field .workspace-select { display:flex; min-width:0; flex-direction:row; align-items:center; gap:8px; padding:0 10px; background:var(--aow-panel,#1e2228); border:1px solid var(--aow-control-line,#ffffff15); border-radius:4px; }

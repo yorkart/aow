@@ -21,7 +21,7 @@ pub const CODEX: AgentDefinition = AgentDefinition {
     display_name: "Codex",
     commands: &["codex"],
     args: &[],
-    configuration_env: &["CODEX_HOME"],
+    configuration_env: &["CODEX_HOME", "AOW_CODEX_TERMINAL"],
 };
 
 pub const TRAECLI: AgentDefinition = AgentDefinition {
@@ -30,6 +30,18 @@ pub const TRAECLI: AgentDefinition = AgentDefinition {
     commands: &["traecli"],
     args: &[],
     configuration_env: &["TRAECLI_HOME", "TRAE_HOME"],
+};
+
+pub const PI: AgentDefinition = AgentDefinition {
+    id: "pi",
+    display_name: "Pi",
+    commands: &["pi"],
+    args: &[],
+    configuration_env: &[
+        "PI_CODING_AGENT_DIR",
+        "PI_CODING_AGENT_SESSION_DIR",
+        "AOW_PI_BINDING",
+    ],
 };
 
 pub const HERMES: AgentDefinition = AgentDefinition {
@@ -49,6 +61,7 @@ pub enum Agent {
     Codex,
     TraeCli,
     Hermes,
+    Pi,
     Gemini,
     OpenCode,
     Aider,
@@ -65,6 +78,7 @@ pub const KNOWN_AGENTS: &[Agent] = &[
     Agent::Codex,
     Agent::TraeCli,
     Agent::Hermes,
+    Agent::Pi,
     Agent::Gemini,
     Agent::OpenCode,
     Agent::Aider,
@@ -94,6 +108,7 @@ impl Agent {
             Self::Codex => &CODEX,
             Self::TraeCli => &TRAECLI,
             Self::Hermes => &HERMES,
+            Self::Pi => &PI,
             Self::Gemini => &AgentDefinition {
                 id: "gemini",
                 display_name: "Gemini CLI",

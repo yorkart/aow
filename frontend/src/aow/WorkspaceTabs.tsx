@@ -10,15 +10,18 @@ import { TerminalTabPreview } from '../features/terminals/TerminalTabPreview';
 import { WorkspaceTabIcon } from './WorkspaceTabIcon';
 import { WorkspaceNewMenu } from './WorkspaceNewMenu';
 import { WorkspaceMenuLabel, type WorkspaceMenuAction } from './WorkspaceMenuLabel';
+import { AcpSpinnerLabel } from '../features/acp';
 
 export interface WorkspaceTab {
   id: string;
-  kind: 'terminal' | 'agent' | 'file' | 'diff' | 'session' | 'automation' | 'pullRequest' | 'browser';
+  kind: 'terminal' | 'agent' | 'file' | 'diff' | 'session' | 'acp' | 'automation' | 'pullRequest' | 'browser';
   label: string;
   targetId: string;
   title?: string;
   terminal?: TerminalTabPresentation;
   automationKind?: TaskKind;
+  acpAgentId?: string;
+  acpWorking?: boolean;
   renameable?: boolean;
   dirty?: boolean;
   pending?: boolean;
@@ -28,6 +31,7 @@ type WorkspaceTabGroup = Exclude<WorkspaceTab['kind'], 'agent'>;
 const groupDefinitions: { id: WorkspaceTabGroup; label: string; color: string }[] = [
   { id: 'browser', label: '系统文件浏览器', color: '#8fa8bd' },
   { id: 'terminal', label: 'Terminal', color: '#6ca8f1' },
+  { id: 'acp', label: 'ACP', color: '#91b8c8' },
   { id: 'session', label: 'Conversation', color: '#ae9bd7' },
   { id: 'automation', label: '自动化', color: '#c8b480' },
   { id: 'pullRequest', label: 'PR', color: '#c99ab5' },
@@ -125,6 +129,7 @@ interface Props {
   onOpenBrowser?: () => void;
   onCreateNote: (kind: 'md' | 'txt') => void;
   onCreateTerminal: (agent?: AowAgent) => void;
+  onCreateAcp?: (agentId: string) => void;
   leadingControls?: ReactNode;
   controls?: ReactNode;
   newLabel?: string;
@@ -134,7 +139,7 @@ interface Props {
 
 export function WorkspaceTabs({ workspaceKey, revealRequest, tabs, activeId, visible, agents, onActivate, onCloseTab, onCloseTabs,
   onCanRename, onRename, onError, destination, onOpenElsewhere, onOpenFile, onOpenBrowser, onCreateNote,
-  onCreateTerminal, leadingControls, controls, newLabel = '新建窗体', tabListLabel = '工作区标签', headerProps }: Props) {
+  onCreateTerminal, onCreateAcp, leadingControls, controls, newLabel = '新建窗体', tabListLabel = '工作区标签', headerProps }: Props) {
   const groups = useMemo(() => groupWorkspaceTabs(tabs), [tabs]);
   const storageKey = `aow-tab-groups-v1:${workspaceKey}`;
   const [collapsed, setCollapsed] = useState<Set<WorkspaceTabGroup>>(() => {
@@ -291,7 +296,8 @@ export function WorkspaceTabs({ workspaceKey, revealRequest, tabs, activeId, vis
                   event.preventDefault(); event.stopPropagation(); dismissPreview(); onActivate(tab); setNewMenu(false);
                   setContextMenu({ tab, anchor: event.currentTarget, x: event.clientX, y: event.clientY });
                 }} onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onActivate(tab); } }}>
-                <WorkspaceTabIcon kind={tab.kind} path={tab.targetId} terminal={tab.terminal} automationKind={tab.automationKind} />
+                <WorkspaceTabIcon kind={tab.kind} path={tab.targetId} terminal={tab.terminal} automationKind={tab.automationKind} acpAgentId={tab.acpAgentId} />
+                {tab.kind === 'acp' && tab.acpWorking && <span className="project-aow-tab-activity" role="status" aria-label="Agent 正在处理…"><AcpSpinnerLabel /></span>}
                 {rename?.tabId === tab.id ? <input className="project-aow-tab-rename-input" value={rename.draft}
                   maxLength={tab.kind === 'terminal' || tab.kind === 'agent' ? 128 : 255} autoFocus
                   aria-label={tab.kind === 'agent' ? 'Agent 名称' : tab.kind === 'terminal' ? 'Terminal 名称' : '文件名'}
@@ -312,7 +318,7 @@ export function WorkspaceTabs({ workspaceKey, revealRequest, tabs, activeId, vis
       <div ref={newMenuRef} className="project-aow-new" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setNewMenu(false); }}>
         <button className="project-aow-new-trigger" title={newLabel} aria-label={newLabel} aria-expanded={newMenu} onClick={() => setNewMenu(value => !value)}><Plus /></button>
         {newMenu ? <WorkspaceNewMenu agents={agents} onOpenFile={onOpenFile} onOpenBrowser={onOpenBrowser}
-          onCreateNote={onCreateNote} onCreateTerminal={onCreateTerminal} onSelect={() => setNewMenu(false)} /> : null}
+          onCreateNote={onCreateNote} onCreateTerminal={onCreateTerminal} onCreateAcp={onCreateAcp} onSelect={() => setNewMenu(false)} /> : null}
       </div>
       {controls}
     </nav>

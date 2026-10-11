@@ -1,4 +1,4 @@
-import { Bot } from 'lucide-react';
+import { Bot, Pi } from 'lucide-react';
 import codexIcon from '../../assets/agents/codex.png';
 import claudeIcon from '../../assets/agents/claude.png';
 import traeIcon from '../../assets/agents/trae.png';
@@ -13,6 +13,7 @@ const icons = new Map([
 ]);
 
 export function AgentIcon({ agentId }: { agentId?: string | null }) {
+  if (agentId?.toLowerCase() === 'pi') return <Pi className="agent-icon" aria-hidden="true" />;
   const icon = icons.get(agentId?.toLowerCase() ?? '');
   return icon
     ? <img className="agent-icon" src={icon} alt="" aria-hidden="true" draggable={false} />

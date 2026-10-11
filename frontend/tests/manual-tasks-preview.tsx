@@ -11,7 +11,9 @@ const project = { id: 'project', name: 'Project', registered_path: '/repo', comm
   worktrees: [{ id: 'main', project_id: 'project', path: '/repo', branch: 'main', head: 'abc', is_main: true, detached: false, locked: false, prunable: false, color: 'default' }],
 } satisfies AowProject;
 const agents = [{ id: 'codex', agent_type: 'codex', display_name: 'Codex', source: 'configured', available: true,
-  command: 'codex', executable: '/bin/codex', args: [], env: {} }] satisfies AowAgent[];
+  command: 'codex', executable: '/bin/codex', args: [], env: {} },
+  { id: 'Work_codex-2', agent_type: 'codex', display_name: 'Work Codex', source: 'configured', available: true,
+    command: 'codex', executable: '/bin/codex', args: [], env: {} }] satisfies AowAgent[];
 function Preview() {
   const [selected, setSelected] = useState<AutomationTask>();
   const [refresh, setRefresh] = useState(0);

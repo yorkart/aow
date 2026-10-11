@@ -23,6 +23,10 @@ const server = await createServer({
   root: fileURLToPath(new URL('../', import.meta.url)),
   server: { host: '127.0.0.1', port: 0, proxy: {} },
   plugins: [react(), { name: 'task-stop-fixture', configureServer(server) {
+    server.middlewares.use((request, _response, next) => {
+      if (request.url.startsWith('/aow/')) request.url = '/tests/agent-notifications-preview.html';
+      next();
+    });
     server.httpServer.on('upgrade', (request, socket, head) => {
       if (request.url === '/api/events/ws') events.handleUpgrade(request, socket, head, ws => events.emit('connection', ws));
     });
@@ -72,6 +76,12 @@ const server = await createServer({
         layout: { type: 'pane', pane_id: 'pane' }, panes: [{ id: 'pane', name: id, cwd: '/workspace/demo', kind: 'terminal',
           shell: '/bin/bash', status: 'running', rows: 24, cols: 80 }] }));
     });
+    server.middlewares.use('/api/acp/', (request, response) => {
+      response.setHeader('Content-Type', 'application/json');
+      const session = { thread_id: 'shared', session_id: 'remote', agent_id: 'codex-acp', cwd: '/workspace/demo', title: 'ACP task', status: 'idle', updated_at: '' };
+      const path = request.url.split('?')[0];
+      response.end(JSON.stringify(path === '/agents' ? [] : path === '/sessions' ? [session] : session));
+    });
     server.middlewares.use('/api/aow/projects', (_request, response) => {
       response.setHeader('Content-Type', 'application/json');
       response.end(JSON.stringify([{ id: 'project', name: 'AoW', worktrees: [{ id: 'worktree', path: '/workspace/demo' }] }]));
@@ -98,6 +108,44 @@ try {
   await server.listen();
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
   const base = `http://127.0.0.1:${server.httpServer.address().port}`;
+  await test('ACP completions share popups and unread state, navigate by thread and suppress the active session only', async t => {
+    const page = await browser.newPage();
+    t.after(() => page.close());
+    await page.goto(`${base}/tests/agent-notifications-preview.html`);
+    await waitConnections(1);
+    await page.getByRole('button', { name: '打开 ACP 会话 ACP task', exact: true }).waitFor();
+    const acp = () => ({ ...notice('remote', 'codex-acp'), sources: [{ ...source('', 'AoW', 'ACP task'), thread_id: 'shared' }] });
+    await page.getByRole('button', { name: '查看同名 Terminal', exact: true }).click();
+    send(acp());
+    await notification(page, 'ACP task').waitFor();
+    assert.equal(await page.getByLabel('Terminal 未读数').textContent(), '0');
+    assert.equal(await page.getByLabel('工作区未读数').textContent(), '1');
+    await page.getByRole('img', { name: '任务已完成，点击查看', exact: true }).waitFor();
+    await page.getByRole('button', { name: '关闭通知：AoW · ACP task', exact: true }).click();
+    await notification(page, 'ACP task').waitFor({ state: 'detached' });
+    await page.reload();
+    await waitConnections(1);
+    await page.getByRole('img', { name: '任务已完成，点击查看', exact: true }).waitFor();
+    assert.equal(await notification(page, 'ACP task').count(), 0, 'closing the popup persists without clearing unread');
+    send(acp());
+    await notification(page, 'ACP task').waitFor();
+    await notification(page, 'ACP task').click();
+    await page.waitForURL('**/aow/tabs/acp/shared');
+    await page.getByRole('img', { name: '任务已完成，点击查看', exact: true }).waitFor({ state: 'detached' });
+    assert.equal(await page.getByLabel('工作区未读数').textContent(), '0');
+    send(acp());
+    send(notice('shared'));
+    await notification(page, 'shared').waitFor();
+    assert.equal(await notification(page, 'ACP task').count(), 0, 'only the active ACP target is suppressed');
+    assert.equal(await page.getByLabel('Terminal 未读数').textContent(), '1');
+    await page.getByRole('button', { name: '离开当前会话', exact: true }).click();
+    send(acp());
+    send(acp());
+    await page.waitForFunction(() => [...document.querySelectorAll('.agent-task-notice-tab')].filter(e => e.textContent === 'ACP task').length === 2);
+    await page.getByRole('button', { name: '打开 ACP 会话 ACP task', exact: true }).click();
+    await notification(page, 'ACP task').first().waitFor({ state: 'detached' });
+    assert.equal(await page.getByLabel('工作区未读数').textContent(), '1', 'opening ACP clears its turns and retains Terminal unread');
+  });
   await test('per-turn token usage is displayed and retained across notification restoration', async t => {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
     t.after(() => page.close());
@@ -145,9 +193,9 @@ try {
     await page.waitForFunction(() => document.querySelectorAll('.agent-task-notice').length === 3);
     assert.equal(await page.locator('.agent-task-notice-heading strong').count(), 3);
     await page.locator('.agent-task-notice-open').first().click({ position: { x: 5, y: 5 } });
-    await page.waitForFunction(() => document.querySelectorAll('.agent-task-notice').length === 2);
-    assert.equal(await page.locator('.agent-task-notice').count(), 2);
-    await page.getByRole('button', { name: '全部关闭' }).click();
+    await page.waitForFunction(() => document.querySelectorAll('.agent-task-notice').length === 1);
+    assert.equal(await page.locator('.agent-task-notice').count(), 1, 'activating the source clears every unread turn for that tab');
+    await page.getByRole('button', { name: '关闭通知：AoW · two', exact: true }).click();
     await page.locator('.agent-task-notifications').waitFor({ state: 'detached' });
     assert.equal(await page.locator('.agent-task-notice').count(), 0);
 

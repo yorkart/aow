@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from 'react';
 import { Check, ChevronRight, Circle, CircleAlert, LoaderCircle, MessageSquare, Minus, Wrench } from 'lucide-react';
 import type { AgentSessionActivity, AgentSessionSnapshotTurn, AgentSessionToolText } from './types';
 import { activityTimeLabel, groupSessionActivities, toolGroupStatus, toolSummary } from './sessionProcessPresentation';
+import { ConversationProcess } from '../../components/conversation/ConversationProcess';
 import './session-turn-process.css';
 
 const statusLabels = { completed: '已完成', failed: '失败', interrupted: '已中断', in_progress: '执行中', unknown: '结果未记录' };
@@ -99,7 +100,6 @@ function ToolGroup({ tools }: { tools: AgentSessionActivity[] }) {
 // preserve a manual choice; finished and historical turns default to collapsed.
 export function SessionTurnProcess({ turn, isLatest }: { turn: AgentSessionSnapshotTurn; isLatest: boolean }) {
   const [expanded, setExpanded] = useState(isLatest && turn.status === 'in_progress');
-  const contentId = useId();
   useEffect(() => {
     if (turn.status !== 'in_progress') setExpanded(false);
   }, [turn.status]);
@@ -109,15 +109,8 @@ export function SessionTurnProcess({ turn, isLatest }: { turn: AgentSessionSnaps
   const progressCount = activities.length - toolCount;
   const entries = groupSessionActivities(activities);
 
-  return <div className={`session-turn-process${expanded ? ' expanded' : ''}`}>
-    <button type="button" className="session-process-toggle" aria-expanded={expanded} aria-controls={contentId}
-      aria-label={expanded ? '收起处理过程' : '展开处理过程'} onClick={() => setExpanded((value) => !value)}>
-      <ChevronRight size={14} className="session-process-chevron" aria-hidden="true" />
-      <span>处理过程</span>
-      <span className="session-process-count">{[toolCount ? `${toolCount} 次工具调用` : '', progressCount ? `${progressCount} 条进度` : ''].filter(Boolean).join(' · ')}</span>
-      <span className="session-process-action">{expanded ? '收起' : '展开'}</span>
-    </button>
-    <div id={contentId} hidden={!expanded}>
+  return <ConversationProcess expanded={expanded} onToggle={() => setExpanded(value => !value)}
+    summary={[toolCount ? `${toolCount} 次工具调用` : '', progressCount ? `${progressCount} 条进度` : ''].filter(Boolean).join(' · ')}>
       {expanded && <>
         {turn.activities_truncated && <p className="session-process-notice">过程较长，仅展示最近的 {activities.length} 条记录。</p>}
         <ol className="session-process-timeline">
@@ -127,8 +120,7 @@ export function SessionTurnProcess({ turn, isLatest }: { turn: AgentSessionSnaps
           </li>)}
         </ol>
       </>}
-    </div>
-  </div>;
+  </ConversationProcess>;
 }
 
 export function SessionTurnPending({ turn }: { turn: AgentSessionSnapshotTurn }) {

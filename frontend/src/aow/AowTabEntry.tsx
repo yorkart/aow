@@ -7,21 +7,22 @@ const TabLocationContext = createContext<(target?: TabTarget | string, hash?: st
 export const useAowTabLocation = () => useContext(TabLocationContext);
 const TabNavigationContext = createContext<(target: TabTarget) => Promise<void>>(async () => {});
 export const useAowTabNavigation = () => useContext(TabNavigationContext);
-interface TerminalTabActivity {
-  getCurrent: () => string | undefined;
+export type TaskTabTarget = Extract<TabTarget, { type: 'terminal' | 'acp' }>;
+interface TaskTabActivity {
+  getCurrent: () => TaskTabTarget | undefined;
   subscribe: (listener: () => void) => () => void;
 }
-const TerminalTabActivityContext = createContext<TerminalTabActivity>({ getCurrent: () => undefined, subscribe: () => () => {} });
-export const useAowTerminalTabActivity = () => useContext(TerminalTabActivityContext);
-function createTerminalTabActivity() {
-  let current: string | undefined;
+const TaskTabActivityContext = createContext<TaskTabActivity>({ getCurrent: () => undefined, subscribe: () => () => {} });
+export const useAowTaskTabActivity = () => useContext(TaskTabActivityContext);
+function createTaskTabActivity() {
+  let current: TaskTabTarget | undefined;
   const listeners = new Set<() => void>();
   return {
     getCurrent: () => current,
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    update(tabId?: string) {
-      if (current === tabId) return;
-      current = tabId;
+    update(target?: TaskTabTarget) {
+      if ((!current && !target) || (current && target && tabTargetUrl(current) === tabTargetUrl(target))) return;
+      current = target;
       for (const listener of listeners) listener();
     },
   };
@@ -35,7 +36,7 @@ const locationKey = () => window.location.pathname + window.location.search;
 export function AowTabEntry({ children }: { children: (entry?: ResolvedTab) => ReactNode }) {
   const [request, setRequest] = useState(() => ({ url: window.location.href }));
   const [entry, setEntry] = useState<ResolvedTab>();
-  const [terminalTabActivity] = useState(createTerminalTabActivity);
+  const [taskTabActivity] = useState(createTaskTabActivity);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(() => window.location.pathname.startsWith(appUrl('/aow/tabs/')));
   const [opened, setOpened] = useState(!loading);
@@ -99,18 +100,18 @@ export function AowTabEntry({ children }: { children: (entry?: ResolvedTab) => R
     if (pending.current && (!target || pending.current !== tabTargetUrl(target))) return;
     pending.current = undefined;
     // Publish synchronously so an arriving stop observes the newly activated tab.
-    terminalTabActivity.update(visible && target?.type === 'terminal' ? target.tabId : undefined);
+    taskTabActivity.update(visible && (target?.type === 'terminal' || target?.type === 'acp') ? target : undefined);
     const url = tabLocationUrl(target, hash);
     if (url !== locationKey() + window.location.hash) window.history.replaceState(window.history.state, '', url);
     currentLocation.current = locationKey();
     setEntry(current => current ? undefined : current);
-  }, [terminalTabActivity]);
+  }, [taskTabActivity]);
   const blocked = loading || !!error;
-  useEffect(() => { if (blocked) terminalTabActivity.update(); }, [blocked, terminalTabActivity]);
+  useEffect(() => { if (blocked) taskTabActivity.update(); }, [blocked, taskTabActivity]);
   return <TabNavigationContext.Provider value={navigateTab}><TabLocationContext.Provider value={syncTab}><TabLocationErrorContext.Provider value={setError}>
-    <TerminalTabActivityContext.Provider value={terminalTabActivity}>
+    <TaskTabActivityContext.Provider value={taskTabActivity}>
       <div style={{ display: blocked ? 'none' : 'contents' }}>{opened && children(entry)}</div>
-    </TerminalTabActivityContext.Provider>
+    </TaskTabActivityContext.Provider>
     {blocked && <main className="aow-auth"><section className="aow-auth-card">
       <h1>{error ? '无法打开 Tab' : '正在定位 Tab…'}</h1>
       {error ? <><p role="alert">{error}</p><button onClick={() => setRequest({ url: window.location.href })}>重试</button></> : <p role="status">正在读取内容所在的工作区。</p>}

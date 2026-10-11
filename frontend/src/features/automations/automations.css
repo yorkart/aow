@@ -114,7 +114,6 @@
 .automation-prompt-preview > h3 { display:flex; align-items:center; gap:7px; margin:0 0 12px; padding:0 2px; color:var(--aow-text-strong); font-size:11px; font-weight:600; }
 .automation-prompt-preview > h3 svg { width:22px; height:22px; padding:3px; color:var(--aow-icon-foreground, var(--aow-icon)); background:#ffffff08; border-radius:6px; }
 .automation-prompt-preview > h3 small { margin-left:auto; color:var(--aow-muted); font-size:10px; font-weight:400; }
-.automation-command-preview > pre { margin:0; padding:14px 16px; color:var(--aow-text); background:#121418; border:1px solid #30353d; border-radius:8px; font:12px/1.8 ui-monospace,SFMono-Regular,Consolas,monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
 .automation-prompt-markdown { padding:0 2px; color:var(--aow-text); font-size:13px; line-height:1.8; overflow-wrap:anywhere; }
 .automation-prompt-markdown > :first-child { margin-top:0; }
 .automation-prompt-markdown > :last-child { margin-bottom:0; }
