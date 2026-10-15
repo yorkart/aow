@@ -218,7 +218,8 @@ try {
     assert.equal(await page.getByRole('button', { name: '打开通知：demo · Tab 不可用', exact: true }).isDisabled(), true);
 
     await page.getByRole('button', { name: '切换订阅' }).click();
-    await waitConnections(0);
+    // The visible ACP list retains the page's shared data connection.
+    await waitConnections(1);
     send(notice('while-disconnected'));
     await page.getByRole('button', { name: '切换订阅' }).click();
     await waitConnections(1);
@@ -309,7 +310,8 @@ try {
     await page.getByRole('button', { name: '全部关闭', exact: true }).click();
     await page.locator('.agent-task-notifications').waitFor({ state: 'detached' });
     await page.getByRole('button', { name: '切换订阅' }).click();
-    await waitConnections(0);
+    // The visible ACP list retains the page's shared data connection.
+    await waitConnections(1);
     await page.getByRole('button', { name: '切换订阅' }).click();
     await waitConnections(1);
     send(notice('close-7'));

@@ -30,6 +30,7 @@ pub(crate) struct AcpConnection {
 }
 
 pub(super) struct StdioContext {
+    pub events: crate::facade::events::SyncEvents,
     pub host: Arc<dyn AcpHost>,
     pub execution_path: Option<std::ffi::OsString>,
     pub threads: Arc<Mutex<ThreadStore>>,
@@ -62,6 +63,9 @@ impl AcpConnection {
         let stop = CancellationToken::new();
         let initialization_guard = stop.clone().drop_guard();
         let context = Arc::new(ClientContext {
+            events: runtime.events,
+            connection_id: debug_log.connection_id.clone(),
+            bindings: Mutex::new(Default::default()),
             host: runtime.host,
             cwd: cwd.clone(),
             threads: runtime.threads,
@@ -119,8 +123,8 @@ impl AcpConnection {
             drop(process_group);
             let _ = child.kill().await;
             stderr_task.abort();
-            exit_context.disconnected(&reason);
             lifetime.cancel();
+            exit_context.disconnected(&reason);
             exit_log.archive();
         });
         let connection = tokio::time::timeout(Duration::from_secs(30), received)

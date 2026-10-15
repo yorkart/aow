@@ -77,9 +77,17 @@ pub(crate) fn routes() -> Router<AppState> {
         ))
 }
 pub(super) fn error(error: anyhow::Error) -> HttpError {
+    let missing = error.to_string() == "ACP session not found"
+        || error.to_string() == "ACP connection not found";
     HttpError::new(
-        StatusCode::BAD_REQUEST,
-        if aow_acp::is_auth_required(&error) {
+        if missing {
+            StatusCode::NOT_FOUND
+        } else {
+            StatusCode::BAD_REQUEST
+        },
+        if missing {
+            "acp_not_found"
+        } else if aow_acp::is_auth_required(&error) {
             "acp_auth_required"
         } else {
             "acp_error"

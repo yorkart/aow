@@ -11,7 +11,7 @@ mod settings;
 
 pub use facade::{
     AcpHost, AcpService, AgentInfo, ConnectionInfo, ConnectionStatus, Content, Permission,
-    SessionImport, SessionInfo, SessionSnapshot, SessionUpdates, ThreadEntry, TurnCompletion,
-    is_auth_required,
+    SessionImport, SessionInfo, SessionSnapshot, SessionUpdates, SessionVersion, SyncEvent,
+    SyncResource, ThreadEntry, TurnCompletion, is_auth_required,
 };
 pub use settings::{SETTINGS_PATH, SettingsDocument, validate_settings};

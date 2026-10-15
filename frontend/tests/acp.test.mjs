@@ -6,6 +6,7 @@ import { createServer } from 'vite';
 import { chromium } from 'playwright';
 import { parse } from 'jsonc-parser';
 import { acpControlFixture } from './fixtures/acp-control.mjs';
+import { acpEventsFixture, disconnectAcpEvents } from './fixtures/acp-events.mjs';
 
 const server = await createServer({ root: fileURLToPath(new URL('../', import.meta.url)), logLevel: 'error', server: { host: '127.0.0.1', port: 0, proxy: {}, watch: { usePolling: true } } });
 let browser;
@@ -22,8 +23,9 @@ try {
     page.on('pageerror', error => errors.push(error.message));
     t.after(async () => { await page.close(); assert.deepEqual(errors, []); });
     const session = { thread_id: 'local', session_id: 'remote', agent_id: 'test', cwd: '/repo', title: 'Conversation', status: 'idle', revision: 1, updated_at: '', entries: [], permissions: [], modes: {}, config_options: [], commands: [], usage: null };
-    const state = initial.sharedState || { session, created: false, actions: [], saved: '', connectionGate: undefined, connectionError: '', connectionStatus: null, installGate: undefined, installError: '', installStatus: null, installed: false, installCalls: 0, connections: 0, listCalls: [], imports: [], loads: 0, deletes: 0, authRequired: false, authenticated: false, sessions: [], content: '// keep comment\n{ "agent_servers": {}, "future": { "keep": true }, }\n' };
+    let state = initial.sharedState || { session, created: false, actions: [], saved: '', connectionGate: undefined, connectionError: '', connectionStatus: null, installGate: undefined, installError: '', installStatus: null, installed: false, installCalls: 0, connections: 0, listCalls: [], imports: [], loads: 0, deletes: 0, authRequired: false, authenticated: false, sessions: [], content: '// keep comment\n{ "agent_servers": {}, "future": { "keep": true }, }\n' };
     Object.assign(state, initial);
+    state = await acpEventsFixture(page, state);
     state.controls ??= acpControlFixture();
     await state.controls.install(page);
     const origin = initial.insecure ? `http://acp.test:${server.httpServer.address().port}` : base;
@@ -208,7 +210,7 @@ try {
   }
 
   for (const legacyResponse of [false, true]) {
-    await test(`polling before resume completes keeps overview mode${legacyResponse ? ' after a same-revision full response' : ''}`, async t => {
+    await test(`notifications before resume completes keeps overview mode${legacyResponse ? ' after a same-revision full response' : ''}`, async t => {
       const { page, state } = await fixture(t);
       state.session.sync_generation = 'prepared';
       let ready = false;
@@ -228,8 +230,9 @@ try {
       await page.route('**/api/acp/sessions/local/actions?*', async route => {
         ready = true;
         state.preparedStates.delete('local');
+        Object.assign(state.session, projected());
         await gate;
-        await route.fulfill({ json: projected() });
+        await route.fulfill({ json: legacyResponse ? full() : projected() });
       });
       const reads = [];
       await page.route('**/api/acp/sessions/local/updates?*', async route => {
@@ -238,13 +241,15 @@ try {
         // The legacy response models an already in-flight canonical read; even
         // at the same revision, the later overview must replace its full body.
         await route.fulfill({ json: ready && query.get('generation') !== 'live'
-          ? { kind: 'snapshot', snapshot: !legacyResponse && query.get('view') === 'overview' ? projected() : full() } : { kind: 'unchanged' } });
+          ? { kind: 'snapshot', snapshot: !legacyResponse && query.get('view') === 'overview' ? projected() : full() } : ready && Number(query.get('revision')) < state.session.revision ? { kind: 'snapshot', snapshot: { ...projected(), revision: state.session.revision } } : { kind: 'unchanged' } });
       });
       await newSession(page);
       await page.getByText('Resume conclusion', { exact: true }).waitFor();
       const resumed = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/actions'));
       release(); await resumed;
-      await page.waitForRequest(request => new URL(request.url()).pathname.endsWith('/updates') && new URL(request.url()).searchParams.get('generation') === 'live');
+      const nextRead = page.waitForRequest(request => new URL(request.url()).pathname.endsWith('/updates') && new URL(request.url()).searchParams.get('generation') === 'live');
+      state.session.revision++;
+      await nextRead;
       await page.getByRole('button', { name: '展开处理过程', exact: true }).click();
       await page.getByRole('button', { name: '展开工具执行：1 次调用', exact: true }).waitFor();
       assert.ok(reads.every(read => read.view === 'overview'), 'preparation never selects canonical polling');
@@ -388,7 +393,7 @@ try {
     assert.equal(applySessionUpdates(previous, { ...delta, terminals: [{ kind: 'append_output', id: 'missing', text: 'bad' }] }), undefined);
     assert.equal(previous.entries[1].content.text, '你好', 'invalid later patch cannot mutate earlier entries');
   });
-  await test('ACP overview and process polling use cursors without downloading history again', async t => {
+  await test('ACP overview and process notifications use cursors without downloading history again', async t => {
     const { page, state } = await fixture(t);
     const user = { id: 'user', kind: 'user', content: { type: 'text', text: 'Question' } };
     const turn = { id: 'user', revision: 1, user: [user], conclusion: [], tool_count: 0, progress_count: 1,
@@ -617,6 +622,19 @@ try {
     await second.getByLabel('ACP 消息', { exact: true }).waitFor();
     assert.equal(await second.getByLabel('ACP 消息', { exact: true }).innerText(), 'New owner draft');
   });
+  await test('data reconnect refreshes a disconnected session without restoring tasks or changing control', async t => {
+    const { page, state } = await fixture(t);
+    await newSession(page);
+    await page.getByLabel('ACP 消息', { exact: true }).fill('Preserve this draft');
+    const actions = state.actions.length;
+    const claims = state.controls.claims.length;
+    disconnectAcpEvents(page);
+    state.session.status = 'disconnected'; state.session.revision++;
+    await page.getByRole('button', { name: '重试连接', exact: true }).waitFor();
+    assert.equal(state.actions.length, actions, 'data resynchronization never resumes a task');
+    assert.equal(state.controls.claims.length, claims, 'data resynchronization never claims control');
+    assert.equal(await page.getByLabel('ACP 消息', { exact: true }).innerText(), 'Preserve this draft');
+  });
   await test('control reconnects without making an observer reclaim a vacant session', async t => {
     const { page: first, state } = await fixture(t);
     await newSession(first);
@@ -644,6 +662,7 @@ try {
     await newSession(first);
     await first.getByLabel('ACP 消息', { exact: true }).fill('Draft before login');
     Object.assign(state.session, { status: 'disconnected', auth_required: false, revision: state.session.revision + 1 });
+    await first.getByRole('button', { name: '重试连接', exact: true }).click();
     await first.getByRole('region', { name: 'Agent 登录', exact: true }).waitFor();
     const { page: second } = await fixture(t, false, { sharedState: state });
     await second.getByRole('button', { name: '打开 ACP 会话 Conversation', exact: true }).click();
@@ -883,9 +902,14 @@ try {
     await input.fill('Keep my recovery draft');
     Object.assign(state.session, { status: 'disconnected', auth_required: false, revision: state.session.revision + 1 });
     const login = content.getByRole('region', { name: 'Agent 登录', exact: true });
+    await content.getByRole('button', { name: '重试连接', exact: true }).click();
     await login.waitFor();
     const pollAgain = async () => {
-      for (let index = 0; index < 3; index++) await page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/api/acp/sessions/local') && response.request().method() === 'GET');
+      for (let index = 0; index < 3; index++) {
+        const updated = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/api/acp/sessions/local') && response.request().method() === 'GET');
+        state.session.revision++;
+        await updated;
+      }
       await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
       assert.equal(await login.isVisible(), true);
     };
@@ -905,6 +929,7 @@ try {
     // A successful login in the import dialog must also release this request-only auth state.
     state.authenticated = false; state.historyAuthRequired = true;
     state.session.status = 'disconnected'; state.session.revision++;
+    await content.getByRole('button', { name: '重试连接', exact: true }).click();
     await login.waitFor();
     const sidebar = page.getByRole('region', { name: 'ACP 会话列表', exact: true });
     await sidebar.getByRole('button', { name: '导入 ACP 会话', exact: true }).click();

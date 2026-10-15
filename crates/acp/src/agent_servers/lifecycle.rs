@@ -43,15 +43,28 @@ impl AgentServerStore {
         // Detach the previous event source before replacing this association.
         if let Ok(previous) = self.session_connection(thread_id)
             && previous.info.id != connection.info.id
-            && let Some(session_id) = self.snapshot(thread_id)?.session_id
         {
-            previous.context.unregister_session(&session_id);
+            previous.context.bindings.lock().unwrap().remove(thread_id);
+            if let Some(session_id) = self.snapshot(thread_id)?.session_id {
+                previous.context.unregister_session(&session_id);
+            }
         }
         self.inner
             .sessions
             .lock()
             .unwrap()
             .insert(thread_id.into(), connection.info.id.clone());
+        connection
+            .context
+            .bindings
+            .lock()
+            .unwrap()
+            .insert(thread_id.into());
+        self.inner
+            .events
+            .changed(crate::facade::SyncResource::Connection {
+                thread_id: thread_id.into(),
+            });
         connection.debug_log.attach(thread_id);
         Ok(())
     }

@@ -4,6 +4,7 @@ use serde_json::Value;
 /// Additive progress view; phase names can grow without changing the connect API.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ConnectionStatus {
+    pub operation_id: String,
     pub phase: String,
     pub detail: Option<String>,
     pub running: bool,

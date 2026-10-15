@@ -5,7 +5,7 @@ export const text = (value: unknown): string => typeof value === 'string' ? valu
 export const failure = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
 export interface AgentInfo { id: string; name: string; description: string; configured: boolean; supported: boolean; installed: boolean; version?: string }
 export interface ConnectionInfo { id: string; agent_id: string; cwd: string; agent_info: Data; capabilities: Data; auth_methods: Data[]; prompt_capabilities?: Data }
-export interface ConnectionStatus { phase: string; detail?: string; running: boolean; elapsed_seconds: number }
+export interface ConnectionStatus { operation_id?: string; phase: string; detail?: string; running: boolean; elapsed_seconds: number }
 export interface Permission { id: string; kind: string; request: Data }
 export interface ThreadEntry { id: string; kind: string; message_id?: string; content: Data }
 export interface SessionTurn { user_entry_id: string; status: 'in_progress' | 'completed' | 'failed' | 'interrupted'; stop_reason?: string | null; error?: string | null }

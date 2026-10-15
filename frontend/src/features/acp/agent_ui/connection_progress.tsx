@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ConnectionStatus } from '../types';
 
 const phases: Record<string, string> = {
+  restoring: '正在恢复会话…', ready: '操作已完成', failed: '操作失败',
   queued: '正在等待其他 Agent 安装完成…', configuration: '正在读取配置…', registry: '正在读取 ACP Registry…',
   runtime: '正在检查 Node.js 和 npm…', installing: '正在下载并安装 Agent 依赖…',
   download: '正在下载 Agent…', extract: '正在解压 Agent…', starting: '正在启动 Agent…', initializing: '正在建立 ACP 连接…',

@@ -2,10 +2,10 @@ import { ChevronRight, List, LoaderCircle } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { TaskCompletion } from '../../../components/TaskCompletion';
 import { MobilePageHeader, MobileRefresh, MobileState, mobileTime } from '../../../mobile/MobilePrimitives';
-import { useMobileResource, useMobileScroll, type MobileNavigate, type MobileRoute } from '../../../mobile/mobileState';
+import { useMobileScroll, type MobileNavigate, type MobileRoute } from '../../../mobile/mobileState';
 import { AgentIcon } from '../../agents/AgentIcon';
 import { useUnreadAcpThreadIds } from '../../notifications/taskNotifications';
-import { acpApi } from '../api';
+import { useSessionsSync } from '../sync/hooks';
 import { SessionPage } from './SessionPage';
 
 export function MobileSessions({ workspace, route, visible, navigate, headerActions }: {
@@ -13,7 +13,7 @@ export function MobileSessions({ workspace, route, visible, navigate, headerActi
 }) {
   const showList = visible && !route.acpSession;
   const key = `acp.sessions.${workspace}`;
-  const list = useMobileResource(key, () => acpApi.sessions(workspace), showList);
+  const list = useSessionsSync(workspace, showList);
   const scroll = useMobileScroll(key, showList && !!list.data);
   const unread = useUnreadAcpThreadIds();
   const sessions = list.data?.filter(session => session.cwd === workspace)

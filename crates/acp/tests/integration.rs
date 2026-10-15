@@ -1229,3 +1229,97 @@ async fn failed_connection_logs_are_bounded_and_removed_when_the_thread_is_delet
     assert!(service.session_logs(&thread.thread_id).is_err());
     Ok(())
 }
+
+#[tokio::test]
+async fn sync_events_cover_adapter_callbacks_requests_binding_and_disconnect() -> Result<()> {
+    use aow_acp::SyncResource;
+    let directory = tempfile::tempdir()?;
+    let service = AcpService::new(host(false), None)?;
+    let mut events = service.subscribe_sync();
+    let connection = service.connect("test", directory.path().into()).await?;
+    let session = service.new_session(&connection.id).await?;
+    let binding = SyncResource::Connection {
+        thread_id: session.thread_id.clone(),
+    };
+    let requests = SyncResource::Requests {
+        connection_id: connection.id.clone(),
+    };
+    let mut bound = false;
+    while let Ok(event) = events.try_recv() {
+        if event.resource == binding {
+            bound = true;
+        }
+    }
+    assert!(bound);
+    assert_eq!(
+        service
+            .session_connection_info(&session.thread_id)?
+            .unwrap()
+            .id,
+        connection.id
+    );
+    let authenticating = service.clone();
+    let id = connection.id.clone();
+    let auth = tokio::spawn(async move { authenticating.authenticate(&id, "login").await });
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while events.recv().await.unwrap().resource != requests {}
+    })
+    .await?;
+    let pending = service.connection_requests(&connection.id)?;
+    assert_eq!(pending.len(), 1);
+    service.answer_connection(
+        &connection.id,
+        &pending[0].id,
+        json!({"action":"accept", "content":{"code":"1234"}}),
+    )?;
+    assert!(service.connection_requests(&connection.id)?.is_empty());
+    auth.await??;
+    let mut answered = 0;
+    while let Ok(event) = events.try_recv() {
+        if event.resource == requests {
+            answered += 1;
+        }
+    }
+    assert_eq!(
+        answered, 1,
+        "answer and dispatcher cleanup must not double-notify the same removal"
+    );
+    service.start_prompt(&session.thread_id, prompt("message-ids"))?;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let event = events.recv().await.unwrap();
+            if let Some(head) = event.session
+                && head.info.thread_id == session.thread_id
+                && head.info.status == "idle"
+            {
+                let snapshot = service.snapshot(&session.thread_id).unwrap();
+                assert!(snapshot.revision >= head.revision);
+                assert!(
+                    snapshot
+                        .entries
+                        .iter()
+                        .any(|entry| entry.content["text"] == "ACP_LIVE_FOLLOWUP_VISIBLE")
+                );
+                break;
+            }
+        }
+    })
+    .await?;
+    service.disconnect(&connection.id)?;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let event = events.recv().await.unwrap();
+            if event.resource == binding {
+                break;
+            }
+        }
+    })
+    .await?;
+    assert!(
+        service
+            .session_connection_info(&session.thread_id)?
+            .is_none()
+    );
+    assert!(service.sync_event(&requests).deleted);
+    Ok(())
+}

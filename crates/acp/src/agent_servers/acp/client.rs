@@ -16,6 +16,9 @@ use tokio_util::sync::CancellationToken;
 
 type PendingReplies = HashMap<String, (String, Permission, oneshot::Sender<Value>)>;
 pub(crate) struct ClientContext {
+    pub events: crate::facade::events::SyncEvents,
+    pub connection_id: String,
+    pub bindings: Mutex<std::collections::HashSet<String>>,
     pub host: Arc<dyn AcpHost>,
     pub cwd: PathBuf,
     pub threads: Arc<Mutex<ThreadStore>>,
@@ -25,6 +28,16 @@ pub(crate) struct ClientContext {
     pub stop: CancellationToken,
 }
 impl ClientContext {
+    fn requests_changed(&self) {
+        self.events.publish(
+            crate::facade::SyncResource::Requests {
+                connection_id: self.connection_id.clone(),
+            },
+            None,
+            self.stop.is_cancelled(),
+            true,
+        );
+    }
     pub(crate) fn unregister_session(&self, session_id: &str) {
         self.cancel_permissions(session_id);
         self.sessions.lock().unwrap().remove(session_id);
@@ -162,6 +175,7 @@ impl ClientContext {
                     .lock()
                     .unwrap()
                     .insert(request_id.clone(), (session_id, permission.clone(), sender));
+                self.requests_changed();
                 if let Some(id) = &id {
                     self.threads.lock().unwrap().update(id, |thread| {
                         AcpThread::request_permission(thread, permission)
@@ -175,7 +189,9 @@ impl ClientContext {
                     }
                 };
                 let response = tokio::select! { response = received => response.unwrap_or_else(|_| cancelled()), () = self.stop.cancelled() => cancelled() };
-                self.replies.lock().unwrap().remove(&request_id);
+                if self.replies.lock().unwrap().remove(&request_id).is_some() {
+                    self.requests_changed();
+                }
                 if let Some(id) = &id {
                     self.threads.lock().unwrap().update(id, |thread| {
                         thread
@@ -229,19 +245,32 @@ impl ClientContext {
         let (_, _, sender) = replies
             .remove(request_id)
             .context("Request is no longer pending")?;
+        drop(replies);
+        self.requests_changed();
         sender
             .send(response)
             .map_err(|_| anyhow::anyhow!("Request cancelled"))
     }
     pub(super) fn cancel_permissions(&self, session_id: &str) {
-        self.replies
-            .lock()
-            .unwrap()
-            .retain(|_, (session, _, _)| session != session_id);
+        let mut replies = self.replies.lock().unwrap();
+        let before = replies.len();
+        replies.retain(|_, (session, _, _)| session != session_id);
+        let changed = before != replies.len();
+        drop(replies);
+        if changed {
+            self.requests_changed();
+        }
     }
     pub(super) fn disconnected(&self, reason: &str) {
         let ids: Vec<_> = self.sessions.lock().unwrap().values().cloned().collect();
         self.replies.lock().unwrap().clear();
+        self.requests_changed();
+        for thread_id in self.bindings.lock().unwrap().iter() {
+            self.events
+                .changed(crate::facade::SyncResource::Connection {
+                    thread_id: thread_id.clone(),
+                });
+        }
         let mut threads = self.threads.lock().unwrap();
         for id in ids {
             if let Err(error) = threads.update(&id, |thread| {

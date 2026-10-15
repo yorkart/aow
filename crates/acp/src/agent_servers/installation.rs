@@ -74,12 +74,19 @@ impl AgentServerStore {
     }
 
     pub async fn install_agent(&self, id: &str) -> Result<()> {
-        let progress = Progress::default();
+        let progress = Progress::observed(
+            self.inner.events.clone(),
+            crate::facade::SyncResource::Operation {
+                agent_id: id.into(),
+                cwd: None,
+            },
+        );
         self.inner
             .installations
             .lock()
             .unwrap()
             .insert(id.into(), progress.clone());
+        progress.notify();
         let result = self.prepare_agent(id, &progress).await;
         progress.finish(result.is_ok());
         result

@@ -11,6 +11,7 @@ use std::{
 };
 
 pub(crate) struct ThreadStore {
+    pub(crate) events: crate::facade::events::SyncEvents,
     pub(crate) metadata: ThreadMetadataStore,
     // Only opened/active conversations are hydrated. Listing history never decodes their bodies.
     pub(crate) threads: BTreeMap<String, Arc<Mutex<SessionSnapshot>>>,
@@ -18,6 +19,7 @@ pub(crate) struct ThreadStore {
 impl ThreadStore {
     pub(crate) fn new(state_directory: Option<PathBuf>) -> Result<Self> {
         Ok(Self {
+            events: Default::default(),
             metadata: ThreadMetadataStore::new(state_directory.as_deref())?,
             threads: BTreeMap::new(),
         })
@@ -130,6 +132,7 @@ impl ThreadStore {
         let source = self.threads.get(id).context("ACP session not found")?;
         let mut thread = source.lock().unwrap();
         let working = thread.status == "working";
+        let title = thread.title.clone();
         let permissions: Vec<_> = thread
             .permissions
             .iter()
@@ -153,6 +156,8 @@ impl ThreadStore {
                     .iter()
                     .map(|permission| permission.id.clone())
                     .collect::<Vec<_>>();
+        let head = crate::facade::SessionVersion::from(&*thread);
+        let urgent = flush || title != thread.title;
         drop(thread);
         self.metadata.save(source);
         // Streamed text/tool updates coalesce in the background. Lifecycle and permission
@@ -160,7 +165,27 @@ impl ThreadStore {
         if flush {
             self.metadata.flush()?;
         }
+        self.publish(head, urgent);
         Ok(())
+    }
+    fn publish(&self, head: crate::facade::SessionVersion, urgent: bool) {
+        use crate::facade::SyncResource;
+        self.events.publish(
+            SyncResource::Sessions {
+                cwd: head.info.cwd.clone(),
+            },
+            None,
+            false,
+            false,
+        );
+        self.events.publish(
+            SyncResource::Session {
+                thread_id: head.info.thread_id.clone(),
+            },
+            Some(head),
+            false,
+            urgent,
+        );
     }
     pub(crate) fn insert(&mut self, mut thread: SessionSnapshot) -> Result<()> {
         thread.updated_at = chrono::Utc::now().to_rfc3339();
@@ -175,18 +200,47 @@ impl ThreadStore {
             thread.revision += 1;
             thread.changes.reset(thread.revision);
         }
+        let heads: Vec<_> = threads
+            .iter()
+            .map(crate::facade::SessionVersion::from)
+            .collect();
         for thread in threads {
             let id = thread.thread_id.clone();
             let thread = Arc::new(Mutex::new(thread));
             self.metadata.save(&thread);
             self.threads.insert(id, thread);
         }
-        self.metadata.flush()
+        self.metadata.flush()?;
+        for head in heads {
+            self.publish(head, true);
+        }
+        Ok(())
     }
     pub(crate) fn remove(&mut self, id: &str) -> Result<()> {
+        let info = self.session_info(id)?;
         self.threads.remove(id);
         self.metadata.delete(id);
-        self.metadata.flush()
+        self.metadata.flush()?;
+        use crate::facade::SyncResource;
+        self.events.publish(
+            SyncResource::Session {
+                thread_id: id.into(),
+            },
+            None,
+            true,
+            true,
+        );
+        self.events.publish(
+            SyncResource::Connection {
+                thread_id: id.into(),
+            },
+            None,
+            true,
+            true,
+        );
+        self.events
+            .changed(SyncResource::Sessions { cwd: info.cwd });
+        Ok(())
     }
 }
 
@@ -210,4 +264,81 @@ pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
         let _ = std::fs::remove_file(temporary);
     }
     result
+}
+
+#[cfg(test)]
+mod sync_tests {
+    use super::*;
+    use crate::facade::SyncResource;
+
+    #[test]
+    fn committed_versions_cover_creation_streaming_permissions_titles_and_deletion() {
+        let mut store = ThreadStore::new(None).unwrap();
+        let mut events = store.events.subscribe();
+        store
+            .insert(super::super::AcpThread::new_snapshot(
+                "thread".into(),
+                "remote".into(),
+                "test".into(),
+                "/repo".into(),
+            ))
+            .unwrap();
+        assert!(matches!(
+            events.try_recv().unwrap().resource,
+            SyncResource::Sessions { .. }
+        ));
+        let created = events.try_recv().unwrap();
+        assert_eq!(
+            created.session.unwrap().revision,
+            store.snapshot("thread").unwrap().revision
+        );
+        store
+            .update("thread", |thread| thread.status = "working".into())
+            .unwrap();
+        events.try_recv().unwrap();
+        assert!(events.try_recv().unwrap().urgent);
+        store.session_update("thread", serde_json::json!({"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "hello"}})).unwrap();
+        events.try_recv().unwrap();
+        let streamed = events.try_recv().unwrap();
+        assert!(!streamed.urgent);
+        let snapshot = store.snapshot("thread").unwrap();
+        assert_eq!(streamed.session.unwrap().revision, snapshot.revision);
+        assert_eq!(snapshot.entries[0].content["text"], "hello");
+        store
+            .update("thread", |thread| {
+                thread.permissions.push(crate::facade::Permission {
+                    id: "confirm".into(),
+                    kind: "permission".into(),
+                    request: serde_json::json!({}),
+                });
+            })
+            .unwrap();
+        events.try_recv().unwrap();
+        assert!(events.try_recv().unwrap().urgent);
+        store
+            .update("thread", |thread| thread.title = "Renamed".into())
+            .unwrap();
+        events.try_recv().unwrap();
+        assert_eq!(
+            events.try_recv().unwrap().session.unwrap().info.title,
+            "Renamed"
+        );
+        store
+            .update("thread", |thread| {
+                thread.status = "idle".into();
+                thread.permissions.clear();
+            })
+            .unwrap();
+        events.try_recv().unwrap();
+        assert!(events.try_recv().unwrap().urgent);
+        store.remove("thread").unwrap();
+        assert!(events.try_recv().unwrap().deleted);
+        assert!(events.try_recv().unwrap().deleted);
+        assert!(matches!(
+            events.try_recv().unwrap().resource,
+            SyncResource::Sessions { .. }
+        ));
+        assert!(store.snapshot("thread").is_err());
+        assert!(events.try_recv().is_err());
+    }
 }

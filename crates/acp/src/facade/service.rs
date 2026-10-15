@@ -8,6 +8,12 @@ use std::{path::PathBuf, sync::Arc};
 #[derive(Clone)]
 pub struct AcpService(AgentServerStore);
 impl AcpService {
+    pub fn subscribe_sync(&self) -> tokio::sync::broadcast::Receiver<super::SyncEvent> {
+        self.0.subscribe_sync()
+    }
+    pub fn sync_event(&self, resource: &super::SyncResource) -> super::SyncEvent {
+        self.0.sync_event(resource)
+    }
     pub fn new(host: Arc<dyn AcpHost>, state_directory: Option<PathBuf>) -> Result<Self> {
         Ok(Self(AgentServerStore::new(host, state_directory)?))
     }

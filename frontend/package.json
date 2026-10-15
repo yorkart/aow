@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b --pretty false",
     "test:architecture": "node --test tests/architecture.test.mjs",
-    "test:acp": "node --test tests/acp.test.mjs",
+    "test:acp": "node --test tests/acp.test.mjs tests/acp-sync.test.mjs",
     "test:agent-arguments": "node --test tests/agent-arguments.test.mjs",
     "test:agent-environment": "node --test tests/agent-environment.test.mjs",
     "test:mobile": "node --test tests/mobile-browser.test.mjs",
