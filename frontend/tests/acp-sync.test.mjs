@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
@@ -37,7 +38,7 @@ try {
       const url = new URL(route.request().url());
       const key = url.pathname.split('/').at(-1);
       state.counts[key] = (state.counts[key] ?? 0) + 1;
-      if (state.failNext) { state.failNext = false; await route.fulfill({ status: 503, json: { message: 'Temporary failure' } }); return; }
+      if (state.failNext || state.failure) { state.failNext = false; await route.fulfill({ status: 503, json: { message: state.failure || 'Temporary failure' } }); return; }
       state.active++; state.maxActive = Math.max(state.maxActive, state.active);
       // Capture the response before waiting, so notifications can overtake it.
       const snapshot = structuredClone(session);
@@ -64,6 +65,15 @@ try {
   const mount = (page, id, resource, read = true) => page.evaluate(({ id, resource, read }) => window.mountResource(id, resource, read), { id, resource, read });
   const ready = (page, id, revision = 1) => page.waitForFunction(({ id, revision }) => window.readers.get(id)?.store.state.data?.revision === revision, { id, revision });
   const sessionResource = { kind: 'session', thread_id: 'thread' };
+  // Poll from Node so browser time can stay frozen while HTTP and WS settle.
+  const waitFor = async (read, expected) => {
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+      if (await read() === expected) return;
+      await delay(10);
+    }
+    assert.equal(await read(), expected);
+  };
 
   await test('healthy idle resources make zero periodic business reads over 60 seconds and share subscriptions', async t => {
     const { page, state } = await fixture(t);
@@ -175,16 +185,71 @@ try {
     assert.deepEqual(state.counts, counts); assert.equal(state.sockets, 1);
     assert.equal(await page.evaluate(() => window.readers.get('thread').store.state.data), undefined);
   });
-  await test('an explicit shared read recovers a failed request and cancels its pending retry timer', async t => {
+  for (const method of ['refresh', 'readSession']) {
+    await test(`explicit ${method} bypasses backoff and cancels the pending retry timer`, async t => {
+      const { page, state } = await fixture(t);
+      await page.clock.install(); await page.clock.pauseAt(new Date(Date.now() + 1000)); state.failNext = true;
+      await mount(page, 'thread', sessionResource);
+      const error = () => page.evaluate(() => window.readers.get('thread').store.state.error);
+      await waitFor(error, 'Temporary failure');
+      await page.evaluate(async method => {
+        if (method === 'refresh') window.readers.get('thread').store.refresh();
+        else await window.syncModule.readSession('thread');
+      }, method);
+      await waitFor(error, '');
+      assert.equal(await page.evaluate(() => window.readers.get('thread').store.state.data.revision), 1);
+      assert.equal(state.counts.thread, 2, 'manual retry does not wait for the clock');
+      const counts = { ...state.counts };
+      await page.clock.runFor(60_000);
+      assert.deepEqual(state.counts, counts);
+    });
+  }
+  await test('new notifications preserve exponential HTTP backoff and retry only the latest version', async t => {
     const { page, state } = await fixture(t);
-    await page.clock.install(); state.failNext = true;
-    await mount(page, 'thread', sessionResource);
-    await page.waitForFunction(() => window.readers.get('thread').store.state.error === 'Temporary failure');
-    const recovered = await page.evaluate(() => window.syncModule.readSession('thread'));
-    assert.equal(recovered.revision, 1);
+    await mount(page, 'thread', sessionResource); await ready(page, 'thread');
+    await page.clock.install(); await page.clock.pauseAt(new Date(Date.now() + 1000));
+    const error = () => page.evaluate(() => window.readers.get('thread').store.state.error);
+    const notify = async () => {
+      state.session.revision++; state.version++; state.emit();
+      await waitFor(() => page.evaluate(() => window.readers.get('thread').store.state.head?.version), state.version);
+    };
+    state.failure = 'Failure 1'; await notify(); await waitFor(error, state.failure);
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      for (let i = 0; i < 4; i++) await notify();
+      assert.equal(state.counts.updates, attempt, 'notifications cannot bypass the pending retry');
+      await page.clock.runFor(1000 * 2 ** (attempt - 1) - 1);
+      assert.equal(state.counts.updates, attempt, 'the full backoff must elapse');
+      state.failure = attempt < 3 ? `Failure ${attempt + 1}` : '';
+      await page.clock.runFor(1);
+      await waitFor(error, state.failure);
+      assert.equal(state.counts.updates, attempt + 1);
+    }
+    assert.equal(await page.evaluate(() => window.readers.get('thread').store.state.data.revision), state.session.revision);
     const counts = { ...state.counts };
     await page.clock.runFor(60_000);
-    assert.deepEqual(state.counts, counts);
-    assert.equal(await page.evaluate(() => window.readers.get('thread').store.state.error), '');
+    assert.deepEqual(state.counts, counts, 'successful catch-up returns to idle without polling');
   });
+  for (const method of ['refresh', 'readSession']) {
+    await test(`failed ${method} retries an unchanged cached revision and clears its error`, async t => {
+      const { page, state } = await fixture(t);
+      await mount(page, 'thread', sessionResource); await ready(page, 'thread');
+      await page.clock.install(); await page.clock.pauseAt(new Date(Date.now() + 1000));
+      state.failNext = true;
+      const failure = await page.evaluate(async method => {
+        if (method === 'refresh') window.readers.get('thread').store.refresh();
+        else try { await window.syncModule.readSession('thread'); } catch (error) { return error.message; }
+      }, method);
+      if (method === 'readSession') assert.equal(failure, 'Temporary failure');
+      const error = () => page.evaluate(() => window.readers.get('thread').store.state.error);
+      await waitFor(error, 'Temporary failure');
+      assert.equal(state.counts.updates, 1);
+      await page.clock.runFor(1000);
+      await waitFor(error, '');
+      assert.equal(state.counts.updates, 2, 'the failed forced read must retry even when the cached revision matches');
+      assert.equal(await page.evaluate(() => window.readers.get('thread').store.state.data.revision), 1);
+      const counts = { ...state.counts };
+      await page.clock.runFor(60_000);
+      assert.deepEqual(state.counts, counts);
+    });
+  }
 } finally { await browser?.close(); await server.close(); }

@@ -42,9 +42,9 @@ function stopFallback() { clearInterval(fallback); fallback = undefined; clearTi
 function degrade() {
   if (!source || protocol || source.readyState !== LiveEvents.OPEN) return;
   setStatus('degraded');
-  for (const store of stores.values()) if (store.active) { store.ready = true; store.refresh(); }
+  for (const store of stores.values()) if (store.active) { store.ready = true; store.revalidate(); }
   if (!fallback) fallback = setInterval(() => {
-    for (const store of stores.values()) if (store.active) store.refresh();
+    for (const store of stores.values()) if (store.active) store.revalidate();
   }, 30_000);
 }
 function connect() {
@@ -118,7 +118,7 @@ export class ResourceStore {
     this.publish({ status });
     connect();
     if (!this.id && protocol) this.start();
-    if (status === 'degraded') { this.ready = true; this.refresh(); }
+    if (status === 'degraded') { this.ready = true; this.revalidate(); }
     else void this.read();
     return () => {
       this.listeners.delete(listener);
@@ -169,12 +169,17 @@ export class ResourceStore {
     this.publish({ head, deleted: false });
     void this.read();
   }
-  refresh = () => { this.forced = true; this.dirty = true; void this.read(); };
+  revalidate() { this.forced = true; this.dirty = true; void this.read(); }
+  refresh = () => {
+    // Only an explicit refresh may bypass an outstanding failure's backoff.
+    clearTimeout(this.retry); this.retry = undefined;
+    this.revalidate();
+  };
   accept(next: SessionSnapshot) {
     if (this.state.deleted || this.state.status === 'denied') return;
     const previous = this.state.data as SessionSnapshot | undefined;
     const head = this.state.head?.session;
-    if (head && head.generation !== next.sync_generation) { this.refresh(); return; }
+    if (head && head.generation !== next.sync_generation) { this.revalidate(); return; }
     if (previous && previous.sync_generation === next.sync_generation && (previous.revision > next.revision
       || previous.revision === next.revision && (previous.overview || !next.overview))) {
       if (this.state.error || this.state.loading) this.publish({ error: '', loading: false });
@@ -222,15 +227,15 @@ export class ResourceStore {
     }
   }
   private read() {
-    if (this.pending || !this.active || !this.reading || !this.ready || this.state.deleted || !this.dirty) return this.pending;
+    if (this.pending || this.retry || !this.active || !this.reading || !this.ready || this.state.deleted || !this.dirty) return this.pending;
     const head = this.state.head;
     const current = this.state.data as SessionSnapshot | undefined;
     if (!this.forced && this.resource.kind === 'session' && head?.session && current?.overview
       && current.sync_generation === head.session.generation && current.revision >= head.session.revision) {
       this.dirty = false; return;
     }
+    const forced = this.forced;
     this.dirty = false; this.forced = false;
-    clearTimeout(this.retry); this.retry = undefined;
     const controller = new AbortController(); this.controller = controller;
     const epoch = this.epoch;
     this.publish({ loading: this.state.data === undefined });
@@ -265,6 +270,8 @@ export class ResourceStore {
       }
       this.publish({ error: error instanceof Error ? error.message : String(error), loading: false });
       this.dirty = true;
+      // A failed forced read still needs HTTP validation, even at the same revision.
+      this.forced ||= forced;
       // Retry failed, outstanding work only; idle resources have no timers.
       this.retry = setTimeout(() => { this.retry = undefined; void this.read(); }, Math.min(30_000, 1000 * 2 ** Math.min(this.failures++, 5)));
     }).finally(() => {
