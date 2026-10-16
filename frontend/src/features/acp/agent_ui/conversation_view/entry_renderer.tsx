@@ -1,6 +1,6 @@
 // Mounted entry renderers own their view state; unmounting releases heavy descendants.
 import type { ReactNode } from 'react';
-import { Brain, ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { ContentBlock, type OpenFile } from './content';
 import { ToolEntry } from './tool_call';
 import { Compaction } from './activity';
@@ -15,7 +15,7 @@ export function useEntryRenderer(session: SessionSnapshot, busy: boolean, onActi
       : group.kind === 'assistant' ? <>{group.entries.map(entry => {
         if (entry.kind !== 'thought') return <div className="acp-message-chunk" key={entry.id}><ContentBlock content={entry.content} onOpenFile={onOpenFile} message /></div>;
         const state = views.thinking(entry.id);
-        return <section key={entry.id} className="acp-thinking"><button type="button" aria-label="思考过程" aria-expanded={state.open} onClick={() => views.toggleThinking(entry.id)}><Brain size={14} /><span>Thinking</span>{state.open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</button>
+        return <section key={entry.id} className="acp-thinking"><button type="button" aria-label="思考过程" aria-expanded={state.open} onClick={() => views.toggleThinking(entry.id)}><span>Thinking</span>{state.open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</button>
           {state.open && <div className={`acp-thinking-content${state.constrained ? ' constrained' : ''}`} ref={element => { if (element && state.following) element.scrollTop = element.scrollHeight; }}><ContentBlock content={entry.content} onOpenFile={onOpenFile} /></div>}
         </section>;
       })}</>

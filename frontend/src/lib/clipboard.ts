@@ -7,6 +7,7 @@ export async function copyText(value: string) {
   const ranges = Array.from({ length: selection?.rangeCount ?? 0 }, (_, index) => selection!.getRangeAt(index).cloneRange());
   const input = document.createElement('textarea');
   input.value = value; input.readOnly = true; input.className = 'acp-clipboard-input';
+  Object.assign(input.style, { position: 'fixed', top: '0', left: '-9999px', opacity: '0' });
   document.body.append(input);
   try {
     input.select();

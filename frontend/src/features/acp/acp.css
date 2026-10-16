@@ -30,7 +30,6 @@
 .acp-message-actions > button { display:flex; padding:4px; border:0; background:transparent; color:var(--aow-muted); opacity:.4; }
 .acp-message-actions:hover > button,.acp-message-actions:focus-within > button { opacity:1; }
 .acp-message-actions > button:hover { color:var(--aow-text); }
-.acp-clipboard-input { position:fixed; top:0; left:-9999px; opacity:0; }
 .acp-notice { margin:8px; padding:8px 12px; border:1px solid var(--acp-border); border-radius:5px; }
 .acp-notice[data-severity="warning"] { border-color:#e3b76f; }
 .acp-notice[data-severity="error"] { border-color:#ee9898; }

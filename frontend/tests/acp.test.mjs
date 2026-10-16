@@ -153,6 +153,12 @@ try {
   }
   const interactions = state => state.actions.filter(action => action.action !== 'resume');
   const newSession = async page => { await page.getByRole('button', { name: '新建窗体', exact: true }).click(); await page.getByRole('button', { name: '新建 ACP 会话：Test Agent', exact: true }).click(); };
+  const toggleThinking = async (page, checked = false) => {
+    await page.getByRole('button', { name: '会话更多操作', exact: true }).click();
+    const option = page.getByRole('menuitemcheckbox', { name: '显示 Thinking', exact: true });
+    assert.equal(await option.getAttribute('aria-checked'), String(checked));
+    await option.click();
+  };
   const importHistory = async page => { await page.getByRole('button', { name: '导入 ACP 会话', exact: true }).click(); const dialog = page.getByRole('dialog', { name: '导入外部 Agent 会话' }); await dialog.getByRole('button', { name: '导入 1 个会话', exact: true }).click(); await dialog.waitFor({ state: 'detached' }); };
   await test('ACP deletion uses the shared confirmation and only deletes after explicit approval', async t => {
     const { page, state } = await fixture(t);
@@ -439,6 +445,58 @@ try {
     const users = [entry('u1', 'user', undefined, { type: 'text', text: 'First' }), entry('u2', 'user', undefined, { type: 'text', text: 'Second' })];
     assert.equal(messageGroups(users, false, false, new Set(), new Set(['u1', 'u2'])).length, 2, 'recorded turns separate consecutive prompts without replies');
   });
+  for (const overview of [false, true]) {
+    await test(`ACP hides thinking by default and merges tools across it in ${overview ? 'loaded history' : 'live sessions'}`, async t => {
+      const { page, state } = await fixture(t);
+      const entry = (id, kind, text) => ({ id, kind, content: { type: 'text', text } });
+      const tool = id => ({ id, kind: 'tool', content: { title: id, kind: 'execute', status: 'completed', rawOutput: `${id} output` } });
+      const user = entry('u', 'user', 'Inspect the project');
+      const conclusion = entry('final', 'assistant', 'Inspection finished');
+      const entries = [user, tool('tool-1'), entry('thought-1', 'thought', 'First thought'), tool('tool-2'), tool('tool-3'),
+        entry('thought-2', 'thought', 'Second thought'), tool('tool-4'), entry('thought-3', 'thought', 'Third thought'),
+        entry('thought-4', 'thought', 'Fourth thought'), tool('tool-5'), entry('mixed-before', 'thought', 'Before progress'),
+        entry('progress', 'assistant', 'Ordinary progress stays visible'), entry('mixed-after', 'thought', 'After progress'), tool('tool-6'), conclusion];
+      Object.assign(state.session, { stop_reason: 'end_turn', entries });
+      if (overview) {
+        state.session.sync_generation = 'thinking-test';
+        state.session.overview = [{ id: user.id, revision: 1, user: [user], conclusion: [conclusion], tool_count: 6, progress_count: 4,
+          running: false, waiting: false, compacting: false, status: 'completed', permission_tool_ids: [] }];
+        state.processSnapshots = { u: { ...state.session, overview: undefined } };
+        state.session.entries = [];
+      }
+      await newSession(page);
+      await page.getByText('Inspection finished', { exact: true }).waitFor();
+      await page.getByRole('button', { name: '展开处理过程', exact: true }).click();
+      const merged = page.getByRole('button', { name: '展开工具执行：5 次调用', exact: true });
+      await merged.waitFor();
+      assert.equal(await page.locator('.acp-thinking, .session-process-marker .lucide-brain').count(), 0);
+      assert.deepEqual(await page.locator('.session-tool-group-count').allTextContents(), ['5 次调用', '1 次调用']);
+      assert.equal(await page.getByText('Ordinary progress stays visible', { exact: true }).isVisible(), true);
+      await merged.click();
+      assert.deepEqual(await page.locator('.acp-process-tool-group').first().getByRole('region').evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label'))), ['tool-1', 'tool-2', 'tool-3', 'tool-4', 'tool-5']);
+      const reads = state.processReads?.length ?? 0;
+      const actions = structuredClone(interactions(state));
+      await toggleThinking(page);
+      await page.getByRole('button', { name: '思考过程', exact: true }).first().waitFor();
+      assert.equal(await page.locator('.acp-thinking').count(), 6);
+      assert.deepEqual(await page.locator('.session-tool-group-count').allTextContents(), ['1 次调用', '2 次调用', '1 次调用', '1 次调用', '1 次调用']);
+      assert.equal(await page.getByText('Ordinary progress stays visible', { exact: true }).isVisible(), true);
+      await toggleThinking(page, true);
+      await page.getByRole('button', { name: /工具执行：5 次调用$/ }).waitFor();
+      assert.equal(await page.locator('.acp-thinking').count(), 0);
+      assert.equal(await page.locator('.project-aow-snapshot-conclusion').innerText(), 'Inspection finished');
+      assert.equal(state.processReads?.length ?? 0, reads, 'visibility changes reuse the loaded process');
+      assert.deepEqual(interactions(state), actions, 'visibility does not send agent actions');
+      assert.equal((overview ? state.processSnapshots.u.entries : state.session.entries).filter(entry => entry.kind === 'thought').length, 6);
+      if (!overview) {
+        state.session.entries.push(entry('late-thought', 'thought', 'Later activity'));
+        state.session.revision++;
+        await page.locator('.project-aow-snapshot-conclusion').waitFor({ state: 'detached' });
+        assert.equal(await page.locator('.acp-thinking').count(), 0, 'streamed thoughts remain hidden');
+        assert.equal(await page.getByText('Inspection finished', { exact: true }).isVisible(), true, 'hiding thoughts must not promote earlier progress to a final reply');
+      }
+    });
+  }
   await test('ACP process and consecutive tool groups expand live and collapse on completion', async t => {
     const { page, state } = await fixture(t);
     const message = (id, text) => ({ id, message_id: id, kind: 'assistant', content: { type: 'text', text } });
@@ -1422,6 +1480,7 @@ try {
     ] });
     await newSession(page);
     const thought = page.getByRole('button', { name: '思考过程', exact: true });
+    await toggleThinking(page);
     await page.waitForFunction(() => document.querySelector('[aria-label="思考过程"]')?.getAttribute('aria-expanded') === 'true');
     assert.equal(await page.locator('.acp-user-text').innerText(), '**literal user input**');
     state.session.entries.push({ id: 'answer', kind: 'assistant', content: { type: 'text', text: '**Answer**' } }); state.session.revision++;
@@ -1606,6 +1665,7 @@ try {
     ] });
     await newSession(page);
     const thinking = page.getByRole('button', { name: '思考过程', exact: true });
+    await toggleThinking(page);
     await page.getByText('Thinking about files', { exact: true }).waitFor();
     state.session.plan = { entries: [{ content: 'Read file', status: 'in_progress' }] };
     state.session.notices = [{ id: 'n', kind: 'notice', content: { severity: 'warning', title: 'Rate limit', description: 'Please **wait** before retrying.' } }];

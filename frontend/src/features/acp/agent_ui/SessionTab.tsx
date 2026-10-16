@@ -1,13 +1,15 @@
 import '../../../components/conversation-theme.css';
 // Conversation content is owned by a workspace tab; closing its view never closes the ACP session.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { MoreHorizontal, ScrollText } from 'lucide-react';
+import { Check, MoreHorizontal, ScrollText } from 'lucide-react';
 import { ConversationLayout } from '../../../components/conversation/ConversationLayout';
+import { ConversationIds } from '../../../components/conversation/ConversationIds';
 import { AgentIcon } from '../../agents/AgentIcon';
 import { useAcpControl } from '../../acp-control/sessionControl';
 import { ControlStatus } from '../../acp-control/ControlStatus';
 import { Authentication } from './authentication';
 import { Popover } from './popover';
+import { ThinkingVisibility } from './thinking_visibility';
 import { authenticationRequired } from '../request';
 import { acpApi, authenticationCompleted, sessionsChanged } from '../api';
 import { acceptSession, readSession } from '../sync/store';
@@ -57,6 +59,7 @@ export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenFil
   const [error, setError] = useState('');
   const [answerBusy, setAnswerBusy] = useState(false);
   const [logs, setLogs] = useState<DebugMessage[]>();
+  const [showThinking, setShowThinking] = useState(false);
   // Request-only authentication belongs to the issuing control attachment; a
   // later owner may have authenticated without ever changing auth_required.
   const [requestAuthRequired, setRequestAuthRequired] = useState<{ token?: string }>();
@@ -167,9 +170,16 @@ export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenFil
     })().catch(reason => recordFailure(reason, token)).finally(() => setAuthBusy(false));
   };
   const threadHidden = !!logs || authRequired;
-  const headerActions = thread_id && <Popover label="会话更多操作" trigger={<MoreHorizontal size={18} />}>
-    {close => <button type="button" role="menuitem" disabled={busy} onClick={() => { close(); if (logs) setLogs(undefined); else void run(async () => setLogs(await acpApi.logs(thread_id))); }}><ScrollText size={14} />{logs ? '返回会话' : 'ACP 协议日志'}</button>}
-  </Popover>;
+  const headerActions = <><ConversationIds identifiers={[
+    { label: 'Thread ID', value: thread_id },
+    { label: 'Session ID', value: session?.session_id },
+    { label: 'Connection ID', value: connectionId },
+  ]} />{thread_id && <Popover label="会话更多操作" trigger={<MoreHorizontal size={18} />}>
+    {close => <>
+      <button type="button" role="menuitemcheckbox" aria-checked={showThinking} onClick={() => { setShowThinking(value => !value); close(); }}><Check size={14} style={{ visibility: showThinking ? 'visible' : 'hidden' }} />显示 Thinking</button>
+      <button type="button" role="menuitem" disabled={busy} onClick={() => { close(); if (logs) setLogs(undefined); else void run(async () => setLogs(await acpApi.logs(thread_id))); }}><ScrollText size={14} />{logs ? '返回会话' : 'ACP 协议日志'}</button>
+    </>}
+  </Popover>}</>;
   const connectionState = <div className="acp-content">
     {sync.deleted && <p role="status">会话已删除。</p>}
     {thread_id && sync.status !== 'live' && <p role="status">{sync.status === 'denied' ? '登录已失效，请重新登录。' : sync.status === 'degraded' ? '服务端暂不支持实时同步，已进入低频同步模式。' : sync.status === 'offline' ? '连接已断开，正在重新同步…' : '正在建立同步连接…'}</p>}
@@ -184,12 +194,12 @@ export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenFil
     {logs && thread_id && <AcpLogs entries={logs} threadId={thread_id} agentName={tab.agentId} busy={busy} onBack={() => setLogs(undefined)} onRefresh={() => { void run(async () => setLogs(await acpApi.logs(thread_id))); }} />}
     {authRequired && connection && <div className="acp-content acp-auth-state">{error && <p className="acp-error" role="alert">{error}</p>}<Authentication connection={connection} pending={authBusy} onAuthenticate={authenticate} /></div>}
   </> : undefined;
-  return <section className="acp-session-tab aow-conversation-theme" aria-label="ACP 会话内容">
+  return <ThinkingVisibility.Provider value={showThinking}><section className="acp-session-tab aow-conversation-theme" aria-label="ACP 会话内容">
     {!session && <ConversationLayout sessionId={tab.id} label="ACP 对话" turns={[]}
       header={{ title: tab.title, agentName: tab.agentId, agentIcon: <AgentIcon agentId={tab.agentId.replace(/-acp$/, '').replace(/^claude-agent$/, 'claude')} />, workspace, actions: headerActions }}
       banner={connectionState} alternateContent={alternateContent}
       state={!busy && !sync.loading && !sync.deleted && !authRequired ? <div className="acp-content acp-empty"><button type="button" onClick={retry}>重试打开会话</button></div> : undefined}
     />}
     {session && <div className="acp-thread-host"><ThreadView session={session} workspace={workspace} tabId={tab.id} busy={busy || restoring} supportsImages={!!connection?.prompt_capabilities?.image} readOnly={!token} controlStatus={<ControlStatus {...control} />} headerActions={headerActions} banner={connectionState} alternateContent={alternateContent} onAction={action} onOpenFile={onOpenFile} /></div>}
-  </section>;
+  </section></ThinkingVisibility.Provider>;
 }

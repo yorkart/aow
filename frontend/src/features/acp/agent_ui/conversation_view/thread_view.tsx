@@ -1,5 +1,5 @@
 // React rendering of the ACP branches in thread_view.rs, with independent view state.
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Maximize2, Minimize2, Send, Square } from 'lucide-react';
 import { ConversationAgentMessage, ConversationLayout } from '../../../../components/conversation/ConversationLayout';
 import { AgentIcon } from '../../../agents/AgentIcon';
@@ -16,7 +16,8 @@ import { ConfigOptions } from '../config_options';
 import { useComposerDraft } from '../composer_drafts';
 import { MessageEditor } from '../message_editor';
 import { emptyDraft, hasDraftContent, hasImages, hasPendingImages, MAX_PROMPT_BYTES, promptContent } from '../message_editor/model';
-import { messageGroups } from './entry_view_state';
+import { messageGroups, visibleMessageGroups } from './entry_view_state';
+import { ThinkingVisibility } from '../thinking_visibility';
 import { list, object, text, type Data, type SessionSnapshot, type TurnOverview } from '../../types';
 import { SpinnerLabel } from '../ui/spinner_label';
 
@@ -30,6 +31,7 @@ function TokenUsage({ usage }: { usage: Data | null }) {
 }
 export function ThreadView({ session, workspace, tabId, busy: pending, supportsImages = false, readOnly = false, controlStatus, headerActions, banner, alternateContent, onAction, onOpenFile: openHostFile }: { session: SessionSnapshot; workspace: string; tabId: string; busy: boolean; supportsImages?: boolean; readOnly?: boolean; controlStatus?: ReactNode; headerActions?: ReactNode; banner?: ReactNode; alternateContent?: ReactNode; onAction: (action: Data) => Promise<boolean>; onOpenFile: OpenFile }) {
   const busy = pending || readOnly;
+  const showThinking = useContext(ThinkingVisibility);
   const [draft, setDraft] = useComposerDraft(workspace, tabId);
   const [composeError, setComposeError] = useState('');
   const [expanded, setExpanded] = useState(false);
@@ -39,7 +41,7 @@ export function ThreadView({ session, workspace, tabId, busy: pending, supportsI
   const onOpenFile: OpenFile = useCallback((path, line) => openHostFile(absoluteFilePath(path, session.cwd || workspace), line), [openHostFile, session.cwd, workspace]);
   const toolId = (permission: typeof session.permissions[number]) => text(object(permission.request.toolCall).toolCallId);
   const permissionTools = useMemo(() => new Set(session.permissions.map(permission => text(object(permission.request.toolCall).toolCallId))), [session.permissions]);
-  const groups = useMemo(() => messageGroups(session.entries, working, session.permissions.length > 0, permissionTools, new Set(session.turns?.map(turn => turn.user_entry_id))), [session.entries, working, session.permissions.length, permissionTools, session.turns]);
+  const groups = useMemo(() => visibleMessageGroups(messageGroups(session.entries, working, session.permissions.length > 0, permissionTools, new Set(session.turns?.map(turn => turn.user_entry_id))), showThinking), [session.entries, working, session.permissions.length, permissionTools, session.turns, showThinking]);
   const { leading, turns } = useMemo(() => conversationTurns(groups), [groups]);
   const entryPositions = useMemo(() => new Map(session.entries.map((entry, index) => [entry.id, index])), [session.entries]);
   const turnRecords = useMemo(() => new Map(session.turns?.map(turn => [turn.user_entry_id, turn])), [session.turns]);
