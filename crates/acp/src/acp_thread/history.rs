@@ -192,6 +192,19 @@ impl ThreadStore {
         thread.updated_at = chrono::Utc::now().to_rfc3339();
         self.insert_metadata(thread)
     }
+    /// Keep the installed model and the writer's retry queue on the same snapshot.
+    pub(crate) fn replace(&mut self, thread: SessionSnapshot) -> Result<()> {
+        let id = thread.thread_id.clone();
+        let previous = self.thread(&id)?;
+        if let Err(error) = self.insert(thread) {
+            self.threads.insert(id, previous.clone());
+            // A failed transaction retains its queued write. Replace that write as
+            // well, so a later flush cannot persist the rejected replay.
+            self.metadata.save(&previous);
+            return Err(error);
+        }
+        Ok(())
+    }
     // Preserve provider timestamps when registering imported metadata.
     pub(crate) fn insert_metadata(&mut self, thread: SessionSnapshot) -> Result<()> {
         self.insert_metadata_all(vec![thread])

@@ -78,7 +78,7 @@ impl ClientContext {
             crate::acp_thread::turns::restore(previous, &mut thread);
         }
         let id = thread.thread_id.clone();
-        self.threads.lock().unwrap().insert(thread)?;
+        self.threads.lock().unwrap().replace(thread)?;
         self.discarded.lock().unwrap().remove(&session_id);
         sessions.insert(session_id, id);
         Ok(())

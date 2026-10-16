@@ -33,10 +33,13 @@ struct Fixture {
 
 impl Fixture {
     async fn new(env: Value) -> Result<Self> {
+        Self::with_storage(env, false).await
+    }
+    async fn with_storage(env: Value, persistent: bool) -> Result<Self> {
         let dir = tempfile::tempdir()?;
         let service = AcpService::new(Arc::new(Host(json!({"agent_servers":{"test":{
             "type":"custom","command":"node","args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/load-recovery-agent.mjs")], "env":env,
-        }}}).to_string())), None)?;
+        }}}).to_string())), persistent.then(|| dir.path().join("state")))?;
         let connection = service.connect("test", dir.path().into()).await?.id;
         let mut fixture = Self {
             dir,
@@ -101,6 +104,339 @@ impl Fixture {
         self.service.close_session(&self.thread).await?;
         Ok(snapshot)
     }
+    async fn second_connection(&self) -> Result<String> {
+        let keeper = self.import("keeper")?;
+        self.service.resume(&keeper).await?;
+        let other = self.import("other")?;
+        self.file("fail-load", "failed");
+        assert!(self.service.resume(&other).await.is_err());
+        self.remove("fail-load");
+        self.service.resume(&other).await?;
+        let second = self.service.session_connection_info(&other)?.unwrap().id;
+        assert_ne!(second, self.connection);
+        Ok(second)
+    }
+}
+
+#[tokio::test]
+async fn failed_install_rolls_back_history_and_persistence_before_retry() -> Result<()> {
+    for resume_only in [false, true] {
+        let fixture =
+            Fixture::with_storage(json!({"RESUME_ONLY":if resume_only {"1"} else {"0"}}), true)
+                .await?;
+        fixture.service.resume(&fixture.thread).await?;
+        fixture
+            .service
+            .start_prompt(&fixture.thread, prompt("previous"))?;
+        until(|| fixture.snapshot().status == "idle").await;
+        let before = fixture.snapshot();
+        fixture.service.close_session(&fixture.thread).await?;
+        fixture.file("hold-load", "");
+        fixture.file("answer.txt", "rejected replay");
+        let load = fixture.load();
+        let method = if resume_only {
+            "session/resume"
+        } else {
+            "session/load"
+        };
+        fixture.event(method, "target", "start", 2).await;
+        let resource = aow_acp::SyncResource::Session {
+            thread_id: fixture.thread.clone(),
+        };
+        let loading_version = fixture.service.sync_event(&resource).version;
+        let database = rusqlite::Connection::open(fixture.dir.path().join("state/threads.sqlite"))?;
+        database.execute_batch("CREATE TRIGGER reject_writes BEFORE INSERT ON acp_thread_snapshots BEGIN SELECT RAISE(ABORT, 'test disk failure'); END;")?;
+        fixture.file("release-load", "");
+        let error = load.await?.unwrap_err();
+        assert!(format!("{error:#}").contains("test disk failure"));
+        let failed = fixture.snapshot();
+        assert_eq!(entries(&failed), entries(&before));
+        assert_eq!(
+            serde_json::to_value(&failed.turns)?,
+            serde_json::to_value(&before.turns)?
+        );
+        assert_eq!(failed.status, "disconnected");
+        assert!(failed.needs_load);
+        assert!(failed.error.is_none());
+        assert_eq!(failed.recovery.as_ref().unwrap().phase, "failed");
+        assert!(
+            failed
+                .recovery
+                .as_ref()
+                .unwrap()
+                .error
+                .as_deref()
+                .unwrap()
+                .contains("test disk failure")
+        );
+        assert!(
+            fixture.service.sync_event(&resource).version > loading_version,
+            "disk errors must still invalidate the UI snapshot"
+        );
+        assert!(
+            fixture
+                .service
+                .start_prompt(&fixture.thread, prompt("too early"))
+                .is_err()
+        );
+        assert_eq!(
+            fixture.events("session/close", "target", "complete").len(),
+            2
+        );
+
+        database.execute_batch("DROP TRIGGER reject_writes")?;
+        fixture.service.flush_threads_on_quit()?;
+        let stored: Vec<u8> = database.query_row(
+            "SELECT data FROM acp_thread_snapshots WHERE thread_id = ?",
+            [&fixture.thread],
+            |row| row.get(0),
+        )?;
+        let stored: Value = serde_json::from_slice(&stored)?;
+        assert_eq!(
+            stored["entries"],
+            entries(&before),
+            "writer retries must not commit the rejected replay"
+        );
+        assert_eq!(stored["status"], "disconnected");
+        assert_eq!(stored["needs_load"], true);
+        fixture.file("answer.txt", "accepted replay");
+        let restored = fixture.service.resume(&fixture.thread).await?;
+        assert!(restored.recovery.is_none());
+        assert_eq!(fixture.events(method, "target", "start").len(), 3);
+        fixture
+            .service
+            .start_prompt(&fixture.thread, prompt("next"))?;
+        until(|| fixture.snapshot().status == "idle").await;
+        assert!(fixture.snapshot().error.is_none());
+        assert_eq!(
+            fixture.snapshot().entries.last().unwrap().content["text"],
+            "prompt complete"
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn returning_to_an_old_connection_closes_stale_session_before_replay() -> Result<()> {
+    let fixture = Fixture::new(json!({})).await?;
+    let second = fixture.second_connection().await?;
+    fixture
+        .service
+        .load_session(&fixture.connection, "target")
+        .await?;
+    fixture.service.load_session(&second, "target").await?;
+    fixture.service.close_session(&fixture.thread).await?;
+    fixture.file("hold-close", "");
+    let first = fixture.service.load_session(&fixture.connection, "target");
+    tokio::pin!(first);
+    assert!(futures::poll!(&mut first).is_pending());
+    fixture.event("session/close", "target", "start", 2).await;
+    assert_eq!(fixture.snapshot().recovery.unwrap().phase, "cleaning");
+    let retry = fixture.service.resume(&fixture.thread);
+    tokio::pin!(retry);
+    assert!(futures::poll!(&mut retry).is_pending());
+    assert_eq!(fixture.events("session/load", "target", "start").len(), 2);
+    fixture.file("answer.txt", "fresh replay");
+    fixture.file("release-close", "");
+    let restored = first.await?;
+    assert_eq!(entries(&restored), entries(&retry.await?));
+    assert_eq!(restored.status, "idle");
+    assert!(!restored.needs_load);
+    assert!(restored.recovery.is_none());
+    assert_eq!(restored.entries.len(), 3);
+    assert_eq!(
+        restored.entries.last().unwrap().content["text"],
+        "fresh replay"
+    );
+    assert_eq!(
+        fixture
+            .service
+            .session_connection_info(&fixture.thread)?
+            .unwrap()
+            .id,
+        fixture.connection
+    );
+    assert_eq!(fixture.events("session/load", "target", "start").len(), 3);
+    assert_eq!(
+        fixture.events("session/close", "target", "complete").len(),
+        2
+    );
+    fixture
+        .service
+        .start_prompt(&fixture.thread, prompt("next"))?;
+    until(|| fixture.snapshot().status == "idle").await;
+    assert!(fixture.snapshot().error.is_none());
+    assert_eq!(
+        fixture.snapshot().entries.last().unwrap().content["text"],
+        "prompt complete"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn stale_loaded_session_cleanup_failure_can_retry_on_another_adapter() -> Result<()> {
+    for no_close in [false, true] {
+        let fixture = Fixture::new(json!({"NO_CLOSE":if no_close {"1"} else {"0"}})).await?;
+        let second = fixture.second_connection().await?;
+        fixture
+            .service
+            .load_session(&fixture.connection, "target")
+            .await?;
+        // Move the binding without leaving a second loaded remote session behind.
+        fixture.file("fail-load", "auth");
+        assert!(
+            fixture
+                .service
+                .load_session(&second, "target")
+                .await
+                .is_err()
+        );
+        fixture.remove("fail-load");
+        let before = fixture.snapshot();
+        fixture.file("fail-close", "");
+        assert!(
+            fixture
+                .service
+                .load_session(&fixture.connection, "target")
+                .await
+                .is_err()
+        );
+        assert_eq!(entries(&fixture.snapshot()), entries(&before));
+        assert_eq!(fixture.snapshot().recovery.unwrap().phase, "failed");
+        assert_eq!(
+            fixture.events("session/load", "target", "start").len(),
+            2,
+            "a failed close must not be followed by another load on that connection"
+        );
+        fixture.remove("fail-close");
+        fixture.service.resume(&fixture.thread).await?;
+        assert_ne!(
+            fixture
+                .service
+                .session_connection_info(&fixture.thread)?
+                .unwrap()
+                .id,
+            fixture.connection
+        );
+        fixture
+            .service
+            .start_prompt(&fixture.thread, prompt("next"))?;
+        until(|| fixture.snapshot().status == "idle").await;
+        assert!(fixture.snapshot().error.is_none());
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn reimported_thread_cannot_reuse_an_old_threads_loaded_cache() -> Result<()> {
+    let mut fixture = Fixture::new(json!({})).await?;
+    let second = fixture.second_connection().await?;
+    fixture
+        .service
+        .load_session(&fixture.connection, "target")
+        .await?;
+    fixture.service.load_session(&second, "target").await?;
+    let previous_thread = fixture.thread.clone();
+    fixture.service.delete_session(&previous_thread).await?;
+    fixture.thread = fixture.import("target")?;
+    assert_ne!(fixture.thread, previous_thread);
+    let restored = fixture
+        .service
+        .load_session(&fixture.connection, "target")
+        .await?;
+    assert_eq!(restored.thread_id, fixture.thread);
+    assert_eq!(restored.status, "idle");
+    assert_eq!(restored.entries.len(), 3);
+    assert_eq!(fixture.events("session/load", "target", "start").len(), 3);
+    fixture
+        .service
+        .start_prompt(&fixture.thread, prompt("next"))?;
+    until(|| fixture.snapshot().status == "idle").await;
+    assert!(fixture.snapshot().error.is_none());
+    Ok(())
+}
+
+#[tokio::test]
+async fn cancelled_stale_cache_cleanup_does_not_start_another_load() -> Result<()> {
+    let fixture = Fixture::new(json!({})).await?;
+    let second = fixture.second_connection().await?;
+    fixture
+        .service
+        .load_session(&fixture.connection, "target")
+        .await?;
+    fixture.service.load_session(&second, "target").await?;
+    fixture.service.close_session(&fixture.thread).await?;
+    let before = fixture.snapshot();
+    fixture.file("hold-close", "");
+    let pending = fixture.service.load_session(&fixture.connection, "target");
+    tokio::pin!(pending);
+    assert!(futures::poll!(&mut pending).is_pending());
+    fixture.event("session/close", "target", "start", 2).await;
+    fixture.service.cancel(&fixture.thread)?;
+    assert!(pending.await.is_err());
+    fixture.file("release-close", "");
+    fixture.settled().await;
+    assert_eq!(entries(&fixture.snapshot()), entries(&before));
+    assert_eq!(fixture.events("session/load", "target", "start").len(), 2);
+    assert_eq!(
+        fixture.events("session/close", "target", "complete").len(),
+        2
+    );
+    let restored = fixture.service.resume(&fixture.thread).await?;
+    assert!(restored.recovery.is_none());
+    assert_eq!(fixture.events("session/load", "target", "start").len(), 3);
+    assert_eq!(
+        fixture
+            .service
+            .session_connection_info(&fixture.thread)?
+            .unwrap()
+            .id,
+        fixture.connection
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn stale_cache_setup_failure_keeps_the_remote_session_quarantined() -> Result<()> {
+    let fixture = Fixture::with_storage(json!({}), true).await?;
+    let second = fixture.second_connection().await?;
+    fixture
+        .service
+        .load_session(&fixture.connection, "target")
+        .await?;
+    fixture.service.load_session(&second, "target").await?;
+    fixture.service.close_session(&fixture.thread).await?;
+    let before = fixture.snapshot();
+    let database = rusqlite::Connection::open(fixture.dir.path().join("state/threads.sqlite"))?;
+    database.execute_batch("CREATE TRIGGER reject_writes BEFORE INSERT ON acp_thread_snapshots BEGIN SELECT RAISE(ABORT, 'test disk failure'); END;")?;
+    assert!(
+        fixture
+            .service
+            .load_session(&fixture.connection, "target")
+            .await
+            .is_err()
+    );
+    assert_eq!(entries(&fixture.snapshot()), entries(&before));
+    assert_eq!(fixture.snapshot().recovery.unwrap().phase, "failed");
+    assert_eq!(fixture.events("session/load", "target", "start").len(), 2);
+    assert_eq!(fixture.events("session/close", "target", "start").len(), 1);
+    database.execute_batch("DROP TRIGGER reject_writes")?;
+    let restored = fixture.service.resume(&fixture.thread).await?;
+    assert!(restored.recovery.is_none());
+    assert_eq!(
+        fixture
+            .service
+            .session_connection_info(&fixture.thread)?
+            .unwrap()
+            .id,
+        second
+    );
+    fixture
+        .service
+        .start_prompt(&fixture.thread, prompt("next"))?;
+    until(|| fixture.snapshot().status == "idle").await;
+    assert!(fixture.snapshot().error.is_none());
+    Ok(())
 }
 
 async fn until(mut ready: impl FnMut() -> bool) {
