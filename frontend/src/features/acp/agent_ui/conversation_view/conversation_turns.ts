@@ -1,6 +1,7 @@
 // Host layout adapter: preserve the upstream implementation's entry grouping and each group's render state.
 import { contentMarkdown, messageGroups, visibleContent, type MessageGroup } from './entry_view_state';
 import { object, text, type Data, type SessionSnapshot, type SessionTurn, type ThreadEntry, type TurnOverview } from '../../types';
+import { userTextPreview } from './user_text_images';
 
 export function overviewPresentation(turn: TurnOverview): ReturnType<typeof turnPresentation> {
   return {
@@ -16,7 +17,7 @@ export function overviewPrompt(turn: TurnOverview) {
 }
 
 function promptText(content: Data): string {
-  if (content.type === 'text') return text(content.text);
+  if (content.type === 'text') return userTextPreview(text(content.text));
   if (content.type === 'image') return '[图片]';
   if (content.type === 'resource') return text(object(content.resource).text) || text(object(content.resource).uri);
   return text(content.name) || text(content.uri);

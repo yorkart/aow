@@ -150,7 +150,7 @@ try {
         else if (action.action === 'clear_plan') session.plan = null;
         else if (action.action === 'set_config') session.config_options = session.config_options.map(option => (option.configId || option.id) === action.config_id ? { ...option, currentValue: action.value } : option);
         else if (action.action === 'set_mode') session.modes.currentModeId = action.mode_id;
-        else if (action.action === 'resume') { session.recovery = null; session.status = 'idle'; if (session.needs_load) { session.needs_load = false; state.loads++; session.entries = [{ id: 'loaded', kind: 'assistant', content: { type: 'text', text: 'Imported conversation content' } }]; } }
+        else if (action.action === 'resume') { session.recovery = null; session.status = 'idle'; if (session.needs_load) { session.needs_load = false; state.loads++; session.entries = state.loadedEntries || [{ id: 'loaded', kind: 'assistant', content: { type: 'text', text: 'Imported conversation content' } }]; } }
         data = session;
       }
       if (data?.thread_id && state.preparedStates?.has(data.thread_id)) data = { ...data, entries: [], permissions: [] };
@@ -2338,6 +2338,87 @@ try {
     await displayed.waitFor();
     assert.equal(await displayed.getAttribute('src'), source);
     assert.equal(interactions(state).length, 1);
+  });
+  await test('replayed ACP image mentions restore pasted images after session load without changing history', async t => {
+    const { page, state } = await fixture(t);
+    const connected = page.waitForResponse(response => response.url().endsWith('/connection'));
+    await newSession(page); await connected;
+    const input = page.getByRole('textbox', { name: 'ACP 消息', exact: true });
+    await input.fill('Describe this image'); await pasteImage(input);
+    await input.locator('.acp-image-mention[data-status="ready"]').waitFor();
+    await input.press('Enter');
+    await page.getByText('Hello from ACP', { exact: true }).waitFor();
+    const original = interactions(state)[0].content.find(block => block.type === 'image');
+    const source = `data:${original.mimeType};base64,${original.data}`;
+    const replayed = `Before **literal** <b>text</b>\n[@image]\n(${source})\nBetween\n![second](${source})\nAfter`;
+    state.loadedEntries = [{ id: 'replayed-user', kind: 'user', content: { type: 'text', text: replayed } }];
+    Object.assign(state.session, { entries: [], needs_load: true, status: 'disconnected' });
+    await page.reload();
+    await page.getByRole('tab').filter({ hasText: 'Conversation' }).click();
+    await page.waitForFunction(() => {
+      const images = [...document.querySelectorAll('.acp-user-message img')];
+      return images.length === 2 && images.every(image => image.complete && image.naturalWidth === 4 && image.naturalHeight === 3);
+    });
+    assert.equal(state.loads, 1);
+    const user = page.locator('.acp-user-message');
+    assert.deepEqual(await user.locator('img').evaluateAll(images => images.map(image => image.src)), [source, source]);
+    assert.equal(await user.textContent(), 'Before **literal** <b>text</b>\n\nBetween\n\nAfter');
+    assert.equal(await user.locator('b, strong, a').count(), 0, 'surrounding user text stays literal');
+    assert.equal(await page.getByRole('navigation', { name: '用户输入导航' }).getByRole('button').getAttribute('title'), 'Before **literal** <b>text</b>\n[图片]\nBetween\n[图片]\nAfter');
+    assert.equal(state.session.entries[0].content.text, replayed, 'display recovery does not rewrite agent history');
+    await page.reload();
+    await page.getByRole('tab').filter({ hasText: 'Conversation' }).click();
+    await user.locator('img').first().waitFor();
+    assert.equal(await user.locator('img').count(), 2);
+    assert.equal(interactions(state).length, 1, 'restoring images never resubmits the prompt');
+  });
+  await test('replayed ACP images work in history overviews and preserve malformed or unsupported data as text', async t => {
+    const { page, state } = await fixture(t);
+    const data = await page.evaluate(() => {
+      const canvas = document.createElement('canvas'); canvas.width = 4; canvas.height = 3;
+      return canvas.toDataURL('image/png').split(',')[1];
+    });
+    const invalid = ['[@image](data:image/png;base64,not*base64)', '[@image](data:image/png;base64,YmFk)', '[@image](data:image/svg+xml;base64,PHN2Zy8+)', '[@image](https://example.invalid/image.png)'].join('\n');
+    const wrap = value => value.match(/.{1,32}/g).join('\r\n');
+    const user = { id: 'u0', kind: 'user', content: { type: 'text', text: `[@image](data:image/png;base64,${wrap(data)})\n${invalid}` } };
+    projectedHistory(state, 1);
+    state.session.overview[0].user = [user];
+    await newSession(page);
+    await page.waitForFunction(() => {
+      const images = [...document.querySelectorAll('.acp-user-message img')];
+      return images.length === 1 && images[0].naturalWidth === 4;
+    });
+    assert.equal(await page.locator('.acp-user-message img').getAttribute('src'), `data:image/png;base64,${data}`);
+    assert.equal(await page.locator('.acp-user-message').textContent(), `\n${invalid}`);
+    assert.equal(state.processReads?.length || 0, 0, 'images render directly from the overview');
+  });
+  await test('replayed ACP images recover as chunks complete and damaged content is replaced', async t => {
+    const { page, state } = await fixture(t);
+    const sources = await page.evaluate(() => {
+      const canvas = document.createElement('canvas'); canvas.width = 4; canvas.height = 3;
+      return ['image/png', 'image/jpeg', 'image/webp'].map(type => canvas.toDataURL(type));
+    });
+    sources.push('data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');
+    const entry = { id: 'streamed-user', kind: 'user', content: { type: 'text', text: `[@image](${sources[0].slice(0, 60)}` } };
+    state.session.entries = [entry];
+    await newSession(page);
+    const user = page.locator('.acp-user-message');
+    await user.waitFor();
+    assert.equal(await user.textContent(), entry.content.text);
+    assert.equal(await user.locator('img').count(), 0, 'an incomplete wrapper stays text');
+    for (const source of sources) {
+      const damaged = '[@image](data:image/png;base64,YmFk)';
+      entry.content.text = damaged; state.session.revision++;
+      await user.getByText(damaged, { exact: true }).waitFor();
+      assert.equal(await user.locator('img').count(), 0);
+      entry.content.text = `[@image](${source})`; state.session.revision++;
+      await page.waitForFunction(source => {
+        const image = document.querySelector('.acp-user-message img');
+        return image?.src === source && image.complete && image.naturalWidth > 0;
+      }, source);
+      assert.equal(await user.textContent(), '');
+      assert.equal(await page.getByRole('navigation', { name: '用户输入导航' }).getByRole('button').getAttribute('title'), '[图片]');
+    }
   });
   await test('image-only ACP prompts retain failed drafts and clear only accepted images', async t => {
     const { page, state } = await fixture(t);
