@@ -1863,6 +1863,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const renderEditor = (selectedDocumentId?: string) => (
           <Suspense fallback={<div className="project-aow-empty">正在加载编辑器…</div>}>
             <EditorArea
+              workspace={worktree.id}
               documents={documents}
               activeId={selectedDocumentId}
               wordWrapOverride={wordWrapFor(selectedDocumentId)}

@@ -41,7 +41,7 @@ try {
   const base = `http://127.0.0.1:${server.httpServer.address().port}`;
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
 
-  async function fixture(t, { mobile = false, login = false, floating = false, extraFloatingTabs = [], global = false, missing = false, removedWorkspace = false, temporary = false, entry = 'target', editable = false, tabUrl, sessionAgent = false, pinned = [], reviewTargets = [], preserveFloating = false, acp = false, acpHistory = [], acpSavedTabs = [] } = {}) {
+  async function fixture(t, { mobile = false, login = false, floating = false, extraFloatingTabs = [], global = false, missing = false, removedWorkspace = false, temporary = false, entry = 'target', editable = false, tabUrl, fileContents = {}, sessionAgent = false, pinned = [], reviewTargets = [], preserveFloating = false, acp = false, acpHistory = [], acpSavedTabs = [] } = {}) {
     const context = await browser.newContext({ viewport: mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 } });
     const root = temporary ? '/private/tmp/aow-inbox-link' : global ? '/global' : worktrees[1].path;
     const target = terminal('target', root, 'Target Tab');
@@ -147,7 +147,10 @@ try {
         const path = url.pathname === '/api/fs/home' ? '/home/fixture' : decodeURIComponent(url.pathname.slice('/api/fs/tree'.length));
         data = { path, entries: [{ name: 'read me #中文.md', path: path.replace(/\/$/, '') + '/read me #中文.md', kind: 'file', size: 12, readonly: false }] };
       }
-      else if (url.pathname.startsWith('/api/fs/text')) data = { path: decodeURIComponent(url.pathname.slice('/api/fs/text'.length)), content: '# Linked document\n\nRestored from URL.', version: 'v1', language: 'markdown', mime: 'text/markdown', size: 38 };
+      else if (url.pathname.startsWith('/api/fs/text')) {
+        const path = decodeURIComponent(url.pathname.slice('/api/fs/text'.length));
+        data = { path, content: fileContents[path] ?? '# Linked document\n\nRestored from URL.', version: 'v1', language: 'markdown', mime: 'text/markdown', size: 38 };
+      }
       else if (url.pathname === '/api/git/diff' || url.pathname === '/api/git/commit/diff') data = { repository: url.searchParams.get('repo'), path: url.searchParams.get('path'), staged: url.searchParams.get('staged') === 'true', patch: '@@ -1 +1 @@\n-before\n+after\n', original: 'before\n', modified: 'after\n', truncated: false };
       else if (url.pathname === '/api/review-targets') data = reviewTargets;
       else if (url.pathname === '/api/my-pull-requests') data = { repository: root, current_branch: 'dev', current_user: { id: 'u', username: 'me' }, pull_requests: [{ ...pr, provider: url.searchParams.get('provider') || 'github', remote: url.searchParams.get('remote') || 'origin' }] };
@@ -1035,6 +1038,92 @@ try {
       await page.waitForFunction(() => document.querySelector('.monaco-editor') || document.querySelector('.mobile-markdown'));
       assert.ok(state.reads.some(url => decodeURIComponent(url).includes('/api/fs/text' + path)));
     }
+  });
+
+  for (const mobile of [false, true]) await test(`Markdown file links resolve from the source directory on ${mobile ? 'mobile' : 'desktop'}`, async t => {
+    const directory = '/workspace/linked/reports #中文%';
+    const path = directory + '/result.md';
+    const textPath = directory + '/evidence/api/01-preflight-failure.txt';
+    const markdown = [
+      '| Case | Result | Image | ANSI | Text |',
+      '| --- | --- | --- | --- | --- |',
+      '| api / 01-preflight-failure | 预检失败（夹具已修正） | [查看](evidence/api/01-preflight-failure.png) | [ANSI](evidence/api/01-preflight-failure.ansi.txt) | [文本](evidence/api/01-preflight-failure.txt) |',
+      '',
+      '[Absolute](/tmp/evidence/result.txt)',
+      '[Current](./evidence/./result.txt)',
+      '[Parent](../shared/../result.txt)',
+      '[Encoded](evidence/read%20me%20%23中文%3F%25.txt)',
+      '[Fragment](other.md#section)',
+      '[Anchor](#section)',
+      '[HTTPS](https://example.com/evidence/result.txt)',
+      '[HTTP](http://example.com/result.txt)',
+      'http://example.com/plain-http',
+      'https://example.com/plain-https',
+      '[Protocol relative](//example.com/result.txt)',
+      '[Email](mailto:reader@example.com)',
+      '<a href="evidence/raw.txt">HTML link</a>',
+      '<a href="https://example.com/html">HTML HTTPS</a>',
+      '[Unsafe](javascript:alert%281%29)',
+      '<a href="javascript:alert(1)">Unsafe HTML</a>',
+    ].join('\n');
+    const { page, state } = await fixture(t, { mobile, tabUrl: resourceUrl('file', { path }), fileContents: { [path]: markdown, [textPath]: 'Evidence text opened through the file route.' } });
+    if (!mobile) await page.getByRole('button', { name: '切换到预览', exact: true }).click();
+    const preview = page.locator(mobile ? '.mobile-markdown' : '.markdown-preview');
+    await preview.getByRole('link', { name: '文本', exact: true }).waitFor();
+    for (const [name, expectedPath, hash = ''] of [
+      ['查看', directory + '/evidence/api/01-preflight-failure.png'],
+      ['ANSI', directory + '/evidence/api/01-preflight-failure.ansi.txt'],
+      ['文本', textPath],
+      ['Absolute', '/tmp/evidence/result.txt'],
+      ['Current', directory + '/evidence/result.txt'],
+      ['Parent', '/workspace/linked/result.txt'],
+      ['Encoded', directory + '/evidence/read me #中文?%.txt'],
+      ['Fragment', directory + '/other.md', '#section'],
+      ['HTML link', directory + '/evidence/raw.txt'],
+    ]) {
+      const link = preview.getByRole('link', { name, exact: true });
+      const href = await link.getAttribute('href');
+      assert.equal(await link.getAttribute('target'), null);
+      assert.ok(href.startsWith('/aow/tabs/file?'), href);
+      const url = new URL(href, base);
+      assert.equal(url.searchParams.get('workspace'), 'wt-1');
+      assert.equal(url.searchParams.get('path'), expectedPath);
+      assert.equal(url.hash, hash);
+    }
+    for (const [name, href] of [['Anchor', '#section'], ['HTTPS', 'https://example.com/evidence/result.txt'],
+      ['HTTP', 'http://example.com/result.txt'], ['Protocol relative', '//example.com/result.txt'], ['Email', 'mailto:reader@example.com']]) {
+      assert.equal(await preview.getByRole('link', { name, exact: true }).getAttribute('href'), href);
+    }
+    await page.context().route(/^https?:\/\/example\.com\//, route => route.fulfill({ contentType: 'text/html', body: '<p>External destination</p>' }));
+    const sourceUrl = page.url();
+    for (const name of ['HTTP', 'HTTPS', 'HTML HTTPS', 'http://example.com/plain-http', 'https://example.com/plain-https']) {
+      const link = preview.getByRole('link', { name, exact: true });
+      const href = await link.getAttribute('href');
+      assert.equal(await link.getAttribute('target'), '_blank');
+      assert.equal(await link.getAttribute('rel'), 'noreferrer');
+      const popupPromise = page.waitForEvent('popup');
+      await link.click();
+      const popup = await popupPromise;
+      await popup.waitForLoadState();
+      assert.equal(popup.url(), href);
+      assert.equal(await popup.evaluate(() => window.opener), null);
+      assert.equal(page.url(), sourceUrl);
+      await popup.close();
+    }
+    for (const name of ['Unsafe', 'Unsafe HTML']) assert.equal(await preview.getByText(name, { exact: true }).getAttribute('href'), null);
+    const pageCount = page.context().pages().length;
+    await page.evaluate(() => { window.markdownFileNavigationMarker = true; });
+    await preview.getByRole('link', { name: '文本', exact: true }).click();
+    await page.waitForURL(url => url.pathname === '/aow/tabs/file' && url.searchParams.get('path') === textPath);
+    await page.getByText('Evidence text opened through the file route.', { exact: true }).first().waitFor();
+    assert.equal(new URL(page.url()).searchParams.get('workspace'), 'wt-1');
+    assert.equal(page.context().pages().length, pageCount);
+    assert.equal(await page.evaluate(() => window.markdownFileNavigationMarker), true, 'local files open without reloading the page');
+    if (!mobile) {
+      await desktopTab(page, 'result.md').waitFor();
+      await activeDesktop(page).filter({ hasText: '01-preflight-failure.txt' }).waitFor();
+    }
+    assert.ok(state.reads.some(url => decodeURIComponent(url).includes('/api/fs/text' + textPath)));
   });
 
   await test('file browser restores its directory and publishes opened file URLs', async t => {
