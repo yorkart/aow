@@ -148,6 +148,7 @@ impl LogState {
             "thread_id": context.thread_id,
             "session_id": context.session_id,
             "scope": scope,
+            "request_method": (!context.method.is_empty()).then_some(context.method),
             "direction": direction,
             "timestamp": chrono::Utc::now().to_rfc3339(),
             "message": line.chars().take(65536).collect::<String>(),

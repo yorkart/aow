@@ -145,6 +145,7 @@ pub(super) fn metadata(thread: &SessionSnapshot) -> SessionSnapshot {
     result.title = thread.title.clone();
     result.status = thread.status.clone();
     result.needs_load = thread.needs_load;
+    result.recovery = thread.recovery.clone();
     result.revision = thread.revision;
     result.sync_generation = thread.sync_generation.clone();
     result.updated_at = thread.updated_at.clone();

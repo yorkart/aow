@@ -27,4 +27,5 @@ uuid.workspace = true
 zip = { version = "4", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
 tempfile = "3.20"

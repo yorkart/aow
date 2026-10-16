@@ -22,12 +22,13 @@ export interface SessionSnapshot {
   sync_generation?: string;
   commands: Data[]; usage: Data | null; error?: string; stop_reason?: string;
   needs_load?: boolean;
+  recovery?: { attempt_id: string; phase: 'loading' | 'cleaning' | 'failed'; error?: string | null } | null;
   config_options_supported?: boolean; auth_required?: boolean;
   terminals?: Record<string, Data>;
   plan?: Data; notices?: ThreadEntry[];
 }
 export interface SettingsFile { path: string; content: string; revision: string }
-export interface DebugMessage { timestamp: string; direction: string; message: string; connection_id: string; thread_id: string | null; session_id: string | null; scope: 'thread' | 'connection' | 'unattributed' }
+export interface DebugMessage { request_method?: string; timestamp: string; direction: string; message: string; connection_id: string; thread_id: string | null; session_id: string | null; scope: 'thread' | 'connection' | 'unattributed' }
 
 export type SessionInfo = Pick<SessionSnapshot, 'thread_id' | 'session_id' | 'agent_id' | 'cwd' | 'title' | 'status' | 'updated_at'>;
 

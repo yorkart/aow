@@ -128,7 +128,16 @@ try {
           await route.fulfill({ json: session }); return;
         }
         if (action.action === 'resume' && state.resumeAuthRequired && !state.authenticated) { await route.fulfill({ status: 400, json: { code: 'acp_auth_required', message: 'Sign in to restore this session' } }); return; }
+        if (action.action === 'resume' && state.recoveryLifecycle) { session.recovery = { attempt_id: 'load-attempt', phase: 'loading' }; session.revision++; }
+        if (action.action === 'cancel' && session.recovery?.phase === 'loading') {
+          session.recovery.phase = 'cleaning'; session.revision++; state.cancelledRecovery = true;
+          await route.fulfill({ json: session }); return;
+        }
         if (action.action === 'resume' && state.resumeGate) await state.resumeGate;
+        if (action.action === 'resume' && state.cancelledRecovery) {
+          session.recovery = { attempt_id: 'load-attempt', phase: 'failed', error: 'Recovery cancelled' }; session.revision++;
+          await route.fulfill({ status: 400, json: { message: 'Recovery cancelled' } }); return;
+        }
         if (action.action === 'resume' && state.resumeError) { await route.fulfill({ status: 400, json: { message: state.resumeError } }); return; }
         if (action.action === 'prompt' && state.promptGate) await state.promptGate;
         if (action.action === 'prompt' && state.promptError) { await route.fulfill({ status: 400, json: { message: state.promptError } }); return; }
@@ -141,7 +150,7 @@ try {
         else if (action.action === 'clear_plan') session.plan = null;
         else if (action.action === 'set_config') session.config_options = session.config_options.map(option => (option.configId || option.id) === action.config_id ? { ...option, currentValue: action.value } : option);
         else if (action.action === 'set_mode') session.modes.currentModeId = action.mode_id;
-        else if (action.action === 'resume') { session.status = 'idle'; if (session.needs_load) { session.needs_load = false; state.loads++; session.entries = [{ id: 'loaded', kind: 'assistant', content: { type: 'text', text: 'Imported conversation content' } }]; } }
+        else if (action.action === 'resume') { session.recovery = null; session.status = 'idle'; if (session.needs_load) { session.needs_load = false; state.loads++; session.entries = [{ id: 'loaded', kind: 'assistant', content: { type: 'text', text: 'Imported conversation content' } }]; } }
         data = session;
       }
       if (data?.thread_id && state.preparedStates?.has(data.thread_id)) data = { ...data, entries: [], permissions: [] };
@@ -1303,7 +1312,7 @@ try {
       ];
       return logMessages(entries).map(message => ({ name: message.name, type: message.type, failed: message.failed, body: payloadText(message, false) }));
     });
-    assert.deepEqual(result.slice(4, 9).map(message => message.name), ['fs/read_text_file', 'session/prompt', 'session/load', 'session/new', '[unrecognized response]']);
+    assert.deepEqual(result.slice(4, 9).map(message => message.name), ['fs/read_text_file', 'session/prompt', 'session/load', 'session/new', '[response: request outside exported log]']);
     assert.equal(result[5].failed, true); assert.equal(result[6].body, 'null');
     assert.deepEqual(result.slice(9, 11).map(message => message.name), ['one', 'two']);
     assert.equal(result[11].body, 'adapter stderr'); assert.equal(result[12].body, '{truncated');
@@ -2540,6 +2549,42 @@ try {
     await content.getByRole('button', { name: '重试连接', exact: true }).click();
     await content.getByText('Imported conversation content', { exact: true }).waitFor();
     assert.equal(state.sessions.length, 1); assert.equal(state.loads, 1);
+  });
+  await test('cancelled recovery keeps the old conclusion, shows cleanup, and can retry', async t => {
+    const { page, state } = await fixture(t, false, { recoveryLifecycle: true });
+    await importHistory(page);
+    const saved = state.sessions[0];
+    saved.entries = [
+      { id: 'old-user', kind: 'user', content: { type: 'text', text: 'Earlier question' } },
+      { id: 'old-answer', kind: 'assistant', message_id: 'answer', content: { type: 'text', text: 'Earlier completed answer' } },
+    ];
+    state.resumeGate = new Promise(resolve => { state.finishResume = resolve; });
+    t.after(() => state.finishResume());
+    await page.getByRole('button', { name: '打开 ACP 会话 Earlier conversation', exact: true }).click();
+    const content = page.getByRole('region', { name: 'ACP 会话内容', exact: true });
+    await content.getByRole('button', { name: '取消恢复', exact: true }).click();
+    await content.getByRole('status').getByText(/正在等待上次恢复结束并清理/).waitFor();
+    await content.getByText('Earlier completed answer', { exact: true }).waitFor();
+    assert.equal(state.actions.filter(action => action.action === 'resume').length, 1);
+    state.finishResume();
+    await content.getByRole('alert').getByText('会话恢复失败：Recovery cancelled', { exact: true }).waitFor();
+    assert.equal(await content.getByText('本轮执行失败，未生成最终结论。', { exact: true }).count(), 0);
+    assert.equal(state.sessions.length, 1);
+    state.cancelledRecovery = false; state.resumeGate = undefined;
+    await content.getByRole('button', { name: '重试连接', exact: true }).click();
+    await content.getByText('Imported conversation content', { exact: true }).waitFor();
+    assert.equal(await content.getByText('会话恢复失败：Recovery cancelled', { exact: true }).count(), 0);
+    assert.deepEqual(state.actions.map(action => action.action), ['resume', 'cancel', 'resume']);
+  });
+  await test('bounded logs retain response names without the original request line', async t => {
+    const { page } = await fixture(t);
+    const result = await page.evaluate(async () => {
+      const { logMessages } = await import('/src/features/acp/acp_tools/messages.ts');
+      return logMessages([{ timestamp: 'now', direction: 'incoming', connection_id: 'connection', request_method: 'session/load', message: JSON.stringify({ id: 'old-request', result: {} }) }])[0];
+    });
+    assert.equal(result.name, 'session/load');
+    assert.equal(result.type, 'Response');
+    assert.equal(result.failed, false);
   });
   await test('an unavailable agent does not prevent importing another agent', async t => {
     const { page, state } = await fixture(t, false, { agents: ['test', 'offline'].map(id => ({ id, name: id === 'test' ? 'Test Agent' : 'Offline Agent', supported: true, installed: true })) });

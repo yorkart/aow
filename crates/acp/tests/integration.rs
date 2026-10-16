@@ -989,7 +989,15 @@ async fn thread_identity_is_durable_before_initialization_and_survives_creation_
                 .unwrap()
                 .contains("Initialization failed"))
     );
-    assert!(service.snapshot(&prepared.thread_id)?.error.is_some());
+    assert!(service.snapshot(&prepared.thread_id)?.error.is_none());
+    assert!(
+        service
+            .snapshot(&prepared.thread_id)?
+            .recovery
+            .unwrap()
+            .error
+            .is_some()
+    );
     let failed_logs = service.session_logs(&prepared.thread_id)?;
     let failed_connection = failed_logs[0]["connection_id"].as_str().unwrap();
     assert_eq!(

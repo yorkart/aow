@@ -69,6 +69,14 @@ pub struct SessionTurn {
     pub error: Option<String>,
 }
 
+/// Connection recovery is independent of recorded prompt outcomes.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SessionRecovery {
+    pub attempt_id: String,
+    pub phase: String,
+    pub error: Option<String>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SessionSnapshot {
     pub thread_id: String,
@@ -81,6 +89,8 @@ pub struct SessionSnapshot {
     /// Imported metadata is hydrated only when the user opens this conversation.
     #[serde(default)]
     pub needs_load: bool,
+    #[serde(default)]
+    pub recovery: Option<SessionRecovery>,
     pub revision: u64,
     /// Distinguishes live incarnations across server restarts and history reloads.
     #[serde(default)]

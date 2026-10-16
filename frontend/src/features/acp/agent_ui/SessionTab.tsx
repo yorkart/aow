@@ -72,6 +72,7 @@ export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenFil
   const status = useProgress(connecting || restoring ? tab.agentId : '', workspace);
   const [restoreAttempt, setRestoreAttempt] = useState(0);
   const needsResume = !!session && (session.status === 'disconnected' || !!session.needs_load);
+  const recovering = session?.recovery?.phase === 'loading' || session?.recovery?.phase === 'cleaning';
   const connectionId = connection?.id;
   const interactions = useRequestsSync(connectionId);
   const requests = (interactions.data ?? []).filter(item => !item.request.sessionId && !object(item.request.scope).sessionId);
@@ -184,9 +185,13 @@ export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenFil
     {sync.deleted && <p role="status">会话已删除。</p>}
     {thread_id && sync.status !== 'live' && <p role="status">{sync.status === 'denied' ? '登录已失效，请重新登录。' : sync.status === 'degraded' ? '服务端暂不支持实时同步，已进入低频同步模式。' : sync.status === 'offline' ? '连接已断开，正在重新同步…' : '正在建立同步连接…'}</p>}
     {(sync.error || binding.error || interactions.error) && <p className="acp-error" role="alert">{sync.error || binding.error || interactions.error}</p>}
-    {error && error !== session?.error && !authRequired && <p className="acp-error" role="alert">{error}</p>}
-    {token && restoring && !authRequired && <ConnectionProgress status={status} message={session?.session_id ? '正在恢复会话…' : '正在创建会话…'} />}
-    {token && needsResume && !restoring && !busy && !authRequired && <button type="button" onClick={() => setRestoreAttempt(value => value + 1)}>重试连接</button>}
+    {session?.recovery?.error && !authRequired && <p className="acp-error" role="alert">会话恢复失败：{session.recovery.error}</p>}
+    {error && error !== session?.error && error !== session?.recovery?.error && !authRequired && <p className="acp-error" role="alert">{error}</p>}
+    {token && (restoring || recovering) && !authRequired && <>
+      <ConnectionProgress status={session?.recovery?.phase === 'cleaning' ? undefined : status} message={session?.recovery?.phase === 'cleaning' ? '正在等待上次恢复结束并清理…' : session?.session_id ? '正在恢复会话…' : '正在创建会话…'} />
+      {session?.recovery?.phase === 'loading' && <button type="button" disabled={busy} onClick={() => { void action({ action: 'cancel' }); }}>取消恢复</button>}
+    </>}
+    {token && needsResume && !restoring && !recovering && !busy && !authRequired && <button type="button" onClick={() => setRestoreAttempt(value => value + 1)}>重试连接</button>}
     {busy && (!session || session.needs_load || connecting) && !authRequired && <ConnectionProgress status={connecting ? status : undefined} message={busyMessage} />}
     {!authBusy && (!thread_id || token) && requests.map(request => <PermissionRequest key={request.id} permission={request} busy={answerBusy} onAnswer={response => { if (!connectionId) return; setAnswerBusy(true); void acpApi.answerConnection(connectionId, request.id, response).catch(recordFailure).finally(() => setAnswerBusy(false)); }} />)}
   </div>;
@@ -200,6 +205,6 @@ export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenFil
       banner={connectionState} alternateContent={alternateContent}
       state={!busy && !sync.loading && !sync.deleted && !authRequired ? <div className="acp-content acp-empty"><button type="button" onClick={retry}>重试打开会话</button></div> : undefined}
     />}
-    {session && <div className="acp-thread-host"><ThreadView session={session} workspace={workspace} tabId={tab.id} busy={busy || restoring} supportsImages={!!connection?.prompt_capabilities?.image} readOnly={!token} controlStatus={<ControlStatus {...control} />} headerActions={headerActions} banner={connectionState} alternateContent={alternateContent} onAction={action} onOpenFile={onOpenFile} /></div>}
+    {session && <div className="acp-thread-host"><ThreadView session={session} workspace={workspace} tabId={tab.id} busy={busy || restoring || recovering} supportsImages={!!connection?.prompt_capabilities?.image} readOnly={!token} controlStatus={<ControlStatus {...control} />} headerActions={headerActions} banner={connectionState} alternateContent={alternateContent} onAction={action} onOpenFile={onOpenFile} /></div>}
   </section></ThinkingVisibility.Provider>;
 }

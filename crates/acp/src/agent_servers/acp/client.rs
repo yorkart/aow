@@ -24,6 +24,7 @@ pub(crate) struct ClientContext {
     pub threads: Arc<Mutex<ThreadStore>>,
     pub sessions: Mutex<HashMap<String, String>>,
     pub pending_updates: Mutex<HashMap<String, Vec<Value>>>,
+    pub(super) discarded: Mutex<std::collections::HashSet<String>>,
     pub replies: Mutex<PendingReplies>,
     pub stop: CancellationToken,
 }
@@ -42,18 +43,47 @@ impl ClientContext {
         self.cancel_permissions(session_id);
         self.sessions.lock().unwrap().remove(session_id);
     }
-    pub(crate) fn register_session(&self, session_id: &str, id: &str) -> Result<()> {
+    pub(crate) fn begin_load(&self, session_id: &str) -> Option<String> {
         let mut sessions = self.sessions.lock().unwrap();
-        sessions.insert(session_id.into(), id.into());
-        if let Some(updates) = self.pending_updates.lock().unwrap().remove(session_id) {
-            self.threads.lock().unwrap().update(id, |thread| {
-                for update in updates {
-                    AcpThread::handle_session_update(thread, update);
-                }
-            })?;
+        self.discarded.lock().unwrap().remove(session_id);
+        self.pending_updates.lock().unwrap().remove(session_id);
+        sessions.remove(session_id)
+    }
+
+    pub(crate) fn discard_load(&self, session_id: &str, previous: Option<&str>) -> Result<()> {
+        let mut sessions = self.sessions.lock().unwrap();
+        self.pending_updates.lock().unwrap().remove(session_id);
+        if let Some(id) = previous {
+            sessions.insert(session_id.into(), id.into());
+        } else {
+            sessions.remove(session_id);
+            self.discarded.lock().unwrap().insert(session_id.into());
         }
         Ok(())
     }
+
+    pub(crate) fn install_session(
+        &self,
+        mut thread: crate::facade::SessionSnapshot,
+        previous: Option<&crate::facade::SessionSnapshot>,
+    ) -> Result<()> {
+        let mut sessions = self.sessions.lock().unwrap();
+        let session_id = thread.session_id.clone().context("Missing session ID")?;
+        if let Some(updates) = self.pending_updates.lock().unwrap().remove(&session_id) {
+            for update in updates {
+                AcpThread::handle_session_update(&mut thread, update);
+            }
+        }
+        if let Some(previous) = previous {
+            crate::acp_thread::turns::restore(previous, &mut thread);
+        }
+        let id = thread.thread_id.clone();
+        self.threads.lock().unwrap().insert(thread)?;
+        self.discarded.lock().unwrap().remove(&session_id);
+        sessions.insert(session_id, id);
+        Ok(())
+    }
+
     pub(super) fn handle_notification(&self, message: UntypedMessage) -> Result<()> {
         if message.method == "session/update" {
             let session_id = message.params["sessionId"]
@@ -66,6 +96,9 @@ impl ClientContext {
                     .unwrap()
                     .session_update(id, message.params["update"].clone())?;
             } else {
+                if self.discarded.lock().unwrap().contains(session_id) {
+                    return Ok(());
+                }
                 let mut pending = self.pending_updates.lock().unwrap();
                 ensure!(
                     pending.len() < 100 || pending.contains_key(session_id),
@@ -262,7 +295,9 @@ impl ClientContext {
         }
     }
     pub(super) fn disconnected(&self, reason: &str) {
-        let ids: Vec<_> = self.sessions.lock().unwrap().values().cloned().collect();
+        let mut ids: std::collections::HashSet<_> =
+            self.sessions.lock().unwrap().values().cloned().collect();
+        ids.extend(self.bindings.lock().unwrap().iter().cloned());
         self.replies.lock().unwrap().clear();
         self.requests_changed();
         for thread_id in self.bindings.lock().unwrap().iter() {
@@ -274,8 +309,20 @@ impl ClientContext {
         let mut threads = self.threads.lock().unwrap();
         for id in ids {
             if let Err(error) = threads.update(&id, |thread| {
+                if thread.status == "working" {
+                    thread.error = Some(reason.into());
+                } else {
+                    thread.recovery = Some(crate::facade::SessionRecovery {
+                        attempt_id: thread
+                            .recovery
+                            .as_ref()
+                            .map(|state| state.attempt_id.clone())
+                            .unwrap_or_default(),
+                        phase: "failed".into(),
+                        error: Some(reason.into()),
+                    });
+                }
                 thread.status = "disconnected".into();
-                thread.error = Some(reason.into());
                 thread.permissions.clear();
             }) {
                 tracing::error!(%error, "Failed to save ACP disconnect");

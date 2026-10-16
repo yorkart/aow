@@ -92,6 +92,7 @@ impl ThreadStore {
             thread
         };
         thread.status = "disconnected".into();
+        thread.recovery = None;
         super::turns::finish(&mut thread);
         thread.permissions.clear();
         super::terminals::normalize_snapshot(&mut thread);

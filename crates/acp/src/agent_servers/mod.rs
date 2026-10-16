@@ -4,6 +4,7 @@ mod imports;
 mod installation;
 mod lifecycle;
 pub(crate) mod progress;
+mod recovery;
 mod sync;
 
 use crate::acp_thread::normalize_config_options;
@@ -197,25 +198,35 @@ impl AgentServerStore {
             }
         }
         let configuration = format!("{launch_settings}\n{execution_path:?}");
-        if let Some(connection) =
-            self.inner
-                .connections
-                .lock()
-                .unwrap()
-                .values()
-                .find(|connection| {
-                    connection.info.agent_id == agent_id
-                        && connection.info.cwd == cwd.to_string_lossy()
-                        && connection.connected()
-                        && self
-                            .inner
-                            .configurations
-                            .lock()
-                            .unwrap()
-                            .get(&connection.info.id)
-                            == Some(&configuration)
-                })
-        {
+        // Do not hold the connection registry while consulting a session operation:
+        // committing a load also updates the thread-to-connection association.
+        let preferred = thread_id.and_then(|id| self.session_connection(id).ok());
+        let mut candidates: Vec<_> = self
+            .inner
+            .connections
+            .lock()
+            .unwrap()
+            .values()
+            .cloned()
+            .collect();
+        candidates.sort_by_key(|candidate| {
+            preferred
+                .as_ref()
+                .is_none_or(|connection| connection.info.id != candidate.info.id)
+        });
+        if let Some(connection) = candidates.iter().find(|connection| {
+            connection.info.agent_id == agent_id
+                && connection.info.cwd == cwd.to_string_lossy()
+                && connection.connected()
+                && thread_id.is_none_or(|id| !connection.loads.blocks_thread(id))
+                && self
+                    .inner
+                    .configurations
+                    .lock()
+                    .unwrap()
+                    .get(&connection.info.id)
+                    == Some(&configuration)
+        }) {
             if let Some(thread_id) = thread_id {
                 connection.debug_log.attach(thread_id);
             }
@@ -362,6 +373,16 @@ impl AgentServerStore {
         result: Value,
         id: String,
     ) -> Result<SessionSnapshot> {
+        self.install_session(connection, result, id.clone())?;
+        self.apply_defaults(&id).await?;
+        self.snapshot(&id)
+    }
+    fn install_session(
+        &self,
+        connection: Arc<AcpConnection>,
+        result: Value,
+        id: String,
+    ) -> Result<SessionSnapshot> {
         let session_id = result["sessionId"]
             .as_str()
             .context("Agent returned no session ID")?
@@ -394,16 +415,11 @@ impl AgentServerStore {
             previous.context.bindings.lock().unwrap().remove(&id);
             previous.context.unregister_session(&session_id);
         }
-        self.inner.threads.lock().unwrap().insert(thread)?;
+        connection
+            .context
+            .install_session(thread, previous.as_ref())?;
         connection.debug_log.bind_session(&session_id, &id);
-        connection.context.register_session(&session_id, &id)?;
-        if let Some(previous) = previous.filter(|snapshot| !snapshot.turns.is_empty()) {
-            self.inner.threads.lock().unwrap().update(&id, |thread| {
-                crate::acp_thread::turns::restore(&previous, thread);
-            })?;
-        }
         self.attach_connection(&connection, &id)?;
-        self.apply_defaults(&id).await?;
         self.snapshot(&id)
     }
     async fn apply_defaults(&self, id: &str) -> Result<()> {
@@ -420,7 +436,7 @@ impl AgentServerStore {
                 .is_some_and(|modes| modes.iter().any(|entry| entry["id"] == mode))
             && let Err(error) = self.set_mode(id, &mode).await
         {
-            self.record_error(id, &error)?;
+            self.record_recovery_error(id, &error)?;
         }
         let mut attempted = Vec::new();
         while let Some((config_id, value)) = next_default(
@@ -429,7 +445,7 @@ impl AgentServerStore {
             &mut attempted,
         ) {
             if let Err(error) = self.set_config_option(id, &config_id, value).await {
-                self.record_error(id, &error)?;
+                self.record_recovery_error(id, &error)?;
             }
         }
         Ok(())
@@ -444,6 +460,7 @@ impl AgentServerStore {
             connection.supports("load"),
             "Agent does not support session loading"
         );
+        let identity = connection.load_identity.lock().await;
         let existing = self
             .inner
             .threads
@@ -478,54 +495,19 @@ impl AgentServerStore {
                 thread.thread_id
             }
         };
-        connection.debug_log.bind_session(session_id, &id);
-        // Buffer replay until the load response, then install the new model atomically.
-        let previous_mapping = connection
-            .context
-            .sessions
-            .lock()
-            .unwrap()
-            .remove(session_id);
-        connection
-            .context
-            .pending_updates
-            .lock()
-            .unwrap()
-            .remove(session_id);
-        let response = connection
-            .thread_request(
-                &id,
-                "session/load",
-                json!({"sessionId":session_id,"cwd":connection.info.cwd,"mcpServers":[]}),
-            )
-            .await;
-        let mut result = match response {
-            Ok(result) => result,
-            Err(error) => {
-                connection
-                    .context
-                    .pending_updates
-                    .lock()
-                    .unwrap()
-                    .remove(session_id);
-                if let Some(id) = previous_mapping {
-                    connection.context.register_session(session_id, &id)?;
-                    if !connection.connected() {
-                        self.inner.threads.lock().unwrap().update(&id, |thread| {
-                            thread.status = "disconnected".into();
-                        })?;
-                    }
-                }
-                return Err(error);
-            }
-        };
-        result["sessionId"] = session_id.into();
-        self.register_session(connection, result, id).await
+        drop(identity);
+        self.open_session(connection, session_id.to_owned(), id, true)
+            .await
     }
     pub async fn resume(&self, id: &str) -> Result<SessionSnapshot> {
         let result = self.resume_inner(id).await;
         if let Err(error) = &result {
-            self.record_error(id, error)?;
+            let thread = self.snapshot(id)?;
+            // A started operation publishes its own error, scoped to its attempt.
+            // Connection/setup failures have no operation yet.
+            if thread.recovery.is_none() && (thread.status == "disconnected" || thread.needs_load) {
+                self.record_recovery_error(id, error)?;
+            }
         }
         result
     }
@@ -536,6 +518,8 @@ impl AgentServerStore {
             && thread.status != "disconnected"
             && !thread.needs_load
             && thread.session_id.is_some()
+            && !connection.loads.pending_thread(id)
+            && !connection.loads.blocks_thread(id)
         {
             return Ok(thread);
         }
@@ -545,7 +529,6 @@ impl AgentServerStore {
         let result = async {
             // Prefer history replay. Resume-only agents continue from the saved local transcript.
             let connection = self.connection(&info.id)?;
-            self.attach_connection(&connection, id)?;
             let Some(session_id) = thread.session_id else {
                 return self.create_on_connection(connection, id).await;
             };
@@ -557,40 +540,8 @@ impl AgentServerStore {
                 connection.supports("resume"),
                 "Agent does not support session loading or resuming"
             );
-            let result = connection
-                .thread_request(
-                    id,
-                    "session/resume",
-                    json!({"sessionId":session_id,"cwd":connection.info.cwd,"mcpServers":[]}),
-                )
-                .await?;
-            let options = normalize_config_options(
-                result
-                    .get("configOptions")
-                    .filter(|value| !value.is_null())
-                    .cloned()
-                    .unwrap_or(json!([])),
-            )?;
-            self.inner.threads.lock().unwrap().update(id, |thread| {
-                thread.status = "idle".into();
-                thread.needs_load = false;
-                thread.error = None;
-                thread.active_prompt = None;
-                thread.modes = result.get("modes").cloned().unwrap_or(json!({}));
-                thread.config_options = options;
-                thread.config_options_supported = result
-                    .get("configOptions")
-                    .is_some_and(|value| !value.is_null());
-                thread.auth_required = false;
-            })?;
-            connection.context.register_session(&session_id, id)?;
-            self.inner
-                .sessions
-                .lock()
-                .unwrap()
-                .insert(id.into(), info.id);
-            self.apply_defaults(id).await?;
-            self.snapshot(id)
+            self.open_session(connection, session_id, id.into(), false)
+                .await
         }
         .await;
         progress.finish(result.is_ok());
@@ -697,7 +648,12 @@ impl AgentServerStore {
         let thread = threads.threads.get(id).context("ACP session not found")?;
         let thread = thread.lock().unwrap();
         ensure!(
-            thread.status == "idle",
+            thread.status == "idle"
+                && !thread.needs_load
+                && !thread
+                    .recovery
+                    .as_ref()
+                    .is_some_and(|recovery| recovery.phase != "failed"),
             "ACP session is busy or disconnected"
         );
         let session_id = thread
@@ -829,6 +785,9 @@ impl AgentServerStore {
         Ok(())
     }
     pub fn cancel(&self, id: &str) -> Result<()> {
+        if self.cancel_recovery(id)? {
+            return Ok(());
+        }
         self.session_connection(id)?.cancel(
             self.snapshot(id)?
                 .session_id
@@ -912,6 +871,9 @@ impl AgentServerStore {
             .answer(request_id, response)
     }
     pub async fn close_session(&self, id: &str) -> Result<()> {
+        if self.close_pending_load(id).await? {
+            return Ok(());
+        }
         let thread = self.snapshot(id)?;
         if let Ok(connection) = self.session_connection(id)
             && connection.connected()
@@ -933,6 +895,7 @@ impl AgentServerStore {
             connection.context.bindings.lock().unwrap().remove(id);
             if let Some(session_id) = session_id {
                 connection.context.unregister_session(session_id);
+                connection.loads.forget(session_id);
             }
         }
         self.inner.sessions.lock().unwrap().remove(id);
@@ -948,6 +911,7 @@ impl AgentServerStore {
         })
     }
     pub async fn delete_session(&self, id: &str) -> Result<()> {
+        self.close_pending_load(id).await?;
         let thread = self.snapshot(id)?;
         if let Ok(connection) = self.session_connection(id)
             && connection.connected()
@@ -967,11 +931,5 @@ impl AgentServerStore {
         self.inner.threads.lock().unwrap().remove(id)?;
         self.inner.logs.remove_thread(id);
         Ok(())
-    }
-    fn record_error(&self, id: &str, error: &anyhow::Error) -> Result<()> {
-        self.inner.threads.lock().unwrap().update(id, |thread| {
-            thread.error = Some(format!("{error:#}"));
-            thread.auth_required = crate::facade::is_auth_required(error);
-        })
     }
 }

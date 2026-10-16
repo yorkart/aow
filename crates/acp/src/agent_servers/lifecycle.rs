@@ -47,6 +47,14 @@ impl AgentServerStore {
             previous.context.bindings.lock().unwrap().remove(thread_id);
             if let Some(session_id) = self.snapshot(thread_id)?.session_id {
                 previous.context.unregister_session(&session_id);
+                // Keep quarantined attempts on their original connection.
+                // Their late responses must never affect the replacement route.
+            }
+            if previous.loads.blocks_thread(thread_id)
+                && previous.context.bindings.lock().unwrap().is_empty()
+            {
+                // No other session owns this failed adapter. Shared adapters stay alive.
+                previous.close();
             }
         }
         self.inner
@@ -101,7 +109,7 @@ impl AgentServerStore {
         }
         .await;
         if let Err(error) = &result {
-            self.record_error(thread_id, error)?;
+            self.record_recovery_error(thread_id, error)?;
         }
         result
     }

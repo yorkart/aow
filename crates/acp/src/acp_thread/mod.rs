@@ -205,6 +205,7 @@ impl AcpThread {
             title: "New conversation".into(),
             status: "idle".into(),
             needs_load: false,
+            recovery: None,
             revision: 0,
             sync_generation: uuid::Uuid::new_v4().to_string(),
             updated_at: chrono::Utc::now().to_rfc3339(),
