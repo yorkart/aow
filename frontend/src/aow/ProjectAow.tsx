@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { gitApi } from '../features/git/api';
 import { filesApi } from '../features/files/api';
+import { WorkspaceMarkdownProvider } from '../features/files/WorkspaceMarkdown';
 import { EditorSettingsProvider, useWordWrapOverrides } from '../features/editor/editorSettings';
 import { AutomationDetail } from '../features/automations/AutomationDetail';
 import { AutomationPanel } from '../features/automations/AutomationPanel';
@@ -1978,7 +1979,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
       </div>
     </aside>
   );
-  return <FloatingOpenMenu><section className="project-aow-surface" hidden={!active || project.builtin}>
+  return <WorkspaceMarkdownProvider workspace={worktree.id} directory={worktree.path}><FloatingOpenMenu><section className="project-aow-surface" hidden={!active || project.builtin}>
     <main className="project-aow-center">
       <WorkspaceTabs workspaceKey={`project:${worktree.path}`} revealRequest={tabRevealRequest} tabs={centerTabs} activeId={activeCenterId} visible={active && !project.builtin} agents={agents}
         onActivate={activateCenter} onCloseTab={closeTab} onCloseTabs={(targets, selected) => closeTabsInGroup(selected, targets.map(tab => tab.id))}
@@ -2072,7 +2073,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     {showOpenFile ? <OpenFileDialog worktreePath={worktree.path} onClose={() => setShowOpenFile(false)} onOpen={path => openFileFloating ? withFloatingOpen(() => openExternalFile(path)) : openExternalFile(path)} /> : null}
     {(operationError || terminals.error) && floating.portal && (project.builtin || floatingId) ? createPortal(
       <div className="floating-workspace-error" role="alert">{operationError || terminals.error}<button aria-label="关闭错误提示" onClick={() => setOperationError('')}><X /></button></div>, floating.portal) : null}
-  </section></FloatingOpenMenu>;
+  </section></FloatingOpenMenu></WorkspaceMarkdownProvider>;
 });
 
 function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {

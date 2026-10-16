@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { WorkspaceMarkdownProvider } from '../src/features/files/WorkspaceMarkdown';
 import { createRoot } from 'react-dom/client';
 import { createPortal } from 'react-dom';
 import { AcpPanel, AcpSessionTab, AcpSettings, useAcpTabs } from '../src/features/acp';
@@ -32,4 +33,4 @@ function Preview() {
     <output hidden aria-label="Opened file">{opened}</output><output hidden aria-label="Unsaved settings">{String(dirty)}</output>
   </div>;
 }
-createRoot(document.getElementById('root')!).render(<Preview />);
+createRoot(document.getElementById('root')!).render(<WorkspaceMarkdownProvider workspace="fixture-workspace" directory="/repo"><Preview /></WorkspaceMarkdownProvider>);

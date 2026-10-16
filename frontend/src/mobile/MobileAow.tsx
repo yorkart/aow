@@ -1,4 +1,5 @@
 import { appUrl } from '../lib/basePath';
+import { WorkspaceMarkdownProvider } from '../features/files/WorkspaceMarkdown';
 import { LogoutButton } from '../features/auth/LogoutButton';
 import type { ResolvedTab } from '../aow/tabRoutes';
 import { mobileTabTarget } from '../aow/tabRoutes/mobile';
@@ -150,7 +151,7 @@ function MobileWorkspace({ project, worktree, route, navigate, back, headerActio
     setVisited((old) => old.has(route.view) ? old : new Set([...old, route.view]));
     saveMobileValue('recent-workspace', worktree.path);
   }, [route.view, worktree.path]);
-  return <main className="mobile-workspace" data-view={route.view}>
+  return <WorkspaceMarkdownProvider workspace={worktree.id} directory={worktree.path}><main className="mobile-workspace" data-view={route.view}>
     <div className="mobile-workspace-pages">
       {navigation.filter(({ id }) => visited.has(id) || id === route.view).map(({ id }) => <div className="mobile-workspace-page" key={id} hidden={id !== route.view}>
         <Suspense fallback={<MobileState loading />}>
@@ -167,5 +168,5 @@ function MobileWorkspace({ project, worktree, route, navigate, back, headerActio
     <nav className="mobile-bottom-nav" aria-label="工作区导航">
       {navigation.map(({ id, label, icon: Icon }) => <button key={id} aria-label={label} title={label} aria-current={route.view === id ? 'page' : undefined}
       onClick={() => navigate({ workspace: worktree.path, view: id }, true)}><Icon size={28} /></button>)}</nav>
-  </main>;
+  </main></WorkspaceMarkdownProvider>;
 }

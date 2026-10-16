@@ -1793,7 +1793,14 @@ try {
     const opened = page.getByLabel('Opened file', { exact: true });
     const url = page.url();
     for (const [label, expected] of [['File', '/repo/a b.rs:12'], ['Relative', '/repo/README.md:8'], ['Absolute', '/repo/main.rs:3']]) {
-      await page.getByRole('link', { name: label, exact: true }).click();
+      const link = page.getByRole('link', { name: label, exact: true });
+      const destination = new URL(await link.getAttribute('href'), page.url());
+      const separator = expected.lastIndexOf(':');
+      assert.equal(destination.pathname, '/aow/tabs/file');
+      assert.equal(destination.searchParams.get('workspace'), 'fixture-workspace');
+      assert.equal(destination.searchParams.get('path'), expected.slice(0, separator));
+      assert.equal(destination.hash, '#L' + expected.slice(separator + 1));
+      await link.click();
       assert.equal(await opened.textContent(), expected);
       assert.equal(page.url(), url);
     }

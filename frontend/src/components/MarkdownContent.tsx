@@ -19,11 +19,13 @@ export function MarkdownContent({ text, className = 'project-aow-snapshot-markdo
   const markdownRef = useRef<HTMLDivElement>(null);
   const handlesLinks = !!onOpenLink;
   const html = useMemo(() => {
-    // Preserve file destinations as inert data only when a host handles clicks.
-    // DOMPurify still applies its normal URL policy to every actual href.
+    // Route file destinations before sanitization, or preserve them as inert
+    // data for a host click handler. DOMPurify still checks every actual href.
     const renderer = new Renderer();
-    if (handlesLinks) renderer.link = function (token) {
-      if (!/^file:\/\//i.test(token.href)) return Renderer.prototype.link.call(this, token);
+    if (handlesLinks || resolveLink) renderer.link = function (token) {
+      const resolved = resolveLink?.(token.href);
+      if (resolved && resolved !== token.href) return Renderer.prototype.link.call(this, { ...token, href: resolved });
+      if (!handlesLinks || !/^file:\/\//i.test(token.href)) return Renderer.prototype.link.call(this, token);
       return `<a href="#" data-local-file="${encodeURIComponent(token.href)}">${this.parser.parseInline(token.tokens)}</a>`;
     };
     const source = marked.parse(text, { renderer, breaks }) as string;

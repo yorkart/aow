@@ -3,6 +3,7 @@ import { AlertCircle, History, LoaderCircle, RefreshCw } from 'lucide-react';
 import { ConversationLayout, conversationStatusNames } from '../../components/conversation/ConversationLayout';
 import { ConversationIds } from '../../components/conversation/ConversationIds';
 import { SessionMessageContent } from './SessionMessageContent';
+import { WorkspaceMarkdownProvider } from '../files/WorkspaceMarkdown';
 import { TokenUsageBadge } from '../../components/TokenUsageBadge';
 import type { AgentSessionSnapshot, AowAgentSession } from './types';
 import { AgentIcon } from '../agents/AgentIcon';
@@ -28,7 +29,7 @@ function time(value: string | null) {
 export function SessionSnapshotView({ session, snapshot, loading, error, onRefresh, actions, publicView = false }: Props) {
   const turnCount = snapshot?.turns.length ?? 0;
   const agentName = { codex: 'Codex', claude: 'Claude', traecli: 'TraeCode CLI', hermes: 'Hermes', pi: 'Pi' }[session.agent];
-  return <ConversationLayout
+  return <WorkspaceMarkdownProvider directory={session.cwd} enabled={!publicView}><ConversationLayout
     sessionId={session.id}
     revision={snapshot}
     className="project-aow-session-snapshot"
@@ -60,5 +61,5 @@ export function SessionSnapshotView({ session, snapshot, loading, error, onRefre
         <SessionTurnPending turn={turn} />
       </>,
     }))}
-  />;
+  /></WorkspaceMarkdownProvider>;
 }

@@ -4,6 +4,7 @@ import { sessionsApi } from './api';
 import { AgentIcon } from '../agents/AgentIcon';
 import { SessionShareButton } from './SessionShareButton';
 import { SessionMessageContent } from './SessionMessageContent';
+import { WorkspaceMarkdownProvider } from '../files/WorkspaceMarkdown';
 import { SessionTurnPending, SessionTurnProcess } from './SessionTurnProcess';
 import type { AowAgentSession } from './types';
 import { MobilePageHeader, MobileRefresh, MobileState, mobileTime } from '../../mobile/MobilePrimitives';
@@ -43,7 +44,7 @@ export function MobileSessions({ route, visible, navigate, back }: { route: Mobi
 export function MobileSessionReader({ session, workspace, back }: { session: AowAgentSession; workspace: string; back: () => void }) {
   const snapshot = useMobileResource(`snapshot.${workspace}.${session.id}`, () => sessionsApi.agentSessionSnapshot(session, workspace));
   const scroll = useMobileScroll(`snapshot.${workspace}.${session.id}`, !!snapshot.data);
-  return <section className="mobile-content-page">
+  return <WorkspaceMarkdownProvider directory={workspace}><section className="mobile-content-page">
     <MobilePageHeader title={session.title} subtitle={snapshot.data ? `${session.agent} · ${statusNames[snapshot.data.status]} · ${snapshot.data.turns.length} 轮` : session.agent}
       back={back} actions={<>{snapshot.data && <SessionShareButton session={session} workspacePath={workspace} />}<MobileRefresh reload={snapshot.reload} loading={snapshot.loading} /></>} />
     <div className="mobile-scroll mobile-conversation" ref={scroll}>
@@ -62,5 +63,5 @@ export function MobileSessionReader({ session, workspace, back }: { session: Aow
         </section>
       </article>)}
     </div>
-  </section>;
+  </section></WorkspaceMarkdownProvider>;
 }

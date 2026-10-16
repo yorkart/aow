@@ -12,6 +12,7 @@ import { Notice } from './activity';
 import { ReplyActions } from './reply_actions';
 import { Plan } from './plan';
 import { absoluteFilePath } from './file_links';
+import { WorkspaceMarkdownProvider } from '../../../files/WorkspaceMarkdown';
 import { ConfigOptions } from '../config_options';
 import { useComposerDraft } from '../composer_drafts';
 import { MessageEditor } from '../message_editor';
@@ -88,7 +89,7 @@ export function ThreadView({ session, workspace, tabId, busy: pending, supportsI
       }} onScrollToTop={latest ? () => conversation.current?.scrollTo({ top: 0, behavior: 'instant' }) : undefined} />;
   };
   const projectedLeading = session.overview?.find(turn => !turn.user.length);
-  return <ConversationLayout
+  return <WorkspaceMarkdownProvider directory={session.cwd || workspace}><ConversationLayout
     sessionId={session.thread_id}
     revision={session.revision}
     label="ACP 对话"
@@ -140,5 +141,5 @@ export function ThreadView({ session, workspace, tabId, busy: pending, supportsI
         </div>
       </form>
     }
-  />;
+  /></WorkspaceMarkdownProvider>;
 }
