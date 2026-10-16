@@ -1671,6 +1671,9 @@ try {
     state.session.notices = [{ id: 'n', kind: 'notice', content: { severity: 'warning', title: 'Rate limit', description: 'Please **wait** before retrying.' } }];
     state.session.revision++;
     const notice = page.getByRole('alert', { name: 'Rate limit', exact: true });
+    await notice.waitFor();
+    assert.equal(await notice.getByText('Please **wait** before retrying.', { exact: true }).isVisible(), false);
+    await notice.getByRole('button', { name: '详情', exact: true }).click();
     await notice.getByText('Please **wait** before retrying.', { exact: true }).waitFor();
     assert.equal(await thinking.getAttribute('aria-expanded'), 'true');
     assert.equal(await notice.getAttribute('data-severity'), 'warning');
@@ -1681,6 +1684,7 @@ try {
     await page.locator('.acp-message-chunk strong').filter({ hasText: /^Hello$/ }).waitFor();
     assert.equal(await page.locator('.acp-message-chunk').count(), 1);
     await page.getByText('All Done', { exact: true }).waitFor();
+    assert.equal(await notice.getByRole('button', { name: '收起', exact: true }).getAttribute('aria-expanded'), 'true', 'stream updates preserve expanded notice details');
     await notice.getByRole('button', { name: '关闭通知：Rate limit', exact: true }).click();
     await notice.waitFor({ state: 'detached' });
     assert.deepEqual(state.actions.at(-1), { action: 'dismiss_notice', notice_id: 'n' });
@@ -1688,6 +1692,67 @@ try {
     await page.getByRole('tab').filter({ hasText: 'Conversation' }).click();
     await page.locator('.acp-message-chunk strong').filter({ hasText: /^Hello$/ }).waitFor();
     assert.equal(await notice.count(), 0);
+  });
+  await test('notices align with the conversation and keep long details readable on narrow screens', async t => {
+    const { page, state } = await fixture(t);
+    const fallback = 'Falling back from WebSockets to HTTPS transport. workspace routing discovery timed out';
+    const longTitle = 'Connection diagnostics: ' + 'workspace-routing-discovery/'.repeat(15);
+    Object.assign(state.session, { entries: [
+      { id: 'u', kind: 'user', content: { type: 'text', text: 'Check the workspace connection' } },
+      { id: 'a', kind: 'assistant', content: { type: 'text', text: 'The connection is being checked.' } },
+    ], notices: [
+      { id: 'transport', kind: 'notice', content: { severity: 'warning', title: fallback } },
+      { id: 'error', kind: 'notice', content: { severity: 'error', title: '无法继续执行任务', description: 'Agent connection failed.\n' + '<script>unsafe()</script>\n'.repeat(30) } },
+      { id: 'info', kind: 'notice', content: { message: longTitle } },
+    ] });
+    await page.addStyleTag({ content: '@media (max-width: 720px) { #root > div > div > aside { display: none; } }' });
+    await newSession(page);
+    const warning = page.getByRole('alert', { name: '已从 WebSocket 切换为 HTTPS 连接', exact: true });
+    const error = page.getByRole('alert', { name: '无法继续执行任务', exact: true });
+    const info = page.locator('.acp-notice[data-severity="info"]');
+    await warning.waitFor();
+    assert.equal(await warning.getByText(fallback, { exact: true }).isVisible(), false);
+    assert.equal(await info.locator('.acp-notice-title').textContent(), longTitle.slice(0, 120) + '…');
+    assert.equal(await warning.locator('.acp-notice-title').evaluate(element => getComputedStyle(element).fontWeight), '400');
+    assert.equal(await warning.evaluate(element => getComputedStyle(element).borderTopWidth), '0px');
+    assert.notEqual(await warning.evaluate(element => getComputedStyle(element).backgroundColor), await error.evaluate(element => getComputedStyle(element).backgroundColor));
+    const aligned = async () => {
+      const composer = await page.locator('.acp-composer').boundingBox();
+      const message = await page.locator('.project-aow-snapshot-message.assistant .project-aow-snapshot-bubble').boundingBox();
+      for (const notice of [warning, error, info]) {
+        const box = await notice.boundingBox();
+        assert.ok(Math.abs(box.x - composer.x) <= 1 && Math.abs(box.width - composer.width) <= 1, 'notice aligns with the composer');
+        assert.ok(Math.abs(box.x - message.x) <= 1 && Math.abs(box.width - message.width) <= 1, 'notice aligns with the conversation');
+        assert.equal(await notice.evaluate(element => element.scrollWidth <= element.clientWidth + 1), true, 'long text does not cause horizontal overflow');
+        const close = await notice.getByRole('button', { name: /^关闭通知/ }).boundingBox();
+        assert.ok(close.x >= box.x && close.x + close.width <= box.x + box.width, 'close stays inside the notice');
+      }
+    };
+    for (const width of [1680, 760, 390]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await aligned();
+      if (process.env.ACP_SCREENSHOT_DIR) await page.screenshot({ path: `${process.env.ACP_SCREENSHOT_DIR}/acp-notices-${width}.png` });
+    }
+    await warning.getByRole('button', { name: '详情', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    await warning.getByText(fallback, { exact: true }).waitFor();
+    const toggle = warning.getByRole('button', { name: '收起', exact: true });
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
+    assert.equal(await toggle.getAttribute('aria-controls'), await warning.locator('.acp-notice-description').getAttribute('id'));
+    await toggle.click();
+    await info.getByRole('button', { name: '详情', exact: true }).click();
+    await info.getByText(longTitle, { exact: true }).waitFor();
+    await info.getByRole('button', { name: '收起', exact: true }).click();
+    await error.getByRole('button', { name: '详情', exact: true }).click();
+    const details = error.locator('.acp-notice-description');
+    assert.equal(await details.evaluate(element => element.scrollHeight > element.clientHeight), true, 'large details scroll within the notice');
+    assert.equal(await details.locator('script').count(), 0, 'details remain plain text');
+    await aligned();
+    if (process.env.ACP_SCREENSHOT_DIR) await page.screenshot({ path: `${process.env.ACP_SCREENSHOT_DIR}/acp-notices-expanded.png` });
+    await error.getByRole('button', { name: '关闭通知：无法继续执行任务', exact: true }).click();
+    await error.waitFor({ state: 'detached' });
+    assert.deepEqual(state.actions.at(-1), { action: 'dismiss_notice', notice_id: 'error' });
+    assert.equal(await warning.isVisible(), true);
   });
   await test('plan cards align with messages and preserve collapse through updates and persistent clearing', async t => {
     const { page, state } = await fixture(t);
