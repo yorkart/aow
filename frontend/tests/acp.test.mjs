@@ -1696,26 +1696,26 @@ try {
   await test('notices align with the conversation and keep long details readable on narrow screens', async t => {
     const { page, state } = await fixture(t);
     const fallback = 'Falling back from WebSockets to HTTPS transport. workspace routing discovery timed out';
-    const longTitle = 'Connection diagnostics: ' + 'workspace-routing-discovery/'.repeat(15);
+    const longTitle = '  Connection diagnostics:\n' + 'workspace-routing-discovery/'.repeat(15) + '\n  ';
+    const description = '  Agent connection failed.\n' + '<script>unsafe()</script>\n'.repeat(30) + '  ';
     Object.assign(state.session, { entries: [
       { id: 'u', kind: 'user', content: { type: 'text', text: 'Check the workspace connection' } },
       { id: 'a', kind: 'assistant', content: { type: 'text', text: 'The connection is being checked.' } },
     ], notices: [
       { id: 'transport', kind: 'notice', content: { severity: 'warning', title: fallback } },
-      { id: 'error', kind: 'notice', content: { severity: 'error', title: '无法继续执行任务', description: 'Agent connection failed.\n' + '<script>unsafe()</script>\n'.repeat(30) } },
+      { id: 'error', kind: 'notice', content: { severity: 'error', title: '无法继续执行任务', description } },
       { id: 'info', kind: 'notice', content: { message: longTitle } },
     ] });
     await page.addStyleTag({ content: '@media (max-width: 720px) { #root > div > div > aside { display: none; } }' });
     await newSession(page);
-    const warning = page.getByRole('alert', { name: '已从 WebSocket 切换为 HTTPS 连接', exact: true });
+    const warning = page.getByRole('alert', { name: fallback, exact: true });
     const error = page.getByRole('alert', { name: '无法继续执行任务', exact: true });
     const info = page.locator('.acp-notice[data-severity="info"]');
     await warning.waitFor();
-    assert.equal(await warning.getByText(fallback, { exact: true }).isVisible(), false);
-    assert.equal(await info.locator('.acp-notice-title').textContent(), longTitle.slice(0, 120) + '…');
-    assert.equal(await warning.locator('.acp-notice-title').evaluate(element => getComputedStyle(element).fontWeight), '400');
-    assert.equal(await warning.evaluate(element => getComputedStyle(element).borderTopWidth), '0px');
-    assert.notEqual(await warning.evaluate(element => getComputedStyle(element).backgroundColor), await error.evaluate(element => getComputedStyle(element).backgroundColor));
+    assert.equal(await warning.locator('.acp-notice-title').textContent(), fallback, 'transport notices preserve the original backend text');
+    assert.equal(await info.locator('.acp-notice-title').textContent(), longTitle, 'long titles preserve every line and whitespace');
+    assert.equal(await warning.getByRole('button', { name: '详情', exact: true }).count(), 0, 'titles alone do not create synthetic details');
+    assert.equal(await info.getByRole('button', { name: '详情', exact: true }).count(), 0);
     const aligned = async () => {
       const composer = await page.locator('.acp-composer').boundingBox();
       const message = await page.locator('.project-aow-snapshot-message.assistant .project-aow-snapshot-bubble').boundingBox();
@@ -1733,18 +1733,15 @@ try {
       await aligned();
       if (process.env.ACP_SCREENSHOT_DIR) await page.screenshot({ path: `${process.env.ACP_SCREENSHOT_DIR}/acp-notices-${width}.png` });
     }
-    await warning.getByRole('button', { name: '详情', exact: true }).focus();
+    await error.getByRole('button', { name: '详情', exact: true }).focus();
     await page.keyboard.press('Enter');
-    await warning.getByText(fallback, { exact: true }).waitFor();
-    const toggle = warning.getByRole('button', { name: '收起', exact: true });
+    const toggle = error.getByRole('button', { name: '收起', exact: true });
     assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
-    assert.equal(await toggle.getAttribute('aria-controls'), await warning.locator('.acp-notice-description').getAttribute('id'));
+    assert.equal(await toggle.getAttribute('aria-controls'), await error.locator('.acp-notice-description').getAttribute('id'));
     await toggle.click();
-    await info.getByRole('button', { name: '详情', exact: true }).click();
-    await info.getByText(longTitle, { exact: true }).waitFor();
-    await info.getByRole('button', { name: '收起', exact: true }).click();
     await error.getByRole('button', { name: '详情', exact: true }).click();
     const details = error.locator('.acp-notice-description');
+    assert.equal(await details.textContent(), description, 'description text matches backend logs without trimming or rewriting');
     assert.equal(await details.evaluate(element => element.scrollHeight > element.clientHeight), true, 'large details scroll within the notice');
     assert.equal(await details.locator('script').count(), 0, 'details remain plain text');
     await aligned();

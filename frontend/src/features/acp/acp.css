@@ -35,7 +35,7 @@
 .acp-notice[data-severity="error"] { --acp-notice-accent:var(--aow-error); background:color-mix(in srgb,var(--acp-notice-accent) 12%,var(--conversation-background)); }
 .acp-notice-header { display:flex; align-items:flex-start; gap:8px; }
 .acp-notice-icon { flex-shrink:0; margin-top:4px; color:var(--acp-notice-accent); }
-.acp-notice-title { flex:1; min-width:0; padding:2px 0; overflow-wrap:anywhere; font-weight:400; }
+.acp-notice-title { flex:1; min-width:0; padding:2px 0; white-space:pre-wrap; overflow-wrap:anywhere; font-weight:400; }
 .acp-notice[data-severity="error"] .acp-notice-title { color:var(--aow-error); }
 .acp-notice-header > button { display:flex; flex-shrink:0; align-items:center; justify-content:center; gap:3px; min-height:24px; padding:2px 4px; border:0; border-radius:4px; background:none; color:var(--aow-muted); font-size:11px; }
 .acp-notice-header > button:not(:disabled):hover { background:color-mix(in srgb,var(--aow-text) 7%,transparent); color:var(--aow-text); }
