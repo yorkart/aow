@@ -16,7 +16,7 @@ export function TurnResponse({ presentation, permissionTools, renderGroup, gener
   presentation: ReturnType<typeof turnPresentation>; permissionTools: Set<string>; renderGroup: (group: MessageGroup) => ReactNode;
   remote?: RemoteProcess; generating?: ReactNode; onJump?: () => void; onScrollToTop?: () => void;
 }) {
-  const { process, conclusion, running, waiting, status, reply, error } = presentation;
+  const { process, conclusion, messages, running, waiting, status, reply, error } = presentation;
   const { expanded, toggle } = useProcessExpansion(running, waiting);
   const toolCount = remote?.turn.tool_count ?? process.filter(group => group.kind === 'tool').length;
   const progressCount = remote?.turn.progress_count ?? process.filter(group => group.kind !== 'tool').length;
@@ -29,7 +29,8 @@ export function TurnResponse({ presentation, permissionTools, renderGroup, gener
       {expanded && (remote ? <ProcessDetails key={`${remote.session.sync_generation}:${remote.turn.id}`} {...remote} />
         : <ProcessTimeline process={process} running={running} permissionTools={permissionTools} renderGroup={renderGroup} />)}
     </ConversationProcess>}
-    {!!conclusion.length && <div className="project-aow-snapshot-conclusion">{conclusion.map(renderGroup)}</div>}
+    {messages ? <div className="acp-turn-dialogue">{messages.map(renderGroup)}</div>
+      : !!conclusion.length && <div className="project-aow-snapshot-conclusion">{conclusion.map(renderGroup)}</div>}
     {generating}
     {!running && !conclusion.length && <p className={`acp-turn-pending ${status ?? 'unknown'}`} role="status"><CircleAlert size={14} />{pending}{error && <span>{error}</span>}</p>}
     {!running && onJump && <div className="acp-content"><ReplyActions content={reply} onJump={onJump} onScrollToTop={onScrollToTop} /></div>}

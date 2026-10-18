@@ -80,9 +80,10 @@ function normalizePane(value: unknown): TerminalPane | null {
   const shell = typeof item.shell === 'string' ? item.shell : '';
   const agentTerminal = asRecord(item.agent_terminal);
   const hosting = asRecord(item.hosting);
+  const parent = asRecord(item.parent);
   return {
     id: item.id,
-    ...(typeof item.parent_pane_id === 'string' ? { parent_pane_id: item.parent_pane_id } : {}),
+    ...(parent && (parent.kind === 'terminal' || parent.kind === 'acp') && typeof parent.id === 'string' ? { parent: { kind: parent.kind, id: parent.id } } : {}),
     // Pane names are generated; ignore legacy custom names from stored metadata
     // and older servers, including when no OSC title is available.
     name: defaultTerminalPaneName({ cwd, shell }),

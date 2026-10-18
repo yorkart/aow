@@ -9,9 +9,10 @@ impl TerminalManager {
         pane_id: &str,
         expected: &TerminalRuntimeSpec,
     ) -> Result<bool, TerminalError> {
-        match self.inner.terminald.get(pane_id).await {
-            Ok(Some(runtime)) => Ok(runtime.spec() == *expected),
-            Ok(None) => Ok(false),
+        // Retry the immutable creation spec: HTTP descriptions redact the launch
+        // environment, so GET cannot confirm whether these options match.
+        match self.inner.terminald.create(pane_id, expected).await {
+            Ok(_) => Ok(true),
             Err(error) => {
                 tracing::debug!(%error, %pane_id, "could not probe ambiguous terminal create result");
                 Ok(false)

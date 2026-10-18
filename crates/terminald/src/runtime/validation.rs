@@ -67,6 +67,11 @@ pub(super) async fn validate_spec(spec: &TerminalRuntimeSpec) -> Result<(), Term
         ));
     }
     if spec.environment.len() > 128
+        || spec.environment_remove.len() > 128
+        || spec
+            .environment_remove
+            .iter()
+            .any(|key| key.is_empty() || key.len() > 256 || key.contains(['=', '\0']))
         || spec.environment.iter().any(|(key, value)| {
             key.is_empty()
                 || key.len() > 256

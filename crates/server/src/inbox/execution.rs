@@ -121,9 +121,11 @@ async fn execute_inner(
                 crate::terminal::agent_control::create_in_workspace(
                     state.clone(),
                     AgentTerminalCreate {
+                        caller: None,
+                        no_parent: false,
                         agent: background.agent.clone(),
                         project_id: background.project_id.clone(),
-                        parent_pane_id: None,
+                        parent: None,
                         cwd,
                         task: Some(background.markdown.clone()),
                         timeout_seconds: 120,

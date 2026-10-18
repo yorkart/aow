@@ -9,6 +9,71 @@ fn file_kind_uses_snake_case() {
 }
 
 #[test]
+fn instance_creation_rejects_unknown_fields_instead_of_losing_parentage() {
+    let terminal = serde_json::json!({
+        "agent":"codex", "project_id":"project", "cwd":"/repo", "timeout_seconds":120,
+        "parent":{"kind":"acp", "id":"root"}
+    });
+    let acp = serde_json::json!({
+        "agent_id":"codex-acp", "project_id":"project", "cwd":"/repo", "timeout_seconds":120,
+        "parent":{"kind":"terminal", "id":"root"}
+    });
+    assert_eq!(
+        serde_json::from_value::<AgentTerminalCreate>(terminal.clone())
+            .unwrap()
+            .parent,
+        Some(InstanceRef::acp("root"))
+    );
+    assert_eq!(
+        serde_json::from_value::<AcpCreate>(acp.clone())
+            .unwrap()
+            .parent,
+        Some(InstanceRef::terminal("root"))
+    );
+    for field in ["parent_pane_id", "unexpected"] {
+        let mut terminal = terminal.clone();
+        let mut acp = acp.clone();
+        terminal[field] = "removed".into();
+        acp[field] = "removed".into();
+        assert!(
+            serde_json::from_value::<AgentTerminalCreate>(terminal)
+                .unwrap_err()
+                .to_string()
+                .contains("unknown field")
+        );
+        assert!(
+            serde_json::from_value::<AcpCreate>(acp)
+                .unwrap_err()
+                .to_string()
+                .contains("unknown field")
+        );
+    }
+}
+
+#[test]
+fn terminal_parent_round_trip_uses_only_instance_references() {
+    for parent in [
+        None,
+        Some(InstanceRef::terminal("terminal-parent")),
+        Some(InstanceRef::acp("acp-parent")),
+    ] {
+        let pane: TerminalPane = serde_json::from_value(serde_json::json!({
+            "id":"pane", "parent":parent, "parent_pane_id":"removed",
+            "cwd":"/repo", "shell":"/bin/sh", "status":"running", "rows":24, "cols":80,
+            "created_at":"2026-01-01T00:00:00Z", "updated_at":"2026-01-01T00:00:00Z"
+        }))
+        .unwrap();
+        assert_eq!(pane.parent, parent);
+        let serialized = serde_json::to_value(&pane).unwrap();
+        assert!(serialized.get("parent_pane_id").is_none());
+        assert_eq!(
+            serde_json::from_value::<TerminalPane>(serialized).unwrap(),
+            pane
+        );
+    }
+}
+
+#[test]
 fn terminal_layout_uses_the_shared_axis_schema() {
     let layout = TerminalLayout::Split {
         axis: TerminalSplitAxis::Row,

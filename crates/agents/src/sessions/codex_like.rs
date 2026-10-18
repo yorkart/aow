@@ -1,4 +1,5 @@
 use super::*;
+use aow_db::codex_like::{CodexLikeDb, ThreadRecord};
 
 pub(crate) struct CodexLikeSessionProvider {
     pub(crate) definition: &'static AgentDefinition,
@@ -21,37 +22,17 @@ pub(super) fn current_title(
 
 impl CodexLikeSessionProvider {
     pub(crate) fn list_sessions(&self, workspace_path: &Path) -> Vec<AgentSession> {
-        let Ok(connection) = open_state_db(&self.home) else {
+        let Ok(db) = CodexLikeDb::open(&self.home.join(STATE_DB_FILENAME)) else {
             return Vec::new();
         };
-        let sql = r#"
-SELECT id, rollout_path, cwd, title, created_at, updated_at
-FROM threads
-WHERE archived = 0
-  AND first_user_message <> ''
-  AND cwd = ?1
-  AND (thread_source IS NULL OR lower(thread_source) <> 'subagent')
-  AND COALESCE(source, '') NOT LIKE '{"subagent"%'
-  AND COALESCE(agent_nickname, '') = ''
-  AND COALESCE(agent_role, '') = ''
-ORDER BY updated_at_ms DESC, id DESC
-"#;
-        let sql = sql.replace(
-            "cwd, title,",
-            &format!("cwd, {},", display_title_column(&connection)),
-        );
-        let Ok(mut statement) = connection.prepare(&sql) else {
+        let Ok(rows) = db.list_threads(&workspace_path.to_string_lossy()) else {
             return Vec::new();
         };
-        let Ok(rows) = statement
-            .query_map(params![workspace_path.to_string_lossy().as_ref()], |row| {
-                Self::row_session(self.definition, &self.home, row)
-            })
-        else {
-            return Vec::new();
-        };
-        let mut sessions: Vec<_> = rows.filter_map(Result::ok).collect();
-        if display_title_column(&connection) == "title" {
+        let mut sessions: Vec<_> = rows
+            .into_iter()
+            .map(|row| Self::row_session(self.definition, &self.home, row))
+            .collect();
+        if !db.has_thread_names() {
             apply_index_names(&self.home, &mut sessions);
         }
         sessions
@@ -64,30 +45,14 @@ ORDER BY updated_at_ms DESC, id DESC
     pub(crate) fn find_sessions<'a>(
         &self,
         session_ids: impl IntoIterator<Item = &'a str>,
-    ) -> rusqlite::Result<Vec<AgentSession>> {
-        let connection = open_state_db(&self.home)?;
-        let sql = r#"
-SELECT id, rollout_path, cwd, title, created_at, updated_at
-FROM threads
-WHERE id = ?1
-"#;
-        let sql = sql.replace(
-            "cwd, title,",
-            &format!("cwd, {},", display_title_column(&connection)),
-        );
-        let mut statement = connection.prepare(&sql)?;
-        let mut sessions = Vec::new();
-        for session_id in session_ids {
-            if let Some(session) = statement
-                .query_row(params![session_id], |row| {
-                    Self::row_session(self.definition, &self.home, row)
-                })
-                .optional()?
-            {
-                sessions.push(session);
-            }
-        }
-        if display_title_column(&connection) == "title" {
+    ) -> anyhow::Result<Vec<AgentSession>> {
+        let db = CodexLikeDb::open(&self.home.join(STATE_DB_FILENAME))?;
+        let mut sessions: Vec<_> = db
+            .find_threads(session_ids)?
+            .into_iter()
+            .map(|row| Self::row_session(self.definition, &self.home, row))
+            .collect();
+        if !db.has_thread_names() {
             apply_index_names(&self.home, &mut sessions);
         }
         Ok(sessions)
@@ -123,37 +88,20 @@ fn apply_index_names(home: &Path, sessions: &mut [AgentSession]) {
     }
 }
 
-// Recent Codex/Trae schemas separate the user-visible name from the searchable
-// first-message title. Older versions have no name column.
-fn display_title_column(connection: &Connection) -> &'static str {
-    let has_name = connection
-        .query_row(
-            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('threads') WHERE name = 'name')",
-            [],
-            |row| row.get::<_, bool>(0),
-        )
-        .unwrap_or(false);
-    if has_name {
-        "COALESCE(NULLIF(name, ''), title)"
-    } else {
-        "title"
-    }
-}
-
 impl CodexLikeSessionProvider {
     fn row_session(
         definition: &'static AgentDefinition,
         home: &Path,
-        row: &rusqlite::Row<'_>,
-    ) -> rusqlite::Result<AgentSession> {
-        let session_id: String = row.get(0)?;
-        let transcript_path = PathBuf::from(row.get::<_, String>(1)?);
-        let cwd = PathBuf::from(row.get::<_, String>(2)?);
-        let title = normalize_title(&row.get::<_, String>(3)?)
+        row: ThreadRecord,
+    ) -> AgentSession {
+        let session_id = row.id;
+        let transcript_path = PathBuf::from(row.rollout_path);
+        let cwd = PathBuf::from(row.cwd);
+        let title = normalize_title(&row.title)
             .unwrap_or_else(|| fallback_title(definition.display_name, &session_id));
-        let created_at = sqlite_timestamp(row.get(4)?);
-        let updated_at = sqlite_timestamp(row.get(5)?);
-        Ok(session(
+        let created_at = sqlite_timestamp(row.created_at);
+        let updated_at = sqlite_timestamp(row.updated_at);
+        session(
             AgentSessionLocator {
                 agent: definition.id,
                 session_id,
@@ -164,18 +112,8 @@ impl CodexLikeSessionProvider {
             },
             created_at,
             updated_at,
-        ))
+        )
     }
-}
-
-fn open_state_db(home: &Path) -> rusqlite::Result<Connection> {
-    let path = home.join(STATE_DB_FILENAME);
-    let connection = Connection::open_with_flags(
-        path,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )?;
-    connection.busy_timeout(std::time::Duration::from_millis(SQLITE_BUSY_TIMEOUT_MS))?;
-    Ok(connection)
 }
 
 pub(super) fn sqlite_timestamp(epoch: i64) -> DateTime<Utc> {

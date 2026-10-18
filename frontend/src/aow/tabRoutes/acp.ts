@@ -1,4 +1,4 @@
-import { resolveAcpSession } from '../../features/acp';
+import { resolveAcpSession } from '../../features/acp/workspace';
 import type { TabRouteAdapter, TabTarget } from './types';
 import { length, segment, url } from './helpers';
 

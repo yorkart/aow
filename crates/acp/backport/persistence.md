@@ -20,21 +20,28 @@ have only metadata and an empty `needs_load` placeholder until explicitly opened
 ## Code correspondence
 
 Upstream paths are relative to the Zed repository; local paths are relative to
-`crates/acp/src` unless indicated otherwise.
+`crates/acp/src` unless prefixed with `crates/`.
 
 | Upstream | Local counterpart | Preserved shape / host adaptation |
 | --- | --- | --- |
 | `crates/agent_ui/src/thread_metadata_store.rs::ThreadMetadata`, `ThreadMetadataStore` | `agent_ui/thread_metadata_store/mod.rs` | Metadata cache, lookup, save, reload and delete. GPUI subscriptions become reducer calls; queued saves carry live session handles. |
-| `ThreadMetadataDb::{MIGRATIONS, LIST_QUERY, list, save, delete}` | `agent_ui/thread_metadata_store/db.rs` | `sidebar_threads` and upstream column/SQL operation names. Start from the pinned schema, with new append-only migrations for later changes. |
+| `ThreadMetadataDb::{MIGRATIONS, LIST_QUERY, list, save, delete}` | `crates/db/src/acp/sidebar_threads/`, `crates/db/src/acp/migrations/`; `agent_ui/thread_metadata_store/record.rs` | Table SQL and row mapping live in `aow-db`; ACP converts stored columns to its metadata model. Existing schemas and migration domains are preserved. |
 | `DbOperation`, `dedup_db_operations`, background operation drain | `agent_ui/thread_metadata_store/operations.rs` and `mod.rs` | Latest upsert/delete per thread wins; the single writer captures the referenced session and commits its metadata and cached body atomically. |
-| `crates/db`, `sqlez::Connection::migrate` | `db/mod.rs` | Thin `rusqlite` connection and domain/version migration adapter; no GPUI globals or editor workspace database dependency. |
-| `crates/agent/src/db.rs::{DbThread, load_thread, save_thread, delete_thread}` | `acp_thread/snapshot_store.rs` | Versioned serialized-body boundary; AoW's `SessionSnapshot` in its own `acp_thread_snapshots` table, using uncompressed JSON rather than native-agent Zstd data. |
+| `crates/db`, `sqlez::Connection::migrate` | `crates/db/src/sqlite/`, `crates/db/src/acp/mod.rs` | Private SQLite connections and domain/version migrations; the ACP data source owns cross-table transactions. |
+| `crates/agent/src/db.rs::{DbThread, load_thread, save_thread, delete_thread}` | `acp_thread/snapshot_store.rs`, `crates/db/src/acp/acp_thread_snapshots/` | ACP encodes and validates versioned `SessionSnapshot` JSON; `aow-db` stores and retrieves opaque bytes in `acp_thread_snapshots`. |
 | `crates/agent/src/agent.rs::{enqueue_save, run_save_worker, flush_threads_on_quit}` | Metadata operation worker; `AgentServerStore::flush_threads_on_quit` | Coalesced pending state and explicit shutdown drain. AoW captures live state after coalescing and checkpoints streaming content too; Zed's native-agent serializer excludes its incomplete streaming message. |
 
 The existing `acp_thread/history.rs::ThreadStore` is host glue for active snapshots
 and lazy body loading. Archive queries use the metadata cache and do not hydrate
 all transcripts on startup. Loading a damaged body reports an error for that
 conversation without making the entire history list unreadable.
+
+`aow-acp` depends on `aow-db`, which has no dependency on ACP session models or
+agent providers. The database crate exposes the `AcpDb` data source and storage
+records; connections and table operations remain private. Each writer batch
+commits both tables in one transaction. Caching, queue coalescing, retries and
+snapshot encoding stay in ACP. Table SQL remains in separate files loaded with
+`include_str!`. This extraction changes neither database paths nor schema versions.
 
 AoW's facade keeps string thread IDs, one cwd per conversation and JSON-encoded
 `folder_paths`. `entry_by_session` scopes remote IDs by agent and cwd. The reserved
@@ -53,6 +60,16 @@ its cached body; the tab URL no longer carries workspace identity.
 
 ## Writes and recovery
 
+- Sidebar ordering and displayed time follow Zed's
+  `sidebar::Sidebar::thread_display_time`: use `interacted_at`, falling back to
+  `updated_at` for older records. AoW now carries the existing SQLite interaction
+  column through session snapshots, metadata, and both desktop/mobile lists.
+  Creation seeds it once; import uses the provider's historical timestamp.
+  Only an accepted user prompt advances it, in the same durable write as the
+  prompt. Failed persistence restores the previous value. Loading, replay,
+  connection/configuration changes, streamed replies and completion preserve it.
+  Legacy hydration freezes the stored update time before recovery changes it.
+  `updated_at` and revision still track snapshot changes for synchronization.
 - SQLite uses WAL, foreign keys and `synchronous=FULL`. The database is created
   with mode `0600`; SQLite sidecars inherit its private permissions.
 - A dedicated writer replaces GPUI's background executor. The queue holds a
@@ -140,3 +157,8 @@ flushing while a prompt is still streaming. Frontend history/import behavior
 uses the renamed HTTP identity fields. Additional tests cover pre-connection
 durability, failed initialization/creation and retry, metadata-only link lookup
 and interleaved shared-connection log attribution.
+The `aow-db` tests cover isolated in-memory handles, byte-preserving snapshot
+storage, whole-batch rollback on failed snapshot writes and metadata deletes,
+retry and reopening. ACP fault-injection tests use independent SQLite connections
+without exposing the data source's connection. A fixed pre-origin schema fixture
+checks upgrades independently of the current migration implementation.

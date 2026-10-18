@@ -109,13 +109,10 @@ fn codex_candidate_refresh_preserves_unread_completions_across_database_failure(
     std::fs::create_dir(&sessions).unwrap();
     let locator = fixture(&sessions, "session", 1);
     let db = rusqlite::Connection::open(root.join("state_5.sqlite")).unwrap();
-    db.execute_batch(
-        "CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT,
-        cwd TEXT, title TEXT, name TEXT, created_at INTEGER, updated_at INTEGER);",
-    )
-    .unwrap();
+    db.execute_batch(include_str!("sql/tests/create_threads.sql"))
+        .unwrap();
     db.execute(
-        "INSERT INTO threads VALUES (?1, ?2, ?3, 'Task', NULL, 1, 1)",
+        include_str!("sql/tests/insert_thread.sql"),
         rusqlite::params![
             locator.session_id,
             locator.transcript_path.to_str(),
@@ -139,13 +136,15 @@ fn codex_candidate_refresh_preserves_unread_completions_across_database_failure(
     );
     assert_eq!(registry.readers.len(), 1);
 
-    db.execute_batch("BEGIN EXCLUSIVE").unwrap();
+    db.execute_batch(include_str!("sql/tests/lock_database.sql"))
+        .unwrap();
     let unavailable = registry::candidates(&identity, roots.clone());
     assert!(unavailable.is_none());
     registry.refresh("pane".into(), identity.clone(), unavailable);
     stop(&locator);
     assert_eq!(registry.readers.len(), 1);
-    db.execute_batch("ROLLBACK").unwrap();
+    db.execute_batch(include_str!("sql/tests/unlock_database.sql"))
+        .unwrap();
     registry.refresh(
         "pane".into(),
         identity.clone(),
@@ -160,7 +159,8 @@ fn codex_candidate_refresh_preserves_unread_completions_across_database_failure(
     assert_eq!(events[0].instance_ids, ["pane"]);
     assert!(registry.poll().is_empty());
 
-    db.execute("DELETE FROM threads", []).unwrap();
+    db.execute(include_str!("sql/tests/delete_threads.sql"), [])
+        .unwrap();
     registry.refresh(
         "pane".into(),
         identity.clone(),
@@ -487,18 +487,10 @@ async fn codex_like_stops_use_the_expected_environment(with_process: bool) {
         locator.cwd = cwd.clone();
         stop(&locator); // Existing completion must not replay when registered.
         let db = rusqlite::Connection::open(home.join("state_5.sqlite")).unwrap();
-        db.execute_batch(
-            "CREATE TABLE threads (
-                id TEXT PRIMARY KEY, rollout_path TEXT, cwd TEXT, title TEXT,
-                created_at INTEGER, updated_at INTEGER, updated_at_ms INTEGER,
-                archived INTEGER, first_user_message TEXT, thread_source TEXT,
-                source TEXT, agent_nickname TEXT, agent_role TEXT
-            );",
-        )
-        .unwrap();
+        db.execute_batch(include_str!("sql/tests/create_session_threads.sql"))
+            .unwrap();
         db.execute(
-            "INSERT INTO threads VALUES (?1, ?2, ?3, 'Same title',
-                1789726500, 1789726500, 1789726500000, 0, 'Task', 'user', 'cli', '', '')",
+            include_str!("sql/tests/insert_session_thread.sql"),
             rusqlite::params![agent, locator.transcript_path.to_str(), cwd.to_str()],
         )
         .unwrap();
@@ -666,7 +658,7 @@ async fn codex_like_stops_use_the_expected_environment(with_process: bool) {
         .unwrap();
         let renamed = format!("{} renamed after registration", locator.agent);
         db.execute(
-            "UPDATE threads SET title = ?1 WHERE id = ?2",
+            include_str!("sql/tests/rename_thread.sql"),
             rusqlite::params![renamed, locator.session_id],
         )
         .unwrap();
@@ -701,7 +693,8 @@ async fn codex_like_stops_use_the_expected_environment(with_process: bool) {
 
         // A temporarily missing store must not suppress subsequent completions
         // or replace the latest known name with the original registration title.
-        db.execute("DELETE FROM threads", []).unwrap();
+        db.execute(include_str!("sql/tests/delete_threads.sql"), [])
+            .unwrap();
         stop(locator);
         let callback = tokio::time::timeout(Duration::from_secs(5), callbacks.recv())
             .await

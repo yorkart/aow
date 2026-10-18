@@ -1,15 +1,13 @@
 //! Host port of agent_ui::thread_metadata_store: cached metadata, queued operations and SQLite.
-mod db;
 mod operations;
+mod record;
 #[cfg(test)]
 mod tests;
 
-use self::{
-    db::ThreadMetadataDb,
-    operations::{DbOperation, DbOperations},
-};
-use crate::{acp_thread::snapshot_store::SnapshotDb, facade::SessionSnapshot};
+use self::operations::{DbOperation, DbOperations};
+use crate::{acp_thread::snapshot_store, facade::SessionSnapshot};
 use anyhow::Result;
+use aow_db::acp::AcpDb;
 use std::{
     collections::HashMap,
     path::Path,
@@ -20,6 +18,8 @@ use std::{
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ThreadMetadata {
     pub thread_id: String,
+    pub source: crate::facade::SessionSource,
+    pub parent: Option<aow_protocol::InstanceRef>,
     pub session_id: Option<String>,
     pub agent_id: String,
     pub title: String,
@@ -43,14 +43,14 @@ impl ThreadMetadata {
     fn from_snapshot(snapshot: &SessionSnapshot, previous: Option<&Self>) -> Self {
         Self {
             thread_id: snapshot.thread_id.clone(),
+            source: snapshot.source,
+            parent: snapshot.parent.clone(),
             session_id: snapshot.session_id.clone(),
             agent_id: snapshot.agent_id.clone(),
             title: snapshot.title.clone(),
             updated_at: snapshot.updated_at.clone(),
-            created_at: previous
-                .and_then(|row| row.created_at.clone())
-                .or_else(|| Some(snapshot.updated_at.clone())),
-            interacted_at: previous.and_then(|row| row.interacted_at.clone()),
+            created_at: Some(snapshot.created_at.clone()),
+            interacted_at: snapshot.interacted_at.clone(),
             folder_paths: vec![snapshot.cwd.clone()],
             archived: previous.is_some_and(|row| row.archived),
             title_override: previous.and_then(|row| row.title_override.clone()),
@@ -59,23 +59,14 @@ impl ThreadMetadata {
 }
 
 pub(crate) struct ThreadMetadataStore {
-    db: ThreadMetadataDb,
+    db: AcpDb,
     threads: HashMap<String, ThreadMetadata>,
     pending_thread_ops: DbOperations,
 }
 impl ThreadMetadataStore {
     pub(crate) fn new(state_directory: Option<&Path>) -> Result<Self> {
         let path = state_directory.map(|directory| directory.join("threads.sqlite"));
-        let db = ThreadMetadataDb(crate::db::open(path.as_deref())?);
-        {
-            let mut connection = db.0.lock().unwrap();
-            crate::db::migrate(
-                &mut connection,
-                ThreadMetadataDb::NAME,
-                ThreadMetadataDb::MIGRATIONS,
-            )?;
-            crate::db::migrate(&mut connection, SnapshotDb::NAME, SnapshotDb::MIGRATIONS)?;
-        }
+        let db = AcpDb::open(path.as_deref())?;
         let mut this = Self {
             pending_thread_ops: DbOperations::new(db.clone())?,
             db,
@@ -87,10 +78,13 @@ impl ThreadMetadataStore {
     fn reload(&mut self) -> Result<()> {
         self.threads = self
             .db
-            .list()?
+            .list_threads()?
             .into_iter()
-            .map(|row| (row.thread_id.clone(), row))
-            .collect();
+            .map(|row| {
+                let metadata = ThreadMetadata::try_from(row)?;
+                Ok((metadata.thread_id.clone(), metadata))
+            })
+            .collect::<Result<_>>()?;
         Ok(())
     }
     pub(crate) fn entries(&self) -> impl Iterator<Item = &ThreadMetadata> {
@@ -129,7 +123,10 @@ impl ThreadMetadataStore {
             .enqueue(DbOperation::Delete(thread_id.into()));
     }
     pub(crate) fn load_thread(&self, id: &str) -> Result<Option<SessionSnapshot>> {
-        SnapshotDb::load_thread(&self.db.0.lock().unwrap(), id)
+        self.db
+            .load_snapshot(id)?
+            .map(|row| snapshot_store::decode(id, row))
+            .transpose()
     }
     pub(crate) fn flush(&self) -> Result<()> {
         self.pending_thread_ops.flush()

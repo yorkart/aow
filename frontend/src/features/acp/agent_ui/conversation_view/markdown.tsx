@@ -2,9 +2,8 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { WrapText } from 'lucide-react';
-import { MarkdownContent } from '../../../../components/MarkdownContent';
+import { ContextualMarkdownContent } from '../../../files/WorkspaceMarkdown';
 import { CopyButton } from '../ui/copy_button';
-import { localFileLink } from './file_links';
 import type { OpenFile } from './content';
 
 function CodeActions({ container, source }: { container: HTMLElement; source: string }) {
@@ -37,7 +36,7 @@ export const AgentMarkdown = memo(function AgentMarkdown({ text, onOpenFile, con
     return () => observer.disconnect();
   }, [controls]);
   return <div className="acp-markdown" ref={root}>
-    <MarkdownContent text={text} className={message ? 'project-aow-snapshot-markdown conversation-prose' : undefined} readOnly breaks onOpenLink={href => { const file = localFileLink(href); if (!file) return false; onOpenFile(file.path, file.line); return true; }} />
+    <ContextualMarkdownContent text={text} className={message ? 'project-aow-snapshot-markdown conversation-prose' : undefined} readOnly breaks onOpenFile={onOpenFile} />
     {controls && blocks.map(block => <CodeActions key={block.id} container={block.pre} source={block.source} />)}
   </div>;
 });

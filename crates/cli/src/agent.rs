@@ -5,13 +5,13 @@ use aow_protocol::{
 use aow_terminald_client::TerminaldClient;
 use clap::{Args, Subcommand};
 use serde_json::{Value, json};
-use std::{
-    io::{self, Read},
-    path::PathBuf,
-    time::Duration,
-};
+use std::{io, path::PathBuf, time::Duration};
 
-const HELP: &str = "Requires a running AoW server and terminald for the same --state-dir.
+use crate::input::{CreationArgs, TaskInput};
+
+const HELP: &str = "create requires --session-id or AOW_SESSION_ID for the calling session.
+This execution context never changes the task text or the child session identity.
+Requires a running AoW server and terminald for the same --state-dir.
 Uses a same-user Unix socket, without a browser login or Cookie.
 CLI terminals start hidden at 160 columns by 48 rows. Open Terminal in the right
 sidebar to observe; take over explicitly once startup is complete.
@@ -19,9 +19,10 @@ The caller must prepare the worktree before creating an agent. --project-id and
 --cwd are required; the existing worktree root must belong to that registered project.
 No worktrees or branches are created, switched, or reset. Worktrees and sessions
 remain after tasks finish. Output includes pane_id, tab_id and phase.
-Parentage is recorded from --parent-pane-id, or AOW_PANE_ID inside an AoW terminal.
-Without either, the new agent has no parent. create/get/list include parent_pane_id
-when present. Terminals opened before this support need an explicit --parent-pane-id.
+Use --parent terminal:ID or --parent acp:THREAD-ID to record the creating instance.
+Without an explicit parent, AOW_INSTANCE is inherited; --no-parent creates a root instance.
+create/get/list include parent as {kind, id}. Terminals without AOW_INSTANCE need an explicit --parent.
+Outside an AoW caller, use --no-parent to explicitly create a root.
 CLI-created tabs use automatic titles and cannot be renamed.
 create waits until the agent's terminal UI is ready for input, not task completion.
 Commands address the pane; users may change the session inside it at any time.
@@ -31,8 +32,8 @@ controller causes a conflict. Do not automatically retry an ambiguous submission
 Examples:
   aow-cli project list
   aow-cli project get PROJECT-ID
-  aow-cli agent create --project-id PROJECT-ID --agent-id codex --cwd /repo
-  aow-cli agent create --project-id PROJECT-ID --agent-id work-codex --cwd /worktrees/fix --task-file task.md
+  aow-cli agent create --session-id CURRENT-SESSION-ID --project-id PROJECT-ID --agent-id codex --cwd /repo
+  aow-cli agent create --session-id CURRENT-SESSION-ID --project-id PROJECT-ID --agent-id work-codex --cwd /worktrees/fix --task-file task.md
   aow-cli agent submit --pane-id PANE-ID --task 'Continue with the confirmed review feedback'
   aow-cli agent get --pane-id PANE-ID
   aow-cli agent list";
@@ -55,9 +56,8 @@ enum AgentCommand {
         /// Registered project that owns the worktree.
         #[arg(long, value_parser = crate::parse_id)]
         project_id: String,
-        /// Creating pane; defaults to AOW_PANE_ID inside an AoW terminal.
-        #[arg(long, value_parser = crate::parse_id)]
-        parent_pane_id: Option<String>,
+        #[command(flatten)]
+        parent: CreationArgs,
         /// Existing worktree root belonging to --project-id.
         #[arg(long)]
         cwd: PathBuf,
@@ -84,35 +84,6 @@ enum AgentCommand {
     /// List CLI-created agent panes, including hidden and failed panes.
     #[command(after_help = HELP)]
     List,
-}
-
-#[derive(Args)]
-struct TaskInput {
-    #[arg(long, conflicts_with = "task_file")]
-    task: Option<String>,
-    /// Read UTF-8 task text from a file, or '-' for stdin (maximum 128 KiB).
-    #[arg(long, conflicts_with = "task")]
-    task_file: Option<PathBuf>,
-}
-
-impl TaskInput {
-    fn read(self) -> Result<Option<String>> {
-        let Some(path) = self.task_file else {
-            return Ok(self.task);
-        };
-        let mut text = String::new();
-        if path.as_os_str() == "-" {
-            io::stdin().take(131_073).read_to_string(&mut text)?;
-        } else {
-            std::fs::File::open(path)?
-                .take(131_073)
-                .read_to_string(&mut text)?;
-        }
-        if text.len() > 131_072 {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "task exceeds 128 KiB").into());
-        }
-        Ok(Some(text))
-    }
 }
 
 #[derive(Debug)]
@@ -146,13 +117,11 @@ pub fn execute(args: AgentArgs, state_dir: PathBuf) -> Result<Value> {
         let timeout = match &args.command { AgentCommand::Create { timeout, .. } => *timeout + 20, _ => 20 };
         tokio::time::timeout(Duration::from_secs(timeout), async {
             match args.command {
-                AgentCommand::Create { agent_id, project_id, parent_pane_id, cwd, timeout, task } => {
-                    let parent_pane_id = parent_pane_id.or_else(|| std::env::var("AOW_PANE_ID").ok())
-                        .map(|id| crate::parse_id(&id).map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, format!("invalid parent pane ID: {error}"))))
-                        .transpose()?;
+                AgentCommand::Create { agent_id, project_id, parent, cwd, timeout, task } => {
+                    let creation = parent.resolve()?;
                     let request = AgentTerminalCreate {
                         agent: agent_id, project_id, cwd: absolute(cwd).to_string_lossy().into_owned(),
-                        parent_pane_id,
+                        parent: creation.parent, caller: Some(creation.caller), no_parent: creation.no_parent,
                         timeout_seconds: timeout, task: task.read()?,
                     };
                     let info: AgentTerminalInfo = client.post_json("/v1/agents", &request).await?;

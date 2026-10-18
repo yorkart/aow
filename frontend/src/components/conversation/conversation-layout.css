@@ -43,8 +43,8 @@
 .project-aow-snapshot-navigation > header strong { font-size:11px; font-weight:500; }
 .project-aow-snapshot-navigation > header span { color:var(--aow-muted); font-size:10px; }
 .project-aow-snapshot-navigation ol { min-height:0; margin:0; padding:0 8px 12px; overflow:auto; list-style:none; scrollbar-color:#3c4552 transparent; }
-.project-aow-snapshot-navigation li + li { margin-top:4px; }
-.project-aow-snapshot-navigation button { width:100%; min-height:38px; display:flex; align-items:center; gap:8px; padding:9px 8px; overflow:hidden; color:var(--aow-text); border:0; border-radius:0; background:transparent; text-align:left; cursor:pointer; }
+.project-aow-snapshot-navigation li + li { margin-top:2px; }
+.project-aow-snapshot-navigation button { width:100%; min-height:26px; display:flex; align-items:center; gap:8px; padding:4px 8px; overflow:hidden; color:var(--aow-text); border:0; border-radius:0; background:transparent; text-align:left; cursor:pointer; }
 .project-aow-snapshot-navigation button:hover { color:var(--aow-text-hover); background:color-mix(in srgb,var(--conversation-user-background) 55%,transparent); }
 .project-aow-snapshot-navigation button.active { color:var(--aow-text-strong); background:var(--conversation-user-background); }
 .project-aow-snapshot-navigation button > span { flex:0 0 16px; color:var(--aow-muted); font:10px/18px ui-monospace,monospace; text-align:center; }

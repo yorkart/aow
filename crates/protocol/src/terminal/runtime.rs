@@ -35,6 +35,10 @@ pub struct TerminalRuntimeSpec {
     pub arguments: Vec<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub environment: BTreeMap<String, String>,
+    /// Names removed from the inherited environment and from `environment`.
+    /// Terminal-owned context (for example TERM) is applied afterwards.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub environment_remove: Vec<String>,
     pub rows: u16,
     pub cols: u16,
 }
@@ -53,6 +57,8 @@ pub struct TerminalRuntime {
     /// are never serialized back to HTTP clients.
     #[serde(skip)]
     pub environment: BTreeMap<String, String>,
+    #[serde(skip)]
+    pub environment_remove: Vec<String>,
     pub status: TerminalRuntimeStatus,
     pub rows: u16,
     pub cols: u16,
@@ -72,6 +78,7 @@ impl TerminalRuntime {
             shell: self.shell.clone(),
             arguments: self.arguments.clone(),
             environment: self.environment.clone(),
+            environment_remove: self.environment_remove.clone(),
             rows: self.rows,
             cols: self.cols,
         }
@@ -81,4 +88,19 @@ impl TerminalRuntime {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TerminalRuntimeList {
     pub runtimes: Vec<TerminalRuntime>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn creation_without_environment_removals_keeps_the_existing_wire_format() {
+        let wire = serde_json::json!({
+            "cwd": "/repo", "shell": "/bin/sh", "rows": 24, "cols": 80
+        });
+        let spec: TerminalRuntimeSpec = serde_json::from_value(wire.clone()).unwrap();
+        assert!(spec.environment_remove.is_empty());
+        assert_eq!(serde_json::to_value(spec).unwrap(), wire);
+    }
 }

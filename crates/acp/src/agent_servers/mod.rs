@@ -1,9 +1,14 @@
 pub(crate) mod acp;
 mod completion;
+mod identity;
 mod imports;
 mod installation;
 mod lifecycle;
 pub(crate) mod progress;
+mod prompt;
+mod recovery;
+mod steering;
+mod sync;
 
 use crate::acp_thread::normalize_config_options;
 use crate::facade::{AcpHost, AgentInfo, ConnectionInfo, Content, SessionInfo, SessionSnapshot};
@@ -40,6 +45,7 @@ struct ServiceInner {
     connect_lock: tokio::sync::Mutex<()>,
     progress: Mutex<HashMap<(String, PathBuf), progress::Progress>>,
     installations: Mutex<HashMap<String, progress::Progress>>,
+    events: crate::facade::events::SyncEvents,
 }
 
 impl AgentServerStore {
@@ -47,6 +53,11 @@ impl AgentServerStore {
         let cache = state_directory.clone().unwrap_or_else(|| {
             std::env::temp_dir().join(format!("aow-acp-{}", std::process::id()))
         });
+        let metadata_host = host.clone();
+        let threads = ThreadStore::new(state_directory.clone(), move || {
+            metadata_host.session_metadata_changed();
+        })?;
+        let events = threads.events.clone();
         Ok(Self {
             inner: Arc::new(ServiceInner {
                 host,
@@ -56,7 +67,8 @@ impl AgentServerStore {
                         .map(|path| path.join("registry.json")),
                 ),
                 cache,
-                threads: Arc::new(Mutex::new(ThreadStore::new(state_directory)?)),
+                threads: Arc::new(Mutex::new(threads)),
+                events,
                 connections: Mutex::new(HashMap::new()),
                 configurations: Mutex::new(HashMap::new()),
                 sessions: Mutex::new(HashMap::new()),
@@ -118,27 +130,40 @@ impl AgentServerStore {
             .collect())
     }
     pub async fn connect(&self, agent_id: &str, cwd: PathBuf) -> Result<ConnectionInfo> {
-        self.connect_for_thread(agent_id, cwd, None).await
+        self.connect_for_thread(agent_id, cwd, None)
+            .await
+            .map(|(info, _)| info)
     }
     async fn connect_for_thread(
         &self,
         agent_id: &str,
         cwd: PathBuf,
         thread_id: Option<&str>,
-    ) -> Result<ConnectionInfo> {
+    ) -> Result<(ConnectionInfo, progress::Progress)> {
         let cwd = tokio::fs::canonicalize(cwd).await?;
         ensure!(cwd.is_dir(), "ACP working directory must be a directory");
-        let progress = progress::Progress::default();
+        let progress = progress::Progress::observed(
+            self.inner.events.clone(),
+            crate::facade::SyncResource::Operation {
+                agent_id: agent_id.into(),
+                cwd: Some(cwd.to_string_lossy().into_owned()),
+            },
+        );
         self.inner
             .progress
             .lock()
             .unwrap()
             .insert((agent_id.into(), cwd.clone()), progress.clone());
+        progress.notify();
         let result = self
             .connect_inner(agent_id, cwd, &progress, thread_id)
             .await;
-        progress.finish(result.is_ok());
-        result
+        if thread_id.is_none() || result.is_err() {
+            progress.finish(result.is_ok());
+        } else {
+            progress.set("restoring");
+        }
+        result.map(|info| (info, progress))
     }
     pub async fn connection_status(
         &self,
@@ -178,26 +203,37 @@ impl AgentServerStore {
                 fields.remove(key);
             }
         }
-        let configuration = format!("{launch_settings}\n{execution_path:?}");
-        if let Some(connection) =
-            self.inner
-                .connections
-                .lock()
-                .unwrap()
-                .values()
-                .find(|connection| {
-                    connection.info.agent_id == agent_id
-                        && connection.info.cwd == cwd.to_string_lossy()
-                        && connection.connected()
-                        && self
-                            .inner
-                            .configurations
-                            .lock()
-                            .unwrap()
-                            .get(&connection.info.id)
-                            == Some(&configuration)
-                })
-        {
+        let environment = self.inner.host.execution_environment();
+        let configuration = format!("{launch_settings}\n{execution_path:?}\n{environment:?}");
+        // Do not hold the connection registry while consulting a session operation:
+        // committing a load also updates the thread-to-connection association.
+        let preferred = thread_id.and_then(|id| self.session_connection(id).ok());
+        let mut candidates: Vec<_> = self
+            .inner
+            .connections
+            .lock()
+            .unwrap()
+            .values()
+            .cloned()
+            .collect();
+        candidates.sort_by_key(|candidate| {
+            preferred
+                .as_ref()
+                .is_none_or(|connection| connection.info.id != candidate.info.id)
+        });
+        if let Some(connection) = candidates.iter().find(|connection| {
+            connection.info.agent_id == agent_id
+                && connection.info.cwd == cwd.to_string_lossy()
+                && connection.connected()
+                && thread_id.is_none_or(|id| !connection.loads.blocks_thread(id))
+                && self
+                    .inner
+                    .configurations
+                    .lock()
+                    .unwrap()
+                    .get(&connection.info.id)
+                    == Some(&configuration)
+        }) {
             if let Some(thread_id) = thread_id {
                 connection.debug_log.attach(thread_id);
             }
@@ -207,7 +243,7 @@ impl AgentServerStore {
             .agent_servers
             .get(agent_id)
             .context("ACP Agent is not configured; open Settings → ACP")?;
-        let command = get_command(
+        let mut command = get_command(
             agent_id,
             agent,
             &self.inner.registry,
@@ -222,6 +258,7 @@ impl AgentServerStore {
             execution_path.as_deref(),
             &command,
         )?;
+        command.env.extend(environment);
         let debug_log = self.inner.logs.create_log();
         if let Some(thread_id) = thread_id {
             debug_log.attach(thread_id);
@@ -232,6 +269,7 @@ impl AgentServerStore {
                 cwd,
                 command,
                 acp::StdioContext {
+                    events: self.inner.events.clone(),
                     host: self.inner.host.clone(),
                     execution_path,
                     threads: self.inner.threads.clone(),
@@ -343,6 +381,16 @@ impl AgentServerStore {
         result: Value,
         id: String,
     ) -> Result<SessionSnapshot> {
+        self.install_session(connection, result, id.clone())?;
+        self.apply_defaults(&id).await?;
+        self.snapshot(&id)
+    }
+    fn install_session(
+        &self,
+        connection: Arc<AcpConnection>,
+        result: Value,
+        id: String,
+    ) -> Result<SessionSnapshot> {
         let session_id = result["sessionId"]
             .as_str()
             .context("Agent returned no session ID")?
@@ -372,22 +420,14 @@ impl AgentServerStore {
         if let Ok(previous) = self.session_connection(&id)
             && previous.info.id != connection.info.id
         {
+            previous.context.bindings.lock().unwrap().remove(&id);
             previous.context.unregister_session(&session_id);
         }
-        self.inner.threads.lock().unwrap().insert(thread)?;
+        connection
+            .context
+            .install_session(thread, previous.as_ref())?;
         connection.debug_log.bind_session(&session_id, &id);
-        connection.context.register_session(&session_id, &id)?;
-        if let Some(previous) = previous.filter(|snapshot| !snapshot.turns.is_empty()) {
-            self.inner.threads.lock().unwrap().update(&id, |thread| {
-                crate::acp_thread::turns::restore(&previous, thread);
-            })?;
-        }
-        self.inner
-            .sessions
-            .lock()
-            .unwrap()
-            .insert(id.clone(), connection.info.id.clone());
-        self.apply_defaults(&id).await?;
+        self.attach_connection(&connection, &id)?;
         self.snapshot(&id)
     }
     async fn apply_defaults(&self, id: &str) -> Result<()> {
@@ -404,7 +444,7 @@ impl AgentServerStore {
                 .is_some_and(|modes| modes.iter().any(|entry| entry["id"] == mode))
             && let Err(error) = self.set_mode(id, &mode).await
         {
-            self.record_error(id, &error)?;
+            self.record_recovery_error(id, &error)?;
         }
         let mut attempted = Vec::new();
         while let Some((config_id, value)) = next_default(
@@ -413,7 +453,7 @@ impl AgentServerStore {
             &mut attempted,
         ) {
             if let Err(error) = self.set_config_option(id, &config_id, value).await {
-                self.record_error(id, &error)?;
+                self.record_recovery_error(id, &error)?;
             }
         }
         Ok(())
@@ -428,6 +468,7 @@ impl AgentServerStore {
             connection.supports("load"),
             "Agent does not support session loading"
         );
+        let identity = connection.load_identity.lock().await;
         let existing = self
             .inner
             .threads
@@ -462,54 +503,19 @@ impl AgentServerStore {
                 thread.thread_id
             }
         };
-        connection.debug_log.bind_session(session_id, &id);
-        // Buffer replay until the load response, then install the new model atomically.
-        let previous_mapping = connection
-            .context
-            .sessions
-            .lock()
-            .unwrap()
-            .remove(session_id);
-        connection
-            .context
-            .pending_updates
-            .lock()
-            .unwrap()
-            .remove(session_id);
-        let response = connection
-            .thread_request(
-                &id,
-                "session/load",
-                json!({"sessionId":session_id,"cwd":connection.info.cwd,"mcpServers":[]}),
-            )
-            .await;
-        let mut result = match response {
-            Ok(result) => result,
-            Err(error) => {
-                connection
-                    .context
-                    .pending_updates
-                    .lock()
-                    .unwrap()
-                    .remove(session_id);
-                if let Some(id) = previous_mapping {
-                    connection.context.register_session(session_id, &id)?;
-                    if !connection.connected() {
-                        self.inner.threads.lock().unwrap().update(&id, |thread| {
-                            thread.status = "disconnected".into();
-                        })?;
-                    }
-                }
-                return Err(error);
-            }
-        };
-        result["sessionId"] = session_id.into();
-        self.register_session(connection, result, id).await
+        drop(identity);
+        self.open_session(connection, session_id.to_owned(), id, true)
+            .await
     }
     pub async fn resume(&self, id: &str) -> Result<SessionSnapshot> {
         let result = self.resume_inner(id).await;
         if let Err(error) = &result {
-            self.record_error(id, error)?;
+            let thread = self.snapshot(id)?;
+            // A started operation publishes its own error, scoped to its attempt.
+            // Connection/setup failures have no operation yet.
+            if thread.recovery.is_none() && (thread.status == "disconnected" || thread.needs_load) {
+                self.record_recovery_error(id, error)?;
+            }
         }
         result
     }
@@ -520,60 +526,34 @@ impl AgentServerStore {
             && thread.status != "disconnected"
             && !thread.needs_load
             && thread.session_id.is_some()
+            && !connection.loads.pending_thread(id)
+            && !connection.loads.blocks_thread(id)
         {
             return Ok(thread);
         }
-        let info = self
+        let (info, progress) = self
             .connect_for_thread(&thread.agent_id, thread.cwd.into(), Some(id))
             .await?;
-        // Prefer history replay. Resume-only agents continue from the saved local transcript.
-        let connection = self.connection(&info.id)?;
-        self.attach_connection(&connection, id)?;
-        let Some(session_id) = thread.session_id else {
-            return self.create_on_connection(connection, id).await;
-        };
-        connection.debug_log.bind_session(&session_id, id);
-        if connection.supports("load") {
-            return self.load_session(&info.id, &session_id).await;
+        let result = async {
+            // Prefer history replay. Resume-only agents continue from the saved local transcript.
+            let connection = self.connection(&info.id)?;
+            let Some(session_id) = thread.session_id else {
+                return self.create_on_connection(connection, id).await;
+            };
+            connection.debug_log.bind_session(&session_id, id);
+            if connection.supports("load") {
+                return self.load_session(&info.id, &session_id).await;
+            }
+            ensure!(
+                connection.supports("resume"),
+                "Agent does not support session loading or resuming"
+            );
+            self.open_session(connection, session_id, id.into(), false)
+                .await
         }
-        ensure!(
-            connection.supports("resume"),
-            "Agent does not support session loading or resuming"
-        );
-        let result = connection
-            .thread_request(
-                id,
-                "session/resume",
-                json!({"sessionId":session_id,"cwd":connection.info.cwd,"mcpServers":[]}),
-            )
-            .await?;
-        let options = normalize_config_options(
-            result
-                .get("configOptions")
-                .filter(|value| !value.is_null())
-                .cloned()
-                .unwrap_or(json!([])),
-        )?;
-        self.inner.threads.lock().unwrap().update(id, |thread| {
-            thread.status = "idle".into();
-            thread.needs_load = false;
-            thread.error = None;
-            thread.active_prompt = None;
-            thread.modes = result.get("modes").cloned().unwrap_or(json!({}));
-            thread.config_options = options;
-            thread.config_options_supported = result
-                .get("configOptions")
-                .is_some_and(|value| !value.is_null());
-            thread.auth_required = false;
-        })?;
-        connection.context.register_session(&session_id, id)?;
-        self.inner
-            .sessions
-            .lock()
-            .unwrap()
-            .insert(id.into(), info.id);
-        self.apply_defaults(id).await?;
-        self.snapshot(id)
+        .await;
+        progress.finish(result.is_ok());
+        result
     }
     // agent::NativeAgentServer::flush_threads_on_quit, adapted to the host snapshot cache.
     pub fn flush_threads_on_quit(&self) -> Result<()> {
@@ -656,158 +636,32 @@ impl AgentServerStore {
         messages.sort_by(|a, b| a["timestamp"].as_str().cmp(&b["timestamp"].as_str()));
         Ok(messages)
     }
-    pub fn start_prompt(&self, id: &str, content: Vec<Content>) -> Result<()> {
-        ensure!(!content.is_empty(), "Prompt is empty");
-        let connection = self.session_connection(id)?;
-        ensure!(connection.connected(), "ACP adapter is disconnected");
-        let content = serde_json::to_value(content)?;
-        // SDK validation stays internal to the stable facade.
-        let blocks: Vec<agent_client_protocol::schema::v2::ContentBlock> =
-            serde_json::from_value(content.clone())?;
-        crate::acp_thread::content::validate_prompt_content_for_v1(&blocks)?;
-        ensure!(
-            !blocks.iter().any(|block| matches!(
-                block,
-                agent_client_protocol::schema::v2::ContentBlock::Image(_)
-            )) || connection.info.prompt_capabilities.get("image").is_some(),
-            "This agent does not support images"
-        );
-        let mut threads = self.inner.threads.lock().unwrap();
-        let thread = threads.threads.get(id).context("ACP session not found")?;
-        let thread = thread.lock().unwrap();
-        ensure!(
-            thread.status == "idle",
-            "ACP session is busy or disconnected"
-        );
-        let session_id = thread
-            .session_id
-            .clone()
-            .context("ACP session has not been created")?;
-        let prompt_request = crate::acp_thread::content::prompt_to_v1(
-            agent_client_protocol::schema::v2::PromptRequest::new(
-                agent_client_protocol::schema::v2::SessionId::new(session_id.clone()),
-                blocks,
-            ),
-        )?;
-        let previous = thread.clone();
-        let entry_start = thread.entries.len();
-        let previous_usage = thread.last_prompt_usage.clone().unwrap_or(Value::Null);
-        drop(thread);
-        let turn_id = uuid::Uuid::new_v4().to_string();
-        if let Err(error) = threads.update(id, |thread| {
-            thread.active_prompt = Some(turn_id.clone());
-            thread.status = "working".into();
-            thread.error = None;
-            thread.stop_reason = None;
-            thread.pending_user_echo = content
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(|block| block["text"].as_str())
-                .collect::<String>();
-            thread.pending_user_images = content
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter(|block| block["type"] == "image")
-                .cloned()
-                .collect();
-            for block in content.as_array().into_iter().flatten() {
-                AcpThread::push(thread, "user", block.clone());
-            }
-            crate::acp_thread::turns::start(thread, entry_start);
-            if thread.title == "New conversation" {
-                thread.title = content[0]["text"]
-                    .as_str()
-                    .unwrap_or("Conversation")
-                    .chars()
-                    .take(80)
-                    .collect();
-            }
-        }) {
-            // No prompt was sent. Replace the failed pending save so retrying cannot leave
-            // an unsent user message or a permanently working session in memory/on disk.
-            let message = format!("{error:#}");
-            let _ = threads.update(id, |thread| {
-                let revision = thread.revision;
-                *thread = previous;
-                thread.revision = revision;
-                thread.error = Some(message);
-            });
-            return Err(error);
-        }
-        drop(threads);
-        // Enqueue before returning so an immediate cancel cannot overtake this prompt.
-        let pending = connection.begin_prompt(prompt_request);
-        let service = self.clone();
-        let id = id.to_owned();
-        tokio::spawn(async move {
-            let result = pending.block_task().await.and_then(|result| {
-                serde_json::to_value(result)
-                    .map_err(agent_client_protocol::Error::into_internal_error)
-            });
-            let completed = {
-                let mut threads = service.inner.threads.lock().unwrap();
-                if !threads.threads.get(&id).is_some_and(|thread| {
-                    thread.lock().unwrap().active_prompt.as_ref() == Some(&turn_id)
-                }) {
-                    return;
-                }
-                let usage = result
-                    .as_ref()
-                    .ok()
-                    .and_then(|result| result.get("usage"))
-                    .cloned();
-                let succeeded = result.is_ok();
-                let saved = threads.update(&id, |thread| {
-                    thread.active_prompt = None;
-                    thread.last_prompt_usage = usage.clone();
-                    thread.pending_user_echo.clear();
-                    thread.pending_user_images.clear();
-                    thread.status = if connection.connected() && thread.status != "disconnected" {
-                        "idle"
-                    } else {
-                        "disconnected"
-                    }
-                    .into();
-                    match result {
-                        Ok(result) => {
-                            thread.stop_reason = result["stopReason"].as_str().map(str::to_owned);
-                            if let Some(usage) = result.get("usage") {
-                                thread.usage = usage.clone();
-                            }
-                        }
-                        Err(error) => {
-                            thread.auth_required =
-                                error.code == agent_client_protocol::ErrorCode::AuthRequired;
-                            thread.error = Some(format!("{error:#}"));
-                        }
-                    }
-                });
-                if let Err(error) = saved {
-                    tracing::error!(%error, "Failed to save ACP prompt result");
-                    None
-                } else if succeeded {
-                    threads.threads.get(&id).and_then(|thread| {
-                        completion::completed_turn(
-                            &thread.lock().unwrap(),
-                            turn_id,
-                            entry_start,
-                            usage,
-                            &previous_usage,
-                        )
-                    })
-                } else {
-                    None
-                }
-            };
-            if let Some(completed) = completed {
-                service.inner.host.turn_completed(completed).await;
-            }
-        });
-        Ok(())
-    }
     pub fn cancel(&self, id: &str) -> Result<()> {
+        if self.cancel_recovery(id)? {
+            return Ok(());
+        }
+        self.inner.threads.lock().unwrap().update(id, |thread| {
+            thread.steering.cancelled = true;
+            if let Some(pending) = &mut thread.steering.pending {
+                pending.cancelled = true;
+            }
+            if thread
+                .steering
+                .pending
+                .as_ref()
+                .is_some_and(|pending| pending.prompt_required)
+            {
+                let pending = thread.steering.pending.take().unwrap();
+                crate::acp_thread::steering::delivery(
+                    thread,
+                    pending.entry_start,
+                    "cancelled",
+                    None,
+                );
+                thread.steering_pending = false;
+                crate::acp_thread::steering::settle_status(thread);
+            }
+        })?;
         self.session_connection(id)?.cancel(
             self.snapshot(id)?
                 .session_id
@@ -891,6 +745,9 @@ impl AgentServerStore {
             .answer(request_id, response)
     }
     pub async fn close_session(&self, id: &str) -> Result<()> {
+        if self.close_pending_load(id).await? {
+            return Ok(());
+        }
         let thread = self.snapshot(id)?;
         if let Ok(connection) = self.session_connection(id)
             && connection.connected()
@@ -908,19 +765,28 @@ impl AgentServerStore {
         self.detach_session(id, thread.session_id.as_deref())
     }
     fn detach_session(&self, id: &str, session_id: Option<&str>) -> Result<()> {
-        if let Ok(connection) = self.session_connection(id)
-            && let Some(session_id) = session_id
-        {
-            connection.context.unregister_session(session_id);
+        if let Ok(connection) = self.session_connection(id) {
+            connection.context.bindings.lock().unwrap().remove(id);
+            if let Some(session_id) = session_id {
+                connection.context.unregister_session(session_id);
+                connection.loads.forget(session_id);
+            }
         }
         self.inner.sessions.lock().unwrap().remove(id);
+        self.inner
+            .events
+            .changed(crate::facade::SyncResource::Connection {
+                thread_id: id.into(),
+            });
         self.inner.threads.lock().unwrap().update(id, |thread| {
             thread.status = "disconnected".into();
+            crate::acp_thread::steering::disconnected(thread);
             thread.active_prompt = None;
             thread.permissions.clear();
         })
     }
     pub async fn delete_session(&self, id: &str) -> Result<()> {
+        self.close_pending_load(id).await?;
         let thread = self.snapshot(id)?;
         if let Ok(connection) = self.session_connection(id)
             && connection.connected()
@@ -940,11 +806,5 @@ impl AgentServerStore {
         self.inner.threads.lock().unwrap().remove(id)?;
         self.inner.logs.remove_thread(id);
         Ok(())
-    }
-    fn record_error(&self, id: &str, error: &anyhow::Error) -> Result<()> {
-        self.inner.threads.lock().unwrap().update(id, |thread| {
-            thread.error = Some(format!("{error:#}"));
-            thread.auth_required = crate::facade::is_auth_required(error);
-        })
     }
 }

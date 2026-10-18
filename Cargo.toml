@@ -2,6 +2,7 @@
 members = [
   "crates/config",
   "crates/acp",
+  "crates/db",
   "crates/id",
   "crates/operation-log",
   "crates/macos-log",

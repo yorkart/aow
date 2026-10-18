@@ -41,7 +41,7 @@ try {
   const base = `http://127.0.0.1:${server.httpServer.address().port}`;
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
 
-  async function fixture(t, { mobile = false, login = false, floating = false, extraFloatingTabs = [], global = false, missing = false, removedWorkspace = false, temporary = false, entry = 'target', editable = false, tabUrl, sessionAgent = false, pinned = [], reviewTargets = [], preserveFloating = false, acp = false, acpHistory = [], acpSavedTabs = [] } = {}) {
+  async function fixture(t, { mobile = false, login = false, floating = false, extraFloatingTabs = [], global = false, missing = false, removedWorkspace = false, temporary = false, entry = 'target', editable = false, tabUrl, fileContents = {}, sessionMarkdown = 'Restored conclusion', sessionAgent = false, pinned = [], reviewTargets = [], preserveFloating = false, acp = false, acpHistory = [], acpSavedTabs = [] } = {}) {
     const context = await browser.newContext({ viewport: mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 } });
     const root = temporary ? '/private/tmp/aow-inbox-link' : global ? '/global' : worktrees[1].path;
     const target = terminal('target', root, 'Target Tab');
@@ -112,6 +112,11 @@ try {
       else if (acp && /^\/api\/acp\/sessions\/[^/]+$/.test(url.pathname)) {
         data = state.acpSessions.find(session => session.thread_id === decodeURIComponent(url.pathname.split('/').at(-1)));
         if (!data) { await route.fulfill({ status: 404, json: { message: 'ACP session not found' } }); return; }
+        if (request.method() === 'DELETE') {
+          if (state.acpDeleteError) { await route.fulfill({ status: 503, json: { message: state.acpDeleteError } }); return; }
+          state.acpSessions = state.acpSessions.filter(session => session !== data);
+          data = {};
+        }
       }
       else if (acp && url.pathname === '/api/acp/connection-status') data = null;
       else if (acp && url.pathname === '/api/acp/connections/acp-connection/requests') data = [];
@@ -147,7 +152,10 @@ try {
         const path = url.pathname === '/api/fs/home' ? '/home/fixture' : decodeURIComponent(url.pathname.slice('/api/fs/tree'.length));
         data = { path, entries: [{ name: 'read me #中文.md', path: path.replace(/\/$/, '') + '/read me #中文.md', kind: 'file', size: 12, readonly: false }] };
       }
-      else if (url.pathname.startsWith('/api/fs/text')) data = { path: decodeURIComponent(url.pathname.slice('/api/fs/text'.length)), content: '# Linked document\n\nRestored from URL.', version: 'v1', language: 'markdown', mime: 'text/markdown', size: 38 };
+      else if (url.pathname.startsWith('/api/fs/text')) {
+        const path = decodeURIComponent(url.pathname.slice('/api/fs/text'.length));
+        data = { path, content: fileContents[path] ?? '# Linked document\n\nRestored from URL.', version: 'v1', language: 'markdown', mime: 'text/markdown', size: 38 };
+      }
       else if (url.pathname === '/api/git/diff' || url.pathname === '/api/git/commit/diff') data = { repository: url.searchParams.get('repo'), path: url.searchParams.get('path'), staged: url.searchParams.get('staged') === 'true', patch: '@@ -1 +1 @@\n-before\n+after\n', original: 'before\n', modified: 'after\n', truncated: false };
       else if (url.pathname === '/api/review-targets') data = reviewTargets;
       else if (url.pathname === '/api/my-pull-requests') data = { repository: root, current_branch: 'dev', current_user: { id: 'u', username: 'me' }, pull_requests: [{ ...pr, provider: url.searchParams.get('provider') || 'github', remote: url.searchParams.get('remote') || 'origin' }] };
@@ -156,7 +164,7 @@ try {
         data = { ...pr, provider: url.searchParams.get('provider') || 'github', remote: url.searchParams.get('remote') || 'origin' };
       }
       else if (url.pathname === '/api/aow/agent-sessions') data = url.searchParams.get('agent') === 'codex' ? [session] : [];
-      else if (url.pathname.endsWith('/session-one/snapshot')) data = { ...session, status: 'completed', turns: [{ id: 'turn', status: 'completed', user: { text: 'Input', timestamp: null }, final: { text: 'Restored conclusion', timestamp: null } }], truncated: false, captured_at: '' };
+      else if (url.pathname.endsWith('/session-one/snapshot')) data = { ...session, status: 'completed', turns: [{ id: 'turn', status: 'completed', user: { text: 'Input', timestamp: null }, final: { text: sessionMarkdown, timestamp: null } }], truncated: false, captured_at: '' };
       else if (url.pathname === '/api/aow/automations/status') data = { platform: 'systemd', ready: true, message: '', timezone: 'Asia/Shanghai' };
       else if (url.pathname === '/api/aow/automations') data = [task];
       else if (url.pathname === '/api/aow/automations/task-one') data = task;
@@ -254,6 +262,64 @@ try {
     }
   });
 
+  await test('desktop ACP project inventory opens a foreign worktree in its owning workspace', async t => {
+    const main = { ...acpSession('main', '/workspace/main'), source: 'cli', created_at: '2026-01-01' };
+    const linked = { ...acpSession('linked'), source: 'user', created_at: '2026-01-02' };
+    const { page, state } = await fixture(t, { acp: true, acpHistory: [main, linked] });
+    await page.getByRole('button', { name: 'ACP 面板', exact: true }).click();
+    const list = page.locator('.project-aow-surface:not([hidden])').getByRole('region', { name: 'ACP 会话列表', exact: true });
+    await list.getByRole('button', { name: '打开 ACP 会话 Saved ACP main', exact: true }).click();
+    await page.waitForURL(url => url.pathname === '/aow/tabs/acp/main');
+    await page.getByText('Retained reply for main', { exact: true }).waitFor();
+    assert.equal(await list.locator('.instance-worktree-heading[aria-current="true"]').first().getAttribute('title'), '/workspace/main\nmain');
+    assert.equal(state.acpSessions.length, 2);
+    assert.deepEqual(state.acpWrites, ['POST /api/acp/sessions/main/actions']);
+    assert.deepEqual(state.errors, []);
+  });
+
+  for (const mounted of [true, false]) {
+    await test(`ACP cross-worktree deletion cleans ${mounted ? 'mounted' : 'unmounted'} owner tabs and preserves other sessions`, async t => {
+      const deleted = { ...acpSession('delete-linked'), status: 'idle' };
+      const kept = { ...acpSession('keep-linked'), status: 'idle' };
+      const main = { ...acpSession('keep-main', '/workspace/main'), status: 'idle' };
+      const saved = [deleted, kept].map(session => ({ id: `new:${session.thread_id}`, thread_id: session.thread_id, agentId: 'test', title: session.title }));
+      const { page, state } = await fixture(t, { acp: true, acpHistory: [deleted, kept, main], acpSavedTabs: saved,
+        tabUrl: '/aow/tabs/acp/delete-linked' });
+      const active = page.locator('.project-aow-surface:not([hidden])');
+      await active.locator('.acp-tab-host:visible').getByLabel('ACP 消息', { exact: true }).fill('Discard deleted draft');
+      await active.getByRole('tab', { name: /^Saved ACP keep-linked/ }).click();
+      await active.locator('.acp-tab-host:visible').getByLabel('ACP 消息', { exact: true }).fill('Keep owner draft');
+      if (mounted) await page.locator('.project-aow-worktrees button[title="/workspace/main"]').click();
+      else await page.goto(`${base}/aow/tabs/terminal/main-tab?ui=desktop`);
+      await page.getByRole('button', { name: 'ACP 面板', exact: true }).click();
+      const list = active.getByRole('region', { name: 'ACP 会话列表', exact: true });
+      await list.getByRole('button', { name: '打开 ACP 会话 Saved ACP keep-main', exact: true }).click();
+      await active.locator('.acp-tab-host:visible').getByLabel('ACP 消息', { exact: true }).fill('Keep current draft');
+      const remove = async () => {
+        await list.getByRole('button', { name: '删除 ACP 会话 Saved ACP delete-linked', exact: true }).click();
+        await page.getByRole('alertdialog').getByRole('button', { name: '删除', exact: true }).click();
+      };
+      state.acpDeleteError = 'Deletion unavailable';
+      await remove();
+      await list.getByRole('alert').filter({ hasText: 'Deletion unavailable' }).waitFor();
+      assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('aow-acp-tabs:/workspace/linked')).map(tab => tab.id)), saved.map(tab => tab.id));
+      state.acpDeleteError = '';
+      await remove();
+      await page.waitForFunction(() => JSON.parse(localStorage.getItem('aow-acp-tabs:/workspace/linked')).every(tab => tab.thread_id !== 'delete-linked'));
+      assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('aow-acp-tabs:/workspace/linked')).map(tab => tab.id)), ['new:keep-linked']);
+      assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('aow-acp-tabs:/workspace/main')).map(tab => tab.thread_id)), ['keep-main']);
+      assert.equal(await active.locator('.acp-tab-host:visible').getByLabel('ACP 消息', { exact: true }).innerText(), 'Keep current draft');
+      assert.equal(state.acpSessions.some(session => session.thread_id === deleted.thread_id), false);
+      await page.locator('.project-aow-worktrees button[title="/workspace/linked"]').click();
+      await active.getByRole('tab', { name: /^Saved ACP keep-linked/ }).click();
+      assert.equal(await active.getByRole('tab', { name: /^Saved ACP delete-linked/ }).count(), 0, 'mounted owner state cannot resurrect the deleted tab');
+      if (mounted) assert.equal(await active.locator('.acp-tab-host:visible').getByLabel('ACP 消息', { exact: true }).innerText(), 'Keep owner draft');
+      await page.reload();
+      await active.getByRole('tab', { name: /^Saved ACP keep-linked/ }).waitFor();
+      assert.equal(await active.getByRole('tab', { name: /^Saved ACP delete-linked/ }).count(), 0, 'restoration cannot resurrect the deleted tab');
+    });
+  }
+
   await test('mobile ACP navigation lists workspace sessions and opens the shared conversation page', async t => {
     const older = { ...acpSession('older'), title: '检查项目配置', agent_id: 'codex-acp', updated_at: '2026-10-13T09:00:00Z' };
     const newer = { ...acpSession('newer'), title: '优化手机端会话导航', agent_id: 'claude-agent-acp', updated_at: '2026-10-13T10:00:00Z' };
@@ -300,7 +366,7 @@ try {
     await page.goBack();
     await list.waitFor();
     await page.reload();
-    await list.waitFor();
+    await list.getByRole('button', { name: '打开 ACP 会话 检查项目配置', exact: true }).waitFor();
     assert.equal(await list.locator('.mobile-list-row').count(), 2);
     assert.deepEqual(state.acpWrites, ['POST /api/acp/sessions/older/actions', 'POST /api/acp/sessions/newer/actions'], 'opening restores existing sessions once without creating duplicates');
     assert.equal(state.acpSessions.length, 3);
@@ -1035,6 +1101,259 @@ try {
       await page.waitForFunction(() => document.querySelector('.monaco-editor') || document.querySelector('.mobile-markdown'));
       assert.ok(state.reads.some(url => decodeURIComponent(url).includes('/api/fs/text' + path)));
     }
+  });
+
+  for (const mobile of [false, true]) await test(`Markdown file links resolve from the source directory on ${mobile ? 'mobile' : 'desktop'}`, async t => {
+    const directory = '/workspace/linked/reports #中文%';
+    const path = directory + '/result.md';
+    const textPath = directory + '/evidence/api/01-preflight-failure.txt';
+    const markdown = [
+      '| Case | Result | Image | ANSI | Text |',
+      '| --- | --- | --- | --- | --- |',
+      '| api / 01-preflight-failure | 预检失败（夹具已修正） | [查看](evidence/api/01-preflight-failure.png) | [ANSI](evidence/api/01-preflight-failure.ansi.txt) | [文本](evidence/api/01-preflight-failure.txt) |',
+      '',
+      '[Absolute](/tmp/evidence/result.txt)',
+      '[Current](./evidence/./result.txt)',
+      '[Parent](../shared/../result.txt)',
+      '[Encoded](evidence/read%20me%20%23中文%3F%25.txt)',
+      '[Fragment](other.md#section)',
+      '[Anchor](#section)',
+      '[HTTPS](https://example.com/evidence/result.txt)',
+      '[HTTP](http://example.com/result.txt)',
+      'http://example.com/plain-http',
+      'https://example.com/plain-https',
+      '[Protocol relative](//example.com/result.txt)',
+      '[Email](mailto:reader@example.com)',
+      '<a href="evidence/raw.txt">HTML link</a>',
+      '<a href="https://example.com/html">HTML HTTPS</a>',
+      '[Unsafe](javascript:alert%281%29)',
+      '<a href="javascript:alert(1)">Unsafe HTML</a>',
+    ].join('\n');
+    const { page, state } = await fixture(t, { mobile, tabUrl: resourceUrl('file', { path }), fileContents: { [path]: markdown, [textPath]: 'Evidence text opened through the file route.' } });
+    if (!mobile) await page.getByRole('button', { name: '切换到预览', exact: true }).click();
+    const preview = page.locator(mobile ? '.mobile-markdown' : '.markdown-preview');
+    await preview.getByRole('link', { name: '文本', exact: true }).waitFor();
+    for (const [name, expectedPath, hash = ''] of [
+      ['查看', directory + '/evidence/api/01-preflight-failure.png'],
+      ['ANSI', directory + '/evidence/api/01-preflight-failure.ansi.txt'],
+      ['文本', textPath],
+      ['Absolute', '/tmp/evidence/result.txt'],
+      ['Current', directory + '/evidence/result.txt'],
+      ['Parent', '/workspace/linked/result.txt'],
+      ['Encoded', directory + '/evidence/read me #中文?%.txt'],
+      ['Fragment', directory + '/other.md', '#section'],
+      ['HTML link', directory + '/evidence/raw.txt'],
+    ]) {
+      const link = preview.getByRole('link', { name, exact: true });
+      const href = await link.getAttribute('href');
+      assert.equal(await link.getAttribute('target'), null);
+      assert.ok(href.startsWith('/aow/tabs/file?'), href);
+      const url = new URL(href, base);
+      assert.equal(url.searchParams.get('workspace'), 'wt-1');
+      assert.equal(url.searchParams.get('path'), expectedPath);
+      assert.equal(url.hash, hash);
+    }
+    for (const [name, href] of [['Anchor', '#section'], ['HTTPS', 'https://example.com/evidence/result.txt'],
+      ['HTTP', 'http://example.com/result.txt'], ['Protocol relative', '//example.com/result.txt'], ['Email', 'mailto:reader@example.com']]) {
+      assert.equal(await preview.getByRole('link', { name, exact: true }).getAttribute('href'), href);
+    }
+    await page.context().route(/^https?:\/\/example\.com\//, route => route.fulfill({ contentType: 'text/html', body: '<p>External destination</p>' }));
+    const sourceUrl = page.url();
+    for (const name of ['HTTP', 'HTTPS', 'HTML HTTPS', 'http://example.com/plain-http', 'https://example.com/plain-https']) {
+      const link = preview.getByRole('link', { name, exact: true });
+      const href = await link.getAttribute('href');
+      assert.equal(await link.getAttribute('target'), '_blank');
+      assert.equal(await link.getAttribute('rel'), 'noreferrer');
+      const popupPromise = page.waitForEvent('popup');
+      await link.click();
+      const popup = await popupPromise;
+      await popup.waitForLoadState();
+      assert.equal(popup.url(), href);
+      assert.equal(await popup.evaluate(() => window.opener), null);
+      assert.equal(page.url(), sourceUrl);
+      await popup.close();
+    }
+    for (const name of ['Unsafe', 'Unsafe HTML']) assert.equal(await preview.getByText(name, { exact: true }).getAttribute('href'), null);
+    const pageCount = page.context().pages().length;
+    await page.evaluate(() => { window.markdownFileNavigationMarker = true; });
+    await preview.getByRole('link', { name: '文本', exact: true }).click();
+    await page.waitForURL(url => url.pathname === '/aow/tabs/file' && url.searchParams.get('path') === textPath);
+    await page.getByText('Evidence text opened through the file route.', { exact: true }).first().waitFor();
+    assert.equal(new URL(page.url()).searchParams.get('workspace'), 'wt-1');
+    assert.equal(page.context().pages().length, pageCount);
+    assert.equal(await page.evaluate(() => window.markdownFileNavigationMarker), true, 'local files open without reloading the page');
+    if (!mobile) {
+      await desktopTab(page, 'result.md').waitFor();
+      await activeDesktop(page).filter({ hasText: '01-preflight-failure.txt' }).waitFor();
+    }
+    assert.ok(state.reads.some(url => decodeURIComponent(url).includes('/api/fs/text' + textPath)));
+  });
+
+  for (const surface of ['ACP', 'Conversation']) for (const mobile of [false, true]) await test(`${surface} Markdown links share file routing on ${mobile ? 'mobile' : 'desktop'}`, async t => {
+    const directory = surface === 'ACP' ? '/workspace/linked' : '/actual-session';
+    const textPath = directory + '/evidence/result.txt';
+    const imagePath = directory + '/evidence/preview #中文.png';
+    const markdown = [
+      '| Text | Image |\n| --- | --- |\n| [Local text](evidence/result.txt) | [Local image](evidence/preview%20%23中文.png) |',
+      '', '[Absolute](/tmp/result.txt)', '[Parent](../shared/result.txt)',
+      '[File URI](file:///tmp/read%20me.txt#L12)', '[Line](source.ts:8)',
+      '<a href="evidence/raw.txt">HTML local</a>',
+      '[HTTPS](https://example.com/result.txt)', 'http://example.com/plain',
+      '[Remote image](https://example.com/remote.png)', '[Unsafe](javascript:alert%281%29)',
+    ].join('\n\n');
+    const acp = acpSession();
+    acp.entries[1].content.text = markdown;
+    const { page, state } = await fixture(t, { mobile, acp: surface === 'ACP', acpHistory: [acp], sessionMarkdown: markdown,
+      tabUrl: surface === 'ACP' ? '/aow/tabs/acp/acp-local' : resourceUrl('session/codex/session-one', { cwd: directory }),
+      fileContents: { [textPath]: 'Evidence from the conversation.' } });
+    const body = page.locator(surface === 'ACP' ? '.acp-markdown:visible' : mobile ? '.mobile-message.assistant' : '.project-aow-snapshot-conclusion');
+    await body.getByRole('link', { name: 'Local text', exact: true }).waitFor();
+    for (const [name, expected, hash = ''] of [
+      ['Local text', textPath], ['Local image', imagePath], ['Absolute', '/tmp/result.txt'],
+      ['Parent', surface === 'ACP' ? '/workspace/shared/result.txt' : '/shared/result.txt'],
+      ['File URI', '/tmp/read me.txt', '#L12'], ['Line', directory + '/source.ts', '#L8'], ['HTML local', directory + '/evidence/raw.txt'],
+    ]) {
+      const link = body.getByRole('link', { name, exact: true });
+      const href = await link.getAttribute('href');
+      assert.ok(href.startsWith('/aow/tabs/file?'), href);
+      const url = new URL(href, base);
+      assert.equal(url.searchParams.get('workspace'), 'wt-1');
+      assert.equal(url.searchParams.get('path'), expected);
+      assert.equal(url.hash, hash);
+      assert.equal(await link.getAttribute('target'), null);
+    }
+    assert.equal(await body.getByText('Unsafe', { exact: true }).getAttribute('href'), null);
+    const imageRequests = [];
+    const externalRequests = [];
+    await page.context().route('**/api/fs/raw/**', async route => {
+      imageRequests.push(decodeURIComponent(new URL(route.request().url()).pathname));
+      await route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="60"><rect width="80" height="60" fill="green"/></svg>' });
+    });
+    await page.context().route(/^https?:\/\/example\.com\//, async route => {
+      externalRequests.push(route.request().url());
+      await route.fulfill({ contentType: 'text/html', body: '<p>External destination</p>' });
+    });
+    if (!mobile) {
+      assert.deepEqual(imageRequests, []);
+      await body.getByRole('link', { name: 'Local image', exact: true }).hover();
+      const tooltip = page.locator('.markdown-image-tooltip');
+      await tooltip.getByRole('img').waitFor();
+      assert.deepEqual(imageRequests, ['/api/fs/raw' + imagePath]);
+      await page.keyboard.press('Escape');
+      await tooltip.waitFor({ state: 'hidden' });
+      await body.getByRole('link', { name: 'Remote image', exact: true }).hover();
+      await page.waitForTimeout(250);
+      assert.equal(await tooltip.count(), 0);
+      assert.deepEqual(externalRequests, []);
+    }
+    const sourceUrl = page.url();
+    for (const name of ['HTTPS', 'http://example.com/plain']) {
+      const link = body.getByRole('link', { name, exact: true });
+      assert.equal(await link.getAttribute('target'), '_blank');
+      assert.equal(await link.getAttribute('rel'), 'noreferrer');
+      const popupPromise = page.waitForEvent('popup');
+      await link.click();
+      const popup = await popupPromise;
+      await popup.waitForLoadState();
+      assert.equal(popup.url(), await link.getAttribute('href'));
+      assert.equal(page.url(), sourceUrl);
+      await popup.close();
+    }
+    const pageCount = page.context().pages().length;
+    await page.evaluate(() => { window.conversationLinkMarker = true; });
+    await body.getByRole('link', { name: 'Local text', exact: true }).click();
+    await page.waitForURL(url => url.pathname === '/aow/tabs/file' && url.searchParams.get('path') === textPath);
+    await page.getByText('Evidence from the conversation.', { exact: true }).first().waitFor();
+    assert.equal(new URL(page.url()).searchParams.get('workspace'), 'wt-1');
+    assert.equal(page.context().pages().length, pageCount);
+    assert.equal(await page.evaluate(() => window.conversationLinkMarker), true);
+    if (!mobile) await desktopTab(page, surface === 'ACP' ? 'Saved ACP acp-local' : 'Linked Conversation').waitFor();
+    assert.deepEqual(state.errors, []);
+  });
+
+  await test('Markdown local image links preview on hover without fetching external images', async t => {
+    const path = '/workspace/linked/reports #中文%/images.md';
+    const imagePath = '/workspace/linked/reports #中文%/evidence/preview #中文.png';
+    const absolutePath = '/tmp/absolute image.JPG';
+    const markdown = '[Relative image](evidence/preview%20%23中文.png)\n\n[Absolute image](</tmp/absolute image.JPG>)\n\n[Missing image](missing.png)\n\n[Text](evidence/result.txt)\n\n[HTTPS image](https://example.com/remote.png)\n\n[HTTP image](http://example.com/remote.png)\n\n[Protocol image](//example.com/remote.png)';
+    const { page } = await fixture(t, { tabUrl: resourceUrl('file', { path }), fileContents: { [path]: markdown } });
+    const png = await page.evaluate(() => {
+      const canvas = document.createElement('canvas'); canvas.width = 1200; canvas.height = 1800;
+      const context = canvas.getContext('2d');
+      context.fillStyle = '#243b59'; context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = '#d3def0'; context.font = '64px sans-serif'; context.fillText('Local image preview', 48, 120);
+      context.fillStyle = '#4ec9b0'; context.fillRect(48, 1520, 1104, 220);
+      return canvas.toDataURL('image/png').split(',')[1];
+    });
+    const imageRequests = [];
+    const externalRequests = [];
+    let releaseImage;
+    const imageReady = new Promise(resolve => { releaseImage = resolve; });
+    t.after(() => releaseImage());
+    await page.context().route('**/api/fs/raw/**', async route => {
+      const requested = decodeURIComponent(new URL(route.request().url()).pathname.slice('/api/fs/raw'.length));
+      imageRequests.push(requested);
+      if (requested.endsWith('/missing.png')) { await route.fulfill({ status: 404 }); return; }
+      await imageReady;
+      await route.fulfill({ contentType: 'image/png', body: Buffer.from(png, 'base64') });
+    });
+    await page.context().route(/^https?:\/\/example\.com\//, async route => { externalRequests.push(route.request().url()); await route.abort(); });
+    await page.getByRole('button', { name: '切换到预览', exact: true }).click();
+    const preview = page.locator('.markdown-preview');
+    const relative = preview.getByRole('link', { name: 'Relative image', exact: true });
+    const absolute = preview.getByRole('link', { name: 'Absolute image', exact: true });
+    const tooltip = page.getByRole('tooltip');
+    await relative.waitFor();
+    assert.deepEqual(imageRequests, [], 'images load only when requested by hovering');
+    await relative.hover();
+    await tooltip.getByText('正在加载图片…', { exact: true }).waitFor();
+    assert.deepEqual(imageRequests, [imagePath]);
+    releaseImage();
+    await tooltip.getByRole('img').waitFor();
+    assert.ok(await tooltip.getByRole('img').evaluate(img => img.complete && img.naturalWidth > 0));
+    const imageBounds = await tooltip.getByRole('img').boundingBox();
+    assert.ok(imageBounds.height <= 240 && imageBounds.width <= 322, 'large images fit inside the preview');
+    assert.ok(Math.abs(imageBounds.width / imageBounds.height - 2 / 3) < 0.01, 'the preview preserves the image aspect ratio');
+    await page.screenshot({ path: join(screenshotDir, 'markdown-image-hover.png') });
+    assert.equal(decodeURIComponent(new URL(await tooltip.getByRole('img').getAttribute('src'), base).pathname), '/api/fs/raw' + imagePath);
+    assert.equal(await relative.getAttribute('aria-describedby'), await tooltip.getAttribute('id'));
+    await tooltip.hover();
+    await page.waitForTimeout(250);
+    assert.equal(await tooltip.isVisible(), true, 'the pointer can move into the preview');
+    await page.keyboard.press('Escape');
+    await tooltip.waitFor({ state: 'hidden' });
+    assert.equal(await relative.getAttribute('aria-describedby'), null);
+    for (const name of ['Text', 'HTTPS image', 'HTTP image', 'Protocol image']) {
+      await preview.getByRole('link', { name, exact: true }).hover();
+      await page.waitForTimeout(250);
+      assert.equal(await tooltip.count(), 0);
+    }
+    assert.deepEqual(externalRequests, []);
+    assert.deepEqual(imageRequests, [imagePath]);
+    await absolute.evaluate(element => { Object.assign(element.style, { position: 'fixed', right: '2px', bottom: '2px' }); });
+    await absolute.hover();
+    await tooltip.getByRole('img').waitFor();
+    assert.equal(decodeURIComponent(new URL(await tooltip.getByRole('img').getAttribute('src'), base).pathname), '/api/fs/raw' + absolutePath);
+    const bounds = await tooltip.boundingBox();
+    assert.ok(bounds.x >= 8 && bounds.y >= 8 && bounds.x + bounds.width <= 1432 && bounds.y + bounds.height <= 892);
+    await absolute.evaluate(element => element.removeAttribute('style'));
+    await preview.evaluate(element => element.dispatchEvent(new Event('scroll')));
+    await tooltip.waitFor({ state: 'hidden' });
+    await relative.focus();
+    await page.keyboard.press('Tab');
+    await page.getByRole('tooltip', { name: '图片预览：absolute image.JPG' }).waitFor();
+    await page.keyboard.press('Escape');
+    await preview.getByRole('link', { name: 'Missing image', exact: true }).hover();
+    await tooltip.getByText('图片预览加载失败', { exact: true }).waitFor();
+    await relative.hover();
+    await tooltip.getByRole('img').waitFor();
+    await page.evaluate(() => { window.markdownImageNavigationMarker = true; });
+    await relative.click();
+    await page.waitForURL(url => url.pathname === '/aow/tabs/file' && url.searchParams.get('path') === imagePath);
+    await page.locator('.image-preview img').waitFor();
+    await tooltip.waitFor({ state: 'hidden' });
+    assert.equal(await page.evaluate(() => window.markdownImageNavigationMarker), true);
+    await desktopTab(page, 'images.md').waitFor();
   });
 
   await test('file browser restores its directory and publishes opened file URLs', async t => {

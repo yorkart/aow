@@ -31,6 +31,7 @@ async fn legacy_detection_requires_a_live_pi_binding_and_preserves_osc_titles() 
                     "exec -a pi /bin/sh -c 'echo $$ > \"$PID_FILE\"; read -r finish'".into(),
                 ],
                 environment,
+                environment_remove: Vec::new(),
                 rows: 24,
                 cols: 80,
             },

@@ -4,6 +4,7 @@ mod entries;
 mod files;
 mod paths;
 mod raw;
+pub(crate) mod search;
 
 pub(crate) use browser::{fs_path, fs_root, fs_root_redirect};
 pub(crate) use content::{list_home, list_path, list_root, read_text};

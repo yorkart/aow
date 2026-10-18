@@ -4,10 +4,12 @@ import { AgentTaskNotifications } from '../src/features/notifications/AgentTaskN
 import { NotificationSettingsPanel } from '../src/features/notifications/NotificationSettingsPanel';
 import { AowTabEntry, useAowTabLocation } from '../src/aow/AowTabEntry';
 import type { ResolvedTab } from '../src/aow/tabRoutes';
-import { AcpPanel } from '../src/features/acp';
+import { ProjectAcpPanelProvider, AcpPanel } from '../src/features/acp';
 import { useUnreadTerminalIds, useWorktreeUnreadCounts } from '../src/features/notifications/taskNotifications';
 import '../src/styles.css';
 
+const project = { id: 'acp-preview', name: 'ACP', registered_path: '/workspace/demo', common_git_dir: '/workspace/demo/.git', notes_path: '/notes',
+  worktrees: ['/workspace/demo', '/workspace/demo-feature'].map((path, index) => ({ id: path, project_id: 'acp-preview', path, branch: index ? 'feature' : 'main', head: 'abc', is_main: !index, detached: false, locked: false, prunable: false, color: 'default' as const })) };
 function Preview({ entry }: { entry?: ResolvedTab }) {
   const syncTab = useAowTabLocation();
   const unreadTerminals = useUnreadTerminalIds();
@@ -22,7 +24,7 @@ function Preview({ entry }: { entry?: ResolvedTab }) {
     <button onClick={() => syncTab({ type: 'terminal', tabId: 'shared' })}>查看同名 Terminal</button>
     <output aria-label="Terminal 未读数">{unreadTerminals.size}</output>
     <output aria-label="工作区未读数">{unreadWorktrees.get('/workspace/demo') ?? 0}</output>
-    <AcpPanel workspace="/workspace/demo" visible onOpen={session => syncTab({ type: 'acp', thread_id: session.thread_id })} onDeleted={() => {}} />
+    <ProjectAcpPanelProvider project={project}><AcpPanel workspace="/workspace/demo" visible onOpen={session => syncTab({ type: 'acp', thread_id: session.thread_id })} /></ProjectAcpPanelProvider>
     <button disabled={busy} onClick={() => setSection('im')}>IM 设置</button>
     <button disabled={busy} onClick={() => setSection('notifications')}>通知设置</button>
     {section && <section className="project-aow-modal project-aow-dialog"><NotificationSettingsPanel section={section} onBusyChange={setBusy} /></section>}

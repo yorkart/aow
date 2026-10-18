@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { copyText } from './clipboard';
+import { copyText } from '../../../../lib/clipboard';
 import { ReplyActionIcon } from './reply_action_icons';
 
 export function ReplyActions({ content, onJump, onScrollToTop }: { content: string; onJump: () => void; onScrollToTop?: () => void }) {

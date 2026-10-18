@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react';
 import { AlertCircle, History, LoaderCircle, RefreshCw } from 'lucide-react';
 import { ConversationLayout, conversationStatusNames } from '../../components/conversation/ConversationLayout';
+import { ConversationIds } from '../../components/conversation/ConversationIds';
 import { SessionMessageContent } from './SessionMessageContent';
+import { WorkspaceMarkdownProvider } from '../files/WorkspaceMarkdown';
 import { TokenUsageBadge } from '../../components/TokenUsageBadge';
 import type { AgentSessionSnapshot, AowAgentSession } from './types';
 import { AgentIcon } from '../agents/AgentIcon';
@@ -27,7 +29,7 @@ function time(value: string | null) {
 export function SessionSnapshotView({ session, snapshot, loading, error, onRefresh, actions, publicView = false }: Props) {
   const turnCount = snapshot?.turns.length ?? 0;
   const agentName = { codex: 'Codex', claude: 'Claude', traecli: 'TraeCode CLI', hermes: 'Hermes', pi: 'Pi' }[session.agent];
-  return <ConversationLayout
+  return <WorkspaceMarkdownProvider directory={session.cwd} enabled={!publicView}><ConversationLayout
     sessionId={session.id}
     revision={snapshot}
     className="project-aow-session-snapshot"
@@ -41,7 +43,7 @@ export function SessionSnapshotView({ session, snapshot, loading, error, onRefre
         {snapshot.truncated && <span className="warning">最近 200 轮</span>}
         <time className="project-aow-snapshot-captured" dateTime={snapshot.captured_at}>更新于 {time(snapshot.captured_at)}</time>
       </>,
-      actions: <>{actions}<button title="刷新会话快照" aria-label="刷新会话快照" disabled={loading} onClick={onRefresh}><RefreshCw className={loading ? 'spinning' : ''} /></button></>,
+      actions: <>{actions}{!publicView && <ConversationIds identifiers={[{ label: 'Session ID', value: session.session_id ?? snapshot?.session_id }]} />}<button title="刷新会话快照" aria-label="刷新会话快照" disabled={loading} onClick={onRefresh}><RefreshCw className={loading ? 'spinning' : ''} /></button></>,
     }}
     state={<>
       {loading && !snapshot && <div className="project-aow-snapshot-state"><LoaderCircle className="spinning" />正在读取会话快照…</div>}
@@ -59,5 +61,5 @@ export function SessionSnapshotView({ session, snapshot, loading, error, onRefre
         <SessionTurnPending turn={turn} />
       </>,
     }))}
-  />;
+  /></WorkspaceMarkdownProvider>;
 }

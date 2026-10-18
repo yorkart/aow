@@ -97,6 +97,7 @@ async fn every_http_session_action_requires_current_control() {
     let router = crate::acp::routes().with_state(state);
     for action in [
         json!({"action":"prompt","content":[{"type":"text","text":"hello"}]}),
+        json!({"action":"steer","content":[{"type":"text","text":"hello"}]}),
         json!({"action":"resume"}),
         json!({"action":"cancel"}),
         json!({"action":"close"}),

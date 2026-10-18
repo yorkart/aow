@@ -8,10 +8,36 @@ pub(super) fn completed_turn(
     usage: Option<Value>,
     previous_usage: &Value,
 ) -> Option<TurnCompletion> {
-    if thread.status != "idle" || thread.stop_reason.as_deref() != Some("end_turn") {
+    let turn = thread
+        .turns
+        .iter()
+        .find(|turn| turn.user_entry_id == thread.entries[entry_start].id)?;
+    if turn.status != "completed" || turn.stop_reason.as_deref() != Some("end_turn") {
         return None;
     }
-    let conclusion = crate::acp_thread::turns::final_message(&thread.entries[entry_start..])
+    let end = thread
+        .entries
+        .iter()
+        .enumerate()
+        .skip(entry_start + 1)
+        .find(|(_, entry)| {
+            thread
+                .turns
+                .iter()
+                .any(|turn| turn.user_entry_id == entry.id)
+        })
+        .map(|(index, _)| index)
+        .into_iter()
+        .chain(
+            thread
+                .steering
+                .pending
+                .as_ref()
+                .and_then(|pending| pending.new_turn_start),
+        )
+        .min()
+        .unwrap_or(thread.entries.len());
+    let conclusion = crate::acp_thread::turns::final_message(&thread.entries[entry_start..end])
         .into_iter()
         .filter(|entry| entry.kind == "assistant" && entry.content["type"] == "text")
         .filter_map(|entry| entry.content["text"].as_str())

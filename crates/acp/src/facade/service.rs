@@ -8,6 +8,12 @@ use std::{path::PathBuf, sync::Arc};
 #[derive(Clone)]
 pub struct AcpService(AgentServerStore);
 impl AcpService {
+    pub fn subscribe_sync(&self) -> tokio::sync::broadcast::Receiver<super::SyncEvent> {
+        self.0.subscribe_sync()
+    }
+    pub fn sync_event(&self, resource: &super::SyncResource) -> super::SyncEvent {
+        self.0.sync_event(resource)
+    }
     pub fn new(host: Arc<dyn AcpHost>, state_directory: Option<PathBuf>) -> Result<Self> {
         Ok(Self(AgentServerStore::new(host, state_directory)?))
     }
@@ -72,12 +78,26 @@ impl AcpService {
     pub async fn prepare_session(&self, agent_id: &str, cwd: PathBuf) -> Result<SessionSnapshot> {
         self.0.prepare_session(agent_id, cwd).await
     }
+    pub async fn prepare_session_with_options(
+        &self,
+        agent_id: &str,
+        cwd: PathBuf,
+        creation: super::SessionCreation,
+    ) -> Result<SessionSnapshot> {
+        self.0
+            .prepare_session_with_options(agent_id, cwd, creation)
+            .await
+    }
     /// Resolve links from metadata without hydrating the transcript or starting an adapter.
     pub fn session_info(&self, thread_id: &str) -> Result<SessionInfo> {
         self.0.session_info(thread_id)
     }
     pub fn session_connection_info(&self, thread_id: &str) -> Result<Option<ConnectionInfo>> {
         self.0.session_connection_info(thread_id)
+    }
+    /// Resolve native session identity in its live connection, without reading a transcript.
+    pub fn thread_for_session(&self, connection_id: &str, session_id: &str) -> Result<String> {
+        self.0.thread_for_session(connection_id, session_id)
     }
     pub async fn load_session(
         &self,
@@ -138,6 +158,9 @@ impl AcpService {
     }
     pub fn cancel(&self, thread_id: &str) -> Result<()> {
         self.0.cancel(thread_id)
+    }
+    pub fn start_steering(&self, thread_id: &str, content: Vec<Content>) -> Result<()> {
+        self.0.start_steering(thread_id, content)
     }
     pub fn dismiss_notice(&self, thread_id: &str, notice_id: &str) -> Result<()> {
         self.0.dismiss_notice(thread_id, notice_id)

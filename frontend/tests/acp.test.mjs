@@ -6,6 +6,7 @@ import { createServer } from 'vite';
 import { chromium } from 'playwright';
 import { parse } from 'jsonc-parser';
 import { acpControlFixture } from './fixtures/acp-control.mjs';
+import { acpEventsFixture, disconnectAcpEvents } from './fixtures/acp-events.mjs';
 
 const server = await createServer({ root: fileURLToPath(new URL('../', import.meta.url)), logLevel: 'error', server: { host: '127.0.0.1', port: 0, proxy: {}, watch: { usePolling: true } } });
 let browser;
@@ -22,8 +23,12 @@ try {
     page.on('pageerror', error => errors.push(error.message));
     t.after(async () => { await page.close(); assert.deepEqual(errors, []); });
     const session = { thread_id: 'local', session_id: 'remote', agent_id: 'test', cwd: '/repo', title: 'Conversation', status: 'idle', revision: 1, updated_at: '', entries: [], permissions: [], modes: {}, config_options: [], commands: [], usage: null };
-    const state = initial.sharedState || { session, created: false, actions: [], saved: '', connectionGate: undefined, connectionError: '', connectionStatus: null, installGate: undefined, installError: '', installStatus: null, installed: false, installCalls: 0, connections: 0, listCalls: [], imports: [], loads: 0, deletes: 0, authRequired: false, authenticated: false, sessions: [], content: '// keep comment\n{ "agent_servers": {}, "future": { "keep": true }, }\n' };
+    let state = initial.sharedState || { session, created: false, actions: [], saved: '', connectionGate: undefined, connectionError: '', connectionStatus: null, installGate: undefined, installError: '', installStatus: null, installed: false, installCalls: 0, connections: 0, listCalls: [], imports: [], loads: 0, deletes: 0, authRequired: false, authenticated: false, sessions: [], content: '// keep comment\n{ "agent_servers": {}, "future": { "keep": true }, }\n' };
     Object.assign(state, initial);
+    if (initial.panelScopes) await page.addInitScript(scopes => {
+      localStorage.setItem('aow-project-acp-scope:acp-preview', JSON.stringify(scopes));
+    }, initial.panelScopes);
+    state = await acpEventsFixture(page, state);
     state.controls ??= acpControlFixture();
     await state.controls.install(page);
     const origin = initial.insecure ? `http://acp.test:${server.httpServer.address().port}` : base;
@@ -53,7 +58,7 @@ try {
         }
         data = state.installStatus;
       } else if (path === '/api/acp/connection-status') data = state.connectionStatus;
-      else if (/^\/api\/acp\/sessions\/[^/]+\/connection$/.test(path)) data = { id: 'connection', agent_id: 'test', cwd: '/repo', auth_methods: state.authRequired || state.advertiseAuth ? [{ id: 'login', name: '登录 Agent', type: 'agent' }] : [], capabilities: state.capabilities || { loadSession: true }, prompt_capabilities: state.imageSupport === false ? {} : { image: {} } };
+      else if (/^\/api\/acp\/sessions\/[^/]+\/connection$/.test(path)) data = { id: 'connection', agent_id: 'test', cwd: '/repo', auth_methods: state.authRequired || state.advertiseAuth ? [{ id: 'login', name: '登录 Agent', type: 'agent' }] : [], extensions: state.extensions, capabilities: state.capabilities || { loadSession: true }, prompt_capabilities: state.imageSupport === false ? {} : { image: {} } };
       else if (path === '/api/acp/connections') {
         state.connections++;
         if (state.connectionGate) await state.connectionGate;
@@ -89,7 +94,13 @@ try {
           state.preparedStates.set(data.thread_id, { status: data.status, session_id: data.session_id });
           data.session_id = null; data.status = 'disconnected';
           state.sessions.push(data);
-        } else data = state.sessions.filter(item => item.cwd === url.searchParams.get('cwd'));
+        } else {
+          const cwd = url.searchParams.get('cwd');
+          (state.sessionListReads ??= []).push(cwd);
+          if (state.sessionListGates?.[cwd]) await state.sessionListGates[cwd];
+          if (state.sessionListErrors?.[cwd]) { await route.fulfill({ status: 503, json: { message: state.sessionListErrors[cwd] } }); return; }
+          data = state.sessions.filter(item => item.cwd === cwd);
+        }
       }
       else if (/^\/api\/acp\/sessions\/[^/]+$/.test(path)) {
         if (request.method() === 'DELETE') { state.deletes++; state.sessions = state.sessions.filter(item => item.thread_id !== path.split('/').at(-1)); }
@@ -126,12 +137,27 @@ try {
           await route.fulfill({ json: session }); return;
         }
         if (action.action === 'resume' && state.resumeAuthRequired && !state.authenticated) { await route.fulfill({ status: 400, json: { code: 'acp_auth_required', message: 'Sign in to restore this session' } }); return; }
+        if (action.action === 'resume' && state.recoveryLifecycle) { session.recovery = { attempt_id: 'load-attempt', phase: 'loading' }; session.revision++; }
+        if (action.action === 'cancel' && session.recovery?.phase === 'loading') {
+          session.recovery.phase = 'cleaning'; session.revision++; state.cancelledRecovery = true;
+          await route.fulfill({ json: session }); return;
+        }
         if (action.action === 'resume' && state.resumeGate) await state.resumeGate;
+        if (action.action === 'resume' && state.cancelledRecovery) {
+          session.recovery = { attempt_id: 'load-attempt', phase: 'failed', error: 'Recovery cancelled' }; session.revision++;
+          await route.fulfill({ status: 400, json: { message: 'Recovery cancelled' } }); return;
+        }
         if (action.action === 'resume' && state.resumeError) { await route.fulfill({ status: 400, json: { message: state.resumeError } }); return; }
+        if (action.action === 'steer' && state.steerError) { await route.fulfill({ status: 400, json: { message: state.steerError } }); return; }
         if (action.action === 'prompt' && state.promptGate) await state.promptGate;
         if (action.action === 'prompt' && state.promptError) { await route.fulfill({ status: 400, json: { message: state.promptError } }); return; }
         session.revision++;
+        if (action.action === 'steer') {
+          session.steering_pending = true;
+          session.entries.push(...action.content.map((content, index) => ({ id: `steer-${session.revision}-${index}`, kind: 'steering', delivery: { status: 'sending' }, content })));
+        }
         if (action.action === 'prompt') {
+          session.interacted_at = new Date().toISOString();
           session.entries = [...action.content.map((content, index) => ({ id: `user-${index}`, kind: 'user', content })), { id: 'assistant', kind: 'assistant', content: { type: 'text', text: 'Hello from ACP' } }, { id: 'tool', kind: 'tool', content: { title: 'Read source', status: 'in_progress', locations: [{ path: '/repo/main.rs', line: 12 }], content: [{ type: 'diff', path: '/repo/main.rs', oldText: 'old', newText: 'new' }] } }];
           session.permissions = [{ id: 'permission', kind: 'permission', request: { toolCall: { title: 'Write source' }, options: [{ optionId: 'yes', name: 'Allow once' }] } }];
         } else if (action.action === 'answer') session.permissions = [];
@@ -139,19 +165,171 @@ try {
         else if (action.action === 'clear_plan') session.plan = null;
         else if (action.action === 'set_config') session.config_options = session.config_options.map(option => (option.configId || option.id) === action.config_id ? { ...option, currentValue: action.value } : option);
         else if (action.action === 'set_mode') session.modes.currentModeId = action.mode_id;
-        else if (action.action === 'resume') { session.status = 'idle'; if (session.needs_load) { session.needs_load = false; state.loads++; session.entries = [{ id: 'loaded', kind: 'assistant', content: { type: 'text', text: 'Imported conversation content' } }]; } }
+        else if (action.action === 'resume') { session.recovery = null; session.status = 'idle'; if (session.needs_load) { session.needs_load = false; state.loads++; session.entries = state.loadedEntries || [{ id: 'loaded', kind: 'assistant', content: { type: 'text', text: 'Imported conversation content' } }]; } }
         data = session;
       }
       if (data?.thread_id && state.preparedStates?.has(data.thread_id)) data = { ...data, entries: [], permissions: [] };
       await route.fulfill({ json: data });
     });
     await page.goto(`${origin}/tests/acp-preview.html${settings ? '?settings' : ''}`);
-    if (!settings) await page.waitForFunction(() => document.querySelector('[aria-label="刷新 ACP"]')?.disabled === false);
+    if (!settings) await page.waitForFunction(() => document.querySelector('[aria-label="刷新 User ACP"]')?.disabled === false);
     return { page, state };
+  }
+  await test('ACP sidebar recency follows submitted tasks instead of opening or background updates', async t => {
+    const session = (id, time) => ({ thread_id: id.replaceAll(' ', '-'), session_id: id, agent_id: 'test', cwd: '/repo', title: id,
+      status: 'disconnected', needs_load: true, revision: 1, created_at: time, updated_at: time, interacted_at: time,
+      entries: [], permissions: [], modes: {}, config_options: [], commands: [], usage: null });
+    const { page, state } = await fixture(t, false, { sessions: [
+      session('Older task', '2020-01-01T00:00:00Z'), session('Newer task', '2021-01-01T00:00:00Z'),
+    ] });
+    const panel = page.getByRole('region', { name: 'User ACP', exact: true });
+    const titles = () => panel.locator('.aow-list-row-open').evaluateAll(rows => rows.map(row => row.title));
+    const older = panel.locator('.acp-panel-row').filter({ has: page.getByRole('button', { name: '打开 ACP 会话 Older task', exact: true }) });
+    await panel.getByRole('button', { name: '打开 ACP 会话 Older task', exact: true }).waitFor();
+    assert.deepEqual(await titles(), ['Newer task', 'Older task']);
+    const displayedTime = await older.locator('small').getAttribute('title');
+    await panel.getByRole('button', { name: '打开 ACP 会话 Older task', exact: true }).click();
+    await page.getByRole('textbox', { name: 'ACP 消息', exact: true }).waitFor();
+    state.sessions[0].updated_at = '2026-01-01T00:00:00Z';
+    state.sessions[0].status = 'working';
+    await older.getByRole('status', { name: 'Agent 正在处理…' }).waitFor();
+    assert.deepEqual(await titles(), ['Newer task', 'Older task']);
+    assert.equal(await older.locator('small').getAttribute('title'), displayedTime);
+    state.sessions[0].status = 'idle';
+    state.sessions[0].revision++;
+    await page.getByRole('textbox', { name: 'ACP 消息', exact: true }).fill('Continue the older task');
+    await page.getByRole('button', { name: '发送', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('.acp-panel-row .aow-list-row-open')?.title === 'Older task');
+    assert.deepEqual(await titles(), ['Older task', 'Newer task']);
+    const submittedTime = await older.locator('small').getAttribute('title');
+    assert.notEqual(submittedTime, displayedTime);
+    state.sessions[1].updated_at = '2099-01-01T00:00:00Z';
+    state.sessions[1].status = 'working';
+    await panel.getByRole('status', { name: 'Agent 正在处理…' }).waitFor();
+    assert.deepEqual(await titles(), ['Older task', 'Newer task']);
+    assert.equal(await older.locator('small').getAttribute('title'), submittedTime);
+    await page.reload();
+    await panel.getByRole('button', { name: '打开 ACP 会话 Older task', exact: true }).waitFor();
+    assert.deepEqual(await titles(), ['Older task', 'Newer task']);
+  });
+
+  await test('ACP project panel groups explicit origins across worktrees and keeps scopes and creation sorting', async t => {
+    const session = (id, cwd, source, created, parent) => ({ thread_id: id.replaceAll(' ', '-'), session_id: id, agent_id: 'test', cwd, source, parent,
+      title: id, status: 'idle', revision: 1, created_at: created, updated_at: '2026-10-01T00:00:00Z', entries: [], permissions: [], modes: {}, config_options: [], commands: [], usage: null });
+    const { page, state } = await fixture(t, false, { sessions: [
+      session('User main', '/repo', 'user', '2026-01-03'),
+      session('User child', '/repo-feature', 'user', '2026-01-01', { kind: 'terminal', id: 'parent' }),
+      session('CLI root', '/repo-feature', 'cli', '2026-01-02'),
+      session('CLI main', '/repo', 'cli', '2026-01-04'),
+      session('Other project', '/other', 'cli', '2026-01-01'),
+    ] });
+    const user = page.getByRole('region', { name: 'User ACP', exact: true });
+    const cli = page.getByRole('region', { name: 'CLI ACP', exact: true });
+    await user.getByRole('button', { name: '打开 ACP 会话 User child', exact: true }).waitFor();
+    await cli.getByRole('button', { name: '打开 ACP 会话 CLI root', exact: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: '打开 ACP 会话 Other project', exact: true }).count(), 0);
+    assert.deepEqual([...new Set(state.sessionListReads)].sort(), ['/repo', '/repo-feature']);
+    assert.equal(state.snapshots || 0, 0, 'inventory never hydrates transcripts');
+    assert.equal(state.connections, 0);
+    if (process.env.ACP_PANEL_SCREENSHOT) await page.getByRole('region', { name: 'ACP 会话列表', exact: true }).screenshot({ path: process.env.ACP_PANEL_SCREENSHOT });
+    assert.deepEqual(await user.locator('.instance-worktree-heading > span').allTextContents(), ['主仓库 · main', 'feature']);
+    assert.equal(await user.locator('.instance-worktree-heading[aria-current="true"]').count(), 1);
+    assert.equal(await user.locator('.aow-panel-header .instance-panel-count').textContent(), '2');
+    await user.locator('.instance-worktree-heading').last().click();
+    assert.equal(await user.getByRole('button', { name: '打开 ACP 会话 User child', exact: true }).isVisible(), false);
+    await user.locator('.instance-worktree-heading').last().click();
+    await user.getByRole('button', { name: 'User ACP 显示范围', exact: true }).click();
+    await page.getByRole('menuitemradio', { name: '按创建时间' }).click();
+    assert.deepEqual(await user.locator('.aow-list-row-title').allTextContents(), ['User child', 'User main']);
+    state.sessions[0].updated_at = '2027-01-01';
+    state.sessions[1].title = 'User renamed'; state.sessions[1].status = 'working';
+    await user.getByRole('button', { name: '打开 ACP 会话 User renamed', exact: true }).waitFor();
+    await user.getByRole('status', { name: 'Agent 正在处理…' }).waitFor();
+    assert.match((await user.locator('.aow-list-row-title').allTextContents())[0], /User renamed/);
+    await user.getByRole('button', { name: 'User ACP 显示范围', exact: true }).click();
+    await page.getByRole('menuitemcheckbox', { name: '显示所有Worktree' }).click();
+    assert.equal(await user.getByRole('button', { name: '打开 ACP 会话 User renamed', exact: true }).count(), 0);
+    await cli.getByRole('button', { name: '打开 ACP 会话 CLI root', exact: true }).waitFor();
+    await page.reload();
+    await user.getByRole('button', { name: '打开 ACP 会话 User main', exact: true }).waitFor();
+    await cli.getByRole('button', { name: '打开 ACP 会话 CLI root', exact: true }).waitFor();
+    assert.equal(await user.getByRole('button', { name: '打开 ACP 会话 User renamed', exact: true }).count(), 0);
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('aow-project-acp-scope:acp-preview'))), { user: false, cli: true });
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('aow-project-acp-sort:acp-preview'))), { user: 'createdAt', cli: 'branch' });
+    await cli.getByRole('button', { name: '删除 ACP 会话 CLI root', exact: true }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: '删除', exact: true }).click();
+    await cli.getByRole('button', { name: '打开 ACP 会话 CLI root', exact: true }).waitFor({ state: 'detached' });
+    assert.equal(state.deletes, 1);
+  });
+  for (const localSource of ['user', 'cli']) {
+    await test(`ACP project panel isolates loading and errors for local ${localSource} scope`, async t => {
+      let release;
+      const gate = new Promise(resolve => { release = resolve; });
+      t.after(() => release());
+      const session = (source, cwd) => ({ thread_id: `${source}-${cwd}`, agent_id: 'test', cwd, source,
+        title: `${source} ${cwd}`, status: 'idle', created_at: '2026-01-01', updated_at: '2026-01-02' });
+      const { page, state } = await fixture(t, false, {
+        sessions: ['user', 'cli'].flatMap(source => ['/repo', '/repo-feature'].map(cwd => session(source, cwd))),
+        panelScopes: { user: localSource !== 'user', cli: localSource !== 'cli' },
+        sessionListGates: { '/repo-feature': gate },
+        sessionListErrors: { '/repo-feature': 'Foreign inventory unavailable' },
+      });
+      const localTitle = localSource === 'user' ? 'User ACP' : 'CLI ACP';
+      const allTitle = localSource === 'user' ? 'CLI ACP' : 'User ACP';
+      const local = page.getByRole('region', { name: localTitle, exact: true });
+      const all = page.getByRole('region', { name: allTitle, exact: true });
+      const toggleLocal = async () => {
+        await local.getByRole('button', { name: `${localTitle} 显示范围`, exact: true }).click();
+        await page.getByRole('menuitemcheckbox', { name: '显示所有Worktree' }).click();
+      };
+      await local.getByRole('button', { name: `打开 ACP 会话 ${localSource} /repo`, exact: true }).waitFor();
+      await all.getByRole('status').waitFor();
+      assert.equal(await local.getByRole('status').count(), 0, 'foreign initial loads do not affect the local group');
+      await toggleLocal();
+      await local.getByRole('status').waitFor();
+      await toggleLocal();
+      assert.equal(await local.getByRole('status').count(), 0);
+      release();
+      await all.getByRole('alert').waitFor();
+      assert.match(await all.getByRole('alert').textContent(), /\/repo-feature: Foreign inventory unavailable/);
+      assert.equal(await local.getByRole('alert').count(), 0, 'foreign failures do not affect the local group');
+      await toggleLocal();
+      await local.getByRole('alert').waitFor();
+      await toggleLocal();
+      assert.equal(await local.getByRole('alert').count(), 0);
+      state.sessionListErrors = {};
+      await all.getByRole('button', { name: `刷新 ${allTitle}`, exact: true }).click();
+      await all.getByRole('button', { name: `打开 ACP 会话 ${localSource === 'user' ? 'cli' : 'user'} /repo-feature`, exact: true }).waitFor();
+      assert.equal(await page.getByRole('alert').count(), 0);
+      assert.equal(await local.getByRole('button', { name: `打开 ACP 会话 ${localSource} /repo-feature`, exact: true }).count(), 0);
+      assert.equal(state.snapshots || 0, 0, 'scope status uses metadata subscriptions only');
+      assert.equal(state.connections, 0);
+    });
   }
   const interactions = state => state.actions.filter(action => action.action !== 'resume');
   const newSession = async page => { await page.getByRole('button', { name: '新建窗体', exact: true }).click(); await page.getByRole('button', { name: '新建 ACP 会话：Test Agent', exact: true }).click(); };
+  const toggleThinking = async (page, checked = false) => {
+    await page.getByRole('button', { name: '会话更多操作', exact: true }).click();
+    const option = page.getByRole('menuitemcheckbox', { name: '显示 Thinking', exact: true });
+    assert.equal(await option.getAttribute('aria-checked'), String(checked));
+    await option.click();
+  };
   const importHistory = async page => { await page.getByRole('button', { name: '导入 ACP 会话', exact: true }).click(); const dialog = page.getByRole('dialog', { name: '导入外部 Agent 会话' }); await dialog.getByRole('button', { name: '导入 1 个会话', exact: true }).click(); await dialog.waitFor({ state: 'detached' }); };
+  const composerStatus = async page => {
+    const card = page.locator('.conversation-footer > .conversation-composer-status');
+    await card.waitFor();
+    assert.equal(await card.count(), 1, 'only one blocking status occupies the composer');
+    assert.equal(await page.getByLabel('ACP 消息', { exact: true }).count(), 0, 'blocked composers cannot receive keyboard input');
+    const { bounds, main, overflow } = await card.evaluate(element => ({
+      bounds: element.getBoundingClientRect().toJSON(),
+      main: element.closest('.conversation-main').getBoundingClientRect().toJSON(),
+      overflow: element.scrollWidth > element.clientWidth,
+    }));
+    assert.ok(bounds.x >= main.x && bounds.x + bounds.width <= main.x + main.width, 'status fits the conversation column');
+    assert.ok(Math.abs(main.y + main.height - bounds.y - bounds.height - 12) < 2, 'status stays at the bottom of the input area');
+    assert.equal(overflow, false, 'status has no horizontal overflow');
+    return card;
+  };
   await test('ACP deletion uses the shared confirmation and only deletes after explicit approval', async t => {
     const { page, state } = await fixture(t);
     const nativeDialogs = [];
@@ -189,6 +367,55 @@ try {
     assert.equal(await page.getByRole('tab').filter({ hasText: 'Conversation' }).count(), 0, 'deleting the active session closes its tab');
     assert.deepEqual(nativeDialogs, []);
   });
+  await test('ACP tab deletion discards owner drafts across mounts and preserves unsaved tabs', async t => {
+    const { page } = await fixture(t);
+    const results = await page.evaluate(async () => {
+      const { createElement } = (await import('/node_modules/.vite/deps/react.js')).default;
+      const { createRoot } = (await import('/node_modules/.vite/deps/react-dom_client.js')).default;
+      const { flushSync } = (await import('/node_modules/.vite/deps/react-dom.js')).default;
+      const { useAcpTabs, removeAcpSessionTabs, savedAcpTabs } = await import('/src/features/acp/agent_ui/workspace_tabs.ts');
+      const { useComposerDraft } = await import('/src/features/acp/agent_ui/composer_drafts.ts');
+      const results = [];
+      for (const mounted of [true, false]) {
+        const workspace = `/draft-owner-${mounted}`;
+        const host = document.createElement('div');
+        document.body.append(host);
+        let tabs;
+        const drafts = new Map();
+        function Draft({ id }) { drafts.set(id, useComposerDraft(workspace, id)); return null; }
+        function Owner() {
+          tabs = useAcpTabs(workspace);
+          return tabs.tabs.map(tab => createElement(Draft, { key: tab.id, id: tab.id }));
+        }
+        const root = createRoot(host);
+        flushSync(() => root.render(createElement(Owner)));
+        const ids = [];
+        for (const threadId of ['deleted', 'kept', undefined]) {
+          let id;
+          flushSync(() => { id = tabs.create('test'); });
+          if (threadId) flushSync(() => tabs.changed(id, { thread_id: threadId, title: threadId, status: 'idle' }));
+          flushSync(() => drafts.get(id)[1]({ parts: [{ type: 'text', text: threadId || 'unsaved' }], images: {} }));
+          ids.push(id);
+        }
+        if (!mounted) root.unmount();
+        flushSync(() => removeAcpSessionTabs(workspace, 'deleted'));
+        const liveIds = mounted ? tabs.tabs.map(tab => tab.id) : undefined;
+        if (mounted) root.unmount();
+        const probe = createRoot(host);
+        flushSync(() => probe.render(ids.map(id => createElement(Draft, { key: id, id }))));
+        results.push({ mounted, liveIds, ids, savedIds: savedAcpTabs(workspace).map(tab => tab.id),
+          drafts: ids.map(id => drafts.get(id)[0].parts.map(part => part.text).join('')) });
+        probe.unmount(); host.remove();
+      }
+      return results;
+    });
+    for (const result of results) {
+      assert.deepEqual(result.savedIds, [result.ids[1]], 'deletion retains the surviving draft-to-thread mapping');
+      if (result.mounted) assert.deepEqual(result.liveIds, result.ids.slice(1), 'an unsaved tab remains in the mounted owner');
+      assert.deepEqual(result.drafts, ['', 'kept', 'unsaved'], 'only the deleted session loses its composer draft');
+    }
+  });
+
   function projectedHistory(state, count = 3, running = false) {
     state.session.sync_generation = 'projection-test';
     state.session.status = running ? 'working' : 'idle';
@@ -208,7 +435,7 @@ try {
   }
 
   for (const legacyResponse of [false, true]) {
-    await test(`polling before resume completes keeps overview mode${legacyResponse ? ' after a same-revision full response' : ''}`, async t => {
+    await test(`notifications before resume completes keeps overview mode${legacyResponse ? ' after a same-revision full response' : ''}`, async t => {
       const { page, state } = await fixture(t);
       state.session.sync_generation = 'prepared';
       let ready = false;
@@ -228,8 +455,9 @@ try {
       await page.route('**/api/acp/sessions/local/actions?*', async route => {
         ready = true;
         state.preparedStates.delete('local');
+        Object.assign(state.session, projected());
         await gate;
-        await route.fulfill({ json: projected() });
+        await route.fulfill({ json: legacyResponse ? full() : projected() });
       });
       const reads = [];
       await page.route('**/api/acp/sessions/local/updates?*', async route => {
@@ -238,13 +466,15 @@ try {
         // The legacy response models an already in-flight canonical read; even
         // at the same revision, the later overview must replace its full body.
         await route.fulfill({ json: ready && query.get('generation') !== 'live'
-          ? { kind: 'snapshot', snapshot: !legacyResponse && query.get('view') === 'overview' ? projected() : full() } : { kind: 'unchanged' } });
+          ? { kind: 'snapshot', snapshot: !legacyResponse && query.get('view') === 'overview' ? projected() : full() } : ready && Number(query.get('revision')) < state.session.revision ? { kind: 'snapshot', snapshot: { ...projected(), revision: state.session.revision } } : { kind: 'unchanged' } });
       });
       await newSession(page);
       await page.getByText('Resume conclusion', { exact: true }).waitFor();
       const resumed = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/actions'));
       release(); await resumed;
-      await page.waitForRequest(request => new URL(request.url()).pathname.endsWith('/updates') && new URL(request.url()).searchParams.get('generation') === 'live');
+      const nextRead = page.waitForRequest(request => new URL(request.url()).pathname.endsWith('/updates') && new URL(request.url()).searchParams.get('generation') === 'live');
+      state.session.revision++;
+      await nextRead;
       await page.getByRole('button', { name: '展开处理过程', exact: true }).click();
       await page.getByRole('button', { name: '展开工具执行：1 次调用', exact: true }).waitFor();
       assert.ok(reads.every(read => read.view === 'overview'), 'preparation never selects canonical polling');
@@ -309,6 +539,45 @@ try {
     assert.equal(next.overview[1].progress_count, 2);
     assert.equal(applySessionUpdates(before, { ...update, turns: [{ ...turn, id: 'unknown' }] }), undefined);
     assert.equal(before.overview[1].progress_count, 1, 'failed patches are atomic');
+  });
+
+  await test('dialogue patches append atomically without copying unchanged images or messages', async () => {
+    const { applySessionUpdates } = await server.ssrLoadModule('/src/features/acp/session_updates.ts');
+    const state = { session: { thread_id: 'local', entries: [], revision: 1 } };
+    projectedHistory(state, 1, true);
+    const before = state.session;
+    const image = { id: 'image', kind: 'steering', content: { type: 'image', data: 'i'.repeat(512 * 1024) } };
+    const answer = { id: 'answer', kind: 'assistant', message_id: 'response', content: { type: 'text', text: 'x'.repeat(512 * 1024) } };
+    before.overview[0].messages = [image, answer];
+    const metadata = { ...before.overview[0] };
+    delete metadata.user; delete metadata.messages;
+    const patch = { ...metadata, revision: 2, messages: { kind: 'delta', entries: [
+      { kind: 'append_text', index: 1, id: 'answer', text: '中z' },
+      { kind: 'replace', index: 2, entry: { id: 'followup', kind: 'assistant', content: { type: 'text', text: 'Next' } } },
+    ] } };
+    const update = { kind: 'overview', from_revision: 1, snapshot: { ...before, overview: undefined, revision: 2 }, turns: [patch] };
+    assert.ok(JSON.stringify(update).length < 8192);
+    const next = applySessionUpdates(before, update);
+    assert.equal(next.overview[0].messages[0], image);
+    assert.equal(next.overview[0].messages[1].content.text, answer.content.text + '中z');
+    assert.equal(next.overview[0].messages[2].content.text, 'Next');
+    assert.equal(applySessionUpdates(next, update), next, 'duplicate responses never append twice');
+    for (const invalid of [
+      { kind: 'append_text', index: 1, id: 'wrong', text: 'bad' },
+      { kind: 'append_text', index: 0, id: 'image', text: 'bad' },
+      { kind: 'replace', index: 4, entry: answer },
+    ]) {
+      assert.equal(applySessionUpdates(before, { ...update, turns: [{ ...patch, messages: { kind: 'delta', entries: [...patch.messages.entries, invalid] } }] }), undefined);
+      assert.equal(before.overview[0].messages[1], answer, 'failed patches leave all prior bodies intact');
+      assert.equal(before.overview[0].messages.length, 2);
+    }
+    const noBaseline = { ...before, overview: [{ ...before.overview[0], messages: null }] };
+    assert.equal(applySessionUpdates(noBaseline, update), undefined, 'delta requires a dialogue baseline');
+    const reset = applySessionUpdates(noBaseline, { ...update, turns: [{ ...patch, messages: { kind: 'reset', entries: [image, answer] } }] });
+    assert.deepEqual(reset.overview[0].messages, [image, answer]);
+    const toolPatch = { ...patch }; delete toolPatch.messages;
+    const toolUpdate = applySessionUpdates(before, { ...update, turns: [{ ...toolPatch, tool_count: 2 }] });
+    assert.equal(toolUpdate.overview[0].messages, before.overview[0].messages, 'tool updates retain the dialogue reference');
   });
 
   await test('projected leading history retains conclusions, copying and navigation without a user prompt', async t => {
@@ -388,7 +657,7 @@ try {
     assert.equal(applySessionUpdates(previous, { ...delta, terminals: [{ kind: 'append_output', id: 'missing', text: 'bad' }] }), undefined);
     assert.equal(previous.entries[1].content.text, '你好', 'invalid later patch cannot mutate earlier entries');
   });
-  await test('ACP overview and process polling use cursors without downloading history again', async t => {
+  await test('ACP overview and process notifications use cursors without downloading history again', async t => {
     const { page, state } = await fixture(t);
     const user = { id: 'user', kind: 'user', content: { type: 'text', text: 'Question' } };
     const turn = { id: 'user', revision: 1, user: [user], conclusion: [], tool_count: 0, progress_count: 1,
@@ -434,6 +703,58 @@ try {
     const users = [entry('u1', 'user', undefined, { type: 'text', text: 'First' }), entry('u2', 'user', undefined, { type: 'text', text: 'Second' })];
     assert.equal(messageGroups(users, false, false, new Set(), new Set(['u1', 'u2'])).length, 2, 'recorded turns separate consecutive prompts without replies');
   });
+  for (const overview of [false, true]) {
+    await test(`ACP hides thinking by default and merges tools across it in ${overview ? 'loaded history' : 'live sessions'}`, async t => {
+      const { page, state } = await fixture(t);
+      const entry = (id, kind, text) => ({ id, kind, content: { type: 'text', text } });
+      const tool = id => ({ id, kind: 'tool', content: { title: id, kind: 'execute', status: 'completed', rawOutput: `${id} output` } });
+      const user = entry('u', 'user', 'Inspect the project');
+      const conclusion = entry('final', 'assistant', 'Inspection finished');
+      const entries = [user, tool('tool-1'), entry('thought-1', 'thought', 'First thought'), tool('tool-2'), tool('tool-3'),
+        entry('thought-2', 'thought', 'Second thought'), tool('tool-4'), entry('thought-3', 'thought', 'Third thought'),
+        entry('thought-4', 'thought', 'Fourth thought'), tool('tool-5'), entry('mixed-before', 'thought', 'Before progress'),
+        entry('progress', 'assistant', 'Ordinary progress stays visible'), entry('mixed-after', 'thought', 'After progress'), tool('tool-6'), conclusion];
+      Object.assign(state.session, { stop_reason: 'end_turn', entries });
+      if (overview) {
+        state.session.sync_generation = 'thinking-test';
+        state.session.overview = [{ id: user.id, revision: 1, user: [user], conclusion: [conclusion], tool_count: 6, progress_count: 4,
+          running: false, waiting: false, compacting: false, status: 'completed', permission_tool_ids: [] }];
+        state.processSnapshots = { u: { ...state.session, overview: undefined } };
+        state.session.entries = [];
+      }
+      await newSession(page);
+      await page.getByText('Inspection finished', { exact: true }).waitFor();
+      await page.getByRole('button', { name: '展开处理过程', exact: true }).click();
+      const merged = page.getByRole('button', { name: '展开工具执行：5 次调用', exact: true });
+      await merged.waitFor();
+      assert.equal(await page.locator('.acp-thinking, .session-process-marker .lucide-brain').count(), 0);
+      assert.deepEqual(await page.locator('.session-tool-group-count').allTextContents(), ['5 次调用', '1 次调用']);
+      assert.equal(await page.getByText('Ordinary progress stays visible', { exact: true }).isVisible(), true);
+      await merged.click();
+      assert.deepEqual(await page.locator('.acp-process-tool-group').first().getByRole('region').evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label'))), ['tool-1', 'tool-2', 'tool-3', 'tool-4', 'tool-5']);
+      const reads = state.processReads?.length ?? 0;
+      const actions = structuredClone(interactions(state));
+      await toggleThinking(page);
+      await page.getByRole('button', { name: '思考过程', exact: true }).first().waitFor();
+      assert.equal(await page.locator('.acp-thinking').count(), 6);
+      assert.deepEqual(await page.locator('.session-tool-group-count').allTextContents(), ['1 次调用', '2 次调用', '1 次调用', '1 次调用', '1 次调用']);
+      assert.equal(await page.getByText('Ordinary progress stays visible', { exact: true }).isVisible(), true);
+      await toggleThinking(page, true);
+      await page.getByRole('button', { name: /工具执行：5 次调用$/ }).waitFor();
+      assert.equal(await page.locator('.acp-thinking').count(), 0);
+      assert.equal(await page.locator('.project-aow-snapshot-conclusion').innerText(), 'Inspection finished');
+      assert.equal(state.processReads?.length ?? 0, reads, 'visibility changes reuse the loaded process');
+      assert.deepEqual(interactions(state), actions, 'visibility does not send agent actions');
+      assert.equal((overview ? state.processSnapshots.u.entries : state.session.entries).filter(entry => entry.kind === 'thought').length, 6);
+      if (!overview) {
+        state.session.entries.push(entry('late-thought', 'thought', 'Later activity'));
+        state.session.revision++;
+        await page.locator('.project-aow-snapshot-conclusion').waitFor({ state: 'detached' });
+        assert.equal(await page.locator('.acp-thinking').count(), 0, 'streamed thoughts remain hidden');
+        assert.equal(await page.getByText('Inspection finished', { exact: true }).isVisible(), true, 'hiding thoughts must not promote earlier progress to a final reply');
+      }
+    });
+  }
   await test('ACP process and consecutive tool groups expand live and collapse on completion', async t => {
     const { page, state } = await fixture(t);
     const message = (id, text) => ({ id, message_id: id, kind: 'assistant', content: { type: 'text', text } });
@@ -542,7 +863,9 @@ try {
     ];
     const { page, state } = await fixture(t, false, { agents });
     assert.equal(await page.getByRole('button', { name: '新建 ACP 会话', exact: true }).count(), 0);
-    await page.getByText('暂无会话，请在工作区标题栏的“新建窗体”菜单中选择 ACP Agent。', { exact: true }).waitFor();
+    const emptyPanel = page.getByRole('region', { name: 'User ACP', exact: true });
+    await emptyPanel.locator('.aow-panel-toggle').click();
+    await emptyPanel.getByText('暂无会话', { exact: true }).waitFor();
     await page.getByRole('button', { name: '新建窗体', exact: true }).click();
     const menu = page.locator('.project-aow-new-menu');
     await menu.getByRole('button', { name: '新建 ACP 会话：Test Agent', exact: true }).waitFor();
@@ -579,7 +902,7 @@ try {
   await test('only the controlling page restores and writes; takeover preserves live work and drafts', async t => {
     const { page: first, state } = await fixture(t);
     state.session.status = 'disconnected'; state.sessions.push(state.session);
-    await first.getByRole('button', { name: '刷新 ACP', exact: true }).click();
+    await first.getByRole('button', { name: '刷新 User ACP', exact: true }).click();
     await first.getByRole('button', { name: '打开 ACP 会话 Conversation', exact: true }).click();
     const input = first.getByLabel('ACP 消息', { exact: true });
     await input.fill('Owner draft');
@@ -591,6 +914,7 @@ try {
     const { page: second } = await fixture(t, false, { sharedState: state });
     await second.getByRole('button', { name: '打开 ACP 会话 Conversation', exact: true }).click();
     await second.getByRole('button', { name: '接管', exact: true }).waitFor();
+    await composerStatus(second);
     assert.equal(await second.getByLabel('ACP 消息', { exact: true }).count(), 0);
     assert.equal(state.actions.length, 1, 'observers never restore an already-open session');
     const stale = await first.evaluate(async () => (await import('/src/features/acp-control/sessionControl.ts')).acpControlHeaders('local'));
@@ -616,6 +940,21 @@ try {
     await second.getByRole('button', { name: '接管', exact: true }).click();
     await second.getByLabel('ACP 消息', { exact: true }).waitFor();
     assert.equal(await second.getByLabel('ACP 消息', { exact: true }).innerText(), 'New owner draft');
+  });
+  await test('data reconnect refreshes a disconnected session without restoring tasks or changing control', async t => {
+    const { page, state } = await fixture(t);
+    await newSession(page);
+    await page.getByLabel('ACP 消息', { exact: true }).fill('Preserve this draft');
+    const actions = state.actions.length;
+    const claims = state.controls.claims.length;
+    disconnectAcpEvents(page);
+    state.session.status = 'disconnected'; state.session.revision++;
+    await page.getByRole('button', { name: '重试连接', exact: true }).waitFor();
+    assert.equal(state.actions.length, actions, 'data resynchronization never resumes a task');
+    assert.equal(state.controls.claims.length, claims, 'data resynchronization never claims control');
+    await composerStatus(page);
+    await page.getByRole('button', { name: '重试连接', exact: true }).click();
+    assert.equal(await page.getByLabel('ACP 消息', { exact: true }).innerText(), 'Preserve this draft');
   });
   await test('control reconnects without making an observer reclaim a vacant session', async t => {
     const { page: first, state } = await fixture(t);
@@ -644,6 +983,7 @@ try {
     await newSession(first);
     await first.getByLabel('ACP 消息', { exact: true }).fill('Draft before login');
     Object.assign(state.session, { status: 'disconnected', auth_required: false, revision: state.session.revision + 1 });
+    await first.getByRole('button', { name: '重试连接', exact: true }).click();
     await first.getByRole('region', { name: 'Agent 登录', exact: true }).waitFor();
     const { page: second } = await fixture(t, false, { sharedState: state });
     await second.getByRole('button', { name: '打开 ACP 会话 Conversation', exact: true }).click();
@@ -767,13 +1107,15 @@ try {
     assert.equal(await input.innerText(), 'Keep draft while navigating');
     await content.getByRole('button', { name: '收起输入区', exact: true }).click();
     state.connectionRequests = [{ id: 'connection-input', kind: 'elicitation', request: { mode: 'form', message: 'Connection input', requestedSchema: { type: 'object', properties: { name: { type: 'string', title: 'Name' } } } } }];
-    const connectionForm = content.getByRole('form', { name: 'Agent 信息请求' });
+    const connectionForm = content.getByRole('form', { name: 'Agent 信息请求', includeHidden: true });
     await connectionForm.getByLabel('Name', { exact: true }).fill('Retain connection input');
     const headerBeforeLogs = await content.locator('.project-aow-snapshot-header').boundingBox();
     await content.getByRole('button', { name: '会话更多操作', exact: true }).click();
     await page.getByRole('menuitem', { name: 'ACP 协议日志', exact: true }).click();
+    await content.locator('.acp-logs').waitFor();
     assert.deepEqual(await content.locator('.project-aow-snapshot-header').boundingBox(), headerBeforeLogs);
     assert.equal(await connectionForm.count(), 1, 'connection requests mount only once');
+    assert.equal(await connectionForm.isVisible(), false, 'composer requests are hidden with the conversation while viewing logs');
     assert.equal(await connectionForm.getByLabel('Name', { exact: true }).inputValue(), 'Retain connection input');
     await content.locator('.acp-logs').getByRole('button', { name: '返回会话', exact: true }).click();
     assert.equal(await connectionForm.getByLabel('Name', { exact: true }).inputValue(), 'Retain connection input');
@@ -883,9 +1225,14 @@ try {
     await input.fill('Keep my recovery draft');
     Object.assign(state.session, { status: 'disconnected', auth_required: false, revision: state.session.revision + 1 });
     const login = content.getByRole('region', { name: 'Agent 登录', exact: true });
+    await content.getByRole('button', { name: '重试连接', exact: true }).click();
     await login.waitFor();
     const pollAgain = async () => {
-      for (let index = 0; index < 3; index++) await page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/api/acp/sessions/local') && response.request().method() === 'GET');
+      for (let index = 0; index < 3; index++) {
+        const updated = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/api/acp/sessions/local') && response.request().method() === 'GET');
+        state.session.revision++;
+        await updated;
+      }
       await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
       assert.equal(await login.isVisible(), true);
     };
@@ -905,6 +1252,7 @@ try {
     // A successful login in the import dialog must also release this request-only auth state.
     state.authenticated = false; state.historyAuthRequired = true;
     state.session.status = 'disconnected'; state.session.revision++;
+    await content.getByRole('button', { name: '重试连接', exact: true }).click();
     await login.waitFor();
     const sidebar = page.getByRole('region', { name: 'ACP 会话列表', exact: true });
     await sidebar.getByRole('button', { name: '导入 ACP 会话', exact: true }).click();
@@ -1063,6 +1411,8 @@ try {
     await page.getByRole('tab', { selected: true }).waitFor();
     const content = page.getByRole('region', { name: 'ACP 会话内容', exact: true });
     await content.getByText(/正在建立 ACP 连接/).waitFor();
+    await composerStatus(page);
+    if (process.env.ACP_SCREENSHOT_DIR) await page.screenshot({ path: `${process.env.ACP_SCREENSHOT_DIR}/acp-connecting.png` });
     assert.equal(state.created, false);
     assert.equal(state.sessions.length, 1);
     const threadId = state.sessions[0].thread_id;
@@ -1070,9 +1420,15 @@ try {
     state.connectionError = 'Adapter connection failed';
     finish();
     await content.getByRole('alert').getByText('Adapter connection failed', { exact: true }).waitFor();
+    const failed = await composerStatus(page);
+    const failedBounds = await failed.boundingBox();
+    if (process.env.ACP_SCREENSHOT_DIR) await page.screenshot({ path: `${process.env.ACP_SCREENSHOT_DIR}/acp-connection-failed.png` });
     state.connectionError = '';
     await content.getByRole('button', { name: '重试连接', exact: true }).click();
     await content.getByLabel('ACP 消息', { exact: true }).fill('Retained after retry');
+    const readyBounds = await page.locator('.acp-composer').boundingBox();
+    assert.equal(readyBounds.x, failedBounds.x, 'status and editor share the same horizontal alignment');
+    assert.equal(readyBounds.width, failedBounds.width, 'status and editor share the same width');
     assert.equal(await page.getByRole('tab').count(), 1);
     assert.equal(state.connections, 2);
     assert.equal(state.sessions[0].thread_id, threadId);
@@ -1116,8 +1472,11 @@ try {
     const { page: first, state } = await fixture(t);
     state.connectionGate = new Promise(resolve => { state.finishConnection = resolve; });
     t.after(() => state.finishConnection());
+    const resuming = first.waitForRequest(request => new URL(request.url()).pathname.endsWith('/actions') && request.postDataJSON().action === 'resume');
     await newSession(first);
-    await first.getByLabel('ACP 消息', { exact: true }).waitFor();
+    await resuming;
+    await first.getByText('正在创建会话…', { exact: true }).waitFor();
+    await composerStatus(first);
     assert.equal(state.sessions.length, 1);
     const threadId = state.sessions[0].thread_id;
     assert.equal(state.sessions[0].session_id, null);
@@ -1220,11 +1579,49 @@ try {
       ];
       return logMessages(entries).map(message => ({ name: message.name, type: message.type, failed: message.failed, body: payloadText(message, false) }));
     });
-    assert.deepEqual(result.slice(4, 9).map(message => message.name), ['fs/read_text_file', 'session/prompt', 'session/load', 'session/new', '[unrecognized response]']);
+    assert.deepEqual(result.slice(4, 9).map(message => message.name), ['fs/read_text_file', 'session/prompt', 'session/load', 'session/new', '[response: request outside exported log]']);
     assert.equal(result[5].failed, true); assert.equal(result[6].body, 'null');
     assert.deepEqual(result.slice(9, 11).map(message => message.name), ['one', 'two']);
     assert.equal(result[11].body, 'adapter stderr'); assert.equal(result[12].body, '{truncated');
   });
+  for (const cwd of ['/repo', '/other-worktree']) await test(`ACP descendant titles follow provider metadata in ${cwd} and manual refresh`, async t => {
+    const session = { session_id: null, agent_id: 'test', cwd: '/repo', status: 'idle', updated_at: '', revision: 1, entries: [], permissions: [] };
+    const root = { ...session, thread_id: 'title-root', title: 'Parent task' };
+    const child = { ...session, thread_id: 'title-child', cwd, title: 'Initial child title', parent: { kind: 'acp', id: root.thread_id } };
+    const instances = [{ kind: 'acp', id: child.thread_id, parent: child.parent, title: child.title, cwd, agent_id: 'test', deleted: false, url: '/aow/tabs/acp/title-child' }];
+    const { page, state } = await fixture(t, false, { sessions: [root, child], instances });
+    await page.getByRole('button', { name: '展开 Parent task 的子实例', exact: true }).click();
+    const descendant = page.locator('[data-instance="acp:title-root"] .terminal-descendant-open');
+    assert.match(await descendant.innerText(), /Initial child title/);
+    state.instances[0].title = 'Updated provider title';
+    state.sessions[1].title = 'Updated provider title';
+    state.sessions[1].revision++;
+    await descendant.filter({ hasText: 'Updated provider title' }).waitFor();
+    if (cwd === '/repo') await page.getByRole('button', { name: '打开 ACP 会话 Updated provider title', exact: true }).waitFor();
+    else assert.equal(await page.getByRole('button', { name: '打开 ACP 会话 Updated provider title', exact: true }).count(), 0);
+    // A manual refresh must also revalidate the graph without an incoming event.
+    state.instances[0].title = 'Refreshed child title';
+    const loaded = page.waitForResponse(response => new URL(response.url()).pathname === '/api/instances');
+    await page.getByRole('button', { name: '刷新 User ACP', exact: true }).click();
+    await loaded;
+    await descendant.filter({ hasText: 'Refreshed child title' }).waitFor();
+  });
+
+  await test('ACP parent rows expand mixed descendants through deleted instances', async t => {
+    const root = { thread_id: 'root', session_id: 'remote-root', agent_id: 'test', cwd: '/repo', title: '根任务', status: 'idle', updated_at: '' };
+    const instances = [
+      { kind: 'terminal', id: 'middle', parent: { kind: 'acp', id: 'root' }, title: '中间任务', cwd: '/repo', agent_id: 'codex', deleted: true, url: null },
+      { kind: 'acp', id: 'leaf', parent: { kind: 'terminal', id: 'middle' }, title: '验证任务', cwd: '/repo', agent_id: 'test', deleted: false, url: '/aow/tabs/acp/leaf' },
+    ];
+    const { page } = await fixture(t, false, { sessions: [root], instances });
+    const family = page.locator('.terminal-family[data-instance="acp:root"]');
+    await family.getByRole('button', { name: '展开 根任务 的子实例', exact: true }).click();
+    assert.equal(await family.getByRole('button', { name: 'main · 中间任务（已删除）', exact: true }).isDisabled(), true);
+    await family.getByRole('button', { name: '展开 main · 中间任务（已删除） 的子实例', exact: true }).click();
+    assert.equal(await family.getByRole('button', { name: 'main · ACP · 验证任务', exact: true }).isVisible(), true);
+    assert.equal(await family.getByRole('button', { name: '打开 ACP 会话 根任务', exact: true }).isVisible(), true);
+  });
+
   await test('Agent history opens a separate tab and reuses it when opened again', async t => {
     const { page, state } = await fixture(t);
     await importHistory(page);
@@ -1397,6 +1794,7 @@ try {
     ] });
     await newSession(page);
     const thought = page.getByRole('button', { name: '思考过程', exact: true });
+    await toggleThinking(page);
     await page.waitForFunction(() => document.querySelector('[aria-label="思考过程"]')?.getAttribute('aria-expanded') === 'true');
     assert.equal(await page.locator('.acp-user-text').innerText(), '**literal user input**');
     state.session.entries.push({ id: 'answer', kind: 'assistant', content: { type: 'text', text: '**Answer**' } }); state.session.revision++;
@@ -1581,11 +1979,15 @@ try {
     ] });
     await newSession(page);
     const thinking = page.getByRole('button', { name: '思考过程', exact: true });
+    await toggleThinking(page);
     await page.getByText('Thinking about files', { exact: true }).waitFor();
     state.session.plan = { entries: [{ content: 'Read file', status: 'in_progress' }] };
     state.session.notices = [{ id: 'n', kind: 'notice', content: { severity: 'warning', title: 'Rate limit', description: 'Please **wait** before retrying.' } }];
     state.session.revision++;
     const notice = page.getByRole('alert', { name: 'Rate limit', exact: true });
+    await notice.waitFor();
+    assert.equal(await notice.getByText('Please **wait** before retrying.', { exact: true }).isVisible(), false);
+    await notice.getByRole('button', { name: '详情', exact: true }).click();
     await notice.getByText('Please **wait** before retrying.', { exact: true }).waitFor();
     assert.equal(await thinking.getAttribute('aria-expanded'), 'true');
     assert.equal(await notice.getAttribute('data-severity'), 'warning');
@@ -1596,6 +1998,7 @@ try {
     await page.locator('.acp-message-chunk strong').filter({ hasText: /^Hello$/ }).waitFor();
     assert.equal(await page.locator('.acp-message-chunk').count(), 1);
     await page.getByText('All Done', { exact: true }).waitFor();
+    assert.equal(await notice.getByRole('button', { name: '收起', exact: true }).getAttribute('aria-expanded'), 'true', 'stream updates preserve expanded notice details');
     await notice.getByRole('button', { name: '关闭通知：Rate limit', exact: true }).click();
     await notice.waitFor({ state: 'detached' });
     assert.deepEqual(state.actions.at(-1), { action: 'dismiss_notice', notice_id: 'n' });
@@ -1603,6 +2006,64 @@ try {
     await page.getByRole('tab').filter({ hasText: 'Conversation' }).click();
     await page.locator('.acp-message-chunk strong').filter({ hasText: /^Hello$/ }).waitFor();
     assert.equal(await notice.count(), 0);
+  });
+  await test('notices align with the conversation and keep long details readable on narrow screens', async t => {
+    const { page, state } = await fixture(t);
+    const fallback = 'Falling back from WebSockets to HTTPS transport. workspace routing discovery timed out';
+    const longTitle = '  Connection diagnostics:\n' + 'workspace-routing-discovery/'.repeat(15) + '\n  ';
+    const description = '  Agent connection failed.\n' + '<script>unsafe()</script>\n'.repeat(30) + '  ';
+    Object.assign(state.session, { entries: [
+      { id: 'u', kind: 'user', content: { type: 'text', text: 'Check the workspace connection' } },
+      { id: 'a', kind: 'assistant', content: { type: 'text', text: 'The connection is being checked.' } },
+    ], notices: [
+      { id: 'transport', kind: 'notice', content: { severity: 'warning', title: fallback } },
+      { id: 'error', kind: 'notice', content: { severity: 'error', title: '无法继续执行任务', description } },
+      { id: 'info', kind: 'notice', content: { message: longTitle } },
+    ] });
+    await page.addStyleTag({ content: '@media (max-width: 720px) { #root > div > div > aside { display: none; } }' });
+    await newSession(page);
+    const warning = page.getByRole('alert', { name: fallback, exact: true });
+    const error = page.getByRole('alert', { name: '无法继续执行任务', exact: true });
+    const info = page.locator('.acp-notice[data-severity="info"]');
+    await warning.waitFor();
+    assert.equal(await warning.locator('.acp-notice-title').textContent(), fallback, 'transport notices preserve the original backend text');
+    assert.equal(await info.locator('.acp-notice-title').textContent(), longTitle, 'long titles preserve every line and whitespace');
+    assert.equal(await warning.getByRole('button', { name: '详情', exact: true }).count(), 0, 'titles alone do not create synthetic details');
+    assert.equal(await info.getByRole('button', { name: '详情', exact: true }).count(), 0);
+    const aligned = async () => {
+      const composer = await page.locator('.acp-composer').boundingBox();
+      const message = await page.locator('.project-aow-snapshot-message.assistant .project-aow-snapshot-bubble').boundingBox();
+      for (const notice of [warning, error, info]) {
+        const box = await notice.boundingBox();
+        assert.ok(Math.abs(box.x - composer.x) <= 1 && Math.abs(box.width - composer.width) <= 1, 'notice aligns with the composer');
+        assert.ok(Math.abs(box.x - message.x) <= 1 && Math.abs(box.width - message.width) <= 1, 'notice aligns with the conversation');
+        assert.equal(await notice.evaluate(element => element.scrollWidth <= element.clientWidth + 1), true, 'long text does not cause horizontal overflow');
+        const close = await notice.getByRole('button', { name: /^关闭通知/ }).boundingBox();
+        assert.ok(close.x >= box.x && close.x + close.width <= box.x + box.width, 'close stays inside the notice');
+      }
+    };
+    for (const width of [1680, 760, 390]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await aligned();
+      if (process.env.ACP_SCREENSHOT_DIR) await page.screenshot({ path: `${process.env.ACP_SCREENSHOT_DIR}/acp-notices-${width}.png` });
+    }
+    await error.getByRole('button', { name: '详情', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    const toggle = error.getByRole('button', { name: '收起', exact: true });
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
+    assert.equal(await toggle.getAttribute('aria-controls'), await error.locator('.acp-notice-description').getAttribute('id'));
+    await toggle.click();
+    await error.getByRole('button', { name: '详情', exact: true }).click();
+    const details = error.locator('.acp-notice-description');
+    assert.equal(await details.textContent(), description, 'description text matches backend logs without trimming or rewriting');
+    assert.equal(await details.evaluate(element => element.scrollHeight > element.clientHeight), true, 'large details scroll within the notice');
+    assert.equal(await details.locator('script').count(), 0, 'details remain plain text');
+    await aligned();
+    if (process.env.ACP_SCREENSHOT_DIR) await page.screenshot({ path: `${process.env.ACP_SCREENSHOT_DIR}/acp-notices-expanded.png` });
+    await error.getByRole('button', { name: '关闭通知：无法继续执行任务', exact: true }).click();
+    await error.waitFor({ state: 'detached' });
+    assert.deepEqual(state.actions.at(-1), { action: 'dismiss_notice', notice_id: 'error' });
+    assert.equal(await warning.isVisible(), true);
   });
   await test('plan cards align with messages and preserve collapse through updates and persistent clearing', async t => {
     const { page, state } = await fixture(t);
@@ -1708,7 +2169,14 @@ try {
     const opened = page.getByLabel('Opened file', { exact: true });
     const url = page.url();
     for (const [label, expected] of [['File', '/repo/a b.rs:12'], ['Relative', '/repo/README.md:8'], ['Absolute', '/repo/main.rs:3']]) {
-      await page.getByRole('link', { name: label, exact: true }).click();
+      const link = page.getByRole('link', { name: label, exact: true });
+      const destination = new URL(await link.getAttribute('href'), page.url());
+      const separator = expected.lastIndexOf(':');
+      assert.equal(destination.pathname, '/aow/tabs/file');
+      assert.equal(destination.searchParams.get('workspace'), 'fixture-workspace');
+      assert.equal(destination.searchParams.get('path'), expected.slice(0, separator));
+      assert.equal(destination.hash, '#L' + expected.slice(separator + 1));
+      await link.click();
       assert.equal(await opened.textContent(), expected);
       assert.equal(page.url(), url);
     }
@@ -2176,6 +2644,202 @@ try {
     assert.equal(await displayed.getAttribute('src'), source);
     assert.equal(interactions(state).length, 1);
   });
+  await test('replayed ACP image mentions restore pasted images after session load without changing history', async t => {
+    const { page, state } = await fixture(t);
+    const connected = page.waitForResponse(response => response.url().endsWith('/connection'));
+    await newSession(page); await connected;
+    const input = page.getByRole('textbox', { name: 'ACP 消息', exact: true });
+    await input.fill('Describe this image'); await pasteImage(input);
+    await input.locator('.acp-image-mention[data-status="ready"]').waitFor();
+    await input.press('Enter');
+    await page.getByText('Hello from ACP', { exact: true }).waitFor();
+    const original = interactions(state)[0].content.find(block => block.type === 'image');
+    const source = `data:${original.mimeType};base64,${original.data}`;
+    const replayed = `Before **literal** <b>text</b>\n[@image]\n(${source})\nBetween\n![second](${source})\nAfter`;
+    state.loadedEntries = [{ id: 'replayed-user', kind: 'user', content: { type: 'text', text: replayed } }];
+    Object.assign(state.session, { entries: [], needs_load: true, status: 'disconnected' });
+    await page.reload();
+    await page.getByRole('tab').filter({ hasText: 'Conversation' }).click();
+    await page.waitForFunction(() => {
+      const images = [...document.querySelectorAll('.acp-user-message img')];
+      return images.length === 2 && images.every(image => image.complete && image.naturalWidth === 4 && image.naturalHeight === 3);
+    });
+    assert.equal(state.loads, 1);
+    const user = page.locator('.acp-user-message');
+    assert.deepEqual(await user.locator('img').evaluateAll(images => images.map(image => image.src)), [source, source]);
+    assert.equal(await user.textContent(), 'Before **literal** <b>text</b>\n\nBetween\n\nAfter');
+    assert.equal(await user.locator('b, strong, a').count(), 0, 'surrounding user text stays literal');
+    assert.equal(await page.getByRole('navigation', { name: '用户输入导航' }).getByRole('button').getAttribute('title'), 'Before **literal** <b>text</b>\n[图片]\nBetween\n[图片]\nAfter');
+    assert.equal(state.session.entries[0].content.text, replayed, 'display recovery does not rewrite agent history');
+    await page.reload();
+    await page.getByRole('tab').filter({ hasText: 'Conversation' }).click();
+    await user.locator('img').first().waitFor();
+    assert.equal(await user.locator('img').count(), 2);
+    assert.equal(interactions(state).length, 1, 'restoring images never resubmits the prompt');
+  });
+  await test('replayed ACP images work in history overviews and preserve malformed or unsupported data as text', async t => {
+    const { page, state } = await fixture(t);
+    const data = await page.evaluate(() => {
+      const canvas = document.createElement('canvas'); canvas.width = 4; canvas.height = 3;
+      return canvas.toDataURL('image/png').split(',')[1];
+    });
+    const invalid = ['[@image](data:image/png;base64,not*base64)', '[@image](data:image/png;base64,YmFk)', '[@image](data:image/svg+xml;base64,PHN2Zy8+)', '[@image](https://example.invalid/image.png)'].join('\n');
+    const wrap = value => value.match(/.{1,32}/g).join('\r\n');
+    const user = { id: 'u0', kind: 'user', content: { type: 'text', text: `[@image](data:image/png;base64,${wrap(data)})\n${invalid}` } };
+    projectedHistory(state, 1);
+    state.session.overview[0].user = [user];
+    await newSession(page);
+    await page.waitForFunction(() => {
+      const images = [...document.querySelectorAll('.acp-user-message img')];
+      return images.length === 1 && images[0].naturalWidth === 4;
+    });
+    assert.equal(await page.locator('.acp-user-message img').getAttribute('src'), `data:image/png;base64,${data}`);
+    assert.equal(await page.locator('.acp-user-message').textContent(), `\n${invalid}`);
+    assert.equal(state.processReads?.length || 0, 0, 'images render directly from the overview');
+  });
+  await test('replayed ACP images recover as chunks complete and damaged content is replaced', async t => {
+    const { page, state } = await fixture(t);
+    const sources = await page.evaluate(() => {
+      const canvas = document.createElement('canvas'); canvas.width = 4; canvas.height = 3;
+      return ['image/png', 'image/jpeg', 'image/webp'].map(type => canvas.toDataURL(type));
+    });
+    sources.push('data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');
+    const entry = { id: 'streamed-user', kind: 'user', content: { type: 'text', text: `[@image](${sources[0].slice(0, 60)}` } };
+    state.session.entries = [entry];
+    await newSession(page);
+    const user = page.locator('.acp-user-message');
+    await user.waitFor();
+    assert.equal(await user.textContent(), entry.content.text);
+    assert.equal(await user.locator('img').count(), 0, 'an incomplete wrapper stays text');
+    for (const source of sources) {
+      const damaged = '[@image](data:image/png;base64,YmFk)';
+      entry.content.text = damaged; state.session.revision++;
+      await user.getByText(damaged, { exact: true }).waitFor();
+      assert.equal(await user.locator('img').count(), 0);
+      entry.content.text = `[@image](${source})`; state.session.revision++;
+      await page.waitForFunction(source => {
+        const image = document.querySelector('.acp-user-message img');
+        return image?.src === source && image.complete && image.naturalWidth > 0;
+      }, source);
+      assert.equal(await user.textContent(), '');
+      assert.equal(await page.getByRole('navigation', { name: '用户输入导航' }).getByRole('button').getAttribute('title'), '[图片]');
+    }
+  });
+  await test('steering is capability-gated, preserves its turn and keeps stop available', async t => {
+    const { page, state } = await fixture(t, false, { extensions: { steering: { supported: true } } });
+    Object.assign(state.session, { status: 'working', turns: [{ user_entry_id: 'u', status: 'in_progress' }], entries: [
+      { id: 'u', kind: 'user', content: { type: 'text', text: 'Original task' } },
+      { id: 'a', kind: 'assistant', content: { type: 'text', text: 'Working on the task' } },
+    ] });
+    await newSession(page);
+    state.session.revision++;
+    const input = page.getByRole('textbox', { name: 'ACP 消息', exact: true });
+    const steer = page.getByRole('button', { name: '追加指令', exact: true });
+    await steer.waitFor();
+    await input.fill('Keep the change small');
+    state.steerError = 'Steering not available';
+    await steer.click();
+    await page.getByRole('alert').getByText('Steering not available', { exact: true }).waitFor();
+    assert.equal(await input.innerText(), 'Keep the change small');
+    state.steerError = '';
+    await input.press('Enter');
+    await page.getByText('追加指令 · 发送中…', { exact: true }).waitFor();
+    assert.equal(await input.innerText(), '');
+    assert.equal(await steer.isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: '停止', exact: true }).isEnabled(), true);
+    assert.equal(state.actions.filter(action => action.action === 'prompt' || action.action === 'cancel').length, 0);
+    assert.equal(await page.locator('.acp-entry-user').count(), 1, 'steering must not create a new rendered turn');
+    state.session.entries.at(-1).delivery.status = 'injected';
+    state.session.steering_pending = false; state.session.revision++;
+    await page.getByText('追加指令 · 已提交', { exact: true }).waitFor();
+    await input.fill('Next instruction');
+    assert.equal(await steer.isEnabled(), true);
+    state.extensions = {};
+    await steer.waitFor({ state: 'detached' });
+    const before = state.actions.length;
+    await input.press('Enter');
+    assert.equal(state.actions.length, before, 'an unsupported agent cannot receive mid-turn prompts');
+    await page.getByRole('button', { name: '停止', exact: true }).click();
+    assert.equal(state.actions.at(-1).action, 'cancel');
+  });
+  await test('steering joins only identified message fragments and copies the complete dialogue', async () => {
+    const { coalesceSteeringChunks } = await server.ssrLoadModule('/src/features/acp/agent_ui/conversation_view/steering_messages.ts');
+    const { messageGroups } = await server.ssrLoadModule('/src/features/acp/agent_ui/conversation_view/entry_view_state.ts');
+    const { turnPresentation, overviewPresentation } = await server.ssrLoadModule('/src/features/acp/agent_ui/conversation_view/conversation_turns.ts');
+    const message = (id, value, message_id) => ({ id, kind: 'assistant', message_id, content: { type: 'text', text: value } });
+    const first = message('first', '**项目', 'readme');
+    const steer = { id: 'steer', kind: 'steering', content: { type: 'text', text: 'Also explain constraints' }, delivery: { status: 'injected' } };
+    const tail = message('tail', '说明**', 'readme');
+    const last = message('last', 'Constraints', 'agents');
+    const entries = [first, steer, tail, last];
+    const before = structuredClone(entries);
+    assert.deepEqual(coalesceSteeringChunks(entries).map(entry => entry.content.text), ['**项目说明**', 'Also explain constraints', 'Constraints']);
+    assert.deepEqual(entries, before, 'presentation must not change cursor-backed entries');
+    const anonymous = entries.map(entry => ({ ...entry, message_id: undefined }));
+    assert.equal(coalesceSteeringChunks(anonymous).length, 4, 'missing identities never justify joining');
+    const interrupted = [first, steer, { id: 'tool', kind: 'tool', content: {} }, tail];
+    assert.equal(coalesceSteeringChunks(interrupted).length, 4, 'a tool boundary is preserved in process timelines');
+    const session = { status: 'idle', permissions: [], stop_reason: 'end_turn' };
+    const view = turnPresentation(messageGroups(entries, false, false), entries, session, true, { status: 'completed' });
+    assert.equal(view.process.length, 0);
+    assert.equal(view.reply, '**项目说明**\n\nConstraints');
+    assert.equal(overviewPresentation({ messages: entries, conclusion: [last], running: false, waiting: false }).reply, view.reply);
+    const failed = turnPresentation(messageGroups(entries, false, false), entries, session, false, { status: 'interrupted' });
+    assert.equal(failed.conclusion.length, 0, 'keeping dialogue visible does not assert success');
+    assert.ok(failed.messages.length);
+  });
+  for (const overview of [false, true]) {
+    await test(`steered answers stay continuous and visible through streaming and reload in ${overview ? 'overview' : 'full'} sessions`, async t => {
+      const { page, state } = await fixture(t);
+      const entry = (id, kind, value, message_id) => ({ id, kind, message_id, content: { type: 'text', text: value } });
+      const user = entry('u', 'user', 'Explain the project');
+      const first = entry('first', 'assistant', 'Read **the ', 'readme');
+      const steer = { ...entry('s', 'steering', 'Also explain AGENTS.md'), delivery: { status: 'injected' } };
+      const tail = entry('tail', 'assistant', 'README**.', 'readme');
+      const last = entry('last', 'assistant', 'AGENTS constraints are documented.', 'agents');
+      const tool = { id: 'tool', kind: 'tool', content: { title: 'Inspect source', status: 'completed' } };
+      const entries = [user, tool, first, steer];
+      const update = (running, includeLast = false) => {
+        const revision = state.session.revision;
+        const previousMessages = state.session.overview?.[0]?.messages;
+        Object.assign(state.session, { status: running ? 'working' : 'idle', stop_reason: running ? null : 'end_turn', sync_generation: 'steering-view',
+          entries: overview ? [] : [...entries], turns: [{ user_entry_id: 'u', status: running ? 'in_progress' : 'completed' }] });
+        state.session.revision++;
+        if (overview) {
+          state.session.overview = [{ id: 'u', revision: state.session.revision, user: [user], conclusion: includeLast ? [last] : [],
+            messages: entries.filter(entry => ['assistant', 'steering'].includes(entry.kind)), tool_count: 1, progress_count: 0,
+            running, waiting: false, compacting: false, status: running ? 'in_progress' : 'completed', permission_tool_ids: [] }];
+          state.processSnapshots = { u: { ...state.session, overview: undefined, entries: [...entries] } };
+          state.updatePayload = { kind: 'overview', from_revision: revision,
+            snapshot: { ...state.session, overview: undefined }, turns: state.session.overview.map(turn => ({ ...turn, messages: previousMessages
+              ? { kind: 'delta', entries: turn.messages.slice(previousMessages.length).map((entry, index) => ({ kind: 'replace', index: previousMessages.length + index, entry })) }
+              : { kind: 'reset', entries: turn.messages } })) };
+        }
+      };
+      update(true);
+      await newSession(page);
+      const dialogue = page.locator('.acp-turn-dialogue');
+      await dialogue.getByText('Also explain AGENTS.md', { exact: true }).waitFor();
+      entries.push(tail); update(true);
+      await dialogue.locator('strong').getByText('the README', { exact: true }).waitFor();
+      assert.equal(await dialogue.locator('.acp-message-chunk').count(), 1, 'the same reply is one Markdown block');
+      assert.equal(await dialogue.locator('.acp-entry-steering').count(), 1);
+      entries.push(last); update(false, true);
+      const verify = async () => {
+        await dialogue.getByText('AGENTS constraints are documented.', { exact: true }).waitFor();
+        assert.equal(await dialogue.locator('strong').innerText(), 'the README');
+        assert.equal(await dialogue.locator('.acp-message-chunk').count(), 2);
+        assert.equal(await page.getByRole('button', { name: '展开处理过程', exact: true }).count(), 1, 'only tools stay collapsed');
+        await page.getByRole('button', { name: '展开处理过程', exact: true }).click();
+        assert.equal(await page.locator('.acp-message-chunk').count(), 2, 'expanded tools never duplicate the dialogue');
+        await page.getByRole('button', { name: '收起处理过程', exact: true }).click();
+      };
+      await verify();
+      await page.reload();
+      await page.getByRole('tab').filter({ hasText: 'Conversation' }).click();
+      await verify();
+    });
+  }
   await test('image-only ACP prompts retain failed drafts and clear only accepted images', async t => {
     const { page, state } = await fixture(t);
     const connected = page.waitForResponse(response => response.url().endsWith('/connection'));
@@ -2288,11 +2952,19 @@ try {
   await test('existing sessions recover from authentication without losing drafts or replaying prompts', async t => {
     const { page, state } = await fixture(t);
     state.advertiseAuth = true;
+    state.session.entries = [
+      { id: 'earlier-user', kind: 'user', content: { type: 'text', text: 'Earlier question' } },
+      { id: 'earlier-answer', kind: 'assistant', content: { type: 'text', text: 'Keep the conversation visible during login' } },
+    ];
     await newSession(page);
     const content = page.getByRole('region', { name: 'ACP 会话内容', exact: true });
     const input = content.getByLabel('ACP 消息', { exact: true });
     await input.fill('Keep this unsent draft');
     Object.assign(state.session, { auth_required: true, error: '请重新登录', revision: state.session.revision + 1 });
+    await content.getByRole('region', { name: 'Agent 登录', exact: true }).waitFor();
+    await composerStatus(page);
+    assert.equal(await content.getByText('Keep the conversation visible during login', { exact: true }).isVisible(), true);
+    if (process.env.ACP_SCREENSHOT_DIR) await page.screenshot({ path: `${process.env.ACP_SCREENSHOT_DIR}/acp-login.png` });
     await content.getByRole('button', { name: '登录 Agent', exact: true }).click();
     await input.waitFor({ state: 'visible' });
     assert.equal(await input.innerText(), 'Keep this unsent draft');
@@ -2306,6 +2978,88 @@ try {
     assert.equal(await input.innerText(), 'Keep this unsent draft');
     assert.deepEqual(interactions(state), []);
   });
+  await test('composer sync states preserve drafts and history while degraded sync remains editable', async t => {
+    const { page, state } = await fixture(t);
+    state.session.entries = [
+      { id: 'user', kind: 'user', content: { type: 'text', text: 'A completed question' } },
+      { id: 'answer', kind: 'assistant', content: { type: 'text', text: 'A completed answer' } },
+    ];
+    await newSession(page);
+    const input = page.getByLabel('ACP 消息', { exact: true });
+    await input.fill('Unsent draft');
+    const actions = state.actions.length;
+    const publish = change => page.evaluate(async change => {
+      const { getResource } = await import('/src/features/acp/sync/store.ts');
+      getResource({ kind: 'session', thread_id: 'local' }).publish(change);
+    }, change);
+    for (const status of ['offline', 'connecting']) {
+      await publish({ status });
+      await composerStatus(page);
+      assert.equal(await page.getByText('A completed answer', { exact: true }).isVisible(), true);
+      await page.keyboard.press('Enter');
+      assert.equal(state.actions.length, actions, 'keyboard input cannot submit while blocked');
+      await publish({ status: 'live' });
+      assert.equal(await input.innerText(), 'Unsent draft');
+    }
+    await publish({ error: 'Temporary snapshot failure' });
+    const failed = await composerStatus(page);
+    await failed.getByRole('button', { name: '重试同步', exact: true }).click();
+    assert.equal(await input.innerText(), 'Unsent draft');
+    await publish({ status: 'degraded' });
+    await page.getByText('服务端暂不支持实时同步，已进入低频同步模式。', { exact: true }).waitFor();
+    assert.equal(await input.isEditable(), true);
+    assert.equal(await page.locator('.conversation-composer-status').count(), 0);
+    await publish({ status: 'live' });
+    Object.assign(state.session, { status: 'working', revision: state.session.revision + 1 });
+    await page.getByRole('button', { name: '停止', exact: true }).waitFor();
+    assert.equal(await input.isEditable(), true, 'normal generation keeps the draft editor available');
+    assert.equal(await input.innerText(), 'Unsent draft');
+  });
+  await test('composer status fits narrow panes and gives terminal states precedence over ownership', async t => {
+    const { page: owner, state } = await fixture(t);
+    await newSession(owner);
+    await owner.getByLabel('ACP 消息', { exact: true }).fill('Owner draft');
+    const { page } = await fixture(t, false, { sharedState: state });
+    await page.getByRole('button', { name: '打开 ACP 会话 Conversation', exact: true }).click();
+    await page.getByRole('button', { name: '接管', exact: true }).waitFor();
+    await page.evaluate(() => { document.querySelector('aside').style.display = 'none'; });
+    for (const width of [1140, 600, 390]) {
+      await page.setViewportSize({ width, height: 800 });
+      const card = await composerStatus(page);
+      const button = await card.getByRole('button', { name: '接管', exact: true }).boundingBox();
+      const bounds = await card.boundingBox();
+      assert.ok(button.x >= bounds.x && button.x + button.width <= bounds.x + bounds.width);
+      if (process.env.ACP_SCREENSHOT_DIR) await page.screenshot({ path: `${process.env.ACP_SCREENSHOT_DIR}/acp-takeover-${width}.png` });
+    }
+    await page.evaluate(async () => {
+      const { getResource } = await import('/src/features/acp/sync/store.ts');
+      getResource({ kind: 'session', thread_id: 'local' }).publish({ status: 'denied', data: undefined, error: '登录已失效' });
+    });
+    await page.getByRole('button', { name: '重新登录', exact: true }).waitFor();
+    await composerStatus(page);
+    assert.equal(await page.getByRole('button', { name: '接管', exact: true }).count(), 0);
+    state.sessions = [];
+    await page.getByText('会话已删除。', { exact: true }).waitFor();
+    await composerStatus(page);
+    assert.equal(await page.getByRole('button', { name: '重新登录', exact: true }).count(), 0);
+  });
+  await test('agent login connection failures can retry inside the composer', async t => {
+    const { page, state } = await fixture(t);
+    state.authRequired = true;
+    let unavailable = true;
+    await page.route('**/api/acp/sessions/local/connection', route => route.fulfill({ json: null }));
+    await page.route('**/api/acp/connections', route => unavailable
+      ? route.fulfill({ status: 503, json: { message: 'Login connection unavailable' } }) : route.fallback());
+    await newSession(page);
+    await page.getByText('Login connection unavailable', { exact: true }).waitFor();
+    const card = await composerStatus(page);
+    unavailable = false;
+    await card.getByRole('button', { name: '重试连接', exact: true }).click();
+    await page.getByRole('button', { name: '登录 Agent', exact: true }).click();
+    await page.getByLabel('ACP 消息', { exact: true }).waitFor();
+    assert.equal(state.authenticated, true);
+    assert.equal(state.sessions.length, 1);
+  });
   await test('history refresh and reload use only local records even when the agent is offline', async t => {
     const { page, state } = await fixture(t);
     assert.equal(state.connections, 0); assert.deepEqual(state.listCalls, []);
@@ -2313,7 +3067,7 @@ try {
     await page.getByLabel('ACP 消息', { exact: true }).fill('Offline draft');
     state.connectionError = 'Offline';
     const sidebar = page.getByRole('region', { name: 'ACP 会话列表', exact: true });
-    await sidebar.getByRole('button', { name: '刷新 ACP', exact: true }).click();
+    await sidebar.getByRole('button', { name: '刷新 User ACP', exact: true }).click();
     await sidebar.getByRole('button', { name: '打开 ACP 会话 Conversation', exact: true }).waitFor();
     await page.reload();
     await sidebar.getByRole('button', { name: '打开 ACP 会话 Conversation', exact: true }).waitFor();
@@ -2386,6 +3140,42 @@ try {
     await content.getByRole('button', { name: '重试连接', exact: true }).click();
     await content.getByText('Imported conversation content', { exact: true }).waitFor();
     assert.equal(state.sessions.length, 1); assert.equal(state.loads, 1);
+  });
+  await test('cancelled recovery keeps the old conclusion, shows cleanup, and can retry', async t => {
+    const { page, state } = await fixture(t, false, { recoveryLifecycle: true });
+    await importHistory(page);
+    const saved = state.sessions[0];
+    saved.entries = [
+      { id: 'old-user', kind: 'user', content: { type: 'text', text: 'Earlier question' } },
+      { id: 'old-answer', kind: 'assistant', message_id: 'answer', content: { type: 'text', text: 'Earlier completed answer' } },
+    ];
+    state.resumeGate = new Promise(resolve => { state.finishResume = resolve; });
+    t.after(() => state.finishResume());
+    await page.getByRole('button', { name: '打开 ACP 会话 Earlier conversation', exact: true }).click();
+    const content = page.getByRole('region', { name: 'ACP 会话内容', exact: true });
+    await content.getByRole('button', { name: '取消恢复', exact: true }).click();
+    await content.getByRole('status').getByText(/正在等待上次恢复结束并清理/).waitFor();
+    await content.getByText('Earlier completed answer', { exact: true }).waitFor();
+    assert.equal(state.actions.filter(action => action.action === 'resume').length, 1);
+    state.finishResume();
+    await content.getByRole('alert').getByText('会话恢复失败：Recovery cancelled', { exact: true }).waitFor();
+    assert.equal(await content.getByText('本轮执行失败，未生成最终结论。', { exact: true }).count(), 0);
+    assert.equal(state.sessions.length, 1);
+    state.cancelledRecovery = false; state.resumeGate = undefined;
+    await content.getByRole('button', { name: '重试连接', exact: true }).click();
+    await content.getByText('Imported conversation content', { exact: true }).waitFor();
+    assert.equal(await content.getByText('会话恢复失败：Recovery cancelled', { exact: true }).count(), 0);
+    assert.deepEqual(state.actions.map(action => action.action), ['resume', 'cancel', 'resume']);
+  });
+  await test('bounded logs retain response names without the original request line', async t => {
+    const { page } = await fixture(t);
+    const result = await page.evaluate(async () => {
+      const { logMessages } = await import('/src/features/acp/acp_tools/messages.ts');
+      return logMessages([{ timestamp: 'now', direction: 'incoming', connection_id: 'connection', request_method: 'session/load', message: JSON.stringify({ id: 'old-request', result: {} }) }])[0];
+    });
+    assert.equal(result.name, 'session/load');
+    assert.equal(result.type, 'Response');
+    assert.equal(result.failed, false);
   });
   await test('an unavailable agent does not prevent importing another agent', async t => {
     const { page, state } = await fixture(t, false, { agents: ['test', 'offline'].map(id => ({ id, name: id === 'test' ? 'Test Agent' : 'Offline Agent', supported: true, installed: true })) });

@@ -6,7 +6,7 @@ import { chromium } from 'playwright';
 
 const server = await createServer({ root: fileURLToPath(new URL('../', import.meta.url)), logLevel: 'error', server: { host: '127.0.0.1', port: 0, proxy: {} } });
 let browser;
-const pane = (id, parent, cli = true) => ({ id, parent_pane_id: parent, name: id, cwd: '/repo', shell: '/bin/sh', status: 'running',
+const pane = (id, parent, cli = true) => ({ id, parent: parent ? { kind: 'terminal', id: parent } : null, name: id, cwd: '/repo', shell: '/bin/sh', status: 'running',
   ...(cli ? { agent_id: 'codex', agent_terminal: { phase: 'ready', task_submitted: false, error: null } } : {}) });
 const tab = (id, name, path, panes) => ({ id, name, workspace_root: path, panes, layout: { type: 'pane', pane_id: panes[0].id } });
 const data = () => [
@@ -20,12 +20,13 @@ const expandRoot = (page, id) => root(page, id).locator(':scope > .terminal-fami
 try {
   await server.listen();
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
-  async function fixture(t, tabs = data()) {
+  async function fixture(t, tabs = data(), instances = []) {
     const page = await browser.newPage({ viewport: { width: 900, height: 700 } });
     page.setDefaultTimeout(8000);
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     t.after(async () => { await page.close(); assert.deepEqual(errors, []); });
+    await page.route(url => url.pathname === '/api/instances', route => route.fulfill({ json: { items: instances } }));
     await page.route(url => url.pathname === '/api/terminals', route => route.fulfill({ json: { tabs } }));
     await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/tests/terminal-hierarchy-preview.html`);
     await root(page, 'a').waitFor();
@@ -70,12 +71,37 @@ try {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
   });
 
+  await test('mixed ACP and terminal descendants retain deleted intermediate nodes', async t => {
+    const item = (kind, id, parent, title, deleted = false) => ({ kind, id, parent, title, cwd: '/repo', agent_id: 'test', deleted,
+      url: deleted ? null : `/aow/tabs/${kind}/${id}` });
+    const instances = [
+      item('acp', 'thread-one', { kind: 'terminal', id: 'pa' }, '分析任务'),
+      item('terminal', 'removed-pane', { kind: 'acp', id: 'thread-one' }, '中间任务', true),
+      item('acp', 'thread-two', { kind: 'terminal', id: 'removed-pane' }, '验证结果'),
+    ];
+    const { page } = await fixture(t, data(), instances);
+    await expandRoot(page, 'a');
+    const branch = root(page, 'a');
+    await branch.getByRole('button', { name: '展开 main · ACP · 分析任务 的子实例', exact: true }).click();
+    assert.equal(await branch.getByRole('button', { name: 'main · 中间任务（已删除）', exact: true }).isDisabled(), true);
+    await branch.getByRole('button', { name: '展开 main · 中间任务（已删除） 的子实例', exact: true }).click();
+    assert.equal(await branch.getByRole('button', { name: 'main · ACP · 验证结果', exact: true }).isVisible(), true);
+    assert.equal(await branch.locator('[data-instance="acp:thread-two"]').count(), 1);
+    await branch.getByRole('button', { name: 'main · ACP · 验证结果', exact: true }).click();
+    assert.equal(await page.getByLabel('Opened pane').textContent(), 'acp:thread-two');
+    instances[2].title = '已更新的验证结果';
+    const refreshed = page.waitForResponse(response => new URL(response.url()).pathname === '/api/instances');
+    await page.getByRole('button', { name: '刷新 User Terminals', exact: true }).click();
+    await refreshed;
+    await branch.getByRole('button', { name: 'main · ACP · 已更新的验证结果', exact: true }).waitFor();
+  });
+
   await test('split-pane parents, missing parents and malformed cycles do not lose roots or recurse forever', async t => {
     const tabs = data();
     tabs[0].panes.push(pane('pa2', undefined, false));
-    tabs[1].panes[0].parent_pane_id = 'pa2';
-    tabs[0].panes[0].parent_pane_id = 'pc';
-    tabs[3].panes[0].parent_pane_id = 'missing';
+    tabs[1].panes[0].parent = { kind: 'terminal', id: 'pa2' };
+    tabs[0].panes[0].parent = { kind: 'terminal', id: 'pc' };
+    tabs[3].panes[0].parent = { kind: 'terminal', id: 'missing' };
     const { page } = await fixture(t, tabs);
     await expandRoot(page, 'a');
     await root(page, 'a').getByRole('button', { name: '展开 feat/auth · 实现认证接口 的子实例', exact: true }).click();

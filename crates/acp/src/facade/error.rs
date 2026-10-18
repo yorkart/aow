@@ -1,8 +1,10 @@
 //! Preserve ACP authentication state across the HTTP host boundary.
 pub fn is_auth_required(error: &anyhow::Error) -> bool {
-    error
-        .downcast_ref::<agent_client_protocol::Error>()
-        .is_some_and(|error| error.code == agent_client_protocol::ErrorCode::AuthRequired)
+    error.chain().any(|cause| {
+        cause
+            .downcast_ref::<agent_client_protocol::Error>()
+            .is_some_and(|error| error.code == agent_client_protocol::ErrorCode::AuthRequired)
+    })
 }
 
 #[cfg(test)]

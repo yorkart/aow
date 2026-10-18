@@ -1,12 +1,20 @@
 // Host layout adapter: preserve the upstream implementation's entry grouping and each group's render state.
 import { contentMarkdown, messageGroups, visibleContent, type MessageGroup } from './entry_view_state';
 import { object, text, type Data, type SessionSnapshot, type SessionTurn, type ThreadEntry, type TurnOverview } from '../../types';
+import { userTextPreview } from './user_text_images';
+import { coalesceSteeringChunks, isSteeringDialogue } from './steering_messages';
+
+function dialogueReply(entries: ThreadEntry[]) {
+  return coalesceSteeringChunks(entries).filter(entry => entry.kind === 'assistant')
+    .map(entry => contentMarkdown(entry.content)).filter(Boolean).join('\n\n');
+}
 
 export function overviewPresentation(turn: TurnOverview): ReturnType<typeof turnPresentation> {
   return {
     running: turn.running, waiting: turn.waiting, status: turn.status ?? undefined,
     process: [], conclusion: messageGroups(turn.conclusion, false, false),
-    reply: turn.conclusion.map(entry => contentMarkdown(entry.content)).filter(Boolean).join('\n\n'),
+    messages: turn.messages ? messageGroups(turn.messages, turn.running, turn.waiting) : undefined,
+    reply: dialogueReply(turn.messages ?? turn.conclusion),
     error: turn.error,
   };
 }
@@ -16,7 +24,7 @@ export function overviewPrompt(turn: TurnOverview) {
 }
 
 function promptText(content: Data): string {
-  if (content.type === 'text') return text(content.text);
+  if (content.type === 'text') return userTextPreview(text(content.text));
   if (content.type === 'image') return '[图片]';
   if (content.type === 'resource') return text(object(content.resource).text) || text(object(content.resource).uri);
   return text(content.name) || text(content.uri);
@@ -39,7 +47,7 @@ export function conversationTurns(groups: MessageGroup[]) {
 // ACP has no final-message flag. Only a trailing complete agent message is a
 // candidate; a later tool/thought must never promote earlier progress to a final.
 export function finalMessageEntries(entries: ThreadEntry[]): ThreadEntry[] {
-  const relevant = entries.filter(entry => ['user', 'tool', 'summary', 'compaction_update'].includes(entry.kind)
+  const relevant = entries.filter(entry => ['user', 'steering', 'tool', 'summary', 'compaction_update'].includes(entry.kind)
     || ['assistant', 'thought'].includes(entry.kind) && visibleContent(entry.content));
   const last = relevant.at(-1);
   if (last?.kind !== 'assistant') return [];
@@ -61,20 +69,22 @@ export function turnPresentation(response: MessageGroup[], entries: ThreadEntry[
   if (running) status = 'in_progress';
   else if (status === 'in_progress') status = 'interrupted';
   else if (!status && latest) {
-    if (session.error) status = 'failed';
+    if (session.error && !session.auth_required) status = 'failed';
     else if (session.stop_reason === 'end_turn') status = 'completed';
     else if (session.stop_reason === 'refusal') status = 'failed';
     else if (session.stop_reason) status = 'interrupted';
   }
   const candidate = !running && (!status || status === 'completed') ? finalMessageEntries(entries) : [];
+  const dialogue = entries.some(entry => entry.kind === 'steering') ? entries.filter(isSteeringDialogue) : undefined;
   const finalIds = new Set(candidate.map(entry => entry.id));
   const select = (final: boolean) => response.flatMap(group => {
-    const selected = group.entries.filter(entry => finalIds.has(entry.id) === final);
+    const selected = group.entries.filter(entry => finalIds.has(entry.id) === final && (final || !dialogue || !isSteeringDialogue(entry)));
     return selected.length ? [{ ...group, id: selected[0].id, entries: selected }] : [];
   });
   return {
     running, waiting, status, process: select(false), conclusion: select(true),
-    reply: candidate.map(entry => contentMarkdown(entry.content)).filter(Boolean).join('\n\n'),
+    messages: dialogue ? messageGroups(dialogue, running, waiting) : undefined,
+    reply: dialogueReply(dialogue ?? candidate),
     error: recorded?.error,
   };
 }

@@ -1,12 +1,12 @@
 import { appUrl } from '../lib/basePath';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { parseTabUrl, resolveTabTarget, tabLocationUrl, tabTargetUrl, type ResolvedTab, type TabTarget } from './tabRoutes';
+import { TabNavigationContext } from './tabNavigation';
+export { useAowTabNavigation } from './tabNavigation';
 export { aowTabUrl } from './tabRoutes';
 
 const TabLocationContext = createContext<(target?: TabTarget | string, hash?: string, visible?: boolean) => void>(() => {});
 export const useAowTabLocation = () => useContext(TabLocationContext);
-const TabNavigationContext = createContext<(target: TabTarget) => Promise<void>>(async () => {});
-export const useAowTabNavigation = () => useContext(TabNavigationContext);
 export type TaskTabTarget = Extract<TabTarget, { type: 'terminal' | 'acp' }>;
 interface TaskTabActivity {
   getCurrent: () => TaskTabTarget | undefined;

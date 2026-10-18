@@ -5,11 +5,16 @@ import { AowIconButton } from './AowIconButton';
 import './aow-list-row.css';
 
 export function AowListRow({ className, openClassName = '', icon, title, tooltip, children, role, menuLabel,
-  menuExpanded, onMenu, onOpen }: {
+  menuExpanded, onMenu, onOpen, actions, titlePrefix, openLabel, active, disabled }: {
   className: string;
   openClassName?: string;
   icon?: ReactNode;
   title: string;
+  titlePrefix?: ReactNode;
+  openLabel?: string;
+  active?: boolean;
+  disabled?: boolean;
+  actions?: ReactNode;
   tooltip?: string;
   children: ReactNode;
   role?: 'listitem';
@@ -26,24 +31,25 @@ export function AowListRow({ className, openClassName = '', icon, title, tooltip
   };
 
   return <div className={`aow-list-row ${className}`} role={role} onContextMenu={event => {
+    if (actions || disabled) return;
     event.preventDefault(); event.stopPropagation();
     const bounds = event.currentTarget.getBoundingClientRect();
     openMenu(event.clientX || bounds.x, event.clientY || bounds.bottom);
   }}>
-    <button ref={openButton} type="button" data-workspace-open={onMenu ? undefined : true}
-      className={`aow-list-row-open ${openClassName}`} title={tooltip} onClick={onOpen}>
+    <button ref={openButton} type="button" data-workspace-open={onMenu || actions ? undefined : true}
+      className={`aow-list-row-open ${openClassName}`} title={tooltip} aria-label={openLabel} aria-current={active ? 'true' : undefined} disabled={disabled} onClick={onOpen}>
       {icon}
       <span className="aow-list-row-content">
-        <strong className="aow-list-row-title">{title}</strong>
+        <strong className="aow-list-row-title">{titlePrefix}{title}</strong>
         {children}
       </span>
     </button>
-    <AowIconButton className="aow-list-row-menu" title={menuLabel} aria-label={`${title} ${menuLabel}`}
+    {actions ?? <AowIconButton disabled={disabled} className="aow-list-row-menu" title={menuLabel} aria-label={`${title} ${menuLabel}`}
       aria-haspopup="menu" aria-expanded={menuExpanded ?? (workspaceMenu?.target === openButton.current)}
       onClick={event => {
         event.stopPropagation();
         const bounds = event.currentTarget.getBoundingClientRect();
         openMenu(bounds.right, bounds.bottom);
-      }}><MoreHorizontal /></AowIconButton>
+      }}><MoreHorizontal /></AowIconButton>}
   </div>;
 }

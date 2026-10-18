@@ -64,6 +64,7 @@ impl Runtime {
             shell: self.creation_spec.shell.clone(),
             arguments: self.creation_spec.arguments.clone(),
             environment: self.creation_spec.environment.clone(),
+            environment_remove: self.creation_spec.environment_remove.clone(),
             status: metadata.status,
             rows: metadata.rows,
             cols: metadata.cols,

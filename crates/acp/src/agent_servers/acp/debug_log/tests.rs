@@ -494,3 +494,23 @@ fn deletion_purges_private_logs_and_contexts_but_preserves_shared_connections() 
         "reused connection still records new sessions"
     );
 }
+
+#[test]
+fn evicted_request_retains_its_response_method() {
+    let log = AcpDebugLog::default();
+    log.bind_session("remote", "thread");
+    record(
+        &log,
+        "outgoing",
+        json!({"id":42,"method":"session/load","params":{"sessionId":"remote"}}),
+    );
+    for _ in 0..501 {
+        log.record_line("stderr", "diagnostic");
+    }
+    record(&log, "incoming", json!({"id":42,"result":{}}));
+    let messages = log.thread_messages("thread");
+    let response = messages.last().unwrap();
+    assert_eq!(response["request_method"], "session/load");
+    assert_eq!(response["session_id"], "remote");
+    assert_eq!(response["thread_id"], "thread");
+}

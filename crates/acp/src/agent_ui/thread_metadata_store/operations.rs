@@ -1,8 +1,9 @@
 //! thread_metadata_store.rs::DbOperation and its background drain/dedup loop.
 //! A dedicated thread replaces GPUI's background executor; snapshots join the same transaction.
-use super::{ThreadMetadata, ThreadMetadataStore, db::ThreadMetadataDb};
-use crate::{acp_thread::snapshot_store::SnapshotDb, facade::SessionSnapshot};
+use super::{ThreadMetadata, ThreadMetadataStore};
+use crate::{acp_thread::snapshot_store, facade::SessionSnapshot};
 use anyhow::{Result, anyhow};
+use aow_db::acp::{AcpDb, ThreadWrite};
 use std::{
     collections::HashMap,
     sync::{Arc, Condvar, Mutex, mpsc},
@@ -35,7 +36,7 @@ pub(super) struct DbOperations {
     worker: Option<JoinHandle<()>>,
 }
 impl DbOperations {
-    pub(super) fn new(db: ThreadMetadataDb) -> Result<Self> {
+    pub(super) fn new(db: AcpDb) -> Result<Self> {
         let pending = Arc::new((Mutex::new(Pending::default()), Condvar::new()));
         let state = pending.clone();
         let worker = std::thread::Builder::new()
@@ -64,7 +65,7 @@ impl DbOperations {
             .map_err(|_| anyhow!("ACP database writer stopped"))?
             .map_err(anyhow::Error::msg)
     }
-    fn run(db: ThreadMetadataDb, pending: Arc<(Mutex<Pending>, Condvar)>) {
+    fn run(db: AcpDb, pending: Arc<(Mutex<Pending>, Condvar)>) {
         let (lock, wake) = &*pending;
         loop {
             let mut state = lock.lock().unwrap();
@@ -109,7 +110,7 @@ impl DbOperations {
             }
         }
     }
-    fn write(db: &ThreadMetadataDb, operations: &[DbOperation]) -> Result<()> {
+    fn write(db: &AcpDb, operations: &[DbOperation]) -> Result<()> {
         if operations.is_empty() {
             return Ok(());
         }
@@ -121,28 +122,26 @@ impl DbOperations {
                 DbOperation::Upsert(metadata, source) => {
                     let snapshot = source.lock().unwrap().clone();
                     let metadata = ThreadMetadata::from_snapshot(&snapshot, Some(metadata));
-                    Some((metadata, snapshot))
+                    Ok(Some((
+                        metadata.into_record()?,
+                        snapshot_store::encode(&snapshot)?,
+                    )))
                 }
-                DbOperation::Delete(_) => None,
+                DbOperation::Delete(_) => Ok(None),
+            })
+            .collect::<Result<_>>()?;
+        let writes: Vec<_> = operations
+            .iter()
+            .zip(&snapshots)
+            .map(|(operation, snapshot)| match (operation, snapshot) {
+                (DbOperation::Upsert(_, _), Some((metadata, snapshot))) => {
+                    ThreadWrite::Upsert { metadata, snapshot }
+                }
+                (DbOperation::Delete(id), _) => ThreadWrite::Delete(id),
+                _ => unreachable!(),
             })
             .collect();
-        let mut connection = db.0.lock().unwrap();
-        let transaction = connection.transaction()?;
-        for (operation, snapshot) in operations.iter().zip(&snapshots) {
-            match (operation, snapshot) {
-                (DbOperation::Upsert(_, _), Some((metadata, snapshot))) => {
-                    ThreadMetadataDb::save(&transaction, metadata)?;
-                    SnapshotDb::save_thread(&transaction, snapshot)?;
-                }
-                (DbOperation::Delete(id), _) => {
-                    SnapshotDb::delete_thread(&transaction, id)?;
-                    ThreadMetadataDb::delete(&transaction, id)?;
-                }
-                _ => unreachable!(),
-            }
-        }
-        transaction.commit()?;
-        Ok(())
+        db.write(&writes)
     }
 }
 impl Drop for DbOperations {

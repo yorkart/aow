@@ -68,7 +68,8 @@ use panes::find_pane;
 use persistence::{atomic_save, timestamp};
 use requests::*;
 use runtime::{
-    apply_runtime, client_error_is_not_found, map_client_error, map_create_error, runtime_spec,
+    apply_runtime, client_error_is_not_found, configure_runtime_environment, map_client_error,
+    map_create_error, runtime_spec,
 };
 pub(crate) use state::TerminalManager;
 use state::{ManagerInner, ManagerState, PersistedState};

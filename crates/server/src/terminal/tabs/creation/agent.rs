@@ -6,7 +6,7 @@ impl TerminalManager {
         request: CreateTerminalRequest,
         launch: AgentLaunch,
     ) -> Result<TerminalTab, TerminalError> {
-        self.create_agent_with_state(request, launch, None, None)
+        self.create_agent_with_state(request, launch, None, None, None)
             .await
     }
 
@@ -15,7 +15,8 @@ impl TerminalManager {
         request: CreateTerminalRequest,
         mut launch: AgentLaunch,
         agent_terminal: Option<aow_protocol::AgentTerminalState>,
-        parent_pane_id: Option<String>,
+        parent: Option<aow_protocol::InstanceRef>,
+        instances: Option<&crate::instances::InstanceStore>,
     ) -> Result<TerminalTab, TerminalError> {
         self.ensure_creation_available(&request)?;
         if let Some(session_id) = request.resume_session_id.as_deref() {
@@ -25,15 +26,17 @@ impl TerminalManager {
         }
         self.reconcile().await?;
         let _operation = self.inner.operation.lock().await;
-        if let Some(parent) = &parent_pane_id {
+        if let Some(parent) = &parent
+            && parent.kind == aow_protocol::InstanceKind::Terminal
+        {
             let state = self.lock_state()?;
             if !state
                 .tabs
                 .iter()
                 .flat_map(|tab| &tab.panes)
-                .any(|pane| &pane.id == parent)
+                .any(|pane| pane.id == parent.id)
             {
-                return Err(TerminalError::PaneNotFound(parent.clone()));
+                return Err(TerminalError::PaneNotFound(parent.id.clone()));
             }
         }
         if request.shell.is_some() {
@@ -71,7 +74,7 @@ impl TerminalManager {
         let now = timestamp();
         let pane = TerminalPane {
             id: pane_id.clone(),
-            parent_pane_id,
+            parent,
             name: launch.display_name.clone(),
             cwd,
             shell: launch.executable,
@@ -115,6 +118,7 @@ impl TerminalManager {
         };
         let mut spec = self.runtime_spec(&pane);
         spec.environment = launch.env;
+        configure_runtime_environment(&pane_id, &mut spec);
         if let Err(error) = self
             .inner
             .terminald
@@ -125,6 +129,15 @@ impl TerminalManager {
             self.delete_failed_runtime_best_effort(&pane_id).await;
             self.rollback_created_tab(&tab.id)?;
             return Err(error);
+        }
+        // Retain only accepted creations. The persisted pane already exposes its
+        // ancestry while startup is in flight; the first task is submitted later.
+        if let Some(instances) = instances
+            && let Err(error) = instances.record_all(vec![crate::instances::terminal(&tab, &pane)])
+        {
+            self.delete_failed_runtime_best_effort(&pane_id).await;
+            self.rollback_created_tab(&tab.id)?;
+            return Err(TerminalError::Invalid(error.body.message));
         }
         Ok(tab)
     }

@@ -25,6 +25,7 @@ pub(crate) struct Snapshot {
     revision: u64,
     projects: u64,
     terminals: u64,
+    instances: u64,
     inbox: u64,
     repositories: BTreeMap<String, u64>,
 }
@@ -58,6 +59,7 @@ impl WorkspaceEvents {
                 revision: 0,
                 projects: 0,
                 terminals: 0,
+                instances: 0,
                 inbox: 0,
                 repositories: BTreeMap::new(),
             })
@@ -79,9 +81,17 @@ impl WorkspaceEvents {
         self.0.changes.send_modify(|snapshot| {
             snapshot.revision += 1;
             snapshot.terminals = snapshot.revision;
+            snapshot.instances = snapshot.revision;
         });
         // A CLI may have prepared a worktree just before creating the pane.
         self.reconcile();
+    }
+
+    pub(crate) fn instances_changed(&self) {
+        self.0.changes.send_modify(|snapshot| {
+            snapshot.revision += 1;
+            snapshot.instances = snapshot.revision;
+        });
     }
 
     pub(crate) fn inbox_changed(&self) {

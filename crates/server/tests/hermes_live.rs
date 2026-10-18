@@ -105,7 +105,7 @@ async fn existing_hermes_process_session_and_screen_agree() -> anyhow::Result<()
     // messages, tool payloads, command arguments or reasoning in test output.
     let native =
         Connection::open_with_flags(&locator.transcript_path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
-    let mut statement = native.prepare("SELECT id, role, content, tool_call_id, tool_calls, timestamp, finish_reason, reasoning FROM messages WHERE session_id = ?1 AND active = 1 ORDER BY id")?;
+    let mut statement = native.prepare(include_str!("sql/hermes_live/active_messages.sql"))?;
     let records = statement
         .query_map([&session_id], |row| {
             Ok(NativeMessage {
@@ -211,11 +211,9 @@ async fn existing_hermes_process_session_and_screen_agree() -> anyhow::Result<()
     // test completion notifications without modifying the user's live store.
     let replay_directory = tempfile::tempdir()?;
     let replay = Connection::open(replay_directory.path().join("state.db"))?;
-    replay.execute_batch("PRAGMA journal_mode=WAL;
-        CREATE TABLE sessions(id TEXT PRIMARY KEY, source TEXT, cwd TEXT, title TEXT, started_at REAL, ended_at REAL, end_reason TEXT, parent_session_id TEXT);
-        CREATE TABLE messages(id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, tool_call_id TEXT, tool_calls TEXT, timestamp REAL, finish_reason TEXT, active INTEGER DEFAULT 1);")?;
+    replay.execute_batch(include_str!("sql/hermes_live/create_database.sql"))?;
     replay.execute(
-        "INSERT INTO sessions(id, source, cwd, title, started_at) VALUES (?1, 'cli', ?2, ?3, 0)",
+        include_str!("sql/hermes_live/insert_session.sql"),
         params![session_id, locator.cwd.to_str(), locator.title],
     )?;
     let mut replay_locator = locator.clone();
@@ -224,8 +222,19 @@ async fn existing_hermes_process_session_and_screen_agree() -> anyhow::Result<()
     let mut tail = SessionTail::from_eof(replay_locator)?;
     let mut events = Vec::new();
     for row in &records {
-        replay.execute("INSERT INTO messages(id, session_id, role, content, tool_call_id, tool_calls, timestamp, finish_reason) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            params![row.id, session_id, row.role, row.content, row.tool_call_id, row.tool_calls, row.timestamp, row.finish_reason])?;
+        replay.execute(
+            include_str!("sql/hermes_live/insert_message.sql"),
+            params![
+                row.id,
+                session_id,
+                row.role,
+                row.content,
+                row.tool_call_id,
+                row.tool_calls,
+                row.timestamp,
+                row.finish_reason
+            ],
+        )?;
         events.extend(tail.poll()?);
         assert!(
             tail.poll()?.is_empty(),

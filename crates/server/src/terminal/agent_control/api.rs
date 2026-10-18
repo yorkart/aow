@@ -14,6 +14,12 @@ pub(crate) async fn create(
     State(state): State<AppState>,
     Json(request): Json<AgentTerminalCreate>,
 ) -> Result<Json<AgentTerminalInfo>, HttpError> {
+    request
+        .caller
+        .as_ref()
+        .ok_or_else(|| crate::instances::invalid("caller session context is required"))?
+        .validate()
+        .map_err(crate::instances::invalid)?;
     create_from_source(state, request, "cli").await
 }
 
@@ -143,6 +149,12 @@ async fn create_inner(
             ["-c".into(), "check_for_update_on_startup=false".into()],
         );
     }
+    let parent = crate::instances::creation_parent(
+        &state,
+        request.parent,
+        request.caller.as_ref(),
+        request.no_parent,
+    )?;
     log.progress("创建 Terminal 并启动 Agent", None);
     let tab = state
         .terminals
@@ -163,7 +175,8 @@ async fn create_inner(
                 error: None,
                 task_submitted: false,
             }),
-            request.parent_pane_id,
+            parent,
+            Some(&state.instances),
         )
         .await
         .map_err(terminal_http_error)?;

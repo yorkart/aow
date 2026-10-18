@@ -1,6 +1,6 @@
 import { appUrl } from './basePath';
 
-type EventName = 'workspace' | 'operations' | 'task-stopped';
+type EventName = 'workspace' | 'operations' | 'task-stopped' | 'acp';
 const subscribers = new Set<LiveEvents>();
 const snapshots = new Map<EventName, string>();
 let socket: WebSocket | undefined;
@@ -30,11 +30,11 @@ function connect() {
     if (socket !== current || typeof event.data !== 'string') return;
     let envelope: { event?: EventName; data?: unknown };
     try { envelope = JSON.parse(event.data); } catch { return; }
-    if (!envelope || !['workspace', 'operations', 'task-stopped'].includes(envelope.event ?? '') || envelope.data === undefined) return;
+    if (!envelope || !['workspace', 'operations', 'task-stopped', 'acp'].includes(envelope.event ?? '') || envelope.data === undefined) return;
     const name = envelope.event!;
     const data = JSON.stringify(envelope.data);
     // State snapshots may be replayed to late subscribers; notifications never are.
-    if (name !== 'task-stopped') snapshots.set(name, data);
+    if (name !== 'task-stopped' && (name !== 'acp' || (envelope.data as { type?: string })?.type === 'hello')) snapshots.set(name, data);
     for (const listener of subscribers) if (listener.name === name) listener.receive(data);
   };
   current.onerror = () => current.close();
@@ -107,6 +107,14 @@ export class LiveEvents extends EventTarget {
   receive(data: string) {
     if (!this.closed) this.dispatchEvent(new MessageEvent(this.name, { data }));
   }
+
+  send(command: unknown) {
+    if (this.closed || socket?.readyState !== WebSocket.OPEN || denied) return false;
+    socket.send(JSON.stringify(command));
+    return true;
+  }
+
+  reconnect() { if (!this.closed) socket?.close(); }
 
   failed() {
     if (this.closed) return;

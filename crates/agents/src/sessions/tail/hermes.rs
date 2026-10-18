@@ -1,5 +1,6 @@
 use super::*;
 use crate::sessions::hermes as store;
+use aow_db::hermes::HermesDb;
 
 const RECORD_BUDGET: usize = 512;
 
@@ -12,15 +13,11 @@ pub(super) struct SqliteTail {
 
 impl SqliteTail {
     pub fn from_eof(locator: &AgentSessionLocator) -> Result<Self, SnapshotError> {
-        let connection = store::open_db(&locator.transcript_path)?;
-        let cursor = watermark(&connection)?;
+        let mut db = HermesDb::open(&locator.transcript_path)?;
+        let reader = db.read()?;
+        let cursor = reader.watermark()?;
         let metadata = std::fs::metadata(&locator.transcript_path)?;
-        let history = store::history(&connection);
-        let last: Option<f64> = connection.query_row(
-            &format!("{history} SELECT MAX(timestamp) FROM messages WHERE session_id IN (SELECT id FROM history)"),
-            [&locator.session_id],
-            |row| row.get(0),
-        )?;
+        let last = reader.last_message_timestamp(&locator.session_id)?;
         let modified = last
             .filter(|value| value.is_finite() && *value >= 0.0)
             .map(|value| SystemTime::from(store::timestamp(value)))
@@ -42,9 +39,9 @@ impl SqliteTail {
     ) -> Result<Vec<TaskStopped>, SnapshotError> {
         validate_locator(locator)?;
         let metadata = std::fs::metadata(&locator.transcript_path)?;
-        let mut connection = store::open_db(&locator.transcript_path)?;
-        let transaction = connection.transaction()?;
-        let latest = watermark(&transaction)?;
+        let mut db = HermesDb::open(&locator.transcript_path)?;
+        let reader = db.read()?;
+        let latest = reader.watermark()?;
         if replaced(&self.metadata, &metadata) || latest < self.cursor {
             *self = Self::from_eof(locator)?;
             return Ok(Vec::new());
@@ -52,7 +49,7 @@ impl SqliteTail {
         if latest == self.cursor {
             return Ok(Vec::new());
         }
-        if let Some(records) = store::compacted_records(&transaction, &locator.session_id)? {
+        if let Some(records) = store::compacted_records(&reader, &locator.session_id)? {
             // Reconstructed copies retain their original row IDs, including
             // completions archived before the next poll. Bound delivery after
             // reconstruction so a large copied context cannot replay old stops.
@@ -63,21 +60,11 @@ impl SqliteTail {
                 .collect();
             return Ok(self.consume(locator, records, latest));
         }
-        let active = if store::has_column(&transaction, "messages", "active") {
-            "AND active = 1"
-        } else {
-            ""
-        };
-        let history = store::history(&transaction);
-        let sql = format!("{history} SELECT id, session_id, role, content, tool_call_id, tool_calls, timestamp, finish_reason
-            FROM messages WHERE session_id IN (SELECT id FROM history) AND id > ?2 {active} ORDER BY id LIMIT ?3");
-        let records = transaction
-            .prepare(&sql)?
-            .query_map(
-                rusqlite::params![locator.session_id, self.cursor, RECORD_BUDGET],
-                store::record,
-            )?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let records = reader
+            .tail_messages(&locator.session_id, self.cursor, RECORD_BUDGET)?
+            .into_iter()
+            .map(store::record)
+            .collect();
         Ok(self.consume(locator, records, latest))
     }
 
@@ -95,7 +82,7 @@ impl SqliteTail {
             // this session, not writes by unrelated sessions sharing the DB.
             self.modified = SystemTime::now();
             // A compression continuation keeps the same logical conversation.
-            // SQL above admits only its lineage, including messages committed
+            // The database admits only its lineage, including messages committed
             // before the terminal's next session-identity refresh.
             let session_id = record["session_id"].as_str().unwrap_or(&locator.session_id);
             if let Some(event) = self.parser.consume(session_id, &record) {
@@ -107,10 +94,4 @@ impl SqliteTail {
         }
         events
     }
-}
-
-fn watermark(connection: &rusqlite::Connection) -> rusqlite::Result<i64> {
-    connection.query_row("SELECT COALESCE(MAX(id), 0) FROM messages", [], |row| {
-        row.get(0)
-    })
 }

@@ -69,14 +69,12 @@ pub(super) fn home(process_home: &Path, environment: &SessionEnvironment) -> Pat
 }
 
 mod content;
-mod database;
 mod history;
 mod sessions;
 
 use content::content_text;
-pub(super) use database::{has_column, open_db, timestamp};
 pub(super) use history::{
-    compacted_records, history, public_text, record, snapshot_records, terminal_reply,
+    compacted_records, public_text, record, snapshot_records, terminal_reply, timestamp,
 };
 pub(super) use sessions::canonical_cwd;
 use sessions::query_sessions;

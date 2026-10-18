@@ -17,16 +17,19 @@ import {
 } from 'lucide-react';
 import { gitApi } from '../features/git/api';
 import { filesApi } from '../features/files/api';
+import { WorkspaceMarkdownProvider } from '../features/files/WorkspaceMarkdown';
 import { EditorSettingsProvider, useWordWrapOverrides } from '../features/editor/editorSettings';
 import { AutomationDetail } from '../features/automations/AutomationDetail';
 import { AutomationPanel } from '../features/automations/AutomationPanel';
 import type { AutomationRun, AutomationTask } from '../features/automations/types';
-import { AcpPanel, AcpSessionTab, useAcpTabs } from '../features/acp';
+import { AcpPanel, AcpSessionTab, ProjectAcpPanelProvider, useAcpTabs } from '../features/acp';
 import { TerminalPanel } from '../features/terminals/TerminalPanel';
 import { isCliTerminal, terminalTabPresentation } from '../features/terminals/terminalPresentation';
 import { AgentSessions } from '../features/sessions/AgentSessions';
 import { SessionShareButton } from '../features/sessions/SessionShareButton';
 import { Explorer } from '../features/files/Explorer';
+import { ExplorerSearch } from '../features/files/ExplorerSearch';
+import type { SearchMatch } from '../features/files/searchTypes';
 import { SystemFileBrowser } from '../features/files/SystemFileBrowser';
 import { DirectoryTypeIcon } from '../features/files/FileTypeIcon';
 import { PullRequestDetailView } from '../features/pr/PullRequestDetailView';
@@ -1113,6 +1116,19 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     }
   }, [documents]);
 
+  const searchRevealSequence = useRef(0);
+  const openSearchFile = async (path: string, source: 'project' | 'notes', match?: SearchMatch) => {
+    const sequence = ++searchRevealSequence.current;
+    await openExplorerFile({ path, name: basename(path), kind: 'file', readonly: false, size: 0,
+      modified_ms: null, hidden: false, mode: 0, links: 1, uid: 0, gid: 0, is_symlink: false, link_target: null }, source);
+    if (match && sequence === searchRevealSequence.current) {
+      setDocuments(items => items.map(document => document.id === path ? { ...document,
+        markdownView: document.kind === 'markdown' ? 'editor' : document.markdownView,
+        revealLocation: { line: match.line, column: match.column, length: match.match_length, revision: sequence },
+      } : document));
+    }
+  };
+
   const openExternalFile = useCallback(async (path: string) => {
     const targetFloating = openingInFloatingWorkspace();
     await filesApi.ensureFile(path);
@@ -1863,6 +1879,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const renderEditor = (selectedDocumentId?: string) => (
           <Suspense fallback={<div className="project-aow-empty">正在加载编辑器…</div>}>
             <EditorArea
+              workspace={worktree.id}
               documents={documents}
               activeId={selectedDocumentId}
               wordWrapOverride={wordWrapFor(selectedDocumentId)}
@@ -1912,6 +1929,9 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
         <button className="project-aow-right-hide" title="隐藏右侧栏" aria-label="隐藏右侧栏" onClick={onHideRightSidebar}><PanelRightClose /></button>
       </nav>
       <div className="project-aow-right-content" hidden={rightView !== 'files'}>
+        <ExplorerSearch key={`search:${worktree.path}:${project.id}`} projectRoot={explorerRoot} notesRoot={project.notes_path}
+          visible={active && rightSidebarVisible && rightView === 'files'} onOpen={(path, source, match) => void openSearchFile(path, source, match)}
+          projectRefresh={explorerRefresh.generation} notesRefresh={notesRefresh.generation}>
         <AowPanelStack className="project-aow-explorer-stack">
           <Explorer
             key={`files:${worktree.path}`} root={explorerRoot}
@@ -1934,6 +1954,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
             onDeleteEntry={(path, directory) => void deleteExplorerEntry('notes', path, directory)} refreshRequest={notesRefresh}
           />
         </AowPanelStack>
+        </ExplorerSearch>
       </div>
       <div className="project-aow-right-content" hidden={rightView !== 'git'}>
         <SourceControl key={`git:${worktree.path}`} root={gitRoot} fixedRepository={repository} titleCase aowHeader refreshGeneration={sourceControlRefresh} visible={active && rightSidebarVisible && rightView === 'git'} activeDocumentId={sidebarDocument?.id} onOpenDiff={openDiff} onOpenCommitDiff={openCommitDiff} />
@@ -1970,14 +1991,14 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
           onOpen={openTerminal} onOpenFloating={tab => openTerminal(tab, true)} />
       </div>
       <div className="project-aow-right-content" hidden={rightView !== 'acp'}>
-        <AcpPanel key={`acp:${worktree.path}`} workspace={worktree.path} visible={active && rightSidebarVisible && rightView === 'acp'} activeThreadId={acp.tabs.find(tab => `acp:${tab.id}` === sidebarActiveId)?.thread_id} onOpen={session => activateAcp(acp.open(session))} onDeleted={acp.removed} />
+        <AcpPanel key={`acp:${worktree.path}`} workspace={worktree.path} visible={active && rightSidebarVisible && rightView === 'acp'} activeThreadId={acp.tabs.find(tab => `acp:${tab.id}` === sidebarActiveId)?.thread_id} onOpen={session => activateAcp(acp.open(session))} />
       </div>
       <div className="project-aow-right-content" hidden={rightView !== 'automations'}>
         <AutomationPanel project={project} agents={agents} activeTaskId={activeCenterId?.startsWith('automation:') ? activeCenterId.slice('automation:'.length) : undefined} refreshKey={automationRefreshKey} onOpenTask={openAutomation} onTaskChanged={taskChanged} onTaskDeleted={taskDeleted} />
       </div>
     </aside>
   );
-  return <FloatingOpenMenu><section className="project-aow-surface" hidden={!active || project.builtin}>
+  return <WorkspaceMarkdownProvider workspace={worktree.id} directory={worktree.path}><FloatingOpenMenu><section className="project-aow-surface" hidden={!active || project.builtin}>
     <main className="project-aow-center">
       <WorkspaceTabs workspaceKey={`project:${worktree.path}`} revealRequest={tabRevealRequest} tabs={centerTabs} activeId={activeCenterId} visible={active && !project.builtin} agents={agents}
         onActivate={activateCenter} onCloseTab={closeTab} onCloseTabs={(targets, selected) => closeTabsInGroup(selected, targets.map(tab => tab.id))}
@@ -2071,7 +2092,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     {showOpenFile ? <OpenFileDialog worktreePath={worktree.path} onClose={() => setShowOpenFile(false)} onOpen={path => openFileFloating ? withFloatingOpen(() => openExternalFile(path)) : openExternalFile(path)} /> : null}
     {(operationError || terminals.error) && floating.portal && (project.builtin || floatingId) ? createPortal(
       <div className="floating-workspace-error" role="alert">{operationError || terminals.error}<button aria-label="关闭错误提示" onClick={() => setOperationError('')}><X /></button></div>, floating.portal) : null}
-  </section></FloatingOpenMenu>;
+  </section></FloatingOpenMenu></WorkspaceMarkdownProvider>;
 });
 
 function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
@@ -2610,11 +2631,11 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
       </aside>
       <div className="project-aow-left-resizer" role="separator" aria-label="调整项目栏宽度" aria-orientation="vertical" onPointerDown={(event) => startSidebarResize('left', event)} />
       <div className="project-aow-surfaces">
-        {projects.map(project => <ProjectTerminalPanelProvider key={project.id} project={project}>
+        {projects.map(project => <ProjectTerminalPanelProvider key={project.id} project={project}><ProjectAcpPanelProvider project={project}>
           {project.worktrees.filter(worktree => !busyWorktrees.has(worktree.path)).filter(worktree => visitedWorktrees.has(worktree.path) || floating.tabs.some(tab => tab.workspace === worktree.path)
             || floating.hostedTabs.some(tab => tab.workspace === worktree.path || tab.host === worktree.path)).map(worktree => <WorkspaceSurface locationSource={locationSource(worktree.path)} initialEntry={initialEntry && (initialEntry.workspacePath === worktree.path
               || floating.hostedTabs.some(tab => tab.host === worktree.path && tab.workspace === initialEntry.workspacePath && tab.id === tabCenterId(initialEntry))) ? initialEntry : undefined} key={worktree.path} project={project} worktree={worktree} active={worktree.path === activeWorktreePath} agents={agents} onShowLeftSidebar={leftSidebarVisible ? undefined : showLeftSidebar} rightSidebarVisible={rightSidebarVisible} onHideRightSidebar={hideRightSidebar} onShowRightSidebar={showRightSidebar} onStartRightResize={startRightResize} notesRefresh={notesRefreshByProject[project.id] ?? initialExplorerRefresh} onNotesChanged={notesChanged} onResourcesChanged={reportResources} />)}
-        </ProjectTerminalPanelProvider>)}
+        </ProjectAcpPanelProvider></ProjectTerminalPanelProvider>)}
         {activeEntry && busyWorktrees.has(activeEntry.worktree.path) ? <div className="project-aow-no-context"><LoaderCircle className="spinning" /><p>该 Worktree 正在清理，可继续使用其他工作区。</p><button onClick={() => setCleanupProjectId(activeEntry.project.id)}>查看清理进度</button></div> : null}
         {!activeEntry && !leftSidebarVisible ? <nav className="project-aow-center-tabs project-aow-empty-toolbar"><LeftSidebarToggle onClick={showLeftSidebar} /></nav> : null}
         {!activeEntry ? <div className="project-aow-no-context"><FolderGit2 /><h1>Project AoW</h1><p>从左侧注册并选择一个 Project Worktree。</p></div> : null}
@@ -2661,9 +2682,9 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
     {bindNotesProject ? <BindNotesDialog project={bindNotesProject} onClose={() => setBindNotesProject(undefined)} onBound={notesBound} /> : null}
     {showSettings ? <SettingsDialog agents={agents} onClose={() => setShowSettings(false)} onNodesChange={setNodeAddresses} onReload={async () => { await Promise.all([loadAgents(), loadProjects()]); }} /> : null}
     <FloatingWorkspace agents={agents} projects={projects} activeLocation={locationInFloating} />
-    {globalProject && globalProject.worktrees[0] && (floating.open || floating.tabs.length > 0) ? <ProjectTerminalPanelProvider key={globalProject.id} project={globalProject}>
+    {globalProject && globalProject.worktrees[0] && (floating.open || floating.tabs.length > 0) ? <ProjectTerminalPanelProvider key={globalProject.id} project={globalProject}><ProjectAcpPanelProvider project={globalProject}>
       <WorkspaceSurface locationSource={locationSource(floating.globalRoot)} initialEntry={globalProject.worktrees.some(worktree => worktree.path === initialEntry?.workspacePath) ? initialEntry : undefined} project={globalProject} worktree={globalProject.worktrees.find(worktree => worktree.is_main) ?? globalProject.worktrees[0]} active={floating.visible} agents={agents} rightSidebarVisible={floating.sidebarOpen} onHideRightSidebar={() => floating.setSidebarOpen(false)} onShowRightSidebar={() => floating.setSidebarOpen(true)} onStartRightResize={() => undefined} notesRefresh={notesRefreshByProject[globalProject.id] ?? initialExplorerRefresh} onNotesChanged={notesChanged} />
-    </ProjectTerminalPanelProvider> : null}
+    </ProjectAcpPanelProvider></ProjectTerminalPanelProvider> : null}
   </div>;
 }
 

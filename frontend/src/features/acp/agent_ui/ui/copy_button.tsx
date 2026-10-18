@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Check, Copy } from 'lucide-react';
-import { copyText } from '../conversation_view/clipboard';
+import { copyText } from '../../../../lib/clipboard';
 
 export function CopyButton({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState<string>();

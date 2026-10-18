@@ -1,4 +1,5 @@
 //! Multiplex live updates on a WebSocket so tabs cannot exhaust HTTP/1.1 slots.
+mod acp;
 
 use std::time::Duration;
 
@@ -32,7 +33,8 @@ async fn upgrade(
     let workspace = state.workspace_events.subscribe();
     let operations = state.operations.subscribe();
     let stops = state.terminals.subscribe_task_stops();
-    Ok(websocket.max_message_size(1024).on_upgrade(move |mut socket| async move {
+    let acp_events = state.acp.subscribe_sync();
+    Ok(websocket.max_message_size(8192).on_upgrade(move |mut socket| async move {
         let revoked = async {
             match access {
                 Some(access) => access.revoked().await,
@@ -47,7 +49,7 @@ async fn upgrade(
                     reason: "Authentication expired".into(),
                 })))).await;
             }
-            _ = forward(&mut socket, workspace, operations, stops) => {}
+            _ = forward(&mut socket, workspace, operations, stops, state.acp, acp_events) => {}
         }
     }))
 }
@@ -72,12 +74,22 @@ async fn forward(
     mut workspace: watch::Receiver<crate::workspace_events::Snapshot>,
     mut operations: watch::Receiver<crate::operations::Snapshot>,
     mut stops: broadcast::Receiver<crate::terminal::notifications::TaskStopNotification>,
+    acp_service: aow_acp::AcpService,
+    mut acp_events: broadcast::Receiver<aow_acp::SyncEvent>,
 ) -> Result<(), ()> {
     // Never hold a watch borrow across a send/await; publishers need its write lock.
     let initial = event("workspace", workspace.borrow_and_update().clone());
     send(socket, initial).await?;
+    let mut subscriptions = acp::Subscriptions::default();
+    let mut flush = tokio::time::interval(Duration::from_millis(50));
+    flush.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let initial = event("operations", operations.borrow_and_update().clone());
     send(socket, initial).await?;
+    send(
+        socket,
+        event("acp", serde_json::json!({"type": "hello", "protocol": 1})),
+    )
+    .await?;
     let mut heartbeat = tokio::time::interval(Duration::from_secs(15));
     heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut last_pong = tokio::time::Instant::now();
@@ -87,7 +99,13 @@ async fn forward(
                 match incoming {
                     Some(Ok(Message::Pong(_))) => last_pong = tokio::time::Instant::now(),
                     Some(Ok(Message::Ping(_))) => {}, // Axum replies automatically.
-                    _ => return Ok(()), // This stream accepts no application commands.
+                    Some(Ok(Message::Text(text))) => {
+                        let command = serde_json::from_str(&text).map_err(|_| ())?;
+                        if let Some(ready) = subscriptions.command(command, &acp_service)? {
+                            send(socket, event("acp", ready)).await?;
+                        }
+                    }
+                    _ => return Ok(()),
                 }
                 continue;
             }
@@ -105,6 +123,23 @@ async fn forward(
                     Err(broadcast::error::RecvError::Lagged(_)) => continue,
                     Err(broadcast::error::RecvError::Closed) => return Ok(()),
                 }
+            }
+            result = acp_events.recv() => {
+                match result {
+                    Ok(change) => match subscriptions.change(change) {
+                        Some(change) => event("acp", change),
+                        None => continue,
+                    },
+                    Err(broadcast::error::RecvError::Lagged(_)) => {
+                        send(socket, event("acp", serde_json::json!({"type": "resync"}))).await?;
+                        return Ok(());
+                    }
+                    Err(broadcast::error::RecvError::Closed) => return Ok(()),
+                }
+            }
+            _ = flush.tick() => {
+                for change in subscriptions.due() { send(socket, event("acp", change)).await?; }
+                continue;
             }
             _ = heartbeat.tick() => {
                 if last_pong.elapsed() > Duration::from_secs(45) { return Ok(()); }

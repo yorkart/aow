@@ -11,7 +11,7 @@ import { AgentIcon } from '../agents/AgentIcon';
 import { useTerminals } from './useTerminals';
 import { useProjectTerminals } from './useProjectTerminals';
 import { terminalApi } from './terminalApi';
-import type { TerminalSort } from './TerminalScopeMenu';
+import type { InstanceSort } from '../instances/InstanceScopeMenu';
 import { useAowTabLocation, useAowTabLocationError } from '../../aow/AowTabEntry';
 import { flattenTerminalTabs, terminalAccessoryKeys, terminalPaneAgent, type TerminalFrame, type TerminalPaneControls } from './terminalPresentation';
 import { terminalPaneLifecycle, terminalPaneStatusMessage, type TerminalConnectionState } from './terminalState';
@@ -29,7 +29,7 @@ const DEFAULT_TERMINAL_FONT_SIZE = 12;
 const terminalFontSize = (value: number) => Math.round(Math.min(28, Math.max(8, Number.isFinite(value) && value > 0 ? value : DEFAULT_TERMINAL_FONT_SIZE)) * 2) / 2;
 
 function terminalPreferences(workspace: string) {
-  const defaults = { opened: [] as string[], scopes: { user: false, cli: false }, sorts: { user: 'branch' as TerminalSort, cli: 'branch' as TerminalSort } };
+  const defaults = { opened: [] as string[], scopes: { user: false, cli: false }, sorts: { user: 'branch' as InstanceSort, cli: 'branch' as InstanceSort } };
   try {
     const saved = JSON.parse(storedMobileValue(`terminal-catalog.${workspace}`, '{}'));
     return {

@@ -109,6 +109,7 @@ fn native_scan_recognizes_all_agents_and_tracks_the_live_cwd_and_exit() {
                     ("AOW_TEST_READY".into(), ready.to_string_lossy().into_owned()),
                     ("AOW_TEST_CWD".into(), cwd.to_string_lossy().into_owned()),
                 ]),
+                environment_remove: Vec::new(),
                 rows: 24,
                 cols: 80,
             },

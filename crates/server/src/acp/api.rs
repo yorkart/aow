@@ -77,9 +77,17 @@ pub(crate) fn routes() -> Router<AppState> {
         ))
 }
 pub(super) fn error(error: anyhow::Error) -> HttpError {
+    let missing = error.to_string() == "ACP session not found"
+        || error.to_string() == "ACP connection not found";
     HttpError::new(
-        StatusCode::BAD_REQUEST,
-        if aow_acp::is_auth_required(&error) {
+        if missing {
+            StatusCode::NOT_FOUND
+        } else {
+            StatusCode::BAD_REQUEST
+        },
+        if missing {
+            "acp_not_found"
+        } else if aow_acp::is_auth_required(&error) {
             "acp_auth_required"
         } else {
             "acp_error"
@@ -362,6 +370,7 @@ async fn delete_session(
 #[serde(tag = "action", rename_all = "snake_case")]
 enum SessionAction {
     Prompt { content: Vec<aow_acp::Content> },
+    Steer { content: Vec<aow_acp::Content> },
     Cancel,
     DismissNotice { notice_id: String },
     ClearPlan,
@@ -395,6 +404,7 @@ async fn session_action(
     controller.authorize(&headers, false)?;
     let result = match action {
         SessionAction::Prompt { content } => state.acp.start_prompt(&thread_id, content),
+        SessionAction::Steer { content } => state.acp.start_steering(&thread_id, content),
         SessionAction::Cancel => state.acp.cancel(&thread_id),
         SessionAction::ClearPlan => state.acp.clear_plan(&thread_id),
         SessionAction::DismissNotice { notice_id } => {

@@ -125,6 +125,7 @@ fn test_runtime() -> (Arc<Runtime>, SpawnedRuntime) {
             shell: "/bin/sh".to_owned(),
             arguments: Vec::new(),
             environment: Default::default(),
+            environment_remove: Vec::new(),
             rows: 24,
             cols: 80,
         },
@@ -148,7 +149,7 @@ fn validates_terminal_dimensions() {
 }
 
 #[test]
-fn runtime_environment_inherits_and_applies_additions_and_overrides() {
+fn runtime_environment_applies_overrides_and_explicit_removals() {
     let directory = tempfile::tempdir().unwrap();
     let output_path = directory.path().join("environment.txt");
     for override_path in [None, Some("/configured/bin")] {
@@ -162,7 +163,10 @@ fn runtime_environment_inherits_and_applies_additions_and_overrides() {
                 "value with spaces=equals".to_owned(),
             ),
             ("AOW_TEST_EMPTY".to_owned(), String::new()),
-            ("AOW_PANE_ID".to_owned(), "inherited-parent".to_owned()),
+            ("AOW_TEST_REMOVED".into(), "remove-me".into()),
+            ("AOW_INSTANCE".to_owned(), "acp:provided-parent".to_owned()),
+            ("AOW_SESSION_ID".into(), "provided-session".into()),
+            ("AOW_ACP_CONNECTION_ID".into(), "provided-connection".into()),
         ]);
         if let Some(path) = override_path {
             environment.insert("PATH".to_owned(), path.to_owned());
@@ -175,8 +179,11 @@ fn runtime_environment_inherits_and_applies_additions_and_overrides() {
                 cwd: directory.path().to_string_lossy().into_owned(),
                 shell: "/bin/sh".to_owned(),
                 arguments: vec!["-c".to_owned(),
-                    "printf '%s\\n' \"$PATH\" \"$AOW_TEST_ADDED\" \"${AOW_TEST_EMPTY-unset}\" \"$AOW_PANE_ID\" > \"$AOW_TEST_OUTPUT\"".to_owned()],
+                    "printf '%s\\n' \"$PATH\" \"$AOW_TEST_ADDED\" \"${AOW_TEST_EMPTY-unset}\" \"$AOW_INSTANCE\" \"$AOW_SESSION_ID\" \"$AOW_ACP_CONNECTION_ID\" \"${AOW_TEST_REMOVED-unset}\" \"${HOME-unset}\" > \"$AOW_TEST_OUTPUT\"".to_owned()],
                 environment,
+                // Remove an override and an inherited variable, without changing
+                // this test process's environment or treating AoW names specially.
+                environment_remove: vec!["AOW_TEST_REMOVED".into(), "HOME".into()],
                 rows: 24,
                 cols: 80,
             },
@@ -190,7 +197,9 @@ fn runtime_environment_inherits_and_applies_additions_and_overrides() {
             .unwrap_or_else(|| std::env::var("PATH").unwrap());
         assert_eq!(
             std::fs::read_to_string(&output_path).unwrap(),
-            format!("{expected_path}\nvalue with spaces=equals\n\n{pane_id}\n")
+            format!(
+                "{expected_path}\nvalue with spaces=equals\n\nacp:provided-parent\nprovided-session\nprovided-connection\nunset\nunset\n"
+            )
         );
         // The child was already reaped, so the guard only releases its handles.
         spawned.child.take();
@@ -257,6 +266,7 @@ fn run_locale_probe(locale: [(&str, &str); 3], script: &str, text: Option<&str>)
             shell: "/bin/sh".to_owned(),
             arguments: vec!["-c".to_owned(), script.to_owned()],
             environment,
+            environment_remove: Vec::new(),
             rows: 24,
             cols: 80,
         },
@@ -925,6 +935,7 @@ fn dropping_uncommitted_spawn_kills_and_reaps_shell() {
                 "AOW_TEST_READY".to_owned(),
                 ready.to_string_lossy().into_owned(),
             )]),
+            environment_remove: Vec::new(),
             rows: 24,
             cols: 80,
         },
@@ -995,6 +1006,7 @@ fn uncommitted_shell_with_unread_output_spec(ready: &Path) -> TerminalRuntimeSpe
             "AOW_TEST_READY".to_owned(),
             ready.to_string_lossy().into_owned(),
         )]),
+        environment_remove: Vec::new(),
         rows: 24,
         cols: 80,
     }
@@ -1077,6 +1089,7 @@ fn dropping_uncommitted_spawn_during_interactive_shell_startup() {
             shell: "/bin/sh".to_owned(),
             arguments: Vec::new(),
             environment: Default::default(),
+            environment_remove: Vec::new(),
             rows: 24,
             cols: 80,
         },

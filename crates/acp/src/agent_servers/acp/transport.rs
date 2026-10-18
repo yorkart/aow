@@ -49,6 +49,11 @@ pub(super) fn spawn_stdio(
         builder.env("PATH", path);
     }
     builder.envs(command.env);
+    // An adapter may serve multiple threads. Never inherit a terminal or another session identity.
+    builder.env_remove("AOW_INSTANCE");
+    builder.env_remove("AOW_SESSION_ID");
+    // Scope native session IDs to this connection, never to a shared process session.
+    builder.env("AOW_ACP_CONNECTION_ID", &debug_log.connection_id);
     let mut child = builder.spawn().with_context(|| format!(
         "Failed to start ACP adapter executable {} in {}. Check the command and Settings → Environment execution PATH",
         command.path.display(), cwd.display()

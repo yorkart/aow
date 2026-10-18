@@ -17,7 +17,7 @@ export interface TerminalHosting {
 
 export interface TerminalPane {
   id: string;
-  parent_pane_id?: string | null;
+  parent?: import('../instances/types').InstanceRef | null;
   name: string;
   cwd: string;
   shell: string;

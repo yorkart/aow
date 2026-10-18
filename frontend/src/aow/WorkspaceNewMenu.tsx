@@ -2,7 +2,7 @@ import { Files, FileText, NotebookPen, SquareTerminal } from 'lucide-react';
 import type { AowAgent } from '../features/agents/types';
 import { AgentIcon } from '../features/agents/AgentIcon';
 import { aowAgentType } from '../features/agents/agentTypes';
-import { AcpNewSessionMenu } from '../features/acp';
+import { AcpNewSessionMenu } from '../features/acp/workspace';
 
 export function WorkspaceNewMenu({ agents, onOpenFile, onOpenBrowser, onCreateNote, onCreateTerminal, onCreateAcp, onSelect }: {
   agents: AowAgent[];

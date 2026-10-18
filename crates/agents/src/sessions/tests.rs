@@ -23,25 +23,7 @@ fn create_state_db(home: &Path) -> Connection {
     fs::create_dir_all(home).unwrap();
     let connection = Connection::open(home.join(STATE_DB_FILENAME)).unwrap();
     connection
-        .execute_batch(
-            "
-CREATE TABLE threads (
-    id TEXT PRIMARY KEY,
-    rollout_path TEXT NOT NULL,
-    cwd TEXT NOT NULL,
-    title TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    updated_at_ms INTEGER NOT NULL,
-    archived INTEGER NOT NULL,
-    first_user_message TEXT NOT NULL,
-    thread_source TEXT,
-    source TEXT,
-    agent_nickname TEXT,
-    agent_role TEXT
-);
-",
-        )
+        .execute_batch(include_str!("sql/tests/create_threads.sql"))
         .unwrap();
     connection
 }
@@ -63,12 +45,7 @@ fn insert_thread(
 ) {
     connection
         .execute(
-            "
-INSERT INTO threads (
-    id, rollout_path, cwd, title, created_at, updated_at, updated_at_ms,
-    archived, first_user_message, thread_source, source, agent_nickname, agent_role
-) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
-",
+            include_str!("sql/tests/insert_thread.sql"),
             params![
                 id,
                 rollout_path.to_string_lossy(),
@@ -289,9 +266,7 @@ fn codex_and_trae_use_native_names_across_schema_versions() {
             "renamed session"
         );
         connection
-            .execute_batch(
-                "ALTER TABLE threads ADD COLUMN name TEXT; UPDATE threads SET name = 'native name'",
-            )
+            .execute_batch(include_str!("sql/tests/add_native_name.sql"))
             .unwrap();
         assert_eq!(
             list_sessions(&cwd, Some(agent.id()), roots.clone())[0].title,
@@ -518,7 +493,7 @@ fn current_titles_follow_native_renames_in_the_bound_codex_like_store() {
             .find_session(&roots, "shared-id")
             .unwrap()
             .locator();
-        db.execute("UPDATE threads SET title = 'Generated rename'", [])
+        db.execute(include_str!("sql/tests/rename_title.sql"), [])
             .unwrap();
         assert_eq!(
             provider.current_title(&locator).as_deref(),
@@ -539,20 +514,19 @@ fn current_titles_follow_native_renames_in_the_bound_codex_like_store() {
         );
 
         // Newer stores have a separate name column, with precedence over title.
-        db.execute_batch("ALTER TABLE threads ADD COLUMN name TEXT;")
+        db.execute_batch(include_str!("sql/tests/add_name.sql"))
             .unwrap();
         let name = format!("{} current name", agent.id());
-        db.execute("UPDATE threads SET name = ?1", [&name]).unwrap();
+        db.execute(include_str!("sql/tests/rename_native_name.sql"), [&name])
+            .unwrap();
         assert_eq!(provider.current_title(&locator), Some(name));
         assert_eq!(locator.title, "Original");
 
-        db.execute(
-            "UPDATE threads SET rollout_path = '/another/session.jsonl'",
-            [],
-        )
-        .unwrap();
+        db.execute(include_str!("sql/tests/change_rollout_path.sql"), [])
+            .unwrap();
         assert_eq!(provider.current_title(&locator), None);
-        db.execute("DELETE FROM threads", []).unwrap();
+        db.execute(include_str!("sql/tests/delete_threads.sql"), [])
+            .unwrap();
         assert_eq!(provider.current_title(&locator), None);
     }
 }

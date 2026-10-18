@@ -1,17 +1,21 @@
 import '../../../components/conversation-theme.css';
 // Conversation content is owned by a workspace tab; closing its view never closes the ACP session.
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { MoreHorizontal, ScrollText } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Check, CircleAlert, LogIn, MoreHorizontal, ScrollText, WifiOff } from 'lucide-react';
 import { ConversationLayout } from '../../../components/conversation/ConversationLayout';
+import { ConversationIds } from '../../../components/conversation/ConversationIds';
+import { ComposerStatus } from '../../../components/conversation/ComposerStatus';
 import { AgentIcon } from '../../agents/AgentIcon';
 import { useAcpControl } from '../../acp-control/sessionControl';
 import { ControlStatus } from '../../acp-control/ControlStatus';
 import { Authentication } from './authentication';
 import { Popover } from './popover';
+import { ThinkingVisibility } from './thinking_visibility';
 import { authenticationRequired } from '../request';
 import { acpApi, authenticationCompleted, sessionsChanged } from '../api';
-import { applySessionUpdates } from '../session_updates';
-import { failure, object, type ConnectionInfo, type Data, type DebugMessage, type Permission, type SessionInfo, type SessionSnapshot } from '../types';
+import { acceptSession, readSession } from '../sync/store';
+import { useConnectionSync, useRequestsSync, useSessionSync } from '../sync/hooks';
+import { failure, object, type ConnectionInfo, type Data, type DebugMessage, type SessionInfo, type SessionSnapshot } from '../types';
 import type { AcpTab } from './workspace_tabs';
 import { ConnectionProgress } from './connection_progress';
 import { useProgress } from './use_progress';
@@ -31,9 +35,9 @@ function resumeSession(id: string, token: string) {
   const key = JSON.stringify([id, token]);
   let pending = restores.get(key);
   if (!pending) {
-    // A takeover may happen before this view's next poll. Recheck the snapshot
-    // so a stale disconnected view never reloads another owner's live session.
-    pending = acpApi.snapshot(id).then(next => next.status === 'disconnected' || next.needs_load
+    // Recheck on an explicit control attachment before restoring the session.
+    // A stale disconnected view must not reload another owner's live session.
+    pending = readSession(id).then(next => next.status === 'disconnected' || next.needs_load
       ? acpApi.action(id, { action: 'resume' }, token) : next).finally(() => restores.delete(key));
     restores.set(key, pending);
   }
@@ -45,21 +49,25 @@ export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenFil
   onSessionChange: (id: string, session: SessionInfo) => void; onOpenSession: (session: SessionInfo) => void; onOpenFile: OpenFile;
 }) {
   const [connection, setConnection] = useState<ConnectionInfo>();
-  const [session, setSession] = useState<SessionSnapshot>();
-  const sessionRef = useRef<SessionSnapshot>(undefined);
+  const [prepared, setPrepared] = useState<SessionSnapshot>();
+  const thread_id = prepared?.thread_id ?? tab.thread_id;
+  const sync = useSessionSync(thread_id, visible);
+  const session = sync.deleted ? undefined : sync.data;
+  const binding = useConnectionSync(thread_id);
   const [busy, setBusy] = useState(true);
   const [busyMessage, setBusyMessage] = useState('正在打开会话…');
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState('');
-  const [requests, setRequests] = useState<Permission[]>([]);
   const [answerBusy, setAnswerBusy] = useState(false);
   const [logs, setLogs] = useState<DebugMessage[]>();
+  const [showThinking, setShowThinking] = useState(false);
   // Request-only authentication belongs to the issuing control attachment; a
   // later owner may have authenticated without ever changing auth_required.
   const [requestAuthRequired, setRequestAuthRequired] = useState<{ token?: string }>();
   const [authBusy, setAuthBusy] = useState(false);
+  const [authConnectionError, setAuthConnectionError] = useState('');
+  const [authConnectionAttempt, setAuthConnectionAttempt] = useState(0);
   const recordFailure = useCallback((reason: unknown, token?: string) => { setError(failure(reason)); if (authenticationRequired(reason)) setRequestAuthRequired({ token }); }, []);
-  const thread_id = session?.thread_id ?? tab.thread_id;
   const control = useAcpControl(thread_id, JSON.stringify([workspace, tab.id]));
   const token = control.token;
   const authRequired = (!thread_id || !!token) && (!!requestAuthRequired && requestAuthRequired.token === token || !!session?.auth_required || authBusy);
@@ -67,26 +75,25 @@ export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenFil
   const status = useProgress(connecting || restoring ? tab.agentId : '', workspace);
   const [restoreAttempt, setRestoreAttempt] = useState(0);
   const needsResume = !!session && (session.status === 'disconnected' || !!session.needs_load);
-  const polling = visible || session?.status === 'working';
+  const recovering = session?.recovery?.phase === 'loading' || session?.recovery?.phase === 'cleaning';
   const connectionId = connection?.id;
+  const interactions = useRequestsSync(connectionId);
+  const requests = (interactions.data ?? []).filter(item => !item.request.sessionId && !object(item.request.scope).sessionId);
+  useEffect(() => { if (binding.data !== undefined) setConnection(binding.data ?? undefined); }, [binding.data]);
+  useEffect(() => {
+    const head = sync.head?.session;
+    const info = head && (!session || head.generation !== session.sync_generation || head.revision >= session.revision) ? head.info : session;
+    if (info) onSessionChange(tab.id, info);
+  }, [sync.head, session, onSessionChange, tab.id]);
   const initialTab = useRef(tab).current;
   const [attempt, setAttempt] = useState(0);
   useEffect(() => { setError(''); }, [token]);
-  const acceptSnapshot = useCallback((next: SessionSnapshot) => {
-    const previous = sessionRef.current;
-    if (previous?.thread_id === next.thread_id && previous.sync_generation === next.sync_generation) {
-      if (previous.revision > next.revision) return;
-      // A same-revision overview still releases a previously accepted full body.
-      if (previous.revision === next.revision && (previous.overview || !next.overview)) return;
-    }
-    sessionRef.current = next;
-    setSession(next);
-  }, []);
   const accept = useCallback((next: SessionSnapshot) => {
-    acceptSnapshot(next);
+    acceptSession(next);
+    setPrepared(next);
     onSessionChange(tab.id, next);
     window.dispatchEvent(new Event(sessionsChanged));
-  }, [acceptSnapshot, onSessionChange, tab.id]);
+  }, [onSessionChange, tab.id]);
   useEffect(() => {
     // Once the backend records AuthRequired it owns subsequent true -> false transitions.
     if (session?.auth_required) setRequestAuthRequired(undefined);
@@ -102,7 +109,7 @@ export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenFil
     let cancelled = false;
     setBusy(true); setError('');
     let pending: Promise<SessionSnapshot>;
-    if (initialTab.thread_id) pending = acpApi.snapshot(initialTab.thread_id);
+    if (initialTab.thread_id) { setBusy(false); return; }
     else {
       setBusyMessage('正在创建会话…');
       let prepared = drafts.get(initialTab);
@@ -117,38 +124,22 @@ export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenFil
       .finally(() => { if (!cancelled) { setConnecting(false); setBusy(false); } });
     return () => { cancelled = true; };
   }, [accept, initialTab, workspace, attempt, recordFailure]);
+  const resumeAttempts = useRef(new Map<string, Promise<SessionSnapshot> | undefined>());
   useEffect(() => {
-    if (!thread_id || !token || !needsResume) { setRestoring(false); return; }
+    if (!thread_id || !token || !session || sync.deleted) return;
+    const key = JSON.stringify([thread_id, token, restoreAttempt]);
+    if (!needsResume) { resumeAttempts.current.set(key, undefined); setRestoring(false); return; }
+    let pending = resumeAttempts.current.get(key);
+    if (!pending && resumeAttempts.current.has(key)) { setRestoring(false); return; }
+    if (!pending) { pending = resumeSession(thread_id, token); resumeAttempts.current.set(key, pending); }
     let cancelled = false;
     setRestoring(true); setError('');
-    void resumeSession(thread_id, token)
+    void pending
       .then(next => { if (!cancelled) accept(next); })
       .catch(reason => { if (!cancelled) recordFailure(reason, token); })
-      .finally(() => { if (!cancelled) setRestoring(false); });
+      .finally(() => { resumeAttempts.current.set(key, undefined); if (!cancelled) setRestoring(false); });
     return () => { cancelled = true; };
-  }, [thread_id, token, needsResume, restoreAttempt, accept, recordFailure]);
-  useEffect(() => {
-    if (!polling || !thread_id && !connectionId) return;
-    const controller = new AbortController(); let timer: number;
-    const poll = async () => {
-      try {
-        if (thread_id) {
-          const update = await acpApi.updates(thread_id, sessionRef.current, controller.signal);
-          if (controller.signal.aborted) return;
-          const next = applySessionUpdates(sessionRef.current, update) ?? await acpApi.snapshot(thread_id, controller.signal);
-          if (!controller.signal.aborted && next !== sessionRef.current) { acceptSnapshot(next); onSessionChange(tab.id, next); }
-        }
-        if (thread_id && token) {
-          const connected = await acpApi.connection(thread_id, controller.signal);
-          if (!controller.signal.aborted) setConnection(previous => previous?.id === connected?.id ? previous : connected ?? undefined);
-        }
-        if (connectionId) { const pending = await acpApi.requests(connectionId, controller.signal); if (!controller.signal.aborted) setRequests(pending.filter(item => !item.request.sessionId && !object(item.request.scope).sessionId)); }
-      } catch (reason) { if (!controller.signal.aborted) setError(failure(reason)); }
-      if (!controller.signal.aborted) timer = window.setTimeout(() => { void poll(); }, 750);
-    };
-    void poll();
-    return () => { controller.abort(); window.clearTimeout(timer); };
-  }, [polling, thread_id, connectionId, token, acceptSnapshot, onSessionChange, tab.id]);
+  }, [thread_id, token, needsResume, !!session, sync.deleted, restoreAttempt, accept, recordFailure]);
   const run = useCallback(async (operation: () => Promise<void>) => {
     setBusy(true); setError(''); setBusyMessage('处理中…');
     try { await operation(); return true; } catch (reason) { recordFailure(reason, token); return false; }
@@ -159,7 +150,7 @@ export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenFil
     setConnecting(true); setBusyMessage('正在连接 Agent…');
     const next = await acpApi.connect(tab.agentId, workspace); setConnection(next); setConnecting(false); return next;
   };
-  const retry = () => { drafts.delete(initialTab); setAttempt(value => value + 1); };
+  const retry = () => { drafts.delete(initialTab); sync.reload(); setAttempt(value => value + 1); };
   const action = useCallback((value: Data) => {
     if (!thread_id || !token) return Promise.resolve(false);
     return run(async () => { accept(await acpApi.action(thread_id, value, token)); });
@@ -167,9 +158,10 @@ export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenFil
   useEffect(() => {
     if (!authRequired || connection) return;
     let cancelled = false;
-    void acpApi.connect(tab.agentId, workspace).then(value => { if (!cancelled) setConnection(value); }).catch(reason => { if (!cancelled) recordFailure(reason, token); });
+    setAuthConnectionError('');
+    void acpApi.connect(tab.agentId, workspace).then(value => { if (!cancelled) { setConnection(value); setAuthConnectionError(''); } }).catch(reason => { if (!cancelled) setAuthConnectionError(failure(reason)); });
     return () => { cancelled = true; };
-  }, [authRequired, connection, tab.agentId, workspace, recordFailure, token]);
+  }, [authRequired, connection, tab.agentId, workspace, token, authConnectionAttempt]);
   const authenticate = (method: string) => {
     setAuthBusy(true); setError('');
     void (async () => {
@@ -177,32 +169,64 @@ export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenFil
       await acpApi.authenticate(next.id, method);
       setRequestAuthRequired(undefined);
       if (thread_id) {
-        const snapshot = await acpApi.snapshot(thread_id);
+        const snapshot = await readSession(thread_id);
         accept(snapshot);
       } else retry();
     })().catch(reason => recordFailure(reason, token)).finally(() => setAuthBusy(false));
   };
-  const threadHidden = !!logs || authRequired;
-  const headerActions = thread_id && <Popover label="会话更多操作" trigger={<MoreHorizontal size={18} />}>
-    {close => <button type="button" role="menuitem" disabled={busy} onClick={() => { close(); if (logs) setLogs(undefined); else void run(async () => setLogs(await acpApi.logs(thread_id))); }}><ScrollText size={14} />{logs ? '返回会话' : 'ACP 协议日志'}</button>}
-  </Popover>;
-  const connectionState = <div className="acp-content">
-    {error && error !== session?.error && !authRequired && <p className="acp-error" role="alert">{error}</p>}
-    {token && restoring && !authRequired && <ConnectionProgress status={status} message={session?.session_id ? '正在恢复会话…' : '正在创建会话…'} />}
-    {token && needsResume && !restoring && !busy && !authRequired && <button type="button" onClick={() => setRestoreAttempt(value => value + 1)}>重试连接</button>}
-    {busy && (!session || session.needs_load || connecting) && !authRequired && <ConnectionProgress status={connecting ? status : undefined} message={busyMessage} />}
-    {!authBusy && (!thread_id || token) && requests.map(request => <PermissionRequest key={request.id} permission={request} busy={answerBusy} onAnswer={response => { if (!connectionId) return; setAnswerBusy(true); void acpApi.answerConnection(connectionId, request.id, response).catch(recordFailure).finally(() => setAnswerBusy(false)); }} />)}
-  </div>;
-  const alternateContent = threadHidden ? <>
-    {logs && thread_id && <AcpLogs entries={logs} threadId={thread_id} agentName={tab.agentId} busy={busy} onBack={() => setLogs(undefined)} onRefresh={() => { void run(async () => setLogs(await acpApi.logs(thread_id))); }} />}
-    {authRequired && connection && <div className="acp-content acp-auth-state">{error && <p className="acp-error" role="alert">{error}</p>}<Authentication connection={connection} pending={authBusy} onAuthenticate={authenticate} /></div>}
-  </> : undefined;
-  return <section className="acp-session-tab aow-conversation-theme" aria-label="ACP 会话内容">
+  const headerActions = <><ConversationIds identifiers={[
+    { label: 'Thread ID', value: thread_id },
+    { label: 'Session ID', value: session?.session_id },
+    { label: 'Connection ID', value: connectionId },
+  ]} />{thread_id && <Popover label="会话更多操作" trigger={<MoreHorizontal size={18} />}>
+    {close => <>
+      <button type="button" role="menuitemcheckbox" aria-checked={showThinking} onClick={() => { setShowThinking(value => !value); close(); }}><Check size={14} style={{ visibility: showThinking ? 'visible' : 'hidden' }} />显示 Thinking</button>
+      <button type="button" role="menuitem" disabled={busy} onClick={() => { close(); if (logs) setLogs(undefined); else void run(async () => setLogs(await acpApi.logs(thread_id))); }}><ScrollText size={14} />{logs ? '返回会话' : 'ACP 协议日志'}</button>
+    </>}
+  </Popover>}</>;
+  const connectionRequests = !authRequired && (!thread_id || token) && requests.length > 0 ? <div className="acp-content">{requests.map(request => <PermissionRequest key={request.id} permission={request} busy={answerBusy} onAnswer={response => { if (!connectionId) return; setAnswerBusy(true); void acpApi.answerConnection(connectionId, request.id, response).catch(recordFailure).finally(() => setAnswerBusy(false)); }} />)}</div> : undefined;
+  // Show one blocking reason at the composer. Ownership takes precedence over
+  // agent authentication and recovery, which only the controlling page can act on.
+  let composerStatus: ReactNode;
+  if (sync.deleted) {
+    composerStatus = <ComposerStatus icon={<CircleAlert />} title="会话已删除。" description="此会话已不可用，可以关闭标签页并打开其他会话。" />;
+  } else if (thread_id && sync.status === 'denied') {
+    composerStatus = <ComposerStatus icon={<LogIn />} title="登录已失效，请重新登录。" description="重新登录网站后可继续使用。" actions={<button type="button" onClick={() => location.reload()}>重新登录</button>} />;
+  } else if (thread_id && !token) {
+    composerStatus = <ControlStatus {...control} />;
+  } else if (authRequired) {
+    composerStatus = connection ? <Authentication connection={connection} pending={authBusy} onAuthenticate={authenticate} composer error={error || session?.error || undefined} />
+      : authConnectionError ? <ComposerStatus icon={<CircleAlert />} title="暂时无法连接登录服务" alert description={authConnectionError} actions={<button type="button" onClick={() => { setAuthConnectionError(''); setAuthConnectionAttempt(value => value + 1); }}>重试连接</button>} />
+        : <ConnectionProgress composer message="正在准备 Agent 登录…" />;
+  } else if (thread_id && (sync.status === 'offline' || sync.status === 'connecting')) {
+    composerStatus = <ConnectionProgress composer message={sync.status === 'offline' ? '连接已断开，正在重新同步…' : '正在建立同步连接…'} />;
+  } else if (!session) {
+    composerStatus = busy || sync.loading ? <ConnectionProgress composer message={busyMessage} />
+      : <ComposerStatus icon={<CircleAlert />} title="暂时无法打开会话" alert description={error || sync.error || '请重试打开会话。'} actions={<button type="button" onClick={retry}>重试打开会话</button>} />;
+  } else if (restoring || recovering || connecting) {
+    composerStatus = <ConnectionProgress composer status={session.recovery?.phase === 'cleaning' ? undefined : status}
+      message={session.recovery?.phase === 'cleaning' ? '正在等待上次恢复结束并清理…' : session.session_id ? '正在恢复会话…' : '正在创建会话…'}
+      actions={session.recovery?.phase === 'loading' && <button type="button" disabled={busy} onClick={() => { void action({ action: 'cancel' }); }}>取消恢复</button>}>{connectionRequests}</ConnectionProgress>;
+  } else if (needsResume) {
+    composerStatus = <ComposerStatus icon={<WifiOff />} title="暂时无法连接 Agent" alert
+      description={session.recovery?.error ? `会话恢复失败：${session.recovery.error}` : error || session.error || '连接已断开，重试后可继续对话。'}
+      actions={<button type="button" disabled={busy} onClick={() => setRestoreAttempt(value => value + 1)}>重试连接</button>}>{connectionRequests}</ComposerStatus>;
+  } else if (sync.error) {
+    composerStatus = <ComposerStatus icon={<CircleAlert />} title="暂时无法同步会话" alert description={sync.error} actions={<button type="button" onClick={sync.reload}>重试同步</button>} />;
+  }
+  const notice = <>
+    {thread_id && sync.status === 'degraded' && <p className="acp-status" role="status">服务端暂不支持实时同步，已进入低频同步模式。</p>}
+    {!composerStatus && <>{connectionRequests}
+      {(binding.error || interactions.error) && <p className="acp-error" role="alert">{binding.error || interactions.error}</p>}
+      {error && error !== session?.error && <p className="acp-error" role="alert">{error}</p>}
+    </>}
+  </>;
+  const alternateContent = logs && thread_id ? <AcpLogs entries={logs} threadId={thread_id} agentName={tab.agentId} busy={busy} onBack={() => setLogs(undefined)} onRefresh={() => { void run(async () => setLogs(await acpApi.logs(thread_id))); }} /> : undefined;
+  return <ThinkingVisibility.Provider value={showThinking}><section className="acp-session-tab aow-conversation-theme" aria-label="ACP 会话内容">
     {!session && <ConversationLayout sessionId={tab.id} label="ACP 对话" turns={[]}
       header={{ title: tab.title, agentName: tab.agentId, agentIcon: <AgentIcon agentId={tab.agentId.replace(/-acp$/, '').replace(/^claude-agent$/, 'claude')} />, workspace, actions: headerActions }}
-      banner={connectionState} alternateContent={alternateContent}
-      state={!busy && !authRequired ? <div className="acp-content acp-empty"><button type="button" onClick={retry}>重试打开会话</button></div> : undefined}
+      alternateContent={alternateContent} footer={composerStatus}
     />}
-    {session && <div className="acp-thread-host"><ThreadView session={session} workspace={workspace} tabId={tab.id} busy={busy || restoring} supportsImages={!!connection?.prompt_capabilities?.image} readOnly={!token} controlStatus={<ControlStatus {...control} />} headerActions={headerActions} banner={connectionState} alternateContent={alternateContent} onAction={action} onOpenFile={onOpenFile} /></div>}
-  </section>;
+    {session && <div className="acp-thread-host"><ThreadView session={session} workspace={workspace} tabId={tab.id} busy={busy || restoring || recovering} supportsImages={!!connection?.prompt_capabilities?.image} supportsSteering={object(connection?.extensions?.steering).supported === true} composerStatus={composerStatus} headerActions={headerActions} notice={notice} alternateContent={alternateContent} onAction={action} onOpenFile={onOpenFile} /></div>}
+  </section></ThinkingVisibility.Provider>;
 }

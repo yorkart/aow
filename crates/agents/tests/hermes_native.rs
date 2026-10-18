@@ -262,7 +262,8 @@ async fn native_new_unpersisted_process_should_not_attach_another_session() {
         .env("PYTHONDONTWRITEBYTECODE", "1").env("HERMES_HOME", dir.path())
         .env("HOME", dir.path()).current_dir(dir.path())
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
-        .arg("-c").arg(r#"
+        .arg("-c").arg(concat!(
+r#"
 import fcntl, json, os, pty, select, sqlite3, struct, subprocess, sys, termios, time
 from pathlib import Path
 root = Path.cwd()
@@ -294,7 +295,9 @@ try:
             ready = True
             break
     db = sqlite3.connect(f'file:{root / "state.db"}?mode=ro', uri=True)
-    ids = [row[0] for row in db.execute('SELECT id FROM sessions')]
+    ids = [row[0] for row in db.execute('''"#,
+include_str!("sql/hermes_native/session_ids.sql"),
+r#"''')]
     print(json.dumps({'pid': cli.pid, 'ready': ready, 'native_session_ids': ids}), flush=True)
     if ready:
         sys.stdin.readline()
@@ -307,7 +310,8 @@ finally:
         cli.terminate()
         cli.wait(timeout=5)
     os.close(master)
-"#).spawn().unwrap();
+"#
+)).spawn().unwrap();
     let mut line = String::new();
     BufReader::new(child.stdout.take().unwrap())
         .read_line(&mut line)

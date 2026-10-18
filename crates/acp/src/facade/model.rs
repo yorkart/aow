@@ -4,6 +4,7 @@ use serde_json::Value;
 /// Additive progress view; phase names can grow without changing the connect API.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ConnectionStatus {
+    pub operation_id: String,
     pub phase: String,
     pub detail: Option<String>,
     pub running: bool,
@@ -30,6 +31,9 @@ pub struct ConnectionInfo {
     pub capabilities: Value,
     pub auth_methods: Value,
     pub prompt_capabilities: Value,
+    /// Capability-negotiated extensions from initialize's top-level _meta.
+    #[serde(default)]
+    pub extensions: Value,
 }
 
 /// Extensible content envelope, owned by this integration rather than the SDK.
@@ -49,6 +53,14 @@ pub struct ThreadEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message_id: Option<String>,
     pub content: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delivery: Option<InputDelivery>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct InputDelivery {
+    pub status: String,
+    pub error: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -68,9 +80,38 @@ pub struct SessionTurn {
     pub error: Option<String>,
 }
 
+/// Connection recovery is independent of recorded prompt outcomes.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SessionRecovery {
+    pub attempt_id: String,
+    pub phase: String,
+    pub error: Option<String>,
+}
+
+/// Creation origin is independent of the instance's parent.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionSource {
+    #[default]
+    User,
+    Cli,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct SessionCreation {
+    pub source: SessionSource,
+    pub parent: Option<aow_protocol::InstanceRef>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SessionSnapshot {
     pub thread_id: String,
+    #[serde(default)]
+    pub source: SessionSource,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent: Option<aow_protocol::InstanceRef>,
     #[serde(default)]
     pub session_id: Option<String>,
     pub agent_id: String,
@@ -80,11 +121,16 @@ pub struct SessionSnapshot {
     /// Imported metadata is hydrated only when the user opens this conversation.
     #[serde(default)]
     pub needs_load: bool,
+    #[serde(default)]
+    pub recovery: Option<SessionRecovery>,
     pub revision: u64,
     /// Distinguishes live incarnations across server restarts and history reloads.
     #[serde(default)]
     pub sync_generation: String,
     pub updated_at: String,
+    /// Sidebar recency: creation/import baseline, then the last accepted user prompt.
+    #[serde(default)]
+    pub interacted_at: Option<String>,
     pub entries: Vec<ThreadEntry>,
     #[serde(default)]
     pub turns: Vec<SessionTurn>,
@@ -113,6 +159,13 @@ pub struct SessionSnapshot {
     pub stop_reason: Option<String>,
     #[serde(skip)]
     pub(crate) pending_user_echo: String,
+    #[serde(default)]
+    pub steering_pending: bool,
+    /// An adapter-owned turn whose completion has no ordinary prompt response.
+    #[serde(default)]
+    pub steering_untracked: bool,
+    #[serde(skip)]
+    pub(crate) steering: crate::acp_thread::steering::SteeringState,
     #[serde(skip)]
     pub(crate) pending_user_images: Vec<Value>,
     #[serde(skip)]
@@ -132,6 +185,9 @@ pub struct TurnOverview {
     pub revision: u64,
     pub user: Vec<ThreadEntry>,
     pub conclusion: Vec<ThreadEntry>,
+    /// Steered turns expose their dialogue independently of final-answer inference.
+    #[serde(default)]
+    pub messages: Option<Vec<ThreadEntry>>,
     pub tool_count: usize,
     pub progress_count: usize,
     pub running: bool,
@@ -143,12 +199,21 @@ pub struct TurnOverview {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum DialoguePatch {
+    Reset { entries: Vec<ThreadEntry> },
+    Delta { entries: Vec<EntryPatch> },
+}
+
+#[derive(Debug, Serialize)]
 pub struct TurnOverviewPatch {
     pub id: String,
     pub revision: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user: Option<Vec<ThreadEntry>>,
     pub conclusion: Vec<ThreadEntry>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub messages: Option<DialoguePatch>,
     pub tool_count: usize,
     pub progress_count: usize,
     pub running: bool,
@@ -208,12 +273,20 @@ pub enum TerminalPatch {
 pub struct SessionInfo {
     pub thread_id: String,
     #[serde(default)]
+    pub source: SessionSource,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent: Option<aow_protocol::InstanceRef>,
+    #[serde(default)]
     pub session_id: Option<String>,
     pub agent_id: String,
     pub cwd: String,
     pub title: String,
     pub status: String,
     pub updated_at: String,
+    #[serde(default)]
+    pub interacted_at: Option<String>,
 }
 
 /// A newly completed prompt, never emitted by history loading or snapshot reads.
@@ -229,12 +302,16 @@ impl From<&SessionSnapshot> for SessionInfo {
     fn from(thread: &SessionSnapshot) -> Self {
         Self {
             thread_id: thread.thread_id.clone(),
+            parent: thread.parent.clone(),
+            source: thread.source,
+            created_at: thread.created_at.clone(),
             session_id: thread.session_id.clone(),
             agent_id: thread.agent_id.clone(),
             cwd: thread.cwd.clone(),
             title: thread.title.clone(),
             status: thread.status.clone(),
             updated_at: thread.updated_at.clone(),
+            interacted_at: thread.interacted_at.clone(),
         }
     }
 }

@@ -1,0 +1,1 @@
+INSERT INTO sidebar_threads(thread_id, agent_id, title, updated_at, created_at, folder_paths, parent) VALUES ('old', 'test', 'Old', '2020-02-01', '2020-01-01', '["/repo"]', '{"kind":"terminal","id":"parent"}')

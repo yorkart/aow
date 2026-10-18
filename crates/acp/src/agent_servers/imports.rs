@@ -61,6 +61,7 @@ impl AgentServerStore {
             {
                 thread.updated_at = updated_at.with_timezone(&chrono::Utc).to_rfc3339();
             }
+            thread.interacted_at = Some(thread.updated_at.clone());
             let info = SessionInfo::from(&thread);
             snapshots.push(thread);
             imported.push(info);

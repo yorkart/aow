@@ -8,13 +8,25 @@ use std::{
 
 struct Host {
     manager: AowManager,
+    state_directory: Option<PathBuf>,
     page: tokio::sync::broadcast::Sender<crate::terminal::notifications::TaskStopNotification>,
+    workspace_events: crate::workspace_events::WorkspaceEvents,
 }
 
 #[async_trait::async_trait]
 impl AcpHost for Host {
+    fn session_metadata_changed(&self) {
+        self.workspace_events.instances_changed();
+    }
     async fn turn_completed(&self, completion: aow_acp::TurnCompletion) {
         super::notifications::dispatch(&self.manager, &self.page, completion).await;
+    }
+    fn execution_environment(&self) -> std::collections::BTreeMap<String, String> {
+        self.state_directory
+            .as_ref()
+            .map(|path| ("AOW_STATE_DIR".into(), path.to_string_lossy().into_owned()))
+            .into_iter()
+            .collect()
     }
     async fn settings(&self) -> Result<String> {
         let manager = self.manager.clone();
@@ -53,9 +65,15 @@ pub(crate) fn service(
     manager: AowManager,
     directory: Option<PathBuf>,
     page: tokio::sync::broadcast::Sender<crate::terminal::notifications::TaskStopNotification>,
+    workspace_events: crate::workspace_events::WorkspaceEvents,
 ) -> Result<AcpService> {
     AcpService::new(
-        Arc::new(Host { manager, page }),
+        Arc::new(Host {
+            manager,
+            page,
+            workspace_events,
+            state_directory: directory.as_ref().map(std::fs::canonicalize).transpose()?,
+        }),
         directory.map(|directory| directory.join("acp")),
     )
 }

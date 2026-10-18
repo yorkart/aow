@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { parse } from 'jsonc-parser';
 import { acpApi, settingsChanged } from '../../api';
 import { list, object, text, type Data, type ThreadEntry } from '../../types';
+import { coalesceSteeringChunks } from './steering_messages';
 
 export function visibleContent(content: Data): boolean {
   if (content.type === 'text') return !!text(content.text).trim();
@@ -31,13 +32,22 @@ export function contentMarkdown(content: Data): string {
   return '';
 }
 export interface MessageGroup { id: string; kind: string; entries: ThreadEntry[]; reply: string; showControls: boolean; userMessageId?: string }
+export function visibleMessageGroups(groups: MessageGroup[], showThinking: boolean) {
+  if (showThinking) return groups;
+  return groups.flatMap(group => {
+    const entries = group.entries.filter(entry => entry.kind !== 'thought');
+    // Keep message identities stable when thoughts share a group with a reply.
+    return entries.length === group.entries.length ? [group] : entries.length ? [{ ...group, entries }] : [];
+  });
+}
+
 export function messageGroups(entries: ThreadEntry[], working: boolean, waiting: boolean, permissionTools = new Set<string>(), turnStarts = new Set<string>()) {
   const groups: MessageGroup[] = [];
   let userMessageId: string | undefined;
-  for (const entry of entries) {
+  for (const entry of coalesceSteeringChunks(entries)) {
     if (entry.kind === 'tool' && !permissionTools.has(entry.id) && !visibleTool(entry.content)) continue;
-    if (['assistant', 'thought', 'user'].includes(entry.kind) && !visibleContent(entry.content)) continue;
-    if (!['assistant', 'thought', 'user', 'tool', 'summary', 'compaction_update'].includes(entry.kind)) continue;
+    if (['assistant', 'thought', 'user', 'steering'].includes(entry.kind) && !visibleContent(entry.content)) continue;
+    if (!['assistant', 'thought', 'user', 'steering', 'tool', 'summary', 'compaction_update'].includes(entry.kind)) continue;
     const kind = entry.kind === 'thought' ? 'assistant' : entry.kind;
     const last = groups.at(-1);
     if (last && last.kind === kind && ['assistant', 'user'].includes(kind) && !turnStarts.has(entry.id)) last.entries.push(entry);

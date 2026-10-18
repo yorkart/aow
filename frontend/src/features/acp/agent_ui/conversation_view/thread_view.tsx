@@ -1,5 +1,5 @@
 // React rendering of the ACP branches in thread_view.rs, with independent view state.
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Maximize2, Minimize2, Send, Square } from 'lucide-react';
 import { ConversationAgentMessage, ConversationLayout } from '../../../../components/conversation/ConversationLayout';
 import { AgentIcon } from '../../../agents/AgentIcon';
@@ -12,11 +12,13 @@ import { Notice } from './activity';
 import { ReplyActions } from './reply_actions';
 import { Plan } from './plan';
 import { absoluteFilePath } from './file_links';
+import { WorkspaceMarkdownProvider } from '../../../files/WorkspaceMarkdown';
 import { ConfigOptions } from '../config_options';
 import { useComposerDraft } from '../composer_drafts';
 import { MessageEditor } from '../message_editor';
 import { emptyDraft, hasDraftContent, hasImages, hasPendingImages, MAX_PROMPT_BYTES, promptContent } from '../message_editor/model';
-import { messageGroups } from './entry_view_state';
+import { messageGroups, visibleMessageGroups } from './entry_view_state';
+import { ThinkingVisibility } from '../thinking_visibility';
 import { list, object, text, type Data, type SessionSnapshot, type TurnOverview } from '../../types';
 import { SpinnerLabel } from '../ui/spinner_label';
 
@@ -28,8 +30,9 @@ function TokenUsage({ usage }: { usage: Data | null }) {
   const title = `Context: ${percent}% · ${used.toLocaleString()} / ${size.toLocaleString()}${typeof cost.amount === 'number' ? `\nCost: ${cost.amount.toFixed(cost.amount > 0 && cost.amount < .01 ? 4 : 2)} ${text(cost.currency)}` : ''}`;
   return <span className={`acp-token-usage${percent >= 85 ? ' warning' : ''}`} role="img" aria-label={title} title={title}><svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" opacity=".25" /><circle cx="8" cy="8" r="6" pathLength="100" strokeDasharray={`${Math.min(100, Math.max(0, percent))} 100`} transform="rotate(-90 8 8)" /></svg></span>;
 }
-export function ThreadView({ session, workspace, tabId, busy: pending, supportsImages = false, readOnly = false, controlStatus, headerActions, banner, alternateContent, onAction, onOpenFile: openHostFile }: { session: SessionSnapshot; workspace: string; tabId: string; busy: boolean; supportsImages?: boolean; readOnly?: boolean; controlStatus?: ReactNode; headerActions?: ReactNode; banner?: ReactNode; alternateContent?: ReactNode; onAction: (action: Data) => Promise<boolean>; onOpenFile: OpenFile }) {
-  const busy = pending || readOnly;
+export function ThreadView({ session, workspace, tabId, busy: pending, supportsImages = false, supportsSteering = false, composerStatus, headerActions, notice, alternateContent, onAction, onOpenFile: openHostFile }: { session: SessionSnapshot; workspace: string; tabId: string; busy: boolean; supportsImages?: boolean; supportsSteering?: boolean; composerStatus?: ReactNode; headerActions?: ReactNode; notice?: ReactNode; alternateContent?: ReactNode; onAction: (action: Data) => Promise<boolean>; onOpenFile: OpenFile }) {
+  const busy = pending || !!composerStatus;
+  const showThinking = useContext(ThinkingVisibility);
   const [draft, setDraft] = useComposerDraft(workspace, tabId);
   const [composeError, setComposeError] = useState('');
   const [expanded, setExpanded] = useState(false);
@@ -39,16 +42,17 @@ export function ThreadView({ session, workspace, tabId, busy: pending, supportsI
   const onOpenFile: OpenFile = useCallback((path, line) => openHostFile(absoluteFilePath(path, session.cwd || workspace), line), [openHostFile, session.cwd, workspace]);
   const toolId = (permission: typeof session.permissions[number]) => text(object(permission.request.toolCall).toolCallId);
   const permissionTools = useMemo(() => new Set(session.permissions.map(permission => text(object(permission.request.toolCall).toolCallId))), [session.permissions]);
-  const groups = useMemo(() => messageGroups(session.entries, working, session.permissions.length > 0, permissionTools, new Set(session.turns?.map(turn => turn.user_entry_id))), [session.entries, working, session.permissions.length, permissionTools, session.turns]);
+  const groups = useMemo(() => visibleMessageGroups(messageGroups(session.entries, working, session.permissions.length > 0, permissionTools, new Set(session.turns?.map(turn => turn.user_entry_id))), showThinking), [session.entries, working, session.permissions.length, permissionTools, session.turns, showThinking]);
   const { leading, turns } = useMemo(() => conversationTurns(groups), [groups]);
   const entryPositions = useMemo(() => new Map(session.entries.map((entry, index) => [entry.id, index])), [session.entries]);
   const turnRecords = useMemo(() => new Map(session.turns?.map(turn => [turn.user_entry_id, turn])), [session.turns]);
   const agentIcon = <AgentIcon agentId={session.agent_id.replace(/-acp$/, '').replace(/^claude-agent$/, 'claude')} />;
-  const canSend = !busy && session.status === 'idle' && hasDraftContent(draft) && !hasPendingImages(draft) && (!hasImages(draft) || supportsImages);
+  const canSteer = working && supportsSteering;
+  const canSend = !busy && !session.steering_pending && (session.status === 'idle' || canSteer) && hasDraftContent(draft) && !hasPendingImages(draft) && (!hasImages(draft) || supportsImages);
   const submit = async () => {
     if (!canSend) return;
     const submitted = draft;
-    const action = { action: 'prompt', content: promptContent(submitted) };
+    const action = { action: canSteer ? 'steer' : 'prompt', content: promptContent(submitted) };
     if (new Blob([JSON.stringify(action)]).size > MAX_PROMPT_BYTES) { setComposeError('Message exceeds 32 MiB. Remove some images and try again.'); return; }
     setComposeError('');
     if (await onAction(action)) {
@@ -86,12 +90,11 @@ export function ThreadView({ session, workspace, tabId, busy: pending, supportsI
       }} onScrollToTop={latest ? () => conversation.current?.scrollTo({ top: 0, behavior: 'instant' }) : undefined} />;
   };
   const projectedLeading = session.overview?.find(turn => !turn.user.length);
-  return <ConversationLayout
+  return <WorkspaceMarkdownProvider directory={session.cwd || workspace}><ConversationLayout
     sessionId={session.thread_id}
     revision={session.revision}
     label="ACP 对话"
     header={{ title: session.title, agentName: session.agent_id, agentIcon, workspace: session.cwd, actions: headerActions }}
-    banner={banner}
     alternateContent={alternateContent}
     live
     followRequest={followRequest}
@@ -120,23 +123,25 @@ export function ThreadView({ session, workspace, tabId, busy: pending, supportsI
       <div className="acp-content acp-activity">
         {session.notices?.map(notice => <Notice key={notice.id} notice={notice} busy={busy} onDismiss={() => { void onAction({ action: 'dismiss_notice', notice_id: notice.id }); }} />)}
         {session.permissions.filter(permission => !tools.has(toolId(permission))).map(permission => <PermissionRequest key={permission.id} permission={permission} requester={session.agent_id} busy={busy} onAnswer={response => { void onAction({ action: 'answer', request_id: permission.id, response }); }} />)}
-        {session.error && !session.auth_required && <p className="acp-error" role="alert">{session.error}</p>}
+        {notice}
+        {session.error && !composerStatus && !session.auth_required && <p className="acp-error" role="alert">{session.error}</p>}
         <Plan key={session.thread_id} entries={plan} busy={busy} onClear={() => { void onAction({ action: 'clear_plan' }); }} onOpenFile={onOpenFile} />
       </div>
     }
-    footerExpanded={expanded && !readOnly}
-    footer={readOnly ? controlStatus :
+    footerExpanded={expanded && !composerStatus}
+    footer={composerStatus ||
       <form className={`acp-content acp-composer${!hasMessages ? ' empty' : ''}${expanded ? ' expanded' : ''}`} onSubmit={event => { event.preventDefault(); void submit(); }}>
         <div className="acp-editor">
           {hasMessages && <button type="button" className="acp-editor-expand" aria-label={expanded ? '收起输入区' : '展开输入区'} onClick={() => setExpanded(value => !value)}>{expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}</button>}
           <MessageEditor draft={draft} onChange={setDraft} commands={session.commands} supportsImages={supportsImages} disabled={session.status === 'disconnected'} placeholder={`Message ${session.agent_id}${session.commands.length ? ' — / for commands' : ''}`} onSubmit={() => { void submit(); }} />
         </div>
+        {session.steering_untracked && <p className="acp-status" role="status">Agent 已启动后续任务，但尚未提供执行状态。请勿重复发送。</p>}
         {composeError && <p className="acp-error" role="alert">{composeError}</p>}
         <div className="acp-composer-toolbar"><span className="acp-composer-spacer" /><TokenUsage usage={session.usage} /><ConfigOptions session={session} disabled={busy || session.status === 'disconnected'} onAction={onAction} />
-          {working ? <button className="acp-send-button acp-stop-button aow-icon-inherit" type="button" aria-label="停止" title="停止" disabled={busy} onClick={() => { void onAction({ action: 'cancel' }); }}><Square size={14} fill="currentColor" strokeWidth={0} /></button>
-            : <button className="acp-send-button" type="submit" aria-label="发送" title="发送 · Enter（Shift + Enter 换行）" disabled={!canSend}><Send size={16} /></button>}
+          {working && <button className="acp-send-button acp-stop-button aow-icon-inherit" type="button" aria-label="停止" title="停止" disabled={busy} onClick={() => { void onAction({ action: 'cancel' }); }}><Square size={14} fill="currentColor" strokeWidth={0} /></button>}
+          {(!working || canSteer) && <button className="acp-send-button" type="submit" aria-label={canSteer ? '追加指令' : '发送'} title={canSteer ? '追加到当前任务 · Enter（Shift + Enter 换行）' : '发送 · Enter（Shift + Enter 换行）'} disabled={!canSend}><Send size={16} /></button>}
         </div>
       </form>
     }
-  />;
+  /></WorkspaceMarkdownProvider>;
 }

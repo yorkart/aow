@@ -1,0 +1,18 @@
+.instance-panel-groups { flex: 1; }
+.instance-panel-group { min-width: 0; }
+.instance-panel-group + .instance-panel-group { border-top: 1px solid var(--aow-line); }
+.instance-panel-body { min-width: 0; }
+.instance-panel-body[hidden] { display: none; }
+.instance-panel-empty { margin: 0; padding: 10px; color: var(--muted); font-size: 12px; }
+.instance-panel-count { flex: none; margin-left: auto; padding: 0 5px; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.instance-worktree-group.active { background: var(--aow-sidebar-selection); }
+.instance-worktree-heading { display: flex; align-items: center; gap: 4px; width: 100%; min-height: 27px; padding: 4px 8px; color: var(--aow-text); text-align: left; cursor: pointer; }
+.instance-worktree-heading:hover { color: var(--aow-text-hover); background: var(--hover); }
+.instance-worktree-heading:focus-visible { outline: 1px solid var(--aow-accent); outline-offset: -1px; }
+.instance-worktree-heading > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+/* Center the chevron in the pane's 20px gutter without moving the branch label. */
+.instance-worktree-heading > svg { position: relative; left: -4px; flex: 0 0 12px; width: 12px; height: 12px; }
+.instance-worktree-heading > svg.expanded { transform: rotate(90deg); }
+.aow-panel-header-actions > .instance-scope-active { color: var(--aow-accent); }
+.instance-scope-menu-separator { margin: 4px 0; border-top: 1px solid var(--aow-line); }
+.instance-panel-error { margin: 0; padding: 8px; color: var(--aow-error); font-size: 12px; }

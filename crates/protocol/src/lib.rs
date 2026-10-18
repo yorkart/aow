@@ -1,6 +1,8 @@
 mod filesystem;
 mod git;
+mod instance;
 mod pull_request;
+mod search;
 mod terminal;
 
 pub use filesystem::{
@@ -10,9 +12,13 @@ pub use git::{
     GitCommit, GitCommitDetail, GitCommitFile, GitCommitFiles, GitCommitStats, GitDiff,
     GitFileStatus, GitIdentity, GitIgnoredPaths, GitLog, GitStatus, RepositorySummary,
 };
+pub use instance::{AcpCreate, CreationContext, InstanceInfo, InstanceKind, InstanceRef};
 pub use pull_request::{
     MyPullRequests, PullRequestCheck, PullRequestComment, PullRequestDetail, PullRequestDiff,
     PullRequestFile, PullRequestMergeCheck, PullRequestSummary, PullRequestThread, PullRequestUser,
+};
+pub use search::{
+    FileSearchFile, FileSearchMatch, FileSearchMode, FileSearchRequest, FileSearchResult,
 };
 pub use terminal::{
     AgentTerminalCreate, AgentTerminalInfo, AgentTerminalPhase, AgentTerminalState,

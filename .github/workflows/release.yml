@@ -153,6 +153,11 @@ jobs:
           npm --prefix frontend ci --ignore-scripts --no-audit --no-fund
           npm --prefix frontend run build
           npm --prefix frontend run test:architecture
+      - name: Test Explorer search and file operations
+        working-directory: frontend
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:explorer
       - name: Build portable VT worker bundle
         if: needs.version.outputs.native-packages == 'true'
         run: |

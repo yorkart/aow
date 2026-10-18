@@ -1,7 +1,7 @@
 use super::*;
 
 impl TerminalManager {
-    pub(in crate::terminal) fn list_snapshot(
+    pub(crate) fn list_snapshot(
         &self,
         workspace_root: Option<&str>,
     ) -> Result<TerminalTabList, TerminalError> {

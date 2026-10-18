@@ -1,8 +1,9 @@
-import { useId, type ReactNode } from 'react';
+import { useContext, useId, type ReactNode } from 'react';
 import { Brain, ChevronRight, MessageSquare, Wrench } from 'lucide-react';
 import { useProcessExpansion } from '../../../../components/conversation/ConversationProcess';
 import { groupProcess } from './conversation_turns';
-import type { MessageGroup } from './entry_view_state';
+import { visibleMessageGroups, type MessageGroup } from './entry_view_state';
+import { ThinkingVisibility } from '../thinking_visibility';
 import { SpinnerLabel } from '../ui/spinner_label';
 
 function ToolGroup({ groups, running, permissionTools, renderGroup }: {
@@ -27,8 +28,9 @@ function ToolGroup({ groups, running, permissionTools, renderGroup }: {
 export function ProcessTimeline({ process, running, permissionTools, renderGroup }: {
   process: MessageGroup[]; running: boolean; permissionTools: Set<string>; renderGroup: (group: MessageGroup) => ReactNode;
 }) {
+  const showThinking = useContext(ThinkingVisibility);
   return <ol className="session-process-timeline">
-    {groupProcess(process).map(item => {
+    {groupProcess(visibleMessageGroups(process, showThinking)).map(item => {
       const Icon = item.kind === 'tools' ? Wrench : item.groups[0].entries.every(entry => entry.kind === 'thought') ? Brain : MessageSquare;
       return <li key={item.id} className={`session-process-item ${item.kind === 'tools' ? 'tools' : 'commentary'}`}>
         <span className="session-process-marker" aria-hidden="true"><Icon size={12} /></span>
