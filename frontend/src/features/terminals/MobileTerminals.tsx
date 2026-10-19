@@ -110,13 +110,6 @@ export function MobileTerminals({ project, worktree, visible, headerActions, ini
     }
   }, [activeKey, workspace]);
   useEffect(() => {
-    if (!visible) return;
-    const refresh = () => { if (document.visibilityState === 'visible') void terminals.reload(); };
-    const timer = window.setInterval(refresh, 15000);
-    document.addEventListener('visibilitychange', refresh);
-    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', refresh); };
-  }, [visible, terminals.reload]);
-  useEffect(() => {
     if (visible) document.getElementById(`mobile-terminal-${activeKey}`)?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
   }, [activeKey, visible]);
   const create = async (agentId?: string) => {
@@ -124,7 +117,7 @@ export function MobileTerminals({ project, worktree, visible, headerActions, ini
     const tab = await terminals.create(agentId);
     if (tab?.panes[0]) setSelected(`${tab.id}:${tab.panes[0].id}`);
   };
-  const reload = () => { void terminals.reload(); projectTerminals.reload(); };
+  const reload = () => { void terminals.reload(); };
   const open = (tab: TerminalTab, paneId?: string) => {
     const target = (paneId ? flattenTerminalTabs([tab], detectedAgents, titles, activity, processes).find(entry => entry.pane.id === paneId) : undefined)
       ?? entries.find(entry => entry.tab.id === tab.id && entry.key === selected)
@@ -167,7 +160,8 @@ export function MobileTerminals({ project, worktree, visible, headerActions, ini
         worktrees={canShowAll ? project.worktrees : undefined} showAll={canShowAll ? preferences.scopes : undefined}
         onShowAllChange={(group, value) => setPreferences(current => ({ ...current, scopes: { ...current.scopes, [group]: value } }))}
         sortBy={preferences.sorts} onSortChange={(group, value) => setPreferences(current => ({ ...current, sorts: { ...current.sorts, [group]: value } }))}
-        loading={showAll && projectTerminals.loading} error={showAll ? projectTerminals.error : undefined} />
+        loading={showAll && projectTerminals.loading}
+        error={showAll && projectTerminals.error !== (operationError || terminals.error) ? projectTerminals.error : undefined} />
     </>}</MobileTerminalCatalog>}
     {entries.length > 0 && <div className="mobile-terminal-tabs" role="tablist" aria-label="终端标签">
       {entries.map((entry) => <button key={entry.key} id={`mobile-terminal-${entry.key}`} role="tab" aria-selected={activeKey === entry.key}

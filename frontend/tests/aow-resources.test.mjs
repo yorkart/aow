@@ -50,7 +50,7 @@ try {
   const baseURL = `http://127.0.0.1:${server.httpServer.address().port}`;
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
 
-  async function fixture(t, { fallback = false, clock = false, multipleTerminals = false, extraTerminals = 0, cliTerminals = 0, splitTerminal = false, registeredAgents = [], floating = false, beforeOpen } = {}) {
+  async function fixture(t, { fallback = false, clock = false, multipleTerminals = false, extraTerminals = 0, cliTerminals = 0, splitTerminal = false, registeredAgents = [], floating = false, waitForTerminal = true, beforeOpen } = {}) {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const state = { errors: [], requests: [], sessionAgents: [], projects: [project], task: { ...task }, detailGate: null, agents: {}, titles: {}, names: {}, paneNames: {}, agentFailure: false };
     state.appearanceWrites = [];
@@ -119,6 +119,31 @@ try {
       return { boot_id: 'fixture', revision: state.operationRevision, operations, log_error: null };
     };
     t.after(async () => { await context.close(); assert.deepEqual(state.errors, []); });
+    const terminalList = scope => {
+      const roots = scope ? [scope] : [...new Set([...state.projects.flatMap(project => project.worktrees.map(worktree => worktree.path)), ...state.createdTerminalTabs.map(tab => tab.workspace_root)])];
+      let data = roots.flatMap(workspace => {
+        const id = workspace.split('/').at(-1);
+        let data = [{ id: `${id}-tab`, name: 'Shell', workspace_root: workspace, revision: 1, layout: { type: 'pane', pane_id: `${id}-pane` }, panes: [{ id: `${id}-pane`, name: 'Shell', cwd: workspace, shell: '/bin/bash', status: 'running', rows: 40, cols: 120 }] }];
+        if (splitTerminal) {
+          data[0].panes.push(...['review', 'logs'].map(suffix => ({ id: `${id}-${suffix}`, name: suffix, cwd: workspace, shell: '/bin/bash', status: 'running', rows: 40, cols: 120 })));
+          data[0].layout = { type: 'split', axis: 'row', ratio: .5, first: { type: 'pane', pane_id: `${id}-pane` }, second: {
+            type: 'split', axis: 'column', ratio: .5, first: { type: 'pane', pane_id: `${id}-review` }, second: { type: 'pane', pane_id: `${id}-logs` },
+          } };
+        }
+        if (multipleTerminals) data.push({ id: `${id}-background`, name: 'Background', workspace_root: workspace, revision: 1, layout: { type: 'pane', pane_id: `${id}-background-pane` }, panes: [{ id: `${id}-background-pane`, name: 'Background', cwd: workspace, shell: '/bin/bash', status: 'running', rows: 40, cols: 120 }] });
+        for (let index = 0; index < extraTerminals; index++) data.push({ id: `${id}-extra-${index}`, name: `Shell ${index + 2}`, workspace_root: workspace, revision: 1,
+          layout: { type: 'pane', pane_id: `${id}-extra-${index}-pane` }, panes: [{ id: `${id}-extra-${index}-pane`, name: 'Shell', cwd: workspace, shell: '/bin/bash', status: 'running', rows: 40, cols: 120 }] });
+        if (!state.defaultTerminalRoots.includes(workspace)) data = [];
+        data.push(...state.createdTerminalTabs.filter(tab => tab.workspace_root === workspace));
+        return data;
+      });
+      data = data.filter(tab => !state.closedTerminalIds.includes(tab.id));
+      data = data.map(item => ({ ...item, name_is_custom: Boolean(state.names[item.id]), ...(state.names[item.id] ? { name: state.names[item.id] } : {}),
+        panes: item.panes.map(pane => ({ ...pane, name_is_custom: Boolean(state.paneNames[pane.id]), ...(state.paneNames[pane.id] ? { name: state.paneNames[pane.id] } : {}) })),
+      }));
+      state.knownTerminalTabs = { ...state.knownTerminalTabs, ...Object.fromEntries(data.map(item => [item.id, item])) };
+      return data;
+    };
     await context.route('**/api/**', async route => {
       const request = route.request();
       const url = new URL(request.url());
@@ -285,28 +310,7 @@ try {
       else if (url.pathname === '/api/terminals') {
         const scope = url.searchParams.get('workspace_root');
         state.terminalListScopes.push(scope);
-        const roots = scope ? [scope] : [...new Set([...state.projects.flatMap(project => project.worktrees.map(worktree => worktree.path)), ...state.createdTerminalTabs.map(tab => tab.workspace_root)])];
-        data = roots.flatMap(workspace => {
-          const id = workspace.split('/').at(-1);
-          let data = [{ id: `${id}-tab`, name: 'Shell', workspace_root: workspace, revision: 1, layout: { type: 'pane', pane_id: `${id}-pane` }, panes: [{ id: `${id}-pane`, name: 'Shell', cwd: workspace, shell: '/bin/bash', status: 'running', rows: 40, cols: 120 }] }];
-          if (splitTerminal) {
-            data[0].panes.push(...['review', 'logs'].map(suffix => ({ id: `${id}-${suffix}`, name: suffix, cwd: workspace, shell: '/bin/bash', status: 'running', rows: 40, cols: 120 })));
-            data[0].layout = { type: 'split', axis: 'row', ratio: .5, first: { type: 'pane', pane_id: `${id}-pane` }, second: {
-              type: 'split', axis: 'column', ratio: .5, first: { type: 'pane', pane_id: `${id}-review` }, second: { type: 'pane', pane_id: `${id}-logs` },
-            } };
-          }
-          if (multipleTerminals) data.push({ id: `${id}-background`, name: 'Background', workspace_root: workspace, revision: 1, layout: { type: 'pane', pane_id: `${id}-background-pane` }, panes: [{ id: `${id}-background-pane`, name: 'Background', cwd: workspace, shell: '/bin/bash', status: 'running', rows: 40, cols: 120 }] });
-          for (let index = 0; index < extraTerminals; index++) data.push({ id: `${id}-extra-${index}`, name: `Shell ${index + 2}`, workspace_root: workspace, revision: 1,
-            layout: { type: 'pane', pane_id: `${id}-extra-${index}-pane` }, panes: [{ id: `${id}-extra-${index}-pane`, name: 'Shell', cwd: workspace, shell: '/bin/bash', status: 'running', rows: 40, cols: 120 }] });
-          if (!state.defaultTerminalRoots.includes(workspace)) data = [];
-          data.push(...state.createdTerminalTabs.filter(tab => tab.workspace_root === workspace));
-          return data;
-        });
-        data = data.filter(tab => !state.closedTerminalIds.includes(tab.id));
-        data = data.map(item => ({ ...item, name_is_custom: Boolean(state.names[item.id]), ...(state.names[item.id] ? { name: state.names[item.id] } : {}),
-          panes: item.panes.map(pane => ({ ...pane, name_is_custom: Boolean(state.paneNames[pane.id]), ...(state.paneNames[pane.id] ? { name: state.paneNames[pane.id] } : {}) })),
-        }));
-        state.knownTerminalTabs = { ...state.knownTerminalTabs, ...Object.fromEntries(data.map(item => [item.id, item])) };
+        data = terminalList(scope);
         if (!scope) await state.allTerminalsGate;
       }
       else if (request.method() === 'GET' && url.pathname.startsWith('/api/terminals/')) {
@@ -345,14 +349,22 @@ try {
         socket.send(JSON.stringify({ type: 'stream', epoch: 'fixture', offset: 0, reset: true, replay_bytes: 0, restore_cols: cli ? 160 : 120, restore_rows: cli ? 48 : 40, restore: '\x1b[2J\x1b[HFixture ready\r\n$ ' }));
       });
     });
-    await installLiveEvents(context);
+    await installLiveEvents(context, undefined, async () => {
+      const tabs = terminalList(null);
+      await state.allTerminalsGate;
+      if (state.agentFailure) state.failedAgentRequests++;
+      return { tabs: state.terminalError ? null : state.terminalListTransform ? state.terminalListTransform(tabs) : tabs,
+        metadata: state.agentFailure ? null : { agents: state.agents, titles: state.titles },
+        error: state.terminalError ?? null, agent_error: state.agentFailure ? 'Daemon unavailable' : null };
+    });
     const page = await context.newPage();
     page.setDefaultTimeout(15000);
     page.on('pageerror', error => state.errors.push(error.stack ?? error.message));
     if (clock) await page.clock.install({ time: '2026-09-15T00:00:00Z' });
     await beforeOpen?.({ context, state });
     await page.goto(`${baseURL}/?ui=desktop`);
-    await surface(page).locator('.terminal-emulator-shell:not(.restore-pending)').first().waitFor();
+    if (waitForTerminal) await surface(page).locator('.terminal-emulator-shell:not(.restore-pending)').first().waitFor();
+    else await page.locator('.project-aow-layout').waitFor();
     return { page, state, operationSnapshot };
   }
 
@@ -1140,43 +1152,30 @@ try {
       await eventually(isCompact);
       const globalRequests = state.terminalListScopes.filter(scope => scope === null).length;
       await refresh();
-      assert.equal(state.terminalListScopes.filter(scope => scope === null).length, globalRequests + 1, 'mounted workspaces share one project terminal inventory poll');
+      assert.equal(state.terminalListScopes.filter(scope => scope === null).length, globalRequests, 'mounted workspaces share push updates without inventory polling');
     });
   }
 
-  await test('worktrees stay expanded while the backend inventory is loading or unavailable', async t => {
+  await test('worktrees stay expanded while the shared terminal snapshot is loading or unavailable', async t => {
     let release;
-    let failInventory = false;
-    let failWorkspace = false;
-    const { page } = await fixture(t, { clock: true, beforeOpen: async ({ context, state }) => {
+    const { page, state } = await fixture(t, { clock: true, waitForTerminal: false, beforeOpen: async ({ state }) => {
       state.closedTerminalIds.push('wt-1-tab');
       state.allTerminalsGate = new Promise(resolve => { release = resolve; });
-      await context.route('**/api/terminals?*', async route => {
-        const scope = new URL(route.request().url()).searchParams.get('workspace_root');
-        if ((scope === null && failInventory) || (scope === worktrees[1].path && failWorkspace)) {
-          await route.fulfill({ status: 503, json: { message: 'Terminal inventory unavailable' } });
-        } else await route.fallback();
-      });
     } });
     t.after(() => release());
     const row = page.locator(`.project-aow-worktrees button[title="${worktrees[1].path}"]`);
     const isCompact = () => row.evaluate(element => element.classList.contains('compact'));
     assert.equal(await isCompact(), false, 'unknown backend resources must not be treated as empty');
-    release();
+    release(); state.allTerminalsGate = null;
     await eventually(isCompact);
-    failInventory = true;
-    await page.clock.runFor(3100);
+    state.terminalError = 'Terminal inventory unavailable';
+    await page.clock.runFor(1600);
     await eventually(async () => !await isCompact());
-    failInventory = false;
-    await page.clock.runFor(3100);
-    await eventually(isCompact);
-    failWorkspace = true;
     await row.click();
     await surface(page).getByText('Terminal inventory unavailable', { exact: true }).first().waitFor();
-    assert.equal(await isCompact(), false, 'a failed local inventory must not reuse an earlier empty snapshot');
-    assert.equal(await surface(page).getByRole('tab').count(), 0);
-    failWorkspace = false;
-    await page.clock.runFor(3100);
+    assert.equal(await isCompact(), false, 'failed inventory must not classify a worktree as empty');
+    state.terminalError = null;
+    await page.clock.runFor(1600);
     await eventually(isCompact);
   });
 
@@ -1265,18 +1264,115 @@ try {
     await row.locator('svg.lucide-cat').waitFor();
   });
 
-  await test('terminal polling preserves pane dragging while applying metadata and layout changes', async t => {
+  for (const failLastSave of [false, true]) {
+    await test(`layout acknowledgements preserve a newer draft until its save ${failLastSave ? 'fails' : 'succeeds'}`, async t => {
+      const { page, state } = await fixture(t, { splitTerminal: true });
+      await page.evaluate(() => { for (const socket of window.liveEventSockets) clearInterval(socket.terminalTimer); });
+      let current = structuredClone(state.knownTerminalTabs['wt-0-tab']);
+      state.terminalListTransform = tabs => tabs.map(tab => tab.id === current.id ? current : tab);
+      const saves = [];
+      let releaseFirst, releaseSecond;
+      const firstGate = new Promise(resolve => { releaseFirst = resolve; });
+      const secondGate = new Promise(resolve => { releaseSecond = resolve; });
+      t.after(() => { releaseFirst(); releaseSecond(); });
+      await page.route('**/api/terminals/wt-0-tab/layout', async route => {
+        const update = route.request().postDataJSON();
+        saves.push(update);
+        const number = saves.length;
+        if (number > 1) {
+          await secondGate;
+          if (failLastSave) {
+            await route.fulfill({ status: 503, json: { message: 'layout unavailable' } }).catch(() => {});
+            return;
+          }
+        }
+        current = { ...current, layout: update.layout, revision: current.revision + 1 };
+        const response = structuredClone(current);
+        if (number === 1) await firstGate;
+        await route.fulfill({ json: response }).catch(() => {});
+      });
+      const split = surface(page).locator('.terminal-split.horizontal').first();
+      const divider = split.locator(':scope > .terminal-split-divider');
+      const bounds = await split.boundingBox();
+      const handle = await divider.boundingBox();
+      await page.mouse.move(handle.x + handle.width / 2, handle.y + 30);
+      await page.mouse.down();
+      try {
+        await page.mouse.move(bounds.x + bounds.width * .6, handle.y + 30);
+        await eventually(() => Promise.resolve(saves.length === 1));
+        await page.mouse.move(bounds.x + bounds.width * .75, handle.y + 30);
+        await eventually(async () => Number(await divider.getAttribute('aria-valuenow')) === 75);
+        const before = Number(await divider.getAttribute('aria-valuenow'));
+        assert.equal(before, 75);
+        releaseFirst();
+        await eventually(() => Promise.resolve(saves.length >= 2));
+        await delay(200);
+        const committedRatio = await page.evaluate(async () => {
+          const { terminalStore } = await import('/src/features/terminals/terminalStore.ts');
+          return terminalStore.snapshot().tabs.find(tab => tab.id === 'wt-0-tab').layout.ratio;
+        });
+        assert.ok(Math.abs(committedRatio - .6) < .01, 'the shared store must not expose the unsaved 75% draft');
+        const after = Number(await divider.getAttribute('aria-valuenow'));
+        assert.equal(after, before, 'the first save acknowledgement must not roll back the newer local divider position');
+      } finally {
+        await page.mouse.up();
+        releaseFirst(); releaseSecond();
+      }
+      if (failLastSave) await surface(page).locator('.terminal-workspace-error').filter({ hasText: '布局保存失败：layout unavailable' }).waitFor();
+      const committed = failLastSave ? 60 : 75;
+      await eventually(() => Math.abs(current.layout.ratio * 100 - committed) < 1);
+      await eventually(async () => Number(await divider.getAttribute('aria-valuenow')) === committed);
+      // After the draft commits, remote layout changes are authoritative again.
+      current = { ...current, revision: current.revision + 1, layout: { ...current.layout, ratio: .65 } };
+      await page.evaluate(async () => { for (const socket of window.liveEventSockets) await socket.sampleTerminals(true); });
+      await eventually(async () => Number(await divider.getAttribute('aria-valuenow')) === 65);
+    });
+  }
+
+  await test('remote pane removal cancels queued drafts and ignores their delayed save responses', async t => {
+    const { page, state } = await fixture(t, { splitTerminal: true });
+    await page.evaluate(() => { for (const socket of window.liveEventSockets) clearInterval(socket.terminalTimer); });
+    let current = structuredClone(state.knownTerminalTabs['wt-0-tab']);
+    state.terminalListTransform = tabs => tabs.map(tab => tab.id === current.id ? current : tab);
+    const saves = [];
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    t.after(() => release());
+    await page.route('**/api/terminals/wt-0-tab/layout', async route => {
+      const update = route.request().postDataJSON();
+      saves.push(update);
+      current = { ...current, layout: update.layout, revision: current.revision + 1 };
+      const response = structuredClone(current);
+      await gate;
+      await route.fulfill({ json: response }).catch(() => {});
+    });
+    const split = surface(page).locator('.terminal-split.horizontal').first();
+    const divider = split.locator(':scope > .terminal-split-divider');
+    const bounds = await split.boundingBox();
+    const handle = await divider.boundingBox();
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + 30);
+    await page.mouse.down();
+    await page.mouse.move(bounds.x + bounds.width * .6, handle.y + 30);
+    await eventually(() => saves.length === 1);
+    await page.mouse.move(bounds.x + bounds.width * .75, handle.y + 30);
+    await page.mouse.up();
+    // Another client removes panes after the first layout was committed.
+    current = { ...current, revision: current.revision + 1, panes: current.panes.slice(0, 1),
+      layout: { type: 'pane', pane_id: current.panes[0].id } };
+    await page.evaluate(async () => { for (const socket of window.liveEventSockets) await socket.sampleTerminals(true); });
+    await eventually(async () => await surface(page).locator('.terminal-pane').count() === 1);
+    release();
+    await delay(500);
+    assert.equal(saves.length, 1, 'the draft containing removed panes must not be saved');
+    assert.equal(await surface(page).locator('.terminal-pane').count(), 1, 'a delayed layout response must not resurrect removed panes');
+  });
+
+  await test('terminal push updates preserve pane dragging while applying metadata and layout changes', async t => {
     const { page, state } = await fixture(t, { splitTerminal: true });
     let current = structuredClone(state.knownTerminalTabs['wt-0-tab']);
     const originalLayout = structuredClone(current.layout);
     const saves = [];
-    await page.route('**/api/terminals?**', async route => {
-      if (new URL(route.request().url()).searchParams.get('workspace_root') !== worktrees[0].path) {
-        await route.fallback();
-        return;
-      }
-      await route.fulfill({ json: [current] });
-    });
+    state.terminalListTransform = tabs => tabs.map(tab => tab.id === current.id ? current : tab);
     await page.route('**/api/terminals/wt-0-tab/layout', async route => {
       const update = route.request().postDataJSON();
       saves.push(update);
@@ -1492,10 +1588,7 @@ try {
     const { page, state } = await fixture(t, { splitTerminal: true });
     const current = structuredClone(state.knownTerminalTabs['wt-0-tab']);
     current.panes[0].status = 'exited';
-    await page.route('**/api/terminals?**', async route => {
-      if (new URL(route.request().url()).searchParams.get('workspace_root') !== worktrees[0].path) return route.fallback();
-      await route.fulfill({ json: [current] });
-    });
+    state.terminalListTransform = tabs => tabs.map(tab => tab.id === current.id ? current : tab);
     const list = surface(page).locator('.terminal-panel');
     const row = list.getByRole('region', { name: worktrees[0].path, exact: true }).locator('.terminal-panel-row').filter({ hasText: 'Shell' });
     const refresh = () => list.getByRole('button', { name: '刷新 User Terminals', exact: true }).click();
@@ -1706,7 +1799,7 @@ try {
     state.createdTerminalTabs.push({ ...structuredClone(state.createdTerminalTabs[0]), id: 'unrelated-cli', name: 'Unrelated agent', workspace_root: '/another-repository' });
     state.projects[0] = { ...project, worktrees: [worktrees[1], worktrees[0], { ...worktrees[1], id: 'empty', path: '/workspace/empty' }] };
     await page.getByRole('button', { name: '刷新全部', exact: true }).click();
-    await eventually(() => state.terminalListScopes.filter(scope => scope === null).length >= 2);
+    assert.equal(state.terminalListScopes.length, 0, 'project changes do not start terminal HTTP polling');
     await eventually(async () => await list.locator('.instance-worktree-heading').count() === 4);
     const connectionCount = state.terminalMessages.filter(item => typeof item.message === 'string' && JSON.parse(item.message).type === 'claim').length;
     const option = page.getByRole('menuitemcheckbox', { name: '显示所有Worktree', exact: true });
@@ -2111,18 +2204,11 @@ try {
     assert.equal(state.createdTerminals.length, 0);
   });
 
-  await test('repository terminal scope can open a new CLI tab before its worktree poll discovers it', async t => {
+  await test('repository terminal scope opens a newly pushed CLI tab without a separate worktree request', async t => {
     const { page, state } = await fixture(t, { cliTerminals: 1 });
     await switchWorktree(page, 1);
     await surface(page).locator('.terminal-emulator-shell:not(.restore-pending)').waitFor();
     await switchWorktree(page, 0);
-    const staleTab = structuredClone(state.knownTerminalTabs['wt-1-tab']);
-    const staleList = async route => {
-      if (new URL(route.request().url()).searchParams.get('workspace_root') === worktrees[1].path) {
-        await route.fulfill({ json: [staleTab] });
-      } else await route.fallback();
-    };
-    await page.route('**/api/terminals?*', staleList);
     const remote = { ...structuredClone(state.createdTerminalTabs[0]), id: 'new-cli', name: 'New worktree agent', workspace_root: worktrees[1].path };
     remote.panes[0].id = 'new-cli-pane';
     remote.panes[0].cwd = worktrees[1].path;
@@ -2133,7 +2219,7 @@ try {
     await surface(page).getByRole('tab').filter({ hasText: remote.name }).waitFor();
     await surface(page).locator('.terminal-connection.observing').waitFor();
     assert.equal(await page.evaluate(() => localStorage.getItem('aow-active')), worktrees[0].path);
-    await page.unroute('**/api/terminals?*', staleList);
+    assert.equal(state.terminalListScopes.length, 0);
     assert.equal(state.createdTerminals.length, 0);
     assert.equal(await page.locator('.terminal-emulator-shell').count(), 3, 'only the explicitly opened CLI tab attaches');
     assert.equal(await page.getByRole('heading', { name: '无法打开 Tab' }).count(), 0);
@@ -2147,7 +2233,7 @@ try {
     await surface(page).locator('.terminal-connection.observing').waitFor();
   });
 
-  await test('repository terminal scope ignores disabled in-flight loads and recovers from refresh errors', async t => {
+  await test('repository terminal scope shares cached snapshots and recovers from refresh errors', async t => {
     const { page, state } = await fixture(t, { beforeOpen: async ({ context }) => {
       await context.addInitScript(() => localStorage.setItem('aow-project-terminal-scope:project', JSON.stringify({ user: false, cli: false })));
     } });
@@ -2156,28 +2242,23 @@ try {
       await list.getByRole('button', { name: 'User Terminals 显示范围', exact: true }).click();
       await page.getByRole('menuitemcheckbox').click();
     };
-    let release;
-    state.allTerminalsGate = new Promise(resolve => { release = resolve; });
     await toggle();
-    await list.getByRole('status').first().waitFor();
-    assert.equal(await list.getByRole('region', { name: 'CLI Terminals', exact: true }).getByRole('status').count(), 0);
-    await eventually(() => state.terminalListScopes.includes(null));
+    assert.equal(await list.getByRole('status').count(), 0, 'scope switches reuse the shared snapshot');
     await toggle();
-    release();
-    state.allTerminalsGate = null;
     assert.equal(await list.locator('.instance-worktree-heading').count(), 0);
     assert.equal(await list.locator('.terminal-panel-row').count(), 1);
     await toggle();
     await eventually(async () => await list.locator('.instance-worktree-heading').count() === 2);
-    state.agentFailure = true;
+    state.terminalError = 'Terminal inventory unavailable';
     await list.getByRole('button', { name: '刷新 User Terminals', exact: true }).click();
-    await list.getByRole('alert').waitFor();
-    assert.equal(await list.getByRole('region', { name: 'CLI Terminals', exact: true }).getByRole('alert').count(), 0);
-    assert.equal(await list.locator('.terminal-panel-row').count(), 2, 'failed polls preserve the last successful inventory');
-    state.agentFailure = false;
+    const error = list.getByRole('alert').filter({ hasText: 'Terminal inventory unavailable' });
+    await error.waitFor();
+    assert.equal(await list.locator('.terminal-panel-row').count(), 2, 'failed snapshots preserve the last successful inventory');
+    state.terminalError = null;
     await list.getByRole('button', { name: '刷新 User Terminals', exact: true }).click();
-    await list.getByRole('alert').waitFor({ state: 'detached' });
+    await error.waitFor({ state: 'detached' });
     assert.equal(await list.locator('.terminal-panel-row').count(), 2);
+    assert.equal(state.terminalListScopes.length, 0);
   });
 
   await test('terminal panel reopens hidden instances, reuses tabs and destroys only after confirmation', async t => {

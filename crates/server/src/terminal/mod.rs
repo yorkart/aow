@@ -52,6 +52,7 @@ mod runtime;
 mod session_titles;
 mod sessions;
 mod state;
+pub(crate) mod sync;
 mod tabs;
 mod validation;
 

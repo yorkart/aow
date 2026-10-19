@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mkdir, readFile } from 'node:fs/promises';
 import { productionPreview } from './fixtures/production-preview.mjs';
+import { installLiveEvents } from './fixtures/live-events.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const server = process.env.MOBILE_TEST_URL ? null : await productionPreview();
@@ -133,10 +134,13 @@ async function fixture(context, pins = { paths: [], revision: 0, failWrites: fal
       });
     });
   }
-  return {
+  const state = {
     messages, sockets, mutations, errors, agents, titles, terminalTabs,
     observeAfterSupersede(socket) { observedPaths.add(new URL(socket.url()).pathname); },
   };
+  await installLiveEvents(context, undefined, () => ({ tabs: state.terminalError ? null : terminalTabs,
+    metadata: { agents, titles }, error: state.terminalError ?? null, agent_error: null }));
+  return state;
 }
 
 async function visible(page, selector) { await page.locator(`${selector}:visible`).first().waitFor({ state: 'visible' }); }
@@ -439,19 +443,16 @@ try {
     assert.deepEqual(state.errors, []);
   });
 
-  await test('mobile catalog retries project loading and confirms destruction inside the drawer', async t => {
+  await test('mobile catalog preserves shared snapshots during errors and confirms destruction inside the drawer', async t => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     t.after(() => context.close());
     const state = await fixture(context);
     state.terminalTabs.push({ id: 'remote-delete', name: '远程待销毁', workspace_root: project.worktrees[1].path,
       layout: leaf('delete-pane'), panes: [pane('delete-pane', 'Shell')] });
-    let failList = true;
     let deletes = 0;
     await context.route('**/api/terminals**', async route => {
       const url = new URL(route.request().url());
-      if (url.pathname === '/api/terminals' && !url.searchParams.has('workspace_root') && failList) {
-        await route.fulfill({ status: 503, json: { message: '暂时无法加载项目终端' } });
-      } else if (url.pathname === '/api/terminals/remote-delete' && route.request().method() === 'DELETE') {
+      if (url.pathname === '/api/terminals/remote-delete' && route.request().method() === 'DELETE') {
         deletes += 1;
         state.terminalTabs.splice(state.terminalTabs.findIndex(tab => tab.id === 'remote-delete'), 1);
         await route.fulfill({ status: 204 });
@@ -460,6 +461,7 @@ try {
     const page = await context.newPage();
     await page.goto(`${baseURL}/m#workspace=${encodeURIComponent(workspace)}&view=terminal`);
     await visible(page, '.mobile-terminal-tabs');
+    state.terminalError = '暂时无法加载项目终端';
     await page.getByRole('button', { name: '终端列表', exact: true }).click();
     const catalog = page.getByRole('dialog', { name: '终端列表', exact: true });
     await catalog.getByRole('button', { name: 'User Terminals 显示范围', exact: true }).click();
@@ -467,13 +469,14 @@ try {
     const bounds = await menu.boundingBox();
     assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 390 && bounds.y >= 0 && bounds.y + bounds.height <= 844);
     await menu.getByRole('menuitemcheckbox', { name: '显示所有Worktree' }).click();
-    await catalog.getByRole('alert').filter({ hasText: '暂时无法加载项目终端' }).waitFor();
-    assert.equal(await catalog.locator('.terminal-panel-row').count(), 2, 'local instances remain available after a project loading error');
-    failList = false;
+    const error = catalog.getByRole('alert').filter({ hasText: '暂时无法加载项目终端' });
+    await error.waitFor();
+    assert.equal(await catalog.locator('.terminal-panel-row').count(), 3, 'cached instances remain available after a shared snapshot error');
+    state.terminalError = null;
     await catalog.getByRole('button', { name: '刷新 User Terminals', exact: true }).click();
     const row = catalog.locator('.terminal-panel-row').filter({ hasText: '远程待销毁' });
     await row.waitFor();
-    assert.equal(await catalog.getByRole('alert').count(), 0);
+    await error.waitFor({ state: 'detached' });
     await row.getByRole('button', { name: '远程待销毁 终端操作', exact: true }).click();
     await page.getByRole('menuitem', { name: '销毁', exact: true }).click();
     const confirmation = page.getByRole('alertdialog', { name: '销毁终端？' });

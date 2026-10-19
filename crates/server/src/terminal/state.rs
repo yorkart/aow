@@ -22,6 +22,7 @@ pub(super) struct ManagerInner {
     pub(super) task_completions:
         tokio::sync::broadcast::Sender<notifications::TaskStopNotification>,
     pub(super) notifications_started: std::sync::atomic::AtomicBool,
+    pub(super) sync: sync::TerminalSync,
 }
 
 #[derive(Default)]

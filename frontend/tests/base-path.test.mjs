@@ -106,6 +106,18 @@ try {
             restore_cols: 80, restore_rows: 24, restore: '\x1b[2J\x1b[HPrefix terminal\r\n$ ' }));
         });
       });
+      await context.routeWebSocket('**/api/events/ws', socket => {
+        // Keep the real authenticated, multiplexed connection and supply the
+        // same terminal fixture through snapshots that REST used to provide.
+        const upstream = socket.connectToServer();
+        upstream.onMessage(raw => {
+          const envelope = JSON.parse(String(raw));
+          if (envelope.event === 'terminals' && envelope.data.type === 'snapshot') {
+            Object.assign(envelope.data.state, { tabs: [terminal], metadata: { agents: {}, titles: {}, processes: {}, activity: {} }, error: null, agent_error: null });
+          }
+          socket.send(JSON.stringify(envelope));
+        });
+      });
       const page = await context.newPage();
       const eventSockets = [];
       page.on('websocket', socket => { if (socket.url().endsWith('/api/events/ws')) eventSockets.push(socket); });
@@ -141,6 +153,7 @@ try {
       assert.equal(requests.has(`${base}/api/terminals/task-stops`), false);
       assert.equal(requests.has(`${base}/api/operations/stream`), false);
       assert.equal(requests.has(`${base}/api/workspace/events`), false);
+      assert.equal(requests.has(`${base}/api/terminals`), false);
       // Four pages used to consume twelve SSE connections in the six-slot HTTP/1.1 pool.
       const extraPages = [];
       for (let index = 0; index < 3; index++) {

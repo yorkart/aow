@@ -164,6 +164,7 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
   const [operation, setOperation] = useState('');
   const rebuildingRef = useRef(false);
   const layoutRef = useRef(layout);
+  const layoutTabIdRef = useRef(tab?.id);
   const draggingPaneIdRef = useRef<string | undefined>(undefined);
   const tabRef = useRef(tab);
   const revisionRef = useRef(tab?.revision);
@@ -199,10 +200,25 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
 
   useEffect(() => {
     const next = tab ? fallbackLayout(tab) : null;
-    setLayout(next);
-    layoutRef.current = next;
+    const sameTab = layoutTabIdRef.current === tab?.id;
+    layoutTabIdRef.current = tab?.id;
     revisionRef.current = tab?.revision;
     const ids = paneIds(next);
+    const draftIds = paneIds(layoutRef.current);
+    // Snapshots acknowledge persisted layouts. Keep a newer local draft until
+    // its save finishes, but still accept remote pane additions and removals.
+    if (sameTab && (savingRef.current || pendingLayoutRef.current)) {
+      if (ids.length === draftIds.length && ids.every(id => draftIds.includes(id))) return;
+      // A remote structural change invalidates queued saves of the old pane set.
+      saveEpochRef.current += 1;
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = undefined;
+      pendingLayoutRef.current = undefined;
+      flushRequestedRef.current = false;
+      savingRef.current = false;
+    }
+    setLayout(next);
+    layoutRef.current = next;
     setActivePaneId((current) => current && ids.includes(current)
       ? current
       : maximizedPaneId && ids.includes(maximizedPaneId) ? maximizedPaneId : ids[0]);
@@ -260,11 +276,22 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
       const updated = await terminalApi.updateLayout(currentTab.id, candidate, revisionRef.current);
       if (updated) {
         const stillActive = saveEpochRef.current === saveEpoch && tabRef.current?.id === currentTab.id;
+        if (!stillActive && tabRef.current?.id === currentTab.id) return;
         if (stillActive) revisionRef.current = updated.revision;
-        onTabChange({ ...updated, layout: stillActive ? layoutRef.current ?? updated.layout : updated.layout });
+        // Shared state contains only committed server data; unsaved divider
+        // movements remain in this workspace until their own response arrives.
+        onTabChange(updated);
       }
     } catch (reason) {
-      if (saveEpochRef.current === saveEpoch) setError(`布局保存失败：${message(reason)}`);
+      if (saveEpochRef.current === saveEpoch) {
+        setError(`布局保存失败：${message(reason)}`);
+        if (!pendingLayoutRef.current) {
+          const current = tabRef.current;
+          const next = current ? fallbackLayout(current) : null;
+          layoutRef.current = next;
+          setLayout(next);
+        }
+      }
     } finally {
       if (saveEpochRef.current === saveEpoch) {
         savingRef.current = false;

@@ -149,6 +149,32 @@ export function tabFromPayload(payload: unknown): TerminalTab | null {
   return normalizeTab(envelope?.tab ?? envelope?.terminal);
 }
 
+export function agentsFromPayload(value: unknown): TerminalAgentList {
+  const payload = asRecord(value);
+  const agents = asRecord(payload?.agents);
+  if (!agents) throw new Error('服务器返回了无效的终端 Agent 数据');
+  return {
+    agents: Object.fromEntries(Object.entries(agents).filter((entry): entry is [string, string | null] =>
+      entry[1] === null || typeof entry[1] === 'string' && entry[1].length > 0)),
+    titles: Object.fromEntries(Object.entries(asRecord(payload?.titles) ?? {})
+      .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].trim().length > 0)),
+    processes: Object.fromEntries(Object.entries(asRecord(payload?.processes) ?? {}).flatMap(([id, value]) => {
+      const process = asRecord(value);
+      return process && Number.isInteger(process.pid) && (process.pid as number) > 0
+        && typeof process.start_time === 'string' && typeof process.cwd === 'string'
+        ? [[id, process as unknown as TerminalAgentProcess]] : [];
+    })),
+    activity: Object.fromEntries(Object.entries(asRecord(payload?.activity) ?? {}).flatMap(([id, value]) => {
+      const activity = asRecord(value);
+      if (!activity) return [];
+      const cwd = typeof activity.cwd === 'string' ? activity.cwd : undefined;
+      const foreground_command = typeof activity.foreground_command === 'string'
+        ? activity.foreground_command : undefined;
+      return cwd || foreground_command ? [[id, { cwd, foreground_command }]] : [];
+    })),
+  };
+}
+
 function terminalPath(tabId: string, suffix = '') {
   return `${TERMINALS_PATH}/${encodeURIComponent(tabId)}${suffix}`;
 }
@@ -157,28 +183,7 @@ export const terminalApi = {
   async agents(workspaceRoot?: string, signal?: AbortSignal): Promise<TerminalAgentList> {
     const query = new URLSearchParams(workspaceRoot === undefined ? {} : { workspace_root: workspaceRoot });
     const payload = asRecord(await request(`${TERMINALS_PATH}/agents?${query}`, undefined, 5_000, signal));
-    const agents = asRecord(payload?.agents);
-    if (!agents) throw new Error('服务器返回了无效的终端 Agent 数据');
-    return {
-      agents: Object.fromEntries(Object.entries(agents).filter((entry): entry is [string, string | null] =>
-        entry[1] === null || typeof entry[1] === 'string' && entry[1].length > 0)),
-      titles: Object.fromEntries(Object.entries(asRecord(payload?.titles) ?? {})
-        .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].trim().length > 0)),
-      processes: Object.fromEntries(Object.entries(asRecord(payload?.processes) ?? {}).flatMap(([id, value]) => {
-        const process = asRecord(value);
-        return process && Number.isInteger(process.pid) && (process.pid as number) > 0
-          && typeof process.start_time === 'string' && typeof process.cwd === 'string'
-          ? [[id, process as unknown as TerminalAgentProcess]] : [];
-      })),
-      activity: Object.fromEntries(Object.entries(asRecord(payload?.activity) ?? {}).flatMap(([id, value]) => {
-        const activity = asRecord(value);
-        if (!activity) return [];
-        const cwd = typeof activity.cwd === 'string' ? activity.cwd : undefined;
-        const foreground_command = typeof activity.foreground_command === 'string'
-          ? activity.foreground_command : undefined;
-        return cwd || foreground_command ? [[id, { cwd, foreground_command }]] : [];
-      })),
-    };
+    return agentsFromPayload(payload);
   },
 
   async paneSessions(tabId: string, paneId: string, signal?: AbortSignal): Promise<TerminalPaneSessions> {

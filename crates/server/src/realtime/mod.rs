@@ -1,5 +1,6 @@
 //! Multiplex live updates on a WebSocket so tabs cannot exhaust HTTP/1.1 slots.
 mod acp;
+mod terminals;
 
 use std::time::Duration;
 
@@ -49,7 +50,7 @@ async fn upgrade(
                     reason: "Authentication expired".into(),
                 })))).await;
             }
-            _ = forward(&mut socket, workspace, operations, stops, state.acp, acp_events) => {}
+            _ = forward(&mut socket, workspace, operations, stops, state.acp, acp_events, state.terminals) => {}
         }
     }))
 }
@@ -76,6 +77,7 @@ async fn forward(
     mut stops: broadcast::Receiver<crate::terminal::notifications::TaskStopNotification>,
     acp_service: aow_acp::AcpService,
     mut acp_events: broadcast::Receiver<aow_acp::SyncEvent>,
+    terminal_manager: crate::terminal::TerminalManager,
 ) -> Result<(), ()> {
     // Never hold a watch borrow across a send/await; publishers need its write lock.
     let initial = event("workspace", workspace.borrow_and_update().clone());
@@ -90,6 +92,15 @@ async fn forward(
         event("acp", serde_json::json!({"type": "hello", "protocol": 1})),
     )
     .await?;
+    send(
+        socket,
+        event(
+            "terminals",
+            serde_json::json!({"type": "hello", "protocol": 1}),
+        ),
+    )
+    .await?;
+    let mut terminal_subscription = terminals::Subscription::new(terminal_manager);
     let mut heartbeat = tokio::time::interval(Duration::from_secs(15));
     heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut last_pong = tokio::time::Instant::now();
@@ -100,9 +111,18 @@ async fn forward(
                     Some(Ok(Message::Pong(_))) => last_pong = tokio::time::Instant::now(),
                     Some(Ok(Message::Ping(_))) => {}, // Axum replies automatically.
                     Some(Ok(Message::Text(text))) => {
-                        let command = serde_json::from_str(&text).map_err(|_| ())?;
-                        if let Some(ready) = subscriptions.command(command, &acp_service)? {
-                            send(socket, event("acp", ready)).await?;
+                        let command: Command = serde_json::from_str(&text).map_err(|_| ())?;
+                        match command {
+                            Command::Terminals(command) => {
+                                if let Some(snapshot) = terminal_subscription.command(command)? {
+                                    send(socket, event("terminals", snapshot)).await?;
+                                }
+                            }
+                            Command::Acp(command) => {
+                                if let Some(ready) = subscriptions.command(command, &acp_service)? {
+                                    send(socket, event("acp", ready)).await?;
+                                }
+                            }
                         }
                     }
                     _ => return Ok(()),
@@ -112,6 +132,9 @@ async fn forward(
             result = workspace.changed() => {
                 result.map_err(|_| ())?;
                 event("workspace", workspace.borrow_and_update().clone())
+            }
+            snapshot = terminal_subscription.changed() => {
+                event("terminals", snapshot?)
             }
             result = operations.changed() => {
                 result.map_err(|_| ())?;
@@ -148,6 +171,13 @@ async fn forward(
         };
         send(socket, message).await?;
     }
+}
+
+#[derive(serde::Deserialize)]
+#[serde(untagged)]
+enum Command {
+    Terminals(terminals::Command),
+    Acp(acp::Command),
 }
 
 #[cfg(test)]
