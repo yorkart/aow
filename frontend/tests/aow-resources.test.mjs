@@ -325,6 +325,7 @@ try {
         const file = state.diffFiles[Number(url.searchParams.get('path').match(/file-(\d+)/)[1])];
         data = { repository: url.searchParams.get('repository'), path: url.searchParams.get('path'), ...(!fallback && { original: file.original, modified: file.modified }), patch: file.patch, truncated: false };
         await state.diffGate;
+        if (state.failDiff) { await route.fulfill({ status: 503, json: { message: 'Diff unavailable' } }); return; }
       }
       else if (url.pathname === '/api/git/commit/files') data = { repository: '/workspace/wt-0', commit: 'commit-1', files: [{ path: 'file-0.txt', status: 'R', original_path: 'old.txt' }] };
       else if (url.pathname === '/api/git/log') data = { commits: state.commits, repository: '/workspace', upstream: null, upstream_commit: null };
@@ -3993,6 +3994,194 @@ try {
       }
     });
   }
+
+  const workingDiffId = index => `diff:${worktrees[0].path}:false:file-${index}.txt`;
+  async function diffContent(page, id, side = 'modified') {
+    return page.evaluate(async ({ id, side }) => {
+      const { monaco } = await import('/src/features/editor/monaco.ts');
+      return monaco.editor.getModels().find(model => decodeURIComponent(decodeURIComponent(model.uri.toString())).includes(id)
+        && model.uri.path.includes(`/${side}/`))?.getValue();
+    }, { id, side });
+  }
+  const pauseDiffClock = async page => page.clock.pauseAt(await page.evaluate(() => Date.now() + 100));
+  const diffIdle = page => eventually(async () => !await page.getByRole('button', { name: '刷新 Diff', exact: true }).isDisabled());
+
+  for (const fallback of [false, true]) {
+    await test(`active ${fallback ? 'patch' : 'two-sided'} diffs refresh on activation and every three seconds for all sources`, async t => {
+      for (const kind of ['working tree', 'staged', 'commit']) {
+        const { page, state } = await fixture(t, { clock: true, fallback });
+        await openText(page);
+        state.staged = true;
+        state.commits = [{ id: 'commit-1', short_id: 'abc', subject: 'Fixture commit', author: 'Fixture', authored_at: '2026-09-15T00:00:00Z', parents: [], is_pushed: true }];
+        await page.getByRole('button', { name: 'Source Control', exact: true }).click();
+        if (kind === 'commit') {
+          await page.locator('.commit-row').click();
+          await page.locator('.commit-changes .change-row').click();
+        } else await surface(page).locator(`.change-row[title="file-0.txt · ${kind}"]`).click();
+        const id = kind === 'commit' ? `commit-diff:${worktrees[0].path}:commit-1:file-0.txt` : `diff:${worktrees[0].path}:${kind === 'staged'}:file-0.txt`;
+        const name = kind === 'commit' ? 'file-0.txt (commit-1)' : 'file-0.txt (Diff)';
+        const side = fallback ? 'fallback' : 'modified';
+        await waitForDiff(page, 0, fallback, id);
+        await pauseDiffClock(page);
+        await diffIdle(page);
+        const paths = await modelPaths(page);
+        await tab(page, 'edit.txt').click();
+        state.diffFiles[0] = { original: 'base', modified: 'activated', patch: 'activated' };
+        const before = state.diffRequests.length;
+        await tab(page, name).click();
+        await eventually(async () => await diffContent(page, id, side) === 'activated');
+        assert.equal(state.diffRequests.length, before + 1, 'activation reads the existing tab immediately');
+        await page.getByRole('button', { name: '隐藏右侧栏', exact: true }).click();
+        state.diffFiles[0] = { original: 'base', modified: 'polled', patch: 'polled' };
+        await page.clock.runFor(2999);
+        assert.equal(state.diffRequests.length, before + 1);
+        await page.clock.runFor(1);
+        await eventually(async () => await diffContent(page, id, side) === 'polled');
+        assert.equal(state.diffRequests.length, before + 2);
+        if (!fallback) assert.equal(await diffContent(page, id, 'original'), 'base');
+        assert.deepEqual(await modelPaths(page), paths, 'refresh keeps the original models');
+        const query = state.diffRequests.at(-1);
+        assert.equal(query.repo, worktrees[0].path);
+        assert.equal(query.path, 'file-0.txt');
+        if (kind === 'commit') { assert.equal(query.commit, 'commit-1'); assert.equal(query.original_path, 'old.txt'); }
+        else assert.equal(query.staged, String(kind === 'staged'));
+
+        await tab(page, 'edit.txt').click();
+        state.diffFiles[0] = { original: 'same', modified: 'same', patch: '' };
+        await sendWorkspaceSnapshot(page, { revision: 1, repositories: { [worktrees[0].path]: 1 } });
+        await page.clock.runFor(9000);
+        assert.equal(state.diffRequests.length, before + 2, 'inactive tabs do not poll or follow repository events');
+        assert.equal(await diffContent(page, id, side), 'polled', 'inactive content stays unchanged');
+        await tab(page, name).click();
+        await eventually(async () => await diffContent(page, id, side) === (fallback ? '' : 'same'));
+        await page.getByRole('button', { name: `关闭 ${name}`, exact: true }).click();
+        const closed = state.diffRequests.length;
+        await page.clock.runFor(9000);
+        assert.equal(state.diffRequests.length, closed, 'closing the last diff removes its timer');
+        await page.context().close();
+      }
+    });
+  }
+
+  await test('active diff refresh transfers between tabs and stops in other workspaces', async t => {
+    const { page, state } = await fixture(t, { clock: true });
+    await openDiffs(page);
+    await pauseDiffClock(page);
+    await diffIdle(page);
+    const inactiveContent = await diffContent(page, workingDiffId(2));
+    state.diffFiles.forEach((file, i) => { file.modified = `updated ${i}`; });
+    const before = state.diffRequests.length;
+    await tab(page, 'file-0.txt (Diff)').click();
+    await eventually(async () => await diffContent(page, workingDiffId(0)) === 'updated 0');
+    await page.clock.runFor(3000);
+    await eventually(() => state.diffRequests.length === before + 2);
+    await diffIdle(page);
+    assert.ok(state.diffRequests.slice(before).every(query => query.path === 'file-0.txt'));
+    assert.equal(await diffContent(page, workingDiffId(2)), inactiveContent);
+    await tab(page, 'file-1.txt (Diff)').click();
+    await eventually(async () => await diffContent(page, workingDiffId(1)) === 'updated 1');
+    const selected = state.diffRequests.length;
+    await page.clock.runFor(3000);
+    await eventually(() => state.diffRequests.length === selected + 1);
+    await diffIdle(page);
+    assert.equal(state.diffRequests.at(-1).path, 'file-1.txt');
+    await switchWorktree(page, 1);
+    const hidden = state.diffRequests.length;
+    await page.clock.runFor(9000);
+    assert.equal(state.diffRequests.length, hidden);
+    state.diffFiles[1].modified = 'returned';
+    await switchWorktree(page, 0);
+    await eventually(async () => await diffContent(page, workingDiffId(1)) === 'returned');
+    assert.equal(state.diffRequests.length, hidden + 1);
+  });
+
+  await test('active diff refresh serializes slow reads, cancels stale responses and retries failures', async t => {
+    const { page, state } = await fixture(t, { clock: true });
+    await page.getByRole('button', { name: 'Source Control', exact: true }).click();
+    await surface(page).locator('.change-row[title="file-0.txt · working tree"]').click();
+    await waitForDiff(page, 0, false);
+    await pauseDiffClock(page);
+    await diffIdle(page);
+    await tab(page, 'Shell').click();
+    const id = workingDiffId(0);
+    const retained = await diffContent(page, id);
+    state.diffFiles[0].modified = 'stale';
+    let release;
+    state.diffGate = new Promise(resolve => { release = resolve; });
+    t.after(() => release());
+    const before = state.diffRequests.length;
+    await tab(page, 'file-0.txt (Diff)').click();
+    await eventually(() => state.diffRequests.length === before + 1);
+    await page.clock.runFor(6000);
+    assert.equal(state.diffRequests.length, before + 1, 'ticks do not overlap a slow read');
+    const aborted = page.waitForEvent('requestfailed', request => new URL(request.url()).pathname === '/api/git/diff');
+    await tab(page, 'Shell').click();
+    await aborted;
+    assert.equal(await diffContent(page, id), retained);
+    state.diffGate = null;
+    state.diffFiles[0].modified = 'fresh';
+    await tab(page, 'file-0.txt (Diff)').click();
+    await eventually(async () => await diffContent(page, id) === 'fresh');
+    release();
+    await delay(100);
+    assert.equal(await diffContent(page, id), 'fresh', 'cancelled content cannot overwrite a reactivated tab');
+    state.failDiff = true;
+    await page.clock.runFor(3000);
+    await page.locator('.editor-file-notice.error').filter({ hasText: 'Diff unavailable' }).waitFor();
+    assert.equal(await diffContent(page, id), 'fresh');
+    state.failDiff = false;
+    state.diffFiles[0].modified = 'recovered';
+    await page.clock.runFor(3000);
+    await eventually(async () => await diffContent(page, id) === 'recovered');
+    assert.equal(await page.locator('.editor-file-notice.error').count(), 0);
+    const visibility = value => page.evaluate(value => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value });
+      document.dispatchEvent(new Event('visibilitychange'));
+    }, value);
+    await visibility('hidden');
+    const hidden = state.diffRequests.length;
+    await page.clock.runFor(9000);
+    assert.equal(state.diffRequests.length, hidden);
+    state.diffFiles[0].modified = 'visible again';
+    await visibility('visible');
+    await eventually(async () => await diffContent(page, id) === 'visible again');
+    assert.equal(state.diffRequests.length, hidden + 1);
+  });
+
+  await test('only the focused diff refreshes when center and floating tabs are both visible', async t => {
+    const { page, state } = await fixture(t, { clock: true, floating: true });
+    await page.getByRole('button', { name: 'Source Control', exact: true }).click();
+    await surface(page).locator('.change-row[title="file-0.txt · working tree"]').click();
+    await waitForDiff(page, 0, false);
+    await surface(page).locator('.change-row[title="file-1.txt · working tree"]').click({ button: 'right' });
+    await page.getByRole('menuitem', { name: '打开 · 浮动工作区', exact: true }).click();
+    const panel = page.getByRole('dialog', { name: '浮动工作区', exact: true });
+    await waitForDiff(page, 1, false);
+    await pauseDiffClock(page);
+    const before = state.diffRequests.length;
+    state.diffFiles[0].modified = 'center update';
+    state.diffFiles[1].modified = 'floating update';
+    await page.clock.runFor(3000);
+    await eventually(async () => await diffContent(page, workingDiffId(1)) === 'floating update');
+    assert.equal(state.diffRequests.length, before + 1);
+    assert.equal(state.diffRequests.at(-1).path, 'file-1.txt');
+    assert.notEqual(await diffContent(page, workingDiffId(0)), 'center update');
+    await tab(page, 'file-0.txt (Diff)').dispatchEvent('pointerdown', { button: 0 });
+    await tab(page, 'file-0.txt (Diff)').dispatchEvent('click');
+    await eventually(async () => await diffContent(page, workingDiffId(0)) === 'center update');
+    const center = state.diffRequests.length;
+    await page.clock.runFor(3000);
+    await eventually(() => state.diffRequests.length === center + 1);
+    assert.equal(state.diffRequests.at(-1).path, 'file-0.txt');
+    assert.equal(await panel.isVisible(), true, 'the other diff remains visible but does not poll');
+    state.diffFiles[1].modified = 'floating reactivated';
+    await panel.getByRole('tab').filter({ hasText: 'file-1.txt (Diff)' }).click();
+    await eventually(async () => await diffContent(page, workingDiffId(1)) === 'floating reactivated');
+    const floating = state.diffRequests.length;
+    await page.clock.runFor(3000);
+    await eventually(() => state.diffRequests.length === floating + 1);
+    assert.equal(state.diffRequests.at(-1).path, 'file-1.txt');
+  });
 
   await test('Git diff wraps shared lines at the same columns on both sides', async t => {
     const shared = 'abcdefghijklmnopqrstuvwxyz '.repeat(10);

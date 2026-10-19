@@ -2,6 +2,7 @@ import { SettingsDialog } from '../features/settings/SettingsDialog';
 import { appLocalStorage } from '../lib/basePath';
 import { subscribeWorkspaceChanges } from '../lib/workspaceEvents';
 import { useWorkspaceDocuments, updateSharedDocument, nextDocumentInstanceId, sharedDocument, isPreviewOwned, savingDocuments, failedDocuments } from '../features/editor/workspaceDocuments';
+import { useActiveDiffRefresh } from '../features/editor/useActiveDiffRefresh';
 import { Fragment, lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { FloatingWorkspace } from './FloatingWorkspace';
@@ -1156,15 +1157,22 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     autoSaveTimers.current.delete(id);
   }, []);
 
-  const refreshDocument = useCallback(async (id: string) => {
+  const refreshDocument = useCallback(async (id: string, signal?: AbortSignal) => {
     const target = documentsRef.current.find((item) => item.id === id);
-    if (!target || target.loading || target.saving || savingDocumentIds.current.has(id) || documentRefreshes.current.has(id)) return;
+    if (!target || target.loading || target.saving || signal?.aborted || savingDocumentIds.current.has(id) || documentRefreshes.current.has(id)) return;
     clearAutoSave(id);
     const controller = new AbortController();
     const request = { instanceId: target.instanceId, controller };
     documentRefreshes.current.set(id, request);
     const matches = (item: OpenDocument) => item.id === id && item.instanceId === target.instanceId;
     const current = () => !controller.signal.aborted && documentsRef.current.some(matches);
+    const cancel = () => {
+      controller.abort();
+      if (documentRefreshes.current.get(id) !== request) return;
+      documentRefreshes.current.delete(id);
+      setDocuments(items => items.map(item => matches(item) ? { ...item, refreshing: false } : item));
+    };
+    signal?.addEventListener('abort', cancel, { once: true });
     setDocuments((items) => items.map((item) => matches(item) ? { ...item, refreshing: true, refreshError: undefined } : item));
     try {
       const kind = target.diffSource ? 'diff' : previewKind(target.path);
@@ -1199,6 +1207,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
       if (current()) setDocuments((items) => items.map((item) => matches(item)
         ? { ...item, refreshing: false, refreshError: message(reason) } : item));
     } finally {
+      signal?.removeEventListener('abort', cancel);
       if (documentRefreshes.current.get(id) === request) documentRefreshes.current.delete(id);
     }
   }, [clearAutoSave]);
@@ -1813,6 +1822,8 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const locationCenterId = locationSource === 'floating' ? floatingId : activeCenterId;
   // The center can retain a floated tab's placeholder while its content is hidden.
   const locationTabVisible = locationSource === 'floating' || (!isFloating(locationCenterId ?? '') && !hostedLocation(locationCenterId ?? ''));
+  useActiveDiffRefresh(locationSource && locationTabVisible
+    ? documents.find(item => item.diffSource && `document:${item.id}` === locationCenterId) : undefined, refreshDocument);
   useEffect(() => {
     if (!locationSource || !restored || !terminals.loaded || terminals.loading) return;
     const tab = centerTabs.find(tab => tab.id === locationCenterId);
