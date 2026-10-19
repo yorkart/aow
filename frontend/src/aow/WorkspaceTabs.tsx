@@ -292,6 +292,12 @@ export function WorkspaceTabs({ workspaceKey, revealRequest, tabs, activeId, vis
                 aria-describedby={preview?.tabId === tab.id ? previewId : undefined}
                 onMouseEnter={event => showPreview(tab, event.currentTarget)} onMouseLeave={dismissPreview}
                 onFocus={event => { if (event.target === event.currentTarget) showPreview(tab, event.currentTarget); }} onBlur={dismissPreview}
+                onMouseDown={event => { if (event.button === 1) event.preventDefault(); }}
+                onAuxClick={event => {
+                  if (event.button !== 1) return;
+                  event.preventDefault(); event.stopPropagation(); dismissPreview();
+                  run(() => onCloseTab(tab));
+                }}
                 onClick={() => onActivate(tab)} onDoubleClick={() => beginRename(tab)} onContextMenu={event => {
                   event.preventDefault(); event.stopPropagation(); dismissPreview(); onActivate(tab); setNewMenu(false);
                   setContextMenu({ tab, anchor: event.currentTarget, x: event.clientX, y: event.clientY });
