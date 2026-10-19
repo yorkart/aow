@@ -5,7 +5,7 @@ use crate::{
 };
 use anyhow::{Context, Result, ensure};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashSet},
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
@@ -15,6 +15,8 @@ pub(crate) struct ThreadStore {
     pub(crate) metadata: ThreadMetadataStore,
     // Only opened/active conversations are hydrated. Listing history never decodes their bodies.
     pub(crate) threads: BTreeMap<String, Arc<Mutex<SessionSnapshot>>>,
+    // Fork RPCs reserve prompt admission without changing the source transcript.
+    pub(crate) forking: HashSet<String>,
     metadata_changed: Box<dyn Fn() + Send + Sync>,
 }
 impl ThreadStore {
@@ -26,6 +28,7 @@ impl ThreadStore {
             events: Default::default(),
             metadata: ThreadMetadataStore::new(state_directory.as_deref())?,
             threads: BTreeMap::new(),
+            forking: HashSet::new(),
             metadata_changed: Box::new(metadata_changed),
         })
     }

@@ -20,10 +20,15 @@ readline.createInterface({ input: process.stdin }).on('line', async line => {
     const sessionId = `native-${Object.keys(sessions).length}`;
     sessions[sessionId] = []; save(); reply(id, { sessionId, ...configuration });
   } else if (method === 'session/fork') {
+    while (existsSync(path.join(process.cwd(), 'hold-fork'))) await new Promise(resolve => setTimeout(resolve, 5));
     if (process.env.FORK_DELAY) await new Promise(resolve => setTimeout(resolve, Number(process.env.FORK_DELAY)));
     if (process.env.FORK_ERROR === '1') { write({ id, error: { code: -32603, message: 'Fork rejected' } }); return; }
     const sessionId = process.env.FORK_SAME_ID === '1' ? params.sessionId : `native-${Object.keys(sessions).length}`;
-    sessions[sessionId] = structuredClone(sessions[params.sessionId]); save();
+    sessions[sessionId] = structuredClone(sessions[params.sessionId]);
+    if (process.env.FORK_REWRITE_HISTORY === '1') {
+      sessions[sessionId].find(entry => entry.role === 'assistant').text = 'Different native result';
+    }
+    save();
     // Like codex-acp, forking returns configuration without replaying any messages.
     reply(id, { sessionId, ...configuration });
   } else if (method === 'session/load') {
@@ -38,7 +43,8 @@ readline.createInterface({ input: process.stdin }).on('line', async line => {
     const response = `History: ${history.filter(entry => entry.role === 'user').map(entry => entry.text).join(', ')}; reply: ${text}`;
     history.push({ role: 'user', text }, { role: 'assistant', text: response }); save();
     update(params.sessionId, 'agent_message_chunk', response);
-    reply(id, { stopReason: 'end_turn' });
+    if (process.env.PROMPT_ERROR === '1') write({ id, error: { code: -32603, message: 'Prompt failed after partial output' } });
+    else reply(id, { stopReason: process.env.PROMPT_STOP_REASON || 'end_turn' });
   } else if (method === 'session/set_mode' || method === 'session/close' || method === 'session/delete') reply(id, {});
   else if (method === 'session/set_config_option') reply(id, { configOptions: configuration.configOptions });
   else write({ id, error: { code: -32601, message: 'Method not found' } });
