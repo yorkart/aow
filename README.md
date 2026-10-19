@@ -18,7 +18,7 @@ Run the following command on the machine where you want to run AoW:
 curl -fsSL https://github.com/yorkart/aow/releases/latest/download/aow-install.sh | bash
 ```
 
-The installer downloads the package for your platform from GitHub Releases, verifies it, installs it, and starts the web service. On the first installation, you must enter a local login username and password in the terminal and confirm the password before the service starts. When prompted to start terminald, enter lowercase `y` to enable terminals. Restarting terminald during an upgrade ends any existing terminal sessions it manages.
+The installer downloads the package for your platform from GitHub Releases, verifies it, installs it, and starts the web service. On the first installation, you must enter a local login username and password in the terminal and confirm the password before the service starts. Installation and updates also update and start/restart terminald by default, without prompting. Restarting terminald ends any existing terminal sessions it manages. To preserve terminald for one installation or update, use `just install --skip-terminald`, `aow update --skip-terminald`, or append `-s -- --skip-terminald` to `bash` in the command above.
 
 LaunchDaemon installations pause for registration by a local administrator before starting services. They run as the installing account and do not require its desktop login. Subsequent code updates need no administrator privileges; changes to the system service configuration require registration again.
 

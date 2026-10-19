@@ -15,7 +15,17 @@
 curl -fsSL https://github.com/yorkart/aow/releases/latest/download/aow-install.sh | bash
 ```
 
-首次安装必须按提示输入登录账号、密码并再次确认密码，并在启动 terminald 的提示中输入小写 `y`，启用网页 Terminal。密码输入不回显；未完成账户设置或取消输入时不会启动服务。升级时可跳过 terminald 重启，保留现有终端会话；重启 terminald 会结束这些会话。
+首次安装必须按提示输入登录账号、密码并再次确认密码。密码输入不回显；未完成账户设置或取消输入时不会启动服务。安装和升级默认更新并启动或重启 terminald，无需额外确认；重启会结束它管理的现有终端会话。
+
+需要保留 terminald 当前状态和终端会话时，添加 `--skip-terminald`：
+
+```bash
+just install --skip-terminald
+aow update --skip-terminald
+curl -fsSL https://github.com/yorkart/aow/releases/latest/download/aow-install.sh | bash -s -- --skip-terminald
+```
+
+该参数仅影响本次安装或升级，不保存为后续默认设置。Web 服务、CLI 和 Runner 仍正常更新；terminald 的服务、当前版本链接和托管 Node 运行时保持不变。首次安装使用该参数时不会启动 terminald，网页 Terminal 暂不可用。
 
 ### macOS 本地安装与目标账户
 
@@ -29,7 +39,7 @@ just install /path/to/package.tar.gz --user aow-service
 
 有图形会话时使用 LaunchAgent，当前账户可直接安装。无图形会话、尚未登记 LaunchDaemon 且发起安装的账户不是管理员时，安装器会在设置登录账户和切换版本前停止，并提示到管理员账户执行 `just install --user aow-service`。只有安装目录或待登记请求不代表登记已经完成。
 
-管理员须在这台 Mac 的本地交互终端中，使用自己拥有、服务账户不可写的可信 AoW 源码和安装包运行该命令（需要 Python 3）。可先执行 `just package` 生成本地包。安装器按需请求管理员密码，然后以目标用户身份安装文件和配置登录账号和密码，以管理员权限登记系统服务，最后回到目标用户身份验证启动；整个流程无需手动切换账户。terminald 的启动或重启只确认一次。
+管理员须在这台 Mac 的本地交互终端中，使用自己拥有、服务账户不可写的可信 AoW 源码和安装包运行该命令（需要 Python 3）。可先执行 `just package` 生成本地包。安装器按需请求管理员密码，然后以目标用户身份安装文件和配置登录账号和密码，以管理员权限登记系统服务，最后回到目标用户身份验证启动；整个流程无需手动切换账户。terminald 默认一并更新，可用 `just install --user aow-service --skip-terminald` 跳过其更新和服务登记。
 
 目标账户需要 Node.js 20+。安装器会以目标用户身份读取其登录 shell 的 PATH，支持该账户通过 nvm 安装的 Node.js；管理员的环境变量和凭据不会传给目标账户，服务配置读取目标账户的 `~/.config/aow/server.env`。
 
@@ -88,13 +98,13 @@ aow account                        # 修改登录账号和密码
 编辑 `~/.config/aow/server.env`，按需设置监听地址、端口、数据目录或访问路径，具体选项见 [配置说明](configuration.md)。默认仅监听 `127.0.0.1:8282`。
 
 - **Linux**：保存后重启 Web 服务。
-- **macOS**：保存后重新执行安装命令；`HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY`（含小写形式）由 Web 启动脚本读取，已有服务只改代理无需管理员登记。其他 LaunchDaemon 配置发生变化时需按提示由管理员重新登记，再重跑安装验证。只改 Web 配置时可跳过 terminald 重启。本地源码有改动时先执行 `just package`，因为 `just install` 只安装已有包。
+- **macOS**：保存后重新执行安装命令；`HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY`（含小写形式）由 Web 启动脚本读取，已有服务只改代理无需管理员登记。其他 LaunchDaemon 配置发生变化时需按提示由管理员重新登记，再重跑安装验证。只改 Web 配置时可加上 `--skip-terminald` 跳过 terminald 重启。本地源码有改动时先执行 `just package`，因为 `just install` 只安装已有包。
 
 ## 服务管理与系统日志
 
 以安装 AoW 的同一系统用户执行以下命令。重启 Web 服务不会结束后台终端；重启 terminald 会结束其管理的所有终端会话。
 
-LaunchDaemon 更新会先发送 SIGTERM，等待最多 5 秒正常退出；若旧进程仍未退出，安装器会重新核对 PID 与账户归属，再用 SIGKILL 结束该进程，并检查新进程的健康状态。这样可避免长连接让 Web 服务停在「端口已关闭但进程未退出」的状态。选择 `n` 跳过 terminald 时，只重启 Web 服务，terminald 及其终端会话保持运行。
+LaunchDaemon 更新会先发送 SIGTERM，等待最多 5 秒正常退出；若旧进程仍未退出，安装器会重新核对 PID 与账户归属，再用 SIGKILL 结束该进程，并检查新进程的健康状态。这样可避免长连接让 Web 服务停在「端口已关闭但进程未退出」的状态。指定 `--skip-terminald` 时，只重启 Web 服务，terminald 及其终端会话保持运行。
 
 ### Linux
 
@@ -156,4 +166,4 @@ launchctl print system/org.aow.service.terminald
 
 - **找不到 `aow` 命令**：在 shell 配置中加入 `export PATH="$HOME/.local/bin:$PATH"`，重新打开终端；也可直接使用 `~/.local/bin/aow`。
 - **网页无法打开**：先检查服务状态和日志，再执行 `curl -fsS http://127.0.0.1:8282/api/health`。自定义地址、端口或 Base Path 时替换为对应 URL；从其他设备访问请按 README 配置 SSH 隧道或 IP 直连。
-- **网页可用但 Terminal 不可用**：检查 terminald 状态；首次安装跳过其启动时，重新执行安装命令并输入小写 `y`。
+- **网页可用但 Terminal 不可用**：检查 terminald 状态；首次安装跳过其启动时，重新执行安装命令，不带 `--skip-terminald`。

@@ -28,13 +28,13 @@ fail() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
 usage() {
     cat <<EOF
-Usage: install-release.sh [--repo OWNER/REPO] [--version VERSION]
-       install-release.sh --package FILE [--repo OWNER/REPO]
+Usage: install-release.sh [--repo OWNER/REPO] [--version VERSION] [--skip-terminald]
+       install-release.sh --package FILE [--repo OWNER/REPO] [--skip-terminald]
 
 Install a GitHub Release or local package, then start/restart its services.
 Without --version, install this script's release (or resolve latest from source).
 With --version, download that release directly. All packages require SHA256 verification.
-Only a lowercase y entered at the terminal permits starting/restarting terminald.
+By default, update and start/restart terminald without prompting; existing terminal sessions end.
 On first installation, set a login account and confirm its password interactively before starting the server.
 
 Options:
@@ -44,6 +44,7 @@ Options:
   --package FILE   Install a local archive with its adjacent FILE.sha256.
                     Resolves symlinks once; reads the version from the manifest.
                     Cannot be combined with --version. No downloads required.
+  --skip-terminald Keep terminald and its existing sessions unchanged for this installation.
   -h, --help        Show this help.
 
 Requires Bash, tar, Node.js 20+, Git, and Linux/systemd or macOS/launchd.
@@ -215,28 +216,19 @@ replace_link() {
     pending_file=
 }
 
-terminald_confirmation() {
-    # The start script prints the prompt. Its stdin receives only the terminal's
-    # reply, never bytes from `curl ... | bash`. Record it to distinguish a skip
-    # (the start script exits 1) from a real failure after the user confirmed.
-    local answer=
-    # The administrator coordinator already asked once for this invocation.
-    if [[ ${AOW_INSTALL_MANAGED:-} == 1 && -n ${AOW_INSTALL_TERMINALD:-} ]]; then
-        answer=$AOW_INSTALL_TERMINALD
-        printf '%s' "$answer" >"$stage/confirmation"
-    elif { IFS= read -r answer </dev/tty; } 2>/dev/null; then
-        printf '%s' "$answer" >"$stage/confirmation"
-    else
-        answer=
-    fi
-    printf '%s\n' "$answer"
+start_terminald() {
+    # Use the existing noninteractive helper contract, including in older packages.
+    # Only this child receives the managed flags; administrator setup is unchanged.
+    printf 'y\n' | AOW_INSTALL_MANAGED=1 AOW_INSTALL_TERMINALD=y \
+        sh "$support/scripts/start-terminald.sh" "$version"
 }
 
 main() {
     local repository=${AOW_RELEASE_REPOSITORY:-}
-    local version='' explicit_version=0 package=''
+    local version='' explicit_version=0 package='' skip_terminald=0
     while (( $# )); do
         case "$1" in
+            --skip-terminald) skip_terminald=1; shift ;;
             --repo|--version|--package)
                 if (( $# < 2 )) || [[ -z "$2" ]]; then fail "$1 requires a value"; fi
                 if [[ "$1" == --repo ]]; then repository=$2
@@ -355,7 +347,9 @@ JS
     local service_mode='' service_record=''
     if [[ "$os" == macos ]]; then
         service_record=$stage/service.json
-        service_mode=$(node "$support/scripts/launchd-mode.mjs" resolve "$runtime_root" "$service_record")
+        local mode_args=(resolve "$runtime_root" "$service_record")
+        if [[ "$skip_terminald" == 1 ]]; then mode_args+=(--skip-terminald); fi
+        service_mode=$(node "$support/scripts/launchd-mode.mjs" "${mode_args[@]}")
         printf 'macOS service mode: %s\n' "$service_mode"
     fi
     chmod 0755 "$support"/bin/* "$support"/packaging/bin/*
@@ -431,11 +425,6 @@ JS
     # the terminal running this installer. Release the install lock beforehand.
     if [[ "$service_mode" == launchdaemon ]]; then
         local server_status=0 terminald_status=0
-        : >"$stage/confirmation"
-        if [[ ${AOW_INSTALL_MANAGED:-} != 1 || -z ${AOW_INSTALL_TERMINALD:-} ]]; then
-            printf '%s\n' 'Start/restart terminald? This ends its existing terminal sessions. Enter lowercase y to confirm:' >&2
-        fi
-        terminald_confirmation >"$stage/terminald-answer"
         sh "$support/scripts/start-server.sh" "$version" || server_status=$?
         if [[ "$server_status" != 0 && "$server_status" != 78 ]]; then
             fail 'LaunchDaemon server activation failed; previous service settings are preserved'
@@ -445,8 +434,8 @@ JS
         replace_file "$stage/update.json" "$runtime_root/update.json" 0600
         rmdir -- "$lock_dir"
         lock_acquired=0
-        if [[ $(cat "$stage/confirmation") == y ]]; then
-            sh "$support/scripts/start-terminald.sh" "$version" <"$stage/terminald-answer" || terminald_status=$?
+        if (( ! skip_terminald )); then
+            start_terminald || terminald_status=$?
             if [[ "$terminald_status" != 0 && "$terminald_status" != 78 ]]; then
                 fail 'LaunchDaemon terminald activation failed; inspect the saved service mode and running server'
             fi
@@ -459,7 +448,11 @@ JS
             fi
             return 78
         fi
-        printf 'AoW %s is installed (LaunchDaemon); unconfirmed terminald changes were skipped.\n' "$version"
+        if (( skip_terminald )); then
+            printf 'Skipped terminald; Web server, CLI and Runner are updated to %s.\n' "$version"
+        else
+            printf 'AoW %s is installed (LaunchDaemon) and its services are active.\n' "$version"
+        fi
         return
     fi
     sh "$support/scripts/start-server.sh" "$version"
@@ -467,11 +460,10 @@ JS
     replace_file "$stage/update.json" "$runtime_root/update.json" 0600
     rmdir -- "$lock_dir"
     lock_acquired=0
-    : >"$stage/confirmation"
-    if terminald_confirmation | sh "$support/scripts/start-terminald.sh" "$version"; then
-        printf 'AoW %s is installed and its services are active.\n' "$version"
-    elif [[ $(cat "$stage/confirmation") != y ]]; then
+    if (( skip_terminald )); then
         printf 'Skipped terminald; Web server, CLI and Runner are updated to %s.\n' "$version"
+    elif start_terminald; then
+        printf 'AoW %s is installed and its services are active.\n' "$version"
     else
         fail 'terminald activation failed; the release is installed and Web server is already active'
     fi

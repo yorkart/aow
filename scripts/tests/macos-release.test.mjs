@@ -215,6 +215,19 @@ cp "$DOWNLOAD_ROOT/$path" "$output"
 }
 function succeeds(result) { assert.equal(result.status, 0, result.stdout + result.stderr); }
 
+test('LaunchAgent update preserves a usable Node link when the managed Node is first on PATH', t => {
+  const f = fixture(t);
+  succeeds(f.pack('1.0.0')); succeeds(f.publish('1.0.0')); succeeds(f.install());
+  const node = join(f.runtime, 'node');
+  const target = realpathSync(node);
+  succeeds(f.pack('2.0.0')); succeeds(f.publish('2.0.0'));
+  succeeds(f.run(join(f.home, '.local/bin/aow'), ['update'], { PATH: `${f.runtime}:${f.env.PATH}` }));
+  assert.equal(realpathSync(node), target);
+  assert.equal(readlinkSync(node), target);
+  assert.equal(f.log(join(f.runtime, '.aow-terminald-node-target')), `${target}\n`);
+  assert.equal(realpathSync(join(f.runtime, 'active/terminald')), join(f.runtime, 'releases/2.0.0'));
+});
+
 test('launchd removal has a bounded wait and never loads over a job that is still registered', t => {
   const f = fixture(t);
   succeeds(f.pack('1.0.0')); succeeds(f.publish('1.0.0')); succeeds(f.install());
@@ -267,12 +280,12 @@ for (const source of ['local', 'github']) {
 }
 
 for (const arch of ['aarch64', 'x86_64']) {
-  test(`macOS ${arch}: local packages share launchd activation, rollback and terminald confirmation`, t => {
+  test(`macOS ${arch}: local packages share launchd activation, rollback and --skip-terminald`, t => {
     const f = fixture(t, arch);
-    const install = (path = 'target/packages/latest', extra = {}, reply) =>
-      f.run('/bin/bash', ['scripts/install-release.sh', '--package', path], extra, reply);
+    const install = (path = 'target/packages/latest', extra = {}, args = []) =>
+      f.run('/bin/bash', ['scripts/install-release.sh', '--package', path, ...args], extra);
     succeeds(f.pack('local-1'));
-    succeeds(install(undefined, {}, 'y\n'));
+    succeeds(install());
     const serverPlist = f.log(f.plist('server'));
     const terminaldPlist = f.log(f.plist('terminald'));
     const updateSettings = f.log(join(f.runtime, 'update.json'));
@@ -283,7 +296,7 @@ for (const arch of ['aarch64', 'x86_64']) {
     assert.equal(realpathSync(join(f.runtime, 'active/server')), join(f.runtime, 'releases/local-1'));
     assert.equal(f.log(f.plist('server')), serverPlist);
     assert.equal(f.log(join(f.runtime, 'update.json')), updateSettings);
-    succeeds(install(undefined, {}, 'n\n'));
+    succeeds(install(undefined, {}, ['--skip-terminald']));
     assert.equal(realpathSync(join(f.runtime, 'active/server')), join(f.runtime, 'releases/2.0.0'));
     assert.equal(realpathSync(join(f.runtime, 'active/terminald')), join(f.runtime, 'releases/local-1'));
     assert.equal(f.log(f.plist('terminald')), terminaldPlist);
@@ -310,7 +323,7 @@ for (const arch of ['aarch64', 'x86_64']) {
     succeeds(f.pack('1.0.0'));
     succeeds(f.publish('1.0.0'));
     const installer = join(f.output, 'aow-install.sh');
-    succeeds(f.run('bash', ['-c', `cat ${quote(installer)} | bash`], {}, 'y\n'));
+    succeeds(f.run('bash', ['-c', `cat ${quote(installer)} | bash`]));
     assert.equal(realpathSync(join(f.runtime, 'active/server')), join(f.runtime, 'releases/1.0.0'));
     assert.equal(realpathSync(join(f.runtime, 'active/terminald')), join(f.runtime, 'releases/1.0.0'));
     const terminaldPlist = f.log(f.plist('terminald'));
@@ -325,7 +338,7 @@ for (const arch of ['aarch64', 'x86_64']) {
     succeeds(f.pack('2.0.0'));
     succeeds(f.publish('2.0.0'));
     const manager = join(f.home, '.local/bin/aow');
-    succeeds(f.run(manager, ['update'], {}, 'n\n'));
+    succeeds(f.run(manager, ['update', '--skip-terminald']));
     assert.equal(realpathSync(join(f.runtime, 'active/server')), join(f.runtime, 'releases/2.0.0'));
     assert.equal(realpathSync(join(f.runtime, 'active/terminald')), join(f.runtime, 'releases/1.0.0'));
     assert.equal(f.log(f.plist('terminald')), terminaldPlist);
@@ -523,20 +536,89 @@ test('unregistered headless installs stop before account setup; registered servi
   write(account, credentials());
   // An interrupted administrator installation is still unregistered, even if
   // files, saved mode and a pending request exist.
-  assert.equal(f.install([], { FAIL_GUI: '125', AOW_INSTALL_TERMINALD: 'n' }).status, 78);
+  assert.equal(f.install(['--skip-terminald'], { FAIL_GUI: '125' }).status, 78);
   const request = f.log(join(f.runtime, 'pending-launchdaemon.json'));
   const pending = f.install([], { AOW_INSTALL_MANAGED: '' });
   assert.equal(pending.status, 78, pending.stdout + pending.stderr);
   assert.match(pending.stderr, /just install --user/);
   assert.equal(f.log(join(f.runtime, 'pending-launchdaemon.json')), request);
   f.registerDaemons();
-  const checked = f.run(process.execPath, [join(f.repo, 'scripts/launchd-mode.mjs'), 'check-install', f.runtime]);
+  const checked = f.run(process.execPath, [join(f.repo, 'scripts/launchd-mode.mjs'), 'check-install', f.runtime, '--skip-terminald']);
   succeeds(checked);
   assert.equal(JSON.parse(checked.stdout).registrationRequired, false);
-  const update = f.install([], { AOW_INSTALL_MANAGED: '' });
+  const update = f.install(['--skip-terminald'], { AOW_INSTALL_MANAGED: '' });
   succeeds(update);
   assert.doesNotMatch(update.stderr, /requires an administrator account/);
   assert.equal(existsSync(join(f.runtime, 'pending-launchdaemon.json')), false);
+});
+
+test('enabling terminald after a server-only LaunchDaemon install requests administrator registration', {
+  skip: process.getuid() === 0,
+}, t => {
+  const f = fixture(t);
+  const checkRegistration = args => {
+    const result = f.run(process.execPath, [join(f.repo, 'scripts/launchd-mode.mjs'), 'check-install', f.runtime, ...args]);
+    succeeds(result);
+    return JSON.parse(result.stdout).registrationRequired;
+  };
+  succeeds(f.pack('1.0.0')); succeeds(f.publish('1.0.0'));
+  assert.equal(f.install(['--skip-terminald'], { FAIL_GUI: '1' }).status, 78);
+  f.registerDaemons();
+  succeeds(f.install(['--skip-terminald'], { AOW_INSTALL_MANAGED: '' }));
+  assert.equal(checkRegistration([]), true);
+  assert.equal(checkRegistration(['--skip-terminald']), false);
+  writeFileSync(f.serviceLog, '');
+  const unregistered = f.install([], { AOW_INSTALL_MANAGED: '' });
+  assert.equal(unregistered.status, 78, unregistered.stdout + unregistered.stderr);
+  assert.match(unregistered.stderr, /just install --user/);
+  assert.doesNotMatch(f.log(f.serviceLog), /signal|bootstrap|bootout/);
+
+  // Exercise the real mode checker and coordinator together. Only sudo and
+  // macOS account/terminal discovery are mocked; no host privileges are used.
+  succeeds(f.run('python3', ['-B', '-c', String.raw`
+import importlib.util, os, pathlib, pwd, subprocess, sys
+from types import SimpleNamespace
+from unittest.mock import patch
+spec = importlib.util.spec_from_file_location('installer', sys.argv[1])
+m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+original_run = subprocess.run
+caller = pwd.getpwuid(os.getuid())
+account = SimpleNamespace(pw_name=caller.pw_name, pw_uid=caller.pw_uid, pw_gid=caller.pw_gid,
+                          pw_dir=os.environ['HOME'], pw_shell='/bin/zsh')
+sudo_calls = []
+def run(args, **kwargs):
+    if args[0] == '/usr/bin/sudo':
+        sudo_calls.append(args)
+        return SimpleNamespace(returncode=0)
+    return original_run(args, **kwargs)
+with patch.object(m.sys, 'platform', 'darwin'), patch.object(m.pwd, 'getpwuid', return_value=account), \
+     patch.object(m.pwd, 'getpwnam', return_value=account), patch.object(m, 'is_admin', return_value=True), \
+     patch.object(m, 'require_local_terminal'), patch.object(m, 'SCRIPT_DIR', pathlib.Path.cwd() / 'scripts'), \
+     patch.object(m, 'trusted_path', side_effect=lambda path, uid: pathlib.Path(path)), \
+     patch.object(m.subprocess, 'run', side_effect=run):
+    for flags in [[], ['--user', account.pw_name]]:
+        assert m.main(['--package', 'target/packages/latest', *flags]) == 0
+        command = sudo_calls[-1]
+        assert command[command.index('--user') + 1] == account.pw_name
+        assert '--skip-terminald' not in command
+    assert len(sudo_calls) == 2, 'Missing terminald registration must reach the administrator coordinator'
+    assert m.main(['--package', 'target/packages/latest', '--skip-terminald']) == 0
+    assert len(sudo_calls) == 2, 'Skipping terminald must not require its registration'
+`, join(root, 'scripts/install-macos.py')], { AOW_INSTALL_MANAGED: '' }));
+
+  // Complete the administrator preparation/registration/verification phases.
+  assert.equal(f.install().status, 78);
+  const request = JSON.parse(f.log(join(f.runtime, 'pending-launchdaemon.json')));
+  assert.deepEqual(Object.keys(request.components), ['terminald']);
+  f.registerDaemons();
+  succeeds(f.install([], { AOW_INSTALL_MANAGED: '' }));
+  assert.equal(checkRegistration([]), false);
+  assert.equal(existsSync(join(f.runtime, 'pending-launchdaemon.json')), false);
+  // An existing plist alone is insufficient if the job has been unregistered.
+  rmSync(join(f.env.SERVICE_STATE, 'org.aow.service.terminald'));
+  assert.equal(checkRegistration([]), true);
+  assert.equal(checkRegistration(['--skip-terminald']), false);
 });
 
 test('headless install stages registration, persists mode, updates without sudo and rolls back failures', {
@@ -568,7 +650,7 @@ test('headless install stages registration, persists mode, updates without sudo 
   succeeds(f.pack('2.0.0')); succeeds(f.publish('2.0.0'));
   // Even with a GUI now present, aow update must retain the saved daemon mode.
   const manager = join(f.home, '.local/bin/aow');
-  succeeds(f.run(manager, ['update'], {}, 'n\n'));
+  succeeds(f.run(manager, ['update', '--skip-terminald']));
   assert.equal(realpathSync(join(f.runtime, 'active/server')), join(f.runtime, 'releases/2.0.0'));
   assert.equal(realpathSync(join(f.runtime, 'active/terminald')), join(f.runtime, 'releases/1.0.0'));
   const failed = f.install([], { FAIL_HEALTH: 'terminald' }, 'y\n');
@@ -595,7 +677,7 @@ test('headless update bounds stuck shutdown and rollback without signalling skip
 
   // A stuck old server and an unhealthy replacement must both be stopped so
   // that rollback can start a healthy process on the previous release.
-  const failed = f.install([], { STALL_TERM: 'server', FAIL_HEALTH: 'server' }, 'n\n');
+  const failed = f.install(['--skip-terminald'], { STALL_TERM: 'server', FAIL_HEALTH: 'server' });
   assert.notEqual(failed.status, 0);
   assert.match(failed.stdout + failed.stderr, /restored previous release/);
   assert.equal((f.log(f.serviceLog).match(/signal-component server -KILL/g) || []).length, 2);
@@ -603,7 +685,7 @@ test('headless update bounds stuck shutdown and rollback without signalling skip
   assert.doesNotMatch(f.log(f.serviceLog), /signal-component terminald/);
 
   writeFileSync(f.serviceLog, '');
-  const updated = f.install([], { STALL_TERM: 'server' }, 'n\n');
+  const updated = f.install(['--skip-terminald'], { STALL_TERM: 'server' });
   succeeds(updated);
   assert.match(updated.stdout + updated.stderr, /did not exit within 5 seconds/);
   assert.equal((f.log(f.serviceLog).match(/signal-component server -KILL/g) || []).length, 1);
@@ -678,7 +760,7 @@ test('proxy-only changes activate an existing daemon and clear stale registratio
   Object.assign(request.components.server.EnvironmentVariables, proxy);
   write(join(f.runtime, 'pending-launchdaemon.json'), JSON.stringify(request));
   writeFileSync(f.serviceLog, '');
-  const result = f.install(['--package', join(f.repo, 'target/packages/aow-2.0.0.tar.gz')], {}, 'n\n');
+  const result = f.install(['--package', join(f.repo, 'target/packages/aow-2.0.0.tar.gz'), '--skip-terminald']);
   succeeds(result);
   assert.doesNotMatch(result.stdout + result.stderr, /registration is required|registration is pending/);
   assert.equal(f.log(plist), previousPlist);
@@ -689,14 +771,14 @@ test('proxy-only changes activate an existing daemon and clear stale registratio
   assert.doesNotMatch(f.log(f.serviceLog), /bootstrap|bootout|signal-component terminald/);
 });
 
-test('pending headless installation retains its mode before registration and leaves unconfirmed terminald untouched', {
+test('pending headless installation retains its mode before registration and leaves skipped terminald untouched', {
   skip: process.getuid() === 0,
 }, t => {
   const f = fixture(t);
   succeeds(f.pack('1.0.0')); succeeds(f.publish('1.0.0'));
-  assert.equal(f.install([], { FAIL_GUI: '1' }).status, 78);
+  assert.equal(f.install(['--skip-terminald'], { FAIL_GUI: '1' }).status, 78);
   // A graphical login after preparation must not change the saved mode.
-  assert.equal(f.install().status, 78);
+  assert.equal(f.install(['--skip-terminald']).status, 78);
   const request = JSON.parse(f.log(join(f.runtime, 'pending-launchdaemon.json')));
   assert.deepEqual(Object.keys(request.components), ['server']);
   assert.equal(existsSync(join(f.runtime, 'active/terminald')), false);
@@ -704,7 +786,7 @@ test('pending headless installation retains its mode before registration and lea
   assert.equal(existsSync(f.plist('server')), false);
   assert.doesNotMatch(f.log(f.serviceLog), /bootstrap|bootout|signal/);
   f.registerDaemons();
-  succeeds(f.install());
+  succeeds(f.install(['--skip-terminald']));
   rmSync(join(f.home, '.local/state/aow/credentials.json'));
   writeFileSync(f.serviceLog, '');
   const missingAccount = f.run('/bin/sh', ['scripts/start-server.sh', '1.0.0']);
@@ -713,7 +795,7 @@ test('pending headless installation retains its mode before registration and lea
   assert.doesNotMatch(f.log(f.serviceLog), /signal|bootstrap|bootout/);
   // Conflicting registrations cannot be resolved by silently changing mode.
   write(f.plist('server'), '<plist/>');
-  const conflict = f.install();
+  const conflict = f.install(['--skip-terminald']);
   assert.notEqual(conflict.status, 0);
   assert.match(conflict.stderr, /Both LaunchAgent and LaunchDaemon/);
 });

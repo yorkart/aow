@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,7 +33,7 @@ case "$*" in
   *) exit 99 ;;
 esac
 `);
-  write(join(tools, 'node'), '#!/bin/sh\nprintf "v24.0.0\\n"\n');
+  symlinkSync(process.execPath, join(tools, 'node'));
   write(join(tools, 'uname'), '#!/bin/sh\nprintf "Linux\\n"\n');
   for (const name of ['bin/aow-terminald', 'releases/old/bin/aow-terminald', 'releases/new/bin/aow-terminald']) {
     write(join(runtime, name), '#!/bin/sh\nexit 99\n');
@@ -110,7 +110,7 @@ for (const active of [true, false]) {
       ...(active ? ['--user restart aow-terminald.service'] : []),
     ]);
     assert.equal(readlinkSync(join(f.runtime, 'active/terminald')), '../releases/new');
-    assert.equal(readlinkSync(join(f.runtime, 'node')), join(f.tools, 'node'));
+    assert.equal(readlinkSync(join(f.runtime, 'node')), realpathSync(process.execPath));
     assert.equal(readFileSync(f.unit, 'utf8'), 'new unit\n');
     assert.match(result.stdout, /aow-terminald is active on release new/);
   });

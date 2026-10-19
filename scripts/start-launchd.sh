@@ -52,6 +52,8 @@ mkdir -p "$plist_dir" "$runtime_root/active"
 stage=$(mktemp -d "$runtime_root/.launchd-$component.XXXXXX")
 node_path=$(command -v node)
 case "$node_path" in /*) ;; *) fail 'Node.js must resolve to an absolute path' ;; esac
+# PATH may select the managed Node link that terminald activation replaces.
+node_path=$("$node_path" -e 'process.stdout.write(require("node:fs").realpathSync(process.argv[1]))' "$node_path")
 [ -f "$script_dir/service-health.mjs" ] || fail 'service health helper is missing; reinstall the package'
 node "$script_dir/launchd-service.mjs" "$component" "$runtime_root" "$stage/service.plist" "$node_path"
 plutil -lint "$stage/service.plist" >/dev/null

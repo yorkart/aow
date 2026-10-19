@@ -46,14 +46,14 @@ HTTPS_PROXY=http://127.0.0.1:7890
 NO_PROXY=localhost,127.0.0.1,::1
 ```
 
-安装后的 Web 服务启动脚本每次启动时从 `server.env` 读取代理变量，传给服务器及其子进程（包括 ACP 的 npm 安装）。代理值按文本读取，不执行 shell 表达式，也不写入系统 plist。仅修改代理时，已有 LaunchDaemon 的服务账户可直接运行 `just install` 更新并重启 Web 服务，无需 sudo 或重新登记；使用本地源码更新时先执行 `just package`。保存文件不会改变正在运行的进程，terminald 的环境也不会随之改变。
+安装后的 Web 服务启动脚本每次启动时从 `server.env` 读取代理变量，传给服务器及其子进程（包括 ACP 的 npm 安装）。代理值按文本读取，不执行 shell 表达式，也不写入系统 plist。仅修改代理时，已有 LaunchDaemon 的服务账户可直接运行 `just install --skip-terminald` 更新并重启 Web 服务，无需 sudo 或重新登记；使用本地源码更新时先执行 `just package`。保存文件不会改变正在运行的进程，terminald 的环境也不会随之改变。
 
 LaunchDaemon 默认 PATH 包含 `~/.local/bin`、AoW 管理的 Node 入口、`~/.cargo/bin` 和常用系统/Homebrew 目录，不继承安装终端的完整 PATH；开发 shell 可在服务账户自己的 `.zprofile` / `.zshrc` 中初始化 Node 和其他工具链。
 
 修改 `AOW_TERMINALD_SOCKET` 时，terminald 也需配置同一路径：
 
 - **Linux**：执行 `systemctl --user edit aow-terminald.service`，添加以下配置，再执行 `systemctl --user daemon-reload` 和 `systemctl --user restart aow-terminald.service aow-server.service`。
-- **macOS**：重新执行安装，在 terminald 重启提示中输入小写 `y`。
+- **macOS**：重新执行安装，不带 `--skip-terminald`，默认会更新并重启 terminald。
 
 ```ini
 [Service]

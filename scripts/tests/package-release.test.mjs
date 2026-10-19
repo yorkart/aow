@@ -181,14 +181,18 @@ test('local install deploys the latest package or an explicit path without downl
   const installed = f.run('bash', ['scripts/install-local.sh']);
   assert.equal(installed.status, 0, installed.stdout + installed.stderr);
   assert.equal(readlinkSync(join(f.runtime, 'active/server')), '../releases/local-1');
-  assert.match(installed.stdout, /Skipped terminald/);
-  assert.equal(existsSync(join(f.runtime, 'active/terminald')), false);
+  assert.match(installed.stdout, /services are active/);
+  assert.equal(readlinkSync(join(f.runtime, 'active/terminald')), '../releases/local-1');
+  assert.doesNotMatch(installed.stdout + installed.stderr, /Enter lowercase y|请输入 y/);
   const output = join(f.temp, 'custom packages');
   const packed = f.pack(['--version', 'local-2', '--output-dir', output]);
   assert.equal(packed.status, 0, packed.stderr);
-  const explicit = f.run('bash', ['scripts/install-local.sh', packed.stdout.trim()]);
+  const servicesBefore = readFileSync(f.serviceLog, 'utf8');
+  const explicit = f.run('bash', ['scripts/install-local.sh', packed.stdout.trim(), '--skip-terminald']);
   assert.equal(explicit.status, 0, explicit.stdout + explicit.stderr);
   assert.equal(readlinkSync(join(f.runtime, 'active/server')), '../releases/local-2');
+  assert.equal(readlinkSync(join(f.runtime, 'active/terminald')), '../releases/local-1');
+  assert.doesNotMatch(readFileSync(f.serviceLog, 'utf8').slice(servicesBefore.length), /terminald/);
   assert.equal(existsSync(join(f.runtime, '.install.lock')), false);
 });
 

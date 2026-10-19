@@ -19,6 +19,8 @@ test('local install forwards its optional user and keeps positional package comp
     [['--user', 'aow-service'], ['--package', 'target/packages/latest', '--user', 'aow-service']],
     [['a package.tar.gz', '--user', 'aow-service'], ['--package', 'a package.tar.gz', '--user', 'aow-service']],
     [['--user', 'aow-service', '--package', 'a package.tar.gz'], ['--package', 'a package.tar.gz', '--user', 'aow-service']],
+    [['--skip-terminald'], ['--package', 'target/packages/latest', '--skip-terminald']],
+    [['a package.tar.gz', '--skip-terminald', '--user', 'aow-service'], ['--package', 'a package.tar.gz', '--skip-terminald', '--user', 'aow-service']],
   ]) {
     const result = spawnSync('bash', ['scripts/install-local.sh', ...args], { cwd: directory, encoding: 'utf8', timeout: 10000,
       env: { ...process.env, PATH: `${join(directory, 'tools')}:${process.env.PATH}` } });
@@ -58,21 +60,25 @@ def entry(arguments, admin=False, registration=False, uid=501):
 
 # Default and explicit-current-account updates never elevate. GUI first installs
 # use the same path. Another target requires the caller's administrator rights.
-for args in [[], ['--user', 'operator']]:
+for args in [[], ['--user', 'operator'], ['--skip-terminald'], ['--user', 'operator', '--skip-terminald']]:
     status, calls = entry(args)
     assert status == 0 and len(calls) == 2
-    assert calls[0][0][-1] == '/Users/operator/.local/lib/aow'
+    assert calls[0][0][3] == '/Users/operator/.local/lib/aow'
+    assert ('--skip-terminald' in calls[0][0]) == ('--skip-terminald' in args)
     assert calls[1][0][0] == '/bin/bash'
+    assert ('--skip-terminald' in calls[1][0]) == ('--skip-terminald' in args)
     assert not any('/usr/bin/sudo' in command for command, _ in calls)
 status, calls = entry([], registration=True)
 assert status == 78 and len(calls) == 1
 status, calls = entry(['--user', 'aow-service'])
 assert status == 78 and calls == []
-for args, expected in [([], 'operator'), (['--user', 'aow-service'], 'aow-service')]:
+for args, expected in [([], 'operator'), (['--user', 'aow-service'], 'aow-service'),
+                       (['--skip-terminald'], 'operator'), (['--user', 'aow-service', '--skip-terminald'], 'aow-service')]:
     status, calls = entry(args, admin=True, registration=True)
     command = calls[-1][0]
     assert status == 0 and command[:4] == ['/usr/bin/sudo', '-k', '/usr/bin/python3', '-I']
     assert command[command.index('--user') + 1] == expected
+    assert ('--skip-terminald' in command) == ('--skip-terminald' in args)
 for args, uid in [(['--user', 'root'], 501), ([], 0)]:
     try:
         entry(args, uid=uid)
@@ -102,7 +108,7 @@ with patch.object(m.os, 'getgrouplist', return_value=[20, 12]), patch.object(m.s
     assert options['cwd'] == target.pw_dir and options['env'] == env
 
 # Administrator inputs stay immutable while scripts and verification run as the
-# target. Only validated, currently confirmed components reach registration.
+# target. Only validated components selected for this invocation reach registration.
 temporary_directory = tempfile.TemporaryDirectory
 with temporary_directory(prefix='aow-admin-test-') as temporary:
     directory = pathlib.Path(temporary)
@@ -118,18 +124,19 @@ with temporary_directory(prefix='aow-admin-test-') as temporary:
     pathlib.Path(str(archive) + '.sha256').write_text('checksum data')
     registration = directory / 'register-launchdaemon.py'
     registration.write_text('# trusted registration helper\n')
-    for reply, components in [('y', ['terminald', 'server']), ('n', ['server']), (' y', ['server'])]:
+    for skip_terminald, components in [(False, ['terminald', 'server']), (True, ['server'])]:
         events = []
         frozen_paths = []
         def run_target(account, arguments, environment):
             assert account is target
             if arguments[0] == '/bin/bash':
-                frozen = pathlib.Path(arguments[-1])
+                frozen = pathlib.Path(arguments[arguments.index('--package') + 1])
                 frozen_paths.append(frozen)
                 assert frozen.read_bytes() == b'package data'
                 assert stat.S_IMODE(frozen.parent.stat().st_mode) == 0o711
                 assert stat.S_IMODE(frozen.stat().st_mode) == 0o644
-                assert environment['AOW_INSTALL_TERMINALD'] == ('y' if reply == 'y' else 'n')
+                assert environment['AOW_INSTALL_TERMINALD'] == ('n' if skip_terminald else 'y')
+                assert ('--skip-terminald' in arguments) == skip_terminald
                 events.append('prepare as target')
                 return 78
             events.append('verify ' + arguments[-2])
@@ -142,10 +149,11 @@ with temporary_directory(prefix='aow-admin-test-') as temporary:
         with patch.object(m, 'SCRIPT_DIR', directory), patch.object(m, 'require_local_terminal'), \
              patch.object(m, 'target_login_path', return_value='/usr/bin:/bin'), \
              patch.object(m, 'trusted_path', side_effect=lambda path, owner: pathlib.Path(path)), \
-             patch('builtins.input', return_value=reply), patch.object(m, 'run_as_user', side_effect=run_target), \
+             patch('builtins.input', side_effect=AssertionError('unexpected terminald prompt')), \
+             patch.object(m, 'run_as_user', side_effect=run_target), \
              patch.object(m, 'registration_module', return_value=helper), \
              patch.object(m.tempfile, 'TemporaryDirectory', side_effect=administrator_stage), contextlib.redirect_stdout(io.StringIO()):
-            assert m.install_as_administrator(target, archive, caller.pw_uid) == 0
+            assert m.install_as_administrator(target, archive, caller.pw_uid, skip_terminald) == 0
         assert events == ['prepare as target', 'register ' + ','.join(components), *['verify ' + name for name in components]]
         assert all(not path.exists() for path in frozen_paths)
     # Errors stop the coordinator rather than registering partial installation.
@@ -153,7 +161,8 @@ with temporary_directory(prefix='aow-admin-test-') as temporary:
         with patch.object(m, 'SCRIPT_DIR', directory), patch.object(m, 'require_local_terminal'), \
              patch.object(m, 'target_login_path', return_value='/usr/bin:/bin'), \
              patch.object(m, 'trusted_path', side_effect=lambda path, owner: pathlib.Path(path)), \
-             patch('builtins.input', return_value='n'), patch.object(m, 'run_as_user', return_value=code), \
+             patch('builtins.input', side_effect=AssertionError('unexpected terminald prompt')), \
+             patch.object(m, 'run_as_user', return_value=code), \
              patch.object(m, 'registration_module') as load_helper, \
              patch.object(m.tempfile, 'TemporaryDirectory', side_effect=administrator_stage), contextlib.redirect_stdout(io.StringIO()):
             assert m.install_as_administrator(target, archive, caller.pw_uid) == code
@@ -166,7 +175,7 @@ with temporary_directory(prefix='aow-admin-test-') as temporary:
     else:
         raise AssertionError('writable administrator input was accepted')
 
-print('account selection, privilege separation, consent and installation sequencing passed')
+print('account selection, privilege separation, terminald selection and installation sequencing passed')
 `, script], { encoding: 'utf8', timeout: 15000 });
   assert.equal(result.status, 0, result.stdout + result.stderr);
 });
