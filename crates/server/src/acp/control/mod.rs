@@ -42,6 +42,19 @@ struct Owner {
     token: String,
 }
 
+/// A CLI operation owns admission until startup/submission finishes, even if its HTTP client leaves.
+pub(super) struct CliLease {
+    controller: Arc<Controller>,
+    attachment: Uuid,
+    pub headers: HeaderMap,
+}
+
+impl Drop for CliLease {
+    fn drop(&mut self) {
+        self.controller.release(self.attachment);
+    }
+}
+
 pub(super) struct Controller {
     owner: Mutex<Option<Owner>>,
     restore: AsyncMutex<()>,
@@ -66,6 +79,25 @@ pub(super) struct ControlState {
 }
 
 impl Controller {
+    pub(super) fn claim_cli(self: &Arc<Self>) -> Result<CliLease, HttpError> {
+        let attachment = Uuid::new_v4();
+        let state = self.claim(attachment, false);
+        let token = state.token.ok_or_else(|| {
+            HttpError::new(
+                StatusCode::CONFLICT,
+                "acp_control_required",
+                "ACP session is controlled by another client",
+                None,
+            )
+        })?;
+        let mut headers = HeaderMap::new();
+        headers.insert(CONTROL_HEADER, token.parse().expect("UUID header"));
+        Ok(CliLease {
+            controller: self.clone(),
+            attachment,
+            headers,
+        })
+    }
     fn state_for(owner: &Option<Owner>, attachment: Uuid) -> ControlState {
         let token = owner
             .as_ref()

@@ -1,4 +1,5 @@
 import { credentials, assertCredentials } from './account-fixture.mjs';
+import { vendorRipgrepFixture } from './ripgrep-fixture.mjs';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -47,6 +48,7 @@ function fixture(t, arch = 'aarch64') {
     write(join(repo, path), content, !path.endsWith('.mjs'));
   }
   for (const binary of binaries) write(join(artifacts, binary), '#!/bin/sh\nexit 0\n', true);
+  vendorRipgrepFixture(repo);
   write(join(repo, 'frontend/dist/index.html'), '<html>macOS release</html>');
   write(join(home, '.local/state/aow/credentials.json'), credentials());
   // Lifecycle tests mock the health transport; service-health.test.mjs exercises
@@ -739,6 +741,7 @@ test('native macOS Mach-O binaries pass the real packaging checks', { skip: proc
   const source = join(f.temp, 'main.c');
   write(source, 'int main(void) { return 0; }\n');
   for (const binary of binaries) succeeds(f.run('/usr/bin/clang', [source, '-o', join(f.artifacts, binary)]));
+  vendorRipgrepFixture(f.repo, join(f.artifacts, 'aow-server'));
   write(join(f.tools, 'lipo'), '#!/bin/sh\nexec /usr/bin/lipo "$@"\n', true);
   write(join(f.tools, 'otool'), '#!/bin/sh\nexec /usr/bin/otool "$@"\n', true);
   succeeds(f.pack('native'));

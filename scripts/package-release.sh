@@ -145,9 +145,12 @@ main() {
     stage=$(mktemp -d "$output_dir/.package-$version.XXXXXX")
     local bundle=$stage/bundle entry elf_info
     mkdir -p "$bundle/bin" "$bundle/frontend"
-    for entry in aow-server aow-terminald aow-automation-runner aow-cli; do
-        [[ -f "$artifact_dir/$entry" ]] || fail "missing artifact: $artifact_dir/$entry; build the $target release first"
-        install -m 0755 -- "$artifact_dir/$entry" "$bundle/bin/$entry"
+    node "$repo_root/scripts/ripgrep.mjs" "$target" "$bundle"
+    for entry in aow-server aow-terminald aow-automation-runner aow-cli rg; do
+        if [[ "$entry" != rg ]]; then
+            [[ -f "$artifact_dir/$entry" ]] || fail "missing artifact: $artifact_dir/$entry; build the $target release first"
+            install -m 0755 -- "$artifact_dir/$entry" "$bundle/bin/$entry"
+        fi
         # Verify every staged binary, including when --skip-build reuses files.
         # A musl-named directory alone does not prove the contents are portable.
         if [[ "$os" == linux ]]; then
@@ -227,7 +230,9 @@ writeFileSync(join(root, 'manifest.json'), JSON.stringify({
     platform: os === 'linux' ? { os, arch, target, libc: 'musl', linkage: 'static' }
         : { os, arch, target, linkage: 'dynamic', minimum_os_version: minimumOsVersion },
     components: { server: 'bin/aow-server', terminald: 'bin/aow-terminald',
-        runner: 'bin/aow-automation-runner', cli: 'bin/aow-cli', frontend: 'frontend/dist' },
+        runner: 'bin/aow-automation-runner', cli: 'bin/aow-cli', frontend: 'frontend/dist', ripgrep: 'bin/rg' },
+    third_party: { ripgrep: { version: JSON.parse(readFileSync(join(root, 'licenses/ripgrep/manifest.json'), 'utf8')).version,
+        sha256: createHash('sha256').update(readFileSync(join(root, 'bin/rg'))).digest('hex') } },
 }, null, 2) + '\n');
 JS
     COPYFILE_DISABLE=1 tar -czf "$stage/archive.tar.gz" -C "$bundle" .

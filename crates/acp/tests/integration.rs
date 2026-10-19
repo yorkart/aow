@@ -38,6 +38,86 @@ fn prompt(value: &str) -> Vec<Content> {
 }
 
 #[tokio::test]
+async fn sidebar_recency_changes_only_when_a_prompt_is_submitted() -> Result<()> {
+    for resume_only in [false, true] {
+        let directory = tempfile::tempdir()?;
+        let state = directory.path().join("state");
+        let host = host(resume_only);
+        if resume_only {
+            let mut settings: Value = serde_json::from_str(&host.settings.read().unwrap())?;
+            settings["agent_servers"]["test"]["env"]["RESUME_ONLY"] = "1".into();
+            *host.settings.write().unwrap() = settings.to_string();
+        }
+        let service = AcpService::new(host.clone(), Some(state.clone()))?;
+        let connection = service.connect("test", directory.path().into()).await?;
+        let imported = service.import_sessions(
+            &connection.id,
+            ["2020-01-01T00:00:00+00:00", "2021-01-01T00:00:00+00:00"]
+                .into_iter()
+                .enumerate()
+                .map(|(index, time)| SessionImport {
+                    session_id: format!("session-{}", index + 1),
+                    cwd: connection.cwd.clone(),
+                    title: Some(format!("Imported {index}")),
+                    updated_at: Some(time.into()),
+                })
+                .collect(),
+        )?;
+        let id = &imported[0].thread_id;
+        let baseline = imported[0].interacted_at.clone();
+        assert_eq!(baseline.as_deref(), Some("2020-01-01T00:00:00+00:00"));
+        let loaded = service.resume(id).await?;
+        assert_eq!(loaded.interacted_at, baseline);
+        assert_eq!(service.overview(id)?.interacted_at, baseline);
+        assert_ne!(loaded.updated_at, imported[0].updated_at);
+        assert_eq!(service.sessions(None)[0].thread_id, imported[1].thread_id);
+        service.set_mode(id, "ask").await?;
+        service
+            .set_config_option(id, "enabled", json!(false))
+            .await?;
+        assert_eq!(service.snapshot(id)?.interacted_at, baseline);
+
+        service.start_prompt(id, prompt("checkpoint"))?;
+        let submitted = service.snapshot(id)?;
+        assert_ne!(submitted.interacted_at, baseline);
+        assert_eq!(service.sessions(None)[0].thread_id, *id);
+        let streamed = wait_for(&service, id, |snapshot| {
+            snapshot
+                .entries
+                .iter()
+                .any(|entry| entry.content["text"] == "Unfinished streamed response")
+        })
+        .await;
+        assert_eq!(streamed.interacted_at, submitted.interacted_at);
+        assert!(streamed.revision > submitted.revision);
+        service.cancel(id)?;
+        let completed = wait_for(&service, id, |snapshot| snapshot.status == "idle").await;
+        assert_eq!(completed.interacted_at, submitted.interacted_at);
+        service.disconnect(&connection.id)?;
+        service.flush_threads_on_quit()?;
+        drop(service);
+
+        let restored = AcpService::new(host, Some(state))?;
+        assert_eq!(restored.sessions(None)[0].thread_id, *id);
+        assert_eq!(
+            restored.session_info(id)?.interacted_at,
+            submitted.interacted_at
+        );
+        assert_eq!(
+            restored.snapshot(id)?.interacted_at,
+            submitted.interacted_at
+        );
+        let resumed = restored.resume(id).await?;
+        assert_eq!(resumed.interacted_at, submitted.interacted_at);
+        assert_eq!(
+            restored.overview(id)?.interacted_at,
+            submitted.interacted_at
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn completion_usage_omits_restored_missing_or_reset_baselines() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let state = directory.path().join("state");
@@ -910,7 +990,7 @@ async fn failed_prompt_persistence_does_not_send_or_leave_the_session_working() 
     let connection = service.connect("test", directory.path().into()).await?;
     let session = service.new_session(&connection.id).await?;
     let database = rusqlite::Connection::open(state.join("threads.sqlite"))?;
-    database.execute_batch("CREATE TRIGGER reject_writes BEFORE INSERT ON acp_thread_snapshots BEGIN SELECT RAISE(ABORT, 'test disk failure'); END;")?;
+    database.execute_batch(include_str!("sql/reject_snapshot_writes.sql"))?;
     assert!(
         service
             .start_prompt(&session.thread_id, prompt("echo"))
@@ -918,6 +998,7 @@ async fn failed_prompt_persistence_does_not_send_or_leave_the_session_working() 
     );
     let failed = service.snapshot(&session.thread_id)?;
     assert_eq!(failed.status, "idle");
+    assert_eq!(failed.interacted_at, session.interacted_at);
     assert!(failed.entries.is_empty());
     assert!(
         failed
@@ -926,7 +1007,7 @@ async fn failed_prompt_persistence_does_not_send_or_leave_the_session_working() 
             .is_some_and(|error| error.contains("test disk failure"))
     );
     assert!(!directory.path().join("prompts.log").exists());
-    database.execute_batch("DROP TRIGGER reject_writes")?;
+    database.execute_batch(include_str!("sql/allow_snapshot_writes.sql"))?;
     service.flush_threads_on_quit()?;
     service.start_prompt(&session.thread_id, prompt("echo"))?;
     let finished = wait_for(&service, &session.thread_id, |snapshot| {
@@ -972,7 +1053,7 @@ async fn thread_identity_is_durable_before_initialization_and_survives_creation_
     assert!(service.session_logs(&prepared.thread_id)?.is_empty());
     let db = rusqlite::Connection::open(state.join("threads.sqlite"))?;
     let persisted: Option<String> = db.query_row(
-        "SELECT session_id FROM sidebar_threads WHERE thread_id = ?",
+        include_str!("sql/session_id.sql"),
         [&prepared.thread_id],
         |row| row.get(0),
     )?;
@@ -989,7 +1070,15 @@ async fn thread_identity_is_durable_before_initialization_and_survives_creation_
                 .unwrap()
                 .contains("Initialization failed"))
     );
-    assert!(service.snapshot(&prepared.thread_id)?.error.is_some());
+    assert!(service.snapshot(&prepared.thread_id)?.error.is_none());
+    assert!(
+        service
+            .snapshot(&prepared.thread_id)?
+            .recovery
+            .unwrap()
+            .error
+            .is_some()
+    );
     let failed_logs = service.session_logs(&prepared.thread_id)?;
     let failed_connection = failed_logs[0]["connection_id"].as_str().unwrap();
     assert_eq!(
@@ -1227,5 +1316,99 @@ async fn failed_connection_logs_are_bounded_and_removed_when_the_thread_is_delet
         assert!(service.logs(connection).is_err());
     }
     assert!(service.session_logs(&thread.thread_id).is_err());
+    Ok(())
+}
+
+#[tokio::test]
+async fn sync_events_cover_adapter_callbacks_requests_binding_and_disconnect() -> Result<()> {
+    use aow_acp::SyncResource;
+    let directory = tempfile::tempdir()?;
+    let service = AcpService::new(host(false), None)?;
+    let mut events = service.subscribe_sync();
+    let connection = service.connect("test", directory.path().into()).await?;
+    let session = service.new_session(&connection.id).await?;
+    let binding = SyncResource::Connection {
+        thread_id: session.thread_id.clone(),
+    };
+    let requests = SyncResource::Requests {
+        connection_id: connection.id.clone(),
+    };
+    let mut bound = false;
+    while let Ok(event) = events.try_recv() {
+        if event.resource == binding {
+            bound = true;
+        }
+    }
+    assert!(bound);
+    assert_eq!(
+        service
+            .session_connection_info(&session.thread_id)?
+            .unwrap()
+            .id,
+        connection.id
+    );
+    let authenticating = service.clone();
+    let id = connection.id.clone();
+    let auth = tokio::spawn(async move { authenticating.authenticate(&id, "login").await });
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while events.recv().await.unwrap().resource != requests {}
+    })
+    .await?;
+    let pending = service.connection_requests(&connection.id)?;
+    assert_eq!(pending.len(), 1);
+    service.answer_connection(
+        &connection.id,
+        &pending[0].id,
+        json!({"action":"accept", "content":{"code":"1234"}}),
+    )?;
+    assert!(service.connection_requests(&connection.id)?.is_empty());
+    auth.await??;
+    let mut answered = 0;
+    while let Ok(event) = events.try_recv() {
+        if event.resource == requests {
+            answered += 1;
+        }
+    }
+    assert_eq!(
+        answered, 1,
+        "answer and dispatcher cleanup must not double-notify the same removal"
+    );
+    service.start_prompt(&session.thread_id, prompt("message-ids"))?;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let event = events.recv().await.unwrap();
+            if let Some(head) = event.session
+                && head.info.thread_id == session.thread_id
+                && head.info.status == "idle"
+            {
+                let snapshot = service.snapshot(&session.thread_id).unwrap();
+                assert!(snapshot.revision >= head.revision);
+                assert!(
+                    snapshot
+                        .entries
+                        .iter()
+                        .any(|entry| entry.content["text"] == "ACP_LIVE_FOLLOWUP_VISIBLE")
+                );
+                break;
+            }
+        }
+    })
+    .await?;
+    service.disconnect(&connection.id)?;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let event = events.recv().await.unwrap();
+            if event.resource == binding {
+                break;
+            }
+        }
+    })
+    .await?;
+    assert!(
+        service
+            .session_connection_info(&session.thread_id)?
+            .is_none()
+    );
+    assert!(service.sync_event(&requests).deleted);
     Ok(())
 }

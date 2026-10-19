@@ -4,6 +4,7 @@
 //! messages again with fresh IDs. Copies must retain their original identity:
 //! global content deduplication would also erase genuinely repeated turns.
 use super::*;
+use aow_db::hermes::CompactedMessageRecord;
 
 const SUMMARY_PREFIXES: [&str; 2] = [
     "[CONTEXT COMPACTION — REFERENCE ONLY]",
@@ -11,16 +12,6 @@ const SUMMARY_PREFIXES: [&str; 2] = [
 ];
 const PRIOR: &str = "[PRIOR CONTEXT — for reference only; not a new message]";
 const SUMMARY: &str = "[END OF PRIOR CONTEXT — COMPACTION SUMMARY BELOW]";
-
-pub(super) fn has_compaction(connection: &Connection, id: &str) -> rusqlite::Result<bool> {
-    if !has_column(connection, "messages", "compacted") {
-        return Ok(false);
-    }
-    connection.query_row(
-        &format!("{} SELECT EXISTS(SELECT 1 FROM messages WHERE session_id IN (SELECT id FROM history) AND compacted = 1)", history(connection)),
-        [id], |row| row.get(0),
-    )
-}
 
 struct Message {
     data: Value,
@@ -33,10 +24,11 @@ struct Message {
 }
 
 impl Message {
-    fn read(row: &rusqlite::Row<'_>) -> rusqlite::Result<Self> {
-        let mut data = record(row)?;
-        let active: bool = row.get(8)?;
-        let compacted: bool = row.get(9)?;
+    fn from_record(row: CompactedMessageRecord) -> Self {
+        let epoch = row.message.timestamp;
+        let mut data = record(row.message);
+        let active = row.active;
+        let compacted = row.compacted;
         let text = public_text(&data).unwrap_or_default();
         let prior = text
             .strip_prefix(PRIOR)
@@ -70,15 +62,15 @@ impl Message {
             ])
             .to_string()
         };
-        Ok(Self {
+        Self {
             data,
             key,
-            epoch: row.get(6)?,
+            epoch,
             visible: active || compacted,
             compacted,
             summary,
             merged,
-        })
+        }
     }
 
     fn copy_of(&self, original: &Self, anchor: &Self) -> bool {
@@ -119,17 +111,10 @@ fn copied_sequence<'a>(
     })
 }
 
-pub(super) fn read(connection: &Connection, id: &str) -> rusqlite::Result<Vec<Value>> {
-    let sql = format!(
-        "{} SELECT id, session_id, role, content, tool_call_id, tool_calls,
-        timestamp, finish_reason, active, compacted FROM messages
-        WHERE session_id IN (SELECT id FROM history) ORDER BY id",
-        history(connection)
-    );
-    let mut statement = connection.prepare(&sql)?;
+pub(super) fn reconstruct_records(rows: Vec<CompactedMessageRecord>) -> Vec<Value> {
     let mut sessions = std::collections::BTreeMap::<String, Vec<Message>>::new();
-    for row in statement.query_map([id], Message::read)? {
-        let message = row?;
+    for row in rows {
+        let message = Message::from_record(row);
         sessions
             .entry(message.data["session_id"].as_str().unwrap().to_owned())
             .or_default()
@@ -137,7 +122,7 @@ pub(super) fn read(connection: &Connection, id: &str) -> rusqlite::Result<Vec<Va
     }
     let mut records: Vec<_> = sessions.into_values().flat_map(reconstruct).collect();
     records.sort_by_key(|record| record["id"].as_i64());
-    Ok(records)
+    records
 }
 
 fn reconstruct(messages: Vec<Message>) -> Vec<Value> {

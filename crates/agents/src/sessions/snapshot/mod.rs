@@ -29,7 +29,7 @@ use serde_json::{Map, Value};
 use super::{AgentSessionLocator, AgentSessionProvider};
 use crate::Agent;
 
-const MAX_SNAPSHOT_TURNS: usize = 200;
+pub(super) const MAX_SNAPSHOT_TURNS: usize = 200;
 const MAX_TURN_ACTIVITIES: usize = 500;
 const MAX_ACTIVITY_TEXT: usize = 1200;
 
@@ -70,17 +70,12 @@ pub(crate) fn read_hermes(
     locator: AgentSessionLocator,
 ) -> Result<AgentSessionSnapshot, SnapshotError> {
     validate_locator(&locator)?;
-    let mut connection = super::hermes::open_db(&locator.transcript_path)?;
-    let transaction = connection.transaction()?;
-    let exists: bool = transaction.query_row(
-        "SELECT EXISTS(SELECT 1 FROM sessions WHERE id = ?1)",
-        [&locator.session_id],
-        |row| row.get(0),
-    )?;
-    if !exists {
+    let mut db = aow_db::hermes::HermesDb::open(&locator.transcript_path)?;
+    let reader = db.read()?;
+    if !reader.session_exists(&locator.session_id)? {
         return Err(SnapshotError::NotFound);
     }
-    let records = super::hermes::snapshot_records(&transaction, &locator.session_id)?;
+    let records = super::hermes::snapshot_records(&reader, &locator.session_id)?;
     Ok(snapshot(locator, hermes::parse(records)))
 }
 

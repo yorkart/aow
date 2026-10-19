@@ -3,6 +3,19 @@ use super::*;
 
 impl AgentServerStore {
     pub async fn prepare_session(&self, agent_id: &str, cwd: PathBuf) -> Result<SessionSnapshot> {
+        self.prepare_session_with_options(agent_id, cwd, Default::default())
+            .await
+    }
+
+    pub async fn prepare_session_with_options(
+        &self,
+        agent_id: &str,
+        cwd: PathBuf,
+        creation: crate::facade::SessionCreation,
+    ) -> Result<SessionSnapshot> {
+        if let Some(parent) = &creation.parent {
+            parent.validate().map_err(anyhow::Error::msg)?;
+        }
         let cwd = tokio::fs::canonicalize(cwd).await?;
         ensure!(cwd.is_dir(), "ACP working directory must be a directory");
         let settings = validate_settings(&self.inner.host.settings().await?)?;
@@ -16,6 +29,8 @@ impl AgentServerStore {
             agent_id.into(),
             cwd.to_string_lossy().into_owned(),
         );
+        thread.parent = creation.parent;
+        thread.source = creation.source;
         thread.status = "disconnected".into();
         let id = thread.thread_id.clone();
         self.inner.threads.lock().unwrap().insert(thread)?;
@@ -43,15 +58,36 @@ impl AgentServerStore {
         // Detach the previous event source before replacing this association.
         if let Ok(previous) = self.session_connection(thread_id)
             && previous.info.id != connection.info.id
-            && let Some(session_id) = self.snapshot(thread_id)?.session_id
         {
-            previous.context.unregister_session(&session_id);
+            previous.context.bindings.lock().unwrap().remove(thread_id);
+            if let Some(session_id) = self.snapshot(thread_id)?.session_id {
+                previous.context.unregister_session(&session_id);
+                // Keep quarantined attempts on their original connection.
+                // Their late responses must never affect the replacement route.
+            }
+            if previous.loads.blocks_thread(thread_id)
+                && previous.context.bindings.lock().unwrap().is_empty()
+            {
+                // No other session owns this failed adapter. Shared adapters stay alive.
+                previous.close();
+            }
         }
         self.inner
             .sessions
             .lock()
             .unwrap()
             .insert(thread_id.into(), connection.info.id.clone());
+        connection
+            .context
+            .bindings
+            .lock()
+            .unwrap()
+            .insert(thread_id.into());
+        self.inner
+            .events
+            .changed(crate::facade::SyncResource::Connection {
+                thread_id: thread_id.into(),
+            });
         connection.debug_log.attach(thread_id);
         Ok(())
     }
@@ -88,7 +124,7 @@ impl AgentServerStore {
         }
         .await;
         if let Err(error) = &result {
-            self.record_error(thread_id, error)?;
+            self.record_recovery_error(thread_id, error)?;
         }
         result
     }

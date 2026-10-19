@@ -51,7 +51,8 @@
     "Plan and request cards follow the pinned Zed structure with AoW Conversation colors, typography and a shared 900px content column; owner-controlled plan clearing persists through snapshot polling and reload without canceling execution",
     "Successful live ACP prompts invoke the optional host turn-completed callback once; AoW shares its Terminal notification dispatcher, page/IM settings and unread queue, with ACP thread destinations and conservative response-usage deltas",
     "Streaming persistence queues shared session references and captures bodies after a one-second coalescing window; generation/revision HTTP deltas carry entry replacements and text/terminal appends, while old terminal-output metadata is normalized on load. Zed uses GPUI events and virtual lists; AoW retains its offline body cache and React layout.",
-    "Browser history defaults to turn overviews; process bodies use scoped lazy reads and deltas only while expanded. Collapse unmounts details and releases their data and requests. Virtual lists and database repartitioning remain deferred."
+    "Browser history defaults to turn overviews; process bodies use scoped lazy reads and deltas only while expanded. Collapse unmounts details and releases their data and requests. Virtual lists and database repartitioning remain deferred.",
+    "Sidebar recency carries the existing interacted_at column through snapshots and desktop/mobile lists. Only accepted user submissions advance it; imports and legacy hydration freeze historical update time as their baseline. Snapshot updated_at and revision still track all state changes."
   ],
   "files": [
     {
@@ -136,7 +137,7 @@
           "sha256": "7e78b4dcde4ba3a329f35237ed1e0641ef793d3c58825f79a5382758e2f386fe"
         }
       ],
-      "local_sha256": "e200460cd53522984c4740a238c8ce709b8d6b1fad0abec750d022850b8cc92c"
+      "local_sha256": "c85d3dc4eb436ac92b12d6570ab13dfd6f623705004199eb6fb7def5245211af"
     },
     {
       "local": "crates/acp/src/acp_thread/defaults.rs",
@@ -162,9 +163,13 @@
         {
           "path": "crates/agent/src/thread_store.rs",
           "sha256": "44c97689232357b8d0ac22e080dd57c4e5cd46c663c0eb6251f083742ad15b3e"
+        },
+        {
+          "path": "crates/sidebar/src/sidebar.rs",
+          "sha256": "f579fdd1b58ae5ea838d7637c8021879706ca1c3b0fcd2a41ae738dd37d6a723"
         }
       ],
-      "local_sha256": "731e90725e98ffb57bd2a5053598d9a9a079d13de4f951a38ca2af6d755703d6"
+      "local_sha256": "5bc1671dd37fa6558148cd592893395cecbee6769d5ac1d84bd3f9114b73df64"
     },
     {
       "local": "crates/acp/src/agent_servers/mod.rs",
@@ -184,7 +189,7 @@
           "sha256": "21207d34f8c5d00db683bf2a92d4ac202eebeaf32c6427fe82c5856ced743c48"
         }
       ],
-      "local_sha256": "c21ffa054f0729d783816cd86344b8422e3eb8f6e170bef51ac1a2604c69a42c"
+      "local_sha256": "2e160dce7aad5e4b8c0b5d7cfb8d43d54142155bdfc628779cc0bb555c8350b2"
     },
     {
       "local": "crates/acp/src/agent_servers/acp/mod.rs",
@@ -208,7 +213,7 @@
           "sha256": "7bed9ea8c55ec5cd3ab35a1661cac89f059c013bb18f341c0f5892de1f83c906"
         }
       ],
-      "local_sha256": "b42812689951be57bfb53c9a27830f8a94b81a99dbc578e525604c75d57bf4ad"
+      "local_sha256": "1244dcbbf100d08e3e1d14edb5a21183a89e05ae7a9ede96199a2618710ef52f"
     },
     {
       "local": "crates/acp/src/agent_servers/acp/transport.rs",
@@ -286,9 +291,13 @@
         {
           "path": "crates/agent_ui/src/thread_metadata_store.rs",
           "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
+        },
+        {
+          "path": "crates/sidebar/src/sidebar.rs",
+          "sha256": "f579fdd1b58ae5ea838d7637c8021879706ca1c3b0fcd2a41ae738dd37d6a723"
         }
       ],
-      "local_sha256": "b2303e67d703f090c7418a4ec53136a28a6e8defc9f34c39790b8526a96ce2bd"
+      "local_sha256": "96ce1fa1dcab94c282f155cc754c8d8a12d1a0acb5f6cb7a4e1f6594260733b7"
     },
     {
       "local": "frontend/src/features/acp/agent_ui/config_options.tsx",
@@ -660,7 +669,7 @@
           "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
         }
       ],
-      "local_sha256": "836dbeef93aa2db408dc7a3edb890f0209bb029b8e326b1d8dacd6d653ea88ab"
+      "local_sha256": "0e7060fe3ac582b700b779b458d5fcf2210ac62430ae6863d8d0f93948144952"
     },
     {
       "local": "crates/acp/src/agent_ui/mod.rs",
@@ -679,19 +688,19 @@
           "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
         }
       ],
-      "local_sha256": "9cc3d16ad6e6112bac61d05a1570a083ea4373a9fcca20413bb11b5b83f7260b"
+      "local_sha256": "77e5d57055a5543dcba7248996f1035ed480af0eca6e9dc99d9de542a36b4311"
     },
     {
-      "local": "crates/acp/src/agent_ui/thread_metadata_store/db.rs",
+      "local": "crates/db/src/acp/sidebar_threads/mod.rs",
       "kind": "host-port",
-      "reason": "ThreadMetadataDb schema, LIST_QUERY and upsert/delete SQL; facade string IDs and single-cwd path encoding",
+      "reason": "sidebar_threads SQL execution and storage row mapping; ACP model conversion stays in its record adapter",
       "sources": [
         {
           "path": "crates/agent_ui/src/thread_metadata_store.rs",
           "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
         }
       ],
-      "local_sha256": "0ab532bfbf9920472477d706209e637d9785faf4b1c423884acb98ff8ecc7065"
+      "local_sha256": "bdf24854ca693f3f5d2ef8d6070a228700cb0a6f8461c2cfffab52a797cf92e8"
     },
     {
       "local": "crates/acp/src/agent_ui/thread_metadata_store/operations.rs",
@@ -707,7 +716,7 @@
           "sha256": "21207d34f8c5d00db683bf2a92d4ac202eebeaf32c6427fe82c5856ced743c48"
         }
       ],
-      "local_sha256": "fa3826cdc402d999b2dfe5aae2df52bbbea956f157a972c2ca06fb2e6e0c25ed"
+      "local_sha256": "d65e0ba55cec294d29b298baa15df7c19288c62a9848c86ef30e0f4aef196135"
     },
     {
       "local": "crates/acp/src/agent_ui/thread_metadata_store/tests.rs",
@@ -719,12 +728,12 @@
           "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
         }
       ],
-      "local_sha256": "96298a576f7e7a7bfc1c86d9615875bf1c75a3b5c4af045483086df5706bb98c"
+      "local_sha256": "ed9e8d3272d1b1e0648ba5e29a82156ff27847416d9d1cb282abbc6abccaa83a"
     },
     {
-      "local": "crates/acp/src/db/mod.rs",
+      "local": "crates/db/src/sqlite/migrations.rs",
       "kind": "host-port",
-      "reason": "Thin rusqlite host equivalent of ThreadSafeConnection and domain migrations; WAL/private file creation",
+      "reason": "Domain/version migration execution preserving existing transaction and newer-schema rejection behavior",
       "sources": [
         {
           "path": "crates/db/src/db.rs",
@@ -735,19 +744,19 @@
           "sha256": "f1bfc7e3fefa3409ce32f50d40ef41d338cf0427c4114e709c5fafb62152cd8e"
         }
       ],
-      "local_sha256": "b12661d086452cad14c1c020070e6e2c86e88d19cad30638a5a7993aca9d01b1"
+      "local_sha256": "7626c7b5ab817ef784430dda428567316d1f9c326b5d25ba489724abbc2a2231"
     },
     {
       "local": "crates/acp/src/acp_thread/snapshot_store.rs",
       "kind": "host-port",
-      "reason": "AoW offline body cache using the native-agent versioned JSON and load_thread/save_thread/delete_thread boundary; no native-agent schema or execution state",
+      "reason": "ACP-owned versioned snapshot serialization and encoding/version/session-ID validation; SQLite access lives in aow-db",
       "sources": [
         {
           "path": "crates/agent/src/db.rs",
           "sha256": "3fb7a86484a3eec7747d09f6e219bf7fd65f0e71451e72be27c0b2dc39e15772"
         }
       ],
-      "local_sha256": "8e407857f3b489593fed05bbd9266da74eaf17923fdb5241f867698d1b9c49f9"
+      "local_sha256": "f454bbcee8ec1bf8b6b1f92892ddc5d9829c96bd6723e9693027c0ee58ba437b"
     },
     {
       "local": "frontend/src/features/acp/agent_ui/conversation_view/tool_call.tsx",
@@ -1024,7 +1033,7 @@
       "kind": "local",
       "reason": "AoW browser turn overviews, live range indexes and scoped lazy process reads; canonical offline storage is unchanged",
       "sources": [],
-      "local_sha256": "46a9278a41af88c9c5d27e369ad8c0f15f0fae12f1b3e816f6f9e19f0c7a9fee"
+      "local_sha256": "2d4649edc8837d2d3af6ba3c6f790a69724b177bfabcca187c10df1b0f1a1fba"
     },
     {
       "local": "frontend/src/features/acp/agent_ui/conversation_view/entry_renderer.tsx",
@@ -1046,6 +1055,262 @@
       "reason": "AoW process timeline and tool grouping; collapsed groups unmount heavy descendants",
       "sources": [],
       "local_sha256": "94c9d5f6dfb4e73f615ecb97652d7ba6401bd2d1bc71f8329cf3c33724262a87"
+    },
+    {
+      "local": "crates/acp/src/agent_ui/thread_metadata_store/record.rs",
+      "kind": "host-port",
+      "reason": "Conversion between database storage records and ACP metadata, including origin and JSON-encoded parent/folder paths",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/thread_metadata_store.rs",
+          "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
+        }
+      ],
+      "local_sha256": "faedda36fff2d2bb84a3d07fc08ffba3bf47583ccf7275812b11c03e7878ee74"
+    },
+    {
+      "local": "crates/db/src/sqlite/connection.rs",
+      "kind": "host-port",
+      "reason": "Private owned-database creation, busy timeout and SQLite initialization",
+      "sources": [
+        {
+          "path": "crates/db/src/db.rs",
+          "sha256": "784711f3bfd1e46b5c1a0474b7c4cc13f9d62d3ed0cd7193c89642b91e2e8f42"
+        },
+        {
+          "path": "crates/sqlez/src/connection.rs",
+          "sha256": "f1bfc7e3fefa3409ce32f50d40ef41d338cf0427c4114e709c5fafb62152cd8e"
+        }
+      ],
+      "local_sha256": "123af2ff2f2866146dc2eadcd882014f383acdecbf7083e5524b88af0e9562b9"
+    },
+    {
+      "local": "crates/db/src/acp/mod.rs",
+      "kind": "host-port",
+      "reason": "ACP data source boundary owning shared connections and atomic metadata/snapshot write batches",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/thread_metadata_store.rs",
+          "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
+        }
+      ],
+      "local_sha256": "79cc0111afe54ca3b75a0696901018118f2f31eb858d43dbc43103823df8ee2f"
+    },
+    {
+      "local": "crates/db/src/acp/migrations/mod.rs",
+      "kind": "host-port",
+      "reason": "Existing ACP migration domains and ordered per-table schema scripts",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/thread_metadata_store.rs",
+          "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
+        }
+      ],
+      "local_sha256": "4103ba3e86f567f51d1eb916ec1409c575f52a8c00979867ea4b823f314c8eb9"
+    },
+    {
+      "local": "crates/db/src/acp/sidebar_threads/model.rs",
+      "kind": "host-port",
+      "reason": "Storage row independent of ACP session models",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/thread_metadata_store.rs",
+          "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
+        }
+      ],
+      "local_sha256": "244c500e3fe03642758a224af107ed81d68103e76215941b0d9e843d21687bb3"
+    },
+    {
+      "local": "crates/db/src/acp/acp_thread_snapshots/mod.rs",
+      "kind": "host-port",
+      "reason": "Opaque snapshot bytes and SQL access; serialization and session validation remain in ACP",
+      "sources": [
+        {
+          "path": "crates/agent/src/db.rs",
+          "sha256": "3fb7a86484a3eec7747d09f6e219bf7fd65f0e71451e72be27c0b2dc39e15772"
+        }
+      ],
+      "local_sha256": "cfd1701b892c4bdfa6592c8564b875bda663db3a3af6e09225491432d84e6390"
+    },
+    {
+      "local": "crates/db/src/sqlite/sql/initialize.sql",
+      "kind": "host-port",
+      "reason": "Existing SQLite statement moved with its table or connection implementation; schema and behavior unchanged",
+      "sources": [
+        {
+          "path": "crates/db/src/db.rs",
+          "sha256": "784711f3bfd1e46b5c1a0474b7c4cc13f9d62d3ed0cd7193c89642b91e2e8f42"
+        },
+        {
+          "path": "crates/sqlez/src/connection.rs",
+          "sha256": "f1bfc7e3fefa3409ce32f50d40ef41d338cf0427c4114e709c5fafb62152cd8e"
+        }
+      ],
+      "local_sha256": "a1b450033839b4a1d0e2b671276205a3e55ce11f1863d65cfaa8cd79201c1b75"
+    },
+    {
+      "local": "crates/db/src/sqlite/sql/migration_version.sql",
+      "kind": "host-port",
+      "reason": "Existing SQLite statement moved with its table or connection implementation; schema and behavior unchanged",
+      "sources": [
+        {
+          "path": "crates/db/src/db.rs",
+          "sha256": "784711f3bfd1e46b5c1a0474b7c4cc13f9d62d3ed0cd7193c89642b91e2e8f42"
+        },
+        {
+          "path": "crates/sqlez/src/connection.rs",
+          "sha256": "f1bfc7e3fefa3409ce32f50d40ef41d338cf0427c4114e709c5fafb62152cd8e"
+        }
+      ],
+      "local_sha256": "2547df47b67d1ca094d61b4a13c1bab6f8ff73ccc15795b52ef1c7de5f9c4795"
+    },
+    {
+      "local": "crates/db/src/sqlite/sql/set_migration_version.sql",
+      "kind": "host-port",
+      "reason": "Existing SQLite statement moved with its table or connection implementation; schema and behavior unchanged",
+      "sources": [
+        {
+          "path": "crates/db/src/db.rs",
+          "sha256": "784711f3bfd1e46b5c1a0474b7c4cc13f9d62d3ed0cd7193c89642b91e2e8f42"
+        },
+        {
+          "path": "crates/sqlez/src/connection.rs",
+          "sha256": "f1bfc7e3fefa3409ce32f50d40ef41d338cf0427c4114e709c5fafb62152cd8e"
+        }
+      ],
+      "local_sha256": "8ee16cd4d0e0c8aa0b2788a9b78f79ce57379f54e55abfed4b04af7b79a8a40f"
+    },
+    {
+      "local": "crates/db/src/acp/sidebar_threads/sql/delete.sql",
+      "kind": "host-port",
+      "reason": "Existing SQLite statement moved with its table or connection implementation; schema and behavior unchanged",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/thread_metadata_store.rs",
+          "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
+        }
+      ],
+      "local_sha256": "2cf849eb6e7a87fa97e43865fbb6a9e4cdee9097a468d1ef4470f2e1108a53d0"
+    },
+    {
+      "local": "crates/db/src/acp/sidebar_threads/sql/list.sql",
+      "kind": "host-port",
+      "reason": "Existing SQLite statement moved with its table or connection implementation; schema and behavior unchanged",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/thread_metadata_store.rs",
+          "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
+        }
+      ],
+      "local_sha256": "c7dd0869ff527d0dd1a721bfaef5ba97798e78a619c265a49606338dc9185fdf"
+    },
+    {
+      "local": "crates/db/src/acp/sidebar_threads/sql/save.sql",
+      "kind": "host-port",
+      "reason": "Existing SQLite statement moved with its table or connection implementation; schema and behavior unchanged",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/thread_metadata_store.rs",
+          "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
+        }
+      ],
+      "local_sha256": "9cd0dd0766ff348533a76fe3b7463b66dfa65a710c1f4fc9c20c62e05a62ba12"
+    },
+    {
+      "local": "crates/db/src/acp/migrations/sidebar_threads/001_create_sidebar_threads.sql",
+      "kind": "host-port",
+      "reason": "Existing SQLite statement moved with its table or connection implementation; schema and behavior unchanged",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/thread_metadata_store.rs",
+          "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
+        }
+      ],
+      "local_sha256": "0d71c7dcbcc89825f5b621d06b280804151a72ca8aa8bfa361c84deba4d9d714"
+    },
+    {
+      "local": "crates/db/src/acp/migrations/sidebar_threads/002_add_parent.sql",
+      "kind": "host-port",
+      "reason": "Existing SQLite statement moved with its table or connection implementation; schema and behavior unchanged",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/thread_metadata_store.rs",
+          "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
+        }
+      ],
+      "local_sha256": "12e15fabac78a24ab9019490a2be16caa98f85a53fabed33eee3b079eab62270"
+    },
+    {
+      "local": "crates/db/src/acp/migrations/sidebar_threads/003_add_source.sql",
+      "kind": "host-port",
+      "reason": "Existing SQLite statement moved with its table or connection implementation; schema and behavior unchanged",
+      "sources": [
+        {
+          "path": "crates/agent_ui/src/thread_metadata_store.rs",
+          "sha256": "d7fb27901f3823c8b8c1ffc5c2afb4f63dfdb82fd73afce0262069a5fdb70fe4"
+        }
+      ],
+      "local_sha256": "b97e4e86f48e6b92dbb38246c7c44c051db2a1f6fb9be60376705dd508e45a25"
+    },
+    {
+      "local": "crates/db/src/acp/acp_thread_snapshots/sql/delete_snapshot.sql",
+      "kind": "host-port",
+      "reason": "Existing SQLite statement moved with its table or connection implementation; schema and behavior unchanged",
+      "sources": [
+        {
+          "path": "crates/agent/src/db.rs",
+          "sha256": "3fb7a86484a3eec7747d09f6e219bf7fd65f0e71451e72be27c0b2dc39e15772"
+        }
+      ],
+      "local_sha256": "cb849f62aa642bd7ff2390c9363a93b77b3384ba56f23be6017596769701d410"
+    },
+    {
+      "local": "crates/db/src/acp/acp_thread_snapshots/sql/load_snapshot.sql",
+      "kind": "host-port",
+      "reason": "Existing SQLite statement moved with its table or connection implementation; schema and behavior unchanged",
+      "sources": [
+        {
+          "path": "crates/agent/src/db.rs",
+          "sha256": "3fb7a86484a3eec7747d09f6e219bf7fd65f0e71451e72be27c0b2dc39e15772"
+        }
+      ],
+      "local_sha256": "211fbee56ad8b897f001ded3f9c43347f2f6ec31a14fba15be59ab6df4b90759"
+    },
+    {
+      "local": "crates/db/src/acp/acp_thread_snapshots/sql/save_snapshot.sql",
+      "kind": "host-port",
+      "reason": "Existing SQLite statement moved with its table or connection implementation; schema and behavior unchanged",
+      "sources": [
+        {
+          "path": "crates/agent/src/db.rs",
+          "sha256": "3fb7a86484a3eec7747d09f6e219bf7fd65f0e71451e72be27c0b2dc39e15772"
+        }
+      ],
+      "local_sha256": "e647566b39e9e7bd93b7f77ef37d78f050a87c8b9a4a66caa0a0d5fec60d1c11"
+    },
+    {
+      "local": "crates/db/src/acp/migrations/acp_thread_snapshots/001_create_snapshots.sql",
+      "kind": "host-port",
+      "reason": "Existing SQLite statement moved with its table or connection implementation; schema and behavior unchanged",
+      "sources": [
+        {
+          "path": "crates/agent/src/db.rs",
+          "sha256": "3fb7a86484a3eec7747d09f6e219bf7fd65f0e71451e72be27c0b2dc39e15772"
+        }
+      ],
+      "local_sha256": "7d1d794949485e43172405e0e5b6691550161ed88cd6a548feb79d6de7d4e05e"
+    },
+    {
+      "local": "frontend/src/features/acp/session_activity.ts",
+      "kind": "host-port",
+      "reason": "Sidebar thread_display_time uses last user interaction for ordering and displayed timestamps, with a legacy update-time fallback",
+      "sources": [
+        {
+          "path": "crates/sidebar/src/sidebar.rs",
+          "sha256": "f579fdd1b58ae5ea838d7637c8021879706ca1c3b0fcd2a41ae738dd37d6a723"
+        }
+      ],
+      "local_sha256": "0fa1afdaaff1bdf503c27f555fc29e797a4b26e7a8f92b29e472443eabfe3d00"
     }
   ],
   "coverage": [
@@ -1341,6 +1606,20 @@
         "crates/acp/tests/integration.rs",
         "frontend/tests/acp.test.mjs",
         "frontend/tests/tab-links.test.mjs"
+      ]
+    },
+    {
+      "date": "2026-10-18",
+      "reason": "Align ACP sidebar recency with Zed interaction time instead of recovery and background snapshot writes",
+      "changes": [
+        "Carry the existing interacted_at column through metadata, snapshots, history replay and browser lists",
+        "Advance recency only with durable prompt submission and restore it after a failed save",
+        "Preserve imported and legacy recency across first open, configuration changes, replies, completion and restart"
+      ],
+      "tests": [
+        "crates/acp/tests/integration.rs",
+        "crates/acp/src/agent_ui/thread_metadata_store/tests.rs",
+        "frontend/tests/acp.test.mjs"
       ]
     }
   ]

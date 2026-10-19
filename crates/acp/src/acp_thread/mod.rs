@@ -7,6 +7,7 @@ pub(crate) struct AcpThread;
 
 impl AcpThread {
     pub(crate) fn handle_session_update(thread: &mut SessionSnapshot, mut update: Value) {
+        steering::observe_activity(thread, &update);
         terminals::apply_legacy_update(thread, &update);
         terminals::remove_consumed_output(&mut update);
         let kind = update["sessionUpdate"].as_str().unwrap_or("unknown");
@@ -18,6 +19,9 @@ impl AcpThread {
                     _ => "assistant",
                 };
                 let content = update["content"].clone();
+                if role == "user" && steering::consume_echo(thread, &content) {
+                    return;
+                }
                 if role == "user"
                     && content["type"] == "image"
                     && let Some(index) = thread.pending_user_images.iter().position(|image| {
@@ -64,6 +68,7 @@ impl AcpThread {
                         id: uuid::Uuid::new_v4().to_string(),
                         kind: role.into(),
                         message_id,
+                        delivery: None,
                         content,
                     });
                     thread.changes.push(Change::Entry {
@@ -107,6 +112,7 @@ impl AcpThread {
                         id,
                         kind: "tool".into(),
                         message_id: None,
+                        delivery: None,
                         content: update,
                     });
                     thread.changes.push(Change::Entry {
@@ -168,6 +174,7 @@ impl AcpThread {
             id: uuid::Uuid::new_v4().to_string(),
             kind: kind.into(),
             message_id: None,
+            delivery: None,
             content,
         });
         thread.changes.push(if kind == "notice" {
@@ -197,17 +204,23 @@ impl AcpThread {
         agent_id: String,
         cwd: String,
     ) -> SessionSnapshot {
+        let now = chrono::Utc::now().to_rfc3339();
         SessionSnapshot {
             thread_id: id,
+            parent: None,
+            source: Default::default(),
+            created_at: now.clone(),
             session_id: (!session_id.is_empty()).then_some(session_id),
             agent_id,
             cwd,
             title: "New conversation".into(),
             status: "idle".into(),
             needs_load: false,
+            recovery: None,
             revision: 0,
             sync_generation: uuid::Uuid::new_v4().to_string(),
-            updated_at: chrono::Utc::now().to_rfc3339(),
+            updated_at: now.clone(),
+            interacted_at: Some(now),
             entries: Vec::new(),
             turns: Vec::new(),
             plan: Value::Null,
@@ -223,6 +236,9 @@ impl AcpThread {
             last_prompt_usage: None,
             error: None,
             stop_reason: None,
+            steering_pending: false,
+            steering_untracked: false,
+            steering: Default::default(),
             pending_user_echo: String::new(),
             pending_user_images: Vec::new(),
             active_prompt: None,
@@ -276,6 +292,7 @@ pub(crate) mod defaults;
 pub(crate) mod overview;
 pub(crate) mod prompt_capabilities;
 pub(crate) mod snapshot_store;
+pub(crate) mod steering;
 mod terminals;
 #[cfg(test)]
 mod tests;

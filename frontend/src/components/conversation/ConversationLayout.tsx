@@ -3,9 +3,9 @@ import { ArrowDown, ArrowDownToLine, UserRound } from 'lucide-react';
 import '../conversation-theme.css';
 import './conversation-layout.css';
 
-export type ConversationStatus = 'completed' | 'failed' | 'interrupted' | 'in_progress';
+export type ConversationStatus = 'completed' | 'failed' | 'interrupted' | 'in_progress' | 'unknown';
 export const conversationStatusNames: Record<ConversationStatus, string> = {
-  completed: '已完成', failed: '失败', interrupted: '已中断', in_progress: '进行中',
+  completed: '已完成', failed: '失败', interrupted: '已中断', in_progress: '进行中', unknown: '执行结果未知',
 };
 
 export interface ConversationTurn {

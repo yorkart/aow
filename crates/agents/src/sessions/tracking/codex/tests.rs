@@ -33,11 +33,8 @@ impl Store {
         std::fs::create_dir(home.join("sessions")).unwrap();
         std::fs::create_dir(home.join("thread-writer-locks")).unwrap();
         let db = rusqlite::Connection::open(home.join("state_5.sqlite")).unwrap();
-        db.execute_batch(
-            "CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT,
-            cwd TEXT, title TEXT, name TEXT, created_at INTEGER, updated_at INTEGER);",
-        )
-        .unwrap();
+        db.execute_batch(include_str!("sql/create_threads.sql"))
+            .unwrap();
         Self {
             _directory: directory,
             cwd: home.clone(),
@@ -53,7 +50,7 @@ impl Store {
     fn insert(&self, id: &str, title: &str) {
         self.db
             .execute(
-                "INSERT INTO threads VALUES (?1, ?2, ?3, ?4, NULL, 1, 1)",
+                include_str!("sql/insert_thread.sql"),
                 rusqlite::params![
                     id,
                     self.root
@@ -104,7 +101,7 @@ fn ownership_separates_same_title_sessions_and_follows_switches() {
     );
     store
         .db
-        .execute("UPDATE threads SET name='New task' WHERE id=?1", [B])
+        .execute(include_str!("sql/rename_thread.sql"), [B])
         .unwrap();
     assert_eq!(
         resolve_files(&store.root, &store.cwd, "New task", &[a.clone(), b.clone()]),
@@ -155,10 +152,16 @@ fn database_failures_are_unavailable_but_missing_sessions_are_not_found() {
     };
     assert_eq!(resolve(), resolved(A));
     assert_eq!(candidates().unwrap().len(), 1);
-    store.db.execute_batch("BEGIN EXCLUSIVE").unwrap();
+    store
+        .db
+        .execute_batch(include_str!("sql/lock_database.sql"))
+        .unwrap();
     assert_eq!(resolve(), SessionResolution::Unavailable);
     assert!(candidates().is_none());
-    store.db.execute_batch("ROLLBACK").unwrap();
+    store
+        .db
+        .execute_batch(include_str!("sql/unlock_database.sql"))
+        .unwrap();
     assert_eq!(resolve(), resolved(A));
     assert_eq!(candidates().unwrap().len(), 1);
 
@@ -168,7 +171,10 @@ fn database_failures_are_unavailable_but_missing_sessions_are_not_found() {
     assert_eq!(resolve(), SessionResolution::Unavailable);
     assert!(candidates().is_none());
     std::fs::rename(&unavailable, &path).unwrap();
-    store.db.execute("DELETE FROM threads", []).unwrap();
+    store
+        .db
+        .execute(include_str!("sql/delete_threads.sql"), [])
+        .unwrap();
     assert_eq!(resolve(), SessionResolution::NotFound);
     assert!(candidates().unwrap().is_empty());
 }

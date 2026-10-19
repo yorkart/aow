@@ -1,5 +1,6 @@
 use super::*;
 use crate::sessions::{AgentSessionProvider, hermes as store};
+use aow_db::hermes::HermesDb;
 
 pub(super) struct Hermes;
 
@@ -46,11 +47,11 @@ impl AgentSessionTracker for Hermes {
         locator: &AgentSessionLocator,
         exited_at: DateTime<Utc>,
     ) -> Result<Option<String>, SnapshotError> {
-        let mut connection = store::open_db(&locator.transcript_path)?;
-        let transaction = connection.transaction()?;
+        let mut db = HermesDb::open(&locator.transcript_path)?;
+        let reader = db.read()?;
         let mut parser = self.task_stop_parser();
         let mut conclusion = None;
-        for record in store::snapshot_records(&transaction, &locator.session_id)? {
+        for record in store::snapshot_records(&reader, &locator.session_id)? {
             let timestamp = record["timestamp"]
                 .as_str()
                 .and_then(|value| DateTime::parse_from_rfc3339(value).ok());
@@ -72,8 +73,8 @@ fn resolve(root: &Path, cwd: &str, pid: Option<i32>) -> SessionResolution {
     let Some(pid) = pid.filter(|pid| *pid > 0) else {
         return SessionResolution::NotFound;
     };
-    let connection = match store::open_db(&root.join("state.db")) {
-        Ok(connection) => connection,
+    let db = match HermesDb::open(&root.join("state.db")) {
+        Ok(db) => db,
         Err(_) if !root.join("state.db").exists() => return SessionResolution::NotFound,
         Err(_) => return SessionResolution::Unavailable,
     };
@@ -86,14 +87,13 @@ fn resolve(root: &Path, cwd: &str, pid: Option<i32>) -> SessionResolution {
                 return SessionResolution::Unavailable;
             };
             if let Some(entries) = value.get("entries").unwrap_or(&value).as_array() {
-                let candidates: Vec<_> = entries.iter()
+                let candidates: Vec<_> = entries
+                    .iter()
                     .filter(|entry| entry["pid"].as_i64() == Some(i64::from(pid)))
                     .filter(|entry| matches!(entry["surface"].as_str(), Some("cli" | "tui")))
                     .filter_map(|entry| entry["session_id"].as_str())
-                    .filter(|id| connection.query_row(
-                        "SELECT EXISTS(SELECT 1 FROM sessions WHERE id = ?1 AND cwd = ?2 AND ended_at IS NULL)",
-                        rusqlite::params![id, cwd], |row| row.get::<_, bool>(0),
-                    ).unwrap_or(false)).collect();
+                    .filter(|id| db.live_session_exists(id, cwd).unwrap_or(false))
+                    .collect();
                 if candidates.len() == 1 {
                     return SessionResolution::Resolved(SessionTarget::Id(
                         candidates[0].to_owned(),

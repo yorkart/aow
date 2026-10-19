@@ -1,5 +1,6 @@
 //! Browser projections: collapsed turns carry no process bodies or terminal output.
 //! Indexes and cached overviews are live-only and never enter the offline snapshot.
+mod dialogue;
 use super::{AcpThread, updates::Change};
 use crate::facade::{
     SessionSnapshot, SessionUpdates, ThreadEntry, TurnOverview, TurnOverviewPatch,
@@ -17,7 +18,14 @@ pub(crate) struct OverviewCache {
     // Cursors older than a boundary change cannot reuse entry positions or turn IDs.
     layout_revision: u64,
     ranges: Vec<Range<usize>>,
-    turns: Vec<TurnOverview>,
+    turns: Vec<CachedTurn>,
+}
+
+#[derive(Debug)]
+struct CachedTurn {
+    summary: TurnOverview,
+    // Keep positions, never copies of historical dialogue bodies.
+    dialogue: Option<Vec<usize>>,
 }
 
 impl Clone for OverviewCache {
@@ -29,7 +37,23 @@ impl Clone for OverviewCache {
 pub(crate) fn snapshot(thread: &mut SessionSnapshot) -> SessionSnapshot {
     refresh(thread);
     let mut snapshot = metadata(thread);
-    snapshot.overview = Some(thread.overview_cache.turns.clone());
+    snapshot.overview = Some(
+        thread
+            .overview_cache
+            .turns
+            .iter()
+            .map(|turn| {
+                let mut summary = turn.summary.clone();
+                summary.messages = turn.dialogue.as_ref().map(|indices| {
+                    indices
+                        .iter()
+                        .map(|index| thread.entries[*index].clone())
+                        .collect()
+                });
+                summary
+            })
+            .collect(),
+    );
     snapshot
 }
 
@@ -70,21 +94,26 @@ pub(crate) fn since(
             .turns
             .iter()
             .zip(&thread.overview_cache.ranges)
-            .filter(|(turn, _)| turn.revision > revision)
-            .map(|(turn, range)| TurnOverviewPatch {
-                id: turn.id.clone(),
-                revision: turn.revision,
-                user: (turn.user.is_empty() || changed_users.range(range.clone()).next().is_some())
+            .filter(|(turn, _)| turn.summary.revision > revision)
+            .map(|(cached, range)| {
+                let turn = &cached.summary;
+                TurnOverviewPatch {
+                    id: turn.id.clone(),
+                    revision: turn.revision,
+                    user: (turn.user.is_empty()
+                        || changed_users.range(range.clone()).next().is_some())
                     .then(|| turn.user.clone()),
-                conclusion: turn.conclusion.clone(),
-                tool_count: turn.tool_count,
-                progress_count: turn.progress_count,
-                running: turn.running,
-                waiting: turn.waiting,
-                compacting: turn.compacting,
-                status: turn.status.clone(),
-                error: turn.error.clone(),
-                permission_tool_ids: turn.permission_tool_ids.clone(),
+                    conclusion: turn.conclusion.clone(),
+                    messages: dialogue::since(thread, cached.dialogue.as_deref(), revision),
+                    tool_count: turn.tool_count,
+                    progress_count: turn.progress_count,
+                    running: turn.running,
+                    waiting: turn.waiting,
+                    compacting: turn.compacting,
+                    status: turn.status.clone(),
+                    error: turn.error.clone(),
+                    permission_tool_ids: turn.permission_tool_ids.clone(),
+                }
             })
             .collect(),
     }
@@ -101,14 +130,15 @@ pub(crate) fn process(
         .overview_cache
         .turns
         .iter()
-        .position(|turn| turn.id == turn_id);
+        .position(|turn| turn.summary.id == turn_id);
     ensure!(
         index.is_some(),
         "ACP turn not found; reload the conversation"
     );
     let index = index.unwrap();
     let full_range = &thread.overview_cache.ranges[index];
-    let turn = &thread.overview_cache.turns[index];
+    let cached = &thread.overview_cache.turns[index];
+    let turn = &cached.summary;
     let entries = &thread.entries[full_range.clone()];
     let start = turn
         .user
@@ -118,6 +148,7 @@ pub(crate) fn process(
     let end = turn
         .conclusion
         .first()
+        .filter(|_| cached.dialogue.is_none())
         .and_then(|final_entry| entries.iter().position(|entry| entry.id == final_entry.id))
         .map_or(full_range.end, |index| full_range.start + index);
     let range = start..end;
@@ -142,12 +173,17 @@ pub(super) fn metadata(thread: &SessionSnapshot) -> SessionSnapshot {
         thread.agent_id.clone(),
         thread.cwd.clone(),
     );
+    result.parent = thread.parent.clone();
+    result.source = thread.source;
+    result.created_at = thread.created_at.clone();
     result.title = thread.title.clone();
     result.status = thread.status.clone();
     result.needs_load = thread.needs_load;
+    result.recovery = thread.recovery.clone();
     result.revision = thread.revision;
     result.sync_generation = thread.sync_generation.clone();
     result.updated_at = thread.updated_at.clone();
+    result.interacted_at = thread.interacted_at.clone();
     result.plan = thread.plan.clone();
     result.notices = thread.notices.clone();
     result.permissions = thread.permissions.clone();
@@ -159,6 +195,8 @@ pub(super) fn metadata(thread: &SessionSnapshot) -> SessionSnapshot {
     result.usage = thread.usage.clone();
     result.error = thread.error.clone();
     result.stop_reason = thread.stop_reason.clone();
+    result.steering_pending = thread.steering_pending;
+    result.steering_untracked = thread.steering_untracked;
     result
 }
 
@@ -209,6 +247,17 @@ fn refresh(thread: &mut SessionSnapshot) {
             .get(*index)
             .is_some_and(|previous| *previous != visible(&thread.entries[*index], thread))
     });
+    if changed.iter().any(|index| {
+        matches!(
+            thread.entries[*index].kind.as_str(),
+            "assistant" | "steering"
+        ) && cache
+            .visibility
+            .get(*index)
+            .is_some_and(|before| *before != visible(&thread.entries[*index], thread))
+    }) {
+        cache.layout_revision = thread.revision;
+    }
     let rebuild = cache.generation != thread.sync_generation
         || cache.revision < thread.changes.base_revision
         || cache.ranges.is_empty()
@@ -229,10 +278,11 @@ fn refresh(thread: &mut SessionSnapshot) {
             .map(|range| range.start)
             .ne(cache.ranges.iter().map(|range| range.start))
             || turns.iter().zip(&cache.turns).any(|(next, previous)| {
-                next.user
+                next.summary.user.iter().map(|entry| &entry.id).ne(previous
+                    .summary
+                    .user
                     .iter()
-                    .map(|entry| &entry.id)
-                    .ne(previous.user.iter().map(|entry| &entry.id))
+                    .map(|entry| &entry.id))
             })
         {
             cache.layout_revision = thread.revision;
@@ -257,7 +307,7 @@ fn refresh(thread: &mut SessionSnapshot) {
             if changed.range(range.clone()).next().is_some()
                 || index + 1 == cache.ranges.len() && cache.length != thread.entries.len()
             {
-                let user = std::mem::take(&mut cache.turns[index].user);
+                let user = std::mem::take(&mut cache.turns[index].summary.user);
                 cache.turns[index] =
                     summarize(thread, range, index + 1 == cache.ranges.len(), Some(user));
             }
@@ -298,7 +348,7 @@ fn summarize(
     range: &Range<usize>,
     latest: bool,
     user: Option<Vec<ThreadEntry>>,
-) -> TurnOverview {
+) -> CachedTurn {
     let entries = &thread.entries[range.clone()];
     let id = if entries[0].kind == "user" {
         entries[0].id.clone()
@@ -337,12 +387,28 @@ fn summarize(
         } else {
             Vec::new()
         };
-    let final_ids: BTreeSet<_> = conclusion.iter().map(|entry| entry.id.as_str()).collect();
+    // ACP does not identify every completed answer. Keep dialogue visible for
+    // steered turns without promoting intermediate messages to final answers.
+    let dialogue = entries
+        .iter()
+        .any(|entry| entry.kind == "steering")
+        .then(|| {
+            entries
+                .iter()
+                .enumerate()
+                .filter(|(_, entry)| dialogue::visible(entry))
+                .map(|(index, _)| range.start + index)
+                .collect::<Vec<_>>()
+        });
+    let displayed_ids: BTreeSet<_> = conclusion.iter().map(|entry| entry.id.as_str()).collect();
     let mut tool_count = 0;
     let mut progress_count = 0;
     let mut last_kind = "";
     for entry in entries.iter().filter(|entry| {
-        entry.kind != "user" && !final_ids.contains(entry.id.as_str()) && visible(entry, thread)
+        entry.kind != "user"
+            && !displayed_ids.contains(entry.id.as_str())
+            && !(dialogue.is_some() && dialogue::visible(entry))
+            && visible(entry, thread)
     }) {
         let kind = if entry.kind == "thought" {
             "assistant"
@@ -356,40 +422,43 @@ fn summarize(
         }
         last_kind = kind;
     }
-    TurnOverview {
-        id,
-        revision: thread.revision,
-        user: user.unwrap_or_else(|| {
-            entries
-                .iter()
-                .take_while(|entry| entry.kind == "user" || !visible(entry, thread))
-                .filter(|entry| entry.kind == "user" && visible_content(&entry.content))
-                .cloned()
-                .collect()
-        }),
-        conclusion,
-        tool_count,
-        progress_count,
-        running,
-        waiting,
-        status,
-        error: recorded.and_then(|turn| turn.error.clone()),
-        compacting: running
-            && entries.iter().any(|entry| {
-                entry.kind == "compaction_update" && entry.content["status"] == "in_progress"
+    CachedTurn {
+        dialogue,
+        summary: TurnOverview {
+            id,
+            revision: thread.revision,
+            user: user.unwrap_or_else(|| {
+                entries
+                    .iter()
+                    .take_while(|entry| entry.kind == "user" || !visible(entry, thread))
+                    .filter(|entry| entry.kind == "user" && visible_content(&entry.content))
+                    .cloned()
+                    .collect()
             }),
-        permission_tool_ids: entries
-            .iter()
-            .filter(|entry| {
-                latest
-                    && entry.kind == "tool"
-                    && thread
-                        .permissions
-                        .iter()
-                        .any(|permission| permission.request["toolCall"]["toolCallId"] == entry.id)
-            })
-            .map(|entry| entry.id.clone())
-            .collect(),
+            conclusion,
+            messages: None,
+            tool_count,
+            progress_count,
+            running,
+            waiting,
+            status,
+            error: recorded.and_then(|turn| turn.error.clone()),
+            compacting: running
+                && entries.iter().any(|entry| {
+                    entry.kind == "compaction_update" && entry.content["status"] == "in_progress"
+                }),
+            permission_tool_ids: entries
+                .iter()
+                .filter(|entry| {
+                    latest
+                        && entry.kind == "tool"
+                        && thread.permissions.iter().any(|permission| {
+                            permission.request["toolCall"]["toolCallId"] == entry.id
+                        })
+                })
+                .map(|entry| entry.id.clone())
+                .collect(),
+        },
     }
 }
 
@@ -401,7 +470,7 @@ fn final_entries(entries: &[ThreadEntry]) -> Vec<&ThreadEntry> {
         .filter(|entry| {
             matches!(
                 entry.kind.as_str(),
-                "user" | "tool" | "summary" | "compaction_update"
+                "user" | "steering" | "tool" | "summary" | "compaction_update"
             ) || matches!(entry.kind.as_str(), "assistant" | "thought")
                 && visible_content(&entry.content)
         })
@@ -442,7 +511,7 @@ fn visible_content(content: &Value) -> bool {
 
 fn visible(entry: &ThreadEntry, thread: &SessionSnapshot) -> bool {
     match entry.kind.as_str() {
-        "user" | "assistant" | "thought" => visible_content(&entry.content),
+        "user" | "steering" | "assistant" | "thought" => visible_content(&entry.content),
         "summary" | "compaction_update" => true,
         "tool" => {
             !matches!(

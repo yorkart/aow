@@ -54,19 +54,32 @@ fn language_for_path(path: &Path) -> &'static str {
         .extension()
         .and_then(|value| value.to_str())
         .unwrap_or_default()
+        .to_ascii_lowercase()
+        .as_str()
     {
         "rs" => "rust",
-        "ts" | "tsx" => "typescript",
-        "js" | "jsx" => "javascript",
+        "ts" | "tsx" | "mts" | "cts" => "typescript",
+        "js" | "jsx" | "mjs" | "cjs" => "javascript",
         "py" => "python",
         "go" => "go",
-        "json" => "json",
+        "java" => "java",
+        "c" | "h" => "c",
+        "cc" | "cpp" | "hpp" => "cpp",
+        "json" | "jsonc" => "json",
         "md" | "markdown" => "markdown",
         "toml" => "toml",
         "yaml" | "yml" => "yaml",
-        "html" => "html",
+        "html" | "htm" => "html",
         "css" => "css",
+        "scss" => "scss",
+        "less" => "less",
+        "xml" => "xml",
         "sh" | "bash" => "shell",
+        "sql" => "sql",
+        "php" => "php",
+        "rb" => "ruby",
+        "swift" => "swift",
+        "kt" => "kotlin",
         _ => "plaintext",
     }
 }

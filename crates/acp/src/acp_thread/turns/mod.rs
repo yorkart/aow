@@ -1,5 +1,6 @@
 //! Per-prompt outcomes and conservative final-message selection.
 use crate::facade::{SessionSnapshot, SessionTurn, ThreadEntry};
+mod replay;
 
 pub(crate) fn start(thread: &mut SessionSnapshot, entry_start: usize) {
     thread.turns.push(SessionTurn {
@@ -14,35 +15,87 @@ pub(crate) fn finish(thread: &mut SessionSnapshot) {
     if thread.status == "working" {
         return;
     }
-    let Some(turn) = thread
+    for turn in thread
         .turns
-        .last_mut()
+        .iter_mut()
         .filter(|turn| turn.status == "in_progress")
-    else {
-        return;
-    };
-    turn.status = match thread.stop_reason.as_deref() {
+    {
+        finish_record(
+            turn,
+            &thread.status,
+            thread.stop_reason.clone(),
+            thread.error.clone(),
+        );
+    }
+}
+
+pub(crate) fn finish_at(thread: &mut SessionSnapshot, entry_start: usize) {
+    let id = &thread.entries[entry_start].id;
+    if let Some(turn) = thread
+        .turns
+        .iter_mut()
+        .find(|turn| &turn.user_entry_id == id)
+    {
+        finish_record(
+            turn,
+            &thread.status,
+            thread.stop_reason.clone(),
+            thread.error.clone(),
+        );
+    }
+}
+
+fn finish_record(
+    turn: &mut SessionTurn,
+    status: &str,
+    stop_reason: Option<String>,
+    error: Option<String>,
+) {
+    turn.status = match stop_reason.as_deref() {
         Some("end_turn") => "completed",
         Some("refusal") => "failed",
         Some(_) => "interrupted",
-        None if thread.status == "disconnected" => "interrupted",
-        None if thread.error.is_some() => "failed",
+        None if status == "disconnected" => "interrupted",
+        None if error.is_some() => "failed",
         None => "interrupted",
     }
     .into();
-    turn.stop_reason = thread.stop_reason.clone();
-    turn.error = thread.error.clone();
+    turn.stop_reason = stop_reason;
+    turn.error = error;
 }
 
 // Replayed entries get new local IDs. Carry outcomes over only for a verified
 // identical transcript prefix; never guess by repeated prompt text alone.
 pub(crate) fn restore(previous: &SessionSnapshot, replay: &mut SessionSnapshot) {
+    if replay::reconcile(previous, replay) {
+        return;
+    }
     let matched = previous
         .entries
         .iter()
         .zip(&replay.entries)
-        .take_while(|(before, after)| before.kind == after.kind && before.content == after.content)
+        .take_while(|(before, after)| {
+            (before.kind == after.kind || before.kind == "steering" && after.kind == "user")
+                && before.content == after.content
+                && (before.message_id.is_none()
+                    || after.message_id.is_none()
+                    || before.message_id == after.message_id)
+                && (before.kind != "steering"
+                    || before
+                        .delivery
+                        .as_ref()
+                        .is_some_and(|delivery| delivery.status == "injected"))
+        })
         .count();
+    for (before, after) in previous
+        .entries
+        .iter()
+        .zip(&mut replay.entries)
+        .take(matched)
+    {
+        after.kind = before.kind.clone();
+        after.delivery = before.delivery.clone();
+    }
     for turn in &previous.turns {
         let Some(start) = previous
             .entries
@@ -75,7 +128,7 @@ pub(crate) fn final_message(entries: &[ThreadEntry]) -> Vec<&ThreadEntry> {
     let relevant: Vec<_> = entries
         .iter()
         .filter(|entry| match entry.kind.as_str() {
-            "tool" | "user" | "summary" | "compaction_update" => true,
+            "tool" | "user" | "steering" | "summary" | "compaction_update" => true,
             "assistant" | "thought" => {
                 entry.content["type"] != "text"
                     || entry.content["text"]

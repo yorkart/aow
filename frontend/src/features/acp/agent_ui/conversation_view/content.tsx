@@ -5,10 +5,11 @@ import { FileText } from 'lucide-react';
 import { AgentMarkdown } from './markdown';
 import { object, text, type Data } from '../../types';
 import { localFileLink } from './file_links';
+import { UserText } from './user_text';
 
 export type OpenFile = (path: string, line?: number) => void;
 export const ContentBlock = memo(function ContentBlock({ content, onOpenFile, user = false, message = false }: { content: Data; onOpenFile: OpenFile; user?: boolean; message?: boolean }) {
-  if (content.type === 'text') return user ? <div className="acp-user-text conversation-prose">{text(content.text)}</div> : <AgentMarkdown text={text(content.text)} onOpenFile={onOpenFile} message={message} />;
+  if (content.type === 'text') return user ? <UserText text={text(content.text)} /> : <AgentMarkdown text={text(content.text)} onOpenFile={onOpenFile} message={message} />;
   if (content.type === 'image' && /^image\/(png|jpeg|webp|gif)$/.test(text(content.mimeType))) return <img className="acp-image" alt={user ? 'User image' : 'Agent image'} src={`data:${text(content.mimeType)};base64,${text(content.data)}`} />;
   if (content.type === 'resource') return <span className="acp-resource-label">{text(object(content.resource).uri)}</span>;
   if (content.type === 'resource_link') return <ResourceLink uri={text(content.uri)} onOpenFile={onOpenFile} />;

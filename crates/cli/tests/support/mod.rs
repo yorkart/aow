@@ -93,7 +93,9 @@ fn run_many_with_env(
         requests
     });
     let mut child = Command::new(env!("CARGO_BIN_EXE_aow-cli"))
-        .env_remove("AOW_PANE_ID")
+        .env_remove("AOW_INSTANCE")
+        .env_remove("AOW_ACP_CONNECTION_ID")
+        .env("AOW_SESSION_ID", "fixture-caller")
         .envs(environment.iter().copied())
         .arg("--state-dir")
         .arg(directory.path())

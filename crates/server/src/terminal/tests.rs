@@ -59,7 +59,7 @@ use tower::ServiceExt;
 pub(super) fn pane(id: &str, status: TerminalPaneStatus) -> TerminalPane {
     TerminalPane {
         id: id.to_owned(),
-        parent_pane_id: None,
+        parent: None,
         name: "tmp".to_owned(),
         cwd: "/tmp".to_owned(),
         shell: "/bin/sh".to_owned(),
@@ -197,7 +197,7 @@ fn persistent_load_preserves_running_desired_state() {
     );
     // Current metadata includes naming intent; legacy migration has its own test.
     original.name_is_custom = Some(true);
-    original.panes[0].parent_pane_id = Some("previous-parent".into());
+    original.panes[0].parent = Some(aow_protocol::InstanceRef::terminal("previous-parent"));
     atomic_save(
         &state_path,
         &PersistedState {
@@ -871,9 +871,18 @@ fn manager_with_pane() -> TerminalManager {
 
 fn clipboard_app(manager: TerminalManager) -> Router {
     let aow = crate::aow::AowManager::in_memory();
+    let workspace_events = crate::workspace_events::WorkspaceEvents::new();
     routes().with_state(AppState {
+        instances: crate::instances::InstanceStore::default(),
+        file_search: crate::filesystem::search::SearchRequests::default(),
         acp_controls: crate::acp::Controls::default(),
-        acp: crate::acp::service(aow.clone(), None, manager.task_stop_sender()).unwrap(),
+        acp: crate::acp::service(
+            aow.clone(),
+            None,
+            manager.task_stop_sender(),
+            workspace_events.clone(),
+        )
+        .unwrap(),
         inbox: crate::inbox::InboxStore::in_memory(),
         base_path: crate::BasePath::default(),
         frontend_dist: PathBuf::new(),
@@ -883,7 +892,7 @@ fn clipboard_app(manager: TerminalManager) -> Router {
         aow,
         automations: None,
         operations: crate::operations::OperationService::in_memory(),
-        workspace_events: crate::workspace_events::WorkspaceEvents::new(),
+        workspace_events,
         review_providers: crate::pull_requests::ProviderManager::default(),
     })
 }
@@ -1167,6 +1176,79 @@ async fn failed_create_and_split_roll_back_desired_state() {
 }
 
 #[tokio::test]
+async fn caller_environment_survives_create_split_and_daemon_reconciliation() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let directory = TempDir::new().unwrap();
+    let shell = directory.path().join("environment-shell");
+    std::fs::write(
+        &shell,
+        "#!/bin/sh\nprintf '%s\\n' \"$AOW_INSTANCE\" \"${AOW_SESSION_ID-unset}\" \"${AOW_ACP_CONNECTION_ID-unset}\" > \"$PWD/$AOW_INSTANCE.env\"\nread -r finish\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&shell, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let socket = directory.path().join("terminald/terminald.sock");
+    let client = TerminaldClient::new(socket.clone());
+    let manager =
+        TerminalManager::persistent(directory.path().join("state"), client.clone()).unwrap();
+    for generation in 0..2 {
+        let (shutdown, daemon) = start_daemon(socket.clone()).await;
+        let tab = if generation == 0 {
+            let tab = manager
+                .create(CreateTerminalRequest {
+                    name: None,
+                    cwd: Some(directory.path().to_string_lossy().into_owned()),
+                    workspace_root: None,
+                    shell: Some(shell.to_string_lossy().into_owned()),
+                    agent_id: None,
+                    resume_session_id: None,
+                    rows: None,
+                    cols: None,
+                })
+                .await
+                .unwrap();
+            manager
+                .split(
+                    &tab.id,
+                    SplitTerminalRequest {
+                        target_pane_id: tab.panes[0].id.clone(),
+                        axis: TerminalSplitAxis::Row,
+                        ratio: None,
+                        cwd: None,
+                        shell: None,
+                        rows: None,
+                        cols: None,
+                    },
+                )
+                .await
+                .unwrap()
+        } else {
+            manager.reconcile().await.unwrap();
+            manager.list_snapshot(None).unwrap().tabs.pop().unwrap()
+        };
+        assert_eq!(tab.panes.len(), 2);
+        for pane in &tab.panes {
+            let output = directory.path().join(format!("terminal:{}.env", pane.id));
+            let expected = format!("terminal:{}\nunset\nunset\n", pane.id);
+            tokio::time::timeout(Duration::from_secs(5), async {
+                while std::fs::read_to_string(&output).unwrap_or_default() != expected {
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                }
+            })
+            .await
+            .expect("terminal did not receive its own identity");
+            let spec = runtime_spec(pane);
+            assert!(manager.runtime_matches(&pane.id, &spec).await.unwrap());
+            let mut conflict = spec;
+            conflict.environment_remove.push("ANOTHER_VARIABLE".into());
+            assert!(!manager.runtime_matches(&pane.id, &conflict).await.unwrap());
+            std::fs::remove_file(output).unwrap();
+        }
+        stop_daemon(shutdown, daemon).await;
+    }
+}
+
+#[tokio::test]
 async fn reconcile_cleans_orphans_rebuilds_after_daemon_restart_and_syncs_exit() {
     let directory = TempDir::new().unwrap();
     let socket = directory.path().join("terminald").join("terminald.sock");
@@ -1196,6 +1278,7 @@ async fn reconcile_cleans_orphans_rebuilds_after_daemon_restart_and_syncs_exit()
                 shell: "/bin/sh".to_owned(),
                 arguments: Vec::new(),
                 environment: Default::default(),
+                environment_remove: Vec::new(),
                 rows: 24,
                 cols: 80,
             },
@@ -1539,9 +1622,18 @@ async fn pane_sessions_use_live_cwd_and_config_and_cache_readable_claude_snapsho
     )
     .unwrap();
     let aow = crate::aow::AowManager::in_memory();
+    let workspace_events = crate::workspace_events::WorkspaceEvents::new();
     let app = crate::build_router(AppState {
+        instances: crate::instances::InstanceStore::default(),
+        file_search: crate::filesystem::search::SearchRequests::default(),
         acp_controls: crate::acp::Controls::default(),
-        acp: crate::acp::service(aow.clone(), None, manager.task_stop_sender()).unwrap(),
+        acp: crate::acp::service(
+            aow.clone(),
+            None,
+            manager.task_stop_sender(),
+            workspace_events.clone(),
+        )
+        .unwrap(),
         inbox: crate::inbox::InboxStore::in_memory(),
         base_path: crate::BasePath::default(),
         frontend_dist: PathBuf::new(),
@@ -1551,7 +1643,7 @@ async fn pane_sessions_use_live_cwd_and_config_and_cache_readable_claude_snapsho
         aow,
         automations: None,
         operations: crate::operations::OperationService::in_memory(),
-        workspace_events: crate::workspace_events::WorkspaceEvents::new(),
+        workspace_events,
         review_providers: crate::pull_requests::ProviderManager::default(),
     });
     let response = app

@@ -144,6 +144,7 @@ fn shell_spec(cwd: &std::path::Path) -> TerminalRuntimeSpec {
             ("ENV".into(), "/dev/null".into()),
         ]
         .into(),
+        environment_remove: Vec::new(),
         rows: 24,
         cols: 80,
     }
@@ -510,7 +511,8 @@ async fn uds_rest_is_idempotent_and_socket_is_private() {
     assert_eq!(socket_mode, 0o600);
 
     let cwd = tempfile::tempdir().unwrap();
-    let spec = shell_spec(cwd.path());
+    let mut spec = shell_spec(cwd.path());
+    spec.environment_remove = vec!["TERMINALD_TEST_REMOVED".into()];
     let mut invalid_cwd = spec.clone();
     invalid_cwd.cwd = "relative/path".to_owned();
     assert!(matches!(
@@ -530,11 +532,38 @@ async fn uds_rest_is_idempotent_and_socket_is_private() {
         })
     ));
 
+    for name in [
+        "".into(),
+        "BAD=NAME".into(),
+        "BAD\0NAME".into(),
+        "x".repeat(257),
+    ] {
+        let mut invalid = spec.clone();
+        invalid.environment_remove = vec![name];
+        assert!(matches!(
+            daemon.client.create("invalid-removal", &invalid).await,
+            Err(TerminaldClientError::HttpStatus {
+                status: axum::http::StatusCode::BAD_REQUEST,
+                ..
+            })
+        ));
+    }
+    let mut invalid = spec.clone();
+    invalid.environment_remove = vec!["VARIABLE".into(); 129];
+    assert!(matches!(
+        daemon.client.create("invalid-removal", &invalid).await,
+        Err(TerminaldClientError::HttpStatus {
+            status: axum::http::StatusCode::BAD_REQUEST,
+            ..
+        })
+    ));
+
     let created = daemon.client.create("stable-id", &spec).await.unwrap();
     assert_eq!(created.id, "stable-id");
     assert_eq!(created.status, TerminalPaneStatus::Running);
     let mut reported_spec = spec.clone();
     reported_spec.environment.clear(); // Launch-only environment is never returned by HTTP.
+    reported_spec.environment_remove.clear();
     assert_eq!(created.spec(), reported_spec);
 
     let existing = daemon.client.create("stable-id", &spec).await.unwrap();
@@ -569,6 +598,18 @@ async fn uds_rest_is_idempotent_and_socket_is_private() {
             status: axum::http::StatusCode::CONFLICT,
             ..
         }
+    ));
+
+    let mut conflicting = spec.clone();
+    conflicting
+        .environment_remove
+        .push("ANOTHER_VARIABLE".into());
+    assert!(matches!(
+        daemon.client.create("stable-id", &conflicting).await,
+        Err(TerminaldClientError::HttpStatus {
+            status: axum::http::StatusCode::CONFLICT,
+            ..
+        })
     ));
 
     daemon.client.delete("stable-id").await.unwrap();
@@ -1028,14 +1069,9 @@ async fn real_pty_attach_resize_and_detach_preserve_runtime() {
 async fn web_runtime_exposes_terminal_environment() {
     let daemon = TestDaemon::start().await;
     let cwd = tempfile::tempdir().unwrap();
-    let spec = shell_spec(cwd.path());
-    #[cfg(target_os = "macos")]
-    let spec = {
-        let mut spec = spec;
-        spec.environment
-            .insert("AOW_LOG_MODE".into(), "unified".into());
-        spec
-    };
+    let mut spec = shell_spec(cwd.path());
+    spec.environment
+        .insert("AOW_LOG_MODE".into(), "unified".into());
     daemon.client.create("clipboard-env", &spec).await.unwrap();
 
     let mut socket = daemon.client.attach("clipboard-env").await.unwrap();
@@ -1054,7 +1090,6 @@ async fn web_runtime_exposes_terminal_environment() {
         output.contains("__TERMINAL_ENV__1|aow-web|127.0.0.1 0 127.0.0.1 0:|:__END__"),
         "unexpected web terminal environment: {output}"
     );
-    #[cfg(target_os = "macos")]
     {
         send_input(
             &mut socket,
@@ -1062,7 +1097,7 @@ async fn web_runtime_exposes_terminal_environment() {
         )
         .await;
         let output = output_until(&mut socket, b"__END__").await;
-        assert!(String::from_utf8_lossy(&output).contains("__LOG_MODE__unset__END__"));
+        assert!(String::from_utf8_lossy(&output).contains("__LOG_MODE__unified__END__"));
     }
 
     daemon.client.delete("clipboard-env").await.unwrap();

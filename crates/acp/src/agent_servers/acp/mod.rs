@@ -26,10 +26,13 @@ pub(crate) struct AcpConnection {
     connection: ConnectionTo<Agent>,
     pub context: Arc<ClientContext>,
     pub debug_log: AcpDebugLog,
+    pub(super) loads: super::recovery::Loads,
+    pub(super) load_identity: tokio::sync::Mutex<()>,
     stop: CancellationToken,
 }
 
 pub(super) struct StdioContext {
+    pub events: crate::facade::events::SyncEvents,
     pub host: Arc<dyn AcpHost>,
     pub execution_path: Option<std::ffi::OsString>,
     pub threads: Arc<Mutex<ThreadStore>>,
@@ -62,11 +65,15 @@ impl AcpConnection {
         let stop = CancellationToken::new();
         let initialization_guard = stop.clone().drop_guard();
         let context = Arc::new(ClientContext {
+            events: runtime.events,
+            connection_id: debug_log.connection_id.clone(),
+            bindings: Mutex::new(Default::default()),
             host: runtime.host,
             cwd: cwd.clone(),
             threads: runtime.threads,
             sessions: Mutex::new(HashMap::new()),
             pending_updates: Mutex::new(HashMap::new()),
+            discarded: Mutex::new(Default::default()),
             replies: Mutex::new(HashMap::new()),
             stop: stop.clone(),
         });
@@ -119,8 +126,8 @@ impl AcpConnection {
             drop(process_group);
             let _ = child.kill().await;
             stderr_task.abort();
-            exit_context.disconnected(&reason);
             lifetime.cancel();
+            exit_context.disconnected(&reason);
             exit_log.archive();
         });
         let connection = tokio::time::timeout(Duration::from_secs(30), received)
@@ -167,10 +174,13 @@ impl AcpConnection {
                         response.agent_capabilities.prompt_capabilities.clone(),
                     ),
                 )?,
+                extensions: serde_json::to_value(response.meta)?,
             },
             connection,
             context,
             debug_log,
+            loads: Default::default(),
+            load_identity: Default::default(),
             stop,
         };
         initialization_guard.disarm();
@@ -187,6 +197,16 @@ impl AcpConnection {
         request: acp::PromptRequest,
     ) -> agent_client_protocol::SentRequest<acp::PromptResponse> {
         self.connection.send_request(request)
+    }
+    pub(crate) fn begin_steering(
+        &self,
+        thread_id: &str,
+        params: Value,
+    ) -> Result<agent_client_protocol::SentRequest<Value>> {
+        let message = UntypedMessage::new("_session/steering", params)?;
+        Ok(self
+            .debug_log
+            .send_request(thread_id, || self.connection.send_request(message)))
     }
     pub(crate) async fn request(&self, method: &str, params: Value) -> Result<Value> {
         self.request_inner(None, method, params).await
@@ -212,15 +232,31 @@ impl AcpConnection {
                 .debug_log
                 .send_request(thread_id, || self.connection.send_request(message)),
             None => self.connection.send_request(message),
-        }
-        .block_task();
-        // Prompts and authentication can legitimately await human input indefinitely.
-        if matches!(method, "session/prompt" | "authenticate") {
-            Ok(pending.await?)
+        };
+        let started = std::time::Instant::now();
+        let request_id = pending.id().clone();
+        tracing::debug!(%request_id, method, thread_id, connection_id = %self.info.id, "ACP request started");
+        let pending = pending.block_task();
+        // Session opening is owned by the recovery task, not an RPC deadline.
+        // Dropping its response future would cancel locally without rolling back the agent.
+        let result = if matches!(
+            method,
+            "session/prompt" | "authenticate" | "session/load" | "session/resume"
+        ) {
+            pending.await.map_err(anyhow::Error::from)
         } else {
-            Ok(tokio::time::timeout(Duration::from_secs(60), pending).await??)
-        }
+            match tokio::time::timeout(Duration::from_secs(60), pending).await {
+                Ok(response) => response.map_err(anyhow::Error::from),
+                Err(error) => {
+                    tracing::warn!(%request_id, method, "ACP request timed out; SDK cancellation is not remote rollback");
+                    Err(error.into())
+                }
+            }
+        };
+        tracing::debug!(%request_id, method, elapsed_ms = started.elapsed().as_millis(), success = result.is_ok(), "ACP request completed");
+        result
     }
+
     pub(crate) fn cancel(&self, session_id: &str) -> Result<()> {
         self.context.cancel_permissions(session_id);
         self.connection

@@ -9,13 +9,16 @@ use tower::ServiceExt;
 // Real PTY and real native history; the manual task uses the production Runner.
 // The scheduler command is a no-op so the test can control run completion without
 // registering a job with the host's launchd/systemd.
-const AGENT: &str = r#"
+const AGENT: &str = concat!(
+    r#"
 import os, sys, json, sqlite3, time, tty
 from pathlib import Path
 root = Path(os.environ.get('CODEX_HOME') or str(Path(os.environ['HOME']) / '.codex'))
 (root / 'sessions').mkdir(parents=True, exist_ok=True)
 db = sqlite3.connect(root / 'state_5.sqlite', timeout=10)
-db.execute('CREATE TABLE IF NOT EXISTS threads (id TEXT PRIMARY KEY, rollout_path TEXT, cwd TEXT, title TEXT, created_at INTEGER, updated_at INTEGER, updated_at_ms INTEGER, archived INTEGER, first_user_message TEXT, thread_source TEXT, source TEXT, agent_nickname TEXT, agent_role TEXT)')
+db.execute('''"#,
+    include_str!("sql/tests/create_threads.sql"),
+    r#"''')
 def event(path, kind, **values):
     with open(path, 'a') as f: f.write(json.dumps({'type':'event_msg', 'payload':{'type':kind, **values}}) + '\n')
 def session(sid, title, prompt, conclusion):
@@ -23,7 +26,9 @@ def session(sid, title, prompt, conclusion):
     event(path, 'task_started', turn_id='turn-one')
     event(path, 'user_message', message=prompt)
     if conclusion is not None: event(path, 'task_complete', turn_id='turn-one', last_agent_message=conclusion)
-    db.execute('INSERT INTO threads VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)', (sid,str(path),os.getcwd(),title,1,1,1,0,prompt,'cli','cli','',''))
+    db.execute('''"#,
+    include_str!("sql/tests/insert_thread.sql"),
+    r#"''', (sid,str(path),os.getcwd(),title,1,1,1,0,prompt,'cli','cli','',''))
     db.commit()
     return path
 config = json.loads((root / 'test-config.json').read_text())
@@ -67,7 +72,8 @@ while True:
     event(path, 'user_message', message=prompt)
     if config['complete_feedback']: event(path, 'task_complete', turn_id=turn_id, last_agent_message='Fixed')
     os.write(1, b'Working\r\n')
-"#;
+"#
+);
 
 async fn request(app: &Router, method: &str, path: &str, body: Value) -> Value {
     let response = app

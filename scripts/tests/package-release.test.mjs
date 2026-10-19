@@ -1,4 +1,5 @@
 import { credentials } from './account-fixture.mjs';
+import { vendorRipgrepFixture } from './ripgrep-fixture.mjs';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -45,6 +46,7 @@ function fixture(t) {
   for (const name of ['aow-cli', 'aow-server', 'aow-terminald', 'aow-automation-runner']) {
     write(join(artifacts, name), '#!/bin/sh\n[ "${FAIL_BINARY:-}" != 1 ]\n', true);
   }
+  vendorRipgrepFixture(repo);
   write(join(repo, 'frontend/dist/index.html'), '<html>release frontend</html>');
   write(join(repo, 'frontend/dist/assets/app.js'), 'console.log("release")');
   write(join(repo, 'vt-worker/dist/vt-worker.mjs'), '// bundled worker');
@@ -110,7 +112,7 @@ test('full native packaging builds four binaries and both frontends without inst
     assert.ok(line.includes(`--target-dir ${join(f.repo, 'target')}`), line);
   }
   assert.equal((builds.match(/^npm run build$/gm) ?? []).length, 2);
-  assert.equal(f.log(join(f.temp, 'elf.log')).trim().split('\n').length, 4);
+  assert.equal(f.log(join(f.temp, 'elf.log')).trim().split('\n').length, 5);
   assert.equal(existsSync(f.runtime), false);
   assert.equal(f.log(f.serviceLog), '');
   f.assertClean();
@@ -133,7 +135,7 @@ test('default version and skip-build create a complete package without invoking 
   assert.deepEqual(manifest.platform, { os: 'linux', arch: machine, target, libc: 'musl', linkage: 'static' });
   assert.equal(archive.endsWith(`aow-${manifest.release_id}.tar.gz`), true);
   for (const path of ['bin/aow-server', 'bin/aow-terminald', 'bin/aow-automation-runner',
-    'bin/aow-cli', 'frontend/dist/index.html', 'scripts/start-server.sh', 'scripts/start-terminald.sh',
+    'bin/aow-cli', 'bin/rg', 'licenses/ripgrep/COPYING', 'frontend/dist/index.html', 'scripts/start-server.sh', 'scripts/start-terminald.sh',
     'scripts/replace-symlink.mjs', 'scripts/server-state-dir.sh', 'packaging/bin/aow', 'packaging/bin/aow-server', 'packaging/bin/aow-terminald',
     'packaging/systemd/aow-server.service', 'packaging/systemd/aow-terminald.service']) {
     assert.equal(existsSync(join(extracted, path)), true, path);
@@ -148,7 +150,7 @@ test('shared web assets still build and validate all native binaries without npm
   assert.equal(result.status, 0, result.stderr);
   const builds = f.log(f.buildLog);
   assert.equal((builds.match(/^cargo /gm) ?? []).length, 1);
-  assert.equal(f.log(join(f.temp, 'elf.log')).trim().split('\n').length, 4);
+  assert.equal(f.log(join(f.temp, 'elf.log')).trim().split('\n').length, 5);
   const manifest = JSON.parse(f.run('tar', ['-xOf', result.stdout.trim(), './manifest.json']).stdout);
   assert.equal(manifest.reused_build_artifacts, false);
   assert.equal(manifest.reused_web_assets, true);

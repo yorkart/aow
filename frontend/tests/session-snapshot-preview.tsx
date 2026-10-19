@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { SessionSnapshotView } from '../src/features/sessions/SessionSnapshotView';
 import { SessionShareButton } from '../src/features/sessions/SessionShareButton';
 import { MobileSessionReader } from '../src/features/sessions/MobileSessions';
+import { WorkspaceMarkdownProvider } from '../src/features/files/WorkspaceMarkdown';
 import { session, snapshot } from './fixtures/session-snapshot.mjs';
 import '../src/styles.css';
 
@@ -18,4 +19,4 @@ function Preview() {
     : <SessionSnapshotView {...state} onRefresh={refresh} actions={<SessionShareButton session={state.session} workspacePath={session.cwd} />} />;
 }
 
-createRoot(document.getElementById('root')!).render(<StrictMode><Preview /></StrictMode>);
+createRoot(document.getElementById('root')!).render(<StrictMode><WorkspaceMarkdownProvider workspace="fixture-workspace" directory={session.cwd}><Preview /></WorkspaceMarkdownProvider></StrictMode>);

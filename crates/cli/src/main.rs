@@ -1,6 +1,9 @@
+mod acp;
 mod agent;
 mod automation;
 mod inbox;
+mod input;
+mod instance;
 mod project;
 
 use std::{
@@ -81,6 +84,10 @@ enum Command {
     Automation(automation::Automation),
     /// Create hidden interactive agents and submit tasks through the local AoW server.
     Agent(agent::AgentArgs),
+    /// Create ACP sessions, submit tasks and inspect sessions through the local server.
+    Acp(acp::AcpArgs),
+    /// Trace creation ancestry across terminal panes and ACP sessions.
+    Instance(instance::InstanceArgs),
 }
 
 fn parse_id(value: &str) -> std::result::Result<String, String> {
@@ -124,6 +131,8 @@ fn execute(cli: Cli) -> Result<()> {
         .unwrap_or_else(aow_filesystem::default_state_dir);
     let value = match cli.command {
         Command::Agent(args) => agent::execute(args, state_dir)?,
+        Command::Acp(args) => acp::execute(args, state_dir)?,
+        Command::Instance(args) => instance::execute(args, state_dir)?,
         Command::Project(args) => project::execute(args, state_dir)?,
         Command::Inbox(args) => inbox::execute(args, state_dir)?,
         Command::Automation(args) => automation::execute(args, state_dir)?,
@@ -151,6 +160,10 @@ fn main() -> ExitCode {
     match execute(cli) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
+            if let Some(failure) = error.downcast_ref::<acp::StartupFailure>() {
+                let _ = write_json(&mut io::stderr().lock(), &failure.json(), true);
+                return ExitCode::from(6);
+            }
             if let Some(failure) = error.downcast_ref::<agent::StartupFailure>() {
                 let _ = write_json(
                     &mut io::stderr().lock(),

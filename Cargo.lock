@@ -165,6 +165,8 @@ version = "0.1.0"
 dependencies = [
  "agent-client-protocol",
  "anyhow",
+ "aow-db",
+ "aow-protocol",
  "async-trait",
  "chrono",
  "flate2",
@@ -192,6 +194,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "aow-config",
+ "aow-db",
  "aow-id",
  "aow-process",
  "chrono",
@@ -256,6 +259,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "aow-db"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "rusqlite",
+ "tempfile",
+]
+
+[[package]]
 name = "aow-filesystem"
 version = "0.1.0"
 dependencies = [
@@ -265,8 +277,12 @@ dependencies = [
  "futures-util",
  "libc",
  "mime_guess",
+ "serde",
+ "serde_json",
+ "tempfile",
  "thiserror 2.0.19",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]

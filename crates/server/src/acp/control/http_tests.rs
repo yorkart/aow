@@ -135,7 +135,17 @@ async fn api_prepares_named_identity_and_reads_metadata_before_owned_startup() {
         }
     }
     assert_eq!(state.acp.sessions(None).len(), 1);
-    assert!(state.acp.snapshot(thread_id).unwrap().error.is_some());
+    assert!(state.acp.snapshot(thread_id).unwrap().error.is_none());
+    assert!(
+        state
+            .acp
+            .snapshot(thread_id)
+            .unwrap()
+            .recovery
+            .unwrap()
+            .error
+            .is_some()
+    );
     let current = state.acp.snapshot(thread_id).unwrap();
     let response = app
         .clone()
@@ -150,6 +160,9 @@ async fn api_prepares_named_identity_and_reads_metadata_before_owned_startup() {
     assert_eq!(response.headers()["cache-control"], "no-store");
     let overview: Value =
         serde_json::from_slice(&to_bytes(response.into_body(), 65536).await.unwrap()).unwrap();
+    assert_eq!(overview["recovery"]["phase"], "failed");
+    assert!(overview["recovery"]["error"].is_string());
+    assert!(overview["error"].is_null());
     assert_eq!(overview["overview"], json!([]));
     assert_eq!(overview["entries"], json!([]));
     let response = app

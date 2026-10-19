@@ -8,9 +8,13 @@ use support::run;
 fn create_records_explicit_or_inherited_parent_and_returns_it() {
     for (inherited, explicit, expected) in [
         (None, None, None),
-        (Some("parent-one"), None, Some("parent-one")),
-        (None, Some("parent-two"), Some("parent-two")),
-        (Some("parent-one"), Some("parent-two"), Some("parent-two")),
+        (Some("terminal:parent-one"), None, Some("parent-one")),
+        (None, Some("terminal:parent-two"), Some("parent-two")),
+        (
+            Some("terminal:parent-one"),
+            Some("terminal:parent-two"),
+            Some("parent-two"),
+        ),
     ] {
         let mut args = vec![
             "agent",
@@ -21,20 +25,21 @@ fn create_records_explicit_or_inherited_parent_and_returns_it() {
             "/repo",
         ];
         if let Some(parent) = explicit {
-            args.extend(["--parent-pane-id", parent]);
+            args.extend(["--parent", parent]);
         }
         let environment: Vec<_> = inherited
-            .map(|parent| ("AOW_PANE_ID", parent))
+            .map(|parent| ("AOW_INSTANCE", parent))
             .into_iter()
             .collect();
         let mut reply = info("ready");
         if let Some(parent) = expected {
-            reply["parent_pane_id"] = json!(parent);
+            reply["parent"] = json!({"kind":"terminal", "id":parent});
         }
         let (output, _, body) =
             support::run_with_env(&args, None, 200, reply.clone(), &environment);
         assert!(output.status.success(), "{output:?}");
-        assert_eq!(body["parent_pane_id"], json!(expected));
+        assert_eq!(body["parent"], reply["parent"]);
+        assert!(body.get("parent_pane_id").is_none());
         assert_eq!(
             serde_json::from_slice::<Value>(&output.stdout).unwrap(),
             reply

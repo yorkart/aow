@@ -11,15 +11,22 @@ use std::{
 };
 
 pub(crate) struct ThreadStore {
+    pub(crate) events: crate::facade::events::SyncEvents,
     pub(crate) metadata: ThreadMetadataStore,
     // Only opened/active conversations are hydrated. Listing history never decodes their bodies.
     pub(crate) threads: BTreeMap<String, Arc<Mutex<SessionSnapshot>>>,
+    metadata_changed: Box<dyn Fn() + Send + Sync>,
 }
 impl ThreadStore {
-    pub(crate) fn new(state_directory: Option<PathBuf>) -> Result<Self> {
+    pub(crate) fn new(
+        state_directory: Option<PathBuf>,
+        metadata_changed: impl Fn() + Send + Sync + 'static,
+    ) -> Result<Self> {
         Ok(Self {
+            events: Default::default(),
             metadata: ThreadMetadataStore::new(state_directory.as_deref())?,
             threads: BTreeMap::new(),
+            metadata_changed: Box::new(metadata_changed),
         })
     }
     pub(crate) fn sessions(&self, cwd: Option<&str>) -> Vec<SessionInfo> {
@@ -33,16 +40,28 @@ impl ThreadStore {
                     .map(|thread| SessionInfo::from(&*thread.lock().unwrap()))
                     .unwrap_or_else(|| SessionInfo {
                         thread_id: row.thread_id.clone(),
+                        parent: row.parent.clone(),
+                        source: row.source,
+                        created_at: row
+                            .created_at
+                            .clone()
+                            .unwrap_or_else(|| row.updated_at.clone()),
                         session_id: row.session_id.clone(),
                         agent_id: row.agent_id.clone(),
                         cwd: row.cwd().into(),
                         title: row.display_title().into(),
                         status: "disconnected".into(),
                         updated_at: row.updated_at.clone(),
+                        interacted_at: row.interacted_at.clone(),
                     })
             })
             .collect();
-        sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        sessions.sort_by(|a, b| {
+            b.interacted_at
+                .as_ref()
+                .unwrap_or(&b.updated_at)
+                .cmp(a.interacted_at.as_ref().unwrap_or(&a.updated_at))
+        });
         sessions
     }
     pub(crate) fn session_info(&self, thread_id: &str) -> Result<SessionInfo> {
@@ -56,12 +75,19 @@ impl ThreadStore {
             .map(|thread| SessionInfo::from(&*thread.lock().unwrap()))
             .unwrap_or_else(|| SessionInfo {
                 thread_id: row.thread_id.clone(),
+                parent: row.parent.clone(),
+                source: row.source,
+                created_at: row
+                    .created_at
+                    .clone()
+                    .unwrap_or_else(|| row.updated_at.clone()),
                 session_id: row.session_id.clone(),
                 agent_id: row.agent_id.clone(),
                 cwd: row.cwd().into(),
                 title: row.display_title().into(),
                 status: "disconnected".into(),
                 updated_at: row.updated_at.clone(),
+                interacted_at: row.interacted_at.clone(),
             }))
     }
     fn load_thread(&mut self, id: &str) -> Result<()> {
@@ -84,12 +110,27 @@ impl ThreadStore {
                 metadata.agent_id.clone(),
                 metadata.cwd().into(),
             );
+            thread.parent = metadata.parent.clone();
             thread.title = metadata.display_title().into();
             thread.updated_at = metadata.updated_at.clone();
             thread.needs_load = true;
             thread
         };
+        thread.source = metadata.source;
+        // Freeze legacy/imported recency before recovery updates updated_at.
+        thread.interacted_at = Some(
+            metadata
+                .interacted_at
+                .clone()
+                .unwrap_or_else(|| metadata.updated_at.clone()),
+        );
+        thread.created_at = metadata
+            .created_at
+            .clone()
+            .unwrap_or_else(|| metadata.updated_at.clone());
         thread.status = "disconnected".into();
+        super::steering::disconnected(&mut thread);
+        thread.recovery = None;
         super::turns::finish(&mut thread);
         thread.permissions.clear();
         super::terminals::normalize_snapshot(&mut thread);
@@ -114,10 +155,11 @@ impl ThreadStore {
         self.update_inner(id, apply, false)
     }
     pub(crate) fn session_update(&mut self, id: &str, update: serde_json::Value) -> Result<()> {
+        let incremental = super::steering::activity(&update).is_none();
         self.update_inner(
             id,
             |thread| super::AcpThread::handle_session_update(thread, update),
-            true,
+            incremental,
         )
     }
     fn update_inner(
@@ -130,6 +172,7 @@ impl ThreadStore {
         let source = self.threads.get(id).context("ACP session not found")?;
         let mut thread = source.lock().unwrap();
         let working = thread.status == "working";
+        let title = thread.title.clone();
         let permissions: Vec<_> = thread
             .permissions
             .iter()
@@ -153,6 +196,9 @@ impl ThreadStore {
                     .iter()
                     .map(|permission| permission.id.clone())
                     .collect::<Vec<_>>();
+        let head = crate::facade::SessionVersion::from(&*thread);
+        let title_changed = title != thread.title;
+        let urgent = flush || title_changed;
         drop(thread);
         self.metadata.save(source);
         // Streamed text/tool updates coalesce in the background. Lifecycle and permission
@@ -160,11 +206,47 @@ impl ThreadStore {
         if flush {
             self.metadata.flush()?;
         }
+        self.publish(head, urgent);
+        if title_changed {
+            (self.metadata_changed)();
+        }
         Ok(())
+    }
+    fn publish(&self, head: crate::facade::SessionVersion, urgent: bool) {
+        use crate::facade::SyncResource;
+        self.events.publish(
+            SyncResource::Sessions {
+                cwd: head.info.cwd.clone(),
+            },
+            None,
+            false,
+            false,
+        );
+        self.events.publish(
+            SyncResource::Session {
+                thread_id: head.info.thread_id.clone(),
+            },
+            Some(head),
+            false,
+            urgent,
+        );
     }
     pub(crate) fn insert(&mut self, mut thread: SessionSnapshot) -> Result<()> {
         thread.updated_at = chrono::Utc::now().to_rfc3339();
         self.insert_metadata(thread)
+    }
+    /// Keep the installed model and the writer's retry queue on the same snapshot.
+    pub(crate) fn replace(&mut self, thread: SessionSnapshot) -> Result<()> {
+        let id = thread.thread_id.clone();
+        let previous = self.thread(&id)?;
+        if let Err(error) = self.insert(thread) {
+            self.threads.insert(id, previous.clone());
+            // A failed transaction retains its queued write. Replace that write as
+            // well, so a later flush cannot persist the rejected replay.
+            self.metadata.save(&previous);
+            return Err(error);
+        }
+        Ok(())
     }
     // Preserve provider timestamps when registering imported metadata.
     pub(crate) fn insert_metadata(&mut self, thread: SessionSnapshot) -> Result<()> {
@@ -175,18 +257,49 @@ impl ThreadStore {
             thread.revision += 1;
             thread.changes.reset(thread.revision);
         }
+        let heads: Vec<_> = threads
+            .iter()
+            .map(crate::facade::SessionVersion::from)
+            .collect();
         for thread in threads {
             let id = thread.thread_id.clone();
             let thread = Arc::new(Mutex::new(thread));
             self.metadata.save(&thread);
             self.threads.insert(id, thread);
         }
-        self.metadata.flush()
+        self.metadata.flush()?;
+        for head in heads {
+            self.publish(head, true);
+        }
+        (self.metadata_changed)();
+        Ok(())
     }
     pub(crate) fn remove(&mut self, id: &str) -> Result<()> {
+        let info = self.session_info(id)?;
         self.threads.remove(id);
         self.metadata.delete(id);
-        self.metadata.flush()
+        self.metadata.flush()?;
+        use crate::facade::SyncResource;
+        self.events.publish(
+            SyncResource::Session {
+                thread_id: id.into(),
+            },
+            None,
+            true,
+            true,
+        );
+        self.events.publish(
+            SyncResource::Connection {
+                thread_id: id.into(),
+            },
+            None,
+            true,
+            true,
+        );
+        self.events
+            .changed(SyncResource::Sessions { cwd: info.cwd });
+        (self.metadata_changed)();
+        Ok(())
     }
 }
 
@@ -210,4 +323,91 @@ pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
         let _ = std::fs::remove_file(temporary);
     }
     result
+}
+
+#[cfg(test)]
+mod sync_tests {
+    use super::*;
+    use crate::facade::SyncResource;
+
+    #[test]
+    fn committed_versions_cover_creation_streaming_permissions_titles_and_deletion() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let invalidations = Arc::new(AtomicUsize::new(0));
+        let observed = invalidations.clone();
+        let mut store = ThreadStore::new(None, move || {
+            observed.fetch_add(1, Ordering::SeqCst);
+        })
+        .unwrap();
+        let mut events = store.events.subscribe();
+        store
+            .insert(super::super::AcpThread::new_snapshot(
+                "thread".into(),
+                "remote".into(),
+                "test".into(),
+                "/repo".into(),
+            ))
+            .unwrap();
+        assert!(matches!(
+            events.try_recv().unwrap().resource,
+            SyncResource::Sessions { .. }
+        ));
+        let created = events.try_recv().unwrap();
+        assert_eq!(
+            created.session.unwrap().revision,
+            store.snapshot("thread").unwrap().revision
+        );
+        assert_eq!(invalidations.load(Ordering::SeqCst), 1);
+        store
+            .update("thread", |thread| thread.status = "working".into())
+            .unwrap();
+        events.try_recv().unwrap();
+        assert!(events.try_recv().unwrap().urgent);
+        store.session_update("thread", serde_json::json!({"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "hello"}})).unwrap();
+        events.try_recv().unwrap();
+        let streamed = events.try_recv().unwrap();
+        assert!(!streamed.urgent);
+        let snapshot = store.snapshot("thread").unwrap();
+        assert_eq!(streamed.session.unwrap().revision, snapshot.revision);
+        assert_eq!(snapshot.entries[0].content["text"], "hello");
+        store
+            .update("thread", |thread| {
+                thread.permissions.push(crate::facade::Permission {
+                    id: "confirm".into(),
+                    kind: "permission".into(),
+                    request: serde_json::json!({}),
+                });
+            })
+            .unwrap();
+        events.try_recv().unwrap();
+        assert!(events.try_recv().unwrap().urgent);
+        assert_eq!(invalidations.load(Ordering::SeqCst), 1);
+        store
+            .update("thread", |thread| thread.title = "Renamed".into())
+            .unwrap();
+        events.try_recv().unwrap();
+        assert_eq!(
+            events.try_recv().unwrap().session.unwrap().info.title,
+            "Renamed"
+        );
+        store
+            .update("thread", |thread| {
+                thread.status = "idle".into();
+                thread.permissions.clear();
+            })
+            .unwrap();
+        events.try_recv().unwrap();
+        assert!(events.try_recv().unwrap().urgent);
+        assert_eq!(invalidations.load(Ordering::SeqCst), 2);
+        store.remove("thread").unwrap();
+        assert_eq!(invalidations.load(Ordering::SeqCst), 3);
+        assert!(events.try_recv().unwrap().deleted);
+        assert!(events.try_recv().unwrap().deleted);
+        assert!(matches!(
+            events.try_recv().unwrap().resource,
+            SyncResource::Sessions { .. }
+        ));
+        assert!(store.snapshot("thread").is_err());
+        assert!(events.try_recv().is_err());
+    }
 }

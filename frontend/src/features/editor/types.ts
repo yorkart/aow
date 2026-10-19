@@ -12,7 +12,7 @@ export interface OpenDocument {
   kind: PreviewKind;
   instanceId?: number;
   loadRequestId?: number;
-  revealLocation?: { line: number; revision: number };
+  revealLocation?: { line: number; column?: number; length?: number; revision: number };
   editRevision?: number;
   language?: string;
   mime?: string;

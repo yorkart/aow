@@ -5,6 +5,7 @@ interface Snapshot {
   revision: number;
   projects: number;
   terminals: number;
+  instances?: number;
   inbox?: number;
   repositories: Record<string, number>;
 }
@@ -13,6 +14,7 @@ export interface WorkspaceChange {
   reset: boolean;
   projects: boolean;
   terminals: boolean;
+  instances: boolean;
   inbox: boolean;
   repositories: ReadonlySet<string>;
 }
@@ -28,7 +30,7 @@ function dispatch(change: WorkspaceChange) {
 }
 
 function reset() {
-  dispatch({ reset: true, projects: true, terminals: true, inbox: true, repositories: new Set() });
+  dispatch({ reset: true, projects: true, terminals: true, instances: true, inbox: true, repositories: new Set() });
 }
 
 // All registered projects are watched by the server. Changing worktrees does
@@ -60,6 +62,7 @@ function connect() {
       reset: reconnected || !previous || previous.boot_id !== next.boot_id,
       projects: previous?.projects !== next.projects,
       terminals: previous?.terminals !== next.terminals,
+      instances: previous?.instances !== next.instances,
       inbox: previous?.inbox !== next.inbox,
       repositories: new Set(Object.keys(next.repositories).filter(root => previous?.repositories[root] !== next.repositories[root])),
     };

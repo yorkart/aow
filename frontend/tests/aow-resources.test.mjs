@@ -1654,16 +1654,16 @@ try {
       }, worktrees[1].path);
     } });
     const list = surface(page).locator('.terminal-panel');
-    await eventually(async () => await list.locator('.terminal-worktree-heading').count() === 4);
-    const activePaths = () => list.locator('.terminal-worktree-group.active').evaluateAll(groups => groups.map(group => group.getAttribute('aria-label')));
+    await eventually(async () => await list.locator('.instance-worktree-heading').count() === 4);
+    const activePaths = () => list.locator('.instance-worktree-group.active').evaluateAll(groups => groups.map(group => group.getAttribute('aria-label')));
     assert.deepEqual(await activePaths(), [worktrees[1].path, worktrees[1].path]);
     for (const group of ['User', 'CLI']) {
       await list.getByRole('button', { name: `${group} Terminals 显示范围`, exact: true }).click();
       assert.equal(await page.getByRole('menuitemcheckbox').getAttribute('aria-checked'), 'true');
       await page.keyboard.press('Escape');
     }
-    assert.equal(await list.locator('.terminal-worktree-heading[aria-current="true"]').count(), 2);
-    const backgrounds = await list.locator('.terminal-worktree-group').evaluateAll(groups => groups.map(group => ({
+    assert.equal(await list.locator('.instance-worktree-heading[aria-current="true"]').count(), 2);
+    const backgrounds = await list.locator('.instance-worktree-group').evaluateAll(groups => groups.map(group => ({
       active: group.classList.contains('active'), color: getComputedStyle(group).backgroundColor,
     })));
     assert.notEqual(backgrounds.find(group => group.active).color, backgrounds.find(group => !group.active).color);
@@ -1672,7 +1672,7 @@ try {
     state.allTerminalsGate = new Promise(resolve => { release = resolve; });
     t.after(() => release());
     await switchWorktree(page, 0);
-    await eventually(async () => (await activePaths()).every(path => path === worktrees[0].path) && await list.locator('.terminal-worktree-heading').count() === 4);
+    await eventually(async () => (await activePaths()).every(path => path === worktrees[0].path) && await list.locator('.instance-worktree-heading').count() === 4);
     assert.equal(await list.getByRole('status').count(), 0, 'switching worktrees reuses the loaded project inventory');
     release();
     state.allTerminalsGate = null;
@@ -1706,23 +1706,23 @@ try {
     state.projects[0] = { ...project, worktrees: [worktrees[1], worktrees[0], { ...worktrees[1], id: 'empty', path: '/workspace/empty' }] };
     await page.getByRole('button', { name: '刷新全部', exact: true }).click();
     await eventually(() => state.terminalListScopes.filter(scope => scope === null).length >= 2);
-    await eventually(async () => await list.locator('.terminal-worktree-heading').count() === 4);
+    await eventually(async () => await list.locator('.instance-worktree-heading').count() === 4);
     const connectionCount = state.terminalMessages.filter(item => typeof item.message === 'string' && JSON.parse(item.message).type === 'claim').length;
     const option = page.getByRole('menuitemcheckbox', { name: '显示所有Worktree', exact: true });
     for (const group of [users, agents]) {
-      assert.deepEqual(await group.locator('.terminal-worktree-heading > span').allTextContents(), ['主仓库 · branch-0', 'branch-1']);
-      assert.deepEqual(await group.locator('.terminal-worktree-heading .terminal-panel-count').allTextContents(), ['1', '1']);
-      assert.equal(await group.locator('.aow-panel-header .terminal-panel-count').textContent(), '2');
-      assert.match(await group.locator('.terminal-worktree-heading').first().getAttribute('title'), /\/workspace\/wt-0/);
+      assert.deepEqual(await group.locator('.instance-worktree-heading > span').allTextContents(), ['主仓库 · branch-0', 'branch-1']);
+      assert.deepEqual(await group.locator('.instance-worktree-heading .instance-panel-count').allTextContents(), ['1', '1']);
+      assert.equal(await group.locator('.aow-panel-header .instance-panel-count').textContent(), '2');
+      assert.match(await group.locator('.instance-worktree-heading').first().getAttribute('title'), /\/workspace\/wt-0/);
     }
     assert.equal(await list.getByText('Unrelated agent', { exact: true }).count(), 0);
     assert.equal(await list.getByRole('region', { name: '/workspace/empty', exact: true }).count(), 0);
     assert.equal(await surface(page).getByRole('tab').count(), 1);
     assert.equal(state.terminalMessages.filter(item => typeof item.message === 'string' && JSON.parse(item.message).type === 'claim').length, connectionCount);
     const foreignGroup = users.getByRole('region', { name: worktrees[1].path, exact: true });
-    await foreignGroup.locator('.terminal-worktree-heading').click();
+    await foreignGroup.locator('.instance-worktree-heading').click();
     assert.equal(await foreignGroup.locator('.terminal-panel-row').isVisible(), false);
-    await foreignGroup.locator('.terminal-worktree-heading').press('Enter');
+    await foreignGroup.locator('.instance-worktree-heading').press('Enter');
     assert.equal(await foreignGroup.locator('.terminal-panel-row').isVisible(), true);
     await agents.getByRole('button', { name: 'CLI Terminals 显示范围', exact: true }).click();
     assert.equal(await option.getAttribute('aria-checked'), 'true');
@@ -1731,20 +1731,20 @@ try {
     if (process.env.TERMINAL_SCOPE_SCREENSHOT) await page.screenshot({ path: process.env.TERMINAL_SCOPE_SCREENSHOT });
     await users.getByRole('button', { name: 'User Terminals 显示范围', exact: true }).click();
     await option.click();
-    assert.equal(await users.locator('.terminal-worktree-heading').count(), 0);
+    assert.equal(await users.locator('.instance-worktree-heading').count(), 0);
     assert.equal(await users.locator('.terminal-panel-row').count(), 1);
-    assert.equal(await agents.locator('.terminal-worktree-heading').count(), 2, 'disabling user terminals keeps CLI terminals global');
+    assert.equal(await agents.locator('.instance-worktree-heading').count(), 2, 'disabling user terminals keeps CLI terminals global');
     await page.reload();
-    await eventually(async () => await agents.locator('.terminal-worktree-heading').count() === 2);
-    assert.equal(await users.locator('.terminal-worktree-heading').count(), 0);
+    await eventually(async () => await agents.locator('.instance-worktree-heading').count() === 2);
+    assert.equal(await users.locator('.instance-worktree-heading').count(), 0);
     assert.equal(await users.locator('.terminal-panel-row').count(), 1);
     await users.getByRole('button', { name: 'User Terminals 显示范围', exact: true }).click();
     assert.equal(await option.getAttribute('aria-checked'), 'false', 'the user terminal choice survives reload');
     await page.keyboard.press('Escape');
     await switchWorktree(page, 1);
     assert.equal(await surface(page).getByRole('button', { name: /Terminals 显示范围/ }).count(), 2);
-    assert.equal(await users.locator('.terminal-worktree-heading').count(), 0);
-    assert.equal(await agents.locator('.terminal-worktree-heading').count(), 2);
+    assert.equal(await users.locator('.instance-worktree-heading').count(), 0);
+    assert.equal(await agents.locator('.instance-worktree-heading').count(), 2);
     await users.getByRole('button', { name: 'User Terminals 显示范围', exact: true }).click();
     assert.equal(await option.getAttribute('aria-checked'), 'false', 'the scope is shared with sibling worktrees');
     await option.click();
@@ -1752,19 +1752,19 @@ try {
     await agents.getByRole('button', { name: 'CLI Terminals 显示范围', exact: true }).click();
     assert.equal(await option.getAttribute('aria-checked'), 'true', 'the CLI terminal choice survives reload and worktree switches');
     await option.click();
-    assert.equal(await users.locator('.terminal-worktree-heading').count(), 2, 'disabling CLI terminals keeps user terminals global');
-    assert.equal(await agents.locator('.terminal-worktree-heading').count(), 0);
+    assert.equal(await users.locator('.instance-worktree-heading').count(), 2, 'disabling CLI terminals keeps user terminals global');
+    assert.equal(await agents.locator('.instance-worktree-heading').count(), 0);
     assert.equal(await agents.locator('.terminal-panel-row').count(), 1);
     await page.reload();
-    await eventually(async () => await users.locator('.terminal-worktree-heading').count() === 2);
-    assert.equal(await agents.locator('.terminal-worktree-heading').count(), 0);
+    await eventually(async () => await users.locator('.instance-worktree-heading').count() === 2);
+    assert.equal(await agents.locator('.instance-worktree-heading').count(), 0);
     assert.equal(await agents.locator('.terminal-panel-row').count(), 1);
     await agents.getByRole('button', { name: 'CLI Terminals 显示范围', exact: true }).click();
     assert.equal(await option.getAttribute('aria-checked'), 'false');
     await page.keyboard.press('Escape');
     await users.getByRole('button', { name: 'User Terminals 显示范围', exact: true }).click();
     await option.click();
-    assert.equal(await list.locator('.terminal-worktree-heading').count(), 0);
+    assert.equal(await list.locator('.instance-worktree-heading').count(), 0);
     assert.equal(await users.locator('.terminal-panel-row').count(), 1);
     assert.equal(await agents.locator('.terminal-panel-row').count(), 1);
     const globalAgentRequests = state.terminalAgentScopes.filter(scope => scope === null).length;
@@ -1811,7 +1811,7 @@ try {
     await remote().waitFor({ state: 'detached' });
     assert.deepEqual(state.closedTerminalIds, ['wt-1-tab']);
     assert.equal(state.createdTerminals.length, 0);
-    assert.equal(await list.locator('.terminal-worktree-heading').count(), 1, 'empty worktree groups disappear');
+    assert.equal(await list.locator('.instance-worktree-heading').count(), 1, 'empty worktree groups disappear');
     await eventually(async () => await page.locator('.floating-workspace-host .terminal-emulator-shell').count() === 0);
   });
 
@@ -2164,10 +2164,10 @@ try {
     await toggle();
     release();
     state.allTerminalsGate = null;
-    assert.equal(await list.locator('.terminal-worktree-heading').count(), 0);
+    assert.equal(await list.locator('.instance-worktree-heading').count(), 0);
     assert.equal(await list.locator('.terminal-panel-row').count(), 1);
     await toggle();
-    await eventually(async () => await list.locator('.terminal-worktree-heading').count() === 2);
+    await eventually(async () => await list.locator('.instance-worktree-heading').count() === 2);
     state.agentFailure = true;
     await list.getByRole('button', { name: '刷新 User Terminals', exact: true }).click();
     await list.getByRole('alert').waitFor();

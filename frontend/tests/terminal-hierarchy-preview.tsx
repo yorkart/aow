@@ -4,6 +4,7 @@ import { TerminalPanel } from '../src/features/terminals/TerminalPanel';
 import { terminalApi } from '../src/features/terminals/terminalApi';
 import type { TerminalTab } from '../src/features/terminals/types';
 import type { AowWorktree } from '../src/aow/types';
+import { TabNavigationContext } from '../src/aow/tabNavigation';
 import '../src/styles.css';
 
 function Preview() {
@@ -19,11 +20,13 @@ function Preview() {
     <button onClick={() => setCurrentOnly(value => !value)}>当前 worktree</button>
     <output aria-label="Opened pane">{opened}</output>
     <div style={{ width: 'min(380px, 100vw)', height: 'calc(100vh - 30px)' }}>
+      <TabNavigationContext.Provider value={async target => setOpened(target.type === 'acp' ? `acp:${target.thread_id}` : target.type === 'terminal' ? `terminal:${target.tabId}` : '')}>
       <TerminalPanel tabs={currentOnly ? tabs.filter(tab => tab.workspace_root === '/repo') : tabs} descendantTabs={tabs}
         worktrees={worktrees} activeWorktreePath="/repo" showAll={{ user: false, cli: false }}
         detectedAgents={{}} titles={{}} openedIds={new Set()} onReload={reload}
         onOpen={tab => setOpened(tab.id)} onOpenPane={(tab, paneId) => setOpened(`${tab.id}:${paneId}`)}
         onTerminate={async () => {}} onRebuild={async () => {}} />
+      </TabNavigationContext.Provider>
     </div>
   </div>;
 }

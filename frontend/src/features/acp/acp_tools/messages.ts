@@ -42,7 +42,7 @@ export function logMessages(entries: DebugMessage[]): LogMessage[] {
         if (id !== undefined) requests.set(requestKey(source.direction), wire.method);
       } else if (id !== undefined) {
         const opposite = requestKey(source.direction === 'incoming' ? 'outgoing' : 'incoming');
-        message.name = requests.get(opposite) ?? '[unrecognized response]';
+        message.name = requests.get(opposite) ?? source.request_method ?? '[response: request outside exported log]';
         requests.delete(opposite);
         message.type = 'Response';
         message.requestId = id;

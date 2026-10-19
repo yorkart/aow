@@ -23,12 +23,10 @@ use std::{
 
 use crate::{Agent, AgentDefinition, CLAUDE};
 use chrono::{DateTime, Utc};
-use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use serde_json::{Map, Value};
 use walkdir::WalkDir;
 
 pub(super) const STATE_DB_FILENAME: &str = "state_5.sqlite";
-const SQLITE_BUSY_TIMEOUT_MS: u64 = 250;
 
 pub use model::{AgentSession, AgentSessionLocator, AgentSessionProvider, SessionEnvironment};
 pub use provider::{SessionAgent, find_session, list_sessions};

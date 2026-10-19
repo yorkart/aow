@@ -15,37 +15,43 @@ function isMermaidCodeBlock(code: HTMLElement) {
   });
 }
 
-export function MarkdownContent({ text, className = 'project-aow-snapshot-markdown', readOnly = false, breaks = false, imageReferences, onOpenLink }: { text: string; className?: string; readOnly?: boolean; breaks?: boolean; imageReferences?: ReadonlyMap<string, string>; onOpenLink?: (href: string) => boolean }) {
+export function MarkdownContent({ text, className = 'project-aow-snapshot-markdown', readOnly = false, breaks = false, imageReferences, onOpenLink, resolveLink }: { text: string; className?: string; readOnly?: boolean; breaks?: boolean; imageReferences?: ReadonlyMap<string, string>; onOpenLink?: (href: string) => boolean; resolveLink?: (href: string) => string }) {
   const markdownRef = useRef<HTMLDivElement>(null);
   const handlesLinks = !!onOpenLink;
   const html = useMemo(() => {
-    // Preserve file destinations as inert data only when a host handles clicks.
-    // DOMPurify still applies its normal URL policy to every actual href.
+    // Route file destinations before sanitization, or preserve them as inert
+    // data for a host click handler. DOMPurify still checks every actual href.
     const renderer = new Renderer();
-    if (handlesLinks) renderer.link = function (token) {
-      if (!/^file:\/\//i.test(token.href)) return Renderer.prototype.link.call(this, token);
+    if (handlesLinks || resolveLink) renderer.link = function (token) {
+      const resolved = resolveLink?.(token.href);
+      if (resolved && resolved !== token.href) return Renderer.prototype.link.call(this, { ...token, href: resolved });
+      if (!handlesLinks || !/^file:\/\//i.test(token.href)) return Renderer.prototype.link.call(this, token);
       return `<a href="#" data-local-file="${encodeURIComponent(token.href)}">${this.parser.parseInline(token.tokens)}</a>`;
     };
     const source = marked.parse(text, { renderer, breaks }) as string;
-    if (!readOnly) return DOMPurify.sanitize(source);
+    if (!readOnly && !resolveLink) return DOMPurify.sanitize(source);
     const content = document.createElement('div');
     content.append(DOMPurify.sanitize(source, {
       RETURN_DOM_FRAGMENT: true,
-      FORBID_TAGS: ['form', 'button', 'textarea', 'select', 'option'],
-      FORBID_ATTR: ['contenteditable', 'autofocus'],
+      FORBID_TAGS: readOnly ? ['form', 'button', 'textarea', 'select', 'option'] : [],
+      FORBID_ATTR: readOnly ? ['contenteditable', 'autofocus'] : [],
     }));
-    if (handlesLinks) content.querySelectorAll('a[href]').forEach(link => {
-      if (/^https?:\/\//i.test(link.getAttribute('href') ?? '')) {
+    // Transform only sanitized destinations, including links authored as HTML.
+    if (resolveLink) content.querySelectorAll('a[href]').forEach(link => {
+      link.setAttribute('href', resolveLink(link.getAttribute('href')!));
+    });
+    if (handlesLinks || resolveLink) content.querySelectorAll('a[href]').forEach(link => {
+      if (/^https?:\/\//i.test(link.getAttribute('href')?.trim() ?? '')) {
         link.setAttribute('target', '_blank'); link.setAttribute('rel', 'noreferrer');
       }
     });
-    content.querySelectorAll('input').forEach((input) => {
+    if (readOnly) content.querySelectorAll('input').forEach((input) => {
       if (input.type === 'checkbox') input.disabled = true;
       else input.remove();
     });
     if (imageReferences?.size) linkImageReferences(content, imageReferences);
     return content.innerHTML;
-  }, [readOnly, text, breaks, imageReferences, handlesLinks]);
+  }, [readOnly, text, breaks, imageReferences, handlesLinks, resolveLink]);
 
   useEffect(() => {
     const markdown = markdownRef.current;
@@ -92,6 +98,7 @@ export function MarkdownContent({ text, className = 'project-aow-snapshot-markdo
   }, [html]);
 
   return <div ref={markdownRef} className={className} onClick={event => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     if (!onOpenLink || !(event.target instanceof Element)) return;
     const link = event.target.closest('a');
     if (!link || !event.currentTarget.contains(link)) return;

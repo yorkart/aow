@@ -180,8 +180,8 @@ body { position:fixed; inset:0; }
 .mobile-terminal-catalog-header>svg { color:var(--aow-icon-foreground, var(--aow-icon)); }
 .mobile-terminal-catalog-header h2 { flex:1; margin:0; font-size:16px; font-weight:600; outline:none; }
 .mobile-terminal-catalog>.terminal-panel { flex:1; height:auto; }
-.mobile-terminal-catalog .terminal-panel-groups { overflow:auto; overscroll-behavior:contain; }
-.mobile-terminal-catalog .terminal-panel-group { flex:none; overflow:visible; }
+.mobile-terminal-catalog .instance-panel-groups { overflow:auto; overscroll-behavior:contain; }
+.mobile-terminal-catalog .instance-panel-group { flex:none; overflow:visible; }
 .mobile-terminal-catalog .terminal-panel-body { flex:none; overflow:visible; }
 .mobile-terminal-catalog .aow-panel-header { background:var(--m-raised); }
 .mobile-terminal-catalog .aow-panel-header-title { gap:6px; }
@@ -189,11 +189,11 @@ body { position:fixed; inset:0; }
 .mobile-terminal-catalog .aow-panel-header-title>svg { width:15px; height:15px; flex-basis:15px; }
 .mobile-terminal-catalog .aow-panel-header-actions>button { width:40px; height:42px; }
 .mobile-terminal-catalog .aow-panel-header-actions>button>svg { width:17px; height:17px; }
-.mobile-terminal-catalog .aow-panel-header-actions>.terminal-scope-active { color:var(--m-accent); }
-.mobile-terminal-catalog .terminal-worktree-heading { min-height:40px; padding:8px 12px; color:var(--m-muted); }
-.mobile-terminal-catalog .terminal-worktree-heading>svg { left:-8px; }
-.mobile-terminal-catalog .terminal-worktree-heading>span { font-size:12px; }
-.mobile-terminal-catalog .terminal-panel-count { font-size:11px; }
+.mobile-terminal-catalog .aow-panel-header-actions>.instance-scope-active { color:var(--m-accent); }
+.mobile-terminal-catalog .instance-worktree-heading { min-height:40px; padding:8px 12px; color:var(--m-muted); }
+.mobile-terminal-catalog .instance-worktree-heading>svg { left:-8px; }
+.mobile-terminal-catalog .instance-worktree-heading>span { font-size:12px; }
+.mobile-terminal-catalog .instance-panel-count { font-size:11px; }
 .mobile-terminal-catalog .terminal-panel-row { border-bottom:1px solid #ffffff06; }
 .mobile-terminal-catalog .aow-list-row-open { min-height:64px; padding:12px; gap:10px; }
 .mobile-terminal-catalog .aow-list-row-title { padding-right:36px; font-size:13px; line-height:20px; }

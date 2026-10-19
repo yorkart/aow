@@ -4,7 +4,7 @@ use anyhow::Result;
 use serde_json::json;
 
 fn store() -> Result<ThreadStore> {
-    let mut store = ThreadStore::new(None)?;
+    let mut store = ThreadStore::new(None, || {})?;
     let mut thread = AcpThread::new_snapshot(
         "local".into(),
         "remote".into(),
@@ -204,7 +204,7 @@ fn mixed_protocol_deltas_reconstruct_the_authoritative_snapshot() -> Result<()> 
 #[ignore = "manual synthetic throughput sample; no timing assertions"]
 fn streaming_hot_path_sample() -> Result<()> {
     for history_mib in [1, 10] {
-        let mut store = ThreadStore::new(None)?;
+        let mut store = ThreadStore::new(None, || {})?;
         let mut thread = AcpThread::new_snapshot(
             "local".into(),
             "remote".into(),

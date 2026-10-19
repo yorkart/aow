@@ -23,6 +23,14 @@ pub fn build_router(state: AppState) -> Router {
         .merge(auth::routes())
         .route("/api/health", get(health))
         .route("/api/fs/home", get(list_home))
+        .route(
+            "/api/fs/search",
+            axum::routing::post(crate::filesystem::search::search),
+        )
+        .route(
+            "/api/fs/search/{request_id}",
+            axum::routing::delete(crate::filesystem::search::cancel),
+        )
         .route("/api/fs/tree", get(list_root))
         .route("/api/fs/tree/{*path}", get(list_path))
         .route("/api/fs/text/{*path}", get(read_text))
@@ -80,6 +88,8 @@ pub fn build_router(state: AppState) -> Router {
         .merge(terminal::routes())
         .merge(aow::routes())
         .merge(crate::acp::routes())
+        .route("/api/instances", get(crate::instances::list))
+        .route("/api/instances/{reference}", get(crate::instances::get))
         .merge(pull_requests::routes())
         .merge(notifications::routes())
         .merge(im_api::routes())

@@ -9,8 +9,10 @@ use crate::{
 
 #[derive(Clone)]
 pub struct AppState {
+    pub(crate) file_search: crate::filesystem::search::SearchRequests,
     pub(crate) acp: aow_acp::AcpService,
     pub(crate) acp_controls: crate::acp::Controls,
+    pub(crate) instances: crate::instances::InstanceStore,
     pub(crate) inbox: crate::inbox::InboxStore,
     pub(crate) base_path: BasePath,
     pub(crate) frontend_dist: PathBuf,
@@ -35,10 +37,18 @@ impl AppState {
         let aow = aow::AowManager::in_memory();
         let terminals =
             terminal::TerminalManager::in_memory(TerminaldClient::new(terminald_socket));
+        let workspace_events = workspace_events::WorkspaceEvents::new();
         Self {
-            acp: crate::acp::service(aow.clone(), None, terminals.task_stop_sender())
-                .expect("in-memory ACP service"),
+            file_search: crate::filesystem::search::SearchRequests::default(),
+            acp: crate::acp::service(
+                aow.clone(),
+                None,
+                terminals.task_stop_sender(),
+                workspace_events.clone(),
+            )
+            .expect("in-memory ACP service"),
             acp_controls: crate::acp::Controls::default(),
+            instances: crate::instances::InstanceStore::default(),
             inbox: crate::inbox::InboxStore::in_memory(),
             base_path: BasePath::default(),
             frontend_dist,
@@ -49,7 +59,7 @@ impl AppState {
             automations: None,
             review_providers: pull_requests::ProviderManager::default(),
             operations: operations::OperationService::in_memory(),
-            workspace_events: workspace_events::WorkspaceEvents::new(),
+            workspace_events,
         }
     }
 
@@ -73,19 +83,25 @@ impl AppState {
             state_dir.clone(),
             TerminaldClient::new(terminald_socket),
         )?;
+        let workspace_events = workspace_events::WorkspaceEvents::new();
         Ok(Self {
+            file_search: crate::filesystem::search::SearchRequests::default(),
             acp_controls: crate::acp::Controls::default(),
             acp: crate::acp::service(
                 aow.clone(),
                 Some(state_dir.clone()),
                 terminals.task_stop_sender(),
+                workspace_events.clone(),
             )
             .map_err(|error| {
                 TerminalError::Invalid(format!("failed to initialize ACP: {error:#}"))
             })?,
+            instances: crate::instances::InstanceStore::persistent(&state_dir).map_err(|e| {
+                TerminalError::Invalid(format!("failed to initialize instance history: {e}"))
+            })?,
             inbox: crate::inbox::InboxStore::persistent(&state_dir)
                 .map_err(|e| TerminalError::Invalid(format!("failed to initialize inbox: {e}")))?,
-            workspace_events: workspace_events::WorkspaceEvents::new(),
+            workspace_events,
             review_providers: pull_requests::ProviderManager::persistent(&state_dir)
                 .map_err(|e| TerminalError::Invalid(e.to_string()))?,
             base_path: BasePath::default(),

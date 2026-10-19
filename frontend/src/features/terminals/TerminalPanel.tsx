@@ -1,21 +1,21 @@
-import { useCallback, useId, useMemo, useRef, useState } from 'react';
-import { ChevronRight, Eye, EyeOff, Glasses, MoreHorizontal, RefreshCw, ShieldCheck, SquareTerminal, Unplug, UserRound } from 'lucide-react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { Eye, EyeOff, Glasses, ShieldCheck, SquareTerminal, Unplug, UserRound } from 'lucide-react';
 import type { TerminalTab } from './types';
 import type { AowWorktree } from '../../aow/types';
 import { isCliTerminal, terminalTabPresentation } from './terminalPresentation';
 import { terminalControlLabels, terminalDisplayLabels, terminalLifecycleLabels } from './terminalState';
 import { requestTerminalPaneSelection, useTerminalStates } from './terminalViewState';
+import { useInstanceGraph } from '../instances/useInstanceGraph';
 import { indexTerminalChildren, TerminalDescendants } from './TerminalDescendants';
 import { TerminalLifecycleDot } from './TerminalLifecycleDot';
 import { TaskCompletion } from '../../components/TaskCompletion';
 import { useUnreadTerminalIds } from '../notifications/taskNotifications';
 import { AgentIcon } from '../agents/AgentIcon';
-import { AowIconButton } from '../../components/AowIconButton';
-import { AowPanel, AowPanelStack } from '../../components/AowPanel';
 import { AowListRow } from '../../components/AowListRow';
 import { useConfirmation } from '../../components/ConfirmationDialog';
 import { TerminalContextMenu } from './TerminalContextMenu';
-import { TerminalScopeMenu, type TerminalSort } from './TerminalScopeMenu';
+import type { InstanceSort } from '../instances/InstanceScopeMenu';
+import { InstancePanelGroups } from '../instances/InstancePanelGroups';
 import './terminal-panel.css';
 
 const terminalGroups = [
@@ -26,11 +26,6 @@ const terminalGroups = [
 export type TerminalGroup = typeof terminalGroups[number]['id'];
 const terminalDisplayIcons = { shown: Eye, hidden: EyeOff };
 const terminalControlIcons = { observing: Glasses, controlled: ShieldCheck, disconnected: Unplug };
-
-function worktreeName(worktree: AowWorktree) {
-  return worktree.detached ? 'detached'
-    : worktree.branch || worktree.path.split('/').filter(Boolean).at(-1) || worktree.path;
-}
 
 function terminalCreatedAt(tab: TerminalTab) {
   const timestamp = typeof tab.created_at === 'number' ? tab.created_at : Date.parse(tab.created_at ?? '');
@@ -56,24 +51,20 @@ export function TerminalPanel({ tabs, descendantTabs = tabs, detectedAgents, tit
   activeWorktreePath?: string;
   showAll?: Record<TerminalGroup, boolean>;
   onShowAllChange?: (group: TerminalGroup, showAll: boolean) => void;
-  sortBy?: Record<TerminalGroup, TerminalSort>;
-  onSortChange?: (group: TerminalGroup, sortBy: TerminalSort) => void;
+  sortBy?: Record<TerminalGroup, InstanceSort>;
+  onSortChange?: (group: TerminalGroup, sortBy: InstanceSort) => void;
   loading?: boolean;
   error?: string;
   menuContainer?: HTMLElement;
 }) {
-  const panelId = useId();
   const terminalState = useTerminalStates();
   const unreadTerminalIds = useUnreadTerminalIds();
-  const childrenIndex = useMemo(() => indexTerminalChildren(descendantTabs), [descendantTabs]);
+  const graph = useInstanceGraph();
+  const childrenIndex = useMemo(() => indexTerminalChildren(descendantTabs, graph.items), [descendantTabs, graph.items]);
   const openChild = (tab: TerminalTab, paneId: string) => {
     if (onOpenPane) onOpenPane(tab, paneId);
     else { requestTerminalPaneSelection(tab.id, paneId); onOpen(tab); }
   };
-  const [collapsedGroups, setCollapsedGroups] = useState<Partial<Record<TerminalGroup, boolean>>>({});
-  const [collapsedWorktrees, setCollapsedWorktrees] = useState<Record<string, boolean>>({});
-  const [scopeMenu, setScopeMenu] = useState<{ anchor: HTMLButtonElement; group: TerminalGroup }>();
-  const dismissScopeMenu = useCallback(() => setScopeMenu(undefined), []);
   const [contextMenu, setContextMenu] = useState<{ tabId: string; x: number; y: number }>();
   const dismissMenu = useCallback(() => setContextMenu(undefined), []);
   const menuTab = contextMenu ? tabs.find(tab => tab.id === contextMenu.tabId) : undefined;
@@ -116,7 +107,7 @@ export function TerminalPanel({ tabs, descendantTabs = tabs, detectedAgents, tit
       title={presentation.title} tooltip={presentation.title}
       icon={<AgentIcon agentId={presentation.agentId ?? pane?.agent_id} />} onOpen={() => onOpen(tab)}
       menuLabel="终端操作" menuExpanded={contextMenu?.tabId === tab.id}
-      onMenu={(x, y) => { dismissScopeMenu(); setContextMenu({ tabId: tab.id, x, y }); }}>
+      onMenu={(x, y) => { setContextMenu({ tabId: tab.id, x, y }); }}>
       <small className="terminal-panel-status">
         <TerminalLifecycleDot className="terminal-panel-status-dot" state={state.lifecycle} />
         <span className="terminal-panel-status-label">{terminalLifecycleLabels[state.lifecycle]}</span>
@@ -131,64 +122,16 @@ export function TerminalPanel({ tabs, descendantTabs = tabs, detectedAgents, tit
     </AowListRow></TerminalDescendants>;
   };
   return <section className="terminal-panel">
+    {graph.error && <p className="terminal-panel-error" role="alert">{graph.error}</p>}
     {rebuildError ? <p className="terminal-panel-error" role="alert">{rebuildError}</p> : null}
-    <AowPanelStack className="terminal-panel-groups">
-      {terminalGroups.map(({ id, cli, title, icon: Icon, tooltip }) => {
-        const items = tabs.filter(tab => isCliTerminal(tab) === cli);
-        const grouped = showAll[id] && !!worktrees;
-        const groupLoading = grouped && loading;
-        const collapsed = collapsedGroups[id] ?? (items.length === 0 && !groupLoading && !(grouped && error));
-        const bodyId = `${panelId}-${id}`;
-        const branches = grouped ? [...worktrees]
-          .sort((left, right) => Number(right.is_main) - Number(left.is_main)
-            || worktreeName(left).localeCompare(worktreeName(right)))
-          .map(worktree => ({ key: `worktree:${worktree.path}`, worktree, members: items.filter(tab => tab.workspace_root === worktree.path) }))
-          .filter(group => group.members.length) : [];
-        const sections = sortBy[id] === 'createdAt'
-          ? branches.flatMap(group => group.members.map(tab => ({ ...group, key: `terminal:${tab.id}`, members: [tab] })))
-            .sort((left, right) => terminalCreatedAt(left.members[0]) - terminalCreatedAt(right.members[0]))
-          : branches;
-        return <AowPanel key={id} className="terminal-panel-group" bodyClassName="terminal-panel-body" title={title} tooltip={tooltip} icon={<Icon />} collapsed={collapsed} controlsId={bodyId}
-            onCollapsedChange={next => setCollapsedGroups(groups => ({ ...groups, [id]: next }))}
-            details={grouped ? <span className="terminal-panel-count">{items.length}</span> : undefined}
-            actions={<>
-              <AowIconButton title="刷新终端列表" aria-label={`刷新 ${title}`} onClick={onReload}><RefreshCw /></AowIconButton>
-              {worktrees && onShowAllChange ? <AowIconButton title="终端显示范围" aria-label={`${title} 显示范围`}
-                aria-haspopup="menu" aria-expanded={scopeMenu?.group === id}
-                className={grouped ? 'terminal-scope-active' : undefined}
-                onClick={event => {
-                  dismissMenu();
-                  const anchor = event.currentTarget;
-                  setScopeMenu(current => current?.group === id ? undefined : { anchor, group: id });
-                }}><MoreHorizontal /></AowIconButton> : null}
-            </>}>
-            {grouped && error ? <p className="terminal-panel-error" role="alert">{error}</p> : null}
-            {groupLoading ? <p className="terminal-panel-empty" role="status">正在加载所有终端…</p> : null}
-            {!items.length && !groupLoading ? <p className="terminal-panel-empty">暂无终端</p> : grouped ? sections
-              .map(({ key: sectionKey, worktree, members }, index) => {
-                const key = `${id}:${sectionKey}`;
-                const collapsed = collapsedWorktrees[key] ?? false;
-                const groupId = `${bodyId}-worktree-${index}`;
-                const name = worktreeName(worktree);
-                const active = worktree.path === activeWorktreePath;
-                return <section className={`terminal-worktree-group${active ? ' active' : ''}`} key={sectionKey} aria-label={worktree.path}>
-                  <button className="terminal-worktree-heading" title={`${worktree.path}${worktree.branch ? `\n${worktree.branch}` : ''}`}
-                    aria-current={active ? 'true' : undefined}
-                    aria-expanded={!collapsed} aria-controls={groupId}
-                    onClick={() => setCollapsedWorktrees(groups => ({ ...groups, [key]: !groups[key] }))}>
-                    <ChevronRight className={collapsed ? undefined : 'expanded'} />
-                    <span>{worktree.is_main ? '主仓库 · ' : ''}{name}</span>
-                    <small className="terminal-panel-count">{members.length}</small>
-                  </button>
-                  <div id={groupId} hidden={collapsed}>{members.map(renderTab)}</div>
-                </section>;
-              }) : items.map(renderTab)}
-        </AowPanel>;
-      })}
-    </AowPanelStack>
-    {scopeMenu && worktrees && onShowAllChange ? <TerminalScopeMenu container={menuContainer} anchor={scopeMenu.anchor} checked={showAll[scopeMenu.group]}
-      sortBy={sortBy[scopeMenu.group]} onSortChange={value => onSortChange?.(scopeMenu.group, value)}
-      onChange={value => onShowAllChange(scopeMenu.group, value)} onClose={dismissScopeMenu} /> : null}
+    <InstancePanelGroups groups={terminalGroups.map(({ id, cli, title, icon: Icon, tooltip }) => ({
+      id, title, icon: <Icon />, tooltip, items: tabs.filter(tab => isCliTerminal(tab) === cli),
+      loading: !!worktrees && showAll[id] && loading, error: worktrees && showAll[id] ? error : undefined,
+    }))} worktrees={worktrees} activeWorktreePath={activeWorktreePath} showAll={showAll} sortBy={sortBy}
+      onShowAllChange={onShowAllChange} onSortChange={onSortChange} onScopeMenuOpen={dismissMenu}
+      onReload={() => { onReload(); graph.reload(); }} noun="终端"
+      itemKey={tab => tab.id} itemWorkspace={tab => tab.workspace_root} itemCreatedAt={terminalCreatedAt}
+      renderItem={renderTab} menuContainer={menuContainer} />
     {contextMenu && menuTab ? <TerminalContextMenu container={menuContainer} x={contextMenu.x} y={contextMenu.y}
       title={terminalTabPresentation(menuTab, detectedAgents, titles).title} onClose={dismissMenu}
       onOpen={() => onOpen(menuTab)} onOpenFloating={onOpenFloating ? () => onOpenFloating(menuTab) : undefined}

@@ -1,7 +1,7 @@
 import { ChevronRight, FileText } from 'lucide-react';
 import { filesApi } from './api';
 import { DirectoryTypeIcon, FileTypeIcon } from './FileTypeIcon';
-import { MarkdownContent } from '../../components/MarkdownContent';
+import { MarkdownFileContent } from './MarkdownFileContent';
 import { MobilePageHeader, MobileRefresh, MobileState } from '../../mobile/MobilePrimitives';
 import { useMobileResource, useMobileScroll, type MobileRoute } from '../../mobile/mobileState';
 import type { MobileNavigate } from '../../mobile/mobileState';
@@ -9,15 +9,15 @@ import type { MobileNavigate } from '../../mobile/mobileState';
 const basename = (path: string) => path.split('/').filter(Boolean).pop() ?? path;
 function within(root: string, path: string) { return path === root || path.startsWith(`${root.replace(/\/$/, '')}/`); }
 
-export function MobileFiles({ route, notesPath, visible, navigate, back }: {
-  route: MobileRoute; notesPath: string; visible: boolean; navigate: MobileNavigate; back: () => void;
+export function MobileFiles({ route, workspace, notesPath, visible, navigate, back }: {
+  route: MobileRoute; workspace: string; notesPath: string; visible: boolean; navigate: MobileNavigate; back: () => void;
 }) {
   const root = route.notes === '1' ? notesPath : route.workspace;
   const directory = route.directory && (route.fileSource === 'external' || within(root, route.directory)) ? route.directory : root;
   const listing = useMobileResource(`directory.${directory}`, () => filesApi.listDirectory(directory), visible && !route.file);
   const scroll = useMobileScroll(`directory.${directory}`, !!listing.data);
   const base: Partial<MobileRoute> = { workspace: route.workspace, view: 'files', notes: route.notes, fileSource: route.fileSource };
-  if (route.file) return <MobileFileReader path={route.file} back={back} />;
+  if (route.file) return <MobileFileReader path={route.file} workspace={workspace} back={back} />;
   return <section className="mobile-content-page">
     <MobilePageHeader title={directory === root ? (route.notes === '1' ? 'Notes' : '文件') : basename(directory)}
       subtitle={directory === root ? '浏览工作区内容' : directory.slice(root.length + 1)} back={directory === root ? undefined : back}
@@ -37,7 +37,7 @@ export function MobileFiles({ route, notesPath, visible, navigate, back }: {
   </section>;
 }
 
-function MobileFileReader({ path, back }: { path: string; back: () => void }) {
+function MobileFileReader({ path, workspace, back }: { path: string; workspace: string; back: () => void }) {
   const image = /\.(png|jpe?g|gif|webp|svg|avif|ico|bmp)$/i.test(path);
   const pdf = /\.pdf$/i.test(path);
   const markdown = /\.(md|markdown)$/i.test(path);
@@ -59,7 +59,7 @@ function MobileFileReader({ path, back }: { path: string; back: () => void }) {
       {image && <img className="mobile-file-image" src={filesApi.rawUrl(path)} alt={basename(path)} />}
       {pdf && <><a className="mobile-button" href={filesApi.rawUrl(path)}>打开 PDF</a><iframe className="mobile-pdf" title={basename(path)} src={filesApi.rawUrl(path)} /></>}
       {data.data && !image && !pdf && (data.data.html ? <div className="mobile-markdown" dangerouslySetInnerHTML={{ __html: data.data.content }} />
-        : markdown ? <MarkdownContent text={data.data.content} className="mobile-markdown" /> : <pre className="mobile-code">{data.data.content}</pre>)}
+        : markdown ? <MarkdownFileContent text={data.data.content} className="mobile-markdown" workspace={workspace} path={path} /> : <pre className="mobile-code">{data.data.content}</pre>)}
     </div>
   </section>;
 }

@@ -11,7 +11,7 @@ pub enum SnapshotError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
-    Database(#[from] rusqlite::Error),
+    Database(#[from] anyhow::Error),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

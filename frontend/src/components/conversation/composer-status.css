@@ -1,0 +1,19 @@
+.conversation-composer-status { flex-shrink:1; width:calc(100% - 2 * var(--conversation-content-inset)); max-width:var(--conversation-content-max-width); min-height:120px; margin:8px auto 12px; padding:20px 24px; overflow:auto; border:1px solid var(--conversation-line); border-radius:10px; background:var(--conversation-panel); color:var(--aow-text); font-size:12px; }
+.conversation-footer.empty:has(> .conversation-composer-status) { flex:0 0 auto; margin-top:auto; }
+.conversation-composer-status-header { display:flex; align-items:center; gap:16px; min-height:78px; }
+.conversation-composer-status-icon { display:flex; flex-shrink:0; color:var(--aow-text-secondary); }
+.conversation-composer-status-icon > svg { width:22px; height:22px; }
+.conversation-composer-status-message { flex:1; min-width:0; overflow-wrap:anywhere; line-height:1.6; }
+.conversation-composer-status-message > strong { color:var(--aow-text-strong); font-size:14px; font-weight:600; }
+.conversation-composer-status-description { margin-top:4px; color:var(--aow-text-secondary); }
+.conversation-composer-status-description p { margin:4px 0 0; }
+.conversation-composer-status-actions { display:flex; flex-shrink:0; flex-wrap:wrap; gap:8px; max-width:45%; padding-left:20px; border-left:1px solid var(--conversation-line); }
+.conversation-composer-status-actions > button { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:32px; padding:6px 10px; border:1px solid transparent; border-radius:5px; background:transparent; color:var(--aow-text); font:inherit; cursor:pointer; }
+.conversation-composer-status-actions > button:hover:not(:disabled) { background:var(--conversation-user-background); color:var(--aow-text-strong); }
+.conversation-composer-status-actions > button:disabled { opacity:.5; cursor:default; }
+.conversation-composer-status-details { margin-top:12px; overflow-wrap:anywhere; }
+@container (max-width:600px) {
+  .conversation-composer-status { padding:16px; }
+  .conversation-composer-status-header { flex-wrap:wrap; gap:12px; min-height:86px; }
+  .conversation-composer-status-actions { width:100%; max-width:none; justify-content:flex-end; padding:10px 0 0; border-left:0; border-top:1px solid var(--conversation-line); }
+}

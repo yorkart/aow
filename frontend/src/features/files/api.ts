@@ -2,6 +2,7 @@ import type { DirectoryListing, TextFile, PinnedDirectories } from './types';
 import { fetchWithTimeout, HttpRequestError, request } from '../../lib/http';
 import { aowRequest } from '../../lib/aowRequest';
 import { appUrl } from '../../lib/basePath';
+import type { SearchOptions, SearchResult } from './searchTypes';
 
 const encodePath = (path: string) => path.split('/').map(encodeURIComponent).join('/');
 
@@ -19,6 +20,10 @@ async function ensureFile(path: string) {
 }
 
 export const filesApi = {
+  search: (input: SearchOptions & { root: string; query: string; request_id: string }, signal: AbortSignal) => request<SearchResult>('/api/fs/search', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal,
+  }, 0, 25_000),
+  cancelSearch: (id: string) => request<void>(`/api/fs/search/${encodeURIComponent(id)}`, { method: 'DELETE', keepalive: true }, 0),
   // `/api/fs/tree` is the root-directory route.  Keeping the root request
   // free of a trailing slash avoids falling through to the SPA route.
   listDirectory: (path: string) => request<DirectoryListing>(path === '/' ? '/api/fs/tree' : `/api/fs/tree${encodePath(path)}`),

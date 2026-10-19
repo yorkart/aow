@@ -10,7 +10,7 @@ import { TerminalTabPreview } from '../features/terminals/TerminalTabPreview';
 import { WorkspaceTabIcon } from './WorkspaceTabIcon';
 import { WorkspaceNewMenu } from './WorkspaceNewMenu';
 import { WorkspaceMenuLabel, type WorkspaceMenuAction } from './WorkspaceMenuLabel';
-import { AcpSpinnerLabel } from '../features/acp';
+import { AcpSpinnerLabel } from '../features/acp/workspace';
 
 export interface WorkspaceTab {
   id: string;

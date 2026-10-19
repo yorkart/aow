@@ -15,14 +15,7 @@ impl Fixture {
         let root = directory.path().canonicalize().unwrap();
         let connection = Connection::open(root.join("state.db")).unwrap();
         connection
-            .execute_batch(
-                "
-            CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, cwd TEXT, title TEXT,
-                started_at REAL, ended_at REAL, end_reason TEXT, parent_session_id TEXT);
-            CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT,
-                content TEXT, timestamp REAL);
-        ",
-            )
+            .execute_batch(include_str!("sql/create_sessions.sql"))
             .unwrap();
         std::fs::create_dir(root.join("runtime")).unwrap();
         Self {
@@ -42,14 +35,12 @@ impl Fixture {
     }
 
     fn session(&self, id: &str, title: Option<&str>, prompt: &str) {
-        self.connection.execute(
-            "INSERT INTO sessions (id, source, cwd, title, started_at) VALUES (?1, 'cli', '/workspace', ?2, 1700000000)",
-            params![id, title],
-        ).unwrap();
-        self.connection.execute(
-            "INSERT INTO messages (session_id, role, content, timestamp) VALUES (?1, 'user', ?2, 1700000001)",
-            params![id, prompt],
-        ).unwrap();
+        self.connection
+            .execute(include_str!("sql/insert_session.sql"), params![id, title])
+            .unwrap();
+        self.connection
+            .execute(include_str!("sql/insert_message.sql"), params![id, prompt])
+            .unwrap();
     }
 
     fn leases(&self, entries: &[(i32, &str)]) {
@@ -89,10 +80,7 @@ async fn native_titles_refresh_without_completion_and_isolate_same_cwd_processes
 
     fixture
         .connection
-        .execute(
-            "UPDATE sessions SET title = '登录接口修复' WHERE id = 'first'",
-            [],
-        )
+        .execute(include_str!("sql/rename_session.sql"), [])
         .unwrap();
     assert_eq!(
         provider
@@ -156,10 +144,7 @@ async fn native_titles_require_a_valid_unique_lease_in_the_process_profile_and_c
     fixture.leases(&[(101, "session")]);
     fixture
         .connection
-        .execute(
-            "UPDATE sessions SET ended_at = 1700000010 WHERE id = 'session'",
-            [],
-        )
+        .execute(include_str!("sql/end_session.sql"), [])
         .unwrap();
     assert!(Hermes.session_title(fixture.context(101)).await.is_none());
 }

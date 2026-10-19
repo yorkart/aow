@@ -3,7 +3,6 @@
 mod acp_thread;
 mod agent_servers;
 mod agent_ui;
-mod db;
 mod facade;
 mod node_runtime;
 mod project;
@@ -11,7 +10,7 @@ mod settings;
 
 pub use facade::{
     AcpHost, AcpService, AgentInfo, ConnectionInfo, ConnectionStatus, Content, Permission,
-    SessionImport, SessionInfo, SessionSnapshot, SessionUpdates, ThreadEntry, TurnCompletion,
-    is_auth_required,
+    SessionCreation, SessionImport, SessionInfo, SessionSnapshot, SessionSource, SessionUpdates,
+    SessionVersion, SyncEvent, SyncResource, ThreadEntry, TurnCompletion, is_auth_required,
 };
 pub use settings::{SETTINGS_PATH, SettingsDocument, validate_settings};

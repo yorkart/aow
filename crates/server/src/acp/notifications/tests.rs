@@ -60,6 +60,9 @@ async fn real_acp_prompts_reach_the_terminal_notification_subscription_without_a
 fn completion(turn_id: &str) -> TurnCompletion {
     TurnCompletion {
         session: aow_acp::SessionInfo {
+            source: Default::default(),
+            created_at: "2026-01-01T00:00:00Z".into(),
+            parent: None,
             thread_id: "thread/中文".into(),
             session_id: Some("remote-session".into()),
             agent_id: "test-acp".into(),
@@ -67,6 +70,7 @@ fn completion(turn_id: &str) -> TurnCompletion {
             title: "ACP task".into(),
             status: "idle".into(),
             updated_at: String::new(),
+            interacted_at: None,
         },
         turn_id: turn_id.into(),
         conclusion: Some("Finished this turn".into()),

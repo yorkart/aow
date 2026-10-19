@@ -158,7 +158,8 @@ try {
     }
     for (const path of ['manifest.json', 'bin', 'frontend', 'frontend/dist',
         'bin/aow-server', 'bin/aow-terminald',
-        'bin/aow-automation-runner', 'bin/aow-cli', 'frontend/dist/index.html']) {
+        'bin/aow-automation-runner', 'bin/aow-cli', 'frontend/dist/index.html',
+        ...(manifest.components?.ripgrep ? ['bin/rg', 'licenses/ripgrep/manifest.json'] : [])]) {
         const info = lstatSync(join(root, path));
         const directory = ['bin', 'frontend', 'frontend/dist'].includes(path);
         if (!(directory ? info.isDirectory() : info.isFile())) throw new Error(`Invalid release entry: ${path}`);

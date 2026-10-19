@@ -47,6 +47,13 @@ where
     loop {
         tokio::select! {
             _ = &mut shutdown => break,
+            // Completed tasks remain allocated until they are joined. Reap
+            // them while serving, and avoid polling an empty set in a loop.
+            result = connections.join_next(), if !connections.is_empty() => {
+                if let Some(Err(error)) = result {
+                    tracing::debug!(%error, "terminald connection task failed");
+                }
+            }
             accepted = listener.accept() => {
                 match accepted {
                     Ok((stream, _)) => {

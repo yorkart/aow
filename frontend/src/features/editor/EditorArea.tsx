@@ -1,7 +1,7 @@
 import { hasDocumentOwners } from './workspaceDocuments';
 import Editor, { DiffEditor } from './MonacoEditor';
 import DOMPurify from 'dompurify';
-import { marked } from 'marked';
+import { MarkdownFileContent } from '../files/MarkdownFileContent';
 import { Check, ChevronLeft, ChevronRight, Code2, Download, Eye, LoaderCircle, RefreshCw, Save, WrapText, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { filesApi } from '../files/api';
@@ -11,6 +11,7 @@ import { monaco } from './monaco';
 import { FileTypeIcon } from '../files/FileTypeIcon';
 
 interface Props {
+  workspace: string;
   documents: OpenDocument[]; activeId?: string;
   wordWrapOverride?: boolean;
   onWordWrapChange: (id: string, enabled: boolean) => void;
@@ -136,7 +137,7 @@ function TabContextMenu({ x, y, document, hasOtherDocuments, onCloseMenu, onClos
   );
 }
 
-export function EditorArea({ documents, activeId, wordWrapOverride, onWordWrapChange, onActivate, onClose, onCloseOthers, onCloseAll, onChange, onSave, onRefresh, onReloadExternal, onKeepLocal, onPreviewLoaded, onPreviewError, onRestorePreview, onMarkdownViewChange }: Props) {
+export function EditorArea({ workspace, documents, activeId, wordWrapOverride, onWordWrapChange, onActivate, onClose, onCloseOthers, onCloseAll, onChange, onSave, onRefresh, onReloadExternal, onKeepLocal, onPreviewLoaded, onPreviewError, onRestorePreview, onMarkdownViewChange }: Props) {
   const active = documents.find((document) => document.id === activeId);
   const { editor } = useEditorSettings();
   const wrapEnabled = wordWrapOverride ?? editor.word_wrap;
@@ -332,7 +333,7 @@ export function EditorArea({ documents, activeId, wordWrapOverride, onWordWrapCh
                     onChange={(value) => onChange(active.id, value ?? '')}
                   />
                 </div>
-                {active.markdownView !== 'editor' ? <article className="markdown-preview" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(active.content ?? '') as string) }} /> : null}
+                {active.markdownView !== 'editor' ? <MarkdownFileContent text={active.content ?? ''} className="markdown-preview" workspace={workspace} path={active.path} /> : null}
               </>
             ) : null}
             {!active.loading && active.kind === 'docx' ? <article className="markdown-preview docx-preview" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(active.content ?? '') }} /> : null}

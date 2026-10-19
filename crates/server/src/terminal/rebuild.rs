@@ -75,6 +75,7 @@ impl TerminalManager {
             .collect();
         let mut specs = specs.to_vec();
         for (pane, spec) in panes.iter_mut().zip(&mut specs) {
+            configure_runtime_environment(&pane.id, spec);
             if pane.kind == TerminalPaneKind::Agent && pane.agent_id.as_deref() == Some("codex") {
                 aow_agents::launch::prepare_codex_terminal(
                     &spec.shell,
@@ -178,7 +179,7 @@ mod tests {
         interrupted.restart_on_daemon_restart = false;
         interrupted.arguments = vec![
             "-c".into(),
-            "printf '%s' \"$REBUILD_FIXTURE\" > \"$REBUILD_OUTPUT\"; exec sleep 60".into(),
+            "printf '%s\\n' \"$REBUILD_FIXTURE\" \"$AOW_INSTANCE\" \"${AOW_SESSION_ID-unset}\" \"${AOW_ACP_CONNECTION_ID-unset}\" > \"$REBUILD_OUTPUT\"; exec sleep 60".into(),
         ];
         let old = tab_with(
             TerminalLayout::Split {
@@ -214,6 +215,12 @@ mod tests {
             "REBUILD_OUTPUT".into(),
             output.to_string_lossy().into_owned(),
         );
+        specs[1]
+            .environment
+            .insert("AOW_SESSION_ID".into(), "stale-session".into());
+        specs[1]
+            .environment
+            .insert("AOW_ACP_CONNECTION_ID".into(), "stale-connection".into());
         let (first, second) =
             tokio::join!(manager.rebuild(&old, &specs), manager.rebuild(&old, &specs));
         let (rebuilt, duplicate) = if first.is_ok() {
@@ -236,6 +243,7 @@ mod tests {
             // Runtime responses intentionally redact environment variables.
             let mut expected_spec = specs[index].clone();
             expected_spec.environment.clear();
+            expected_spec.environment_remove.clear();
             assert_eq!(
                 client.get(&replacement.id).await.unwrap().unwrap().spec(),
                 expected_spec
@@ -250,8 +258,12 @@ mod tests {
             assert!(client.get(&old.panes[index].id).await.unwrap().is_none());
         }
         assert_eq!(rebuilt.layout, expected_layout);
+        let expected_environment = format!(
+            "preserved\nterminal:{}\nunset\nunset\n",
+            rebuilt.panes[1].id
+        );
         tokio::time::timeout(Duration::from_secs(3), async {
-            while std::fs::read_to_string(&output).unwrap_or_default() != "preserved" {
+            while std::fs::read_to_string(&output).unwrap_or_default() != expected_environment {
                 tokio::time::sleep(Duration::from_millis(20)).await;
             }
         })

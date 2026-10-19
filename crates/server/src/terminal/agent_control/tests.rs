@@ -178,9 +178,14 @@ impl Fixture {
 
     fn request(&self) -> AgentTerminalCreate {
         AgentTerminalCreate {
+            caller: Some(aow_protocol::CreationContext {
+                session_id: "fixture".into(),
+                acp_connection_id: None,
+            }),
+            no_parent: true,
             agent: "codex".into(),
             project_id: self.project_id.clone(),
-            parent_pane_id: None,
+            parent: None,
             cwd: self.repo.to_string_lossy().into_owned(),
             task: None,
             timeout_seconds: 8,
@@ -251,6 +256,25 @@ async fn request(app: &Router, method: &str, path: &str, body: Value) -> Value {
 #[tokio::test]
 async fn session_resume_launches_selected_profiles_without_changing_registration() {
     use std::os::unix::fs::PermissionsExt;
+
+    fn assert_runtime_identity(invocation: &mut Value, pane_id: &str) {
+        let fields = invocation.as_object_mut().unwrap();
+        assert_eq!(
+            fields.remove("instance").unwrap(),
+            format!("terminal:{pane_id}")
+        );
+        for key in ["session", "connection"] {
+            assert_eq!(fields.remove(key), Some(Value::Null));
+        }
+        assert_eq!(
+            fields.remove("log_mode"),
+            Some(if cfg!(target_os = "macos") {
+                Value::Null
+            } else {
+                json!("unified")
+            })
+        );
+    }
     let fixture = Fixture::with_storage("ready", true).await;
     let app = crate::build_router(fixture.state.clone());
     let session_cwd = fixture.repo.join("session subdirectory");
@@ -264,7 +288,13 @@ if sys.argv[1:] == ['--help']:
     print(os.environ['CODEX_HELP'])
     sys.exit(0)
 with open(sys.argv[1], 'w') as log:
-    json.dump({'args': sys.argv[2:], 'cwd': os.getcwd(), 'profile': os.environ['RESUME_PROFILE'], 'state_dir': os.environ['AOW_STATE_DIR'], 'codex_terminal': os.environ.get('AOW_CODEX_TERMINAL')}, log)
+    json.dump({
+        'args': sys.argv[2:], 'cwd': os.getcwd(),
+        'profile': os.environ['RESUME_PROFILE'], 'state_dir': os.environ['AOW_STATE_DIR'],
+        'codex_terminal': os.environ.get('AOW_CODEX_TERMINAL'),
+        'instance': os.environ.get('AOW_INSTANCE'), 'session': os.environ.get('AOW_SESSION_ID'),
+        'connection': os.environ.get('AOW_ACP_CONNECTION_ID'), 'log_mode': os.environ.get('AOW_LOG_MODE')
+    }, log)
 time.sleep(30)
 "#,
     )
@@ -293,6 +323,8 @@ time.sleep(30)
         // Exercise both an older CLI and a CLI advertising embedded TUI support.
         let supports_isolation = index == 1;
         let env = json!({"RESUME_PROFILE": id, "AOW_STATE_DIR": "/another-aow-instance",
+            "AOW_INSTANCE": "acp:stale-parent", "AOW_SESSION_ID": "stale-session",
+            "AOW_ACP_CONNECTION_ID": "stale-connection", "AOW_LOG_MODE": "unified",
             "CODEX_HELP": if supports_isolation {"  --no-daemon"} else {"  --no-alt-screen"}});
         post(
             &app,
@@ -375,6 +407,7 @@ time.sleep(30)
         } else if *agent_type == "codex" {
             assert!(marker.is_null());
         }
+        assert_runtime_identity(&mut invocation, tab["panes"][0]["id"].as_str().unwrap());
         assert_eq!(
             invocation,
             json!({"args": invocation_args,
@@ -441,6 +474,7 @@ time.sleep(30)
         } else if *agent_type == "codex" {
             assert!(marker.is_null());
         }
+        assert_runtime_identity(&mut replay, rebuilt["panes"][0]["id"].as_str().unwrap());
         assert_eq!(
             replay, invocation,
             "rebuild must use the original profile environment and resume arguments"
@@ -515,6 +549,88 @@ async fn control(
 }
 
 #[tokio::test]
+async fn rejected_runtime_does_not_leave_a_lineage_record() {
+    let fixture = Fixture::with_storage("ready", true).await;
+    let parent = fixture
+        .state
+        .terminals
+        .create(
+            serde_json::from_value(json!({
+                "cwd": fixture.repo, "workspace_root": fixture.repo, "shell": "/bin/sh"
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let app = crate::build_router(fixture.state.clone());
+    // The profile is valid, but managed startup adds flags beyond terminald's limit.
+    post(
+        &app,
+        "/api/aow/agents",
+        json!({
+            "id": "broken-agent", "agent_type": "codex", "display_name": "Broken agent",
+            "command": "/usr/bin/python3", "args": vec!["--verbose"; 128]
+        }),
+    )
+    .await;
+    let mut request = fixture.request();
+    request.agent = "broken-agent".into();
+    request.no_parent = false;
+    request.parent = Some(aow_protocol::InstanceRef::terminal(&parent.panes[0].id));
+    let error = fixture
+        .client
+        .post_json::<_, AgentTerminalInfo>("/v1/agents", &request)
+        .await
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("terminal arguments are invalid"),
+        "{error}"
+    );
+    assert_eq!(
+        fixture
+            .state
+            .terminals
+            .list_snapshot(None)
+            .unwrap()
+            .tabs
+            .len(),
+        1
+    );
+    let graph = crate::instances::graph(&fixture.state).unwrap();
+    assert_eq!(graph.len(), 1);
+    assert!(graph.values().all(|item| item.parent != request.parent));
+    let reloaded = crate::instances::InstanceStore::persistent(&fixture.state_dir).unwrap();
+    let saved = reloaded.snapshot().unwrap();
+    assert_eq!(saved.len(), 1);
+    assert!(saved.contains_key(&aow_protocol::InstanceRef::terminal(&parent.panes[0].id)));
+    fixture.stop().await;
+}
+
+#[tokio::test]
+async fn failed_lineage_persistence_cleans_up_the_started_runtime() {
+    let fixture = Fixture::with_storage("ready", true).await;
+    std::fs::create_dir(fixture.state_dir.join("instances.json")).unwrap();
+    let result = fixture
+        .client
+        .post_json::<_, AgentTerminalInfo>("/v1/agents", &fixture.request())
+        .await;
+    assert!(result.is_err());
+    assert!(
+        fixture
+            .state
+            .terminals
+            .list_snapshot(None)
+            .unwrap()
+            .tabs
+            .is_empty()
+    );
+    assert!(fixture.state.instances.snapshot().unwrap().is_empty());
+    let daemon = TerminaldClient::new(fixture.directory.path().join("terminald/daemon.sock"));
+    assert!(daemon.list().await.unwrap().is_empty());
+    fixture.stop().await;
+}
+
+#[tokio::test]
 async fn agent_parentage_is_validated_returned_and_survives_parent_removal() {
     let fixture = Fixture::with_storage("ready", true).await;
     let manager = &fixture.state.terminals;
@@ -528,7 +644,8 @@ async fn agent_parentage_is_validated_returned_and_survives_parent_removal() {
         .await
         .unwrap();
     let mut request = fixture.request();
-    request.parent_pane_id = Some("missing-pane".into());
+    request.no_parent = false;
+    request.parent = Some(aow_protocol::InstanceRef::terminal("missing-pane"));
     let error = fixture
         .client
         .post_json::<_, AgentTerminalInfo>("/v1/agents", &request)
@@ -543,26 +660,28 @@ async fn agent_parentage_is_validated_returned_and_survives_parent_removal() {
     ));
     assert_eq!(manager.list_snapshot(None).unwrap().tabs.len(), 1);
 
-    request.parent_pane_id = Some(parent.panes[0].id.clone());
+    request.no_parent = false;
+    request.parent = Some(aow_protocol::InstanceRef::terminal(&parent.panes[0].id));
     let child: AgentTerminalInfo = fixture
         .client
         .post_json("/v1/agents", &request)
         .await
         .unwrap();
-    assert_eq!(child.parent_pane_id, request.parent_pane_id);
-    request.parent_pane_id = Some(child.pane_id.clone());
+    assert_eq!(child.parent, request.parent);
+    request.no_parent = false;
+    request.parent = Some(aow_protocol::InstanceRef::terminal(&child.pane_id));
     let grandchild: AgentTerminalInfo = fixture
         .client
         .post_json("/v1/agents", &request)
         .await
         .unwrap();
     assert_eq!(
-        grandchild.parent_pane_id.as_deref(),
-        Some(child.pane_id.as_str())
+        grandchild.parent,
+        Some(aow_protocol::InstanceRef::terminal(&child.pane_id))
     );
     assert_eq!(
-        manager.get_snapshot(&child.tab_id).unwrap().panes[0].parent_pane_id,
-        child.parent_pane_id
+        manager.get_snapshot(&child.tab_id).unwrap().panes[0].parent,
+        child.parent
     );
 
     let app = crate::build_router(fixture.state.clone());
@@ -580,7 +699,7 @@ async fn agent_parentage_is_validated_returned_and_survives_parent_removal() {
         .get_json(&format!("/v1/agents/{}", child.pane_id))
         .await
         .unwrap();
-    assert_eq!(loaded.parent_pane_id, child.parent_pane_id);
+    assert_eq!(loaded.parent, child.parent);
     let listed: Value = fixture.client.get_json("/v1/agents").await.unwrap();
     assert_eq!(listed["items"].as_array().unwrap().len(), 2);
     assert!(
@@ -589,7 +708,7 @@ async fn agent_parentage_is_validated_returned_and_survives_parent_removal() {
             .unwrap()
             .iter()
             .any(|item| item["pane_id"] == grandchild.pane_id
-                && item["parent_pane_id"] == child.pane_id)
+                && item["parent"] == json!({"kind":"terminal", "id":child.pane_id}))
     );
 
     let path = manager.inner.metadata_path.as_ref().unwrap();
@@ -599,15 +718,99 @@ async fn agent_parentage_is_validated_returned_and_survives_parent_removal() {
     )
     .unwrap();
     assert_eq!(
-        reloaded.cli_agent(&child.pane_id).unwrap().parent_pane_id,
-        child.parent_pane_id
+        reloaded.cli_agent(&child.pane_id).unwrap().parent,
+        child.parent
     );
     assert_eq!(
-        reloaded
-            .cli_agent(&grandchild.pane_id)
+        reloaded.cli_agent(&grandchild.pane_id).unwrap().parent,
+        grandchild.parent
+    );
+    fixture.stop().await;
+}
+
+#[tokio::test]
+async fn mixed_terminal_acp_lineage_survives_deleted_intermediate_instances_and_restart() {
+    let fixture = Fixture::with_storage("ready", true).await;
+    let node = std::process::Command::new("node")
+        .args(["-p", "process.execPath"])
+        .output()
+        .unwrap();
+    assert!(node.status.success());
+    let settings = fixture.state.aow.acp_settings().unwrap();
+    fixture.state.aow.save_acp_settings(json!({"agent_servers":{"test":{"type":"custom", "command":String::from_utf8(node.stdout).unwrap().trim(),
+        "args":[Path::new(env!("CARGO_MANIFEST_DIR")).join("../acp/tests/fixtures/lineage-agent.mjs")]}}}).to_string(), settings.revision).await.unwrap();
+    let root: AgentTerminalInfo = fixture
+        .client
+        .post_json("/v1/agents", &fixture.request())
+        .await
+        .unwrap();
+    let acp: Value = fixture
+        .client
+        .post_json(
+            "/v1/acp/sessions",
+            &json!({"caller":{"session_id":"terminal-session"},"agent_id":"test", "project_id":fixture.project_id, "cwd":fixture.repo,
+        "parent":{"kind":"terminal","id":root.pane_id}, "timeout_seconds":10, "task":"hello"}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(acp["phase"], "ready", "{acp}");
+    let acp_id = acp["thread_id"].as_str().unwrap();
+    let mut request = fixture.request();
+    request.no_parent = false;
+    request.caller = Some(aow_protocol::CreationContext {
+        session_id: acp["session_id"].as_str().unwrap().into(),
+        acp_connection_id: Some(
+            fixture
+                .state
+                .acp
+                .session_connection_info(acp_id)
+                .unwrap()
+                .unwrap()
+                .id,
+        ),
+    });
+    let child: AgentTerminalInfo = fixture
+        .client
+        .post_json("/v1/agents", &request)
+        .await
+        .unwrap();
+    assert_eq!(child.parent, Some(aow_protocol::InstanceRef::acp(acp_id)));
+    fixture.state.acp.delete_session(acp_id).await.unwrap();
+    fixture
+        .state
+        .terminals
+        .delete_tab(&root.tab_id)
+        .await
+        .unwrap();
+    let graph: Value = fixture
+        .client
+        .get_json(&format!("/v1/instances/terminal:{}", child.pane_id))
+        .await
+        .unwrap();
+    assert_eq!(graph["ancestors"][0]["id"], acp_id);
+    assert_eq!(graph["ancestors"][1]["id"], root.pane_id);
+    assert!(
+        graph["ancestors"]
+            .as_array()
             .unwrap()
-            .parent_pane_id,
-        grandchild.parent_pane_id
+            .iter()
+            .all(|item| item["deleted"] == true)
+    );
+    let mut reloaded = fixture.state.clone();
+    reloaded.instances = crate::instances::InstanceStore::persistent(&fixture.state_dir).unwrap();
+    reloaded.terminals = TerminalManager::persistent(
+        fixture.state_dir.clone(),
+        fixture.state.terminals.inner.terminald.clone(),
+    )
+    .unwrap();
+    let graph = crate::instances::graph(&reloaded).unwrap();
+    assert_eq!(
+        graph[&aow_protocol::InstanceRef::terminal(&child.pane_id)].parent,
+        Some(aow_protocol::InstanceRef::acp(acp_id))
+    );
+    assert_eq!(
+        graph[&aow_protocol::InstanceRef::acp(acp_id)].parent,
+        Some(aow_protocol::InstanceRef::terminal(&root.pane_id))
     );
     fixture.stop().await;
 }
@@ -1363,6 +1566,7 @@ async fn native_startup_probes() {
                     error: None,
                     task_submitted: false,
                 }),
+                None,
                 None,
             )
             .await

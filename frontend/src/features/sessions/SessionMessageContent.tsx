@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { sessionImageReferences } from './sessionImageReferences';
-import { MarkdownContent } from '../../components/MarkdownContent';
+import { ContextualMarkdownContent } from '../files/WorkspaceMarkdown';
 import './session-image-preview.css';
 
 function ImagePreview({ anchor, id, onClose, onEnter, onLeave }: {
@@ -77,7 +77,7 @@ export function SessionMessageContent({ text, imageReferenceText = text, classNa
 
   return <div ref={root} onMouseOver={(event) => show(event.target)} onMouseLeave={scheduleClose}
     onFocusCapture={(event) => show(event.target)} onBlurCapture={scheduleClose}>
-    <MarkdownContent text={text} className={className} readOnly imageReferences={images} />
+    <ContextualMarkdownContent text={text} className={className} readOnly imageReferences={images} />
     {anchor && <ImagePreview key={anchor.href} anchor={anchor} id={id} onClose={close} onEnter={cancelClose} onLeave={scheduleClose} />}
   </div>;
 }

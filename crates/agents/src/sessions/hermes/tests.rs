@@ -3,6 +3,7 @@ use crate::sessions::{
     tail::SessionTail,
     tracking::{AgentSessionTracker, LiveSessionContext, SessionResolution, SessionTarget},
 };
+use rusqlite::{Connection, params};
 use serde_json::json;
 
 struct Fixture {
@@ -107,7 +108,10 @@ fn lists_symlinked_workspaces_and_excludes_delegated_children() {
         "cli",
         cwd.canonicalize().unwrap().to_str().unwrap(),
     );
-    fixture.connection.execute("UPDATE sessions SET parent_session_id = 'root', model_config = '{\"_delegate_from\":\"root\"}' WHERE id = 'child'", []).unwrap();
+    fixture
+        .connection
+        .execute(include_str!("sql/tests/delegate_child.sql"), [])
+        .unwrap();
     fixture.message("child", "user", "Delegated", None, None, None);
     #[cfg(unix)]
     assert_eq!(Hermes.list_sessions(&fixture.roots, &alias).len(), 1);
@@ -118,14 +122,9 @@ impl Fixture {
     fn new() -> Self {
         let directory = tempfile::tempdir().unwrap();
         let connection = Connection::open(directory.path().join("state.db")).unwrap();
-        connection.execute_batch("
-            PRAGMA journal_mode=WAL;
-            CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, cwd TEXT, title TEXT,
-                started_at REAL, ended_at REAL, end_reason TEXT, parent_session_id TEXT, model_config TEXT, archived INTEGER DEFAULT 0);
-            CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, role TEXT,
-                content TEXT, tool_call_id TEXT, tool_calls TEXT, timestamp REAL, finish_reason TEXT,
-                reasoning TEXT, active INTEGER DEFAULT 1, compacted INTEGER DEFAULT 0);
-        ").unwrap();
+        connection
+            .execute_batch(include_str!("sql/tests/create_database.sql"))
+            .unwrap();
         let environment = [("HERMES_HOME".into(), directory.path().to_path_buf())].into();
         let roots = SessionRoots::from_configuration(directory.path(), &environment);
         Self {
@@ -136,8 +135,12 @@ impl Fixture {
     }
 
     fn session(&self, id: &str, source: &str, cwd: &str) {
-        self.connection.execute("INSERT INTO sessions (id, source, cwd, started_at) VALUES (?1, ?2, ?3, 1700000000.125)",
-            params![id, source, cwd]).unwrap();
+        self.connection
+            .execute(
+                include_str!("sql/tests/insert_session.sql"),
+                params![id, source, cwd],
+            )
+            .unwrap();
     }
 
     fn message(
@@ -149,9 +152,19 @@ impl Fixture {
         calls: Option<Value>,
         call_id: Option<&str>,
     ) {
-        self.connection.execute("INSERT INTO messages (session_id, role, content, timestamp, finish_reason, tool_calls, tool_call_id, reasoning)
-            VALUES (?1, ?2, ?3, COALESCE((SELECT MAX(timestamp) + 0.01 FROM messages), 1700000001.5), ?4, ?5, ?6, 'PRIVATE_REASONING')",
-            params![id, role, text, reason, calls.map(|value| value.to_string()), call_id]).unwrap();
+        self.connection
+            .execute(
+                include_str!("sql/tests/insert_message.sql"),
+                params![
+                    id,
+                    role,
+                    text,
+                    reason,
+                    calls.map(|value| value.to_string()),
+                    call_id
+                ],
+            )
+            .unwrap();
     }
 
     fn locator(&self, id: &str) -> AgentSessionLocator {
@@ -167,29 +180,35 @@ impl Fixture {
     fn compact(&self, id: &str, head: usize, tail: usize, merged: bool) {
         let ids: Vec<i64> = self
             .connection
-            .prepare("SELECT id FROM messages WHERE session_id = ?1 AND active = 1 ORDER BY id")
+            .prepare(include_str!("sql/tests/active_message_ids.sql"))
             .unwrap()
             .query_map([id], |row| row.get(0))
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap();
         assert!(head + tail <= ids.len());
-        self.connection.execute_batch("BEGIN IMMEDIATE").unwrap();
-        self.connection.execute("UPDATE messages SET active = 0, compacted = 1 WHERE session_id = ?1 AND active = 1", [id]).unwrap();
+        self.connection
+            .execute_batch(include_str!("sql/tests/begin_compaction.sql"))
+            .unwrap();
+        self.connection
+            .execute(include_str!("sql/tests/archive_messages.sql"), [id])
+            .unwrap();
         let clock = std::cell::Cell::new(
             self.connection
-                .query_row("SELECT MAX(timestamp) + 100 FROM messages", [], |row| {
-                    row.get::<_, f64>(0)
-                })
+                .query_row(
+                    include_str!("sql/tests/compaction_timestamp.sql"),
+                    [],
+                    |row| row.get::<_, f64>(0),
+                )
                 .unwrap(),
         );
         let copy = |row: i64, merged: bool| {
-            self.connection.execute("INSERT INTO messages(session_id, role, content, tool_call_id, tool_calls, timestamp, finish_reason)
-                SELECT session_id, role, CASE WHEN ?2 THEN
-                    '[PRIOR CONTEXT — for reference only; not a new message]' || char(10) || content || char(10) ||
-                    '[END OF PRIOR CONTEXT — COMPACTION SUMMARY BELOW]' || char(10) || '[CONTEXT SUMMARY]: older messages'
-                    ELSE content END, tool_call_id, tool_calls, ?3, finish_reason
-                FROM messages WHERE id = ?1", params![row, merged, clock.get()]).unwrap();
+            self.connection
+                .execute(
+                    include_str!("sql/tests/copy_message.sql"),
+                    params![row, merged, clock.get()],
+                )
+                .unwrap();
             clock.set(clock.get() + 1e-6);
         };
         for row in &ids[..head] {
@@ -206,7 +225,7 @@ impl Fixture {
             );
             self.connection
                 .execute(
-                    "UPDATE messages SET timestamp = ?1 WHERE id = last_insert_rowid()",
+                    include_str!("sql/tests/timestamp_last_message.sql"),
                     [clock.get()],
                 )
                 .unwrap();
@@ -215,7 +234,9 @@ impl Fixture {
         for (index, row) in ids[ids.len() - tail..].iter().enumerate() {
             copy(*row, merged && index == 0);
         }
-        self.connection.execute_batch("COMMIT").unwrap();
+        self.connection
+            .execute_batch(include_str!("sql/tests/commit_compaction.sql"))
+            .unwrap();
     }
 }
 
@@ -238,14 +259,11 @@ fn reads_native_wal_history_and_filters_workspace_sources_and_archives() {
     }
     fixture
         .connection
-        .execute("UPDATE sessions SET archived = 1 WHERE id = 'archived'", [])
+        .execute(include_str!("sql/tests/archive_session.sql"), [])
         .unwrap();
     fixture
         .connection
-        .execute(
-            "UPDATE sessions SET title = ' Renamed  session ' WHERE id = 'one'",
-            [],
-        )
+        .execute(include_str!("sql/tests/rename_session.sql"), [])
         .unwrap();
     let sessions = Hermes.list_sessions(&fixture.roots, Path::new("/repo"));
     assert_eq!(sessions.len(), 2);
@@ -255,10 +273,7 @@ fn reads_native_wal_history_and_filters_workspace_sources_and_archives() {
     assert_eq!(session.updated_at, "2023-11-14T22:13:21.500Z");
     fixture
         .connection
-        .execute(
-            "UPDATE sessions SET title = 'Latest title' WHERE id = 'one'",
-            [],
-        )
+        .execute(include_str!("sql/tests/rename_session_again.sql"), [])
         .unwrap();
     assert_eq!(
         Agent::Hermes
@@ -397,10 +412,7 @@ fn compaction_merged_into_a_tail_keeps_tools_and_honors_rewinds() {
     // source rows compacted=1. They must not resurrect the retracted turn.
     fixture
         .connection
-        .execute(
-            "UPDATE messages SET active = 0 WHERE session_id = 'one' AND compacted = 0",
-            [],
-        )
+        .execute(include_str!("sql/tests/rewind_messages.sql"), [])
         .unwrap();
     let rewound = fixture.snapshot("one");
     assert_eq!(rewound["turns"].as_array().unwrap().len(), 1);
@@ -495,23 +507,26 @@ fn snapshots_follow_compression_but_exclude_rewound_rows_and_other_branches() {
     for id in ["parent", "child", "branch", "delegate", "stale"] {
         fixture.session(id, "cli", "/repo");
     }
-    fixture.connection.execute("UPDATE sessions SET end_reason = 'compression', ended_at = 1700000002 WHERE id = 'parent'", []).unwrap();
     fixture
         .connection
-        .execute(
-            "UPDATE sessions SET parent_session_id = 'parent' WHERE id = 'child'",
-            [],
-        )
+        .execute(include_str!("sql/tests/compress_parent.sql"), [])
         .unwrap();
     fixture
         .connection
-        .execute(
-            "UPDATE sessions SET parent_session_id = 'parent', model_config = '{\"_branched_from\":\"parent\"}' WHERE id = 'branch'",
-            [],
-        )
+        .execute(include_str!("sql/tests/continue_parent.sql"), [])
         .unwrap();
-    fixture.connection.execute("UPDATE sessions SET parent_session_id = 'parent', model_config = '{\"_delegate_from\":\"parent\"}' WHERE id = 'delegate'", []).unwrap();
-    fixture.connection.execute("UPDATE sessions SET parent_session_id = 'parent', ended_at = 1700000004, end_reason = 'ws_orphan_reap' WHERE id = 'stale'", []).unwrap();
+    fixture
+        .connection
+        .execute(include_str!("sql/tests/branch_parent.sql"), [])
+        .unwrap();
+    fixture
+        .connection
+        .execute(include_str!("sql/tests/delegate_parent.sql"), [])
+        .unwrap();
+    fixture
+        .connection
+        .execute(include_str!("sql/tests/stale_child.sql"), [])
+        .unwrap();
     fixture.message("parent", "user", "Old turn", None, None, None);
     fixture.message(
         "parent",
@@ -532,10 +547,7 @@ fn snapshots_follow_compression_but_exclude_rewound_rows_and_other_branches() {
     );
     fixture
         .connection
-        .execute(
-            "UPDATE messages SET active = 0 WHERE content = 'Discarded answer'",
-            [],
-        )
+        .execute(include_str!("sql/tests/discard_answer.sql"), [])
         .unwrap();
     fixture.message("child", "assistant", "New answer", Some("stop"), None, None);
     fixture.message("branch", "user", "Other branch", None, None, None);
@@ -543,10 +555,7 @@ fn snapshots_follow_compression_but_exclude_rewound_rows_and_other_branches() {
     fixture.message("stale", "user", "Stale sibling", None, None, None);
     fixture
         .connection
-        .execute(
-            "UPDATE messages SET timestamp = 1700000010 WHERE session_id = 'stale'",
-            [],
-        )
+        .execute(include_str!("sql/tests/advance_stale_child.sql"), [])
         .unwrap();
     let snapshot = fixture.snapshot("child");
     assert_eq!(snapshot["turns"].as_array().unwrap().len(), 2);
@@ -566,17 +575,20 @@ fn compressed_conversations_with_empty_roots_keep_the_latest_title_and_activity(
     for id in ["root", "child", "unrelated"] {
         fixture.session(id, "cli", "/repo");
     }
-    fixture.connection.execute("UPDATE sessions SET end_reason = 'compression', ended_at = 1700000002, title = 'Old title' WHERE id = 'root'", []).unwrap();
-    fixture.connection.execute("UPDATE sessions SET parent_session_id = 'root', title = 'Current title' WHERE id = 'child'", []).unwrap();
+    fixture
+        .connection
+        .execute(include_str!("sql/tests/compress_root_with_title.sql"), [])
+        .unwrap();
+    fixture
+        .connection
+        .execute(include_str!("sql/tests/continue_root_with_title.sql"), [])
+        .unwrap();
     fixture.message("unrelated", "user", "Other task", None, None, None);
     fixture.message("child", "user", "Continuing the task", None, None, None);
     fixture.message("child", "assistant", "Finished", Some("stop"), None, None);
     fixture
         .connection
-        .execute(
-            "UPDATE messages SET timestamp = 1700000005 WHERE session_id = 'child'",
-            [],
-        )
+        .execute(include_str!("sql/tests/advance_child.sql"), [])
         .unwrap();
     let sessions = Hermes.list_sessions(&fixture.roots, Path::new("/repo"));
     assert_eq!(sessions.len(), 2);
@@ -721,16 +733,20 @@ fn sqlite_tail_recovers_after_database_replacement_without_replaying() {
     let replacement = fixture.directory.path().join("replacement.db");
     fixture
         .connection
-        .execute("VACUUM INTO ?1", [replacement.to_str().unwrap()])
+        .execute(
+            include_str!("sql/tests/copy_database.sql"),
+            [replacement.to_str().unwrap()],
+        )
         .unwrap();
     fixture
         .connection
-        .execute_batch("PRAGMA wal_checkpoint(TRUNCATE); PRAGMA journal_mode=DELETE;")
+        .execute_batch(include_str!("sql/tests/checkpoint_database.sql"))
         .unwrap();
     std::fs::rename(&replacement, fixture.directory.path().join("state.db")).unwrap();
     assert!(tail.poll().unwrap().is_empty());
     let next = Connection::open(fixture.directory.path().join("state.db")).unwrap();
-    next.execute("INSERT INTO messages (session_id, role, content, timestamp, finish_reason) VALUES ('one','assistant','After replacement',1700000003,'stop')", []).unwrap();
+    next.execute(include_str!("sql/tests/replacement_message.sql"), [])
+        .unwrap();
     assert_eq!(
         tail.poll().unwrap()[0].conclusion.as_deref(),
         Some("After replacement")
@@ -747,15 +763,18 @@ fn sqlite_tail_follows_compression_without_replaying_history_or_other_branches()
     for id in ["continuation", "branch"] {
         fixture.session(id, "cli", "/repo");
     }
-    fixture.connection.execute("UPDATE sessions SET end_reason = 'compression', ended_at = 1700000002 WHERE id = 'root'", []).unwrap();
     fixture
         .connection
-        .execute(
-            "UPDATE sessions SET parent_session_id = 'root' WHERE id IN ('continuation', 'branch')",
-            [],
-        )
+        .execute(include_str!("sql/tests/compress_root.sql"), [])
         .unwrap();
-    fixture.connection.execute("UPDATE sessions SET model_config = '{\"_branched_from\":\"root\"}' WHERE id = 'branch'", []).unwrap();
+    fixture
+        .connection
+        .execute(include_str!("sql/tests/continue_root.sql"), [])
+        .unwrap();
+    fixture
+        .connection
+        .execute(include_str!("sql/tests/branch_root.sql"), [])
+        .unwrap();
     fixture.message(
         "continuation",
         "assistant",
@@ -835,10 +854,7 @@ async fn live_association_requires_a_matching_pid_lease_even_with_one_open_sessi
     );
     fixture
         .connection
-        .execute(
-            "UPDATE sessions SET ended_at = 1700000003 WHERE id = 'one'",
-            [],
-        )
+        .execute(include_str!("sql/tests/end_session.sql"), [])
         .unwrap();
     assert_eq!(
         tracker.resolve_live_session(context()).await,

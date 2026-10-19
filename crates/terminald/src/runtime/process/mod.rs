@@ -146,6 +146,9 @@ pub(super) fn spawn_runtime_blocking(
     for (key, value) in &spec.environment {
         command.env(key, value);
     }
+    for key in &spec.environment_remove {
+        command.env_remove(key);
+    }
     // Service managers (especially launchd) may provide no locale. Without
     // one, Vim defaults to latin1 and displays UTF-8 text as control bytes.
     // Apply the fallback after per-runtime overrides and leave LC_* intact.
@@ -162,9 +165,6 @@ pub(super) fn spawn_runtime_blocking(
     command.env("COLORTERM", "truecolor");
     command.env("TERM_PROGRAM", "aow-web");
     command.env("AOW_WEB_TERMINAL", "1");
-    // Always identify this pane, overriding any inherited or profile identity.
-    // CLI-created descendants use it as their direct parent, including after rebuilds.
-    command.env("AOW_PANE_ID", &id);
     // This PTY is a remote terminal from the user's point of view. Programs
     // such as TraeCode CLI must use terminal-mediated clipboard protocols (OSC 52)
     // instead of writing to terminald's host clipboard. Keep the standard
@@ -173,8 +173,6 @@ pub(super) fn spawn_runtime_blocking(
     command.env_remove("SSH_TTY");
     command.env_remove("TMUX");
     command.env_remove("TMUX_PANE");
-    #[cfg(target_os = "macos")]
-    command.env_remove("AOW_LOG_MODE");
     let child = pair
         .slave
         .spawn_command(command)

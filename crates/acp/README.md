@@ -226,6 +226,54 @@ presence suppresses legacy mode controls even when the provider returns an empty
 list. Changing a selection also saves its default in JSONC. Advertised slash
 commands appear as suggestions; selecting a suggestion does not send a prompt.
 
+### Mid-turn steering
+
+AoW supports the optional `_session/steering` extension when the agent advertises
+`initialize._meta.steering.supported: true`. Initialization metadata is exposed
+as `ConnectionInfo.extensions`; no agent-name allowlist is used. The `steer`
+session action accepts the same content as `prompt`, requires session control,
+and leaves cancellation and pending approvals independent. The composer offers
+“追加指令” while working and retains a separate stop button.
+
+Delivery is recorded inside the current turn, with pending, accepted, failed,
+or unknown status. Acceptance does not assert that the model has acted on the
+input. AoW requests `_meta.steering.idleBehavior: "promptRequired"`; when honored,
+unconsumed input starts an ordinary owned prompt after the previous one settles.
+Cancellation prevents that fallback. `startedNewTurn` means the adapter already
+consumed the input and must never trigger a resend. The old prompt's response
+cannot finish the new turn. A compatibility reader recognizes codex-acp's
+`session_info_update._meta.codex.threadStatus`; idle clears activity but records
+an unknown outcome, since it does not prove successful completion. Agents that
+start detached turns without a lifecycle signal remain visibly untracked until
+they report a state or the session is disconnected; silent output is never used
+as a completion heuristic. Unknown delivery is retained and never auto-retried.
+
+This extension is independent of the proposed standard `session/inject` API.
+Protocol fixtures cover injection, echo suppression, idle races, cancellation,
+capability negotiation, and detached turn ownership.
+
+Steered turns keep their agent messages and delivery cards visible as dialogue,
+including earlier answers in the same turn; tools and thinking remain in the
+collapsible process. Overview snapshots carry this dialogue in `messages`;
+overview patches use `messages: { kind: "delta", entries: [...] }` for indexed
+replacements and text suffixes, or `kind: "reset"` for a new dialogue baseline.
+Omitted `messages` retains the existing dialogue. Revision gaps and visibility
+changes that invalidate message positions require a full snapshot. The cache
+retains message positions rather than historical bodies. This does not change
+conservative final-answer inference or completion callbacks.
+The browser joins text fragments with the same message identity
+across steering cards, so a submitted instruction cannot split Markdown in an
+active reply. Saved entry order and synchronization cursors are unchanged, and
+the same presentation applies to existing saved sessions.
+
+History loading reconciles ordered input blocks and the verified response/tool
+transcript, merging response chunks only with matching message identities.
+This preserves delivery cards and turn outcomes when native replay places an
+input after the response that was streaming at submission time. Repeated text
+alone never identifies uncertain delivery; ambiguous or changed history keeps
+only outcomes supported by an identical prefix. Failed or unconfirmed inputs
+absent from a verified replay remain local delivery cards.
+
 See [the behavior map](backport/frontend-behavior.md) for upstream function
 correspondence, validation and explicit host/capability differences.
 
