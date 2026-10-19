@@ -38,6 +38,36 @@ fn prompt(value: &str) -> Vec<Content> {
 }
 
 #[tokio::test]
+async fn unsupported_protocol_versions_fail_before_session_creation_and_allow_retry() -> Result<()>
+{
+    for version in [0, 2, u16::MAX] {
+        let directory = tempfile::tempdir()?;
+        let host = host(false);
+        let mut settings: Value = serde_json::from_str(&host.settings.read().unwrap())?;
+        settings["agent_servers"]["test"]["env"]["PROTOCOL_VERSION"] = version.to_string().into();
+        *host.settings.write().unwrap() = settings.to_string();
+        let service = AcpService::new(host.clone(), None)?;
+        let error = service
+            .connect("test", directory.path().into())
+            .await
+            .unwrap_err();
+        // The SDK can reject negotiation before our response-version guard is reached.
+        assert!(error.to_string().contains("protocol version"), "{error:#}");
+        assert!(service.sessions(None).is_empty());
+
+        settings["agent_servers"]["test"]["env"]["PROTOCOL_VERSION"] = "1".into();
+        *host.settings.write().unwrap() = settings.to_string();
+        let connection = service.connect("test", directory.path().into()).await?;
+        let session = service.new_session(&connection.id).await?;
+        service.start_prompt(&session.thread_id, prompt("retry"))?;
+        let snapshot = wait_for(&service, &session.thread_id, |value| value.status == "idle").await;
+        assert_eq!(snapshot.stop_reason.as_deref(), Some("end_turn"));
+        service.disconnect(&connection.id)?;
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn sidebar_recency_changes_only_when_a_prompt_is_submitted() -> Result<()> {
     for resume_only in [false, true] {
         let directory = tempfile::tempdir()?;
@@ -551,6 +581,11 @@ async fn activity_streams_and_dismissed_notices_survive_reload() -> Result<()> {
     let snapshot = restored.snapshot(&session.thread_id)?;
     assert!(snapshot.notices.is_empty());
     assert_eq!(snapshot.entries.len(), 3);
+    assert_eq!(
+        snapshot.entries[2].content["summary"][0]["text"],
+        "**Summary**"
+    );
+    assert_eq!(snapshot.entries[2].content["status"], "completed");
     assert_eq!(snapshot.plan["entries"][0]["status"], "completed");
     service.clear_plan(&session.thread_id)?;
     let cleared = service.snapshot(&session.thread_id)?;

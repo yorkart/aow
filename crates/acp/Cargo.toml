@@ -7,7 +7,7 @@ license = "GPL-3.0-or-later"
 [dependencies]
 aow-db = { path = "../db" }
 aow-protocol = { path = "../protocol" }
-agent-client-protocol = { version = "=2.2.0", features = ["unstable", "unstable_protocol_v2"] }
+agent-client-protocol = { version = "=3.4.0", features = ["unstable", "unstable_protocol_v2"] }
 anyhow.workspace = true
 async-trait.workspace = true
 chrono.workspace = true

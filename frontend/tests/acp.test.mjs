@@ -2212,6 +2212,10 @@ try {
     content.summary = [{ type: 'text', text: 'Replacement summary' }]; state.session.revision++;
     await card.getByText('Replacement summary', { exact: true }).waitFor();
     assert.equal(await card.getByRole('alert').count(), 0);
+    content.summary[0].text += ' with appended context'; state.session.revision++;
+    await card.getByText('Replacement summary with appended context', { exact: true }).waitFor();
+    await card.getByText('上下文已压缩', { exact: true }).waitFor();
+    assert.equal(await page.locator('.acp-compaction').count(), 1);
     content.status = 'cancelled'; content.summary = []; state.session.revision++;
     await page.getByText('上下文压缩已取消', { exact: true }).waitFor();
     assert.equal(await card.count(), 0);

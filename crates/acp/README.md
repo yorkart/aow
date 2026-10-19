@@ -308,8 +308,32 @@ remain the backport boundary.
 The initial source is `zed-industries/zed` at
 `dc3fb21676457b84d2233ac4c6bec5cebc698ec3` (2026-10-08), with
 `agent-client-protocol = 2.2.0`, `unstable` and `unstable_protocol_v2`.
-Application connections negotiate v1, as the upstream baseline does. Shared v1/v2
-conversion behavior remains in the imported conversion modules.
+AoW now pins `agent-client-protocol = 3.4.0` (schema `1.12.0`) with the same feature
+flags. This SDK upgrade is independent of the recorded Zed source baseline.
+Application connections explicitly negotiate v1 and reject any other response
+version before creating a session. Shared v1/v2 conversion behavior remains in
+the imported conversion modules; enabling draft v2 types does not enable v2 wire
+negotiation or advertise subagent support.
+
+Compaction follows the updated schema: a first-seen summary chunk creates an
+in-progress entry, and later chunks append in receive order even after a terminal
+status. Chunks preserve the entry's identity, position, status and retained
+metadata; chunk metadata does not patch the compaction. Explicit compaction
+updates retain the existing absent/null/replacement patch semantics. The public
+facade fixture covers chunk-first delivery, post-completion appends and SQLite
+reload, alongside the existing authentication, cancellation, recovery and fork
+tests. No persisted schema migration is required.
+
+Upgrade validation includes the Rust workspace, Chromium ACP suites and live
+Registry initialization with Codex ACP 2.2.2 and Claude ACP 0.93.0. The fresh Codex
+profile requires authentication before session creation; Claude creates and
+closes a session. These smoke checks send no prompts. Authenticated inference
+and macOS validation remain outside this Linux run.
+
+Source-map validation for this upgrade covers the changed mappings and all four
+imported conversion modules. The weekly baseline already contains stale hashes
+and a removed `conversation_view/clipboard.ts` mapping, so the complete backport
+checker requires a separate source-map refresh.
 
 `backport/sources.json` records source paths and hashes, destination paths,
 extracted responsibilities, host adaptations and the last synchronization.

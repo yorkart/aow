@@ -153,8 +153,10 @@ impl AcpConnection {
             }
         };
         ensure!(
-            response.protocol_version >= ProtocolVersion::V1,
-            "Unsupported ACP protocol version"
+            response.protocol_version == ProtocolVersion::V1,
+            "Unsupported ACP protocol version: expected {}, received {}",
+            ProtocolVersion::V1,
+            response.protocol_version
         );
         let result = Self {
             info: ConnectionInfo {

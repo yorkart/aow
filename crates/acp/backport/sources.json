@@ -4,11 +4,24 @@
   "source_date": "2026-10-08",
   "sdk": {
     "package": "agent-client-protocol",
-    "version": "2.2.0",
+    "version": "3.4.0",
     "features": [
       "unstable",
       "unstable_protocol_v2"
-    ]
+    ],
+    "schema_version": "1.12.0",
+    "upgrade": {
+      "date": "2026-10-19",
+      "from_version": "2.2.0",
+      "from_schema_version": "1.9.1",
+      "source_baseline_unchanged": true,
+      "wire_protocol": 1,
+      "notes": [
+        "SDK-only upgrade; the pinned Zed source and four imported conversion modules are unchanged.",
+        "Compaction summary chunks create first-seen entries and append in receive order regardless of status.",
+        "Initialization accepts only ACP v1; draft v2 types and unstable features do not advertise new capabilities."
+      ]
+    }
   },
   "last_sync": {
     "date": "2026-10-10",
@@ -52,7 +65,8 @@
     "Successful live ACP prompts invoke the optional host turn-completed callback once; AoW shares its Terminal notification dispatcher, page/IM settings and unread queue, with ACP thread destinations and conservative response-usage deltas",
     "Streaming persistence queues shared session references and captures bodies after a one-second coalescing window; generation/revision HTTP deltas carry entry replacements and text/terminal appends, while old terminal-output metadata is normalized on load. Zed uses GPUI events and virtual lists; AoW retains its offline body cache and React layout.",
     "Browser history defaults to turn overviews; process bodies use scoped lazy reads and deltas only while expanded. Collapse unmounts details and releases their data and requests. Virtual lists and database repartitioning remain deferred.",
-    "Sidebar recency carries the existing interacted_at column through snapshots and desktop/mobile lists. Only accepted user submissions advance it; imports and legacy hydration freeze historical update time as their baseline. Snapshot updated_at and revision still track all state changes."
+    "Sidebar recency carries the existing interacted_at column through snapshots and desktop/mobile lists. Only accepted user submissions advance it; imports and legacy hydration freeze historical update time as their baseline. Snapshot updated_at and revision still track all state changes.",
+    "SDK 3.4.0/schema 1.12.0 is newer than the recorded Zed source baseline. Compaction chunks follow the new receive-order contract, and initialization rejects protocol versions other than v1. Subagent and system-prompt behavior remain outside this upgrade."
   ],
   "files": [
     {
@@ -201,7 +215,7 @@
           "sha256": "7bed9ea8c55ec5cd3ab35a1661cac89f059c013bb18f341c0f5892de1f83c906"
         }
       ],
-      "local_sha256": "c3333d89b2a60b8c24fc147b5b9cdacb7f7b3ee37cb9f1c4b4fb66a7e55c1ee7"
+      "local_sha256": "684213395527b234ff3e814020905160b80fde148bcd5f7d18bed49dc3e97700"
     },
     {
       "local": "crates/acp/src/agent_servers/acp/client.rs",
@@ -562,14 +576,14 @@
     {
       "local": "crates/acp/src/acp_thread/compaction.rs",
       "kind": "host-port",
-      "reason": "Compaction upsert, in-progress summary accumulation and absent/null/replacement patches",
+      "reason": "Compaction upsert and absent/null/replacement patches; schema 1.12.0 extends the pinned baseline with chunk-first creation and receive-order appends independent of status",
       "sources": [
         {
           "path": "crates/acp_thread/src/acp_thread.rs",
           "sha256": "7e78b4dcde4ba3a329f35237ed1e0641ef793d3c58825f79a5382758e2f386fe"
         }
       ],
-      "local_sha256": "604330329e9b2695b109785ceb7fdba86e819850a0f7288bf914ed98fc6d7fb3"
+      "local_sha256": "f7b8cc442d31c83ffc3e1eb20260cd799203d0862749f35638ae898f2f5bd6ba"
     },
     {
       "local": "frontend/src/features/acp/agent_ui/conversation_view/activity.tsx",
