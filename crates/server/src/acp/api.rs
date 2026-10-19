@@ -41,6 +41,7 @@ pub(crate) fn routes() -> Router<AppState> {
         )
         .route("/api/acp/sessions", get(sessions).post(prepare_session))
         .route("/api/acp/sessions/{thread_id}/metadata", get(session_info))
+        .route("/api/acp/sessions/{thread_id}/fork", post(fork_session))
         .route(
             "/api/acp/sessions/{thread_id}/process",
             get(session_process),
@@ -251,6 +252,23 @@ async fn session_info(
     Path(thread_id): Path<String>,
 ) -> Result<Json<aow_acp::SessionInfo>, HttpError> {
     state.acp.session_info(&thread_id).map(Json).map_err(error)
+}
+async fn fork_session(
+    State(state): State<AppState>,
+    Path(thread_id): Path<String>,
+    Query(query): Query<ViewQuery>,
+    headers: HeaderMap,
+) -> Result<Json<aow_acp::SessionSnapshot>, HttpError> {
+    let controller = state.acp_controls.session(&thread_id);
+    let _lifecycle = controller.authorize_lifecycle(&headers, false).await?;
+    crate::instances::preserve_parent(&state, Some(&aow_protocol::InstanceRef::acp(&thread_id)))?;
+    let fork = state.acp.fork_session(&thread_id).await.map_err(error)?;
+    state
+        .instances
+        .record_all(vec![crate::instances::acp(&aow_acp::SessionInfo::from(
+            &fork,
+        ))])?;
+    view_snapshot(&state, &fork.thread_id, &query)
 }
 async fn session_connection(
     State(state): State<AppState>,

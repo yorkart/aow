@@ -241,7 +241,7 @@ impl AcpConnection {
         // Dropping its response future would cancel locally without rolling back the agent.
         let result = if matches!(
             method,
-            "session/prompt" | "authenticate" | "session/load" | "session/resume"
+            "session/prompt" | "authenticate" | "session/load" | "session/resume" | "session/fork"
         ) {
             pending.await.map_err(anyhow::Error::from)
         } else {

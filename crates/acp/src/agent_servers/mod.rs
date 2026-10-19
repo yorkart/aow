@@ -1,5 +1,6 @@
 pub(crate) mod acp;
 mod completion;
+mod fork;
 mod identity;
 mod imports;
 mod installation;
@@ -504,7 +505,7 @@ impl AgentServerStore {
             }
         };
         drop(identity);
-        self.open_session(connection, session_id.to_owned(), id, true)
+        self.open_session(connection, session_id.to_owned(), id, true, true)
             .await
     }
     pub async fn resume(&self, id: &str) -> Result<SessionSnapshot> {
@@ -548,7 +549,7 @@ impl AgentServerStore {
                 connection.supports("resume"),
                 "Agent does not support session loading or resuming"
             );
-            self.open_session(connection, session_id, id.into(), false)
+            self.open_session(connection, session_id, id.into(), false, true)
                 .await
         }
         .await;

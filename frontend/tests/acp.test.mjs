@@ -120,6 +120,16 @@ try {
             ? { kind: 'unchanged' } : { kind: 'snapshot', snapshot: details };
       }
       else if (path.endsWith('/logs')) { (state.logReads ??= []).push(path); data = state.logs || []; }
+      else if (path.endsWith('/fork')) {
+        const id = path.split('/').at(-2);
+        if (!state.controls.authorized(id, request)) { await route.fulfill({ status: 409, json: { code: 'acp_control_required', message: 'No session control' } }); return; }
+        (state.forks ??= []).push(id);
+        if (state.forkGate) await state.forkGate;
+        if (state.forkError) { await route.fulfill({ status: 400, json: { message: state.forkError } }); return; }
+        const source = state.sessions.find(item => item.thread_id === id);
+        data = { ...JSON.parse(JSON.stringify(source)), thread_id: `fork-${state.sessions.length}`, session_id: `fork-native-${state.sessions.length}`, title: `${source.title} · 分叉`, parent: { kind: 'acp', id } };
+        state.sessions.push(data);
+      }
       else if (path.endsWith('/actions')) {
         if (!state.controls.authorized(path.split('/').at(-2), request)) {
           await route.fulfill({ status: 409, json: { code: 'acp_control_required', message: 'No session control' } }); return;
@@ -308,6 +318,51 @@ try {
   }
   const interactions = state => state.actions.filter(action => action.action !== 'resume');
   const newSession = async page => { await page.getByRole('button', { name: '新建窗体', exact: true }).click(); await page.getByRole('button', { name: '新建 ACP 会话：Test Agent', exact: true }).click(); };
+  await test('ACP fork opens an independent tab with history and preserves the source and its draft', async t => {
+    const { page, state } = await fixture(t, false, { capabilities: { loadSession: true, sessionCapabilities: { fork: {} } } });
+    state.session.entries = [{ id: 'history-user', kind: 'user', content: { type: 'text', text: 'Shared question' } }, { id: 'history-answer', kind: 'assistant', content: { type: 'text', text: 'Shared answer' } }];
+    await newSession(page);
+    await page.getByLabel('ACP 消息', { exact: true }).fill('Source draft');
+    const before = JSON.parse(JSON.stringify(state.sessions[0]));
+    await page.getByRole('button', { name: '会话更多操作', exact: true }).click();
+    await page.getByRole('menuitem', { name: '分叉会话', exact: true }).click();
+    await page.getByRole('tab').filter({ hasText: 'Conversation · 分叉' }).waitFor();
+    await page.getByText('Shared answer', { exact: true }).filter({ visible: true }).waitFor();
+    assert.deepEqual(state.forks, ['local']);
+    assert.deepEqual(state.sessions[0], before);
+    assert.equal(await page.getByRole('textbox', { name: 'ACP 消息', exact: true }).innerText(), '');
+    await page.getByRole('tab').filter({ hasText: 'Conversation', hasNotText: '分叉' }).click();
+    assert.equal(await page.getByRole('textbox', { name: 'ACP 消息', exact: true }).innerText(), 'Source draft');
+  });
+  await test('ACP fork failures stay on the source and allow an explicit retry', async t => {
+    const { page, state } = await fixture(t, false, { capabilities: { sessionCapabilities: { fork: {} } }, forkError: 'Fork rejected' });
+    await newSession(page);
+    await page.getByLabel('ACP 消息', { exact: true }).fill('Keep draft');
+    await page.getByRole('button', { name: '会话更多操作', exact: true }).click();
+    await page.getByRole('menuitem', { name: '分叉会话', exact: true }).click();
+    await page.getByRole('alert').filter({ hasText: 'Fork rejected' }).waitFor();
+    assert.equal(state.sessions.length, 1);
+    assert.equal(await page.getByLabel('ACP 消息', { exact: true }).innerText(), 'Keep draft');
+    state.forkError = '';
+    await page.getByRole('button', { name: '会话更多操作', exact: true }).click();
+    await page.getByRole('menuitem', { name: '分叉会话', exact: true }).click();
+    await page.getByRole('tab').filter({ hasText: 'Conversation · 分叉' }).waitFor();
+    assert.deepEqual(state.forks, ['local', 'local']);
+  });
+  await test('ACP fork is hidden without capability and disabled for an observer', async t => {
+    const { page, state } = await fixture(t);
+    await newSession(page);
+    await page.getByLabel('ACP 消息', { exact: true }).waitFor();
+    await page.getByRole('button', { name: '会话更多操作', exact: true }).click();
+    assert.equal(await page.getByRole('menuitem', { name: '分叉会话', exact: true }).count(), 0);
+    state.capabilities = { sessionCapabilities: { fork: {} } };
+    const { page: observer } = await fixture(t, false, { sharedState: state });
+    await observer.getByRole('button', { name: '打开 ACP 会话 Conversation', exact: true }).click();
+    await observer.getByRole('button', { name: '接管', exact: true }).waitFor();
+    await observer.getByRole('button', { name: '会话更多操作', exact: true }).click();
+    assert.equal(await observer.getByRole('menuitem', { name: '分叉会话', exact: true }).isDisabled(), true);
+    assert.deepEqual(state.forks || [], []);
+  });
   const toggleThinking = async (page, checked = false) => {
     await page.getByRole('button', { name: '会话更多操作', exact: true }).click();
     const option = page.getByRole('menuitemcheckbox', { name: '显示 Thinking', exact: true });

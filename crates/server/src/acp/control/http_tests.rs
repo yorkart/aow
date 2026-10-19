@@ -6,10 +6,17 @@ use serde_json::{Value, json};
 use std::{path::Path, sync::Arc};
 use tower::ServiceExt;
 
-struct Host;
+struct Host {
+    fork: bool,
+}
 #[async_trait::async_trait]
 impl aow_acp::AcpHost for Host {
     async fn settings(&self) -> anyhow::Result<String> {
+        if self.fork {
+            return Ok(json!({"agent_servers":{"test":{"type":"custom","command":"node","args":[
+                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../acp/tests/fixtures/fork-agent.mjs")
+            ]}}}).to_string());
+        }
         Ok(
             json!({"agent_servers":{"test":{"type":"custom","command":"/missing/acp-adapter"}}})
                 .to_string(),
@@ -67,7 +74,11 @@ async fn api_prepares_named_identity_and_reads_metadata_before_owned_startup() {
     let directory = tempfile::tempdir().unwrap();
     let workspace = directory.path().canonicalize().unwrap();
     let mut state = crate::AppState::new(Default::default());
-    state.acp = aow_acp::AcpService::new(Arc::new(Host), Some(workspace.join("state"))).unwrap();
+    state.acp = aow_acp::AcpService::new(
+        Arc::new(Host { fork: false }),
+        Some(workspace.join("state")),
+    )
+    .unwrap();
     let app = crate::acp::routes().with_state(state.clone());
     let prepared = app
         .clone()
@@ -207,5 +218,61 @@ async fn api_prepares_named_identity_and_reads_metadata_before_owned_startup() {
                 assert_eq!(body["snapshot"]["overview"].is_array(), !view.is_empty());
             }
         }
+    }
+}
+
+#[tokio::test]
+async fn fork_requires_control_and_returns_a_distinct_session_with_ancestry() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut state = crate::AppState::new(Default::default());
+    state.acp = aow_acp::AcpService::new(
+        Arc::new(Host { fork: true }),
+        Some(directory.path().join("state")),
+    )
+    .unwrap();
+    let connection = state
+        .acp
+        .connect("test", directory.path().into())
+        .await
+        .unwrap();
+    let source = state.acp.new_session(&connection.id).await.unwrap();
+    let controller = state.acp_controls.session(&source.thread_id);
+    let token = controller.claim(uuid::Uuid::new_v4(), false).token.unwrap();
+    let app = crate::acp::routes().with_state(state.clone());
+    for credential in [None, Some("stale"), Some(token.as_str())] {
+        let mut request = Request::post(format!(
+            "/api/acp/sessions/{}/fork?view=overview",
+            source.thread_id
+        ));
+        if let Some(token) = credential {
+            request = request.header("X-Aow-Acp-Control", token);
+        }
+        let response = app
+            .clone()
+            .oneshot(request.body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        if credential != Some(token.as_str()) {
+            assert_eq!(response.status(), StatusCode::CONFLICT);
+            assert_eq!(state.acp.sessions(None).len(), 1);
+            continue;
+        }
+        assert_eq!(response.status(), StatusCode::OK);
+        let fork: Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), 65536).await.unwrap()).unwrap();
+        assert_ne!(fork["thread_id"], source.thread_id);
+        assert_ne!(fork["session_id"], source.session_id.as_deref().unwrap());
+        assert_eq!(fork["parent"], json!({"kind":"acp","id":source.thread_id}));
+        assert_eq!(fork["overview"], json!([]));
+        assert_eq!(state.acp.sessions(None).len(), 2);
+        assert!(
+            state
+                .instances
+                .snapshot()
+                .unwrap()
+                .contains_key(&aow_protocol::InstanceRef::acp(
+                    fork["thread_id"].as_str().unwrap()
+                ))
+        );
     }
 }

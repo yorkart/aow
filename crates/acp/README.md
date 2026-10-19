@@ -55,6 +55,28 @@ pending; newer input is preserved.
 Conversations run in adapter child processes owned by the server. There is no
 ACP daemon, PTY or terminald dependency.
 
+## Forking sessions
+
+The conversation's **分叉会话** menu action is available when the connected agent
+advertises `agentCapabilities.sessionCapabilities.fork`. This is ACP's optional,
+unstable `session/fork` method. Only the controlling view can fork an idle session;
+active turns and recovery must finish first. Mobile views open the resulting
+conversation through the same action.
+
+`POST /api/acp/sessions/<thread_id>/fork` requires the source session's control
+token and returns the new snapshot (`?view=overview` selects the browser view).
+AoW sends the source's native `sessionId`, workspace `cwd` and `mcpServers: []`.
+The new local thread has its own native session identity and records the source
+as its parent. Source history and composer drafts remain unchanged. Fork mode and
+configuration come from the agent, without applying new-session defaults.
+
+Fork responses need not replay history. For agents supporting `session/load`,
+AoW loads the new native session through its existing recovery machinery; other
+agents retain the known source transcript locally. The new native identity is
+persisted before replay so a failed load can be retried. An abandoned HTTP caller
+does not cancel an already admitted fork RPC; the resulting session remains in
+the local session list. Forking does not create a Git worktree.
+
 ## Configuration and storage
 
 AoW Settings owns `<active configuration directory>/acp/settings.json`. It is
@@ -355,3 +377,13 @@ cargo test -p aow-acp --test integration \
 ```
 
 The default smoke agent is `codex-acp`; set `AOW_ACP_SMOKE_AGENT` for another ID.
+
+An additional opt-in test uses an installed, authenticated codex-acp. It performs
+two inference turns to verify inherited context, source isolation and restart
+recovery. Use a dedicated `CODEX_HOME` when isolating the test from normal history:
+
+```sh
+AOW_ACP_FORK_COMMAND=/absolute/path/to/codex-acp \
+cargo test -p aow-acp --test fork \
+  live_codex_acp_fork_preserves_context_and_resumes -- --ignored --nocapture
+```

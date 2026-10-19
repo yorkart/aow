@@ -74,6 +74,10 @@ impl AcpService {
     pub async fn new_session(&self, connection_id: &str) -> Result<SessionSnapshot> {
         self.0.new_session(connection_id).await
     }
+    /// Branch an idle, connected session using the agent's negotiated fork capability.
+    pub async fn fork_session(&self, thread_id: &str) -> Result<SessionSnapshot> {
+        self.0.fork_session(thread_id).await
+    }
     /// Persist identity before connecting; the controlling view then calls resume.
     pub async fn prepare_session(&self, agent_id: &str, cwd: PathBuf) -> Result<SessionSnapshot> {
         self.0.prepare_session(agent_id, cwd).await

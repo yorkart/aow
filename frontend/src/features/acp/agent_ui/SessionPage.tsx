@@ -5,8 +5,9 @@ import { SessionTab } from './SessionTab';
 import type { AcpTab } from './workspace_tabs';
 
 // A host without a workspace tab strip can open the same persisted conversation.
-export function SessionPage({ workspace, thread_id, onOpenFile }: {
+export function SessionPage({ workspace, thread_id, onOpenSession, onOpenFile }: {
   workspace: string; thread_id: string; onOpenFile: (path: string, line?: number) => void;
+  onOpenSession: (session: SessionInfo) => void;
 }) {
   const [location, setLocation] = useState<{ workspace: string; thread_id: string; tab: AcpTab }>();
   const tab = location?.workspace === workspace && location.thread_id === thread_id ? location.tab : undefined;
@@ -23,6 +24,6 @@ export function SessionPage({ workspace, thread_id, onOpenFile }: {
   const changed = useCallback((_: string, session: SessionInfo) => {
     setLocation(current => current?.thread_id === session.thread_id && current.tab.title !== session.title ? { ...current, tab: { ...current.tab, title: session.title } } : current);
   }, []);
-  return tab ? <SessionTab key={`${workspace}:${thread_id}`} tab={tab} workspace={workspace} visible onSessionChange={changed} onOpenSession={() => {}} onOpenFile={onOpenFile} />
+  return tab ? <SessionTab key={`${workspace}:${thread_id}`} tab={tab} workspace={workspace} visible onSessionChange={changed} onOpenSession={onOpenSession} onOpenFile={onOpenFile} />
     : <div className="aow-conversation-layout aow-conversation-theme"><p className={error ? 'acp-error' : 'acp-muted'} role={error ? 'alert' : 'status'}>{error || '正在打开会话…'}</p></div>;
 }

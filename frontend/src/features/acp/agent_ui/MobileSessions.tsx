@@ -22,7 +22,7 @@ export function MobileSessions({ workspace, route, visible, navigate, headerActi
   if (visible && route.acpSession) return <>
     {headerActions && createPortal(<button className="mobile-icon-button" aria-label="返回 ACP 会话列表" title="返回 ACP 会话列表"
       onClick={() => navigate({ workspace, view: 'acp' }, true)}><List size={20} /></button>, headerActions)}
-    <SessionPage workspace={workspace} thread_id={route.acpSession} onOpenFile={path => navigate({ workspace, view: 'files', file: path, fileSource: 'external' })} />
+    <SessionPage workspace={workspace} thread_id={route.acpSession} onOpenSession={session => navigate({ workspace: session.cwd, view: 'acp', acpSession: session.thread_id })} onOpenFile={path => navigate({ workspace, view: 'files', file: path, fileSource: 'external' })} />
   </>;
   return <section className="mobile-content-page" aria-label="ACP 会话列表">
     <MobilePageHeader title="ACP" subtitle="本地会话记录" actions={<MobileRefresh reload={list.reload} loading={list.loading} />} />

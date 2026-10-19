@@ -1,7 +1,7 @@
 import '../../../components/conversation-theme.css';
 // Conversation content is owned by a workspace tab; closing its view never closes the ACP session.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Check, CircleAlert, LogIn, MoreHorizontal, ScrollText, WifiOff } from 'lucide-react';
+import { Check, CircleAlert, GitFork, LogIn, MoreHorizontal, ScrollText, WifiOff } from 'lucide-react';
 import { ConversationLayout } from '../../../components/conversation/ConversationLayout';
 import { ConversationIds } from '../../../components/conversation/ConversationIds';
 import { ComposerStatus } from '../../../components/conversation/ComposerStatus';
@@ -44,7 +44,7 @@ function resumeSession(id: string, token: string) {
   return pending;
 }
 
-export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenFile }: {
+export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenSession, onOpenFile }: {
   tab: AcpTab; workspace: string; visible: boolean;
   onSessionChange: (id: string, session: SessionInfo) => void; onOpenSession: (session: SessionInfo) => void; onOpenFile: OpenFile;
 }) {
@@ -181,6 +181,16 @@ export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenFil
   ]} />{thread_id && <Popover label="会话更多操作" trigger={<MoreHorizontal size={18} />}>
     {close => <>
       <button type="button" role="menuitemcheckbox" aria-checked={showThinking} onClick={() => { setShowThinking(value => !value); close(); }}><Check size={14} style={{ visibility: showThinking ? 'visible' : 'hidden' }} />显示 Thinking</button>
+      {!!object(connection?.capabilities?.sessionCapabilities).fork && <button type="button" role="menuitem" disabled={!token || busy || restoring || recovering || needsResume || session?.status !== 'idle'} onClick={() => {
+        if (!token) return;
+        close();
+        void run(async () => {
+          const fork = await acpApi.fork(thread_id, token);
+          acceptSession(fork);
+          window.dispatchEvent(new Event(sessionsChanged));
+          onOpenSession(fork);
+        });
+      }}><GitFork size={14} />分叉会话</button>}
       <button type="button" role="menuitem" disabled={busy} onClick={() => { close(); if (logs) setLogs(undefined); else void run(async () => setLogs(await acpApi.logs(thread_id))); }}><ScrollText size={14} />{logs ? '返回会话' : 'ACP 协议日志'}</button>
     </>}
   </Popover>}</>;
