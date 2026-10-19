@@ -14,6 +14,8 @@ import { useConfirmation } from '../../components/ConfirmationDialog';
 
 interface Props {
   visible: boolean;
+  autoFocus?: boolean;
+  focusRequest?: number;
   tab?: TerminalTab;
   loading: boolean;
   detectedAgents: Record<string, string | null>;
@@ -153,7 +155,7 @@ function splitShortcutLabel(axis: TerminalSplitAxis) {
   return axis === 'row' ? 'Ctrl+Shift+E' : 'Ctrl+Shift+O';
 }
 
-export function TerminalWorkspace({ visible, tab, loading, detectedAgents, terminalTitles, agentProcesses = {}, terminalActivity = {}, onTabChange, onTabClosed, onPaneStatus, onReload }: Props) {
+export function TerminalWorkspace({ visible, autoFocus = true, focusRequest, tab, loading, detectedAgents, terminalTitles, agentProcesses = {}, terminalActivity = {}, onTabChange, onTabClosed, onPaneStatus, onReload }: Props) {
   const { confirm, confirmationDialog } = useConfirmation();
   const [layout, setLayout] = useState<TerminalLayout | null>(() => tab ? fallbackLayout(tab) : null);
   const [activePaneId, setActivePaneId] = useState<string>();
@@ -604,7 +606,7 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
             ) : null}
             <button title="关闭 pane" aria-label="关闭 pane" disabled={paneBusy} onClick={() => void closePane(pane)}>{paneBusy ? <LoaderCircle className="spinning" /> : <X />}</button>
           </header>}
-            terminal={terminalVisible => <TerminalInputPane key={`${tab!.id}:${pane.id}`} visible={terminalVisible} tabId={tab!.id} pane={pane} active={activePaneId === pane.id} onFocus={() => setActivePaneId(pane.id)} onStatus={(status, code) => markStatus(pane.id, status, code)}
+            terminal={terminalVisible => <TerminalInputPane key={`${tab!.id}:${pane.id}`} visible={terminalVisible} autoFocus={autoFocus} focusRequest={focusRequest} tabId={tab!.id} pane={pane} active={activePaneId === pane.id} onFocus={() => setActivePaneId(pane.id)} onStatus={(status, code) => markStatus(pane.id, status, code)}
               onRebuild={canRebuild ? () => void rebuild() : undefined} rebuilding={operation === 'rebuild'} />}
           />
         </section>

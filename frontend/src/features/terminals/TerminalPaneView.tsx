@@ -84,6 +84,7 @@ interface Props {
   attachEnabled?: boolean;
   forceOnAttach?: boolean;
   autoFocus?: boolean;
+  focusRequest?: number;
   inputSuspended?: boolean;
   mobileInput?: boolean;
   controlsRef?: RefObject<TerminalPaneControls | null>;
@@ -374,7 +375,7 @@ class LimitedClipboardBase64 implements IBase64 {
 }
 
 export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStatus, onRebuild, rebuilding = false,
-  sizing = 'container', renderer = 'auto', fontSize = 13, attachEnabled = true, forceOnAttach = false, autoFocus = true, inputSuspended = false, mobileInput = false, controlsRef, onConnectionChange, onFrameChange,
+  sizing = 'container', renderer = 'auto', fontSize = 13, attachEnabled = true, forceOnAttach = false, autoFocus = true, focusRequest = 0, inputSuspended = false, mobileInput = false, controlsRef, onConnectionChange, onFrameChange,
 }: Props) {
   const [connection, setConnection] = useState<ConnectionState>(pane.status === 'running' ? 'connecting' : pane.status);
   usePublishTerminalConnection(tabId, pane.id, attachEnabled && pane.status === 'running' ? connection
@@ -388,6 +389,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
   savedSizeRef.current = savedTerminalDimensions(pane);
   const shellRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
+  const appliedFocusRequest = useRef(0);
   const terminalRef = useRef<Terminal | undefined>(undefined);
   const stdinDisabled = inputSuspended || Boolean(pane.hosting);
   const inputSuspendedRef = useRef(stdinDisabled);
@@ -986,15 +988,16 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
   useEffect(() => {
     // The emulator is visibility:hidden during restore, so focusing it before
     // replay finishes has no effect. Retry once the active pane is ready.
-    if (!autoFocus || !active || !visible || restorePending) return;
+    if ((!autoFocus && focusRequest === appliedFocusRequest.current) || !active || !visible || restorePending) return;
     const frame = window.requestAnimationFrame(() => {
       // Restore must not interrupt a menu or inline rename in either workspace's tab bar.
       if (inputSuspendedRef.current) return;
       if (document.activeElement?.closest('.project-aow-new, .project-aow-tab-rename-input, .project-aow-group-toggle')) return;
+      appliedFocusRequest.current = focusRequest;
       terminalRef.current?.focus();
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [active, visible, restorePending, autoFocus]);
+  }, [active, visible, restorePending, autoFocus, focusRequest]);
 
   useEffect(() => {
     if (pane.status !== 'running') {

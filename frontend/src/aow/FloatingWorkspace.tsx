@@ -125,6 +125,7 @@ export function FloatingWorkspace({ agents, projects, activeLocation = true }: {
       />
       {operationError ? <div className="project-aow-inline-error" role="alert">{operationError}<button aria-label="关闭错误提示" onClick={() => setOperationError('')}><X /></button></div> : null}
       <div className="floating-workspace-body">
+        <div className="floating-workspace-main">
         <div className="floating-workspace-content" ref={floating.setPortal}>
           {inboxVisited && <div className="floating-workspace-inbox" hidden={!floating.inboxOpen}><Suspense fallback={<p>正在加载 Inbox…</p>}>
             <InboxPanel visible={floating.visible && floating.inboxOpen} projects={projects} agents={agents} onOpenTerminal={async id => {
@@ -136,6 +137,8 @@ export function FloatingWorkspace({ agents, projects, activeLocation = true }: {
           </Suspense></div>}
           {floating.tabs.filter(tab => tab.external && !projects.some(project => project.worktrees.some(worktree => worktree.path === tab.workspace)) && tab.workspace !== floating.globalRoot).map(tab => <FloatingTerminal key={tabKey(tab)} entry={tab} activeLocation={activeLocation} />)}
           {!floating.tabs.length && !floating.inboxOpen ? <div className="floating-workspace-empty">{actions}{!floating.globalRoot ? <p>正在加载全局项目…</p> : null}</div> : null}
+        </div>
+        <div className="floating-workspace-dock" ref={floating.setDockPortal} />
         </div>
         <div className="floating-workspace-sidebar" hidden={!floating.sidebarOpen} ref={floating.setSidebar} />
       </div>

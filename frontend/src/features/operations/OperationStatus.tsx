@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, FileClock, LoaderCircle, TriangleAlert, X } from 'lucide-react';
 import { type Operation, operationOutcomeLabels } from './operations';
 import './operations.css';
 
-export function OperationStatus({ operations, ready, error, logOpen, onOpenOperation, onOpenLogs }: {
+export function OperationStatus({ operations, ready, error, logOpen, onOpenOperation, onOpenLogs, beforeLogs }: {
+  beforeLogs?: ReactNode;
   operations: Operation[]; ready: boolean; error: string; logOpen: boolean;
   onOpenOperation: (operation: Operation) => void; onOpenLogs: (operationId?: string) => void;
 }) {
@@ -33,6 +34,7 @@ export function OperationStatus({ operations, ready, error, logOpen, onOpenOpera
         if (active.length === 1) onOpenOperation(active[0]); else setExpanded(value => !value);
       }}><LoaderCircle size={12} className="spinning" /><span>{active.length === 1 ? describe(active[0]) : `${active.length} 个操作进行中`}</span></button>}
     {error && <span className="operation-status-warning" title={error} role="status"><TriangleAlert size={12} aria-label="操作状态异常" /></span>}
+    {beforeLogs}
     <button type="button" title="操作日志" aria-label="操作日志" aria-expanded={logOpen} onClick={() => onOpenLogs()}><FileClock size={13} /></button>
     {expanded && <div className="operation-task-list" role="dialog" aria-label="正在执行的操作" onKeyDown={event => { if (event.key === 'Escape') setExpanded(false); }}>
       <header><strong>正在执行的操作</strong><button aria-label="关闭任务列表" onClick={() => setExpanded(false)}><X size={14} /></button></header>

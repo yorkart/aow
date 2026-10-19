@@ -138,7 +138,7 @@ try {
         return data;
       });
       data = data.filter(tab => !state.closedTerminalIds.includes(tab.id));
-      data = data.map(item => ({ ...item, name_is_custom: Boolean(state.names[item.id]), ...(state.names[item.id] ? { name: state.names[item.id] } : {}),
+      data = data.map(item => ({ ...item, name_is_custom: Boolean(state.names[item.id]) || item.name_is_custom === true, ...(state.names[item.id] ? { name: state.names[item.id] } : {}),
         panes: item.panes.map(pane => ({ ...pane, name_is_custom: Boolean(state.paneNames[pane.id]), ...(state.paneNames[pane.id] ? { name: state.paneNames[pane.id] } : {}) })),
       }));
       state.knownTerminalTabs = { ...state.knownTerminalTabs, ...Object.fromEntries(data.map(item => [item.id, item])) };
@@ -304,8 +304,9 @@ try {
         if (state.terminalCreateError) { await route.fulfill({ status: 500, json: { message: state.terminalCreateError } }); return; }
         const id = `created-${state.createdTerminals.length}`;
         const agent = state.registeredAgents.find(agent => agent.id === created.agent_id);
-        data = { id, name: agent?.display_name ?? 'New shell', workspace_root: created.workspace_root, layout: { type: 'pane', pane_id: id + '-pane' }, panes: [{ id: id + '-pane', name: agent?.display_name ?? 'Shell', cwd: created.cwd, shell: agent?.command ?? '/bin/bash', kind: agent ? 'agent' : 'terminal', agent_id: agent ? agent.agent_type ?? agent.id : null, status: 'running', rows: 40, cols: 120 }] };
+        data = { id, name: created.name ?? agent?.display_name ?? 'New shell', name_is_custom: !!created.name, workspace_root: created.workspace_root, layout: { type: 'pane', pane_id: id + '-pane' }, panes: [{ id: id + '-pane', name: agent?.display_name ?? 'Shell', cwd: created.cwd, shell: agent?.command ?? '/bin/bash', kind: agent ? 'agent' : 'terminal', agent_id: agent ? agent.agent_type ?? agent.id : null, status: 'running', rows: 40, cols: 120 }] };
         state.createdTerminalTabs.push(data);
+        await state.terminalCreateGate;
       }
       else if (url.pathname === '/api/terminals') {
         const scope = url.searchParams.get('workspace_root');
@@ -369,6 +370,181 @@ try {
   }
 
   const groupButton = (root, name) => root.getByRole('button', { name: new RegExp(`^(展开|收起) ${name} 分组`) });
+
+  async function openDockFile(page, path = `${worktrees[0].path}/edit.txt`) {
+    await surface(page).getByRole('button', { name: 'Explorer', exact: true }).click();
+    await surface(page).locator(`.tree-row[data-tree-path="${path}"]`).click();
+    await page.getByRole('button', { name: '项目终端', exact: true }).waitFor();
+  }
+  const projectDock = page => page.getByRole('region', { name: '项目共享终端', exact: true });
+  const readyDock = page => projectDock(page).locator('.terminal-emulator-shell:not(.restore-pending)').first().waitFor();
+
+  await test('project terminal dock shares one tabless renderer across pages and worktrees and restores after reload', async t => {
+    const other = `${worktrees[0].path}/other.txt`;
+    const { page, state } = await fixture(t, { beforeOpen: ({ state }) => {
+      state.textFiles[other] = { content: 'Other file', version: 'v1' };
+    } });
+    const toggle = page.getByRole('button', { name: '项目终端', exact: true });
+    assert.equal(await toggle.count(), 0, 'terminal tabs have no dock entry');
+    await openDockFile(page);
+    const pageUrl = page.url();
+    await toggle.click();
+    await readyDock(page);
+    assert.deepEqual(state.createdTerminals, [{ workspace_root: worktrees[0].path, cwd: worktrees[0].path, name: `${project.name} · Terminal` }]);
+    assert.equal(page.url(), pageUrl, 'opening the dock keeps the file route');
+    assert.equal(await tab(page, 'edit.txt').getAttribute('aria-selected'), 'true');
+    assert.equal(await page.locator('[data-workspace-tab-id="terminal:created-1"]').count(), 0);
+    assert.equal(await projectDock(page).getByRole('tablist').count(), 0);
+    const terminal = await projectDock(page).locator('.xterm').elementHandle();
+    const connections = state.terminalSockets.filter(socket => socket.url().includes('/terminals/created-1/')).length;
+    const detached = state.closedTerminalConnections.filter(url => url.includes('/terminals/created-1/')).length;
+    assert.equal(connections - detached, 1, 'StrictMode leaves exactly one live attachment');
+    await projectDock(page).locator('.xterm-helper-textarea').pressSequentially('pwd');
+    await eventually(() => state.terminalMessages.some(entry => entry.url.includes('/terminals/created-1/') && typeof entry.message !== 'string'));
+    if (process.env.AOW_DOCK_SCREENSHOT) await page.screenshot({ path: process.env.AOW_DOCK_SCREENSHOT });
+    const terminalBox = await projectDock(page).boundingBox();
+    const contentBox = await surface(page).locator('.project-aow-center-content').boundingBox();
+    assert.ok(contentBox.y + contentBox.height <= terminalBox.y + 1, 'terminal reserves space below the page');
+    const toggleBox = await toggle.boundingBox();
+    const logBox = await page.getByRole('button', { name: '操作日志', exact: true }).boundingBox();
+    assert.ok(toggleBox.x + toggleBox.width < logBox.x + 1);
+    await surface(page).locator(`.tree-row[data-tree-path="${other}"]`).click();
+    await readyDock(page);
+    assert.ok(await terminal.evaluate(node => node.isConnected));
+    await toggle.click();
+    assert.equal(await projectDock(page).count(), 0);
+    assert.ok(await terminal.evaluate(node => node.isConnected));
+    await toggle.click();
+    await readyDock(page);
+    await tab(page, 'Shell').click();
+    assert.equal(await toggle.count(), 0);
+    await tab(page, 'edit.txt').click();
+    await readyDock(page);
+    assert.equal(await page.evaluate(() => !!document.activeElement?.closest('.project-terminal-dock')), false, 'restoring the dock does not steal focus from the selected page');
+    const height = await projectDock(page).evaluate(node => node.clientHeight);
+    await projectDock(page).getByRole('separator', { name: '调整项目终端高度' }).press('ArrowUp');
+    assert.ok(await projectDock(page).evaluate(node => node.clientHeight) > height);
+    await switchWorktree(page, 1);
+    await openDockFile(page, `${worktrees[1].path}/edit.txt`);
+    await readyDock(page);
+    assert.ok(await terminal.evaluate(node => node.isConnected && !!node.closest('.project-aow-surface:not([hidden])')));
+    await surface(page).getByRole('button', { name: 'Terminal 面板', exact: true }).click();
+    await surface(page).locator('.terminal-panel-open').filter({ hasText: `${project.name} · Terminal` }).waitFor();
+    assert.equal(state.createdTerminals.length, 1);
+    assert.equal(state.terminalSockets.filter(socket => socket.url().includes('/terminals/created-1/')).length, connections);
+    assert.equal(state.closedTerminalConnections.filter(url => url.includes('/terminals/created-1/')).length, detached);
+    assert.deepEqual(state.closedTerminalIds, []);
+    await page.reload();
+    await readyDock(page);
+    assert.equal(state.createdTerminals.length, 1);
+    assert.equal(await page.locator('[data-workspace-tab-id="terminal:created-1"]').count(), 0);
+  });
+
+  await test('project terminal dock recovers from creation failure and removes a destroyed association', async t => {
+    const { page, state } = await fixture(t);
+    await openDockFile(page);
+    state.terminalCreateError = 'Shell unavailable';
+    await page.getByRole('button', { name: '项目终端', exact: true }).click();
+    await projectDock(page).getByRole('alert').filter({ hasText: 'Shell unavailable' }).waitFor();
+    state.terminalCreateError = undefined;
+    await projectDock(page).getByRole('button', { name: '重试', exact: true }).click();
+    await readyDock(page);
+    await surface(page).getByRole('button', { name: 'Terminal 面板', exact: true }).click();
+    const row = surface(page).locator('.terminal-panel-open').filter({ hasText: `${project.name} · Terminal` });
+    await page.getByRole('button', { name: '项目终端', exact: true }).click();
+    await row.click();
+    await readyDock(page);
+    assert.equal(state.createdTerminals.length, 2);
+    assert.equal(await page.locator('[data-workspace-tab-id="terminal:created-2"]').count(), 0);
+    await row.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: /销毁/ }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: '销毁', exact: true }).click();
+    await eventually(async () => await projectDock(page).count() === 0);
+    assert.deepEqual(state.closedTerminalIds, ['created-2']);
+    await page.getByRole('button', { name: '项目终端', exact: true }).click();
+    await readyDock(page);
+    assert.equal(state.createdTerminals.length, 3);
+  });
+
+  await test('project terminal dock keeps pane splitting and maximize controls', async t => {
+    const { page, state } = await fixture(t, { beforeOpen: async ({ context, state }) => {
+      await context.route('**/api/terminals/created-1/split', async route => {
+        const terminal = state.createdTerminalTabs[0];
+        const pane = { ...terminal.panes[0], id: 'dock-split' };
+        terminal.panes.push(pane);
+        terminal.layout = { type: 'split', axis: route.request().postDataJSON().axis, ratio: .5,
+          first: terminal.layout, second: { type: 'pane', pane_id: pane.id } };
+        await route.fulfill({ json: terminal });
+      });
+    } });
+    await openDockFile(page);
+    await page.getByRole('button', { name: '项目终端', exact: true }).click();
+    await readyDock(page);
+    await projectDock(page).getByRole('button', { name: '向右分屏', exact: true }).click();
+    await eventually(async () => await projectDock(page).locator('.terminal-pane').count() === 2);
+    await projectDock(page).getByRole('button', { name: '最大化 shell 窗口', exact: true }).first().click();
+    await projectDock(page).locator('.terminal-pane.maximized').waitFor();
+    await projectDock(page).getByRole('button', { name: '恢复布局', exact: true }).click();
+    assert.equal(await projectDock(page).locator('.terminal-pane.maximized').count(), 0);
+    assert.equal(state.createdTerminals.length, 1);
+  });
+
+  await test('project terminal dock stays the same instance when its file moves to the floating workspace', async t => {
+    const { page, state } = await fixture(t, { floating: true });
+    await openDockFile(page);
+    await page.getByRole('button', { name: '项目终端', exact: true }).click();
+    await readyDock(page);
+    const terminal = await projectDock(page).locator('.xterm').elementHandle();
+    const connections = state.terminalSockets.filter(socket => socket.url().includes('/terminals/created-1/')).length;
+    await tab(page, 'edit.txt').click({ button: 'right' });
+    await page.getByRole('menuitem', { name: '打开 · 浮动工作区', exact: true }).click();
+    const floating = page.getByRole('dialog', { name: '浮动工作区', exact: true });
+    await floating.getByRole('region', { name: '项目共享终端' }).waitFor();
+    assert.ok(await terminal.evaluate(node => node.isConnected && !!node.closest('[data-floating-workspace]')));
+    await page.getByRole('button', { name: '项目终端', exact: true }).click();
+    await page.getByRole('button', { name: '项目终端', exact: true }).click();
+    await readyDock(page);
+    await surface(page).getByRole('button', { name: 'Terminal 面板', exact: true }).click();
+    await surface(page).locator('.terminal-panel-open').filter({ hasText: `${project.name} · Terminal` }).click();
+    await floating.getByRole('region', { name: '项目共享终端' }).waitFor();
+    assert.equal(state.createdTerminals.length, 1);
+    assert.equal(state.terminalSockets.filter(socket => socket.url().includes('/terminals/created-1/')).length, connections);
+  });
+
+  await test('project terminal dock isolates projects and never duplicates a pending creation', async t => {
+    const root = '/workspace/second-project';
+    const second = { ...project, id: 'second', name: 'Second Project', registered_path: root,
+      worktrees: [{ ...worktrees[0], id: 'second-main', project_id: 'second', path: root }] };
+    let release;
+    const { page, state } = await fixture(t, { beforeOpen: ({ state }) => {
+      state.projects.push(second);
+      state.defaultTerminalRoots.push(root);
+      state.textFiles[`${root}/edit.txt`] = { content: 'Second project', version: 'v1' };
+      state.terminalCreateGate = new Promise(resolve => { release = resolve; });
+    } });
+    t.after(() => release());
+    await openDockFile(page);
+    const toggle = page.getByRole('button', { name: '项目终端', exact: true });
+    await toggle.evaluate(button => { button.click(); button.click(); });
+    await eventually(() => state.createdTerminalTabs.length === 1);
+    await page.evaluate(() => Promise.all(window.liveEventSockets.map(socket => socket.sampleTerminals(true))));
+    assert.equal(await page.locator('[data-workspace-tab-id="terminal:created-1"]').count(), 0, 'a push arriving before the create response must not open a normal tab');
+    assert.equal(state.createdTerminals.length, 1);
+    release();
+    await readyDock(page);
+    const first = await projectDock(page).locator('.xterm').elementHandle();
+    await page.locator(`.project-aow-worktrees button[title="${root}"]`).dispatchEvent('click');
+    await openDockFile(page, `${root}/edit.txt`);
+    assert.equal(await projectDock(page).count(), 0, 'a different project starts collapsed');
+    await toggle.click();
+    await readyDock(page);
+    assert.equal(state.createdTerminals.length, 2);
+    assert.deepEqual(state.createdTerminals[1], { workspace_root: root, cwd: root, name: 'Second Project · Terminal' });
+    await switchWorktree(page, 0);
+    await readyDock(page);
+    assert.ok(await first.evaluate(node => node.isConnected && !!node.closest('.project-aow-surface:not([hidden])')));
+    assert.equal(state.createdTerminals.length, 2);
+  });
 
   const creationJob = (input, id = 'create-one') => ({
     id, project_id: project.id, ...input, status: 'running', error: null,
@@ -2678,9 +2854,12 @@ try {
     const panel = page.getByRole('dialog', { name: '浮动工作区', exact: true });
     const originalBounds = await panel.boundingBox();
     const header = await panel.locator('.project-aow-center-tabs').boundingBox();
-    await page.mouse.move(header.x + 60, header.y + 5);
+    // Drag the empty header area; the leading controls are not draggable.
+    const dragX = header.x + header.width / 2;
+    assert.equal(await page.evaluate(({ x, y }) => !!document.elementFromPoint(x, y)?.closest('button,[role=tab]'), { x: dragX, y: header.y + 5 }), false);
+    await page.mouse.move(dragX, header.y + 5);
     await page.mouse.down();
-    await page.mouse.move(header.x + 85, header.y + 23);
+    await page.mouse.move(dragX + 25, header.y + 23);
     await page.mouse.up();
     const movedBounds = await panel.boundingBox();
     assert.equal(movedBounds.x, originalBounds.x + 25);

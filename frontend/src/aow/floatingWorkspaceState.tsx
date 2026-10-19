@@ -89,6 +89,7 @@ function useFloatingController() {
   const [showRequest, setShowRequest] = useState(0);
   const visible = open && !autoHidden;
   const [portal, setPortal] = useState<HTMLDivElement | null>(null);
+  const [dockPortal, setDockPortal] = useState<HTMLDivElement | null>(null);
   const [sidebar, setSidebar] = useState<HTMLDivElement | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const sources = useRef(new Map<string, WorkspaceCommands>());
@@ -171,7 +172,7 @@ function useFloatingController() {
     else remove(tab.workspace, tab.id);
   };
   return { inboxOpen: activeKey === 'inbox', openInbox, tabs, tabRevealRequest, contains, active, open, visible, pinned, togglePinned, autoHidden, setAutoHidden, showRequest, portal, setPortal, sidebar, setSidebar, sidebarOpen, setSidebarOpen,
-    globalRoot, setGlobalRoot, sources, show, minimize, add, restore, remove, replaceDocument, retainWorkspaces, publish, select, close,
+    dockPortal, setDockPortal, globalRoot, setGlobalRoot, sources, show, minimize, add, restore, remove, replaceDocument, retainWorkspaces, publish, select, close,
     hostedTabs, hosts, publishHost, hostTerminal, removeHosted, terminalRequests, requestTerminal, acknowledgeTerminal, cancelTerminalRequest };
 }
 const FloatingContext = createContext<ReturnType<typeof useFloatingController> | null>(null);

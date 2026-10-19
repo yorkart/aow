@@ -6,6 +6,7 @@ import { useActiveDiffRefresh } from '../features/editor/useActiveDiffRefresh';
 import { Fragment, lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { FloatingWorkspace } from './FloatingWorkspace';
+import { ProjectTerminalDockHost, ProjectTerminalDockProvider, useProjectTerminalDock } from './ProjectTerminalDock';
 import { useAowTabLocation, useAowTabLocationError } from './AowTabEntry';
 import { captureTabTarget, openTabTarget, tabCenterId, type ResolvedTab, type TabOpenActions, type AutomationLocation } from './tabRoutes';
 import { diffDocument } from './tabRoutes/diff';
@@ -705,6 +706,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   onShowRightSidebar, onStartRightResize, notesRefresh, onNotesChanged: onProjectNotesChanged, onResourcesChanged, initialEntry, locationSource,
 }: WorkspaceSurfaceProps) {
   const floating = useFloatingWorkspace();
+  const terminalDock = useProjectTerminalDock();
   const [browserOpened, setBrowserOpened] = useState(() => !!project.builtin && floating.tabs.some(tab => tab.id === 'system-files'));
   const [browserTab, setBrowserTab] = useState(browserOpened);
   const restoring = useRef(true);
@@ -748,10 +750,10 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const onNotesChanged = useCallback((directory: string) => onProjectNotesChanged(project.id, directory), [project.id, onProjectNotesChanged]);
   const terminals = useTerminals(worktree.path, true);
   const [terminalVisibility, setTerminalVisibility] = useState<Record<string, boolean>>({});
-  const openedTerminals = useMemo(() => terminals.tabs.filter(tab => terminalVisibility[tab.id]
+  const openedTerminals = useMemo(() => terminals.tabs.filter(tab => !terminalDock.owns(tab) && (terminalVisibility[tab.id]
     ?? (floating.hostedTabs.some(item => item.workspace === worktree.path && item.targetId === tab.id)
-      || floating.tabs.some(item => item.workspace === worktree.path && item.targetId === tab.id) || !isCliTerminal(tab))),
-  [terminals.tabs, terminalVisibility, floating.hostedTabs, floating.tabs, worktree.path]);
+      || floating.tabs.some(item => item.workspace === worktree.path && item.targetId === tab.id) || !isCliTerminal(tab)))),
+  [terminals.tabs, terminalVisibility, floating.hostedTabs, floating.tabs, worktree.path, terminalDock.owns]);
   const [documents, setDocuments] = useWorkspaceDocuments(worktree.path);
   const { wordWrapFor, setWordWrap } = useWordWrapOverrides(documents);
   const [sessionPreviews, setSessionPreviews] = useState<SessionPreview[]>([]);
@@ -774,10 +776,12 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   );
   const showAllTerminals = canShowAllTerminals && (terminalScopes.user || terminalScopes.cli);
   const localPanelTerminals = terminals.loaded ? terminals.tabs : projectTerminals.tabs.filter(tab => tab.workspace_root === worktree.path);
-  const panelTerminals = showAllTerminals
+  const scopedPanelTerminals = showAllTerminals
     ? [...localPanelTerminals, ...projectTerminals.tabs.filter(tab => tab.workspace_root !== worktree.path
       && terminalScopes[isCliTerminal(tab) ? 'cli' : 'user'])]
     : terminals.tabs;
+  const panelTerminals = terminalDock.tab && !scopedPanelTerminals.some(tab => tab.id === terminalDock.tab!.id)
+    ? [...scopedPanelTerminals, terminalDock.tab] : scopedPanelTerminals;
   const [filesExplorerCollapsed, setFilesExplorerCollapsed] = useState<boolean>();
   const [notesExplorerCollapsed, setNotesExplorerCollapsed] = useState<boolean>();
   const [showOpenFile, setShowOpenFile] = useState(false);
@@ -930,7 +934,16 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   };
   const createAcp = (agentId: string) => activateAcp(acp.create(agentId));
 
+  const showProjectTerminal = () => {
+    const selectedId = locationSource === 'floating' ? floatingId : activeCenterId;
+    const page = centerTabs.find(tab => tab.id === selectedId && centerTabGroup(tab) !== 'terminal')
+      ?? centerTabs.find(tab => centerTabGroup(tab) !== 'terminal');
+    if (!page) { setOperationError('请先打开一个文件、Diff 或其他非 Terminal 页面，再展开项目终端。'); return; }
+    activateCenter(page);
+    terminalDock.show();
+  };
   const openTerminal = (tab: TerminalTab, targetFloating = openingInFloatingWorkspace()) => {
+    if (terminalDock.owns(tab)) { showProjectTerminal(); return; }
     if (tab.workspace_root !== worktree.path) {
       const descriptor = terminalCenterTab(tab, projectTerminals.agents, projectTerminals.titles);
       floating.requestTerminal(tab);
@@ -1778,6 +1791,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const routeActions = useRef<TabOpenActions>(null!);
   routeActions.current = {
     terminal: id => {
+      if (id === terminalDock.terminalId) { showProjectTerminal(); return; }
       if (!terminals.tabs.some(tab => tab.id === id)) throw new Error('该 Tab 已关闭或不存在。');
       setTerminalVisibility(items => ({ ...items, [id]: true }));
       setActiveCenterId(`terminal:${id}`); setActiveDocumentId(undefined); terminals.activate(id); routeToFloating(`terminal:${id}`);
@@ -1992,14 +2006,14 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
       </div>
       <div className="project-aow-right-content" hidden={rightView !== 'terminals'}>
         <TerminalPanel tabs={panelTerminals} descendantTabs={[...localPanelTerminals, ...projectTerminals.tabs.filter(tab => tab.workspace_root !== worktree.path)]}
-          activeId={activeTerminalId} activeWorktreePath={worktree.path}
+          activeId={terminalDock.visible ? terminalDock.terminalId : activeTerminalId} activeWorktreePath={worktree.path}
           detectedAgents={{ ...projectTerminals.agents, ...terminals.detectedAgents }}
           titles={{ ...projectTerminals.titles, ...terminals.terminalTitles }}
           worktrees={canShowAllTerminals ? project.worktrees : undefined} showAll={canShowAllTerminals ? terminalScopes : undefined}
           onShowAllChange={setScope}
           sortBy={terminalSorts} onSortChange={setSort}
           loading={showAllTerminals && projectTerminals.loading} error={showAllTerminals ? projectTerminals.error : undefined}
-          openedIds={new Set([...openedTerminals.map(tab => tab.id), ...hostedTabs.map(tab => tab.targetId)])}
+          openedIds={new Set([...openedTerminals.map(tab => tab.id), ...hostedTabs.map(tab => tab.targetId), ...(terminalDock.visible && terminalDock.terminalId ? [terminalDock.terminalId] : [])])}
           onReload={() => { void terminals.reload(); projectTerminals.reload(); }}
           onRebuild={async id => {
             const tab = await terminalApi.rebuild(id);
@@ -2013,7 +2027,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
               catch (reason) { setOperationError(message(reason)); }
             }
           }}
-          onOpen={openTerminal} onOpenFloating={tab => openTerminal(tab, true)} />
+          onOpen={openTerminal} onOpenFloating={tab => openTerminal(tab, true)} canOpenFloating={tab => !terminalDock.owns(tab)} />
       </div>
       <div className="project-aow-right-content" hidden={rightView !== 'acp'}>
         <AcpPanel key={`acp:${worktree.path}`} workspace={worktree.path} visible={active && rightSidebarVisible && rightView === 'acp'} activeThreadId={acp.tabs.find(tab => `acp:${tab.id}` === sidebarActiveId)?.thread_id} onOpen={session => activateAcp(acp.open(session))} />
@@ -2111,9 +2125,11 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
         </div> : null}
         {!activeCenterId ? <div className="project-aow-welcome"><ProjectIcon project={project} size={32} /><h2>{project.name}</h2><p>{worktree.path}</p><span>点击 + 新建 Terminal 或启动本地 Agent；从右侧打开文件和 Git Diff。</span></div> : null}
       </div>
+      <ProjectTerminalDockHost active={locationSource === 'center' && locationTabVisible && centerTabs.some(tab => tab.id === activeCenterId && centerTabGroup(tab) !== 'terminal')} />
     </main>
     <div className="project-aow-right-resizer" role="separator" aria-label="调整右侧栏宽度" aria-orientation="vertical" onPointerDown={onStartRightResize} />
     {project.builtin && floating.sidebar ? createPortal(renderSidebar(), floating.sidebar) : renderSidebar()}
+    {floating.dockPortal ? createPortal(<ProjectTerminalDockHost active={locationSource === 'floating' && centerTabs.some(tab => tab.id === floatingId && centerTabGroup(tab) !== 'terminal')} />, floating.dockPortal) : null}
     {showOpenFile ? <OpenFileDialog worktreePath={worktree.path} onClose={() => setShowOpenFile(false)} onOpen={path => openFileFloating ? withFloatingOpen(() => openExternalFile(path)) : openExternalFile(path)} /> : null}
     {(operationError || terminals.error) && floating.portal && (project.builtin || floatingId) ? createPortal(
       <div className="floating-workspace-error" role="alert">{operationError || terminals.error}<button aria-label="关闭错误提示" onClick={() => setOperationError('')}><X /></button></div>, floating.portal) : null}
@@ -2138,6 +2154,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
   }, []);
   const operations = useOperations();
   const [bottomPanel, setBottomPanel] = useState<{ type: 'logs'; operationId?: string } | { type: 'notifications' }>();
+  const [terminalDockControls, setTerminalDockControls] = useState<HTMLSpanElement | null>(null);
   const logPanel = bottomPanel?.type === 'logs' ? bottomPanel : undefined;
   const notificationButton = useRef<HTMLButtonElement>(null);
   const removals = useWorktreeRemovals();
@@ -2584,8 +2601,8 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
   }, [activeEntry]);
 
   return <div className="project-aow"
-    onPointerDownCapture={event => setFloatingFocused(!!(event.target as HTMLElement).closest('[data-floating-workspace]'))}
-    onFocusCapture={event => setFloatingFocused(!!(event.target as HTMLElement).closest('[data-floating-workspace]'))}>
+    onPointerDownCapture={event => { if (!(event.target as HTMLElement).closest('.project-terminal-dock-controls')) setFloatingFocused(!!(event.target as HTMLElement).closest('[data-floating-workspace]')); }}
+    onFocusCapture={event => { if (!(event.target as HTMLElement).closest('.project-terminal-dock-controls')) setFloatingFocused(!!(event.target as HTMLElement).closest('[data-floating-workspace]')); }}>
     <div
       className={`project-aow-layout${leftSidebarVisible ? '' : ' left-sidebar-hidden'}${rightSidebarVisible ? '' : ' right-sidebar-hidden'}`}
       ref={layoutRef}
@@ -2656,11 +2673,11 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
       </aside>
       <div className="project-aow-left-resizer" role="separator" aria-label="调整项目栏宽度" aria-orientation="vertical" onPointerDown={(event) => startSidebarResize('left', event)} />
       <div className="project-aow-surfaces">
-        {projects.map(project => <ProjectTerminalPanelProvider key={project.id} project={project}><ProjectAcpPanelProvider project={project}>
+        {projects.map(project => <ProjectTerminalDockProvider key={project.id} project={project} controls={terminalDockControls} onShow={() => setBottomPanel(undefined)}><ProjectTerminalPanelProvider project={project}><ProjectAcpPanelProvider project={project}>
           {project.worktrees.filter(worktree => !busyWorktrees.has(worktree.path)).filter(worktree => visitedWorktrees.has(worktree.path) || floating.tabs.some(tab => tab.workspace === worktree.path)
             || floating.hostedTabs.some(tab => tab.workspace === worktree.path || tab.host === worktree.path)).map(worktree => <WorkspaceSurface locationSource={locationSource(worktree.path)} initialEntry={initialEntry && (initialEntry.workspacePath === worktree.path
               || floating.hostedTabs.some(tab => tab.host === worktree.path && tab.workspace === initialEntry.workspacePath && tab.id === tabCenterId(initialEntry))) ? initialEntry : undefined} key={worktree.path} project={project} worktree={worktree} active={worktree.path === activeWorktreePath} agents={agents} onShowLeftSidebar={leftSidebarVisible ? undefined : showLeftSidebar} rightSidebarVisible={rightSidebarVisible} onHideRightSidebar={hideRightSidebar} onShowRightSidebar={showRightSidebar} onStartRightResize={startRightResize} notesRefresh={notesRefreshByProject[project.id] ?? initialExplorerRefresh} onNotesChanged={notesChanged} onResourcesChanged={reportResources} />)}
-        </ProjectAcpPanelProvider></ProjectTerminalPanelProvider>)}
+        </ProjectAcpPanelProvider></ProjectTerminalPanelProvider></ProjectTerminalDockProvider>)}
         {activeEntry && busyWorktrees.has(activeEntry.worktree.path) ? <div className="project-aow-no-context"><LoaderCircle className="spinning" /><p>该 Worktree 正在清理，可继续使用其他工作区。</p><button onClick={() => setCleanupProjectId(activeEntry.project.id)}>查看清理进度</button></div> : null}
         {!activeEntry && !leftSidebarVisible ? <nav className="project-aow-center-tabs project-aow-empty-toolbar"><LeftSidebarToggle onClick={showLeftSidebar} /></nav> : null}
         {!activeEntry ? <div className="project-aow-no-context"><FolderGit2 /><h1>Project AoW</h1><p>从左侧注册并选择一个 Project Worktree。</p></div> : null}
@@ -2669,6 +2686,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
     <footer className="project-aow-status"><span>{activeEntry?.worktree.path ?? 'No active worktree'}</span>
       <div className="project-aow-status-actions">
         <OperationStatus operations={operations.operations} ready={!!operations.boot_id} error={operations.log_error || operations.error} logOpen={!!logPanel}
+          beforeLogs={<span className="project-terminal-dock-controls" ref={setTerminalDockControls} />}
           onOpenOperation={operation => {
             if (operation.kind === 'worktree.remove' && operation.project_id && projects.some(project => project.id === operation.project_id)) {
               setCleanupProjectId(operation.project_id); void removals.refresh();
@@ -2707,9 +2725,9 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
     {bindNotesProject ? <BindNotesDialog project={bindNotesProject} onClose={() => setBindNotesProject(undefined)} onBound={notesBound} /> : null}
     {showSettings ? <SettingsDialog agents={agents} onClose={() => setShowSettings(false)} onNodesChange={setNodeAddresses} onReload={async () => { await Promise.all([loadAgents(), loadProjects()]); }} /> : null}
     <FloatingWorkspace agents={agents} projects={projects} activeLocation={locationInFloating} />
-    {globalProject && globalProject.worktrees[0] && (floating.open || floating.tabs.length > 0) ? <ProjectTerminalPanelProvider key={globalProject.id} project={globalProject}><ProjectAcpPanelProvider project={globalProject}>
+    {globalProject && globalProject.worktrees[0] && (floating.open || floating.tabs.length > 0) ? <ProjectTerminalDockProvider key={globalProject.id} project={globalProject} controls={terminalDockControls} onShow={() => setBottomPanel(undefined)}><ProjectTerminalPanelProvider project={globalProject}><ProjectAcpPanelProvider project={globalProject}>
       <WorkspaceSurface locationSource={locationSource(floating.globalRoot)} initialEntry={globalProject.worktrees.some(worktree => worktree.path === initialEntry?.workspacePath) ? initialEntry : undefined} project={globalProject} worktree={globalProject.worktrees.find(worktree => worktree.is_main) ?? globalProject.worktrees[0]} active={floating.visible} agents={agents} rightSidebarVisible={floating.sidebarOpen} onHideRightSidebar={() => floating.setSidebarOpen(false)} onShowRightSidebar={() => floating.setSidebarOpen(true)} onStartRightResize={() => undefined} notesRefresh={notesRefreshByProject[globalProject.id] ?? initialExplorerRefresh} onNotesChanged={notesChanged} />
-    </ProjectAcpPanelProvider></ProjectTerminalPanelProvider> : null}
+    </ProjectAcpPanelProvider></ProjectTerminalPanelProvider></ProjectTerminalDockProvider> : null}
   </div>;
 }
 

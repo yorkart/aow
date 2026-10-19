@@ -32,7 +32,7 @@ function terminalCreatedAt(tab: TerminalTab) {
   return Number.isFinite(timestamp) ? timestamp : Number.MAX_SAFE_INTEGER;
 }
 
-export function TerminalPanel({ tabs, descendantTabs = tabs, detectedAgents, titles, openedIds, activeId, onOpen, onOpenPane, onOpenFloating, onTerminate, onRebuild, onReload,
+export function TerminalPanel({ tabs, descendantTabs = tabs, detectedAgents, titles, openedIds, activeId, onOpen, onOpenPane, onOpenFloating, canOpenFloating, onTerminate, onRebuild, onReload,
   worktrees, activeWorktreePath, showAll = { user: false, cli: false }, onShowAllChange,
   sortBy = { user: 'branch', cli: 'branch' }, onSortChange, loading = false, error, menuContainer }: {
   tabs: TerminalTab[];
@@ -44,6 +44,7 @@ export function TerminalPanel({ tabs, descendantTabs = tabs, detectedAgents, tit
   onOpen: (tab: TerminalTab) => void;
   onOpenPane?: (tab: TerminalTab, paneId: string) => void;
   onOpenFloating?: (tab: TerminalTab) => void;
+  canOpenFloating?: (tab: TerminalTab) => boolean;
   onTerminate: (id: string) => Promise<void>;
   onRebuild: (id: string) => Promise<void>;
   onReload: () => void;
@@ -134,7 +135,7 @@ export function TerminalPanel({ tabs, descendantTabs = tabs, detectedAgents, tit
       renderItem={renderTab} menuContainer={menuContainer} />
     {contextMenu && menuTab ? <TerminalContextMenu container={menuContainer} x={contextMenu.x} y={contextMenu.y}
       title={terminalTabPresentation(menuTab, detectedAgents, titles).title} onClose={dismissMenu}
-      onOpen={() => onOpen(menuTab)} onOpenFloating={onOpenFloating ? () => onOpenFloating(menuTab) : undefined}
+      onOpen={() => onOpen(menuTab)} onOpenFloating={onOpenFloating && (canOpenFloating?.(menuTab) ?? true) ? () => onOpenFloating(menuTab) : undefined}
       onRebuild={menuTab.panes.length > 0 && menuTab.panes.every(pane => pane.status !== 'running')
         ? () => void rebuild(menuTab.id) : undefined} rebuilding={rebuilding.has(menuTab.id)}
       onDestroy={() => void terminate(menuTab)} /> : null}

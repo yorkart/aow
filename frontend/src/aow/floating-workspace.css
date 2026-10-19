@@ -7,6 +7,8 @@
 .floating-workspace-window-actions { display:flex; align-items:center; gap:6px; padding:0 4px; margin-left:auto; flex-shrink:0; height:100%; }
 .floating-workspace-window-actions .floating-workspace-pin[aria-pressed="true"] { color:var(--aow-accent); }
 .floating-workspace-body { flex:1; min-height:0; display:flex; overflow:hidden; border-radius:0 0 3px 3px; }
+.floating-workspace-main { flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; }
+.floating-workspace-dock { display:contents; }
 .floating-workspace-content { position:relative; flex:1; min-width:0; min-height:0; overflow:hidden; }
 .floating-workspace-host { position:absolute; inset:0; display:flex; flex-direction:column; overflow:hidden; }
 .floating-workspace-host[hidden] { display:none; }
