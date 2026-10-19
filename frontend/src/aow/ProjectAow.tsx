@@ -791,7 +791,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const savingDocumentIds = useRef(savingDocuments);
   const autoSavePendingAfterSave = useRef(new Set<string>());
 
-  const documentRefreshes = useRef(new Map<string, { instanceId?: number; controller: AbortController }>());
+  const documentRefreshes = useRef(new Map<string, { instanceId?: number; controller: AbortController; background: boolean }>());
   const refreshedPreviewUrls = useRef(new Set<string>());
   const sessionSnapshotRequestIds = useRef(new Map<string, number>());
 
@@ -1157,12 +1157,16 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     autoSaveTimers.current.delete(id);
   }, []);
 
-  const refreshDocument = useCallback(async (id: string, signal?: AbortSignal) => {
+  const refreshDocument = useCallback(async (id: string, { signal, background = false }: { signal?: AbortSignal; background?: boolean } = {}) => {
     const target = documentsRef.current.find((item) => item.id === id);
-    if (!target || target.loading || target.saving || signal?.aborted || savingDocumentIds.current.has(id) || documentRefreshes.current.has(id)) return;
+    const pending = documentRefreshes.current.get(id);
+    if (!target || target.loading || target.saving || signal?.aborted || savingDocumentIds.current.has(id)
+      || (pending && (background || !pending.background))) return;
+    // An explicit refresh takes priority over a background poll already in flight.
+    pending?.controller.abort();
     clearAutoSave(id);
     const controller = new AbortController();
-    const request = { instanceId: target.instanceId, controller };
+    const request = { instanceId: target.instanceId, controller, background };
     documentRefreshes.current.set(id, request);
     const matches = (item: OpenDocument) => item.id === id && item.instanceId === target.instanceId;
     const current = () => !controller.signal.aborted && documentsRef.current.some(matches);
@@ -1170,16 +1174,22 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
       controller.abort();
       if (documentRefreshes.current.get(id) !== request) return;
       documentRefreshes.current.delete(id);
-      setDocuments(items => items.map(item => matches(item) ? { ...item, refreshing: false } : item));
+      if (!background) setDocuments(items => items.map(item => matches(item) ? { ...item, refreshing: false } : item));
     };
     signal?.addEventListener('abort', cancel, { once: true });
-    setDocuments((items) => items.map((item) => matches(item) ? { ...item, refreshing: true, refreshError: undefined } : item));
+    if (!background) setDocuments((items) => items.map((item) => matches(item) ? { ...item, refreshing: true, refreshError: undefined } : item));
     try {
       const kind = target.diffSource ? 'diff' : previewKind(target.path);
       if (target.diffSource) {
         const diff = await readDocumentDiff(target, controller.signal);
         if (!current()) return;
-        setDocuments((items) => items.map((item) => matches(item) ? { ...item, ...diff, refreshing: false, error: undefined } : item));
+        const latest = sharedDocument(id);
+        // Polls must leave the shared document and editor untouched when the
+        // rendered diff is unchanged. Explicit refreshes still update the view.
+        if (background && latest && matches(latest) && latest.kind === diff.kind
+          && latest.content === diff.content && latest.originalContent === diff.originalContent && latest.language === diff.language
+          && !latest.refreshing && !latest.error && !latest.refreshError) return;
+        setDocuments((items) => items.map((item) => matches(item) ? { ...item, ...diff, refreshing: false, error: undefined, refreshError: undefined } : item));
       } else if (kind === 'image' || kind === 'pdf') {
         const blob = await filesApi.readBlob(target.path, controller.signal);
         if (!current()) return;
@@ -1204,6 +1214,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
         }));
       }
     } catch (reason) {
+      if (background && sharedDocument(id)?.refreshError === message(reason)) return;
       if (current()) setDocuments((items) => items.map((item) => matches(item)
         ? { ...item, refreshing: false, refreshError: message(reason) } : item));
     } finally {
@@ -1822,8 +1833,11 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const locationCenterId = locationSource === 'floating' ? floatingId : activeCenterId;
   // The center can retain a floated tab's placeholder while its content is hidden.
   const locationTabVisible = locationSource === 'floating' || (!isFloating(locationCenterId ?? '') && !hostedLocation(locationCenterId ?? ''));
-  useActiveDiffRefresh(locationSource && locationTabVisible
-    ? documents.find(item => item.diffSource && `document:${item.id}` === locationCenterId) : undefined, refreshDocument);
+  useActiveDiffRefresh(
+    locationSource && locationTabVisible
+      ? documents.find(item => item.diffSource && `document:${item.id}` === locationCenterId) : undefined,
+    (id, signal, trigger) => refreshDocument(id, { signal, background: trigger === 'interval' }),
+  );
   useEffect(() => {
     if (!locationSource || !restored || !terminals.loaded || terminals.loading) return;
     const tab = centerTabs.find(tab => tab.id === locationCenterId);

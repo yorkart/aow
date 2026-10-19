@@ -159,8 +159,10 @@ export function EditorArea({ workspace, documents, activeId, wordWrapOverride, o
     const previous = previousDocument.current;
     previousDocument.current = active;
     restoreRefreshView.current = undefined;
-    if (!active || active.refreshing || !previous?.refreshing
+    if (!active || !previous || active.refreshing
       || previous.id !== active.id || previous.instanceId !== active.instanceId) return;
+    const diffChanged = active.diffSource && (previous.content !== active.content || previous.originalContent !== active.originalContent);
+    if (!previous.refreshing && !diffChanged) return;
     const views = monaco.editor.getEditors().flatMap((editor) => {
       const node = editor.getDomNode();
       return node && editorArea.current?.contains(node)

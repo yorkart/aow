@@ -4127,11 +4127,30 @@ try {
         if (kind === 'commit') { assert.equal(query.commit, 'commit-1'); assert.equal(query.original_path, 'old.txt'); }
         else assert.equal(query.staged, String(kind === 'staged'));
 
+        const snapshot = await page.evaluateHandle(async id => (await import('/src/features/editor/workspaceDocuments.ts')).sharedDocument(id), id);
+        try {
+          for (let tick = 0; tick < 2; tick++) {
+            const finished = page.waitForEvent('requestfinished', request => /\/api\/git\/(commit\/)?diff\?/.test(request.url()));
+            await page.clock.runFor(3000);
+            await finished;
+            await delay(100);
+            assert.equal(await page.evaluate(async ({ id, snapshot }) =>
+              (await import('/src/features/editor/workspaceDocuments.ts')).sharedDocument(id) === snapshot,
+            { id, snapshot }), true, 'unchanged polls preserve the document object without publishing an editor update');
+          }
+          await page.getByRole('button', { name: '刷新 Diff', exact: true }).click();
+          await diffIdle(page);
+          assert.equal(await page.evaluate(async ({ id, snapshot }) =>
+            (await import('/src/features/editor/workspaceDocuments.ts')).sharedDocument(id) === snapshot,
+          { id, snapshot }), false, 'manual refresh still updates the view even when the diff is unchanged');
+        } finally { await snapshot.dispose(); }
+
+        const idle = state.diffRequests.length;
         await tab(page, 'edit.txt').click();
         state.diffFiles[0] = { original: 'same', modified: 'same', patch: '' };
         await sendWorkspaceSnapshot(page, { revision: 1, repositories: { [worktrees[0].path]: 1 } });
         await page.clock.runFor(9000);
-        assert.equal(state.diffRequests.length, before + 2, 'inactive tabs do not poll or follow repository events');
+        assert.equal(state.diffRequests.length, idle, 'inactive tabs do not poll or follow repository events');
         assert.equal(await diffContent(page, id, side), 'polled', 'inactive content stays unchanged');
         await tab(page, name).click();
         await eventually(async () => await diffContent(page, id, side) === (fallback ? '' : 'same'));
@@ -4141,6 +4160,72 @@ try {
         assert.equal(state.diffRequests.length, closed, 'closing the last diff removes its timer');
         await page.context().close();
       }
+    });
+  }
+
+  for (const fallback of [false, true]) {
+    await test(`periodic ${fallback ? 'patch' : 'two-sided'} refresh stays quiet and preserves reading position`, async t => {
+      const lines = Array.from({ length: 300 }, (_, i) => `line ${i}`).join('\n');
+      const { page, state } = await fixture(t, { clock: true, fallback, beforeOpen: ({ state }) => {
+        state.diffFiles[0] = { original: lines, modified: lines.replace('line 10\n', 'changed line 10\n'), patch: lines };
+      } });
+      await page.getByRole('button', { name: 'Source Control', exact: true }).click();
+      await surface(page).locator('.change-row[title="file-0.txt · working tree"]').click();
+      await waitForDiff(page, 0, fallback);
+      await pauseDiffClock(page);
+      await diffIdle(page);
+      const button = page.getByRole('button', { name: '刷新 Diff', exact: true });
+      const id = workingDiffId(0);
+      const side = fallback ? 'fallback' : 'modified';
+      const view = reset => page.evaluate(async ({ reset, fallback }) => {
+        const { monaco } = await import('/src/features/editor/monaco.ts');
+        const editor = fallback ? monaco.editor.getEditors().find(editor => editor.getDomNode()?.checkVisibility())
+          : monaco.editor.getDiffEditors().find(diff => diff.getModifiedEditor().getDomNode()?.checkVisibility()).getModifiedEditor();
+        if (reset) {
+          editor.setSelection({ startLineNumber: 130, startColumn: 2, endLineNumber: 131, endColumn: 4 });
+          editor.setScrollTop(1500);
+        }
+        return { scroll: editor.getScrollTop(), selection: editor.getSelection(), editor: editor.getId(), model: editor.getModel().id };
+      }, { reset, fallback });
+      const initial = await view(true);
+      const snapshot = await page.evaluateHandle(async id => (await import('/src/features/editor/workspaceDocuments.ts')).sharedDocument(id), id);
+      let release;
+      state.diffGate = new Promise(resolve => { release = resolve; });
+      try {
+        const before = state.diffRequests.length;
+        await page.clock.runFor(3000);
+        await eventually(() => state.diffRequests.length === before + 1);
+        assert.equal(await button.getAttribute('aria-busy'), 'false', 'polling does not animate the refresh button');
+        assert.equal(await page.evaluate(async ({ id, snapshot }) =>
+          (await import('/src/features/editor/workspaceDocuments.ts')).sharedDocument(id) === snapshot,
+        { id, snapshot }), true, 'starting a poll does not publish a loading state');
+        const aborted = page.waitForEvent('requestfailed', request => new URL(request.url()).pathname === '/api/git/diff');
+        await button.click();
+        await aborted;
+        await eventually(() => state.diffRequests.length === before + 2);
+        assert.equal(await button.getAttribute('aria-busy'), 'true', 'manual refresh takes priority and retains its loading indicator');
+        release(); state.diffGate = null;
+        await diffIdle(page);
+        assert.deepEqual(await view(false), initial);
+      } finally { release(); state.diffGate = null; await snapshot.dispose(); }
+
+      // Check both sides independently: changing only the original still changes the diff.
+      for (const field of fallback ? ['patch'] : ['original', 'modified']) {
+        state.diffFiles[0][field] = state.diffFiles[0][field].replace('line 20\n', `updated ${field}\n`);
+        await page.clock.runFor(3000);
+        await eventually(async () => (await diffContent(page, id, field === 'original' ? 'original' : side)).includes(`updated ${field}\n`));
+        await page.clock.runFor(300);
+        assert.deepEqual(await view(false), initial, 'changed polls preserve editor/model identity, scroll and selection');
+      }
+      state.failDiff = true;
+      await page.clock.runFor(3000);
+      await page.locator('.editor-file-notice.error').waitFor();
+      const retained = await diffContent(page, id, side);
+      state.failDiff = false;
+      await page.clock.runFor(3000);
+      await page.locator('.editor-file-notice.error').waitFor({ state: 'hidden' });
+      assert.equal(await diffContent(page, id, side), retained, 'successful unchanged polls still clear a previous error');
+      assert.deepEqual(state.errors, []);
     });
   }
 
