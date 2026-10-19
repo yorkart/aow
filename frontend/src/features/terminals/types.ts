@@ -56,6 +56,7 @@ export interface TerminalTab {
   id: string;
   name: string;
   name_is_custom?: boolean;
+  dock_project_id?: string;
   workspace_root: string;
   layout: TerminalLayout | null;
   panes: TerminalPane[];

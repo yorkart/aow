@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent as ReactDragEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type DragEvent as ReactDragEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { Columns2, GripVertical, LoaderCircle, Maximize2, Minimize2, Rows2, SquareTerminal, X } from 'lucide-react';
 import { terminalApi } from './terminalApi';
 import type { TerminalAgentProcess, TerminalLayout, TerminalPane, TerminalPaneActivity, TerminalPaneStatus, TerminalSplitAxis, TerminalTab } from './types';
@@ -159,6 +159,12 @@ export function TerminalWorkspace({ visible, autoFocus = true, focusRequest, tab
   const { confirm, confirmationDialog } = useConfirmation();
   const [layout, setLayout] = useState<TerminalLayout | null>(() => tab ? fallbackLayout(tab) : null);
   const [activePaneId, setActivePaneId] = useState<string>();
+  const [paneFocusRequests, setPaneFocusRequests] = useState<Record<string, number>>({});
+  // Explicit pane actions request focus even in embedded workspaces that suppress passive autofocus.
+  const focusPane = useCallback((id: string) => {
+    setActivePaneId(id);
+    setPaneFocusRequests(current => ({ ...current, [id]: (current[id] ?? 0) + 1 }));
+  }, []);
   const [draggingPaneId, setDraggingPaneId] = useState<string>();
   const [paneDropTarget, setPaneDropTarget] = useState<PaneDropTarget>();
   const [maximizedPaneIds, setMaximizedPaneIds] = useState<Record<string, string>>({});
@@ -234,9 +240,9 @@ export function TerminalWorkspace({ visible, autoFocus = true, focusRequest, tab
     if (!visible || !selection || appliedSelection.current === selection || tab?.id !== selection.tabId
       || !tab.panes.some(pane => pane.id === selection.paneId)) return;
     appliedSelection.current = selection;
-    setActivePaneId(selection.paneId);
+    focusPane(selection.paneId);
     if (maximizedPaneId) setMaximizedPaneId(tab.id, selection.paneId);
-  }, [visible, selection, tab, maximizedPaneId]);
+  }, [visible, selection, tab, maximizedPaneId, focusPane]);
 
   useEffect(() => {
     saveEpochRef.current += 1;
@@ -410,7 +416,7 @@ export function TerminalWorkspace({ visible, autoFocus = true, focusRequest, tab
     if (next) {
       layoutRef.current = next;
       setLayout(next);
-      setActivePaneId(sourcePaneId);
+      focusPane(sourcePaneId);
       setError('');
       queueLayoutSave(next, true);
     }
@@ -429,7 +435,7 @@ export function TerminalWorkspace({ visible, autoFocus = true, focusRequest, tab
       if (updated) {
         onTabChange(updated);
         const ids = paneIds(updated.layout);
-        setActivePaneId(ids.find((id) => !tab.panes.some((oldPane) => oldPane.id === id)) ?? pane.id);
+        focusPane(ids.find((id) => !tab.panes.some((oldPane) => oldPane.id === id)) ?? pane.id);
       } else {
         onReload();
       }
@@ -464,7 +470,7 @@ export function TerminalWorkspace({ visible, autoFocus = true, focusRequest, tab
 
   const togglePaneMaximized = (pane: TerminalPane) => {
     if (!tab || tab.panes.length <= 1 || operation) return;
-    setActivePaneId(pane.id);
+    focusPane(pane.id);
     setDraggingPaneId(undefined);
     draggingPaneIdRef.current = undefined;
     setPaneDropTarget(undefined);
@@ -473,7 +479,7 @@ export function TerminalWorkspace({ visible, autoFocus = true, focusRequest, tab
 
   const selectMaximizedPane = (paneId: string) => {
     if (!tab || !maximizedPaneId || paneId === maximizedPaneId) return;
-    setActivePaneId(paneId);
+    focusPane(paneId);
     setMaximizedPaneId(tab.id, paneId);
   };
 
@@ -496,13 +502,13 @@ export function TerminalWorkspace({ visible, autoFocus = true, focusRequest, tab
     try {
       const updated = await terminalApi.closePane(tab.id, pane.id);
       if (updated) {
-        if (maximizedPaneId === pane.id) {
+        if (maximizedPaneId === pane.id || activePaneId === pane.id) {
           const currentIds = paneIds(layoutRef.current);
           const closedIndex = currentIds.indexOf(pane.id);
           const remainingIds = paneIds(fallbackLayout(updated));
           const nextPaneId = remainingIds[Math.min(Math.max(closedIndex, 0), remainingIds.length - 1)];
-          setMaximizedPaneId(tab.id, updated.panes.length > 1 ? nextPaneId : undefined);
-          setActivePaneId(nextPaneId);
+          if (maximizedPaneId) setMaximizedPaneId(tab.id, updated.panes.length > 1 ? nextPaneId : undefined);
+          if (nextPaneId) focusPane(nextPaneId);
         }
         onTabChange(updated);
       } else {
@@ -523,7 +529,9 @@ export function TerminalWorkspace({ visible, autoFocus = true, focusRequest, tab
     setOperation('rebuild');
     setError('');
     try {
-      onTabChange(await terminalApi.rebuild(tab.id));
+      const updated = await terminalApi.rebuild(tab.id);
+      onTabChange(updated);
+      if (updated.panes[0]) focusPane(updated.panes[0].id);
     } catch (reason) {
       setError(message(reason));
     } finally {
@@ -576,6 +584,9 @@ export function TerminalWorkspace({ visible, autoFocus = true, focusRequest, tab
             header={sessionButton => <header
             className={`terminal-pane-header ${paneDraggable ? 'draggable' : ''}`}
             draggable={paneDraggable}
+            onPointerDown={event => {
+              if (event.button === 0 && !(event.target instanceof Element && event.target.closest('button'))) focusPane(pane.id);
+            }}
             onDragStart={(event) => startPaneDrag(event, pane.id)}
             onDragEnd={finishPaneDrag}
             onDoubleClick={(event) => {
@@ -606,7 +617,7 @@ export function TerminalWorkspace({ visible, autoFocus = true, focusRequest, tab
             ) : null}
             <button title="关闭 pane" aria-label="关闭 pane" disabled={paneBusy} onClick={() => void closePane(pane)}>{paneBusy ? <LoaderCircle className="spinning" /> : <X />}</button>
           </header>}
-            terminal={terminalVisible => <TerminalInputPane key={`${tab!.id}:${pane.id}`} visible={terminalVisible} autoFocus={autoFocus} focusRequest={focusRequest} tabId={tab!.id} pane={pane} active={activePaneId === pane.id} onFocus={() => setActivePaneId(pane.id)} onStatus={(status, code) => markStatus(pane.id, status, code)}
+            terminal={terminalVisible => <TerminalInputPane key={`${tab!.id}:${pane.id}`} visible={terminalVisible} autoFocus={autoFocus} focusRequest={(focusRequest ?? 0) + (paneFocusRequests[pane.id] ?? 0)} tabId={tab!.id} pane={pane} active={activePaneId === pane.id} onFocus={() => setActivePaneId(pane.id)} onStatus={(status, code) => markStatus(pane.id, status, code)}
               onRebuild={canRebuild ? () => void rebuild() : undefined} rebuilding={operation === 'rebuild'} />}
           />
         </section>

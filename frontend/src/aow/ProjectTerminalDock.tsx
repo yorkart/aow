@@ -46,9 +46,12 @@ export function ProjectTerminalDockProvider({ project, controls, onShow, childre
   const [error, setError] = useState('');
   const [focusRequest, setFocusRequest] = useState(0);
   const mounted = useRef(true);
+  const attemptedMigration = useRef<string | undefined>(undefined);
   const root = project.worktrees.find(worktree => worktree.is_main)?.path ?? project.registered_path;
-  const name = `${[...project.name].slice(0, 117).join('')} · Terminal`;
-  const tab = snapshot.tabs?.find(tab => tab.id === state.terminalId && tab.workspace_root === root);
+  const serverTab = snapshot.tabs?.find(tab => tab.dock_project_id === project.id);
+  const legacyTab = !serverTab ? snapshot.tabs?.find(tab => tab.id === state.terminalId
+    && !tab.dock_project_id && tab.workspace_root === root) : undefined;
+  const tab = serverTab ?? legacyTab;
   const visible = !!host && state.open;
   const publishHost = useCallback((element: HTMLDivElement, active: boolean) => {
     setHost(current => active ? element : current === element ? null : current);
@@ -58,30 +61,26 @@ export function ProjectTerminalDockProvider({ project, controls, onShow, childre
   useLayoutEffect(() => { if (host) host.appendChild(container); }, [container, host]);
   useEffect(() => () => container.remove(), [container]);
 
-  // Only an authoritative inventory may invalidate a saved association. Hiding never deletes a PTY.
+  // Server ownership survives browser storage clearing and other clients creating the dock.
   useEffect(() => {
-    if (!state.terminalId || tab || creating || !snapshot.tabs || snapshot.error || snapshot.status === 'denied') return;
-    setState(current => ({ ...current, terminalId: undefined, open: false }));
-  }, [state.terminalId, tab, creating, snapshot.tabs, snapshot.error, snapshot.status]);
-
-  const show = async () => {
-    if (creatingRef.current) return;
-    onShow();
-    setError('');
-    setState(current => ({ ...current, open: true }));
-    setFocusRequest(value => value + 1);
-    if (tab) return;
-    if (!snapshot.tabs || snapshot.error || snapshot.status === 'denied') {
-      setError(snapshot.error || '正在确认终端实例，请稍后重试。');
+    if (serverTab && state.terminalId !== serverTab.id) {
+      setState(current => ({ ...current, terminalId: serverTab.id }));
       return;
     }
+    // Only an authoritative inventory may invalidate a saved association. Hiding never deletes a PTY.
+    if (!state.terminalId || tab || creating || !snapshot.tabs || snapshot.error || snapshot.status === 'denied') return;
+    setState(current => ({ ...current, terminalId: undefined, open: false }));
+  }, [state.terminalId, serverTab, tab, creating, snapshot.tabs, snapshot.error, snapshot.status]);
+
+  const ensureDock = useCallback(async (legacyId?: string) => {
+    if (creatingRef.current) return;
+    setError('');
     creatingRef.current = true;
     setCreating(true);
     const session = terminalStore.session();
     try {
-      const created = await terminalApi.create(root, { cwd: root, name });
+      const created = await terminalApi.projectDock(project.id, legacyId);
       if (!mounted.current || !terminalStore.isCurrentSession(session)) return;
-      // Publish the association before the shared inventory so no ordinary tab is mounted for it.
       setState(current => ({ ...current, terminalId: created.id }));
       terminalStore.replace(created);
     } catch (reason) {
@@ -90,11 +89,34 @@ export function ProjectTerminalDockProvider({ project, controls, onShow, childre
       creatingRef.current = false;
       if (mounted.current) setCreating(false);
     }
+  }, [project.id]);
+
+  // Upgrade only an explicitly saved, still-existing legacy instance; never infer ownership from its name.
+  useEffect(() => {
+    if (!legacyTab || creating || snapshot.error || snapshot.status === 'denied'
+      || attemptedMigration.current === legacyTab.id) return;
+    attemptedMigration.current = legacyTab.id;
+    void ensureDock(legacyTab.id);
+  }, [legacyTab, creating, snapshot.error, snapshot.status, ensureDock]);
+
+  const show = async () => {
+    if (creatingRef.current) return;
+    onShow();
+    setError('');
+    setState(current => ({ ...current, open: true }));
+    setFocusRequest(value => value + 1);
+    if (serverTab) return;
+    if (!snapshot.tabs || snapshot.error || snapshot.status === 'denied') {
+      setError(snapshot.error || '正在确认终端实例，请稍后重试。');
+      return;
+    }
+    await ensureDock(legacyTab?.id);
   };
   const close = () => setState(current => ({ ...current, open: false }));
-  const owns = useCallback((candidate: TerminalTab) => candidate.id === state.terminalId
-    || creating && candidate.workspace_root === root && candidate.name === name, [state.terminalId, creating, root, name]);
-  return <Context.Provider value={{ terminalId: state.terminalId, tab, open: state.open, visible, height: state.height,
+  const owns = useCallback((candidate: TerminalTab) => candidate.dock_project_id === project.id
+    || !serverTab && !candidate.dock_project_id && candidate.id === state.terminalId && candidate.workspace_root === root,
+  [project.id, serverTab, state.terminalId, root]);
+  return <Context.Provider value={{ terminalId: tab?.id, tab, open: state.open, visible, height: state.height,
     publishHost, resize: height => setState(current => ({ ...current, height: clampHeight(height) })), show: () => { void show(); }, owns }}>
     {children}
     {host && controls ? createPortal(<button type="button" className="project-terminal-dock-toggle" title="项目终端" aria-label="项目终端"

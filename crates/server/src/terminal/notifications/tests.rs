@@ -587,6 +587,7 @@ async fn codex_like_stops_use_the_expected_environment(with_process: bool) {
         id: "tab".into(),
         name: "Terminal".into(),
         name_is_custom: None,
+        dock_project_id: None,
         workspace_root: cwd.to_string_lossy().into_owned(),
         layout: TerminalLayout::Pane {
             pane_id: "pane".into(),

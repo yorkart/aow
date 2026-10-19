@@ -101,6 +101,7 @@ impl TerminalManager {
                 name_is_custom: Some(requested_name.is_some()),
                 name: requested_name.unwrap_or_else(|| launch.display_name.clone()),
                 workspace_root,
+                dock_project_id: None,
                 layout: TerminalLayout::Pane {
                     pane_id: pane_id.clone(),
                 },

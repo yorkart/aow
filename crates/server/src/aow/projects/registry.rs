@@ -210,6 +210,24 @@ impl AowManager {
         Ok(())
     }
 
+    pub(crate) async fn project_terminal_defaults(
+        &self,
+        id: &str,
+    ) -> Result<(String, String), AowError> {
+        let project = self.project(id).await?;
+        let root = project
+            .worktrees
+            .into_iter()
+            .find(|worktree| worktree.is_main)
+            .map(|worktree| worktree.path)
+            .unwrap_or(project.registered_path);
+        let name = format!(
+            "{} · Terminal",
+            project.name.chars().take(117).collect::<String>()
+        );
+        Ok((root, name))
+    }
+
     pub(in crate::aow) async fn project(&self, id: &str) -> Result<Project, AowError> {
         let stored = self
             .lock()?

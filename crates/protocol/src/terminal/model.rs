@@ -93,6 +93,9 @@ pub struct TerminalTab {
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name_is_custom: Option<bool>,
+    /// Project whose shared bottom terminal this tab represents.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dock_project_id: Option<String>,
     pub workspace_root: String,
     pub layout: TerminalLayout,
     pub panes: Vec<TerminalPane>,

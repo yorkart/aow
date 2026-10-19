@@ -46,6 +46,7 @@ pub(crate) mod notifications;
 mod panes;
 mod persistence;
 mod pi_detection;
+mod project_dock;
 mod rebuild;
 mod requests;
 mod runtime;

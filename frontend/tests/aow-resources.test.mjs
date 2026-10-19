@@ -57,6 +57,7 @@ try {
     state.pinnedWorktrees = { paths: [], revision: 0 };
     if (floating) state.projects.unshift({ ...project, id: '__aow_floating', name: '浮动工作区', builtin: true, registered_path: '/global', notes_path: '/notes/localhost/test/__aow_floating', worktrees: [{ ...worktrees[0], id: 'global-main', project_id: '__aow_floating', path: '/global', branch: 'main' }] });
     state.createdTerminals = [];
+    state.dockProjects = {};
     state.terminalListScopes = [];
     state.terminalAgentScopes = [];
     state.closedTerminalIds = [];
@@ -138,7 +139,7 @@ try {
         return data;
       });
       data = data.filter(tab => !state.closedTerminalIds.includes(tab.id));
-      data = data.map(item => ({ ...item, name_is_custom: Boolean(state.names[item.id]) || item.name_is_custom === true, ...(state.names[item.id] ? { name: state.names[item.id] } : {}),
+      data = data.map(item => ({ ...item, ...(state.dockProjects[item.id] ? { dock_project_id: state.dockProjects[item.id] } : {}), name_is_custom: Boolean(state.names[item.id]) || item.name_is_custom === true, ...(state.names[item.id] ? { name: state.names[item.id] } : {}),
         panes: item.panes.map(pane => ({ ...pane, name_is_custom: Boolean(state.paneNames[pane.id]), ...(state.paneNames[pane.id] ? { name: state.paneNames[pane.id] } : {}) })),
       }));
       state.knownTerminalTabs = { ...state.knownTerminalTabs, ...Object.fromEntries(data.map(item => [item.id, item])) };
@@ -298,13 +299,28 @@ try {
         await route.fulfill({ status: 204 });
         return;
       }
-      else if (url.pathname === '/api/terminals' && request.method() === 'POST') {
-        const created = request.postDataJSON();
+      else if ((url.pathname === '/api/terminals' || url.pathname.startsWith('/api/terminals/project-dock/')) && request.method() === 'POST') {
+        let created = request.postDataJSON();
+        const dockProject = url.pathname.startsWith('/api/terminals/project-dock/')
+          ? state.projects.find(project => project.id === decodeURIComponent(url.pathname.split('/').at(-1))) : undefined;
+        if (dockProject) {
+          const tabs = terminalList();
+          const existing = tabs.find(tab => tab.dock_project_id === dockProject.id)
+            ?? tabs.find(tab => tab.id === created.legacy_terminal_id);
+          if (existing) {
+            state.dockProjects[existing.id] = dockProject.id;
+            await route.fulfill({ json: { ...existing, dock_project_id: dockProject.id } });
+            return;
+          }
+          const root = dockProject.worktrees.find(worktree => worktree.is_main)?.path ?? dockProject.registered_path;
+          created = { workspace_root: root, cwd: root, name: `${[...dockProject.name].slice(0, 117).join('')} · Terminal` };
+        }
         state.createdTerminals.push(created);
         if (state.terminalCreateError) { await route.fulfill({ status: 500, json: { message: state.terminalCreateError } }); return; }
         const id = `created-${state.createdTerminals.length}`;
         const agent = state.registeredAgents.find(agent => agent.id === created.agent_id);
         data = { id, name: created.name ?? agent?.display_name ?? 'New shell', name_is_custom: !!created.name, workspace_root: created.workspace_root, layout: { type: 'pane', pane_id: id + '-pane' }, panes: [{ id: id + '-pane', name: agent?.display_name ?? 'Shell', cwd: created.cwd, shell: agent?.command ?? '/bin/bash', kind: agent ? 'agent' : 'terminal', agent_id: agent ? agent.agent_type ?? agent.id : null, status: 'running', rows: 40, cols: 120 }] };
+        if (dockProject) data.dock_project_id = dockProject.id;
         state.createdTerminalTabs.push(data);
         await state.terminalCreateGate;
       }
@@ -544,6 +560,105 @@ try {
     await readyDock(page);
     assert.ok(await first.evaluate(node => node.isConnected && !!node.closest('.project-aow-surface:not([hidden])')));
     assert.equal(state.createdTerminals.length, 2);
+  });
+
+  await test('ordinary terminal pane headers retain keyboard focus after repeated selection', async t => {
+    const { page } = await fixture(t, { splitTerminal: true });
+    const panes = surface(page).locator('.project-aow-terminal-host:not([hidden]) .terminal-pane');
+    await panes.nth(1).locator('.terminal-emulator-shell:not(.restore-pending)').waitFor();
+    await panes.nth(1).locator('.xterm-helper-textarea').focus();
+    await delay(200);
+    for (const index of [0, 1, 0]) {
+      await panes.nth(index).locator('.terminal-pane-name').click();
+      await delay(200);
+    }
+    assert.ok(await panes.first().evaluate(node => node.contains(document.activeElement)),
+      `normal selected pane lost focus: ${await page.evaluate(() => document.activeElement?.tagName)}`);
+  });
+
+  await test('project terminal dock pane selection retains terminal keyboard focus', async t => {
+    const { page } = await fixture(t, { beforeOpen: async ({ context, state }) => {
+      await context.route('**/api/terminals/created-1/split', async route => {
+        const terminal = state.createdTerminalTabs[0];
+        terminal.panes.push({ ...terminal.panes[0], id: 'dock-split' });
+        terminal.layout = { type: 'split', axis: 'row', ratio: .5,
+          first: terminal.layout, second: { type: 'pane', pane_id: 'dock-split' } };
+        await route.fulfill({ json: terminal });
+      });
+    } });
+    await openDockFile(page);
+    await surface(page).locator('.monaco-editor').first().waitFor();
+    await page.getByRole('button', { name: '项目终端', exact: true }).click();
+    await readyDock(page);
+    const panes = projectDock(page).locator('.terminal-pane');
+    await panes.first().locator('.xterm-helper-textarea').focus();
+    await projectDock(page).getByRole('button', { name: '向右分屏', exact: true }).click();
+    await panes.nth(1).locator('.terminal-emulator-shell:not(.restore-pending)').waitFor();
+    await panes.nth(1).locator('.xterm-helper-textarea').focus();
+    await delay(200);
+    for (const index of [0, 1, 0]) {
+      await panes.nth(index).locator('.terminal-pane-name').click();
+      await delay(200);
+    }
+    assert.ok(await panes.first().evaluate(node => node.contains(document.activeElement)),
+      `selected pane has no keyboard focus: ${await page.evaluate(() => document.activeElement?.tagName)}`);
+  });
+
+  await test('project terminal dock creation does not detach an unrelated terminal with the generated name', async t => {
+    let release;
+    t.after(() => release?.());
+    const { page, state } = await fixture(t, { beforeOpen: ({ state }) => {
+      state.names['wt-0-tab'] = `${project.name} · Terminal`;
+      state.terminalCreateGate = new Promise(resolve => { release = resolve; });
+    } });
+    const original = await surface(page).locator('.project-aow-terminal-host .xterm').first().elementHandle();
+    await openDockFile(page);
+    await surface(page).locator('.monaco-editor').first().waitFor();
+    await page.getByRole('button', { name: '项目终端', exact: true }).click();
+    await eventually(() => state.createdTerminalTabs.length === 1);
+    const connected = await original.evaluate(node => node.isConnected);
+    release();
+    await readyDock(page);
+    assert.equal(connected, true, 'an unrelated existing terminal renderer was removed while creating the dock');
+  });
+
+  await test('project terminal dock concurrent browser tabs keep one shared project terminal', async t => {
+    const { page, state } = await fixture(t);
+    await openDockFile(page);
+    await surface(page).locator('.monaco-editor').first().waitFor();
+    const second = await page.context().newPage();
+    second.setDefaultTimeout(45000);
+    await second.goto(`${baseURL}/?ui=desktop`);
+    await second.getByRole('button', { name: '项目终端', exact: true }).waitFor();
+    await page.getByRole('button', { name: '项目终端', exact: true }).click();
+    await readyDock(page);
+    await second.evaluate(() => Promise.all(window.liveEventSockets.map(socket => socket.sampleTerminals(true))));
+    await second.getByRole('button', { name: '项目终端', exact: true }).click();
+    await readyDock(second);
+    assert.equal(state.createdTerminals.length, 1, 'two browser tabs created two project terminals');
+    assert.equal(await second.locator('[data-workspace-tab-id="terminal:created-1"]').count(), 0);
+    await second.evaluate(() => {
+      for (const key of Object.keys(localStorage)) if (key.includes('aow-project-terminal-dock:')) localStorage.removeItem(key);
+    });
+    await second.reload();
+    await second.getByRole('button', { name: '项目终端', exact: true }).click();
+    await readyDock(second);
+    assert.equal(state.createdTerminals.length, 1, 'clearing browser ownership storage must reuse the server instance');
+  });
+
+  await test('project terminal dock upgrades an explicitly saved legacy instance without recreating it', async t => {
+    const { page, state } = await fixture(t, { waitForTerminal: false, beforeOpen: async ({ context }) => {
+      await context.addInitScript(() => {
+        localStorage.setItem('aow-project-terminal-dock:project', JSON.stringify({ terminalId: 'wt-0-tab', open: true, height: 280 }));
+      });
+    } });
+    await eventually(() => state.dockProjects['wt-0-tab'] === project.id);
+    await openDockFile(page);
+    await readyDock(page);
+    assert.equal(state.createdTerminals.length, 0);
+    assert.equal(await page.locator('[data-workspace-tab-id="terminal:wt-0-tab"]').count(), 0);
+    assert.ok(state.terminalSockets.some(socket => socket.url().includes('/terminals/wt-0-tab/panes/wt-0-pane/')));
+    assert.deepEqual(state.closedTerminalIds, []);
   });
 
   const creationJob = (input, id = 'create-one') => ({

@@ -129,6 +129,7 @@ function normalizeTab(value: unknown): TerminalTab | null {
     id: item.id,
     name: typeof item.name === 'string' && item.name.trim() ? item.name : 'Terminal',
     ...(typeof item.name_is_custom === 'boolean' ? { name_is_custom: item.name_is_custom } : {}),
+    ...(typeof item.dock_project_id === 'string' ? { dock_project_id: item.dock_project_id } : {}),
     workspace_root: typeof item.workspace_root === 'string' ? item.workspace_root : '',
     layout: normalizeLayout(item.layout),
     panes: Array.isArray(item.panes)
@@ -180,6 +181,14 @@ function terminalPath(tabId: string, suffix = '') {
 }
 
 export const terminalApi = {
+  async projectDock(projectId: string, legacyTerminalId?: string): Promise<TerminalTab> {
+    const tab = tabFromPayload(await request(`${TERMINALS_PATH}/project-dock/${encodeURIComponent(projectId)}`, {
+      method: 'POST', body: JSON.stringify({ legacy_terminal_id: legacyTerminalId }),
+    }));
+    if (!tab || tab.dock_project_id !== projectId) throw new Error('服务器返回了无效的项目终端');
+    return tab;
+  },
+
   async agents(workspaceRoot?: string, signal?: AbortSignal): Promise<TerminalAgentList> {
     const query = new URLSearchParams(workspaceRoot === undefined ? {} : { workspace_root: workspaceRoot });
     const payload = asRecord(await request(`${TERMINALS_PATH}/agents?${query}`, undefined, 5_000, signal));

@@ -84,6 +84,7 @@ pub(super) fn tab_with(layout: TerminalLayout, panes: Vec<TerminalPane>) -> Term
         id: "tab-1".to_owned(),
         name: "Terminal".to_owned(),
         name_is_custom: None,
+        dock_project_id: None,
         workspace_root: "/tmp".to_owned(),
         layout,
         panes,
