@@ -1894,8 +1894,14 @@ try {
       navigator.clipboard.writeText = async value => { window.copiedReply = value; };
       Element.prototype.scrollIntoView = function () { window.scrolledEntry = this.getAttribute('data-entry-id'); };
     });
-    await actions.last().getByRole('button', { name: '复制回复', exact: true }).click();
+    const copy = actions.last().getByRole('button', { name: '复制回复', exact: true });
+    await copy.click();
     assert.equal(await page.evaluate(() => window.copiedReply), 'Final answer');
+    await copy.locator('.lucide-check').waitFor();
+    assert.equal(await copy.getAttribute('title'), '已复制');
+    assert.equal(await actions.first().locator('.lucide-check').count(), 0, 'copy feedback belongs to the selected reply');
+    await copy.locator('.lucide-check').waitFor({ state: 'detached' });
+    assert.equal(await copy.getAttribute('title'), 'Copy This Agent Response');
     await actions.last().getByRole('button', { name: '跳到用户消息', exact: true }).click();
     assert.equal(await page.evaluate(() => window.scrolledEntry), 'u2', 'skip intervening tool and commentary');
     state.session.permissions = [{ id: 'pending', kind: 'permission', request: { toolCall: { title: 'Confirmation' }, options: [] } }]; state.session.revision++;
@@ -2258,6 +2264,7 @@ try {
     await copy.click();
     await page.waitForFunction(() => window.copiedReply === 'LAN reply');
     assert.equal(await page.evaluate(() => window.copiedReply), 'LAN reply');
+    await copy.locator('.lucide-check').waitFor();
     assert.equal(await page.locator('.acp-clipboard-input').count(), 0);
     await page.evaluate(() => {
       Object.defineProperty(navigator, 'clipboard', { value: { writeText: async () => { throw new Error('denied'); } }, configurable: true });
@@ -2265,6 +2272,7 @@ try {
     });
     await copy.click();
     await page.getByRole('alert').filter({ hasText: '复制失败，请选择文本后手动复制。' }).waitFor();
+    assert.equal(await copy.locator('.lucide-check').count(), 0, 'failed copying must not retain the previous success indicator');
     assert.equal(await page.locator('.acp-clipboard-input').count(), 0);
   });
   await test('execute tools display streamed terminals, retained output and raw-output fallback', async t => {
