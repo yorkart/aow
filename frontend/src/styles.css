@@ -253,9 +253,9 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .project-aow-pinned-panel { margin-bottom:12px; }
 .project-aow-pinned { display:flex; flex-direction:column; gap:3px; padding-top:4px; }
 .project-aow-worktrees { display:flex; flex-direction:column; gap:2px; margin:0 0 0 15px; padding:3px 0; border-left:1px solid #d3def009; }
-.project-aow-worktrees > button,.project-aow-pinned > button { --aow-icon:#8f9daf; width:100%; min-height:43px; display:flex; align-items:center; gap:9px; padding:6px 9px; color:var(--aow-text-strong); text-align:left; border:1px solid transparent; border-radius:8px; }
+.project-aow-worktrees > button,.project-aow-pinned > button { --aow-icon:#8f9daf; width:100%; min-height:43px; display:flex; align-items:center; gap:9px; padding:0 9px; color:var(--aow-text-strong); text-align:left; border:1px solid transparent; border-radius:8px; }
 .project-aow-worktrees > button { padding-left:6px; }
-.project-aow-pinned > button { min-height:46px; padding:6px 10px; }
+.project-aow-pinned > button { min-height:46px; padding:0 10px; }
 .project-aow-worktrees > button:hover,.project-aow-pinned > button:hover { background:var(--aow-hover); }
 .project-aow-worktrees > button.active,.project-aow-pinned > button.active { background:var(--aow-sidebar-selection); border-color:#d3def017; box-shadow:0 1px 2px #0000000a; }
 .project-aow-worktrees > button:focus-visible,.project-aow-pinned > button:focus-visible { outline:1px solid var(--aow-accent); outline-offset:-1px; }
@@ -266,7 +266,7 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .project-aow-worktrees > button:has(> .project-aow-worktree-unread) strong,.project-aow-pinned > button:has(> .project-aow-worktree-unread) strong { color:var(--aow-text-hover); font-weight:600; }
 .project-aow-worktrees small,.project-aow-pinned small { color:#7e8a9d; font-size:10px; line-height:14px; }
 .project-aow-worktrees i,.project-aow-pinned i { color:#9f947c; font-size:9px; font-style:normal; }
-.project-aow-worktrees > button.compact { min-height:27px; height:27px; padding-block:3px; color:#8f9daf; font-size:11px; font-weight:400; }
+.project-aow-worktrees > button.compact { min-height:27px; height:27px; color:#8f9daf; font-size:11px; font-weight:400; }
 .project-aow-worktrees > button:disabled,.project-aow-pinned > button:disabled { opacity:.5; cursor:wait; }
 .project-aow-dialog.worktree-cleanup-dialog { width:min(720px, calc(100vw - 32px)); }
 .worktree-cleanup-dialog input[type="checkbox"] { width:14px; height:14px; padding:0; margin:0; flex:0 0 14px; accent-color:var(--aow-accent); }
