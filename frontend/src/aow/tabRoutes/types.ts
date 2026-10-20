@@ -28,6 +28,7 @@ export interface TabContext {
 }
 export interface ResolvedTab {
   target: TabTarget; workspacePath: string;
+  signal?: AbortSignal;
   terminal?: TerminalTab; session?: AowAgentSession;
   acpSession?: AcpSessionInfo; centerId?: string;
   pullRequest?: PullRequestSummary; task?: AutomationTask;

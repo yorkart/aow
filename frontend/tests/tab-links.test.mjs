@@ -41,7 +41,7 @@ try {
   const base = `http://127.0.0.1:${server.httpServer.address().port}`;
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
 
-  async function fixture(t, { mobile = false, login = false, floating = false, extraFloatingTabs = [], global = false, missing = false, removedWorkspace = false, temporary = false, entry = 'target', editable = false, tabUrl, fileContents = {}, sessionMarkdown = 'Restored conclusion', sessionAgent = false, pinned = [], reviewTargets = [], preserveFloating = false, acp = false, acpHistory = [], acpSavedTabs = [] } = {}) {
+  async function fixture(t, { mobile = false, login = false, floating = false, extraFloatingTabs = [], global = false, missing = false, removedWorkspace = false, temporary = false, entry = 'target', editable = false, tabUrl, fileContents = {}, sessionMarkdown = 'Restored conclusion', sessionAgent = false, pinned = [], reviewTargets = [], preserveFloating = false, acp = false, acpHistory = [], acpSavedTabs = [], restoreAcpSessions = false, terminalUnavailable = false } = {}) {
     const context = await browser.newContext({ viewport: mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 } });
     const root = temporary ? '/private/tmp/aow-inbox-link' : global ? '/global' : worktrees[1].path;
     const target = terminal('target', root, 'Target Tab');
@@ -50,7 +50,7 @@ try {
     const projects = removedWorkspace ? [] : [project];
     if (global) projects.push({ ...project, id: '__aow_floating', name: '浮动工作区', builtin: true,
       registered_path: root, worktrees: [{ ...worktrees[0], id: 'global-main', project_id: '__aow_floating', path: root }] });
-    const state = { authenticated: !login, targetReads: 0, mutations: [], errors: [], reads: [], inbox: [], acpSessions: structuredClone(acpHistory), acpListError: '', acpConnections: 0, acpWrites: [] };
+    const state = { authenticated: !login, targetReads: 0, mutations: [], errors: [], reads: [], inbox: [], acpSessions: structuredClone(acpHistory), acpListError: '', acpConnections: 0, acpWrites: [], terminalUnavailable };
     const session = { id: 'codex:session-one', session_id: 'session-one', agent: 'codex', title: 'Linked Conversation', cwd: '/actual-session', created_at: '', updated_at: '' };
     const task = { id: 'task-one', name: 'Linked Automation', project_id: 'project', project_name: project.name, revision: 1, agent: 'codex', workspace_mode: 'existing', workspace_path: root, prompt: 'Task prompt', cron: '0 9 * * *', interval_seconds: null, max_concurrent_runs: 1, enabled: true, yolo: false, base_branch: '', cleanup_worktree: false, is_running: false, scheduler_error: null, last_run: null, next_run_at: null };
     const run = { id: 'run-old', task_id: task.id, task_name: task.name, agent: 'codex', source: 'manual', status: 'completed', started_at: '2026-09-19T00:00:00Z', finished_at: '2026-09-19T00:01:00Z', workspace_path: root, branch: 'dev', session_id: null, duration_ms: 60000, exit_code: 0 };
@@ -59,19 +59,27 @@ try {
     await installLiveEvents(context);
     const controls = acpControlFixture();
     if (acp) await controls.install(context);
-    await context.addInitScript(({ root, floating, extraFloatingTabs, preserveFloating, acp, acpSavedTabs }) => {
+    await context.addInitScript(({ root, floating, extraFloatingTabs, preserveFloating, acp, acpSavedTabs, restoredSessions }) => {
       window.sendTaskStop = data => window.emitLiveEvent('task-stopped', data);
       window.taskStopReady = () => window.liveEventSockets.some(socket => socket.readyState === 1);
       if (!acp || !localStorage.getItem('aow-active')) localStorage.setItem('aow-active', '/workspace/main');
       if (!acp || !localStorage.getItem(`aow-workspace-tabs:${root}`)) localStorage.setItem(`aow-workspace-tabs:${root}`, JSON.stringify({ active: 'terminal:other' }));
       if (acpSavedTabs.length && !localStorage.getItem(`aow-acp-tabs:${root}`)) localStorage.setItem(`aow-acp-tabs:${root}`, JSON.stringify(acpSavedTabs));
+      for (const workspace of new Set(restoredSessions.map(session => session.cwd))) {
+        if (localStorage.getItem(`aow-acp-tabs:${workspace}`)) continue;
+        const tabs = restoredSessions.filter(session => session.cwd === workspace).map(session => ({
+          id: session.thread_id, thread_id: session.thread_id, agentId: session.agent_id, title: session.title,
+        }));
+        localStorage.setItem(`aow-acp-tabs:${workspace}`, JSON.stringify(tabs));
+        localStorage.setItem(`aow-workspace-tabs:${workspace}`, JSON.stringify({ active: `acp:${tabs[0].id}` }));
+      }
       sessionStorage.setItem(`aow.mobile.terminal.${root}`, 'other:other-pane');
       if (floating && (!preserveFloating || !localStorage.getItem('aow-floating-tabs-v1'))) {
         localStorage.setItem('aow-floating-tabs-v1', JSON.stringify([{ workspace: root,
           id: 'terminal:target', targetId: 'target', kind: 'terminal', label: 'Target Tab' }, ...extraFloatingTabs]));
         localStorage.setItem('aow-floating-open', 'false');
       }
-    }, { root, floating, extraFloatingTabs, preserveFloating, acp, acpSavedTabs });
+    }, { root, floating, extraFloatingTabs, preserveFloating, acp, acpSavedTabs, restoredSessions: restoreAcpSessions ? acpHistory : [] });
     await context.route('**/api/**', async route => {
       const request = route.request();
       const url = new URL(request.url());
@@ -138,7 +146,10 @@ try {
         data = tabs.find(tab => tab.id === id);
         if (!data || missing) { await route.fulfill({ status: 404, json: { message: 'Tab not found' } }); return; }
       }
-      else if (url.pathname === '/api/terminals' && request.method() === 'GET') data = tabs.filter(tab => !url.searchParams.has('workspace_root') || tab.workspace_root === url.searchParams.get('workspace_root'));
+      else if (url.pathname === '/api/terminals' && request.method() === 'GET') {
+        if (state.terminalUnavailable) { await route.fulfill({ status: 503, json: { message: 'Terminal inventory unavailable' } }); return; }
+        data = tabs.filter(tab => !url.searchParams.has('workspace_root') || tab.workspace_root === url.searchParams.get('workspace_root'));
+      }
       else if (editable && url.pathname === '/api/terminals' && request.method() === 'POST') {
         data = terminal('created', request.postDataJSON().workspace_root, 'Created Tab');
         tabs.push(data); state.mutations.push('create');
@@ -276,6 +287,135 @@ try {
     assert.deepEqual(state.acpWrites, ['POST /api/acp/sessions/main/actions']);
     assert.deepEqual(state.errors, []);
   });
+
+  async function refreshOnActivation(page, event) {
+    await Promise.all([
+      page.waitForResponse(response => new URL(response.url()).pathname === '/api/aow/projects'),
+      page.evaluate(event => {
+        if (event === 'focus') window.dispatchEvent(new Event('focus'));
+        else {
+          Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+          document.dispatchEvent(new Event('visibilitychange'));
+          Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+          document.dispatchEvent(new Event('visibilitychange'));
+        }
+      }, event),
+    ]);
+    // Allow the refreshed inventory's React effects to apply before asserting.
+    await page.waitForTimeout(250);
+  }
+
+  for (const terminalUnavailable of [false, true]) {
+    await test(`ACP worktree selection survives focus and visibility refresh with terminal inventory ${terminalUnavailable ? 'unavailable' : 'ready'}`, async t => {
+      const main = { ...acpSession('main', '/workspace/main'), status: 'idle' };
+      const linked = { ...acpSession('linked'), status: 'idle' };
+      const { page, state } = await fixture(t, { acp: true, acpHistory: [main, linked], restoreAcpSessions: true,
+        terminalUnavailable, tabUrl: '/aow/tabs/acp/main' });
+      const active = page.locator('.project-aow-surface:not([hidden])');
+      await active.getByText('Retained reply for main', { exact: true }).waitFor();
+      if (terminalUnavailable) await active.locator('.project-aow-inline-error').filter({ hasText: 'Terminal inventory unavailable' }).waitFor();
+      else await active.getByRole('tab', { name: /^Main Tab/ }).waitFor();
+      await page.locator('.project-aow-worktrees button[title="/workspace/linked"]').click();
+      await active.getByText('Retained reply for linked', { exact: true }).waitFor();
+      await page.waitForURL(url => url.pathname === '/aow/tabs/acp/linked');
+      await active.getByLabel('ACP 消息', { exact: true }).fill('Keep this linked draft');
+      for (const event of ['focus', 'visibilitychange']) {
+        await refreshOnActivation(page, event);
+        assert.equal(await page.locator('.project-aow-worktrees button.active').getAttribute('title'), linked.cwd);
+        assert.equal(new URL(page.url()).pathname, '/aow/tabs/acp/linked');
+        assert.equal(await active.getByLabel('ACP 消息', { exact: true }).innerText(), 'Keep this linked draft');
+        assert.equal(await active.getByRole('tab', { selected: true }).innerText(), linked.title);
+      }
+      if (terminalUnavailable) {
+        state.terminalUnavailable = false;
+        await refreshOnActivation(page, 'visibilitychange');
+        await active.getByRole('tab', { name: /^Other Tab/ }).waitFor();
+        assert.equal(new URL(page.url()).pathname, '/aow/tabs/acp/linked');
+        assert.equal(await active.getByLabel('ACP 消息', { exact: true }).innerText(), 'Keep this linked draft');
+      }
+      assert.deepEqual(await page.locator('.project-aow-worktrees > button').evaluateAll(buttons => buttons.map(button => button.title)), worktrees.map(worktree => worktree.path));
+      assert.deepEqual(state.acpWrites, []);
+    });
+  }
+
+  await test('fresh ACP links and same-worktree session switching do not wait for terminal inventory', async t => {
+    const one = { ...acpSession('one'), status: 'idle' };
+    const two = { ...acpSession('two'), status: 'idle' };
+    const { page, state } = await fixture(t, { acp: true, acpHistory: [one, two], terminalUnavailable: true,
+      tabUrl: '/aow/tabs/acp/one' });
+    const active = page.locator('.project-aow-surface:not([hidden])');
+    await active.getByText('Retained reply for one', { exact: true }).waitFor();
+    await active.getByRole('button', { name: '打开 ACP 会话 Saved ACP two', exact: true }).click();
+    await page.waitForURL(url => url.pathname === '/aow/tabs/acp/two');
+    await active.getByText('Retained reply for two', { exact: true }).waitFor();
+    await active.getByRole('tab', { name: /^Saved ACP one/ }).click();
+    await page.waitForURL(url => url.pathname === '/aow/tabs/acp/one');
+    await refreshOnActivation(page, 'focus');
+    assert.equal(new URL(page.url()).pathname, '/aow/tabs/acp/one');
+    assert.deepEqual(state.acpWrites, []);
+  });
+
+  for (const selection of ['worktree', 'tab']) {
+    await test(`explicit ${selection} selection cancels a terminal link waiting for its first inventory`, async t => {
+      const main = { ...acpSession('main', '/workspace/main'), status: 'idle' };
+      const second = { ...acpSession('second', '/workspace/main'), status: 'idle' };
+      const linked = { ...acpSession('linked'), status: 'idle' };
+      const { page, state } = await fixture(t, { acp: true, acpHistory: [main, second, linked], restoreAcpSessions: true,
+        terminalUnavailable: true, pinned: ['/workspace/linked'], tabUrl: '/aow/tabs/main-tab' });
+      const active = page.locator('.project-aow-surface:not([hidden])');
+      await active.getByText('Retained reply for main', { exact: true }).waitFor();
+      await active.locator('.project-aow-inline-error').filter({ hasText: 'Terminal inventory unavailable' }).waitFor();
+      if (selection === 'worktree') await page.locator('.project-aow-pinned button[title="/workspace/linked"]').click();
+      else await active.getByRole('tab', { name: /^Saved ACP second/ }).click();
+      const selected = selection === 'worktree' ? linked : second;
+      await page.waitForURL(url => url.pathname === `/aow/tabs/acp/${selected.thread_id}`);
+      await active.locator('.acp-tab-host:visible').getByLabel('ACP 消息', { exact: true }).fill('New selection wins');
+      state.terminalUnavailable = false;
+      await refreshOnActivation(page, 'visibilitychange');
+      await active.getByRole('tab', { name: selection === 'worktree' ? /^Other Tab/ : /^Main Tab/ }).waitFor();
+      await refreshOnActivation(page, 'focus');
+      assert.equal(await page.locator('.project-aow-worktrees button.active').getAttribute('title'), selected.cwd);
+      assert.equal(new URL(page.url()).pathname, `/aow/tabs/acp/${selected.thread_id}`);
+      assert.equal(await active.locator('.acp-tab-host:visible').getByLabel('ACP 消息', { exact: true }).innerText(), 'New selection wins');
+      assert.deepEqual(state.acpWrites, []);
+    });
+  }
+
+  for (const selection of ['worktree', 'tab']) {
+    await test(`explicit ${selection} selection cancels a delayed cross-worktree ACP lookup`, async t => {
+      const main = { ...acpSession('main', '/workspace/main'), status: 'idle' };
+      const second = { ...acpSession('second', '/workspace/main'), status: 'idle' };
+      const linked = { ...acpSession('linked'), status: 'idle' };
+      const { page, state } = await fixture(t, { acp: true, acpHistory: [main, second, linked], restoreAcpSessions: true,
+        tabUrl: '/aow/tabs/acp/main' });
+      const active = page.locator('.project-aow-surface:not([hidden])');
+      await active.getByText('Retained reply for main', { exact: true }).waitFor();
+      const started = Promise.withResolvers();
+      const release = Promise.withResolvers();
+      const finished = Promise.withResolvers();
+      t.after(() => release.resolve());
+      await page.route('**/api/acp/sessions/linked/metadata', async route => {
+        started.resolve();
+        await release.promise;
+        await route.fulfill({ json: linked });
+        finished.resolve();
+      });
+      await active.getByRole('button', { name: '打开 ACP 会话 Saved ACP linked', exact: true }).click();
+      await started.promise;
+      // Even reselecting the current worktree must supersede the pending link.
+      if (selection === 'worktree') await page.locator('.project-aow-worktrees button[title="/workspace/main"]').click();
+      else await active.getByRole('tab', { name: /^Saved ACP second/ }).click();
+      const selected = selection === 'worktree' ? main : second;
+      await page.waitForURL(url => url.pathname === `/aow/tabs/acp/${selected.thread_id}`);
+      release.resolve();
+      await finished.promise;
+      await refreshOnActivation(page, 'focus');
+      assert.equal(await page.locator('.project-aow-worktrees button.active').getAttribute('title'), main.cwd);
+      assert.equal(new URL(page.url()).pathname, `/aow/tabs/acp/${selected.thread_id}`);
+      await active.getByText(`Retained reply for ${selected.thread_id}`, { exact: true }).waitFor();
+      assert.deepEqual(state.acpWrites, []);
+    });
+  }
 
   for (const mounted of [true, false]) {
     await test(`ACP cross-worktree deletion cleans ${mounted ? 'mounted' : 'unmounted'} owner tabs and preserves other sessions`, async t => {

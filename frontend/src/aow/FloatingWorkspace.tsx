@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { AowProject } from './types';
 import { useAowTabLocation } from './AowTabEntry';
+import { useCancelAowTabNavigation } from './tabNavigation';
 import { terminalApi } from '../features/terminals/terminalApi';
 import { Inbox, NotebookPen, Files, Maximize2, Minimize2, Minus, PanelsTopLeft, Pin, PinOff, SquareTerminal, X, PanelRight } from 'lucide-react';
 import { persist, readStored, useFloatingWorkspace, type FloatingTab } from './floatingWorkspaceState';
@@ -22,6 +23,7 @@ function clamp(bounds: Bounds): Bounds {
 export function FloatingWorkspace({ agents, projects, activeLocation = true }: { agents: AowAgent[]; projects: AowProject[]; activeLocation?: boolean }) {
   const floating = useFloatingWorkspace();
   const syncLocation = useAowTabLocation();
+  const cancelTabNavigation = useCancelAowTabNavigation();
   const [inboxVisited, setInboxVisited] = useState(floating.inboxOpen);
   useEffect(() => { if (floating.inboxOpen) setInboxVisited(true); }, [floating.inboxOpen]);
   const [bounds, setBounds] = useState(() => {
@@ -69,6 +71,7 @@ export function FloatingWorkspace({ agents, projects, activeLocation = true }: {
     else if (document.activeElement instanceof HTMLElement && panelRef.current?.contains(document.activeElement)) document.activeElement.blur();
   }, [floating.visible]);
   const create = (kind: 'markdown' | 'text' | 'terminal' | 'files', agent?: AowAgent) => {
+    cancelTabNavigation();
     floating.sources.current.get(floating.globalRoot)?.create(kind, agent);
   };
   const actions = <>
@@ -88,7 +91,7 @@ export function FloatingWorkspace({ agents, projects, activeLocation = true }: {
     <div ref={panelRef} data-floating-workspace className={`floating-workspace${maximized ? ' maximized' : ''}`} role="dialog" aria-label="浮动工作区" aria-hidden={!floating.visible} inert={!floating.visible}
       tabIndex={-1} style={{ ...(maximized ? { left: 8, top: 8, width: window.innerWidth - 16, height: window.innerHeight - 16 } : bounds), visibility: floating.visible ? 'visible' : 'hidden', pointerEvents: floating.visible ? undefined : 'none' }}>
       <WorkspaceTabs workspaceKey="floating" revealRequest={floating.tabRevealRequest} tabs={tabs} activeId={floating.active ? tabKey(floating.active) : undefined} visible={floating.visible} agents={agents}
-        onActivate={tab => floating.select(sourceTab(tab))} onCloseTab={tab => floating.close(sourceTab(tab))} onCloseTabs={closeTabs}
+        onActivate={tab => { cancelTabNavigation(); floating.select(sourceTab(tab)); }} onCloseTab={tab => { cancelTabNavigation(); floating.close(sourceTab(tab)); }} onCloseTabs={targets => { cancelTabNavigation(); return closeTabs(targets); }}
         onCanRename={tab => {
           const source = sourceTab(tab);
           setOperationError('');
@@ -106,8 +109,8 @@ export function FloatingWorkspace({ agents, projects, activeLocation = true }: {
         }}
         onOpenBrowser={() => create('files')} onCreateNote={kind => create(kind === 'md' ? 'markdown' : 'text')}
         onCreateTerminal={agent => create('terminal', agent)} newLabel="浮动工作区新建" tabListLabel="浮动工作区标签"
-        onCreateAcp={floating.globalRoot ? agentId => floating.sources.current.get(floating.globalRoot)?.createAcp(agentId) : undefined}
-        leadingControls={<button className={`floating-workspace-inbox-tab${floating.inboxOpen ? ' active' : ''}`} aria-label="Inbox" aria-pressed={floating.inboxOpen} onClick={() => { floating.openInbox(); syncLocation(undefined); }}><Inbox size={15} />Inbox</button>}
+        onCreateAcp={floating.globalRoot ? agentId => { cancelTabNavigation(); floating.sources.current.get(floating.globalRoot)?.createAcp(agentId); } : undefined}
+        leadingControls={<button className={`floating-workspace-inbox-tab${floating.inboxOpen ? ' active' : ''}`} aria-label="Inbox" aria-pressed={floating.inboxOpen} onClick={() => { cancelTabNavigation(); floating.openInbox(); syncLocation(undefined); }}><Inbox size={15} />Inbox</button>}
         controls={<div className="floating-workspace-window-actions">
           <button title="全局项目面板" aria-label="全局项目面板" aria-pressed={floating.sidebarOpen} onClick={() => floating.setSidebarOpen(!floating.sidebarOpen)}><PanelRight /></button>
           <button className="floating-workspace-pin" title={floating.pinned ? '取消固定：移出后自动隐藏' : '固定显示浮动工作区'} aria-label="固定显示浮动工作区" aria-pressed={floating.pinned} onClick={floating.togglePinned}>{floating.pinned ? <Pin /> : <PinOff />}</button>
