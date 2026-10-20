@@ -1398,21 +1398,55 @@ try {
   });
   await test('ACP settings keep the editor in a modal and protect custom drafts', async t => {
     const { page, state } = await fixture(t, true);
-    assert.equal(await page.locator('.acp-settings-editor').count(), 0);
-    await page.getByRole('button', { name: '添加自定义 Agent', exact: true }).click();
+    const nativeDialogs = [];
+    page.on('dialog', async prompt => { nativeDialogs.push(prompt.message()); await prompt.dismiss(); });
+    const editorContent = () => page.evaluate(async () => {
+      const { monaco } = await import('/src/features/editor/monaco.ts');
+      return monaco.editor.getModel(monaco.Uri.parse('inmemory://aow/acp/aow-acp-settings.jsonc')).getValue();
+    });
+    const addCustom = page.getByRole('button', { name: '添加自定义 Agent', exact: true });
     const modal = page.getByRole('dialog', { name: '添加自定义 ACP Agent', exact: true });
-    await modal.waitFor();
-    // The lazily loaded editor needs a cold Vite transform on shared CI CPUs.
+    const confirmation = page.getByRole('alertdialog', { name: '放弃 ACP 修改？', exact: true });
+    const edit = async content => {
+      const input = modal.getByRole('textbox', { name: 'ACP JSONC 配置', exact: true });
+      await input.press('ControlOrMeta+a');
+      await page.keyboard.insertText(content);
+    };
+    assert.equal(await page.locator('.acp-settings-editor').count(), 0);
+    assert.equal(await page.getByRole('button', { name: '保存', exact: true }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: '重新加载', exact: true }).count(), 0);
+    for (const close of ['取消', '关闭对话框', 'Escape']) {
+      await addCustom.click();
+      // The lazily loaded editor needs a cold Vite transform on shared CI CPUs.
+      await modal.locator('.monaco-editor').waitFor({ timeout: 30000 });
+      assert.equal(await editorContent(), state.content, 'opening the editor must not insert a template');
+      assert.equal(await modal.getByRole('button', { name: '保存', exact: true }).isDisabled(), true);
+      assert.equal(await page.getByLabel('Unsaved settings').textContent(), 'false');
+      if (close === 'Escape') await page.keyboard.press('Escape');
+      else await modal.getByRole('button', { name: close, exact: true }).click();
+      await modal.waitFor({ state: 'hidden' });
+      assert.equal(await confirmation.count(), 0);
+      assert.equal(state.saved, '');
+    }
+    await addCustom.click();
     await modal.locator('.monaco-editor').waitFor({ timeout: 30000 });
-    page.once('dialog', prompt => prompt.dismiss());
+    const draft = state.content.replace('"agent_servers": {}', '"agent_servers": {"my-agent": {"type": "custom", "command": "my-acp", "args": [], "env": {}}}');
+    await edit(draft);
+    await page.waitForFunction(() => document.querySelector('[aria-label="Unsaved settings"]')?.textContent === 'true');
     await modal.getByRole('button', { name: '取消', exact: true }).click();
+    await confirmation.waitFor();
+    await confirmation.getByRole('button', { name: '取消', exact: true }).click();
     assert.equal(await modal.isVisible(), true);
-    page.once('dialog', prompt => prompt.accept());
+    assert.equal(await editorContent(), draft);
     await page.keyboard.press('Escape');
+    await confirmation.getByRole('button', { name: '放弃修改', exact: true }).click();
     await modal.waitFor({ state: 'hidden' });
     assert.equal(state.saved, '');
-    assert.equal(await page.getByLabel('Unsaved settings').textContent(), 'false');
-    await page.getByRole('button', { name: '添加自定义 Agent', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('[aria-label="Unsaved settings"]')?.textContent === 'false');
+    await addCustom.click();
+    await modal.locator('.monaco-editor').waitFor({ timeout: 30000 });
+    assert.equal(await editorContent(), state.content);
+    await edit(draft);
     state.settingsError = '配置保存失败';
     await modal.getByRole('button', { name: '保存', exact: true }).click();
     await modal.getByRole('alert').filter({ hasText: state.settingsError }).waitFor();
@@ -1426,26 +1460,77 @@ try {
     assert.ok(state.saved.includes('// keep comment'));
     assert.deepEqual(parse(state.saved).future, { keep: true });
     assert.equal(state.connections, 0);
-    await page.getByRole('button', { name: '添加自定义 Agent', exact: true }).click();
-    await modal.getByRole('button', { name: '保存', exact: true }).click();
+    await addCustom.click();
+    await modal.locator('.monaco-editor').waitFor({ timeout: 30000 });
+    assert.equal(await editorContent(), state.saved);
+    assert.equal(await modal.getByRole('button', { name: '保存', exact: true }).isDisabled(), true);
+    await modal.getByRole('button', { name: '取消', exact: true }).click();
     await modal.waitFor({ state: 'hidden' });
-    assert.equal(parse(state.saved).agent_servers['my-agent-2'].type, 'custom');
+    assert.equal(parse(state.saved).agent_servers['my-agent-2'], undefined);
+    assert.deepEqual(nativeDialogs, []);
   });
 
-  await test('ACP default selector saves independently and preserves JSONC comments', async t => {
+  await test('ACP editor cancellation preserves the saved default and uses the app confirmation', async t => {
+    const { page, state } = await fixture(t, true, { content: '{"agent_servers":{"test":{"type":"registry"}}}\n' });
+    const nativeDialogs = [];
+    page.on('dialog', async prompt => { nativeDialogs.push(prompt.message()); await prompt.dismiss(); });
+    const selector = page.getByRole('combobox', { name: '默认 ACP 实例', exact: true });
+    await selector.selectOption('test');
+    await page.getByText('默认 ACP 实例已保存。', { exact: true }).waitFor();
+    const saved = state.saved;
+    await page.getByRole('button', { name: '编辑 Test Agent ACP 配置', exact: true }).click();
+    const modal = page.getByRole('dialog', { name: '编辑 ACP 配置', exact: true });
+    await modal.locator('.monaco-editor').waitFor({ timeout: 30000 });
+    const input = modal.getByRole('textbox', { name: 'ACP JSONC 配置', exact: true });
+    await input.press('ControlOrMeta+a');
+    await page.keyboard.insertText('{"agent_servers":{}}');
+    await modal.getByRole('button', { name: '关闭对话框', exact: true }).click();
+    const discard = page.getByRole('alertdialog', { name: '放弃 ACP 修改？', exact: true });
+    await discard.waitFor();
+    await page.keyboard.press('Escape');
+    await discard.waitFor({ state: 'hidden' });
+    assert.equal(await modal.isVisible(), true, 'Escape dismisses only the confirmation');
+    await modal.getByRole('button', { name: '关闭对话框', exact: true }).click();
+    await discard.getByRole('button', { name: '放弃修改', exact: true }).click();
+    await modal.waitFor({ state: 'hidden' });
+    assert.equal(await selector.inputValue(), 'test', 'discarding editor changes retains the earlier default selection');
+    await page.waitForFunction(() => document.querySelector('[aria-label="Unsaved settings"]')?.textContent === 'false');
+    await page.getByRole('button', { name: '添加自定义 Agent', exact: true }).click();
+    const custom = page.getByRole('dialog', { name: '添加自定义 ACP Agent', exact: true });
+    await custom.getByRole('button', { name: '取消', exact: true }).click();
+    await custom.waitFor({ state: 'hidden' });
+    assert.equal(await selector.inputValue(), 'test');
+    assert.equal(state.saved, saved);
+    assert.deepEqual(nativeDialogs, []);
+  });
+
+  await test('ACP default selector saves immediately, preserves JSONC comments and recovers from save errors', async t => {
     const { page, state } = await fixture(t, true, { content: '// keep comment\n{ "agent_servers": { "test": { "type": "registry" }, "other": { "type": "registry" } }, "future": { "keep": true } }\n' });
     const selector = page.getByRole('combobox', { name: '默认 ACP 实例', exact: true });
     await selector.selectOption('test');
-    assert.equal(state.saved, '', 'selection remains a draft until save');
-    await page.getByRole('button', { name: '保存', exact: true }).click();
-    await page.getByText('已保存，新连接将使用更新后的配置。', { exact: true }).waitFor();
+    await page.getByText('默认 ACP 实例已保存。', { exact: true }).waitFor();
     assert.equal(parse(state.saved).default_agent_id, 'test');
     assert.ok(state.saved.includes('// keep comment'));
     assert.deepEqual(parse(state.saved).future, { keep: true });
+    const saved = state.saved;
+    state.settingsError = '默认实例保存失败';
+    await selector.selectOption('other');
+    await page.getByRole('alert').filter({ hasText: state.settingsError }).waitFor();
+    assert.equal(await selector.inputValue(), 'test', 'a failed save retains the previous selection');
+    assert.equal(state.saved, saved);
+    assert.equal(await page.getByLabel('Unsaved settings').textContent(), 'false');
+    state.settingsError = '';
+    await selector.selectOption('other');
+    await page.getByText('默认 ACP 实例已保存。', { exact: true }).waitFor();
+    assert.equal(parse(state.saved).default_agent_id, 'other');
     await selector.selectOption('');
-    await page.getByRole('button', { name: '保存', exact: true }).click();
-    await page.waitForFunction(() => document.querySelector('[aria-label="Unsaved settings"]')?.textContent === 'false');
+    await page.waitForFunction(() => {
+      const selector = document.querySelector('[aria-label="默认 ACP 实例"]');
+      return selector && !selector.disabled && selector.value === '';
+    });
     assert.equal(parse(state.saved).default_agent_id, undefined);
+    assert.equal(await page.getByLabel('Unsaved settings').textContent(), 'false');
+    assert.equal(await page.getByRole('button', { name: '保存', exact: true }).count(), 0);
     assert.equal(state.connections, 0);
   });
   await test('Registry additions retain comments and unknown JSONC fields', async t => {
@@ -1461,6 +1546,12 @@ try {
     assert.deepEqual(parse(state.saved).future, { keep: true });
     assert.equal(parse(state.saved).agent_servers['codex-acp'].type, 'registry');
     assert.equal(await page.getByLabel('Unsaved settings').textContent(), 'false');
+    const registry = page.getByRole('dialog', { name: 'ACP Registry', exact: true });
+    assert.equal(await registry.getByRole('button', { name: '保存', exact: true }).count(), 0);
+    await registry.getByRole('button', { name: '关闭', exact: true }).click();
+    await registry.waitFor({ state: 'hidden' });
+    await page.getByRole('button', { name: '编辑 Codex ACP ACP 配置', exact: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: '保存', exact: true }).count(), 0);
   });
   await test('installing from the configured ACP list displays detailed progress without a Registry modal', async t => {
     const { page, state } = await fixture(t, true, {
