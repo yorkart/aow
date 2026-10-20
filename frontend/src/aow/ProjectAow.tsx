@@ -2672,36 +2672,38 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
         </div>
       </aside>
       <div className="project-aow-left-resizer" role="separator" aria-label="调整项目栏宽度" aria-orientation="vertical" onPointerDown={(event) => startSidebarResize('left', event)} />
-      <div className="project-aow-surfaces">
-        {projects.map(project => <ProjectTerminalDockProvider key={project.id} project={project} controls={terminalDockControls} onShow={() => setBottomPanel(undefined)}><ProjectTerminalPanelProvider project={project}><ProjectAcpPanelProvider project={project}>
-          {project.worktrees.filter(worktree => !busyWorktrees.has(worktree.path)).filter(worktree => visitedWorktrees.has(worktree.path) || floating.tabs.some(tab => tab.workspace === worktree.path)
-            || floating.hostedTabs.some(tab => tab.workspace === worktree.path || tab.host === worktree.path)).map(worktree => <WorkspaceSurface locationSource={locationSource(worktree.path)} initialEntry={initialEntry && (initialEntry.workspacePath === worktree.path
-              || floating.hostedTabs.some(tab => tab.host === worktree.path && tab.workspace === initialEntry.workspacePath && tab.id === tabCenterId(initialEntry))) ? initialEntry : undefined} key={worktree.path} project={project} worktree={worktree} active={worktree.path === activeWorktreePath} agents={agents} onShowLeftSidebar={leftSidebarVisible ? undefined : showLeftSidebar} rightSidebarVisible={rightSidebarVisible} onHideRightSidebar={hideRightSidebar} onShowRightSidebar={showRightSidebar} onStartRightResize={startRightResize} notesRefresh={notesRefreshByProject[project.id] ?? initialExplorerRefresh} onNotesChanged={notesChanged} onResourcesChanged={reportResources} />)}
-        </ProjectAcpPanelProvider></ProjectTerminalPanelProvider></ProjectTerminalDockProvider>)}
-        {activeEntry && busyWorktrees.has(activeEntry.worktree.path) ? <div className="project-aow-no-context"><LoaderCircle className="spinning" /><p>该 Worktree 正在清理，可继续使用其他工作区。</p><button onClick={() => setCleanupProjectId(activeEntry.project.id)}>查看清理进度</button></div> : null}
-        {!activeEntry && !leftSidebarVisible ? <nav className="project-aow-center-tabs project-aow-empty-toolbar"><LeftSidebarToggle onClick={showLeftSidebar} /></nav> : null}
-        {!activeEntry ? <div className="project-aow-no-context"><FolderGit2 /><h1>Project AoW</h1><p>从左侧注册并选择一个 Project Worktree。</p></div> : null}
+      <div className="project-aow-workspace">
+        <div className="project-aow-surfaces">
+          {projects.map(project => <ProjectTerminalDockProvider key={project.id} project={project} controls={terminalDockControls} onShow={() => setBottomPanel(undefined)}><ProjectTerminalPanelProvider project={project}><ProjectAcpPanelProvider project={project}>
+            {project.worktrees.filter(worktree => !busyWorktrees.has(worktree.path)).filter(worktree => visitedWorktrees.has(worktree.path) || floating.tabs.some(tab => tab.workspace === worktree.path)
+              || floating.hostedTabs.some(tab => tab.workspace === worktree.path || tab.host === worktree.path)).map(worktree => <WorkspaceSurface locationSource={locationSource(worktree.path)} initialEntry={initialEntry && (initialEntry.workspacePath === worktree.path
+                || floating.hostedTabs.some(tab => tab.host === worktree.path && tab.workspace === initialEntry.workspacePath && tab.id === tabCenterId(initialEntry))) ? initialEntry : undefined} key={worktree.path} project={project} worktree={worktree} active={worktree.path === activeWorktreePath} agents={agents} onShowLeftSidebar={leftSidebarVisible ? undefined : showLeftSidebar} rightSidebarVisible={rightSidebarVisible} onHideRightSidebar={hideRightSidebar} onShowRightSidebar={showRightSidebar} onStartRightResize={startRightResize} notesRefresh={notesRefreshByProject[project.id] ?? initialExplorerRefresh} onNotesChanged={notesChanged} onResourcesChanged={reportResources} />)}
+          </ProjectAcpPanelProvider></ProjectTerminalPanelProvider></ProjectTerminalDockProvider>)}
+          {activeEntry && busyWorktrees.has(activeEntry.worktree.path) ? <div className="project-aow-no-context"><LoaderCircle className="spinning" /><p>该 Worktree 正在清理，可继续使用其他工作区。</p><button onClick={() => setCleanupProjectId(activeEntry.project.id)}>查看清理进度</button></div> : null}
+          {!activeEntry && !leftSidebarVisible ? <nav className="project-aow-center-tabs project-aow-empty-toolbar"><LeftSidebarToggle onClick={showLeftSidebar} /></nav> : null}
+          {!activeEntry ? <div className="project-aow-no-context"><FolderGit2 /><h1>Project AoW</h1><p>从左侧注册并选择一个 Project Worktree。</p></div> : null}
+        </div>
+        <footer className="project-aow-status"><span>{activeEntry?.worktree.path ?? 'No active worktree'}</span>
+          <div className="project-aow-status-actions">
+            <OperationStatus operations={operations.operations} ready={!!operations.boot_id} error={operations.log_error || operations.error} logOpen={!!logPanel}
+              beforeLogs={<span className="project-terminal-dock-controls" ref={setTerminalDockControls} />}
+              onOpenOperation={operation => {
+                if (operation.kind === 'worktree.remove' && operation.project_id && projects.some(project => project.id === operation.project_id)) {
+                  setCleanupProjectId(operation.project_id); void removals.refresh();
+                } else if (operation.kind === 'worktree.create') {
+                  setCreationJobId(operation.id); void creations.refresh();
+                } else setBottomPanel({ type: 'logs', operationId: operation.id });
+              }}
+              onOpenLogs={operationId => setBottomPanel(current => operationId ? { type: 'logs', operationId } : current?.type === 'logs' && !current.operationId ? undefined : { type: 'logs' })} />
+            <button ref={notificationButton} type="button" className="task-notification-toggle" title="提醒" aria-label="提醒" aria-expanded={bottomPanel?.type === 'notifications'} aria-controls="task-notification-panel"
+              onClick={() => setBottomPanel(current => current?.type === 'notifications' ? undefined : { type: 'notifications' })}><Bell size={13} aria-hidden="true" /></button>
+          </div>
+        </footer>
+        {logPanel && <OperationLogPanel key={logPanel.operationId ?? 'all'} initialOperationId={logPanel.operationId} operations={operations.operations}
+          revision={operations.revision} bootId={operations.boot_id} logError={operations.log_error} onClose={() => setBottomPanel(undefined)} />}
+        {bottomPanel?.type === 'notifications' && <TaskNotificationPanel onClose={() => { setBottomPanel(undefined); notificationButton.current?.focus({ preventScroll: true }); }} />}
       </div>
     </div>
-    <footer className="project-aow-status"><span>{activeEntry?.worktree.path ?? 'No active worktree'}</span>
-      <div className="project-aow-status-actions">
-        <OperationStatus operations={operations.operations} ready={!!operations.boot_id} error={operations.log_error || operations.error} logOpen={!!logPanel}
-          beforeLogs={<span className="project-terminal-dock-controls" ref={setTerminalDockControls} />}
-          onOpenOperation={operation => {
-            if (operation.kind === 'worktree.remove' && operation.project_id && projects.some(project => project.id === operation.project_id)) {
-              setCleanupProjectId(operation.project_id); void removals.refresh();
-            } else if (operation.kind === 'worktree.create') {
-              setCreationJobId(operation.id); void creations.refresh();
-            } else setBottomPanel({ type: 'logs', operationId: operation.id });
-          }}
-          onOpenLogs={operationId => setBottomPanel(current => operationId ? { type: 'logs', operationId } : current?.type === 'logs' && !current.operationId ? undefined : { type: 'logs' })} />
-        <button ref={notificationButton} type="button" className="task-notification-toggle" title="提醒" aria-label="提醒" aria-expanded={bottomPanel?.type === 'notifications'} aria-controls="task-notification-panel"
-          onClick={() => setBottomPanel(current => current?.type === 'notifications' ? undefined : { type: 'notifications' })}><Bell size={13} aria-hidden="true" /></button>
-      </div>
-    </footer>
-    {logPanel && <OperationLogPanel key={logPanel.operationId ?? 'all'} initialOperationId={logPanel.operationId} operations={operations.operations}
-      revision={operations.revision} bootId={operations.boot_id} logError={operations.log_error} onClose={() => setBottomPanel(undefined)} />}
-    {bottomPanel?.type === 'notifications' && <TaskNotificationPanel onClose={() => { setBottomPanel(undefined); notificationButton.current?.focus({ preventScroll: true }); }} />}
     {worktreeContextMenu && contextMenuEntry ? <WorktreeContextMenu state={{ ...worktreeContextMenu, ...contextMenuEntry }} savingAppearance={savingWorktreeAppearance} pinned={pinnedWorktrees.has(worktreeContextMenu.worktree.path)} onClose={() => setWorktreeContextMenu(undefined)} onTogglePin={() => togglePinnedWorktree(worktreeContextMenu.worktree.path)} onColorChange={(color) => void changeWorktreeAppearance(contextMenuEntry, { color })} onIconChange={(icon) => void changeWorktreeAppearance(contextMenuEntry, { icon })} onRemove={() => void inspectWorktreeRemoval(worktreeContextMenu)} /> : null}
     {removeWorktreeState ? <RemoveWorktreeDialog state={removeWorktreeState} onClose={() => setRemoveWorktreeState(undefined)} onSubmitted={removalSubmitted} /> : null}
     {projectMenu ? <ProjectMenu state={projectMenu} onClose={() => setProjectMenu(undefined)} onCreateWorktree={() => { setCreationRetry(undefined); setCreateWorktreeProject(projectMenu.project); }} onCleanup={() => { setCleanupProjectId(projectMenu.project.id); void removals.refresh(); }} onBindNotes={() => setBindNotesProject(projectMenu.project)} onRemove={() => void removeProject(projectMenu.project)} /> : null}
