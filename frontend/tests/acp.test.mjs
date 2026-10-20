@@ -42,10 +42,11 @@ try {
       if (path.endsWith('/agents')) {
         if (state.agentsGate) await state.agentsGate;
         if (state.agentsError) { await route.fulfill({ status: 503, json: { message: state.agentsError } }); return; }
-        data = state.agents || [{ id: 'test', name: 'Test Agent', supported: true, configured: true, installed: true }, ...(state.saved ? [{ id: 'codex-acp', name: 'Codex ACP', supported: true, configured: true, installed: state.installed }] : [])];
+        data = state.agents || [{ id: 'test', name: 'Test Agent', supported: true, configured: true, installed: true }, ...(state.saved ? [{ id: 'codex-acp', name: 'Codex ACP', supported: true, configured: true, installed: state.installed }, ...Object.entries(parse(state.saved).agent_servers || {}).filter(([, config]) => config.type === 'custom').map(([id]) => ({ id, name: id, supported: true, configured: true, installed: true }))] : [])];
       }
       else if (path.endsWith('/registry')) data = [{ id: 'codex-acp', name: 'Codex ACP', description: 'Registry agent', supported: true }];
       else if (path.endsWith('/settings')) {
+        if (request.method() === 'PUT' && state.settingsError) { await route.fulfill({ status: 500, json: { message: state.settingsError } }); return; }
         if (request.method() === 'PUT') { state.saved = request.postDataJSON().content; state.content = state.saved; }
         data = { path: '/config/acp/settings.json', revision: 'v1', content: state.content };
       } else if (path.endsWith('/installation')) {
@@ -1395,6 +1396,42 @@ try {
     assert.deepEqual(interactions(state)[0], { action: 'prompt', content: [{ type: 'text', text: 'hello' }] });
     assert.deepEqual(interactions(state)[1], { action: 'answer', request_id: 'permission', response: { outcome: { outcome: 'selected', optionId: 'yes' } } });
   });
+  await test('ACP settings keep the editor in a modal and protect custom drafts', async t => {
+    const { page, state } = await fixture(t, true);
+    assert.equal(await page.locator('.acp-settings-editor').count(), 0);
+    await page.getByRole('button', { name: '添加自定义 Agent', exact: true }).click();
+    const modal = page.getByRole('dialog', { name: '添加自定义 ACP Agent', exact: true });
+    await modal.waitFor();
+    // The lazily loaded editor needs a cold Vite transform on shared CI CPUs.
+    await modal.locator('.monaco-editor').waitFor({ timeout: 30000 });
+    page.once('dialog', prompt => prompt.dismiss());
+    await modal.getByRole('button', { name: '取消', exact: true }).click();
+    assert.equal(await modal.isVisible(), true);
+    page.once('dialog', prompt => prompt.accept());
+    await page.keyboard.press('Escape');
+    await modal.waitFor({ state: 'hidden' });
+    assert.equal(state.saved, '');
+    assert.equal(await page.getByLabel('Unsaved settings').textContent(), 'false');
+    await page.getByRole('button', { name: '添加自定义 Agent', exact: true }).click();
+    state.settingsError = '配置保存失败';
+    await modal.getByRole('button', { name: '保存', exact: true }).click();
+    await modal.getByRole('alert').filter({ hasText: state.settingsError }).waitFor();
+    assert.equal(await modal.isVisible(), true);
+    assert.equal(state.saved, '');
+    state.settingsError = '';
+    await modal.getByRole('button', { name: '保存', exact: true }).click();
+    await modal.waitFor({ state: 'hidden' });
+    assert.equal(parse(state.saved).agent_servers['my-agent'].type, 'custom');
+    await page.getByRole('button', { name: '编辑 my-agent ACP 配置', exact: true }).waitFor();
+    assert.ok(state.saved.includes('// keep comment'));
+    assert.deepEqual(parse(state.saved).future, { keep: true });
+    assert.equal(state.connections, 0);
+    await page.getByRole('button', { name: '添加自定义 Agent', exact: true }).click();
+    await modal.getByRole('button', { name: '保存', exact: true }).click();
+    await modal.waitFor({ state: 'hidden' });
+    assert.equal(parse(state.saved).agent_servers['my-agent-2'].type, 'custom');
+  });
+
   await test('ACP default selector saves independently and preserves JSONC comments', async t => {
     const { page, state } = await fixture(t, true, { content: '// keep comment\n{ "agent_servers": { "test": { "type": "registry" }, "other": { "type": "registry" } }, "future": { "keep": true } }\n' });
     const selector = page.getByRole('combobox', { name: '默认 ACP 实例', exact: true });
@@ -1414,6 +1451,7 @@ try {
   await test('Registry additions retain comments and unknown JSONC fields', async t => {
     const { page, state } = await fixture(t, true);
     await page.getByRole('button', { name: '浏览 ACP Registry', exact: true }).click();
+    await page.getByRole('dialog', { name: 'ACP Registry', exact: true }).waitFor();
     await page.getByRole('button', { name: '添加并安装', exact: true }).click();
     await page.getByText('codex-acp 已安装，可在工作区“新建窗体”菜单的 ACP 分组中新建会话。').waitFor();
     assert.equal(state.installCalls, 1);
@@ -1424,6 +1462,26 @@ try {
     assert.equal(parse(state.saved).agent_servers['codex-acp'].type, 'registry');
     assert.equal(await page.getByLabel('Unsaved settings').textContent(), 'false');
   });
+  await test('installing from the configured ACP list displays detailed progress without a Registry modal', async t => {
+    const { page, state } = await fixture(t, true, {
+      content: '{"agent_servers":{"codex-acp":{"type":"registry"}}}',
+      agents: [{ id: 'codex-acp', name: 'Codex ACP', supported: true, configured: true, installed: false }],
+    });
+    let finish;
+    state.installGate = new Promise(resolve => { finish = resolve; });
+    t.after(() => finish());
+    state.installStatus = { phase: 'installing', detail: null, running: true, elapsed_seconds: 18 };
+    await page.getByRole('button', { name: '安装', exact: true }).click();
+    await page.getByText('正在下载并安装 Agent 依赖… · 已等待 18 秒', { exact: true }).waitFor();
+    assert.equal(await page.getByRole('dialog').count(), 0);
+    state.installStatus = { ...state.installStatus, detail: 'ETIMEDOUT', elapsed_seconds: 20 };
+    await page.getByText(/网络连接失败（ETIMEDOUT）/).waitFor();
+    finish();
+    await page.getByText('codex-acp 已安装，可在工作区“新建窗体”菜单的 ACP 分组中新建会话。').waitFor();
+    assert.equal(state.installCalls, 1);
+    assert.equal(state.connections, 0);
+  });
+
   await test('Registry installation reports progress and allows retry without creating a session', async t => {
     const { page, state } = await fixture(t, true);
     let finish;
@@ -1431,8 +1489,10 @@ try {
     t.after(() => finish());
     state.installStatus = { phase: 'installing', detail: null, running: true, elapsed_seconds: 18 };
     await page.getByRole('button', { name: '浏览 ACP Registry', exact: true }).click();
+    await page.getByRole('dialog', { name: 'ACP Registry', exact: true }).waitFor();
     await page.getByRole('button', { name: '添加并安装', exact: true }).click();
     await page.getByText('正在下载并安装 Agent 依赖… · 已等待 18 秒', { exact: true }).waitFor();
+    assert.equal(await page.getByRole('dialog', { name: 'ACP Registry', exact: true }).getByRole('button', { name: '关闭对话框' }).isDisabled(), true);
     state.installStatus = { ...state.installStatus, detail: 'ETIMEDOUT', elapsed_seconds: 20 };
     await page.getByText(/网络连接失败（ETIMEDOUT）/).waitFor();
     assert.equal(state.created, false);
@@ -1441,7 +1501,7 @@ try {
     finish();
     await page.getByRole('alert').getByText(state.installError, { exact: true }).waitFor();
     state.installError = '';
-    await page.getByRole('button', { name: '重试安装', exact: true }).first().click();
+    await page.getByRole('dialog', { name: 'ACP Registry', exact: true }).getByRole('button', { name: '重试安装', exact: true }).click();
     await page.getByText('codex-acp 已安装，可在工作区“新建窗体”菜单的 ACP 分组中新建会话。').waitFor();
     assert.equal(state.installCalls, 2);
     assert.equal(state.connections, 0);

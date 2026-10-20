@@ -16,7 +16,7 @@ async function fixture(t, width = 390, mobile = true, virtualViewport = false, a
     Object.defineProperty(window, 'visualViewport', { value: Object.assign(new EventTarget(), { height: 844, width: 390, offsetTop: 0 }) });
   });
   const state = {
-    errors: [], writes: [], projects: [], failSave: false, failEnvironmentRead: false, holdSave: undefined,
+    errors: [], writes: [], projects: [], failSave: false, failAgentRefresh: false, failEnvironmentRead: false, holdSave: undefined,
     serverEnvironment: { path: '/home/aow/.config/aow/server.env', content: '# Existing comment\nAOW_SERVER_PORT=8282\n', revision: 'first', exists: true, platform: 'linux' },
     settings: { notes_base: '/notes', execution_path: ['/usr/bin', '/bin'], node_addresses: [], editor: { word_wrap: false } },
     agents: agents ?? [{ id: 'codex', agent_type: 'codex', display_name: 'Codex', source: 'detected', available: true, command: 'codex', executable: '/usr/bin/codex', args: [], env: {} }],
@@ -71,7 +71,10 @@ async function fixture(t, width = 390, mobile = true, virtualViewport = false, a
         const agent = { ...body, id: body.id, available: true, source: 'configured', executable: body.command };
         state.agents = [...state.agents.filter(item => item.id !== agent.id), agent];
         data = agent;
-      } else data = state.agents;
+      } else {
+        if (state.failAgentRefresh && url.searchParams.get('refresh') === 'true') { await route.fulfill({ status: 503, json: { message: 'Agent 列表读取失败' } }); return; }
+        data = state.agents;
+      }
     } else if (path.startsWith('/api/aow/agents/') && request.method() === 'PUT') {
       const existing = decodeURIComponent(path.split('/').at(-1));
       assert.equal(body.id, existing, 'editing preserves the Agent ID');
@@ -114,7 +117,7 @@ async function fixture(t, width = 390, mobile = true, virtualViewport = false, a
     assert.ok(logout.x >= settings.x + settings.width, 'Logout sits immediately to the right of Settings');
   }
   await trigger.click();
-  const dialog = page.getByRole(mobile ? 'dialog' : 'region', { name: mobile ? undefined : '设置', exact: true });
+  const dialog = page.locator('.project-aow-settings, .settings-action-dialog');
   await dialog.getByRole('navigation', { name: '设置分类' }).waitFor();
   const choose = async name => {
     if (mobile && await dialog.getByRole('button', { name: '返回设置分类' }).isVisible()) await dialog.getByRole('button', { name: '返回设置分类' }).click();
@@ -148,6 +151,27 @@ async function layout(page, dialog, name) {
 }
 
 try {
+  await test('a saved Agent closes its form even when refresh fails, and retry only reloads the list', async t => {
+    const { page, state, dialog, choose } = await fixture(t);
+    await choose('Agents');
+    await dialog.getByRole('button', { name: '新增 Agent', exact: true }).click();
+    const action = page.getByRole('dialog', { name: '新增 Agent', exact: true });
+    await action.getByRole('textbox', { name: 'Agent ID', exact: true }).fill('saved-before-refresh');
+    await action.getByRole('combobox', { name: 'Agent 类型' }).selectOption('codex');
+    await action.getByRole('textbox', { name: 'Display name' }).fill('Saved Agent');
+    state.failAgentRefresh = true;
+    await action.getByRole('button', { name: '注册', exact: true }).click();
+    await action.waitFor({ state: 'hidden' });
+    await dialog.getByRole('status').filter({ hasText: 'Saved Agent 配置已保存' }).waitFor();
+    await dialog.getByRole('alert').filter({ hasText: '列表刷新失败' }).waitFor();
+    assert.equal(state.writes.filter(write => write.method === 'POST').length, 1);
+    state.failAgentRefresh = false;
+    await dialog.getByRole('button', { name: '重试刷新', exact: true }).click();
+    await dialog.getByRole('button', { name: '编辑 Saved Agent', exact: true }).waitFor();
+    assert.equal(await dialog.getByRole('button', { name: '重试刷新', exact: true }).count(), 0);
+    assert.equal(state.writes.filter(write => write.method === 'POST').length, 1);
+  });
+
   await test('default Agent selection submits only its ID and preserves detected profiles', async t => {
     const { page, state, dialog, choose } = await fixture(t, 1280, false);
     await choose('Agents');
@@ -242,8 +266,19 @@ try {
   });
 
   for (const mobile of [false, true]) await test(`${mobile ? 'mobile' : 'desktop'} Agent IDs are required, unique, immutable, and can be replaced by delete and create`, async t => {
-    const { state, dialog, choose } = await fixture(t, mobile ? 390 : 1280, mobile);
+    const { page, state, dialog, choose } = await fixture(t, mobile ? 390 : 1280, mobile);
     await choose('Agents');
+    assert.equal(await dialog.getByRole('textbox', { name: 'Agent ID', exact: true }).count(), 0);
+    await dialog.getByRole('button', { name: '新增 Agent', exact: true }).click();
+    const action = page.getByRole('dialog', { name: '新增 Agent', exact: true });
+    await action.waitFor();
+    assert.equal(await action.evaluate(element => element.scrollWidth <= element.clientWidth), true);
+    const bounds = await action.boundingBox();
+    assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= page.viewportSize().width);
+    await page.keyboard.press('Escape');
+    await action.waitFor({ state: 'hidden' });
+    assert.equal(await page.locator('.project-aow-settings').isVisible(), true);
+    await dialog.getByRole('button', { name: '新增 Agent', exact: true }).click();
     const id = dialog.getByRole('textbox', { name: 'Agent ID', exact: true });
     await dialog.getByRole('combobox', { name: 'Agent 类型' }).selectOption('codex');
     await dialog.getByRole('textbox', { name: 'Display name' }).fill('Work Codex');
@@ -280,10 +315,11 @@ try {
     assert.equal(state.writes.at(-1).path, '/api/aow/agents/Work_codex-2');
     assert.equal(state.writes.at(-1).body.id, 'Work_codex-2');
     assert.equal(state.agents.find(agent => agent.id === 'Work_codex-2').display_name, 'Updated Work Codex');
-    await dialog.getByRole('button', { name: '编辑 Updated Work Codex', exact: true }).click();
+    assert.equal(await dialog.getByRole('textbox', { name: 'Agent ID', exact: true }).count(), 0);
     await dialog.locator('.project-aow-agent-row').filter({ hasText: 'Work_codex-2' }).getByRole('button', { name: '移除配置' }).click();
     await dialog.locator('.project-aow-agent-row').filter({ hasText: 'Work_codex-2' }).waitFor({ state: 'detached' });
     assert.equal(state.writes.at(-1).method, 'DELETE');
+    await dialog.getByRole('button', { name: '新增 Agent', exact: true }).click();
     assert.equal(await id.inputValue(), '');
     assert.equal(await id.isEditable(), true);
     await id.fill('New_codex-3');
@@ -405,6 +441,7 @@ try {
     await layout(page, dialog, 'environment');
 
     await choose('Agents');
+    await dialog.getByRole('button', { name: '新增 Agent', exact: true }).click();
     await dialog.getByRole('combobox', { name: 'Agent 类型' }).selectOption('codex');
     assert.equal(await dialog.getByRole('textbox', { name: 'Executable' }).inputValue(), '/usr/bin/codex');
     await dialog.getByRole('textbox', { name: 'Agent ID', exact: true }).fill('Mobile_codex-1');
@@ -426,7 +463,7 @@ try {
     assert.equal(await dialog.getByRole('textbox', { name: 'Arguments', exact: true }).inputValue(), '--model\ngpt-6');
     assert.equal(await dialog.getByRole('textbox', { name: 'Environment variables' }).inputValue(), 'MODE=mobile');
     page.once('dialog', prompt => prompt.dismiss());
-    await dialog.getByRole('button', { name: '关闭设置' }).click();
+    await dialog.getByRole('button', { name: '关闭对话框' }).click();
     assert.equal(await dialog.getByRole('textbox', { name: 'Display name' }).inputValue(), '手机 Codex（副本）', 'copied drafts retain unsaved-change protection');
     assert.equal(await dialog.getByRole('textbox', { name: 'Agent ID', exact: true }).inputValue(), '');
     await dialog.getByRole('textbox', { name: 'Agent ID', exact: true }).fill('Mobile_codex-copy');

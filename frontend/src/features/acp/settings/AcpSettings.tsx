@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { applyEdits, format, modify, parse, printParseErrorCode, type ParseError } from 'jsonc-parser';
+import { SettingsActionDialog } from '../../settings/SettingsActionDialog';
 import { acpApi } from '../api';
 import { failure, object, type AgentInfo, type SettingsFile } from '../types';
 import { ConnectionProgress } from '../agent_ui/connection_progress';
@@ -64,6 +65,8 @@ export function AcpSettings({ active, onBusyChange, onDirtyChange }: { active: b
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
   const [registry, setRegistry] = useState<AgentInfo[]>();
+  const [modal, setModal] = useState<'registry' | 'custom' | 'edit'>();
+  const [modalBaseline, setModalBaseline] = useState('');
   const [search, setSearch] = useState('');
   const dirty = !!saved && content !== saved.content;
   const parsed = useMemo(() => parseJsonc(content), [content]);
@@ -104,13 +107,32 @@ export function AcpSettings({ active, onBusyChange, onDirtyChange }: { active: b
       await acpApi.agents().then(setAgents).catch(reason => setError(failure(reason)));
     }
   });
+  const closeModal = () => {
+    if (busy) return;
+    if (modal !== 'registry' && content !== modalBaseline) {
+      if (!window.confirm('ACP 有未保存的修改，是否放弃并关闭？')) return;
+      setContent(modalBaseline);
+    }
+    setModal(undefined); setError('');
+  };
+  const editConfiguration = () => { setModalBaseline(content); setModal('edit'); setError(''); setStatus(''); };
   const addCustom = () => {
     try {
-      if ('my-agent' in agentSettings(content)) throw new Error('已配置 my-agent。');
-      setContent(applyEdits(content, modify(content, ['agent_servers', 'my-agent'], { type: 'custom', command: 'node', args: ['/path/to/agent.js'], env: {} }, { formattingOptions: { insertSpaces: true, tabSize: 2 } })));
-      setStatus('已加入配置草稿，请保存。');
+      const configured = agentSettings(content);
+      let id = 'my-agent';
+      for (let i = 2; id in configured; i++) id = `my-agent-${i}`;
+      setModalBaseline(content);
+      setContent(applyEdits(content, modify(content, ['agent_servers', id], { type: 'custom', command: 'node', args: ['/path/to/agent.js'], env: {} }, { formattingOptions: jsoncFormattingOptions })));
+      setModal('custom'); setError(''); setStatus('');
     } catch (reason) { setError(failure(reason)); }
   };
+  const saveEditor = () => run(async () => {
+    const next = await save(content);
+    setModalBaseline(next.content);
+    setAgents(await acpApi.agents());
+    setModal(undefined);
+    setStatus('已保存，新连接将使用更新后的配置。');
+  });
   const installButton = (agent: AgentInfo, registryEntry: boolean) => {
     const installed = agents.some(value => value.id === agent.id && value.installed);
     const configured = agents.some(value => value.id === agent.id);
@@ -130,10 +152,21 @@ export function AcpSettings({ active, onBusyChange, onDirtyChange }: { active: b
           {configuredIds.map(id => <option key={id} value={id}>{id}</option>)}
         </select>
       </label>
-      {!!agents.length && <div className="acp-registry" aria-label="已配置的 ACP Agent">{agents.map(agent => <article key={agent.id}><div><strong>{agent.name}</strong><small>{agent.installed ? '可用于新建会话' : '尚未安装，请先完成安装'}</small></div>{installButton(agent, false)}</article>)}</div>}
-      <div className="acp-actions"><button type="button" disabled={busy || !saved} onClick={() => { void run(async () => setRegistry(await acpApi.registry(true))); }}>浏览 ACP Registry</button><button type="button" disabled={busy || !saved} onClick={addCustom}>添加自定义 Agent</button></div>
+      {!!agents.length && <div className="acp-registry" aria-label="已配置的 ACP Agent">{agents.map(agent => <article key={agent.id}><div><strong>{agent.name}</strong><small>{agent.installed ? '可用于新建会话' : '尚未安装，请先完成安装'}</small></div><button type="button" disabled={busy || !saved} onClick={editConfiguration} aria-label={`编辑 ${agent.name} ACP 配置`}>编辑</button>{installButton(agent, false)}</article>)}</div>}
+      {!agents.length && saved && <p className="project-aow-empty">尚未配置 ACP Agent。</p>}
+      <div className="acp-actions"><button type="button" disabled={busy || !saved} onClick={() => { setModal('registry'); setSearch(''); void run(async () => setRegistry(await acpApi.registry(true))); }}>浏览 ACP Registry</button><button type="button" disabled={busy || !saved} onClick={addCustom}>添加自定义 Agent</button></div>
+      {modal === 'registry' && <SettingsActionDialog title="ACP Registry" busy={busy} onClose={closeModal}>
+        <div className="project-aow-dialog-body">
       {registry && <div className="acp-registry" aria-label="ACP Registry"><input aria-label="搜索 ACP Registry" placeholder="搜索 Agent…" value={search} onChange={event => setSearch(event.target.value)} />{registry.filter(agent => `${agent.id} ${agent.name} ${agent.description}`.toLowerCase().includes(search.toLowerCase())).map(agent => <article key={agent.id}><div><strong>{agent.name}</strong><small>{agent.description}</small></div>{installButton(agent, true)}</article>)}</div>}
-      {installing && <ConnectionProgress status={progress} message={`正在安装 ${installing}…`} />}
+          {!registry && !error && <p role="status">正在加载 ACP Registry…</p>}
+          {installing && <ConnectionProgress status={progress} message={`正在安装 ${installing}…`} />}
+          {error && <p className="acp-error" role="alert">{error}</p>}{status && <p role="status">{status}</p>}
+        </div>
+        <footer className="project-aow-dialog-footer"><button type="button" disabled={busy} onClick={closeModal}>关闭</button></footer>
+      </SettingsActionDialog>}
+      {(modal === 'custom' || modal === 'edit') && <SettingsActionDialog title={modal === 'custom' ? '添加自定义 ACP Agent' : '编辑 ACP 配置'} busy={busy} onClose={closeModal}>
+        <form className="project-aow-dialog-form acp-settings" onSubmit={event => { event.preventDefault(); event.stopPropagation(); void saveEditor(); }}>
+          <div className="project-aow-dialog-body">
       <div className="project-aow-dialog-field">
         <div className="acp-settings-editor-toolbar"><span id="acp-settings-editor-label">{saved?.path ?? 'acp/settings.json'}</span><button type="button" disabled={busy || !saved || !!syntaxError} onClick={() => { setContent(formatJsonc(content)); setError(''); setStatus('JSONC 已格式化。'); }}>格式化</button></div>
         <div className="acp-settings-editor" role="group" aria-labelledby="acp-settings-editor-label">
@@ -177,9 +210,15 @@ export function AcpSettings({ active, onBusyChange, onDirtyChange }: { active: b
           </Suspense> : <div className="acp-settings-editor-loading">正在加载 ACP 配置…</div>}
         </div>
       </div>
-      <small>支持注释和尾逗号。“添加并安装”会保存当前配置并立即安装 Agent，不会创建会话。手动加入 Registry 配置后，可在上方点击安装。</small>
+      <small>支持注释和尾逗号。保存后新连接将使用更新后的配置。</small>
       {syntaxError && <p className="acp-error" role="alert">{syntaxError}</p>}
-      {error && <p className="acp-error" role="alert">{error}</p>}{status && <p role="status">{status}</p>}
+      {error && <p className="acp-error" role="alert">{error}</p>}
+          </div>
+          <footer className="project-aow-dialog-footer"><button type="button" disabled={busy} onClick={closeModal}>取消</button><button type="submit" className="project-aow-dialog-button primary" disabled={busy || !saved || !dirty || !!syntaxError}>保存</button></footer>
+        </form>
+      </SettingsActionDialog>}
+      {!modal && installing && <ConnectionProgress status={progress} message={`正在安装 ${installing}…`} />}
+      {!modal && error && <p className="acp-error" role="alert">{error}</p>}{!modal && status && <p role="status">{status}</p>}
     </div>
     <footer className="project-aow-dialog-footer"><button type="button" className="project-aow-dialog-button" disabled={busy} onClick={() => { if (!dirty || window.confirm('放弃未保存的 ACP 配置修改并重新加载？')) void run(async () => { const [next, available] = await Promise.all([acpApi.settings(), acpApi.agents()]); setSaved(next); setContent(next.content); setAgents(available); }); }}>重新加载</button><button type="submit" className="project-aow-dialog-button primary" disabled={busy || !saved || !dirty || !!syntaxError}>保存</button></footer>
   </form>;

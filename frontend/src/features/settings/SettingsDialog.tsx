@@ -19,6 +19,7 @@ import { ConfigurationSettings } from '../configuration/ConfigurationSettings';
 import { NotificationSettingsPanel } from '../notifications/NotificationSettingsPanel';
 import { LogoutButton } from '../auth/LogoutButton';
 import { ServerEnvironmentFields, useServerEnvironment } from './ServerEnvironmentFields';
+import { SettingsActionDialog } from './SettingsActionDialog';
 import { AgentList } from './AgentList';
 
 const message = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
@@ -62,6 +63,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const serverEnvironment = useServerEnvironment(section === 'environment' && !overview, setSettingsBusy);
+  const [agentDialog, setAgentDialog] = useState<'new' | 'copy' | 'edit'>();
   const [editingAgentId, setEditingAgentId] = useState<string>();
   const [agentId, setAgentId] = useState('');
   const [agentType, setAgentType] = useState<AowAgent['agent_type'] | ''>('');
@@ -70,6 +72,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
   const [args, setArgs] = useState(() => argumentsDraft());
   const [env, setEnv] = useState(() => environmentDraft());
   const [agentSaved, setAgentSaved] = useState('');
+  const [agentRefreshError, setAgentRefreshError] = useState('');
   const [agentBaseline, setAgentBaseline] = useState(emptyAgentBaseline);
   const agentForm = useRef<HTMLFormElement>(null);
   const dialog = useRef<HTMLElement>(null);
@@ -224,10 +227,18 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
     setError('');
   };
 
+  const closeAgentDialog = () => {
+    if (busy) return;
+    const changed = JSON.stringify([agentId, agentType, displayName, command, args.text, env.text]) !== agentBaseline;
+    if (changed && !window.confirm('Agent 有未保存的修改，是否放弃并关闭？')) return;
+    setAgentDialog(undefined); resetAgentForm();
+  };
+
   const loadAgent = (agent: AowAgent, copy = false) => {
     const name = copy ? `${agent.display_name}（副本）` : agent.display_name;
     const nextArgs = argumentsDraft(agent.args);
     const nextEnv = environmentDraft(agent.env);
+    setAgentDialog(copy ? 'copy' : 'edit');
     setEditingAgentId(copy ? undefined : agent.id);
     setAgentId(copy ? '' : agent.id);
     setAgentType(aowAgentType(agent) ?? '');
@@ -238,8 +249,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
     setAgentBaseline(copy ? emptyAgentBaseline : JSON.stringify([agent.id, aowAgentType(agent) ?? '', name, agent.command ?? agent.executable ?? '', nextArgs.text, nextEnv.text]));
     setAgentSaved('');
     setError('');
-    agentForm.current?.querySelector('select')?.scrollIntoView({ block: 'nearest' });
-    if (copy) agentForm.current?.querySelector('input')?.focus({ preventScroll: true });
+
   };
 
   const selectAgentType = (value: string) => {
@@ -277,6 +287,13 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
     }
   };
 
+  const reloadAgentList = async () => {
+    setBusy(true); setAgentRefreshError('');
+    try { await onReload(); }
+    catch (reason) { setAgentRefreshError(message(reason)); }
+    finally { setBusy(false); }
+  };
+
   const save = async () => {
     if (!/^[A-Za-z0-9_-]{1,80}$/.test(agentId)) {
       setError('Agent ID 必填，限 1–80 个字母、数字、- 或 _。');
@@ -303,8 +320,9 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
         env: environment,
       }, editingAgentId);
       resetAgentForm();
+      setAgentDialog(undefined);
       setAgentSaved(`${displayName} 配置已保存。`);
-      await onReload();
+      await reloadAgentList();
     } catch (reason) {
       setError(message(reason));
     } finally {
@@ -390,9 +408,8 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
               <footer className="project-aow-dialog-footer"><button type="button" className="project-aow-dialog-button" disabled={settingsLoading || settingsBusy} onClick={() => void readEnvironment()}><RefreshCw size={14} />从本机环境读取</button><button type="submit" className="project-aow-dialog-button primary" disabled={settingsLoading || settingsBusy || !executionPath.trim()}>{settingsBusy ? '处理中…' : '保存 PATH'}</button></footer>
             </form>
           </> : <>
-            <form className="project-aow-dialog-form" ref={agentForm} onSubmit={(event) => { event.preventDefault(); void save(); }}>
-              <div className="project-aow-dialog-body">
-                <div className="project-aow-settings-heading"><div><h2>Agents</h2><p>目前支持 Claude Code、Codex、TraeCode CLI、Hermes 和 Pi。每种类型可注册多个配置。</p></div><button type="button" className="project-aow-dialog-button" title="重新探测本地 Agent" disabled={busy} onClick={() => void onReload().catch((reason) => setError(message(reason)))}><RefreshCw />刷新</button></div>
+            <div className="project-aow-dialog-form"><div className="project-aow-dialog-body">
+                <div className="project-aow-settings-heading"><div><h2>Agents</h2><p>目前支持 Claude Code、Codex、TraeCode CLI、Hermes 和 Pi。每种类型可注册多个配置。</p></div><button type="button" className="project-aow-dialog-button" title="重新探测本地 Agent" disabled={busy} onClick={() => void reloadAgentList()}><RefreshCw />刷新</button><button type="button" className="project-aow-dialog-button primary" disabled={busy} onClick={() => { resetAgentForm(); setAgentDialog('new'); }}>新增 Agent</button></div>
                 {agentsError && <div className="project-aow-error" role="alert">{agentsError}</div>}
                 <label className="project-aow-dialog-field">默认 Agent 实例
                   <select aria-label="默认 Agent 实例" disabled={busy} value={agents.find(agent => agent.is_default)?.id ?? ''} onChange={event => void selectDefaultAgent(event.target.value)}>
@@ -401,7 +418,13 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
                   </select>
                 </label>
                 <AgentList agents={agents} busy={busy} editingAgentId={editingAgentId} onEdit={loadAgent} onCopy={agent => loadAgent(agent, true)} onRemove={id => void removeAgent(id)} onReorder={reorderAgents} />
-                <h3>{editingAgentId ? '编辑 Agent 配置' : '注册 Agent 配置'}</h3>
+                {agentSaved && <p role="status">{agentSaved}</p>}
+                {agentRefreshError && <div className="project-aow-error" role="alert">列表刷新失败：{agentRefreshError}<button type="button" className="project-aow-dialog-button" disabled={busy} onClick={() => void reloadAgentList()}>重试刷新</button></div>}
+                {!agentDialog && error && <div className="project-aow-error" role="alert">{error}</div>}
+              </div></div>
+            {agentDialog && <SettingsActionDialog title={agentDialog === 'edit' ? '编辑 Agent 配置' : agentDialog === 'copy' ? '复制 Agent 配置' : '新增 Agent'} busy={busy} onClose={closeAgentDialog}>
+              <form className="project-aow-dialog-form" ref={agentForm} onSubmit={event => { event.preventDefault(); event.stopPropagation(); void save(); }}>
+                <div className="project-aow-dialog-body">
                 <label className="project-aow-dialog-field"><span>Agent ID <em>必填</em></span><input aria-label="Agent ID" value={agentId} readOnly={!!editingAgentId} disabled={busy} onChange={event => { setAgentId(event.target.value); setAgentSaved(''); setError(''); }} placeholder="例如：work-codex" pattern={'[A-Za-z0-9_\\-]+'} maxLength={80} autoCapitalize="none" spellCheck={false} required /><small>唯一标识，限字母、数字、- 和 _，创建后不可修改；如需调整，请删除后重新创建。CLI 使用 --agent-id 指定此配置。</small></label>
                 <label className="project-aow-dialog-field"><span>Agent 类型 <em>必填</em></span><div className="project-aow-agent-type"><AgentIcon agentId={agentType} /><select aria-label="Agent 类型" value={agentType ?? ''} disabled={busy || !!builtinAgentType(editingAgentId)} onChange={(event) => selectAgentType(event.target.value)} required><option value="" disabled>请选择 Agent 类型</option>{agentTypes.map(type => <option key={type.id} value={type.id}>{type.label}</option>)}</select></div></label>
                 <p className="project-aow-form-intro">选择类型后，优先填入自动探测的可执行文件路径，否则使用第一条同类配置的路径。名称、启动命令、参数和环境变量均可编辑。</p>
@@ -411,11 +434,11 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
                 <label className="project-aow-dialog-field"><span>Environment variables</span><textarea aria-label="Environment variables" spellCheck={false} rows={4} value={env.text} disabled={busy} onChange={(event) => setEnv({ ...env, text: event.target.value })} placeholder={'BASE_URL=https://example.com\nAPI_KEY=your-key'} /></label>
                 <p className="project-aow-form-intro">自动继承启动环境。每行填写一个 key=value，只填写需要新增或覆盖的变量；留空即可保留继承的环境。值按原文保存，无需加引号。</p>
                 <p className="project-aow-form-intro">保存后用于新启动的终端 Agent。PATH 统一在 Environment 中配置。移除内置 Agent 的配置后会恢复自动探测。</p>
-                {agentSaved ? <p role="status">{agentSaved}</p> : null}
-                {error ? <div className="project-aow-error" role="alert">{error}</div> : null}
-              </div>
-              <footer className="project-aow-dialog-footer">{editingAgentId ? <button type="button" className="project-aow-dialog-button" disabled={busy} onClick={resetAgentForm}>取消编辑</button> : null}<button type="submit" className="project-aow-dialog-button primary" disabled={busy || !agentType}>{busy ? '保存中…' : editingAgentId ? '保存配置' : '注册'}</button></footer>
-            </form>
+                  {error && <div className="project-aow-error" role="alert">{error}</div>}
+                </div>
+                <footer className="project-aow-dialog-footer"><button type="button" className="project-aow-dialog-button" disabled={busy} onClick={closeAgentDialog}>取消</button><button type="submit" className="project-aow-dialog-button primary" disabled={busy || !agentType}>{busy ? '保存中…' : editingAgentId ? '保存配置' : '注册'}</button></footer>
+              </form>
+            </SettingsActionDialog>}
           </>}
         </div>
       </div>

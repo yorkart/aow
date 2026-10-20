@@ -95,7 +95,7 @@ export function AgentList({ agents, busy, editingAgentId, onEdit, onCopy, onRemo
         </div>)}
       </section>;
     })}
-    {!agents.length && <p className="project-aow-empty">尚未发现本地 Agent，可在下方注册。</p>}
+    {!agents.length && <p className="project-aow-empty">尚未发现本地 Agent，点击“新增 Agent”注册。</p>}
     {status && <p role="status">{status}</p>}
     {error && <div className="project-aow-error" role="alert">{error}</div>}
   </div>;

@@ -1,0 +1,6 @@
+.settings-action-dialog { width:min(860px,calc(100vw - 24px)); max-height:calc(100dvh - 24px); padding:0; margin:auto; }
+.settings-action-dialog:not([open]) { display:none; }
+.settings-action-dialog::backdrop { background:#0009; }
+.settings-action-dialog > header { display:flex; align-items:center; justify-content:space-between; }
+.settings-action-dialog > .project-aow-dialog-form { min-height:0; overflow:hidden; }
+.settings-action-dialog .project-aow-dialog-body { overscroll-behavior:contain; }
