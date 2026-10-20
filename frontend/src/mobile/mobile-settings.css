@@ -29,8 +29,8 @@
 .mobile-settings .project-aow-dialog-checkbox,.mobile-settings form .project-aow-dialog-checkbox { display:flex; align-items:center; min-height:48px; gap:12px; font-size:14px; }
 .mobile-settings .project-aow-dialog-checkbox input,.mobile-settings .configuration-version input[type="radio"] { width:20px; height:20px; flex:0 0 20px; }
 .mobile-settings .project-aow-dialog-checkbox span { font-size:14px; }
-.mobile-settings .project-aow-dialog-button { min-height:44px; height:auto; max-width:100%; padding:10px 14px; border-radius:11px; font-size:13px; white-space:normal; line-height:1.5; background:#252d39; border-color:#3c4655; }
-.mobile-settings .project-aow-dialog-button.primary,.mobile-settings .project-aow-dialog-button.primary:hover:not(:disabled) { color:#182333; background:#c0d4f0; border-color:#c0d4f0; font-weight:650; }
+.mobile-settings .project-aow-dialog-button { min-height:44px; height:auto; max-width:100%; padding:10px 14px; border-radius:11px; font-size:13px; white-space:normal; line-height:1.5; background:var(--aow-elevated); border-color:var(--aow-control-line); }
+.mobile-settings .project-aow-dialog-button.primary,.mobile-settings .project-aow-dialog-button.primary:hover:not(:disabled) { color:var(--aow-on-primary); background:var(--aow-primary); border-color:var(--aow-primary); font-weight:650; }
 .mobile-settings .project-aow-dialog-button svg { width:17px; height:17px; }
 .mobile-settings .project-aow-dialog-footer { gap:8px; padding:12px 16px max(12px,env(safe-area-inset-bottom)); background:var(--m-bg); border-color:var(--m-line); }
 .mobile-settings .project-aow-dialog-footer > button { flex:1 1 auto; }

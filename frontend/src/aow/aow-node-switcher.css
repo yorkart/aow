@@ -6,7 +6,7 @@
 .aow-node-trigger > svg { flex:0 0 12px; width:12px; height:12px; color:var(--aow-icon-foreground, var(--aow-icon)); }
 .aow-node-menu { width:max-content; min-width:220px; max-width:min(440px,calc(100vw - 8px)); max-height:calc(100vh - 8px); overflow-y:auto; }
 .aow-node-menu a { min-height:30px; display:flex; align-items:center; gap:12px; padding:6px 8px; color:var(--aow-text); border-radius:3px; text-decoration:none; }
-.aow-node-menu a:hover,.aow-node-menu a:focus-visible { color:var(--aow-text-hover); background:#33465e; outline:none; }
+.aow-node-menu a:hover,.aow-node-menu a:focus-visible { color:var(--aow-text-hover); background:var(--aow-selection); outline:none; }
 .aow-node-menu a > span { min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .aow-node-menu a > svg { flex:0 0 13px; width:13px; height:13px; }
 .aow-node-empty { max-width:260px; margin:0; padding:8px; color:var(--aow-text-secondary); line-height:1.6; }

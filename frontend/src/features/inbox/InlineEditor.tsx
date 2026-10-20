@@ -39,7 +39,7 @@ export function InlineEditor({ value, onChange, onFinish, onComposing, status, l
         if (finish || escape) { event.preventDefault(); event.stopPropagation(); onFinish(); }
       }}>
       <Suspense fallback={<div className="inbox-editor-loading" style={{ height }} role="status">正在加载编辑器…</div>}>
-        <Editor language="markdown" theme="vs-dark" value={value} height={height} saveViewState={false}
+        <Editor language="markdown" value={value} height={height} saveViewState={false}
           loading={<span className="inbox-editor-loading">正在加载编辑器…</span>}
           onMount={mount} onChange={text => onChange(text ?? '')}
           options={{

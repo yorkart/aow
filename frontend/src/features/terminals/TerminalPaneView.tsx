@@ -1,4 +1,5 @@
 import { appLocalStorage } from '../../lib/basePath';
+import { getTheme, subscribeTheme } from '../../lib/theme/store';
 import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type RefObject } from 'react';
 import { Base64, ClipboardAddon, type ClipboardSelectionType, type IBase64, type IClipboardProvider } from '@xterm/addon-clipboard';
 import { FitAddon } from '@xterm/addon-fit';
@@ -696,6 +697,10 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
     const host = hostRef.current;
     if (!host) return;
     host.style.setProperty('--terminal-scrollbar-width', `${TERMINAL_SCROLLBAR_WIDTH}px`);
+    const terminalTheme = () => {
+      const colors = getTheme().terminal;
+      return { ...colors, cursorAccent: colors.background, overviewRulerBorder: 'transparent' };
+    };
     const terminal = new Terminal({
       ...(sizing === 'saved' ? savedSizeRef.current : {}),
       // Match VS Code's browser terminal width/rendering path. Unicode 11
@@ -725,11 +730,11 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
           setPendingLink((current) => current ?? { identity: activeIdentityRef.current, url });
         },
       },
-      theme: {
-        background: '#1e1e1e', foreground: '#cccccc', cursor: '#ffffff',
-        selectionBackground: '#264f78', black: '#000000', brightBlack: '#666666',
-        overviewRulerBorder: '#00000000',
-      },
+      theme: terminalTheme(),
+    });
+    // Updating xterm options preserves its screen, selection, scrollback and socket.
+    const unsubscribeTheme = subscribeTheme(() => {
+      terminal.options.theme = terminalTheme();
     });
     const fit = new FitAddon();
     let disposed = false;
@@ -835,6 +840,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
 
     return () => {
       disposed = true;
+      unsubscribeTheme();
       observer.disconnect();
       if (frame !== undefined) window.cancelAnimationFrame(frame);
       input.dispose();

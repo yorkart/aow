@@ -316,7 +316,6 @@ export function EditorArea({ workspace, documents, activeId, wordWrapOverride, o
                 keepCurrentModel
                 language={active.language}
                 value={active.content ?? ''}
-                theme="vs-dark"
                 options={{ automaticLayout: true, minimap: { enabled: false }, readOnly: active.readOnly, fontSize: 13, scrollBeyondLastLine: false, wordWrap }}
                 onChange={(value) => onChange(active.id, value ?? '')}
               />
@@ -329,7 +328,6 @@ export function EditorArea({ workspace, documents, activeId, wordWrapOverride, o
                     revealLocation={active.revealLocation}
                     language={active.language ?? 'markdown'}
                     value={active.content ?? ''}
-                    theme="vs-dark"
                     keepCurrentModel
                     options={{ automaticLayout: true, minimap: { enabled: false }, readOnly: active.readOnly, fontSize: 13, scrollBeyondLastLine: false, wordWrap }}
                     onChange={(value) => onChange(active.id, value ?? '')}
@@ -352,7 +350,6 @@ export function EditorArea({ workspace, documents, activeId, wordWrapOverride, o
                 language={active.language ?? 'plaintext'}
                 originalModelPath={diffModelPath(active, 'original')}
                 modifiedModelPath={diffModelPath(active, 'modified')}
-                theme="vs-dark"
                 keepCurrentOriginalModel
                 keepCurrentModifiedModel
                 options={{
@@ -371,7 +368,6 @@ export function EditorArea({ workspace, documents, activeId, wordWrapOverride, o
                 keepCurrentModel
                 language={active.language ?? 'plaintext'}
                 value={active.content ?? ''}
-                theme="vs-dark"
                 options={{ automaticLayout: true, minimap: { enabled: false }, readOnly: true, fontSize: 12, scrollBeyondLastLine: false, wordWrap }}
               />
             ) : null}

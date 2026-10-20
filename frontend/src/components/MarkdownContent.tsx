@@ -2,6 +2,7 @@ import DOMPurify from 'dompurify';
 import { marked, Renderer } from 'marked';
 import { useEffect, useMemo, useRef } from 'react';
 import { linkImageReferences } from './markdownImageReferences';
+import { useTheme } from '../lib/theme/useTheme';
 
 let nextMermaidDiagramId = 0;
 
@@ -16,6 +17,7 @@ function isMermaidCodeBlock(code: HTMLElement) {
 }
 
 export function MarkdownContent({ text, className = 'project-aow-snapshot-markdown', readOnly = false, breaks = false, imageReferences, onOpenLink, resolveLink }: { text: string; className?: string; readOnly?: boolean; breaks?: boolean; imageReferences?: ReadonlyMap<string, string>; onOpenLink?: (href: string) => boolean; resolveLink?: (href: string) => string }) {
+  const theme = useTheme();
   const markdownRef = useRef<HTMLDivElement>(null);
   const handlesLinks = !!onOpenLink;
   const html = useMemo(() => {
@@ -66,7 +68,16 @@ export function MarkdownContent({ text, className = 'project-aow-snapshot-markdo
     const diagramPrefix = `agent-session-flowchart-${nextMermaidDiagramId += 1}`;
     void import('mermaid').then(async ({ default: mermaid }) => {
       // SVG text labels survive the SVG-only sanitization below.
-      mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'dark', htmlLabels: false });
+      mermaid.initialize({
+        startOnLoad: false, securityLevel: 'strict', theme: 'base', htmlLabels: false,
+        themeVariables: {
+          darkMode: theme.appearance === 'dark', background: theme.colors.background,
+          primaryColor: theme.colors.panel, primaryTextColor: theme.colors.text,
+          primaryBorderColor: theme.colors.controlBorder, lineColor: theme.colors.secondary,
+          secondaryColor: theme.colors.selection, tertiaryColor: theme.colors.elevated,
+          edgeLabelBackground: theme.colors.panel,
+        },
+      });
       await Promise.all(codeBlocks.map(async (code, index) => {
         try {
           const { svg, bindFunctions } = await mermaid.render(`${diagramPrefix}-${index}`, code.textContent ?? '');
@@ -95,7 +106,7 @@ export function MarkdownContent({ text, className = 'project-aow-snapshot-markdo
     });
 
     return () => { cancelled = true; };
-  }, [html]);
+  }, [html, theme]);
 
   return <div ref={markdownRef} className={className} onClick={event => {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;

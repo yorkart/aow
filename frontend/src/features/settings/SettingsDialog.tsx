@@ -1,6 +1,6 @@
 import type { MutableRefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Bell, Bot, ChevronRight, FileText, GitPullRequest, MessageSquare, Network, NotebookPen, RefreshCw, Settings, SquareTerminal, X } from 'lucide-react';
+import { ArrowLeft, Bell, Bot, ChevronRight, FileText, GitPullRequest, MessageSquare, Network, NotebookPen, Palette, RefreshCw, Settings, SquareTerminal, X } from 'lucide-react';
 import { aowApi } from '../../aow/aowApi';
 import { parseNodeAddresses } from '../../aow/aowNodes';
 import type { AowSettings } from '../../aow/types';
@@ -21,11 +21,13 @@ import { LogoutButton } from '../auth/LogoutButton';
 import { ServerEnvironmentFields, useServerEnvironment } from './ServerEnvironmentFields';
 import { SettingsActionDialog } from './SettingsActionDialog';
 import { AgentList } from './AgentList';
+import { AppearanceSettings } from './AppearanceSettings';
 
 const message = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
 const emptyAgentBaseline = JSON.stringify(['', '', '', '', '', '']);
 
 const sections = [
+  { id: 'appearance', label: 'Appearance', description: '主题与界面配色', icon: Palette },
   { id: 'configuration', label: 'Configuration', description: '选择配置仓库和版本', icon: Settings },
   { id: 'nodes', label: 'Nodes', description: '配置其他 AoW 节点', icon: Network },
   { id: 'editor', label: 'Editor', description: '配置文件编辑器', icon: FileText },
@@ -360,7 +362,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
           <div className="review-provider-settings-host" hidden={section !== 'review'}><ReviewProviderSettings active={section === 'review'} onBusyChange={setSettingsBusy} onDirtyChange={setReviewDirty} /></div>
           <div className="configuration-settings-host" hidden={section !== 'configuration'}><ConfigurationSettings active={section === 'configuration'} onBusyChange={setSettingsBusy} onDirtyChange={setConfigurationDirty} /></div>
           <div className="configuration-settings-host" hidden={section !== 'acp'}><AcpSettings active={section === 'acp'} onBusyChange={setSettingsBusy} onDirtyChange={setAcpDirty} /></div>
-          {section === 'review' || section === 'configuration' || section === 'acp' ? null : section === 'nodes' ? (
+          {section === 'review' || section === 'configuration' || section === 'acp' ? null : section === 'appearance' ? <AppearanceSettings /> : section === 'nodes' ? (
             <form className="project-aow-dialog-form" onSubmit={event => { event.preventDefault(); void saveNodes(); }}>
               <div className="project-aow-dialog-body">
                 <div className="project-aow-settings-heading"><div><h2>Nodes</h2><p>配置其他机器上部署的 AoW，点击左上角 Logo 或 AoW 文字即可切换。</p></div></div>

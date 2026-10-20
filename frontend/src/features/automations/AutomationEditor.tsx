@@ -120,7 +120,7 @@ export function AutomationEditor({ task, kind = 'scheduled', initialWorkspaceMod
           <div className="automation-prompt-input" role="group" aria-labelledby="automation-prompt-label">
             <div className="automation-prompt-monaco">
               <Suspense fallback={<span className="automation-hint">正在加载编辑器…</span>}>
-                <Editor language="markdown" theme="vs-dark" value={draft.prompt} saveViewState={false}
+                <Editor language="markdown" value={draft.prompt} saveViewState={false}
                   loading={<span className="automation-hint">正在加载编辑器…</span>}
                   options={{
                     ariaLabel: '任务内容', placeholder: '描述希望 Agent 执行的任务、关注的文件，以及预期的结果…',

@@ -49,6 +49,6 @@ export function DiffContent({ content, onOpenFile }: { content: Data; onOpenFile
       updateFont();
       const resize = () => setHeight(Math.max(60, mounted.getModifiedEditor().getContentHeight()));
       mounted.getModifiedEditor().onDidContentSizeChange(resize); resize();
-    }} original={text(content.oldText)} modified={text(content.newText)} theme="vs-dark" height={height} options={{ readOnly: true, renderSideBySide: false, minimap: { enabled: false }, scrollBeyondLastLine: false, automaticLayout: true, lineNumbers: 'off', glyphMargin: false, folding: false, renderOverviewRuler: false, overviewRulerLanes: 0, scrollBeyondLastColumn: 0, scrollbar: { vertical: 'hidden', alwaysConsumeMouseWheel: false }, hideUnchangedRegions: { enabled: true }, padding: { top: 6, bottom: 6 } }} /></Suspense>
+    }} original={text(content.oldText)} modified={text(content.newText)} height={height} options={{ readOnly: true, renderSideBySide: false, minimap: { enabled: false }, scrollBeyondLastLine: false, automaticLayout: true, lineNumbers: 'off', glyphMargin: false, folding: false, renderOverviewRuler: false, overviewRulerLanes: 0, scrollBeyondLastColumn: 0, scrollbar: { vertical: 'hidden', alwaysConsumeMouseWheel: false }, hideUnchangedRegions: { enabled: true }, padding: { top: 6, bottom: 6 } }} /></Suspense>
   </div>;
 }

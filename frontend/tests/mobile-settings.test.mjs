@@ -8,7 +8,7 @@ const server = await productionPreview();
 const base = `http://127.0.0.1:${server.httpServer.address().port}`;
 const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
 const versions = ['550e8400-e29b-41d4-a716-446655440000', '550e8400-e29b-41d4-a716-446655440001'];
-const categories = ['Configuration', 'Nodes', 'Editor', 'Notes', 'Environment', 'ACP', 'Agents', 'IM', '通知', 'Pull Requests'];
+const categories = ['Appearance', 'Configuration', 'Nodes', 'Editor', 'Notes', 'Environment', 'ACP', 'Agents', 'IM', '通知', 'Pull Requests'];
 
 async function fixture(t, width = 390, mobile = true, virtualViewport = false, agents) {
   const context = await browser.newContext({ viewport: { width, height: 844 }, isMobile: mobile, hasTouch: mobile });

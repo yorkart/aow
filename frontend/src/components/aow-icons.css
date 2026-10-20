@@ -1,10 +1,3 @@
-:root {
-  --aow-icon: #8fa5bf;
-  --aow-icon-hover: #adc0d9;
-  --aow-icon-active: var(--aow-accent);
-  --aow-icon-disabled: #596a80;
-}
-
 /* A low-specificity default also covers icons in menus and portalled dialogs. */
 :where(svg.lucide) { color: var(--aow-icon-foreground, var(--aow-icon)); }
 :where(button:not(:disabled):hover, a:hover, summary:hover) { --aow-icon-foreground: var(--aow-icon-hover); }

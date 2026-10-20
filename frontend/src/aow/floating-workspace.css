@@ -1,8 +1,8 @@
 .workspace-open-boundary { display:contents; }
-.floating-workspace-trigger { position:fixed; z-index:46; width:34px; height:34px; display:grid; place-items:center; color:var(--aow-icon-foreground, var(--aow-icon)); background:var(--aow-sidebar-background); border:1px solid var(--aow-control-line); border-radius:7px; box-shadow:0 3px 12px #0008; cursor:grab; touch-action:none; }
+.floating-workspace-trigger { position:fixed; z-index:46; width:34px; height:34px; display:grid; place-items:center; color:var(--aow-icon-foreground, var(--aow-icon)); background:var(--aow-sidebar-background); border:1px solid var(--aow-control-line); border-radius:7px; box-shadow:0 3px 12px var(--aow-shadow); cursor:grab; touch-action:none; }
 .floating-workspace-trigger:hover { color:var(--aow-icon-hover); background-image:linear-gradient(var(--aow-sidebar-selection),var(--aow-sidebar-selection)); }
 .floating-workspace-trigger svg { width:16px; height:16px; }
-.floating-workspace { position:fixed; z-index:45; display:flex; flex-direction:column; color:var(--aow-text); background:var(--aow-surface); border:1px solid var(--aow-control-line); border-radius:3px; box-shadow:0 18px 70px #000a; outline:none; font-size:12px; }
+.floating-workspace { position:fixed; z-index:45; display:flex; flex-direction:column; color:var(--aow-text); background:var(--aow-surface); border:1px solid var(--aow-control-line); border-radius:3px; box-shadow:0 18px 70px var(--aow-shadow); outline:none; font-size:12px; }
 .floating-workspace-header { cursor:grab; touch-action:none; }
 .floating-workspace-window-actions { display:flex; align-items:center; gap:6px; padding:0 4px; margin-left:auto; flex-shrink:0; height:100%; }
 .floating-workspace-window-actions .floating-workspace-pin[aria-pressed="true"] { color:var(--aow-accent); }
@@ -29,7 +29,7 @@
 
 .floating-workspace .system-file-browser[hidden] { display:none; }
 
-.floating-workspace-error { position:absolute; bottom:0; left:0; right:0; z-index:5; display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--aow-panel); color:#f48771; border-top:1px solid var(--aow-control-line); }
+.floating-workspace-error { position:absolute; bottom:0; left:0; right:0; z-index:5; display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--aow-panel); color:var(--aow-error); border-top:1px solid var(--aow-control-line); }
 .floating-workspace-error button { margin-left:auto; }
 .floating-workspace-error svg { width:16px; height:16px; }
 

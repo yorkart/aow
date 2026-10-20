@@ -11,6 +11,10 @@ import htmlWorker from 'monaco-editor/languages/features/html/html.worker.js?wor
 import jsonWorker from 'monaco-editor/languages/features/json/json.worker.js?worker';
 import tsWorker from 'monaco-editor/languages/features/typescript/ts.worker.js?worker';
 import { tomlConfiguration, tomlLanguage } from './toml';
+import { themes } from '../../lib/theme/themes';
+import { monacoTheme } from '../../lib/theme/monacoTheme';
+
+for (const theme of themes) monaco.editor.defineTheme(`aow-${theme.id}`, monacoTheme(theme));
 
 // Both the editor workspace and PR inline diffs use Monaco. Keep its worker
 // configuration in one module imported by each lazy editor entry, so a DiffEditor

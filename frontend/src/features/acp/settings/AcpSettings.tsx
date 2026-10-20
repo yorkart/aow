@@ -172,7 +172,6 @@ export function AcpSettings({ active, onBusyChange, onDirtyChange }: { active: b
             <MonacoEditor
               language="json"
               path="inmemory://aow/acp/aow-acp-settings.jsonc"
-              theme="vs-dark"
               value={content}
               onChange={value => setContent(value ?? '')}
               onMount={(_editor, monaco) => {
