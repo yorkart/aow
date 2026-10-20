@@ -200,7 +200,7 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .spinning { animation:spin .8s linear infinite; }
 /* Project AoW is mounted at /aow/. */
 .agent-icon { flex:0 0 16px; width:16px; height:16px; display:block; object-fit:contain; }
-.project-aow { --project-aow-topbar-height:32px; --project-aow-header-height:29px; --project-aow-status-height:24px; width:100%; height:100%; display:grid; grid-template-rows:minmax(0,1fr) var(--project-aow-status-height); color:var(--aow-text); background:#14161a; font-size:12px; }
+.project-aow { --project-aow-topbar-height:32px; --project-aow-header-height:29px; --project-aow-status-height:30px; width:100%; height:100%; display:grid; grid-template-rows:minmax(0,1fr) var(--project-aow-status-height); color:var(--aow-text); background:#14161a; font-size:12px; }
 .project-aow button { cursor:pointer; }
 .project-aow-layout { min-width:0; min-height:0; display:grid; grid-template-columns:var(--project-left-width,280px) 0 minmax(0,1fr); }
 .project-aow-layout.left-sidebar-hidden { grid-template-columns:0 0 minmax(0,1fr); }
@@ -533,6 +533,7 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .project-aow-no-context h1 { margin:14px 0 3px; color:var(--aow-text-strong); font-size:24px; font-weight:450; }
 .project-aow-status { min-height:0; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:0 7px; overflow:hidden; color:var(--aow-text); background:#294e78; font-size:11px; line-height:1; }
 .project-aow-status span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.project-aow-status > span:first-child { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
 .project-aow-status-actions :is(.project-terminal-dock-toggle,.task-notification-toggle,.operation-status > button) { --aow-icon:var(--aow-text); --aow-icon-hover:var(--aow-text-hover); }
 .project-aow-status-actions :is(.project-terminal-dock-toggle,.task-notification-toggle,.operation-status > button):hover { background:transparent; }
 .project-aow-status-actions :is(.project-terminal-dock-toggle,.task-notification-toggle,.operation-status > button)[aria-expanded="true"] { --aow-icon-foreground:var(--aow-icon-active); background:transparent; }
