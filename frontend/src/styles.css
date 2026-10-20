@@ -533,6 +533,9 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .project-aow-no-context h1 { margin:14px 0 3px; color:var(--aow-text-strong); font-size:24px; font-weight:450; }
 .project-aow-status { min-height:0; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:0 7px; overflow:hidden; color:var(--aow-text); background:#294e78; font-size:11px; line-height:1; }
 .project-aow-status span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.project-aow-status-actions :is(.project-terminal-dock-toggle,.task-notification-toggle,.operation-status > button) { --aow-icon:var(--aow-text); --aow-icon-hover:var(--aow-text-hover); }
+.project-aow-status-actions :is(.project-terminal-dock-toggle,.task-notification-toggle,.operation-status > button):hover { background:transparent; }
+.project-aow-status-actions :is(.project-terminal-dock-toggle,.task-notification-toggle,.operation-status > button)[aria-expanded="true"] { --aow-icon-foreground:var(--aow-icon-active); background:transparent; }
 .project-aow-modal-backdrop { position:fixed; z-index:1000; inset:0; display:grid; place-items:center; padding:30px; background:#0009; }
 .project-aow-modal { width:min(680px,100%); max-height:min(760px,calc(100vh - 60px)); display:flex; flex-direction:column; overflow:hidden; background:#22262c; border:1px solid #555d69; border-radius:8px; box-shadow:0 20px 70px #000d; }
 .project-aow-modal > header { min-height:58px; display:flex; align-items:center; padding:10px 13px 10px 16px; border-bottom:1px solid #3b414b; }
