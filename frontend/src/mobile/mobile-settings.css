@@ -45,8 +45,11 @@
 .mobile-settings .project-aow-agent-identity { grid-column:4 / -1; min-height:36px; align-items:center; }
 .mobile-settings .project-aow-agent-row strong { font-size:14px; }
 .mobile-settings .project-aow-agent-row small,.mobile-settings .project-aow-agent-identity > span { font-size:12px; }
-.mobile-settings .project-aow-agent-row > small { grid-column:2 / 5; }
+.mobile-settings .project-aow-agent-options { grid-column:1 / 5; flex-direction:column; align-items:flex-start; gap:0; }
+.mobile-settings .project-aow-agent-default { min-height:44px; font-size:12px; }
+.mobile-settings .project-aow-agent-default input[type="checkbox"] { width:20px; height:20px; }
 .mobile-settings .project-aow-agent-row > button { width:44px; height:44px; }
+.mobile-settings .project-aow-agent-action-placeholder { width:44px; height:44px; }
 .mobile-settings .project-aow-agent-row > .project-aow-agent-drag { width:32px; }
 .mobile-settings .project-aow-agent-drag-placeholder { width:32px; }
 .mobile-settings .project-aow-agent-row > button svg { width:18px; height:18px; }

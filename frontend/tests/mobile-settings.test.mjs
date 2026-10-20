@@ -172,22 +172,39 @@ try {
     assert.equal(state.writes.filter(write => write.method === 'POST').length, 1);
   });
 
-  await test('default Agent selection submits only its ID and preserves detected profiles', async t => {
-    const { page, state, dialog, choose } = await fixture(t, 1280, false);
+  for (const mobile of [false, true]) await test(`${mobile ? 'mobile' : 'desktop'} default Agent row options submit only the ID and preserve detected profiles`, async t => {
+    const profile = { id: 'codex', agent_type: 'codex', display_name: 'Codex', source: 'detected', available: true, command: 'codex', executable: '/usr/bin/codex', args: [], env: {} };
+    const { page, state, dialog, choose } = await fixture(t, mobile ? 320 : 1280, mobile, false, [
+      profile, { ...profile, id: 'work-codex', display_name: 'Work Codex', source: 'configured' },
+    ]);
     await choose('Agents');
-    const select = dialog.getByRole('combobox', { name: '默认 Agent 实例', exact: true });
+    assert.equal(await dialog.getByRole('combobox', { name: '默认 Agent 实例', exact: true }).count(), 0);
+    const detected = dialog.getByRole('checkbox', { name: '默认 Agent：Codex', exact: true });
+    const configured = dialog.getByRole('checkbox', { name: '默认 Agent：Work Codex', exact: true });
+    const waitDefault = (name, checked) => page.waitForFunction(({ name, checked }) => {
+      const option = document.querySelector(`[aria-label="默认 Agent：${name}"]`);
+      return option && option.checked === checked && !option.disabled;
+    }, { name, checked });
     // Simulate another window changing launch data after this page loaded.
     state.agents[0] = { ...state.agents[0], args: ['--latest'], env: { MODE: 'latest' } };
-    await select.selectOption('codex');
-    await page.waitForFunction(() => document.querySelector('[aria-label="默认 Agent 实例"]')?.value === 'codex'
-      && !document.querySelector('[aria-label="默认 Agent 实例"]')?.disabled);
+    await detected.click();
+    await waitDefault('Codex', true);
     assert.deepEqual(state.writes, [{ path: '/api/aow/agents/settings/default', method: 'PUT', body: { agent_id: 'codex' } }]);
     assert.equal(state.agents[0].source, 'detected');
     assert.deepEqual(state.agents[0].args, ['--latest']);
     assert.deepEqual(state.agents[0].env, { MODE: 'latest' });
-    await select.selectOption('');
-    await page.waitForFunction(() => document.querySelector('[aria-label="默认 Agent 实例"]')?.value === ''
-      && !document.querySelector('[aria-label="默认 Agent 实例"]')?.disabled);
+    state.failSave = true;
+    await configured.click();
+    await dialog.getByRole('alert').filter({ hasText: '配置写入失败' }).waitFor();
+    assert.equal(await detected.isChecked(), true);
+    assert.equal(await configured.isChecked(), false);
+    state.failSave = false;
+    await configured.click();
+    await waitDefault('Work Codex', true);
+    assert.equal(await detected.isChecked(), false);
+    assert.deepEqual(state.writes.at(-1).body, { agent_id: 'work-codex' });
+    await configured.click();
+    await waitDefault('Work Codex', false);
     assert.deepEqual(state.writes.at(-1).body, { agent_id: null });
     assert.equal(state.agents[0].source, 'detected');
   });
@@ -206,6 +223,14 @@ try {
     assert.deepEqual(await ids(), initial.map(agent => agent.id));
     assert.deepEqual(await dialog.locator('.project-aow-agent-group > h3').allTextContents(), ['Claude Code', 'Codex']);
     assert.equal(await row('codex').getByRole('button', { name: /^调整/ }).count(), 0);
+    assert.equal(await row('codex').getByRole('button', { name: '移除配置', exact: true }).count(), 0);
+    const controls = await dialog.locator('.project-aow-agent-row').evaluateAll(rows => rows.map(row => [
+      row.querySelector('.project-aow-agent-default'),
+      row.querySelector('.project-aow-agent-edit'),
+      row.querySelector('.project-aow-agent-copy'),
+      row.querySelector('.project-aow-agent-action-placeholder, button[title="移除配置"]'),
+    ].map(control => control.getBoundingClientRect().x)));
+    for (const positions of controls) assert.ok(positions.every((x, index) => Math.abs(x - controls[0][index]) < 1), 'default, edit, copy and remove columns align for detected and configured agents');
     assert.equal(await row('work-claude').getByRole('button', { name: /^调整/ }).getAttribute('aria-disabled'), 'true');
     assert.equal(await dialog.locator('.project-aow-agent-row .agent-icon').count(), initial.length);
     assert.equal(await dialog.locator('.project-aow-agent-list').getByText('/usr/bin/codex', { exact: true }).count(), 0);

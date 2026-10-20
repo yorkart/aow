@@ -690,12 +690,16 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .project-aow-agent-row strong { overflow:hidden; font-size:11px; font-weight:600; text-overflow:ellipsis; white-space:nowrap; }
 .project-aow-agent-identity > span { min-width:0; overflow:hidden; color:var(--aow-muted); font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
 .project-aow-agent-row small { color:var(--aow-muted); font-size:10px; }
-.project-aow-agent-row > small { flex-shrink:0; }
+.project-aow-agent-options { display:flex; flex:0 0 auto; align-items:center; gap:8px; }
+.project-aow-agent-default { display:flex; flex:0 0 auto; align-items:center; gap:4px; min-height:24px; color:var(--aow-text); font-size:11px; white-space:nowrap; cursor:pointer; }
+.project-aow-agent-default input[type="checkbox"] { width:14px; height:14px; margin:0; accent-color:var(--aow-accent); cursor:inherit; }
+.project-aow-agent-default:has(input:disabled) { opacity:.5; cursor:default; }
 .project-aow-agent-row > button { width:24px; height:24px; flex:0 0 24px; display:grid; place-items:center; padding:0; color:#a67873; border-radius:3px; }
 .project-aow-agent-row > button:hover:not(:disabled) { color:#ef9f95; background:#422b29; }
 .project-aow-agent-row > .project-aow-agent-edit,.project-aow-agent-row > .project-aow-agent-copy { color:var(--aow-accent); }
 .project-aow-agent-row > .project-aow-agent-edit:hover:not(:disabled),.project-aow-agent-row > .project-aow-agent-copy:hover:not(:disabled),.project-aow-agent-row > .project-aow-agent-edit[aria-pressed="true"] { color:#c3dcfc; background:var(--aow-selection); }
 .project-aow-agent-drag-placeholder { width:24px; flex:0 0 24px; }
+.project-aow-agent-action-placeholder { width:24px; height:24px; flex:0 0 24px; }
 .project-aow-agent-row > .project-aow-agent-drag { color:var(--aow-muted); cursor:grab; touch-action:none; user-select:none; }
 .project-aow-agent-row > .project-aow-agent-drag:hover { color:var(--aow-text); background:var(--aow-hover); }
 .project-aow-agent-row > .project-aow-agent-drag:active { cursor:grabbing; }

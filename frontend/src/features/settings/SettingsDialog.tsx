@@ -411,13 +411,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
             <div className="project-aow-dialog-form"><div className="project-aow-dialog-body">
                 <div className="project-aow-settings-heading"><div><h2>Agents</h2><p>目前支持 Claude Code、Codex、TraeCode CLI、Hermes 和 Pi。每种类型可注册多个配置。</p></div><button type="button" className="project-aow-dialog-button" title="重新探测本地 Agent" disabled={busy} onClick={() => void reloadAgentList()}><RefreshCw />刷新</button><button type="button" className="project-aow-dialog-button primary" disabled={busy} onClick={() => { resetAgentForm(); setAgentDialog('new'); }}>新增 Agent</button></div>
                 {agentsError && <div className="project-aow-error" role="alert">{agentsError}</div>}
-                <label className="project-aow-dialog-field">默认 Agent 实例
-                  <select aria-label="默认 Agent 实例" disabled={busy} value={agents.find(agent => agent.is_default)?.id ?? ''} onChange={event => void selectDefaultAgent(event.target.value)}>
-                    <option value="">使用列表第一项{agents[0] ? `（${agents[0].display_name}）` : ''}</option>
-                    {agents.map(agent => <option key={agent.id} value={agent.id} disabled={!aowAgentType(agent)}>{agent.display_name}（{agent.id}）</option>)}
-                  </select>
-                </label>
-                <AgentList agents={agents} busy={busy} editingAgentId={editingAgentId} onEdit={loadAgent} onCopy={agent => loadAgent(agent, true)} onRemove={id => void removeAgent(id)} onReorder={reorderAgents} />
+                <AgentList agents={agents} busy={busy} editingAgentId={editingAgentId} onEdit={loadAgent} onCopy={agent => loadAgent(agent, true)} onRemove={id => void removeAgent(id)} onReorder={reorderAgents} onDefaultChange={id => void selectDefaultAgent(id)} />
                 {agentSaved && <p role="status">{agentSaved}</p>}
                 {agentRefreshError && <div className="project-aow-error" role="alert">列表刷新失败：{agentRefreshError}<button type="button" className="project-aow-dialog-button" disabled={busy} onClick={() => void reloadAgentList()}>重试刷新</button></div>}
                 {!agentDialog && error && <div className="project-aow-error" role="alert">{error}</div>}

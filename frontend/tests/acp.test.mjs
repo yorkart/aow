@@ -1474,8 +1474,8 @@ try {
     const { page, state } = await fixture(t, true, { content: '{"agent_servers":{"test":{"type":"registry"}}}\n' });
     const nativeDialogs = [];
     page.on('dialog', async prompt => { nativeDialogs.push(prompt.message()); await prompt.dismiss(); });
-    const selector = page.getByRole('combobox', { name: '默认 ACP 实例', exact: true });
-    await selector.selectOption('test');
+    const defaultOption = page.getByRole('checkbox', { name: '默认 ACP：Test Agent', exact: true });
+    await defaultOption.click();
     await page.getByText('默认 ACP 实例已保存。', { exact: true }).waitFor();
     const saved = state.saved;
     await page.getByRole('button', { name: '编辑 Test Agent ACP 配置', exact: true }).click();
@@ -1493,40 +1493,48 @@ try {
     await modal.getByRole('button', { name: '关闭对话框', exact: true }).click();
     await discard.getByRole('button', { name: '放弃修改', exact: true }).click();
     await modal.waitFor({ state: 'hidden' });
-    assert.equal(await selector.inputValue(), 'test', 'discarding editor changes retains the earlier default selection');
+    assert.equal(await defaultOption.isChecked(), true, 'discarding editor changes retains the earlier default selection');
     await page.waitForFunction(() => document.querySelector('[aria-label="Unsaved settings"]')?.textContent === 'false');
     await page.getByRole('button', { name: '添加自定义 Agent', exact: true }).click();
     const custom = page.getByRole('dialog', { name: '添加自定义 ACP Agent', exact: true });
     await custom.getByRole('button', { name: '取消', exact: true }).click();
     await custom.waitFor({ state: 'hidden' });
-    assert.equal(await selector.inputValue(), 'test');
+    assert.equal(await defaultOption.isChecked(), true);
     assert.equal(state.saved, saved);
     assert.deepEqual(nativeDialogs, []);
   });
 
-  await test('ACP default selector saves immediately, preserves JSONC comments and recovers from save errors', async t => {
-    const { page, state } = await fixture(t, true, { content: '// keep comment\n{ "agent_servers": { "test": { "type": "registry" }, "other": { "type": "registry" } }, "future": { "keep": true } }\n' });
-    const selector = page.getByRole('combobox', { name: '默认 ACP 实例', exact: true });
-    await selector.selectOption('test');
+  await test('ACP default row options save immediately, preserve JSONC comments and recover from save errors', async t => {
+    const { page, state } = await fixture(t, true, {
+      content: '// keep comment\n{ "agent_servers": { "test": { "type": "registry" }, "other": { "type": "registry" } }, "future": { "keep": true } }\n',
+      agents: [{ id: 'test', name: 'Test Agent', supported: true, configured: true, installed: true }, { id: 'other', name: 'Other Agent', supported: true, configured: true, installed: true }],
+    });
+    assert.equal(await page.getByRole('combobox', { name: '默认 ACP 实例', exact: true }).count(), 0);
+    const first = page.getByRole('checkbox', { name: '默认 ACP：Test Agent', exact: true });
+    const other = page.getByRole('checkbox', { name: '默认 ACP：Other Agent', exact: true });
+    await first.click();
     await page.getByText('默认 ACP 实例已保存。', { exact: true }).waitFor();
     assert.equal(parse(state.saved).default_agent_id, 'test');
     assert.ok(state.saved.includes('// keep comment'));
     assert.deepEqual(parse(state.saved).future, { keep: true });
     const saved = state.saved;
     state.settingsError = '默认实例保存失败';
-    await selector.selectOption('other');
+    await other.click();
     await page.getByRole('alert').filter({ hasText: state.settingsError }).waitFor();
-    assert.equal(await selector.inputValue(), 'test', 'a failed save retains the previous selection');
+    assert.equal(await first.isChecked(), true, 'a failed save retains the previous selection');
+    assert.equal(await other.isChecked(), false);
     assert.equal(state.saved, saved);
     assert.equal(await page.getByLabel('Unsaved settings').textContent(), 'false');
     state.settingsError = '';
-    await selector.selectOption('other');
+    await other.click();
     await page.getByText('默认 ACP 实例已保存。', { exact: true }).waitFor();
     assert.equal(parse(state.saved).default_agent_id, 'other');
-    await selector.selectOption('');
+    assert.equal(await first.isChecked(), false);
+    assert.equal(await other.isChecked(), true);
+    await other.click();
     await page.waitForFunction(() => {
-      const selector = document.querySelector('[aria-label="默认 ACP 实例"]');
-      return selector && !selector.disabled && selector.value === '';
+      const option = document.querySelector('[aria-label="默认 ACP：Other Agent"]');
+      return option && !option.disabled && !option.checked;
     });
     assert.equal(parse(state.saved).default_agent_id, undefined);
     assert.equal(await page.getByLabel('Unsaved settings').textContent(), 'false');

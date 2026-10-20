@@ -73,7 +73,6 @@ export function AcpSettings({ active, onBusyChange, onDirtyChange }: { active: b
   const dirty = !!saved && content !== saved.content;
   const parsed = useMemo(() => parseJsonc(content), [content]);
   const syntaxErrors = parsed.errors;
-  const configuredIds = Object.keys(object(object(parsed.value).agent_servers)).sort();
   const defaultAgentId = String(object(parsed.value).default_agent_id ?? '');
   const syntaxError = syntaxErrors[0] ? syntaxErrorMessage(content, syntaxErrors[0]) : '';
   useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
@@ -145,13 +144,13 @@ export function AcpSettings({ active, onBusyChange, onDirtyChange }: { active: b
   return <div className="project-aow-dialog-form acp-settings">
     <div className="project-aow-dialog-body">
       <div className="project-aow-settings-heading"><div><h2>ACP</h2><p>安装 Registry Agent 或配置自定义启动命令。</p></div></div>
-      <label className="project-aow-dialog-field">默认 ACP 实例
-        <select aria-label="默认 ACP 实例" disabled={busy || !saved || !!syntaxError} value={defaultAgentId} onChange={event => { void selectDefaultAgent(event.target.value); }}>
-          <option value="">使用列表第一项</option>
-          {configuredIds.map(id => <option key={id} value={id}>{id}</option>)}
-        </select>
-      </label>
-      {!!agents.length && <div className="acp-registry" aria-label="已配置的 ACP Agent">{agents.map(agent => <article key={agent.id}><div><strong>{agent.name}</strong><small>{agent.installed ? '可用于新建会话' : '尚未安装，请先完成安装'}</small></div><button type="button" disabled={busy || !saved} onClick={() => openEditor('edit')} aria-label={`编辑 ${agent.name} ACP 配置`}>编辑</button>{installButton(agent, false)}</article>)}</div>}
+      {!!agents.length && <div className="acp-registry" aria-label="已配置的 ACP Agent">{agents.map(agent => <article key={agent.id}>
+        <div><strong>{agent.name}</strong><small>{agent.installed ? '可用于新建会话' : '尚未安装，请先完成安装'}</small></div>
+        <label className="project-aow-agent-default" title={defaultAgentId === agent.id ? '取消默认，使用列表第一项' : '设为默认实例'}>
+          <input type="checkbox" aria-label={`默认 ACP：${agent.name}`} checked={defaultAgentId === agent.id} disabled={busy || !saved || !!syntaxError} onChange={event => { void selectDefaultAgent(event.target.checked ? agent.id : ''); }} />默认
+        </label>
+        <button type="button" disabled={busy || !saved} onClick={() => openEditor('edit')} aria-label={`编辑 ${agent.name} ACP 配置`}>编辑</button>{installButton(agent, false)}
+      </article>)}</div>}
       {!agents.length && saved && <p className="project-aow-empty">尚未配置 ACP Agent。</p>}
       <div className="acp-actions"><button type="button" disabled={busy || !saved} onClick={() => { setModal('registry'); setSearch(''); void run(async () => setRegistry(await acpApi.registry(true))); }}>浏览 ACP Registry</button><button type="button" disabled={busy || !saved} onClick={() => openEditor('custom')}>添加自定义 Agent</button></div>
       {modal === 'registry' && <SettingsActionDialog title="ACP Registry" busy={busy} onClose={closeModal}>

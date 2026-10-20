@@ -8,10 +8,11 @@ interface Drag {
   id: string; x: number; y: number; moved: boolean; over?: string; after: boolean;
 }
 
-export function AgentList({ agents, busy, editingAgentId, onEdit, onCopy, onRemove, onReorder }: {
+export function AgentList({ agents, busy, editingAgentId, onEdit, onCopy, onRemove, onReorder, onDefaultChange }: {
   agents: AowAgent[]; busy: boolean; editingAgentId?: string;
   onEdit: (agent: AowAgent) => void; onCopy: (agent: AowAgent) => void; onRemove: (id: string) => void;
   onReorder: (type: AowAgent['agent_type'], ids: string[]) => Promise<void>;
+  onDefaultChange: (id: string) => void;
 }) {
   const drag = useRef<Drag | undefined>(undefined);
   const saving = useRef(false);
@@ -88,10 +89,15 @@ export function AgentList({ agents, busy, editingAgentId, onEdit, onCopy, onRemo
           <span className={`project-aow-agent-dot ${agent.available ? 'available' : ''}`} title={agent.available ? '可用' : '不可用，请检查类型和执行路径'} />
           <AgentIcon agentId={aowAgentType(agent)} />
           <div className="project-aow-agent-identity"><strong title={agent.display_name}>{agent.display_name}</strong><span title={agent.id}>{agent.id}</span></div>
-          <small>{agent.source === 'detected' ? 'Auto detected' : 'Configured'}</small>
+          <div className="project-aow-agent-options">
+            <small>{agent.source === 'detected' ? 'Auto detected' : 'Configured'}</small>
+            <label className="project-aow-agent-default" title={agent.is_default ? '取消默认，使用列表第一项' : '设为默认实例'}>
+              <input type="checkbox" aria-label={`默认 Agent：${agent.display_name}`} checked={!!agent.is_default} disabled={busy || !aowAgentType(agent)} onChange={event => onDefaultChange(event.target.checked ? agent.id : '')} />默认
+            </label>
+          </div>
           <button type="button" className="project-aow-agent-edit" title={`编辑 ${agent.display_name}`} aria-pressed={editingAgentId === agent.id} disabled={busy} onClick={() => onEdit(agent)}><Pencil /></button>
           <button type="button" className="project-aow-agent-copy" title={`复制 ${agent.display_name}`} disabled={busy} onClick={() => onCopy(agent)}><Copy /></button>
-          {agent.source === 'configured' && <button type="button" title="移除配置" disabled={busy} onClick={() => onRemove(agent.id)}><Trash2 /></button>}
+          {agent.source === 'configured' ? <button type="button" title="移除配置" disabled={busy} onClick={() => onRemove(agent.id)}><Trash2 /></button> : <span className="project-aow-agent-action-placeholder" aria-hidden="true" />}
         </div>)}
       </section>;
     })}
