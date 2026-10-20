@@ -203,7 +203,7 @@
           "sha256": "21207d34f8c5d00db683bf2a92d4ac202eebeaf32c6427fe82c5856ced743c48"
         }
       ],
-      "local_sha256": "2e160dce7aad5e4b8c0b5d7cfb8d43d54142155bdfc628779cc0bb555c8350b2"
+      "local_sha256": "288a441b81233dc4e3131258c283e9625238494ca715d7d4d4d71d80ee3a47dd"
     },
     {
       "local": "crates/acp/src/agent_servers/acp/mod.rs",

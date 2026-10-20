@@ -3,7 +3,7 @@ import { vendorRipgrepFixture } from './ripgrep-fixture.mjs';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readlinkSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readlinkSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +32,7 @@ function fixture(t) {
   write(join(tools, 'uname'), `#!/bin/sh\ncase "$1" in -s) echo Linux;; -m) echo ${machine};; esac\n`, true);
   mkdirSync(join(repo, 'vt-worker'), { recursive: true });
   for (const path of [
+    'skills/aow-agent/SKILL.md', 'skills/aow-acp/SKILL.md',
     'scripts/package-release.sh', 'scripts/install-release.sh', 'scripts/install-local.sh',
     'scripts/start-server.sh', 'scripts/start-terminald.sh', 'scripts/replace-symlink.mjs', 'scripts/server-state-dir.sh',
     'scripts/start-launchd.sh', 'scripts/launchd-service.mjs', 'scripts/activate-terminald.mjs', 'scripts/service-health.mjs',
@@ -135,6 +136,7 @@ test('default version and skip-build create a complete package without invoking 
   assert.deepEqual(manifest.platform, { os: 'linux', arch: machine, target, libc: 'musl', linkage: 'static' });
   assert.equal(archive.endsWith(`aow-${manifest.release_id}.tar.gz`), true);
   for (const path of ['bin/aow-server', 'bin/aow-terminald', 'bin/aow-automation-runner',
+    'skills/aow-agent/SKILL.md', 'skills/aow-acp/SKILL.md',
     'bin/aow-cli', 'bin/rg', 'licenses/ripgrep/COPYING', 'frontend/dist/index.html', 'scripts/start-server.sh', 'scripts/start-terminald.sh',
     'scripts/replace-symlink.mjs', 'scripts/server-state-dir.sh', 'packaging/bin/aow', 'packaging/bin/aow-server', 'packaging/bin/aow-terminald',
     'packaging/systemd/aow-server.service', 'packaging/systemd/aow-terminald.service']) {
@@ -184,6 +186,15 @@ test('local install deploys the latest package or an explicit path without downl
   assert.match(installed.stdout, /services are active/);
   assert.equal(readlinkSync(join(f.runtime, 'active/terminald')), '../releases/local-1');
   assert.doesNotMatch(installed.stdout + installed.stderr, /Enter lowercase y|请输入 y/);
+  for (const name of ['aow-agent', 'aow-acp']) {
+    const installedSkill = join(f.home, '.aow/skills', name, 'SKILL.md');
+    assert.equal(lstatSync(installedSkill).isFile(), true);
+    assert.equal(readFileSync(installedSkill, 'utf8'), readFileSync(join(root, 'skills', name, 'SKILL.md'), 'utf8'));
+  }
+  assert.equal(existsSync(join(f.home, '.agents/skills')), false);
+  // Updating replaces bundled content, preserving unrelated skills.
+  write(join(f.home, '.aow/skills/aow-agent/SKILL.md'), 'stale version');
+  write(join(f.home, '.aow/skills/custom/SKILL.md'), 'user skill');
   const output = join(f.temp, 'custom packages');
   const packed = f.pack(['--version', 'local-2', '--output-dir', output]);
   assert.equal(packed.status, 0, packed.stderr);
@@ -193,6 +204,8 @@ test('local install deploys the latest package or an explicit path without downl
   assert.equal(readlinkSync(join(f.runtime, 'active/server')), '../releases/local-2');
   assert.equal(readlinkSync(join(f.runtime, 'active/terminald')), '../releases/local-1');
   assert.doesNotMatch(readFileSync(f.serviceLog, 'utf8').slice(servicesBefore.length), /terminald/);
+  assert.equal(readFileSync(join(f.home, '.aow/skills/aow-agent/SKILL.md'), 'utf8'), readFileSync(join(root, 'skills/aow-agent/SKILL.md'), 'utf8'));
+  assert.equal(readFileSync(join(f.home, '.aow/skills/custom/SKILL.md'), 'utf8'), 'user skill');
   assert.equal(existsSync(join(f.runtime, '.install.lock')), false);
 });
 

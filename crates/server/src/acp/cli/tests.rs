@@ -12,11 +12,15 @@ use tower::ServiceExt;
 struct Host {
     command: String,
     delay_ms: u64,
+    default_agent_id: Option<String>,
 }
 #[async_trait::async_trait]
 impl aow_acp::AcpHost for Host {
     async fn settings(&self) -> anyhow::Result<String> {
-        Ok(json!({"agent_servers":{"test":{"type":"custom","command":self.command,"env":{"START_DELAY_MS":self.delay_ms.to_string()},"args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../acp/tests/fixtures/lineage-agent.mjs")]}}}).to_string())
+        let mut settings = json!({"agent_servers":{"test":{"type":"custom","command":self.command,"env":{"START_DELAY_MS":self.delay_ms.to_string()},"args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../acp/tests/fixtures/lineage-agent.mjs")]}}});
+        settings["agent_servers"]["another"] = settings["agent_servers"]["test"].clone();
+        settings["default_agent_id"] = json!(self.default_agent_id);
+        Ok(settings.to_string())
     }
     async fn execution_path(&self) -> anyhow::Result<Option<std::ffi::OsString>> {
         Ok(None)
@@ -66,6 +70,7 @@ async fn fixture(command: &str) -> (tempfile::TempDir, AppState, Router, String,
         Arc::new(Host {
             command: command.into(),
             delay_ms: 0,
+            default_agent_id: None,
         }),
         Some(directory.path().join("acp")),
     )
@@ -119,10 +124,11 @@ async fn caller_context_errors_never_allocate_children() {
 #[tokio::test]
 async fn cli_creates_submits_traces_and_respects_browser_ownership() {
     let (_directory, state, app, project, repo) = fixture("node").await;
-    let create = json!({"caller":{"session_id":"fixture"},"no_parent":true,"agent_id":"test","project_id":project,"cwd":repo,"timeout_seconds":10,"task":"hello"});
+    let create = json!({"caller":{"session_id":"fixture"},"no_parent":true,"project_id":project,"cwd":repo,"timeout_seconds":10,"task":"hello"});
     let (status, first) = call(&app, "POST", "/v1/acp/sessions", create.clone()).await;
     assert_eq!(status, StatusCode::OK, "{first}");
     assert_eq!(first["phase"], "ready", "{first}");
+    assert_eq!(first["agent_id"], "another");
     assert_eq!(first["task_submitted"], true);
     let id = first["thread_id"].as_str().unwrap();
     let root_info = state.acp.session_info(id).unwrap();
@@ -131,6 +137,7 @@ async fn cli_creates_submits_traces_and_respects_browser_ownership() {
     assert!(!root_info.created_at.is_empty());
     let parent = aow_protocol::InstanceRef::acp(id);
     let mut create = create;
+    create["agent_id"] = json!("test");
     create["no_parent"] = json!(false);
     create["caller"] = json!({"session_id": root_info.session_id,
         "acp_connection_id": state.acp.session_connection_info(id).unwrap().unwrap().id});
@@ -209,6 +216,7 @@ async fn timed_out_creation_finishes_once_and_busy_submission_is_rejected() {
         Arc::new(Host {
             command: "node".into(),
             delay_ms: 1500,
+            default_agent_id: None,
         }),
         None,
     )
@@ -243,4 +251,34 @@ async fn timed_out_creation_finishes_once_and_busy_submission_is_rejected() {
     .unwrap();
     let prompts = std::fs::read_to_string(repo.join("lineage-prompts.jsonl")).unwrap();
     assert_eq!(prompts.lines().count(), 1);
+}
+
+#[tokio::test]
+async fn acp_default_and_explicit_override_select_the_expected_adapter() {
+    let (_directory, mut state, _, project, repo) = fixture("node").await;
+    state.acp = aow_acp::AcpService::new(
+        Arc::new(Host {
+            command: "node".into(),
+            delay_ms: 0,
+            default_agent_id: Some("test".into()),
+        }),
+        None,
+    )
+    .unwrap();
+    let app = routes().with_state(state.clone());
+    for (explicit, expected) in [(None, "test"), (Some("another"), "another")] {
+        let mut request = json!({"caller":{"session_id":"fixture"}, "no_parent":true, "project_id":project, "cwd":repo, "timeout_seconds":10});
+        if let Some(id) = explicit {
+            request["agent_id"] = json!(id);
+        }
+        let (status, created) = call(&app, "POST", "/v1/acp/sessions", request).await;
+        assert_eq!(status, StatusCode::OK, "{created}");
+        assert_eq!(created["phase"], "ready", "{created}");
+        assert_eq!(created["agent_id"], expected);
+        state
+            .acp
+            .delete_session(created["thread_id"].as_str().unwrap())
+            .await
+            .unwrap();
+    }
 }

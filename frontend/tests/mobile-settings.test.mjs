@@ -55,7 +55,11 @@ async function fixture(t, width = 390, mobile = true, virtualViewport = false, a
       }
       data = state.serverEnvironment;
     } else if (path === '/api/aow/settings/discovered-path') data = ['/opt/bin', '/usr/bin', '/bin'];
-    else if (path === '/api/aow/agents') {
+    else if (path === '/api/aow/agents/settings/default') {
+      assert.deepEqual(Object.keys(body), ['agent_id']);
+      state.agents = state.agents.map(agent => ({ ...agent, is_default: agent.id === body.agent_id }));
+      await route.fulfill({ status: 204 }); return;
+    } else if (path === '/api/aow/agents') {
       if (request.method() === 'PATCH') {
         const group = state.agents.filter(agent => agent.source === 'configured' && agent.agent_type === body.agent_type);
         assert.deepEqual([...body.ids].sort(), group.map(agent => agent.id).sort());
@@ -144,6 +148,25 @@ async function layout(page, dialog, name) {
 }
 
 try {
+  await test('default Agent selection submits only its ID and preserves detected profiles', async t => {
+    const { page, state, dialog, choose } = await fixture(t, 1280, false);
+    await choose('Agents');
+    const select = dialog.getByRole('combobox', { name: '默认 Agent 实例', exact: true });
+    // Simulate another window changing launch data after this page loaded.
+    state.agents[0] = { ...state.agents[0], args: ['--latest'], env: { MODE: 'latest' } };
+    await select.selectOption('codex');
+    await page.waitForFunction(() => document.querySelector('[aria-label="默认 Agent 实例"]')?.value === 'codex'
+      && !document.querySelector('[aria-label="默认 Agent 实例"]')?.disabled);
+    assert.deepEqual(state.writes, [{ path: '/api/aow/agents/settings/default', method: 'PUT', body: { agent_id: 'codex' } }]);
+    assert.equal(state.agents[0].source, 'detected');
+    assert.deepEqual(state.agents[0].args, ['--latest']);
+    assert.deepEqual(state.agents[0].env, { MODE: 'latest' });
+    await select.selectOption('');
+    await page.waitForFunction(() => document.querySelector('[aria-label="默认 Agent 实例"]')?.value === ''
+      && !document.querySelector('[aria-label="默认 Agent 实例"]')?.disabled);
+    assert.deepEqual(state.writes.at(-1).body, { agent_id: null });
+    assert.equal(state.agents[0].source, 'detected');
+  });
   for (const mobile of [false, true]) await test(`${mobile ? 'touch' : 'mouse'} Agent sorting stays within type, pins detected entries, and persists the compact list`, async t => {
     const agent = (id, type, name, source = 'configured') => ({ id, agent_type: type, display_name: name, source,
       available: true, command: `/usr/bin/${type}`, executable: `/usr/bin/${type}`, args: ['--model', 'example'], env: { MODE: 'work' } });

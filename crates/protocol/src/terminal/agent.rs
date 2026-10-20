@@ -26,7 +26,8 @@ pub struct AgentTerminalCreate {
     pub caller: Option<crate::CreationContext>,
     #[serde(default)]
     pub no_parent: bool,
-    pub agent: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<String>,
     pub project_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent: Option<crate::InstanceRef>,

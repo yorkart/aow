@@ -141,3 +141,42 @@ config-id = "g123456789ab"
 账户仅保存在服务所在机器的数据目录中（默认 `~/.local/state/aow/credentials.json`），权限为 `0600`。当前使用一个本地账户，保存账号、随机盐和 PBKDF2-HMAC-SHA256 密码哈希，不保存明文密码。账户不进入配置 Git 仓库。首次安装必须设置，后续升级保留；忘记密码可在服务器终端重新运行 `aow account`，无需重启服务。旧 `pin.md5` 不再读取，也不会自动转换成账户。
 
 服务日志和故障排查见 [安装说明](release-installation.md)。
+
+## Default CLI instances
+
+Agent and ACP defaults are independent. For `aow-cli agent create` and
+`aow-cli acp create`, an explicit `--agent-id` takes precedence. When omitted,
+the server selects the corresponding saved default, or the first listed instance
+when no default is set. Old configurations need no migration. An empty list or
+an unavailable selection fails explicitly; AoW does not silently try another instance.
+
+In Settings → Agents, select **默认 Agent 实例**. This stores the root
+`default_agent_id` field in `aow-agents.json`, separately
+from profile data. Selecting a detected instance preserves automatic discovery.
+Editing a profile does not change the default selection. Deleting the
+default profile restores the first-item fallback. Agent order matches the Agent
+list, including detected profiles and configured instance ordering.
+
+In Settings → ACP, select **默认 ACP 实例** and save, or set the root
+`default_agent_id` field in `acp/settings.json`:
+
+```jsonc
+{
+  "default_agent_id": "work-acp",
+  "agent_servers": {
+    "work-acp": { "type": "custom", "command": "my-acp-adapter", "args": [] }
+  }
+}
+```
+
+Remove `default_agent_id` (or set it to `null`) to use the first configured adapter.
+ACP adapters are listed by ID; the fallback uses that same order. A configured
+default must reference an existing adapter.
+
+## Bundled CLI skills
+
+The repository maintains `skills/aow-agent/SKILL.md` and `skills/aow-acp/SKILL.md`.
+Release packages include both skills. Local and release installation copy them to
+`~/.aow/skills/aow-agent/SKILL.md` and `~/.aow/skills/aow-acp/SKILL.md`, and updates
+refresh those files while preserving unrelated skills. No links are created in
+`~/.agents/skills/` or other skill discovery directories.

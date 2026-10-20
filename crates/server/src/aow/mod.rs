@@ -45,7 +45,7 @@ use registry::RegistryDocument;
 pub(crate) use registry::atomic_save_document;
 use registry::{
     AGENTS_FILE, PROJECTS_FILE, REGISTRY_VERSION, RegistryState, StoredAgent, StoredProject,
-    load_registry,
+    load_agents, load_registry,
 };
 
 use agents::{AgentsQuery, RegisterAgentRequest, ReorderAgentsRequest};
@@ -141,7 +141,7 @@ impl AowManager {
         let agents_path = config.directory().join(AGENTS_FILE);
         let settings_path = config.directory().join(SETTINGS_FILE);
         let projects = load_registry(&projects_path)?;
-        let agents = load_registry(&agents_path)?;
+        let (agents, default_agent_id) = load_agents(&agents_path)?;
         let settings = load_settings(&settings_path, notes_base)?;
         let notifications = crate::notifications::NotificationManager::persistent(&state_dir)?;
         let removals = removal::RemovalJobs::in_memory();
@@ -154,7 +154,11 @@ impl AowManager {
                 projects_path: Some(projects_path),
                 agents_path: Some(agents_path),
                 settings_path: Some(settings_path),
-                state: Mutex::new(RegistryState { projects, agents }),
+                state: Mutex::new(RegistryState {
+                    projects,
+                    agents,
+                    default_agent_id,
+                }),
                 settings: Mutex::new(settings),
                 session_locators: Mutex::new(HashMap::new()),
                 project_operation: Arc::new(tokio::sync::Mutex::new(())),

@@ -56,6 +56,7 @@ Later updates run as the target account. Configuration changes may require regis
 This release installer never uses sudo; just install coordinates administrator setup.
 Downloads require curl and HTTPS access to GitHub Releases.
 Installs under ~/.local/lib/aow; preserves existing configuration and data.
+Bundled skills are copied to ~/.aow/skills without links to other skill directories.
 Also installs aow update / aow account and remembers the GitHub repository.
 Local installs preserve the saved repository unless explicitly overridden.
 EOF
@@ -160,9 +161,10 @@ try {
     for (const path of ['manifest.json', 'bin', 'frontend', 'frontend/dist',
         'bin/aow-server', 'bin/aow-terminald',
         'bin/aow-automation-runner', 'bin/aow-cli', 'frontend/dist/index.html',
+        ...(manifest.components?.skills ? ['skills', 'skills/aow-agent', 'skills/aow-agent/SKILL.md', 'skills/aow-acp', 'skills/aow-acp/SKILL.md'] : []),
         ...(manifest.components?.ripgrep ? ['bin/rg', 'licenses/ripgrep/manifest.json'] : [])]) {
         const info = lstatSync(join(root, path));
-        const directory = ['bin', 'frontend', 'frontend/dist'].includes(path);
+        const directory = ['bin', 'frontend', 'frontend/dist', 'skills', 'skills/aow-agent', 'skills/aow-acp'].includes(path);
         if (!(directory ? info.isDirectory() : info.isFile())) throw new Error(`Invalid release entry: ${path}`);
     }
     process.stdout.write(id);
@@ -189,6 +191,7 @@ function equal(path) {
 }
 try {
     const paths = ['manifest.json', 'bin', 'frontend', 'scripts', 'packaging'];
+    if (JSON.parse(readFileSync(join(incoming, 'manifest.json'), 'utf8')).components?.skills) paths.push('skills');
     if (!paths.every(equal)) throw new Error('content differs');
 } catch (error) {
     console.error(`error: version already installed with different content; use a new version number (${error.message})`);
@@ -408,6 +411,15 @@ JS
         release=$runtime_root/releases/$version
         node -e 'require("node:fs").renameSync(process.argv[1], process.argv[2])' "$support" "$release"
         support=$release
+    fi
+    if [[ -d "$release/skills" ]]; then
+        local skill
+        for skill in aow-agent aow-acp; do
+            [[ ! -L "$HOME/.aow" && ! -L "$HOME/.aow/skills" && ! -L "$HOME/.aow/skills/$skill" ]] \
+                || fail 'skill installation directories must not be symlinks'
+            mkdir -p -- "$HOME/.aow/skills/$skill"
+            replace_file "$release/skills/$skill/SKILL.md" "$HOME/.aow/skills/$skill/SKILL.md" 0644
+        done
     fi
     replace_file "$support/packaging/bin/aow-server" "$runtime_root/bin/aow-server" 0755
     replace_file "$support/packaging/bin/aow-terminald" "$runtime_root/bin/aow-terminald" 0755

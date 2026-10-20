@@ -78,6 +78,10 @@ impl AcpService {
     pub async fn fork_session(&self, thread_id: &str) -> Result<SessionSnapshot> {
         self.0.fork_session(thread_id).await
     }
+    /// Resolve an explicit CLI adapter or the configured default.
+    pub async fn select_agent_id(&self, explicit: Option<&str>) -> Result<String> {
+        self.0.select_agent_id(explicit).await
+    }
     /// Persist identity before connecting; the controlling view then calls resume.
     pub async fn prepare_session(&self, agent_id: &str, cwd: PathBuf) -> Result<SessionSnapshot> {
         self.0.prepare_session(agent_id, cwd).await

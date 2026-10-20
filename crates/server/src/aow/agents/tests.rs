@@ -395,3 +395,205 @@ async fn failed_reorder_persistence_keeps_the_previous_in_memory_order() {
     std::fs::remove_dir(registry).unwrap();
     std::fs::write(registry, before).unwrap();
 }
+
+#[tokio::test]
+async fn default_agent_is_unique_persisted_and_legacy_profiles_fall_back_to_first() {
+    let directory = tempfile::tempdir().unwrap();
+    let manager = AowManager::persistent(directory.path()).unwrap();
+    // Restrict discovery so this also exercises an empty configuration deterministically.
+    manager.inner.settings.lock().unwrap().execution_path = Some(vec![directory.path().to_owned()]);
+    assert!(manager.select_agent_id(None).await.is_err());
+    for id in ["first", "second"] {
+        manager
+            .register_agent(serde_json::from_value(profile(id)).unwrap())
+            .await
+            .unwrap();
+    }
+    assert_eq!(manager.select_agent_id(None).await.unwrap(), "first");
+    manager
+        .set_default_agent(Some("second".into()))
+        .await
+        .unwrap();
+    assert_eq!(manager.select_agent_id(None).await.unwrap(), "second");
+    assert_eq!(
+        manager.select_agent_id(Some("first")).await.unwrap(),
+        "first"
+    );
+    assert_eq!(
+        manager.select_agent_id(Some("missing")).await.unwrap(),
+        "missing"
+    );
+    // Older clients that edit a profile without the new field preserve its default flag.
+    manager
+        .save_agent(
+            Some("second"),
+            serde_json::from_value(profile("second")).unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(manager.select_agent_id(None).await.unwrap(), "second");
+    let reloaded = AowManager::persistent(directory.path()).unwrap();
+    assert_eq!(reloaded.select_agent_id(None).await.unwrap(), "second");
+    manager
+        .set_default_agent(Some("first".into()))
+        .await
+        .unwrap();
+    let agents = manager.agents().await.unwrap();
+    assert_eq!(agents.iter().filter(|agent| agent.is_default).count(), 1);
+    assert_eq!(manager.select_agent_id(None).await.unwrap(), "first");
+    manager.remove_agent("first").await.unwrap();
+    assert_eq!(manager.select_agent_id(None).await.unwrap(), "second");
+}
+
+#[tokio::test]
+async fn default_endpoint_preserves_concurrent_profile_edits_and_rejects_unknown_ids() {
+    let directory = tempfile::tempdir().unwrap();
+    let manager = AowManager::persistent(directory.path()).unwrap();
+    manager
+        .register_agent(serde_json::from_value(profile("work")).unwrap())
+        .await
+        .unwrap();
+    let mut state = AppState::new(PathBuf::new());
+    state.aow = manager.clone();
+    let app = crate::build_router(state);
+    let (_, stale) = call(&app, "GET", "/api/aow/agents", Value::Null).await;
+    let mut updated = profile("work");
+    updated["command"] = json!("/bin/bash");
+    updated["args"] = json!(["--updated"]);
+    updated["env"] = json!({"MODE":"latest"});
+    let (edit, selected) = tokio::join!(
+        call(&app, "PUT", "/api/aow/agents/work", updated.clone()),
+        call(
+            &app,
+            "PUT",
+            "/api/aow/agents/settings/default",
+            json!({"agent_id":"work"})
+        ),
+    );
+    assert_eq!(edit.0, StatusCode::OK);
+    assert_eq!(selected.0, StatusCode::NO_CONTENT);
+    let (_, latest) = call(&app, "GET", "/api/aow/agents", Value::Null).await;
+    let work = latest
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|agent| agent["id"] == "work")
+        .unwrap();
+    for field in ["command", "args", "env"] {
+        assert_eq!(work[field], updated[field]);
+    }
+    assert_eq!(work["is_default"], true);
+    assert_ne!(
+        work["args"],
+        stale
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|agent| agent["id"] == "work")
+            .unwrap()["args"]
+    );
+    let reloaded = AowManager::persistent(directory.path()).unwrap();
+    assert_eq!(reloaded.select_agent_id(None).await.unwrap(), "work");
+    assert_eq!(
+        reloaded
+            .agents()
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|agent| agent.id == "work")
+            .unwrap()
+            .env["MODE"],
+        "latest"
+    );
+    assert_eq!(
+        call(
+            &app,
+            "PUT",
+            "/api/aow/agents/settings/default",
+            json!({"agent_id":"missing"})
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(manager.select_agent_id(None).await.unwrap(), "work");
+    assert_eq!(
+        call(
+            &app,
+            "PUT",
+            "/api/aow/agents/settings/default",
+            json!({"agent_id":null})
+        )
+        .await
+        .0,
+        StatusCode::NO_CONTENT
+    );
+    assert!(manager.lock().unwrap().default_agent_id.is_none());
+}
+
+#[tokio::test]
+async fn detected_default_stays_detected_across_clear_restart_and_executable_changes() {
+    let directory = tempfile::tempdir().unwrap();
+    let executable = directory.path().join("codex");
+    std::fs::write(&executable, "#!/bin/sh\nexit 0\n").unwrap();
+    std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let manager = AowManager::persistent(directory.path()).unwrap();
+    manager.inner.settings.lock().unwrap().execution_path = Some(vec![directory.path().to_owned()]);
+    manager
+        .set_default_agent(Some("codex".into()))
+        .await
+        .unwrap();
+    let document: Value = serde_json::from_slice(
+        &std::fs::read(manager.inner.agents_path.as_ref().unwrap()).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(document["default_agent_id"], "codex");
+    assert_eq!(document["items"], json!([]));
+    let reloaded = AowManager::persistent(directory.path()).unwrap();
+    reloaded.inner.settings.lock().unwrap().execution_path =
+        Some(vec![directory.path().to_owned()]);
+    let agent = reloaded.agents().await.unwrap().remove(0);
+    assert_eq!(agent.source, "detected");
+    assert!(agent.is_default && agent.available);
+    std::fs::remove_file(&executable).unwrap();
+    let unavailable = reloaded.agents().await.unwrap().remove(0);
+    assert_eq!(unavailable.source, "detected");
+    assert!(unavailable.is_default && !unavailable.available);
+    reloaded.set_default_agent(None).await.unwrap();
+    assert!(reloaded.agents().await.unwrap().is_empty());
+    assert!(reloaded.lock().unwrap().agents.is_empty());
+    assert!(
+        AowManager::persistent(directory.path())
+            .unwrap()
+            .lock()
+            .unwrap()
+            .default_agent_id
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn failed_default_persistence_preserves_the_previous_selection_and_profiles() {
+    let directory = tempfile::tempdir().unwrap();
+    let manager = AowManager::persistent(directory.path()).unwrap();
+    manager
+        .register_agent(serde_json::from_value(profile("work")).unwrap())
+        .await
+        .unwrap();
+    manager
+        .set_default_agent(Some("work".into()))
+        .await
+        .unwrap();
+    let registry = manager.inner.agents_path.as_ref().unwrap();
+    let before = std::fs::read(registry).unwrap();
+    std::fs::remove_file(registry).unwrap();
+    std::fs::create_dir(registry).unwrap();
+    assert!(manager.set_default_agent(None).await.is_err());
+    assert_eq!(
+        manager.lock().unwrap().default_agent_id.as_deref(),
+        Some("work")
+    );
+    assert_eq!(manager.lock().unwrap().agents.len(), 1);
+    std::fs::remove_dir(registry).unwrap();
+    std::fs::write(registry, before).unwrap();
+}

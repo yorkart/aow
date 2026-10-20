@@ -60,6 +60,7 @@ impl AgentType {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct AgentRegistration {
+    pub is_default: bool,
     pub id: String,
     /// None only for legacy registrations that still need a type selected.
     pub agent_type: Option<AgentType>,
@@ -236,6 +237,7 @@ mod tests {
     #[test]
     fn legacy_codex_profile_matching_ignores_only_the_effective_isolation_flag() {
         let registration = AgentRegistration {
+            is_default: false,
             id: "work".into(),
             agent_type: Some(AgentType::Codex),
             display_name: "work".into(),
@@ -263,6 +265,7 @@ mod tests {
             assert!(!registration.matches_terminal_arguments(&args), "{args:?}");
         }
         let registration = AgentRegistration {
+            is_default: false,
             args: vec!["--".into(), "prompt".into()],
             ..registration
         };

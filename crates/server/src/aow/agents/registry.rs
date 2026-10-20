@@ -42,6 +42,36 @@ fn executable_file(path: &Path) -> bool {
 }
 
 impl AowManager {
+    pub(crate) async fn select_agent_id(&self, explicit: Option<&str>) -> Result<String, AowError> {
+        if let Some(id) = explicit {
+            return Ok(id.to_owned());
+        }
+        let agents = self.agents().await?;
+        agents
+            .iter()
+            .find(|agent| agent.is_default)
+            .or_else(|| agents.first())
+            .map(|agent| agent.id.clone())
+            .ok_or_else(|| AowError::Invalid("未配置 Agent 实例".into()))
+    }
+
+    pub(in crate::aow) async fn set_default_agent(
+        &self,
+        id: Option<String>,
+    ) -> Result<(), AowError> {
+        let _operation = self.inner.agent_operation.lock().await;
+        if let Some(id) = &id {
+            validation::validate_id(id)?;
+            if !self.agents().await?.iter().any(|agent| &agent.id == id) {
+                return Err(AowError::AgentNotFound(id.clone()));
+            }
+        }
+        let mut state = self.lock()?;
+        self.persist_agents(&state.agents, id.as_deref())?;
+        state.default_agent_id = id;
+        Ok(())
+    }
+
     pub(in crate::aow) async fn agents(&self) -> Result<Vec<AgentRegistration>, AowError> {
         let path = self.execution_path().await?;
         self.agents_in_path(&path)
@@ -51,7 +81,10 @@ impl AowManager {
         &self,
         path: &[PathBuf],
     ) -> Result<Vec<AgentRegistration>, AowError> {
-        let custom = self.lock()?.agents.clone();
+        let (custom, default_agent_id) = {
+            let state = self.lock()?;
+            (state.agents.clone(), state.default_agent_id.clone())
+        };
         let custom_ids = custom
             .iter()
             .map(|agent| agent.id.clone())
@@ -61,6 +94,7 @@ impl AowManager {
             let agent_type = agent.agent_type.or_else(|| AgentType::from_id(&agent.id));
             let executable = resolve_executable(&agent.command, path);
             agents.push(AgentRegistration {
+                is_default: default_agent_id.as_deref() == Some(agent.id.as_str()),
                 id: agent.id,
                 agent_type,
                 display_name: agent.display_name,
@@ -81,15 +115,21 @@ impl AowManager {
                 .commands
                 .iter()
                 .find_map(|command| resolve_executable(command, path).map(|path| (*command, path)));
-            if let Some((command, executable)) = executable {
+            let is_default = default_agent_id.as_deref() == Some(known.id);
+            // Keep a missing default visible and unavailable until it is cleared or restored.
+            if executable.is_some() || is_default {
+                let (command, executable) = executable
+                    .map(|(command, path)| (command, Some(path)))
+                    .unwrap_or((known.commands[0], None));
                 agents.push(AgentRegistration {
+                    is_default,
                     id: known.id.to_owned(),
                     agent_type: Some(agent_type),
                     display_name: known.display_name.to_owned(),
                     source: "detected",
-                    available: true,
+                    available: executable.is_some(),
                     command: command.to_owned(),
-                    executable: Some(executable.to_string_lossy().into_owned()),
+                    executable: executable.map(|path| path.to_string_lossy().into_owned()),
                     args: known.args.iter().map(|value| (*value).to_owned()).collect(),
                     env: BTreeMap::new(),
                 });
@@ -167,7 +207,7 @@ impl AowManager {
                 agents.push(stored);
             }
             group_agents(&mut agents);
-            self.persist_agents(&agents)?;
+            self.persist_agents(&agents, state.default_agent_id.as_deref())?;
             state.agents = agents;
         }
         self.agents()
@@ -185,11 +225,15 @@ impl AowManager {
             .iter()
             .position(|agent| agent.id == id)
             .ok_or_else(|| AowError::AgentNotFound(id.to_owned()))?;
-        let removed = state.agents.remove(index);
-        if let Err(error) = self.persist_agents(&state.agents) {
-            state.agents.insert(index, removed);
-            return Err(error);
-        }
+        let mut agents = state.agents.clone();
+        agents.remove(index);
+        let default_agent_id = state
+            .default_agent_id
+            .clone()
+            .filter(|default| default != id);
+        self.persist_agents(&agents, default_agent_id.as_deref())?;
+        state.agents = agents;
+        state.default_agent_id = default_agent_id;
         Ok(())
     }
 }

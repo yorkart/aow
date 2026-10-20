@@ -123,7 +123,7 @@ async fn execute_inner(
                     AgentTerminalCreate {
                         caller: None,
                         no_parent: false,
-                        agent: background.agent.clone(),
+                        agent: Some(background.agent.clone()),
                         project_id: background.project_id.clone(),
                         parent: None,
                         cwd,

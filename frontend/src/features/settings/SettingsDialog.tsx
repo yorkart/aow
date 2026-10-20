@@ -197,6 +197,15 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
     }
   };
 
+  const selectDefaultAgent = async (id: string) => {
+    setBusy(true); setError('');
+    try {
+      await agentsApi.setDefaultAgent(id || null);
+      await onReload();
+    } catch (reason) { setError(message(reason)); }
+    finally { setBusy(false); }
+  };
+
   const resetAgentForm = () => {
     setEditingAgentId(undefined);
     setAgentId('');
@@ -379,6 +388,12 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
               <div className="project-aow-dialog-body">
                 <div className="project-aow-settings-heading"><div><h2>Agents</h2><p>目前支持 Claude Code、Codex、TraeCode CLI、Hermes 和 Pi。每种类型可注册多个配置。</p></div><button type="button" className="project-aow-dialog-button" title="重新探测本地 Agent" disabled={busy} onClick={() => void onReload().catch((reason) => setError(message(reason)))}><RefreshCw />刷新</button></div>
                 {agentsError && <div className="project-aow-error" role="alert">{agentsError}</div>}
+                <label className="project-aow-dialog-field">默认 Agent 实例
+                  <select aria-label="默认 Agent 实例" disabled={busy} value={agents.find(agent => agent.is_default)?.id ?? ''} onChange={event => void selectDefaultAgent(event.target.value)}>
+                    <option value="">使用列表第一项{agents[0] ? `（${agents[0].display_name}）` : ''}</option>
+                    {agents.map(agent => <option key={agent.id} value={agent.id} disabled={!aowAgentType(agent)}>{agent.display_name}（{agent.id}）</option>)}
+                  </select>
+                </label>
                 <AgentList agents={agents} busy={busy} editingAgentId={editingAgentId} onEdit={loadAgent} onCopy={agent => loadAgent(agent, true)} onRemove={id => void removeAgent(id)} onReorder={reorderAgents} />
                 <h3>{editingAgentId ? '编辑 Agent 配置' : '注册 Agent 配置'}</h3>
                 <label className="project-aow-dialog-field"><span>Agent ID <em>必填</em></span><input aria-label="Agent ID" value={agentId} readOnly={!!editingAgentId} disabled={busy} onChange={event => { setAgentId(event.target.value); setAgentSaved(''); setError(''); }} placeholder="例如：work-codex" pattern={'[A-Za-z0-9_\\-]+'} maxLength={80} autoCapitalize="none" spellCheck={false} required /><small>唯一标识，限字母、数字、- 和 _，创建后不可修改；如需调整，请删除后重新创建。CLI 使用 --agent-id 指定此配置。</small></label>

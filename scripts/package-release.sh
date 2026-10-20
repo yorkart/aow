@@ -190,6 +190,7 @@ JS
     done
     [[ -f "$repo_root/frontend/dist/index.html" ]] || fail 'missing frontend/dist/index.html'
     cp -R -- "$repo_root/frontend/dist" "$bundle/frontend/dist"
+    cp -R -- "$repo_root/skills" "$bundle/skills"
     for entry in scripts/start-server.sh scripts/start-terminald.sh scripts/replace-symlink.mjs scripts/server-state-dir.sh \
         scripts/start-launchd.sh scripts/launchd-service.mjs scripts/activate-terminald.mjs scripts/service-health.mjs \
         scripts/launchd-mode.mjs scripts/start-launchdaemon.mjs scripts/register-launchdaemon.py \
@@ -230,7 +231,7 @@ writeFileSync(join(root, 'manifest.json'), JSON.stringify({
     platform: os === 'linux' ? { os, arch, target, libc: 'musl', linkage: 'static' }
         : { os, arch, target, linkage: 'dynamic', minimum_os_version: minimumOsVersion },
     components: { server: 'bin/aow-server', terminald: 'bin/aow-terminald',
-        runner: 'bin/aow-automation-runner', cli: 'bin/aow-cli', frontend: 'frontend/dist', ripgrep: 'bin/rg' },
+        runner: 'bin/aow-automation-runner', cli: 'bin/aow-cli', skills: 'skills', frontend: 'frontend/dist', ripgrep: 'bin/rg' },
     third_party: { ripgrep: { version: JSON.parse(readFileSync(join(root, 'licenses/ripgrep/manifest.json'), 'utf8')).version,
         sha256: createHash('sha256').update(readFileSync(join(root, 'bin/rg'))).digest('hex') } },
 }, null, 2) + '\n');

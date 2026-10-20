@@ -46,16 +46,21 @@ async fn create_with_workspace(
     workspace: Option<aow_workspaces::PreparedWorkspace>,
 ) -> Result<Json<AgentTerminalInfo>, HttpError> {
     tokio::spawn(async move {
+        let agent_id = state
+            .aow
+            .select_agent_id(request.agent.as_deref())
+            .await
+            .map_err(crate::aow::aow_http_error)?;
         let log = state.operations.begin(Spec {
             id: aow_id::new_id(),
             kind: "agent.create",
             source,
-            title: format!("创建 Agent · {}", request.agent),
+            title: format!("创建 Agent · {agent_id}"),
             project_id: Some(request.project_id.clone()),
             resource: Some(request.cwd.clone()),
             total: None,
         });
-        let result = create_inner(state, request, &log, workspace).await;
+        let result = create_inner(state, request, &agent_id, &log, workspace).await;
         match &result {
             Ok(info) if info.state.phase == AgentTerminalPhase::Ready => {
                 log.finish(
@@ -85,6 +90,7 @@ async fn create_with_workspace(
 async fn create_inner(
     state: AppState,
     request: AgentTerminalCreate,
+    agent_id: &str,
     log: &Handle,
     workspace: Option<aow_workspaces::PreparedWorkspace>,
 ) -> Result<Json<AgentTerminalInfo>, HttpError> {
@@ -113,7 +119,7 @@ async fn create_inner(
         }
         let launch = state
             .aow
-            .resolve_agent_profile(&request.agent)
+            .resolve_agent_profile(agent_id)
             .await
             .map_err(crate::aow::aow_http_error)?;
         (requested.to_string_lossy().into_owned(), launch)
@@ -125,7 +131,7 @@ async fn create_inner(
             .map_err(crate::aow::aow_http_error)?;
         let launch = state
             .aow
-            .resolve_agent_launch(&request.agent, &cwd)
+            .resolve_agent_launch(agent_id, &cwd)
             .await
             .map_err(crate::aow::aow_http_error)?;
         (cwd, launch)
@@ -133,7 +139,7 @@ async fn create_inner(
     let adapter = launch.agent_type.agent().interactive().ok_or_else(|| {
         terminal_http_error(TerminalError::Invalid(format!(
             "interactive startup is not supported for agent {}",
-            request.agent
+            agent_id
         )))
     })?;
     if launch.agent_type == AgentType::Codex {
@@ -164,7 +170,7 @@ async fn create_inner(
                 cwd: Some(cwd.clone()),
                 workspace_root: Some(cwd),
                 shell: None,
-                agent_id: Some(request.agent),
+                agent_id: Some(agent_id.to_owned()),
                 resume_session_id: None,
                 rows: Some(ROWS),
                 cols: Some(COLS),

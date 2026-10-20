@@ -34,8 +34,9 @@ enum AcpCommand {
     /// Create and start an ACP session, optionally submitting a first task.
     #[command(after_help = HELP)]
     Create {
+        /// Saved ACP adapter ID; omitted uses its default, then the first configured adapter.
         #[arg(long)]
-        agent_id: String,
+        agent_id: Option<String>,
         #[arg(long, value_parser = crate::parse_id)]
         project_id: String,
         #[arg(long)]

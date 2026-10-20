@@ -55,7 +55,7 @@ impl AowManager {
                     .unwrap_or(0),
             )
         });
-        self.persist_agents(&agents)?;
+        self.persist_agents(&agents, state.default_agent_id.as_deref())?;
         state.agents = agents;
         Ok(())
     }

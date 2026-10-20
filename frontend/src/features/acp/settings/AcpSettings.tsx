@@ -66,7 +66,10 @@ export function AcpSettings({ active, onBusyChange, onDirtyChange }: { active: b
   const [registry, setRegistry] = useState<AgentInfo[]>();
   const [search, setSearch] = useState('');
   const dirty = !!saved && content !== saved.content;
-  const syntaxErrors = useMemo(() => parseJsonc(content).errors, [content]);
+  const parsed = useMemo(() => parseJsonc(content), [content]);
+  const syntaxErrors = parsed.errors;
+  const configuredIds = Object.keys(object(object(parsed.value).agent_servers)).sort();
+  const defaultAgentId = String(object(parsed.value).default_agent_id ?? '');
   const syntaxError = syntaxErrors[0] ? syntaxErrorMessage(content, syntaxErrors[0]) : '';
   useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
   useEffect(() => { if (active) onBusyChange(busy); }, [active, busy, onBusyChange]);
@@ -118,6 +121,15 @@ export function AcpSettings({ active, onBusyChange, onDirtyChange }: { active: b
   return <form className="project-aow-dialog-form acp-settings" onSubmit={event => { event.preventDefault(); void run(async () => { await save(content); setAgents(await acpApi.agents()); setStatus('已保存，新连接将使用更新后的配置。'); }); }}>
     <div className="project-aow-dialog-body">
       <div className="project-aow-settings-heading"><div><h2>ACP</h2><p>安装 Registry Agent 或配置自定义启动命令。</p></div></div>
+      <label className="project-aow-dialog-field">默认 ACP 实例
+        <select aria-label="默认 ACP 实例" disabled={busy || !saved || !!syntaxError} value={defaultAgentId} onChange={event => {
+          setContent(applyEdits(content, modify(content, ['default_agent_id'], event.target.value || undefined, { formattingOptions: jsoncFormattingOptions })));
+          setStatus('默认实例已修改，请保存。');
+        }}>
+          <option value="">使用列表第一项</option>
+          {configuredIds.map(id => <option key={id} value={id}>{id}</option>)}
+        </select>
+      </label>
       {!!agents.length && <div className="acp-registry" aria-label="已配置的 ACP Agent">{agents.map(agent => <article key={agent.id}><div><strong>{agent.name}</strong><small>{agent.installed ? '可用于新建会话' : '尚未安装，请先完成安装'}</small></div>{installButton(agent, false)}</article>)}</div>}
       <div className="acp-actions"><button type="button" disabled={busy || !saved} onClick={() => { void run(async () => setRegistry(await acpApi.registry(true))); }}>浏览 ACP Registry</button><button type="button" disabled={busy || !saved} onClick={addCustom}>添加自定义 Agent</button></div>
       {registry && <div className="acp-registry" aria-label="ACP Registry"><input aria-label="搜索 ACP Registry" placeholder="搜索 Agent…" value={search} onChange={event => setSearch(event.target.value)} />{registry.filter(agent => `${agent.id} ${agent.name} ${agent.description}`.toLowerCase().includes(search.toLowerCase())).map(agent => <article key={agent.id}><div><strong>{agent.name}</strong><small>{agent.description}</small></div>{installButton(agent, true)}</article>)}</div>}

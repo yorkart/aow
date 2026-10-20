@@ -103,7 +103,8 @@ pub struct AcpCreate {
     pub caller: Option<CreationContext>,
     #[serde(default)]
     pub no_parent: bool,
-    pub agent_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_id: Option<String>,
     pub project_id: String,
     pub cwd: String,
     #[serde(default)]

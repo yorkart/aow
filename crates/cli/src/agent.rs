@@ -50,9 +50,9 @@ enum AgentCommand {
     /// Create a hidden agent pane, wait until ready, optionally submit its first task.
     #[command(after_help = HELP)]
     Create {
-        /// Saved Agent configuration ID from Settings → Agents.
-        #[arg(long, default_value = "codex", allow_hyphen_values = true, value_parser = parse_agent_id)]
-        agent_id: String,
+        /// Saved Agent configuration ID; omitted uses its default, then the first listed Agent.
+        #[arg(long, allow_hyphen_values = true, value_parser = parse_agent_id)]
+        agent_id: Option<String>,
         /// Registered project that owns the worktree.
         #[arg(long, value_parser = crate::parse_id)]
         project_id: String,

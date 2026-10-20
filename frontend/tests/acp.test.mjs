@@ -1395,6 +1395,22 @@ try {
     assert.deepEqual(interactions(state)[0], { action: 'prompt', content: [{ type: 'text', text: 'hello' }] });
     assert.deepEqual(interactions(state)[1], { action: 'answer', request_id: 'permission', response: { outcome: { outcome: 'selected', optionId: 'yes' } } });
   });
+  await test('ACP default selector saves independently and preserves JSONC comments', async t => {
+    const { page, state } = await fixture(t, true, { content: '// keep comment\n{ "agent_servers": { "test": { "type": "registry" }, "other": { "type": "registry" } }, "future": { "keep": true } }\n' });
+    const selector = page.getByRole('combobox', { name: '默认 ACP 实例', exact: true });
+    await selector.selectOption('test');
+    assert.equal(state.saved, '', 'selection remains a draft until save');
+    await page.getByRole('button', { name: '保存', exact: true }).click();
+    await page.getByText('已保存，新连接将使用更新后的配置。', { exact: true }).waitFor();
+    assert.equal(parse(state.saved).default_agent_id, 'test');
+    assert.ok(state.saved.includes('// keep comment'));
+    assert.deepEqual(parse(state.saved).future, { keep: true });
+    await selector.selectOption('');
+    await page.getByRole('button', { name: '保存', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('[aria-label="Unsaved settings"]')?.textContent === 'false');
+    assert.equal(parse(state.saved).default_agent_id, undefined);
+    assert.equal(state.connections, 0);
+  });
   await test('Registry additions retain comments and unknown JSONC fields', async t => {
     const { page, state } = await fixture(t, true);
     await page.getByRole('button', { name: '浏览 ACP Registry', exact: true }).click();

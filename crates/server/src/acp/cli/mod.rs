@@ -50,7 +50,8 @@ async fn create(
     tokio::spawn(async move {
         let cwd = state.aow.agent_worktree_path(&request.project_id, &request.cwd).await.map_err(crate::aow::aow_http_error)?;
         let parent = instances::creation_parent(&state, request.parent, request.caller.as_ref(), request.no_parent)?;
-        let session = state.acp.prepare_session_with_options(&request.agent_id, cwd.into(), aow_acp::SessionCreation { source: aow_acp::SessionSource::Cli, parent }).await.map_err(super::api::error)?;
+        let agent_id = state.acp.select_agent_id(request.agent_id.as_deref()).await.map_err(super::api::error)?;
+        let session = state.acp.prepare_session_with_options(&agent_id, cwd.into(), aow_acp::SessionCreation { source: aow_acp::SessionSource::Cli, parent }).await.map_err(super::api::error)?;
         let id = session.thread_id;
         let info = state.acp.session_info(&id).map_err(super::api::error)?;
         if let Err(error) = state.instances.record_all(vec![instances::acp(&info)]) {

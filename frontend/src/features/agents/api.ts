@@ -7,6 +7,9 @@ export const agentsApi = {
     method: 'PATCH',
     body: JSON.stringify({ agent_type: agentType, ids }),
   }),
+  setDefaultAgent: (id: string | null) => aowRequest<void>('/api/aow/agents/settings/default', {
+    method: 'PUT', body: JSON.stringify({ agent_id: id }),
+  }),
   registerAgent: (agent: { id: string; agentType: NonNullable<AowAgent['agent_type']>; displayName: string; command: string; args: string[]; env: Record<string, string> }, existingId?: string) => aowRequest<AowAgent>(existingId ? `/api/aow/agents/${encodeURIComponent(existingId)}` : '/api/aow/agents', {
     method: existingId ? 'PUT' : 'POST',
     body: JSON.stringify({
