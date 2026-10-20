@@ -14,17 +14,26 @@ try {
   await server.listen();
   const base = `http://127.0.0.1:${server.httpServer.address().port}`;
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
-  async function fixture(t, width = 1280) {
+  async function fixture(t, width = 1280, withProjects = false, slowRestore = false) {
     const context = await browser.newContext({ viewport: { width, height: 800 } });
     const initial = { config_repo: '/repo', config_id: first };
-    const state = { selection: initial, active: initial, saves: [], errors: [], failSave: false };
-    t.after(async () => { await context.close(); assert.deepEqual(state.errors, []); });
+    const state = { selection: initial, active: initial, saves: [], errors: [], failSave: false, projectsAvailable: withProjects, releaseRestore: undefined };
+    const restoreGate = slowRestore ? new Promise(resolve => { state.releaseRestore = resolve; }) : Promise.resolve();
+    t.after(async () => { state.releaseRestore?.(); await context.close(); assert.deepEqual(state.errors, []); });
     await context.route('**/api/**', async route => {
       const request = route.request();
       const url = new URL(request.url());
       let data = [];
       if (url.pathname === '/api/auth/status') data = { configured: true, authenticated: true };
       else if (url.pathname === '/api/aow/settings') data = { notes_base: '/notes', execution_path: ['/usr/bin'], editor: { word_wrap: false }, node_addresses: [] };
+      else if (url.pathname === '/api/aow/projects' && state.projectsAvailable) data = ['one', 'two'].map(id => ({
+        id, name: id, registered_path: `/repo/${id}`, common_git_dir: `/repo/${id}/.git`, notes_path: '/notes',
+        worktrees: [{ id: `wt-${id}`, project_id: id, path: `/repo/${id}`, branch: 'main', head: 'abc', is_main: true, detached: false, locked: false, prunable: false, color: 'default' }],
+      }));
+      else if (url.pathname === '/api/fs/text/repo/one/restored.txt') {
+        await restoreGate;
+        data = { path: '/repo/one/restored.txt', content: 'Restored content', version: '1', language: 'plaintext', mime: 'text/plain' };
+      }
       else if (url.pathname === endpoint) {
         let changed = false;
         if (request.method() === 'PUT') {
@@ -45,16 +54,74 @@ try {
     });
     const page = await context.newPage();
     page.on('pageerror', error => state.errors.push(error.message));
+    if (withProjects) await page.addInitScript(() => localStorage.setItem('aow-active', '/repo/one'));
+    if (slowRestore) await page.addInitScript(() => localStorage.setItem('aow-workspace-tabs:/repo/one', JSON.stringify({
+      documents: [{ id: '/repo/one/restored.txt', path: '/repo/one/restored.txt', name: 'restored.txt', kind: 'text', explorerSource: 'project' }],
+      active: 'document:/repo/one/restored.txt',
+    })));
     await page.goto(`${base}/aow/?ui=desktop`);
     const open = async () => {
       await page.getByRole('button', { name: 'Settings', exact: true }).click();
-      const dialog = page.getByRole('dialog', { name: '设置', exact: true });
+      const dialog = page.getByRole('region', { name: '设置', exact: true });
       await dialog.getByRole('button', { name: /^Configuration/ }).click();
       await dialog.getByRole('radio').first().waitFor();
       return dialog;
     };
     return { page, state, open, dialog: await open() };
   }
+
+  await test('Settings is a singleton project tab and retains drafts when moved', async t => {
+    const { page, dialog } = await fixture(t, 1280, true);
+    const settings = page.getByRole('button', { name: 'Settings', exact: true });
+    const draft = dialog.getByRole('textbox', { name: '配置仓库目录' });
+    await draft.fill('/unsaved');
+    const firstSurface = page.locator('.project-aow-surface').filter({ has: dialog });
+    await settings.click();
+    assert.equal(await page.locator('.project-aow-settings-slot .project-aow-settings').count(), 1);
+    assert.equal(await draft.inputValue(), '/unsaved');
+    await firstSurface.evaluate(element => { element.dataset.originalSettingsOwner = 'true'; });
+    await page.locator('button[title="/repo/two"]').first().click();
+    assert.equal(await dialog.isVisible(), false);
+    await settings.click();
+    await dialog.waitFor();
+    assert.equal(await draft.inputValue(), '/unsaved');
+    assert.equal(await page.locator('.project-aow-settings-slot .project-aow-settings').count(), 1);
+    assert.equal(await page.locator('[data-original-settings-owner] .project-aow-settings').count(), 0);
+    assert.equal(await page.getByRole('dialog').count(), 0);
+    page.once('dialog', prompt => prompt.dismiss());
+    await page.getByRole('button', { name: '关闭 Settings', exact: true }).click();
+    assert.equal(await dialog.isVisible(), true);
+    page.once('dialog', prompt => prompt.accept());
+    await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+    await dialog.waitFor({ state: 'hidden' });
+  });
+
+  await test('finishing workspace restoration does not replace Settings selected during loading', async t => {
+    const { page, state, dialog } = await fixture(t, 1280, true, true);
+    assert.equal(await dialog.isVisible(), true);
+    state.releaseRestore();
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('aow-workspace-tabs:/repo/one') || '{}').active === 'settings');
+    assert.equal(await dialog.isVisible(), true);
+    assert.equal(await page.getByRole('tab', { name: 'Settings' }).getAttribute('aria-selected'), 'true');
+  });
+
+  await test('standalone Settings becomes a project tab without covering later project selections', async t => {
+    const { page, state, dialog } = await fixture(t, 1280, false, true);
+    const draft = dialog.getByRole('textbox', { name: '配置仓库目录' });
+    await draft.fill('/unsaved');
+    state.projectsAvailable = true;
+    await page.getByRole('button', { name: '刷新全部', exact: true }).click();
+    await page.locator('.project-aow-settings-slot .project-aow-settings').waitFor();
+    state.releaseRestore();
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('aow-workspace-tabs:/repo/one') || '{}').active === 'settings');
+    assert.equal(await page.locator('.project-aow-settings-standalone').count(), 0);
+    assert.equal(await draft.inputValue(), '/unsaved');
+    await page.locator('button[title="/repo/two"]').first().click();
+    await dialog.waitFor({ state: 'hidden' });
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await dialog.waitFor();
+    assert.equal(await draft.inputValue(), '/unsaved');
+  });
 
   await test('selection is single-choice, no-op saves skip restart messaging, changed saves persist and retain active version', async t => {
     const { state, dialog, open } = await fixture(t);

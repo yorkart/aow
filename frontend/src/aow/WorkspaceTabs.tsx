@@ -14,7 +14,7 @@ import { AcpSpinnerLabel } from '../features/acp/workspace';
 
 export interface WorkspaceTab {
   id: string;
-  kind: 'terminal' | 'agent' | 'file' | 'diff' | 'session' | 'acp' | 'automation' | 'pullRequest' | 'browser';
+  kind: 'settings' | 'terminal' | 'agent' | 'file' | 'diff' | 'session' | 'acp' | 'automation' | 'pullRequest' | 'browser';
   label: string;
   targetId: string;
   title?: string;
@@ -29,6 +29,7 @@ export interface WorkspaceTab {
 export interface TabRevealRequest { tabId: string }
 type WorkspaceTabGroup = Exclude<WorkspaceTab['kind'], 'agent'>;
 const groupDefinitions: { id: WorkspaceTabGroup; label: string; color: string }[] = [
+  { id: 'settings', label: 'Settings', color: '#8fa8bd' },
   { id: 'browser', label: '系统文件浏览器', color: '#8fa8bd' },
   { id: 'terminal', label: 'Terminal', color: '#6ca8f1' },
   { id: 'acp', label: 'ACP', color: '#91b8c8' },

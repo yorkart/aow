@@ -1,3 +1,4 @@
+import type { MutableRefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Bell, Bot, ChevronRight, FileText, GitPullRequest, MessageSquare, Network, NotebookPen, RefreshCw, Settings, SquareTerminal, X } from 'lucide-react';
 import { aowApi } from '../../aow/aowApi';
@@ -37,7 +38,8 @@ const sections = [
 ] as const;
 type Section = typeof sections[number]['id'];
 
-export function SettingsDialog({ agents, agentsError, mobile = false, onClose: closeDialog, onReload, onNodesChange }: {
+export function SettingsDialog({ agents, agentsError, mobile = false, embedded = false, closeRequest, onClose: closeDialog, onReload, onNodesChange }: {
+  embedded?: boolean; closeRequest?: MutableRefObject<() => void>;
   agents: AowAgent[]; agentsError?: string; mobile?: boolean; onClose: () => void;
   onReload: () => Promise<void>; onNodesChange: (addresses: string[]) => void;
 }) {
@@ -81,6 +83,9 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
     if (busy || settingsBusy) return;
     if (!dirty || window.confirm('设置有未保存的修改，是否放弃并关闭？')) closeDialog();
   };
+  useEffect(() => {
+    if (closeRequest) closeRequest.current = onClose;
+  });
   const selectSection = (next: Section) => {
     // These panels own their drafts and are unmounted when switching categories.
     if (mobile && section !== next && notificationDirty && !window.confirm('当前设置有未保存的修改，是否放弃并切换？')) return;
@@ -307,9 +312,10 @@ export function SettingsDialog({ agents, agentsError, mobile = false, onClose: c
     }
   };
 
-  return <div className={mobile ? 'mobile-settings-backdrop' : 'project-aow-modal-backdrop'} onPointerDown={onClose}>
-    <section ref={dialog} tabIndex={-1} className={`project-aow-modal project-aow-dialog project-aow-settings${mobile ? ' mobile-settings' : ''}`} role="dialog" aria-modal="true" aria-labelledby="aow-settings-title" onPointerDown={(event) => event.stopPropagation()}
+  return <div className={embedded ? 'project-aow-settings-page' : mobile ? 'mobile-settings-backdrop' : 'project-aow-modal-backdrop'} onPointerDown={embedded ? undefined : onClose}>
+    <section ref={dialog} tabIndex={-1} className={`project-aow-modal project-aow-dialog project-aow-settings${mobile ? ' mobile-settings' : ''}`} role={embedded ? 'region' : 'dialog'} aria-modal={embedded ? undefined : true} aria-labelledby="aow-settings-title" onPointerDown={(event) => event.stopPropagation()}
       onKeyDown={event => {
+        if (embedded) return;
         if (event.key === 'Escape') { event.stopPropagation(); if (mobile && !overview && !busy && !settingsBusy) setOverview(true); else onClose(); }
         if (event.key === 'Tab') {
           const controls = [...event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], summary, [tabindex="0"]')].filter(element => element.getClientRects().length > 0);

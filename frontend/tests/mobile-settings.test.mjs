@@ -114,7 +114,7 @@ async function fixture(t, width = 390, mobile = true, virtualViewport = false, a
     assert.ok(logout.x >= settings.x + settings.width, 'Logout sits immediately to the right of Settings');
   }
   await trigger.click();
-  const dialog = page.getByRole('dialog');
+  const dialog = page.getByRole(mobile ? 'dialog' : 'region', { name: mobile ? undefined : '设置', exact: true });
   await dialog.getByRole('navigation', { name: '设置分类' }).waitFor();
   const choose = async name => {
     if (mobile && await dialog.getByRole('button', { name: '返回设置分类' }).isVisible()) await dialog.getByRole('button', { name: '返回设置分类' }).click();

@@ -652,6 +652,11 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .project-aow-dialog .project-aow-error { margin:0; padding:8px 10px; border:1px solid #6f332d; border-radius:4px; overflow-wrap:anywhere; }
 .project-aow-dialog p[role="status"] { margin:0; color:var(--aow-success); font-size:11px; }
 .project-aow-settings { width:min(860px,100%); height:min(680px,calc(100dvh - 60px)); }
+/* The stable portal container moves with the singleton Settings tab. */
+.project-aow-settings-standalone { position:absolute; inset:0; z-index:1; min-height:0; }
+.project-aow-settings-slot { position:absolute; inset:0; }
+.project-aow-settings-standalone > div, .project-aow-settings-slot > div, .project-aow-settings-page { width:100%; height:100%; min-height:0; }
+.project-aow-settings-page .project-aow-settings { width:100%; height:100%; max-width:none; max-height:none; border:0; border-radius:0; box-shadow:none; }
 .project-aow-settings-body { min-width:0; min-height:0; flex:1; display:grid; grid-template-columns:160px minmax(0,1fr); overflow:hidden; }
 .project-aow-settings-nav { min-width:0; min-height:0; padding:8px 6px; overflow:auto; background:var(--aow-panel); border-right:1px solid var(--aow-line); }
 .project-aow-settings-nav button { width:100%; min-height:42px; display:flex; align-items:center; gap:8px; padding:6px 8px; color:var(--aow-text); border-radius:0; text-align:left; }
