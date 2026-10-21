@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Data } from '../../types';
 import { Notice } from './activity';
+import { sessionMetaFormats } from './session_meta_formats';
 
 const duration = 10_000;
 type Hint = { token: string; expiresAt: number };
@@ -25,13 +26,15 @@ function currentHint(sessionId: string, name: string, token: string) {
 export function SessionMeta({ sessionId, metadata, revisions }: { sessionId: string; metadata?: Data; revisions?: Record<string, number> }) {
   if (!metadata) return null;
   return <section className="acp-session-meta" aria-label="会话元数据">
-    {Object.entries(metadata).map(([name, value]) => <MetadataHint key={name} sessionId={sessionId} name={name} value={value} revision={revisions?.[name] ?? 0} />)}
+    {sessionMetaFormats.map(({ key, format }) => {
+      const message = format(metadata[key]);
+      return message ? <MetadataHint key={key} sessionId={sessionId} name={key} message={message} revision={revisions?.[key] ?? 0} /> : null;
+    })}
   </section>;
 }
 
-function MetadataHint({ sessionId, name, value, revision }: { sessionId: string; name: string; value: unknown; revision: number }) {
-  const serialized = JSON.stringify(value);
-  const hint = currentHint(sessionId, name, `${revision}:${serialized}`);
+function MetadataHint({ sessionId, name, message, revision }: { sessionId: string; name: string; message: string; revision: number }) {
+  const hint = currentHint(sessionId, name, `${revision}:${message}`);
   const [, refresh] = useState(0);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -47,8 +50,6 @@ function MetadataHint({ sessionId, name, value, revision }: { sessionId: string;
   return <div tabIndex={0}
     onMouseEnter={() => setHovered(true)} onMouseLeave={() => { hint.expiresAt = Date.now() + duration; setHovered(false); }}
     onFocus={() => setFocused(true)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) { hint.expiresAt = Date.now() + duration; setFocused(false); } }}>
-    <Notice notice={{ id: name, kind: 'notice', content: { title: `${name} meta:`, severity: 'info' } }}>
-      <span>{`${name} meta:`}</span> <code>{serialized}</code>
-    </Notice>
+    <Notice notice={{ id: name, kind: 'notice', content: { title: message, severity: 'info' } }} />
   </div>;
 }
