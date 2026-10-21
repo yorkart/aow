@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Copy, LoaderCircle, Share2, X } from 'lucide-react';
 import { sessionShareApi, type SessionShare } from './sessionShareApi';
+import { ConversationAction } from '../../components/conversation/ConversationAction';
 import type { AowAgentSession } from './types';
 import './session-share.css';
 
@@ -10,7 +11,7 @@ interface Props { session: AowAgentSession; workspacePath: string }
 export function SessionShareButton(props: Props) {
   const [open, setOpen] = useState(false);
   return <>
-    <button type="button" className="session-share-button" title="分享会话" aria-label="分享会话" onClick={() => setOpen(true)}><Share2 size={16} /><span>分享</span></button>
+    <ConversationAction className="session-share-button" label="分享" onClick={() => setOpen(true)}><Share2 size={16} /></ConversationAction>
     {open && <ShareDialog key={`${props.session.id}:${props.workspacePath}`} {...props} close={() => setOpen(false)} />}
   </>;
 }

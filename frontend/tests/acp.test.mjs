@@ -324,9 +324,24 @@ try {
     state.session.entries = [{ id: 'history-user', kind: 'user', content: { type: 'text', text: 'Shared question' } }, { id: 'history-answer', kind: 'assistant', content: { type: 'text', text: 'Shared answer' } }];
     await newSession(page);
     await page.getByLabel('ACP 消息', { exact: true }).fill('Source draft');
+    assert.equal(await page.getByRole('button', { name: '会话更多操作', exact: true }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: '最新一轮', exact: true }).count(), 0);
+    const ids = page.getByRole('button', { name: '会话 ID 信息', exact: true });
+    await ids.hover();
+    assert.equal(await page.getByRole('dialog', { name: '会话 ID 信息', exact: true }).count(), 0);
+    assert.equal(await page.getByRole('tooltip').count(), 0);
+    await ids.click();
+    await page.getByRole('dialog', { name: '会话 ID 信息', exact: true }).waitFor();
+    await page.keyboard.press('Escape');
+    for (const label of ['显示 Thinking', '分叉会话', 'ACP 协议日志']) {
+      const button = page.getByRole('button', { name: label, exact: true });
+      assert.equal(await button.innerText(), '');
+      assert.equal(await button.getAttribute('title'), null);
+      await button.hover();
+      await page.getByRole('tooltip').filter({ hasText: label }).waitFor();
+    }
     const before = JSON.parse(JSON.stringify(state.sessions[0]));
-    await page.getByRole('button', { name: '会话更多操作', exact: true }).click();
-    await page.getByRole('menuitem', { name: '分叉会话', exact: true }).click();
+    await page.getByRole('button', { name: '分叉会话', exact: true }).click();
     await page.getByRole('tab').filter({ hasText: 'Conversation · 分叉' }).waitFor();
     await page.getByText('Shared answer', { exact: true }).filter({ visible: true }).waitFor();
     assert.deepEqual(state.forks, ['local']);
@@ -339,14 +354,12 @@ try {
     const { page, state } = await fixture(t, false, { capabilities: { sessionCapabilities: { fork: {} } }, forkError: 'Fork rejected' });
     await newSession(page);
     await page.getByLabel('ACP 消息', { exact: true }).fill('Keep draft');
-    await page.getByRole('button', { name: '会话更多操作', exact: true }).click();
-    await page.getByRole('menuitem', { name: '分叉会话', exact: true }).click();
+    await page.getByRole('button', { name: '分叉会话', exact: true }).click();
     await page.getByRole('alert').filter({ hasText: 'Fork rejected' }).waitFor();
     assert.equal(state.sessions.length, 1);
     assert.equal(await page.getByLabel('ACP 消息', { exact: true }).innerText(), 'Keep draft');
     state.forkError = '';
-    await page.getByRole('button', { name: '会话更多操作', exact: true }).click();
-    await page.getByRole('menuitem', { name: '分叉会话', exact: true }).click();
+    await page.getByRole('button', { name: '分叉会话', exact: true }).click();
     await page.getByRole('tab').filter({ hasText: 'Conversation · 分叉' }).waitFor();
     assert.deepEqual(state.forks, ['local', 'local']);
   });
@@ -354,20 +367,17 @@ try {
     const { page, state } = await fixture(t);
     await newSession(page);
     await page.getByLabel('ACP 消息', { exact: true }).waitFor();
-    await page.getByRole('button', { name: '会话更多操作', exact: true }).click();
-    assert.equal(await page.getByRole('menuitem', { name: '分叉会话', exact: true }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: '分叉会话', exact: true }).count(), 0);
     state.capabilities = { sessionCapabilities: { fork: {} } };
     const { page: observer } = await fixture(t, false, { sharedState: state });
     await observer.getByRole('button', { name: '打开 ACP 会话 Conversation', exact: true }).click();
     await observer.getByRole('button', { name: '接管', exact: true }).waitFor();
-    await observer.getByRole('button', { name: '会话更多操作', exact: true }).click();
-    assert.equal(await observer.getByRole('menuitem', { name: '分叉会话', exact: true }).isDisabled(), true);
+    assert.equal(await observer.getByRole('button', { name: '分叉会话', exact: true }).isDisabled(), true);
     assert.deepEqual(state.forks || [], []);
   });
   const toggleThinking = async (page, checked = false) => {
-    await page.getByRole('button', { name: '会话更多操作', exact: true }).click();
-    const option = page.getByRole('menuitemcheckbox', { name: '显示 Thinking', exact: true });
-    assert.equal(await option.getAttribute('aria-checked'), String(checked));
+    const option = page.getByRole('button', { name: '显示 Thinking', exact: true });
+    assert.equal(await option.getAttribute('aria-pressed'), String(checked));
     await option.click();
   };
   const importHistory = async page => { await page.getByRole('button', { name: '导入 ACP 会话', exact: true }).click(); const dialog = page.getByRole('dialog', { name: '导入外部 Agent 会话' }); await dialog.getByRole('button', { name: '导入 1 个会话', exact: true }).click(); await dialog.waitFor({ state: 'detached' }); };
@@ -1166,8 +1176,7 @@ try {
     const connectionForm = content.getByRole('form', { name: 'Agent 信息请求', includeHidden: true });
     await connectionForm.getByLabel('Name', { exact: true }).fill('Retain connection input');
     const headerBeforeLogs = await content.locator('.project-aow-snapshot-header').boundingBox();
-    await content.getByRole('button', { name: '会话更多操作', exact: true }).click();
-    await page.getByRole('menuitem', { name: 'ACP 协议日志', exact: true }).click();
+    await page.getByRole('button', { name: 'ACP 协议日志', exact: true }).click();
     await content.locator('.acp-logs').waitFor();
     assert.deepEqual(await content.locator('.project-aow-snapshot-header').boundingBox(), headerBeforeLogs);
     assert.equal(await connectionForm.count(), 1, 'connection requests mount only once');
@@ -1739,8 +1748,7 @@ try {
       record(4, 'incoming', { id: 0, result: { sessionId: 'remote' } }),
     ];
     await page.evaluate(() => { navigator.clipboard.writeText = async value => { window.copiedLog = value; }; });
-    await page.getByRole('button', { name: '会话更多操作', exact: true }).click();
-    await page.getByRole('menuitem', { name: 'ACP 协议日志', exact: true }).click();
+    await page.getByRole('button', { name: 'ACP 协议日志', exact: true }).click();
     const logs = page.getByRole('region', { name: 'ACP 协议日志', exact: true });
     const rows = logs.locator('.acp-log-row');
     await rows.nth(4).waitFor();

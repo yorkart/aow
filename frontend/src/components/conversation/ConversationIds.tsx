@@ -83,8 +83,7 @@ export function ConversationIds({ identifiers }: { identifiers: Identifier[] }) 
 
   return <>
     <button ref={button} type="button" className="conversation-ids-trigger" aria-label="会话 ID 信息" aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? id : undefined}
-      onPointerEnter={event => { if (event.pointerType !== 'touch') show(); }} onPointerLeave={scheduleClose}
-      onFocus={event => { if (event.currentTarget.matches(':focus-visible')) show(); }}
+      onPointerLeave={scheduleClose}
       onBlur={event => { if (!contains(event.relatedTarget)) scheduleClose(); }}
       onClick={show} onKeyDown={event => {
         if (event.key === 'Tab' && !event.shiftKey && open) {

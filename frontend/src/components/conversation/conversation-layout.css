@@ -8,6 +8,7 @@
 .project-aow-snapshot-header .warning { color:var(--aow-warning); }
 .project-aow-snapshot-header > button { height:30px; flex-shrink:0; display:flex; align-items:center; justify-content:center; gap:6px; padding:0 8px; color:var(--aow-icon-foreground, var(--aow-icon)); border:1px solid var(--aow-line-subtle); border-radius:6px; background:transparent; font-size:11px; cursor:pointer; }
 .project-aow-snapshot-header > button:hover:not(:disabled) { color:var(--aow-icon-hover); background:var(--aow-subtle-hover); }
+.project-aow-snapshot-header > button[aria-pressed="true"] { color:var(--aow-accent); background:var(--aow-selection); }
 .project-aow-snapshot-header > button:disabled { opacity:.55; }
 .project-aow-snapshot-header > button svg { width:14px; height:14px; }
 .aow-conversation-layout button:focus-visible { outline:2px solid var(--aow-accent); outline-offset:2px; }
@@ -68,7 +69,7 @@
   .project-aow-snapshot-message.user { max-width:96%; }
 }
 @container (max-width:480px) {
-  .project-aow-snapshot-latest span,.project-aow-snapshot-header > .status,.project-aow-snapshot-header .warning { display:none; }
+  .project-aow-snapshot-header > .status,.project-aow-snapshot-header .warning { display:none; }
   .project-aow-snapshot-header > .agent-icon { width:26px; height:26px; flex-basis:26px; }
   .project-aow-snapshot-heading h2 { font-size:12px; }
   .project-aow-snapshot-message time { font-size:9px; }

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { AlertCircle, History, LoaderCircle, RefreshCw } from 'lucide-react';
 import { ConversationLayout, conversationStatusNames } from '../../components/conversation/ConversationLayout';
 import { ConversationIds } from '../../components/conversation/ConversationIds';
+import { ConversationAction } from '../../components/conversation/ConversationAction';
 import { SessionMessageContent } from './SessionMessageContent';
 import { WorkspaceMarkdownProvider } from '../files/WorkspaceMarkdown';
 import { TokenUsageBadge } from '../../components/TokenUsageBadge';
@@ -43,7 +44,7 @@ export function SessionSnapshotView({ session, snapshot, loading, error, onRefre
         {snapshot.truncated && <span className="warning">最近 200 轮</span>}
         <time className="project-aow-snapshot-captured" dateTime={snapshot.captured_at}>更新于 {time(snapshot.captured_at)}</time>
       </>,
-      actions: <>{actions}{!publicView && <ConversationIds identifiers={[{ label: 'Session ID', value: session.session_id ?? snapshot?.session_id }]} />}<button title="刷新会话快照" aria-label="刷新会话快照" disabled={loading} onClick={onRefresh}><RefreshCw className={loading ? 'spinning' : ''} /></button></>,
+      actions: <>{actions}{!publicView && <ConversationIds identifiers={[{ label: 'Session ID', value: session.session_id ?? snapshot?.session_id }]} />}<ConversationAction label="刷新会话快照" disabled={loading} onClick={onRefresh}><RefreshCw className={loading ? 'spinning' : ''} /></ConversationAction></>,
     }}
     state={<>
       {loading && !snapshot && <div className="project-aow-snapshot-state"><LoaderCircle className="spinning" />正在读取会话快照…</div>}

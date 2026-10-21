@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { ArrowDown, ArrowDownToLine, UserRound } from 'lucide-react';
+import { ArrowDown, UserRound } from 'lucide-react';
 import '../conversation-theme.css';
 import './conversation-layout.css';
 
@@ -25,10 +25,9 @@ interface HeaderProps {
   workspace?: string;
   metadata?: ReactNode;
   actions?: ReactNode;
-  onLatest?: () => void;
 }
 
-export function ConversationHeader({ title, agentIcon, workspace, metadata, actions, onLatest }: HeaderProps) {
+export function ConversationHeader({ title, agentIcon, workspace, metadata, actions }: HeaderProps) {
   return <header className="project-aow-snapshot-header">
     {agentIcon}
     <div className="project-aow-snapshot-heading">
@@ -36,7 +35,6 @@ export function ConversationHeader({ title, agentIcon, workspace, metadata, acti
       {workspace && <span className="project-aow-snapshot-workspace" title={workspace}>{workspace.split(/[/\\]/).filter(Boolean).at(-1) || workspace}</span>}
     </div>
     {metadata}
-    {onLatest && <button className="project-aow-snapshot-latest" type="button" onClick={onLatest}><ArrowDownToLine /><span>最新一轮</span></button>}
     {actions}
   </header>;
 }
@@ -173,7 +171,7 @@ export function ConversationLayout({ sessionId, turns, header, agentClassName, c
   };
 
   return <section className={`aow-conversation-layout aow-conversation-theme ${className}`} aria-label={label}>
-    <ConversationHeader {...header} onLatest={!alternateContent && turnCount > 1 ? () => navigateToTurn(turnCount - 1) : undefined} />
+    <ConversationHeader {...header} />
     {banner}
     {alternateContent}
     <div className={`project-aow-snapshot-body${turnCount ? '' : ' without-navigation'}`} hidden={!!alternateContent}>

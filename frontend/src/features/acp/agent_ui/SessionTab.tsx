@@ -1,7 +1,8 @@
 import '../../../components/conversation-theme.css';
 // Conversation content is owned by a workspace tab; closing its view never closes the ACP session.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Check, CircleAlert, GitFork, LogIn, MoreHorizontal, ScrollText, WifiOff } from 'lucide-react';
+import { Brain, CircleAlert, GitFork, LogIn, MessagesSquare, ScrollText, WifiOff } from 'lucide-react';
+import { ConversationAction } from '../../../components/conversation/ConversationAction';
 import { ConversationLayout } from '../../../components/conversation/ConversationLayout';
 import { ConversationIds } from '../../../components/conversation/ConversationIds';
 import { ComposerStatus } from '../../../components/conversation/ComposerStatus';
@@ -9,7 +10,6 @@ import { AgentIcon } from '../../agents/AgentIcon';
 import { useAcpControl } from '../../acp-control/sessionControl';
 import { ControlStatus } from '../../acp-control/ControlStatus';
 import { Authentication } from './authentication';
-import { Popover } from './popover';
 import { ThinkingVisibility } from './thinking_visibility';
 import { authenticationRequired } from '../request';
 import { acpApi, authenticationCompleted, sessionsChanged } from '../api';
@@ -178,22 +178,19 @@ export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenSes
     { label: 'Thread ID', value: thread_id },
     { label: 'Session ID', value: session?.session_id },
     { label: 'Connection ID', value: connectionId },
-  ]} />{thread_id && <Popover label="会话更多操作" trigger={<MoreHorizontal size={18} />}>
-    {close => <>
-      <button type="button" role="menuitemcheckbox" aria-checked={showThinking} onClick={() => { setShowThinking(value => !value); close(); }}><Check size={14} style={{ visibility: showThinking ? 'visible' : 'hidden' }} />显示 Thinking</button>
-      {!!object(connection?.capabilities?.sessionCapabilities).fork && <button type="button" role="menuitem" disabled={!token || busy || restoring || recovering || needsResume || session?.status !== 'idle'} onClick={() => {
+  ]} />{thread_id && <>
+      <ConversationAction label="显示 Thinking" aria-pressed={showThinking} onClick={() => setShowThinking(value => !value)}><Brain size={16} /></ConversationAction>
+      {!!object(connection?.capabilities?.sessionCapabilities).fork && <ConversationAction label="分叉会话" disabled={!token || busy || restoring || recovering || needsResume || session?.status !== 'idle'} onClick={() => {
         if (!token) return;
-        close();
         void run(async () => {
           const fork = await acpApi.fork(thread_id, token);
           acceptSession(fork);
           window.dispatchEvent(new Event(sessionsChanged));
           onOpenSession(fork);
         });
-      }}><GitFork size={14} />分叉会话</button>}
-      <button type="button" role="menuitem" disabled={busy} onClick={() => { close(); if (logs) setLogs(undefined); else void run(async () => setLogs(await acpApi.logs(thread_id))); }}><ScrollText size={14} />{logs ? '返回会话' : 'ACP 协议日志'}</button>
-    </>}
-  </Popover>}</>;
+      }}><GitFork size={16} /></ConversationAction>}
+      <ConversationAction label={logs ? '返回会话' : 'ACP 协议日志'} disabled={busy} onClick={() => { if (logs) setLogs(undefined); else void run(async () => setLogs(await acpApi.logs(thread_id))); }}>{logs ? <MessagesSquare size={16} /> : <ScrollText size={16} />}</ConversationAction>
+  </>}</>;
   const connectionRequests = !authRequired && (!thread_id || token) && requests.length > 0 ? <div className="acp-content">{requests.map(request => <PermissionRequest key={request.id} permission={request} busy={answerBusy} onAnswer={response => { if (!connectionId) return; setAnswerBusy(true); void acpApi.answerConnection(connectionId, request.id, response).catch(recordFailure).finally(() => setAnswerBusy(false)); }} />)}</div> : undefined;
   // Show one blocking reason at the composer. Ownership takes precedence over
   // agent authentication and recovery, which only the controlling page can act on.

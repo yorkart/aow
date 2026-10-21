@@ -259,7 +259,8 @@ try {
     await page.locator('.project-aow-snapshot-turn').nth(2).waitFor();
     assert.deepEqual(await expanded(page), ['true', 'false', 'true']);
     assert.equal(await page.locator('.session-turn-pending').innerText(), 'Agent 正在处理，尚未生成最终结论。');
-    await page.getByRole('button', { name: '最新一轮', exact: true }).click();
+    assert.equal(await page.getByRole('button', { name: '最新一轮', exact: true }).count(), 0);
+    await page.locator('.project-aow-snapshot-navigation li:last-child button').click();
     await page.waitForFunction(() => document.querySelector('.project-aow-snapshot-navigation li:last-child button')?.getAttribute('aria-current') === 'location');
     const finished = structuredClone(next);
     finished.status = 'completed';
