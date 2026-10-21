@@ -294,8 +294,8 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .project-aow-worktrees > button.compact > .project-aow-worktree-dot { flex:0 0 15px; width:15px; align-items:center; justify-content:center; }
 .project-aow-worktree-dot::before { content:""; width:4px; height:4px; border-radius:50%; background:var(--aow-hover); }
 .project-aow-worktrees > button.compact > .project-aow-worktree-branch { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:400; }
-.project-aow-worktrees > button > .project-aow-worktree-unread,.project-aow-pinned > button > .project-aow-worktree-unread { flex:0 0 auto; min-width:17px; height:17px; display:inline-flex; align-items:center; justify-content:center; margin-left:auto; padding:0 5px; border-radius:8px; color:var(--aow-info); background:var(--aow-hover); font-size:9px; font-weight:600; line-height:17px; font-variant-numeric:tabular-nums; }
-.project-aow-worktrees > button.compact > .project-aow-worktree-unread { background:var(--aow-hover); }
+.project-aow-worktrees > button > .project-aow-worktree-unread,.project-aow-pinned > button > .project-aow-worktree-unread { flex:0 0 auto; min-width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; margin-left:auto; padding:0 5px; border-radius:9px; color:var(--aow-badge-foreground); background:var(--aow-badge-background); font-size:9px; font-weight:600; line-height:18px; font-variant-numeric:tabular-nums; }
+.project-aow-worktrees > button.compact > .project-aow-worktree-unread { background:var(--aow-badge-background); }
 /* stylelint-disable-next-line no-duplicate-selectors -- Drag affordances follow the shared button states to preserve their cascade. */
 .project-aow-pinned > button { position:relative; cursor:grab; user-select:none; }
 .project-aow-pinned > button:active { cursor:grabbing; }

@@ -1,19 +1,19 @@
 .agent-task-notifications { position:fixed; z-index:12000; top:max(16px,env(safe-area-inset-top)); right:max(16px,env(safe-area-inset-right)); display:flex; flex-direction:column; gap:8px; width:min(340px,calc(100vw - 32px)); max-height:calc(100dvh - max(16px,env(safe-area-inset-top)) - max(16px,env(safe-area-inset-bottom))); padding:2px 2px 12px; box-sizing:border-box; pointer-events:none; }
-.agent-task-notifications.is-expanded { padding:10px; background:var(--aow-elevated); border:1px solid var(--aow-control-line); border-radius:12px; box-shadow:0 12px 40px var(--aow-shadow); pointer-events:auto; }
+.agent-task-notifications.is-expanded { padding:10px; background:var(--aow-notification-background); border:1px solid var(--aow-notification-border); border-radius:12px; box-shadow:0 12px 40px var(--aow-shadow); pointer-events:auto; }
 .agent-task-notifications-toolbar { display:flex; align-items:center; justify-content:flex-end; flex:none; gap:6px; min-height:26px; color:var(--aow-text); font-size:12px; }
-.agent-task-notifications-toolbar > span { margin-right:auto; padding:4px 7px; border-radius:5px; background:var(--aow-elevated); }
-.agent-task-notifications-toolbar button { display:flex; align-items:center; gap:3px; padding:5px 7px; border:0; border-radius:5px; background:var(--aow-elevated); color:var(--aow-text); font:inherit; cursor:pointer; pointer-events:auto; }
+.agent-task-notifications-toolbar > span { margin-right:auto; padding:4px 7px; border-radius:5px; background:var(--aow-notification-background); }
+.agent-task-notifications-toolbar button { display:flex; align-items:center; gap:3px; padding:5px 7px; border:0; border-radius:5px; background:var(--aow-notification-background); color:var(--aow-text); font:inherit; cursor:pointer; pointer-events:auto; }
 .agent-task-notifications-list { display:flex; flex-direction:column; gap:6px; min-height:0; overflow-y:auto; overscroll-behavior:contain; pointer-events:auto; scrollbar-width:thin; scrollbar-color:var(--aow-scrollbar) transparent; }
-.agent-task-notifications-stack { position:relative; isolation:isolate; display:flex; align-items:center; gap:10px; flex:none; width:calc(100% - 16px); margin:0 8px; padding:12px; border:1px solid var(--aow-control-line); border-radius:9px; color:var(--aow-text); background:var(--aow-hover); box-shadow:0 6px 18px var(--aow-shadow); cursor:pointer; pointer-events:auto; text-align:left; }
-.agent-task-notifications-stack::before,.agent-task-notifications-stack::after { content:""; position:absolute; z-index:-1; inset:0 5px -5px; background:var(--aow-elevated); border:1px solid var(--aow-control-line); border-radius:9px; pointer-events:none; }
-.agent-task-notifications-stack::after { z-index:-2; inset:0 10px -10px; background:var(--aow-elevated); }
+.agent-task-notifications-stack { position:relative; isolation:isolate; display:flex; align-items:center; gap:10px; flex:none; width:calc(100% - 16px); margin:0 8px; padding:12px; border:1px solid var(--aow-notification-border); border-radius:9px; color:var(--aow-text); background:var(--aow-notification-background); box-shadow:0 6px 18px var(--aow-shadow); cursor:pointer; pointer-events:auto; text-align:left; }
+.agent-task-notifications-stack::before,.agent-task-notifications-stack::after { content:""; position:absolute; z-index:-1; inset:0 5px -5px; background:var(--aow-notification-background); border:1px solid var(--aow-notification-border); border-radius:9px; pointer-events:none; }
+.agent-task-notifications-stack::after { z-index:-2; inset:0 10px -10px; background:var(--aow-notification-background); }
 .agent-task-notifications-stack > span { flex:1; }
 .agent-task-notifications-stack strong { display:block; font-size:13px; font-weight:600; }
 .agent-task-notifications-stack small { display:block; margin-top:3px; color:var(--aow-text-secondary); font-size:11px; }
 .agent-task-notifications-stack > svg { color:var(--aow-icon-foreground, var(--aow-icon)); }
 .agent-task-notifications-stack:hover { background:var(--aow-hover); border-color:var(--aow-accent); color:var(--aow-text-hover); }
 .agent-task-notifications-storage-error { flex:none; padding:8px; border-radius:6px; color:var(--aow-warning); background:var(--aow-error-background); font-size:12px; pointer-events:auto; }
-.agent-task-notice { position:relative; flex:none; min-width:0; color:var(--aow-text); background:var(--aow-elevated); border:1px solid var(--aow-control-line); border-radius:10px; box-shadow:0 8px 28px var(--aow-shadow); pointer-events:auto; overflow:hidden; }
+.agent-task-notice { position:relative; flex:none; min-width:0; color:var(--aow-text); background:var(--aow-notification-background); border:1px solid var(--aow-notification-border); border-radius:10px; box-shadow:0 12px 36px var(--aow-shadow); pointer-events:auto; overflow:hidden; }
 .agent-task-notice-open { display:flex; align-items:center; gap:11px; width:100%; padding:13px 43px 13px 13px; border:0; border-radius:9px; color:inherit; background:transparent; text-align:left; font:inherit; cursor:pointer; }
 .agent-task-notice-close { position:absolute; top:8px; right:8px; display:grid; place-items:center; width:24px; height:24px; padding:0; border:0; border-radius:5px; color:var(--aow-icon-foreground, var(--aow-icon)); background:transparent; cursor:pointer; }
 .agent-task-notice-close:hover:not(:disabled) { color:var(--aow-icon-hover); background:var(--aow-hover); }
@@ -36,3 +36,5 @@
 .agent-task-notice-remove:hover,.agent-task-notifications-toolbar button:hover { background:var(--aow-hover); color:var(--aow-text-hover); }
 .agent-task-notifications button:focus-visible,.agent-task-notifications-list:focus-visible { outline:2px solid var(--aow-accent); outline-offset:-2px; }
 .agent-task-notice-open:hover:not(:disabled) .agent-task-notice-tab { color:var(--aow-text-hover); }
+
+.agent-task-notice::before { content:""; position:absolute; inset:0 auto 0 0; width:3px; background:var(--aow-notification-accent); pointer-events:none; }

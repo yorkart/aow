@@ -26,6 +26,11 @@
   --aow-primary:#3569a6;
   --aow-primary-hover:color-mix(in srgb, #3569a6 90%, #000000);
   --aow-on-primary:#ffffff;
+  --aow-badge-background:#3569a6;
+  --aow-badge-foreground:#ffffff;
+  --aow-notification-background:#30343c;
+  --aow-notification-border:#555f6e;
+  --aow-notification-accent:#6ca8f1;
   --aow-danger:color-mix(in srgb, #f48771 60%, #000000);
   --aow-danger-hover:color-mix(in srgb, #f48771 55%, #000000);
   --aow-text:#cbd2dc;

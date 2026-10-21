@@ -117,3 +117,12 @@ The `aow.diff-palette` preference uses deployment-scoped browser storage and
 synchronizes across tabs. Missing/invalid values follow the theme; blocked storage
 allows immediate changes and displays a warning. Existing Git, PR and ACP Monaco
 diffs update in place without recreating models or losing edits and undo history.
+
+## Notification contrast
+
+Each workbench theme owns `badgeBackground`, `badgeForeground`,
+`notificationBackground`, `notificationBorder`, and `notificationAccent`.
+Unread worktree counts use solid blue pills with white text. Notification cards
+use a raised neutral surface, a visible border, a soft shadow, and an accent stripe.
+Dark themes currently declare matching values independently; light themes use
+white notification surfaces and darker borders.

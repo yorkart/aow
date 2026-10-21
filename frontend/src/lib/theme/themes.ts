@@ -36,7 +36,12 @@ export const themes: readonly Theme[] = [
       "userBackground": "color-mix(in srgb, #6ca8f1 12%, #181a1f)",
       "userBorder": "color-mix(in srgb, #6ca8f1 25%, #181a1f)",
       "infoBackground": "color-mix(in srgb, #9cdcfe 12%, #181a1f)",
-      "infoBorder": "color-mix(in srgb, #9cdcfe 38%, #181a1f)"
+      "infoBorder": "color-mix(in srgb, #9cdcfe 38%, #181a1f)",
+      "badgeBackground": "#3569a6",
+      "badgeForeground": "#ffffff",
+      "notificationBackground": "#30343c",
+      "notificationBorder": "#555f6e",
+      "notificationAccent": "#6ca8f1"
     },
     "editor": {
       "background": "#1e1e1e",
@@ -90,7 +95,12 @@ export const themes: readonly Theme[] = [
       "userBackground": "color-mix(in srgb, #6ca8f1 12%, #181a1f)",
       "userBorder": "color-mix(in srgb, #6ca8f1 25%, #181a1f)",
       "infoBackground": "color-mix(in srgb, #9cdcfe 12%, #181a1f)",
-      "infoBorder": "color-mix(in srgb, #9cdcfe 38%, #181a1f)"
+      "infoBorder": "color-mix(in srgb, #9cdcfe 38%, #181a1f)",
+      "badgeBackground": "#3569a6",
+      "badgeForeground": "#ffffff",
+      "notificationBackground": "#30343c",
+      "notificationBorder": "#555f6e",
+      "notificationAccent": "#6ca8f1"
     },
     "editor": {
       "background": "#1e1f22",
@@ -144,7 +154,12 @@ export const themes: readonly Theme[] = [
       "userBackground": "color-mix(in srgb, #0055ff 12%, #ffffff)",
       "userBorder": "color-mix(in srgb, #0055ff 25%, #ffffff)",
       "infoBackground": "color-mix(in srgb, #176b9b 12%, #ffffff)",
-      "infoBorder": "color-mix(in srgb, #176b9b 38%, #ffffff)"
+      "infoBorder": "color-mix(in srgb, #176b9b 38%, #ffffff)",
+      "badgeBackground": "#336edb",
+      "badgeForeground": "#ffffff",
+      "notificationBackground": "#ffffff",
+      "notificationBorder": "#b8c2ce",
+      "notificationAccent": "#0055ff"
     },
     "editor": {
       "background": "#ffffff",
@@ -198,7 +213,12 @@ export const themes: readonly Theme[] = [
       "userBackground": "color-mix(in srgb, #6ca8f1 12%, #181a1f)",
       "userBorder": "color-mix(in srgb, #6ca8f1 25%, #181a1f)",
       "infoBackground": "color-mix(in srgb, #9cdcfe 12%, #181a1f)",
-      "infoBorder": "color-mix(in srgb, #9cdcfe 38%, #181a1f)"
+      "infoBorder": "color-mix(in srgb, #9cdcfe 38%, #181a1f)",
+      "badgeBackground": "#3569a6",
+      "badgeForeground": "#ffffff",
+      "notificationBackground": "#30343c",
+      "notificationBorder": "#555f6e",
+      "notificationAccent": "#6ca8f1"
     },
     "editor": {
       "background": "#191a1c",
@@ -252,7 +272,12 @@ export const themes: readonly Theme[] = [
       "userBackground": "color-mix(in srgb, #0055ff 12%, #ffffff)",
       "userBorder": "color-mix(in srgb, #0055ff 25%, #ffffff)",
       "infoBackground": "color-mix(in srgb, #176b9b 12%, #ffffff)",
-      "infoBorder": "color-mix(in srgb, #176b9b 38%, #ffffff)"
+      "infoBorder": "color-mix(in srgb, #176b9b 38%, #ffffff)",
+      "badgeBackground": "#336edb",
+      "badgeForeground": "#ffffff",
+      "notificationBackground": "#ffffff",
+      "notificationBorder": "#b8c2ce",
+      "notificationAccent": "#0055ff"
     },
     "editor": {
       "background": "#ffffff",
@@ -306,7 +331,12 @@ export const themes: readonly Theme[] = [
       "userBackground": "color-mix(in srgb, #6ca8f1 12%, #181a1f)",
       "userBorder": "color-mix(in srgb, #6ca8f1 25%, #181a1f)",
       "infoBackground": "color-mix(in srgb, #9cdcfe 12%, #181a1f)",
-      "infoBorder": "color-mix(in srgb, #9cdcfe 38%, #181a1f)"
+      "infoBorder": "color-mix(in srgb, #9cdcfe 38%, #181a1f)",
+      "badgeBackground": "#3569a6",
+      "badgeForeground": "#ffffff",
+      "notificationBackground": "#30343c",
+      "notificationBorder": "#555f6e",
+      "notificationAccent": "#6ca8f1"
     },
     "editor": {
       "background": "#1f1f1f",

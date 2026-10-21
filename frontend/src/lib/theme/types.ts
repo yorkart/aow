@@ -17,6 +17,11 @@ export interface Theme {
     selection: string;
     accent: string;
     primary: string;
+    badgeBackground: string;
+    badgeForeground: string;
+    notificationBackground: string;
+    notificationBorder: string;
+    notificationAccent: string;
     primaryHover: string;
     linkHover: string;
     userBackground: string;
