@@ -31,8 +31,6 @@ export function themeTokens(theme: Theme): Record<string, string> {
     '--aow-line-subtle': mix(c.text, 10),
     '--aow-scrollbar': mix(c.text, 25),
     '--aow-editor-background': theme.editor.background,
-    '--aow-terminal-background': theme.terminal.background,
-    '--aow-terminal-foreground': theme.terminal.foreground,
     '--aow-conversation-background': c.background,
     '--aow-conversation-panel': c.panel,
     '--aow-conversation-user-background': mix(c.accent, 12),

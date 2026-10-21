@@ -6,7 +6,7 @@
 .terminal-input-trigger svg { width:14px; height:14px; }
 .terminal-input-trigger:hover > span,.terminal-input-trigger:focus-visible > span { opacity:1; }
 .terminal-input-trigger:focus-visible { outline:1px solid var(--aow-accent); outline-offset:-1px; }
-.terminal-input-composer { position:absolute; z-index:8; bottom:0; left:0; right:0; display:flex; flex-direction:column; min-height:0; overflow:hidden; background:var(--aow-terminal-background); border:1px solid var(--aow-control-line); outline:none; animation:terminal-input-enter .16s ease-out; }
+.terminal-input-composer { position:absolute; z-index:8; bottom:0; left:0; right:0; display:flex; flex-direction:column; min-height:0; overflow:hidden; background:var(--aow-panel); border:1px solid var(--aow-control-line); outline:none; animation:terminal-input-enter .16s ease-out; }
 .terminal-input-resize { position:absolute; z-index:1; top:0; left:0; right:0; height:6px; cursor:ns-resize; touch-action:none; }
 .terminal-input-resize:hover,.terminal-input-resize:focus-visible { box-shadow:inset 0 1px var(--aow-line); outline:none; }
 .terminal-input-editor { flex:1; min-height:0; overflow:hidden; }

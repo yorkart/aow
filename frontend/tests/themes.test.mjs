@@ -56,12 +56,14 @@ try {
         background: getComputedStyle(element.closest('.xterm').querySelector('.xterm-scrollable-element')).backgroundColor,
         colors: [...element.querySelectorAll('span')].filter(span => span.textContent.trim()).map(span => getComputedStyle(span).color),
       }));
-      const expected = await page.evaluate(theme => {
+      const expected = await page.evaluate(async theme => {
+        const { resolveTerminalPalette } = await import('/src/lib/theme/terminalPalette.ts');
+        const palette = resolveTerminalPalette(theme.appearance);
         const rgb = color => {
           const element = document.createElement('span'); element.style.color = color;
           document.body.append(element); const value = getComputedStyle(element).color; element.remove(); return value;
         };
-        return { background: rgb(theme.terminal.background), red: rgb(theme.terminal.red), green: rgb(theme.terminal.green) };
+        return { background: rgb(palette.background), red: rgb(palette.red), green: rgb(palette.green) };
       }, theme);
       assert.equal(terminal.background, expected.background);
       assert.ok(terminal.colors.includes(expected.red), `${theme.id} ANSI red`);
@@ -80,7 +82,8 @@ try {
     await page.goto(server.url + '/?ui=desktop');
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await page.getByRole('button', { name: /^Appearance/ }).click();
-    assert.equal(await page.getByRole('radio').count(), 6);
+    assert.equal(await page.locator('input[name="aow-theme"]').count(), 6);
+    assert.equal(await page.locator('input[name="aow-terminal-palette"]').count(), 3);
     await page.getByRole('radio', { name: /^JetBrains Light / }).check();
     await selected(page, 'jetbrains-light');
     await page.reload();
@@ -94,11 +97,14 @@ try {
     await mobile.getByRole('radio', { name: /^VS Code Dark Modern / }).check();
     await selected(mobile, 'vscode-dark-modern');
     await selected(page, 'vscode-dark-modern');
+    await mobile.locator('input[value="soft-light"]').check();
+    await page.waitForFunction(() => document.documentElement.dataset.terminalPalette === 'soft-light');
     assert.equal(await mobile.locator('.appearance-settings').evaluate(element => element.scrollWidth <= element.clientWidth), true);
     await mobile.getByRole('radio', { name: /^VS Code Dark Modern / }).focus();
     await mobile.keyboard.press('ArrowLeft');
     await selected(mobile, 'jetbrains-islands-light');
     await selected(page, 'jetbrains-islands-light');
+    assert.equal(await mobile.locator('input[value="soft-light"]').isChecked(), true);
     await mobile.evaluate(() => localStorage.removeItem('aow.theme'));
     await selected(page, 'aow-dark');
   });
@@ -129,6 +135,78 @@ try {
     await denied.getByRole('radio', { name: /^JetBrains Light / }).check();
     await selected(denied, 'jetbrains-light');
     await denied.getByRole('status').filter({ hasText: '浏览器阻止了保存' }).waitFor();
+  });
+
+  await test('terminal palettes stay independent, update live terminals and persist across tabs and reloads', async t => {
+    const { context, page } = await fixture(t);
+    await page.goto(server.url + previewPath);
+    await page.locator('.xterm-rows').getByText(/terminal stays connected/).waitFor();
+    const baseline = { connections: server.state.connections, claims: server.state.claims };
+    const paletteRadio = id => page.locator(`input[name="aow-terminal-palette"][value="${id}"]`);
+    const effective = id => page.waitForFunction(id => document.documentElement.dataset.terminalPalette === id, id);
+    await effective('soft-dark');
+    await paletteRadio('soft-light').check();
+    await effective('soft-light');
+    const checkTerminal = async (background, green) => {
+      await page.waitForFunction(({ background, green }) => {
+        const root = document.documentElement;
+        const surface = document.querySelector('.xterm-scrollable-element');
+        const spans = [...document.querySelectorAll('.xterm-rows span')];
+        return root.style.getPropertyValue('--aow-terminal-background') === background
+          && getComputedStyle(surface).backgroundColor === (background === '#fafafa' ? 'rgb(250, 250, 250)' : 'rgb(30, 30, 30)')
+          && spans.some(span => span.textContent.includes('green') && getComputedStyle(span).color === green);
+      }, { background, green });
+    };
+    await checkTerminal('#fafafa', 'rgb(82, 115, 63)');
+    await page.getByRole('radio', { name: /^JetBrains Dark / }).check();
+    await effective('soft-light');
+    await checkTerminal('#fafafa', 'rgb(82, 115, 63)');
+    await paletteRadio('soft-dark').check();
+    await page.getByRole('radio', { name: /^JetBrains Light / }).check();
+    await effective('soft-dark');
+    await checkTerminal('#1e1e1e', 'rgb(78, 154, 6)');
+    assert.equal(await page.locator('.xterm-rows').getByText(/terminal stays connected/).count(), 1);
+    assert.deepEqual({ connections: server.state.connections, claims: server.state.claims }, baseline);
+    const other = await context.newPage();
+    await other.goto(server.url + previewPath);
+    assert.equal(await other.locator('input[value="soft-dark"]').isChecked(), true);
+    await other.locator('input[value="soft-light"]').check();
+    await effective('soft-light');
+    await checkTerminal('#fafafa', 'rgb(82, 115, 63)');
+    await page.reload();
+    assert.equal(await paletteRadio('soft-light').isChecked(), true);
+    await other.evaluate(() => localStorage.removeItem('aow.terminal-palette'));
+    await effective('soft-light');
+    await page.waitForFunction(() => document.querySelector('input[value="auto"]').checked);
+    await page.getByRole('radio', { name: /^AOW Dark / }).check();
+    await effective('soft-dark');
+    await checkTerminal('#1e1e1e', 'rgb(78, 154, 6)');
+  });
+
+  await test('terminal palette storage handles invalid values, blocked storage and deployment isolation', async t => {
+    const { context, page } = await fixture(t);
+    await page.addInitScript(() => localStorage.setItem('aow.terminal-palette', 'removed-palette'));
+    await page.goto(server.url + previewPath);
+    assert.equal(await page.locator('input[value="auto"]').isChecked(), true);
+    const scoped = await context.newPage();
+    await scoped.route('**/tests/theme-preview.html', async route => {
+      const response = await route.fetch();
+      await route.fulfill({ response, body: (await response.text()).replace('<head>', '<head><meta name="aow-base-path" content="/other">') });
+    });
+    await scoped.routeWebSocket('**/other/api/**', socket => socket.close());
+    await scoped.goto(server.url + previewPath);
+    await scoped.locator('input[value="soft-light"]').check();
+    assert.equal(await scoped.evaluate(() => localStorage.getItem('aow@/other:aow.terminal-palette')), 'soft-light');
+    assert.equal(await page.locator('input[value="auto"]').isChecked(), true);
+    const denied = await context.newPage();
+    await denied.addInitScript(() => {
+      Storage.prototype.getItem = () => { throw new DOMException('Blocked', 'SecurityError'); };
+      Storage.prototype.setItem = () => { throw new DOMException('Blocked', 'SecurityError'); };
+    });
+    await denied.goto(server.url + previewPath);
+    await denied.locator('input[value="soft-light"]').check();
+    await denied.getByRole('status').filter({ hasText: '已应用终端配色，但浏览器阻止了保存' }).waitFor();
+    assert.equal(await denied.evaluate(() => document.documentElement.dataset.terminalPalette), 'soft-light');
   });
 
   await test('default CSS matches the theme contract and every palette produces valid colors', async t => {

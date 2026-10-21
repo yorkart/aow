@@ -1,5 +1,6 @@
 import { appLocalStorage } from '../../lib/basePath';
 import { getTheme, subscribeTheme } from '../../lib/theme/store';
+import { resolveTerminalPalette, subscribeTerminalPalette } from '../../lib/theme/terminalPalette';
 import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type RefObject } from 'react';
 import { Base64, ClipboardAddon, type ClipboardSelectionType, type IBase64, type IClipboardProvider } from '@xterm/addon-clipboard';
 import { FitAddon } from '@xterm/addon-fit';
@@ -698,7 +699,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
     if (!host) return;
     host.style.setProperty('--terminal-scrollbar-width', `${TERMINAL_SCROLLBAR_WIDTH}px`);
     const terminalTheme = () => {
-      const colors = getTheme().terminal;
+      const colors = resolveTerminalPalette(getTheme().appearance);
       return { ...colors, cursorAccent: colors.background, overviewRulerBorder: 'transparent' };
     };
     const terminal = new Terminal({
@@ -733,9 +734,9 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
       theme: terminalTheme(),
     });
     // Updating xterm options preserves its screen, selection, scrollback and socket.
-    const unsubscribeTheme = subscribeTheme(() => {
-      terminal.options.theme = terminalTheme();
-    });
+    const updateTerminalTheme = () => { terminal.options.theme = terminalTheme(); };
+    const unsubscribeTheme = subscribeTheme(updateTerminalTheme);
+    const unsubscribePalette = subscribeTerminalPalette(updateTerminalTheme);
     const fit = new FitAddon();
     let disposed = false;
     const clipboardProvider: IClipboardProvider = {
@@ -841,6 +842,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
     return () => {
       disposed = true;
       unsubscribeTheme();
+      unsubscribePalette();
       observer.disconnect();
       if (frame !== undefined) window.cancelAnimationFrame(frame);
       input.dispose();

@@ -1,6 +1,7 @@
 import { appLocalStorage, storageKey } from '../basePath';
 import { themes } from './themes';
 import { themeTokens } from './tokens';
+import { applyTerminalPalette, initializeTerminalPalette } from './terminalPalette';
 
 export const THEME_STORAGE_KEY = 'aow.theme';
 export const defaultTheme = themes[0];
@@ -22,6 +23,7 @@ function applyTheme(id: unknown) {
   root.dataset.appearance = current.appearance;
   root.style.colorScheme = current.appearance;
   for (const [name, value] of Object.entries(themeTokens(current))) root.style.setProperty(name, value);
+  applyTerminalPalette(current.appearance);
   for (const listener of listeners) listener();
 }
 
@@ -29,6 +31,7 @@ function applyTheme(id: unknown) {
 export function initializeTheme() {
   if (initialized) return;
   initialized = true;
+  initializeTerminalPalette();
   let saved: string | null = null;
   try { saved = appLocalStorage.getItem(THEME_STORAGE_KEY); } catch { /* Storage can be disabled. */ }
   applyTheme(saved);

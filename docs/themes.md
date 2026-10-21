@@ -2,7 +2,8 @@
 
 Open **Settings → Appearance** on desktop, or **设置 → Appearance** on mobile.
 Selecting a card applies the theme immediately to the workbench, dialogs,
-conversations, Monaco editors and diffs, Mermaid diagrams, and terminal ANSI colors.
+conversations, Monaco editors and diffs, and Mermaid diagrams. Terminal colors
+are configured independently under **终端配色** in the same Appearance settings.
 It preserves editor models, undo history, terminal buffers, and connections.
 
 The selection is saved in this browser's local storage and synchronized between
@@ -32,7 +33,7 @@ Reference palettes were read from the installed Zed extensions:
 License texts and the upstream JetBrains notice are preserved in
 `frontend/public/third-party/themes/` and included in the frontend build.
 
-These are AOW adaptations. They retain the reference editor and terminal colors,
+These are AOW adaptations. They retain the reference editor colors,
 while mapping interface roles to AOW's layout and adjusting secondary text,
 links, and status colors for readability. They do not require Zed at runtime.
 
@@ -40,7 +41,8 @@ links, and status colors for readability. They do not require Zed at runtime.
 
 Theme code lives in `frontend/src/lib/theme/`:
 
-- `types.ts` defines a complete palette: UI, editor, terminal, and syntax colors.
+- `types.ts` defines the workbench palette: UI, editor, and syntax colors.
+- `terminalPalette.ts` defines independent terminal palettes and their saved preference.
 - `themes.ts` registers the built-in palettes with stable IDs.
 - `tokens.ts` maps a palette to semantic CSS properties, including derived status
   backgrounds, borders, and overlays.
@@ -51,7 +53,8 @@ Theme code lives in `frontend/src/lib/theme/`:
   handles persistence, fallback, and storage events. `useTheme.ts` subscribes
   React consumers without coupling theme data to application components.
 - `monacoTheme.ts` adapts theme data for Monaco when the editor is loaded.
-  Terminals subscribe to the same store and update their options in place.
+  Terminals subscribe to theme and terminal-palette changes and update their
+  options in place.
 
 Use roles such as `--aow-surface`, `--aow-text`, `--aow-line`, `--aow-selection`,
 `--aow-primary`, `--aow-on-primary`, and `--aow-error`. Prefer an existing role over
@@ -80,3 +83,18 @@ The regression suite checks all six palettes, live editor and terminal state,
 ANSI colors, Mermaid rendering, desktop/mobile selection, keyboard navigation,
 reload persistence, cross-tab updates, deployment isolation, unavailable storage,
 invalid preferences, and the default CSS contract.
+
+## Terminal palettes
+
+Choose **跟随主题**, **柔和深色**, or **柔和浅色** under **终端配色**.
+The default follows the workbench's light/dark appearance and uses the matching
+soft palette. An explicit selection stays fixed when the workbench theme changes.
+Soft Dark restores the pre-theme terminal's Tango ANSI colors, AOW background,
+and selection; Soft Light uses muted colors designed for a light background.
+Each palette defines the background, foreground, cursor, selection and all 16
+ANSI colors. Applications using explicit RGB or 256-color output keep those colors.
+
+The `aow.terminal-palette` preference is saved separately in browser storage, scoped
+to the deployment path, and synchronized across tabs. Missing or invalid values
+fall back to following the theme. Blocked storage still allows immediate changes
+and displays a warning. Updates preserve live terminal connections and buffers.
