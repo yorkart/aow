@@ -10,13 +10,13 @@ export const diffPalettes = {
     insertedText: '#9ccc2c33', removedText: '#ff000033',
     insertedLine: '#9bb95533', removedLine: '#ff000033',
     insertedGutter: '#9bb95533', removedGutter: '#ff000033',
-    insertedOverview: '#9ccc2ccc', removedOverview: '#ff0000cc',
+    insertedOverview: '#7f995966', removedOverview: '#c76b6b66',
   },
   light: {
     insertedText: '#9ccc2c40', removedText: '#ff000033',
     insertedLine: '#9bb95533', removedLine: '#ff000033',
     insertedGutter: '#9bb95533', removedGutter: '#ff000033',
-    insertedOverview: '#668c20cc', removedOverview: '#c02020cc',
+    insertedOverview: '#668c2066', removedOverview: '#b65c5c66',
   },
 };
 
