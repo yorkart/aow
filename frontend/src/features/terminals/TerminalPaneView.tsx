@@ -700,7 +700,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
     host.style.setProperty('--terminal-scrollbar-width', `${TERMINAL_SCROLLBAR_WIDTH}px`);
     const terminalTheme = () => {
       const colors = resolveTerminalPalette(getTheme().appearance);
-      return { ...colors, cursorAccent: colors.background, overviewRulerBorder: 'transparent' };
+      return { ...colors, cursorAccent: colors.background, overviewRulerBorder: '#00000000' };
     };
     const terminal = new Terminal({
       ...(sizing === 'saved' ? savedSizeRef.current : {}),
