@@ -122,6 +122,7 @@ export function ThreadView({ session, workspace, tabId, busy: pending, supportsI
     })}
     accessory={
       <div className="acp-content acp-activity">
+        <SessionMeta sessionId={session.thread_id} metadata={session.session_meta} revisions={session.session_meta_revisions} />
         {session.notices?.map(notice => <Notice key={notice.id} notice={notice} busy={busy} onDismiss={() => { void onAction({ action: 'dismiss_notice', notice_id: notice.id }); }} />)}
         {session.permissions.filter(permission => !tools.has(toolId(permission))).map(permission => <PermissionRequest key={permission.id} permission={permission} requester={session.agent_id} busy={busy} onAnswer={response => { void onAction({ action: 'answer', request_id: permission.id, response }); }} />)}
         {notice}
@@ -132,7 +133,6 @@ export function ThreadView({ session, workspace, tabId, busy: pending, supportsI
     footerExpanded={expanded && !composerStatus}
     footer={composerStatus ||
       <form className={`acp-content acp-composer${!hasMessages ? ' empty' : ''}${expanded ? ' expanded' : ''}`} onSubmit={event => { event.preventDefault(); void submit(); }}>
-        <SessionMeta sessionId={session.thread_id} metadata={session.session_meta} revisions={session.session_meta_revisions} />
         <div className="acp-editor">
           {hasMessages && <button type="button" className="acp-editor-expand" aria-label={expanded ? '收起输入区' : '展开输入区'} onClick={() => setExpanded(value => !value)}>{expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}</button>}
           <MessageEditor draft={draft} onChange={setDraft} commands={session.commands} supportsImages={supportsImages} disabled={session.status === 'disconnected'} placeholder={`Message ${session.agent_id}${session.commands.length ? ' — / for commands' : ''}`} onSubmit={() => { void submit(); }} />

@@ -324,6 +324,7 @@ try {
     await newSession(page);
     await page.getByRole('textbox', { name: 'ACP 消息', exact: true }).waitFor();
     await page.clock.install();
+    await page.mouse.move(0, 0);
     const hints = page.getByRole('region', { name: '会话元数据', exact: true });
     const update = async metadata => {
       state.session.session_meta = metadata;
@@ -334,6 +335,10 @@ try {
     };
     await update({ trae: { queueStatus: { state: 'waiting', position: 1175, message: 'Queue position: 1175' } }, other: { text: '<script>bad()</script>' } });
     await hints.getByText('trae meta:', { exact: true }).waitFor();
+    assert.equal(await hints.evaluate(element => element.closest('form') === null && element.parentElement.classList.contains('acp-activity')), true);
+    const hintBounds = await hints.boundingBox();
+    const composerBounds = await page.locator('.acp-composer').boundingBox();
+    assert.ok(hintBounds.y + hintBounds.height <= composerBounds.y, 'metadata uses the shared notice area above the composer');
     assert.equal(await hints.locator('code').count(), 2);
     assert.equal(await hints.locator('script').count(), 0);
     assert.equal(await hints.getByRole('button').count(), 0);
