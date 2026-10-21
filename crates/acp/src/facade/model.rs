@@ -152,6 +152,8 @@ pub struct SessionSnapshot {
     pub session_meta: std::collections::BTreeMap<String, Value>,
     #[serde(default)]
     pub session_meta_revision: u64,
+    #[serde(default)]
+    pub session_meta_revisions: std::collections::BTreeMap<String, u64>,
     /// Display-only terminal state, accumulated independently of tool metadata patches.
     #[serde(default)]
     pub terminals: std::collections::BTreeMap<String, Value>,
