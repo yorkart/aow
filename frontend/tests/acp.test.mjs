@@ -2248,7 +2248,7 @@ try {
     const fallback = 'Falling back from WebSockets to HTTPS transport. workspace routing discovery timed out';
     const longTitle = '  Connection diagnostics:\n' + 'workspace-routing-discovery/'.repeat(15) + '\n  ';
     const description = '  Agent connection failed.\n' + '<script>unsafe()</script>\n'.repeat(30) + '  ';
-    Object.assign(state.session, { entries: [
+    Object.assign(state.session, { error: 'The agent reported a session error.', entries: [
       { id: 'u', kind: 'user', content: { type: 'text', text: 'Check the workspace connection' } },
       { id: 'a', kind: 'assistant', content: { type: 'text', text: 'The connection is being checked.' } },
     ], notices: [
@@ -2269,6 +2269,8 @@ try {
     const aligned = async () => {
       const composer = await page.locator('.acp-composer').boundingBox();
       const message = await page.locator('.project-aow-snapshot-message.assistant .project-aow-snapshot-bubble').boundingBox();
+      const sessionError = await page.locator('.acp-activity > .acp-error').boundingBox();
+      assert.ok(Math.abs(sessionError.x - composer.x) <= 1 && Math.abs(sessionError.width - composer.width) <= 1, 'plain error aligns with the composer');
       for (const notice of [warning, error, info]) {
         const box = await notice.boundingBox();
         assert.ok(Math.abs(box.x - composer.x) <= 1 && Math.abs(box.width - composer.width) <= 1, 'notice aligns with the composer');
@@ -2322,6 +2324,8 @@ try {
     assert.equal(await card.locator('li strong').innerText(), 'project configuration');
     const aligned = async () => {
       const plan = await card.boundingBox();
+      const composer = await page.locator('.acp-composer').boundingBox();
+      assert.ok(Math.abs(plan.x - composer.x) <= 1 && Math.abs(plan.width - composer.width) <= 1, 'plan aligns with composer edges');
       const message = await page.locator('.project-aow-snapshot-message.assistant .project-aow-snapshot-bubble').boundingBox();
       assert.ok(Math.abs(plan.x - message.x) <= 1, `plan and message left edges: ${plan.x}, ${message.x}`);
       assert.ok(Math.abs(plan.width - message.width) <= 1, `plan and message widths: ${plan.width}, ${message.width}`);

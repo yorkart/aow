@@ -30,7 +30,7 @@
 .acp-message-actions > button { display:flex; padding:4px; border:0; background:transparent; color:var(--aow-muted); opacity:.4; }
 .acp-message-actions:hover > button,.acp-message-actions:focus-within > button { opacity:1; }
 .acp-message-actions > button:hover { color:var(--aow-text); }
-.acp-notice { --acp-notice-accent:var(--aow-accent); width:calc(100% - 2 * var(--conversation-content-inset)); max-width:var(--conversation-content-max-width); min-width:0; margin:4px auto; padding:7px 10px; border:0; border-radius:6px; background:color-mix(in srgb,var(--acp-notice-accent) 7%,var(--conversation-background)); font-size:12px; line-height:1.5; }
+.acp-notice { --acp-notice-accent:var(--aow-accent); width:100%; min-width:0; margin:4px auto; padding:7px 10px; border:0; border-radius:6px; background:color-mix(in srgb,var(--acp-notice-accent) 7%,var(--conversation-background)); font-size:12px; line-height:1.5; }
 .acp-notice[data-severity="warning"] { --acp-notice-accent:var(--aow-warning); }
 .acp-notice[data-severity="error"] { --acp-notice-accent:var(--aow-error); background:color-mix(in srgb,var(--acp-notice-accent) 12%,var(--conversation-background)); }
 .acp-notice-header { display:flex; align-items:flex-start; gap:8px; }
@@ -118,12 +118,12 @@
 .acp-diff { overflow:hidden; }
 .acp-diff > .acp-file-link { padding:3px 5px; }
 .acp-activity:empty { display:none; }
-.acp-activity { display:flex; flex-direction:column; flex-shrink:0; max-height:45%; overflow:auto; }
+.acp-activity { display:flex; flex-direction:column; flex-shrink:0; width:calc(100% - 2 * var(--conversation-content-inset)); max-width:var(--conversation-content-max-width); min-width:0; max-height:45%; margin:0 auto; overflow:auto; }
 .acp-activity > :not(.acp-request-card) { flex-shrink:0; }
 .acp-working { display:flex; align-items:center; gap:6px; padding:5px 0; margin:0; color:var(--aow-muted); font-size:11px; }
 .acp-entry + .acp-working { margin-top:12px; }
 .acp-spinner-label { display:inline-block; flex-shrink:0; width:1ch; font-family:var(--conversation-mono,ui-monospace,SFMono-Regular,Consolas,monospace); line-height:1; text-align:center; }
-.acp-plan { width:calc(100% - 2 * var(--conversation-content-inset)); max-width:var(--conversation-content-max-width); margin:0 auto; overflow:hidden; border:1px solid var(--aow-line); border-radius:6px; background:color-mix(in srgb,var(--conversation-background) 70%,var(--aow-hover) 30%); color:var(--aow-muted); font-size:var(--conversation-code-font-size); }
+.acp-plan { width:100%; margin:0 auto; overflow:hidden; border:1px solid var(--aow-line); border-radius:6px; background:color-mix(in srgb,var(--conversation-background) 70%,var(--aow-hover) 30%); color:var(--aow-muted); font-size:var(--conversation-code-font-size); }
 .acp-plan-header { display:flex; align-items:center; gap:4px; min-height:30px; padding:4px; cursor:pointer; }
 .acp-content .acp-plan-toggle,.acp-content .acp-plan-clear { display:flex; align-items:center; justify-content:center; flex-shrink:0; width:22px; height:22px; padding:0; border:0; background:transparent; color:inherit; }
 .acp-plan-toggle > svg,.acp-plan-clear > svg { color:inherit; }
@@ -201,7 +201,7 @@
 .acp-actions { display:flex; align-items:center; flex-wrap:wrap; gap:6px; padding:7px; }
 .acp-actions > small { color:var(--aow-muted); }
 .acp-request-card { display:flex; flex-direction:column; min-width:0; min-height:100px; max-width:100%; margin:6px 0; overflow:hidden; border:1px solid var(--aow-line); border-radius:6px; background:var(--acp-editor,var(--aow-panel)); color:var(--aow-text); font-size:var(--conversation-code-font-size,12px); }
-.acp-activity > .acp-request-card { width:calc(100% - 2 * var(--conversation-content-inset)); max-width:var(--conversation-content-max-width); margin:8px auto; }
+.acp-activity > .acp-request-card { width:100%; margin:8px 0; }
 .acp-request-header { display:flex; align-items:center; flex-shrink:0; gap:7px; min-height:32px; padding:6px 10px; background:color-mix(in srgb,var(--aow-text) 3%,transparent); border-bottom:1px solid var(--aow-line); }
 .acp-request-header > svg { flex-shrink:0; color:var(--aow-accent); }
 .acp-request-header > span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
