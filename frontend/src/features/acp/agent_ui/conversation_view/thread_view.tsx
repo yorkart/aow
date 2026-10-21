@@ -126,7 +126,6 @@ export function ThreadView({ session, workspace, tabId, busy: pending, supportsI
         {session.notices?.map(notice => <Notice key={notice.id} notice={notice} busy={busy} onDismiss={() => { void onAction({ action: 'dismiss_notice', notice_id: notice.id }); }} />)}
         {session.permissions.filter(permission => !tools.has(toolId(permission))).map(permission => <PermissionRequest key={permission.id} permission={permission} requester={session.agent_id} busy={busy} onAnswer={response => { void onAction({ action: 'answer', request_id: permission.id, response }); }} />)}
         {notice}
-        {session.error && !composerStatus && !session.auth_required && <p className="acp-error" role="alert">{session.error}</p>}
         <Plan key={session.thread_id} entries={plan} busy={busy} onClear={() => { void onAction({ action: 'clear_plan' }); }} onOpenFile={onOpenFile} />
       </div>
     }
