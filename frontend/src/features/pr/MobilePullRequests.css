@@ -54,8 +54,8 @@
 .pr-touch-diff code { white-space:pre; }
 .pr-touch-diff .pr-diff-line-number { min-width:32px; text-align:right; user-select:none; color:var(--aow-muted); background:var(--aow-subtle); font-size:10px; }
 .pr-touch-diff .pr-diff-marker { width:18px; min-width:18px; text-align:center; user-select:none; }
-.pr-touch-diff .added { color:var(--aow-success); background:var(--aow-success-background); }
-.pr-touch-diff .removed { color:var(--aow-error); background:var(--aow-error-background); }
+.pr-touch-diff .added { color:var(--aow-text); background:var(--aow-diff-inserted-background); }
+.pr-touch-diff .removed { color:var(--aow-text); background:var(--aow-diff-removed-background); }
 .pr-touch-diff .hunk { color:var(--aow-info); background:var(--aow-selection); }
 .pr-touch-diff .meta { color:var(--aow-text-secondary); font-size:11px; }
 @media(min-width:700px) { .mobile-pr-cards { width:100%; max-width:800px; margin-inline:auto; }.mobile-pr-search { width:calc(100% - 32px); max-width:768px; margin-inline:auto; } }

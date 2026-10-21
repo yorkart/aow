@@ -103,3 +103,17 @@ The `aow.terminal-palette` preference is saved separately in browser storage, sc
 to the deployment path, and synchronized across tabs. Missing or invalid values
 fall back to following the theme. Blocked storage still allows immediate changes
 and displays a warning. Updates preserve live terminal connections and buffers.
+
+## Diff palettes
+
+**Diff 配色** offers **跟随主题**, **深色**, and **浅色** independently of the
+workbench and terminal palettes. Auto follows the workbench's light/dark mode;
+manual choices remain fixed. Dark restores Monaco's original `vs-dark` red/green
+line and text backgrounds. Each palette also sets gutter and overview markers. Mobile text diffs use the
+same independent line backgrounds while retaining workbench text colors.
+Code backgrounds and syntax colors continue to follow the editor theme.
+
+The `aow.diff-palette` preference uses deployment-scoped browser storage and
+synchronizes across tabs. Missing/invalid values follow the theme; blocked storage
+allows immediate changes and displays a warning. Existing Git, PR and ACP Monaco
+diffs update in place without recreating models or losing edits and undo history.

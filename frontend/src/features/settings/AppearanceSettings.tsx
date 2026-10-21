@@ -5,6 +5,7 @@ import { setTheme } from '../../lib/theme/store';
 import { useTheme } from '../../lib/theme/useTheme';
 import type { Theme } from '../../lib/theme/types';
 import { getTerminalPalettePreference, resolveTerminalPalette, setTerminalPalettePreference, subscribeTerminalPalette, type TerminalPalettePreference } from '../../lib/theme/terminalPalette';
+import { DiffPaletteSettings } from './DiffPaletteSettings';
 import './appearance-settings.css';
 
 function previewColors(theme: Theme): CSSProperties {
@@ -32,7 +33,7 @@ export function AppearanceSettings() {
     { id: 'soft-light', name: '柔和浅色', description: '浅色背景，柔和且清晰的文字颜色' },
   ];
   return <div className="project-aow-dialog-body appearance-settings">
-    <div className="project-aow-settings-heading"><div><h2>Appearance</h2><p>选择工作台主题，终端配色可独立设置。</p></div></div>
+    <div className="project-aow-settings-heading"><div><h2>Appearance</h2><p>选择工作台主题，终端和 Diff 配色可独立设置。</p></div></div>
     <fieldset className="theme-picker">
       <legend>颜色主题</legend>
       <div className="theme-grid">
@@ -77,5 +78,6 @@ export function AppearanceSettings() {
         ? '终端配色选择会单独保存在此浏览器中。'
         : '已应用终端配色，但浏览器阻止了保存；刷新后可能恢复跟随主题。'}</p>
     </fieldset>
+    <DiffPaletteSettings />
   </div>;
 }

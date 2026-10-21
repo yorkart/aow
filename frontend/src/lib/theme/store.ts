@@ -3,6 +3,8 @@ import { themes } from './themes';
 import { themeTokens } from './tokens';
 import { applyTerminalPalette, initializeTerminalPalette } from './terminalPalette';
 
+import { applyDiffPalette, initializeDiffPalette } from './diffPalette';
+
 export const THEME_STORAGE_KEY = 'aow.theme';
 export const defaultTheme = themes[0];
 export const resolveTheme = (id: unknown) => themes.find(theme => theme.id === id) ?? defaultTheme;
@@ -24,6 +26,7 @@ function applyTheme(id: unknown) {
   root.style.colorScheme = current.appearance;
   for (const [name, value] of Object.entries(themeTokens(current))) root.style.setProperty(name, value);
   applyTerminalPalette(current.appearance);
+  applyDiffPalette(current.appearance);
   for (const listener of listeners) listener();
 }
 
@@ -32,6 +35,7 @@ export function initializeTheme() {
   if (initialized) return;
   initialized = true;
   initializeTerminalPalette();
+  initializeDiffPalette();
   let saved: string | null = null;
   try { saved = appLocalStorage.getItem(THEME_STORAGE_KEY); } catch { /* Storage can be disabled. */ }
   applyTheme(saved);

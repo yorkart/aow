@@ -139,7 +139,7 @@ body { position:fixed; inset:0; }
 .mobile-diff { margin:0; font:12px/1.7 ui-monospace,SFMono-Regular,Consolas,monospace; min-width:max-content; tab-size:4; }
 .mobile-diff>span { display:block; padding:0 14px; }
 .mobile-diff>span br { display:none; }
-.mobile-diff .added { color:var(--aow-success); background:var(--aow-success-background); }.mobile-diff .removed { color:var(--aow-error); background:var(--aow-error-background); }.mobile-diff .hunk { color:var(--aow-info); background:var(--aow-selection); }
+.mobile-diff .added { color:var(--aow-text); background:var(--aow-diff-inserted-background); }.mobile-diff .removed { color:var(--aow-text); background:var(--aow-diff-removed-background); }.mobile-diff .hunk { color:var(--aow-info); background:var(--aow-selection); }
 .mobile-task-summary { padding:0 20px 22px; overflow-wrap:anywhere; }
 .mobile-task-summary>p { margin:15px 0; white-space:pre-wrap; }
 .mobile-task-summary+.mobile-section-label { margin:0 18px 12px; }

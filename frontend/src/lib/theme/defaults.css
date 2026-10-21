@@ -46,6 +46,8 @@
   --aow-line-subtle:color-mix(in srgb, #cbd2dc 10%, #181a1f);
   --aow-scrollbar:color-mix(in srgb, #cbd2dc 25%, #181a1f);
   --aow-editor-background:#1e1e1e;
+  --aow-diff-inserted-background:#9bb95533;
+  --aow-diff-removed-background:#ff000033;
   --aow-terminal-background:#1e1e1e;
   --aow-terminal-foreground:#cccccc;
   --aow-conversation-background:#181a1f;

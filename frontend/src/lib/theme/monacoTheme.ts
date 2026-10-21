@@ -1,9 +1,11 @@
 import type { editor } from 'monaco-editor';
 import type { Theme } from './types';
+import { resolveDiffPalette } from './diffPalette';
 
 /** Adapter kept separate so choosing a theme never loads Monaco eagerly. */
 export function monacoTheme(theme: Theme): editor.IStandaloneThemeData {
   const c = theme.colors;
+  const diff = resolveDiffPalette(theme.appearance);
   return {
     base: theme.appearance === 'dark' ? 'vs-dark' : 'vs',
     inherit: true,
@@ -41,10 +43,14 @@ export function monacoTheme(theme: Theme): editor.IStandaloneThemeData {
       'input.foreground': c.text,
       'input.border': c.controlBorder,
       'focusBorder': c.accent,
-      'diffEditor.insertedTextBackground': `${c.success.slice(0, 7)}25`,
-      'diffEditor.removedTextBackground': `${c.error.slice(0, 7)}25`,
-      'diffEditor.insertedLineBackground': `${c.success.slice(0, 7)}12`,
-      'diffEditor.removedLineBackground': `${c.error.slice(0, 7)}12`,
+      'diffEditor.insertedTextBackground': diff.insertedText,
+      'diffEditor.removedTextBackground': diff.removedText,
+      'diffEditor.insertedLineBackground': diff.insertedLine,
+      'diffEditor.removedLineBackground': diff.removedLine,
+      'diffEditorGutter.insertedLineBackground': diff.insertedGutter,
+      'diffEditorGutter.removedLineBackground': diff.removedGutter,
+      'diffEditorOverview.insertedForeground': diff.insertedOverview,
+      'diffEditorOverview.removedForeground': diff.removedOverview,
     },
   };
 }

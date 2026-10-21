@@ -84,6 +84,7 @@ try {
     await page.getByRole('button', { name: /^Appearance/ }).click();
     assert.equal(await page.locator('input[name="aow-theme"]').count(), 6);
     assert.equal(await page.locator('input[name="aow-terminal-palette"]').count(), 3);
+    assert.equal(await page.locator('input[name="aow-diff-palette"]').count(), 3);
     await page.getByRole('radio', { name: /^JetBrains Light / }).check();
     await selected(page, 'jetbrains-light');
     await page.reload();
@@ -99,12 +100,15 @@ try {
     await selected(page, 'vscode-dark-modern');
     await mobile.locator('input[value="soft-light"]').check();
     await page.waitForFunction(() => document.documentElement.dataset.terminalPalette === 'soft-light');
+    await mobile.locator('input[name="aow-diff-palette"][value="dark"]').check();
+    await page.waitForFunction(async () => (await import('/src/lib/theme/diffPalette.ts')).getDiffPalettePreference() === 'dark');
     assert.equal(await mobile.locator('.appearance-settings').evaluate(element => element.scrollWidth <= element.clientWidth), true);
     await mobile.getByRole('radio', { name: /^VS Code Dark Modern / }).focus();
     await mobile.keyboard.press('ArrowLeft');
     await selected(mobile, 'jetbrains-islands-light');
     await selected(page, 'jetbrains-islands-light');
     assert.equal(await mobile.locator('input[value="soft-light"]').isChecked(), true);
+    assert.equal(await mobile.locator('input[name="aow-diff-palette"][value="dark"]').isChecked(), true);
     await mobile.evaluate(() => localStorage.removeItem('aow.theme'));
     await selected(page, 'aow-dark');
   });
@@ -177,7 +181,7 @@ try {
     assert.equal(await paletteRadio('soft-light').isChecked(), true);
     await other.evaluate(() => localStorage.removeItem('aow.terminal-palette'));
     await effective('soft-light');
-    await page.waitForFunction(() => document.querySelector('input[value="auto"]').checked);
+    await page.waitForFunction(() => document.querySelector('input[name="aow-terminal-palette"][value="auto"]').checked);
     await page.getByRole('radio', { name: /^AOW Dark / }).check();
     await effective('soft-dark');
     await checkTerminal('#1e1e1e', 'rgb(78, 154, 6)');
@@ -187,7 +191,7 @@ try {
     const { context, page } = await fixture(t);
     await page.addInitScript(() => localStorage.setItem('aow.terminal-palette', 'removed-palette'));
     await page.goto(server.url + previewPath);
-    assert.equal(await page.locator('input[value="auto"]').isChecked(), true);
+    assert.equal(await page.locator('input[name="aow-terminal-palette"][value="auto"]').isChecked(), true);
     const scoped = await context.newPage();
     await scoped.route('**/tests/theme-preview.html', async route => {
       const response = await route.fetch();
@@ -197,7 +201,7 @@ try {
     await scoped.goto(server.url + previewPath);
     await scoped.locator('input[value="soft-light"]').check();
     assert.equal(await scoped.evaluate(() => localStorage.getItem('aow@/other:aow.terminal-palette')), 'soft-light');
-    assert.equal(await page.locator('input[value="auto"]').isChecked(), true);
+    assert.equal(await page.locator('input[name="aow-terminal-palette"][value="auto"]').isChecked(), true);
     const denied = await context.newPage();
     await denied.addInitScript(() => {
       Storage.prototype.getItem = () => { throw new DOMException('Blocked', 'SecurityError'); };
@@ -207,6 +211,76 @@ try {
     await denied.locator('input[value="soft-light"]').check();
     await denied.getByRole('status').filter({ hasText: '已应用终端配色，但浏览器阻止了保存' }).waitFor();
     assert.equal(await denied.evaluate(() => document.documentElement.dataset.terminalPalette), 'soft-light');
+  });
+
+  await test('Diff palettes update existing marks independently and preserve editor state across tabs and reloads', async t => {
+    const { context, page } = await fixture(t);
+    await page.goto(server.url + previewPath);
+    await page.waitForFunction(() => window.themeDiff);
+    const radio = id => page.locator(`input[name="aow-diff-palette"][value="${id}"]`);
+    const inserted = color => page.waitForFunction(color => [...document.querySelectorAll('.monaco-diff-editor .char-insert')]
+      .some(element => getComputedStyle(element).backgroundColor === color), color);
+    await inserted('rgba(156, 204, 44, 0.2)');
+    assert.equal(await page.evaluate(() => document.documentElement.style.getPropertyValue('--aow-diff-inserted-background')), '#9bb95533');
+    assert.equal(await page.evaluate(() => document.documentElement.style.getPropertyValue('--aow-diff-removed-background')), '#ff000033');
+    await page.evaluate(() => {
+      window.originalDiff = window.themeDiff;
+      window.originalDiffModel = window.themeDiff.getModel();
+      window.originalDiffValue = window.originalDiffModel.modified.getValue();
+      window.originalDiffModel.modified.pushStackElement();
+      window.originalDiffModel.modified.pushEditOperations([], [{ range: { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 1 }, text: '// unsaved diff edit\n' }], () => null);
+      window.originalDiffModel.modified.pushStackElement();
+    });
+    await radio('light').check();
+    await inserted('rgba(156, 204, 44, 0.25)');
+    await page.getByRole('radio', { name: /^JetBrains Dark / }).check();
+    await inserted('rgba(156, 204, 44, 0.25)');
+    assert.equal(await radio('light').isChecked(), true);
+    await radio('dark').check();
+    await page.getByRole('radio', { name: /^JetBrains Light / }).check();
+    await inserted('rgba(156, 204, 44, 0.2)');
+    assert.equal(await page.evaluate(() => window.themeDiff === window.originalDiff && window.themeDiff.getModel() === window.originalDiffModel), true);
+    assert.match(await page.evaluate(() => window.themeDiff.getModel().modified.getValue()), /^\/\/ unsaved diff edit/);
+    await page.evaluate(() => window.themeDiff.getModel().modified.undo());
+    assert.equal(await page.evaluate(() => window.themeDiff.getModel().modified.getValue() === window.originalDiffValue), true);
+    await page.reload();
+    await inserted('rgba(156, 204, 44, 0.2)');
+    const other = await context.newPage();
+    await other.goto(server.url + previewPath);
+    assert.equal(await other.locator('input[name="aow-diff-palette"][value="dark"]').isChecked(), true);
+    await other.locator('input[name="aow-diff-palette"][value="light"]').check();
+    await inserted('rgba(156, 204, 44, 0.25)');
+    await page.reload();
+    assert.equal(await radio('light').isChecked(), true);
+    await other.evaluate(() => localStorage.removeItem('aow.diff-palette'));
+    await page.waitForFunction(() => document.querySelector('input[name="aow-diff-palette"][value="auto"]').checked);
+    await page.getByRole('radio', { name: /^AOW Dark / }).check();
+    await inserted('rgba(156, 204, 44, 0.2)');
+  });
+
+  await test('Diff palette storage falls back safely and remains isolated by deployment', async t => {
+    const { context, page } = await fixture(t);
+    await page.addInitScript(() => localStorage.setItem('aow.diff-palette', 'unknown'));
+    await page.goto(server.url + previewPath);
+    assert.equal(await page.locator('input[name="aow-diff-palette"][value="auto"]').isChecked(), true);
+    const scoped = await context.newPage();
+    await scoped.route('**/tests/theme-preview.html', async route => {
+      const response = await route.fetch();
+      await route.fulfill({ response, body: (await response.text()).replace('<head>', '<head><meta name="aow-base-path" content="/other">') });
+    });
+    await scoped.routeWebSocket('**/other/api/**', socket => socket.close());
+    await scoped.goto(server.url + previewPath);
+    await scoped.locator('input[name="aow-diff-palette"][value="light"]').check();
+    assert.equal(await scoped.evaluate(() => localStorage.getItem('aow@/other:aow.diff-palette')), 'light');
+    assert.equal(await page.locator('input[name="aow-diff-palette"][value="auto"]').isChecked(), true);
+    const denied = await context.newPage();
+    await denied.addInitScript(() => {
+      Storage.prototype.getItem = () => { throw new DOMException('Blocked', 'SecurityError'); };
+      Storage.prototype.setItem = () => { throw new DOMException('Blocked', 'SecurityError'); };
+    });
+    await denied.goto(server.url + previewPath);
+    await denied.locator('input[name="aow-diff-palette"][value="light"]').check();
+    await denied.getByRole('status').filter({ hasText: '已应用 Diff 配色，但浏览器阻止了保存' }).waitFor();
   });
 
   await test('default CSS matches the theme contract and every palette produces valid colors', async t => {
