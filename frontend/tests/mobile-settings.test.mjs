@@ -368,9 +368,9 @@ try {
     state.failEnvironmentRead = false;
     await dialog.getByRole('button', { name: '重新读取文件', exact: true }).click();
     await dialog.getByText(/LaunchDaemon 模式可能需要本地管理员重新登记/).waitFor();
-    const editor = dialog.getByRole('textbox', { name: 'server.env 文件内容', exact: true });
-    await page.waitForFunction(() => document.querySelector('textarea[aria-label="server.env 文件内容"]')?.value.includes('8282'));
-    await editor.fill('# Comment\nAOW_SERVER_PORT=8283\n');
+    const editor = dialog.getByRole('textbox', { name: 'AOW_SERVER_PORT', exact: true });
+    await page.waitForFunction(() => document.querySelector('input[aria-label="AOW_SERVER_PORT"]')?.value === '8282');
+    await editor.fill('8283');
     await dialog.getByRole('button', { name: '保存 server.env', exact: true }).click();
     await dialog.getByRole('status').filter({ hasText: 'server.env 已保存' }).waitFor();
     assert.equal(state.serverEnvironment.content, '# Comment\r\nAOW_SERVER_PORT=8283\r\n');
@@ -379,22 +379,23 @@ try {
   for (const mobile of [false, true]) await test(`${mobile ? 'mobile' : 'desktop'} server.env edits preserve drafts and save the file independently of PATH`, async t => {
     const { page, state, dialog, choose, trigger } = await fixture(t, mobile ? 320 : 1280, mobile);
     const close = () => dialog.getByRole('button', { name: mobile ? '关闭设置' : '关闭', exact: true });
+    state.serverEnvironment.content = '# Keep comment\n\nAOW_SERVER_PORT="8282"\nCUSTOM=$HOME=a=b\n';
     await choose('Environment');
-    const editor = dialog.getByRole('textbox', { name: 'server.env 文件内容', exact: true });
-    await page.waitForFunction(() => document.querySelector('textarea[aria-label="server.env 文件内容"]')?.value.includes('8282'));
+    const editor = dialog.getByRole('textbox', { name: 'AOW_SERVER_PORT', exact: true });
+    await page.waitForFunction(() => document.querySelector('input[aria-label="AOW_SERVER_PORT"]')?.value === '8282');
     await dialog.getByText('systemctl --user restart aow-server.service', { exact: true }).waitFor();
     const content = '# Keep comment\n\nAOW_SERVER_PORT="8283"\nCUSTOM=$HOME=a=b\n';
-    await editor.fill(content);
+    await editor.fill('8283');
     await choose('Editor');
     await choose('Environment');
-    assert.equal(await editor.inputValue(), content, 'category changes retain drafts');
+    assert.equal(await editor.inputValue(), '8283', 'category changes retain drafts');
     page.once('dialog', prompt => prompt.dismiss());
     await close().click();
-    assert.equal(await editor.inputValue(), content, 'cancelled close retains draft');
+    assert.equal(await editor.inputValue(), '8283', 'cancelled close retains draft');
     state.failSave = true;
     await dialog.getByRole('button', { name: '保存 server.env', exact: true }).click();
     await dialog.getByRole('alert').filter({ hasText: '配置写入失败' }).waitFor();
-    assert.equal(await editor.inputValue(), content);
+    assert.equal(await editor.inputValue(), '8283');
     assert.equal(state.serverEnvironment.content.includes('8282'), true);
     state.failSave = false;
     await dialog.getByRole('button', { name: '保存 server.env', exact: true }).click();
@@ -406,23 +407,71 @@ try {
     await close().click();
     await trigger.click();
     await choose('Environment');
-    await page.waitForFunction(() => document.querySelector('textarea[aria-label="server.env 文件内容"]')?.value.includes('8283'));
-    await editor.fill('LOCAL=draft\n');
-    state.serverEnvironment.content = 'EXTERNAL=updated\n';
+    await page.waitForFunction(() => document.querySelector('input[aria-label="AOW_SERVER_PORT"]')?.value === '8283');
+    await editor.fill('8284');
+    state.serverEnvironment.content = 'EXTERNAL=updated\nAOW_SERVER_PORT=9000\n';
     state.serverEnvironment.revision = 'external';
     await dialog.getByRole('button', { name: '保存 server.env', exact: true }).click();
     await dialog.getByRole('alert').filter({ hasText: '已被外部程序修改' }).waitFor();
-    assert.equal(await editor.inputValue(), 'LOCAL=draft\n');
+    assert.equal(await editor.inputValue(), '8284');
     page.once('dialog', prompt => prompt.dismiss());
     await dialog.getByRole('button', { name: '重新读取文件', exact: true }).click();
-    assert.equal(await editor.inputValue(), 'LOCAL=draft\n');
+    assert.equal(await editor.inputValue(), '8284');
     page.once('dialog', prompt => prompt.accept());
     await dialog.getByRole('button', { name: '重新读取文件', exact: true }).click();
-    await page.waitForFunction(() => document.querySelector('textarea[aria-label="server.env 文件内容"]')?.value === 'EXTERNAL=updated\n');
+    await page.waitForFunction(() => document.querySelector('input[aria-label="AOW_SERVER_PORT"]')?.value === '9000');
     await editor.fill('');
     await dialog.getByRole('button', { name: '保存 server.env', exact: true }).click();
     await dialog.getByRole('status').filter({ hasText: 'server.env 已保存' }).waitFor();
-    assert.equal(state.serverEnvironment.content, '', 'blank content clears the file');
+    assert.equal(state.serverEnvironment.content, 'EXTERNAL=updated\n', 'clearing a value preserves unmanaged configuration');
+  });
+
+  for (const mobile of [false, true]) await test(`${mobile ? 'mobile' : 'desktop'} environment table lists all keys and saves proxies and session limits without filling defaults`, async t => {
+    const { page, state, dialog, choose } = await fixture(t, mobile ? 320 : 1280, mobile);
+    state.serverEnvironment.exists = false;
+    state.serverEnvironment.revision = 'missing';
+    state.serverEnvironment.content = '';
+    await choose('Environment');
+    await dialog.getByText('（尚不存在，保存时创建）', { exact: false }).waitFor();
+    const tables = dialog.locator('.server-environment-table');
+    assert.equal(await tables.count(), 4);
+    const inputs = tables.getByRole('textbox');
+    assert.equal(await inputs.count(), 24);
+    assert.deepEqual(await inputs.evaluateAll(elements => elements.map(element => element.value)), Array(24).fill(''));
+    assert.equal(await dialog.getByRole('textbox', { name: 'HOME', exact: true }).count(), 0);
+    for (const row of await tables.locator('tbody tr').all()) {
+      assert.ok(await row.locator('td').nth(0).textContent(), 'each key has a description');
+      assert.ok(await row.locator('td').nth(1).textContent(), 'each key has an example');
+    }
+    const values = {
+      HTTP_PROXY: 'http://127.0.0.1:7890', HTTPS_PROXY: 'http://127.0.0.1:7891', ALL_PROXY: 'socks5://127.0.0.1:1080', NO_PROXY: 'localhost,127.0.0.1,::1',
+      http_proxy: 'http://127.0.0.1:7892', https_proxy: 'http://127.0.0.1:7893', all_proxy: 'socks5://127.0.0.1:1081', no_proxy: 'example.com',
+      AOW_AUTH_SESSION_MAX_AGE_SECONDS: '86400', AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS: '7200',
+    };
+    for (const [key, value] of Object.entries(values)) await dialog.getByRole('textbox', { name: key, exact: true }).fill(value);
+    await layout(page, dialog, 'server-environment-table');
+    const save = dialog.getByRole('button', { name: '保存 server.env', exact: true });
+    const duration = dialog.getByRole('textbox', { name: 'AOW_AUTH_SESSION_MAX_AGE_SECONDS', exact: true });
+    for (const invalid of ['0', '-1', '1.5', '12h', '18446744073709551616']) {
+      await duration.fill(invalid);
+      assert.equal(await duration.getAttribute('aria-invalid'), 'true');
+      assert.equal(await save.isDisabled(), true);
+      assert.equal(state.writes.length, 0);
+    }
+    await duration.fill(values.AOW_AUTH_SESSION_MAX_AGE_SECONDS);
+    await save.click();
+    await dialog.getByRole('status').filter({ hasText: 'server.env 已保存' }).waitFor();
+    assert.deepEqual(Object.fromEntries(state.serverEnvironment.content.trim().split('\n').map(line => line.split('='))), values);
+    assert.equal(state.serverEnvironment.exists, true);
+    assert.equal(state.serverEnvironment.content.includes('AOW_SERVER_HOST'), false, 'examples and defaults stay unset');
+    await dialog.getByRole('textbox', { name: 'HTTP_PROXY', exact: true }).fill('');
+    await duration.fill('');
+    await duration.press('Enter');
+    await dialog.getByRole('status').filter({ hasText: 'server.env 已保存' }).waitFor();
+    assert.equal(state.serverEnvironment.content.includes('HTTP_PROXY='), false);
+    assert.equal(state.serverEnvironment.content.includes('AOW_AUTH_SESSION_MAX_AGE_SECONDS='), false);
+    assert.ok(state.serverEnvironment.content.includes(`http_proxy=${values.http_proxy}\n`));
+    assert.ok(state.writes.every(write => write.path === '/api/aow/settings/server-environment'), 'Enter in the table never submits the separate PATH form');
   });
 
   for (const width of [320, 390]) await test(`mobile ${width}px exposes and saves every desktop settings category`, async t => {

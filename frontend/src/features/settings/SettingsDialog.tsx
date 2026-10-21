@@ -405,9 +405,9 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
                 <p className="project-aow-form-intro">保存后对后续执行生效，已有任务无需重新保存。正在运行的任务保持原环境。</p>
                 {environmentSaved ? <p role="status">执行环境已保存。</p> : null}
                 {error ? <div className="project-aow-error" role="alert">{error}</div> : null}
+                <div className="project-aow-settings-heading"><button type="button" className="project-aow-dialog-button" disabled={settingsLoading || settingsBusy} onClick={() => void readEnvironment()}><RefreshCw size={14} />从本机环境读取</button><button type="submit" className="project-aow-dialog-button primary" disabled={settingsLoading || settingsBusy || !executionPath.trim()}>{settingsBusy ? '处理中…' : '保存 PATH'}</button></div>
                 <ServerEnvironmentFields environment={serverEnvironment} busy={settingsBusy} />
               </div>
-              <footer className="project-aow-dialog-footer"><button type="button" className="project-aow-dialog-button" disabled={settingsLoading || settingsBusy} onClick={() => void readEnvironment()}><RefreshCw size={14} />从本机环境读取</button><button type="submit" className="project-aow-dialog-button primary" disabled={settingsLoading || settingsBusy || !executionPath.trim()}>{settingsBusy ? '处理中…' : '保存 PATH'}</button></footer>
             </form>
           </> : <>
             <div className="project-aow-dialog-form"><div className="project-aow-dialog-body">

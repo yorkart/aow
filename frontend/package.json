@@ -15,7 +15,7 @@
     "test:agent-arguments": "node --test tests/agent-arguments.test.mjs",
     "test:agent-environment": "node --test tests/agent-environment.test.mjs",
     "test:mobile": "node --test tests/mobile-browser.test.mjs",
-    "test:mobile-settings": "node --test tests/mobile-settings.test.mjs",
+    "test:mobile-settings": "node --test tests/server-environment.test.mjs tests/mobile-settings.test.mjs",
     "test:pr": "node --test tests/pull-request.test.mjs",
     "test:files": "node --test tests/system-file-browser.test.mjs",
     "test:explorer": "node --test --test-concurrency=1 tests/explorer-paste.test.mjs tests/explorer-search.test.mjs",
