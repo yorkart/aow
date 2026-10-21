@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { AlertCircle, AlertTriangle, ChevronDown, Info, X } from 'lucide-react';
 import { ContentBlock, type OpenFile } from './content';
 import { visibleContent } from './entry_view_state';
@@ -15,7 +15,7 @@ export function Compaction({ content, onOpenFile }: { content: Data; onOpenFile:
   </details>;
 }
 
-export function Notice({ notice, busy, onDismiss }: { notice: ThreadEntry; busy: boolean; onDismiss: () => void }) {
+export function Notice({ notice, busy = false, onDismiss, children }: { notice: ThreadEntry; busy?: boolean; onDismiss?: () => void; children?: ReactNode }) {
   const [expanded, setExpanded] = useState(false);
   const detailsId = useId();
   const { content } = notice;
@@ -27,11 +27,11 @@ export function Notice({ notice, busy, onDismiss }: { notice: ThreadEntry; busy:
   return <section className="acp-notice" data-severity={severity} role={['error', 'warning'].includes(severity) ? 'alert' : 'status'} aria-label={title}>
     <div className="acp-notice-header">
       <Icon className="acp-notice-icon" size={15} aria-hidden="true" />
-      <span className="acp-notice-title">{title}</span>
+      <span className="acp-notice-title">{children ?? title}</span>
       {details && <button type="button" className="acp-notice-toggle" aria-expanded={expanded} aria-controls={detailsId} onClick={() => setExpanded(value => !value)}>
         {expanded ? '收起' : '详情'}<ChevronDown size={12} aria-hidden="true" />
       </button>}
-      <button type="button" className="acp-notice-dismiss" aria-label={`关闭通知：${title}`} title="关闭通知" disabled={busy} onClick={onDismiss}><X size={14} /></button>
+      {onDismiss && <button type="button" className="acp-notice-dismiss" aria-label={`关闭通知：${title}`} title="关闭通知" disabled={busy} onClick={onDismiss}><X size={14} /></button>}
     </div>
     {details && <p id={detailsId} className="acp-notice-description" hidden={!expanded}>{details}</p>}
   </section>;

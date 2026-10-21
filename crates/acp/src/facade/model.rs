@@ -147,6 +147,11 @@ pub struct SessionSnapshot {
     pub plan: Value,
     #[serde(default)]
     pub notices: Vec<ThreadEntry>,
+    /// Current session-info extension metadata, replaced by top-level key.
+    #[serde(default)]
+    pub session_meta: std::collections::BTreeMap<String, Value>,
+    #[serde(default)]
+    pub session_meta_revision: u64,
     /// Display-only terminal state, accumulated independently of tool metadata patches.
     #[serde(default)]
     pub terminals: std::collections::BTreeMap<String, Value>,

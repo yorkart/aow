@@ -31,6 +31,9 @@ export interface SessionSnapshot {
   config_options_supported?: boolean; auth_required?: boolean;
   terminals?: Record<string, Data>;
   plan?: Data; notices?: ThreadEntry[];
+  session_meta?: Data;
+  session_meta_revision?: number;
+  session_meta_revisions?: Record<string, number>;
 }
 export interface SettingsFile { path: string; content: string; revision: string }
 export interface DebugMessage { request_method?: string; timestamp: string; direction: string; message: string; connection_id: string; thread_id: string | null; session_id: string | null; scope: 'thread' | 'connection' | 'unattributed' }

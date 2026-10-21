@@ -186,6 +186,9 @@ pub(super) fn metadata(thread: &SessionSnapshot) -> SessionSnapshot {
     result.interacted_at = thread.interacted_at.clone();
     result.plan = thread.plan.clone();
     result.notices = thread.notices.clone();
+    result.session_meta = thread.session_meta.clone();
+    result.session_meta_revision = thread.session_meta_revision;
+    result.session_meta_revisions = thread.session_meta_revisions.clone();
     result.permissions = thread.permissions.clone();
     result.modes = thread.modes.clone();
     result.config_options = thread.config_options.clone();

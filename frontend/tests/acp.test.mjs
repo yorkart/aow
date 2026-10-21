@@ -319,6 +319,57 @@ try {
   }
   const interactions = state => state.actions.filter(action => action.action !== 'resume');
   const newSession = async page => { await page.getByRole('button', { name: '新建窗体', exact: true }).click(); await page.getByRole('button', { name: '新建 ACP 会话：Test Agent', exact: true }).click(); };
+  await test('session metadata uses info notices and resets auto-hide on updates without manual controls', async t => {
+    const { page, state } = await fixture(t);
+    await newSession(page);
+    await page.getByRole('textbox', { name: 'ACP 消息', exact: true }).waitFor();
+    await page.clock.install();
+    const hints = page.getByRole('region', { name: '会话元数据', exact: true });
+    const update = async metadata => {
+      state.session.session_meta = metadata;
+      state.session.session_meta_revision = (state.session.session_meta_revision || 0) + 1;
+      state.session.session_meta_revisions = Object.fromEntries(Object.keys(metadata).map(key => [key, state.session.session_meta_revision]));
+      state.session.revision++;
+      await hints.locator('code').first().waitFor();
+    };
+    await update({ trae: { queueStatus: { state: 'waiting', position: 1175, message: 'Queue position: 1175' } }, other: { text: '<script>bad()</script>' } });
+    await hints.getByText('trae meta:', { exact: true }).waitFor();
+    assert.equal(await hints.locator('code').count(), 2);
+    assert.equal(await hints.locator('script').count(), 0);
+    assert.equal(await hints.getByRole('button').count(), 0);
+    assert.equal(await hints.locator('.acp-notice-icon').count(), 2);
+    await page.clock.runFor(7000);
+    state.session.session_meta.trae = { queueStatus: { state: 'waiting', position: 1174 } };
+    state.session.revision++;
+    await hints.locator('code').filter({ hasText: '1174' }).waitFor();
+    assert.equal(await hints.locator('.acp-notice[data-severity="info"]').count(), 2);
+    await page.clock.runFor(4000);
+    assert.equal(await hints.locator('code').count(), 1, 'only the updated key restarts its timer');
+    assert.equal(await hints.getByText('other meta:', { exact: true }).count(), 0);
+    await page.clock.runFor(6100);
+    await hints.locator('code').first().waitFor({ state: 'hidden' });
+    await page.getByRole('button', { name: '移动会话视图', exact: true }).click();
+    await page.getByRole('textbox', { name: 'ACP 消息', exact: true }).waitFor();
+    assert.equal(await hints.locator('code').count(), 0, 'remounting does not revive expired metadata');
+    const nextRevision = (state.session.session_meta_revision || 0) + 1;
+    state.session.session_meta_revisions = { ...state.session.session_meta_revisions, trae: nextRevision };
+    state.session.revision++;
+    await hints.locator('code').first().waitFor();
+    assert.equal(await hints.locator('code').count(), 1, 'an identical update revives only its own key');
+    await page.clock.runFor(10_100);
+    await hints.locator('code').first().waitFor({ state: 'hidden' });
+    assert.equal(await page.getByRole('button', { name: 'Meta', exact: true }).count(), 0);
+    await update({ trae: { queueStatus: { state: 'ready', position: null, message: null } } });
+    await hints.locator('code').filter({ hasText: '"state":"ready"' }).waitFor();
+    assert.equal(await hints.locator('code').count(), 1);
+    assert.match(await hints.locator('code').textContent(), /"message":null/);
+    await hints.locator('.acp-notice').hover();
+    await page.clock.runFor(11_000);
+    assert.equal(await hints.locator('code').isVisible(), true, 'hover pauses hiding');
+    await page.mouse.move(0, 0);
+    await page.clock.runFor(10_100);
+    await hints.locator('code').waitFor({ state: 'hidden' });
+  });
   await test('ACP fork opens an independent tab with history and preserves the source and its draft', async t => {
     const { page, state } = await fixture(t, false, { capabilities: { loadSession: true, sessionCapabilities: { fork: {} } } });
     state.session.entries = [{ id: 'history-user', kind: 'user', content: { type: 'text', text: 'Shared question' } }, { id: 'history-answer', kind: 'assistant', content: { type: 'text', text: 'Shared answer' } }];

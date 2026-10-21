@@ -424,6 +424,9 @@ impl AgentServerStore {
         let previous = self.snapshot(&id).ok();
         if let Some(previous) = &previous {
             thread.title = previous.title.clone();
+            thread.session_meta = previous.session_meta.clone();
+            thread.session_meta_revision = previous.session_meta_revision;
+            thread.session_meta_revisions = previous.session_meta_revisions.clone();
             thread.revision = previous.revision;
         }
         thread.modes = result.get("modes").cloned().unwrap_or(json!({}));
