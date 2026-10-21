@@ -35,7 +35,12 @@ License texts and the upstream JetBrains notice are preserved in
 
 These are AOW adaptations. They retain the reference editor colors,
 while mapping interface roles to AOW's layout and adjusting secondary text,
-links, and status colors for readability. They do not require Zed at runtime.
+links, and status colors for readability. Dark themes currently use matching AOW
+UI blues for links, active icons, selections, buttons, focus borders and user
+messages. Each theme declares its own values, including hover colors and blue
+backgrounds/borders; there is no inheritance or reference to another theme.
+Editor syntax and terminal palettes remain independent. They do not require Zed
+at runtime.
 
 ## Theme contract
 

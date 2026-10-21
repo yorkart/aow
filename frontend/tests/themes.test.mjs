@@ -217,11 +217,21 @@ try {
       const { themeTokens } = await import('/src/lib/theme/tokens.ts');
       return {
         defaults: themeTokens(themes[0]),
+        darkBlueDifferences: themes.filter(theme => theme.appearance === 'dark').flatMap(theme => {
+          const roles = ['--accent', '--aow-accent', '--aow-icon-active', '--aow-link', '--aow-link-hover',
+            '--aow-selection', '--aow-sidebar-selection', '--aow-primary', '--aow-primary-hover',
+            '--aow-conversation-user-background', '--aow-conversation-user-line',
+            '--aow-info', '--aow-info-background', '--aow-info-border'];
+          const tokens = themeTokens(theme);
+          const reference = themeTokens(themes[0]);
+          return roles.filter(role => tokens[role] !== reference[role]).map(role => `${theme.id}: ${role}`);
+        }),
         invalid: themes.flatMap(theme => Object.entries(themeTokens(theme))
           .filter(([, value]) => !CSS.supports('color', value)).map(([name]) => `${theme.id}: ${name}`)),
       };
     });
     assert.deepEqual(result.invalid, []);
+    assert.deepEqual(result.darkBlueDifferences, []);
     const css = await readFile(new URL('../src/lib/theme/defaults.css', import.meta.url), 'utf8');
     for (const [name, value] of Object.entries(result.defaults)) assert.ok(css.includes(`${name}:${value};`), name);
   });

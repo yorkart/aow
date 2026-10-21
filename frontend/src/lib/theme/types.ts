@@ -17,6 +17,12 @@ export interface Theme {
     selection: string;
     accent: string;
     primary: string;
+    primaryHover: string;
+    linkHover: string;
+    userBackground: string;
+    userBorder: string;
+    infoBackground: string;
+    infoBorder: string;
     text: string;
     secondary: string;
     muted: string;
