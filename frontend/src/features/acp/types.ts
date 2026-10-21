@@ -3,7 +3,7 @@ export const object = (value: unknown): Data => value && typeof value === 'objec
 export const list = (value: unknown): Data[] => Array.isArray(value) ? value.map(object) : [];
 export const text = (value: unknown): string => typeof value === 'string' ? value : '';
 export const failure = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
-export interface AgentInfo { id: string; name: string; description: string; configured: boolean; supported: boolean; installed: boolean; version?: string }
+export interface AgentInfo { id: string; name: string; description: string; configured: boolean; supported: boolean; installed: boolean; version?: string; icon?: string | null; repository?: string | null; website?: string | null; license_url?: string | null }
 export interface ConnectionInfo { id: string; agent_id: string; cwd: string; agent_info: Data; capabilities: Data; auth_methods: Data[]; prompt_capabilities?: Data; extensions?: Data }
 export interface ConnectionStatus { operation_id?: string; phase: string; detail?: string; running: boolean; elapsed_seconds: number }
 export interface Permission { id: string; kind: string; request: Data }

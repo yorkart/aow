@@ -17,6 +17,14 @@ pub struct AgentInfo {
     pub name: String,
     pub description: String,
     pub version: Option<String>,
+    #[serde(default)]
+    pub icon: Option<String>,
+    #[serde(default)]
+    pub repository: Option<String>,
+    #[serde(default)]
+    pub website: Option<String>,
+    #[serde(default)]
+    pub license_url: Option<String>,
     pub configured: bool,
     pub supported: bool,
     pub installed: bool,

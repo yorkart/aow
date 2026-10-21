@@ -104,6 +104,10 @@ impl AgentServerStore {
                 name: id.clone(),
                 description: String::new(),
                 version: None,
+                icon: None,
+                repository: None,
+                website: None,
+                license_url: None,
                 configured: true,
                 supported: true,
                 installed: self.installed(id, &values, execution_path.as_deref()),
@@ -136,6 +140,10 @@ impl AgentServerStore {
                     name: entry.name,
                     description: entry.description,
                     version: Some(entry.version),
+                    icon: entry.icon,
+                    repository: entry.repository,
+                    website: entry.website,
+                    license_url: entry.license_url,
                     supported,
                 }
             })

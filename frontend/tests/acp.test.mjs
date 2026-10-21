@@ -44,7 +44,7 @@ try {
         if (state.agentsError) { await route.fulfill({ status: 503, json: { message: state.agentsError } }); return; }
         data = state.agents || [{ id: 'test', name: 'Test Agent', supported: true, configured: true, installed: true }, ...(state.saved ? [{ id: 'codex-acp', name: 'Codex ACP', supported: true, configured: true, installed: state.installed }, ...Object.entries(parse(state.saved).agent_servers || {}).filter(([, config]) => config.type === 'custom').map(([id]) => ({ id, name: id, supported: true, configured: true, installed: true }))] : [])];
       }
-      else if (path.endsWith('/registry')) data = [{ id: 'codex-acp', name: 'Codex ACP', description: 'Registry agent', supported: true }];
+      else if (path.endsWith('/registry')) data = state.registry || [{ id: 'codex-acp', name: 'Codex ACP', description: 'Registry agent', supported: true }];
       else if (path.endsWith('/settings')) {
         if (request.method() === 'PUT' && state.settingsError) { await route.fulfill({ status: 500, json: { message: state.settingsError } }); return; }
         if (request.method() === 'PUT') { state.saved = request.postDataJSON().content; state.content = state.saved; }
@@ -1413,8 +1413,8 @@ try {
       const { monaco } = await import('/src/features/editor/monaco.ts');
       return monaco.editor.getModel(monaco.Uri.parse('inmemory://aow/acp/aow-acp-settings.jsonc')).getValue();
     });
-    const addCustom = page.getByRole('button', { name: '添加自定义 Agent', exact: true });
-    const modal = page.getByRole('dialog', { name: '添加自定义 ACP Agent', exact: true });
+    const addCustom = page.getByRole('button', { name: 'Setting File', exact: true });
+    const modal = page.getByRole('dialog', { name: '编辑 ACP 配置', exact: true });
     const confirmation = page.getByRole('alertdialog', { name: '放弃 ACP 修改？', exact: true });
     const edit = async content => {
       const input = modal.getByRole('textbox', { name: 'ACP JSONC 配置', exact: true });
@@ -1504,8 +1504,8 @@ try {
     await modal.waitFor({ state: 'hidden' });
     assert.equal(await defaultOption.isChecked(), true, 'discarding editor changes retains the earlier default selection');
     await page.waitForFunction(() => document.querySelector('[aria-label="Unsaved settings"]')?.textContent === 'false');
-    await page.getByRole('button', { name: '添加自定义 Agent', exact: true }).click();
-    const custom = page.getByRole('dialog', { name: '添加自定义 ACP Agent', exact: true });
+    await page.getByRole('button', { name: 'Setting File', exact: true }).click();
+    const custom = page.getByRole('dialog', { name: '编辑 ACP 配置', exact: true });
     await custom.getByRole('button', { name: '取消', exact: true }).click();
     await custom.waitFor({ state: 'hidden' });
     assert.equal(await defaultOption.isChecked(), true);
@@ -1550,11 +1550,49 @@ try {
     assert.equal(await page.getByRole('button', { name: '保存', exact: true }).count(), 0);
     assert.equal(state.connections, 0);
   });
+  await test('Registry header actions, metadata links and installed filters match the settings layout', async t => {
+    const { page } = await fixture(t, true, {
+      agents: [{ id: 'ready', name: 'Ready Agent', installed: true, supported: true }],
+      registry: [
+        { id: 'ready', name: 'Ready Agent', description: 'Installed adapter', version: '1.2.3', supported: true, repository: 'https://github.com/example/ready', website: 'https://example.com/ready', license_url: 'https://example.com/license', icon: 'https://example.com/missing.svg' },
+        { id: 'new', name: 'New Agent', description: 'Searchable adapter', version: '2.0.0', supported: true, website: 'javascript:alert(1)' },
+      ],
+    });
+    const heading = page.locator('.acp-settings-heading');
+    await heading.getByRole('button', { name: 'Setting File', exact: true }).waitFor();
+    await heading.getByRole('button', { name: 'ACP Registry', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'ACP Registry', exact: true });
+    const cards = dialog.locator('.acp-registry-card');
+    await cards.first().waitFor();
+    assert.equal(await cards.count(), 2);
+    const searchBounds = await dialog.locator('.acp-registry-search').boundingBox();
+    const inputBounds = await dialog.getByRole('searchbox').boundingBox();
+    assert.ok(inputBounds.x + inputBounds.width <= searchBounds.x + searchBounds.width, 'search input stays inside its bordered control');
+    assert.equal(await dialog.getByRole('link', { name: /Learn More/i }).count(), 0);
+    assert.equal(await dialog.getByRole('link', { name: 'Ready Agent Repository' }).getAttribute('href'), 'https://github.com/example/ready');
+    assert.equal(await dialog.getByRole('link', { name: 'Ready Agent Website' }).getAttribute('target'), '_blank');
+    assert.equal(await dialog.getByRole('link', { name: 'Ready Agent License' }).count(), 1);
+    assert.equal(await dialog.getByRole('link', { name: 'New Agent Website' }).count(), 0);
+    await dialog.getByText('v1.2.3', { exact: true }).waitFor();
+    await dialog.getByText('ID: ready', { exact: true }).waitFor();
+    await dialog.getByRole('group', { name: '安装状态筛选' }).getByRole('button', { name: 'Installed', exact: true }).click();
+    assert.equal(await cards.count(), 1);
+    assert.match(await cards.first().textContent(), /Ready Agent/);
+    await dialog.getByRole('button', { name: 'Not Installed', exact: true }).click();
+    assert.equal(await cards.count(), 1);
+    assert.match(await cards.first().textContent(), /New Agent/);
+    await dialog.getByRole('searchbox', { name: '搜索 ACP Registry' }).fill('absent');
+    await dialog.getByText('没有匹配的 Agent。').waitFor();
+    await dialog.getByRole('searchbox').fill('searchable');
+    assert.equal(await cards.count(), 1);
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.equal(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth), true);
+  });
   await test('Registry additions retain comments and unknown JSONC fields', async t => {
     const { page, state } = await fixture(t, true);
-    await page.getByRole('button', { name: '浏览 ACP Registry', exact: true }).click();
+    await page.getByRole('button', { name: 'ACP Registry', exact: true }).click();
     await page.getByRole('dialog', { name: 'ACP Registry', exact: true }).waitFor();
-    await page.getByRole('button', { name: '添加并安装', exact: true }).click();
+    await page.getByRole('button', { name: 'Install', exact: true }).click();
     await page.getByText('codex-acp 已安装，可在工作区“新建窗体”菜单的 ACP 分组中新建会话。').waitFor();
     assert.equal(state.installCalls, 1);
     assert.equal(state.connections, 0);
@@ -1596,9 +1634,9 @@ try {
     state.installGate = new Promise(resolve => { finish = resolve; });
     t.after(() => finish());
     state.installStatus = { phase: 'installing', detail: null, running: true, elapsed_seconds: 18 };
-    await page.getByRole('button', { name: '浏览 ACP Registry', exact: true }).click();
+    await page.getByRole('button', { name: 'ACP Registry', exact: true }).click();
     await page.getByRole('dialog', { name: 'ACP Registry', exact: true }).waitFor();
-    await page.getByRole('button', { name: '添加并安装', exact: true }).click();
+    await page.getByRole('button', { name: 'Install', exact: true }).click();
     await page.getByText('正在下载并安装 Agent 依赖… · 已等待 18 秒', { exact: true }).waitFor();
     assert.equal(await page.getByRole('dialog', { name: 'ACP Registry', exact: true }).getByRole('button', { name: '关闭对话框' }).isDisabled(), true);
     state.installStatus = { ...state.installStatus, detail: 'ETIMEDOUT', elapsed_seconds: 20 };
@@ -1609,7 +1647,7 @@ try {
     finish();
     await page.getByRole('alert').getByText(state.installError, { exact: true }).waitFor();
     state.installError = '';
-    await page.getByRole('dialog', { name: 'ACP Registry', exact: true }).getByRole('button', { name: '重试安装', exact: true }).click();
+    await page.getByRole('dialog', { name: 'ACP Registry', exact: true }).getByRole('button', { name: 'Retry', exact: true }).click();
     await page.getByText('codex-acp 已安装，可在工作区“新建窗体”菜单的 ACP 分组中新建会话。').waitFor();
     assert.equal(state.installCalls, 2);
     assert.equal(state.connections, 0);
