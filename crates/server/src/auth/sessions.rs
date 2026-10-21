@@ -1,17 +1,15 @@
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
-    time::{Duration, Instant},
+    time::Instant,
 };
 
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use super::provider::VerifiedIdentity;
+use super::{SessionTimeouts, provider::VerifiedIdentity};
 use crate::HttpError;
 
-pub(super) const ABSOLUTE_TIMEOUT: Duration = Duration::from_secs(12 * 60 * 60);
-const IDLE_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 const MAX_SESSIONS: usize = 64;
 
 #[derive(Clone)]
@@ -24,14 +22,17 @@ pub(super) struct Session {
 }
 
 impl Session {
-    fn expired(&self, now: Instant) -> bool {
-        now.duration_since(self.created) >= ABSOLUTE_TIMEOUT
-            || now.duration_since(self.last_active) >= IDLE_TIMEOUT
+    fn expired(&self, now: Instant, timeouts: SessionTimeouts) -> bool {
+        now.duration_since(self.created) >= timeouts.max_age
+            || now.duration_since(self.last_active) >= timeouts.idle_timeout
     }
 }
 
 #[derive(Clone, Default)]
-pub(super) struct Sessions(Arc<Mutex<HashMap<String, Session>>>);
+pub(super) struct Sessions {
+    entries: Arc<Mutex<HashMap<String, Session>>>,
+    pub(super) timeouts: SessionTimeouts,
+}
 
 impl Sessions {
     pub fn create(
@@ -41,10 +42,10 @@ impl Sessions {
     ) -> Result<String, HttpError> {
         let now = Instant::now();
         let mut sessions = self
-            .0
+            .entries
             .lock()
             .map_err(|_| HttpError::internal("登录会话锁不可用"))?;
-        Self::prune(&mut sessions, now);
+        self.prune(&mut sessions, now);
         if sessions.len() >= MAX_SESSIONS {
             let oldest = sessions
                 .iter()
@@ -72,10 +73,10 @@ impl Sessions {
     pub fn get(&self, token: &str, touch: bool) -> Result<Option<Session>, HttpError> {
         let now = Instant::now();
         let mut sessions = self
-            .0
+            .entries
             .lock()
             .map_err(|_| HttpError::internal("登录会话锁不可用"))?;
-        Self::prune(&mut sessions, now);
+        self.prune(&mut sessions, now);
         Ok(sessions.get_mut(token).map(|session| {
             if touch {
                 session.last_active = now;
@@ -86,7 +87,7 @@ impl Sessions {
 
     pub fn revoke(&self, token: &str) -> Result<(), HttpError> {
         if let Some(session) = self
-            .0
+            .entries
             .lock()
             .map_err(|_| HttpError::internal("登录会话锁不可用"))?
             .remove(token)
@@ -96,9 +97,9 @@ impl Sessions {
         Ok(())
     }
 
-    fn prune(sessions: &mut HashMap<String, Session>, now: Instant) {
+    fn prune(&self, sessions: &mut HashMap<String, Session>, now: Instant) {
         sessions.retain(|_, session| {
-            if session.expired(now) {
+            if session.expired(now, self.timeouts) {
                 session.cancelled.cancel();
                 false
             } else {
@@ -110,6 +111,8 @@ impl Sessions {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
 
     fn identity() -> VerifiedIdentity {
@@ -121,22 +124,54 @@ mod tests {
 
     #[test]
     fn absolute_and_idle_expiry_cancel_connections_and_cannot_be_refreshed() {
-        for absolute in [false, true] {
-            let sessions = Sessions::default();
-            let token = sessions.create("test", identity()).unwrap();
-            let cancelled = sessions.get(&token, false).unwrap().unwrap().cancelled;
-            {
-                let mut entries = sessions.0.lock().unwrap();
-                let entry = entries.get_mut(&token).unwrap();
-                if absolute {
-                    entry.created -= ABSOLUTE_TIMEOUT;
-                } else {
-                    entry.last_active -= IDLE_TIMEOUT;
+        for timeouts in [
+            SessionTimeouts::default(),
+            SessionTimeouts::from_seconds(10, 2).unwrap(),
+            SessionTimeouts::from_seconds(86400, 3600).unwrap(),
+        ] {
+            for absolute in [false, true] {
+                let sessions = Sessions {
+                    timeouts,
+                    ..Sessions::default()
+                };
+                let token = sessions.create("test", identity()).unwrap();
+                let cancelled = sessions.get(&token, false).unwrap().unwrap().cancelled;
+                {
+                    let mut entries = sessions.entries.lock().unwrap();
+                    let entry = entries.get_mut(&token).unwrap();
+                    if absolute {
+                        entry.created -= sessions.timeouts.max_age;
+                    } else {
+                        entry.last_active -= sessions.timeouts.idle_timeout;
+                    }
                 }
+                assert!(sessions.get(&token, true).unwrap().is_none());
+                assert!(cancelled.is_cancelled());
             }
-            assert!(sessions.get(&token, true).unwrap().is_none());
-            assert!(cancelled.is_cancelled());
         }
+    }
+
+    #[test]
+    fn longer_limits_allow_sessions_past_the_defaults_and_activity_only_refreshes_idle() {
+        let sessions = Sessions {
+            timeouts: SessionTimeouts::from_seconds(86400, 7200).unwrap(),
+            ..Sessions::default()
+        };
+        let token = sessions.create("test", identity()).unwrap();
+        let created = Instant::now() - Duration::from_secs(13 * 60 * 60);
+        let last_active = Instant::now() - Duration::from_secs(60 * 60);
+        {
+            let mut entries = sessions.entries.lock().unwrap();
+            let entry = entries.get_mut(&token).unwrap();
+            entry.created = created;
+            entry.last_active = last_active;
+        }
+        let passive = sessions.get(&token, false).unwrap().unwrap();
+        assert_eq!(passive.created, created);
+        assert_eq!(passive.last_active, last_active);
+        let active = sessions.get(&token, true).unwrap().unwrap();
+        assert_eq!(active.created, created);
+        assert!(active.last_active > last_active);
     }
 
     #[test]
@@ -145,7 +180,7 @@ mod tests {
         let token = sessions.create("test", identity()).unwrap();
         let before = Instant::now() - Duration::from_secs(60);
         sessions
-            .0
+            .entries
             .lock()
             .unwrap()
             .get_mut(&token)
@@ -161,7 +196,7 @@ mod tests {
             sessions.create("test", identity()).unwrap();
         }
         assert!(cancelled.is_cancelled());
-        assert_eq!(sessions.0.lock().unwrap().len(), MAX_SESSIONS);
+        assert_eq!(sessions.entries.lock().unwrap().len(), MAX_SESSIONS);
         let token = sessions.create("test", identity()).unwrap();
         let cancelled = sessions.get(&token, false).unwrap().unwrap().cancelled;
         sessions.revoke(&token).unwrap();

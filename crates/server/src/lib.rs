@@ -23,6 +23,7 @@ mod terminal;
 mod web;
 mod workspace_events;
 
+pub use auth::SessionTimeouts;
 pub use base_path::BasePath;
 pub use error::HttpError;
 pub use local_cli::start_local_cli;

@@ -178,6 +178,7 @@ cp "$DOWNLOAD_ROOT/$path" "$output"
     AOW_RUNTIME_ROOT: runtime, AOW_USER_BIN_DIR: join(home, '.local/bin'),
     AOW_STATE_DIR: '', AOW_SERVER_STATE_DIR: '', AOW_RELEASE_REPOSITORY: '',
     AOW_SERVER_HOST: '', AOW_SERVER_PORT: '', AOW_BASE_PATH: '', AOW_TERMINALD_SOCKET: '',
+    AOW_AUTH_SESSION_MAX_AGE_SECONDS: '', AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS: '',
     XDG_STATE_HOME: '', XDG_RUNTIME_DIR: '', XDG_CONFIG_HOME: join(home, '.config'),
     SERVICE_LOG: serviceLog, SERVICE_STATE: serviceState, DOWNLOAD_ROOT: output,
     DOWNLOAD_LOG: join(temp, 'downloads.log') };
@@ -815,6 +816,22 @@ test('daemon installation refuses a system configuration belonging to another ac
   assert.notEqual(conflict.status, 0);
   assert.match(conflict.stderr, /belong to another account/);
   assert.doesNotMatch(f.log(f.serviceLog), /bootstrap|bootout|signal/);
+});
+
+test('launchd preserves session timeout configuration and environment overrides for both service modes', t => {
+  const f = fixture(t);
+  write(join(f.home, '.config/aow/server.env'), 'AOW_AUTH_SESSION_MAX_AGE_SECONDS=86400\nAOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS=7200\n');
+  for (const mode of ['launchagent', 'launchdaemon']) {
+    const plist = join(f.temp, `${mode}.plist`);
+    for (const extra of [{}, { AOW_AUTH_SESSION_MAX_AGE_SECONDS: '172800', AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS: '3600' }]) {
+      succeeds(f.run(process.execPath, ['scripts/launchd-service.mjs', 'server', f.runtime, plist, process.execPath, mode], extra));
+      const converted = f.run('plutil', ['-convert', 'json', '-o', '-', plist]);
+      succeeds(converted);
+      const environment = JSON.parse(converted.stdout).EnvironmentVariables;
+      assert.equal(environment.AOW_AUTH_SESSION_MAX_AGE_SECONDS, extra.AOW_AUTH_SESSION_MAX_AGE_SECONDS || '86400');
+      assert.equal(environment.AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS, extra.AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS || '7200');
+    }
+  }
 });
 
 test('native macOS Mach-O binaries pass the real packaging checks', { skip: process.platform !== 'darwin' }, t => {

@@ -20,6 +20,9 @@ mod limits;
 mod password;
 mod provider;
 mod sessions;
+mod timeouts;
+
+pub use timeouts::SessionTimeouts;
 
 pub(crate) use authorization::require_auth;
 pub(crate) use http::routes;
@@ -54,6 +57,10 @@ pub(super) struct AuthStatus {
 }
 
 impl AuthService {
+    pub(crate) fn set_session_timeouts(&mut self, timeouts: SessionTimeouts) {
+        self.sessions.timeouts = timeouts;
+    }
+
     pub(crate) fn persistent(state_dir: &Path) -> Self {
         Self::with_providers(vec![Arc::new(PasswordProvider::new(state_dir))])
     }

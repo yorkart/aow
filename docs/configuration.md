@@ -36,7 +36,7 @@ IPv6 浏览器地址使用方括号，例如 `http://[::1]:8282/`。若改为 IP
 
 macOS **LaunchDaemon** 模式会将监听地址等服务配置写入由 root 管理的系统 plist。这些配置变化时，安装器先准备请求并以退出码 78 提示本地管理员登记；登记后回到服务账户重跑安装验证。仅程序版本或下方代理变量变化不需要重新登记，步骤见 [安装说明](release-installation.md)。
 
-LaunchDaemon 的 `server.env` 仅接受服务配置和基本运行环境：`AOW_SERVER_HOST`、`AOW_SERVER_PORT`、`AOW_SERVER_STATE_DIR`、`AOW_STATE_DIR`、`AOW_TERMINALD_SOCKET`、`AOW_BASE_PATH`、`AOW_AUTH_SECURE_COOKIE`、`XDG_STATE_HOME`、`XDG_RUNTIME_DIR`、`PATH`、`SHELL`、`LANG`、`LC_ALL`、`LC_CTYPE`。账户身份、HOME、运行目录和日志模式由安装器固定。系统 plist 可被其他本机账户读取，不要在其中填写 API 密钥或口令；其他环境变量会被拒绝。
+LaunchDaemon 的 `server.env` 仅接受服务配置和基本运行环境：`AOW_SERVER_HOST`、`AOW_SERVER_PORT`、`AOW_SERVER_STATE_DIR`、`AOW_STATE_DIR`、`AOW_TERMINALD_SOCKET`、`AOW_BASE_PATH`、`AOW_AUTH_SECURE_COOKIE`、`AOW_AUTH_SESSION_MAX_AGE_SECONDS`、`AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS`、`XDG_STATE_HOME`、`XDG_RUNTIME_DIR`、`PATH`、`SHELL`、`LANG`、`LC_ALL`、`LC_CTYPE`。账户身份、HOME、运行目录和日志模式由安装器固定。系统 plist 可被其他本机账户读取，不要在其中填写 API 密钥或口令；其他环境变量会被拒绝。
 
 另外支持标准代理变量 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY` 及其小写形式，例如：
 
@@ -98,7 +98,21 @@ AOW_AUTH_SECURE_COOKIE=true
 
 直接运行二进制也可使用 `--secure-cookies`。该设置为登录和清除会话的 Cookie 添加 `Secure`；它不为后端启用 TLS，反向代理仍需负责 HTTPS、HTTP 跳转和 HSTS。代理应保留浏览器请求的 `Host`，以便登录/退出请求检查 `Origin`。服务端不根据客户端可伪造的 `X-Forwarded-Proto` 降低 Cookie 安全设置。只接受 `true` 或 `false`，本机 HTTP 默认为 `false`。
 
-登录会话最长保留 12 小时，30 分钟没有工作台 API 请求或终端输入时过期；登录状态轮询和终端输出不延长空闲期限。桌面在 Settings 中、手机在项目首页右上角可退出登录。退出、会话过期、修改账号/密码后，旧会话的新请求和终端输入会被拒绝，已建立的终端和事件流最迟在下一次会话检查时断开（约 1 秒）；这不会结束 terminald 中的进程。
+登录会话默认最长保留 12 小时，默认空闲 30 分钟后过期。可在 **Settings → Environment → AoW 服务环境变量** 中编辑 `~/.config/aow/server.env`，分别配置这两项，单位为秒：
+
+```dotenv
+# 从登录成功开始计算的最长有效期，默认 12 小时
+AOW_AUTH_SESSION_MAX_AGE_SECONDS=43200
+
+# 从最后一次有效活动开始计算的空闲超时，默认 30 分钟
+AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS=1800
+```
+
+未设置的项使用各自默认值。只接受大于 0 的整数秒；空值、0、负数、小数、带单位的值及超出 64 位无符号整数范围的值会导致启动报错。两项独立生效，任一达到就需要重新登录；空闲时间大于最长有效期时，仍由最长有效期限制会话。工作台 API 请求和终端输入会刷新空闲计时，登录状态轮询和终端输出不会刷新；有效活动不会延长从登录开始计算的最长有效期。
+
+保存后按上面的“使配置生效”步骤重新加载配置并重启 Web 服务；macOS LaunchDaemon 模式修改这两项也需重新登记系统 plist。直接运行二进制时，可设置上述环境变量，或使用优先级更高的 `--session-max-age-seconds`、`--session-idle-timeout-seconds` 参数。配置在启动时读取，不会热更新。
+
+桌面在 Settings 中、手机在项目首页右上角可退出登录。退出、会话过期、修改账号/密码后，旧会话的新请求和终端输入会被拒绝，已建立的终端和事件流最迟在下一次会话检查时断开（约 1 秒）；这不会结束 terminald 中的进程。
 
 登录校验全局最多并发 2 个，最多突发 10 次，此后每 6 秒恢复一次额度。连续 5 次凭据错误后开始退避，最长 60 秒；被限流时返回 `429` 和 `Retry-After`。这些限制不使用客户端提交的账号名或转发 IP 来创建独立额度。重启服务会清空内存会话和限流状态。
 

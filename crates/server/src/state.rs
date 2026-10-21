@@ -135,6 +135,12 @@ impl AppState {
         self
     }
 
+    /// Sets login session limits before serving requests or cloning the state.
+    pub fn with_session_timeouts(mut self, timeouts: crate::SessionTimeouts) -> Self {
+        self.auth.set_session_timeouts(timeouts);
+        self
+    }
+
     /// Reconciles durable terminal tabs with the external terminal daemon.
     /// A later terminal request retries this operation if startup happens
     /// while the daemon is unavailable.
