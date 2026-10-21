@@ -46,7 +46,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
   agents: AowAgent[]; agentsError?: string; mobile?: boolean; onClose: () => void;
   onReload: () => Promise<void>; onNodesChange: (addresses: string[]) => void;
 }) {
-  const [section, setSection] = useState<Section>('notes');
+  const [section, setSection] = useState<Section>(sections[0].id);
   const [overview, setOverview] = useState(mobile);
   const [reviewDirty, setReviewDirty] = useState(false);
   const [acpDirty, setAcpDirty] = useState(false);
