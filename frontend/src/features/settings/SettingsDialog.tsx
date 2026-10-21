@@ -400,12 +400,18 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
             <form className="project-aow-dialog-form" onSubmit={(event) => { event.preventDefault(); void saveEnvironment(); }}>
               <div className="project-aow-dialog-body">
                 <div className="project-aow-settings-heading"><div><h2>Environment</h2><p>配置执行 PATH，编辑 AoW 服务的环境变量文件。</p></div></div>
-                <label className="project-aow-dialog-field"><span>PATH 目录（从上到下优先）</span><textarea aria-label="PATH 目录" spellCheck={false} rows={10} value={executionPath} disabled={settingsLoading || settingsBusy} onChange={(event) => { setExecutionPath(event.target.value); setEnvironmentSaved(false); setError(''); }} placeholder={'/opt/python/3.11/bin\n/usr/local/bin\n/usr/bin\n/bin'} required /></label>
+                <h3>PATH 目录（从上到下优先）</h3>
+                <div className="environment-settings-toolbar">
+                  <div className="environment-settings-buttons">
+                    <button type="button" className="project-aow-dialog-button" disabled={settingsLoading || settingsBusy} onClick={() => void readEnvironment()}><RefreshCw size={14} />从本机环境读取</button>
+                    <button type="submit" className="project-aow-dialog-button primary" disabled={settingsLoading || settingsBusy || !executionPath.trim()}>{settingsBusy ? '处理中…' : '保存 PATH'}</button>
+                  </div>
+                </div>
+                <div className="project-aow-dialog-field"><textarea aria-label="PATH 目录" spellCheck={false} rows={10} value={executionPath} disabled={settingsLoading || settingsBusy} onChange={(event) => { setExecutionPath(event.target.value); setEnvironmentSaved(false); setError(''); }} placeholder={'/opt/python/3.11/bin\n/usr/local/bin\n/usr/bin\n/bin'} required /></div>
                 <p className="project-aow-form-intro">每行一个服务器上的绝对目录。要优先使用某个 Python，请把包含 python3 的目录放在前面；这里不填写可执行文件，也不展开 ~、$HOME 或 $PATH。</p>
                 <p className="project-aow-form-intro">保存后对后续执行生效，已有任务无需重新保存。正在运行的任务保持原环境。</p>
                 {environmentSaved ? <p role="status">执行环境已保存。</p> : null}
                 {error ? <div className="project-aow-error" role="alert">{error}</div> : null}
-                <div className="project-aow-settings-heading"><button type="button" className="project-aow-dialog-button" disabled={settingsLoading || settingsBusy} onClick={() => void readEnvironment()}><RefreshCw size={14} />从本机环境读取</button><button type="submit" className="project-aow-dialog-button primary" disabled={settingsLoading || settingsBusy || !executionPath.trim()}>{settingsBusy ? '处理中…' : '保存 PATH'}</button></div>
                 <ServerEnvironmentFields environment={serverEnvironment} busy={settingsBusy} />
               </div>
             </form>

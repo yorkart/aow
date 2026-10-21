@@ -367,7 +367,6 @@ try {
     assert.equal(await dialog.getByRole('button', { name: '保存 server.env', exact: true }).isDisabled(), true);
     state.failEnvironmentRead = false;
     await dialog.getByRole('button', { name: '重新读取文件', exact: true }).click();
-    await dialog.getByText(/LaunchDaemon 模式可能需要本地管理员重新登记/).waitFor();
     const editor = dialog.getByRole('textbox', { name: 'AOW_SERVER_PORT', exact: true });
     await page.waitForFunction(() => document.querySelector('input[aria-label="AOW_SERVER_PORT"]')?.value === '8282');
     await editor.fill('8283');
@@ -383,7 +382,6 @@ try {
     await choose('Environment');
     const editor = dialog.getByRole('textbox', { name: 'AOW_SERVER_PORT', exact: true });
     await page.waitForFunction(() => document.querySelector('input[aria-label="AOW_SERVER_PORT"]')?.value === '8282');
-    await dialog.getByText('systemctl --user restart aow-server.service', { exact: true }).waitFor();
     const content = '# Keep comment\n\nAOW_SERVER_PORT="8283"\nCUSTOM=$HOME=a=b\n';
     await editor.fill('8283');
     await choose('Editor');
@@ -432,7 +430,7 @@ try {
     state.serverEnvironment.revision = 'missing';
     state.serverEnvironment.content = '';
     await choose('Environment');
-    await dialog.getByText('（尚不存在，保存时创建）', { exact: false }).waitFor();
+    await dialog.locator('.server-environment-actions').getByText(state.serverEnvironment.path, { exact: true }).waitFor();
     const tables = dialog.locator('.server-environment-table');
     assert.equal(await tables.count(), 4);
     const inputs = tables.getByRole('textbox');

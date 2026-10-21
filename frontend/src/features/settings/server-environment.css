@@ -1,5 +1,8 @@
+.environment-settings-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding:8px 0 12px; border-bottom:1px solid var(--aow-line); }
+.environment-settings-buttons { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:12px; margin-left:auto; }
 .server-environment-groups { min-width:0; container-type:inline-size; }
-.server-environment-actions { position:sticky; top:0; z-index:1; display:flex; flex-direction:column; gap:8px; padding-top:8px; background:var(--aow-panel); }
+.server-environment-actions { position:sticky; top:0; z-index:1; display:flex; flex-direction:column; gap:8px; background:var(--aow-panel); }
+.server-environment-path { min-width:0; flex:1 1 240px; color:var(--aow-muted); font:11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace; overflow-wrap:anywhere; }
 .server-environment-table { width:100%; table-layout:fixed; border-collapse:collapse; margin-bottom:18px; color:var(--aow-text); font-size:11px; line-height:1.6; }
 .server-environment-table caption { padding:0 0 8px; color:var(--aow-text-strong); font-size:12px; font-weight:600; text-align:left; }
 .server-environment-table :is(th,td) { padding:8px; border:1px solid var(--aow-line); text-align:left; vertical-align:top; overflow-wrap:anywhere; }
