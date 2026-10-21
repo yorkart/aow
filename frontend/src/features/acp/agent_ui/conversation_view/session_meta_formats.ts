@@ -5,7 +5,9 @@ export const sessionMetaFormats: ReadonlyArray<{ key: string; format: (value: un
   {
     key: 'trae',
     format: value => {
-      const message = object(object(value).queueStatus).message;
+      const queue = object(object(value).queueStatus);
+      if (queue.state === 'ready') return undefined;
+      const message = queue.message;
       return typeof message === 'string' && message.trim() ? message : undefined;
     },
   },
