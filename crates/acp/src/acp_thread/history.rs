@@ -132,6 +132,7 @@ impl ThreadStore {
             .clone()
             .unwrap_or_else(|| metadata.updated_at.clone());
         thread.status = "disconnected".into();
+        super::AcpThread::clear_session_meta(&mut thread);
         super::steering::disconnected(&mut thread);
         thread.recovery = None;
         super::turns::finish(&mut thread);
@@ -182,6 +183,9 @@ impl ThreadStore {
             .map(|permission| permission.id.clone())
             .collect();
         apply(&mut thread);
+        if (working && thread.status != "working") || thread.status == "disconnected" {
+            super::AcpThread::clear_session_meta(&mut thread);
+        }
         super::turns::finish(&mut thread);
         thread.revision += 1;
         thread.updated_at = chrono::Utc::now().to_rfc3339();

@@ -664,6 +664,7 @@ impl AgentServerStore {
             return Ok(());
         }
         self.inner.threads.lock().unwrap().update(id, |thread| {
+            AcpThread::clear_session_meta(thread);
             thread.steering.cancelled = true;
             if let Some(pending) = &mut thread.steering.pending {
                 pending.cancelled = true;

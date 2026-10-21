@@ -3,6 +3,8 @@ use crate::facade::{SessionSnapshot, SessionTurn, ThreadEntry};
 mod replay;
 
 pub(crate) fn start(thread: &mut SessionSnapshot, entry_start: usize) {
+    super::AcpThread::clear_session_meta(thread);
+    thread.session_meta_suppressed = false;
     thread.turns.push(SessionTurn {
         user_entry_id: thread.entries[entry_start].id.clone(),
         status: "in_progress".into(),

@@ -159,6 +159,7 @@ impl AgentServerStore {
                 let succeeded = result.is_ok();
                 let mut completed = None;
                 let saved = threads.update(&id, |thread| {
+                    AcpThread::clear_session_meta(thread);
                     thread.active_prompt = None;
                     thread.last_prompt_usage = usage.clone();
                     thread.pending_user_echo.clear();

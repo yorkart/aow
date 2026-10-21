@@ -292,3 +292,44 @@ fn session_metadata_replaces_top_level_keys_and_keeps_ready_payloads() -> Result
     assert!(store.snapshot("local")?.session_meta_revisions.is_empty());
     Ok(())
 }
+
+#[test]
+fn metadata_is_cleared_at_turn_boundaries_and_late_updates_stay_hidden() -> Result<()> {
+    let mut store = store()?;
+    let queue = json!({"sessionUpdate":"session_info_update","_meta":{"trae":{"queueStatus":{"message":"Waiting"}}}});
+    store.session_update("local", queue.clone())?;
+    store.update("local", |thread| {
+        let start = thread.entries.len();
+        AcpThread::push(thread, "user", json!({"type":"text","text":"New task"}));
+        crate::acp_thread::turns::start(thread, start);
+    })?;
+    assert!(store.snapshot("local")?.session_meta.is_empty());
+    store.session_update("local", queue.clone())?;
+    store.update("local", AcpThread::clear_session_meta)?;
+    assert!(store.snapshot("local")?.session_meta.is_empty());
+    store.session_update("local", queue.clone())?;
+    assert!(store.snapshot("local")?.session_meta.is_empty());
+    store.session_update(
+        "local",
+        json!({"sessionUpdate":"session_info_update","title":"New title"}),
+    )?;
+    assert_eq!(store.snapshot("local")?.title, "New title");
+
+    for status in ["idle", "disconnected"] {
+        store.update("local", |thread| {
+            thread.status = "working".into();
+            let start = thread.entries.len();
+            AcpThread::push(thread, "user", json!({"type":"text","text":"Next"}));
+            crate::acp_thread::turns::start(thread, start);
+        })?;
+        store.session_update("local", queue.clone())?;
+        assert!(!store.snapshot("local")?.session_meta.is_empty());
+        store.update("local", |thread| thread.status = status.into())?;
+        let ended = store.snapshot("local")?;
+        assert!(ended.session_meta.is_empty());
+        assert!(ended.session_meta_revisions.is_empty());
+        store.session_update("local", queue.clone())?;
+        assert!(store.snapshot("local")?.session_meta.is_empty());
+    }
+    Ok(())
+}
