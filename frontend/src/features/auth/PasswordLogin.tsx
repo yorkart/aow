@@ -35,15 +35,12 @@ export function PasswordLogin({ onSuccess }: LoginMethodProps) {
     void submit();
   };
 
-  return <>
-    <p>请输入首次安装时设置的账号和密码。</p>
-    <form onSubmit={onSubmit}>
-      <label htmlFor="aow-username">账号</label>
-      <input id="aow-username" name="username" autoComplete="username" autoFocus autoCapitalize="none" spellCheck={false} placeholder="请输入账号" type="text" value={username} required disabled={submitting} onChange={(event) => { setUsername(event.target.value); setError(undefined); }} />
-      <label htmlFor="aow-password">密码</label>
-      <input id="aow-password" name="password" autoComplete="current-password" placeholder="请输入密码" type="password" value={password} required disabled={submitting} onChange={(event) => { setPassword(event.target.value); setError(undefined); }} />
-      {error && <p className="aow-auth-error" role="alert">{error}</p>}
-      <button type="submit" disabled={submitting}>{submitting ? '正在验证…' : '登录'}</button>
-    </form>
-  </>;
+  return <form onSubmit={onSubmit}>
+    <label htmlFor="aow-username">账号</label>
+    <input id="aow-username" name="username" autoComplete="username" autoFocus autoCapitalize="none" spellCheck={false} placeholder="请输入账号" type="text" value={username} required disabled={submitting} onChange={(event) => { setUsername(event.target.value); setError(undefined); }} />
+    <label htmlFor="aow-password">密码</label>
+    <input id="aow-password" name="password" autoComplete="current-password" placeholder="请输入密码" type="password" value={password} required disabled={submitting} onChange={(event) => { setPassword(event.target.value); setError(undefined); }} />
+    {error && <p className="aow-auth-error" role="alert">{error}</p>}
+    <button type="submit" disabled={submitting}>{submitting ? '正在验证…' : '登录'}</button>
+  </form>;
 }

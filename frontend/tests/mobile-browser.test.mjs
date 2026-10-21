@@ -182,6 +182,30 @@ async function noOverflow(page) {
 let browser;
 try {
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
+  await test('mobile login restores full height when keyboard dismissal emits no resize', async t => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    t.after(() => context.close());
+    await context.addInitScript(() => {
+      Object.defineProperty(window, 'visualViewport', { value: Object.assign(new EventTarget(), { height: 844, width: 390, offsetTop: 0 }) });
+    });
+    const state = await fixture(context);
+    await context.route('**/api/auth/status', route => route.fulfill({ json: { configured: true, authenticated: false } }));
+    await context.route('**/api/auth/login', route => route.fulfill({ json: { configured: true, authenticated: true } }));
+    const page = await context.newPage();
+    await page.goto(`${baseURL}/?ui=mobile`);
+    await page.getByLabel('账号', { exact: true }).fill('admin');
+    await page.getByLabel('密码', { exact: true }).fill('test-password');
+    await page.evaluate(() => { window.visualViewport.height = 420; });
+    await page.getByRole('button', { name: '登录', exact: true }).click();
+    await page.locator('.mobile-app').waitFor();
+    await page.waitForFunction(() => document.documentElement.style.getPropertyValue('--mobile-height') === '420px');
+    // The login fields have unmounted, so neither focusout nor resize is heard
+    // by the new app when the WebView finishes dismissing the keyboard.
+    await page.evaluate(() => { window.visualViewport.height = 844; });
+    await page.waitForFunction(() => document.documentElement.style.getPropertyValue('--mobile-height') === '844px');
+    assert.equal((await page.locator('.mobile-app').boundingBox()).height, 844);
+    assert.deepEqual(state.errors, []);
+  });
   await test('mobile project avatars load directly and fall back without changing the project card layout', async t => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     t.after(() => context.close());
