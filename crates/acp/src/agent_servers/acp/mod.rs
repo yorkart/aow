@@ -29,6 +29,7 @@ pub(crate) struct AcpConnection {
     pub(super) loads: super::recovery::Loads,
     pub(super) load_identity: tokio::sync::Mutex<()>,
     stop: CancellationToken,
+    stopped: CancellationToken,
 }
 
 pub(super) struct StdioContext {
@@ -63,6 +64,8 @@ impl AcpConnection {
             debug_log,
         } = transport::spawn_stdio(&cwd, command, runtime.execution_path, runtime.debug_log)?;
         let stop = CancellationToken::new();
+        let stopped = CancellationToken::new();
+        let exited = stopped.clone();
         let initialization_guard = stop.clone().drop_guard();
         let context = Arc::new(ClientContext {
             events: runtime.events,
@@ -129,6 +132,7 @@ impl AcpConnection {
             lifetime.cancel();
             exit_context.disconnected(&reason);
             exit_log.archive();
+            exited.cancel();
         });
         let connection = tokio::time::timeout(Duration::from_secs(30), received)
             .await?
@@ -184,9 +188,14 @@ impl AcpConnection {
             loads: Default::default(),
             load_identity: Default::default(),
             stop,
+            stopped,
         };
         initialization_guard.disarm();
         Ok(result)
+    }
+    pub(crate) async fn wait_stopped(&self) -> Result<()> {
+        tokio::time::timeout(Duration::from_secs(5), self.stopped.cancelled()).await?;
+        Ok(())
     }
     pub(crate) fn connected(&self) -> bool {
         !self.stop.is_cancelled()

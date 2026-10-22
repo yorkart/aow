@@ -193,6 +193,14 @@ impl AcpService {
     pub async fn close_session(&self, thread_id: &str) -> Result<()> {
         self.0.close_session(thread_id).await
     }
+    /// Block admission while the host removes a workspace; unrelated workspaces stay available.
+    pub fn set_workspace_removing(&self, cwd: &str, removing: bool) {
+        self.0.set_workspace_removing(cwd, removing);
+    }
+    /// Remove only AoW-owned state. Never sends session/delete to an agent.
+    pub async fn delete_workspace(&self, cwd: &str) -> Result<usize> {
+        self.0.delete_workspace(cwd).await
+    }
     pub async fn delete_session(&self, thread_id: &str) -> Result<()> {
         self.0.delete_session(thread_id).await
     }

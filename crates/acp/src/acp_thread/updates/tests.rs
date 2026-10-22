@@ -283,7 +283,10 @@ fn session_metadata_replaces_top_level_keys_and_keeps_ready_payloads() -> Result
     );
     let overview = crate::acp_thread::overview::snapshot(&mut thread.lock().unwrap());
     assert_eq!(overview.session_meta, current.session_meta);
-    assert_eq!(overview.session_meta_revisions, current.session_meta_revisions);
+    assert_eq!(
+        overview.session_meta_revisions,
+        current.session_meta_revisions
+    );
     store.session_update(
         "local",
         json!({"sessionUpdate":"session_info_update","_meta":null}),

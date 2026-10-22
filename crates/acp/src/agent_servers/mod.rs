@@ -10,6 +10,7 @@ mod prompt;
 mod recovery;
 mod steering;
 mod sync;
+mod workspace;
 
 use crate::acp_thread::normalize_config_options;
 use crate::facade::{AcpHost, AgentInfo, ConnectionInfo, Content, SessionInfo, SessionSnapshot};
@@ -207,6 +208,12 @@ impl AgentServerStore {
         thread_id: Option<&str>,
     ) -> Result<ConnectionInfo> {
         let _guard = self.inner.connect_lock.lock().await;
+        self.inner
+            .threads
+            .lock()
+            .unwrap()
+            .workspace_version(&cwd.to_string_lossy())?;
+        ensure!(cwd.is_dir(), "ACP working directory must be a directory");
         progress.set("configuration");
         let raw_settings = self.inner.host.settings().await?;
         let settings = validate_settings(&raw_settings)?;
@@ -492,6 +499,12 @@ impl AgentServerStore {
             "Agent does not support session loading"
         );
         let identity = connection.load_identity.lock().await;
+        self.inner
+            .threads
+            .lock()
+            .unwrap()
+            .workspace_version(&connection.info.cwd)?;
+        ensure!(connection.connected(), "ACP adapter is disconnected");
         let existing = self
             .inner
             .threads
@@ -531,6 +544,11 @@ impl AgentServerStore {
             .await
     }
     pub async fn resume(&self, id: &str) -> Result<SessionSnapshot> {
+        self.inner
+            .threads
+            .lock()
+            .unwrap()
+            .ensure_session_available(id)?;
         let result = self.resume_inner(id).await;
         if let Err(error) = &result {
             let thread = self.snapshot(id)?;

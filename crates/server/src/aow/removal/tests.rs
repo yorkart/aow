@@ -242,3 +242,57 @@ fn legacy_history_is_ignored_even_when_invalid() {
     let restored = AowManager::persistent(directory.path()).unwrap();
     assert!(restored.inner.removals.lock().unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn removal_cleans_local_acp_sessions_and_preserves_rejected_worktrees() {
+    let (_directory, mut state, project, paths) = fixture().await;
+    let settings = state.aow.acp_settings().unwrap();
+    state
+        .aow
+        .save_acp_settings(
+            serde_json::json!({"agent_servers":{"test":{"type":"custom","command":"/bin/sh"}}})
+                .to_string(),
+            settings.revision,
+        )
+        .await
+        .unwrap();
+    state.acp = crate::acp::service(
+        state.aow.clone(),
+        None,
+        state.terminals.task_stop_sender(),
+        state.workspace_events.clone(),
+    )
+    .unwrap();
+    let retained = state
+        .acp
+        .prepare_session("test", paths[0].clone().into())
+        .await
+        .unwrap();
+    let removed = state
+        .acp
+        .prepare_session("test", paths[1].clone().into())
+        .await
+        .unwrap();
+    let job = submit(
+        state.clone(),
+        project.id.clone(),
+        vec![
+            RemovalRequest {
+                path: paths[0].clone(),
+                force: false,
+            },
+            RemovalRequest {
+                path: paths[1].clone(),
+                force: false,
+            },
+        ],
+    )
+    .unwrap();
+    let finished = wait_finished(&state, &job.id).await;
+    assert_eq!(finished.items[0].status, RemovalStatus::Failed);
+    assert_eq!(finished.items[1].status, RemovalStatus::Succeeded);
+    assert!(state.acp.snapshot(&retained.thread_id).is_ok());
+    assert!(state.acp.snapshot(&removed.thread_id).is_err());
+    assert!(state.acp.sessions(Some(&paths[1])).is_empty());
+    assert!(!Path::new(&paths[1]).exists());
+}

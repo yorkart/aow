@@ -65,7 +65,7 @@ export function WorktreeCleanupDialog({ project, isUnallocated, jobs, progressEr
     <section className="project-aow-modal project-aow-dialog worktree-cleanup-dialog" role="dialog" aria-modal="true" aria-labelledby="worktree-cleanup-title" onPointerDown={event => event.stopPropagation()}>
       <header><div><Trash2 /><strong id="worktree-cleanup-title">批量清理 Worktree</strong><span>{project.name}</span></div><button type="button" title="关闭" aria-label="关闭" onClick={onClose}><X /></button></header>
       <div className="project-aow-dialog-body worktree-cleanup-body">
-        <p className="project-aow-form-intro">删除所选 Worktree 的目录和关联 Terminal / Agent，保留 Git 分支。提交后可关闭弹窗，后台会继续清理。</p>
+        <p className="project-aow-form-intro">删除所选 Worktree 的目录、关联 Terminal / Agent 和 ACP 本地会话数据，保留 Git 分支及 Agent 自身的会话历史。提交后可关闭弹窗，后台会继续清理。</p>
         {previews ? <>
           <strong>确认清理以下 {previews.length} 个 Worktree</strong>
           {previews.map(preview => <div className="worktree-cleanup-preview" key={preview.worktree.path}>

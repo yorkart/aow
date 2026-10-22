@@ -24,6 +24,7 @@ impl AgentServerStore {
             "This agent does not support images"
         );
         let mut threads = self.inner.threads.lock().unwrap();
+        threads.ensure_session_available(id)?;
         let source = threads.threads.get(id).context("ACP session not found")?;
         let thread = source.lock().unwrap();
         ensure!(

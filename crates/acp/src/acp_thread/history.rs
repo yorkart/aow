@@ -5,7 +5,7 @@ use crate::{
 };
 use anyhow::{Context, Result, ensure};
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
@@ -17,6 +17,8 @@ pub(crate) struct ThreadStore {
     pub(crate) threads: BTreeMap<String, Arc<Mutex<SessionSnapshot>>>,
     // Fork RPCs reserve prompt admission without changing the source transcript.
     pub(crate) forking: HashSet<String>,
+    removing_workspaces: HashSet<String>,
+    workspace_versions: HashMap<String, u64>,
     metadata_changed: Box<dyn Fn() + Send + Sync>,
 }
 impl ThreadStore {
@@ -29,6 +31,8 @@ impl ThreadStore {
             metadata: ThreadMetadataStore::new(state_directory.as_deref())?,
             threads: BTreeMap::new(),
             forking: HashSet::new(),
+            removing_workspaces: HashSet::new(),
+            workspace_versions: HashMap::new(),
             metadata_changed: Box::new(metadata_changed),
         })
     }
@@ -92,6 +96,26 @@ impl ThreadStore {
                 updated_at: row.updated_at.clone(),
                 interacted_at: row.interacted_at.clone(),
             }))
+    }
+    pub(crate) fn workspace_version(&self, cwd: &str) -> Result<u64> {
+        ensure!(
+            !self.removing_workspaces.contains(cwd),
+            "ACP workspace is being removed"
+        );
+        Ok(*self.workspace_versions.get(cwd).unwrap_or(&0))
+    }
+    pub(crate) fn set_workspace_removing(&mut self, cwd: &str, removing: bool) {
+        if removing {
+            if self.removing_workspaces.insert(cwd.into()) {
+                *self.workspace_versions.entry(cwd.into()).or_default() += 1;
+            }
+        } else {
+            self.removing_workspaces.remove(cwd);
+        }
+    }
+    pub(crate) fn ensure_session_available(&self, id: &str) -> Result<()> {
+        self.workspace_version(&self.session_info(id)?.cwd)?;
+        Ok(())
     }
     fn load_thread(&mut self, id: &str) -> Result<()> {
         if self.threads.contains_key(id) {
@@ -260,6 +284,12 @@ impl ThreadStore {
         self.insert_metadata_all(vec![thread])
     }
     pub(crate) fn insert_metadata_all(&mut self, mut threads: Vec<SessionSnapshot>) -> Result<()> {
+        for thread in &threads {
+            // Existing operations may finish and persist while removal is queued.
+            if self.metadata.entry(&thread.thread_id).is_none() {
+                self.workspace_version(&thread.cwd)?;
+            }
+        }
         for thread in &mut threads {
             thread.revision += 1;
             thread.changes.reset(thread.revision);
@@ -283,9 +313,8 @@ impl ThreadStore {
     }
     pub(crate) fn remove(&mut self, id: &str) -> Result<()> {
         let info = self.session_info(id)?;
+        self.metadata.delete_durable(id)?;
         self.threads.remove(id);
-        self.metadata.delete(id);
-        self.metadata.flush()?;
         use crate::facade::SyncResource;
         self.events.publish(
             SyncResource::Session {

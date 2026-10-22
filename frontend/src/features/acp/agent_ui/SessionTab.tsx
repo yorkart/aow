@@ -16,7 +16,7 @@ import { acpApi, authenticationCompleted, sessionsChanged } from '../api';
 import { acceptSession, readSession } from '../sync/store';
 import { useConnectionSync, useRequestsSync, useSessionSync } from '../sync/hooks';
 import { failure, object, type ConnectionInfo, type Data, type DebugMessage, type SessionInfo, type SessionSnapshot } from '../types';
-import type { AcpTab } from './workspace_tabs';
+import { removeAcpSessionTabs, type AcpTab } from './workspace_tabs';
 import { ConnectionProgress } from './connection_progress';
 import { useProgress } from './use_progress';
 import { PermissionRequest } from './conversation_view/elicitation';
@@ -53,6 +53,9 @@ export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenSes
   const thread_id = prepared?.thread_id ?? tab.thread_id;
   const sync = useSessionSync(thread_id, visible);
   const session = sync.deleted ? undefined : sync.data;
+  useEffect(() => {
+    if (thread_id && sync.deleted) removeAcpSessionTabs(workspace, thread_id);
+  }, [workspace, thread_id, sync.deleted]);
   const binding = useConnectionSync(thread_id);
   const [busy, setBusy] = useState(true);
   const [busyMessage, setBusyMessage] = useState('正在打开会话…');

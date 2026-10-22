@@ -44,6 +44,7 @@ pub(super) fn spawn(
                     })
                     .unwrap_or(false);
                 if active {
+                    state.acp.set_workspace_removing(&item.path, false);
                     let _ = state.terminals.set_workspace_removing(&item.path, false);
                     let _ = state.aow.inner.removals.update(
                         &worker_job.id,
@@ -103,6 +104,13 @@ pub(super) async fn run_job(state: &AppState, job: &RemovalJob, operation: &Hand
                 .terminals
                 .set_workspace_removing(&item.path, true)
                 .map_err(|error| AowError::Invalid(error.to_string()))?;
+            state.acp.set_workspace_removing(&item.path, true);
+            operation.progress(format!("清理 ACP 本地资源：{}", item.path), Some(index));
+            state
+                .acp
+                .delete_workspace(&item.path)
+                .await
+                .map_err(|error| AowError::Invalid(error.to_string()))?;
             operation.progress(format!("清理 Terminal / Agent：{}", item.path), Some(index));
             state
                 .terminals
@@ -133,6 +141,7 @@ pub(super) async fn run_job(state: &AppState, job: &RemovalJob, operation: &Hand
             },
             Some(index + 1),
         );
+        state.acp.set_workspace_removing(&item.path, false);
         let _ = state.terminals.set_workspace_removing(&item.path, false);
         if let Err(error) = state
             .aow

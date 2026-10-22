@@ -217,7 +217,10 @@ impl AowManager {
     ) -> Result<(String, String), AowError> {
         let project = self.project(id).await?;
         if let Some(root) = workspace_root
-            && !project.worktrees.iter().any(|worktree| worktree.path == root)
+            && !project
+                .worktrees
+                .iter()
+                .any(|worktree| worktree.path == root)
         {
             return Err(AowError::ProjectNotFound(root.to_owned()));
         }

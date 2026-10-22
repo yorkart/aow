@@ -1165,6 +1165,11 @@ try {
       state.dirtyWorktrees = [worktrees[1].path];
       state.defaultTerminalRoots = [worktrees[0].path, '/workspace/wt-2'];
     } });
+    await page.evaluate(() => {
+      localStorage.setItem('aow-acp-tabs:/workspace/wt-1', JSON.stringify([{ id: 'removed-acp', thread_id: 'removed-thread', agentId: 'test', title: 'Removed' }]));
+      localStorage.setItem('aow-acp-tabs:/workspace/wt-2', JSON.stringify([{ id: 'kept-acp', thread_id: 'kept-thread', agentId: 'test', title: 'Kept' }, { id: 'already-deleted', thread_id: 'gone-thread', agentId: 'test', title: 'Deleted before failure' }]));
+    });
+    await page.route('**/api/acp/sessions?**', route => route.fulfill({ json: [{ thread_id: 'kept-thread', cwd: '/workspace/wt-2' }] }));
     await eventually(async () => await page.locator('.project-aow-worktrees button.compact').count() === 1);
     assert.equal(await page.getByLabel('仅显示未分配资源', { exact: true }).count(), 0);
     await page.getByRole('button', { name: /Project 操作$/ }).click();
@@ -1197,6 +1202,11 @@ try {
     state.removalJobs[0].items[1].error = 'Permission denied';
     state.projects = state.projects.map(project => ({ ...project, worktrees: project.worktrees.filter(worktree => worktree.path !== '/workspace/wt-1') }));
     await eventually(async () => await page.locator('.project-aow-worktrees button[title="/workspace/wt-1"]').count() === 0);
+    await eventually(() => page.evaluate(() => localStorage.getItem('aow-acp-tabs:/workspace/wt-1') === null));
+    await eventually(() => page.evaluate(() => {
+      const tabs = JSON.parse(localStorage.getItem('aow-acp-tabs:/workspace/wt-2') || '[]');
+      return tabs.length === 1 && tabs[0].thread_id === 'kept-thread';
+    }));
     assert.equal(await page.getByRole('button', { name: '查看清理结果', exact: true }).count(), 0);
     await dialog.getByText('已删除', { exact: true }).waitFor();
     await dialog.getByText('Permission denied', { exact: true }).waitFor();

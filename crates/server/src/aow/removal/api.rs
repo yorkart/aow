@@ -111,6 +111,7 @@ pub(in crate::aow) fn submit(
         next.push(job.clone());
         *jobs = next;
         for item in &job.items {
+            state.acp.set_workspace_removing(&item.path, true);
             if let Err(error) = state.terminals.set_workspace_removing(&item.path, true) {
                 tracing::error!(%error, path = %item.path, "failed to reserve workspace for removal");
             }

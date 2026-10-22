@@ -26,6 +26,8 @@ import { EditorSettingsProvider, useWordWrapOverrides } from '../features/editor
 import { AutomationDetail } from '../features/automations/AutomationDetail';
 import { AutomationPanel } from '../features/automations/AutomationPanel';
 import type { AutomationRun, AutomationTask } from '../features/automations/types';
+import { removeAcpWorkspaceTabs, pruneAcpWorkspaceTabs, savedAcpTabs } from '../features/acp/agent_ui/workspace_tabs';
+import { acpApi } from '../features/acp/api';
 import { AcpPanel, AcpSessionTab, ProjectAcpPanelProvider, useAcpTabs } from '../features/acp';
 import { TerminalPanel } from '../features/terminals/TerminalPanel';
 import { isCliTerminal, terminalTabPresentation } from '../features/terminals/terminalPresentation';
@@ -2592,23 +2594,33 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
         ?? project.worktrees[0]?.path
         ?? '';
     });
+    removeAcpWorkspaceTabs(removedPath);
     appLocalStorage.removeItem(`aow-workspace-tabs:${removedPath}`);
   };
 
   useEffect(() => {
-    const completed = removals.jobs.flatMap(job => job.items.filter(item => item.status === 'succeeded')
-      .map(item => ({ key: `${job.id}:${item.path}`, projectId: job.project_id, path: item.path })))
+    const completed = removals.jobs.flatMap(job => job.items.filter(item => !removalActive(item))
+      .map(item => ({ key: `${job.id}:${item.path}`, projectId: job.project_id, path: item.path, status: item.status })))
       .filter(item => !handledRemovals.current.has(item.key));
     if (!completed.length || applyingRemovals.current) return;
     applyingRemovals.current = true;
-    void aowApi.projects().then(all => {
+    void aowApi.projects().then(async all => {
       for (const item of completed) {
         const project = all.find(project => project.id === item.projectId);
         // History must never remove a newly created worktree at an old path.
-        if (project && !project.worktrees.some(worktree => worktree.path === item.path)) worktreeRemoved(project, item.path);
+        if (item.status === 'succeeded') {
+          if (project && !project.worktrees.some(worktree => worktree.path === item.path)) worktreeRemoved(project, item.path);
+        } else {
+          // ACP cleanup can succeed before Terminal or directory removal fails.
+          const checked = savedAcpTabs(item.path).flatMap(tab => tab.thread_id ? [tab.thread_id] : []);
+          if (checked.length) {
+            const sessions = await acpApi.sessions(item.path);
+            pruneAcpWorkspaceTabs(item.path, checked, new Set(sessions.map(session => session.thread_id)));
+          }
+        }
         handledRemovals.current.add(item.key);
       }
-    }).catch(reason => setError(`Worktree 已删除，但刷新项目失败：${message(reason)}`))
+    }).catch(reason => setError(`清理任务已结束，但刷新工作区资源失败：${message(reason)}`))
       .finally(() => { applyingRemovals.current = false; });
   }, [removals.jobs]);
 

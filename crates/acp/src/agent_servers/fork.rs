@@ -24,6 +24,7 @@ impl AgentServerStore {
         let (source, reservation) = {
             // The same lock admits prompts, so the idle check and reservation are atomic.
             let mut threads = self.inner.threads.lock().unwrap();
+            threads.ensure_session_available(id)?;
             let source = threads.thread(id)?.lock().unwrap().clone();
             ensure!(
                 source.status == "idle"

@@ -62,13 +62,9 @@ impl TerminalManager {
         legacy_id: Option<&str>,
     ) -> Result<Option<TerminalTab>, TerminalError> {
         let mut state = self.lock_state()?;
-        if let Some(tab) = state
-            .tabs
-            .iter()
-            .find(|tab| {
-                tab.dock_project_id.as_deref() == Some(project_id) && tab.workspace_root == root
-            })
-        {
+        if let Some(tab) = state.tabs.iter().find(|tab| {
+            tab.dock_project_id.as_deref() == Some(project_id) && tab.workspace_root == root
+        }) {
             return Ok(Some(tab.clone()));
         }
         let Some(index) = legacy_id.and_then(|id| state.tabs.iter().position(|tab| tab.id == id))

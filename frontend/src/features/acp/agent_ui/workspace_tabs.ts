@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SessionInfo } from '../types';
-import { discardComposerDraft } from './composer_drafts';
+import { discardComposerDraft, discardWorkspaceComposerDrafts } from './composer_drafts';
 
 export interface AcpTab { id: string; agentId: string; thread_id?: string; title: string; working?: boolean }
 
-const removalListeners = new Set<(workspace: string, threadId: string) => void>();
+const removalListeners = new Set<(workspace: string, threadId?: string) => void>();
 
 export function savedAcpTabs(workspace: string): AcpTab[] {
   try {
@@ -30,6 +30,19 @@ export function removeAcpSessionTabs(workspace: string, threadId: string) {
   for (const listener of removalListeners) listener(workspace, threadId);
 }
 
+// Only prune identities checked before the request; a delayed response must not
+// remove a session created while that request was in flight.
+export function pruneAcpWorkspaceTabs(workspace: string, checkedIds: string[], availableIds: Set<string>) {
+  for (const id of checkedIds) if (!availableIds.has(id)) removeAcpSessionTabs(workspace, id);
+}
+
+// Worktree removal also clears tabs whose view is not currently mounted.
+export function removeAcpWorkspaceTabs(workspace: string) {
+  discardWorkspaceComposerDrafts(workspace);
+  for (const listener of removalListeners) listener(workspace);
+  try { localStorage.removeItem(`aow-acp-tabs:${workspace}`); } catch { /* Storage can be unavailable. */ }
+}
+
 export function useAcpTabs(workspace: string) {
   const [tabs, setTabs] = useState<AcpTab[]>(() => savedAcpTabs(workspace));
   const current = useRef(tabs);
@@ -40,7 +53,8 @@ export function useAcpTabs(workspace: string) {
     current.current = next; setTabs(next);
   }, [workspace]);
   useEffect(() => {
-    const removed = (owner: string, threadId: string) => {
+    const removed = (owner: string, threadId?: string) => {
+      if (owner === workspace && threadId === undefined) { update([]); return; }
       if (owner === workspace && current.current.some(tab => tab.thread_id === threadId)) {
         update(current.current.filter(tab => tab.thread_id !== threadId));
       }
