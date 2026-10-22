@@ -354,7 +354,6 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
         <nav className="project-aow-settings-nav" aria-label={t("settings.settings_categories")} hidden={mobile && !overview}>
           {sections.map(({ id, label, description, icon: Icon }) => <button key={id} type="button" disabled={busy || settingsBusy} aria-current={!overview && section === id ? 'page' : undefined} className={!overview && section === id ? 'active' : ''} onClick={() => selectSection(id)}>
             <Icon /><span><strong>{label}</strong><small>{description}</small></span>
-            {id === 'agents' && <i>{agents.filter(agent => agent.available).length}</i>}
             {mobile && <ChevronRight />}
           </button>)}
           {!mobile && <LogoutButton disabled={busy || settingsBusy} />}

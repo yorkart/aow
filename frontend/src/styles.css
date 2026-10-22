@@ -755,5 +755,5 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .project-aow-projects .project-navigator-trigger > svg { transition:transform .1s; }
 .project-aow-projects .project-navigator-trigger > svg.project-navigator-open { transform:rotate(180deg); }
 .project-navigator > .aow-panel-header-actions { margin-left:auto; }
-.project-navigator-menu button { justify-content:flex-start; }
+.inbox-row-menu.project-navigator-menu button { justify-content:flex-start; }
 @media (prefers-reduced-motion:reduce) { .project-aow-projects .project-navigator-trigger > svg { transition:none; } }

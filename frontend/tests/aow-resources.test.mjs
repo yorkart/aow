@@ -418,6 +418,13 @@ try {
     await trigger.click();
     const menu = page.getByRole('menu', { name: '项目', exact: true });
     assert.equal(await menu.getByRole('menuitem').count(), 31);
+    const itemLayout = await menu.getByRole('menuitem').first().evaluate(button => {
+      const icon = button.querySelector('.project-icon').getBoundingClientRect();
+      const name = button.querySelector('span').getBoundingClientRect();
+      return { alignment: getComputedStyle(button).justifyContent, gap: name.left - icon.right };
+    });
+    assert.equal(itemLayout.alignment, 'flex-start');
+    assert.ok(Math.abs(itemLayout.gap - 8) < 1, 'project names sit beside their icons at the left edge');
     await menu.getByRole('menuitem').filter({ hasText: 'Project 29' }).click();
     await eventually(async () => await last.evaluate(element => {
       const bounds = element.querySelector('.aow-panel-header').getBoundingClientRect();
