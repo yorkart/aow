@@ -3,6 +3,8 @@ use crate::facade::{SessionSnapshot, SessionTurn, ThreadEntry};
 mod replay;
 
 pub(crate) fn start(thread: &mut SessionSnapshot, entry_start: usize) {
+    // Plans belong to a turn; retain the result until another turn is admitted.
+    thread.plan = serde_json::Value::Null;
     super::AcpThread::clear_session_meta(thread);
     thread.session_meta_suppressed = false;
     thread.turns.push(SessionTurn {

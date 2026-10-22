@@ -602,6 +602,39 @@ async fn activity_streams_and_dismissed_notices_survive_reload() -> Result<()> {
 }
 
 #[tokio::test]
+async fn plan_is_retained_after_completion_and_cleared_when_the_next_turn_starts() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let service = AcpService::new(host(false), None)?;
+    let connection = service.connect("test", directory.path().into()).await?;
+    let session = service.new_session(&connection.id).await?;
+    service.start_prompt(&session.thread_id, prompt("activity"))?;
+    let completed = wait_for(&service, &session.thread_id, |value| value.status == "idle").await;
+    assert_eq!(completed.plan["entries"][0]["status"], "completed");
+
+    // A rejected send must not erase the plan of the completed turn.
+    assert!(service.start_prompt(&session.thread_id, vec![]).is_err());
+    assert_eq!(service.snapshot(&session.thread_id)?.plan, completed.plan);
+
+    // This prompt stays running and emits no replacement plan.
+    service.start_prompt(&session.thread_id, prompt("checkpoint"))?;
+    let working = service.snapshot(&session.thread_id)?;
+    assert_eq!(working.status, "working");
+    assert!(working.plan.is_null());
+    assert!(service.overview(&session.thread_id)?.plan.is_null());
+    assert!(working.revision > completed.revision);
+    service.cancel(&session.thread_id)?;
+    let cancelled = wait_for(&service, &session.thread_id, |value| value.status == "idle").await;
+    assert!(cancelled.plan.is_null());
+
+    // New plan updates must still appear and remain after the new turn finishes.
+    service.start_prompt(&session.thread_id, prompt("activity"))?;
+    let next = wait_for(&service, &session.thread_id, |value| value.status == "idle").await;
+    assert_eq!(next.plan["entries"][0]["status"], "completed");
+    service.disconnect(&connection.id)?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn failed_load_preserves_history_and_the_live_event_route() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let service = AcpService::new(host(false), None)?;
