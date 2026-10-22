@@ -23,7 +23,7 @@ export function AowPanelStack({ children, className = '', dockHeaders = true, ..
       const scroller = viewport.current;
       if (!scroller || !anchor.isConnected) return;
       const anchors = panelAnchors(scroller);
-      const previous = !dockHeaders || crowded.current ? 0 : anchors.slice(0, anchors.indexOf(anchor)).reduce((sum, item) => sum + item.offsetHeight, 0);
+      const previous = !dockHeaders ? parseFloat(getComputedStyle(scroller).scrollPaddingTop) || 0 : crowded.current ? 0 : anchors.slice(0, anchors.indexOf(anchor)).reduce((sum, item) => sum + item.offsetHeight, 0);
       const top = scroller.scrollTop + anchor.getBoundingClientRect().top - scroller.getBoundingClientRect().top - previous;
       scroller.scrollTo({ top: Math.max(0, top), behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
     });

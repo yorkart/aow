@@ -399,6 +399,7 @@ try {
 
   await test('Projects navigation lists every project and scrolls natural rows without changing collapse state', async t => {
     const { page } = await fixture(t, { beforeOpen: ({ state }) => {
+      state.pinnedWorktrees.paths = [worktrees[0].path];
       state.projects.push(...Array.from({ length: 30 }, (_, index) => ({
         ...project, id: `extra-${index}`, name: `Project ${index}`, registered_path: `/projects/${index}`,
         worktrees: [{ ...worktrees[0], id: `extra-wt-${index}`, project_id: `extra-${index}`, path: `/projects/${index}`, branch: 'main' }],
@@ -406,6 +407,11 @@ try {
     } });
     const sidebar = page.locator('.project-aow-projects');
     const trigger = sidebar.locator('.project-navigator-trigger');
+    assert.equal(await trigger.evaluate(element => {
+      const header = element.closest('header');
+      const pinned = header.previousElementSibling;
+      return pinned?.classList.contains('project-aow-pinned-panel') && pinned.parentElement === header.parentElement;
+    }), true, 'Pinned stays above Projects as a sibling section');
     const viewport = sidebar.locator('.aow-panel-viewport');
     const last = sidebar.locator('.project-aow-project').filter({ has: page.locator('.aow-panel-header-title strong', { hasText: /^Project 29$/ }) });
     assert.equal(await sidebar.locator('.aow-panel-jump, [data-docked="top"], [data-docked="bottom"]').count(), 0);
@@ -416,7 +422,7 @@ try {
     await eventually(async () => await last.evaluate(element => {
       const bounds = element.querySelector('.aow-panel-header').getBoundingClientRect();
       const viewport = element.closest('.aow-panel-viewport').getBoundingClientRect();
-      return bounds.top >= viewport.top - 1 && bounds.bottom <= viewport.bottom + 1;
+      return bounds.top >= viewport.top + 29 && bounds.bottom <= viewport.bottom + 1;
     }));
     assert.ok(await viewport.evaluate(element => element.scrollTop) > 0);
     assert.equal(await trigger.isVisible(), true);

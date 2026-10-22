@@ -18,7 +18,7 @@ export function ProjectNavigator({ projects, projectId, actions }: {
     const viewport = section?.closest<HTMLElement>('.aow-panel-viewport');
     const button = header?.querySelector<HTMLButtonElement>('.aow-panel-header-title');
     if (!header || !viewport || !button) { trigger.current?.focus({ preventScroll: true }); return; }
-    viewport.scrollTo({ top: viewport.scrollTop + header.getBoundingClientRect().top - viewport.getBoundingClientRect().top,
+    viewport.scrollTo({ top: viewport.scrollTop + header.getBoundingClientRect().top - viewport.getBoundingClientRect().top - (trigger.current?.closest('header')?.offsetHeight ?? 0),
       behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
     button.focus({ preventScroll: true });
     if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {

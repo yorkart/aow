@@ -2681,7 +2681,6 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
     >
       <aside id="aow-project-sidebar" className="project-aow-projects" aria-label={t("aow.projects_sidebar")} hidden={!leftSidebarVisible}>
         <header className="project-aow-brand"><AowNodeSwitcher addresses={nodeAddresses} /><LeftSidebarToggle expanded onClick={hideLeftSidebar} /></header>
-        <ProjectNavigator projects={projects} projectId={id => `${projectNavigationId}-${id}`} actions={<><AowIconButton title={t("aow.refresh_all")} aria-label={t("aow.refresh_all")} onClick={() => void loadProjects()}><RefreshCw /></AowIconButton><AowIconButton title={t("aow.register_project")} aria-label={t("aow.register_project")} onClick={() => setShowRegisterProject(true)}><Plus /></AowIconButton></>} />
         <AowPanelStack className="project-aow-project-list" dockHeaders={false}>
           {pinnedState.error ? <div className="project-aow-error" role="alert">{pinnedState.error}<button onClick={pinnedState.reload}>{t("aow.retry")}</button></div> : null}
           {pinnedEntries.length ? <AowPanel className="project-aow-pinned-panel" headerClassName="project-aow-section-title" title={t("navigation.pinned")} collapsible={false}>
@@ -2705,7 +2704,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
             ><WorktreeIcon icon={entry.worktree.icon} style={{ color: worktreeColorValues[entry.worktree.color ?? 'default'] }} /><span><strong>{entry.worktree.detached ? t("git.detached_head") : entry.worktree.branch || basename(entry.worktree.path)}</strong><small>{entry.project.name} · {basename(entry.worktree.path)}</small></span>{entry.worktree.locked ? <i>{t("navigation.locked")}</i> : null}<WorktreeUnreadBadge count={unreadCounts.get(entry.worktree.path)} /></button>)}
           </section>
           </AowPanel> : null}
-
+          <ProjectNavigator projects={projects} projectId={id => `${projectNavigationId}-${id}`} actions={<><AowIconButton title={t("aow.refresh_all")} aria-label={t("aow.refresh_all")} onClick={() => void loadProjects()}><RefreshCw /></AowIconButton><AowIconButton title={t("aow.register_project")} aria-label={t("aow.register_project")} onClick={() => setShowRegisterProject(true)}><Plus /></AowIconButton></>} />
           {error ? <div className="project-aow-error">{error}</div> : null}
           {loading ? <div className="project-aow-empty">{t("aow.loading")}</div> : null}
           {projects.map((project) => {

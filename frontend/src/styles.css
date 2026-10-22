@@ -223,7 +223,7 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .project-aow-sidebar-footer button > span { color:var(--aow-text); font-family:inherit; font-size:11px; font-weight:600; line-height:1; letter-spacing:0; }
 .floating-workspace-window-actions button:hover:not(:disabled),.editor-toolbar button:hover:not(:disabled) { color:var(--aow-icon-hover); background:var(--aow-elevated); }
 .project-aow-project-list { flex:1; padding:4px 8px 16px; }
-.project-aow-project-list > .aow-panel-viewport { scrollbar-color:transparent transparent; }
+.project-aow-project-list > .aow-panel-viewport { --panel-scroll-top:var(--project-aow-header-height,30px); scrollbar-color:transparent transparent; }
 .project-aow-project-list:hover > .aow-panel-viewport { scrollbar-color:var(--aow-scrollbar) transparent; }
 .project-aow-projects .aow-panel > [data-panel-anchor] > .aow-panel-header { padding:0 1px; background:var(--aow-panel); border:0; box-shadow:none; }
 .project-aow-projects .aow-panel-header-title,.project-aow-projects .aow-panel-header button.aow-panel-header-title { gap:7px; padding:0; color:var(--aow-muted); }
@@ -748,7 +748,7 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .markdown-preview a,.project-aow-snapshot-markdown a { color:var(--aow-link); }
 .markdown-preview a:hover,.project-aow-snapshot-markdown a:hover,.worktree-cleanup-result > button:hover:not(:disabled) { color:var(--aow-link-hover); }
 .project-aow-dialog .project-aow-command-preview summary:hover { color:var(--aow-text-hover); }
-.project-aow-projects > .project-navigator { flex-shrink:0; padding:0 9px; background:var(--aow-panel); border:0; }
+.project-aow-projects .project-navigator { position:sticky; top:0; z-index:20; padding:0 1px; background:var(--aow-panel); border:0; }
 .project-aow-projects .project-navigator-trigger { flex:0 1 auto; border-radius:4px; }
 .project-aow-projects .project-navigator-trigger strong { flex:none; }
 .project-aow-projects .project-navigator-trigger:hover { background:var(--aow-subtle-hover); }
