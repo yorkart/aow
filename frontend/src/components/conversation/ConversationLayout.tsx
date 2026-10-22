@@ -83,6 +83,7 @@ export function ConversationLayout({ sessionId, turns, header, agentClassName, c
   const localRef = useRef<HTMLDivElement>(null);
   const conversationRef = scrollRef ?? localRef;
   const footerRef = useRef<HTMLDivElement>(null);
+  const accessoryRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
   const turnRefs = useRef<Array<HTMLElement | null>>([]);
   const navigationRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -92,19 +93,24 @@ export function ConversationLayout({ sessionId, turns, header, agentClassName, c
   const turnCount = turns.length;
   const hasMessages = turnCount > 0 || !!leadingContent;
   const hasFooter = !!footer;
+  const hasAccessory = !!accessory;
   const setFollow = (value: boolean) => { followRef.current = value; setFollowing(value); };
 
   useLayoutEffect(() => {
     const conversation = conversationRef.current;
-    const footer = footerRef.current;
-    if (!conversation || !footer) return;
-    // The fixed footer must use the same available width as the scrolling transcript.
-    const alignFooter = () => { footer.style.paddingInlineEnd = `${conversation.offsetWidth - conversation.clientWidth}px`; };
-    alignFooter();
-    const observer = new ResizeObserver(alignFooter);
+    if (!conversation) return;
+    // Fixed accessories and the footer share the scrolling transcript's available width.
+    const alignFixedContent = () => {
+      const padding = `${conversation.offsetWidth - conversation.clientWidth}px`;
+      for (const element of [accessoryRef.current, footerRef.current]) {
+        if (element) element.style.paddingInlineEnd = padding;
+      }
+    };
+    alignFixedContent();
+    const observer = new ResizeObserver(alignFixedContent);
     observer.observe(conversation);
     return () => observer.disconnect();
-  }, [conversationRef, hasFooter]);
+  }, [conversationRef, hasFooter, hasAccessory]);
 
   useEffect(() => {
     turnRefs.current.length = turnCount;
@@ -194,7 +200,7 @@ export function ConversationLayout({ sessionId, turns, header, agentClassName, c
           </div>
         </div>
         {live && !following && hasMessages && <div className="conversation-follow"><button type="button" onClick={() => { setFollow(true); scrollToEnd(); }}><ArrowDown size={13} />跳到最新消息</button></div>}
-        {accessory}
+        {accessory && <div ref={accessoryRef} className="conversation-accessory">{accessory}</div>}
         {footer && <div ref={footerRef} className={`conversation-footer${!hasMessages ? ' empty' : ''}${footerExpanded ? ' expanded' : ''}`}>{footer}</div>}
       </div>
       {turnCount > 0 && <nav className="project-aow-snapshot-navigation" aria-label="用户输入导航">

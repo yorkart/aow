@@ -2430,6 +2430,10 @@ try {
       assert.ok(plan.width <= 900);
     };
     await aligned();
+    await page.addStyleTag({ content: '.project-aow-snapshot-conversation { scrollbar-gutter:stable; } .project-aow-snapshot-conversation::-webkit-scrollbar { width:15px; }' });
+    assert.equal(await page.locator('.project-aow-snapshot-conversation').evaluate(element => element.offsetWidth - element.clientWidth), 15);
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await aligned();
     if (process.env.ACP_SCREENSHOT_DIR) await page.screenshot({ path: `${process.env.ACP_SCREENSHOT_DIR}/acp-plan-expanded.png` });
     await card.getByRole('button', { name: '收起计划', exact: true }).click();
     assert.equal(await card.locator('ol').isVisible(), false);

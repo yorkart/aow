@@ -117,8 +117,8 @@
 .acp-image { display:block; max-width:100%; max-height:400px; border-radius:4px; }
 .acp-diff { overflow:hidden; }
 .acp-diff > .acp-file-link { padding:3px 5px; }
-.acp-activity:empty { display:none; }
-.acp-activity { display:flex; flex-direction:column; flex-shrink:0; width:calc(100% - 2 * var(--conversation-content-inset)); max-width:var(--conversation-content-max-width); min-width:0; max-height:45%; margin:0 auto; overflow:auto; }
+.acp-activity:empty,.conversation-accessory:has(> .acp-activity:empty) { display:none; }
+.acp-activity { display:flex; flex-direction:column; flex-shrink:1; width:calc(100% - 2 * var(--conversation-content-inset)); max-width:var(--conversation-content-max-width); min-width:0; min-height:0; margin:0 auto; overflow:auto; }
 .acp-activity > :not(.acp-request-card) { flex-shrink:0; }
 .acp-working { display:flex; align-items:center; gap:6px; padding:5px 0; margin:0; color:var(--aow-muted); font-size:11px; }
 .acp-entry + .acp-working { margin-top:12px; }
