@@ -3,6 +3,7 @@ import { ChevronDown } from 'lucide-react';
 import { RowMenu } from '../components/RowMenu';
 import { t } from '../lib/i18n';
 import type { AowProject } from './types';
+import { ProjectIcon } from './ProjectIcon';
 
 export function ProjectNavigator({ projects, projectId, actions }: {
   projects: AowProject[]; projectId: (id: string) => string; actions: ReactNode;
@@ -32,9 +33,9 @@ export function ProjectNavigator({ projects, projectId, actions }: {
       <strong>{title}</strong><ChevronDown className={open ? 'project-navigator-open' : undefined} aria-hidden="true" />
     </button>
     <span className="aow-panel-header-actions">{actions}</span>
-    {open && <RowMenu id={id} label={title} anchor={trigger} onClose={() => setOpen(false)}>
-      {projects.map(project => <button key={project.id} type="button" role="menuitem" title={project.registered_path} onClick={() => locate(project)}>
-        <span>{project.name}<small className="project-navigator-path">{project.registered_path}</small></span>
+    {open && <RowMenu id={id} label={title} anchor={trigger} onClose={() => setOpen(false)} className="project-navigator-menu">
+      {projects.map(project => <button key={project.id} type="button" role="menuitem" onClick={() => locate(project)}>
+        <ProjectIcon project={project} /><span>{project.name}</span>
       </button>)}
       {!projects.length && <p>{t('aow.no_projects')}</p>}
     </RowMenu>}
