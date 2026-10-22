@@ -534,6 +534,12 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .project-aow-status { min-width:0; min-height:0; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:0 7px; overflow:hidden; color:var(--aow-text); background:var(--aow-sidebar-background); border-top:1px solid var(--aow-line-subtle); font-size:11px; line-height:1; }
 .project-aow-status span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .project-aow-status > span:first-child { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
+.project-aow-status-path { display:flex; align-items:center; gap:5px; min-width:0; }
+.project-aow-status-path > span { min-width:0; }
+.project-aow-status-path > button { flex-shrink:0; display:grid; place-items:center; width:22px; height:22px; padding:0; border-radius:3px; color:var(--aow-icon-foreground,var(--aow-icon)); cursor:pointer; }
+.project-aow-status-path > button:hover { color:var(--aow-icon-hover); background:var(--aow-subtle-hover); }
+.project-aow-status-path > button:focus-visible { outline:1px solid var(--aow-accent); outline-offset:-1px; }
+.project-aow-status-path > button[data-copied="true"] { color:var(--aow-success); }
 .project-aow-status-actions :is(.project-terminal-dock-toggle,.task-notification-toggle,.operation-status > button) { --aow-icon:var(--aow-text); --aow-icon-hover:var(--aow-text-hover); }
 .project-aow-status-actions :is(.project-terminal-dock-toggle,.task-notification-toggle,.operation-status > button):hover { background:transparent; }
 .project-aow-status-actions :is(.project-terminal-dock-toggle,.task-notification-toggle,.operation-status > button)[aria-expanded="true"] { --aow-icon-foreground:var(--aow-icon-active); background:transparent; }

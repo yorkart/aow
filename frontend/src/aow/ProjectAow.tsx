@@ -1,3 +1,4 @@
+import { WorktreeStatusPath } from './WorktreeStatusPath';
 import { SettingsDialog } from '../features/settings/SettingsDialog';
 import { appLocalStorage } from '../lib/basePath';
 import { subscribeWorkspaceChanges } from '../lib/workspaceEvents';
@@ -2739,7 +2740,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
           {settingsLocation?.path === '' ? <div className="project-aow-settings-standalone" ref={node => { if (node) node.appendChild(settingsElement); }} /> : null}
           {!activeEntry && settingsLocation?.path !== '' ? <div className="project-aow-no-context"><FolderGit2 /><h1>Project AoW</h1><p>从左侧注册并选择一个 Project Worktree。</p></div> : null}
         </div>
-        <footer className="project-aow-status"><span>{activeEntry?.worktree.path ?? 'No active worktree'}</span>
+        <footer className="project-aow-status"><WorktreeStatusPath key={activeEntry?.worktree.path} path={activeEntry?.worktree.path} />
           <div className="project-aow-status-actions">
             <OperationStatus operations={operations.operations} ready={!!operations.boot_id} error={operations.log_error || operations.error} logOpen={!!logPanel}
               beforeLogs={<span className="project-terminal-dock-controls" ref={setTerminalDockControls} />}
