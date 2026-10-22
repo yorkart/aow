@@ -181,11 +181,11 @@ function terminalPath(tabId: string, suffix = '') {
 }
 
 export const terminalApi = {
-  async projectDock(projectId: string, legacyTerminalId?: string): Promise<TerminalTab> {
+  async projectDock(projectId: string, workspaceRoot: string, legacyTerminalId?: string): Promise<TerminalTab> {
     const tab = tabFromPayload(await request(`${TERMINALS_PATH}/project-dock/${encodeURIComponent(projectId)}`, {
-      method: 'POST', body: JSON.stringify({ legacy_terminal_id: legacyTerminalId }),
+      method: 'POST', body: JSON.stringify({ workspace_root: workspaceRoot, legacy_terminal_id: legacyTerminalId }),
     }));
-    if (!tab || tab.dock_project_id !== projectId) throw new Error('服务器返回了无效的项目终端');
+    if (!tab || tab.dock_project_id !== projectId || tab.workspace_root !== workspaceRoot) throw new Error('服务器返回了无效的 Worktree 终端');
     return tab;
   },
 

@@ -4,6 +4,7 @@ use super::*;
 pub(super) struct OpenProjectDockRequest {
     /// Explicit association saved by the browser before server-owned docks existed.
     legacy_terminal_id: Option<String>,
+    workspace_root: Option<String>,
 }
 
 pub(super) async fn open(
@@ -13,7 +14,7 @@ pub(super) async fn open(
 ) -> Result<Json<TerminalTab>, HttpError> {
     let (root, name) = state
         .aow
-        .project_terminal_defaults(&project_id)
+        .project_terminal_defaults(&project_id, request.workspace_root.as_deref())
         .await
         .map_err(crate::aow::aow_http_error)?;
     state
@@ -64,7 +65,9 @@ impl TerminalManager {
         if let Some(tab) = state
             .tabs
             .iter()
-            .find(|tab| tab.dock_project_id.as_deref() == Some(project_id))
+            .find(|tab| {
+                tab.dock_project_id.as_deref() == Some(project_id) && tab.workspace_root == root
+            })
         {
             return Ok(Some(tab.clone()));
         }

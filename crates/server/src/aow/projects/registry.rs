@@ -213,12 +213,18 @@ impl AowManager {
     pub(crate) async fn project_terminal_defaults(
         &self,
         id: &str,
+        workspace_root: Option<&str>,
     ) -> Result<(String, String), AowError> {
         let project = self.project(id).await?;
+        if let Some(root) = workspace_root
+            && !project.worktrees.iter().any(|worktree| worktree.path == root)
+        {
+            return Err(AowError::ProjectNotFound(root.to_owned()));
+        }
         let root = project
             .worktrees
             .into_iter()
-            .find(|worktree| worktree.is_main)
+            .find(|worktree| workspace_root.map_or(worktree.is_main, |root| worktree.path == root))
             .map(|worktree| worktree.path)
             .unwrap_or(project.registered_path);
         let name = format!(

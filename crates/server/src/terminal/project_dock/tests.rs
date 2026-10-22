@@ -57,6 +57,25 @@ async fn project_dock_is_atomic_persistent_and_recreated_only_after_deletion() {
     assert_eq!(restored.id, first.id);
     assert_eq!(restored.name, "Renamed");
     assert_eq!(restored.panes, first.panes);
+    let linked_root = directory.path().join("linked");
+    std::fs::create_dir(&linked_root).unwrap();
+    let linked_root = linked_root.to_str().unwrap();
+    let linked = manager
+        .project_dock("project", linked_root, "Linked · Terminal", None)
+        .await
+        .unwrap();
+    assert_ne!(linked.id, first.id);
+    assert_eq!(linked.workspace_root, linked_root);
+    assert_eq!(linked.panes[0].cwd, linked_root);
+    assert_eq!(
+        manager
+            .project_dock("project", linked_root, "Linked", None)
+            .await
+            .unwrap()
+            .id,
+        linked.id
+    );
+    manager.delete_tab(&linked.id).await.unwrap();
     manager.delete_tab(&restored.id).await.unwrap();
     let replacement = manager
         .project_dock("project", root, "Project · Terminal", None)
@@ -170,7 +189,7 @@ async fn project_dock_endpoint_uses_registered_project_defaults_and_rejects_unkn
         project["id"].as_str().unwrap()
     );
     let (first, second) = tokio::join!(
-        post(&app, &endpoint, json!({})),
+        post(&app, &endpoint, json!({"workspace_root": root})),
         post(&app, &endpoint, json!({}))
     );
     assert_eq!(first.0, StatusCode::OK, "{}", first.1);
@@ -182,6 +201,12 @@ async fn project_dock_endpoint_uses_registered_project_defaults_and_rejects_unkn
     assert_eq!(first.1["panes"][0]["cwd"], root.to_str().unwrap());
     assert_eq!(
         post(&app, "/api/terminals/project-dock/unknown", json!({}))
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        post(&app, &endpoint, json!({"workspace_root": directory.path()}))
             .await
             .0,
         StatusCode::NOT_FOUND

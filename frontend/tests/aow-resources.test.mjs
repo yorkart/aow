@@ -305,14 +305,14 @@ try {
           ? state.projects.find(project => project.id === decodeURIComponent(url.pathname.split('/').at(-1))) : undefined;
         if (dockProject) {
           const tabs = terminalList();
-          const existing = tabs.find(tab => tab.dock_project_id === dockProject.id)
+          const root = created.workspace_root ?? dockProject.worktrees.find(worktree => worktree.is_main)?.path ?? dockProject.registered_path;
+          const existing = tabs.find(tab => tab.dock_project_id === dockProject.id && tab.workspace_root === root)
             ?? tabs.find(tab => tab.id === created.legacy_terminal_id);
           if (existing) {
             state.dockProjects[existing.id] = dockProject.id;
             await route.fulfill({ json: { ...existing, dock_project_id: dockProject.id } });
             return;
           }
-          const root = dockProject.worktrees.find(worktree => worktree.is_main)?.path ?? dockProject.registered_path;
           created = { workspace_root: root, cwd: root, name: `${[...dockProject.name].slice(0, 117).join('')} · Terminal` };
         }
         state.createdTerminals.push(created);
@@ -390,17 +390,17 @@ try {
   async function openDockFile(page, path = `${worktrees[0].path}/edit.txt`) {
     await surface(page).getByRole('button', { name: 'Explorer', exact: true }).click();
     await surface(page).locator(`.tree-row[data-tree-path="${path}"]`).click();
-    await page.getByRole('button', { name: '项目终端', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Worktree 终端', exact: true }).waitFor();
   }
-  const projectDock = page => page.getByRole('region', { name: '项目共享终端', exact: true });
+  const projectDock = page => page.getByRole('region', { name: 'Worktree 终端', exact: true });
   const readyDock = page => projectDock(page).locator('.terminal-emulator-shell:not(.restore-pending)').first().waitFor();
 
-  await test('project terminal dock shares one tabless renderer across pages and worktrees and restores after reload', async t => {
+  await test('project terminal dock shares one tabless renderer across pages and isolates worktrees and restores after reload', async t => {
     const other = `${worktrees[0].path}/other.txt`;
     const { page, state } = await fixture(t, { beforeOpen: ({ state }) => {
       state.textFiles[other] = { content: 'Other file', version: 'v1' };
     } });
-    const toggle = page.getByRole('button', { name: '项目终端', exact: true });
+    const toggle = page.getByRole('button', { name: 'Worktree 终端', exact: true });
     assert.equal(await toggle.count(), 0, 'terminal tabs have no dock entry');
     await openDockFile(page);
     const pageUrl = page.url();
@@ -438,21 +438,23 @@ try {
     await readyDock(page);
     assert.equal(await page.evaluate(() => !!document.activeElement?.closest('.project-terminal-dock')), false, 'restoring the dock does not steal focus from the selected page');
     const height = await projectDock(page).evaluate(node => node.clientHeight);
-    await projectDock(page).getByRole('separator', { name: '调整项目终端高度' }).press('ArrowUp');
+    await projectDock(page).getByRole('separator', { name: '调整 Worktree 终端高度' }).press('ArrowUp');
     assert.ok(await projectDock(page).evaluate(node => node.clientHeight) > height);
     await switchWorktree(page, 1);
     await openDockFile(page, `${worktrees[1].path}/edit.txt`);
+    assert.equal(await projectDock(page).count(), 0, 'another worktree starts collapsed');
+    await toggle.click();
+    await readyDock(page);
+    assert.equal(state.createdTerminals.length, 2);
+    assert.equal(state.createdTerminals[1].workspace_root, worktrees[1].path);
+    assert.equal(state.createdTerminals[1].cwd, worktrees[1].path);
+    await switchWorktree(page, 0);
     await readyDock(page);
     assert.ok(await terminal.evaluate(node => node.isConnected && !!node.closest('.project-aow-surface:not([hidden])')));
-    await surface(page).getByRole('button', { name: 'Terminal 面板', exact: true }).click();
-    await surface(page).locator('.terminal-panel-open').filter({ hasText: `${project.name} · Terminal` }).waitFor();
-    assert.equal(state.createdTerminals.length, 1);
-    assert.equal(state.terminalSockets.filter(socket => socket.url().includes('/terminals/created-1/')).length, connections);
-    assert.equal(state.closedTerminalConnections.filter(url => url.includes('/terminals/created-1/')).length, detached);
     assert.deepEqual(state.closedTerminalIds, []);
     await page.reload();
     await readyDock(page);
-    assert.equal(state.createdTerminals.length, 1);
+    assert.equal(state.createdTerminals.length, 2);
     assert.equal(await page.locator('[data-workspace-tab-id="terminal:created-1"]').count(), 0);
   });
 
@@ -460,14 +462,14 @@ try {
     const { page, state } = await fixture(t);
     await openDockFile(page);
     state.terminalCreateError = 'Shell unavailable';
-    await page.getByRole('button', { name: '项目终端', exact: true }).click();
+    await page.getByRole('button', { name: 'Worktree 终端', exact: true }).click();
     await projectDock(page).getByRole('alert').filter({ hasText: 'Shell unavailable' }).waitFor();
     state.terminalCreateError = undefined;
     await projectDock(page).getByRole('button', { name: '重试', exact: true }).click();
     await readyDock(page);
     await surface(page).getByRole('button', { name: 'Terminal 面板', exact: true }).click();
     const row = surface(page).locator('.terminal-panel-open').filter({ hasText: `${project.name} · Terminal` });
-    await page.getByRole('button', { name: '项目终端', exact: true }).click();
+    await page.getByRole('button', { name: 'Worktree 终端', exact: true }).click();
     await row.click();
     await readyDock(page);
     assert.equal(state.createdTerminals.length, 2);
@@ -477,7 +479,7 @@ try {
     await page.getByRole('alertdialog').getByRole('button', { name: '销毁', exact: true }).click();
     await eventually(async () => await projectDock(page).count() === 0);
     assert.deepEqual(state.closedTerminalIds, ['created-2']);
-    await page.getByRole('button', { name: '项目终端', exact: true }).click();
+    await page.getByRole('button', { name: 'Worktree 终端', exact: true }).click();
     await readyDock(page);
     assert.equal(state.createdTerminals.length, 3);
   });
@@ -494,7 +496,7 @@ try {
       });
     } });
     await openDockFile(page);
-    await page.getByRole('button', { name: '项目终端', exact: true }).click();
+    await page.getByRole('button', { name: 'Worktree 终端', exact: true }).click();
     await readyDock(page);
     await projectDock(page).getByRole('button', { name: '向右分屏', exact: true }).click();
     await eventually(async () => await projectDock(page).locator('.terminal-pane').count() === 2);
@@ -508,21 +510,21 @@ try {
   await test('project terminal dock stays the same instance when its file moves to the floating workspace', async t => {
     const { page, state } = await fixture(t, { floating: true });
     await openDockFile(page);
-    await page.getByRole('button', { name: '项目终端', exact: true }).click();
+    await page.getByRole('button', { name: 'Worktree 终端', exact: true }).click();
     await readyDock(page);
     const terminal = await projectDock(page).locator('.xterm').elementHandle();
     const connections = state.terminalSockets.filter(socket => socket.url().includes('/terminals/created-1/')).length;
     await tab(page, 'edit.txt').click({ button: 'right' });
     await page.getByRole('menuitem', { name: '打开 · 浮动工作区', exact: true }).click();
     const floating = page.getByRole('dialog', { name: '浮动工作区', exact: true });
-    await floating.getByRole('region', { name: '项目共享终端' }).waitFor();
+    await floating.getByRole('region', { name: 'Worktree 终端' }).waitFor();
     assert.ok(await terminal.evaluate(node => node.isConnected && !!node.closest('[data-floating-workspace]')));
-    await page.getByRole('button', { name: '项目终端', exact: true }).click();
-    await page.getByRole('button', { name: '项目终端', exact: true }).click();
+    await page.getByRole('button', { name: 'Worktree 终端', exact: true }).click();
+    await page.getByRole('button', { name: 'Worktree 终端', exact: true }).click();
     await readyDock(page);
     await surface(page).getByRole('button', { name: 'Terminal 面板', exact: true }).click();
     await surface(page).locator('.terminal-panel-open').filter({ hasText: `${project.name} · Terminal` }).click();
-    await floating.getByRole('region', { name: '项目共享终端' }).waitFor();
+    await floating.getByRole('region', { name: 'Worktree 终端' }).waitFor();
     assert.equal(state.createdTerminals.length, 1);
     assert.equal(state.terminalSockets.filter(socket => socket.url().includes('/terminals/created-1/')).length, connections);
   });
@@ -540,7 +542,7 @@ try {
     } });
     t.after(() => release());
     await openDockFile(page);
-    const toggle = page.getByRole('button', { name: '项目终端', exact: true });
+    const toggle = page.getByRole('button', { name: 'Worktree 终端', exact: true });
     await toggle.evaluate(button => { button.click(); button.click(); });
     await eventually(() => state.createdTerminalTabs.length === 1);
     await page.evaluate(() => Promise.all(window.liveEventSockets.map(socket => socket.sampleTerminals(true))));
@@ -588,7 +590,7 @@ try {
     } });
     await openDockFile(page);
     await surface(page).locator('.monaco-editor').first().waitFor();
-    await page.getByRole('button', { name: '项目终端', exact: true }).click();
+    await page.getByRole('button', { name: 'Worktree 终端', exact: true }).click();
     await readyDock(page);
     const panes = projectDock(page).locator('.terminal-pane');
     await panes.first().locator('.xterm-helper-textarea').focus();
@@ -614,7 +616,7 @@ try {
     const original = await surface(page).locator('.project-aow-terminal-host .xterm').first().elementHandle();
     await openDockFile(page);
     await surface(page).locator('.monaco-editor').first().waitFor();
-    await page.getByRole('button', { name: '项目终端', exact: true }).click();
+    await page.getByRole('button', { name: 'Worktree 终端', exact: true }).click();
     await eventually(() => state.createdTerminalTabs.length === 1);
     const connected = await original.evaluate(node => node.isConnected);
     release();
@@ -629,19 +631,19 @@ try {
     const second = await page.context().newPage();
     second.setDefaultTimeout(45000);
     await second.goto(`${baseURL}/?ui=desktop`);
-    await second.getByRole('button', { name: '项目终端', exact: true }).waitFor();
-    await page.getByRole('button', { name: '项目终端', exact: true }).click();
+    await second.getByRole('button', { name: 'Worktree 终端', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Worktree 终端', exact: true }).click();
     await readyDock(page);
     await second.evaluate(() => Promise.all(window.liveEventSockets.map(socket => socket.sampleTerminals(true))));
-    await second.getByRole('button', { name: '项目终端', exact: true }).click();
+    await second.getByRole('button', { name: 'Worktree 终端', exact: true }).click();
     await readyDock(second);
     assert.equal(state.createdTerminals.length, 1, 'two browser tabs created two project terminals');
     assert.equal(await second.locator('[data-workspace-tab-id="terminal:created-1"]').count(), 0);
     await second.evaluate(() => {
-      for (const key of Object.keys(localStorage)) if (key.includes('aow-project-terminal-dock:')) localStorage.removeItem(key);
+      for (const key of Object.keys(localStorage)) if (key.includes('aow-worktree-terminal-dock:')) localStorage.removeItem(key);
     });
     await second.reload();
-    await second.getByRole('button', { name: '项目终端', exact: true }).click();
+    await second.getByRole('button', { name: 'Worktree 终端', exact: true }).click();
     await readyDock(second);
     assert.equal(state.createdTerminals.length, 1, 'clearing browser ownership storage must reuse the server instance');
   });
