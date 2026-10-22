@@ -50,21 +50,7 @@
 .inbox-label-select { max-width:calc(100% - 66px); }
 .inbox-tags { display:flex; gap:4px; min-width:0; overflow:hidden; white-space:nowrap; }
 .inbox-tags .inbox-tag { flex:none; }
-.inbox-row-menu { position:fixed; z-index:1100; box-sizing:border-box; min-width:0; margin:0; padding:6px; overflow:auto; overscroll-behavior:contain; color:var(--aow-text,var(--aow-text)); color-scheme:dark; background:var(--aow-panel,var(--aow-panel)); border:1px solid var(--aow-control-line,var(--aow-line-subtle)); border-radius:4px; box-shadow:0 6px 20px var(--aow-shadow); font:12px/1.5 -apple-system,BlinkMacSystemFont,sans-serif; }
-.inbox-row-menu fieldset { min-width:0; margin:0; padding:0; border:0; }
-.inbox-row-menu button { display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; min-height:30px; padding:6px; text-align:left; border:0; border-radius:3px; background:transparent; color:inherit; font:inherit; cursor:pointer; }
-.inbox-row-menu button > span { min-width:0; overflow-wrap:anywhere; }
-.inbox-row-menu button small { color:var(--aow-muted,var(--aow-muted)); font-size:10px; flex:none; }
 .inbox-option-check { flex:none; color:var(--aow-accent,var(--aow-info)); }
-.inbox-row-menu button:hover:not(:disabled) { background:var(--aow-hover,var(--aow-subtle-hover)); }
-.inbox-row-menu button:disabled { opacity:.55; cursor:default; }
-.inbox-row-menu :focus-visible { outline:1px solid var(--aow-accent,var(--aow-info)); outline-offset:-1px; }
-.inbox-row-menu label { display:flex; align-items:center; gap:6px; min-height:30px; padding:6px; border-radius:3px; cursor:pointer; overflow-wrap:anywhere; }
-.inbox-row-menu label i { flex:none; width:6px; height:6px; border-radius:50%; background:var(--label-color); }
-.inbox-row-menu label span { min-width:0; }
-.inbox-row-menu label:hover { background:var(--aow-hover,var(--aow-subtle-hover)); }
-.inbox-row-menu input { margin:0; flex:none; accent-color:var(--aow-accent,var(--aow-info)); }
-.inbox-row-menu p { margin:4px; color:var(--aow-muted,var(--aow-muted)); }
 .inbox-tag { border:1px solid; border-radius:3px; padding:0 5px; font-size:10px; line-height:18px; overflow-wrap:anywhere; }
 .inbox-row-actions { display:flex; flex:none; gap:2px; margin-left:auto; }
 .inbox-row.editing .inbox-row-meta { flex-wrap:wrap; }

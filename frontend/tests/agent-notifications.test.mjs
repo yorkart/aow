@@ -16,7 +16,8 @@ let preferences = { enabled: true, channels: ['page'] };
 let providers = [];
 let storedSecret;
 let publicBaseUrl = "";
-const settings = () => ({ im: { providers }, notifications: { agent_task_completed: preferences, public_base_url: publicBaseUrl } });
+let notificationLanguage = 'en-US';
+const settings = () => ({ im: { providers }, notifications: { agent_task_completed: preferences, public_base_url: publicBaseUrl, language: notificationLanguage } });
 const server = await createServer({
   configFile: false,
   cacheDir: 'node_modules/.vite-notifications-tests',
@@ -46,7 +47,7 @@ const server = await createServer({
             storedSecret = provider.app_secret || storedSecret;
             return { provider: 'feishu', app_id: provider.app_id, secret_configured: true };
           });
-        } else { preferences = update.agent_task_completed; publicBaseUrl = update.public_base_url ?? publicBaseUrl; }
+        } else { notificationLanguage = update.language ?? notificationLanguage; preferences = update.agent_task_completed; publicBaseUrl = update.public_base_url ?? publicBaseUrl; }
       }
       response.end(JSON.stringify(settings()));
     });
@@ -395,6 +396,10 @@ try {
     assert.equal(storedSecret, 'test-secret');
     await page.getByRole('button', { name: '通知设置', exact: true }).click();
     await page.getByLabel('飞书推送', { exact: true }).check();
+    const languagePicker = page.getByRole('button', { name: '通知语言', exact: true });
+    assert.match(await languagePicker.innerText(), /English/);
+    await languagePicker.click();
+    await page.getByRole('option', { name: '简体中文', exact: true }).click();
     await page.getByRole('button', { name: '使用当前访问地址', exact: true }).click();
     assert.equal(await page.getByLabel('AoW 访问地址').inputValue(), base);
     await page.getByLabel('AoW 访问地址').fill('https://aow.example.com');
@@ -408,6 +413,8 @@ try {
     await page.getByLabel('飞书推送', { exact: true }).waitFor();
     assert.equal(await page.getByLabel('飞书推送', { exact: true }).isChecked(), true);
     assert.equal(await page.getByLabel('AoW 访问地址').inputValue(), 'https://aow.example.com');
+    assert.equal(notificationLanguage, 'zh-CN');
+    assert.match(await page.getByRole('button', { name: '通知语言', exact: true }).innerText(), /简体中文/);
     assert.equal(await page.getByLabel('页面提示', { exact: true }).isChecked(), false);
     await page.getByRole('button', { name: 'IM 设置', exact: true }).click();
     await page.getByRole('button', { name: '移除飞书配置', exact: true }).click();

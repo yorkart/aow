@@ -3396,14 +3396,16 @@ try {
     await page.screenshot({ path: '/tmp/aow-review-provider-settings.png' });
     await dialog.getByRole('button', { name: '关闭', exact: true }).click();
     await open();
-    await dialog.getByLabel('选择 Provider', { exact: true }).selectOption('1');
+    await dialog.getByRole('button', { name: '选择 Provider', exact: true }).click();
+    await page.getByRole('option', { name: /^Custom Git/ }).click();
     await eventually(async () => (await currentEditorWrap(page))?.content === uploaded);
     assert.equal(await dialog.getByLabel('启用此 Provider', { exact: true }).isChecked(), false);
     await dialog.getByLabel('上传 Provider 脚本', { exact: true }).setInputFiles({ name: 'replacement.py', mimeType: 'text/x-python', buffer: Buffer.from('# replacement\n') });
     await eventually(async () => (await currentEditorWrap(page))?.content === '# replacement\n');
     assert.equal(state.reviewProviders.providers[1].script, uploaded, 'upload does not replace the saved script');
     await dialog.getByRole('button', { name: '放弃修改', exact: true }).click();
-    await dialog.getByLabel('选择 Provider', { exact: true }).selectOption('1');
+    await dialog.getByRole('button', { name: '选择 Provider', exact: true }).click();
+    await page.getByRole('option', { name: /^Custom Git/ }).click();
     await eventually(async () => (await currentEditorWrap(page))?.content === uploaded);
     await dialog.getByRole('button', { name: '移除', exact: true }).click();
     await dialog.getByRole('button', { name: '保存', exact: true }).click();

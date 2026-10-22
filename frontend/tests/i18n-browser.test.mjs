@@ -28,7 +28,8 @@ try {
         return localize(21, 'Close');
       });
       assert.match(await editorLabel(), /^Close$/);
-      await page.getByRole('combobox').selectOption('zh-CN');
+      await page.locator('button[aria-haspopup="listbox"]').click();
+      await page.getByRole('option', { name: '简体中文', exact: true }).click();
       page.once('dialog', dialog => dialog.accept());
       await Promise.all([page.waitForEvent('load'), page.getByRole('button', { name: 'Apply language' }).click()]);
       await page.getByRole('heading', { name: '登录 AoW', exact: true }).waitFor();
@@ -42,19 +43,54 @@ try {
       assert.deepEqual(errors, []);
     } finally { await context.close(); }
   });
+  for (const width of [1000, 320]) await test(`custom language picker supports keyboard, outside dismissal and dialog Escape at ${width}px`, async () => {
+    const context = await browser.newContext({ viewport: { width, height: 700 } });
+    try {
+      const page = await context.newPage();
+      await page.goto(base);
+      const picker = page.locator('button[aria-haspopup="listbox"]');
+      const menu = page.getByRole('listbox');
+      const apply = page.getByRole('button', { name: 'Apply language', exact: true });
+      assert.equal(await page.locator('select').count(), 0);
+      assert.equal(await apply.isDisabled(), true);
+      await picker.focus();
+      await page.keyboard.press('ArrowDown');
+      await page.getByRole('option', { name: 'English', exact: true }).waitFor();
+      assert.equal(await page.getByRole('option', { selected: true }).innerText(), 'English');
+      await page.keyboard.press('End');
+      assert.equal(await page.getByRole('option', { name: '简体中文', exact: true }).evaluate(node => node === document.activeElement), true);
+      await page.keyboard.press('Escape');
+      assert.equal(await menu.count(), 0);
+      assert.equal(await picker.evaluate(node => node === document.activeElement), true);
+      assert.equal(await page.evaluate(() => document.body.dataset.settingsEscape), undefined);
+      await page.keyboard.press('ArrowDown');
+      await page.keyboard.press('End');
+      await page.keyboard.press('Enter');
+      assert.equal(await apply.isEnabled(), true);
+      assert.match(await picker.innerText(), /简体中文/);
+      assert.equal(await page.locator('html').getAttribute('lang'), 'en-US', 'selection requires explicit application');
+      await picker.click();
+      assert.equal(await page.getByRole('option', { selected: true }).innerText(), '简体中文');
+      const bounds = await menu.boundingBox();
+      assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width);
+      await page.getByRole('heading').click();
+      assert.equal(await menu.count(), 0);
+    } finally { await context.close(); }
+  });
   await test('blocked storage reports failure without reloading or losing the selected language', async () => {
     const context = await browser.newContext();
     try {
       await context.addInitScript(() => { Storage.prototype.setItem = () => { throw new Error('blocked'); }; });
       const page = await context.newPage();
       await page.goto(base);
-      await page.getByRole('combobox').selectOption('zh-CN');
+      await page.locator('button[aria-haspopup="listbox"]').click();
+      await page.getByRole('option', { name: '简体中文', exact: true }).click();
       page.once('dialog', dialog => dialog.accept());
       await page.getByRole('button', { name: 'Apply language' }).click();
       await page.getByRole('alert').waitFor();
       assert.match(await page.getByRole('alert').innerText(), /blocked saving the language/);
       assert.equal(await page.locator('html').getAttribute('lang'), 'en-US');
-      assert.equal(await page.getByRole('combobox').inputValue(), 'zh-CN');
+      assert.match(await page.locator('button[aria-haspopup="listbox"]').innerText(), /简体中文/);
     } finally { await context.close(); }
   });
 } finally { await browser?.close(); await server.close(); }

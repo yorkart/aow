@@ -1,4 +1,5 @@
 import { t, languages, type Language } from '../../lib/i18n';
+import { AowSelect } from '../../components/AowSelect';
 import { appBaseUrl } from '../../lib/basePath';
 import { useEffect, useState } from 'react';
 import { notificationsApi } from './api';
@@ -73,7 +74,7 @@ function NotificationPreferences({ onBusyChange, onDirtyChange }: { onBusyChange
       </div></div>
       {loading && <p role="status">{t("im.loading_configuration")}</p>}
       <>
-        <label className="project-aow-dialog-field"><span>{t('language.notificationLanguage')}</span><select disabled={unavailable} value={language} onChange={event => { setLanguage(event.target.value as Language); changed(); }}>{languages.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <label className="project-aow-dialog-field"><span>{t('language.notificationLanguage')}</span><AowSelect label={t('language.notificationLanguage')} disabled={unavailable} value={language} options={languages.map(item => ({ value: item.id, label: item.name }))} onChange={value => { setLanguage(value as Language); changed(); }} /></label>
         <p className="project-aow-form-intro">{t('language.notificationDescription')}</p>
         <label className="project-aow-dialog-field"><span>{t("notifications.aow_url")}</span><input type="url" aria-label={t("notifications.aow_url")} value={publicBaseUrl} disabled={unavailable} spellCheck={false} placeholder="https://aow.example.com" onChange={event => { setPublicBaseUrl(event.target.value); changed(); }} /></label>
         <button type="button" className="project-aow-dialog-button" disabled={unavailable} onClick={() => { setPublicBaseUrl(appBaseUrl()); changed(); }}>{t("notifications.use_current_url")}</button>

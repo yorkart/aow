@@ -1,6 +1,7 @@
 import { t } from '../../lib/i18n';
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useId, useRef, useState } from 'react';
 import { Plus, Trash2, Upload } from 'lucide-react';
+import { AowSelect } from '../../components/AowSelect';
 import { prApi } from './api';
 import type { ReviewProvider, ReviewProviderSettings as Settings } from './types';
 import { MarkdownContent } from '../../components/MarkdownContent';
@@ -13,6 +14,7 @@ const message = (reason: unknown) => reason instanceof Error ? reason.message : 
 export function ReviewProviderSettings({ active, onBusyChange, onDirtyChange }: {
   active: boolean; onBusyChange: (busy: boolean) => void; onDirtyChange: (dirty: boolean) => void;
 }) {
+  const providerSelectId = useId();
   const [saved, setSaved] = useState<Settings>();
   const [loadRevision, setLoadRevision] = useState(0);
   const [draft, setDraft] = useState<Settings>();
@@ -72,9 +74,12 @@ export function ReviewProviderSettings({ active, onBusyChange, onDirtyChange }: 
     <div className="project-aow-dialog-body">
       <div className="project-aow-settings-heading"><div><h2>{t("navigation.pull_requests")}</h2><p>{t("pr.match_providers_by_git_remote_domain_scripts_implement_the")}</p></div></div>
       <div className="review-provider-toolbar">
-        <label>{t("navigation.provider")}<select aria-label={t("pr.choose_provider")} disabled={busy || !draft?.providers.length} value={selected} onChange={e => { setSelected(Number(e.target.value)); setStatus(''); }}>
-          {draft?.providers.map((p, index) => <option key={index} value={index}>{p.name || p.id}{p.enabled ? '' : t("pr.disabled")}</option>)}
-        </select></label>
+        <div className="review-provider-picker">
+          <label htmlFor={providerSelectId}>{t("navigation.provider")}</label>
+          <AowSelect id={providerSelectId} label={t("pr.choose_provider")} disabled={busy || !draft?.providers.length} value={String(selected)}
+            options={draft?.providers.map((provider, index) => ({ value: String(index), label: `${provider.name || provider.id}${provider.enabled ? '' : t("pr.disabled")}` })) ?? []}
+            onChange={value => { setSelected(Number(value)); setStatus(''); }} />
+        </div>
         <button className="project-aow-dialog-button" disabled={busy || !draft} onClick={add}><Plus size={14} />{t("pr.add_provider")}</button>
         {provider ? <button className="project-aow-dialog-button" disabled={busy} onClick={() => { setDraft({ ...draft!, providers: draft!.providers.filter((_, i) => i !== selected) }); setSelected(0); setStatus(''); }}><Trash2 size={14} />{t("notifications.remove")}</button> : null}
       </div>
