@@ -17,7 +17,7 @@ export function LanguageSettings() {
       </select>
     </label>
     <p>{t('language.description')}</p>
-    <button type="button" disabled={language === getLanguage()} onClick={apply}>{t('language.apply')}</button>
+    <button type="button" className="project-aow-dialog-button primary" disabled={language === getLanguage()} onClick={apply}>{t('language.apply')}</button>
     {error && <p role="alert">{t('language.saveFailed')}</p>}
   </fieldset>;
 }
