@@ -3321,6 +3321,18 @@ try {
     assert.deepEqual(state.writes, [], 'display preferences must never save file contents');
   });
 
+  await test('editor Word Wrap caption uses normal theme text color', async t => {
+    const { page } = await fixture(t);
+    await page.getByRole('button', { name: "设置", exact: true }).click();
+    const dialog = page.locator('.project-aow-settings');
+    await dialog.getByRole('button', { name: /^编辑器/ }).click();
+    const checkbox = dialog.getByRole('checkbox', { name: 'Word Wrap（自动换行）', exact: true });
+    assert.equal(await checkbox.evaluate(input => {
+      const label = input.closest('label');
+      return getComputedStyle(label.querySelector('span')).color === getComputedStyle(label).color;
+    }), true, 'Word Wrap caption uses the normal label color rather than muted form-field text');
+  });
+
   await test('editor word wrap defaults off for legacy settings and failed saves keep the active default', async t => {
     const { page, state } = await fixture(t);
     await surface(page).getByRole('button', { name: "资源管理器", exact: true }).click();
