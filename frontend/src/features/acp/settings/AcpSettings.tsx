@@ -5,6 +5,7 @@ import { SettingsActionDialog } from '../../settings/SettingsActionDialog';
 import { acpApi } from '../api';
 import { Download } from 'lucide-react';
 import { AcpRegistry } from './AcpRegistry';
+import { AgentIcon } from '../../agents/AgentIcon';
 import { failure, object, type AgentInfo, type SettingsFile } from '../types';
 import { ConnectionProgress } from '../agent_ui/connection_progress';
 import { useProgress } from '../agent_ui/use_progress';
@@ -145,7 +146,8 @@ export function AcpSettings({ active, onBusyChange, onDirtyChange }: { active: b
     <div className="project-aow-dialog-body">
       <div className="project-aow-settings-heading acp-settings-heading"><div><h2>ACP</h2><p>安装 Registry Agent 或配置自定义启动命令。</p></div><div className="acp-actions"><button type="button" disabled={busy || !saved} onClick={() => { setModal('registry'); void run(async () => setRegistry(await acpApi.registry(true))); }}>ACP Registry</button><button type="button" disabled={busy || !saved} onClick={() => openEditor('edit')}>Setting File</button></div></div>
       {!!agents.length && <div className="acp-registry" aria-label="已配置的 ACP Agent">{agents.map(agent => <article key={agent.id}>
-        <div><strong>{agent.name}</strong><small>{agent.installed ? '可用于新建会话' : '尚未安装，请先完成安装'}</small></div>
+        <AgentIcon agentId={agent.id.replace(/-acp$/, '').replace(/^claude-agent$/, 'claude')} />
+        <div><strong>{agent.name}</strong>{!agent.installed && <small>尚未安装，请先完成安装</small>}</div>
         <label className="project-aow-agent-default" title={defaultAgentId === agent.id ? '取消默认，使用列表第一项' : '设为默认实例'}>
           <input type="checkbox" aria-label={`默认 ACP：${agent.name}`} checked={defaultAgentId === agent.id} disabled={busy || !saved || !!syntaxError} onChange={event => { void selectDefaultAgent(event.target.checked ? agent.id : ''); }} />默认
         </label>
