@@ -48,7 +48,7 @@ fn router<S: Clone + Send + Sync + 'static>(path: PathBuf) -> Router<S> {
 async fn respond(
     operation: impl FnOnce() -> Result<Document, HttpError> + Send + 'static,
 ) -> impl IntoResponse {
-    let result = tokio::task::spawn_blocking(operation)
+    let result = aow_i18n::spawn_blocking(operation)
         .await
         .map_err(|error| HttpError::internal(error.to_string()))
         .and_then(std::convert::identity)

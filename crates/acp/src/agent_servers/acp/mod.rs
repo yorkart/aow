@@ -115,8 +115,8 @@ impl AcpConnection {
                     futures::future::pending::<Result<(), agent_client_protocol::Error>>().await
                 },
             );
-        tokio::spawn(async move {
-            let stderr_task = tokio::spawn(stderr);
+        aow_i18n::spawn(async move {
+            let stderr_task = aow_i18n::spawn(stderr);
             tokio::pin!(io);
             let reason = tokio::select! {
                 result = &mut io => format!("ACP connection closed: {result:?}"),

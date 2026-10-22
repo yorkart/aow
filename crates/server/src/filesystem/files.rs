@@ -70,7 +70,11 @@ pub(crate) async fn rename_file_path(
     let name = destination
         .file_name()
         .and_then(|value| value.to_str())
-        .ok_or_else(|| HttpError::internal("renamed file does not have a UTF-8 name"))?
+        .ok_or_else(|| {
+            HttpError::internal(aow_i18n::text(
+                "validation.renamed_file_does_not_have_a_utf_8_name",
+            ))
+        })?
         .to_owned();
     Ok(Json(RenameResult {
         path: destination.to_string_lossy().into_owned(),

@@ -1,3 +1,4 @@
+import { t, getLanguage } from '../../lib/i18n';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
 import { ArrowUp, Check, ChevronDown, ChevronRight, Copy, Download, Home, LoaderCircle, Pin, PinOff, RefreshCw, Upload, X } from 'lucide-react';
@@ -36,10 +37,10 @@ function DirectoryPin({ path, label = path, pins, className = '', showLabel = fa
 }) {
   const pinned = pins.paths.includes(path);
   const pending = pins.pending.has(path);
-  const action = `${pinned ? '取消 Pin' : 'Pin'} ${label}`;
+  const action = t(pinned ? "files.unpin_path" : "files.pin_path", { path: label });
   return <button type="button" className={`system-file-pin ${className}`} title={action} aria-label={action} aria-pressed={pinned}
     disabled={!path || pins.loading || pending} onClick={() => void pins.toggle(path, pinned)}>
-    {pending ? <LoaderCircle className="system-file-spin" /> : pinned ? <PinOff /> : <Pin />}{showLabel ? <span>{pinned ? '取消 Pin' : 'Pin 当前目录'}</span> : null}
+    {pending ? <LoaderCircle className="system-file-spin" /> : pinned ? <PinOff /> : <Pin />}{showLabel ? <span>{pinned ? t("files.unpin") : t("files.pin_current_directory")}</span> : null}
   </button>;
 }
 
@@ -66,7 +67,7 @@ function DirectoryTree(props: DirectoryTreeProps) {
   const directories = listings[path]?.entries.filter((entry) => entry.kind === 'directory');
   return <li>
     <div className={`system-file-tree-row${currentPath === path ? ' selected' : ''}`}>
-      <button className="system-file-tree-toggle" style={{ marginLeft: depth * 13 }} aria-label={`${isExpanded ? '折叠' : '展开'} ${path}`} aria-expanded={isExpanded} onClick={() => onToggle(path)}>
+      <button className="system-file-tree-toggle" style={{ marginLeft: depth * 13 }} aria-label={`${isExpanded ? t("common.collapse") : t("aow.expand")} ${path}`} aria-expanded={isExpanded} onClick={() => onToggle(path)}>
         {pending.has(path) ? <LoaderCircle className="system-file-spin" /> : isExpanded ? <ChevronDown /> : <ChevronRight />}
       </button>
       <button className="system-file-tree-name" title={path} aria-current={currentPath === path ? 'location' : undefined} onClick={() => onNavigate(path)}>
@@ -74,13 +75,13 @@ function DirectoryTree(props: DirectoryTreeProps) {
       </button>
       <span className="system-file-tree-actions">
         <DirectoryPin path={path} pins={pins} className="system-file-tree-pin" />
-        <button className="system-file-tree-copy" title={`复制路径 ${path}`} aria-label={`复制路径 ${path}`} onClick={() => onCopy(path)}><Copy /></button>
+        <button className="system-file-tree-copy" title={t("files.copy_path", { value0: path })} aria-label={t("files.copy_path", { value0: path })} onClick={() => onCopy(path)}><Copy /></button>
       </span>
     </div>
     {isExpanded ? <ul>
-      {errors[path] ? <li className="system-file-tree-error" style={{ paddingLeft: (depth + 1) * 13 + 8 }} title={errors[path]}>{errors[path]}<button onClick={() => onRetry(path)}>重试</button></li> : null}
+      {errors[path] ? <li className="system-file-tree-error" style={{ paddingLeft: (depth + 1) * 13 + 8 }} title={errors[path]}>{errors[path]}<button onClick={() => onRetry(path)}>{t("aow.retry")}</button></li> : null}
       {directories?.map((entry) => <DirectoryTree key={entry.path} {...props} path={entry.path} depth={depth + 1} />)}
-      {!pending.has(path) && !errors[path] && directories?.length === 0 ? <li className="system-file-tree-empty" style={{ paddingLeft: (depth + 1) * 13 + 8 }}>无子目录</li> : null}
+      {!pending.has(path) && !errors[path] && directories?.length === 0 ? <li className="system-file-tree-empty" style={{ paddingLeft: (depth + 1) * 13 + 8 }}>{t("files.no_subdirectories")}</li> : null}
     </ul> : null}
   </li>;
 }
@@ -158,7 +159,7 @@ export function SystemFileBrowser({ open, onHide, onOpenFile, navigationRequest,
       setSelectedPath((previous) => listing.entries.some((entry) => entry.path === previous) ? previous : '');
       if (fileListRef.current && listing.path !== currentPath) fileListRef.current.scrollTop = 0;
     } catch (reason) {
-      if (generation === navigationRef.current) setError(`无法打开 ${path}：${errorMessage(reason)}`);
+      if (generation === navigationRef.current) setError(t("files.unable_to_open", { value0: path, value1: errorMessage(reason) }));
     } finally {
       if (generation === navigationRef.current) setLoading(false);
     }
@@ -180,7 +181,7 @@ export function SystemFileBrowser({ open, onHide, onOpenFile, navigationRequest,
       setAddress(listing.path);
       setSelectedPath('');
     } catch (reason) {
-      if (generation === navigationRef.current) setError(`无法打开 Home：${errorMessage(reason)}`);
+      if (generation === navigationRef.current) setError(t("files.unable_to_open_home", { value0: errorMessage(reason) }));
     } finally {
       if (generation === navigationRef.current) setLoading(false);
     }
@@ -246,7 +247,7 @@ export function SystemFileBrowser({ open, onHide, onOpenFile, navigationRequest,
     setNotice('');
     try {
       try {
-        if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+        if (!navigator.clipboard?.writeText) throw new Error(t("common.clipboard_unavailable"));
         await navigator.clipboard.writeText(path);
       } catch {
         const focused = document.activeElement;
@@ -257,14 +258,14 @@ export function SystemFileBrowser({ open, onHide, onOpenFile, navigationRequest,
         dialogRef.current!.appendChild(input);
         try {
           input.select();
-          if (!document.execCommand('copy')) throw new Error('浏览器拒绝复制操作');
+          if (!document.execCommand('copy')) throw new Error(t("files.the_browser_denied_the_copy_operation"));
         } finally {
           input.remove();
           if (focused instanceof HTMLElement) focused.focus({ preventScroll: true });
         }
       }
-      setNotice(`已复制：${path}`);
-    } catch (reason) { setError(`复制失败：${errorMessage(reason)}`); }
+      setNotice(t("files.copied", { value0: path }));
+    } catch (reason) { setError(t("files.copy_failed", { value0: errorMessage(reason) })); }
   };
 
   const enqueueUploads = (files: File[]) => {
@@ -284,7 +285,7 @@ export function SystemFileBrowser({ open, onHide, onOpenFile, navigationRequest,
             await filesApi.uploadFile(item.directory, item.file, (loaded) => update(item.id, { loaded }));
             update(item.id, { status: 'success', loaded: item.file.size });
             try { await loadDirectory(item.directory, true); }
-            catch (reason) { setError(`文件已上传，但目录刷新失败：${errorMessage(reason)}`); }
+            catch (reason) { setError(t("files.file_uploaded_but_directory_refresh_failed", { value0: errorMessage(reason) })); }
           } catch (reason) { update(item.id, { status: 'error', error: errorMessage(reason) }); }
         }
       } finally { uploadingRef.current = false; }
@@ -298,7 +299,7 @@ export function SystemFileBrowser({ open, onHide, onOpenFile, navigationRequest,
     setDragging(false);
     const items = [...event.dataTransfer.items];
     const containsDirectory = items.some((item) => item.webkitGetAsEntry?.()?.isDirectory);
-    if (containsDirectory) setError('请拖入文件；暂不支持整目录上传。');
+    if (containsDirectory) setError(t("files.drop_files_here_directory_uploads_are_not_supported"));
     const files = items.length
       ? items.filter((item) => item.kind === 'file' && !item.webkitGetAsEntry?.()?.isDirectory).map((item) => item.getAsFile()).filter((file): file is File => file !== null)
       : [...event.dataTransfer.files];
@@ -308,7 +309,7 @@ export function SystemFileBrowser({ open, onHide, onOpenFile, navigationRequest,
   const listing = listings[currentPath];
   const activeUploads = uploads.filter((item) => item.status === 'waiting' || item.status === 'uploading').length;
 
-  return <div ref={dialogRef} className="system-file-browser" hidden={!open} role="region" aria-label="系统文件浏览器"
+  return <div ref={dialogRef} className="system-file-browser" hidden={!open} role="region" aria-label={t("aow.system_file_browser")}
 
     onKeyDown={(event) => { event.stopPropagation(); if (event.key === 'Escape') { event.preventDefault(); onHide(); } }}
     onClick={(event) => {
@@ -336,64 +337,64 @@ export function SystemFileBrowser({ open, onHide, onOpenFile, navigationRequest,
   >
     <div className="system-file-toolbar">
       <div className="system-file-toolbar-actions">
-        <button title="上级目录" aria-label="上级目录" disabled={!currentPath || currentPath === '/'} onClick={() => void navigate(parentPath(currentPath))}><ArrowUp /></button>
-        <button title="刷新当前目录" aria-label="刷新当前目录" disabled={loading} onClick={() => void (currentPath ? navigate(currentPath, true) : loadHome())}><RefreshCw className={loading ? 'system-file-spin' : ''} /></button>
-        <DirectoryPin path={currentPath} label="当前目录" pins={pins} showLabel />
-        <button className="system-file-upload-button" disabled={!currentPath || loading} onClick={() => fileInputRef.current?.click()}><Upload />上传文件</button>
-        <input ref={fileInputRef} type="file" multiple hidden aria-label="选择上传文件" onChange={(event) => { enqueueUploads([...event.currentTarget.files ?? []]); event.currentTarget.value = ''; }} />
+        <button title={t("aow.parent_directory")} aria-label={t("aow.parent_directory")} disabled={!currentPath || currentPath === '/'} onClick={() => void navigate(parentPath(currentPath))}><ArrowUp /></button>
+        <button title={t("aow.refresh_current_directory")} aria-label={t("aow.refresh_current_directory")} disabled={loading} onClick={() => void (currentPath ? navigate(currentPath, true) : loadHome())}><RefreshCw className={loading ? 'system-file-spin' : ''} /></button>
+        <DirectoryPin path={currentPath} label={t("files.current_directory")} pins={pins} showLabel />
+        <button className="system-file-upload-button" disabled={!currentPath || loading} onClick={() => fileInputRef.current?.click()}><Upload />{t("files.upload_files")}</button>
+        <input ref={fileInputRef} type="file" multiple hidden aria-label={t("files.choose_upload_files")} onChange={(event) => { enqueueUploads([...event.currentTarget.files ?? []]); event.currentTarget.value = ''; }} />
       </div>
     </div>
     <form className="system-file-address" onSubmit={(event) => {
       event.preventDefault();
       let path = address.trim();
       if (home && (path === '~' || path.startsWith('~/'))) path = home + path.slice(1);
-      if (!path.startsWith('/')) { setError('请输入绝对路径，例如 /tmp 或 ~/Documents'); return; }
+      if (!path.startsWith('/')) { setError(t("files.enter_an_absolute_path_such_as_tmp_or_documents")); return; }
       void navigate(path.replace(/\/{2,}/g, '/').replace(/\/$/, '') || '/');
-    }}><input autoFocus aria-label="目录路径" spellCheck={false} value={address} placeholder="输入目录路径" onChange={(event) => setAddress(event.target.value)} /><button type="submit">前往</button><button type="button" title="复制当前目录路径" aria-label="复制当前目录路径" disabled={!currentPath} onClick={() => void copyPath(currentPath)}><Copy /></button></form>
-    {error ? <div className="system-file-error" role="alert"><span>{error}</span><button aria-label="关闭错误提示" onClick={() => setError('')}><X /></button></div> : null}
+    }}><input autoFocus aria-label={t("aow.directory_path")} spellCheck={false} value={address} placeholder={t("files.enter_directory_path")} onChange={(event) => setAddress(event.target.value)} /><button type="submit">{t("files.go")}</button><button type="button" title={t("files.copy_current_directory_path")} aria-label={t("files.copy_current_directory_path")} disabled={!currentPath} onClick={() => void copyPath(currentPath)}><Copy /></button></form>
+    {error ? <div className="system-file-error" role="alert"><span>{error}</span><button aria-label={t("aow.dismiss_error")} onClick={() => setError('')}><X /></button></div> : null}
     <div className="system-file-body">
-      <aside className="system-file-shortcuts" aria-label="快捷导航与收藏">
-        <div className="system-file-pane-title">快捷导航</div>
-        <nav aria-label="快捷导航">
-          <button title="根目录 /" onClick={() => void navigate('/')} aria-pressed={currentPath === '/'}><DirectoryTypeIcon /><span>/</span></button>
+      <aside className="system-file-shortcuts" aria-label={t("files.quick_navigation_and_favorites")}>
+        <div className="system-file-pane-title">{t("files.quick_navigation")}</div>
+        <nav aria-label={t("files.quick_navigation")}>
+          <button title={t("files.root")} onClick={() => void navigate('/')} aria-pressed={currentPath === '/'}><DirectoryTypeIcon /><span>/</span></button>
           <button title="/tmp" onClick={() => void navigate('/tmp')} aria-pressed={currentPath === '/tmp'}><DirectoryTypeIcon /><span>/tmp</span></button>
-          <button title={home || 'Home'} onClick={() => void (home ? navigate(home) : loadHome())} aria-pressed={!!home && currentPath === home}><Home /><span>Home</span></button>
+          <button title={home || t("navigation.home")} onClick={() => void (home ? navigate(home) : loadHome())} aria-pressed={!!home && currentPath === home}><Home /><span>{t("navigation.home")}</span></button>
         </nav>
-        <section className="system-file-bookmarks" aria-label="收藏目录">
-          <div className="system-file-pane-title"><Pin /><span>收藏 / Pin</span><button title="刷新收藏" aria-label="刷新收藏" disabled={pins.loading} onClick={() => void pins.reload()}><RefreshCw className={pins.loading ? 'system-file-spin' : ''} /></button></div>
-          {pins.error ? <div className="system-file-bookmark-error" role="alert"><span>{pins.error}</span><button onClick={() => void pins.reload()}>重新加载</button></div> : null}
-          {pins.loading && pins.paths.length === 0 ? <p className="system-file-bookmarks-empty">正在加载收藏…</p> : !pins.error && pins.paths.length === 0 ? <p className="system-file-bookmarks-empty">Pin 常用目录，在这里快速访问。</p> : null}
+        <section className="system-file-bookmarks" aria-label={t("files.favorite_directories")}>
+          <div className="system-file-pane-title"><Pin /><span>{t("files.favorites_pins")}</span><button title={t("files.refresh_favorites")} aria-label={t("files.refresh_favorites")} disabled={pins.loading} onClick={() => void pins.reload()}><RefreshCw className={pins.loading ? 'system-file-spin' : ''} /></button></div>
+          {pins.error ? <div className="system-file-bookmark-error" role="alert"><span>{pins.error}</span><button onClick={() => void pins.reload()}>{t("configuration.reload")}</button></div> : null}
+          {pins.loading && pins.paths.length === 0 ? <p className="system-file-bookmarks-empty">{t("files.loading_favorites")}</p> : !pins.error && pins.paths.length === 0 ? <p className="system-file-bookmarks-empty">{t("files.pin_frequently_used_directories_for_quick_access_here")}</p> : null}
           <ul>{pins.paths.map((path) => <li key={path} className={currentPath === path ? 'selected' : ''}>
-            <button className="system-file-bookmark-link" title={path} aria-label={`打开收藏 ${path}`} aria-current={currentPath === path ? 'location' : undefined} onClick={() => void navigate(path)}><DirectoryTypeIcon /><span><strong>{path.split('/').pop() || '/'}</strong><small>{path}</small></span></button>
+            <button className="system-file-bookmark-link" title={path} aria-label={t("files.open_favorite", { value0: path })} aria-current={currentPath === path ? 'location' : undefined} onClick={() => void navigate(path)}><DirectoryTypeIcon /><span><strong>{path.split('/').pop() || '/'}</strong><small>{path}</small></span></button>
             <DirectoryPin path={path} pins={pins} />
           </li>)}</ul>
         </section>
       </aside>
-      <aside className="system-file-tree" ref={treeRef} aria-label="目录树"><div className="system-file-pane-title">目录树</div><ul><DirectoryTree path="/" currentPath={currentPath} listings={listings} expanded={expanded} pending={pending} errors={directoryErrors} onToggle={toggleDirectory} onNavigate={(path) => void navigate(path)} onRetry={(path) => { void loadDirectory(path, true).catch(() => undefined); }} onCopy={(path) => void copyPath(path)} pins={pins} /></ul></aside>
-      <div className="system-file-list" ref={fileListRef} aria-label="文件列表" aria-busy={loading}>
-        <table><thead><tr><th>名称</th><th>大小</th><th>修改时间</th><th>操作</th></tr></thead><tbody>
+      <aside className="system-file-tree" ref={treeRef} aria-label={t("files.directory_tree")}><div className="system-file-pane-title">{t("files.directory_tree")}</div><ul><DirectoryTree path="/" currentPath={currentPath} listings={listings} expanded={expanded} pending={pending} errors={directoryErrors} onToggle={toggleDirectory} onNavigate={(path) => void navigate(path)} onRetry={(path) => { void loadDirectory(path, true).catch(() => undefined); }} onCopy={(path) => void copyPath(path)} pins={pins} /></ul></aside>
+      <div className="system-file-list" ref={fileListRef} aria-label={t("files.file_list")} aria-busy={loading}>
+        <table><thead><tr><th>{t("automations.name")}</th><th>{t("files.size")}</th><th>{t("files.modified")}</th><th>{t("files.actions")}</th></tr></thead><tbody>
           {listing?.entries.map((entry) => <tr key={entry.path} className={selectedPath === entry.path ? 'selected' : ''} aria-selected={selectedPath === entry.path} onClick={() => setSelectedPath(entry.path)} onDoubleClick={() => { if (entry.kind === 'directory') void navigate(entry.path); }}>
             <td><button className="system-file-entry-name" title={entry.is_symlink ? `${entry.path} → ${entry.link_target}` : entry.path} onClick={() => { setSelectedPath(entry.path); if (entry.kind === 'directory') void navigate(entry.path); }}>
               {entry.kind === 'directory' ? <DirectoryTypeIcon /> : <FileTypeIcon path={entry.path} />}<span>{entry.name}</span>{entry.is_symlink ? <small>↗</small> : null}
             </button></td>
             <td>{entry.kind === 'file' ? formatSize(entry.size) : '—'}</td>
-            <td>{entry.modified_ms == null ? '—' : new Date(entry.modified_ms).toLocaleString()}</td>
-            <td><div className="system-file-entry-actions">{entry.kind === 'file' && !/\.(png|jpe?g|gif|webp|ico|bmp|pdf|zip|gz|tar|exe|so|woff2?|mp[34]|mov|docx?|xlsx?)$/i.test(entry.name) ? <button title="打开文件" aria-label={`打开 ${entry.name}`} onClick={() => onOpenFile(entry)}>打开</button> : null}<button title="复制路径" aria-label={`复制路径 ${entry.name}`} onClick={() => void copyPath(entry.path)}><Copy /></button>{entry.kind === 'directory' ? <DirectoryPin path={entry.path} label={entry.name} pins={pins} /> : entry.kind === 'file' ? <a href={filesApi.rawUrl(entry.path)} download={entry.name} title="下载文件" aria-label={`下载 ${entry.name}`}><Download /></a> : null}</div></td>
+            <td>{entry.modified_ms == null ? '—' : new Date(entry.modified_ms).toLocaleString(getLanguage())}</td>
+            <td><div className="system-file-entry-actions">{entry.kind === 'file' && !/\.(png|jpe?g|gif|webp|ico|bmp|pdf|zip|gz|tar|exe|so|woff2?|mp[34]|mov|docx?|xlsx?)$/i.test(entry.name) ? <button title={t("aow.open_file")} aria-label={t("files.open", { value0: entry.name })} onClick={() => onOpenFile(entry)}>{t("aow.open")}</button> : null}<button title={t("files.copy_path_2")} aria-label={t("files.copy_path", { value0: entry.name })} onClick={() => void copyPath(entry.path)}><Copy /></button>{entry.kind === 'directory' ? <DirectoryPin path={entry.path} label={entry.name} pins={pins} /> : entry.kind === 'file' ? <a href={filesApi.rawUrl(entry.path)} download={entry.name} title={t("editor.download_file")} aria-label={t("files.download_2", { value0: entry.name })}><Download /></a> : null}</div></td>
           </tr>)}
         </tbody></table>
-        {!listing ? <div className="system-file-empty">{loading ? <><LoaderCircle className="system-file-spin" />正在加载目录…</> : '请选择目录'}</div> : listing.entries.length === 0 ? <div className="system-file-empty"><DirectoryTypeIcon expanded />目录为空，可拖入文件上传</div> : null}
+        {!listing ? <div className="system-file-empty">{loading ? <><LoaderCircle className="system-file-spin" />{t("files.loading_directory")}</> : t("files.choose_a_directory")}</div> : listing.entries.length === 0 ? <div className="system-file-empty"><DirectoryTypeIcon expanded />{t("files.directory_is_empty_drop_files_to_upload")}</div> : null}
       </div>
     </div>
-    {uploads.length > 0 ? <section className="system-file-uploads" aria-label="上传任务">
-      <header><strong>{activeUploads ? `正在上传 · ${activeUploads} 个文件` : '上传记录'}</strong><span>隐藏窗口后继续上传</span><button onClick={() => setUploads((previous) => previous.filter((item) => item.status === 'waiting' || item.status === 'uploading'))}>清除已结束</button></header>
+    {uploads.length > 0 ? <section className="system-file-uploads" aria-label={t("files.upload_tasks")}>
+      <header><strong>{activeUploads ? t("files.uploading_files", { value0: activeUploads }) : t("files.upload_history")}</strong><span>{t("files.uploads_continue_when_this_window_is_hidden")}</span><button onClick={() => setUploads((previous) => previous.filter((item) => item.status === 'waiting' || item.status === 'uploading'))}>{t("files.clear_finished")}</button></header>
       <ul>{uploads.map((item) => <li key={item.id}>
         {item.status === 'success' ? <Check className="system-file-success" /> : item.status === 'error' ? <X className="system-file-failure" /> : <LoaderCircle className={item.status === 'uploading' ? 'system-file-spin' : ''} />}
         <div title={`${item.directory.replace(/\/$/, '')}/${item.file.name}`}><strong>{item.file.name}</strong><small>{item.directory}</small></div>
-        {item.status === 'uploading' ? <progress aria-label={`上传进度 ${item.file.name}`} max={item.file.size || 1} value={item.loaded} /> : null}
-        <span className={item.status === 'error' ? 'system-file-failure' : ''} title={item.error}>{item.status === 'waiting' ? '等待上传' : item.status === 'success' ? '已上传' : item.status === 'error' ? item.error : item.loaded >= item.file.size ? '正在保存…' : `${Math.round(item.loaded / (item.file.size || 1) * 100)}%`}</span>
+        {item.status === 'uploading' ? <progress aria-label={t("files.upload_progress", { value0: item.file.name })} max={item.file.size || 1} value={item.loaded} /> : null}
+        <span className={item.status === 'error' ? 'system-file-failure' : ''} title={item.error}>{item.status === 'waiting' ? t("files.waiting_to_upload") : item.status === 'success' ? t("files.uploaded") : item.status === 'error' ? item.error : item.loaded >= item.file.size ? t("files.saving") : `${Math.round(item.loaded / (item.file.size || 1) * 100)}%`}</span>
       </li>)}</ul>
     </section> : null}
-    <footer className="system-file-footer"><span role="status" title={notice || currentPath}>{notice || (loading ? '正在加载…' : `${listing?.entries.length ?? 0} 个项目 · ${currentPath}`)}</span><span>拖入文件上传到当前目录</span></footer>
-    {dragging ? <div className="system-file-drop-overlay"><Upload /><strong>{loading || !currentPath ? '请等待目录加载完成' : '松开以上传文件'}</strong><span>{currentPath}</span></div> : null}
+    <footer className="system-file-footer"><span role="status" title={notice || currentPath}>{notice || (loading ? t("aow.loading") : t("files.items", { value0: listing?.entries.length ?? 0, value1: currentPath }))}</span><span>{t("files.drop_files_to_upload_to_the_current_directory")}</span></footer>
+    {dragging ? <div className="system-file-drop-overlay"><Upload /><strong>{loading || !currentPath ? t("files.wait_for_the_directory_to_finish_loading") : t("files.release_to_upload_files")}</strong><span>{currentPath}</span></div> : null}
   </div>;
 }

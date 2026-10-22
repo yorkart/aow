@@ -71,7 +71,11 @@ async fn unresolved_dynamic_workspace_cannot_prepare_a_directory() {
     let error = prepare(&config, Path::new("/missing"), "manual", &Git)
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("执行时指定工作区"));
+    assert!(
+        error
+            .to_string()
+            .contains("workspace directory for this run")
+    );
     let fixed = WorkspaceConfig {
         workspace_path: "/repo".into(),
         ..config

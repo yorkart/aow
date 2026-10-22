@@ -1,3 +1,4 @@
+import { t, getLanguage } from '../../lib/i18n';
 import { appUrl } from '../../lib/basePath';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, FileClock, LoaderCircle, RefreshCw, Search, X } from 'lucide-react';
@@ -47,46 +48,46 @@ export function OperationLogPanel({ initialOperationId, operations, revision, bo
   const refresh = () => { setCursors([undefined]); setPageIndex(0); setReload(value => value + 1); setNewRecords(false); };
   const operation = operations.find(operation => operation.id === filters.operation_id);
   const latest = page?.items[0];
-  const sourceLabel = (value: string) => ({ web: '页面', cli: 'CLI', automation: '自动化', system: '系统', auth: '认证' }[value] ?? value);
+  const sourceLabel = (value: string) => ({ web: t("operations.page"), cli: 'CLI', automation: t("aow.automations"), system: t("operations.system"), auth: t("operations.authentication") }[value] ?? value);
   const resizeTo = (value: number) => setHeight(Math.max(180, Math.min(window.innerHeight * 0.75, value)));
-  return <section ref={panel} tabIndex={-1} className="operation-log-panel" aria-label="操作日志" style={{ height }} onKeyDown={event => {
+  return <section ref={panel} tabIndex={-1} className="operation-log-panel" aria-label={t("operations.operation_logs")} style={{ height }} onKeyDown={event => {
     if (event.key === 'Escape') { event.stopPropagation(); onClose(); }
   }}>
-    <div className="operation-log-resize" role="separator" aria-label="调整操作日志高度" aria-orientation="horizontal" tabIndex={0}
+    <div className="operation-log-resize" role="separator" aria-label={t("operations.resize_operation_logs_height")} aria-orientation="horizontal" tabIndex={0}
       onPointerDown={event => { resize.current = { y: event.clientY, height }; event.currentTarget.setPointerCapture(event.pointerId); }}
       onPointerMove={event => { if (resize.current) resizeTo(resize.current.height + resize.current.y - event.clientY); }}
       onPointerUp={() => { resize.current = undefined; }} onPointerCancel={() => { resize.current = undefined; }}
       onKeyDown={event => { if (event.key === 'ArrowUp' || event.key === 'ArrowDown') { event.preventDefault(); resizeTo(height + (event.key === 'ArrowUp' ? 20 : -20)); } }} />
-    <header><div><FileClock size={15} /><strong>操作日志</strong>{filters.operation_id && <button onClick={() => changeFilters({ operation_id: '' })}><ArrowLeft size={13} />全部操作</button>}</div>
-      <div>{newRecords && <button onClick={refresh}>有新记录</button>}<button aria-label="刷新操作日志" title="刷新" onClick={refresh}><RefreshCw size={14} /></button><button aria-label="关闭操作日志" onClick={onClose}><X size={15} /></button></div>
+    <header><div><FileClock size={15} /><strong>{t("operations.operation_logs")}</strong>{filters.operation_id && <button onClick={() => changeFilters({ operation_id: '' })}><ArrowLeft size={13} />{t("operations.all_operations")}</button>}</div>
+      <div>{newRecords && <button onClick={refresh}>{t("operations.new_records")}</button>}<button aria-label={t("operations.refresh_operation_logs")} title={t("files.refresh")} onClick={refresh}><RefreshCw size={14} /></button><button aria-label={t("operations.close_operation_logs")} onClick={onClose}><X size={15} /></button></div>
     </header>
     <form className="operation-log-filters" onSubmit={event => { event.preventDefault(); changeFilters({ query: query.trim() }); }}>
-      <label><Search size={13} /><input aria-label="搜索操作日志" placeholder="搜索描述或资源…" value={query} maxLength={1024} onChange={event => setQuery(event.target.value)} /></label>
-      <button type="submit">搜索</button>
-      <select aria-label="操作类型" value={filters.kind} onChange={event => changeFilters({ kind: event.target.value })}><option value="">全部类型</option><option value="worktree.create">创建 Worktree</option><option value="worktree.remove">删除 Worktree</option><option value="agent.create">创建 Agent</option><option value="auth.login">登录</option><option value="auth.access">未登录访问</option><option value="auth.notification">认证通知</option></select>
-      <select aria-label="操作来源" value={filters.source} onChange={event => changeFilters({ source: event.target.value })}><option value="">全部来源</option><option value="web">页面</option><option value="cli">CLI</option><option value="automation">自动化</option><option value="system">系统</option><option value="auth">认证</option></select>
-      <select aria-label="日志级别" value={filters.level} onChange={event => changeFilters({ level: event.target.value })}><option value="">全部级别</option><option value="info">信息</option><option value="warn">警告</option><option value="error">错误</option></select>
+      <label><Search size={13} /><input aria-label={t("operations.search_operation_logs")} placeholder={t("operations.search_description_or_resource")} value={query} maxLength={1024} onChange={event => setQuery(event.target.value)} /></label>
+      <button type="submit">{t("operations.search")}</button>
+      <select aria-label={t("operations.operation_type")} value={filters.kind} onChange={event => changeFilters({ kind: event.target.value })}><option value="">{t("operations.all_types")}</option><option value="worktree.create">{t("aow.create_worktree")}</option><option value="worktree.remove">{t("aow.delete_worktree")}</option><option value="agent.create">{t("operations.create_agent")}</option><option value="auth.login">{t("auth.sign_in")}</option><option value="auth.access">{t("operations.unauthenticated_access")}</option><option value="auth.notification">{t("operations.authentication_notification")}</option></select>
+      <select aria-label={t("operations.operation_source")} value={filters.source} onChange={event => changeFilters({ source: event.target.value })}><option value="">{t("operations.all_sources")}</option><option value="web">{t("operations.page")}</option><option value="cli">CLI</option><option value="automation">{t("aow.automations")}</option><option value="system">{t("operations.system")}</option><option value="auth">{t("operations.authentication")}</option></select>
+      <select aria-label={t("operations.log_level")} value={filters.level} onChange={event => changeFilters({ level: event.target.value })}><option value="">{t("operations.all_levels")}</option><option value="info">{t("operations.info")}</option><option value="warn">{t("operations.warning")}</option><option value="error">{t("operations.error")}</option></select>
     </form>
-    {operation && <div className="operation-log-current">{!operation.outcome && <LoaderCircle size={13} className="spinning" />}<strong>{operation.title} · {operation.outcome ? operationOutcomeLabels[operation.outcome] : '进行中'}</strong><span>{operation.message}</span>
-      {operation.kind === 'agent.create' && operation.resource?.startsWith('/aow/tabs/terminal/') && <a href={appUrl(operation.resource)}>查看 Terminal</a>}
+    {operation && <div className="operation-log-current">{!operation.outcome && <LoaderCircle size={13} className="spinning" />}<strong>{operation.title} · {operation.outcome ? operationOutcomeLabels[operation.outcome] : t("components.in_progress")}</strong><span>{operation.message}</span>
+      {operation.kind === 'agent.create' && operation.resource?.startsWith('/aow/tabs/terminal/') && <a href={appUrl(operation.resource)}>{t("operations.view_terminal")}</a>}
     </div>}
-    {pageIndex === 0 && filters.operation_id && !operation && latest && latest.boot_id !== bootId && latest.event !== 'finished' && !latest.outcome && !filters.query && !filters.kind && !filters.source && !filters.level && <div className="operation-log-warning">这次操作尚未找到结束记录，结果未确认。</div>}
-    {(error || logError) && <div className="operation-log-error" role="alert">{error || logError}<button onClick={refresh}>刷新</button></div>}
+    {pageIndex === 0 && filters.operation_id && !operation && latest && latest.boot_id !== bootId && latest.event !== 'finished' && !latest.outcome && !filters.query && !filters.kind && !filters.source && !filters.level && <div className="operation-log-warning">{t("operations.no_completion_record_found_for_this_operation_the_result")}</div>}
+    {(error || logError) && <div className="operation-log-error" role="alert">{error || logError}<button onClick={refresh}>{t("files.refresh")}</button></div>}
     <div className="operation-log-rows" ref={list} aria-busy={loading}>
-      {loading && <div className="operation-log-empty"><LoaderCircle size={14} className="spinning" />正在读取…</div>}
+      {loading && <div className="operation-log-empty"><LoaderCircle size={14} className="spinning" />{t("operations.reading")}</div>}
       {!loading && page?.items.map((record, index) => <article className={`operation-log-row ${record.level}`} key={`${record.operation_id}:${record.timestamp}:${index}`}>
-        <time title={record.timestamp}>{new Date(record.timestamp).toLocaleString()}</time><span className="operation-log-source">{sourceLabel(record.source)}</span>
-        <button title="查看本次操作的全部日志" onClick={() => { setQuery(''); changeFilters({ operation_id: record.operation_id, query: '', kind: '', source: '', level: '' }); }}>{record.title}</button>
+        <time title={record.timestamp}>{new Date(record.timestamp).toLocaleString(getLanguage())}</time><span className="operation-log-source">{sourceLabel(record.source)}</span>
+        <button title={t("operations.view_all_logs_for_this_operation")} onClick={() => { setQuery(''); changeFilters({ operation_id: record.operation_id, query: '', kind: '', source: '', level: '' }); }}>{record.title}</button>
         <span className="operation-log-message">{record.message}</span>
         {record.outcome && <span className="operation-log-outcome">{operationOutcomeLabels[record.outcome]}</span>}
       </article>)}
-      {!loading && page && !page.items.length && !error && <div className="operation-log-empty">{page.next_cursor ? '这部分日志没有匹配记录，可以继续查找。' : '没有匹配的日志记录。'}</div>}
+      {!loading && page && !page.items.length && !error && <div className="operation-log-empty">{page.next_cursor ? t("operations.no_matching_records_in_this_section_continue_searching") : t("operations.no_matching_log_records")}</div>}
     </div>
-    <footer><span>{page?.budget_exhausted ? '已搜索部分日志，可继续查找更早记录。' : `第 ${pageIndex + 1} 页${page ? ` · ${page.items.length} 条记录` : ''}`}</span>
-      <div><button disabled={loading || pageIndex === 0} onClick={() => setPageIndex(index => index - 1)}><ChevronLeft size={14} />上一页</button>
+    <footer><span>{page?.budget_exhausted ? t("operations.some_logs_have_been_searched_continue_to_search_earlier") : t("operations.page_2", { value0: pageIndex + 1, value1: page ? t("common.records", { value0: page.items.length }) : '' })}</span>
+      <div><button disabled={loading || pageIndex === 0} onClick={() => setPageIndex(index => index - 1)}><ChevronLeft size={14} />{t("operations.previous_page")}</button>
         <button disabled={loading || !!error || !page?.next_cursor} onClick={() => {
           if (page?.next_cursor) { setCursors(current => [...current.slice(0, pageIndex + 1), page.next_cursor!]); setPageIndex(index => index + 1); }
-        }}>{page?.budget_exhausted ? '继续查找' : '更早记录'}<ChevronRight size={14} /></button></div>
+        }}>{page?.budget_exhausted ? t("operations.continue_searching") : t("operations.earlier_records")}<ChevronRight size={14} /></button></div>
     </footer>
   </section>;
 }

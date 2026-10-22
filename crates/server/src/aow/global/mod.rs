@@ -30,7 +30,7 @@ impl AowManager {
             .unwrap();
         let mut project = state.projects.remove(index);
         project.id = FLOATING_PROJECT_ID.into();
-        project.name = "浮动工作区".into();
+        project.name = aow_i18n::text("server.floating_workspace").into();
         project.builtin = true;
         // There is one floating builtin project. Restored records can have a
         // different identity or another machine's repository path.

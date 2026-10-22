@@ -26,7 +26,9 @@ pub(super) async fn run(
             .revision
             .is_some_and(|revision| revision != task.revision)
     {
-        return Err(error("任务已被修改，请刷新后重新填写变量"));
+        return Err(error(aow_i18n::text(
+            "server.task_modified_refresh_and_enter_variables_again",
+        )));
     }
     let dynamic = task.input.workspace.workspace_mode == WorkspaceMode::Dynamic;
     task.input
@@ -89,7 +91,7 @@ pub(super) async fn run_detail(
             .store
             .read_run(&id, &run_id)
             .map_err(error)?
-            .ok_or_else(|| error("执行记录尚未生成"))?,
+            .ok_or_else(|| error(aow_i18n::text("server.run_record_not_yet_created")))?,
     ))
 }
 
@@ -102,7 +104,11 @@ pub(super) async fn run_output(
     let output = match output.as_str() {
         "stdio" => RunOutput::Stdio,
         "stderr" => RunOutput::Stderr,
-        _ => return Err(error("输出类型必须是 stdio 或 stderr")),
+        _ => {
+            return Err(error(aow_i18n::text(
+                "server.output_type_must_be_stdio_or_stderr",
+            )));
+        }
     };
     let bytes = manager
         .store

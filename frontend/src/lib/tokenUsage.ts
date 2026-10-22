@@ -1,3 +1,4 @@
+import { t, getLanguage } from './i18n';
 export interface TokenUsage {
   input_tokens: number;
   output_tokens: number;
@@ -25,20 +26,20 @@ export function parseTokenUsage(value: unknown): TokenUsage | undefined {
   return { input_tokens, output_tokens, total_tokens, cached_input_tokens, cache_write_input_tokens, reasoning_output_tokens };
 }
 
-const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
-const exact = new Intl.NumberFormat('en-US');
+const compact = new Intl.NumberFormat(getLanguage(), { notation: 'compact', maximumFractionDigits: 1 });
+const exact = new Intl.NumberFormat(getLanguage());
 
 export const formatTokenCount = (count: number) => `${compact.format(count)} tokens`;
-export const tokenUsageLabel = (usage: TokenUsage) => `本轮 ${formatTokenCount(usage.total_tokens)}`;
+export const tokenUsageLabel = (usage: TokenUsage) => t("lib.this_turn", { value0: formatTokenCount(usage.total_tokens) });
 
 export function tokenUsageDetails(usage: TokenUsage): string {
   const details = [
-    `本轮：${exact.format(usage.total_tokens)} tokens`,
-    `输入：${exact.format(usage.input_tokens)}`,
-    `输出：${exact.format(usage.output_tokens)}`,
-    `缓存命中（包含在输入中）：${exact.format(usage.cached_input_tokens)}`,
+    t("lib.this_turn_tokens", { value0: exact.format(usage.total_tokens) }),
+    t("lib.input", { value0: exact.format(usage.input_tokens) }),
+    t("lib.output", { value0: exact.format(usage.output_tokens) }),
+    t("lib.cache_hits_included_in_input", { value0: exact.format(usage.cached_input_tokens) }),
   ];
-  if (usage.cache_write_input_tokens) details.push(`缓存写入（包含在输入中）：${exact.format(usage.cache_write_input_tokens)}`);
-  if (usage.reasoning_output_tokens) details.push(`推理（包含在输出中）：${exact.format(usage.reasoning_output_tokens)}`);
+  if (usage.cache_write_input_tokens) details.push(t("lib.cache_writes_included_in_input", { value0: exact.format(usage.cache_write_input_tokens) }));
+  if (usage.reasoning_output_tokens) details.push(t("lib.reasoning_included_in_output", { value0: exact.format(usage.reasoning_output_tokens) }));
   return details.join('\n');
 }

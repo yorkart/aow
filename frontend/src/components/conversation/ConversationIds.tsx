@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Copy, Info } from 'lucide-react';
@@ -9,13 +10,13 @@ interface Identifier { label: string; value?: string | null }
 function IdentifierRow({ label, value }: Identifier) {
   const [status, setStatus] = useState('');
   return <div className="conversation-id-row">
-    <dt>{label}</dt><dd>{value || '暂无'}</dd>
-    <button type="button" aria-label={`复制 ${label}`} title={status || `复制 ${label}`} disabled={!value} onClick={() => {
+    <dt>{label}</dt><dd>{value || t("components.none")}</dd>
+    <button type="button" aria-label={t("components.copy", { value0: label })} title={status || t("components.copy", { value0: label })} disabled={!value} onClick={() => {
       if (!value) return;
       setStatus('');
-      void copyText(value).then(() => setStatus('已复制')).catch(() => setStatus('复制失败，请选择文本后手动复制。'));
-    }}>{status === '已复制' ? <Check size={14} /> : <Copy size={14} />}</button>
-    {status && status !== '已复制' && <span className="conversation-id-status" role="alert">{status}</span>}
+      void copyText(value).then(() => setStatus(t("components.copied"))).catch(() => setStatus(t("components.copy_failed_select_the_text_and_copy_it_manually")));
+    }}>{status === t("components.copied") ? <Check size={14} /> : <Copy size={14} />}</button>
+    {status && status !== t("components.copied") && <span className="conversation-id-status" role="alert">{status}</span>}
   </div>;
 }
 
@@ -82,7 +83,7 @@ export function ConversationIds({ identifiers }: { identifiers: Identifier[] }) 
   }, [open, close, cancelClose, scheduleClose]);
 
   return <>
-    <button ref={button} type="button" className="conversation-ids-trigger" aria-label="会话 ID 信息" aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? id : undefined}
+    <button ref={button} type="button" className="conversation-ids-trigger" aria-label={t("components.session_ids")} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? id : undefined}
       onPointerLeave={scheduleClose}
       onBlur={event => { if (!contains(event.relatedTarget)) scheduleClose(); }}
       onClick={show} onKeyDown={event => {
@@ -91,7 +92,7 @@ export function ConversationIds({ identifiers }: { identifiers: Identifier[] }) 
           if (first) { event.preventDefault(); first.focus(); }
         }
       }}><Info size={16} /></button>
-    {open && createPortal(<div ref={panel} id={id} role="dialog" aria-label="会话 ID 信息" className="conversation-ids-panel aow-conversation-theme" style={position}
+    {open && createPortal(<div ref={panel} id={id} role="dialog" aria-label={t("components.session_ids")} className="conversation-ids-panel aow-conversation-theme" style={position}
       onPointerEnter={cancelClose} onPointerLeave={scheduleClose} onFocus={cancelClose}
       onBlur={event => { if (!contains(event.relatedTarget)) scheduleClose(); }}
       onKeyDown={event => {

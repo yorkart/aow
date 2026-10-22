@@ -19,7 +19,7 @@ pub(super) async fn execute(
 ) -> Result<(StatusCode, Json<Run>), HttpError> {
     // Once accepted by the handler, persistence and launch survive a client
     // disconnect together; never leave a durable Starting receipt unlaunched.
-    tokio::spawn(execute_inner(state, id, input))
+    aow_i18n::spawn(execute_inner(state, id, input))
         .await
         .map_err(|error| HttpError::internal(error.to_string()))?
 }
@@ -31,23 +31,28 @@ async fn execute_inner(
 ) -> Result<(StatusCode, Json<Run>), HttpError> {
     validate_id(&input.request_key)?;
     if input.workspace.workspace_mode == WorkspaceMode::Dynamic {
-        return Err(invalid("仅手动任务支持动态指定工作区"));
+        return Err(invalid(aow_i18n::text(
+            "automations.only_manual_tasks_support_dynamic_workspaces",
+        )));
     }
     if let Some(run) = state.inbox.existing_run(&id, &input)? {
         return Ok((StatusCode::ACCEPTED, Json(run)));
     }
     let item = state.inbox.item(&id)?;
     revision(item.revision, input.expected_revision)?;
-    let project_id = item
-        .project_id
-        .as_deref()
-        .ok_or_else(|| invalid("请先为需求绑定项目，再选择 Agent 执行。"))?;
+    let project_id = item.project_id.as_deref().ok_or_else(|| {
+        invalid(aow_i18n::text(
+            "server.bind_a_project_to_the_requirement_before_choosing_an",
+        ))
+    })?;
     input
         .workspace
         .validate()
         .map_err(|error| invalid(&error.to_string()))?;
     if input.append_prompt.contains('\0') || input.append_prompt.len() > 128 * 1024 {
-        return Err(invalid("追加 prompt 无效或超过 128 KiB。"));
+        return Err(invalid(aow_i18n::text(
+            "server.additional_prompt_is_invalid_or_exceeds_128_kib",
+        )));
     }
     let cwd = state
         .aow
@@ -60,13 +65,15 @@ async fn execute_inner(
         .await
         .map_err(crate::aow::aow_http_error)?;
     if launch.agent_type.agent().interactive().is_none() {
-        return Err(invalid(
-            "该 Agent 暂不支持自动提交任务，请选择 Codex、Trae CLI、Hermes 或 Pi。",
-        ));
+        return Err(invalid(aow_i18n::text(
+            "server.this_agent_does_not_support_automatic_task_submission_choose",
+        )));
     }
     let markdown = input.final_task(&item.markdown);
     if markdown.len() > 128 * 1024 {
-        return Err(invalid("需求和追加 prompt 拼接后不能超过 128 KiB。"));
+        return Err(invalid(aow_i18n::text(
+            "server.combined_requirement_and_additional_prompt_must_not_exceed_128",
+        )));
     }
     let execution_fingerprint = input
         .fingerprint()
@@ -96,7 +103,7 @@ async fn execute_inner(
         let item_id = item.id;
         let request_key = input.request_key;
         state.workspace_events.inbox_changed();
-        tokio::spawn(async move {
+        aow_i18n::spawn(async move {
             let result = async {
                 let workspace = state
                     .aow

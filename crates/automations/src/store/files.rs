@@ -14,7 +14,7 @@ pub fn valid_component(value: &str) -> Result<()> {
             && value
                 .bytes()
                 .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_'),
-        "无效的任务或执行 ID"
+        aow_i18n::message("automations.invalid_task_or_run_id", &[])
     );
     Ok(())
 }
@@ -28,14 +28,16 @@ pub fn private_dir(path: &Path) -> Result<()> {
     fs::create_dir_all(path)?;
     ensure!(
         !fs::symlink_metadata(path)?.file_type().is_symlink(),
-        "数据目录不能是符号链接"
+        aow_i18n::message("automations.data_directory_cannot_be_a_symbolic_link", &[])
     );
     fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
     Ok(())
 }
 
 pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
-    let parent = path.parent().context("文件缺少父目录")?;
+    let parent = path
+        .parent()
+        .context(aow_i18n::text("automations.file_has_no_parent_directory"))?;
     if !parent.exists() {
         private_dir(parent)?;
     }

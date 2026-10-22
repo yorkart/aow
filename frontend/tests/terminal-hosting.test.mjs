@@ -15,6 +15,7 @@ try {
   const task = { id: 'review', revision: 3, name: '代码 Review', kind: 'manual', workspace_mode: 'dynamic', prompt: '检查本轮代码变更', project_id: 'project' };
   async function fixture(t, mobile = false) {
     const page = await browser.newPage({ viewport: { width: mobile ? 390 : 1100, height: 750 } });
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     page.setDefaultTimeout(15000);
     const errors = [], starts = [], claims = [], inputs = [], requests = [], saves = [], createdTasks = [];
     let hosted = false, socket, events, revision = 1;
@@ -65,9 +66,9 @@ try {
         }
       });
     });
-    await page.routeWebSocket('**/api/events/ws', current => { events = current; notify(); });
+    await page.routeWebSocket('**/api/events/ws*', current => { events = current; notify(); });
     await page.goto(`${base}/tests/terminal-hosting-preview.html${mobile ? '?mobile' : ''}`);
-    await page.getByRole('button', { name: 'Autopilot', exact: true }).waitFor();
+    await page.getByRole('button', { name: "托管", exact: true }).waitFor();
     return { page, starts, claims, inputs, requests, saves, updateHosting: async patch => {
       currentHosting = { ...currentHosting, ...patch }; notify();
       if (!mobile) await page.evaluate(value => window.hostingPreview.update(value), currentHosting);
@@ -76,7 +77,7 @@ try {
   for (const mobile of [false, true]) {
     await test(`${mobile ? 'mobile' : 'desktop'} creates a dynamic manual task from Autopilot and returns it to the picker`, async t => {
       const { page, saves, starts } = await fixture(t, mobile);
-      const autopilot = page.getByRole('button', { name: 'Autopilot', exact: true });
+      const autopilot = page.getByRole('button', { name: "托管", exact: true });
       const menu = page.getByRole('dialog', { name: '选择托管任务' });
       const dialog = page.getByRole('dialog', { name: '创建手动任务' });
       await autopilot.click();
@@ -88,7 +89,7 @@ try {
       await dialog.getByRole('button', { name: '取消', exact: true }).click();
       await dialog.waitFor({ state: 'hidden' });
       assert.deepEqual(saves, []);
-      await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Autopilot');
+      await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '托管');
       await autopilot.click();
       await menu.getByLabel('最多自动输入次数').fill('2');
       const immediate = menu.getByRole('checkbox', { name: '开启托管后立即执行一次' });
@@ -118,7 +119,7 @@ try {
   for (const mobile of [false, true]) {
     await test(`${mobile ? 'mobile' : 'desktop'} waits for completion by default and reopens without enabling again`, async t => {
       const { page, starts } = await fixture(t, mobile);
-      await page.getByRole('button', { name: 'Autopilot', exact: true }).click();
+      await page.getByRole('button', { name: "托管", exact: true }).click();
       const menu = page.getByRole('dialog', { name: '选择托管任务' });
       const immediate = menu.getByRole('checkbox', { name: '开启托管后立即执行一次' });
       assert.equal(await immediate.isChecked(), false);
@@ -140,7 +141,7 @@ try {
   }
   await test('selecting a manual task hosts the pane, displays state beside takeover, and blocks input', async t => {
     const { page, starts, claims, inputs } = await fixture(t);
-    await page.getByRole('button', { name: 'Autopilot', exact: true }).click();
+    await page.getByRole('button', { name: "托管", exact: true }).click();
     const menu = page.getByRole('dialog', { name: '选择托管任务' });
     await menu.getByRole('button', { name: /代码 Review/ }).waitFor();
     assert.equal(await menu.getByText('定时任务').count(), 0);
@@ -159,7 +160,7 @@ try {
     await page.locator('.terminal-connection.hosting').getByText(/托管中 · 代码 Review/).waitFor();
     assert.deepEqual(starts, [{ task_id: 'review', revision: 3, max_inputs: 3, run_on_enable: false }]);
     assert.equal(await page.locator('.terminal-pane-header').getByText(/托管中/).count(), 0);
-    assert.equal(await page.getByRole('button', { name: 'Autopilot', exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: "托管", exact: true }).isDisabled(), true);
     await page.locator('.xterm-helper-textarea').focus(); await page.keyboard.type('do not send');
     assert.deepEqual(inputs, []);
     await page.locator('.terminal-connection').getByRole('button', { name: '接管', exact: true }).click();
@@ -184,7 +185,7 @@ try {
   });
   await test('takeover restores keyboard input after reopening an already hosted pane', async t => {
     const { page, inputs, claims } = await fixture(t);
-    await page.getByRole('button', { name: 'Autopilot', exact: true }).click();
+    await page.getByRole('button', { name: "托管", exact: true }).click();
     await page.getByRole('dialog', { name: '选择托管任务' }).getByRole('button', { name: /代码 Review/ }).click();
     await page.locator('.terminal-connection.hosting').waitFor();
     await page.reload();
@@ -205,7 +206,7 @@ try {
   });
   await test('mobile shows hosting failure beside takeover and disables the composer until takeover', async t => {
     const { page, claims } = await fixture(t, true);
-    await page.getByRole('button', { name: 'Autopilot', exact: true }).click();
+    await page.getByRole('button', { name: "托管", exact: true }).click();
     await page.getByRole('dialog', { name: '选择托管任务' }).getByRole('button', { name: /代码 Review/ }).click();
     const status = page.locator('.mobile-terminal-hosting');
     await status.getByText('Agent 异常退出').waitFor();
@@ -220,7 +221,7 @@ try {
   for (const mobile of [false, true]) {
     await test(`${mobile ? 'mobile' : 'desktop'} preserves stopped outcomes, counts and observer controls`, async t => {
       const { page, starts, inputs, claims, updateHosting } = await fixture(t, mobile);
-      await page.getByRole('button', { name: 'Autopilot', exact: true }).click();
+      await page.getByRole('button', { name: "托管", exact: true }).click();
       const menu = page.getByRole('dialog', { name: '选择托管任务' });
       await menu.getByLabel('最多自动输入次数').fill('2');
       await menu.getByRole('button', { name: /代码 Review/ }).click();

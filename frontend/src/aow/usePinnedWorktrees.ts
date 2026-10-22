@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n';
 import { appLocalStorage } from '../lib/basePath';
 import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react';
 import { aowApi } from './aowApi';
@@ -40,7 +41,7 @@ export function usePinnedWorktrees() {
       await task();
       setError('');
     }).catch((reason: unknown) => {
-      setError(`置顶同步失败：${reason instanceof Error ? reason.message : String(reason)}`);
+      setError(t("aow.failed_to_sync_pinned_state", { value0: reason instanceof Error ? reason.message : String(reason) }));
     }).finally(() => {
       pending.current -= 1;
       if (!background) {

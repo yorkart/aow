@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useCallback, useRef, useState } from 'react';
 import { Inbox, Plus } from 'lucide-react';
 import type { AowProject } from '../../aow/types';
@@ -50,15 +51,15 @@ export function InboxPanel({ visible, projects, agents, onOpenTerminal }: {
     catch (reason) { setActionError(inboxError(reason)); }
     finally { setBusy(false); }
   };
-  return <section className="inbox-panel" aria-label="Inbox">
+  return <section className="inbox-panel" aria-label={t("navigation.inbox")}>
     <InboxToolbar visible={visible} data={data} projects={ownProjects} project={project} query={query} labels={selectedLabels} count={items.length}
       onProject={setProject} onQuery={setQuery} onLabel={id => setLabels(current => current.includes(id) ? current.filter(value => value !== id) : [...current, id])}
       onClear={() => { setProject(''); setLabels([]); setQuery(''); }} mutate={mutate} />
     <div className="inbox-scroll">
-      {error && <div className="inbox-error" role="alert">{error}<button onClick={() => void reload()}>重试加载</button></div>}
-      {!data && !error && <p className="inbox-empty">正在加载…</p>}
-      {data && !items.length && !draft && <div className="inbox-empty"><Inbox size={28} /><strong>{data.items.length ? '没有匹配的需求' : '先把想法记下来'}</strong><p>{data.items.length ? '调整筛选，或添加新的需求。' : '一段 Markdown 就够了，项目和标签可以稍后补充。'}</p></div>}
-      <div className="inbox-list" aria-label="需求列表">{items.map((item, index) => <InboxRow key={item.id} item={item} labels={data!.labels} projects={ownProjects} agents={agents} execution={data?.executions.find(run => run.item_id === item.id)}
+      {error && <div className="inbox-error" role="alert">{error}<button onClick={() => void reload()}>{t("inbox.retry_loading")}</button></div>}
+      {!data && !error && <p className="inbox-empty">{t("aow.loading")}</p>}
+      {data && !items.length && !draft && <div className="inbox-empty"><Inbox size={28} /><strong>{data.items.length ? t("inbox.no_matching_requirements") : t("inbox.capture_an_idea_first")}</strong><p>{data.items.length ? t("inbox.adjust_filters_or_add_a_requirement") : t("inbox.a_little_markdown_is_enough_add_a_project_and")}</p></div>}
+      <div className="inbox-list" aria-label={t("inbox.requirements_list")}>{items.map((item, index) => <InboxRow key={item.id} item={item} labels={data!.labels} projects={ownProjects} agents={agents} execution={data?.executions.find(run => run.item_id === item.id)}
         commentCount={data?.comment_counts[item.id] ?? 0}
         mutate={mutate} onOpenTerminal={onOpenTerminal} onEditingChange={onEditingChange} dragging={dragging?.id === item.id} drop={dragging?.over === item.id ? dragging.after ? 'after' : 'before' : undefined}
         dragProps={{
@@ -96,16 +97,16 @@ export function InboxPanel({ visible, projects, agents, onOpenTerminal }: {
           },
         }} />)}</div>
       {draft && <div ref={editor} className="inbox-new-row" data-inbox-editor="new">
-        {capture.editing ? <InlineEditor value={draft.markdown} label="新需求 Markdown" onChange={markdown => capture.update({ markdown })}
+        {capture.editing ? <InlineEditor value={draft.markdown} label={t("inbox.new_requirement_markdown")} onChange={markdown => capture.update({ markdown })}
           onFinish={() => { void capture.finish(); }} onComposing={capture.setComposing} status={capture.status} />
-          : <><div className="inbox-edit-target inbox-content" tabIndex={0} role="group" aria-label="需求内容，双击或按 Enter 编辑"
+          : <><div className="inbox-edit-target inbox-content" tabIndex={0} role="group" aria-label={t("inbox.requirement_content_double_click_or_press_enter_to_edit")}
             onDoubleClick={event => { if (!(event.target as Element).closest('a, button, input, select, textarea, summary')) capture.begin(); }} onKeyDown={event => { if (event.target === event.currentTarget && ['Enter', 'F2'].includes(event.key)) { event.preventDefault(); capture.begin(); } }}>
             <MarkdownContent text={draft.markdown} readOnly className="inbox-markdown" /></div><span className="inbox-save-status" role="status">{capture.status}</span></>}
-        {capture.conflict && <p className="inbox-conflict">这条需求已有更新。<button disabled={capture.saving} onClick={() => capture.resolve(true)}>{capture.removing ? '按最新版本移除' : '保留草稿，以最新版本保存'}</button><button disabled={capture.saving} onClick={() => capture.resolve(false)}>载入最新内容</button></p>}
-        {capture.error && <p className="inbox-error" role="alert">{capture.error}<button onClick={() => { void capture.retry(); }}>重试</button></p>}
+        {capture.conflict && <p className="inbox-conflict">{t("inbox.this_requirement_has_been_updated")}<button disabled={capture.saving} onClick={() => capture.resolve(true)}>{capture.removing ? t("inbox.remove_using_latest_version") : t("inbox.keep_draft_and_save_against_latest_version")}</button><button disabled={capture.saving} onClick={() => capture.resolve(false)}>{t("inbox.load_latest_content")}</button></p>}
+        {capture.error && <p className="inbox-error" role="alert">{capture.error}<button onClick={() => { void capture.retry(); }}>{t("aow.retry")}</button></p>}
       </div>}
       {actionError && <p className="inbox-error" role="alert">{actionError}</p>}
     </div>
-    <footer className="inbox-add-bar"><button onClick={() => { void add(); }} disabled={!data}><Plus size={16} />添加需求</button></footer>
+    <footer className="inbox-add-bar"><button onClick={() => { void add(); }} disabled={!data}><Plus size={16} />{t("inbox.add_requirement")}</button></footer>
   </section>;
 }

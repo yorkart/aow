@@ -151,7 +151,7 @@ impl AppState {
     /// The ACP writer runs outside Tokio; explicitly drain it before the runtime exits.
     pub async fn flush_acp_history(&self) -> anyhow::Result<()> {
         let service = self.acp.clone();
-        tokio::task::spawn_blocking(move || service.flush_threads_on_quit()).await?
+        aow_i18n::spawn_blocking(move || service.flush_threads_on_quit()).await?
     }
 
     pub fn start_agent_notifications(&self) {

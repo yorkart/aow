@@ -119,7 +119,7 @@ pub async fn start_local_cli(state: AppState, state_dir: &Path) -> anyhow::Resul
         .route("/v1/agents/{pane_id}/submit", post(agent_control::submit))
         .with_state(state);
     let (shutdown, receiver) = tokio::sync::oneshot::channel();
-    let task = tokio::spawn(async move {
+    let task = aow_i18n::spawn(async move {
         let _guard = guard;
         axum::serve(listener, router)
             .with_graceful_shutdown(async {

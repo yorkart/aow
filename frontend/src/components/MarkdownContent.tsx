@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n';
 import DOMPurify from 'dompurify';
 import { marked, Renderer } from 'marked';
 import { useEffect, useMemo, useRef } from 'react';
@@ -93,7 +94,7 @@ export function MarkdownContent({ text, className = 'project-aow-snapshot-markdo
           if (cancelled || !code.isConnected) return;
           const error = document.createElement('p');
           error.className = 'project-aow-snapshot-flowchart-error';
-          error.textContent = 'Flowchart 渲染失败，已保留原始代码。';
+          error.textContent = t("components.flowchart_rendering_failed_original_code_retained");
           code.parentElement?.after(error);
         }
       }));
@@ -101,7 +102,7 @@ export function MarkdownContent({ text, className = 'project-aow-snapshot-markdo
       if (cancelled || !markdown.isConnected) return;
       const error = document.createElement('p');
       error.className = 'project-aow-snapshot-flowchart-error';
-      error.textContent = 'Flowchart 渲染组件加载失败，已保留原始代码。';
+      error.textContent = t("components.unable_to_load_the_flowchart_renderer_original_code_retained");
       markdown.append(error);
     });
 

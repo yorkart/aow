@@ -1,4 +1,4 @@
-// render_collapsible_command: literal, wrapping command text with its own copy action.
+import { t } from '../../../../lib/i18n';
 import { useMemo, type ReactNode } from 'react';
 import { refractor } from 'refractor/core';
 import bash from 'refractor/bash';
@@ -25,5 +25,5 @@ export function Command({ title }: { title: string }) {
     try { return renderTokens(refractor.highlight(title, 'bash').children); }
     catch { return title; }
   }, [title]);
-  return <div className="acp-command"><pre className="acp-command-code"><code>{highlighted}</code></pre><CopyButton text={title} label="复制命令" /></div>;
+  return <div className="acp-command"><pre className="acp-command-code"><code>{highlighted}</code></pre><CopyButton text={title} label={t("acp.copy_command")} /></div>;
 }

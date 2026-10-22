@@ -16,7 +16,7 @@ impl TerminalManager {
         self.ensure_creation_available(&request)?;
         if request.resume_session_id.is_some() {
             return Err(TerminalError::Invalid(
-                "resume_session_id requires agent_id".to_owned(),
+                aow_i18n::text("validation.resume_session_id_requires_agent_id").to_owned(),
             ));
         }
         self.reconcile().await?;
@@ -43,7 +43,8 @@ impl TerminalManager {
         let shell = normalize_shell(request.shell.as_deref())?;
         if request.agent_id.is_some() {
             return Err(TerminalError::Invalid(
-                "agent_id is only accepted by the AoW terminal endpoint".to_owned(),
+                aow_i18n::text("validation.agent_id_is_only_accepted_by_the_aow_terminal_endpoint")
+                    .to_owned(),
             ));
         }
         let (rows, cols) = terminal_size(request.rows, request.cols)?;

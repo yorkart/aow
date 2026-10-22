@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { LoaderCircle, Play, X } from 'lucide-react';
@@ -69,19 +70,19 @@ export function InboxExecutePanel({ item, project, agents, busy, error, containe
   }}>
     <section ref={dialog} className="inbox-execute-panel" role="dialog" aria-modal="true" aria-labelledby={titleId} onKeyDown={onDialogKeyDown}>
     <form onSubmit={submit}>
-      <header><div><Play size={15} /><div><h2 id={titleId}>执行需求</h2><p title={item.markdown}>{item.markdown.split(/\r?\n/, 1)[0]}</p></div></div><button type="button" aria-label="关闭" disabled={busy} onClick={onClose}><X size={16} /></button></header>
+      <header><div><Play size={15} /><div><h2 id={titleId}>{t("inbox.execute_requirement")}</h2><p title={item.markdown}>{item.markdown.split(/\r?\n/, 1)[0]}</p></div></div><button type="button" aria-label={t("aow.close")} disabled={busy} onClick={onClose}><X size={16} /></button></header>
       <div className="inbox-execute-body">
         <label><span>Agent</span><select autoFocus aria-label="Agent" required value={agent} onChange={event => setAgent(event.target.value)} disabled={busy}>
-          {!availableAgents.length && <option value="">没有可用的交互式 Agent</option>}
-          {agents.map(option => <option key={option.id} value={option.id} disabled={!option.available || !interactiveAgent(option)}>{option.display_name}{!option.available ? ' · 未安装' : !interactiveAgent(option) ? ' · 暂不支持交互执行' : ''}</option>)}
+          {!availableAgents.length && <option value="">{t("inbox.no_interactive_agents_available")}</option>}
+          {agents.map(option => <option key={option.id} value={option.id} disabled={!option.available || !interactiveAgent(option)}>{option.display_name}{!option.available ? t("automations.not_installed") : !interactiveAgent(option) ? t("inbox.interactive_execution_unsupported") : ''}</option>)}
         </select></label>
         <WorkspaceSelect project={project} value={workspace} disabled={busy} onChange={setWorkspace} onValidityChange={setWorkspaceReady} />
-        {workspace.workspace_mode === 'temporary' && <p className="workspace-hint">此工作区会保留供 Agent 使用，不会自动清理。</p>}
-        <label className="inbox-append-prompt"><span>追加 prompt <small>可选</small></span><textarea aria-label="追加 prompt" rows={5} value={appendPrompt} onChange={event => setAppendPrompt(event.target.value)} placeholder="例如：先分析需求和实现方案，列出风险，再开始修改代码。" disabled={busy} /></label>
-        <details className="inbox-final-prompt"><summary>查看最终任务输入</summary><pre>{finalPrompt}</pre></details>
+        {workspace.workspace_mode === 'temporary' && <p className="workspace-hint">{t("inbox.this_workspace_is_retained_for_the_agent_and_will")}</p>}
+        <label className="inbox-append-prompt"><span>{t("inbox.additional_prompt")} <small>{t("aow.optional")}</small></span><textarea aria-label={t("inbox.additional_prompt")} rows={5} value={appendPrompt} onChange={event => setAppendPrompt(event.target.value)} placeholder={t("inbox.for_example_analyze_requirements_and_an_implementation_plan_list")} disabled={busy} /></label>
+        <details className="inbox-final-prompt"><summary>{t("inbox.view_final_task_input")}</summary><pre>{finalPrompt}</pre></details>
         {error && <p className="inbox-execute-error" role="alert">{error}</p>}
       </div>
-      <footer><button type="button" disabled={busy} onClick={onClose}>取消</button><button className="inbox-execute-primary" type="submit" disabled={busy || !agent || !workspaceReady}>{busy ? <LoaderCircle className="inbox-spin" size={14} /> : <Play size={14} />}{busy ? '正在启动…' : '开始执行'}</button></footer>
+      <footer><button type="button" disabled={busy} onClick={onClose}>{t("aow.cancel")}</button><button className="inbox-execute-primary" type="submit" disabled={busy || !agent || !workspaceReady}>{busy ? <LoaderCircle className="inbox-spin" size={14} /> : <Play size={14} />}{busy ? t("inbox.starting") : t("inbox.start_execution")}</button></footer>
     </form>
     </section>
   </div>, container);

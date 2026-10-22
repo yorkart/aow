@@ -3,8 +3,9 @@
 pub const FINISH_MARKER: &str = "[AOW_HOSTING_DONE]";
 
 pub(crate) fn prompt(task: &str) -> String {
-    format!(
-        "你正在执行一次审查任务，请遵循任务原有的执行和输出要求。审查通过时，在最终输出的最后另起一行，单独追加标记：{FINISH_MARKER}。\n\n审查任务：\n{task}\n"
+    aow_i18n::message(
+        "automations.you_are_performing_a_review_follow_the_original_task",
+        &[("p0", FINISH_MARKER.to_string()), ("p1", task.to_string())],
     )
 }
 

@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+aow-i18n = { path = "../i18n" }
 aow-id = { path = "../id" }
 anyhow.workspace = true
 base64 = "0.22"

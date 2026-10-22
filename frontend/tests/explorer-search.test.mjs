@@ -42,6 +42,7 @@ let browser;
 
 async function fixture(t) {
   const context = await browser.newContext({ viewport: { width: 1100, height: 800 }, reducedMotion: 'reduce' });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
   const state = { requests: [], cancelled: [], errors: [], gates: [] };
   await context.route('**/api/**', async route => {
     const request = route.request(), url = new URL(request.url());
@@ -64,7 +65,8 @@ async function fixture(t) {
     }
     return route.fulfill({ status: 404 });
   });
-  const page = await context.newPage(); page.setDefaultTimeout(10000); page.setDefaultNavigationTimeout(30000);
+  const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } }); page.setDefaultTimeout(10000); page.setDefaultNavigationTimeout(30000);
   page.on('pageerror', error => state.errors.push(error.message));
   t.after(async () => { state.gates.forEach(resolve => resolve()); await context.close(); assert.deepEqual(state.errors, []); });
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/search-test`);

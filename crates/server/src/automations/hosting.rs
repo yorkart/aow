@@ -4,21 +4,33 @@ use crate::terminal::notifications::TaskStopNotification;
 impl AutomationManager {
     pub(crate) fn hosting_task(&self, id: &str, revision: u64) -> Result<Task> {
         let task = self.task(id)?;
-        ensure!(task.input.kind == TaskKind::Manual, "托管仅支持手动任务");
+        ensure!(
+            task.input.kind == TaskKind::Manual,
+            aow_i18n::message("automations.autopilot_supports_only_manual_tasks", &[])
+        );
         ensure!(
             task.input.workspace.workspace_mode == WorkspaceMode::Dynamic,
-            "托管仅支持动态指定工作区的手动任务，请修改任务的工作区方式"
+            aow_i18n::message(
+                "server.autopilot_supports_only_manual_tasks_with_dynamic_workspaces_change",
+                &[]
+            )
         );
         ensure!(
             task.revision == revision,
-            "手动任务已修改，请接管后重新选择任务"
+            aow_i18n::message(
+                "server.manual_task_changed_take_control_and_select_the_task",
+                &[]
+            )
         );
         ensure!(
             task.input.prompt_bindings.iter().all(|binding| matches!(
                 binding.name.as_str(),
                 "workspace" | "session_id" | "turn_id" | "conclusion"
             )),
-            "托管变量仅支持 workspace、session_id、turn_id、conclusion"
+            aow_i18n::message(
+                "server.autopilot_variables_support_only_workspace_session_id_turn_id",
+                &[]
+            )
         );
         Ok(task)
     }
@@ -29,10 +41,16 @@ impl AutomationManager {
         hosting: &aow_protocol::TerminalHosting,
         event: Option<&TaskStopNotification>,
     ) -> Result<()> {
-        let run_id = hosting.run_id.as_deref().context("托管运行 ID 缺失")?;
+        let run_id = hosting
+            .run_id
+            .as_deref()
+            .context(aow_i18n::text("server.autopilot_run_id_missing"))?;
         ensure!(
             task.input.workspace.workspace_mode == WorkspaceMode::Dynamic,
-            "托管仅支持动态指定工作区的手动任务"
+            aow_i18n::message(
+                "server.autopilot_supports_only_manual_tasks_with_dynamic_workspaces",
+                &[]
+            )
         );
         task.input
             .resolve_workspace(Some(PathBuf::from(&hosting.process.cwd)))?;
@@ -55,7 +73,7 @@ impl AutomationManager {
                 (
                     binding.name.clone(),
                     if value.trim().is_empty() {
-                        "（无）".into()
+                        aow_i18n::text("server.none").into()
                     } else {
                         value.to_owned()
                     },

@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { ArrowDown, UserRound } from 'lucide-react';
 import '../conversation-theme.css';
@@ -5,7 +6,7 @@ import './conversation-layout.css';
 
 export type ConversationStatus = 'completed' | 'failed' | 'interrupted' | 'in_progress' | 'unknown';
 export const conversationStatusNames: Record<ConversationStatus, string> = {
-  completed: '已完成', failed: '失败', interrupted: '已中断', in_progress: '进行中', unknown: '执行结果未知',
+  completed: t("aow.completed"), failed: t("aow.failed"), interrupted: t("aow.interrupted"), in_progress: t("components.in_progress"), unknown: t("components.execution_result_unknown"),
 };
 
 export interface ConversationTurn {
@@ -56,7 +57,7 @@ export function ConversationAgentMessage({ agentName, agentIcon, agentClassName 
 function promptPreview(text: string) {
   const normalized = text.replace(/\s+/g, ' ').trim();
   const characters = Array.from(normalized);
-  return characters.length > 32 ? `${characters.slice(0, 32).join('')}…` : normalized || '空白输入';
+  return characters.length > 32 ? `${characters.slice(0, 32).join('')}…` : normalized || t("components.empty_input");
 }
 
 // Presentation only: callers supply message contents and retain their process renderers.
@@ -192,19 +193,19 @@ export function ConversationLayout({ sessionId, turns, header, agentClassName, c
             {leadingContent}
             {turns.map((turn, index) => <article className="project-aow-snapshot-turn" key={turn.id} ref={node => { turnRefs.current[index] = node; }}>
               <section className="project-aow-snapshot-message user">
-                <header className="project-aow-snapshot-message-header"><UserRound size={22} /><strong>User</strong>{turn.userMeta}</header>
+                <header className="project-aow-snapshot-message-header"><UserRound size={22} /><strong>{t("navigation.user")}</strong>{turn.userMeta}</header>
                 <div className="project-aow-snapshot-bubble">{turn.user}</div>
               </section>
               <ConversationAgentMessage agentName={header.agentName} agentIcon={header.agentIcon} agentClassName={agentClassName} metadata={turn.assistantMeta}>{turn.assistant}</ConversationAgentMessage>
             </article>)}
           </div>
         </div>
-        {live && !following && hasMessages && <div className="conversation-follow"><button type="button" onClick={() => { setFollow(true); scrollToEnd(); }}><ArrowDown size={13} />跳到最新消息</button></div>}
+        {live && !following && hasMessages && <div className="conversation-follow"><button type="button" onClick={() => { setFollow(true); scrollToEnd(); }}><ArrowDown size={13} />{t("components.jump_to_latest_message")}</button></div>}
         {accessory && <div ref={accessoryRef} className="conversation-accessory">{accessory}</div>}
         {footer && <div ref={footerRef} className={`conversation-footer${!hasMessages ? ' empty' : ''}${footerExpanded ? ' expanded' : ''}`}>{footer}</div>}
       </div>
-      {turnCount > 0 && <nav className="project-aow-snapshot-navigation" aria-label="用户输入导航">
-        <header><strong>对话导航</strong><span>{turnCount}</span></header>
+      {turnCount > 0 && <nav className="project-aow-snapshot-navigation" aria-label={t("components.user_input_navigation")}>
+        <header><strong>{t("components.conversation_navigation")}</strong><span>{turnCount}</span></header>
         <ol>{turns.map((turn, index) => <li key={turn.id}>
           <button className={activeTurn === index ? 'active' : undefined} type="button" title={turn.prompt} aria-current={activeTurn === index ? 'location' : undefined} ref={node => { navigationRefs.current[index] = node; }} onClick={() => navigateToTurn(index)}>
             <span>{index + 1}</span><strong>{promptPreview(turn.prompt)}</strong>

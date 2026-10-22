@@ -36,11 +36,18 @@ pub(super) fn git_command(repository: &Path) -> Command {
 }
 
 pub(super) fn git_checked(command: &mut Command) -> Result<Output> {
-    let output = command.output().context("无法执行配置仓库 Git 命令")?;
+    let output = command.output().context(aow_i18n::text(
+        "config.unable_to_execute_configuration_repository_git_command",
+    ))?;
     ensure!(
         output.status.success(),
-        "配置仓库 Git 操作失败：{}",
-        String::from_utf8_lossy(&output.stderr)
+        aow_i18n::message(
+            "config.configuration_repository_git_operation_failed",
+            &[(
+                "auto0",
+                format!("{}", String::from_utf8_lossy(&output.stderr))
+            )]
+        )
     );
     Ok(output)
 }

@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useId } from 'react';
 import { normalizeArguments, pasteArguments, type ArgumentsDraft } from './arguments';
 
@@ -11,9 +12,9 @@ export function AgentArgumentsInput({ value, onChange, executable, disabled, onE
   const helpId = useId();
   return <>
     <label className="project-aow-dialog-field">
-      <span>Arguments</span>
+      <span>{t("navigation.arguments")}</span>
       <textarea className="project-aow-dialog-monospace" rows={6} spellCheck={false} autoCapitalize="off" autoCorrect="off"
-        aria-label="Arguments" aria-describedby={helpId} value={value.text} disabled={disabled} placeholder={'-m\ngpt-6-luna\n-c\napproval_policy="on-request"'}
+        aria-label={t("navigation.arguments")} aria-describedby={helpId} value={value.text} disabled={disabled} placeholder={'-m\ngpt-6-luna\n-c\napproval_policy="on-request"'}
         onChange={event => { onChange({ ...value, text: event.target.value }); onError(''); }}
         onBlur={() => {
           try { onChange(normalizeArguments(value, executable)); onError(''); }
@@ -35,6 +36,6 @@ export function AgentArgumentsInput({ value, onChange, executable, disabled, onE
           }
         }} />
     </label>
-    <p className="project-aow-form-intro" id={helpId}>每行一个参数；可粘贴命令，自动识别引号、空格和行末 \ 续行。手动输入后离开输入框时自动整理。</p>
+    <p className="project-aow-form-intro" id={helpId}>{t("agents.one_argument_per_line_paste_commands_to_parse_quotes")}</p>
   </>;
 }

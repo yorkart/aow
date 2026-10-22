@@ -83,14 +83,17 @@ impl AgentServerStore {
     }
     pub async fn select_agent_id(&self, explicit: Option<&str>) -> Result<String> {
         if let Some(id) = explicit {
-            ensure!(!id.is_empty(), "ACP Agent ID 不能为空");
+            ensure!(
+                !id.is_empty(),
+                aow_i18n::message("acp.acp_agent_id_cannot_be_empty", &[])
+            );
             return Ok(id.to_owned());
         }
         let settings = validate_settings(&self.inner.host.settings().await?)?;
         settings
             .default_agent_id
             .or_else(|| settings.agent_servers.keys().next().cloned())
-            .context("未配置 ACP 实例")
+            .context(aow_i18n::text("acp.no_acp_instance_configured"))
     }
     pub async fn agents(&self) -> Result<Vec<AgentInfo>> {
         let raw = self.inner.host.settings().await?;

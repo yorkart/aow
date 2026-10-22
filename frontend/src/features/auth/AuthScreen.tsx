@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import type { ReactNode } from 'react';
 
 export function AuthScreen({ title, detail, children, retry }: {
@@ -14,7 +15,7 @@ export function AuthScreen({ title, detail, children, retry }: {
       </div>
       {detail && <p>{detail}</p>}
       {children}
-      {retry && <button type="button" onClick={retry}>重试</button>}
+      {retry && <button type="button" onClick={retry}>{t("aow.retry")}</button>}
     </section>
   </main>;
 }

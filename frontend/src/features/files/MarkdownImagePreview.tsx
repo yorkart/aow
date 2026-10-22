@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { parseTabUrl } from '../../aow/tabRoutes';
@@ -43,11 +44,11 @@ function ImageTooltip({ id, link, onEnter, onLeave }: {
       else link.anchor.setAttribute('aria-describedby', previous);
     };
   }, [id, link]);
-  return createPortal(<div ref={panel} id={id} role="tooltip" aria-label={`图片预览：${name}`} className="markdown-image-tooltip" style={position}
+  return createPortal(<div ref={panel} id={id} role="tooltip" aria-label={t("files.image_preview", { value0: name })} className="markdown-image-tooltip" style={position}
     onPointerEnter={onEnter} onPointerLeave={onLeave}>
     <div className="markdown-image-tooltip-frame">
       <img src={filesApi.rawUrl(link.path)} alt={name} hidden={status !== 'loaded'} onLoad={() => setStatus('loaded')} onError={() => setStatus('error')} />
-      {status !== 'loaded' && <span role="status">{status === 'error' ? '图片预览加载失败' : '正在加载图片…'}</span>}
+      {status !== 'loaded' && <span role="status">{status === 'error' ? t("files.failed_to_load_image_preview") : t("files.loading_image")}</span>}
     </div>
     <div className="markdown-image-tooltip-name" title={link.path}>{name}</div>
   </div>, document.body);

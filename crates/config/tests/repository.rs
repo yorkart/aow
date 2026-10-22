@@ -133,7 +133,7 @@ fn failed_commit_preserves_saved_file_and_retry_records_it() {
     let error = config
         .save(Path::new("aow-settings.json"), b"{}")
         .unwrap_err();
-    assert!(error.to_string().contains("Git 提交失败"));
+    assert!(error.to_string().contains("Git commit failed"));
     assert_eq!(
         fs::read(config.directory().join("aow-settings.json")).unwrap(),
         b"{}"
@@ -425,7 +425,7 @@ fn repository_discovery_uses_configuration_contents_and_opaque_ids() {
                 .err()
                 .unwrap()
                 .to_string(),
-            "配置 ID 不合法"
+            "Invalid configuration ID"
         );
     }
     // Folder names alone do not identify configuration versions.

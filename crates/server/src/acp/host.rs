@@ -30,7 +30,7 @@ impl AcpHost for Host {
     }
     async fn settings(&self) -> Result<String> {
         let manager = self.manager.clone();
-        Ok(tokio::task::spawn_blocking(move || manager.acp_settings())
+        Ok(aow_i18n::spawn_blocking(move || manager.acp_settings())
             .await??
             .content)
     }

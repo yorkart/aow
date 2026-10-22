@@ -4,7 +4,9 @@ use super::SearchError;
 
 pub(super) fn arguments(request: &FileSearchRequest) -> Result<Vec<String>, SearchError> {
     if !std::path::Path::new(&request.root).is_absolute() {
-        return Err(SearchError::Invalid("搜索目录必须是绝对路径".into()));
+        return Err(SearchError::Invalid(
+            aow_i18n::text("filesystem.search_directory_must_be_an_absolute_path").into(),
+        ));
     }
     if [
         &request.query,
@@ -15,7 +17,10 @@ pub(super) fn arguments(request: &FileSearchRequest) -> Result<Vec<String>, Sear
     .any(|text| text.len() > 8192 || text.contains('\0'))
     {
         return Err(SearchError::Invalid(
-            "搜索条件过长或包含无效字符（最多 8 KiB）".into(),
+            aow_i18n::text(
+                "filesystem.search_criteria_too_long_or_contain_invalid_characters_maximum",
+            )
+            .into(),
         ));
     }
     let mut args: Vec<String> = [
@@ -88,7 +93,9 @@ fn split_globs(input: &str) -> Result<Vec<String>, SearchError> {
     result.push(input[start..].trim().to_owned());
     result.retain(|pattern| !pattern.is_empty());
     if result.len() > 64 {
-        return Err(SearchError::Invalid("文件筛选规则最多 64 项".into()));
+        return Err(SearchError::Invalid(
+            aow_i18n::text("filesystem.at_most_64_file_filter_rules_are_allowed").into(),
+        ));
     }
     Ok(result)
 }

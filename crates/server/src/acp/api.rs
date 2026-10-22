@@ -100,7 +100,7 @@ pub(super) fn error(error: anyhow::Error) -> HttpError {
 async fn settings(
     State(state): State<AppState>,
 ) -> Result<Json<crate::aow::AcpSettingsFile>, HttpError> {
-    tokio::task::spawn_blocking(move || state.aow.acp_settings())
+    aow_i18n::spawn_blocking(move || state.aow.acp_settings())
         .await
         .map_err(|e| HttpError::internal(e.to_string()))?
         .map(Json)
@@ -487,7 +487,7 @@ async fn answer_connection(
         return Err(HttpError::new(
             StatusCode::CONFLICT,
             "acp_control_required",
-            "请通过持有控制权的会话回答此请求",
+            aow_i18n::text("server.answer_this_request_through_the_session_holding_control"),
             None,
         ));
     }

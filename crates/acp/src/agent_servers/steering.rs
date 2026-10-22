@@ -106,7 +106,7 @@ impl AgentServerStore {
         drop(threads);
         let service = self.clone();
         let id = id.to_owned();
-        tokio::spawn(async move {
+        aow_i18n::spawn(async move {
             let result = pending.block_task().await;
             let mut cancel_fallback = false;
             let mut completed = None;
@@ -180,7 +180,7 @@ impl AgentServerStore {
                                 thread,
                                 entry_start,
                                 "failed",
-                                Some("Agent 未接受追加指令。".into()),
+                                Some(aow_i18n::text("acp.the_agent_did_not_accept_the_additional_instructions").into()),
                             );
                         }
                         Err(ref error)
@@ -204,7 +204,7 @@ impl AgentServerStore {
                                 thread,
                                 entry_start,
                                 "unknown",
-                                Some(format!("无法确认追加指令是否送达，请勿自动重发：{other:?}")),
+                                Some(aow_i18n::message("acp.unable_to_confirm_delivery_of_additional_instructions_do_not", &[("p0", format!("{:?}", other))])),
                             );
                         }
                     }

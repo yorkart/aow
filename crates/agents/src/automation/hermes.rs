@@ -20,7 +20,10 @@ impl AgentAutomation for Hermes {
                     && !["-q", "-z", "-r", "-c"]
                         .iter()
                         .any(|flag| key.starts_with(flag)),
-                "Hermes 启动参数与自动化新会话模式冲突: {key}"
+                aow_i18n::message(
+                    "agents.hermes_launch_arguments_conflict_with_automation_new_session_mode",
+                    &[("p0", key.to_string())]
+                )
             );
         }
         Ok(())

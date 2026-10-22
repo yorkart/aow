@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n';
 import { appUrl, appBaseUrl } from '../lib/basePath';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -53,12 +54,12 @@ function NodeMenu({ anchor, addresses, mobile, error, onClose }: {
     };
   }, [anchor, onClose]);
   return createPortal(<div ref={menu} id="aow-node-menu" className={`project-aow-context-menu aow-node-menu${mobile ? ' mobile-aow-node-menu' : ''}`}
-    style={{ left: position.x, top: position.y }} role="menu" aria-label="其他 AoW 节点" tabIndex={-1}>
+    style={{ left: position.x, top: position.y }} role="menu" aria-label={t("aow.other_aow_nodes")} tabIndex={-1}>
     {nodes.map(address => <a key={address} href={address} target="_blank" rel="noopener noreferrer" role="menuitem" title={address} onClick={onClose}>
       <span>{address}</span><ExternalLink aria-hidden="true" />
     </a>)}
-    {error ? <p className="aow-node-empty" role="alert">节点地址加载失败：{error}</p>
-      : !nodes.length ? <p className="aow-node-empty">{addresses ? '暂无其他节点，可在 Settings → Nodes 中配置。' : '节点地址加载中…'}</p> : null}
+    {error ? <p className="aow-node-empty" role="alert">{t("aow.failed_to_load_node_addresses")}{error}</p>
+      : !nodes.length ? <p className="aow-node-empty">{addresses ? t("aow.no_other_nodes_configure_them_in_settings_nodes") : t("aow.loading_node_addresses")}</p> : null}
   </div>, document.body);
 }
 
@@ -67,13 +68,13 @@ export function AowNodeSwitcher({ addresses, mobile = false, error }: { addresse
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
   return <>
-    <button ref={trigger} type="button" className="aow-node-trigger" title="切换 AoW 节点"
-      aria-label="切换 AoW 节点" aria-haspopup="menu" aria-expanded={open} aria-controls={open ? 'aow-node-menu' : undefined}
+    <button ref={trigger} type="button" className="aow-node-trigger" title={t("aow.switch_aow_node")}
+      aria-label={t("aow.switch_aow_node")} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? 'aow-node-menu' : undefined}
       onClick={() => setOpen(value => !value)} onKeyDown={event => {
         if (event.key === 'ArrowDown' && !open) { event.preventDefault(); setOpen(true); }
       }}>
       <img src={appUrl('/workspace-icon.svg')} width={16} height={16} alt="" aria-hidden="true" draggable={false} />
-      <strong>AoW</strong>{mobile ? <span className="mobile-node-subtitle">移动工作台</span> : null}<ChevronDown aria-hidden="true" />
+      <strong>AoW</strong>{mobile ? <span className="mobile-node-subtitle">{t("aow.mobile_workspace")}</span> : null}<ChevronDown aria-hidden="true" />
     </button>
     {open && trigger.current ? <NodeMenu anchor={trigger.current} addresses={addresses} mobile={mobile} error={error} onClose={close} /> : null}
   </>;

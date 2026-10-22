@@ -181,9 +181,11 @@ const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], 
 try {
   await test('untrusted HTML and SVG download without authenticated script execution; images still render', { timeout: 30000 }, async t => {
     const f = await fixture(t);
-    const context = await browser.newContext(); t.after(() => context.close());
+    const context = await browser.newContext();
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } }); t.after(() => context.close());
     assert.equal((await context.request.post(f.url('/api/auth/login'), { data: { username: 'admin', password: 'test-password' } })).status(), 200);
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.goto(f.url('/aow/?ui=mobile'));
     await page.getByRole('button', { name: '退出登录' }).waitFor();
     const marker = join(f.root, 'must-not-be-written.txt');
@@ -210,9 +212,11 @@ try {
   });
   await test('PDF keeps its inline media response without plugin-blocking sandbox headers', { timeout: 30000 }, async t => {
     const f = await fixture(t);
-    const context = await browser.newContext(); t.after(() => context.close());
+    const context = await browser.newContext();
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } }); t.after(() => context.close());
     await context.request.post(f.url('/api/auth/login'), { data: { username: 'admin', password: 'test-password' } });
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.setContent('<p>PDF preview fixture</p>');
     const path = join(f.root, 'preview.pdf');
     await writeFile(path, await page.pdf());
@@ -230,11 +234,13 @@ try {
     await test(`${mobile ? 'mobile' : 'desktop'} logout UI clears the session and returns to login`, { timeout: 30000 }, async t => {
       const f = await fixture(t, { base: '/tools/aow' });
       const context = await browser.newContext({ viewport: { width: mobile ? 390 : 1440, height: 900 } });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
       t.after(() => context.close());
       assert.equal((await context.request.post(f.url('/api/auth/login'), { data: { username: 'admin', password: 'test-password' } })).status(), 200);
       const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
       await page.goto(f.url(`/aow/?ui=${mobile ? 'mobile' : 'desktop'}`));
-      if (!mobile) await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      if (!mobile) await page.getByRole('button', { name: "设置", exact: true }).click();
       await page.getByRole('button', { name: '退出登录', exact: true }).click();
       await page.getByRole('heading', { name: '登录 AoW', exact: true }).waitFor();
       assert.equal((await context.request.get(f.url('/api/fs/tree'))).status(), 401);

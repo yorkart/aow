@@ -29,7 +29,7 @@ async fn save_settings(
     Json(settings): Json<Settings>,
 ) -> std::result::Result<Json<Settings>, HttpError> {
     let manager = state.review_providers.clone();
-    let settings = tokio::task::spawn_blocking(move || manager.save(settings))
+    let settings = aow_i18n::spawn_blocking(move || manager.save(settings))
         .await
         .map_err(|e| PullRequestError::Command(e.to_string()))??;
     Ok(Json(settings))

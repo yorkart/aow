@@ -54,7 +54,7 @@ impl AgentServerStore {
             .context("ACP session has not been created")?;
         let service = self.clone();
         // A disappearing HTTP caller must not cancel the RPC and lose the new native identity.
-        tokio::spawn(async move {
+        aow_i18n::spawn(async move {
             let _reservation = reservation;
             let result = connection
                 .thread_request(
@@ -102,7 +102,8 @@ impl AgentServerStore {
                 .unwrap()
                 .update(&id, |thread| {
                     thread.session_id = Some(fork_id.clone());
-                    thread.title = format!("{} · 分叉", source.title);
+                    thread.title =
+                        aow_i18n::message("acp.fork", &[("auto0", source.title.to_string())]);
                     thread.needs_load = true;
                 })?;
             service.attach_connection(&connection, &id)?;

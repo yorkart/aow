@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { ChevronRight, MessageSquare } from 'lucide-react';
 import { TokenUsageBadge } from '../../components/TokenUsageBadge';
 import { sessionsApi } from './api';
@@ -11,7 +12,7 @@ import { MobilePageHeader, MobileRefresh, MobileState, mobileTime } from '../../
 import { useMobileResource, useMobileScroll, type MobileRoute, type MobileNavigate } from '../../mobile/mobileState';
 
 const agents = ['codex', 'claude', 'traecli', 'hermes', 'pi'] as const;
-const statusNames = { completed: '已完成', failed: '失败', interrupted: '已中断', in_progress: '进行中' };
+const statusNames = { completed: t("aow.completed"), failed: t("aow.failed"), interrupted: t("aow.interrupted"), in_progress: t("components.in_progress") };
 
 export function MobileSessions({ route, visible, navigate, back }: { route: MobileRoute; visible: boolean; navigate: MobileNavigate; back: () => void }) {
   const list = useMobileResource(`sessions.${route.cwd ?? route.workspace}`, async () => {
@@ -25,11 +26,11 @@ export function MobileSessions({ route, visible, navigate, back }: { route: Mobi
   const selected = list.data?.sessions.find((session) => session.id === route.session || session.agent === route.agent && session.agent + ':' + session.session_id === route.session);
   return <section className="mobile-content-page">
     {route.session ? selected ? <MobileSessionReader session={selected} workspace={route.cwd ?? selected.cwd} back={back} />
-      : <><MobilePageHeader title="会话" back={back} /><MobileState loading={list.loading} error={list.error} retry={list.reload} empty="未找到这个会话，请返回列表刷新。" /></>
+      : <><MobilePageHeader title={t("sessions.session")} back={back} /><MobileState loading={list.loading} error={list.error} retry={list.reload} empty={t("sessions.session_not_found_return_to_the_list_and_refresh")} /></>
       : <>
-        <MobilePageHeader title="Conversation" subtitle="本地会话记录" actions={<MobileRefresh reload={list.reload} loading={list.loading} />} />
+        <MobilePageHeader title={t("navigation.conversation")} subtitle={t("acp.local_session_records")} actions={<MobileRefresh reload={list.reload} loading={list.loading} />} />
         <div className="mobile-scroll" ref={scroll}>
-          <MobileState error={list.error} loading={list.loading && !list.data} retry={list.reload} empty={list.data?.sessions.length === 0 ? '这个工作区还没有会话记录。' : undefined} />
+          <MobileState error={list.error} loading={list.loading && !list.data} retry={list.reload} empty={list.data?.sessions.length === 0 ? t("sessions.this_workspace_has_no_session_records_yet") : undefined} />
           {list.data?.failures.map((failure) => <p className="mobile-inline-error" key={failure}>{failure}</p>)}
           <div className="mobile-list">{list.data?.sessions.map((session) => <button className="mobile-list-row mobile-session-row" key={session.id}
             onClick={() => navigate({ workspace: route.workspace, view: 'sessions', session: session.id, agent: session.agent, cwd: session.cwd })}>
@@ -45,11 +46,11 @@ export function MobileSessionReader({ session, workspace, back }: { session: Aow
   const snapshot = useMobileResource(`snapshot.${workspace}.${session.id}`, () => sessionsApi.agentSessionSnapshot(session, workspace));
   const scroll = useMobileScroll(`snapshot.${workspace}.${session.id}`, !!snapshot.data);
   return <WorkspaceMarkdownProvider directory={workspace}><section className="mobile-content-page">
-    <MobilePageHeader title={session.title} subtitle={snapshot.data ? `${session.agent} · ${statusNames[snapshot.data.status]} · ${snapshot.data.turns.length} 轮` : session.agent}
+    <MobilePageHeader title={session.title} subtitle={snapshot.data ? t("sessions.turns", { value0: session.agent, value1: statusNames[snapshot.data.status], value2: snapshot.data.turns.length }) : session.agent}
       back={back} actions={<>{snapshot.data && <SessionShareButton session={session} workspacePath={workspace} />}<MobileRefresh reload={snapshot.reload} loading={snapshot.loading} /></>} />
     <div className="mobile-scroll mobile-conversation" ref={scroll}>
-      <MobileState error={snapshot.error} loading={snapshot.loading && !snapshot.data} retry={snapshot.reload} empty={snapshot.data?.turns.length === 0 ? '这个会话还没有可展示的对话。' : undefined} />
-      {snapshot.data && <p className="mobile-reader-meta"><MessageSquare size={13} />快照更新于 {mobileTime(snapshot.data.captured_at)}{snapshot.data.truncated && ' · 仅展示最近 200 轮'}</p>}
+      <MobileState error={snapshot.error} loading={snapshot.loading && !snapshot.data} retry={snapshot.reload} empty={snapshot.data?.turns.length === 0 ? t("sessions.this_session_has_no_conversation_to_display_yet") : undefined} />
+      {snapshot.data && <p className="mobile-reader-meta"><MessageSquare size={13} />{t("sessions.snapshot_updated")} {mobileTime(snapshot.data.captured_at)}{snapshot.data.truncated && t("sessions.showing_the_latest_200_turns_only")}</p>}
       {snapshot.data?.turns.map((turn, index) => <article className="mobile-turn" key={turn.id}>
         <section className="mobile-message user"><SessionMessageContent text={turn.user.text} className="mobile-markdown" /></section>
         <section className="mobile-message assistant">

@@ -52,7 +52,7 @@ pub(super) async fn list(
         })
         .ok_or_else(|| {
             terminal_http_error(TerminalError::Conflict(
-                "当前面板没有可读取会话的 Agent".into(),
+                aow_i18n::text("server.no_agent_in_this_panel_supports_reading_sessions").into(),
             ))
         })?;
     let process = detected.processes.get(&pane_id).cloned();
@@ -65,7 +65,7 @@ pub(super) async fn list(
     // another process after PID reuse or use the server's config for that PID.
     if process.is_some() && environment.is_none() {
         return Err(terminal_http_error(TerminalError::Conflict(
-            "Agent 进程已变化，请刷新会话列表".into(),
+            aow_i18n::text("server.agent_process_changed_refresh_the_session_list").into(),
         )));
     }
     let roots = environment.as_ref().map_or_else(
@@ -104,7 +104,7 @@ pub(super) async fn list(
     let scan_cwd = PathBuf::from(&cwd);
     let scan_agent = agent.clone();
     let exact_id = live_session_id.clone();
-    let sessions = tokio::task::spawn_blocking(move || {
+    let sessions = aow_i18n::spawn_blocking(move || {
         let mut sessions =
             aow_agents::sessions::list_sessions(&scan_cwd, Some(&scan_agent), roots.clone());
         if let Some(id) = exact_id
@@ -124,7 +124,7 @@ pub(super) async fn list(
         .is_some_and(|process| !same_process(process))
     {
         return Err(terminal_http_error(TerminalError::Conflict(
-            "Agent 进程已变化，请刷新会话列表".into(),
+            aow_i18n::text("server.agent_process_changed_refresh_the_session_list").into(),
         )));
     }
     // The pane supplies the trusted scan scope, including directories opened

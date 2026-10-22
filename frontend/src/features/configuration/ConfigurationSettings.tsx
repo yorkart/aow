@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useEffect, useState } from 'react';
 import { configurationApi } from './api';
 import type { ConfigurationSettings as Settings, RepositoryVersions } from './types';
@@ -55,38 +56,38 @@ export function ConfigurationSettings({ active, onBusyChange, onDirtyChange }: {
       const next = await configurationApi.save({ config_repo: versions.config_repo, config_id: selected });
       setSaved(next); setPath(next.selection.config_repo); setSelected(next.selection.config_id);
       setStatus(next.changed
-        ? next.restart_required ? '配置已保存，重启服务后生效。' : '配置已保存，与当前运行版本一致。'
-        : '配置未发生变化。');
+        ? next.restart_required ? t("configuration.configuration_saved_restart_the_service_to_apply") : t("configuration.configuration_saved_and_matches_the_running_version")
+        : t("configuration.configuration_unchanged"));
     } catch (reason) { setError(message(reason)); }
     finally { setBusy(false); }
   };
 
-  return <section className="configuration-settings project-aow-dialog-form" aria-label="配置版本设置">
+  return <section className="configuration-settings project-aow-dialog-form" aria-label={t("configuration.configuration_version_settings")}>
     <div className="project-aow-dialog-body">
-      <div className="project-aow-settings-heading"><div><h2>Configuration</h2><p>选择配置仓库和要使用的版本。</p></div></div>
+      <div className="project-aow-settings-heading"><div><h2>{t("navigation.configuration")}</h2><p>{t("configuration.choose_a_configuration_repository_and_version")}</p></div></div>
       <form className="configuration-repository" onSubmit={event => { event.preventDefault(); void inspect(); }}>
-        <label className="project-aow-dialog-field"><span>配置仓库目录</span><input aria-label="配置仓库目录" className="project-aow-dialog-monospace" value={path} disabled={busy} spellCheck={false} placeholder="/absolute/path/to/config-repo" onChange={event => {
+        <label className="project-aow-dialog-field"><span>{t("configuration.configuration_repository_directory")}</span><input aria-label={t("configuration.configuration_repository_directory")} className="project-aow-dialog-monospace" value={path} disabled={busy} spellCheck={false} placeholder="/absolute/path/to/config-repo" onChange={event => {
           setPath(event.target.value); setVersions(undefined); setSelected(''); setError(''); setStatus('');
         }} /></label>
-        <button type="submit" className="project-aow-dialog-button" disabled={busy || !path.trim()}>读取版本</button>
+        <button type="submit" className="project-aow-dialog-button" disabled={busy || !path.trim()}>{t("configuration.read_versions")}</button>
       </form>
-      <p className="project-aow-form-intro">填写服务所在机器上的 Git 仓库目录，支持 ~/。也可以填写仓库下的配置版本目录，读取后会自动选中该版本。</p>
+      <p className="project-aow-form-intro">{t("configuration.enter_a_git_repository_directory_on_the_server_is")}</p>
       {versions ? versions.config_ids.length ? <fieldset className="configuration-versions" disabled={busy}>
-        <legend>配置版本（单选）</legend>
+        <legend>{t("configuration.configuration_version_choose_one")}</legend>
         {versions.config_ids.map(id => <label className="configuration-version" key={id}>
           <input type="radio" name="config-version" value={id} checked={selected === id} onChange={() => { setSelected(id); setStatus(''); setError(''); }} />
-          <span><code>{id}</code>{saved?.selection.config_repo === versions.config_repo && saved.selection.config_id === id ? <small>已保存</small> : null}</span>
+          <span><code>{id}</code>{saved?.selection.config_repo === versions.config_repo && saved.selection.config_id === id ? <small>{t("configuration.saved")}</small> : null}</span>
         </label>)}
-      </fieldset> : <p role="status">仓库中没有配置版本目录，请选择包含配置版本的仓库。</p> : null}
-      {saved ? <small className="project-aow-dialog-path-hint">当前运行版本：<code>{saved.active_selection.config_repo}/{saved.active_selection.config_id}</code></small> : null}
-      {saved?.restart_required && !status ? <p role="status">已保存的配置与当前运行版本不同，重启服务后生效。</p> : null}
+      </fieldset> : <p role="status">{t("configuration.no_configuration_version_directories_found_choose_a_repository_containing")}</p> : null}
+      {saved ? <small className="project-aow-dialog-path-hint">{t("configuration.running_version")}<code>{saved.active_selection.config_repo}/{saved.active_selection.config_id}</code></small> : null}
+      {saved?.restart_required && !status ? <p role="status">{t("configuration.the_saved_configuration_differs_from_the_running_version_restart")}</p> : null}
       {status ? <p role="status">{status}</p> : null}
       {error ? <div className="project-aow-error" role="alert">{error}</div> : null}
-      {!saved && !busy ? <button className="project-aow-dialog-button" onClick={() => { setError(''); setLoadRevision(value => value + 1); }}>重新加载</button> : null}
+      {!saved && !busy ? <button className="project-aow-dialog-button" onClick={() => { setError(''); setLoadRevision(value => value + 1); }}>{t("configuration.reload")}</button> : null}
     </div>
     <footer className="project-aow-dialog-footer">
-      {dirty ? <small>有未保存的修改</small> : null}
-      <button className="project-aow-dialog-button primary" disabled={busy || !saved || !versions?.config_ids.includes(selected)} onClick={() => void save()}>{busy ? '处理中…' : '保存'}</button>
+      {dirty ? <small>{t("configuration.unsaved_changes")}</small> : null}
+      <button className="project-aow-dialog-button primary" disabled={busy || !saved || !versions?.config_ids.includes(selected)} onClick={() => void save()}>{busy ? t("acp.processing") : t("acp.save")}</button>
     </footer>
   </section>;
 }

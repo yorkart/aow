@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useEffect, useState } from 'react';
 import { aowRequest } from '../../lib/aowRequest';
 import { readServerEnvironment, serverEnvironmentFields, serverEnvironmentGroups, validateServerEnvironment, writeServerEnvironment } from './serverEnvironment';
@@ -40,7 +41,7 @@ export function useServerEnvironment(active: boolean, onBusyChange: (busy: boole
   const dirty = !!document && serverEnvironmentFields.some(({ key }) => (values[key] ?? '') !== (original[key] ?? ''));
   const fieldErrors = validateServerEnvironment(values);
   const reload = async () => {
-    if (dirty && !window.confirm('重新读取会放弃 server.env 的未保存修改，是否继续？')) return;
+    if (dirty && !window.confirm(t("settings.reloading_will_discard_unsaved_server_env_changes_continue"))) return;
     setLoading(true); onBusyChange(true); setError(''); setSaved(false);
     try {
       const next = await aowRequest<ServerEnvironment>(endpoint, { cache: 'no-store' });
@@ -72,23 +73,23 @@ export function ServerEnvironmentFields({ environment, busy }: {
 }) {
   const { document, values, fieldErrors, loading, error, saved, reload, save, edit } = environment;
   return <>
-    <h3>AoW 服务环境变量</h3>
+    <h3>{t("settings.aow_service_environment_variables")}</h3>
     <div className="server-environment-actions">
       <div className="environment-settings-toolbar">
         {document ? <code className="server-environment-path" title={document.path}>{document.path}</code> : null}
         <div className="environment-settings-buttons">
-          <button type="button" className="project-aow-dialog-button" disabled={loading || busy} onClick={() => void reload()}>重新读取文件</button>
-          <button type="button" className="project-aow-dialog-button primary" disabled={loading || busy || !document || !!Object.keys(fieldErrors).length} onClick={() => void save()}>保存 server.env</button>
+          <button type="button" className="project-aow-dialog-button" disabled={loading || busy} onClick={() => void reload()}>{t("settings.reload_file")}</button>
+          <button type="button" className="project-aow-dialog-button primary" disabled={loading || busy || !document || !!Object.keys(fieldErrors).length} onClick={() => void save()}>{t("settings.save_server_env")}</button>
         </div>
       </div>
-      {loading ? <p role="status">正在读取 server.env…</p> : null}
-      {saved ? <p role="status">server.env 已保存。</p> : null}
+      {loading ? <p role="status">{t("settings.reading_server_env")}</p> : null}
+      {saved ? <p role="status">{t("settings.server_env_saved")}</p> : null}
       {error ? <div className="project-aow-error" role="alert">{error}</div> : null}
     </div>
     <div className="server-environment-groups">
       {serverEnvironmentGroups.map(group => <table className="server-environment-table" key={group.title}>
         <caption>{group.title}</caption>
-        <thead><tr><th scope="col">配置项（Key）</th><th scope="col">说明</th><th scope="col">Value 示例</th><th scope="col">当前值</th></tr></thead>
+        <thead><tr><th scope="col">{t("settings.setting_key")}</th><th scope="col">{t("settings.description")}</th><th scope="col">{t("settings.example_value")}</th><th scope="col">{t("settings.current_value")}</th></tr></thead>
         <tbody>{group.fields.map(field => <tr key={field.key}>
           <th scope="row"><label htmlFor={`server-env-${field.key}`}><code>{field.key}</code></label></th>
           <td id={`server-env-${field.key}-description`}>{field.description}</td>
@@ -96,7 +97,7 @@ export function ServerEnvironmentFields({ environment, busy }: {
           <td><div className="project-aow-dialog-field">
             <input id={`server-env-${field.key}`} aria-label={field.key} aria-describedby={`server-env-${field.key}-description${fieldErrors[field.key] ? ` server-env-${field.key}-error` : ''}`} aria-invalid={!!fieldErrors[field.key]}
               spellCheck={false} autoCapitalize="off" autoCorrect="off" autoComplete="off" inputMode={field.key === 'AOW_SERVER_PORT' || field.key.startsWith('AOW_AUTH_SESSION_') ? 'numeric' : 'text'}
-              value={values[field.key] ?? ''} disabled={loading || busy || !document} onChange={event => edit(field.key, event.target.value)} placeholder="未配置"
+              value={values[field.key] ?? ''} disabled={loading || busy || !document} onChange={event => edit(field.key, event.target.value)} placeholder={t("settings.not_configured")}
               onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); void save(); } }} />
             {fieldErrors[field.key] ? <small className="server-environment-error" id={`server-env-${field.key}-error`}>{fieldErrors[field.key]}</small> : null}
           </div></td>

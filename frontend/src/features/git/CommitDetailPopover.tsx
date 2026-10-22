@@ -1,3 +1,4 @@
+import { t, getLanguage } from '../../lib/i18n';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Copy, ExternalLink, GitCommitHorizontal, LoaderCircle, X } from 'lucide-react';
@@ -28,7 +29,7 @@ function relativeTime(value: string) {
     ['year', 31_536_000], ['month', 2_592_000], ['week', 604_800],
     ['day', 86_400], ['hour', 3_600], ['minute', 60],
   ];
-  const formatter = new Intl.RelativeTimeFormat('zh-CN', { numeric: 'auto' });
+  const formatter = new Intl.RelativeTimeFormat(getLanguage(), { numeric: 'auto' });
   for (const [unit, size] of ranges) {
     if (Math.abs(seconds) >= size) return formatter.format(Math.round(seconds / size), unit);
   }
@@ -38,7 +39,7 @@ function relativeTime(value: string) {
 function absoluteTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'medium' }).format(date);
+  return new Intl.DateTimeFormat(getLanguage(), { dateStyle: 'medium', timeStyle: 'medium' }).format(date);
 }
 
 async function copyText(value: string) {
@@ -93,7 +94,7 @@ export function CommitDetailPopover({ commit, detail, loading, error, anchor, pi
       id={popoverId}
       className={`commit-detail-popover${pinned ? ' pinned' : ''}`}
       role="dialog"
-      aria-label={`提交详情：${commit.subject}`}
+      aria-label={t("git.commit_details", { value0: commit.subject })}
       tabIndex={-1}
       style={position}
       onPointerEnter={onEnter}
@@ -101,8 +102,8 @@ export function CommitDetailPopover({ commit, detail, loading, error, anchor, pi
       onFocusCapture={onEnter}
       onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onLeave(); }}
     >
-      {pinned ? <button className="commit-detail-close" title="关闭" onClick={onClose}><X /></button> : null}
-      {loading ? <div className="commit-detail-loading"><LoaderCircle className="spinning" />正在加载提交详情…</div> : null}
+      {pinned ? <button className="commit-detail-close" title={t("aow.close")} onClick={onClose}><X /></button> : null}
+      {loading ? <div className="commit-detail-loading"><LoaderCircle className="spinning" />{t("git.loading_commit_details")}</div> : null}
       {error ? <div className="commit-detail-error">{error}</div> : null}
       {detail ? <>
         <div className="commit-detail-author">
@@ -112,21 +113,21 @@ export function CommitDetailPopover({ commit, detail, loading, error, anchor, pi
         </div>
         <h4>{detail.subject}</h4>
         {detail.body.trim() ? <pre className="commit-detail-body">{detail.body.trim()}</pre> : null}
-        {identityChanged ? <div className="commit-detail-committer">提交者：{detail.committer.name} &lt;{detail.committer.email}&gt; · {absoluteTime(detail.committer.date)}</div> : null}
+        {identityChanged ? <div className="commit-detail-committer">{t("git.committer")}{detail.committer.name} &lt;{detail.committer.email}&gt; · {absoluteTime(detail.committer.date)}</div> : null}
         {stats ? <div className="commit-detail-stats">
-          <span>{stats.files_changed} 个文件变更</span>
+          <span>{stats.files_changed} {t("git.changed_files")}</span>
           <b>+{stats.insertions}</b><em>-{stats.deletions}</em>
-          {stats.binary_files ? <span>{stats.binary_files} 个二进制文件</span> : null}
+          {stats.binary_files ? <span>{stats.binary_files} {t("git.binary_files")}</span> : null}
         </div> : null}
         <div className="commit-detail-meta">
-          <span className={`commit-sync-state ${commit.is_pushed ? 'pushed' : 'outgoing'}`}>{commit.is_pushed ? `已推送${upstream ? ` · ${upstream}` : ''}` : '仅本地'}</span>
+          <span className={`commit-sync-state ${commit.is_pushed ? 'pushed' : 'outgoing'}`}>{commit.is_pushed ? t("git.pushed", { value0: upstream ? ` · ${upstream}` : '' }) : t("git.local_only")}</span>
           {detail.refs.map((ref) => <span className="commit-detail-ref" key={ref}>{ref}</span>)}
         </div>
-        {detail.parents.length > 1 ? <div className="commit-detail-parents"><span>Parents</span>{detail.parents.map((parent) => <code key={parent}>{shortId(parent)}</code>)}</div> : null}
+        {detail.parents.length > 1 ? <div className="commit-detail-parents"><span>{t("navigation.parents")}</span>{detail.parents.map((parent) => <code key={parent}>{shortId(parent)}</code>)}</div> : null}
         <footer className="commit-detail-footer">
           <GitCommitHorizontal /><code title={detail.id}>{detail.id}</code>
-          <button title="复制 commit SHA" onClick={() => { void copyText(detail.id).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1200); }); }}>{copied ? <Check /> : <Copy />}</button>
-          {detail.commit_url ? <a href={detail.commit_url} target="_blank" rel="noopener noreferrer"><ExternalLink />在 {detail.remote_name ?? '远程仓库'} 中打开</a> : null}
+          <button title={t("git.copy_commit_sha")} onClick={() => { void copyText(detail.id).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1200); }); }}>{copied ? <Check /> : <Copy />}</button>
+          {detail.commit_url ? <a href={detail.commit_url} target="_blank" rel="noopener noreferrer"><ExternalLink />{t("git.open_in")} {detail.remote_name ?? t("git.remote_repository")} {t("git.message")}</a> : null}
         </footer>
       </> : null}
     </div>,

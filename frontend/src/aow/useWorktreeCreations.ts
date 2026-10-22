@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { aowApi } from './aowApi';
 import type { WorktreeCreationJob } from './types';
@@ -19,7 +20,7 @@ export function useWorktreeCreations() {
       const result = await aowApi.worktreeCreations();
       if (mounted.current && generation.current === version) { setJobs(result); setError(''); }
     } catch (reason) {
-      if (mounted.current) setError(`无法更新创建进度：${reason instanceof Error ? reason.message : String(reason)}`);
+      if (mounted.current) setError(t("aow.unable_to_update_creation_progress", { value0: reason instanceof Error ? reason.message : String(reason) }));
     } finally { pending.current = false; }
   }, []);
   const submitted = useCallback((job: WorktreeCreationJob) => {

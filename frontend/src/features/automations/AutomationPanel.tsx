@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { CalendarClock, LoaderCircle, MousePointerClick, Plus, RefreshCw } from 'lucide-react';
 import type { AowAgent } from '../agents/types';
@@ -81,27 +82,27 @@ export function AutomationPanel({ project, agents, activeTaskId, refreshKey = 0,
     finally { setBusy(false); }
   };
 
-  return <section className="automation-panel" aria-label={`${project.name} 自动化`}>
+  return <section className="automation-panel" aria-label={t("automations.automation", { value0: project.name })}>
     {error ? <div className="automation-panel-error" role="alert">{error}</div> : null}
     <AowPanelStack>
     {(['scheduled', 'manual'] as const).map(kind => {
       const manual = kind === 'manual';
       const items = tasks.filter(task => (task.kind ?? 'scheduled') === kind);
-      const label = manual ? '手动任务' : '自动化';
-      const title = manual ? 'Manual' : 'Schedule';
+      const label = manual ? t("automations.manual_tasks") : t("aow.automations");
+      const title = manual ? t("automations.manual_group") : t("automations.schedule_group");
       const collapsed = collapsedGroups[kind] ?? (!loading && !error && items.length === 0);
       const bodyId = `${panelId}-${kind}`;
       return <AowPanel className="automation-panel-group" key={kind} bodyClassName="automation-panel-list" bodyRole="list" title={title} icon={manual ? <MousePointerClick /> : <CalendarClock />} collapsed={collapsed} controlsId={bodyId}
           onCollapsedChange={next => { setCollapsedGroups(groups => ({ ...groups, [kind]: next })); dismissMenu(); }} actions={<>
-          <AowIconButton title={`刷新${label}`} aria-label={`刷新${label}`} disabled={loading} onClick={() => { setLoading(true); void refresh(true); }}><RefreshCw className={loading ? 'automation-spin' : ''} /></AowIconButton>
-          <AowIconButton title={`创建${label}`} aria-label={`创建${label}`} disabled={!!project.error || !project.worktrees.length} onClick={() => { setCreatingKind(kind); setEditingTask(undefined); setEditorOpen(true); }}><Plus /></AowIconButton>
+          <AowIconButton title={t("automations.refresh", { value0: label })} aria-label={t("automations.refresh", { value0: label })} disabled={loading} onClick={() => { setLoading(true); void refresh(true); }}><RefreshCw className={loading ? 'automation-spin' : ''} /></AowIconButton>
+          <AowIconButton title={t("automations.create", { value0: label })} aria-label={t("automations.create", { value0: label })} disabled={!!project.error || !project.worktrees.length} onClick={() => { setCreatingKind(kind); setEditingTask(undefined); setEditorOpen(true); }}><Plus /></AowIconButton>
         </>}>
-          {loading ? <div className="automation-panel-state"><LoaderCircle className="automation-spin" />正在加载任务…</div> : null}
-          {!loading && !items.length ? <div className="automation-panel-state">{manual ? <MousePointerClick /> : <CalendarClock />}<strong>暂无{manual ? '手动任务' : '自动化任务'}</strong><span>点击右上角新增{label}。</span></div> : null}
+          {loading ? <div className="automation-panel-state"><LoaderCircle className="automation-spin" />{t("automations.loading_tasks")}</div> : null}
+          {!loading && !items.length ? <div className="automation-panel-state">{manual ? <MousePointerClick /> : <CalendarClock />}<strong>{t("components.none")}{manual ? t("automations.manual_tasks") : t("aow.automated_tasks")}</strong><span>{t("automations.click_at_the_top_right_to_add")}{label}。</span></div> : null}
           {!loading && items.map(task => <AowListRow key={task.id} role="listitem" className={`automation-panel-row${task.id === activeTaskId ? ' active' : ''}`}
-            title={task.name} tooltip={`${task.name} · ID: ${task.id}`} icon={manual ? <MousePointerClick /> : <CalendarClock />} menuLabel="任务操作" onOpen={() => onOpenTask(task)}
+            title={task.name} tooltip={`${task.name} · ID: ${task.id}`} icon={manual ? <MousePointerClick /> : <CalendarClock />} menuLabel={t("automations.task_actions")} onOpen={() => onOpenTask(task)}
             menuExpanded={contextMenu?.taskId === task.id} onMenu={(x, y) => setContextMenu({ taskId: task.id, x, y })}>
-            <small className="automation-panel-meta"><AutomationTaskBadge task={task} /><span aria-hidden="true">•</span><span className="automation-panel-summary"><code>{task.id}</code><span> · </span>{manual ? `${variableNames(task.prompt_bindings).length} 个变量` : scheduleName(task.cron, task.interval_seconds)}</span></small>
+            <small className="automation-panel-meta"><AutomationTaskBadge task={task} /><span aria-hidden="true">•</span><span className="automation-panel-summary"><code>{task.id}</code><span> · </span>{manual ? t("automations.variables_2", { count: variableNames(task.prompt_bindings).length, value0: variableNames(task.prompt_bindings).length }) : scheduleName(task.cron, task.interval_seconds)}</span></small>
           </AowListRow>)}
       </AowPanel>;
     })}

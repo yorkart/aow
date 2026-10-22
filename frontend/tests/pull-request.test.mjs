@@ -1,3 +1,4 @@
+import { loadModule } from './helpers/load-module.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { after, test } from 'node:test';
@@ -5,9 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import ts from 'typescript';
 
-const source = await readFile(new URL('../src/features/pr/pullRequestPresentation.ts', import.meta.url), 'utf8');
-const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 } });
-const { stateClass, stateLabel, safeExternalUrl, formatPrTime, parsePullRequestNumber } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
+const { stateClass, stateLabel, safeExternalUrl, formatPrTime, parsePullRequestNumber } = await loadModule(new URL('../src/features/pr/pullRequestPresentation.ts', import.meta.url));
 
 test('CI conclusions distinguish waiting, failures, and unknown states', () => {
   for (const state of ['all_passed', 'succeeded', 'approved']) assert.equal(stateClass(state), 'passed');
@@ -103,6 +102,7 @@ test('desktop review diffs release models after detaching and reopen without sta
     ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
   page.setDefaultTimeout(10000);
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -154,6 +154,7 @@ async function panelFixture(t, { fail = false } = {}) {
   const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'],
     ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
   const page = await browser.newPage({ viewport: { width: 1100, height: 720 }, reducedMotion: 'reduce' });
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
   page.setDefaultTimeout(10000);
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));

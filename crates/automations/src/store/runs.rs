@@ -45,16 +45,19 @@ impl Store {
             .custom_flags(libc::O_NOFOLLOW)
             .open(path)?;
         let metadata = file.metadata()?;
-        ensure!(metadata.file_type().is_file(), "执行输出文件无效");
+        ensure!(
+            metadata.file_type().is_file(),
+            aow_i18n::message("automations.invalid_execution_output_file", &[])
+        );
         ensure!(
             metadata.len() <= MAX_RUN_OUTPUT_BYTES,
-            "执行输出超过大小限制"
+            aow_i18n::message("automations.execution_output_exceeds_size_limit", &[])
         );
         let mut bytes = Vec::with_capacity(metadata.len() as usize);
         file.read_to_end(&mut bytes)?;
         ensure!(
             bytes.len() as u64 <= MAX_RUN_OUTPUT_BYTES,
-            "执行输出超过大小限制"
+            aow_i18n::message("automations.execution_output_exceeds_size_limit", &[])
         );
         Ok(bytes)
     }
@@ -76,7 +79,10 @@ impl Store {
                 .create_new(true)
                 .mode(0o600)
                 .open(&events)?;
-            ensure!(try_exclusive(&file)?, "执行文件已被占用");
+            ensure!(
+                try_exclusive(&file)?,
+                aow_i18n::message("automations.run_file_is_already_in_use", &[])
+            );
             for output in RunOutput::ALL {
                 OpenOptions::new()
                     .write(true)

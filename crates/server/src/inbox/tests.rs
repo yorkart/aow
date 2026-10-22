@@ -729,7 +729,12 @@ async fn api_captures_without_project_checks_binding_and_refuses_unbound_executi
         json!({"expected_revision":1,"request_key":"dynamic","agent":"codex","workspace_mode":"dynamic"}),
     ).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert!(result["message"].as_str().unwrap().contains("仅手动任务"));
+    assert!(
+        result["message"]
+            .as_str()
+            .unwrap()
+            .contains("Only manual tasks")
+    );
     let (status, _) = request(
         &app,
         "PUT",

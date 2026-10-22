@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { imApi } from './api';
 import type { ImProviderView, WechatLogin, WechatStatus, WechatVerification } from './types';
@@ -10,7 +11,7 @@ function SetupStep({ number, title, complete, current, children }: {
 }) {
   return <li className={`im-wechat-step${complete ? ' complete' : ''}`} aria-current={current ? 'step' : undefined}>
     <div className="im-wechat-step-heading"><span className="im-wechat-step-number" aria-hidden="true">{number}</span>
-      <h4>{title}</h4><span className="im-wechat-step-state">{complete ? '已完成' : current ? '当前步骤' : '待完成'}</span></div>
+      <h4>{title}</h4><span className="im-wechat-step-state">{complete ? t("aow.completed") : current ? t("im.current_step") : t("im.pending")}</span></div>
     <div className="im-wechat-step-body">{children}</div>
   </li>;
 }
@@ -134,21 +135,21 @@ export function WechatSettings({ provider, disabled, onChanged, onBusyChange }: 
     const result = await imApi.wechatReceipt(verification.test_id, received);
     if (mounted.current) updateVerification(result.verification);
   });
-  return <section className="im-wechat" aria-label="微信 Bot 设置">
-    <h3>微信 Bot {provider && <small className="notification-configured">{confirmed ? '已验证' : '已绑定'}</small>}</h3>
-    <p className="project-aow-form-intro">使用普通微信扫码绑定，通知发送到扫码账号与 Bot 的私聊。目前不支持普通微信群。</p>
-    <ol className="im-wechat-steps" aria-label="微信推送设置步骤">
-      <SetupStep number={1} title="扫码绑定微信" complete={!!provider && !pairing} current={step === 1}>
-        <p className="project-aow-form-intro">{provider ? `接收账号：${provider.user_id}` : '用接收通知的微信账号扫码，按手机提示完成授权。'}</p>
+  return <section className="im-wechat" aria-label={t("im.wechat_bot_settings")}>
+    <h3>{t("automations.wechat_bot")} {provider && <small className="notification-configured">{confirmed ? t("im.verified") : t("im.linked")}</small>}</h3>
+    <p className="project-aow-form-intro">{t("im.scan_with_wechat_to_link_your_account_notifications_go")}</p>
+    <ol className="im-wechat-steps" aria-label={t("im.wechat_push_setup_steps")}>
+      <SetupStep number={1} title={t("im.scan_to_link_wechat")} complete={!!provider && !pairing} current={step === 1}>
+        <p className="project-aow-form-intro">{provider ? t("im.recipient_account", { value0: provider.user_id }) : t("im.scan_with_the_wechat_account_that_will_receive_notifications")}</p>
         <div className="im-actions">
-          <button type="button" className="project-aow-dialog-button" disabled={unavailable} onClick={() => void start()}>{login && login.status !== 'confirmed' ? '重新生成二维码' : provider ? '重新扫码绑定' : '扫码连接微信'}</button>
-          {login && login.status !== 'confirmed' && <button type="button" className="project-aow-dialog-button" disabled={unavailable} onClick={() => void cancel()}>关闭扫码</button>}
+          <button type="button" className="project-aow-dialog-button" disabled={unavailable} onClick={() => void start()}>{login && login.status !== 'confirmed' ? t("im.generate_new_qr_code") : provider ? t("im.scan_again_to_link") : t("im.scan_to_connect_wechat")}</button>
+          {login && login.status !== 'confirmed' && <button type="button" className="project-aow-dialog-button" disabled={unavailable} onClick={() => void cancel()}>{t("im.close_qr_code")}</button>}
           {provider && <button type="button" className="project-aow-dialog-button" disabled={unavailable} onClick={() => void operation(async () => {
             await imApi.disconnectWechat(); currentId.current = undefined; setLogin(undefined); setConnection(null); await onChanged();
-          })}>解除微信绑定</button>}
+          })}>{t("im.unlink_wechat")}</button>}
         </div>
         {login && login.status !== 'confirmed' && <div className="im-wechat-login">
-          {login.qr_image && <img className="im-wechat-qr" src={login.qr_image} alt="微信 Bot 登录二维码" width="256" height="256" />}
+          {login.qr_image && <img className="im-wechat-qr" src={login.qr_image} alt={t("im.wechat_bot_login_qr_code")} width="256" height="256" />}
           <p role="status">{login.message}</p>
           {login.status === 'need_verifycode' && <form onSubmit={event => {
             event.preventDefault();
@@ -162,29 +163,29 @@ export function WechatSettings({ provider, disabled, onChanged, onBusyChange }: 
               setCycle(value => value + 1);
             });
           }}>
-            <label className="project-aow-dialog-field"><span>手机微信显示的数字</span><input aria-label="微信配对码" inputMode="numeric" pattern="[0-9]+" maxLength={16} autoComplete="off" value={code} disabled={unavailable} onChange={event => setCode(event.target.value)} required /></label>
-            <button type="submit" className="project-aow-dialog-button" disabled={unavailable || !code.trim()}>确认配对码</button>
+            <label className="project-aow-dialog-field"><span>{t("im.number_displayed_in_wechat_on_your_phone")}</span><input aria-label={t("im.wechat_pairing_code")} inputMode="numeric" pattern="[0-9]+" maxLength={16} autoComplete="off" value={code} disabled={unavailable} onChange={event => setCode(event.target.value)} required /></label>
+            <button type="submit" className="project-aow-dialog-button" disabled={unavailable || !code.trim()}>{t("im.confirm_pairing_code")}</button>
           </form>}
-          {error && polling(login) && <button type="button" className="project-aow-dialog-button" disabled={unavailable} onClick={() => { setError(''); setCycle(value => value + 1); }}>重试检查</button>}
+          {error && polling(login) && <button type="button" className="project-aow-dialog-button" disabled={unavailable} onClick={() => { setError(''); setCycle(value => value + 1); }}>{t("im.retry_check")}</button>}
         </div>}
       </SetupStep>
-      <SetupStep number={2} title="在微信中向 Bot 发一条消息" complete={(contextReady || testSubmitted) && !pairing} current={step === 2}>
-        <p className="project-aow-form-intro">绑定后，打开微信里的 Bot 私聊，发送一句“你好”。请保持本页面打开，AoW 收到后会自动更新状态。</p>
-        {provider && <p className="im-wechat-progress" role="status">{statusError || connection?.error || (contextReady ? '已收到你的消息，可以发送测试通知。' : '等待接收你在微信中发送的消息…')}</p>}
-        {provider && (!contextReady || statusError) && <div className="im-actions"><button type="button" className="project-aow-dialog-button" disabled={unavailable || pairing} onClick={() => setStatusCycle(value => value + 1)}>我已发送，检查状态</button></div>}
+      <SetupStep number={2} title={t("im.send_a_message_to_the_bot_in_wechat")} complete={(contextReady || testSubmitted) && !pairing} current={step === 2}>
+        <p className="project-aow-form-intro">{t("im.after_linking_open_the_bot_s_private_chat_and")}</p>
+        {provider && <p className="im-wechat-progress" role="status">{statusError || connection?.error || (contextReady ? t("im.message_received_you_can_send_a_test_notification") : t("im.waiting_for_your_message_from_wechat"))}</p>}
+        {provider && (!contextReady || statusError) && <div className="im-actions"><button type="button" className="project-aow-dialog-button" disabled={unavailable || pairing} onClick={() => setStatusCycle(value => value + 1)}>{t("im.i_sent_it_check_status")}</button></div>}
       </SetupStep>
-      <SetupStep number={3} title="由 AoW 发送测试通知" complete={testSubmitted} current={step === 3}>
-        <p className="project-aow-form-intro">{testSubmitted ? '测试请求已提交，请到微信查看“AoW 微信推送测试”。' : '收到你的消息后，点击下方按钮，让 AoW 向当前绑定的微信账号发送一条测试通知。'}</p>
-        <div className="im-actions"><button type="button" className="project-aow-dialog-button primary" disabled={unavailable || pairing || !contextReady} onClick={() => void sendTest()}>{testing ? '正在发送…' : '发送微信测试消息'}</button></div>
+      <SetupStep number={3} title={t("im.send_a_test_notification_from_aow")} complete={testSubmitted} current={step === 3}>
+        <p className="project-aow-form-intro">{testSubmitted ? t("im.test_request_submitted_check_wechat_for_aow_wechat_push") : t("im.after_your_message_is_received_click_below_to_send")}</p>
+        <div className="im-actions"><button type="button" className="project-aow-dialog-button primary" disabled={unavailable || pairing || !contextReady} onClick={() => void sendTest()}>{testing ? t("im.sending") : t("im.send_wechat_test_message")}</button></div>
       </SetupStep>
-      <SetupStep number={4} title="确认微信收到通知" complete={confirmed} current={step === 4}>
-        <p className="project-aow-form-intro">{confirmed ? '验证完成，记录已保存。请在 Settings → 通知中勾选“微信推送”，并保存通知设置。后续连接状态请查看第二步提示。' : '请以微信中实际出现测试通知为准，收到后点击“我已收到”。'}</p>
-        {testResult === 'missing' && <p className="im-wechat-progress" role="status">请确认查看的是本次扫码账号与 Bot 的私聊。向 Bot 再发一条消息，然后重新发送测试通知；仍未收到时，可重新扫码绑定。</p>}
+      <SetupStep number={4} title={t("im.confirm_notification_received_in_wechat")} complete={confirmed} current={step === 4}>
+        <p className="project-aow-form-intro">{confirmed ? t("im.verification_complete_and_saved_select_wechat_push_in_settings") : t("im.confirm_the_test_notification_actually_appears_in_wechat_then")}</p>
+        {testResult === 'missing' && <p className="im-wechat-progress" role="status">{t("im.check_the_private_chat_between_the_scanned_account_and")}</p>}
         {testSubmitted && !confirmed && <div className="im-actions">
-          <button type="button" className="project-aow-dialog-button primary" disabled={unavailable || pairing} onClick={() => void receipt(true)}>我已收到</button>
-          <button type="button" className="project-aow-dialog-button" disabled={unavailable || pairing} onClick={() => void receipt(false)}>还没收到</button>
+          <button type="button" className="project-aow-dialog-button primary" disabled={unavailable || pairing} onClick={() => void receipt(true)}>{t("im.i_received_it")}</button>
+          <button type="button" className="project-aow-dialog-button" disabled={unavailable || pairing} onClick={() => void receipt(false)}>{t("im.not_received_yet")}</button>
         </div>}
-        {confirmed && <p className="im-wechat-progress im-wechat-verified" role="status">已确认收到微信测试通知。</p>}
+        {confirmed && <p className="im-wechat-progress im-wechat-verified" role="status">{t("im.wechat_test_notification_receipt_confirmed")}</p>}
       </SetupStep>
     </ol>
     {error && <p className="project-aow-error" role="alert">{error}</p>}

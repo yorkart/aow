@@ -15,6 +15,7 @@ try {
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
   async function fixture(t) {
     const context = await browser.newContext({ viewport: { width: 1100, height: 900 }, reducedMotion: 'reduce' });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     const state = { errors: [], paths: ['/a', '/b'], pinRequests: 0, pinGate: null, failPins: false, gitRequests: [], statusGate: null, logGate: null, failStatus: false, branch: 'main', commits: structuredClone(commits) };
     state.gitCommands = [];
     state.commandGate = null;
@@ -57,6 +58,7 @@ try {
       await route.fulfill(data === undefined ? { status: 404, json: { message: 'Unknown fixture endpoint' } } : { json: data });
     });
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     page.setDefaultTimeout(10000);
     page.on('pageerror', error => state.errors.push(error.message));
     await page.clock.install({ time: new Date('2026-09-16T00:00:00Z') });
@@ -121,7 +123,7 @@ try {
       await page.locator('.commit-changes .change-row').waitFor();
       await connected();
       await page.getByRole('button', { name: 'Commits 视图选项', exact: true }).click();
-      await page.getByRole('menuitemradio', { name: 'View as Tree', exact: true }).click();
+      await page.getByRole('menuitemradio', { name: "树形视图", exact: true }).click();
       await page.locator('.commit-changes .source-change-tree').waitFor();
       await connected();
       if (process.env.AOW_GIT_GRAPH_SCREENSHOT) await page.locator('.source-control').screenshot({ path: process.env.AOW_GIT_GRAPH_SCREENSHOT });
@@ -161,7 +163,7 @@ try {
     await menu.waitFor({ state: 'detached' });
     assert.equal(await commitsMenu.evaluate(element => element === document.activeElement), true);
     await changes.click();
-    await menu.getByRole('menuitemradio', { name: 'View as Tree', exact: true }).click();
+    await menu.getByRole('menuitemradio', { name: "树形视图", exact: true }).click();
     await page.locator('.changes-list .source-change-tree').waitFor();
     await navigate(page, 'Commits');
     await page.locator('.commit-row').first().click();
@@ -170,10 +172,10 @@ try {
     await page.locator('.commit-changes .change-row').first().waitFor();
     assert.equal(await page.locator('.commit-changes .source-change-tree').count(), 0);
     await commitsMenu.click();
-    await menu.getByRole('menuitemradio', { name: 'View as Tree', exact: true }).click();
+    await menu.getByRole('menuitemradio', { name: "树形视图", exact: true }).click();
     await page.locator('.commit-changes .source-change-tree').waitFor();
     await changes.click();
-    await menu.getByRole('menuitemradio', { name: 'View as list', exact: true }).click();
+    await menu.getByRole('menuitemradio', { name: "列表视图", exact: true }).click();
     assert.equal(await page.locator('.changes-list .source-change-tree').count(), 0);
     assert.equal(await page.locator('.commit-changes .source-change-tree').count(), 1);
     await commitsMenu.click();
@@ -379,7 +381,7 @@ try {
     await list.locator('.change-row').first().waitFor();
     assert.equal(await scroller.evaluate(element => element.scrollTop), scrollTop);
     await page.getByRole('button', { name: 'Changes 视图选项', exact: true }).click();
-    await page.getByRole('menuitemradio', { name: 'View as Tree', exact: true }).click();
+    await page.getByRole('menuitemradio', { name: "树形视图", exact: true }).click();
     await scroller.evaluate(element => { element.scrollTop = 0; });
     const folder = list.locator('.change-folder-row[title="dir-00"]');
     await folder.click();

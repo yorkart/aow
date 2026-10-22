@@ -22,7 +22,8 @@ pub(in crate::aow) async fn default_notes_identity(repository: &Path) -> Result<
     }
     if repository_has_remote(repository).await? {
         return Err(AowError::Invalid(
-            "origin remote is required when Notes path is not provided".to_owned(),
+            aow_i18n::text("validation.origin_remote_is_required_when_notes_path_is_not_provided")
+                .to_owned(),
         ));
     }
     local_repository_identity(repository, &process_account_name()?)
@@ -40,7 +41,10 @@ pub(in crate::aow) fn local_repository_identity(
         .file_name()
         .and_then(|value| value.to_str())
         .ok_or_else(|| {
-            AowError::Invalid("local Git repository name is not valid UTF-8".to_owned())
+            AowError::Invalid(
+                aow_i18n::text("validation.local_git_repository_name_is_not_valid_utf_8")
+                    .to_owned(),
+            )
         })?;
     Ok(PathBuf::from("localhost")
         .join(validate_remote_component(account_name)?)
@@ -61,7 +65,8 @@ pub(in crate::aow) fn process_account_name() -> Result<String, AowError> {
         }
     }
     Err(AowError::Invalid(
-        "current account name is unavailable for local Notes mapping".to_owned(),
+        aow_i18n::text("validation.current_account_name_is_unavailable_for_local_notes_mapping")
+            .to_owned(),
     ))
 }
 
@@ -69,23 +74,29 @@ pub(in crate::aow) fn parse_remote_identity(remote: &str) -> Result<PathBuf, Aow
     let (authority, path) = if let Some((_, rest)) = remote.split_once("://") {
         if rest.starts_with('/') {
             return Err(AowError::Invalid(
-                "origin remote must be an SSH or HTTP(S) repository URL".to_owned(),
+                aow_i18n::text("validation.origin_remote_must_be_an_ssh_or_http_s_repository")
+                    .to_owned(),
             ));
         }
         let (authority, path) = rest.split_once('/').ok_or_else(|| {
-            AowError::Invalid("origin remote URL does not include a repository path".to_owned())
+            AowError::Invalid(
+                aow_i18n::text("validation.origin_remote_url_does_not_include_a_repository_path")
+                    .to_owned(),
+            )
         })?;
         (authority.rsplit('@').next().unwrap_or(authority), path)
     } else if let Some((authority, path)) = remote.split_once(':') {
         if authority.contains('/') || authority.contains('\\') {
             return Err(AowError::Invalid(
-                "origin remote must be an SSH or HTTP(S) repository URL".to_owned(),
+                aow_i18n::text("validation.origin_remote_must_be_an_ssh_or_http_s_repository")
+                    .to_owned(),
             ));
         }
         (authority.rsplit('@').next().unwrap_or(authority), path)
     } else {
         return Err(AowError::Invalid(
-            "origin remote must be an SSH or HTTP(S) repository URL".to_owned(),
+            aow_i18n::text("validation.origin_remote_must_be_an_ssh_or_http_s_repository")
+                .to_owned(),
         ));
     };
 
@@ -113,7 +124,7 @@ pub(in crate::aow) fn parse_remote_identity(remote: &str) -> Result<PathBuf, Aow
         });
     if authority.is_empty() || path.is_empty() {
         return Err(AowError::Invalid(
-            "origin remote URL is incomplete".to_owned(),
+            aow_i18n::text("validation.origin_remote_url_is_incomplete").to_owned(),
         ));
     }
 
@@ -121,7 +132,8 @@ pub(in crate::aow) fn parse_remote_identity(remote: &str) -> Result<PathBuf, Aow
     let components = path.split('/').collect::<Vec<_>>();
     if components.len() < 2 {
         return Err(AowError::Invalid(
-            "origin remote URL must include an owner and repository".to_owned(),
+            aow_i18n::text("validation.origin_remote_url_must_include_an_owner_and_repository")
+                .to_owned(),
         ));
     }
     for component in components {
@@ -140,7 +152,8 @@ fn validate_remote_component(value: &str) -> Result<&str, AowError> {
             .any(|character| character.is_control() || matches!(character, '/' | '\\' | '\0'))
     {
         return Err(AowError::Invalid(
-            "origin remote URL contains an unsafe path component".to_owned(),
+            aow_i18n::text("validation.origin_remote_url_contains_an_unsafe_path_component")
+                .to_owned(),
         ));
     }
     Ok(value)

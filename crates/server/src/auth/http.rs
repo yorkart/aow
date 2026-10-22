@@ -64,7 +64,7 @@ async fn login(
         evidence,
         kind: "auth.login",
         event: "login_failed",
-        title: "登录失败",
+        title: aow_i18n::text("server.login_failed"),
         status: StatusCode::BAD_REQUEST,
         reason: String::new(),
         login_method: request
@@ -86,7 +86,7 @@ async fn login(
                 HttpError::new(
                     error.status(),
                     "invalid_login_request",
-                    "登录请求格式无效",
+                    aow_i18n::text("server.invalid_login_request_format"),
                     None,
                 )
             })
@@ -103,16 +103,21 @@ async fn login(
     };
     // Only admitted attempts create a background task (at most two). Keep the
     // permit until auditing is queued, even when the HTTP caller disconnects.
-    tokio::spawn(async move {
+    aow_i18n::spawn(async move {
         let auth = state.auth.clone();
-        let verified = tokio::task::spawn_blocking(move || {
+        let verified = aow_i18n::spawn_blocking(move || {
             let result = auth.login_with_attempt(&request.method, request.credentials, &attempt);
             (result, attempt)
         })
         .await;
         let (result, _attempt) = match verified {
             Ok((result, attempt)) => (result, Some(attempt)),
-            Err(_) => (Err(HttpError::internal("登录验证失败")), None),
+            Err(_) => (
+                Err(HttpError::internal(aow_i18n::text(
+                    "server.login_verification_failed",
+                ))),
+                None,
+            ),
         };
         let result = result.and_then(|token| {
             event.subject = state
@@ -125,7 +130,7 @@ async fn login(
         match &result {
             Ok(response) => {
                 event.event = "login_succeeded";
-                event.title = "登录成功";
+                event.title = aow_i18n::text("server.login_successful");
                 event.status = response.status();
                 event.reason = "login_succeeded".into();
             }
@@ -138,7 +143,7 @@ async fn login(
         result
     })
     .await
-    .map_err(|_| HttpError::internal("登录处理失败"))?
+    .map_err(|_| HttpError::internal(aow_i18n::text("server.login_processing_failed")))?
 }
 
 fn login_response(
@@ -206,7 +211,7 @@ pub(crate) fn check_origin(headers: &HeaderMap) -> Result<(), HttpError> {
             return Err(HttpError::new(
                 StatusCode::FORBIDDEN,
                 "invalid_origin",
-                "请求来源无效",
+                aow_i18n::text("server.invalid_request_origin"),
                 None,
             ));
         }

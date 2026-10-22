@@ -99,11 +99,11 @@ async fn logs(
             HttpError::new(
                 StatusCode::TOO_MANY_REQUESTS,
                 "log_queries_busy",
-                "日志查询繁忙，请稍后重试",
+                aow_i18n::text("server.log_queries_busy_try_again_later"),
                 None,
             )
         })?;
-    tokio::task::spawn_blocking(move || {
+    aow_i18n::spawn_blocking(move || {
         let _permit = permit;
         reader.read(&options)
     })

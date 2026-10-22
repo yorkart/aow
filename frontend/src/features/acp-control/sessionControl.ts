@@ -1,3 +1,4 @@
+import { getLanguage } from '../../lib/i18n';
 // AoW page ownership, independent of the ACP protocol and the Upstream port.
 import { useMemo, useSyncExternalStore } from 'react';
 import { appUrl } from '../../lib/basePath';
@@ -22,6 +23,7 @@ function createControl(threadId: string, key: string) {
     if (socket || !listeners.size) return;
     const url = new URL(appUrl(`/api/acp/sessions/${encodeURIComponent(threadId)}/control`), location.href);
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    url.searchParams.set('lang', getLanguage());
     const current = new WebSocket(url);
     socket = current;
     publish(initial);

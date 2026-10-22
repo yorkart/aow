@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n';
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { LoaderCircle, SquareTerminal } from 'lucide-react';
@@ -112,7 +113,7 @@ export function ProjectTerminalDockProvider({ project, worktree, controls, onSho
     setFocusRequest(value => value + 1);
     if (serverTab) return;
     if (!snapshot.tabs || snapshot.error || snapshot.status === 'denied') {
-      setError(snapshot.error || '正在确认终端实例，请稍后重试。');
+      setError(snapshot.error || t("aow.checking_terminal_instances_try_again_shortly"));
       return;
     }
     await ensureDock(legacyTab?.id);
@@ -124,17 +125,17 @@ export function ProjectTerminalDockProvider({ project, worktree, controls, onSho
   return <Context.Provider value={{ terminalId: tab?.id, tab, open: state.open, visible, height: state.height,
     publishHost, resize: height => setState(current => ({ ...current, height: clampHeight(height) })), show: () => { void show(); }, owns }}>
     {children}
-    {host && controls ? createPortal(<button type="button" className="project-terminal-dock-toggle" title="Worktree 终端" aria-label="Worktree 终端"
+    {host && controls ? createPortal(<button type="button" className="project-terminal-dock-toggle" title={t("aow.worktree_terminal")} aria-label={t("aow.worktree_terminal")}
       aria-expanded={visible} disabled={creating} onClick={() => { if (visible) close(); else void show(); }}>
       {creating ? <LoaderCircle size={13} className="spinning" /> : <SquareTerminal size={13} />}
     </button>, controls) : null}
     {createPortal(<WorkspaceMarkdownProvider workspace={worktree.id} directory={root}>
-      {error && <div className="project-terminal-dock-error" role="alert">{error}<button onClick={() => void show()}>重试</button></div>}
+      {error && <div className="project-terminal-dock-error" role="alert">{error}<button onClick={() => void show()}>{t("aow.retry")}</button></div>}
       {tab ? <TerminalWorkspace key={tab.id} visible={visible} autoFocus={false} focusRequest={focusRequest} tab={tab} loading={false}
         detectedAgents={snapshot.metadata.agents} terminalTitles={snapshot.metadata.titles} agentProcesses={snapshot.metadata.processes} terminalActivity={snapshot.metadata.activity}
         onTabChange={updated => terminalStore.replace(updated)} onTabClosed={id => { terminalStore.remove(id); setState(current => ({ ...current, terminalId: undefined, open: false })); }}
         onPaneStatus={(...args) => terminalStore.updatePaneStatus(...args)} onReload={() => { void terminalStore.refresh(); }} />
-        : creating ? <div className="project-terminal-dock-loading"><LoaderCircle className="spinning" size={16} />正在创建 Worktree 终端…</div> : null}
+        : creating ? <div className="project-terminal-dock-loading"><LoaderCircle className="spinning" size={16} />{t("aow.creating_worktree_terminal")}</div> : null}
     </WorkspaceMarkdownProvider>, container)}
   </Context.Provider>;
 }
@@ -157,8 +158,8 @@ export function ProjectTerminalDockHost({ active }: { active: boolean }) {
     return () => publishHost(element, false);
   }, [element, active, publishHost]);
   const shown = active && dock.open;
-  return <section className="project-terminal-dock" aria-label="Worktree 终端" hidden={!shown} style={{ height: dock.height }}>
-    <div className="project-terminal-dock-resize" role="separator" aria-label="调整 Worktree 终端高度" aria-orientation="horizontal"
+  return <section className="project-terminal-dock" aria-label={t("aow.worktree_terminal")} hidden={!shown} style={{ height: dock.height }}>
+    <div className="project-terminal-dock-resize" role="separator" aria-label={t("aow.resize_worktree_terminal_height")} aria-orientation="horizontal"
       tabIndex={0} aria-valuenow={Math.round(dock.height)} aria-valuemin={120} aria-valuemax={800}
       onPointerDown={event => { if (event.button !== 0) return; event.preventDefault(); drag.current = { y: event.clientY, height: event.currentTarget.parentElement!.clientHeight }; event.currentTarget.setPointerCapture(event.pointerId); }}
       onPointerMove={event => { if (drag.current) dock.resize(drag.current.height + drag.current.y - event.clientY); }}

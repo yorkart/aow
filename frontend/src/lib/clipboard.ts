@@ -1,3 +1,4 @@
+import { t } from './i18n';
 export async function copyText(value: string) {
   try {
     if (navigator.clipboard) { await navigator.clipboard.writeText(value); return; }
@@ -11,7 +12,7 @@ export async function copyText(value: string) {
   document.body.append(input);
   try {
     input.select();
-    if (!document.execCommand('copy')) throw new Error('copy failed');
+    if (!document.execCommand('copy')) throw new Error(t("common.copy_failed"));
   } finally {
     input.remove();
     if (focused instanceof HTMLElement) focused.focus({ preventScroll: true });

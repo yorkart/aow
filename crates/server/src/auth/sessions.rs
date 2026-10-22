@@ -41,10 +41,9 @@ impl Sessions {
         identity: VerifiedIdentity,
     ) -> Result<String, HttpError> {
         let now = Instant::now();
-        let mut sessions = self
-            .entries
-            .lock()
-            .map_err(|_| HttpError::internal("登录会话锁不可用"))?;
+        let mut sessions = self.entries.lock().map_err(|_| {
+            HttpError::internal(aow_i18n::text("server.login_session_lock_unavailable"))
+        })?;
         self.prune(&mut sessions, now);
         if sessions.len() >= MAX_SESSIONS {
             let oldest = sessions
@@ -72,10 +71,9 @@ impl Sessions {
 
     pub fn get(&self, token: &str, touch: bool) -> Result<Option<Session>, HttpError> {
         let now = Instant::now();
-        let mut sessions = self
-            .entries
-            .lock()
-            .map_err(|_| HttpError::internal("登录会话锁不可用"))?;
+        let mut sessions = self.entries.lock().map_err(|_| {
+            HttpError::internal(aow_i18n::text("server.login_session_lock_unavailable"))
+        })?;
         self.prune(&mut sessions, now);
         Ok(sessions.get_mut(token).map(|session| {
             if touch {
@@ -89,7 +87,9 @@ impl Sessions {
         if let Some(session) = self
             .entries
             .lock()
-            .map_err(|_| HttpError::internal("登录会话锁不可用"))?
+            .map_err(|_| {
+                HttpError::internal(aow_i18n::text("server.login_session_lock_unavailable"))
+            })?
             .remove(token)
         {
             session.cancelled.cancel();

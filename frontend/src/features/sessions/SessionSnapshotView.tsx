@@ -1,3 +1,4 @@
+import { t, getLanguage } from '../../lib/i18n';
 import type { ReactNode } from 'react';
 import { AlertCircle, History, LoaderCircle, RefreshCw } from 'lucide-react';
 import { ConversationLayout, conversationStatusNames } from '../../components/conversation/ConversationLayout';
@@ -24,7 +25,7 @@ function time(value: string | null) {
   if (!value) return '';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'medium' }).format(date);
+  return new Intl.DateTimeFormat(getLanguage(), { dateStyle: 'medium', timeStyle: 'medium' }).format(date);
 }
 
 export function SessionSnapshotView({ session, snapshot, loading, error, onRefresh, actions, publicView = false }: Props) {
@@ -34,22 +35,22 @@ export function SessionSnapshotView({ session, snapshot, loading, error, onRefre
     sessionId={session.id}
     revision={snapshot}
     className="project-aow-session-snapshot"
-    label={`${session.title} 会话快照`}
+    label={t("sessions.session_snapshot", { value0: session.title })}
     agentClassName={session.agent}
     header={{
       title: session.title, agentName, agentIcon: <AgentIcon agentId={session.agent} />,
       workspace: publicView ? undefined : session.cwd,
       metadata: snapshot && <>
         <span className={`status ${snapshot.status}`}>{conversationStatusNames[snapshot.status]}</span>
-        {snapshot.truncated && <span className="warning">最近 200 轮</span>}
-        <time className="project-aow-snapshot-captured" dateTime={snapshot.captured_at}>更新于 {time(snapshot.captured_at)}</time>
+        {snapshot.truncated && <span className="warning">{t("sessions.latest_200_turns")}</span>}
+        <time className="project-aow-snapshot-captured" dateTime={snapshot.captured_at}>{t("pr.updated")} {time(snapshot.captured_at)}</time>
       </>,
-      actions: <>{actions}{!publicView && <ConversationIds identifiers={[{ label: 'Session ID', value: session.session_id ?? snapshot?.session_id }]} />}<ConversationAction label="刷新会话快照" disabled={loading} onClick={onRefresh}><RefreshCw className={loading ? 'spinning' : ''} /></ConversationAction></>,
+      actions: <>{actions}{!publicView && <ConversationIds identifiers={[{ label: t("navigation.session_id"), value: session.session_id ?? snapshot?.session_id }]} />}<ConversationAction label={t("sessions.refresh_session_snapshot")} disabled={loading} onClick={onRefresh}><RefreshCw className={loading ? 'spinning' : ''} /></ConversationAction></>,
     }}
     state={<>
-      {loading && !snapshot && <div className="project-aow-snapshot-state"><LoaderCircle className="spinning" />正在读取会话快照…</div>}
-      {error && <div className="project-aow-snapshot-state error"><AlertCircle />{error}<button onClick={onRefresh}>重试</button></div>}
-      {!loading && !error && snapshot && !snapshot.turns.length && <div className="project-aow-snapshot-state"><History />这个会话还没有可展示的用户输入。</div>}
+      {loading && !snapshot && <div className="project-aow-snapshot-state"><LoaderCircle className="spinning" />{t("sessions.reading_session_snapshot")}</div>}
+      {error && <div className="project-aow-snapshot-state error"><AlertCircle />{error}<button onClick={onRefresh}>{t("aow.retry")}</button></div>}
+      {!loading && !error && snapshot && !snapshot.turns.length && <div className="project-aow-snapshot-state"><History />{t("sessions.this_session_has_no_user_input_to_display_yet")}</div>}
     </>}
     turns={(snapshot?.turns ?? []).map((turn, index) => ({
       id: turn.id, prompt: turn.user.text, status: turn.status,

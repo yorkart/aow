@@ -153,10 +153,11 @@ impl ProviderManager {
         if current.revision != next.revision {
             return Err(PullRequestError::Conflict);
         }
-        next.revision = next
-            .revision
-            .checked_add(1)
-            .ok_or_else(|| PullRequestError::Invalid("configuration revision overflow".into()))?;
+        next.revision = next.revision.checked_add(1).ok_or_else(|| {
+            PullRequestError::Invalid(
+                aow_i18n::text("validation.configuration_revision_overflow").into(),
+            )
+        })?;
         self.persist(&next)?;
         *current = next.clone();
         Ok(next)
@@ -216,10 +217,11 @@ pub(super) fn upgrade_bundled_scripts(
         }
     }
     if changed {
-        settings.revision = settings
-            .revision
-            .checked_add(1)
-            .ok_or_else(|| PullRequestError::Invalid("configuration revision overflow".into()))?;
+        settings.revision = settings.revision.checked_add(1).ok_or_else(|| {
+            PullRequestError::Invalid(
+                aow_i18n::text("validation.configuration_revision_overflow").into(),
+            )
+        })?;
     }
     Ok(changed)
 }

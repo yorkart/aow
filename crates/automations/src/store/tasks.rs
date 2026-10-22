@@ -26,10 +26,13 @@ impl Store {
     }
 
     pub fn get_task(&self, id: &str) -> Result<Task> {
-        let task: Task = serde_json::from_slice(
-            &fs::read(self.task_path(id)?).context("自动化任务不存在或无法读取")?,
-        )?;
-        ensure!(task.id == id, "任务文件 ID 不匹配");
+        let task: Task = serde_json::from_slice(&fs::read(self.task_path(id)?).context(
+            aow_i18n::text("automations.automation_does_not_exist_or_cannot_be_read"),
+        )?)?;
+        ensure!(
+            task.id == id,
+            aow_i18n::message("automations.task_file_id_mismatch", &[])
+        );
         Ok(task)
     }
 
@@ -80,14 +83,22 @@ impl Store {
             fields.entry("hosted").or_insert(hosted.into());
         }
         let request: crate::ManualRunRequest = serde_json::from_value(request)?;
-        ensure!(request.task.id == task_id, "手动执行配置的任务 ID 不匹配");
+        ensure!(
+            request.task.id == task_id,
+            aow_i18n::message(
+                "automations.manual_execution_configuration_task_id_mismatch",
+                &[]
+            )
+        );
         Ok(Some(request))
     }
     pub fn save_task(&self, task: &Task) -> Result<()> {
         let path = self.task_path(&task.id)?;
         self.config
             .as_ref()
-            .context("请先初始化配置仓库再保存任务")?
+            .context(aow_i18n::text(
+                "automations.initialize_the_configuration_repository_before_saving_tasks",
+            ))?
             .save(
                 path.strip_prefix(&self.config_dir)?,
                 &serde_json::to_vec_pretty(task)?,
@@ -111,11 +122,15 @@ impl Store {
         for entry in entries {
             let path = entry?.path();
             if path.extension().is_some_and(|v| v == "json") {
-                let task: Task = serde_json::from_slice(&fs::read(&path)?)
-                    .with_context(|| format!("任务文件损坏: {}", path.display()))?;
+                let task: Task = serde_json::from_slice(&fs::read(&path)?).with_context(|| {
+                    aow_i18n::message(
+                        "automations.corrupted_task_file",
+                        &[("auto0", format!("{}", path.display()))],
+                    )
+                })?;
                 ensure!(
                     path.file_stem().and_then(|v| v.to_str()) == Some(&task.id),
-                    "任务文件 ID 不匹配"
+                    aow_i18n::message("automations.task_file_id_mismatch", &[])
                 );
                 tasks.push(task);
             }

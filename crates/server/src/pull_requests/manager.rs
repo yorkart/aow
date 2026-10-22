@@ -137,14 +137,21 @@ impl ProviderManager {
         let mut seen = HashSet::new();
         matches.retain(|t| seen.insert((t.provider.clone(), t.host.clone(), t.repository.clone())));
         let target = match matches.len() {
-            0 => return Err(PullRequestError::Unavailable(
-                "未找到匹配的 PR Provider，请在 Settings → Pull Requests 配置 remote 域名和脚本。"
+            0 => {
+                return Err(PullRequestError::Unavailable(
+                    aow_i18n::text(
+                        "server.no_matching_pr_provider_configure_remote_domains_and_scripts",
+                    )
                     .into(),
-            )),
+                ));
+            }
             1 => matches.remove(0),
             _ => {
                 return Err(PullRequestError::Invalid(
-                    "多个 remote 匹配 PR Provider，请先选择 remote。".into(),
+                    aow_i18n::text(
+                        "server.multiple_remotes_match_pr_providers_choose_a_remote_first",
+                    )
+                    .into(),
                 ));
             }
         };
@@ -152,7 +159,11 @@ impl ProviderManager {
             .providers
             .into_iter()
             .find(|p| p.id == target.provider && p.enabled)
-            .ok_or_else(|| PullRequestError::Unavailable("Provider 已停用，请刷新。".into()))?;
+            .ok_or_else(|| {
+                PullRequestError::Unavailable(
+                    aow_i18n::text("server.provider_disabled_refresh").into(),
+                )
+            })?;
         let request = json!({"version":2,"operation":operation,
             "repository":{"root":query.repo,"host":target.host,"path":target.repository,"remote":target.remote},"params":params});
         let result = self
@@ -190,7 +201,11 @@ impl ProviderManager {
                 data.repository = query.repo.clone();
                 serde_json::to_value(data).unwrap()
             }
-            _ => return Err(PullRequestError::Invalid("unknown operation".into())),
+            _ => {
+                return Err(PullRequestError::Invalid(
+                    aow_i18n::text("validation.unknown_operation").into(),
+                ));
+            }
         };
         let attach = |value: &mut Value| {
             value["provider"] = json!(target.provider);

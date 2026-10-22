@@ -41,7 +41,7 @@ impl TerminalManager {
         }
         if request.shell.is_some() {
             return Err(TerminalError::Invalid(
-                "shell cannot be combined with agent_id".to_owned(),
+                aow_i18n::text("validation.shell_cannot_be_combined_with_agent_id").to_owned(),
             ));
         }
         let requested_name = request.name.as_deref().map(validate_name).transpose()?;

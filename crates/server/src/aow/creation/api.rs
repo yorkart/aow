@@ -54,7 +54,7 @@ pub(super) fn submit_with_timeout(
                     || (existing.project_id == job.project_id && existing.branch == job.branch))
         }) {
             return Err(AowError::CreationConflict(
-                "该分支或路径已在创建队列中".into(),
+                aow_i18n::text("server.this_branch_or_path_is_already_in_the_creation").into(),
             ));
         }
         jobs.push(job.clone());
@@ -63,7 +63,10 @@ pub(super) fn submit_with_timeout(
         id: job.id.clone(),
         kind: "worktree.create",
         source: "web",
-        title: format!("创建 Worktree · {}", job.branch),
+        title: aow_i18n::message(
+            "server.create_worktree",
+            &[("auto0", job.branch.to_string())],
+        ),
         project_id: Some(job.project_id.clone()),
         resource: Some(job.path.clone()),
         total: Some(job.steps.len()),
@@ -76,9 +79,9 @@ pub(super) fn submit_with_timeout(
     });
     let id = job.project_id.clone();
     // The worker owns execution independently of the submitting HTTP connection.
-    tokio::spawn(async move {
+    aow_i18n::spawn(async move {
         let observer = progress.clone();
-        let worker = tokio::spawn(async move {
+        let worker = aow_i18n::spawn(async move {
             state
                 .aow
                 .create_worktree_steps(&id, request, Some(&progress))
@@ -87,7 +90,10 @@ pub(super) fn submit_with_timeout(
         match worker.await {
             Ok(Ok(result)) => observer.finish(
                 Status::Succeeded,
-                format!("Worktree 已创建：{}", result.worktree.path),
+                aow_i18n::message(
+                    "server.worktree_created",
+                    &[("auto0", result.worktree.path.to_string())],
+                ),
                 Some(result.worktree.path),
             ),
             Ok(Err(error)) => observer.finish(
@@ -101,7 +107,10 @@ pub(super) fn submit_with_timeout(
             ),
             Err(error) => observer.finish(
                 Status::Interrupted,
-                format!("创建任务中断：{error}；请刷新项目并检查分支和目录状态"),
+                aow_i18n::message(
+                    "server.creation_task_interrupted_refresh_projects_and_check_branch_and",
+                    &[("p0", format!("{}", error))],
+                ),
                 None,
             ),
         }

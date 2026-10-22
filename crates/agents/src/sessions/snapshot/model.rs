@@ -4,9 +4,9 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum SnapshotError {
-    #[error("agent session is no longer available")]
+    #[error("{translated}", translated = aow_i18n::text("errors.agent_session_is_no_longer_available"))]
     NotFound,
-    #[error("invalid agent session transcript: {0}")]
+    #[error("{translated}", translated = aow_i18n::message("errors.invalid_agent_session_transcript", &[("p0", .0.to_string())]))]
     Invalid(String),
     #[error(transparent)]
     Io(#[from] std::io::Error),

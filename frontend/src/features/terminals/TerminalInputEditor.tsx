@@ -1,8 +1,9 @@
+import { t } from '../../lib/i18n';
 import Editor from '../editor/MonacoEditor';
 
 export default function TerminalInputEditor({ value, onChange, onComposing }: { value: string; onChange: (value: string) => void; onComposing: (active: boolean) => void }) {
   return <Editor language="markdown" value={value} onChange={value => onChange(value ?? '')}
-    loading={<span className="terminal-input-loading">正在加载编辑器…</span>}
+    loading={<span className="terminal-input-loading">{t("aow.loading_editor")}</span>}
     onMount={editor => {
       const listeners = [editor.onDidCompositionStart(() => onComposing(true)), editor.onDidCompositionEnd(() => onComposing(false))];
       editor.onDidDispose(() => { listeners.forEach(listener => listener.dispose()); onComposing(false); });
@@ -11,7 +12,7 @@ export default function TerminalInputEditor({ value, onChange, onComposing }: { 
       editor.focus();
     }}
     options={{
-      ariaLabel: '终端 Markdown 输入', automaticLayout: true, minimap: { enabled: false },
+      ariaLabel: t("terminals.terminal_markdown_input"), automaticLayout: true, minimap: { enabled: false },
       fontFamily: "'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace",
       lineHeight: 15, cursorStyle: 'line', cursorBlinking: 'blink',
       fontSize: 13, lineNumbers: 'off', glyphMargin: false, folding: false, lineDecorationsWidth: 8,

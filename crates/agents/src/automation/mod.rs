@@ -150,7 +150,10 @@ pub(crate) fn validate_common_arguments(arguments: &[String]) -> Result<()> {
                 "-w"
             ]
             .contains(&key),
-            "Agent 启动参数与自动化执行模式冲突: {key}"
+            aow_i18n::message(
+                "agents.agent_launch_arguments_conflict_with_automation_execution_mode",
+                &[("p0", key.to_string())]
+            )
         );
     }
     Ok(())

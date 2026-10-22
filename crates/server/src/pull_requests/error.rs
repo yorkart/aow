@@ -7,15 +7,15 @@ pub(super) type Result<T> = std::result::Result<T, PullRequestError>;
 pub enum PullRequestError {
     #[error("{0}")]
     Invalid(String),
-    #[error("配置已更新，请重新加载后保存。")]
+    #[error("{message}", message = aow_i18n::text("server.configuration_updated_reload_before_saving"))]
     Conflict,
     #[error("{0}")]
     Unavailable(String),
-    #[error("Provider 脚本执行超时")]
+    #[error("{message}", message = aow_i18n::text("server.provider_script_execution_timed_out"))]
     Timeout,
     #[error("{0}")]
     Command(String),
-    #[error("Provider 返回数据不符合协议：{0}")]
+    #[error("{message}", message = aow_i18n::message("server.provider_response_violates_the_protocol", &[("p0", .0.to_string())]))]
     InvalidJson(String),
     #[error(transparent)]
     Io(#[from] std::io::Error),

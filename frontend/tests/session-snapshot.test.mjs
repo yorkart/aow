@@ -16,6 +16,7 @@ try {
 
   async function open(t, mobile = false, width = mobile ? 390 : 1280) {
     const page = await browser.newPage({ viewport: { width, height: mobile ? 844 : 960 } });
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => page.close());
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
@@ -510,6 +511,7 @@ try {
     await mkdir(process.env.SESSION_TEST_SCREENSHOTS, { recursive: true });
     for (const [name, width, mobile] of [['desktop', 1280, false], ['narrow', 540, false], ['mobile', 390, true]]) {
       const page = await browser.newPage({ viewport: { width, height: 960 } });
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
       await page.route('**/api/**', (route) => route.fulfill({ json: snapshot }));
       await page.goto(`${baseURL}${mobile ? '?mobile' : ''}`);
       await toggles(page).first().waitFor();

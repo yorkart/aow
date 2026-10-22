@@ -17,16 +17,23 @@ pub(super) async fn read(manager: &TerminalManager, pane_id: &str) -> Result<Sou
         .agents
         .get(pane_id)
         .and_then(|agent| agent.as_deref())
-        .context("当前实例没有运行中的 Agent")?;
+        .context(aow_i18n::text(
+            "server.no_running_agent_in_the_current_instance",
+        ))?;
     let process = detected
         .processes
         .get(pane_id)
         .cloned()
-        .context("无法确认 Agent 进程身份，请升级终端服务")?;
-    let environment = sessions::process_environment(&process).context("Agent 进程已变化")?;
+        .context(aow_i18n::text(
+            "server.unable_to_verify_agent_process_identity_upgrade_the_terminal",
+        ))?;
+    let environment = sessions::process_environment(&process)
+        .context(aow_i18n::text("server.agent_process_changed"))?;
     let tracker = aow_agents::Agent::from_id(agent)
         .and_then(aow_agents::Agent::session_tracking)
-        .context("该 Agent 暂不支持托管")?;
+        .context(aow_i18n::text(
+            "server.this_agent_does_not_support_autopilot_yet",
+        ))?;
     let target = match tracker
         .resolve_live_session_with_timeout(
             LiveSessionContext {
@@ -40,7 +47,10 @@ pub(super) async fn read(manager: &TerminalManager, pane_id: &str) -> Result<Sou
         .await
     {
         SessionResolution::Resolved(target) => target,
-        _ => anyhow::bail!("尚未定位 Agent 当前会话，请在会话开始后重试"),
+        _ => anyhow::bail!(aow_i18n::message(
+            "server.current_agent_session_not_identified_yet_retry_after_the",
+            &[]
+        )),
     };
     let roots = SessionRoots::from_configuration(
         environment
@@ -49,16 +59,22 @@ pub(super) async fn read(manager: &TerminalManager, pane_id: &str) -> Result<Sou
         &environment,
     );
     let cwd = PathBuf::from(&process.cwd);
-    let locator = tokio::task::spawn_blocking(move || -> Result<_> {
+    let locator = aow_i18n::spawn_blocking(move || -> Result<_> {
         let mut candidates = tracker.candidate_sessions(&target, &cwd, roots);
         ensure!(
             candidates.len() == 1,
-            "无法唯一定位当前 Agent 会话，请为会话设置唯一标题后重试"
+            aow_i18n::message(
+                "server.unable_to_uniquely_identify_the_current_agent_session_set",
+                &[]
+            )
         );
         Ok(candidates.remove(0))
     })
     .await??;
-    ensure!(sessions::same_process(&process), "Agent 进程已变化");
+    ensure!(
+        sessions::same_process(&process),
+        aow_i18n::message("server.agent_process_changed", &[])
+    );
     Ok(Source { locator, process })
 }
 

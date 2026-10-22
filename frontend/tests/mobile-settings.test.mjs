@@ -12,6 +12,7 @@ const categories = ['Appearance', 'Configuration', 'Nodes', 'Editor', 'Notes', '
 
 async function fixture(t, width = 390, mobile = true, virtualViewport = false, agents) {
   const context = await browser.newContext({ viewport: { width, height: 844 }, isMobile: mobile, hasTouch: mobile });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
   if (virtualViewport) await context.addInitScript(() => {
     Object.defineProperty(window, 'visualViewport', { value: Object.assign(new EventTarget(), { height: 844, width: 390, offsetTop: 0 }) });
   });
@@ -106,10 +107,11 @@ async function fixture(t, width = 390, mobile = true, virtualViewport = false, a
     await route.fulfill({ json: data });
   });
   const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
   page.setDefaultTimeout(10000);
   page.on('pageerror', error => state.errors.push(error.message));
   await page.goto(`${base}/${mobile ? 'm' : 'aow/?ui=desktop'}`);
-  const trigger = page.getByRole('button', { name: mobile ? '设置' : 'Settings', exact: true });
+  const trigger = page.getByRole('button', { name: mobile ? '设置' : "设置", exact: true });
   await trigger.waitFor();
   if (mobile) {
     const logout = await page.getByRole('button', { name: '退出登录', exact: true }).boundingBox();
@@ -121,7 +123,7 @@ async function fixture(t, width = 390, mobile = true, virtualViewport = false, a
   await dialog.getByRole('navigation', { name: '设置分类' }).waitFor();
   const choose = async name => {
     if (mobile && await dialog.getByRole('button', { name: '返回设置分类' }).isVisible()) await dialog.getByRole('button', { name: '返回设置分类' }).click();
-    await dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button', { name: new RegExp(`^${name}`) }).click();
+    await dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button', { name: new RegExp(`^${{"Agent": "Agent", "环境": "环境", "编辑器": "编辑器", "笔记": "笔记", "节点": "节点", "外观": "外观", "配置": "配置"}[name] ?? name}`) }).click();
   };
   const save = async text => {
     await dialog.getByRole('button', { name: '保存', exact: true }).click();
@@ -158,7 +160,7 @@ try {
     const action = page.getByRole('dialog', { name: '新增 Agent', exact: true });
     await action.getByRole('textbox', { name: 'Agent ID', exact: true }).fill('saved-before-refresh');
     await action.getByRole('combobox', { name: 'Agent 类型' }).selectOption('codex');
-    await action.getByRole('textbox', { name: 'Display name' }).fill('Saved Agent');
+    await action.getByRole('textbox', { name: "显示名称" }).fill('Saved Agent');
     state.failAgentRefresh = true;
     await action.getByRole('button', { name: '注册', exact: true }).click();
     await action.waitFor({ state: 'hidden' });
@@ -306,8 +308,8 @@ try {
     await dialog.getByRole('button', { name: '新增 Agent', exact: true }).click();
     const id = dialog.getByRole('textbox', { name: 'Agent ID', exact: true });
     await dialog.getByRole('combobox', { name: 'Agent 类型' }).selectOption('codex');
-    await dialog.getByRole('textbox', { name: 'Display name' }).fill('Work Codex');
-    await dialog.getByRole('textbox', { name: 'Executable' }).fill('/usr/bin/codex');
+    await dialog.getByRole('textbox', { name: "显示名称" }).fill('Work Codex');
+    await dialog.getByRole('textbox', { name: "可执行文件" }).fill('/usr/bin/codex');
     for (const value of ['', 'with space', 'bad.id', '中文']) {
       await id.fill(value);
       await dialog.getByRole('button', { name: '注册', exact: true }).click();
@@ -326,13 +328,13 @@ try {
     await dialog.getByRole('button', { name: '编辑 Work Codex', exact: true }).click();
     assert.equal(await id.inputValue(), 'Work_codex-2');
     assert.equal(await id.isEditable(), false);
-    await dialog.getByRole('textbox', { name: 'Display name' }).fill('Updated Work Codex');
+    await dialog.getByRole('textbox', { name: "显示名称" }).fill('Updated Work Codex');
     state.failSave = true;
     await dialog.getByRole('button', { name: '保存配置', exact: true }).click();
     await dialog.getByRole('alert').filter({ hasText: '配置写入失败' }).waitFor();
     assert.equal(await id.inputValue(), 'Work_codex-2');
     assert.equal(await id.isEditable(), false);
-    assert.equal(await dialog.getByRole('textbox', { name: 'Display name' }).inputValue(), 'Updated Work Codex');
+    assert.equal(await dialog.getByRole('textbox', { name: "显示名称" }).inputValue(), 'Updated Work Codex');
     state.failSave = false;
     await dialog.getByRole('button', { name: '保存配置', exact: true }).click();
     await dialog.getByRole('status').filter({ hasText: 'Updated Work Codex 配置已保存' }).waitFor();
@@ -349,7 +351,7 @@ try {
     assert.equal(await id.isEditable(), true);
     await id.fill('New_codex-3');
     await dialog.getByRole('combobox', { name: 'Agent 类型' }).selectOption('codex');
-    await dialog.getByRole('textbox', { name: 'Display name' }).fill('New Work Codex');
+    await dialog.getByRole('textbox', { name: "显示名称" }).fill('New Work Codex');
     await dialog.getByRole('button', { name: '注册', exact: true }).click();
     await dialog.getByRole('status').filter({ hasText: 'New Work Codex 配置已保存' }).waitFor();
     assert.equal(state.writes.at(-1).method, 'POST');
@@ -495,7 +497,7 @@ try {
     await layout(page, dialog, 'editor');
 
     await choose('Notes');
-    const notes = dialog.getByRole('textbox', { name: 'Notes root' });
+    const notes = dialog.getByRole('textbox', { name: "笔记根目录" });
     assert.equal(await notes.evaluate(element => element === document.activeElement), false, 'opening a category does not pop up the keyboard');
     await notes.fill('/notes/mobile');
     await save('Notes root 已保存');
@@ -515,12 +517,12 @@ try {
     await choose('Agents');
     await dialog.getByRole('button', { name: '新增 Agent', exact: true }).click();
     await dialog.getByRole('combobox', { name: 'Agent 类型' }).selectOption('codex');
-    assert.equal(await dialog.getByRole('textbox', { name: 'Executable' }).inputValue(), '/usr/bin/codex');
+    assert.equal(await dialog.getByRole('textbox', { name: "可执行文件" }).inputValue(), '/usr/bin/codex');
     await dialog.getByRole('textbox', { name: 'Agent ID', exact: true }).fill('Mobile_codex-1');
-    await dialog.getByRole('textbox', { name: 'Display name' }).fill('手机 Codex');
-    await dialog.getByRole('textbox', { name: 'Executable' }).fill('/usr/bin/codex');
-    await dialog.getByRole('textbox', { name: 'Arguments', exact: true }).fill('--model\ngpt-6');
-    await dialog.getByRole('textbox', { name: 'Environment variables' }).fill('MODE=mobile');
+    await dialog.getByRole('textbox', { name: "显示名称" }).fill('手机 Codex');
+    await dialog.getByRole('textbox', { name: "可执行文件" }).fill('/usr/bin/codex');
+    await dialog.getByRole('textbox', { name: "参数", exact: true }).fill('--model\ngpt-6');
+    await dialog.getByRole('textbox', { name: "环境变量" }).fill('MODE=mobile');
     await dialog.getByRole('button', { name: '注册', exact: true }).click();
     await dialog.getByRole('status').filter({ hasText: '手机 Codex 配置已保存' }).waitFor();
     assert.deepEqual(state.agents.at(-1).args, ['--model', 'gpt-6']);
@@ -531,15 +533,15 @@ try {
     const copy = dialog.getByRole('button', { name: '复制 手机 Codex', exact: true });
     assert.equal(await copy.evaluate(element => element.getBoundingClientRect().width), 44);
     await copy.click();
-    assert.equal(await dialog.getByRole('textbox', { name: 'Display name' }).inputValue(), '手机 Codex（副本）');
-    assert.equal(await dialog.getByRole('textbox', { name: 'Arguments', exact: true }).inputValue(), '--model\ngpt-6');
-    assert.equal(await dialog.getByRole('textbox', { name: 'Environment variables' }).inputValue(), 'MODE=mobile');
+    assert.equal(await dialog.getByRole('textbox', { name: "显示名称" }).inputValue(), '手机 Codex（副本）');
+    assert.equal(await dialog.getByRole('textbox', { name: "参数", exact: true }).inputValue(), '--model\ngpt-6');
+    assert.equal(await dialog.getByRole('textbox', { name: "环境变量" }).inputValue(), 'MODE=mobile');
     page.once('dialog', prompt => prompt.dismiss());
     await dialog.getByRole('button', { name: '关闭对话框' }).click();
-    assert.equal(await dialog.getByRole('textbox', { name: 'Display name' }).inputValue(), '手机 Codex（副本）', 'copied drafts retain unsaved-change protection');
+    assert.equal(await dialog.getByRole('textbox', { name: "显示名称" }).inputValue(), '手机 Codex（副本）', 'copied drafts retain unsaved-change protection');
     assert.equal(await dialog.getByRole('textbox', { name: 'Agent ID', exact: true }).inputValue(), '');
     await dialog.getByRole('textbox', { name: 'Agent ID', exact: true }).fill('Mobile_codex-copy');
-    await dialog.getByRole('textbox', { name: 'Environment variables' }).fill('MODE=copied');
+    await dialog.getByRole('textbox', { name: "环境变量" }).fill('MODE=copied');
     await dialog.getByRole('button', { name: '注册', exact: true }).click();
     await dialog.getByRole('status').filter({ hasText: '手机 Codex（副本） 配置已保存' }).waitFor();
     assert.equal(state.agents.length, 3);

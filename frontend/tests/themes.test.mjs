@@ -10,7 +10,9 @@ const previewPath = '/tests/theme-preview.html';
 
 async function fixture(t, options = {}) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, ...options });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
   const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   t.after(async () => { await context.close(); assert.deepEqual(errors, []); });
@@ -80,8 +82,8 @@ try {
   await test('desktop and mobile settings expose themes, persist selection and synchronize other tabs', async t => {
     const { context, page } = await fixture(t);
     await page.goto(server.url + '/?ui=desktop');
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await page.getByRole('button', { name: /^Appearance/ }).click();
+    await page.getByRole('button', { name: "设置", exact: true }).click();
+    await page.getByRole('button', { name: /^外观/ }).click();
     assert.equal(await page.locator('input[name="aow-theme"]').count(), 6);
     assert.equal(await page.locator('input[name="aow-terminal-palette"]').count(), 3);
     assert.equal(await page.locator('input[name="aow-diff-palette"]').count(), 3);
@@ -90,10 +92,11 @@ try {
     await page.reload();
     await selected(page, 'jetbrains-light');
     const mobile = await context.newPage();
+    await mobile.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await mobile.setViewportSize({ width: 390, height: 844 });
     await mobile.goto(server.url + '/?ui=mobile');
     await mobile.getByRole('button', { name: '设置', exact: true }).click();
-    await mobile.getByRole('button', { name: /^Appearance/ }).click();
+    await mobile.getByRole('button', { name: /^外观/ }).click();
     assert.equal(await mobile.getByRole('radio', { name: /^JetBrains Light / }).isChecked(), true);
     await mobile.getByRole('radio', { name: /^VS Code Dark Modern / }).check();
     await selected(mobile, 'vscode-dark-modern');
@@ -119,6 +122,7 @@ try {
     await page.goto(server.url + previewPath);
     await selected(page, 'aow-dark');
     const scoped = await context.newPage();
+    await scoped.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await scoped.route('**/tests/theme-preview.html', async route => {
       const response = await route.fetch();
       await route.fulfill({ response, body: (await response.text()).replace('<head>', '<head><meta name="aow-base-path" content="/other">') });
@@ -130,6 +134,7 @@ try {
     assert.equal(await scoped.evaluate(() => localStorage.getItem('aow@/other:aow.theme')), 'jetbrains-dark');
     assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'aow-dark');
     const denied = await context.newPage();
+    await denied.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await denied.addInitScript(() => {
       Storage.prototype.getItem = () => { throw new DOMException('Blocked', 'SecurityError'); };
       Storage.prototype.setItem = () => { throw new DOMException('Blocked', 'SecurityError'); };
@@ -172,6 +177,7 @@ try {
     assert.equal(await page.locator('.xterm-rows').getByText(/terminal stays connected/).count(), 1);
     assert.deepEqual({ connections: server.state.connections, claims: server.state.claims }, baseline);
     const other = await context.newPage();
+    await other.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await other.goto(server.url + previewPath);
     assert.equal(await other.locator('input[value="soft-dark"]').isChecked(), true);
     await other.locator('input[value="soft-light"]').check();
@@ -193,6 +199,7 @@ try {
     await page.goto(server.url + previewPath);
     assert.equal(await page.locator('input[name="aow-terminal-palette"][value="auto"]').isChecked(), true);
     const scoped = await context.newPage();
+    await scoped.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await scoped.route('**/tests/theme-preview.html', async route => {
       const response = await route.fetch();
       await route.fulfill({ response, body: (await response.text()).replace('<head>', '<head><meta name="aow-base-path" content="/other">') });
@@ -203,6 +210,7 @@ try {
     assert.equal(await scoped.evaluate(() => localStorage.getItem('aow@/other:aow.terminal-palette')), 'soft-light');
     assert.equal(await page.locator('input[name="aow-terminal-palette"][value="auto"]').isChecked(), true);
     const denied = await context.newPage();
+    await denied.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await denied.addInitScript(() => {
       Storage.prototype.getItem = () => { throw new DOMException('Blocked', 'SecurityError'); };
       Storage.prototype.setItem = () => { throw new DOMException('Blocked', 'SecurityError'); };
@@ -246,6 +254,7 @@ try {
     await page.reload();
     await inserted('rgba(156, 204, 44, 0.2)');
     const other = await context.newPage();
+    await other.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await other.goto(server.url + previewPath);
     assert.equal(await other.locator('input[name="aow-diff-palette"][value="dark"]').isChecked(), true);
     await other.locator('input[name="aow-diff-palette"][value="light"]').check();
@@ -264,6 +273,7 @@ try {
     await page.goto(server.url + previewPath);
     assert.equal(await page.locator('input[name="aow-diff-palette"][value="auto"]').isChecked(), true);
     const scoped = await context.newPage();
+    await scoped.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await scoped.route('**/tests/theme-preview.html', async route => {
       const response = await route.fetch();
       await route.fulfill({ response, body: (await response.text()).replace('<head>', '<head><meta name="aow-base-path" content="/other">') });
@@ -274,6 +284,7 @@ try {
     assert.equal(await scoped.evaluate(() => localStorage.getItem('aow@/other:aow.diff-palette')), 'light');
     assert.equal(await page.locator('input[name="aow-diff-palette"][value="auto"]').isChecked(), true);
     const denied = await context.newPage();
+    await denied.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await denied.addInitScript(() => {
       Storage.prototype.getItem = () => { throw new DOMException('Blocked', 'SecurityError'); };
       Storage.prototype.setItem = () => { throw new DOMException('Blocked', 'SecurityError'); };

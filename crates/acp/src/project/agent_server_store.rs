@@ -149,7 +149,7 @@ async fn install_binary(
         .next()
         .unwrap_or("")
         .ends_with(".zip");
-    tokio::task::spawn_blocking(move || -> Result<()> {
+    aow_i18n::spawn_blocking(move || -> Result<()> {
         let staging = directory.with_extension(uuid::Uuid::new_v4().to_string());
         std::fs::create_dir_all(&staging)?;
         let result = (|| -> Result<()> {

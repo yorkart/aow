@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useEffect, useId, useRef, useState } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 import type { AowProject } from '../../aow/types';
@@ -9,12 +10,12 @@ export function ProjectSelect({ projects, value, onChange, disabled = false, fil
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const menuId = useId();
-  const label = filter ? '按项目筛选' : '绑定项目';
+  const label = filter ? t("inbox.filter_by_project") : t("inbox.bind_project");
   const options = [
-    ...(filter ? [{ id: '', name: '所有项目' }, { id: 'unbound', name: '未绑定项目' }] : [{ id: '', name: '未绑定项目' }]),
+    ...(filter ? [{ id: '', name: t("inbox.all_projects") }, { id: 'unbound', name: t("inbox.no_project_bound") }] : [{ id: '', name: t("inbox.no_project_bound") }]),
     ...projects,
   ];
-  if (!options.some(option => option.id === value)) options.push({ id: value, name: '项目已移除' });
+  if (!options.some(option => option.id === value)) options.push({ id: value, name: t("inbox.project_removed") });
   const selected = options.find(option => option.id === value)!;
   useEffect(() => { if (disabled || !visible) setOpen(false); }, [disabled, visible]);
   return <>

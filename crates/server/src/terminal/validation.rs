@@ -57,7 +57,7 @@ pub(super) fn normalize_shell(shell: Option<&str>) -> Result<String, TerminalErr
         });
     if shell.as_bytes().contains(&0) {
         return Err(TerminalError::Invalid(
-            "shell contains a NUL byte".to_owned(),
+            aow_i18n::text("validation.shell_contains_a_nul_byte").to_owned(),
         ));
     }
     Ok(shell)
@@ -76,7 +76,8 @@ pub(super) fn terminal_size(
 fn validate_dimensions(rows: u16, cols: u16) -> Result<(), TerminalError> {
     if !(1..=1000).contains(&rows) || !(1..=1000).contains(&cols) {
         return Err(TerminalError::Invalid(
-            "terminal rows and cols must be between 1 and 1000".to_owned(),
+            aow_i18n::text("validation.terminal_rows_and_cols_must_be_between_1_and_1000")
+                .to_owned(),
         ));
     }
     Ok(())
@@ -86,12 +87,12 @@ pub(super) fn validate_name(name: &str) -> Result<String, TerminalError> {
     let name = name.trim();
     if name.is_empty() {
         return Err(TerminalError::Invalid(
-            "terminal name cannot be empty".to_owned(),
+            aow_i18n::text("validation.terminal_name_cannot_be_empty").to_owned(),
         ));
     }
     if name.chars().count() > 128 {
         return Err(TerminalError::Invalid(
-            "terminal name cannot exceed 128 characters".to_owned(),
+            aow_i18n::text("validation.terminal_name_cannot_exceed_128_characters").to_owned(),
         ));
     }
     Ok(name.to_owned())

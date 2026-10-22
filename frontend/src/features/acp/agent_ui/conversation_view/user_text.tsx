@@ -1,3 +1,4 @@
+import { t } from '../../../../lib/i18n';
 import { useMemo, useState } from 'react';
 import { userTextParts } from './user_text_images';
 
@@ -11,5 +12,5 @@ function ReplayedImage({ source, original }: { source: string; original: string 
   const [failedSource, setFailedSource] = useState('');
   // Syntactically valid base64 may still contain truncated or non-image bytes.
   if (failedSource === source) return <>{original}</>;
-  return <img className="acp-image" alt="User image" src={source} onError={() => setFailedSource(source)} />;
+  return <img className="acp-image" alt={t("navigation.user_image")} src={source} onError={() => setFailedSource(source)} />;
 }

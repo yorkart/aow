@@ -35,24 +35,27 @@ async fn upgrade(
     let operations = state.operations.subscribe();
     let stops = state.terminals.subscribe_task_stops();
     let acp_events = state.acp.subscribe_sync();
-    Ok(websocket.max_message_size(8192).on_upgrade(move |mut socket| async move {
-        let revoked = async {
-            match access {
-                Some(access) => access.revoked().await,
-                None => std::future::pending::<()>().await,
+    Ok(crate::locale::upgrade(
+        websocket.max_message_size(8192),
+        move |mut socket| async move {
+            let revoked = async {
+                match access {
+                    Some(access) => access.revoked().await,
+                    None => std::future::pending::<()>().await,
+                }
+            };
+            tokio::select! {
+                biased;
+                _ = revoked => {
+                    let _ = tokio::time::timeout(Duration::from_secs(1), socket.send(Message::Close(Some(CloseFrame {
+                        code: 1008,
+                        reason: aow_i18n::text("validation.authentication_expired").into(),
+                    })))).await;
+                }
+                _ = forward(&mut socket, workspace, operations, stops, state.acp, acp_events, state.terminals) => {}
             }
-        };
-        tokio::select! {
-            biased;
-            _ = revoked => {
-                let _ = tokio::time::timeout(Duration::from_secs(1), socket.send(Message::Close(Some(CloseFrame {
-                    code: 1008,
-                    reason: "Authentication expired".into(),
-                })))).await;
-            }
-            _ = forward(&mut socket, workspace, operations, stops, state.acp, acp_events, state.terminals) => {}
-        }
-    }))
+        },
+    ))
 }
 
 fn event(name: &str, data: impl Serialize) -> Message {

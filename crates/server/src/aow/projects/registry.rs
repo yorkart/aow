@@ -186,12 +186,13 @@ impl AowManager {
         let mut state = self.lock()?;
         if self.inner.creations.project_busy(id)? {
             return Err(AowError::CreationConflict(
-                "Project 正在创建 Worktree，请等待完成".into(),
+                aow_i18n::text("server.project_is_creating_a_worktree_wait_for_completion").into(),
             ));
         }
         if self.inner.removals.project_busy(id)? {
             return Err(AowError::RemovalConflict(
-                "Project 正在清理 Worktree，请等待完成".into(),
+                aow_i18n::text("server.project_is_cleaning_up_a_worktree_wait_for_completion")
+                    .into(),
             ));
         }
         let index = state
@@ -200,7 +201,9 @@ impl AowManager {
             .position(|project| project.id == id)
             .ok_or_else(|| AowError::ProjectNotFound(id.to_owned()))?;
         if state.projects[index].builtin {
-            return Err(AowError::Invalid("内置浮动工作区不能移除".into()));
+            return Err(AowError::Invalid(
+                aow_i18n::text("server.the_built_in_floating_workspace_cannot_be_removed").into(),
+            ));
         }
         let removed = state.projects.remove(index);
         if let Err(error) = self.persist_projects(&state.projects) {

@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { appLocalStorage } from '../../lib/basePath';
 import { getTheme, subscribeTheme } from '../../lib/theme/store';
 import { resolveTerminalPalette, subscribeTerminalPalette } from '../../lib/theme/terminalPalette';
@@ -152,7 +153,7 @@ function terminalRestore(control: ControlMessage & { reset: boolean }): Terminal
   if (!hasRestore || typeof control.restore !== 'string') {
     return {
       ok: false,
-      message: '服务器返回了无效的终端恢复数据',
+      message: t("terminals.server_returned_invalid_terminal_recovery_data"),
       closeReason: 'invalid terminal restore data',
     };
   }
@@ -160,21 +161,21 @@ function terminalRestore(control: ControlMessage & { reset: boolean }): Terminal
     || utf8ByteLength(control.restore, MAX_VT_SNAPSHOT_BYTES) > MAX_VT_SNAPSHOT_BYTES) {
     return {
       ok: false,
-      message: '服务器返回的终端恢复数据过大',
+      message: t("terminals.server_returned_oversized_terminal_recovery_data"),
       closeReason: 'terminal restore exceeds size limit',
     };
   }
   if (!control.reset) {
     return {
       ok: false,
-      message: '服务器在续传流中返回了无效的终端恢复数据',
+      message: t("terminals.server_returned_invalid_terminal_recovery_data_in_the_resume"),
       closeReason: 'terminal restore without reset',
     };
   }
   if (hasRestoreCols !== hasRestoreRows) {
     return {
       ok: false,
-      message: '服务器返回了不完整的终端快照尺寸',
+      message: t("terminals.server_returned_incomplete_terminal_snapshot_dimensions"),
       closeReason: 'incomplete terminal snapshot dimensions',
     };
   }
@@ -189,7 +190,7 @@ function terminalRestore(control: ControlMessage & { reset: boolean }): Terminal
     || typeof rows !== 'number' || !Number.isInteger(rows) || rows < 1 || rows > 1000) {
     return {
       ok: false,
-      message: '服务器返回了无效的终端快照尺寸',
+      message: t("terminals.server_returned_invalid_terminal_snapshot_dimensions"),
       closeReason: 'invalid terminal snapshot dimensions',
     };
   }
@@ -321,7 +322,7 @@ function clipboardImage(data: DataTransfer | null): File | undefined {
 }
 
 function reasonMessage(reason: unknown) {
-  return reason instanceof Error ? reason.message : '未知错误';
+  return reason instanceof Error ? reason.message : t("terminals.unknown_error");
 }
 
 function quotePastedPath(path: string) {
@@ -364,14 +365,14 @@ class LimitedClipboardBase64 implements IBase64 {
   private readonly base64 = new Base64();
 
   encodeText(data: string) {
-    if (textByteLength(data) > MAX_OSC52_TEXT_BYTES) throw new Error('OSC 52 response is too large');
+    if (textByteLength(data) > MAX_OSC52_TEXT_BYTES) throw new Error(t("common.osc_52_response_is_too_large"));
     return this.base64.encodeText(data);
   }
 
   decodeText(data: string) {
-    if (data.length > MAX_OSC52_BASE64_CHARS) throw new Error('OSC 52 payload is too large');
+    if (data.length > MAX_OSC52_BASE64_CHARS) throw new Error(t("common.osc_52_payload_is_too_large"));
     const text = this.base64.decodeText(data);
-    if (textByteLength(text) > MAX_OSC52_TEXT_BYTES) throw new Error('OSC 52 decoded text is too large');
+    if (textByteLength(text) > MAX_OSC52_TEXT_BYTES) throw new Error(t("common.osc_52_decoded_text_is_too_large"));
     return text;
   }
 }
@@ -643,7 +644,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
   };
   const showClipboardCopySuccess = () => {
     clearClipboardCopyTimer();
-    setClipboardCopyState({ status: 'success', message: '已复制到剪贴板' });
+    setClipboardCopyState({ status: 'success', message: t("terminals.copied_to_clipboard") });
     clipboardCopyTimerRef.current = window.setTimeout(() => {
       setClipboardCopyState(null);
       clipboardCopyTimerRef.current = undefined;
@@ -651,7 +652,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
   };
   const showPendingClipboardCopy = (text: string) => {
     clearClipboardCopyTimer();
-    setClipboardCopyState({ status: 'pending', message: `终端请求复制 ${text.length} 个字符`, text });
+    setClipboardCopyState({ status: 'pending', message: t("terminals.terminal_requests_copying_characters", { value0: text.length }), text });
     clipboardCopyTimerRef.current = window.setTimeout(() => {
       setClipboardCopyState(null);
       clipboardCopyTimerRef.current = undefined;
@@ -666,7 +667,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
       || activeIdentityRef.current !== identity
       || !clipboardPaneIsCurrent(/*requireTerminalFocus=*/ false)) return;
     if (copied) showClipboardCopySuccess();
-    else setClipboardCopyState({ status: 'error', message: '浏览器拒绝访问剪贴板，请检查站点权限', text });
+    else setClipboardCopyState({ status: 'error', message: t("terminals.the_browser_denied_clipboard_access_check_site_permissions"), text });
     terminalRef.current?.focus();
   };
 
@@ -678,7 +679,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
   };
   const showClipboardSuccess = (count: number) => {
     clearClipboardSuccessTimer();
-    setClipboardImageState({ status: 'success', message: count === 1 ? '图片已粘贴' : `${count} 张图片已粘贴` });
+    setClipboardImageState({ status: 'success', message: count === 1 ? t("terminals.image_pasted") : t("terminals.images_pasted", { value0: count }) });
     clipboardSuccessTimerRef.current = window.setTimeout(() => {
       setClipboardImageState(null);
       clipboardSuccessTimerRef.current = undefined;
@@ -755,7 +756,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
         if (selection !== 'c' || text.length === 0) return;
         const bytes = textByteLength(text);
         if (bytes > MAX_OSC52_TEXT_BYTES) {
-          setClipboardCopyState({ status: 'error', message: `终端复制内容过大（最大 ${MAX_OSC52_TEXT_BYTES / 1024} KiB）` });
+          setClipboardCopyState({ status: 'error', message: t("terminals.terminal_copy_content_too_large_maximum_kib", { value0: MAX_OSC52_TEXT_BYTES / 1024 }) });
           return;
         }
         const identity = activeIdentityRef.current;
@@ -901,19 +902,19 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
       clearClipboardSuccessTimer();
       const imageType = image.type.toLowerCase();
       if (imageType && !SUPPORTED_CLIPBOARD_IMAGE_TYPES.has(imageType)) {
-        setClipboardImageState({ status: 'error', message: '仅支持 PNG、JPEG、GIF 或 WebP 图片' });
+        setClipboardImageState({ status: 'error', message: t("terminals.only_png_jpeg_gif_or_webp_images_are_supported") });
         return;
       }
       if (image.size === 0) {
-        setClipboardImageState({ status: 'error', message: '剪贴板图片为空' });
+        setClipboardImageState({ status: 'error', message: t("terminals.clipboard_image_is_empty") });
         return;
       }
       if (image.size > MAX_CLIPBOARD_IMAGE_BYTES) {
-        setClipboardImageState({ status: 'error', message: '剪贴板图片不能超过 10 MiB' });
+        setClipboardImageState({ status: 'error', message: t("terminals.clipboard_image_must_not_exceed_10_mib") });
         return;
       }
       if (socketRef.current !== inputReadySocketRef.current || socketRef.current?.readyState !== WebSocket.OPEN) {
-        setClipboardImageState({ status: 'error', message: '终端未连接，无法粘贴图片' });
+        setClipboardImageState({ status: 'error', message: t("terminals.terminal_disconnected_cannot_paste_image") });
         return;
       }
 
@@ -925,7 +926,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
         const uploadSocket = inputReadySocketRef.current;
         const uploadGeneration = mutationGenerationRef.current;
         currentUpload = new AbortController();
-        setClipboardImageState({ status: 'uploading', message: '正在上传剪贴板图片…' });
+        setClipboardImageState({ status: 'uploading', message: t("terminals.uploading_clipboard_image") });
         try {
           const response = await terminalApi.uploadClipboardImage(tabId, pane.id, image, currentUpload.signal);
           if (disposed
@@ -935,10 +936,10 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
           pendingClipboardPathsRef.current.push(response.path);
           const pasted = flushClipboardPaths();
           if (pasted) showClipboardSuccess(pasted);
-          else setClipboardImageState({ status: 'success', message: '图片已上传，切回此 pane 后附加' });
+          else setClipboardImageState({ status: 'success', message: t("terminals.image_uploaded_switch_back_to_this_pane_to_attach") });
         } catch (reason) {
           if (!disposed && !(reason instanceof DOMException && reason.name === 'AbortError')) {
-            setClipboardImageState({ status: 'error', message: `图片上传失败：${reasonMessage(reason)}` });
+            setClipboardImageState({ status: 'error', message: t("terminals.image_upload_failed", { value0: reasonMessage(reason) }) });
           }
         } finally {
           currentUpload = undefined;
@@ -1234,7 +1235,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
       clearPendingMessages(context);
       setRestorePending(false);
       setConnection('connecting');
-      setConnectionMessage('控制权已被其他窗口接管，正在切换为只读查看');
+      setConnectionMessage(t("terminals.another_window_took_control_switching_to_read_only_view"));
       context.socket.close(1000, 'terminal attachment superseded');
       // Do not depend on the peer's close timing: the old socket can no
       // longer mutate the PTY, and its later onclose is a no-op because this
@@ -1270,12 +1271,12 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
         const control = controlMessage(data);
         if (control?.type === 'control') {
           if (control.state === undefined) {
-            failProtocol(context, '服务器返回了无效的终端控制状态', 'invalid terminal control state');
+            failProtocol(context, t("terminals.server_returned_invalid_terminal_control_state"), 'invalid terminal control state');
             return;
           }
           if (control.state === 'waiting') {
             if (context.controlState === 'claimed' || context.controlState === 'observing' || context.sawStream) {
-              failProtocol(context, '服务器在终端流开始后撤销了控制权', 'invalid terminal control transition');
+              failProtocol(context, t("terminals.server_revoked_control_after_the_terminal_stream_started"), 'invalid terminal control transition');
               return;
             }
             context.controlState = 'waiting';
@@ -1291,7 +1292,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
           }
           if (control.state === 'observing') {
             if (context.controlState === 'claimed' || context.sawStream) {
-              failProtocol(context, '服务器在终端流开始后改变了控制状态', 'invalid terminal control transition');
+              failProtocol(context, t("terminals.server_changed_control_state_after_the_terminal_stream_started"), 'invalid terminal control transition');
               return;
             }
             context.controlState = 'observing';
@@ -1310,7 +1311,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
               context.legacyMode = false;
               return;
             }
-            failProtocol(context, '服务器重复授予了终端控制权', 'duplicate terminal control claim');
+            failProtocol(context, t("terminals.server_granted_terminal_control_more_than_once"), 'duplicate terminal control claim');
             return;
           }
           context.controlState = 'claimed';
@@ -1333,15 +1334,15 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
             context.forceClaim = false;
             context.mutationsRevoked = false;
           } else if (context.controlState !== 'claimed' && context.controlState !== 'observing') {
-            failProtocol(context, '服务器在授予控制权前发送了终端流', 'terminal stream before control claim');
+            failProtocol(context, t("terminals.server_sent_terminal_stream_before_granting_control"), 'terminal stream before control claim');
             return;
           }
           if (context.sawStream) {
-            failProtocol(context, '服务器重复发送了终端流信息', 'duplicate terminal stream handshake');
+            failProtocol(context, t("terminals.server_sent_terminal_stream_information_more_than_once"), 'duplicate terminal stream handshake');
             return;
           }
           if (control.epoch === undefined || control.offset === undefined || control.reset === undefined || control.replay_bytes === undefined) {
-            failProtocol(context, '服务器返回了无效的终端流信息', 'invalid terminal stream handshake');
+            failProtocol(context, t("terminals.server_returned_invalid_terminal_stream_information"), 'invalid terminal stream handshake');
             return;
           }
           const restoreValidation = terminalRestore(control as ControlMessage & { reset: boolean });
@@ -1370,7 +1371,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
               };
               setRestorePending(false);
               setConnection('disconnected');
-              setConnectionMessage('终端快照尚未就绪，正在从已渲染位置续传');
+              setConnectionMessage(t("terminals.terminal_snapshot_not_ready_resuming_from_the_rendered_position"));
               context.socket.close(1000, 'terminal snapshot recovery unavailable');
               return;
             }
@@ -1388,7 +1389,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
             streamStateRef.current = { identity: paneIdentity, initialized: false, epoch: '', nextOffset: 0 };
             setRestorePending(false);
             setConnection('disconnected');
-            setConnectionMessage('终端续传位置不连续，正在重新同步');
+            setConnectionMessage(t("terminals.terminal_resume_position_is_discontinuous_resyncing"));
             context.discardSubsequentMessages = true;
             context.socket.close(1000, 'terminal stream offset mismatch');
             return;
@@ -1443,7 +1444,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
         }
         if (control?.type === 'status' && control.status) {
           if (context.controlState !== 'claimed' && context.controlState !== 'observing') {
-            failProtocol(context, '服务器在授予控制权前发送了终端状态', 'terminal status before control claim');
+            failProtocol(context, t("terminals.server_sent_terminal_state_before_granting_control"), 'terminal status before control claim');
             return;
           }
           if (control.status === 'running') {
@@ -1458,7 +1459,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
         }
         if (control?.type === 'exit' || control?.type === 'exited') {
           if (context.controlState !== 'claimed' && context.controlState !== 'observing') {
-            failProtocol(context, '服务器在授予控制权前发送了终端状态', 'terminal exit before control claim');
+            failProtocol(context, t("terminals.server_sent_terminal_state_before_granting_control"), 'terminal exit before control claim');
             return;
           }
           await renderStatus(context, 'exited', control.exit_code);
@@ -1472,7 +1473,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
             reattachAsObserver(context);
           } else {
             setRestorePending(false);
-            setConnectionMessage(control.message || '终端连接发生错误');
+            setConnectionMessage(control.message || t("terminals.terminal_connection_error"));
             if (control.code === 'output_lagged' || control.code === 'output_gap') {
               context.mutationsRevoked = true;
               revokeInput(context.socket);
@@ -1483,7 +1484,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
           return;
         }
         if (!control) {
-          failProtocol(context, '服务器返回了无法识别的终端消息', 'unknown terminal text message');
+          failProtocol(context, t("terminals.server_returned_an_unrecognized_terminal_message"), 'unknown terminal text message');
         }
         return;
       }
@@ -1492,7 +1493,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
       if (!contextIsActive(context) || context.discardSubsequentMessages) return;
       const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
       if ((context.controlState !== 'claimed' && context.controlState !== 'observing') || !context.sawStream) {
-        failProtocol(context, '服务器在终端流就绪前发送了输出', 'terminal output before stream');
+        failProtocol(context, t("terminals.server_sent_output_before_the_terminal_stream_was_ready"), 'terminal output before stream');
         return;
       }
       if (context.sawStream && !context.replayDone
@@ -1503,7 +1504,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
         streamStateRef.current = { identity: paneIdentity, initialized: false, epoch: '', nextOffset: 0 };
         setRestorePending(false);
         setConnection('disconnected');
-        setConnectionMessage('服务器返回了无效的终端回放长度，正在重新同步');
+        setConnectionMessage(t("terminals.server_returned_invalid_terminal_replay_length_resyncing"));
         context.socket.close(1000, 'terminal replay length mismatch');
         return;
       }
@@ -1573,7 +1574,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
       revokeInput(context.socket);
       clearPendingMessages(context);
       setConnection('disconnected');
-      setConnectionMessage('终端输出较快，正在同步最新画面');
+      setConnectionMessage(t("terminals.terminal_output_is_fast_syncing_the_latest_screen"));
       context.socket.close(1000, 'terminal output backpressure');
       return true;
     };
@@ -1635,7 +1636,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
           revokeInput(context.socket);
           clearPendingMessages(context);
           setConnection('disconnected');
-          setConnectionMessage('终端输出处理失败，正在续传');
+          setConnectionMessage(t("terminals.terminal_output_processing_failed_resuming"));
           context.socket.close(1000, 'terminal output processing failed');
         }
       });
@@ -1856,11 +1857,11 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
     >
       {visible && pendingLink?.identity === paneIdentity ? (
         <ConfirmationDialog
-          title="打开链接"
-          description="将在新标签页中打开以下链接。"
+          title={t("terminals.open_link")}
+          description={t("terminals.the_following_link_will_open_in_a_new_tab")}
           items={[{ id: pendingLink.url.href, label: pendingLink.url.host, detail: pendingLink.url.href, icon: <ExternalLink aria-hidden="true" /> }]}
-          warning="请确认链接来源可信后再打开。"
-          confirmLabel="打开链接"
+          warning={t("terminals.confirm_you_trust_the_link_s_source_before_opening")}
+          confirmLabel={t("terminals.open_link")}
           onResult={(confirmed) => {
             setPendingLink(null);
             // Open directly from the confirmation click to retain user activation.
@@ -1869,12 +1870,11 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
         />
       ) : null}
       <div ref={hostRef} className="terminal-emulator" />
-      {pathDropActive ? <div className="terminal-path-drop-overlay">松开以输入路径</div> : null}
+      {pathDropActive ? <div className="terminal-path-drop-overlay">{t("terminals.release_to_insert_path")}</div> : null}
       {restorePending ? (
         <div className="terminal-restore-status" role="status" aria-live="polite">
           <span aria-hidden="true" />
-          正在恢复终端…
-        </div>
+          {t("terminals.restoring_terminal")}</div>
       ) : null}
       {clipboardImageState ? (
         <div className={`terminal-clipboard-image-status ${clipboardImageState.status}`} role="status" aria-live="polite">
@@ -1887,13 +1887,13 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
           <ClipboardCopy aria-hidden="true" />
           <span>{clipboardCopyState.message}</span>
           {clipboardCopyState.text ? (
-            <button type="button" onClick={(event) => { event.stopPropagation(); void completePendingClipboardCopy(); }}>复制</button>
+            <button type="button" onClick={(event) => { event.stopPropagation(); void completePendingClipboardCopy(); }}>{t("pr.copy")}</button>
           ) : null}
           <button
             type="button"
             className="dismiss"
-            aria-label="关闭复制提示"
-            title="关闭"
+            aria-label={t("terminals.dismiss_copy_prompt")}
+            title={t("aow.close")}
             onClick={(event) => { event.stopPropagation(); clearClipboardCopyTimer(); setClipboardCopyState(null); }}
           >
             <X />
@@ -1909,7 +1909,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
             disabled={rebuilding}
             onClick={(event) => { event.stopPropagation(); onRebuild(); }}
           >
-            {rebuilding ? '重建中…' : '重建'}
+            {rebuilding ? t("terminals.rebuilding") : t("terminals.rebuild")}
           </button>
         ) : pane.hosting || connection === 'observing' || connection === 'waiting' ? (
           <button
@@ -1918,12 +1918,11 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
             disabled={Boolean(pane.agent_terminal && pane.agent_terminal.phase !== 'ready')}
             onClick={(event) => { event.stopPropagation(); manualReconnectRef.current(true); }}
           >
-            接管
-          </button>
+            {t("acp-control.take_control")}</button>
         ) : connection === 'disconnected' ? (
           <button
-            title="立即重连"
-            aria-label="立即重连"
+            title={t("terminals.reconnect_now")}
+            aria-label={t("terminals.reconnect_now")}
             onClick={(event) => { event.stopPropagation(); manualReconnectRef.current(false); }}
           >
             <RefreshCw />

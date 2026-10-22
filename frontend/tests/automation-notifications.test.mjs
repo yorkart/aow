@@ -14,6 +14,7 @@ try {
 
   async function fixture(t, { bot = false, wechat = false, selected = false, unavailable = false } = {}) {
     const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => page.close());
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));

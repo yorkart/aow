@@ -244,7 +244,7 @@ impl AgentServerStore {
                         let load = waiter.0.clone();
                         let connection = connection.clone();
                         let session_id = session_id.clone();
-                        tokio::spawn(async move {
+                        aow_i18n::spawn(async move {
                             run_load(
                                 owner,
                                 connection,

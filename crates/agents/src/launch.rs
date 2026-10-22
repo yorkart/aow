@@ -11,7 +11,7 @@ pub use crate::codex_terminal::prepare as prepare_codex_terminal;
 
 #[derive(Debug, Error)]
 pub enum LaunchError {
-    #[error("agent not found or unavailable: {0}")]
+    #[error("{translated}", translated = aow_i18n::message("errors.agent_not_found_or_unavailable", &[("p0", .0.to_string())]))]
     Unavailable(String),
     #[error("{0}")]
     Invalid(String),
@@ -149,7 +149,10 @@ impl AgentRegistration {
 
     pub fn into_launch(self, paths: &[PathBuf]) -> Result<AgentLaunch, LaunchError> {
         let agent_type = self.agent_type.ok_or_else(|| {
-            LaunchError::Invalid(format!("请先为 {} 设置 Agent 类型", self.display_name))
+            LaunchError::Invalid(aow_i18n::message(
+                "agents.set_the_agent_type_for_first",
+                &[("auto0", self.display_name.to_string())],
+            ))
         })?;
         let executable = self
             .executable

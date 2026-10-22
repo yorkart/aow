@@ -1,3 +1,5 @@
+import { LanguageSettings } from './LanguageSettings';
+import { t } from '../../lib/i18n';
 import { useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { Check } from 'lucide-react';
 import { themes } from '../../lib/theme/themes';
@@ -28,14 +30,15 @@ export function AppearanceSettings() {
   const [terminalPersistent, setTerminalPersistent] = useState(true);
   const terminalPreference = useSyncExternalStore(subscribeTerminalPalette, getTerminalPalettePreference, getTerminalPalettePreference);
   const terminalOptions: { id: TerminalPalettePreference; name: string; description: string }[] = [
-    { id: 'auto', name: '跟随主题', description: '按界面深浅模式自动选择柔和配色' },
-    { id: 'soft-dark', name: '柔和深色', description: '深色背景，保留原有终端配色' },
-    { id: 'soft-light', name: '柔和浅色', description: '浅色背景，柔和且清晰的文字颜色' },
+    { id: 'auto', name: t("settings.follow_theme"), description: t("settings.automatically_choose_a_soft_palette_for_the_interface_s") },
+    { id: 'soft-dark', name: t("settings.soft_dark"), description: t("settings.dark_background_with_the_original_terminal_palette") },
+    { id: 'soft-light', name: t("settings.soft_light"), description: t("settings.light_background_with_soft_readable_text_colors") },
   ];
   return <div className="project-aow-dialog-body appearance-settings">
-    <div className="project-aow-settings-heading"><div><h2>Appearance</h2><p>选择工作台主题，终端和 Diff 配色可独立设置。</p></div></div>
+    <div className="project-aow-settings-heading"><div><h2>{t("navigation.appearance")}</h2><p>{t("settings.choose_a_workspace_theme_terminal_and_diff_palettes_can")}</p></div></div>
+    <LanguageSettings />
     <fieldset className="theme-picker">
-      <legend>颜色主题</legend>
+      <legend>{t("settings.color_theme")}</legend>
       <div className="theme-grid">
         {themes.map(item => <label className="theme-card" key={item.id} style={previewColors(item)}>
           <input type="radio" name="aow-theme" value={item.id} checked={item.id === theme.id}
@@ -45,18 +48,18 @@ export function AppearanceSettings() {
             <span className="theme-preview-sidebar"><b /><b /><b /><b /></span>
             <span className="theme-preview-editor"><span><em>const</em> theme = {'{'}</span><span>  name: <strong>"AoW"</strong>,</span><span>  ready: <em>true</em></span><span>{'}'}</span><small>❯ npm run dev</small></span>
           </span>
-          <span className="theme-card-caption"><span><strong>{item.name}</strong><small>{item.family} · {item.appearance === 'dark' ? '深色' : '浅色'}</small></span>
+          <span className="theme-card-caption"><span><strong>{item.name}</strong><small>{item.family} · {item.appearance === 'dark' ? t("settings.dark") : t("settings.light")}</small></span>
             <span className="theme-card-check" aria-hidden="true">{item.id === theme.id && <Check />}</span>
           </span>
         </label>)}
       </div>
     </fieldset>
     <p className="theme-selection-status" role="status">{persistent
-      ? `当前主题：${theme.name}。选择会保存在此浏览器中。`
-      : `已应用 ${theme.name}，但浏览器阻止了保存；刷新后可能恢复默认主题。`}</p>
+      ? t("settings.current_theme_your_selection_is_saved_in_this_browser", { value0: theme.name })
+      : t("settings.applied_but_the_browser_blocked_saving_refreshing_may_restore", { value0: theme.name })}</p>
     <fieldset className="theme-picker terminal-palette-picker">
-      <legend>终端配色</legend>
-      <p className="terminal-palette-description">单独选择后，切换界面主题会保留终端配色。已有终端即时更新，无需重连。</p>
+      <legend>{t("settings.terminal_palette")}</legend>
+      <p className="terminal-palette-description">{t("settings.an_explicit_selection_stays_when_the_interface_theme_changes")}</p>
       <div className="theme-grid">
         {terminalOptions.map(item => {
           const palette = resolveTerminalPalette(theme.appearance, item.id);
@@ -75,8 +78,8 @@ export function AppearanceSettings() {
         })}
       </div>
       <p className="theme-selection-status" role="status">{terminalPersistent
-        ? '终端配色选择会单独保存在此浏览器中。'
-        : '已应用终端配色，但浏览器阻止了保存；刷新后可能恢复跟随主题。'}</p>
+        ? t("settings.the_terminal_palette_is_saved_separately_in_this_browser")
+        : t("settings.terminal_palette_applied_but_the_browser_blocked_saving_refreshing")}</p>
     </fieldset>
     <DiffPaletteSettings />
   </div>;

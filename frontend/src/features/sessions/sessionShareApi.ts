@@ -1,3 +1,5 @@
+import { localizedFetch } from '../../lib/localizedFetch';
+import { t } from '../../lib/i18n';
 import { appUrl } from '../../lib/basePath';
 import type { AgentSessionSnapshot, AowAgentSession } from './types';
 
@@ -12,12 +14,12 @@ export class SessionShareError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(appUrl(path), {
+  const response = await localizedFetch(appUrl(path), {
     cache: 'no-store', ...init,
     signal: init?.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(20_000)]) : AbortSignal.timeout(20_000),
   });
   const payload = response.status === 204 ? null : await response.json().catch(() => null);
-  if (!response.ok) throw new SessionShareError(payload?.message ?? `请求失败（HTTP ${response.status}）`, response.status);
+  if (!response.ok) throw new SessionShareError(payload?.message ?? t("sessions.request_failed_http", { value0: response.status }), response.status);
   return payload as T;
 }
 

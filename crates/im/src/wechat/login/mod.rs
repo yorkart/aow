@@ -79,14 +79,17 @@ impl LoginManager {
         let qrcode = response["qrcode"]
             .as_str()
             .filter(|code| !code.is_empty())
-            .ok_or_else(|| anyhow!("微信未返回二维码"))?;
-        let content = response["qrcode_img_content"]
-            .as_str()
-            .ok_or_else(|| anyhow!("微信未返回二维码内容"))?;
+            .ok_or_else(|| anyhow!(aow_i18n::message("im.wechat_did_not_return_a_qr_code", &[])))?;
+        let content = response["qrcode_img_content"].as_str().ok_or_else(|| {
+            anyhow!(aow_i18n::message(
+                "im.wechat_did_not_return_qr_code_content",
+                &[]
+            ))
+        })?;
         // The upstream value is QR payload, NOT an image URL. Render locally;
         // never send a login QR to a third-party image-generation service.
         let svg = QrCode::new(content.as_bytes())
-            .map_err(|_| anyhow!("微信二维码内容无效"))?
+            .map_err(|_| anyhow!(aow_i18n::message("im.invalid_wechat_qr_code_content", &[])))?
             .render::<svg::Color>()
             .min_dimensions(256, 256)
             .build();
@@ -98,7 +101,8 @@ impl LoginManager {
             "data:image/svg+xml;base64,{}",
             STANDARD.encode(svg)
         ));
-        login.view.message = "请用手机微信扫码，并在手机上确认连接。".into();
+        login.view.message =
+            aow_i18n::text("im.scan_with_wechat_on_your_phone_and_confirm_the").into();
         Ok(login.view.clone())
     }
 
@@ -115,7 +119,7 @@ impl LoginManager {
                 !code.is_empty()
                     && code.len() <= 16
                     && code.bytes().all(|byte| byte.is_ascii_digit()),
-                "请填写手机微信显示的数字"
+                aow_i18n::message("im.enter_the_number_displayed_in_wechat_on_your_phone", &[])
             );
         }
         let snapshot = {
@@ -128,38 +132,51 @@ impl LoginManager {
         ) {
             return Ok(snapshot.view);
         }
-        ensure!(!snapshot.qrcode.is_empty(), "二维码尚未准备好");
-        let _polling = snapshot
-            .polling
-            .try_lock()
-            .map_err(|_| anyhow!("正在等待微信扫码状态，请稍后重试"))?;
+        ensure!(
+            !snapshot.qrcode.is_empty(),
+            aow_i18n::message("im.qr_code_is_not_ready_yet", &[])
+        );
+        let _polling = snapshot.polling.try_lock().map_err(|_| {
+            anyhow!(aow_i18n::message(
+                "im.waiting_for_wechat_scan_status_try_again_shortly",
+                &[]
+            ))
+        })?;
         let response = self
             .api
             .qr_status(&snapshot.base_url, &snapshot.qrcode, verify_code)
             .await?;
         let mut active = self.active.lock().unwrap();
         let login = current(&mut active, id)?;
-        let status = response["status"]
-            .as_str()
-            .ok_or_else(|| anyhow!("微信未返回扫码状态"))?;
+        let status = response["status"].as_str().ok_or_else(|| {
+            anyhow!(aow_i18n::message(
+                "im.wechat_did_not_return_scan_status",
+                &[]
+            ))
+        })?;
         let message = match status {
-            "wait" => "请用手机微信扫码。",
-            "scaned" => "已扫码，请在手机微信上继续确认。",
+            "wait" => aow_i18n::text("im.scan_with_wechat_on_your_phone"),
+            "scaned" => aow_i18n::text("im.scanned_continue_confirmation_in_wechat_on_your_phone"),
             "need_verifycode" => {
                 if verify_code.is_some() {
-                    "数字不匹配，请重新输入手机微信显示的数字。"
+                    aow_i18n::text("im.number_mismatch_enter_the_number_displayed_in_wechat_on")
                 } else {
-                    "请输入手机微信显示的数字，以继续连接。"
+                    aow_i18n::text("im.enter_the_number_displayed_in_wechat_on_your_phone_2")
                 }
             }
-            "expired" => "二维码已过期，请重新生成。",
-            "verify_code_blocked" => "验证次数过多，请稍后重新生成二维码。",
+            "expired" => aow_i18n::text("im.qr_code_expired_generate_a_new_one"),
+            "verify_code_blocked" => {
+                aow_i18n::text("im.too_many_verification_attempts_generate_a_new_qr_code")
+            }
             "scaned_but_redirect" => {
-                let host = response["redirect_host"]
-                    .as_str()
-                    .ok_or_else(|| anyhow!("微信未返回跳转地址"))?;
+                let host = response["redirect_host"].as_str().ok_or_else(|| {
+                    anyhow!(aow_i18n::message(
+                        "im.wechat_did_not_return_a_redirect_url",
+                        &[]
+                    ))
+                })?;
                 login.base_url = validate_base(&format!("https://{host}"))?;
-                "已扫码，正在继续验证。"
+                aow_i18n::text("im.scanned_continuing_verification")
             }
             "confirmed" => {
                 let field = |name| {
@@ -167,7 +184,12 @@ impl LoginManager {
                         .as_str()
                         .filter(|value| !value.is_empty())
                         .map(str::to_owned)
-                        .ok_or_else(|| anyhow!("微信返回的绑定信息不完整"))
+                        .ok_or_else(|| {
+                            anyhow!(aow_i18n::message(
+                                "im.wechat_returned_incomplete_binding_information",
+                                &[]
+                            ))
+                        })
                 };
                 let credentials = Credentials {
                     account_id: field("ilink_bot_id")?,
@@ -180,11 +202,14 @@ impl LoginManager {
                 };
                 credentials.validate()?;
                 accept(credentials)?;
-                "微信 Bot 已绑定，通知将发给本次扫码的微信账号。"
+                aow_i18n::text("im.wechat_bot_linked_notifications_go_to_the_account_used")
             }
             "binded_redirect" => {
                 let previous = login.previous.clone().ok_or_else(|| {
-                    anyhow!("微信提示已绑定，但本机没有对应凭证，请在微信解除旧连接后重新扫码")
+                    anyhow!(aow_i18n::message(
+                        "im.wechat_reports_an_existing_binding_but_no_matching_local",
+                        &[]
+                    ))
                 })?;
                 ensure!(
                     response["ilink_bot_id"]
@@ -193,12 +218,15 @@ impl LoginManager {
                         && response["ilink_user_id"]
                             .as_str()
                             .is_none_or(|id| id == previous.user_id),
-                    "微信提示的绑定与本机账号不一致，请在微信解除旧连接后重新扫码"
+                    aow_i18n::message("im.the_binding_reported_by_wechat_does_not_match_the", &[])
                 );
                 accept(previous)?;
-                "已恢复本机保存的微信绑定。"
+                aow_i18n::text("im.restored_the_locally_saved_wechat_binding")
             }
-            _ => bail!("微信返回未知扫码状态，请重新生成二维码"),
+            _ => bail!(aow_i18n::message(
+                "im.wechat_returned_an_unknown_scan_status_generate_a_new",
+                &[]
+            )),
         };
         login.view.status = if status == "binded_redirect" {
             "confirmed"
@@ -233,12 +261,20 @@ fn current<'a>(active: &'a mut Option<Login>, id: &str) -> Result<&'a mut Login>
     let login = active
         .as_mut()
         .filter(|login| login.view.id == id)
-        .ok_or_else(|| anyhow!("扫码已取消或被新的二维码替换"))?;
+        .ok_or_else(|| {
+            anyhow!(aow_i18n::message(
+                "im.scan_canceled_or_replaced_by_a_new_qr_code",
+                &[]
+            ))
+        })?;
     if login.started.elapsed() >= Duration::from_secs(300) && login.view.status != "confirmed" {
         login.view.status = "expired".into();
         login.view.qr_image = None;
         login.previous = None;
-        bail!("二维码已过期，请重新生成");
+        bail!(aow_i18n::message(
+            "im.qr_code_expired_generate_a_new_one_2",
+            &[]
+        ));
     }
     Ok(login)
 }

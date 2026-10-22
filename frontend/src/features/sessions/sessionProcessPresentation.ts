@@ -1,14 +1,15 @@
+import { t, getLanguage } from '../../lib/i18n';
 import type { AgentSessionActivity, AgentSessionToolAction } from './types';
 
-const recordDateTime = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'medium' });
-const recordTime = new Intl.DateTimeFormat('zh-CN', { timeStyle: 'medium' });
+const recordDateTime = new Intl.DateTimeFormat(getLanguage(), { dateStyle: 'medium', timeStyle: 'medium' });
+const recordTime = new Intl.DateTimeFormat(getLanguage(), { timeStyle: 'medium' });
 
 export function activityTimeLabel(activities: Pick<AgentSessionActivity, 'timestamp'>[]): string {
   const timestamps = activities.flatMap(({ timestamp }) => {
     const value = timestamp ? Date.parse(timestamp) : NaN;
     return Number.isNaN(value) ? [] : [value];
   });
-  if (!timestamps.length) return '时间未记录';
+  if (!timestamps.length) return t("sessions.time_not_recorded");
   const first = new Date(Math.min(...timestamps));
   const last = new Date(Math.max(...timestamps));
   let label = recordDateTime.format(first);
@@ -16,7 +17,7 @@ export function activityTimeLabel(activities: Pick<AgentSessionActivity, 'timest
     const end = first.toDateString() === last.toDateString() ? recordTime.format(last) : recordDateTime.format(last);
     label += ` – ${end}`;
   }
-  if (timestamps.length < activities.length) label += '（部分时间未记录）';
+  if (timestamps.length < activities.length) label += t("sessions.some_timestamps_missing");
   return label;
 }
 
@@ -78,10 +79,10 @@ export function toolGroupStatus(tools: AgentSessionActivity[]) {
   const status = counts.in_progress ? 'in_progress' : counts.failed ? 'failed'
     : counts.interrupted ? 'interrupted' : counts.unknown ? 'unknown' : 'completed';
   const label = [
-    counts.in_progress ? `${counts.in_progress} 次执行中` : '',
-    counts.failed ? `${counts.failed} 次失败` : '',
-    counts.interrupted ? `${counts.interrupted} 次中断` : '',
-    counts.unknown ? `${counts.unknown} 次结果未记录` : '',
-  ].filter(Boolean).join(' · ') || '已完成';
+    counts.in_progress ? t("sessions.running", { value0: counts.in_progress }) : '',
+    counts.failed ? t("sessions.failed", { value0: counts.failed }) : '',
+    counts.interrupted ? t("sessions.interrupted", { value0: counts.interrupted }) : '',
+    counts.unknown ? t("sessions.results_not_recorded", { value0: counts.unknown }) : '',
+  ].filter(Boolean).join(' · ') || t("aow.completed");
   return { status, label } as const;
 }

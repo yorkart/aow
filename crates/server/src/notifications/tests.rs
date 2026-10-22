@@ -114,11 +114,11 @@ fn automation_routes_to_snapshot_channel_and_uses_transport_independent_messages
     assert!(matches!(provider, Provider::Wechat(_)));
     let message = messages::automation_failure(&event);
     assert!(message.error && !message.markdown);
-    assert_eq!(message.title, "自动化失败 · 检查 <at id=all>");
-    assert!(message.text(4000).contains("执行 ID：run-1"));
+    assert_eq!(message.title, "Automation failed · 检查 <at id=all>");
+    assert!(message.text(4000).contains("Run ID: run-1"));
     let message = messages::task_completed(&super::tests::event());
-    assert_eq!(message.title, "AoW·task·TraeCode CLI·完成");
-    assert!(message.text(4000).contains("Session ID：session-1"));
+    assert_eq!(message.title, "AoW·task·TraeCode CLI·Completed");
+    assert!(message.text(4000).contains("Session ID: session-1"));
 }
 
 #[tokio::test]
@@ -139,6 +139,7 @@ async fn automation_delivery_uses_local_bot_and_its_own_preference_and_link() {
         .unwrap();
     manager
         .update(SettingsUpdate::Notifications {
+            language: None,
             agent_task_completed: TaskCompletedSettings {
                 enabled: false,
                 channels: vec![],
@@ -155,6 +156,7 @@ async fn automation_delivery_uses_local_bot_and_its_own_preference_and_link() {
     );
     manager
         .update(SettingsUpdate::Notifications {
+            language: None,
             agent_task_completed: TaskCompletedSettings::default(),
             public_base_url: Some("https://aow.example.com/tools/aow/".into()),
         })
@@ -188,6 +190,7 @@ fn im(app: &str, secret: Option<&str>) -> SettingsUpdate {
 }
 fn preferences(enabled: bool, channels: Vec<Channel>) -> SettingsUpdate {
     SettingsUpdate::Notifications {
+        language: None,
         agent_task_completed: TaskCompletedSettings { enabled, channels },
         public_base_url: None,
     }
@@ -220,26 +223,26 @@ fn completed_messages_include_only_the_observed_turn_usage_when_available() {
         messages::task_completed(&event)
             .fields
             .iter()
-            .all(|field| field.label != "本轮 Token")
+            .all(|field| field.label != "Tokens this turn")
     );
     for (input, output, cached, expected) in [
         (
             100,
             20,
             50,
-            "合计：120 tokens\n输入：100 tokens · 输出：20 tokens\n缓存命中：50 tokens（包含在输入中）",
+            "Total: 120 tokens\nInput: 100 tokens · Output: 20 tokens\nCache hits: 50 tokens (included in input)",
         ),
         (
             880_000,
             2_825,
             500_000,
-            "合计：882.8K tokens\n输入：880K tokens · 输出：2.8K tokens\n缓存命中：500K tokens（包含在输入中）",
+            "Total: 882.8K tokens\nInput: 880K tokens · Output: 2.8K tokens\nCache hits: 500K tokens (included in input)",
         ),
         (
             999_950,
             1_250,
             0,
-            "合计：1M tokens\n输入：1M tokens · 输出：1.3K tokens\n缓存命中：0 tokens（包含在输入中）",
+            "Total: 1M tokens\nInput: 1M tokens · Output: 1.3K tokens\nCache hits: 0 tokens (included in input)",
         ),
     ] {
         event.usage = Some(aow_agents::sessions::usage::TokenUsage {
@@ -253,7 +256,7 @@ fn completed_messages_include_only_the_observed_turn_usage_when_available() {
         let field = message
             .fields
             .iter()
-            .find(|field| field.label == "本轮 Token")
+            .find(|field| field.label == "Tokens this turn")
             .unwrap();
         assert_eq!(field.value, expected);
         assert_eq!(message.body, "本轮结论");
@@ -283,6 +286,7 @@ fn notification_urls_persist_validate_and_support_legacy_settings() {
     manager.dispatch(event(), &page);
     assert_eq!(receiver.try_recv().unwrap().sources[0].tab_url, None);
     let update = |url: &str| SettingsUpdate::Notifications {
+        language: None,
         agent_task_completed: TaskCompletedSettings::default(),
         public_base_url: Some(url.into()),
     };
@@ -510,4 +514,43 @@ async fn settings_api_redacts_secrets_and_rejects_invalid_preferences() {
         body["notifications"]["agent_task_completed"]["channels"],
         json!(["page"])
     );
+}
+
+#[test]
+fn notification_language_defaults_preserves_legacy_updates_and_formats_background_messages() {
+    use aow_i18n::{Language, with_language};
+    let manager = NotificationManager::in_memory();
+    assert_eq!(manager.language(), Language::English);
+    manager
+        .update(SettingsUpdate::Notifications {
+            language: Some(Language::Chinese),
+            agent_task_completed: Default::default(),
+            public_base_url: None,
+        })
+        .unwrap();
+    manager
+        .update(SettingsUpdate::Notifications {
+            language: None,
+            agent_task_completed: Default::default(),
+            public_base_url: None,
+        })
+        .unwrap();
+    assert_eq!(manager.language(), Language::Chinese);
+    let original = event();
+    let chinese = with_language(manager.language(), || messages::task_completed(&original));
+    assert!(chinese.title.ends_with("完成"));
+    assert_eq!(
+        chinese.body,
+        original.conclusion.clone().unwrap_or_default()
+    );
+    let english = with_language(Language::English, || messages::task_completed(&original));
+    assert!(english.title.ends_with("Completed"));
+    assert_eq!(english.body, chinese.body);
+    let mut old_document = serde_json::to_value(Document::default()).unwrap();
+    old_document["notifications"]
+        .as_object_mut()
+        .unwrap()
+        .remove("language");
+    let old_document: Document = serde_json::from_value(old_document).unwrap();
+    assert_eq!(old_document.notifications.language, Language::English);
 }

@@ -66,7 +66,10 @@ async fn resolve(state: &AppState, input: &TaskInput) -> Result<(String, PathBuf
     let launch = state.aow.resolve_agent_launch(agent_id, &reference).await?;
     ensure!(
         launch.agent_type.id() == input.agent.id(),
-        "Agent 配置的类型与任务不一致"
+        aow_i18n::message(
+            "server.agent_configuration_type_does_not_match_the_task",
+            &[]
+        )
     );
     let environment = aow_agents::automation::configuration_environment();
     let launch = AgentLaunch {
@@ -130,7 +133,9 @@ pub(super) async fn update(
     let _operation = manager.operation.lock().await;
     let mut task = manager.task(&id).map_err(error)?;
     if task.revision != request.revision {
-        return Err(error("任务已被修改，请刷新后重试"));
+        return Err(error(aow_i18n::text(
+            "server.task_modified_refresh_and_try_again",
+        )));
     }
     force_worktree_cleanup(&mut request.input);
     let (project_name, repository_path, launch) =
@@ -163,7 +168,9 @@ pub(super) async fn set_enabled(
     let mut task = manager.task(&id).map_err(error)?;
     task.input.enabled = input.enabled;
     if task.input.kind == TaskKind::Manual {
-        return Err(error("手动任务无需暂停或启用"));
+        return Err(error(aow_i18n::text(
+            "server.manual_tasks_do_not_need_to_be_paused_or",
+        )));
     }
     task.revision += 1;
     task.updated_at = Utc::now();
@@ -194,7 +201,7 @@ pub(super) async fn remove(
     task.input.enabled = false;
     task.revision += 1;
     task.updated_at = Utc::now();
-    task.scheduler_error = Some("定时器正在移除".into());
+    task.scheduler_error = Some(aow_i18n::text("server.removing_timer").into());
     manager.store.save_task(&task).map_err(error)?;
     task.deleted = true;
     if let Err(reason) = manager.scheduler.sync(&manager.store, &task).await {

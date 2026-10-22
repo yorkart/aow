@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n';
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, HTMLAttributes, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -29,14 +30,14 @@ export interface WorkspaceTab {
 export interface TabRevealRequest { tabId: string }
 type WorkspaceTabGroup = Exclude<WorkspaceTab['kind'], 'agent'>;
 const groupDefinitions: { id: WorkspaceTabGroup; label: string; color: string }[] = [
-  { id: 'settings', label: 'Settings', color: '#8fa8bd' },
-  { id: 'browser', label: '系统文件浏览器', color: '#8fa8bd' },
-  { id: 'terminal', label: 'Terminal', color: '#6ca8f1' },
+  { id: 'settings', label: t("navigation.settings"), color: '#8fa8bd' },
+  { id: 'browser', label: t("aow.system_file_browser"), color: '#8fa8bd' },
+  { id: 'terminal', label: t("navigation.terminal"), color: '#6ca8f1' },
   { id: 'acp', label: 'ACP', color: '#91b8c8' },
-  { id: 'session', label: 'Conversation', color: '#ae9bd7' },
-  { id: 'automation', label: '自动化', color: '#c8b480' },
+  { id: 'session', label: t("navigation.conversation"), color: '#ae9bd7' },
+  { id: 'automation', label: t("aow.automations"), color: '#c8b480' },
   { id: 'pullRequest', label: 'PR', color: '#c99ab5' },
-  { id: 'file', label: '文件', color: '#86b6a0' },
+  { id: 'file', label: t("aow.files"), color: '#86b6a0' },
   { id: 'diff', label: 'Diff', color: '#c6a583' },
 ];
 export function isWorkspaceTabKind(kind: unknown): kind is WorkspaceTab['kind'] {
@@ -102,12 +103,12 @@ function CenterTabContextMenu({
 
   const canRename = state.tab.renameable !== false && (state.tab.kind === 'terminal' || state.tab.kind === 'agent' || state.tab.kind === 'file');
 
-  return <div ref={menu} className="project-aow-context-menu project-aow-tab-context-menu" style={{ left: position.x, top: position.y }} role="menu" aria-label={`${state.tab.label} 操作`} onPointerDown={(event) => event.stopPropagation()}>
+  return <div ref={menu} className="project-aow-context-menu project-aow-tab-context-menu" style={{ left: position.x, top: position.y }} role="menu" aria-label={t("aow.actions", { value0: state.tab.label })} onPointerDown={(event) => event.stopPropagation()}>
     {onOpenElsewhere && destination ? <button role="menuitem" onClick={action(onOpenElsewhere)}><WorkspaceMenuLabel action={destination} /></button> : null}
-    {canRename ? <button role="menuitem" onClick={action(onRename)}><Pencil />重命名</button> : null}
-    <button role="menuitem" onClick={action(onCloseTab)}><X />关闭</button>
-    <button role="menuitem" disabled={!hasOtherTabs} onClick={action(onCloseOthers)}><ListX />关闭其他</button>
-    <button role="menuitem" onClick={action(onCloseAll)}><ListX />关闭所有</button>
+    {canRename ? <button role="menuitem" onClick={action(onRename)}><Pencil />{t("aow.rename")}</button> : null}
+    <button role="menuitem" onClick={action(onCloseTab)}><X />{t("aow.close")}</button>
+    <button role="menuitem" disabled={!hasOtherTabs} onClick={action(onCloseOthers)}><ListX />{t("aow.close_others")}</button>
+    <button role="menuitem" onClick={action(onCloseAll)}><ListX />{t("aow.close_all")}</button>
   </div>;
 }
 
@@ -140,7 +141,7 @@ interface Props {
 
 export function WorkspaceTabs({ workspaceKey, revealRequest, tabs, activeId, visible, agents, onActivate, onCloseTab, onCloseTabs,
   onCanRename, onRename, onError, destination, onOpenElsewhere, onOpenFile, onOpenBrowser, onCreateNote,
-  onCreateTerminal, onCreateAcp, leadingControls, controls, newLabel = '新建窗体', tabListLabel = '工作区标签', headerProps }: Props) {
+  onCreateTerminal, onCreateAcp, leadingControls, controls, newLabel = t("aow.new_window"), tabListLabel = t("aow.workspace_tabs"), headerProps }: Props) {
   const groups = useMemo(() => groupWorkspaceTabs(tabs), [tabs]);
   const storageKey = `aow-tab-groups-v1:${workspaceKey}`;
   const [collapsed, setCollapsed] = useState<Set<WorkspaceTabGroup>>(() => {
@@ -250,7 +251,7 @@ export function WorkspaceTabs({ workspaceKey, revealRequest, tabs, activeId, vis
     if (cancelRename.current || !tab || !rename) return;
     const name = rename.draft.trim();
     if (name === rename.original.trim()) return;
-    if (!name) { onError('名称不能为空。'); return; }
+    if (!name) { onError(t("aow.name_cannot_be_empty")); return; }
     run(() => onRename(tab, name));
   };
   const toggleGroup = (group: WorkspaceTabGroup) => {
@@ -266,7 +267,7 @@ export function WorkspaceTabs({ workspaceKey, revealRequest, tabs, activeId, vis
     const targets = tabs.filter(tab => workspaceTabGroup(tab) === group && (!keep || tab.id !== selected.id));
     if (!targets.length) return;
     const dirty = targets.filter(tab => tab.dirty).length;
-    if (group === 'file' && dirty && !window.confirm(`有 ${dirty} 个文件包含未保存的更改，确定关闭吗？`)) return;
+    if (group === 'file' && dirty && !window.confirm(t("aow.files_have_unsaved_changes_close_them", { value0: dirty }))) return;
     await onCloseTabs(targets, selected);
   });
 
@@ -277,12 +278,12 @@ export function WorkspaceTabs({ workspaceKey, revealRequest, tabs, activeId, vis
         {groups.map(group => {
           const folded = collapsed.has(group.id);
           const activeTab = group.tabs.find(tab => tab.id === activeId);
-          const action = folded ? '展开' : '收起';
+          const action = folded ? t("aow.expand") : t("aow.collapse");
           return <div key={group.id} className={`project-aow-tab-group${folded ? ' collapsed' : ''}`}
             role="presentation" style={{ '--tab-group-color': group.color } as CSSProperties}>
             <button type="button" className={`project-aow-group-toggle${activeTab ? ' active' : ''}`}
-              aria-label={`${action} ${group.label} 分组（${group.tabs.length} 个 Tab）`} aria-expanded={!folded}
-              aria-controls={`${groupId}-${group.id}`} title={`${group.label} · ${group.tabs.length} 个 Tab · 点击${action}${folded && activeTab ? `\n当前：${activeTab.label}` : ''}`}
+              aria-label={t("aow.group_tabs", { value0: action, value1: group.label, value2: group.tabs.length })} aria-expanded={!folded}
+              aria-controls={`${groupId}-${group.id}`} title={t("aow.tabs_click_to", { value0: group.label, value1: group.tabs.length, value2: action, value3: folded && activeTab ? t("common.current", { value0: activeTab.label }) : '' })}
               onClick={() => toggleGroup(group.id)}>
               <WorkspaceTabIcon kind={group.id} path="" />
               {folded ? <span className="project-aow-group-count" aria-hidden="true">{group.tabs.length > 9 ? '…' : group.tabs.length}</span> : null}
@@ -304,18 +305,18 @@ export function WorkspaceTabs({ workspaceKey, revealRequest, tabs, activeId, vis
                   setContextMenu({ tab, anchor: event.currentTarget, x: event.clientX, y: event.clientY });
                 }} onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onActivate(tab); } }}>
                 <WorkspaceTabIcon kind={tab.kind} path={tab.targetId} terminal={tab.terminal} automationKind={tab.automationKind} acpAgentId={tab.acpAgentId} />
-                {tab.kind === 'acp' && tab.acpWorking && <span className="project-aow-tab-activity" role="status" aria-label="Agent 正在处理…"><AcpSpinnerLabel /></span>}
+                {tab.kind === 'acp' && tab.acpWorking && <span className="project-aow-tab-activity" role="status" aria-label={t("aow.agent_is_working")}><AcpSpinnerLabel /></span>}
                 {rename?.tabId === tab.id ? <input className="project-aow-tab-rename-input" value={rename.draft}
                   maxLength={tab.kind === 'terminal' || tab.kind === 'agent' ? 128 : 255} autoFocus
-                  aria-label={tab.kind === 'agent' ? 'Agent 名称' : tab.kind === 'terminal' ? 'Terminal 名称' : '文件名'}
+                  aria-label={tab.kind === 'agent' ? t("aow.agent_name") : tab.kind === 'terminal' ? t("aow.terminal_name") : t("aow.file_name")}
                   onFocus={event => event.currentTarget.select()} onChange={event => setRename({ ...rename, draft: event.target.value })}
                   onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}
                   onPointerDown={event => event.stopPropagation()} onContextMenu={event => event.stopPropagation()} onBlur={finishRename}
                   onKeyDown={event => { event.stopPropagation(); if (event.key === 'Enter') event.currentTarget.blur();
                     if (event.key === 'Escape') { cancelRename.current = true; event.currentTarget.blur(); } }} /> : <span>{tab.label}</span>}
-                {tab.terminal && tab.terminal.agentCount > 1 && tab.label !== `${tab.terminal.agentCount} agents`
-                  ? <small className="terminal-tab-agent-count" aria-label={`${tab.terminal.agentCount} agents`}>{tab.terminal.agentCount}</small> : null}
-                {rename?.tabId !== tab.id ? <button className="project-aow-tab-close" title={`关闭 ${tab.label}`} aria-label={`关闭 ${tab.label}`}
+                {tab.terminal && tab.terminal.agentCount > 1 && tab.label !== t("terminals.agent_count", { count: tab.terminal.agentCount })
+                  ? <small className="terminal-tab-agent-count" aria-label={t("terminals.agent_count", { count: tab.terminal.agentCount })}>{tab.terminal.agentCount}</small> : null}
+                {rename?.tabId !== tab.id ? <button className="project-aow-tab-close" title={t("aow.close_2", { value0: tab.label })} aria-label={t("aow.close_2", { value0: tab.label })}
                   onClick={event => { event.stopPropagation(); run(() => onCloseTab(tab)); }}><X /></button> : null}
               </div>) : null}
             </div>

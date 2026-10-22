@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { prApi } from '../../features/pr/api';
 import type { ReviewIdentity } from '../../features/pr/types';
 import type { TabRouteAdapter, TabTarget } from './types';
@@ -12,7 +13,7 @@ export const prRoute: TabRouteAdapter<Extract<TabTarget, { type: 'pr' }>> = {
     length(parts, 3);
     const provider = segment(parts, 1);
     const number = Number(segment(parts, 2));
-    if (!Number.isSafeInteger(number) || number <= 0) throw new Error('PR 编号无效。');
+    if (!Number.isSafeInteger(number) || number <= 0) throw new Error(t("aow.invalid_pr_number"));
     return { type: 'pr', workspace: required(q, 'workspace'), repository: absolutePath(required(q, 'repository')), provider, number, remote: q.get('remote') || undefined };
   },
   url: t => url('pr/' + encodeURIComponent(t.provider) + '/' + t.number, { workspace: t.workspace, repository: t.repository, remote: t.remote }),

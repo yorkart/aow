@@ -39,7 +39,8 @@ pub struct ConfigFile {
 
 impl ConfigFile {
     pub fn load(state_dir: &Path) -> Result<Self> {
-        let document = read_document(state_dir)?.context("config.toml 不存在")?;
+        let document = read_document(state_dir)?
+            .context(aow_i18n::text("config.config_toml_does_not_exist"))?;
         let selection =
             ConfigRepository::from_selection(&document_selection(&document)?)?.selection();
         Ok(Self {
@@ -91,39 +92,74 @@ impl ConfigRepository {
     pub fn from_selection(selection: &ConfigSelection) -> Result<Self> {
         ensure!(
             selection.config_repo.is_absolute(),
-            "config-repo 必须是绝对路径"
+            aow_i18n::message("config.config_repo_must_be_an_absolute_path", &[])
         );
-        ensure!(valid_config_id(&selection.config_id), "配置 ID 不合法");
+        ensure!(
+            valid_config_id(&selection.config_id),
+            aow_i18n::message("config.invalid_configuration_id", &[])
+        );
         let repository = repository_root(&selection.config_repo)?;
         let config = Self::from_directory(&repository.join(&selection.config_id))?;
         ensure!(
             config.repository == repository && config.selection().config_id == selection.config_id,
-            "配置版本必须是该 Git 仓库根目录下对应的配置版本目录"
+            aow_i18n::message(
+                "config.the_configuration_version_must_be_a_version_directory_at",
+                &[]
+            )
         );
         Ok(config)
     }
 }
 
 pub(super) fn repository_root(path: &Path) -> Result<PathBuf> {
-    let repository = fs::canonicalize(path)
-        .with_context(|| format!("仓库目录不存在或无法访问：{}", path.display()))?;
-    ensure!(repository.is_dir(), "仓库路径不是目录：{}", path.display());
-    let top = git_text(&repository, &["rev-parse", "--show-toplevel"])
-        .with_context(|| format!("路径不是 Git 仓库：{}", path.display()))?;
+    let repository = fs::canonicalize(path).with_context(|| {
+        aow_i18n::message(
+            "config.repository_directory_missing_or_inaccessible",
+            &[("auto0", format!("{}", path.display()))],
+        )
+    })?;
+    ensure!(
+        repository.is_dir(),
+        aow_i18n::message(
+            "config.repository_path_is_not_a_directory",
+            &[("auto0", format!("{}", path.display()))]
+        )
+    );
+    let top = git_text(&repository, &["rev-parse", "--show-toplevel"]).with_context(|| {
+        aow_i18n::message(
+            "config.path_is_not_a_git_repository",
+            &[("auto0", format!("{}", path.display()))],
+        )
+    })?;
     ensure!(
         fs::canonicalize(top)? == repository,
-        "路径必须是 Git 仓库根目录：{}",
-        path.display()
+        aow_i18n::message(
+            "config.path_must_be_the_git_repository_root",
+            &[("auto0", format!("{}", path.display()))]
+        )
     );
     Ok(repository)
 }
 
 /// List configuration version directories, accepting a repository or one of its versions.
 pub fn inspect_repository(path: &Path) -> Result<RepositoryVersions> {
-    ensure!(path.is_absolute(), "请输入 Git 仓库的绝对路径");
-    let directory = fs::canonicalize(path)
-        .with_context(|| format!("目录不存在或无法访问：{}", path.display()))?;
-    ensure!(directory.is_dir(), "路径不是目录：{}", path.display());
+    ensure!(
+        path.is_absolute(),
+        aow_i18n::message("config.enter_the_absolute_path_of_a_git_repository", &[])
+    );
+    let directory = fs::canonicalize(path).with_context(|| {
+        aow_i18n::message(
+            "config.directory_missing_or_inaccessible",
+            &[("auto0", format!("{}", path.display()))],
+        )
+    })?;
+    ensure!(
+        directory.is_dir(),
+        aow_i18n::message(
+            "config.path_is_not_a_directory",
+            &[("auto0", format!("{}", path.display()))]
+        )
+    );
     let version = directory
         .file_name()
         .and_then(OsStr::to_str)
@@ -160,12 +196,19 @@ fn read_document(state_dir: &Path) -> Result<Option<DocumentMut>> {
     let text = match fs::read_to_string(&path) {
         Ok(text) => text,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            ensure!(!path.is_symlink(), "config.toml 是失效的符号链接");
+            ensure!(
+                !path.is_symlink(),
+                aow_i18n::message("config.config_toml_is_a_broken_symbolic_link", &[])
+            );
             return Ok(None);
         }
-        Err(error) => return Err(error).context("无法读取 config.toml"),
+        Err(error) => {
+            return Err(error).context(aow_i18n::text("config.unable_to_read_config_toml"));
+        }
     };
-    Ok(Some(text.parse().context("config.toml 格式无效")?))
+    Ok(Some(text.parse().context(aow_i18n::text(
+        "config.invalid_config_toml_format",
+    ))?))
 }
 
 fn document_selection(document: &DocumentMut) -> Result<ConfigSelection> {
@@ -173,11 +216,15 @@ fn document_selection(document: &DocumentMut) -> Result<ConfigSelection> {
         .get("config-repo")
         .and_then(|item| item.as_str())
         .filter(|path| !path.is_empty())
-        .context("config.toml 缺少字符串字段 config-repo")?;
+        .context(aow_i18n::text(
+            "config.config_toml_is_missing_string_field_config_repo",
+        ))?;
     let config_id = document
         .get("config-id")
         .and_then(|item| item.as_str())
-        .context("config.toml 缺少字符串字段 config-id")?;
+        .context(aow_i18n::text(
+            "config.config_toml_is_missing_string_field_config_id",
+        ))?;
     Ok(ConfigSelection {
         config_repo: PathBuf::from(config_repo),
         config_id: config_id.to_owned(),
@@ -196,7 +243,7 @@ fn update_document(document: &mut DocumentMut, selection: &ConfigSelection) -> R
         selection
             .config_repo
             .to_str()
-            .context("配置路径必须是 UTF-8")?,
+            .context(aow_i18n::text("config.configuration_path_must_be_utf_8"))?,
     );
     document["config-id"] = value(&selection.config_id);
     Ok(())

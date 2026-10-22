@@ -154,7 +154,7 @@ async fn request_returns_accepted_while_worker_waits_and_rejects_duplicate_delet
             .to_vec(),
     )
     .unwrap();
-    assert!(error.contains("Worktree 正在清理"), "{error}");
+    assert!(error.contains("Worktree is being cleaned up"), "{error}");
     drop(permit);
     assert_eq!(
         wait_finished(&state, &job.id).await.items[0].status,

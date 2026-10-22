@@ -1515,7 +1515,7 @@ async fn disconnected_cli_creation_still_finishes_and_logs_without_task_contents
     assert!(
         page.items
             .iter()
-            .any(|record| record.message == "提交初始任务")
+            .any(|record| record.message == "Submit initial task")
     );
     assert!(
         !serde_json::to_string(&page)

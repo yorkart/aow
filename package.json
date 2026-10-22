@@ -2,9 +2,11 @@
   "name": "aow-repository-tools",
   "private": true,
   "type": "module",
-  "engines": { "node": "^22.16.0 || >=24.0.0" },
+  "engines": {
+    "node": "^22.16.0 || >=24.0.0"
+  },
   "scripts": {
-    "lint": "npm run lint:js && npm run lint:css && npm run lint:html && npm run lint:config && npm run lint:markdown",
+    "lint": "npm run lint:js && npm run lint:css && npm run lint:html && npm run lint:config && npm run lint:markdown && npm run check:i18n",
     "lint:js": "eslint . --max-warnings 0",
     "lint:css": "stylelint 'frontend/**/*.css' --max-warnings 0",
     "lint:html": "html-validate 'frontend/**/*.html' --max-warnings 0",
@@ -13,7 +15,8 @@
     "lint:shell": "node scripts/lint/shell.mjs",
     "lint:python": "ruff check .",
     "lint:yaml": "node scripts/lint/yaml.mjs",
-    "lint:workflows": "actionlint"
+    "lint:workflows": "actionlint",
+    "check:i18n": "node --test scripts/i18n/audit.test.mjs && node scripts/i18n/check.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

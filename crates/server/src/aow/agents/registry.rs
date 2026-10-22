@@ -52,7 +52,9 @@ impl AowManager {
             .find(|agent| agent.is_default)
             .or_else(|| agents.first())
             .map(|agent| agent.id.clone())
-            .ok_or_else(|| AowError::Invalid("未配置 Agent 实例".into()))
+            .ok_or_else(|| {
+                AowError::Invalid(aow_i18n::text("server.no_agent_instances_configured").into())
+            })
     }
 
     pub(in crate::aow) async fn set_default_agent(
@@ -163,7 +165,7 @@ impl AowManager {
             .any(|value| value.len() > 32768 || value.contains('\0'))
         {
             return Err(AowError::Invalid(
-                "agent environment values are invalid".to_owned(),
+                aow_i18n::text("validation.agent_environment_values_are_invalid").to_owned(),
             ));
         }
         let id = validation::validate_id(&request.id)?;
@@ -175,7 +177,8 @@ impl AowManager {
             }
             if id != existing_id {
                 return Err(AowError::Invalid(
-                    "Agent ID 创建后不可修改；如需调整，请删除后重新创建".to_owned(),
+                    aow_i18n::text("server.agent_id_cannot_be_changed_after_creation_delete_and")
+                        .to_owned(),
                 ));
             }
         }
@@ -184,7 +187,7 @@ impl AowManager {
         }
         if AgentType::from_id(&id).is_some_and(|agent_type| agent_type != request.agent_type) {
             return Err(AowError::Invalid(
-                "内置 Agent 的类型必须与其 ID 一致；其他类型请注册为新配置".to_owned(),
+                aow_i18n::text("server.a_built_in_agent_s_type_must_match_its").to_owned(),
             ));
         }
         let stored = StoredAgent {

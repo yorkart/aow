@@ -79,7 +79,10 @@ impl TerminalManager {
             })
         {
             return Err(TerminalError::Invalid(
-                "legacy project terminal does not belong to this project".into(),
+                aow_i18n::text(
+                    "validation.legacy_project_terminal_does_not_belong_to_this_project",
+                )
+                .into(),
             ));
         }
         state.tabs[index].dock_project_id = Some(project_id.to_owned());

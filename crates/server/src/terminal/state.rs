@@ -39,7 +39,8 @@ impl ManagerState {
             .any(|root| Path::new(path).starts_with(root))
         {
             return Err(TerminalError::Invalid(
-                "Worktree 正在清理，暂时不能创建资源".into(),
+                aow_i18n::text("server.worktree_is_being_cleaned_up_cannot_create_resources_yet")
+                    .into(),
             ));
         }
         Ok(())

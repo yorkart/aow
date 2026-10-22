@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useEffect, useId, useRef, useState } from 'react';
 import { Plus, RefreshCw, TerminalSquare } from 'lucide-react';
 import { AgentIcon } from '../agents/AgentIcon';
@@ -47,21 +48,21 @@ export function MobileTerminalNewMenu({ busy, onCreate }: { busy: boolean; onCre
     onCreate(agentId);
   };
   return <div ref={container} className="mobile-terminal-new">
-    <button ref={trigger} className="mobile-icon-button" aria-label="新建终端" aria-haspopup="menu" aria-expanded={open}
+    <button ref={trigger} className="mobile-icon-button" aria-label={t("terminals.new_terminal")} aria-haspopup="menu" aria-expanded={open}
       aria-controls={open ? id : undefined} disabled={busy} onClick={() => setOpen(value => !value)} onKeyDown={event => {
         if (event.key === 'ArrowDown' && !open) { event.preventDefault(); setOpen(true); }
       }}><Plus size={21} /></button>
-    {open && <div ref={menu} id={id} className="mobile-terminal-new-menu" role="menu" aria-label="新建终端或 Agent">
-      <button role="menuitem" disabled={busy} onClick={() => create()}><TerminalSquare size={21} /><span>Terminal</span></button>
-      <div className="mobile-terminal-new-label">Agents</div>
+    {open && <div ref={menu} id={id} className="mobile-terminal-new-menu" role="menu" aria-label={t("terminals.new_terminal_or_agent")}>
+      <button role="menuitem" disabled={busy} onClick={() => create()}><TerminalSquare size={21} /><span>{t("navigation.terminal")}</span></button>
+      <div className="mobile-terminal-new-label">{t("navigation.agents")}</div>
       {available.map(agent => <button key={agent.id} role="menuitem" disabled={busy} onClick={() => create(agent.id)}>
         <AgentIcon agentId={aowAgentType(agent)} /><span>{agent.display_name}</span>
       </button>)}
-      {agents.loading ? <p className="mobile-terminal-new-status" role="status">正在加载 Agent…</p>
+      {agents.loading ? <p className="mobile-terminal-new-status" role="status">{t("terminals.loading_agents")}</p>
         : agents.error ? <>
-          <p className="mobile-terminal-new-status error" role="alert">Agent 加载失败：{agents.error}</p>
-          <button role="menuitem" onClick={agents.reload}><RefreshCw size={18} /><span>重新加载 Agent</span></button>
-        </> : !available.length ? <p className="mobile-terminal-new-status">未发现可用 Agent</p> : null}
+          <p className="mobile-terminal-new-status error" role="alert">{t("terminals.failed_to_load_agents")}{agents.error}</p>
+          <button role="menuitem" onClick={agents.reload}><RefreshCw size={18} /><span>{t("inbox.reload_agents")}</span></button>
+        </> : !available.length ? <p className="mobile-terminal-new-status">{t("aow.no_agents_available")}</p> : null}
     </div>}
   </div>;
 }

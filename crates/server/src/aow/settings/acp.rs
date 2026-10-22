@@ -48,18 +48,23 @@ impl AowManager {
         aow_acp::validate_settings(&content)?;
         let operation = self.inner.project_operation.clone().lock_owned().await;
         let manager = self.clone();
-        tokio::task::spawn_blocking(move || {
+        aow_i18n::spawn_blocking(move || {
             let _operation = operation;
             let previous = manager.acp_settings()?;
             ensure!(
                 previous.revision == revision,
-                "ACP 配置已被其他窗口或程序修改，请重新加载后再保存"
+                aow_i18n::message(
+                    "server.acp_configuration_changed_in_another_window_or_program_reload",
+                    &[]
+                )
             );
             manager
                 .inner
                 .config
                 .as_ref()
-                .context("当前服务未配置持久化目录")?
+                .context(aow_i18n::text(
+                    "server.no_persistent_directory_configured_for_this_service",
+                ))?
                 .save(
                     std::path::Path::new(aow_acp::SETTINGS_PATH),
                     content.as_bytes(),

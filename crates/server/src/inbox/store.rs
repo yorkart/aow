@@ -57,7 +57,7 @@ impl InboxStore {
         self.0
             .state
             .lock()
-            .map_err(|_| HttpError::internal("Inbox lock poisoned"))
+            .map_err(|_| HttpError::internal(aow_i18n::text("validation.inbox_lock_poisoned")))
     }
     pub(super) fn snapshot(&self) -> Result<Snapshot> {
         let s = self.lock()?;
@@ -139,7 +139,9 @@ impl InboxStore {
         });
         let comment = if let Some(existing) = existing {
             if existing.content != input.content || existing.author != input.author {
-                return Err(conflict("这条评论已提交，补充内容请追加新评论。"));
+                return Err(conflict(aow_i18n::text(
+                    "server.this_comment_was_submitted_add_a_new_comment_for",
+                )));
             }
             existing.clone()
         } else {
@@ -174,14 +176,16 @@ impl InboxStore {
             let fingerprint = format!("{:x}", md5::compute(input.markdown.as_bytes()));
             if let Some((id, previous)) = doc.captures.get(&input.request_key) {
                 if previous != &fingerprint {
-                    return Err(conflict("这次录入已提交，请刷新列表确认后再录入。"));
+                    return Err(conflict(aow_i18n::text(
+                        "server.this_entry_was_submitted_refresh_the_list_to_confirm",
+                    )));
                 }
                 return doc
                     .items
                     .iter()
                     .find(|item| &item.id == id)
                     .cloned()
-                    .ok_or_else(|| conflict("这次录入已被删除。"));
+                    .ok_or_else(|| conflict(aow_i18n::text("server.this_entry_was_deleted")));
             }
             let now = chrono::Utc::now().to_rfc3339();
             let item = Item {
@@ -296,14 +300,16 @@ impl InboxStore {
             .iter()
             .any(|r| r.item_id == item.id && r.phase == RunPhase::Starting)
         {
-            return Err(conflict("该需求正在启动 Agent，请等待执行结果。"));
+            return Err(conflict(aow_i18n::text(
+                "server.an_agent_is_starting_for_this_requirement_wait_for",
+            )));
         }
         let id = aow_id::new_id();
         let markdown = super::context::task(&item.id, &id, &markdown);
         if markdown.len() > 128 * 1024 {
-            return Err(invalid(
-                "需求、追加 prompt 与 Inbox 上下文拼接后不能超过 128 KiB。",
-            ));
+            return Err(invalid(aow_i18n::text(
+                "server.combined_requirement_additional_prompt_and_inbox_context_must_not",
+            )));
         }
         let run = Run {
             id,
@@ -315,7 +321,7 @@ impl InboxStore {
             project_id: item
                 .project_id
                 .clone()
-                .ok_or_else(|| invalid("请先绑定项目。"))?,
+                .ok_or_else(|| invalid(aow_i18n::text("server.bind_a_project_first")))?,
             cwd,
             workspace_mode: input.workspace.workspace_mode,
             markdown,
@@ -370,7 +376,9 @@ impl InboxStore {
                     RunPhase::Failed
                 };
                 run.error = info.state.error.or_else(|| {
-                    (run.phase == RunPhase::Failed).then(|| "需求未提交，请查看终端。".into())
+                    (run.phase == RunPhase::Failed).then(|| {
+                        aow_i18n::text("server.requirement_not_submitted_check_the_terminal").into()
+                    })
                 });
             }
             Err(error) => {
@@ -398,7 +406,9 @@ fn existing_run(runs: &[Run], item: &str, input: &Execute) -> Result<Option<Run>
             || run.item_revision != input.expected_revision
             || (!run.execution_fingerprint.is_empty() && run.execution_fingerprint != fingerprint)
         {
-            return Err(conflict("执行请求已使用，请刷新后重试。"));
+            return Err(conflict(aow_i18n::text(
+                "server.execution_request_already_used_refresh_and_try_again",
+            )));
         }
         return Ok(Some(run.clone()));
     }
@@ -418,14 +428,18 @@ pub(super) fn validate_document(doc: &Document) -> Result<()> {
             || item.label_ids.iter().collect::<HashSet<_>>().len() != item.label_ids.len()
             || item.label_ids.iter().any(|id| !labels.contains(id))
         {
-            return Err(invalid("需求 ID 或标签无效。"));
+            return Err(invalid(aow_i18n::text(
+                "server.invalid_requirement_id_or_labels",
+            )));
         }
     }
     Ok(())
 }
 fn validate_labels(labels: &[Label]) -> Result<()> {
     if labels.len() > 64 {
-        return Err(invalid("最多配置 64 个标签。"));
+        return Err(invalid(aow_i18n::text(
+            "server.at_most_64_labels_are_allowed",
+        )));
     }
     let mut ids = HashSet::new();
     let mut names = HashSet::new();
@@ -441,22 +455,24 @@ fn validate_labels(labels: &[Label]) -> Result<()> {
                 .iter()
                 .all(u8::is_ascii_hexdigit)
         {
-            return Err(invalid(
-                "标签名称须唯一且不超过 40 字，颜色须为十六进制色值。",
-            ));
+            return Err(invalid(aow_i18n::text(
+                "server.label_names_must_be_unique_and_at_most_40",
+            )));
         }
     }
     Ok(())
 }
 pub(super) fn validate_id(id: &str) -> Result<()> {
     if !aow_id::is_valid_id(id) {
-        return Err(invalid("ID 无效。"));
+        return Err(invalid(aow_i18n::text("server.invalid_id")));
     }
     Ok(())
 }
 fn validate_markdown(markdown: &str) -> Result<()> {
     if markdown.trim().is_empty() || markdown.len() > 128 * 1024 || markdown.contains('\0') {
-        return Err(invalid("请输入需求，最多支持 128 KiB 文本。"));
+        return Err(invalid(aow_i18n::text(
+            "server.enter_a_requirement_up_to_128_kib_of_text",
+        )));
     }
     Ok(())
 }
@@ -472,17 +488,17 @@ pub(super) fn validate_comment(comment: &Comment) -> Result<()> {
         || comment.author.name.chars().count() > 80
         || chrono::DateTime::parse_from_rfc3339(&comment.created_at).is_err()
     {
-        return Err(invalid(
-            "评论须包含正文和作者，正文最多 128 KiB，作者名称最多 80 字。",
-        ));
+        return Err(invalid(aow_i18n::text(
+            "server.comments_require_content_and_an_author_content_is_limited",
+        )));
     }
     Ok(())
 }
 pub(super) fn revision(current: u64, expected: u64) -> Result<()> {
     if current != expected {
-        return Err(conflict(
-            "内容已在其他页面更新，请检查最新内容后重试；当前输入已保留。",
-        ));
+        return Err(conflict(aow_i18n::text(
+            "server.content_was_updated_in_another_page_check_the_latest",
+        )));
     }
     Ok(())
 }
@@ -496,7 +512,7 @@ fn missing() -> HttpError {
     HttpError::new(
         StatusCode::NOT_FOUND,
         "inbox_not_found",
-        "需求不存在或已被删除。",
+        aow_i18n::text("server.requirement_does_not_exist_or_was_deleted"),
         None,
     )
 }

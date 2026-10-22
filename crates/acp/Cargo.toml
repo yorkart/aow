@@ -5,6 +5,7 @@ edition.workspace = true
 license = "GPL-3.0-or-later"
 
 [dependencies]
+aow-i18n = { path = "../i18n" }
 aow-db = { path = "../db" }
 aow-protocol = { path = "../protocol" }
 agent-client-protocol = { version = "=3.4.0", features = ["unstable", "unstable_protocol_v2"] }

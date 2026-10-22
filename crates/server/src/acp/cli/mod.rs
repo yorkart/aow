@@ -47,7 +47,7 @@ async fn create(
         .map_err(instances::invalid)?;
     validate(request.task.as_deref(), request.timeout_seconds)?;
     // The operation is independent of the requesting CLI, including preparation and first prompt.
-    tokio::spawn(async move {
+    aow_i18n::spawn(async move {
         let cwd = state.aow.agent_worktree_path(&request.project_id, &request.cwd).await.map_err(crate::aow::aow_http_error)?;
         let parent = instances::creation_parent(&state, request.parent, request.caller.as_ref(), request.no_parent)?;
         let agent_id = state.acp.select_agent_id(request.agent_id.as_deref()).await.map_err(super::api::error)?;
@@ -97,7 +97,7 @@ fn start(
 ) -> Result<tokio::task::JoinHandle<Result<bool, HttpError>>, HttpError> {
     let controller = state.acp_controls.session(&id);
     let lease = controller.claim_cli()?;
-    Ok(tokio::spawn(async move {
+    Ok(aow_i18n::spawn(async move {
         let _lifecycle = controller.authorize_restore(&lease.headers).await?;
         state.acp.resume(&id).await.map_err(super::api::error)?;
         // A browser takeover during initialization revokes admission of the pending prompt.

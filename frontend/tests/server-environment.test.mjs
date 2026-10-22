@@ -1,11 +1,9 @@
+import { loadModule } from './helpers/load-module.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
-import ts from 'typescript';
 
-const source = await readFile(new URL('../src/features/settings/serverEnvironment.ts', import.meta.url), 'utf8');
-const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 } });
-const { serverEnvironmentFields, readServerEnvironment: read, writeServerEnvironment: write, validateServerEnvironment: validate } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
+const { serverEnvironmentFields, readServerEnvironment: read, writeServerEnvironment: write, validateServerEnvironment: validate } = await loadModule(new URL('../src/features/settings/serverEnvironment.ts', import.meta.url));
 
 test('the table covers the installer allowlist and proxies, excluding installer-owned values', async () => {
   const installer = await readFile(new URL('../../scripts/launchd-service.mjs', import.meta.url), 'utf8');

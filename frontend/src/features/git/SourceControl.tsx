@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { appLocalStorage } from '../../lib/basePath';
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -366,10 +367,10 @@ export const SourceControl = memo(function SourceControl({ root, visible, refres
       setLayoutMenu(undefined);
     };
     return createPortal(<div ref={menuRef} className="project-aow-context-menu layout-menu" role="menu"
-      aria-label={`${target === 'all' ? 'Source Control' : target === 'changes' ? 'Changes' : 'Commits'} 视图选项`}
+      aria-label={t("git.view_options", { value0: target === 'all' ? t("navigation.source_control") : target === 'changes' ? t("common.changes") : t("common.commits") })}
       style={{ left: menuPosition.x, top: menuPosition.y }} onPointerDown={event => event.stopPropagation()} onContextMenu={event => event.preventDefault()}>
-      <button role="menuitemradio" aria-checked={current === 'list'} onClick={() => selectLayout('list')}><List /> View as list{current === 'list' ? <Check className="layout-menu-check" /> : null}</button>
-      <button role="menuitemradio" aria-checked={current === 'tree'} onClick={() => selectLayout('tree')}><TreePine /> View as Tree{current === 'tree' ? <Check className="layout-menu-check" /> : null}</button>
+      <button role="menuitemradio" aria-checked={current === 'list'} onClick={() => selectLayout('list')}><List /> {t("navigation.view_as_list")}{current === 'list' ? <Check className="layout-menu-check" /> : null}</button>
+      <button role="menuitemradio" aria-checked={current === 'tree'} onClick={() => selectLayout('tree')}><TreePine /> {t("navigation.view_as_tree")}{current === 'tree' ? <Check className="layout-menu-check" /> : null}</button>
       {target === 'commits' ? <>
         <hr />
         <button role="menuitem" disabled={!repository || gitOperation?.state === 'running'} onClick={() => void runGitCommand('pull')}><ArrowDown /> git pull</button>
@@ -382,39 +383,39 @@ export const SourceControl = memo(function SourceControl({ root, visible, refres
   return (
     <section ref={panelRef} className={`side-view source-control${commitsCollapsed ? ' commits-collapsed' : ''}`}>
       <Container>
-      {!aowHeader ? <div className="side-title"><strong>{titleCase ? 'Source Control' : 'SOURCE CONTROL'}</strong><span className="source-actions"><button title="刷新" onClick={() => { setRefreshKey((key) => key + 1); refresh(); }}><RefreshCw size={14} /></button><button title="视图选项" data-source-menu="all" aria-haspopup="menu" aria-expanded={layoutMenu === 'all'} onClick={() => setLayoutMenu((current) => current === 'all' ? undefined : 'all')}><MoreHorizontal size={14} /></button></span>{renderLayoutMenu('all')}</div> : null}
-      {!fixedRepository ? <select value={repository} onChange={(event) => setRepository(event.target.value)} aria-label="选择 Git 仓库">
-        {repositories.length ? repositories.map((repo) => <option key={repo.path} value={repo.path}>{repo.name} · {repo.branch}</option>) : <option value="">未发现仓库</option>}
+      {!aowHeader ? <div className="side-title"><strong>{titleCase ? t("navigation.source_control") : t("common.source_control")}</strong><span className="source-actions"><button title={t("files.refresh")} onClick={() => { setRefreshKey((key) => key + 1); refresh(); }}><RefreshCw size={14} /></button><button title={t("git.view_options_2")} data-source-menu="all" aria-haspopup="menu" aria-expanded={layoutMenu === 'all'} onClick={() => setLayoutMenu((current) => current === 'all' ? undefined : 'all')}><MoreHorizontal size={14} /></button></span>{renderLayoutMenu('all')}</div> : null}
+      {!fixedRepository ? <select value={repository} onChange={(event) => setRepository(event.target.value)} aria-label={t("git.choose_git_repository")}>
+        {repositories.length ? repositories.map((repo) => <option key={repo.path} value={repo.path}>{repo.name} · {repo.branch}</option>) : <option value="">{t("git.no_repositories_found")}</option>}
       </select> : null}
-      <SourceSection hideLegacyHeader aow={aowHeader} title={titleCase ? 'Branches' : 'BRANCHES'} icon={<GitBranch />} collapsed={branchesCollapsed}
+      <SourceSection hideLegacyHeader aow={aowHeader} title={titleCase ? t("common.branches") : t("common.branches_2")} icon={<GitBranch />} collapsed={branchesCollapsed}
         controlsId={branchesSectionId} onToggle={() => setBranchesCollapsed(!branchesCollapsed)}>
       {repository ? <div id={aowHeader ? undefined : branchesSectionId} className="branch-label" hidden={aowHeader && branchesCollapsed}>
         <GitBranch size={13} /><span className="branch-name">{branch}</span>
-        {upstream ? <span className="branch-upstream" title={`Tracking ${upstream}${ahead ? ` · ahead ${ahead}` : ''}${behind ? ` · behind ${behind}` : ''}`}><Cloud />{upstream}{ahead ? ` ↑${ahead}` : ''}{behind ? ` ↓${behind}` : ''}</span> : <span className="branch-upstream missing">未配置 upstream</span>}
+        {upstream ? <span className="branch-upstream" title={t("git.tracking_status", { upstream, ahead, behind })}><Cloud />{upstream}{ahead ? ` ↑${ahead}` : ''}{behind ? ` ↓${behind}` : ''}</span> : <span className="branch-upstream missing">{t("git.no_upstream_configured")}</span>}
       </div> : null}
       </SourceSection>
       {error ? <div className="side-error">{error}</div> : null}
       {gitOperation?.repository === repository ? <div className={gitOperation.state === 'error' ? 'side-error' : 'source-git-status'} role={gitOperation.state === 'error' ? 'alert' : 'status'}>
-        git {gitOperation.command}{gitOperation.state === 'running' ? ' 执行中…' : gitOperation.state === 'success' ? ' 已完成' : ` 失败：${gitOperation.message}`}
+        git {gitOperation.command}{gitOperation.state === 'running' ? t("git.running") : gitOperation.state === 'success' ? t("git.completed") : t("git.failed", { value0: gitOperation.message })}
       </div> : null}
       <SourceSection
-        aow={aowHeader} title={titleCase ? 'Changes' : 'CHANGES'} icon={<FileDiff />} collapsed={changesCollapsed}
+        aow={aowHeader} title={titleCase ? t("common.changes") : t("common.changes_2")} icon={<FileDiff />} collapsed={changesCollapsed}
         controlsId={changesSectionId} count={aowHeader ? undefined : workingChanges.length} onToggle={toggleChangesSection}
         actions={aowHeader ? <>
-          <AowIconButton title="刷新 Changes" aria-label="刷新 Changes" onClick={() => refresh('changes')}><RefreshCw /></AowIconButton>
-          <AowIconButton title="Changes 视图选项" aria-label="Changes 视图选项" data-source-menu="changes" aria-haspopup="menu" aria-expanded={layoutMenu === 'changes'} onClick={() => setLayoutMenu((current) => current === 'changes' ? undefined : 'changes')}><MoreHorizontal /></AowIconButton>
+          <AowIconButton title={t("git.refresh_changes")} aria-label={t("git.refresh_changes")} onClick={() => refresh('changes')}><RefreshCw /></AowIconButton>
+          <AowIconButton title={t("git.changes_view_options")} aria-label={t("git.changes_view_options")} data-source-menu="changes" aria-haspopup="menu" aria-expanded={layoutMenu === 'changes'} onClick={() => setLayoutMenu((current) => current === 'changes' ? undefined : 'changes')}><MoreHorizontal /></AowIconButton>
         </> : undefined}
         menu={aowHeader ? renderLayoutMenu('changes') : undefined}
       >
-      <div id={aowHeader ? undefined : changesSectionId} className="changes-list" hidden={changesCollapsed}><SourceControlChanges items={workingChanges} layout={aowHeader ? changesLayout : layout} active={visible && !changesCollapsed} selectedId={activeDocumentId} onOpen={openWorkingChange} />{!workingChanges.length ? <div className="side-empty">没有未提交更改</div> : null}</div>
+      <div id={aowHeader ? undefined : changesSectionId} className="changes-list" hidden={changesCollapsed}><SourceControlChanges items={workingChanges} layout={aowHeader ? changesLayout : layout} active={visible && !changesCollapsed} selectedId={activeDocumentId} onOpen={openWorkingChange} />{!workingChanges.length ? <div className="side-empty">{t("git.no_uncommitted_changes")}</div> : null}</div>
       </SourceSection>
       <SourceSection
-        aow={aowHeader} title={titleCase ? 'Commits' : 'COMMITS'} icon={<History />} collapsed={commitsCollapsed}
+        aow={aowHeader} title={titleCase ? t("common.commits") : t("common.commits_2")} icon={<History />} collapsed={commitsCollapsed}
         controlsId={commitsSectionId} onToggle={toggleCommitsSection}
-        details={aowHeader ? undefined : <span className="commit-legend"><i className="outgoing" />本地<i className="pushed" />已推送</span>}
+        details={aowHeader ? undefined : <span className="commit-legend"><i className="outgoing" />{t("git.local")}<i className="pushed" />{t("git.pushed_2")}</span>}
         actions={aowHeader ? <>
-          <AowIconButton title="刷新 Commits" aria-label="刷新 Commits" onClick={() => refresh('commits')}><RefreshCw /></AowIconButton>
-          <AowIconButton title="Commits 视图选项" aria-label="Commits 视图选项" data-source-menu="commits" aria-haspopup="menu" aria-expanded={layoutMenu === 'commits'} onClick={() => setLayoutMenu((current) => current === 'commits' ? undefined : 'commits')}><MoreHorizontal /></AowIconButton>
+          <AowIconButton title={t("git.refresh_commits")} aria-label={t("git.refresh_commits")} onClick={() => refresh('commits')}><RefreshCw /></AowIconButton>
+          <AowIconButton title={t("git.commits_view_options")} aria-label={t("git.commits_view_options")} data-source-menu="commits" aria-haspopup="menu" aria-expanded={layoutMenu === 'commits'} onClick={() => setLayoutMenu((current) => current === 'commits' ? undefined : 'commits')}><MoreHorizontal /></AowIconButton>
         </> : undefined}
         menu={aowHeader ? renderLayoutMenu('commits') : undefined}
       >
@@ -423,7 +424,7 @@ export const SourceControl = memo(function SourceControl({ root, visible, refres
           const isExpanded = commit.id in expanded; const files = expanded[commit.id];
           const state = commit.is_pushed ? 'pushed' : 'outgoing';
           const graphRow = commitGraph.get(commit.id)!;
-          const stateTitle = commit.is_pushed ? `已推送${upstream ? `到 ${upstream}` : ''}` : upstream ? `尚未推送到 ${upstream}` : '仅存在于本地（未配置 upstream）';
+          const stateTitle = commit.is_pushed ? t("git.pushed", { value0: upstream ? t("common.to", { value0: upstream }) : '' }) : upstream ? t("git.not_pushed_to_yet", { value0: upstream }) : t("git.local_only_no_upstream_configured");
           const rowStyle = { '--commit-content-offset': `${graphWidth(graphRow)}px` } as CSSProperties;
           const selected = commitPopover?.commit.id === commit.id;
           const changesId = `${sectionIdPrefix}-commit-${commit.id}`;
@@ -431,7 +432,7 @@ export const SourceControl = memo(function SourceControl({ root, visible, refres
             <CommitGraph commit={commit} row={graphRow} expanded={isExpanded} />
             <button
               className="commit-row" type="button" aria-expanded={isExpanded} aria-controls={changesId}
-              aria-label={`${isExpanded ? '收起' : '展开'} ${commit.subject} 的文件，${stateTitle}`}
+              aria-label={t("git.files_in", { value0: isExpanded ? t("aow.collapse") : t("aow.expand"), value1: commit.subject, value2: stateTitle })}
               onPointerEnter={(event) => scheduleCommitPreview(commit, event.currentTarget)}
               onPointerLeave={clearHoverTimer}
               onFocus={(event) => {
@@ -454,7 +455,7 @@ export const SourceControl = memo(function SourceControl({ root, visible, refres
                 </span>
               </span>
             </button>
-            {isExpanded ? <div id={changesId} className="commit-changes">{files === null ? <div className="side-empty" role="status">加载中…</div> : files.length ? <CommitChanges repository={repository} commit={commit} files={files} layout={aowHeader ? commitsLayout : layout} active={visible && !commitsCollapsed} onOpen={onOpenCommitDiff} /> : <div className="side-empty">此提交没有文件变更</div>}</div> : null}
+            {isExpanded ? <div id={changesId} className="commit-changes">{files === null ? <div className="side-empty" role="status">{t("automations.loading")}</div> : files.length ? <CommitChanges repository={repository} commit={commit} files={files} layout={aowHeader ? commitsLayout : layout} active={visible && !commitsCollapsed} onOpen={onOpenCommitDiff} /> : <div className="side-empty">{t("git.this_commit_has_no_file_changes")}</div>}</div> : null}
           </div>;
         })}
       </div>

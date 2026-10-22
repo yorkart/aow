@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { lazy, Suspense, useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { ArrowLeft, ArrowRight, Check, ChevronDown, ChevronRight, Circle, CircleAlert, Clock3, ExternalLink, FileDiff, FileText, FileWarning, GitBranch, GitCommitHorizontal, GitMerge, GitPullRequest, LoaderCircle, MessageSquareMore, RefreshCw, Search, ShieldCheck, XCircle } from 'lucide-react';
@@ -42,23 +43,23 @@ function Empty({ icon, children }: { icon: ReactNode; children: ReactNode }) {
 function InlineFileDiff({ detail, file, state, modelScope, sideBySide, onRetry, mobile }: {
   detail: PullRequestDetail; file: PullRequestFile; state?: FileDiffState; modelScope: string; sideBySide: boolean; onRetry: () => void; mobile: boolean;
 }) {
-  if (state?.loading) return <Empty icon={<LoaderCircle className="spinning" />}>正在加载 Diff…</Empty>;
-  if (state?.error) return <div className="pr-diff-error" role="alert"><CircleAlert /><span>{state.error}</span><button className="pr-text-button" onClick={onRetry}>重试</button></div>;
+  if (state?.loading) return <Empty icon={<LoaderCircle className="spinning" />}>{t("pr.loading_diff")}</Empty>;
+  if (state?.error) return <div className="pr-diff-error" role="alert"><CircleAlert /><span>{state.error}</span><button className="pr-text-button" onClick={onRetry}>{t("aow.retry")}</button></div>;
   const diff = state?.diff;
   if (!diff) return null;
-  if (diff.binary) return <Empty icon={<FileWarning />}>二进制文件，无法显示文本差异。</Empty>;
-  if (diff.truncated || (!mobile && (diff.original === null || diff.modified === null))) return <Empty icon={<FileWarning />}>文件过大或内容不可用，无法显示文本差异。</Empty>;
+  if (diff.binary) return <Empty icon={<FileWarning />}>{t("pr.binary_file_text_diff_unavailable")}</Empty>;
+  if (diff.truncated || (!mobile && (diff.original === null || diff.modified === null))) return <Empty icon={<FileWarning />}>{t("pr.file_is_too_large_or_unavailable_text_diff_unavailable")}</Empty>;
   return <>
-    {diff.original_path && diff.original_path !== file.path ? <div className="pr-rename">原路径：<code>{diff.original_path}</code></div> : null}
-    {mobile ? diff.patch == null ? <Empty icon={<FileWarning />}>当前服务未提供单列差异，请更新服务后重试。</Empty>
-      : diff.patch ? <div className="pr-touch-diff" role="region" tabIndex={0} aria-label={`${file.path} 单列差异`}>
-        <table><thead><tr><th>原行</th><th>新行</th><th aria-label="变更类型" /><th>代码</th></tr></thead><tbody>
+    {diff.original_path && diff.original_path !== file.path ? <div className="pr-rename">{t("pr.original_path")}<code>{diff.original_path}</code></div> : null}
+    {mobile ? diff.patch == null ? <Empty icon={<FileWarning />}>{t("pr.the_current_server_does_not_provide_unified_diffs_update")}</Empty>
+      : diff.patch ? <div className="pr-touch-diff" role="region" tabIndex={0} aria-label={t("pr.unified_diff", { value0: file.path })}>
+        <table><thead><tr><th>{t("pr.old_line")}</th><th>{t("pr.new_line")}</th><th aria-label={t("pr.change_type")} /><th>{t("pr.code")}</th></tr></thead><tbody>
           {pullRequestDiffLines(diff.patch).map((line, index) => <tr key={index} className={line.kind}>
             <td className="pr-diff-line-number">{line.oldLine}</td><td className="pr-diff-line-number">{line.newLine}</td><td className="pr-diff-marker">{line.kind === 'added' ? '+' : line.kind === 'removed' ? '−' : ''}</td><td><code>{line.text || ' '}</code></td>
           </tr>)}
         </tbody></table>
-      </div> : <Empty icon={<FileDiff />}>没有文本差异，可能只改动了文件名或权限。</Empty>
-      : <Suspense fallback={<Empty icon={<LoaderCircle className="spinning" />}>正在加载 Diff…</Empty>}>
+      </div> : <Empty icon={<FileDiff />}>{t("pr.no_text_changes_only_the_file_name_or_permissions")}</Empty>
+      : <Suspense fallback={<Empty icon={<LoaderCircle className="spinning" />}>{t("pr.loading_diff")}</Empty>}>
         <DesktopDiff diff={diff} number={detail.number} path={file.path} modelScope={modelScope} sideBySide={sideBySide} />
       </Suspense>}
   </>;
@@ -68,10 +69,10 @@ function CheckCard({ check }: { check: PullRequestCheck }) {
   const value = check.conclusion || check.status;
   const url = safeExternalUrl(check.details_url);
   return <details className="pr-check-card">
-    <summary><span className={'pr-check-icon ' + stateClass(value)}><StateIcon value={value} /></span><span className="pr-check-name"><strong>{check.name}</strong>{check.description ? <small>{check.description}</small> : null}</span>{check.required ? <span className="pr-required">必需</span> : null}<Badge value={value} /><ChevronDown className="pr-disclosure" /></summary>
+    <summary><span className={'pr-check-icon ' + stateClass(value)}><StateIcon value={value} /></span><span className="pr-check-name"><strong>{check.name}</strong>{check.description ? <small>{check.description}</small> : null}</span>{check.required ? <span className="pr-required">{t("pr.required")}</span> : null}<Badge value={value} /><ChevronDown className="pr-disclosure" /></summary>
     <div className="pr-check-content">
-      <div className="pr-check-meta"><span>开始于 {formatPrTime(check.started_at)}</span><span>完成于 {formatPrTime(check.completed_at)}</span>{url ? <a className="pr-link" href={url} target="_blank" rel="noreferrer">查看检查详情<ExternalLink /></a> : null}</div>
-      {check.text ? <MarkdownContent readOnly text={check.text} className="pr-markdown" /> : <p className="pr-muted">此检查未提供详细输出。</p>}
+      <div className="pr-check-meta"><span>{t("pr.started")} {formatPrTime(check.started_at)}</span><span>{t("pr.completed")} {formatPrTime(check.completed_at)}</span>{url ? <a className="pr-link" href={url} target="_blank" rel="noreferrer">{t("pr.view_check_details")}<ExternalLink /></a> : null}</div>
+      {check.text ? <MarkdownContent readOnly text={check.text} className="pr-markdown" /> : <p className="pr-muted">{t("pr.this_check_has_no_detailed_output")}</p>}
     </div>
   </details>;
 }
@@ -79,10 +80,10 @@ function CheckCard({ check }: { check: PullRequestCheck }) {
 function DiscussionCard({ thread }: { thread: PullRequestThread }) {
   const comments = thread.comments?.length ? thread.comments : [{ id: thread.id, author: thread.author, body: thread.body, created_at: thread.updated_at || '', updated_at: thread.updated_at || '' }];
   return <section className="pr-discussion-card">
-    <header><MessageSquareMore /><code title={thread.path || '一般讨论'}>{thread.path || '一般讨论'}{thread.line ? `:${thread.line}` : ''}</code><Badge value={thread.status === 'open' ? 'pending' : thread.status}>{thread.status === 'open' ? '未解决' : stateLabel(thread.status)}</Badge></header>
+    <header><MessageSquareMore /><code title={thread.path || t("pr.general_discussion")}>{thread.path || t("pr.general_discussion")}{thread.line ? `:${thread.line}` : ''}</code><Badge value={thread.status === 'open' ? 'pending' : thread.status}>{thread.status === 'open' ? t("pr.unresolved") : stateLabel(thread.status)}</Badge></header>
     {comments.map((comment, index) => <div className="pr-comment" key={comment.id || index}>
       <span className="pr-avatar" aria-hidden="true">{(comment.author || '?').slice(0, 1).toUpperCase()}</span>
-      <div className="pr-comment-main"><div className="pr-comment-byline"><strong>{comment.author || '未知用户'}</strong><time dateTime={comment.created_at || undefined}>{formatPrTime(comment.created_at)}</time>{comment.updated_at && comment.updated_at !== comment.created_at ? <span title={formatPrTime(comment.updated_at)}>已更新</span> : null}</div><MarkdownContent readOnly text={comment.body || '评论内容不可用'} className="pr-markdown" /></div>
+      <div className="pr-comment-main"><div className="pr-comment-byline"><strong>{comment.author || t("pr.unknown_user")}</strong><time dateTime={comment.created_at || undefined}>{formatPrTime(comment.created_at)}</time>{comment.updated_at && comment.updated_at !== comment.created_at ? <span title={formatPrTime(comment.updated_at)}>{t("pr.updated_2")}</span> : null}</div><MarkdownContent readOnly text={comment.body || t("pr.comment_content_unavailable")} className="pr-markdown" /></div>
     </div>)}
   </section>;
 }
@@ -159,8 +160,8 @@ function PullRequestContent({ repository, provider, remote, number, visible, mob
   };
 
   if (!detail) return <div className="pr-detail-state" role={error ? 'alert' : 'status'}>
-    {onBack ? <button className="pr-control pr-state-back" aria-label="返回 PR 列表" onClick={onBack}><ArrowLeft />PR 列表</button> : null}
-    {error ? <><CircleAlert /><strong>暂时无法加载 PR #{number}</strong><p>{error}</p><button className="pr-control" disabled={loading} onClick={() => void load()}><RefreshCw />重试</button></> : <><LoaderCircle className="spinning" /><span>正在加载 PR #{number}…</span></>}
+    {onBack ? <button className="pr-control pr-state-back" aria-label={t("pr.back_to_pr_list")} onClick={onBack}><ArrowLeft />{t("pr.pr_list")}</button> : null}
+    {error ? <><CircleAlert /><strong>{t("pr.unable_to_load_pr")}{number}</strong><p>{error}</p><button className="pr-control" disabled={loading} onClick={() => void load()}><RefreshCw />{t("aow.retry")}</button></> : <><LoaderCircle className="spinning" /><span>{t("pr.loading_pr")}{number}…</span></>}
   </div>;
 
   const review = detail.review_status || 'unknown';
@@ -176,12 +177,12 @@ function PullRequestContent({ repository, provider, remote, number, visible, mob
   const deletions = detail.files.some((file) => file.deletions != null) ? detail.files.reduce((sum, file) => sum + (file.deletions || 0), 0) : null;
   const partialStats = detail.files.some((file) => file.additions == null || file.deletions == null);
   const mergeState = detail.mergeable === true ? 'passed' : detail.mergeable === false ? 'pending' : 'unknown';
-  const mergeLabel = detail.status === 'merged' ? '此 PR 已合并' : detail.status === 'closed' ? '此 PR 已关闭' : detail.mergeable === true ? '已满足合并条件' : detail.mergeable === false ? '尚未满足合并条件' : '合并条件未知';
+  const mergeLabel = detail.status === 'merged' ? t("pr.this_pr_has_been_merged") : detail.status === 'closed' ? t("pr.this_pr_has_been_closed") : detail.mergeable === true ? t("pr.merge_requirements_satisfied") : detail.mergeable === false ? t("pr.merge_requirements_not_satisfied_yet") : t("pr.merge_requirements_unknown");
   const tabs: { id: DetailTab; label: string; icon: ReactNode; count?: number }[] = [
-    { id: 'overview', label: '概览', icon: <FileText /> },
-    { id: 'changes', label: '文件变更', icon: <FileDiff />, count: detail.changes_count },
-    { id: 'checks', label: '检查', icon: <ShieldCheck />, count: detail.checks.length },
-    { id: 'discussion', label: '讨论', icon: <MessageSquareMore />, count: threads.length },
+    { id: 'overview', label: t("pr.overview"), icon: <FileText /> },
+    { id: 'changes', label: t("pr.changed_files"), icon: <FileDiff />, count: detail.changes_count },
+    { id: 'checks', label: t("pr.checks"), icon: <ShieldCheck />, count: detail.checks.length },
+    { id: 'discussion', label: t("pr.discussion"), icon: <MessageSquareMore />, count: threads.length },
   ];
   const tabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     let next: number;
@@ -194,59 +195,59 @@ function PullRequestContent({ repository, provider, remote, number, visible, mob
     document.getElementById(`${prefix}-${tabs[next].id}-tab`)?.focus();
   };
 
-  return <article ref={mobileReaderRef} className={'pr-detail' + (mobile ? ' pr-detail-mobile' : '')} aria-label={`PR #${number} 详情`} aria-busy={loading}>
+  return <article ref={mobileReaderRef} className={'pr-detail' + (mobile ? ' pr-detail-mobile' : '')} aria-label={t("pr.pr_details", { value0: number })} aria-busy={loading}>
     <header className="pr-header">
-      <div className="pr-breadcrumb">{onBack ? <button className="pr-back-button" aria-label="返回 PR 列表" onClick={onBack}><ArrowLeft /></button> : null}<span title={repository}>{repoName}</span><ChevronRight /><span>Pull requests</span><ChevronRight /><strong>#{detail.number}</strong></div>
-      <div className="pr-title-row"><h1>{detail.title}</h1><div className="pr-header-actions">{mrUrl ? <a className="pr-control" href={mrUrl} target="_blank" rel="noreferrer" aria-label={`在 ${detail.provider_name || '平台'} 查看 PR`}><ExternalLink /><span>{detail.provider_name || '平台'}</span></a> : null}<button className="pr-control pr-icon-button" title="刷新 PR 详情" aria-label="刷新 PR 详情" disabled={loading} onClick={() => void load()}><RefreshCw className={loading ? 'spinning' : ''} /></button></div></div>
-      <div className="pr-author-line">{detail.author ? <strong>{detail.author.display_name || detail.author.username}</strong> : null}<span>创建于 <time dateTime={detail.created_at}>{formatPrTime(detail.created_at)}</time></span></div>
-      <div className="pr-context"><span className={'pr-lifecycle ' + detail.status}>{detail.status === 'merged' ? <GitMerge /> : <GitPullRequest />}{stateLabel(detail.status)}</span>{detail.draft ? <span className="pr-draft">草稿</span> : null}<span className="pr-branch" title={detail.source_branch}><GitBranch /><code>{detail.source_branch}</code></span><ArrowRight className="pr-branch-arrow" /><span className="pr-branch" title={detail.target_branch}><GitBranch /><code>{detail.target_branch}</code></span><span className="pr-commit-count"><GitCommitHorizontal />{detail.commits_count} 次提交</span></div>
-      {detail.diverged_commits_count ? <p className="pr-branch-behind">当前 PR 版本落后目标分支 {detail.diverged_commits_count} 次提交</p> : null}
+      <div className="pr-breadcrumb">{onBack ? <button className="pr-back-button" aria-label={t("pr.back_to_pr_list")} onClick={onBack}><ArrowLeft /></button> : null}<span title={repository}>{repoName}</span><ChevronRight /><span>{t("navigation.pull_requests_label")}</span><ChevronRight /><strong>#{detail.number}</strong></div>
+      <div className="pr-title-row"><h1>{detail.title}</h1><div className="pr-header-actions">{mrUrl ? <a className="pr-control" href={mrUrl} target="_blank" rel="noreferrer" aria-label={t("pr.view_pr_on", { value0: detail.provider_name || t("pr.platform") })}><ExternalLink /><span>{detail.provider_name || t("pr.platform")}</span></a> : null}<button className="pr-control pr-icon-button" title={t("pr.refresh_pr_details")} aria-label={t("pr.refresh_pr_details")} disabled={loading} onClick={() => void load()}><RefreshCw className={loading ? 'spinning' : ''} /></button></div></div>
+      <div className="pr-author-line">{detail.author ? <strong>{detail.author.display_name || detail.author.username}</strong> : null}<span>{t("pr.created")} <time dateTime={detail.created_at}>{formatPrTime(detail.created_at)}</time></span></div>
+      <div className="pr-context"><span className={'pr-lifecycle ' + detail.status}>{detail.status === 'merged' ? <GitMerge /> : <GitPullRequest />}{stateLabel(detail.status)}</span>{detail.draft ? <span className="pr-draft">{t("pr.draft")}</span> : null}<span className="pr-branch" title={detail.source_branch}><GitBranch /><code>{detail.source_branch}</code></span><ArrowRight className="pr-branch-arrow" /><span className="pr-branch" title={detail.target_branch}><GitBranch /><code>{detail.target_branch}</code></span><span className="pr-commit-count"><GitCommitHorizontal />{detail.commits_count} {t("pr.commits")}</span></div>
+      {detail.diverged_commits_count ? <p className="pr-branch-behind">{t("pr.the_current_pr_is_behind_the_target_branch")} {detail.diverged_commits_count} {t("pr.commits")}</p> : null}
     </header>
-    <nav className="pr-tabs" role="tablist" aria-label="Pull Request 内容">{tabs.map((tab, index) => <button key={tab.id} id={`${prefix}-${tab.id}-tab`} role="tab" tabIndex={activeTab === tab.id ? 0 : -1} aria-selected={activeTab === tab.id} aria-controls={`${prefix}-${tab.id}`} onKeyDown={(event) => tabKeyDown(event, index)} onClick={() => setActiveTab(tab.id)}>{tab.icon}{tab.label}{tab.count != null ? <span className="pr-tab-count">{tab.count}</span> : null}{tab.id === 'discussion' && detail.unresolved_threads.length > 0 ? <i className="pr-attention-dot" title={`${detail.unresolved_threads.length} 条未解决讨论`} /> : null}</button>)}</nav>
+    <nav className="pr-tabs" role="tablist" aria-label={t("pr.pull_request_content")}>{tabs.map((tab, index) => <button key={tab.id} id={`${prefix}-${tab.id}-tab`} role="tab" tabIndex={activeTab === tab.id ? 0 : -1} aria-selected={activeTab === tab.id} aria-controls={`${prefix}-${tab.id}`} onKeyDown={(event) => tabKeyDown(event, index)} onClick={() => setActiveTab(tab.id)}>{tab.icon}{tab.label}{tab.count != null ? <span className="pr-tab-count">{tab.count}</span> : null}{tab.id === 'discussion' && detail.unresolved_threads.length > 0 ? <i className="pr-attention-dot" title={t("pr.unresolved_discussions", { value0: detail.unresolved_threads.length })} /> : null}</button>)}</nav>
     <div className="pr-scroll" ref={scrollRef}>
-      {error ? <div className="pr-notice" role="alert"><CircleAlert /><span>刷新失败，当前展示上次加载的内容。{error}</span></div> : null}
-      {detail.warnings?.length ? <div className="pr-notice" role="status"><CircleAlert /><div><strong>部分信息未完整加载</strong>{detail.warnings.map((warning) => <p key={warning}>{warning}</p>)}</div></div> : null}
+      {error ? <div className="pr-notice" role="alert"><CircleAlert /><span>{t("pr.refresh_failed_showing_previously_loaded_content")}{error}</span></div> : null}
+      {detail.warnings?.length ? <div className="pr-notice" role="status"><CircleAlert /><div><strong>{t("pr.some_information_was_not_fully_loaded")}</strong>{detail.warnings.map((warning) => <p key={warning}>{warning}</p>)}</div></div> : null}
       <div className={'pr-layout' + (activeTab === 'overview' ? '' : ' pr-layout-wide')}>
         <main className="pr-main">
           <section id={`${prefix}-overview`} role="tabpanel" aria-labelledby={`${prefix}-overview-tab`} hidden={activeTab !== 'overview'}>
             <div className="pr-status-grid">
-              <button onClick={() => setActiveTab('checks')}><span><ShieldCheck />代码审阅</span><Badge value={review} /></button>
-              <button onClick={() => setActiveTab('checks')}><span><Check />持续集成 <small>{passedChecks}/{detail.checks.length}</small></span><Badge value={ci} /></button>
-              <button onClick={() => { setUnresolvedOnly(true); setActiveTab('discussion'); }}><span><MessageSquareMore />未解决讨论</span><strong className={detail.unresolved_threads.length ? 'pr-warning-text' : ''}>{detail.unresolved_threads.length}<small> 条</small></strong></button>
+              <button onClick={() => setActiveTab('checks')}><span><ShieldCheck />{t("pr.code_review")}</span><Badge value={review} /></button>
+              <button onClick={() => setActiveTab('checks')}><span><Check />{t("pr.continuous_integration")} <small>{passedChecks}/{detail.checks.length}</small></span><Badge value={ci} /></button>
+              <button onClick={() => { setUnresolvedOnly(true); setActiveTab('discussion'); }}><span><MessageSquareMore />{t("pr.unresolved_discussions_2")}</span><strong className={detail.unresolved_threads.length ? 'pr-warning-text' : ''}>{detail.unresolved_threads.length}<small>  {t("pr.items")}</small></strong></button>
             </div>
-            <section className="pr-card pr-description"><header><button className="pr-card-toggle" aria-expanded={!descriptionCollapsed} aria-controls={`${prefix}-description`} onClick={() => setDescriptionCollapsed(!descriptionCollapsed)}>{descriptionCollapsed ? <ChevronRight /> : <ChevronDown />}<h2>描述</h2></button></header><div id={`${prefix}-description`} className="pr-card-body" hidden={descriptionCollapsed}>{detail.description ? <MarkdownContent readOnly text={detail.description} className="pr-markdown" /> : <p className="pr-muted">作者尚未添加描述。</p>}</div></section>
-            <section className="pr-card pr-merge-card"><header><GitMerge /><h2>合并条件</h2><Badge value={detail.status === 'merged' ? 'passed' : mergeState}>{mergeLabel}</Badge></header><div className="pr-gates">{detail.merge_checks?.length ? detail.merge_checks.map((check, index) => <div className="pr-gate" key={check.name + index}><span className={'pr-check-icon ' + (check.passed === true ? 'passed' : check.passed === false ? 'pending' : 'neutral')}><StateIcon value={check.passed === true ? 'passed' : check.passed === false ? 'pending' : 'unknown'} /></span><div><strong>{mergeCheckLabel(check.name)}</strong>{check.reason ? <p>{check.reason}</p> : null}</div><small>{check.passed === true ? '已通过' : check.passed === false ? '未满足' : '未知'}</small></div>) : <p className="pr-muted">暂未提供具体合并条件。</p>}</div></section>
+            <section className="pr-card pr-description"><header><button className="pr-card-toggle" aria-expanded={!descriptionCollapsed} aria-controls={`${prefix}-description`} onClick={() => setDescriptionCollapsed(!descriptionCollapsed)}>{descriptionCollapsed ? <ChevronRight /> : <ChevronDown />}<h2>{t("pr.description")}</h2></button></header><div id={`${prefix}-description`} className="pr-card-body" hidden={descriptionCollapsed}>{detail.description ? <MarkdownContent readOnly text={detail.description} className="pr-markdown" /> : <p className="pr-muted">{t("pr.the_author_has_not_added_a_description")}</p>}</div></section>
+            <section className="pr-card pr-merge-card"><header><GitMerge /><h2>{t("pr.merge_requirements")}</h2><Badge value={detail.status === 'merged' ? 'passed' : mergeState}>{mergeLabel}</Badge></header><div className="pr-gates">{detail.merge_checks?.length ? detail.merge_checks.map((check, index) => <div className="pr-gate" key={check.name + index}><span className={'pr-check-icon ' + (check.passed === true ? 'passed' : check.passed === false ? 'pending' : 'neutral')}><StateIcon value={check.passed === true ? 'passed' : check.passed === false ? 'pending' : 'unknown'} /></span><div><strong>{mergeCheckLabel(check.name)}</strong>{check.reason ? <p>{check.reason}</p> : null}</div><small>{check.passed === true ? t("pr.passed") : check.passed === false ? t("pr.not_satisfied") : t("pr.unknown")}</small></div>) : <p className="pr-muted">{t("pr.no_specific_merge_requirements_provided")}</p>}</div></section>
           </section>
           <section id={`${prefix}-changes`} role="tabpanel" aria-labelledby={`${prefix}-changes-tab`} hidden={activeTab !== 'changes'}>
-            <div className="pr-section-heading"><div><h2>文件变更</h2><span>{detail.changes_count} 个文件{additions != null ? <b className="pr-additions">+{additions}</b> : null}{deletions != null ? <b className="pr-deletions">−{deletions}</b> : null}{partialStats && additions != null ? <small>已知行数</small> : null}</span></div>{mobile ? <span className="pr-muted">单列 Diff</span> : <div className="pr-segmented" aria-label="Diff 显示方式"><button aria-pressed={sideBySide} onClick={() => setSideBySide(true)}>并排</button><button aria-pressed={!sideBySide} onClick={() => setSideBySide(false)}>统一</button></div>}</div>
-            <div className="pr-file-toolbar"><label className="pr-search"><Search /><input aria-label="筛选变更文件" placeholder="按文件路径筛选…" value={fileQuery} onChange={(event) => setFileQuery(event.target.value)} />{fileQuery ? <button aria-label="清除文件筛选" onClick={() => setFileQuery('')}>×</button> : null}</label><span>{files.length} / {detail.files.length}</span><button className="pr-text-button" disabled={!expandedFiles.size} onClick={() => setExpandedFiles(new Set())}>收起全部</button></div>
+            <div className="pr-section-heading"><div><h2>{t("pr.changed_files")}</h2><span>{detail.changes_count} {t("pr.files")}{additions != null ? <b className="pr-additions">+{additions}</b> : null}{deletions != null ? <b className="pr-deletions">−{deletions}</b> : null}{partialStats && additions != null ? <small>{t("pr.known_line_count")}</small> : null}</span></div>{mobile ? <span className="pr-muted">{t("pr.unified_diff_2")}</span> : <div className="pr-segmented" aria-label={t("pr.diff_display_mode")}><button aria-pressed={sideBySide} onClick={() => setSideBySide(true)}>{t("pr.side_by_side")}</button><button aria-pressed={!sideBySide} onClick={() => setSideBySide(false)}>{t("pr.unified")}</button></div>}</div>
+            <div className="pr-file-toolbar"><label className="pr-search"><Search /><input aria-label={t("pr.filter_changed_files")} placeholder={t("pr.filter_by_file_path")} value={fileQuery} onChange={(event) => setFileQuery(event.target.value)} />{fileQuery ? <button aria-label={t("pr.clear_file_filter")} onClick={() => setFileQuery('')}>×</button> : null}</label><span>{files.length} / {detail.files.length}</span><button className="pr-text-button" disabled={!expandedFiles.size} onClick={() => setExpandedFiles(new Set())}>{t("pr.collapse_all")}</button></div>
             <div className="pr-files">{files.length ? files.map((file) => {
               const expanded = expandedFiles.has(file.path);
-              const names: Record<string, string> = { added: '新增', deleted: '删除', modified: '修改', renamed: '重命名', copied: '复制' };
+              const names: Record<string, string> = { added: t("pr.added"), deleted: t("acp.delete"), modified: t("pr.modified"), renamed: t("aow.rename"), copied: t("pr.copy") };
               return <section className={'pr-file' + (expanded ? ' expanded' : '')} key={file.path}>
                 <button className="pr-file-header" disabled={loading} aria-expanded={expanded} aria-controls={`${prefix}-file-${encodeURIComponent(file.path)}`} onClick={() => toggleFile(file)}>{expanded ? <ChevronDown /> : <ChevronRight />}<FileTypeIcon path={file.path} /><span className="pr-file-path" title={file.path}>{file.path}</span><span className={'pr-change-type ' + file.change_type}>{names[file.change_type] || file.change_type}</span><span className="pr-file-stat">{file.additions != null ? <b className="pr-additions">+{file.additions}</b> : null}{file.deletions != null ? <b className="pr-deletions">−{file.deletions}</b> : null}</span></button>
                 <div id={`${prefix}-file-${encodeURIComponent(file.path)}`} className="pr-inline-diff" hidden={!expanded}>{expanded && activeTab === 'changes' ? <InlineFileDiff detail={detail} file={file} state={fileDiffs[file.path]} mobile={mobile} modelScope={`${repository}:${prefix}`} sideBySide={sideBySide} onRetry={() => loadDiff(file, true)} /> : null}</div>
               </section>;
-            }) : <Empty icon={<FileDiff />}>{fileQuery ? '没有匹配的文件，试试其他路径。' : '暂无可展示的文件变更。'}</Empty>}</div>
+            }) : <Empty icon={<FileDiff />}>{fileQuery ? t("pr.no_matching_files_try_another_path") : t("pr.no_file_changes_to_display")}</Empty>}</div>
           </section>
           <section id={`${prefix}-checks`} role="tabpanel" aria-labelledby={`${prefix}-checks-tab`} hidden={activeTab !== 'checks'}>
-            <div className="pr-section-heading"><div><h2>检查与审阅</h2><span>{passedChecks} / {detail.checks.length} 项检查通过</span></div><label className="pr-filter-label">显示<select aria-label="筛选检查" value={checkFilter} onChange={(event) => setCheckFilter(event.target.value)}><option value="all">全部检查</option><option value="failed">未通过</option><option value="pending">等待 / 运行中</option><option value="passed">已通过</option></select></label></div>
-            <label className="pr-search pr-check-search"><Search /><input aria-label="搜索检查名称" placeholder="搜索检查名称…" value={checkQuery} onChange={(event) => setCheckQuery(event.target.value)} /></label>
-            <div className="pr-review-summary"><ShieldCheck /><span>代码审阅</span><Badge value={review} /><small>{detail.reviewers.length} 位审阅人</small></div>
-            <div className="pr-checks">{checks.length ? checks.map((check, index) => <CheckCard key={check.id || `${check.name}:${index}`} check={check} />) : <Empty icon={<ShieldCheck />}>{detail.checks.length ? '没有符合筛选条件的检查。' : '暂无 CI 检查。'}</Empty>}</div>
+            <div className="pr-section-heading"><div><h2>{t("pr.checks_and_reviews")}</h2><span>{passedChecks} / {detail.checks.length} {t("pr.checks_passed")}</span></div><label className="pr-filter-label">{t("pr.show")}<select aria-label={t("pr.filter_checks")} value={checkFilter} onChange={(event) => setCheckFilter(event.target.value)}><option value="all">{t("pr.all_checks")}</option><option value="failed">{t("pr.failed")}</option><option value="pending">{t("pr.waiting_running")}</option><option value="passed">{t("pr.passed")}</option></select></label></div>
+            <label className="pr-search pr-check-search"><Search /><input aria-label={t("pr.search_check_names")} placeholder={t("pr.search_check_names_2")} value={checkQuery} onChange={(event) => setCheckQuery(event.target.value)} /></label>
+            <div className="pr-review-summary"><ShieldCheck /><span>{t("pr.code_review")}</span><Badge value={review} /><small>{detail.reviewers.length} {t("pr.reviewers")}</small></div>
+            <div className="pr-checks">{checks.length ? checks.map((check, index) => <CheckCard key={check.id || `${check.name}:${index}`} check={check} />) : <Empty icon={<ShieldCheck />}>{detail.checks.length ? t("pr.no_checks_match_the_filters") : t("pr.no_ci_checks")}</Empty>}</div>
           </section>
           <section id={`${prefix}-discussion`} role="tabpanel" aria-labelledby={`${prefix}-discussion-tab`} hidden={activeTab !== 'discussion'}>
-            <div className="pr-section-heading"><div><h2>讨论</h2><span>{threads.length} 条讨论 · {detail.unresolved_threads.length} 条未解决</span></div><div className="pr-segmented" aria-label="讨论筛选"><button aria-pressed={!unresolvedOnly} onClick={() => setUnresolvedOnly(false)}>全部</button><button aria-pressed={unresolvedOnly} onClick={() => setUnresolvedOnly(true)}>未解决</button></div></div>
-            <div className="pr-discussions">{discussions.length ? discussions.map((thread) => <DiscussionCard key={thread.id} thread={thread} />) : <Empty icon={unresolvedOnly ? <Check /> : <MessageSquareMore />}>{unresolvedOnly ? '没有未解决的讨论。' : '暂无讨论。'}</Empty>}</div>
+            <div className="pr-section-heading"><div><h2>{t("pr.discussion")}</h2><span>{threads.length} {t("pr.discussions")} {detail.unresolved_threads.length} {t("pr.unresolved_2")}</span></div><div className="pr-segmented" aria-label={t("pr.discussion_filter")}><button aria-pressed={!unresolvedOnly} onClick={() => setUnresolvedOnly(false)}>{t("pr.all")}</button><button aria-pressed={unresolvedOnly} onClick={() => setUnresolvedOnly(true)}>{t("pr.unresolved")}</button></div></div>
+            <div className="pr-discussions">{discussions.length ? discussions.map((thread) => <DiscussionCard key={thread.id} thread={thread} />) : <Empty icon={unresolvedOnly ? <Check /> : <MessageSquareMore />}>{unresolvedOnly ? t("pr.no_unresolved_discussions") : t("pr.no_discussions")}</Empty>}</div>
           </section>
         </main>
-        {activeTab === 'overview' ? <aside className="pr-sidebar" aria-label="PR 元信息">
-          <section><h2>作者</h2>{detail.author ? <Person user={detail.author} /> : <p className="pr-muted">未提供作者信息</p>}</section>
-          <section><h2>审阅人 <span>{detail.reviewers.length}</span></h2>{detail.reviewers.length ? detail.reviewers.map((user) => <Person key={user.id} user={user} />) : <p className="pr-muted">暂未指定审阅人</p>}</section>
-          <section><h2>标签</h2>{detail.labels?.length ? <div className="pr-labels">{detail.labels.map((label) => <span key={label}>{label}</span>)}</div> : <p className="pr-muted">暂无标签</p>}</section>
-          {detail.milestone ? <section><h2>里程碑</h2><p className="pr-milestone">{detail.milestone}</p></section> : null}
-          <section><h2>时间</h2><dl className="pr-metadata"><div><dt>创建于</dt><dd><time dateTime={detail.created_at}>{formatPrTime(detail.created_at)}</time></dd></div><div><dt>更新于</dt><dd><time dateTime={detail.updated_at}>{formatPrTime(detail.updated_at)}</time></dd></div></dl></section>
-          <section><h2>变更概况</h2><dl className="pr-metadata pr-diff-summary"><div><dt><GitCommitHorizontal />提交</dt><dd>{detail.commits_count}</dd></div><div><dt><FileDiff />文件</dt><dd>{detail.changes_count}</dd></div>{additions != null ? <div><dt>{partialStats ? '已知新增行' : '新增行'}</dt><dd className="pr-additions">+{additions}</dd></div> : null}{deletions != null ? <div><dt>{partialStats ? '已知删除行' : '删除行'}</dt><dd className="pr-deletions">−{deletions}</dd></div> : null}</dl></section>
+        {activeTab === 'overview' ? <aside className="pr-sidebar" aria-label={t("pr.pr_metadata")}>
+          <section><h2>{t("pr.author")}</h2>{detail.author ? <Person user={detail.author} /> : <p className="pr-muted">{t("pr.author_information_unavailable")}</p>}</section>
+          <section><h2>{t("pr.reviewers_2")} <span>{detail.reviewers.length}</span></h2>{detail.reviewers.length ? detail.reviewers.map((user) => <Person key={user.id} user={user} />) : <p className="pr-muted">{t("pr.no_reviewers_assigned")}</p>}</section>
+          <section><h2>{t("inbox.labels")}</h2>{detail.labels?.length ? <div className="pr-labels">{detail.labels.map((label) => <span key={label}>{label}</span>)}</div> : <p className="pr-muted">{t("pr.no_labels")}</p>}</section>
+          {detail.milestone ? <section><h2>{t("pr.milestone")}</h2><p className="pr-milestone">{detail.milestone}</p></section> : null}
+          <section><h2>{t("automations.time")}</h2><dl className="pr-metadata"><div><dt>{t("pr.created")}</dt><dd><time dateTime={detail.created_at}>{formatPrTime(detail.created_at)}</time></dd></div><div><dt>{t("pr.updated")}</dt><dd><time dateTime={detail.updated_at}>{formatPrTime(detail.updated_at)}</time></dd></div></dl></section>
+          <section><h2>{t("pr.change_summary")}</h2><dl className="pr-metadata pr-diff-summary"><div><dt><GitCommitHorizontal />{t("inbox.submit")}</dt><dd>{detail.commits_count}</dd></div><div><dt><FileDiff />{t("aow.files")}</dt><dd>{detail.changes_count}</dd></div>{additions != null ? <div><dt>{partialStats ? t("pr.known_added_lines") : t("pr.added_lines")}</dt><dd className="pr-additions">+{additions}</dd></div> : null}{deletions != null ? <div><dt>{partialStats ? t("pr.known_deleted_lines") : t("pr.deleted_lines")}</dt><dd className="pr-deletions">−{deletions}</dd></div> : null}</dl></section>
         </aside> : null}
       </div>
     </div>

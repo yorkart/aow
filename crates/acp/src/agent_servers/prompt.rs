@@ -140,7 +140,7 @@ impl AgentServerStore {
         drop(threads);
         let service = self.clone();
         let id = id.to_owned();
-        tokio::spawn(async move {
+        aow_i18n::spawn(async move {
             let result = pending.block_task().await.and_then(|result| {
                 serde_json::to_value(result)
                     .map_err(agent_client_protocol::Error::into_internal_error)

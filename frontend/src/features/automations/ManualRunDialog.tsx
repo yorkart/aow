@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { LoaderCircle, MousePointerClick, Play, X } from 'lucide-react';
@@ -38,22 +39,22 @@ export function ManualRunDialog({ task, onClose, onStarted }: {
       } catch (reason) { setError(errorMessage(reason)); }
       finally { submitting.current = false; setBusy(false); }
     }}>
-      <header><div><MousePointerClick /><h2 id="manual-run-title">运行手动任务</h2></div><button type="button" aria-label="关闭" disabled={busy} onClick={onClose}><X /></button></header>
+      <header><div><MousePointerClick /><h2 id="manual-run-title">{t("automations.run_manual_task")}</h2></div><button type="button" aria-label={t("aow.close")} disabled={busy} onClick={onClose}><X /></button></header>
       <div className="automation-run-fields">
         <p>{task.name}</p>
-        {dynamic && <label><span>工作区目录</span>
-          <input aria-label="工作区目录" required disabled={busy} value={workspacePath} placeholder="输入当前项目工作区的绝对路径"
+        {dynamic && <label><span>{t("automations.workspace_directory")}</span>
+          <input aria-label={t("automations.workspace_directory")} required disabled={busy} value={workspacePath} placeholder={t("automations.enter_the_absolute_path_of_a_workspace_in_this")}
             onChange={event => setWorkspacePath(event.target.value)} />
-          <small className="automation-hint">指定本次执行使用的已有目录，可填写项目 Worktree 或其子目录。</small>
+          <small className="automation-hint">{t("automations.choose_an_existing_directory_for_this_run_such_as")}</small>
         </label>}
-        {names.length > 0 && <p className="automation-hint">填写本次执行的变量值，所有变量均为必填。</p>}
+        {names.length > 0 && <p className="automation-hint">{t("automations.enter_variable_values_for_this_run_all_variables_are")}</p>}
         {names.map((name, index) => <label key={name} htmlFor={`manual-variable-${index}`}><span>{name}</span>
           <textarea id={`manual-variable-${index}`} required rows={2} disabled={busy} value={Object.hasOwn(values, name) ? values[name] : ''}
             onChange={event => setValues(current => ({ ...current, [name]: event.target.value }))} />
         </label>)}
       </div>
       {error ? <div className="automation-error" role="alert">{error}</div> : null}
-      <footer><span /><div><button type="button" disabled={busy} onClick={onClose}>取消</button><button type="submit" className="automation-primary" disabled={busy || !ready}>{busy ? <LoaderCircle className="automation-spin" /> : <Play />}{busy ? '提交中…' : '运行'}</button></div></footer>
+      <footer><span /><div><button type="button" disabled={busy} onClick={onClose}>{t("aow.cancel")}</button><button type="submit" className="automation-primary" disabled={busy || !ready}>{busy ? <LoaderCircle className="automation-spin" /> : <Play />}{busy ? t("aow.submitting") : t("automations.run")}</button></div></footer>
     </form>
   </dialog>, document.body);
 }

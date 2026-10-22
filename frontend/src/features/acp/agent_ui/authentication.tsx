@@ -1,4 +1,4 @@
-// conversation_view.rs::render_auth_required_state: render only an explicit AuthRequired state.
+import { t } from '../../../lib/i18n';
 import { LoaderCircle, LogIn } from 'lucide-react';
 import { useState } from 'react';
 import { ComposerStatus } from '../../../components/conversation/ComposerStatus';
@@ -14,8 +14,8 @@ export function Authentication({ connection, pending, onAuthenticate, composer =
   const [error, setError] = useState('');
   const methods = (connection.auth_methods ?? []).filter(method => !method.type || method.type === 'agent');
   const icon = pending ? <LoaderCircle className="acp-spinner" size={16} /> : <LogIn size={16} />;
-  const title = `${pending ? '正在登录' : '登录'} ${text(connection.agent_info?.title) || text(connection.agent_info?.name) || connection.agent_id}`;
-  const description = pending ? '请完成 Agent 提供的认证步骤…' : !methods.length ? '此 Agent 没有提供当前支持的登录方式。' : methods.length > 1 ? '选择一种登录方式以继续。' : composer ? '登录后可继续对话，未发送的草稿会保留。' : undefined;
+  const title = `${pending ? t("common.signing_in") : t("auth.sign_in")} ${text(connection.agent_info?.title) || text(connection.agent_info?.name) || connection.agent_id}`;
+  const description = pending ? t("acp.complete_the_authentication_steps_provided_by_the_agent") : !methods.length ? t("acp.this_agent_has_no_supported_login_methods") : methods.length > 1 ? t("acp.choose_a_login_method_to_continue") : composer ? t("acp.sign_in_to_continue_the_conversation_unsent_drafts_will") : undefined;
   const actions = !pending && !!methods.length && [...methods].reverse().map(method => <button type="button" key={text(method.methodId) || text(method.id)} title={text(method.description)} onClick={() => onAuthenticate(text(method.methodId) || text(method.id))}>{text(method.name) || text(method.methodId) || text(method.id)}</button>);
   const details = requests.length || error || sync.error || externalError ? <>
     {requests.map(request => <PermissionRequest key={request.id} permission={request} busy={answering} onAnswer={response => {
@@ -24,6 +24,6 @@ export function Authentication({ connection, pending, onAuthenticate, composer =
     }} />)}
     {(error || sync.error || externalError) && <p className="acp-error" role="alert">{error || sync.error || externalError}</p>}
   </> : undefined;
-  return composer ? <ComposerStatus label="Agent 登录" icon={icon} title={title} description={description} actions={actions}>{details}</ComposerStatus>
-    : <section className="acp-auth-callout" aria-label="Agent 登录"><div>{icon}<strong>{title}</strong></div>{description && <p role={pending ? 'status' : undefined}>{description}</p>}{actions && <div className="acp-auth-actions">{actions}</div>}{details}</section>;
+  return composer ? <ComposerStatus label={t("acp.agent_login")} icon={icon} title={title} description={description} actions={actions}>{details}</ComposerStatus>
+    : <section className="acp-auth-callout" aria-label={t("acp.agent_login")}><div>{icon}<strong>{title}</strong></div>{description && <p role={pending ? 'status' : undefined}>{description}</p>}{actions && <div className="acp-auth-actions">{actions}</div>}{details}</section>;
 }

@@ -9,7 +9,8 @@ pub(super) fn ensure_rebuildable(tab: &TerminalTab) -> Result<(), TerminalError>
             .any(|pane| pane.status == TerminalPaneStatus::Running)
     {
         return Err(TerminalError::Conflict(
-            "仅已退出或已中断的终端可以重建，请刷新列表".into(),
+            aow_i18n::text("server.only_exited_or_interrupted_terminals_can_be_rebuilt_refresh")
+                .into(),
         ));
     }
     Ok(())
@@ -30,7 +31,9 @@ impl TerminalManager {
             .map(|pane| &pane.id)
             .ne(previous.panes.iter().map(|pane| &pane.id))
         {
-            return Err(TerminalError::Conflict("终端已发生变化，请刷新列表".into()));
+            return Err(TerminalError::Conflict(
+                aow_i18n::text("server.terminal_changed_refresh_the_list").into(),
+            ));
         }
         {
             let state = self.lock_state()?;
@@ -50,7 +53,9 @@ impl TerminalManager {
                 .map_err(map_client_error)?
                 .is_some_and(|runtime| runtime.status == TerminalPaneStatus::Running)
             {
-                return Err(TerminalError::Conflict("终端仍在运行，请刷新列表".into()));
+                return Err(TerminalError::Conflict(
+                    aow_i18n::text("server.terminal_is_still_running_refresh_the_list").into(),
+                ));
             }
         }
 

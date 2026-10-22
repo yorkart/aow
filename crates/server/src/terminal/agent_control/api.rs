@@ -45,7 +45,7 @@ async fn create_with_workspace(
     source: &'static str,
     workspace: Option<aow_workspaces::PreparedWorkspace>,
 ) -> Result<Json<AgentTerminalInfo>, HttpError> {
-    tokio::spawn(async move {
+    aow_i18n::spawn(async move {
         let agent_id = state
             .aow
             .select_agent_id(request.agent.as_deref())
@@ -55,7 +55,7 @@ async fn create_with_workspace(
             id: aow_id::new_id(),
             kind: "agent.create",
             source,
-            title: format!("创建 Agent · {agent_id}"),
+            title: aow_i18n::message("server.create_agent", &[("p0", agent_id.to_string())]),
             project_id: Some(request.project_id.clone()),
             resource: Some(request.cwd.clone()),
             total: None,
@@ -66,9 +66,9 @@ async fn create_with_workspace(
                 log.finish(
                     Outcome::Succeeded,
                     if info.state.task_submitted {
-                        "Agent 已就绪，初始任务已提交"
+                        aow_i18n::text("server.agent_ready_initial_task_submitted")
                     } else {
-                        "Agent 已就绪"
+                        aow_i18n::text("server.agent_ready")
                     },
                 );
             }
@@ -77,7 +77,7 @@ async fn create_with_workspace(
                 info.state
                     .error
                     .clone()
-                    .unwrap_or_else(|| "Agent 初始化失败".into()),
+                    .unwrap_or_else(|| aow_i18n::text("server.agent_initialization_failed").into()),
             ),
             Err(error) => log.finish(Outcome::Failed, error.body.message.clone()),
         }
@@ -94,10 +94,13 @@ async fn create_inner(
     log: &Handle,
     workspace: Option<aow_workspaces::PreparedWorkspace>,
 ) -> Result<Json<AgentTerminalInfo>, HttpError> {
-    log.progress("检查 Agent 配置和工作目录", None);
+    log.progress(
+        aow_i18n::text("server.check_agent_configuration_and_working_directory"),
+        None,
+    );
     if !(1..=600).contains(&request.timeout_seconds) {
         return Err(terminal_http_error(TerminalError::Invalid(
-            "timeout_seconds must be 1-600".into(),
+            aow_i18n::text("validation.timeout_seconds_must_be_1_600").into(),
         )));
     }
     if let Some(task) = &request.task {
@@ -114,7 +117,8 @@ async fn create_inner(
             .map_err(|error| terminal_http_error(TerminalError::Invalid(error.to_string())))?;
         if requested != workspace.directory {
             return Err(terminal_http_error(TerminalError::Invalid(
-                "执行目录与准备的工作区不一致".into(),
+                aow_i18n::text("server.execution_directory_does_not_match_the_prepared_workspace")
+                    .into(),
             )));
         }
         let launch = state
@@ -161,7 +165,10 @@ async fn create_inner(
         request.caller.as_ref(),
         request.no_parent,
     )?;
-    log.progress("创建 Terminal 并启动 Agent", None);
+    log.progress(
+        aow_i18n::text("server.create_terminal_and_start_agent"),
+        None,
+    );
     let tab = state
         .terminals
         .create_agent_with_state(
@@ -194,7 +201,7 @@ async fn create_inner(
     // Own the lifecycle independently of the HTTP client. A disconnected CLI
     // must not leave a pane permanently in Starting with no initializer.
     let events = state.workspace_events;
-    let result = tokio::spawn(async move {
+    let result = aow_i18n::spawn(async move {
         manager
             .initialize_agent_lifecycle(
                 &pane_id,
@@ -255,12 +262,14 @@ pub(crate) async fn submit(
     validate_task(&request.task).map_err(terminal_http_error)?;
     // This operation also survives HTTP cancellation once started. Retrying a
     // timed-out submission is not automatic: its delivery may be ambiguous.
-    tokio::spawn(async move {
+    aow_i18n::spawn(async move {
         let manager = state.terminals;
         let hosting_gate = manager.hosting_gate(&pane_id)?;
         let _hosting_gate = hosting_gate.lock().await;
         if manager.hosting(&pane_id)?.is_some() {
-            return Err(TerminalError::Conflict("实例正在托管，请先接管".into()));
+            return Err(TerminalError::Conflict(
+                aow_i18n::text("server.instance_is_managed_by_autopilot_take_control_first").into(),
+            ));
         }
         let operation = manager.agent_operation(&pane_id)?;
         let _lease = operation.try_write_owned().map_err(|_| {
@@ -303,7 +312,8 @@ pub(in crate::terminal) fn validate_task(task: &str) -> Result<(), TerminalError
             .any(|ch| ch.is_control() && !matches!(ch, '\n' | '\r' | '\t'))
     {
         return Err(TerminalError::Invalid(
-            "task must contain 1-131072 bytes of text without terminal control characters".into(),
+            aow_i18n::text("validation.task_must_contain_1_131072_bytes_of_text_without_terminal")
+                .into(),
         ));
     }
     Ok(())

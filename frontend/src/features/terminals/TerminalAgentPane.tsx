@@ -1,3 +1,4 @@
+import { t, getLanguage } from '../../lib/i18n';
 import { appSessionStorage } from '../../lib/basePath';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { LoaderCircle, MessageSquare, RefreshCw, SquareTerminal } from 'lucide-react';
@@ -42,12 +43,12 @@ function relativeTime(value: string) {
   const timestamp = Date.parse(value);
   if (!Number.isFinite(timestamp)) return value;
   const seconds = Math.round((timestamp - Date.now()) / 1000);
-  if (seconds === 0) return '刚刚';
+  if (seconds === 0) return t("terminals.just_now");
   const ranges: [Intl.RelativeTimeFormatUnit, number][] = [
     ['year', 31_536_000], ['month', 2_592_000], ['week', 604_800],
     ['day', 86_400], ['hour', 3_600], ['minute', 60],
   ];
-  const formatter = new Intl.RelativeTimeFormat('zh-CN', { numeric: 'always' });
+  const formatter = new Intl.RelativeTimeFormat(getLanguage(), { numeric: 'always' });
   for (const [unit, size] of ranges) {
     if (Math.abs(seconds) >= size) return formatter.format(Math.round(seconds / size), unit);
   }
@@ -90,7 +91,7 @@ export function TerminalAgentPane({ tabId, paneId, agentId, title, cwd, process,
       if (data.agent !== agentId || (process && (data.process?.pid !== process.pid
         || data.process.start_time !== process.start_time))) {
         setAssociation(undefined);
-        setError('Agent 进程已变化，请刷新会话列表');
+        setError(t("terminals.agent_process_changed_refresh_the_session_list"));
         return;
       }
       const candidates = terminalSessionCandidates(data);
@@ -172,9 +173,9 @@ export function TerminalAgentPane({ tabId, paneId, agentId, title, cwd, process,
 
   return <>
     {header(supported ? <button className="terminal-agent-session-button" type="button"
-      title={showing ? '返回终端' : '切换到会话详情'} aria-label={showing ? '返回终端' : '切换到会话详情'}
+      title={showing ? t("terminals.back_to_terminal") : t("terminals.switch_to_session_details")} aria-label={showing ? t("terminals.back_to_terminal") : t("terminals.switch_to_session_details")}
       aria-pressed={showing} onClick={() => setOpen(value => !value)}>
-      {showing ? <SquareTerminal /> : <MessageSquare />}<span>{showing ? 'Terminal' : 'Conversation'}</span>
+      {showing ? <SquareTerminal /> : <MessageSquare />}<span>{showing ? t("terminals.terminal") : t("navigation.conversation")}</span>
     </button> : null)}
     <div className="terminal-pane-surface" hidden={showing}>
       {terminal(visible && !showing)}
@@ -182,30 +183,30 @@ export function TerminalAgentPane({ tabId, paneId, agentId, title, cwd, process,
     {showing ? <div className="terminal-agent-session-surface">
       <div className="terminal-agent-session-toolbar">
         <span title={selected?.session_id ?? current?.data?.cwd ?? cwd}>
-          {selected ? `${current?.manual ? '已选择' : current?.data?.live_session_id ? '当前会话' : '标题匹配'} · ${selected.session_id}` : '选择当前会话'}
+          {selected ? `${current?.manual ? t("aow.selected") : current?.data?.live_session_id ? t("common.current_session") : t("common.title_match")} · ${selected.session_id}` : t("terminals.select_current_session")}
         </span>
-        {selected ? <button type="button" onClick={reselect}>重新选择</button> : null}
-        <button type="button" title="刷新会话列表" aria-label="刷新会话列表" disabled={loading} onClick={() => void refresh()}><RefreshCw className={loading ? 'spinning' : ''} /></button>
+        {selected ? <button type="button" onClick={reselect}>{t("terminals.choose_again")}</button> : null}
+        <button type="button" title={t("terminals.refresh_session_list")} aria-label={t("terminals.refresh_session_list")} disabled={loading} onClick={() => void refresh()}><RefreshCw className={loading ? 'spinning' : ''} /></button>
       </div>
       {error ? <div className="terminal-agent-session-error" role="alert">{error}</div> : null}
       {selected ? <SessionSnapshotView session={selected} snapshot={snapshot?.snapshot} loading={snapshot?.loading ?? true}
         actions={snapshot?.snapshot && <SessionShareButton session={selected} workspacePath={selected.cwd} />}
         error={snapshot?.error} onRefresh={() => void refresh()} /> : <div className="terminal-agent-session-picker">
-        <p>{loading && !current?.data ? '正在查找当前会话…'
-          : current?.data?.live_session_id && !matches.length ? '已识别当前会话，记录尚未就绪。可刷新重试或手动选择。'
-          : matches.length ? `找到 ${matches.length} 个标题匹配的会话，请确认当前正在使用的会话。`
-          : '未找到唯一匹配，请从当前目录的会话中选择。'}</p>
+        <p>{loading && !current?.data ? t("terminals.finding_current_session")
+          : current?.data?.live_session_id && !matches.length ? t("terminals.current_session_identified_but_records_are_not_ready_refresh")
+          : matches.length ? t("terminals.found_sessions_with_matching_titles_confirm_which_one_is", { value0: matches.length })
+          : t("terminals.no_unique_match_choose_a_session_from_the_current")}</p>
         <div className="terminal-agent-session-filter">
-          <input aria-label="搜索会话标题或 ID" placeholder="搜索会话标题或 ID" value={query} onChange={event => setQuery(event.target.value)} />
-          {matches.length > 0 ? <button type="button" onClick={() => setShowAll(value => !value)}>{showAll ? '只看标题匹配' : '显示全部会话'}</button> : null}
+          <input aria-label={t("terminals.search_session_title_or_id")} placeholder={t("terminals.search_session_title_or_id")} value={query} onChange={event => setQuery(event.target.value)} />
+          {matches.length > 0 ? <button type="button" onClick={() => setShowAll(value => !value)}>{showAll ? t("terminals.only_matching_titles") : t("terminals.show_all_sessions")}</button> : null}
         </div>
         <div className="terminal-agent-session-directory" title={current?.data?.cwd ?? cwd}>{current?.data?.cwd ?? cwd}</div>
-        <div className="terminal-agent-session-list" aria-label="候选会话">
+        <div className="terminal-agent-session-list" aria-label={t("terminals.candidate_sessions")}>
           {loading && !current?.data ? <LoaderCircle className="spinning" /> : null}
-          {!loading && !displayed.length ? <p>暂无匹配会话。新会话产生记录后可刷新重试。</p> : null}
+          {!loading && !displayed.length ? <p>{t("terminals.no_matching_sessions_refresh_after_the_new_session_creates")}</p> : null}
           {displayed.map(session => <button type="button" key={session.id} onClick={() => choose(session)}>
             <strong><span>{session.title}</span><time dateTime={session.updated_at}>{relativeTime(session.updated_at)}</time></strong>
-            <span><code>{session.session_id}</code><time dateTime={session.updated_at}>{new Date(session.updated_at).toLocaleString()}</time></span>
+            <span><code>{session.session_id}</code><time dateTime={session.updated_at}>{new Date(session.updated_at).toLocaleString(getLanguage())}</time></span>
           </button>)}
         </div>
       </div>}

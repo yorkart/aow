@@ -1,4 +1,4 @@
-// thread_view.rs::render_tool_call, render_terminal_tool_call and render_tool_call_label.
+import { t } from '../../../../lib/i18n';
 import { memo, useState } from 'react';
 import { ArrowRightLeft, Brain, ChevronUp, FilePenLine, Globe, Search, Terminal, Trash2, Wrench, X } from 'lucide-react';
 import { list, object, text, type Data, type Permission } from '../../types';
@@ -32,7 +32,7 @@ function ToolLabel({ content, title, edit, onOpenFile }: { content: Data; title:
   const Icon = icons[text(content.kind) as keyof typeof icons] || Wrench;
   const label = edit ? title : title.split('\n')[0] + (title.includes('\n') ? '…' : '');
   const open = () => { if (location) onOpenFile(text(location.path), typeof location.line === 'number' ? location.line : undefined); };
-  return <div className={`acp-tool-label${location ? ' acp-tool-location' : ''}`} role={location ? 'button' : undefined} tabIndex={location ? 0 : undefined} aria-label={location ? locationLabel(location) : undefined} title={location ? `打开文件：${locationLabel(location)}` : title} onClick={event => {
+  return <div className={`acp-tool-label${location ? ' acp-tool-location' : ''}`} role={location ? 'button' : undefined} tabIndex={location ? 0 : undefined} aria-label={location ? locationLabel(location) : undefined} title={location ? t("acp.open_file", { value0: locationLabel(location) }) : title} onClick={event => {
     if (!(event.target instanceof Element) || !event.target.closest('a')) open();
   }} onKeyDown={event => {
     if (event.target === event.currentTarget && location && ['Enter', ' '].includes(event.key)) { event.preventDefault(); open(); }
@@ -55,7 +55,7 @@ export function ToolCall({ content, terminals, onOpenFile, permission, busy = fa
   const failed = ['failed', 'rejected', 'cancelled', 'canceled'].includes(text(content.status));
   const rejected = content.status === 'rejected' && !permission;
   const card = edit || execute || !!permission;
-  const title = text(content.title).trim() ? text(content.title) : text(content.toolName) || 'Tool call';
+  const title = text(content.title).trim() ? text(content.title) : text(content.toolName) || t("acp.generic_tool_call");
   const hasContent = parts.length > 0 || showRawInput && content.rawInput != null;
   const toggle = () => setExpanded(value => !value);
   const authorization = permission && onAnswer && <PermissionRequest permission={permission} busy={busy} onAnswer={onAnswer} embedded />;
@@ -65,7 +65,7 @@ export function ToolCall({ content, terminals, onOpenFile, permission, busy = fa
       const terminal = terminals?.[text(part.terminalId)];
       const exit = object(terminal?.exit_status);
       const exitFailed = typeof exit.exitCode === 'number' && exit.exitCode !== 0 || !!exit.signal;
-      const failure = exitFailed ? typeof exit.exitCode === 'number' ? `退出码：${exit.exitCode}` : text(exit.signal) : failed ? '执行失败或已取消' : undefined;
+      const failure = exitFailed ? typeof exit.exitCode === 'number' ? t("acp.exit_code", { value0: exit.exitCode }) : text(exit.signal) : failed ? t("acp.execution_failed_or_canceled") : undefined;
       return <div key={text(part.terminalId) || index} className={`acp-tool acp-tool-card${failure ? ' acp-tool-failed' : ''}`}>
         <TerminalToolHeader title={title} directory={text(terminal?.cwd) || 'current directory'} open={expanded} running={pending && !permission && terminal?.exit_status == null} failure={failure} onToggle={toggle}><Command title={title} /></TerminalToolHeader>
         {expanded && <div className="acp-tool-output acp-terminal-body"><TerminalOutput terminal={terminal} pending={pending} /></div>}
@@ -76,23 +76,23 @@ export function ToolCall({ content, terminals, onOpenFile, permission, busy = fa
 
   const output = parts.map((part, index) => <div className="acp-tool-content" key={index}>
     {part.type === 'content' ? <>
-      {object(part.content).type === 'image' && list(content.locations)[0] && <button type="button" className="acp-file-link" onClick={() => { const location = list(content.locations)[0]; onOpenFile(text(location.path), typeof location.line === 'number' ? location.line : undefined); }}>打开文件</button>}
+      {object(part.content).type === 'image' && list(content.locations)[0] && <button type="button" className="acp-file-link" onClick={() => { const location = list(content.locations)[0]; onOpenFile(text(location.path), typeof location.line === 'number' ? location.line : undefined); }}>{t("aow.open_file")}</button>}
       <ContentBlock content={object(part.content)} onOpenFile={onOpenFile} />
     </> : part.type === 'diff' ? <DiffContent content={part} onOpenFile={onOpenFile} /> : null}
   </div>);
   return <section className={`acp-tool${card ? ' acp-tool-card' : ''}${failed ? ' acp-tool-failed' : ''}`} aria-label={title}>
-    {execute ? <TerminalToolHeader title={title} open={open} running={pending && !permission} failure={failed ? '执行失败或已取消' : undefined} onToggle={hasContent && !permission ? toggle : undefined}><Command title={title} /></TerminalToolHeader>
+    {execute ? <TerminalToolHeader title={title} open={open} running={pending && !permission} failure={failed ? t("acp.execution_failed_or_canceled") : undefined} onToggle={hasContent && !permission ? toggle : undefined}><Command title={title} /></TerminalToolHeader>
       : <div className="acp-tool-header">
         <ToolLabel content={content} title={title} edit={edit} onOpenFile={onOpenFile} />
         {hasContent && !permission && <ToolDisclosure title={title} open={open} onToggle={toggle} />}
-        {permission && <span className="acp-tool-approval-state" role="status">等待授权</span>}
-        {failed && <X size={13} className="acp-tool-error-icon" aria-label="失败或已取消" />}
+        {permission && <span className="acp-tool-approval-state" role="status">{t("acp.awaiting_permission")}</span>}
+        {failed && <X size={13} className="acp-tool-error-icon" aria-label={t("acp.failed_or_canceled")} />}
       </div>}
     {open && !rejected && <div className="acp-tool-output">
-      {!permission && showRawInput && <div className="acp-tool-input"><div className="acp-tool-section-label">Raw Input:</div><AgentMarkdown text={rawToolMarkdown(content.rawInput)} onOpenFile={onOpenFile} /><div className="acp-tool-section-label">Output:</div></div>}
+      {!permission && showRawInput && <div className="acp-tool-input"><div className="acp-tool-section-label">{t("navigation.raw_input")}</div><AgentMarkdown text={rawToolMarkdown(content.rawInput)} onOpenFile={onOpenFile} /><div className="acp-tool-section-label">{t("navigation.output")}</div></div>}
       {output}
-      {permission && showRawInput && <div className="acp-tool-input acp-tool-confirm-input"><button type="button" className="acp-tool-input-toggle" aria-expanded={rawExpanded} onClick={() => setRawExpanded(value => !value)}><span>{rawExpanded ? 'Raw Input:' : 'View Raw Input'}</span><ChevronUp size={12} style={{ transform: rawExpanded ? undefined : 'rotate(180deg)' }} /></button>{rawExpanded && <AgentMarkdown text={rawToolMarkdown(content.rawInput)} onOpenFile={onOpenFile} />}</div>}
-      {!card && <button type="button" className="acp-tool-collapse" aria-label="收起工具详情" onClick={toggle}><ChevronUp size={13} /></button>}
+      {permission && showRawInput && <div className="acp-tool-input acp-tool-confirm-input"><button type="button" className="acp-tool-input-toggle" aria-expanded={rawExpanded} onClick={() => setRawExpanded(value => !value)}><span>{rawExpanded ? t("navigation.raw_input") : t("common.view_raw_input")}</span><ChevronUp size={12} style={{ transform: rawExpanded ? undefined : 'rotate(180deg)' }} /></button>{rawExpanded && <AgentMarkdown text={rawToolMarkdown(content.rawInput)} onOpenFile={onOpenFile} />}</div>}
+      {!card && <button type="button" className="acp-tool-collapse" aria-label={t("acp.collapse_tool_details")} onClick={toggle}><ChevronUp size={13} /></button>}
     </div>}
     {authorization}
   </section>;

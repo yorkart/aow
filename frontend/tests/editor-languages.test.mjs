@@ -73,7 +73,9 @@ let browser;
 
 async function fixture(t, { diff = false, filename = 'Cargo.toml', language = 'toml' } = {}) {
   const context = await browser.newContext({ viewport: { width: 1200, height: 800 } });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
   const page = await context.newPage(), errors = [];
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
   page.on('pageerror', error => errors.push(error.message));
   t.after(async () => { await context.close(); assert.deepEqual(errors, []); });
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/editor-languages-test?file=${encodeURIComponent(filename)}${diff ? '&diff' : ''}`);

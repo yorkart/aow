@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n';
 function nodeUrl(address: string): URL | undefined {
   try {
     const url = new URL(address.trim());
@@ -9,7 +10,7 @@ export function parseNodeAddresses(text: string): string[] {
   const addresses = text.split('\n').flatMap((line, index) => {
     if (!line.trim()) return [];
     const url = nodeUrl(line);
-    if (!url) throw new Error(`第 ${index + 1} 行地址无效，请填写完整的 http:// 或 https:// 地址（不含用户名和密码）。`);
+    if (!url) throw new Error(t("aow.invalid_address_on_line_enter_a_full_http_or", { value0: index + 1 }));
     return [url.href];
   });
   return [...new Set(addresses)];

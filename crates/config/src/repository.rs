@@ -32,21 +32,32 @@ impl ConfigRepository {
     }
 
     pub(super) fn from_directory(directory: &Path) -> Result<Self> {
-        let directory = fs::canonicalize(directory)
-            .with_context(|| format!("配置目录不存在或无法访问：{}", directory.display()))?;
+        let directory = fs::canonicalize(directory).with_context(|| {
+            aow_i18n::message(
+                "config.configuration_directory_missing_or_inaccessible",
+                &[("auto0", format!("{}", directory.display()))],
+            )
+        })?;
         ensure!(
             directory.is_dir(),
-            "配置路径不是目录：{}",
-            directory.display()
+            aow_i18n::message(
+                "config.configuration_path_is_not_a_directory",
+                &[("auto0", format!("{}", directory.display()))]
+            )
         );
         let name = directory
             .file_name()
             .and_then(OsStr::to_str)
-            .context("配置 ID 不合法")?;
-        ensure!(selection::valid_config_id(name), "配置 ID 不合法");
+            .context(aow_i18n::text("config.invalid_configuration_id"))?;
+        ensure!(
+            selection::valid_config_id(name),
+            aow_i18n::message("config.invalid_configuration_id", &[])
+        );
         let repository = directory
             .parent()
-            .context("配置目录缺少仓库父目录")?
+            .context(aow_i18n::text(
+                "config.configuration_directory_has_no_parent_repository",
+            ))?
             .to_path_buf();
         selection::repository_root(&repository)?;
         // Resolve relative output ourselves; --path-format requires Git 2.31.
@@ -76,8 +87,10 @@ impl ConfigRepository {
         if !repository.join(".git").exists() {
             ensure!(
                 fs::read_dir(&repository)?.next().is_none(),
-                "配置仓库目录非空且不是 Git 仓库：{}",
-                repository.display()
+                aow_i18n::message(
+                    "config.configuration_repository_directory_is_nonempty_and_is_not_a",
+                    &[("auto0", format!("{}", repository.display()))]
+                )
             );
             // --initial-branch requires Git 2.28. Set HEAD before the first commit
             // using commands that also work on older Git versions.
@@ -118,8 +131,10 @@ impl ConfigRepository {
         for (source, bytes) in copied {
             ensure!(
                 fs::read(&source)? == bytes,
-                "初始化期间原配置发生变化，请重试：{}",
-                source.display()
+                aow_i18n::message(
+                    "config.original_configuration_changed_during_initialization_try_again",
+                    &[("auto0", format!("{}", source.display()))]
+                )
             );
         }
         selection::write_selection(&state_dir, &config.selection())?;
@@ -136,25 +151,37 @@ impl ConfigRepository {
     pub fn save(&self, relative: &Path, bytes: &[u8]) -> Result<()> {
         ensure!(
             is_configuration(relative),
-            "不支持的配置文件：{}",
-            relative.display()
+            aow_i18n::message(
+                "config.unsupported_configuration_file",
+                &[("auto0", format!("{}", relative.display()))]
+            )
         );
         let _save = self.lock()?;
         let path = self.directory.join(relative);
         let mut parent = self.directory.clone();
         for component in relative
             .parent()
-            .context("配置文件缺少父目录")?
+            .context(aow_i18n::text(
+                "config.configuration_file_has_no_parent_directory",
+            ))?
             .components()
         {
             parent.push(component);
-            ensure!(!parent.is_symlink(), "配置文件不能通过符号链接写入其他目录");
+            ensure!(
+                !parent.is_symlink(),
+                aow_i18n::message(
+                    "config.configuration_file_cannot_write_to_another_directory_through_a",
+                    &[]
+                )
+            );
             private_directories(&parent)?;
         }
         ensure!(
             !path.is_symlink(),
-            "配置文件不能是符号链接：{}",
-            path.display()
+            aow_i18n::message(
+                "config.configuration_file_cannot_be_a_symbolic_link",
+                &[("auto0", format!("{}", path.display()))]
+            )
         );
         match fs::read(&path) {
             Ok(previous) if previous == bytes => {}
@@ -172,7 +199,9 @@ impl ConfigRepository {
                 relative.display()
             ),
         )
-        .context("配置文件已保存，但 Git 提交失败；再次保存可重试")
+        .context(aow_i18n::text(
+            "config.configuration_file_saved_but_git_commit_failed_save_again",
+        ))
     }
 
     /// Update a configuration directory under one repository lock and commit.
@@ -188,14 +217,22 @@ impl ConfigRepository {
                 relative.to_str(),
                 Some("inbox" | "automations/tasks" | "review-providers")
             ),
-            "不支持的配置目录：{}",
-            relative.display()
+            aow_i18n::message(
+                "config.unsupported_configuration_directory",
+                &[("auto0", format!("{}", relative.display()))]
+            )
         );
         let _save = self.lock()?;
         let mut directory = self.directory.clone();
         for component in relative.components() {
             directory.push(component);
-            ensure!(!directory.is_symlink(), "配置目录不能是符号链接");
+            ensure!(
+                !directory.is_symlink(),
+                aow_i18n::message(
+                    "config.configuration_directory_cannot_be_a_symbolic_link",
+                    &[]
+                )
+            );
             private_directories(&directory)?;
         }
         check_directory(&directory)?;
@@ -208,7 +245,9 @@ impl ConfigRepository {
                 relative.display()
             ),
         )
-        .context("配置目录已保存，但 Git 提交失败；再次保存可重试")
+        .context(aow_i18n::text(
+            "config.configuration_directory_saved_but_git_commit_failed_save_again",
+        ))
     }
 
     fn lock(&self) -> Result<FileLock> {
@@ -231,8 +270,13 @@ impl ConfigRepository {
         }
         ensure!(
             diff.status.code() == Some(1),
-            "无法检查配置 Git 变更：{}",
-            String::from_utf8_lossy(&diff.stderr)
+            aow_i18n::message(
+                "config.unable_to_check_configuration_git_changes",
+                &[(
+                    "auto0",
+                    format!("{}", String::from_utf8_lossy(&diff.stderr))
+                )]
+            )
         );
         // --only preserves unrelated staged changes, including other machines.
         git_checked(
@@ -250,16 +294,20 @@ fn check_directory(directory: &Path) -> Result<()> {
         let kind = entry.file_type()?;
         ensure!(
             !kind.is_symlink(),
-            "配置目录不能包含符号链接：{}",
-            entry.path().display()
+            aow_i18n::message(
+                "config.configuration_directory_cannot_contain_symbolic_links",
+                &[("auto0", format!("{}", entry.path().display()))]
+            )
         );
         if kind.is_dir() {
             check_directory(&entry.path())?;
         } else {
             ensure!(
                 kind.is_file(),
-                "配置必须是普通文件：{}",
-                entry.path().display()
+                aow_i18n::message(
+                    "config.configuration_must_be_a_regular_file",
+                    &[("auto0", format!("{}", entry.path().display()))]
+                )
             );
         }
     }

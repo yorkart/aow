@@ -23,7 +23,11 @@ impl TerminalManager {
                 None
             } else {
                 state.tabs[index].layout = remove_layout_leaf(old.layout.clone(), pane_id)
-                    .ok_or_else(|| TerminalError::Invalid("layout cannot be empty".to_owned()))?;
+                    .ok_or_else(|| {
+                        TerminalError::Invalid(
+                            aow_i18n::text("validation.layout_cannot_be_empty").to_owned(),
+                        )
+                    })?;
                 state.tabs[index].panes.retain(|pane| pane.id != pane_id);
                 touch_tab(&mut state.tabs[index]);
                 Some(state.tabs[index].clone())

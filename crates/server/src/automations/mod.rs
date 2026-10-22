@@ -96,7 +96,8 @@ impl AutomationManager {
     async fn save(&self, mut task: Task) -> Result<TaskView> {
         // Persist the desired configuration first. Even an old installed trigger
         // reads the new enabled flag, and a dropped HTTP request leaves a visible error.
-        task.scheduler_error = Some("定时器配置待同步".into());
+        task.scheduler_error =
+            Some(aow_i18n::text("server.timer_configuration_awaiting_sync").into());
         self.store.save_task(&task)?;
         task.scheduler_error = self
             .scheduler
@@ -114,7 +115,10 @@ impl AutomationManager {
 
     fn task(&self, id: &str) -> Result<Task> {
         let task = self.store.get_task(id)?;
-        ensure!(!task.deleted, "自动化任务已删除");
+        ensure!(
+            !task.deleted,
+            aow_i18n::message("server.automation_deleted", &[])
+        );
         Ok(task)
     }
 
@@ -122,7 +126,7 @@ impl AutomationManager {
         self.store.get_task(task_id)?;
         self.store
             .read_run(task_id, run_id)?
-            .context("执行记录尚未生成")
+            .context(aow_i18n::text("server.run_record_not_yet_created"))
     }
 
     pub(crate) fn run_result(&self, run: &Run) -> Result<String> {

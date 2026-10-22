@@ -60,16 +60,19 @@ impl Store {
         };
         ensure!(
             file.metadata()?.len() <= MAX_RUN_EVENTS_BYTES,
-            "执行记录超过大小限制"
+            aow_i18n::message("automations.run_record_exceeds_size_limit", &[])
         );
-        ensure!(file.metadata()?.is_file(), "执行记录不是普通文件");
+        ensure!(
+            file.metadata()?.is_file(),
+            aow_i18n::message("automations.run_record_is_not_a_regular_file", &[])
+        );
         let mut bytes = Vec::new();
         (&mut *file)
             .take(MAX_RUN_EVENTS_BYTES + 1)
             .read_to_end(&mut bytes)?;
         ensure!(
             bytes.len() as u64 <= MAX_RUN_EVENTS_BYTES,
-            "执行记录超过大小限制"
+            aow_i18n::message("automations.run_record_exceeds_size_limit", &[])
         );
         let mut run = None;
         let mut configuration = None;
@@ -78,14 +81,21 @@ impl Store {
             if !line.ends_with(b"\n") {
                 break;
             }
-            let event: StoredRunEvent =
-                serde_json::from_slice(line).context("执行记录包含无效 JSON")?;
+            let event: StoredRunEvent = serde_json::from_slice(line).context(aow_i18n::text(
+                "automations.run_record_contains_invalid_json",
+            ))?;
             if let StoredRunEvent::Started {
                 run: started,
                 configuration: input,
             } = event
             {
-                ensure!(run.is_none(), "执行记录包含重复开始事件");
+                ensure!(
+                    run.is_none(),
+                    aow_i18n::message(
+                        "automations.run_record_contains_duplicate_start_events",
+                        &[]
+                    )
+                );
                 run = Some(*started);
                 configuration = Some(input);
                 continue;
@@ -135,11 +145,16 @@ impl Store {
         if let Some(run) = run.as_mut() {
             ensure!(
                 run.id == run_id && run.task_id == task_id,
-                "执行文件 ID 不匹配"
+                aow_i18n::message("automations.run_file_id_mismatch", &[])
             );
             if !run.status.terminal() && !live {
                 run.status = RunStatus::Interrupted;
-                run.message = Some("执行进程已结束，未留下完成记录".into());
+                run.message = Some(
+                    aow_i18n::text(
+                        "automations.execution_process_ended_without_a_completion_record",
+                    )
+                    .into(),
+                );
             }
         }
         Ok(run.map(|run| RunDetail {

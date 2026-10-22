@@ -66,9 +66,12 @@ impl PasswordProvider {
                 return Err(account_not_configured());
             }
             Err(error) => {
-                return Err(configuration_error(format!(
-                    "无法读取账户配置 {}：{error}",
-                    path.display()
+                return Err(configuration_error(aow_i18n::message(
+                    "auth.read_account_configuration",
+                    &[
+                        ("path", path.display().to_string()),
+                        ("error", error.to_string()),
+                    ],
                 )));
             }
         };
@@ -81,9 +84,9 @@ impl PasswordProvider {
             {
                 Ok(credentials)
             }
-            _ => Err(configuration_error(format!(
-                "账户配置 {} 无效；请重新运行 `aow account`",
-                path.display()
+            _ => Err(configuration_error(aow_i18n::message(
+                "auth.invalid_account_configuration",
+                &[("path", path.display().to_string())],
             ))),
         }
     }
@@ -94,7 +97,7 @@ impl LoginProvider for PasswordProvider {
         METHOD
     }
     fn label(&self) -> &'static str {
-        "账号密码"
+        aow_i18n::text("common.passwordLabel")
     }
     fn check_configured(&self) -> Result<(), HttpError> {
         self.configuration().map(|_| ())
@@ -106,7 +109,7 @@ impl LoginProvider for PasswordProvider {
                 HttpError::new(
                     StatusCode::UNPROCESSABLE_ENTITY,
                     "invalid_credentials",
-                    "请输入账号和密码",
+                    aow_i18n::text("common.enterCredentials"),
                     None,
                 )
             })?;
@@ -117,7 +120,7 @@ impl LoginProvider for PasswordProvider {
             return Err(HttpError::new(
                 StatusCode::BAD_REQUEST,
                 "invalid_credentials",
-                "请输入有效的账号和密码",
+                aow_i18n::text("common.validCredentials"),
                 None,
             ));
         }
@@ -136,7 +139,7 @@ impl LoginProvider for PasswordProvider {
             return Err(HttpError::new(
                 StatusCode::UNAUTHORIZED,
                 "invalid_credentials",
-                "账号或密码不正确",
+                aow_i18n::text("common.incorrectCredentials"),
                 None,
             ));
         }
@@ -180,7 +183,7 @@ fn account_not_configured() -> HttpError {
     HttpError::new(
         StatusCode::SERVICE_UNAVAILABLE,
         "account_not_configured",
-        "AoW 尚未设置登录账户；请在服务器上运行 `aow account`",
+        aow_i18n::text("common.accountNotConfigured"),
         None,
     )
 }

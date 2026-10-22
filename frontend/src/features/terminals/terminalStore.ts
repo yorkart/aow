@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { LiveEvents } from '../../lib/liveEvents';
 import { agentsFromPayload, tabFromPayload, terminalApi } from './terminalApi';
 import type { TerminalAgentList, TerminalPaneStatus, TerminalTab } from './types';
@@ -57,7 +58,7 @@ function readFallback() {
   pending = Promise.allSettled([terminalApi.list(undefined, request.signal), terminalApi.agents(undefined, request.signal)]).then(([tabs, metadata]) => {
     if (generation !== epoch || request.signal.aborted) return;
     for (const result of [tabs, metadata]) {
-      if (result.status === 'rejected' && [401, 403].includes(result.reason?.status)) { denied('登录已失效'); return; }
+      if (result.status === 'rejected' && [401, 403].includes(result.reason?.status)) { denied(t("acp.login_expired")); return; }
     }
     const change: Partial<TerminalState> = {};
     if (tabs.status === 'fulfilled') { change.tabs = stableTabs(tabs.value); change.error = ''; }
@@ -101,7 +102,7 @@ function connect() {
   };
   connection.onerror = () => {
     protocol = false; subscribed = false; barrier = undefined; stopFallback(); invalidateRead();
-    if (connection.readyState === 2) denied('登录已失效');
+    if (connection.readyState === 2) denied(t("acp.login_expired"));
     else startFallback('offline');
   };
   connection.addEventListener('terminals', event => {

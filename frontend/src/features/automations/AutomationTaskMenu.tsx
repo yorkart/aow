@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Pause, Pencil, Trash2, Zap } from 'lucide-react';
@@ -45,13 +46,13 @@ export function AutomationTaskMenu({ x, y, task, busy, onClose, onOpen, onOpenFl
 
   const action = (callback: () => void) => () => { onClose(); callback(); };
   return createPortal(<div ref={menu} className="project-aow-context-menu automation-task-menu"
-    style={{ left: position.x, top: position.y }} role="menu" aria-label={`${task.name} 自动化操作`}
+    style={{ left: position.x, top: position.y }} role="menu" aria-label={t("automations.automation_actions", { value0: task.name })}
     onPointerDown={event => event.stopPropagation()} onContextMenu={event => event.preventDefault()}>
     <button role="menuitem" onClick={action(onOpen)}><WorkspaceMenuLabel action="open" /></button>
     <button role="menuitem" onClick={action(onOpenFloating)}><WorkspaceMenuLabel action="floating" /></button>
     <hr />
-    <button role="menuitem" disabled={busy} onClick={action(onEdit)}><Pencil />编辑</button>
-    {task.kind !== 'manual' ? <button role="menuitem" disabled={busy} onClick={action(onToggle)}>{task.enabled ? <Pause /> : <Zap />}{task.enabled ? '暂停' : '启用'}</button> : null}
-    <button role="menuitem" className="danger" disabled={busy} onClick={action(onDelete)}><Trash2 />删除</button>
+    <button role="menuitem" disabled={busy} onClick={action(onEdit)}><Pencil />{t("acp.edit")}</button>
+    {task.kind !== 'manual' ? <button role="menuitem" disabled={busy} onClick={action(onToggle)}>{task.enabled ? <Pause /> : <Zap />}{task.enabled ? t("automations.pause") : t("automations.enable")}</button> : null}
+    <button role="menuitem" className="danger" disabled={busy} onClick={action(onDelete)}><Trash2 />{t("acp.delete")}</button>
   </div>, document.body);
 }

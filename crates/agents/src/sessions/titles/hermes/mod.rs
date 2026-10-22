@@ -21,7 +21,7 @@ impl AgentSessionTitleProvider for Hermes {
         };
         let roots = SessionRoots::from_configuration(home, context.environment);
         let cwd = std::path::PathBuf::from(context.cwd);
-        tokio::task::spawn_blocking(move || {
+        aow_i18n::spawn_blocking(move || {
             // Generated titles, /title and /new must refresh independently of
             // completion events. Never infer identity from a title or directory.
             let candidates = tracker.candidate_sessions(&target, &cwd, roots);

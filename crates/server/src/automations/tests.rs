@@ -859,7 +859,12 @@ async fn api_validates_temporary_and_dynamic_workspace_tasks() {
     });
     let (code, result) = call(&router, "POST", "/api/aow/automations", input.clone()).await;
     assert_eq!(code, StatusCode::BAD_REQUEST, "{result}");
-    assert!(result["message"].as_str().unwrap().contains("仅手动任务"));
+    assert!(
+        result["message"]
+            .as_str()
+            .unwrap()
+            .contains("Only manual tasks")
+    );
     input["kind"] = "manual".into();
     input["cron"] = "".into();
     let (code, dynamic) = call(&router, "POST", "/api/aow/automations", input).await;
@@ -939,7 +944,7 @@ async fn api_validates_temporary_and_dynamic_workspace_tasks() {
                 .hosting_task(id, fixed.revision)
                 .unwrap_err()
                 .to_string()
-                .contains("动态指定")
+                .contains("dynamic")
         );
         let (code, result) = call(
             &router,

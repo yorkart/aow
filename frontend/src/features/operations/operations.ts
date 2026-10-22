@@ -1,3 +1,5 @@
+import { localizedFetch } from '../../lib/localizedFetch';
+import { t } from '../../lib/i18n';
 import { appUrl } from '../../lib/basePath';
 import { LiveEvents } from '../../lib/liveEvents';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -25,15 +27,15 @@ export interface OperationLog {
 }
 export interface OperationLogPage { items: OperationLog[]; next_cursor: LogCursor | null; budget_exhausted: boolean; scanned_bytes: number }
 export const operationOutcomeLabels: Record<OperationOutcome, string> = {
-  succeeded: '已完成', partial_success: '部分失败', failed: '失败', interrupted: '结果未确认', cancelled: '已取消',
+  succeeded: t("aow.completed"), partial_success: t("operations.partially_failed"), failed: t("aow.failed"), interrupted: t("operations.result_unconfirmed"), cancelled: t("acp.canceled"),
 };
 export const operationsChangedEvent = 'aow-operations-changed';
 
 async function request<T>(url: string, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(appUrl(url), { cache: 'no-store', signal });
+  const response = await localizedFetch(appUrl(url), { cache: 'no-store', signal });
   if (!response.ok) {
     const error = await response.json().catch(() => null);
-    throw new Error(error?.message ?? `请求失败 (${response.status})`);
+    throw new Error(error?.message ?? t("automations.request_failed", { value0: response.status }));
   }
   return response.json() as Promise<T>;
 }

@@ -58,7 +58,7 @@ impl AowManager {
         }
         let operation = self.inner.project_operation.clone().lock_owned().await;
         let manager = self.clone();
-        tokio::task::spawn_blocking(move || {
+        aow_i18n::spawn_blocking(move || {
             // Finish persistence even if the HTTP request is cancelled.
             let _operation = operation;
             let mut settings = manager.lock_settings()?;

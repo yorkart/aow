@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, MoreHorizontal } from 'lucide-react';
@@ -50,16 +51,16 @@ export function PullRequestFilterMenu({ hideDrafts, onChange }: {
   }, [open, close]);
 
   return <>
-    <AowIconButton ref={trigger} title="Open PRs 过滤选项" aria-label="Open PRs 过滤选项" aria-haspopup="menu"
+    <AowIconButton ref={trigger} title={t("pr.open_pr_filter_options")} aria-label={t("pr.open_pr_filter_options")} aria-haspopup="menu"
       aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setOpen(value => !value)}>
       <MoreHorizontal />
     </AowIconButton>
     {open ? createPortal(<div ref={menu} id={id} className="project-aow-context-menu pull-requests-filter-menu"
-      role="menu" aria-label="Open PRs 过滤选项" style={position}
+      role="menu" aria-label={t("pr.open_pr_filter_options")} style={position}
       onPointerDown={event => event.stopPropagation()}
       onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget) && !trigger.current?.contains(event.relatedTarget)) close(); }}>
       <button type="button" role="menuitemcheckbox" aria-checked={hideDrafts} onClick={() => { onChange(!hideDrafts); close(true); }}>
-        <span>过滤 Draft</span>{hideDrafts ? <Check /> : null}
+        <span>{t("pr.filter_drafts")}</span>{hideDrafts ? <Check /> : null}
       </button>
     </div>, document.body) : null}
   </>;

@@ -103,6 +103,7 @@ pub fn build_router(state: AppState) -> Router {
             state.clone(),
             auth::require_auth,
         ))
+        .layer(axum::middleware::from_fn(crate::locale::middleware))
         .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http())
         .with_state(state);

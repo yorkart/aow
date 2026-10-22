@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { filesApi } from './api';
 
@@ -50,13 +51,13 @@ export function useExplorerUploads(root: string, onUploaded: (directory: string,
           update(item.id, { status: 'uploading' });
           try {
             if (!item.file.name || item.file.name === '.' || item.file.name === '..' || /[/\\\0]/.test(item.file.name)) {
-              throw new Error('文件名无效，请重新选择文件');
+              throw new Error(t("files.invalid_file_name_choose_the_file_again"));
             }
             const result = await filesApi.uploadFile(item.directory, item.file, (loaded) => update(item.id, { loaded }), { keepBoth: true, signal: abort.signal });
             if (epoch.current !== generation) return;
             update(item.id, { status: 'success', path: result.path, loaded: item.file.size });
             try { await completed.current(item.directory, result.path); }
-            catch (reason) { update(item.id, { error: `文件已上传，目录刷新失败：${reason instanceof Error ? reason.message : String(reason)}` }); }
+            catch (reason) { update(item.id, { error: t("files.file_uploaded_but_directory_refresh_failed_2", { value0: reason instanceof Error ? reason.message : String(reason) }) }); }
           } catch (reason) {
             update(item.id, { status: 'error', error: reason instanceof Error ? reason.message : String(reason) });
           }
@@ -73,7 +74,7 @@ export function useExplorerUploads(root: string, onUploaded: (directory: string,
       const waiting = new Set(queue.current.map((item) => item.id));
       queue.current = [];
       controller.current?.abort();
-      setUploads((previous) => previous.map((item) => waiting.has(item.id) ? { ...item, status: 'error', error: '上传已取消' } : item));
+      setUploads((previous) => previous.map((item) => waiting.has(item.id) ? { ...item, status: 'error', error: t("files.upload_canceled") } : item));
     },
     clear: () => setUploads((previous) => previous.filter((item) => item.status === 'waiting' || item.status === 'uploading')),
     retry: (item: Upload) => {

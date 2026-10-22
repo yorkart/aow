@@ -142,7 +142,7 @@ impl AuthService {
                 HttpError::new(
                     StatusCode::BAD_REQUEST,
                     "unsupported_login_method",
-                    "不支持此登录方式",
+                    aow_i18n::text("common.unsupportedLogin"),
                     None,
                 )
             })?;
@@ -208,7 +208,7 @@ impl AuthService {
             HttpError::new(
                 StatusCode::SERVICE_UNAVAILABLE,
                 "auth_not_configured",
-                "尚未配置可用的登录方式",
+                aow_i18n::text("common.noLoginMethods"),
                 None,
             )
         }))
@@ -248,7 +248,7 @@ fn authentication_required() -> HttpError {
     HttpError::new(
         StatusCode::UNAUTHORIZED,
         "authentication_required",
-        "请先登录 AoW",
+        aow_i18n::text("common.loginRequired"),
         None,
     )
 }

@@ -79,7 +79,12 @@ pub async fn run(
                 at: Utc::now(),
                 status: RunStatus::Skipped,
                 exit_code: None,
-                message: Some("手动任务正在执行，已达到并发限制".into()),
+                message: Some(
+                    aow_i18n::text(
+                        "automations.manual_task_is_running_and_the_concurrency_limit_has",
+                    )
+                    .into(),
+                ),
                 duration_ms: 0,
             })?;
         }
@@ -92,7 +97,11 @@ pub async fn run(
         || (source == RunSource::Scheduled
             && (!task.input.enabled || task.input.kind == crate::TaskKind::Manual))
     {
-        Ok((RunStatus::Skipped, None, Some("任务已暂停或删除".into())))
+        Ok((
+            RunStatus::Skipped,
+            None,
+            Some(aow_i18n::text("automations.task_paused_or_deleted").into()),
+        ))
     } else {
         tokio::select! {
             result = async {
@@ -122,7 +131,7 @@ pub async fn run(
                     &concurrency_slot,
                 ).await
             } => result,
-            _ = shutdown_signal() => Ok((RunStatus::Interrupted, None, Some("执行收到停止信号".into()))),
+            _ = shutdown_signal() => Ok((RunStatus::Interrupted, None, Some(aow_i18n::text("automations.execution_received_a_stop_signal").into()))),
         }
     };
     if let Err(error) = cleanup_worktree(&task, &run.id, &concurrency_slot).await {

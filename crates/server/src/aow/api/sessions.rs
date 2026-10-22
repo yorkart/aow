@@ -29,12 +29,12 @@ async fn list_agent_sessions(
             .is_none()
     }) {
         return Err(aow_response(AowError::Invalid(
-            "unsupported agent session source".to_owned(),
+            aow_i18n::text("validation.unsupported_agent_session_source").to_owned(),
         )));
     }
     let list_worktree = worktree.clone();
     let list_agent = agent.clone();
-    let sessions = tokio::task::spawn_blocking(move || {
+    let sessions = aow_i18n::spawn_blocking(move || {
         aow_agents::sessions::list_sessions(&list_worktree, list_agent.as_deref(), roots)
     })
     .await
@@ -56,7 +56,7 @@ async fn automation_run_session(
         HttpError::new(
             StatusCode::SERVICE_UNAVAILABLE,
             "automations_unavailable",
-            "automations require persistent state",
+            aow_i18n::text("http.persistent_automations"),
             None,
         )
         .into_response()
@@ -66,14 +66,14 @@ async fn automation_run_session(
         .map_err(|error| aow_response(AowError::Invalid(error.to_string())))?;
     let session_id = run.session_id.ok_or_else(|| {
         aow_response(AowError::Invalid(
-            "automation run has no agent session".to_owned(),
+            aow_i18n::text("validation.automation_run_has_no_agent_session").to_owned(),
         ))
     })?;
     let agent = run.agent.id();
     let roots = aow_agents::sessions::SessionRoots::from_environment(&crate::PROCESS_HOME);
     let found_agent = agent.to_owned();
     let found_session_id = session_id.clone();
-    let session = tokio::task::spawn_blocking(move || {
+    let session = aow_i18n::spawn_blocking(move || {
         aow_agents::sessions::find_session(&found_agent, &found_session_id, roots)
     })
     .await
@@ -85,7 +85,7 @@ async fn automation_run_session(
         HttpError::new(
             StatusCode::NOT_FOUND,
             "agent_session_not_found",
-            "agent session is no longer available",
+            aow_i18n::text("http.session_unavailable"),
             None,
         )
         .into_response()
@@ -104,7 +104,7 @@ async fn agent_session_snapshot(
 ) -> Result<Json<aow_agents::sessions::snapshot::AgentSessionSnapshot>, Response> {
     let locator =
         resolve_session_locator(&state, &session_id, &query.agent, &query.worktree_path).await?;
-    tokio::task::spawn_blocking(move || aow_agents::sessions::snapshot::read(locator))
+    aow_i18n::spawn_blocking(move || aow_agents::sessions::snapshot::read(locator))
         .await
         .map_err(|error| {
             HttpError::internal(format!("agent session snapshot task failed: {error}"))
@@ -127,7 +127,7 @@ pub(crate) async fn resolve_session_locator(
         || session_id.len() > 256
     {
         return Err(aow_response(AowError::Invalid(
-            "invalid agent session identity".to_owned(),
+            aow_i18n::text("validation.invalid_agent_session_identity").to_owned(),
         )));
     }
     // A locator is only cached by a registered-session scan or a trusted

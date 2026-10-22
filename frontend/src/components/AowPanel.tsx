@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n';
 import { createContext, useCallback, useContext, useId, useLayoutEffect, useRef, useState, type HTMLAttributes, type ReactNode } from 'react';
 import { AowPanelHeader, type AowPanelHeaderProps } from './AowPanelHeader';
 import './aow-panel.css';
@@ -88,7 +89,7 @@ export function AowPanelStack({ children, className = '', ...props }: HTMLAttrib
 
   return <PanelStackContext.Provider value={navigate}>
     <div {...props} className={`aow-panel-stack ${className}`}>
-      {overflowPanels.length ? <select className="aow-panel-jump" aria-label="快速定位面板" value="" onChange={event => {
+      {overflowPanels.length ? <select className="aow-panel-jump" aria-label={t("components.quick_navigation_panel")} value="" onChange={event => {
         const anchor = document.getElementById(event.target.value);
         if (!anchor) return;
         // Titles may toggle or be plain labels; jumping only opens a collapsed panel.
@@ -96,7 +97,7 @@ export function AowPanelStack({ children, className = '', ...props }: HTMLAttrib
           anchor.querySelector<HTMLButtonElement>('.aow-panel-toggle, .aow-panel-header-title[aria-expanded]')?.click();
         }
         navigate(anchor);
-      }}><option value="" disabled>快速定位面板</option>{overflowPanels.map(panel => <option key={panel.id} value={panel.id}>{panel.title}</option>)}</select> : null}
+      }}><option value="" disabled>{t("components.quick_navigation_panel")}</option>{overflowPanels.map(panel => <option key={panel.id} value={panel.id}>{panel.title}</option>)}</select> : null}
       <div ref={viewport} className="aow-panel-viewport">
         <div ref={content} className="aow-panel-content">{children}</div>
       </div>

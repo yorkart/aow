@@ -13,12 +13,18 @@ use anyhow::{Context, Result, ensure};
 pub(super) fn copy_json(source: &Path, destination: &Path) -> Result<(PathBuf, Vec<u8>)> {
     ensure!(
         fs::symlink_metadata(source)?.is_file(),
-        "配置必须是普通文件：{}",
-        source.display()
+        aow_i18n::message(
+            "config.configuration_must_be_a_regular_file",
+            &[("auto0", format!("{}", source.display()))]
+        )
     );
     let bytes = fs::read(source)?;
-    serde_json::from_slice::<serde_json::Value>(&bytes)
-        .with_context(|| format!("原配置 JSON 无效：{}", source.display()))?;
+    serde_json::from_slice::<serde_json::Value>(&bytes).with_context(|| {
+        aow_i18n::message(
+            "config.invalid_original_configuration_json",
+            &[("auto0", format!("{}", source.display()))],
+        )
+    })?;
     atomic_write(destination, &bytes)?;
     Ok((source.to_path_buf(), bytes))
 }
@@ -54,7 +60,9 @@ impl Drop for FileLock {
     }
 }
 pub(super) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
-    let parent = path.parent().context("配置文件缺少父目录")?;
+    let parent = path.parent().context(aow_i18n::text(
+        "config.configuration_file_has_no_parent_directory",
+    ))?;
     private_directories(parent)?;
     let temporary = parent.join(format!(".{}.tmp", aow_id::new_id()));
     let result = (|| {

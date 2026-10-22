@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import type { OpenDocument } from '../../features/editor/types';
 import type { TabRouteAdapter, TabTarget } from './types';
 import { absolutePath, length, required, url } from './helpers';
@@ -7,9 +8,9 @@ export const diffRoute: TabRouteAdapter<Extract<TabTarget, { type: 'diff' }>> = 
   parse(parts, q) {
     length(parts, 1);
     const source = required(q, 'source');
-    if (source !== 'working' && source !== 'staged' && source !== 'commit') throw new Error('无法识别 Diff 来源。');
+    if (source !== 'working' && source !== 'staged' && source !== 'commit') throw new Error(t("aow.unrecognized_diff_source"));
     const commit = source === 'commit' ? required(q, 'commit') : undefined;
-    if (commit && !/^[a-f0-9]{40,64}$/i.test(commit)) throw new Error('Commit Diff 必须使用完整提交 SHA。');
+    if (commit && !/^[a-f0-9]{40,64}$/i.test(commit)) throw new Error(t("aow.a_commit_diff_requires_the_full_commit_sha"));
     return { type: 'diff', workspace: required(q, 'workspace'), repository: absolutePath(required(q, 'repository')),
       path: required(q, 'path'), source, commit, originalPath: q.get('original_path') ?? undefined, untracked: q.get('untracked') === '1' || undefined };
   },

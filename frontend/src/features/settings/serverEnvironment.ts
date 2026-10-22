@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 interface EnvironmentField {
   key: string;
   description: string;
@@ -5,35 +6,35 @@ interface EnvironmentField {
 }
 
 export const serverEnvironmentGroups: { title: string; fields: EnvironmentField[] }[] = [
-  { title: '服务配置', fields: [
-    { key: 'AOW_SERVER_HOST', description: '服务监听地址，默认 127.0.0.1。0.0.0.0 监听全部 IPv4 接口，:: 监听 IPv6。', example: '127.0.0.1' },
-    { key: 'AOW_SERVER_PORT', description: '服务监听端口，默认 8282。', example: '8282' },
-    { key: 'AOW_SERVER_STATE_DIR', description: '服务数据目录，使用绝对路径；优先于 AOW_STATE_DIR。', example: '/srv/aow/state' },
-    { key: 'AOW_STATE_DIR', description: 'AoW 数据目录；未设置时使用 XDG_STATE_HOME 下的 aow，或 ~/.local/state/aow。', example: '/srv/aow/state' },
-    { key: 'AOW_TERMINALD_SOCKET', description: '连接 terminald 的 Unix socket 绝对路径，须与 terminald 的监听路径一致。', example: '/run/user/1000/aow-terminald/terminald.sock' },
-    { key: 'AOW_BASE_PATH', description: '反向代理部署的 URL 子路径，默认根路径 /。', example: '/tools/aow' },
+  { title: t("settings.service_configuration"), fields: [
+    { key: 'AOW_SERVER_HOST', description: t("settings.listen_address_default_127_0_0_1_use_0"), example: '127.0.0.1' },
+    { key: 'AOW_SERVER_PORT', description: t("settings.listen_port_default_8282"), example: '8282' },
+    { key: 'AOW_SERVER_STATE_DIR', description: t("settings.absolute_service_data_directory_takes_precedence_over_aow_state"), example: '/srv/aow/state' },
+    { key: 'AOW_STATE_DIR', description: t("settings.aow_data_directory_defaults_to_aow_under_xdg_state"), example: '/srv/aow/state' },
+    { key: 'AOW_TERMINALD_SOCKET', description: t("settings.absolute_terminald_unix_socket_path_must_match_terminald_s"), example: '/run/user/1000/aow-terminald/terminald.sock' },
+    { key: 'AOW_BASE_PATH', description: t("settings.url_base_path_for_reverse_proxy_deployments_defaults_to"), example: '/tools/aow' },
   ] },
-  { title: '登录会话', fields: [
-    { key: 'AOW_AUTH_SECURE_COOKIE', description: '是否仅通过 HTTPS 发送登录 Cookie。填写 true 或 false，默认 false；不为服务启用 TLS。', example: 'true' },
-    { key: 'AOW_AUTH_SESSION_MAX_AGE_SECONDS', description: '登录后的最长有效时间，活动不会延长。单位秒，正整数；默认 43200（12 小时）。', example: '43200' },
-    { key: 'AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS', description: '无有效活动多久后登录过期，活动会重新计时。单位秒，正整数；默认 1800（30 分钟）。任一会话时限达到即过期。', example: '1800' },
+  { title: t("settings.login_sessions"), fields: [
+    { key: 'AOW_AUTH_SECURE_COOKIE', description: t("settings.send_login_cookies_only_over_https_use_true_or"), example: 'true' },
+    { key: 'AOW_AUTH_SESSION_MAX_AGE_SECONDS', description: t("settings.maximum_login_lifetime_in_positive_integer_seconds_unaffected_by"), example: '43200' },
+    { key: 'AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS', description: t("settings.idle_login_timeout_in_positive_integer_seconds_reset_by"), example: '1800' },
   ] },
-  { title: '基础运行环境', fields: [
-    { key: 'XDG_STATE_HOME', description: '用户状态数据的根目录，默认 ~/.local/state；未指定 AoW 数据目录时使用其 aow 子目录。填写绝对路径。', example: '/home/aow/.local/state' },
-    { key: 'XDG_RUNTIME_DIR', description: '用户运行时目录，填写绝对路径；默认 terminald socket 位于其 aow-terminald 子目录。未设置时使用 /tmp/aow-terminald-用户ID。', example: '/run/user/1000' },
-    { key: 'PATH', description: '服务进程查找程序的目录，用冒号分隔绝对路径。与上方单独保存的 Agent 执行 PATH 不同。', example: '/home/aow/.local/bin:/usr/local/bin:/usr/bin:/bin' },
-    { key: 'SHELL', description: '服务环境中的 shell 可执行文件绝对路径。', example: '/bin/zsh' },
-    { key: 'LANG', description: '默认语言和字符编码，应使用系统已安装的 UTF-8 locale。', example: 'en_US.UTF-8' },
-    { key: 'LC_ALL', description: '覆盖所有语言和字符编码设置，优先于 LANG 和其他 LC_* 变量。', example: 'en_US.UTF-8' },
-    { key: 'LC_CTYPE', description: '字符分类和字符编码，覆盖 LANG；LC_ALL 的优先级更高。', example: 'en_US.UTF-8' },
+  { title: t("settings.base_runtime_environment"), fields: [
+    { key: 'XDG_STATE_HOME', description: t("settings.absolute_user_state_directory_default_local_state_aow_uses"), example: '/home/aow/.local/state' },
+    { key: 'XDG_RUNTIME_DIR', description: t("settings.absolute_user_runtime_directory_the_default_terminald_socket_is"), example: '/run/user/1000' },
+    { key: 'PATH', description: t("settings.colon_separated_absolute_directories_used_by_the_service_to"), example: '/home/aow/.local/bin:/usr/local/bin:/usr/bin:/bin' },
+    { key: 'SHELL', description: t("settings.absolute_path_to_the_shell_executable_in_the_service"), example: '/bin/zsh' },
+    { key: 'LANG', description: t("settings.default_language_and_character_encoding_use_a_utf_8"), example: 'en_US.UTF-8' },
+    { key: 'LC_ALL', description: t("settings.overrides_all_language_and_character_encoding_settings_taking_precedence"), example: 'en_US.UTF-8' },
+    { key: 'LC_CTYPE', description: t("settings.character_classification_and_encoding_overrides_lang_lc_all_takes"), example: 'en_US.UTF-8' },
   ] },
-  { title: '代理配置', fields: [
+  { title: t("settings.proxy_configuration"), fields: [
     ...[
-      { key: 'HTTP_PROXY', description: 'HTTP 请求使用的代理地址。', example: 'http://127.0.0.1:7890' },
-      { key: 'HTTPS_PROXY', description: 'HTTPS 请求使用的代理地址；HTTP 代理的地址仍可使用 http://。', example: 'http://127.0.0.1:7890' },
-      { key: 'ALL_PROXY', description: '通用代理地址，协议支持和优先级取决于客户端。', example: 'socks5://127.0.0.1:7890' },
-      { key: 'NO_PROXY', description: '不经过代理的主机、域名或 IP，用逗号分隔。', example: 'localhost,127.0.0.1,::1' },
-    ].flatMap(field => [field, { ...field, key: field.key.toLowerCase(), description: `${field.description}小写形式，供读取小写变量的客户端使用，与大写项独立保存。` }]),
+      { key: 'HTTP_PROXY', description: t("settings.proxy_url_for_http_requests"), example: 'http://127.0.0.1:7890' },
+      { key: 'HTTPS_PROXY', description: t("settings.proxy_url_for_https_requests_http_proxy_urls_can"), example: 'http://127.0.0.1:7890' },
+      { key: 'ALL_PROXY', description: t("settings.general_proxy_url_protocol_support_and_priority_depend_on"), example: 'socks5://127.0.0.1:7890' },
+      { key: 'NO_PROXY', description: t("settings.comma_separated_hosts_domains_or_ips_that_bypass_the"), example: 'localhost,127.0.0.1,::1' },
+    ].flatMap(field => [field, { ...field, key: field.key.toLowerCase(), description: t("settings.lowercase_form_for_clients_that_read_lowercase_variables_saved", { value0: field.description }) }]),
   ] },
 ];
 
@@ -99,10 +100,10 @@ export function validateServerEnvironment(values: ServerEnvironmentValues): Serv
   for (const { key } of serverEnvironmentFields) {
     const value = values[key] ?? '';
     if (!value) continue;
-    if (/[\r\n\0]/.test(value)) errors[key] = '请填写单行值，不能包含换行或空字符。';
-    else if (key === 'AOW_SERVER_PORT' && (!/^\d+$/.test(value) || Number(value) > 65535)) errors[key] = '端口必须是 0–65535 的整数。';
-    else if (key === 'AOW_AUTH_SECURE_COOKIE' && !['true', 'false'].includes(value)) errors[key] = '请填写 true 或 false。';
-    else if (key.startsWith('AOW_AUTH_SESSION_') && (!/^\d+$/.test(value) || BigInt(value) === 0n || BigInt(value) > 18446744073709551615n)) errors[key] = '请填写大于 0 的整数秒，最大为 18446744073709551615。';
+    if (/[\r\n\0]/.test(value)) errors[key] = t("settings.enter_a_single_line_value_without_newlines_or_null");
+    else if (key === 'AOW_SERVER_PORT' && (!/^\d+$/.test(value) || Number(value) > 65535)) errors[key] = t("settings.port_must_be_an_integer_from_0_to_65535");
+    else if (key === 'AOW_AUTH_SECURE_COOKIE' && !['true', 'false'].includes(value)) errors[key] = t("settings.enter_true_or_false");
+    else if (key.startsWith('AOW_AUTH_SESSION_') && (!/^\d+$/.test(value) || BigInt(value) === 0n || BigInt(value) > 18446744073709551615n)) errors[key] = t("settings.enter_a_positive_integer_number_of_seconds_up_to");
   }
   return errors;
 }

@@ -35,9 +35,10 @@ pub(in crate::acp) async fn attach(
         .snapshot(&thread_id)
         .map_err(super::super::api::error)?;
     let controller = state.acp_controls.session(&thread_id);
-    Ok(websocket
-        .max_message_size(1024)
-        .on_upgrade(move |socket| run(socket, controller, access.map(|access| access.0))))
+    Ok(crate::locale::upgrade(
+        websocket.max_message_size(1024),
+        move |socket| run(socket, controller, access.map(|access| access.0)),
+    ))
 }
 
 async fn send(socket: &mut WebSocket, message: Message) -> bool {

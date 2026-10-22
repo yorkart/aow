@@ -1,4 +1,4 @@
-// React rendering of the ACP branches in thread_view.rs, with independent view state.
+import { t, getLanguage } from '../../../../lib/i18n';
 import { useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Maximize2, Minimize2, Send, Square } from 'lucide-react';
 import { ConversationAgentMessage, ConversationLayout } from '../../../../components/conversation/ConversationLayout';
@@ -28,7 +28,13 @@ function TokenUsage({ usage }: { usage: Data | null }) {
   const used = Number(usage.used ?? usage.totalTokens ?? 0); const size = Number(usage.size ?? usage.contextWindow ?? 0);
   if (!size) return null;
   const percent = Math.round(used / size * 100); const cost = object(usage.cost);
-  const title = `Context: ${percent}% · ${used.toLocaleString()} / ${size.toLocaleString()}${typeof cost.amount === 'number' ? `\nCost: ${cost.amount.toFixed(cost.amount > 0 && cost.amount < .01 ? 4 : 2)} ${text(cost.currency)}` : ''}`;
+  const title = t(typeof cost.amount === 'number' ? 'usage.context_with_cost' : 'usage.context', {
+    percent, used: used.toLocaleString(getLanguage()), size: size.toLocaleString(getLanguage()),
+    amount: typeof cost.amount === 'number' ? new Intl.NumberFormat(getLanguage(), {
+      minimumFractionDigits: cost.amount > 0 && cost.amount < .01 ? 4 : 2,
+      maximumFractionDigits: cost.amount > 0 && cost.amount < .01 ? 4 : 2,
+    }).format(cost.amount) : '', currency: text(cost.currency),
+  });
   return <span className={`acp-token-usage${percent >= 85 ? ' warning' : ''}`} role="img" aria-label={title} title={title}><svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" opacity=".25" /><circle cx="8" cy="8" r="6" pathLength="100" strokeDasharray={`${Math.min(100, Math.max(0, percent))} 100`} transform="rotate(-90 8 8)" /></svg></span>;
 }
 export function ThreadView({ session, workspace, tabId, busy: pending, supportsImages = false, supportsSteering = false, composerStatus, headerActions, notice, alternateContent, onAction, onOpenFile: openHostFile }: { session: SessionSnapshot; workspace: string; tabId: string; busy: boolean; supportsImages?: boolean; supportsSteering?: boolean; composerStatus?: ReactNode; headerActions?: ReactNode; notice?: ReactNode; alternateContent?: ReactNode; onAction: (action: Data) => Promise<boolean>; onOpenFile: OpenFile }) {
@@ -68,8 +74,8 @@ export function ThreadView({ session, workspace, tabId, busy: pending, supportsI
   // Upstream appends its generating indicator to the transcript, after the last entry.
   const confirmation = session.permissions.length > 0;
   const compacting = session.overview ? session.overview.some(turn => turn.compacting) : session.entries.some(entry => entry.kind === 'compaction_update' && entry.content.status === 'in_progress');
-  const generating = working && !compacting ? <div className="acp-content acp-working" role="status" aria-label={confirmation ? 'Awaiting Confirmation' : 'Agent 正在处理…'}>
-    <SpinnerLabel variant={confirmation ? 'sand' : 'dots'} />{confirmation && <span>Awaiting Confirmation</span>}
+  const generating = working && !compacting ? <div className="acp-content acp-working" role="status" aria-label={confirmation ? t("navigation.awaiting_confirmation") : t("aow.agent_is_working")}>
+    <SpinnerLabel variant={confirmation ? 'sand' : 'dots'} />{confirmation && <span>{t("navigation.awaiting_confirmation")}</span>}
   </div> : null;
   const renderEntry = useEntryRenderer(session, busy, onAction, onOpenFile);
   const renderGroup = (group: typeof groups[number], controls = false) => renderEntry(group,
@@ -94,7 +100,7 @@ export function ThreadView({ session, workspace, tabId, busy: pending, supportsI
   return <WorkspaceMarkdownProvider directory={session.cwd || workspace}><ConversationLayout
     sessionId={session.thread_id}
     revision={session.revision}
-    label="ACP 对话"
+    label={t("acp.acp_conversation")}
     header={{ title: session.title, agentName: session.agent_id, agentIcon, workspace: session.cwd, actions: headerActions }}
     alternateContent={alternateContent}
     live
@@ -133,14 +139,14 @@ export function ThreadView({ session, workspace, tabId, busy: pending, supportsI
     footer={composerStatus ||
       <form className={`acp-content acp-composer${!hasMessages ? ' empty' : ''}${expanded ? ' expanded' : ''}`} onSubmit={event => { event.preventDefault(); void submit(); }}>
         <div className="acp-editor">
-          {hasMessages && <button type="button" className="acp-editor-expand" aria-label={expanded ? '收起输入区' : '展开输入区'} onClick={() => setExpanded(value => !value)}>{expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}</button>}
-          <MessageEditor draft={draft} onChange={setDraft} commands={session.commands} supportsImages={supportsImages} disabled={session.status === 'disconnected'} placeholder={`Message ${session.agent_id}${session.commands.length ? ' — / for commands' : ''}`} onSubmit={() => { void submit(); }} />
+          {hasMessages && <button type="button" className="acp-editor-expand" aria-label={expanded ? t("acp.collapse_input") : t("acp.expand_input")} onClick={() => setExpanded(value => !value)}>{expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}</button>}
+          <MessageEditor draft={draft} onChange={setDraft} commands={session.commands} supportsImages={supportsImages} disabled={session.status === 'disconnected'} placeholder={t(session.commands.length ? 'acp.message_agent_with_commands' : 'acp.message_agent', { agent: session.agent_id })} onSubmit={() => { void submit(); }} />
         </div>
-        {session.steering_untracked && <p className="acp-status" role="status">Agent 已启动后续任务，但尚未提供执行状态。请勿重复发送。</p>}
+        {session.steering_untracked && <p className="acp-status" role="status">{t("acp.the_agent_started_a_follow_up_task_but_has")}</p>}
         {composeError && <p className="acp-error" role="alert">{composeError}</p>}
         <div className="acp-composer-toolbar"><span className="acp-composer-spacer" /><TokenUsage usage={session.usage} /><ConfigOptions session={session} disabled={busy || session.status === 'disconnected'} onAction={onAction} />
-          {working && <button className="acp-send-button acp-stop-button aow-icon-inherit" type="button" aria-label="停止" title="停止" disabled={busy} onClick={() => { void onAction({ action: 'cancel' }); }}><Square size={14} fill="currentColor" strokeWidth={0} /></button>}
-          {(!working || canSteer) && <button className="acp-send-button" type="submit" aria-label={canSteer ? '追加指令' : '发送'} title={canSteer ? '追加到当前任务 · Enter（Shift + Enter 换行）' : '发送 · Enter（Shift + Enter 换行）'} disabled={!canSend}><Send size={16} /></button>}
+          {working && <button className="acp-send-button acp-stop-button aow-icon-inherit" type="button" aria-label={t("acp.stop")} title={t("acp.stop")} disabled={busy} onClick={() => { void onAction({ action: 'cancel' }); }}><Square size={14} fill="currentColor" strokeWidth={0} /></button>}
+          {(!working || canSteer) && <button className="acp-send-button" type="submit" aria-label={canSteer ? t("acp.add_instructions") : t("acp.send")} title={canSteer ? t("acp.add_to_current_task_enter_shift_enter_for_a") : t("acp.send_enter_shift_enter_for_a_new_line")} disabled={!canSend}><Send size={16} /></button>}
         </div>
       </form>
     }

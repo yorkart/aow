@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowUp, Keyboard, KeyboardOff, List, ShieldCheck, TerminalSquare } from 'lucide-react';
@@ -96,7 +97,7 @@ export function MobileTerminals({ project, worktree, visible, headerActions, ini
       setOpenedIds(ids => ids.has(target.tab.id) ? ids : new Set([...ids, target.tab.id]));
       setSelected(target.key);
     }
-    else reportTabLocationError('该 Tab 已关闭或不存在。');
+    else reportTabLocationError(t("aow.this_tab_has_been_closed_or_no_longer_exists"));
   }, [initialTabId, terminals.loaded, terminals.loading, entries, reportTabLocationError]);
   useEffect(() => {
     if (visible && terminals.loaded && !terminals.loading && !restoringHostedTab) {
@@ -122,7 +123,7 @@ export function MobileTerminals({ project, worktree, visible, headerActions, ini
     const target = (paneId ? flattenTerminalTabs([tab], detectedAgents, titles, activity, processes).find(entry => entry.pane.id === paneId) : undefined)
       ?? entries.find(entry => entry.tab.id === tab.id && entry.key === selected)
       ?? entries.find(entry => entry.tab.id === tab.id) ?? flattenTerminalTabs([tab], detectedAgents, titles, activity, processes)[0];
-    if (!target) { setOperationError('该终端没有可打开的窗格，请刷新列表。'); return; }
+    if (!target) { setOperationError(t("terminals.this_terminal_has_no_available_panes_refresh_the_list")); return; }
     setOperationError('');
     setOpenedIds(ids => ids.has(tab.id) ? ids : new Set([...ids, tab.id]));
     setSelected(target.key);
@@ -140,7 +141,7 @@ export function MobileTerminals({ project, worktree, visible, headerActions, ini
   return <section className="mobile-terminal-page">
     {visible && headerActions && createPortal(<>
       {active && terminalPaneAgent(active.pane, detectedAgents) && <TerminalHostingButton tab={active.tab} pane={active.pane} onChange={tab => { if (tab.workspace_root === workspace) terminals.replace(tab); else projectTerminals.reload(); }} />}
-      <button ref={catalogButton} className="mobile-icon-button" aria-label="终端列表" aria-haspopup="dialog" aria-expanded={catalogOpen} aria-controls={catalogId}
+      <button ref={catalogButton} className="mobile-icon-button" aria-label={t("terminals.terminal_list")} aria-haspopup="dialog" aria-expanded={catalogOpen} aria-controls={catalogId}
         onClick={() => setCatalogOpen(true)}><List size={21} /></button>
       <MobileRefresh reload={reload} loading={terminals.loading || projectTerminals.loading} />
       <MobileTerminalNewMenu busy={terminals.busy} onCreate={agentId => void create(agentId)} />
@@ -163,14 +164,14 @@ export function MobileTerminals({ project, worktree, visible, headerActions, ini
         loading={showAll && projectTerminals.loading}
         error={showAll && projectTerminals.error !== (operationError || terminals.error) ? projectTerminals.error : undefined} />
     </>}</MobileTerminalCatalog>}
-    {entries.length > 0 && <div className="mobile-terminal-tabs" role="tablist" aria-label="终端标签">
+    {entries.length > 0 && <div className="mobile-terminal-tabs" role="tablist" aria-label={t("terminals.terminal_tabs")}>
       {entries.map((entry) => <button key={entry.key} id={`mobile-terminal-${entry.key}`} role="tab" aria-selected={activeKey === entry.key}
         aria-controls={`mobile-terminal-panel-${entry.key}`} className={activeKey === entry.key ? 'active' : ''} onClick={() => setSelected(entry.key)}>
         {terminalPaneAgent(entry.pane, detectedAgents) ? <AgentIcon agentId={terminalPaneAgent(entry.pane, detectedAgents)} /> : <TerminalSquare size={15} />}
         <span>{entry.title}</span><TerminalLifecycleDot className="mobile-dot" state={terminalPaneLifecycle(entry.pane)} />
       </button>)}
     </div>}
-    {(!entries.length || restoringHostedTab) && <MobileState loading={terminals.loading || restoringHostedTab} empty="从右上角列表打开已有终端，或点击 + 新建。" />}
+    {(!entries.length || restoringHostedTab) && <MobileState loading={terminals.loading || restoringHostedTab} empty={t("terminals.open_existing_terminals_from_the_top_right_list_or")} />}
     <div className="mobile-terminal-panels">
       {entries.filter((entry) => visited.has(entry.key) || entry.key === activeKey).map((entry) => <div className="mobile-terminal-panel"
         key={entry.key} id={`mobile-terminal-panel-${entry.key}`} role="tabpanel" aria-labelledby={`mobile-terminal-${entry.key}`} hidden={entry.key !== activeKey}>
@@ -259,7 +260,7 @@ function MobileTerminal({ entry, visible, onStatus }: {
     setKeyboard(focusedInput.current !== null);
   }}>
     <div className="mobile-terminal-display">
-      <div className="mobile-terminal-viewport" ref={viewport} aria-label="终端画面，上下滑动滚动内容，双指缩放字体" {...gestures}>
+      <div className="mobile-terminal-viewport" ref={viewport} aria-label={t("terminals.terminal_screen_swipe_vertically_to_scroll_pinch_to_change")} {...gestures}>
         <div className="mobile-terminal-stage" ref={surface}>
           <TerminalPaneView pane={entry.pane} tabId={entry.tab.id} active={visible} visible={visible}
             sizing="container" renderer="dom" fontSize={fontSize} attachEnabled={visible && requested} forceOnAttach={force} autoFocus={false} mobileInput controlsRef={controls}
@@ -269,28 +270,28 @@ function MobileTerminal({ entry, visible, onStatus }: {
       </div>
       {!entry.pane.hosting && (!requested || running && !ready && connection !== 'observing') && <div className="mobile-terminal-welcome">
         <TerminalSquare size={28} /><strong>{entry.title}</strong>
-        <p role="status">{requested ? terminalPaneStatusMessage(entry.pane, connection, message) : running ? '接管后同步终端画面与输入' : '进程已结束，可查看保留的输出'}</p>
-        <button className="mobile-button mobile-terminal-claim" disabled={requested && connection === 'connecting'} onClick={claim}><ShieldCheck size={14} />{running ? requested ? '重新接管' : '接管终端' : '查看输出'}</button>
+        <p role="status">{requested ? terminalPaneStatusMessage(entry.pane, connection, message) : running ? t("terminals.take_control_to_sync_terminal_display_and_input") : t("terminals.process_ended_retained_output_is_available")}</p>
+        <button className="mobile-button mobile-terminal-claim" disabled={requested && connection === 'connecting'} onClick={claim}><ShieldCheck size={14} />{running ? requested ? t("terminals.retake_control") : t("terminals.take_terminal_control") : t("terminals.view_output")}</button>
       </div>}
-      {entry.pane.hosting && <div className="mobile-terminal-hosting"><div><span>{hostingStatus(entry.pane.hosting)}</span><button className="mobile-button" onClick={claim}>接管</button></div><TerminalHostingDetails hosting={entry.pane.hosting} /></div>}
-      {!entry.pane.hosting && requested && running && connection === 'observing' && <button className="mobile-button mobile-terminal-observing-claim" disabled={Boolean(entry.pane.agent_terminal && entry.pane.agent_terminal.phase !== 'ready')} onClick={claim}><ShieldCheck size={14} />接管终端</button>}
+      {entry.pane.hosting && <div className="mobile-terminal-hosting"><div><span>{hostingStatus(entry.pane.hosting)}</span><button className="mobile-button" onClick={claim}>{t("acp-control.take_control")}</button></div><TerminalHostingDetails hosting={entry.pane.hosting} /></div>}
+      {!entry.pane.hosting && requested && running && connection === 'observing' && <button className="mobile-button mobile-terminal-observing-claim" disabled={Boolean(entry.pane.agent_terminal && entry.pane.agent_terminal.phase !== 'ready')} onClick={claim}><ShieldCheck size={14} />{t("terminals.take_terminal_control")}</button>}
     </div>
     <div className="mobile-terminal-input">
-      <div className="mobile-accessory-keys" aria-label="终端辅助按键">
-        {terminalAccessoryKeys.map((key) => <button key={key.label} disabled={!ready} aria-label={`发送 ${key.label}`}
+      <div className="mobile-accessory-keys" aria-label={t("terminals.terminal_helper_keys")}>
+        {terminalAccessoryKeys.map((key) => <button key={key.label} disabled={!ready} aria-label={t("terminals.send", { value0: key.label })}
           onPointerDown={(event) => event.preventDefault()} onClick={() => send(key.data)}>{key.label}</button>)}
       </div>
       <form className="mobile-composer" onSubmit={(event) => { event.preventDefault(); send('\r'); }}>
-        <button type="button" aria-label={keyboard ? '收起键盘' : '打开键盘'} disabled={!ready} onPointerDown={(event) => event.preventDefault()} onMouseDown={(event) => event.preventDefault()} onClick={() => {
+        <button type="button" aria-label={keyboard ? t("terminals.hide_keyboard") : t("terminals.show_keyboard")} disabled={!ready} onPointerDown={(event) => event.preventDefault()} onMouseDown={(event) => event.preventDefault()} onClick={() => {
           if (keyboard) hideKeyboard(); else input.current?.focus({ preventScroll: true });
         }}>{keyboard ? <KeyboardOff size={21} /> : <Keyboard size={21} />}</button>
-        <textarea ref={input} rows={1} aria-label="终端命令" placeholder={ready ? '输入命令，按 Enter 执行' : '接管后可输入'} value={draft} disabled={!ready}
+        <textarea ref={input} rows={1} aria-label={t("terminals.terminal_command")} placeholder={ready ? t("terminals.enter_a_command_and_press_enter_to_run") : t("terminals.take_control_to_type")} value={draft} disabled={!ready}
           autoCorrect="off" autoCapitalize="off" spellCheck={false} enterKeyHint="send"
           onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}
           onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && !composing.current) { event.preventDefault(); send('\r'); }
           }} />
-        <button className="mobile-send" type="submit" disabled={!ready} aria-label="执行命令" onPointerDown={(event) => event.preventDefault()}><ArrowUp size={20} /></button>
+        <button className="mobile-send" type="submit" disabled={!ready} aria-label={t("terminals.run_command")} onPointerDown={(event) => event.preventDefault()}><ArrowUp size={20} /></button>
       </form>
     </div>
   </div>;

@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { hasDocumentOwners } from './workspaceDocuments';
 import Editor, { DiffEditor } from './MonacoEditor';
 import DOMPurify from 'dompurify';
@@ -129,10 +130,10 @@ function TabContextMenu({ x, y, document, hasOtherDocuments, onCloseMenu, onClos
   };
 
   return (
-    <div ref={menu} className="editor-tab-context-menu" style={{ left: position.x, top: position.y }} role="menu" aria-label={`${document.name} 标签操作`} onPointerDown={(event) => event.stopPropagation()}>
-      <button className="danger" role="menuitem" onClick={action(onClose)}>关闭</button>
-      <button className="danger" role="menuitem" disabled={!hasOtherDocuments} onClick={action(onCloseOthers)}>关闭其他</button>
-      <button className="danger" role="menuitem" onClick={action(onCloseAll)}>关闭所有</button>
+    <div ref={menu} className="editor-tab-context-menu" style={{ left: position.x, top: position.y }} role="menu" aria-label={t("editor.tab_actions", { value0: document.name })} onPointerDown={(event) => event.stopPropagation()}>
+      <button className="danger" role="menuitem" onClick={action(onClose)}>{t("aow.close")}</button>
+      <button className="danger" role="menuitem" disabled={!hasOtherDocuments} onClick={action(onCloseOthers)}>{t("aow.close_others")}</button>
+      <button className="danger" role="menuitem" onClick={action(onCloseAll)}>{t("aow.close_all")}</button>
     </div>
   );
 }
@@ -142,10 +143,10 @@ export function EditorArea({ workspace, documents, activeId, wordWrapOverride, o
   const { editor } = useEditorSettings();
   const wrapEnabled = wordWrapOverride ?? editor.word_wrap;
   const wordWrap = wrapEnabled ? 'on' : 'off';
-  const saveLabel = active?.saving ? '自动保存中…' : active?.dirty ? '立即保存' : '已自动保存';
+  const saveLabel = active?.saving ? t("editor.autosaving") : active?.dirty ? t("editor.save_now") : t("editor.autosaved");
   const showWordWrap = active?.kind === 'text' || active?.kind === 'json' || active?.kind === 'diff'
     || (active?.kind === 'markdown' && active.markdownView === 'editor');
-  const markdownViewLabel = active?.markdownView === 'editor' ? '切换到预览' : '切换到源码';
+  const markdownViewLabel = active?.markdownView === 'editor' ? t("editor.switch_to_preview") : t("editor.switch_to_source");
   const editorArea = useRef<HTMLElement>(null);
   const tabs = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<TabContextMenu>();
@@ -209,7 +210,7 @@ export function EditorArea({ workspace, documents, activeId, wordWrapOverride, o
   return (
     <main ref={editorArea} className="editor-area">
       <div className="tabs-shell">
-        <button className="tabs-scroll-button" title="向左滚动" onClick={() => scrollTabs(-260)}><ChevronLeft size={15} /></button>
+        <button className="tabs-scroll-button" title={t("editor.scroll_left")} onClick={() => scrollTabs(-260)}><ChevronLeft size={15} /></button>
         <div
           ref={tabs}
           className="editor-tabs"
@@ -240,7 +241,7 @@ export function EditorArea({ workspace, documents, activeId, wordWrapOverride, o
             );
           })}
         </div>
-        <button className="tabs-scroll-button" title="向右滚动" onClick={() => scrollTabs(260)}><ChevronRight size={15} /></button>
+        <button className="tabs-scroll-button" title={t("editor.scroll_right")} onClick={() => scrollTabs(260)}><ChevronRight size={15} /></button>
       </div>
       {contextMenu ? (() => {
         const menuDocument = documents.find((document) => document.id === contextMenu.documentId);
@@ -263,16 +264,16 @@ export function EditorArea({ workspace, documents, activeId, wordWrapOverride, o
           />
         );
       })() : null}
-      {!active ? <div className="welcome"><h1>AoW</h1><p>从左侧文件树选择文件，或切换到 Source Control 查看更改。</p></div> : (
+      {!active ? <div className="welcome"><h1>AoW</h1><p>{t("editor.select_a_file_from_the_file_tree_or_switch")}</p></div> : (
         <>
           <div className="editor-toolbar">
             <code title={active.path}>{active.path}</code>
             {showWordWrap || active.kind === 'markdown' ? (
               <>
-                <div className="editor-toolbar-group" role="group" aria-label="视图操作">
+                <div className="editor-toolbar-group" role="group" aria-label={t("editor.view_actions")}>
                   {showWordWrap ? <button
-                    className={wrapEnabled ? 'active' : undefined} aria-label="自动换行" aria-pressed={wrapEnabled}
-                    title={`自动换行：${wrapEnabled ? '已开启' : '已关闭'}（${wordWrapOverride === undefined ? '跟随全局设置' : '当前 Tab'}）`}
+                    className={wrapEnabled ? 'active' : undefined} aria-label={t("editor.word_wrap")} aria-pressed={wrapEnabled}
+                    title={t("editor.word_wrap_2", { value0: wrapEnabled ? t("common.enabled") : t("pr.closed"), value1: wordWrapOverride === undefined ? t("common.follow_global_setting") : t("common.current_tab") })}
                     onClick={() => onWordWrapChange(active.id, !wrapEnabled)}><WrapText aria-hidden="true" /></button> : null}
                   {active.kind === 'markdown' ? <button
                     title={markdownViewLabel} aria-label={markdownViewLabel}
@@ -283,32 +284,32 @@ export function EditorArea({ workspace, documents, activeId, wordWrapOverride, o
                 <span className="editor-toolbar-separator" aria-hidden="true" />
               </>
             ) : null}
-            <div className="editor-toolbar-group" role="group" aria-label="文件操作">
+            <div className="editor-toolbar-group" role="group" aria-label={t("editor.file_actions")}>
               {(active.kind === 'text' || active.kind === 'json' || active.kind === 'markdown') && !active.readOnly ? <button
-                title={`${saveLabel}；自动保存已开启（macOS: Command+S；其他系统: Ctrl+S）`} aria-label={saveLabel} aria-busy={Boolean(active.saving)}
+                title={t("editor.autosave_enabled_macos_command_s_other_systems_ctrl_s", { value0: saveLabel })} aria-label={saveLabel} aria-busy={Boolean(active.saving)}
                 disabled={!canSaveDocument(active)} onClick={() => onSave(active.id)}>
                 {active.saving ? <LoaderCircle className="spinning" aria-hidden="true" /> : active.dirty ? <Save aria-hidden="true" /> : <Check aria-hidden="true" />}
               </button> : null}
-              <button title={active.refreshing ? '正在刷新…' : active.diffSource ? '刷新 Diff' : '刷新文件'} aria-label={active.diffSource ? '刷新 Diff' : '刷新文件'} aria-busy={Boolean(active.refreshing)} disabled={active.loading || active.refreshing || active.saving} onClick={() => onRefresh(active.id)}><RefreshCw className={active.refreshing ? 'spinning' : undefined} aria-hidden="true" /></button>
-              {!active.diffSource ? <button title="下载文件" aria-label="下载文件" onClick={() => downloadFile(active.path)}><Download aria-hidden="true" /></button> : null}
+              <button title={active.refreshing ? t("editor.refreshing") : active.diffSource ? t("editor.refresh_diff") : t("editor.refresh_file")} aria-label={active.diffSource ? t("editor.refresh_diff") : t("editor.refresh_file")} aria-busy={Boolean(active.refreshing)} disabled={active.loading || active.refreshing || active.saving} onClick={() => onRefresh(active.id)}><RefreshCw className={active.refreshing ? 'spinning' : undefined} aria-hidden="true" /></button>
+              {!active.diffSource ? <button title={t("editor.download_file")} aria-label={t("editor.download_file")} onClick={() => downloadFile(active.path)}><Download aria-hidden="true" /></button> : null}
             </div>
           </div>
           {active.pendingExternal ? (
             <div className="editor-file-notice warning">
-              <span>文件已在磁盘上更新。请选择重新加载，或用当前编辑内容覆盖磁盘版本。</span>
-              <button disabled={active.refreshing} onClick={() => onReloadExternal(active.id)}>从磁盘重新加载</button>
-              <button disabled={active.refreshing} onClick={() => onKeepLocal(active.id)}>保留并覆盖</button>
+              <span>{t("editor.the_file_changed_on_disk_reload_it_or_overwrite")}</span>
+              <button disabled={active.refreshing} onClick={() => onReloadExternal(active.id)}>{t("editor.reload_from_disk")}</button>
+              <button disabled={active.refreshing} onClick={() => onKeepLocal(active.id)}>{t("editor.keep_edits_and_overwrite")}</button>
             </div>
           ) : null}
           {active.kind === 'pdf' && active.previewHistory?.length ? (
             <div className="editor-file-notice info">
-              <span>PDF 已刷新。如果浏览器无法显示新版本，可以恢复上一个预览。</span>
-              <button onClick={() => onRestorePreview(active.id)}>恢复上一个预览</button>
+              <span>{t("editor.pdf_refreshed_if_the_browser_cannot_display_the_new")}</span>
+              <button onClick={() => onRestorePreview(active.id)}>{t("editor.restore_previous_preview")}</button>
             </div>
           ) : null}
-          {active.refreshError ? <div className="editor-file-notice error"><span>刷新失败：{active.refreshError}</span></div> : null}
+          {active.refreshError ? <div className="editor-file-notice error"><span>{t("editor.refresh_failed")}{active.refreshError}</span></div> : null}
           <div className="editor-content">
-            {active.loading ? <div className="editor-loading"><span className="loading-spinner" />加载中…</div> : null}
+            {active.loading ? <div className="editor-loading"><span className="loading-spinner" />{t("automations.loading")}</div> : null}
             {!active.loading && (active.kind === 'text' || active.kind === 'json') ? (
               <Editor
                 path={documentEditorModelPath(active)}
@@ -371,7 +372,7 @@ export function EditorArea({ workspace, documents, activeId, wordWrapOverride, o
                 options={{ automaticLayout: true, minimap: { enabled: false }, readOnly: true, fontSize: 12, scrollBeyondLastLine: false, wordWrap }}
               />
             ) : null}
-            {active.kind === 'unsupported' ? <div className="unsupported-preview"><h2>无法直接预览</h2><p>{active.error}</p></div> : null}
+            {active.kind === 'unsupported' ? <div className="unsupported-preview"><h2>{t("editor.preview_unavailable")}</h2><p>{active.error}</p></div> : null}
           </div>
         </>
       )}

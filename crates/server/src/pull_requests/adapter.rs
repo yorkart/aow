@@ -18,7 +18,9 @@ const COMMAND_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub(super) async fn git(repo: &str, args: &[&str], paths: &[PathBuf]) -> Result<String> {
     let executable = resolve_executable("git", paths).ok_or_else(|| {
-        PullRequestError::Unavailable("找不到 git，请检查 Settings → Environment。".into())
+        PullRequestError::Unavailable(
+            aow_i18n::text("server.git_not_found_check_settings_environment").into(),
+        )
     })?;
     let mut command = Command::new(executable);
     command.args(args).current_dir(repo);
@@ -41,7 +43,9 @@ pub(super) async fn run_adapter(
     script_path: Option<&Path>,
 ) -> Result<Value> {
     let executable = resolve_executable("python3", paths).ok_or_else(|| {
-        PullRequestError::Unavailable("找不到 python3，请检查 Settings → Environment。".into())
+        PullRequestError::Unavailable(
+            aow_i18n::text("server.python3_not_found_check_settings_environment").into(),
+        )
     })?;
     let mut command = Command::new(executable);
     // Draft tests and in-memory embeddings use a temporary file. Saved providers

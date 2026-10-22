@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n';
 import { ListRowMenuContext } from '../components/ListRowMenuContext';
 import { appLocalStorage } from '../lib/basePath';
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -107,7 +108,7 @@ function useFloatingController() {
   const add = useCallback((workspace: string, id: string, initial?: WorkspaceTab & { external?: boolean }) => {
     removeHosted(workspace, id);
     const descriptor = sources.current.get(workspace)?.tabs.find(tab => tab.id === id) ?? initial;
-    const tab: FloatingTab = { workspace, ...(descriptor ?? { id, label: '正在打开…', kind: 'file', pending: true, targetId: id.slice(id.indexOf(':') + 1) }) };
+    const tab: FloatingTab = { workspace, ...(descriptor ?? { id, label: t("aow.opening_2"), kind: 'file', pending: true, targetId: id.slice(id.indexOf(':') + 1) }) };
     setTabs(items => items.some(item => tabKey(item) === tabKey(tab)) ? items : [...items, tab]);
     setActiveKey(tabKey(tab));
     setTabRevealRequest({ tabId: tabKey(tab) });
@@ -216,7 +217,7 @@ export function FloatingOpenMenu({ children }: { children: ReactNode }) {
     event.preventDefault(); event.stopPropagation();
     const bounds = element.getBoundingClientRect();
     open(element, event.clientX || bounds.x, event.clientY || bounds.bottom);
-  }}>{children}{target ? <div ref={menu} className="project-aow-context-menu" role="menu" aria-label="选择打开位置"
+  }}>{children}{target ? <div ref={menu} className="project-aow-context-menu" role="menu" aria-label={t("aow.choose_where_to_open")}
     style={{ left: target.x, top: target.y }} onPointerDown={event => event.stopPropagation()} onMouseDown={event => event.preventDefault()}>
     <button role="menuitem" onClick={() => { target.element.click(); setTarget(undefined); }}><WorkspaceMenuLabel action="open" /></button>
     <button role="menuitem" onClick={() => { withFloatingOpen(() => target.element.click()); setTarget(undefined); }}><WorkspaceMenuLabel action="floating" /></button>

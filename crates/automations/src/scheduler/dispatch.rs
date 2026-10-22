@@ -20,12 +20,18 @@ impl Scheduler {
     ) -> Result<Option<String>> {
         ensure!(
             source == RunSource::Manual || task.input.kind == TaskKind::Scheduled,
-            "手动任务不能定时触发"
+            aow_i18n::message(
+                "automations.manual_tasks_cannot_be_triggered_on_a_schedule",
+                &[]
+            )
         );
         task.input.render_prompt(&variables)?;
         ensure!(
             task.input.workspace.workspace_mode != crate::WorkspaceMode::Dynamic,
-            "请在执行时指定工作区目录"
+            aow_i18n::message(
+                "automations.specify_a_workspace_directory_for_this_run",
+                &[]
+            )
         );
         // This avoids creating a transient OS job when all slots are occupied.
         // The runner acquires a slot again as the authoritative race-free check.
@@ -61,7 +67,10 @@ impl Scheduler {
                     at: chrono::Utc::now(),
                     status: crate::RunStatus::Failed,
                     exit_code: None,
-                    message: Some(format!("Runner 启动失败: {error:#}")),
+                    message: Some(aow_i18n::message(
+                        "automations.failed_to_start_runner",
+                        &[("p0", format!("{:#}", error))],
+                    )),
                     duration_ms: 0,
                 })?;
             }
@@ -80,7 +89,7 @@ impl Scheduler {
         let domain = self.check_ready().await?;
         ensure!(
             !task.deleted && (source == RunSource::Manual || task.input.enabled),
-            "任务已暂停或删除"
+            aow_i18n::message("automations.task_paused_or_deleted", &[])
         );
         let mut args = self.arguments(store, task, "run", source);
         args.extend(["--run-id".into(), id.to_owned()]);
@@ -105,7 +114,9 @@ impl Scheduler {
                 task,
                 &label,
                 &args,
-                domain.as_deref().context("缺少 launchd 用户域")?,
+                domain
+                    .as_deref()
+                    .context(aow_i18n::text("automations.missing_launchd_user_domain"))?,
             )
             .await?;
         }

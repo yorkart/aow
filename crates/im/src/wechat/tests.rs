@@ -348,7 +348,7 @@ fn rejects_untrusted_credential_destinations_and_unsafe_session_paths() {
         credentials.binding_id = id.into();
         assert_eq!(
             credentials.validate().unwrap_err().to_string(),
-            "无效的微信绑定 ID"
+            "Invalid WeChat binding ID"
         );
         assert!(WechatClient::new(credentials, None).is_err());
     }

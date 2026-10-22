@@ -16,6 +16,7 @@ try {
   const base = `http://127.0.0.1:${server.httpServer.address().port}`;
   async function fixture(t, settings = false, initial = {}) {
     const page = await browser.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     page.setDefaultTimeout(8000);
     // Cold Vite transforms can exceed the interaction deadline on shared CI CPUs.
     page.setDefaultNavigationTimeout(30000);
@@ -183,7 +184,7 @@ try {
       await route.fulfill({ json: data });
     });
     await page.goto(`${origin}/tests/acp-preview.html${settings ? '?settings' : ''}`);
-    if (!settings) await page.waitForFunction(() => document.querySelector('[aria-label="刷新 User ACP"]')?.disabled === false);
+    if (!settings) await page.waitForFunction(() => document.querySelector('[aria-label="刷新 用户 ACP"]')?.disabled === false);
     return { page, state };
   }
   await test('ACP sidebar recency follows submitted tasks instead of opening or background updates', async t => {
@@ -193,7 +194,7 @@ try {
     const { page, state } = await fixture(t, false, { sessions: [
       session('Older task', '2020-01-01T00:00:00Z'), session('Newer task', '2021-01-01T00:00:00Z'),
     ] });
-    const panel = page.getByRole('region', { name: 'User ACP', exact: true });
+    const panel = page.getByRole('region', { name: "用户 ACP", exact: true });
     const titles = () => panel.locator('.aow-list-row-open').evaluateAll(rows => rows.map(row => row.title));
     const older = panel.locator('.acp-panel-row').filter({ has: page.getByRole('button', { name: '打开 ACP 会话 Older task', exact: true }) });
     await panel.getByRole('button', { name: '打开 ACP 会话 Older task', exact: true }).waitFor();
@@ -234,8 +235,8 @@ try {
       session('CLI main', '/repo', 'cli', '2026-01-04'),
       session('Other project', '/other', 'cli', '2026-01-01'),
     ] });
-    const user = page.getByRole('region', { name: 'User ACP', exact: true });
-    const cli = page.getByRole('region', { name: 'CLI ACP', exact: true });
+    const user = page.getByRole('region', { name: "用户 ACP", exact: true });
+    const cli = page.getByRole('region', { name: "CLI ACP", exact: true });
     await user.getByRole('button', { name: '打开 ACP 会话 User child', exact: true }).waitFor();
     await cli.getByRole('button', { name: '打开 ACP 会话 CLI root', exact: true }).waitFor();
     assert.equal(await page.getByRole('button', { name: '打开 ACP 会话 Other project', exact: true }).count(), 0);
@@ -249,7 +250,7 @@ try {
     await user.locator('.instance-worktree-heading').last().click();
     assert.equal(await user.getByRole('button', { name: '打开 ACP 会话 User child', exact: true }).isVisible(), false);
     await user.locator('.instance-worktree-heading').last().click();
-    await user.getByRole('button', { name: 'User ACP 显示范围', exact: true }).click();
+    await user.getByRole('button', { name: '用户 ACP 显示范围', exact: true }).click();
     await page.getByRole('menuitemradio', { name: '按创建时间' }).click();
     assert.deepEqual(await user.locator('.aow-list-row-title').allTextContents(), ['User child', 'User main']);
     state.sessions[0].updated_at = '2027-01-01';
@@ -257,7 +258,7 @@ try {
     await user.getByRole('button', { name: '打开 ACP 会话 User renamed', exact: true }).waitFor();
     await user.getByRole('status', { name: 'Agent 正在处理…' }).waitFor();
     assert.match((await user.locator('.aow-list-row-title').allTextContents())[0], /User renamed/);
-    await user.getByRole('button', { name: 'User ACP 显示范围', exact: true }).click();
+    await user.getByRole('button', { name: '用户 ACP 显示范围', exact: true }).click();
     await page.getByRole('menuitemcheckbox', { name: '显示所有Worktree' }).click();
     assert.equal(await user.getByRole('button', { name: '打开 ACP 会话 User renamed', exact: true }).count(), 0);
     await cli.getByRole('button', { name: '打开 ACP 会话 CLI root', exact: true }).waitFor();
@@ -285,8 +286,8 @@ try {
         sessionListGates: { '/repo-feature': gate },
         sessionListErrors: { '/repo-feature': 'Foreign inventory unavailable' },
       });
-      const localTitle = localSource === 'user' ? 'User ACP' : 'CLI ACP';
-      const allTitle = localSource === 'user' ? 'CLI ACP' : 'User ACP';
+      const localTitle = localSource === 'user' ? "用户 ACP" : 'CLI ACP';
+      const allTitle = localSource === 'user' ? 'CLI ACP' : "用户 ACP";
       const local = page.getByRole('region', { name: localTitle, exact: true });
       const all = page.getByRole('region', { name: allTitle, exact: true });
       const toggleLocal = async () => {
@@ -981,13 +982,13 @@ try {
     ];
     const { page, state } = await fixture(t, false, { agents });
     assert.equal(await page.getByRole('button', { name: '新建 ACP 会话', exact: true }).count(), 0);
-    const emptyPanel = page.getByRole('region', { name: 'User ACP', exact: true });
+    const emptyPanel = page.getByRole('region', { name: "用户 ACP", exact: true });
     await emptyPanel.locator('.aow-panel-toggle').click();
     await emptyPanel.getByText('暂无会话', { exact: true }).waitFor();
     await page.getByRole('button', { name: '新建窗体', exact: true }).click();
     const menu = page.locator('.project-aow-new-menu');
     await menu.getByRole('button', { name: '新建 ACP 会话：Test Agent', exact: true }).waitFor();
-    assert.deepEqual(await menu.locator('.project-aow-menu-label').allTextContents(), ['Workspace', 'Agents', 'ACP', 'Notes', 'Files']);
+    assert.deepEqual(await menu.locator('.project-aow-menu-label').allTextContents(), ['工作区', 'Agent', 'ACP', '笔记', '文件']);
     assert.equal(await menu.getByRole('button', { name: /^新建 ACP 会话：/ }).count(), 1);
     state.agents = [];
     await page.evaluate(() => window.dispatchEvent(new Event('aow:acp-settings-changed')));
@@ -1020,7 +1021,7 @@ try {
   await test('only the controlling page restores and writes; takeover preserves live work and drafts', async t => {
     const { page: first, state } = await fixture(t);
     state.session.status = 'disconnected'; state.sessions.push(state.session);
-    await first.getByRole('button', { name: '刷新 User ACP', exact: true }).click();
+    await first.getByRole('button', { name: '刷新 用户 ACP', exact: true }).click();
     await first.getByRole('button', { name: '打开 ACP 会话 Conversation', exact: true }).click();
     const input = first.getByLabel('ACP 消息', { exact: true });
     await input.fill('Owner draft');
@@ -1285,6 +1286,7 @@ try {
       for (const key of ['--aow-text', '--aow-line', '--aow-panel', '--aow-muted', '--aow-accent']) host.style.removeProperty(key);
     });
     const native = await browser.newPage();
+    await native.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => native.close());
     await native.goto(`${base}/tests/session-snapshot-preview.html`);
     await native.locator('.project-aow-snapshot-header').waitFor();
@@ -1465,7 +1467,7 @@ try {
       const { monaco } = await import('/src/features/editor/monaco.ts');
       return monaco.editor.getModel(monaco.Uri.parse('inmemory://aow/acp/aow-acp-settings.jsonc')).getValue();
     });
-    const addCustom = page.getByRole('button', { name: 'Setting File', exact: true });
+    const addCustom = page.getByRole('button', { name: "配置文件", exact: true });
     const modal = page.getByRole('dialog', { name: '编辑 ACP 配置', exact: true });
     const confirmation = page.getByRole('alertdialog', { name: '放弃 ACP 修改？', exact: true });
     const edit = async content => {
@@ -1556,7 +1558,7 @@ try {
     await modal.waitFor({ state: 'hidden' });
     assert.equal(await defaultOption.isChecked(), true, 'discarding editor changes retains the earlier default selection');
     await page.waitForFunction(() => document.querySelector('[aria-label="Unsaved settings"]')?.textContent === 'false');
-    await page.getByRole('button', { name: 'Setting File', exact: true }).click();
+    await page.getByRole('button', { name: "配置文件", exact: true }).click();
     const custom = page.getByRole('dialog', { name: '编辑 ACP 配置', exact: true });
     await custom.getByRole('button', { name: '取消', exact: true }).click();
     await custom.waitFor({ state: 'hidden' });
@@ -1611,7 +1613,7 @@ try {
       ],
     });
     const heading = page.locator('.acp-settings-heading');
-    await heading.getByRole('button', { name: 'Setting File', exact: true }).waitFor();
+    await heading.getByRole('button', { name: "配置文件", exact: true }).waitFor();
     await heading.getByRole('button', { name: 'ACP Registry', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'ACP Registry', exact: true });
     const cards = dialog.locator('.acp-registry-card');
@@ -1621,16 +1623,16 @@ try {
     const inputBounds = await dialog.getByRole('searchbox').boundingBox();
     assert.ok(inputBounds.x + inputBounds.width <= searchBounds.x + searchBounds.width, 'search input stays inside its bordered control');
     assert.equal(await dialog.getByRole('link', { name: /Learn More/i }).count(), 0);
-    assert.equal(await dialog.getByRole('link', { name: 'Ready Agent Repository' }).getAttribute('href'), 'https://github.com/example/ready');
-    assert.equal(await dialog.getByRole('link', { name: 'Ready Agent Website' }).getAttribute('target'), '_blank');
-    assert.equal(await dialog.getByRole('link', { name: 'Ready Agent License' }).count(), 1);
+    assert.equal(await dialog.getByRole('link', { name: "Ready Agent 仓库" }).getAttribute('href'), 'https://github.com/example/ready');
+    assert.equal(await dialog.getByRole('link', { name: "Ready Agent 网站" }).getAttribute('target'), '_blank');
+    assert.equal(await dialog.getByRole('link', { name: "Ready Agent 许可证" }).count(), 1);
     assert.equal(await dialog.getByRole('link', { name: 'New Agent Website' }).count(), 0);
     await dialog.getByText('v1.2.3', { exact: true }).waitFor();
     await dialog.getByText('ID: ready', { exact: true }).waitFor();
-    await dialog.getByRole('group', { name: '安装状态筛选' }).getByRole('button', { name: 'Installed', exact: true }).click();
+    await dialog.getByRole('group', { name: '安装状态筛选' }).getByRole('button', { name: "已安装", exact: true }).click();
     assert.equal(await cards.count(), 1);
     assert.match(await cards.first().textContent(), /Ready Agent/);
-    await dialog.getByRole('button', { name: 'Not Installed', exact: true }).click();
+    await dialog.getByRole('button', { name: '未安装', exact: true }).click();
     assert.equal(await cards.count(), 1);
     assert.match(await cards.first().textContent(), /New Agent/);
     await dialog.getByRole('searchbox', { name: '搜索 ACP Registry' }).fill('absent');
@@ -1644,7 +1646,7 @@ try {
     const { page, state } = await fixture(t, true);
     await page.getByRole('button', { name: 'ACP Registry', exact: true }).click();
     await page.getByRole('dialog', { name: 'ACP Registry', exact: true }).waitFor();
-    await page.getByRole('button', { name: 'Install', exact: true }).click();
+    await page.getByRole('button', { name: "安装", exact: true }).click();
     await page.getByText('codex-acp 已安装，可在工作区“新建窗体”菜单的 ACP 分组中新建会话。').waitFor();
     assert.equal(state.installCalls, 1);
     assert.equal(state.connections, 0);
@@ -1688,7 +1690,7 @@ try {
     state.installStatus = { phase: 'installing', detail: null, running: true, elapsed_seconds: 18 };
     await page.getByRole('button', { name: 'ACP Registry', exact: true }).click();
     await page.getByRole('dialog', { name: 'ACP Registry', exact: true }).waitFor();
-    await page.getByRole('button', { name: 'Install', exact: true }).click();
+    await page.getByRole('button', { name: "安装", exact: true }).click();
     await page.getByText('正在下载并安装 Agent 依赖… · 已等待 18 秒', { exact: true }).waitFor();
     assert.equal(await page.getByRole('dialog', { name: 'ACP Registry', exact: true }).getByRole('button', { name: '关闭对话框' }).isDisabled(), true);
     state.installStatus = { ...state.installStatus, detail: 'ETIMEDOUT', elapsed_seconds: 20 };
@@ -1699,7 +1701,7 @@ try {
     finish();
     await page.getByRole('alert').getByText(state.installError, { exact: true }).waitFor();
     state.installError = '';
-    await page.getByRole('dialog', { name: 'ACP Registry', exact: true }).getByRole('button', { name: 'Retry', exact: true }).click();
+    await page.getByRole('dialog', { name: 'ACP Registry', exact: true }).getByRole('button', { name: "重试", exact: true }).click();
     await page.getByText('codex-acp 已安装，可在工作区“新建窗体”菜单的 ACP 分组中新建会话。').waitFor();
     assert.equal(state.installCalls, 2);
     assert.equal(state.connections, 0);
@@ -1857,7 +1859,7 @@ try {
     await preview.click({ position: { x: 20, y: 8 } });
     const expanded = rows.first().locator('pre');
     assert.equal(await expanded.textContent(), JSON.stringify(params, null, 2));
-    await rows.first().getByRole('button', { name: 'Copy Message', exact: true }).click();
+    await rows.first().getByRole('button', { name: "复制消息", exact: true }).click();
     assert.deepEqual(JSON.parse(await page.evaluate(() => window.copiedLog)), params);
     await rows.first().locator('.acp-log-heading').click();
     assert.equal(await rows.first().locator('pre').count(), 0);
@@ -1867,18 +1869,18 @@ try {
     if (process.env.ACP_SCREENSHOT_DIR) await page.screenshot({ path: `${process.env.ACP_SCREENSHOT_DIR}/acp-protocol-logs.png` });
     await rows.last().locator('.acp-log-heading').click();
     assert.deepEqual(JSON.parse(await rows.last().locator('pre').textContent()), { sessionId: 'remote' });
-    await logs.getByRole('button', { name: 'Copy All Messages', exact: true }).click();
+    await logs.getByRole('button', { name: "复制全部消息", exact: true }).click();
     const copied = JSON.parse(await page.evaluate(() => window.copiedLog));
     assert.equal(copied.length, 5); assert.equal(copied[4].method, 'session/new');
     assert.equal(copied[0].scope, 'connection'); assert.equal(copied[4].thread_id, 'local');
     state.logs.push(record(5, 'incoming', { method: 'session/update', params: { sessionId: 'remote', update: { sessionUpdate: 'available_commands_update', availableCommands: [] } } }));
-    await logs.getByRole('button', { name: 'Refresh Messages', exact: true }).click();
+    await logs.getByRole('button', { name: "刷新消息", exact: true }).click();
     await rows.nth(5).waitFor();
     assert.equal(await rows.nth(3).locator('.acp-log-heading').getAttribute('aria-expanded'), 'true');
-    await logs.getByRole('button', { name: 'Clear Messages', exact: true }).click();
-    await logs.getByText('No messages recorded yet', { exact: true }).waitFor();
+    await logs.getByRole('button', { name: "清空消息", exact: true }).click();
+    await logs.getByText("暂无消息记录", { exact: true }).waitFor();
     state.logs.push(record(6, 'incoming', { method: 'session/update', params: { sessionId: 'remote' } }));
-    await logs.getByRole('button', { name: 'Refresh Messages', exact: true }).click();
+    await logs.getByRole('button', { name: "刷新消息", exact: true }).click();
     await rows.first().waitFor(); assert.equal(await rows.count(), 1, 'clear affects the view and refresh only reveals newer messages');
     await page.setViewportSize({ width: 390, height: 844 });
     await page.locator('aside').evaluate(element => { element.style.display = 'none'; });
@@ -1930,7 +1932,7 @@ try {
     // A manual refresh must also revalidate the graph without an incoming event.
     state.instances[0].title = 'Refreshed child title';
     const loaded = page.waitForResponse(response => new URL(response.url()).pathname === '/api/instances');
-    await page.getByRole('button', { name: '刷新 User ACP', exact: true }).click();
+    await page.getByRole('button', { name: '刷新 用户 ACP', exact: true }).click();
     await loaded;
     await descendant.filter({ hasText: 'Refreshed child title' }).waitFor();
   });
@@ -2153,7 +2155,7 @@ try {
     await page.getByText('Checking files', { exact: true }).waitFor();
     const actions = page.locator('.acp-message-actions');
     assert.equal(await actions.count(), 1, 'only the previous completed turn has controls');
-    assert.equal(await page.getByTitle('Scroll to Top', { exact: true }).count(), 0, 'historical controls have no top action');
+    assert.equal(await page.getByTitle("回到顶部", { exact: true }).count(), 0, 'historical controls have no top action');
     state.session.entries.push({ id: 'command', kind: 'tool', content: { title: 'Read files', kind: 'execute', status: 'completed', content: [] } }, entry('a3', 'assistant', 'Final answer'));
     state.session.revision++;
     await page.getByText('Final answer', { exact: true }).waitFor();
@@ -2161,8 +2163,8 @@ try {
     state.session.status = 'idle'; state.session.revision++;
     await page.waitForFunction(() => document.querySelectorAll('.acp-message-actions').length === 2);
     assert.equal(await page.locator('[data-entry-id="a2"] .acp-message-actions').count(), 0);
-    assert.deepEqual(await actions.first().getByRole('button').evaluateAll(buttons => buttons.map(button => button.title)), ['Copy This Agent Response', 'Scroll to User Message']);
-    assert.deepEqual(await actions.last().getByRole('button').evaluateAll(buttons => buttons.map(button => button.title)), ['Copy This Agent Response', 'Scroll to User Message', 'Scroll to Top']);
+    assert.deepEqual(await actions.first().getByRole('button').evaluateAll(buttons => buttons.map(button => button.title)), ["复制本次 Agent 回复", "跳到用户消息"]);
+    assert.deepEqual(await actions.last().getByRole('button').evaluateAll(buttons => buttons.map(button => button.title)), ["复制本次 Agent 回复", "跳到用户消息", "回到顶部"]);
     await page.evaluate(() => {
       navigator.clipboard.writeText = async value => { window.copiedReply = value; };
       Element.prototype.scrollIntoView = function () { window.scrolledEntry = this.getAttribute('data-entry-id'); };
@@ -2174,20 +2176,20 @@ try {
     assert.equal(await copy.getAttribute('title'), '已复制');
     assert.equal(await actions.first().locator('.lucide-check').count(), 0, 'copy feedback belongs to the selected reply');
     await copy.locator('.lucide-check').waitFor({ state: 'detached' });
-    assert.equal(await copy.getAttribute('title'), 'Copy This Agent Response');
+    assert.equal(await copy.getAttribute('title'), "复制本次 Agent 回复");
     await actions.last().getByRole('button', { name: '跳到用户消息', exact: true }).click();
     assert.equal(await page.evaluate(() => window.scrolledEntry), 'u2', 'skip intervening tool and commentary');
     state.session.permissions = [{ id: 'pending', kind: 'permission', request: { toolCall: { title: 'Confirmation' }, options: [] } }]; state.session.revision++;
     await page.getByRole('region', { name: 'Agent 权限请求', exact: true }).waitFor();
     await page.waitForFunction(() => document.querySelectorAll('.acp-message-actions').length === 1);
-    assert.equal(await page.getByTitle('Scroll to Top', { exact: true }).count(), 0, 'pending confirmation hides bottom navigation');
+    assert.equal(await page.getByTitle("回到顶部", { exact: true }).count(), 0, 'pending confirmation hides bottom navigation');
     state.session.permissions = []; state.session.status = 'working';
     state.session.entries.push(entry('u3', 'user', 'Third prompt'), entry('a4', 'assistant', 'Next response')); state.session.revision++;
     await page.getByText('Next response', { exact: true }).waitFor();
     assert.equal(await actions.count(), 2, 'historical turn controls remain while the next turn runs');
     state.session.status = 'idle'; state.session.stop_reason = 'cancelled'; state.session.revision++;
     await page.waitForFunction(() => document.querySelectorAll('.acp-message-actions').length === 3);
-    assert.equal(await page.getByTitle('Scroll to Top', { exact: true }).count(), 1, 'only the latest completed turn offers top navigation');
+    assert.equal(await page.getByTitle("回到顶部", { exact: true }).count(), 1, 'only the latest completed turn offers top navigation');
   });
   await test('reply footer navigates to its user and conversation top without moving the composer or losing drafts', async t => {
     const { page, state } = await fixture(t);
@@ -2202,12 +2204,12 @@ try {
     const fixedPositions = async () => ({ header: await page.locator('.project-aow-snapshot-header').boundingBox(), composer: await page.locator('.acp-composer').boundingBox() });
     const before = await fixedPositions();
     const latest = page.locator('.acp-message-actions').last();
-    await latest.getByTitle('Scroll to User Message', { exact: true }).click();
+    await latest.getByTitle("跳到用户消息", { exact: true }).click();
     await page.waitForFunction(() => {
       const conversation = document.querySelector('.acp-conversation');
       return conversation.scrollTop > 100 && Math.abs(document.querySelector('[data-entry-id="u2"]').getBoundingClientRect().top - conversation.getBoundingClientRect().top) < 2;
     });
-    await latest.getByTitle('Scroll to Top', { exact: true }).click();
+    await latest.getByTitle("回到顶部", { exact: true }).click();
     await page.waitForFunction(() => document.querySelector('.acp-conversation').scrollTop === 0 && document.querySelector('.project-aow-snapshot-navigation button')?.getAttribute('aria-current') === 'location');
     state.session.entries.at(-1).content.text += '\n\nUpdated response'; state.session.revision++;
     await page.waitForFunction(() => document.querySelector('[data-entry-id="a2"]').textContent.includes('Updated response'));
@@ -2221,13 +2223,13 @@ try {
     await newSession(page);
     const actions = page.locator('.acp-message-actions');
     await actions.waitFor();
-    assert.deepEqual(await actions.getByRole('button').evaluateAll(buttons => buttons.map(button => button.title)), ['Scroll to User Message', 'Scroll to Top']);
+    assert.deepEqual(await actions.getByRole('button').evaluateAll(buttons => buttons.map(button => button.title)), ["跳到用户消息", "回到顶部"]);
     await page.evaluate(() => {
       document.querySelector('.acp-conversation').scrollTo = options => { window.footerScrollTarget = options.top; };
     });
-    await actions.getByTitle('Scroll to User Message', { exact: true }).click();
+    await actions.getByTitle("跳到用户消息", { exact: true }).click();
     assert.equal(await page.evaluate(() => window.footerScrollTarget), await page.locator('.acp-conversation').evaluate(element => element.scrollHeight), 'missing user history falls back to the bottom');
-    await actions.getByTitle('Scroll to Top', { exact: true }).click();
+    await actions.getByTitle("回到顶部", { exact: true }).click();
     assert.equal(await page.evaluate(() => window.footerScrollTarget), 0);
   });
   await test('tool endings retain turn navigation without mislabeling progress as a final reply', async t => {
@@ -2331,7 +2333,7 @@ try {
     state.session.plan.entries[0].status = 'completed'; state.session.revision++;
     await page.locator('.acp-message-chunk strong').filter({ hasText: /^Hello$/ }).waitFor();
     assert.equal(await page.locator('.acp-message-chunk').count(), 1);
-    await page.getByText('All Done', { exact: true }).waitFor();
+    await page.getByText('全部完成', { exact: true }).waitFor();
     assert.equal(await notice.getByRole('button', { name: '收起', exact: true }).getAttribute('aria-expanded'), 'true', 'stream updates preserve expanded notice details');
     await notice.getByRole('button', { name: '关闭通知：Rate limit', exact: true }).click();
     await notice.waitFor({ state: 'detached' });
@@ -2413,12 +2415,12 @@ try {
       { content: 'Read **project configuration**', status: 'in_progress' },
       { content: 'Review `src/main.rs`', status: 'pending' },
     ] }; state.session.revision++;
-    const card = page.getByRole('region', { name: 'Plan', exact: true });
+    const card = page.getByRole('region', { name: "计划", exact: true });
     await card.getByRole('button', { name: '展开计划', exact: true }).waitFor();
     assert.equal(await card.locator('ol').isVisible(), false, 'plans start collapsed like Zed');
-    await card.getByText('Current:', { exact: true }).waitFor();
+    await card.getByText("当前：", { exact: true }).waitFor();
     await card.getByRole('button', { name: '展开计划', exact: true }).click();
-    await card.getByText('2 Tasks', { exact: true }).waitFor();
+    await card.getByText('2 个任务', { exact: true }).waitFor();
     assert.equal(await card.locator('li strong').innerText(), 'project configuration');
     const aligned = async () => {
       const plan = await card.boundingBox();
@@ -2437,24 +2439,24 @@ try {
     if (process.env.ACP_SCREENSHOT_DIR) await page.screenshot({ path: `${process.env.ACP_SCREENSHOT_DIR}/acp-plan-expanded.png` });
     await card.getByRole('button', { name: '收起计划', exact: true }).click();
     assert.equal(await card.locator('ol').isVisible(), false);
-    await card.getByText('Current:', { exact: true }).waitFor();
-    await card.getByText('2 left', { exact: true }).waitFor();
+    await card.getByText("当前：", { exact: true }).waitFor();
+    await card.getByText("剩余 2 项", { exact: true }).waitFor();
     state.session.plan.entries[0].status = 'completed';
     state.session.plan.entries[1].status = 'in_progress'; state.session.revision++;
     await card.locator('.acp-plan-current code').getByText('src/main.rs', { exact: true }).waitFor();
     assert.equal(await card.getByRole('button', { name: '展开计划', exact: true }).getAttribute('aria-expanded'), 'false');
-    await card.getByText('1 left', { exact: true }).waitFor();
+    await card.getByText('剩余 1 项', { exact: true }).waitFor();
     await card.getByRole('button', { name: '展开计划', exact: true }).click();
     await card.getByText('1/2', { exact: true }).waitFor();
     const completed = await card.locator('li[data-status="completed"]').evaluate(element => ({ color: getComputedStyle(element.querySelector('svg')).color, strike: getComputedStyle(element.querySelector('.acp-markdown')).textDecorationLine }));
     assert.equal(completed.strike, 'line-through');
     assert.equal(completed.color, 'rgb(78, 201, 176)');
     state.session.plan.entries[1].status = 'cancelled'; state.session.revision++;
-    await card.getByText('Finished', { exact: true }).waitFor();
+    await card.getByText('已结束', { exact: true }).waitFor();
     state.session.plan.entries[0].status = 'cancelled'; state.session.revision++;
-    await card.getByText('Cancelled', { exact: true }).waitFor();
+    await card.getByText('已取消', { exact: true }).waitFor();
     state.session.plan.entries = Array.from({ length: 20 }, (_, index) => ({ content: `Task ${index}: ${'long content '.repeat(20)}`, status: 'pending' })); state.session.revision++;
-    await card.getByText('20 Tasks', { exact: true }).waitFor();
+    await card.getByText("20 个任务", { exact: true }).waitFor();
     assert.ok((await card.locator('ol').boundingBox()).height <= 160);
     assert.equal(await card.locator('ol').evaluate(element => element.scrollHeight > element.clientHeight), true);
     state.session.entries[1].content.text += `\n\n${'A longer streamed response.\n\n'.repeat(40)}`; state.session.revision++;
@@ -2643,7 +2645,7 @@ try {
     assert.ok(width.height > 34);
     await tool.getByRole('button', { name: command, exact: true }).click();
     await tool.getByText('Command result', { exact: true }).waitFor();
-    assert.equal(await tool.getByText('Raw Input:', { exact: true }).count(), 0);
+    assert.equal(await tool.getByText("原始输入：", { exact: true }).count(), 0);
     assert.deepEqual(interactions(state), [], 'view and copy actions never execute commands');
     const large = 'printf "' + 'x'.repeat(33_000) + '"';
     state.session.entries[1].content.title = large; state.session.revision++;
@@ -2674,8 +2676,8 @@ try {
     assert.equal(await page.getByLabel('Opened file').textContent(), '/repo/src/main.rs:9');
     assert.equal(await tool.locator('.acp-tool-output').count(), 0, 'file navigation is independent of expansion');
     await tool.getByRole('button', { name: title, exact: true }).click();
-    await tool.getByText('Raw Input:', { exact: true }).waitFor();
-    await tool.getByText('Output:', { exact: true }).waitFor();
+    await tool.getByText("原始输入：", { exact: true }).waitFor();
+    await tool.getByText("输出：", { exact: true }).waitFor();
     assert.equal(await tool.locator('.acp-tool-input pre > code').textContent(), '{\n  "path": "src/main.rs"\n}\n');
     const output = tool.locator('.acp-tool-content').first();
     await output.getByRole('button', { name: '代码自动换行', exact: true }).click();
@@ -2709,7 +2711,7 @@ try {
     assert.equal(await tool.getByText('Search project', { exact: true }).count(), 1);
     assert.equal(await tool.getByRole('button', { name: 'Search project', exact: true }).count(), 0);
     assert.equal(await tool.locator('pre').count(), 0);
-    await tool.getByRole('button', { name: 'View Raw Input', exact: true }).click();
+    await tool.getByRole('button', { name: "查看原始输入", exact: true }).click();
     assert.match(await tool.locator('.acp-tool-confirm-input pre').textContent(), /needle/);
     assert.equal(await tool.locator('.acp-tool-permission pre').count(), 0);
     const permission = tool.getByRole('region', { name: 'Agent 权限请求', exact: true });
@@ -2778,7 +2780,7 @@ try {
     await edit.getByRole('button', { name: 'Edit file', exact: true }).click();
     await edit.locator('.modified-in-monaco-diff-editor').waitFor();
     await page.waitForFunction(() => document.querySelector('.acp-diff')?.getBoundingClientRect().height > 320);
-    assert.equal(await edit.getByText('Raw Input:', { exact: true }).count(), 0);
+    assert.equal(await edit.getByText("原始输入：", { exact: true }).count(), 0);
     const wide = page.getByRole('region', { name: 'Wide result', exact: true });
     await wide.getByRole('button', { name: 'Wide result', exact: true }).click();
     await wide.locator('table').waitFor();
@@ -2786,8 +2788,8 @@ try {
     assert.equal(await page.locator('.acp-conversation').evaluate(element => element.scrollWidth <= element.clientWidth + 1), true);
     const image = page.getByRole('region', { name: 'Image result', exact: true });
     await image.getByRole('button', { name: 'Image result', exact: true }).click();
-    await image.getByRole('img', { name: 'Agent image' }).waitFor();
-    assert.equal(await image.getByText('Raw Input:', { exact: true }).count(), 0);
+    await image.getByRole('img', { name: "Agent 图片" }).waitFor();
+    assert.equal(await image.getByText("原始输入：", { exact: true }).count(), 0);
     state.session.entries[1].content.status = 'rejected'; state.session.revision++;
     await wide.locator('.acp-tool-output').waitFor({ state: 'detached' });
     assert.equal(await wide.getByLabel('失败或已取消').count(), 1);
@@ -2880,7 +2882,7 @@ try {
         data.setData('application/x-aow-acp-draft+json', payload); data.setData('text/plain', 'Image');
         element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
       }, payload);
-      await page.getByRole('alert').getByText('Invalid ACP clipboard content. Copy the selection again.', { exact: true }).waitFor();
+      await page.getByRole('alert').getByText("ACP 剪贴板内容无效，请重新复制所选内容。", { exact: true }).waitFor();
       assert.equal(await input.textContent(), 'Keep draft');
     }
     await input.press('ControlOrMeta+a');
@@ -2905,7 +2907,7 @@ try {
     await input.fill('Keep this '); await pasteImage(input);
     await input.locator('.acp-image-mention[data-status="loading"]').waitFor();
     await input.press('ControlOrMeta+a'); await input.press('ControlOrMeta+x');
-    await page.getByRole('alert').getByText('Wait for images to finish processing or remove failed images before copying or cutting.', { exact: true }).waitFor();
+    await page.getByRole('alert').getByText("请等待图片处理完成，或移除失败的图片后再复制或剪切。", { exact: true }).waitFor();
     assert.equal(await input.textContent(), 'Keep this Image ');
     await page.evaluate(() => window.finishImageDecode());
     await input.locator('.acp-image-mention[data-status="ready"]').waitFor();
@@ -2965,7 +2967,7 @@ try {
     await input.press('ControlOrMeta+Shift+z');
     await image.waitFor();
     await image.hover();
-    const preview = page.getByRole('img', { name: 'Image preview', exact: true });
+    const preview = page.getByRole('img', { name: "图片预览", exact: true });
     await preview.waitFor();
     await page.waitForFunction(() => document.querySelector('.acp-image-preview img')?.naturalWidth > 0);
     assert.deepEqual(await preview.evaluate(image => [image.naturalWidth, image.naturalHeight]), [1568, 784]);
@@ -3205,7 +3207,7 @@ try {
     assert.equal(await input.locator('.acp-image-mention').count(), 0);
     assert.equal(interactions(state).at(-1).content[0].type, 'image');
     await input.focus(); await pasteImage(input, { invalid: true });
-    await page.getByRole('alert').getByText('Failed to decode image.', { exact: true }).waitFor();
+    await page.getByRole('alert').getByText("图片解码失败。", { exact: true }).waitFor();
     assert.equal(await page.getByRole('button', { name: '发送', exact: true }).isDisabled(), true);
     await input.getByRole('button', { name: 'Image', exact: true }).focus();
     await page.keyboard.press('Backspace');
@@ -3415,7 +3417,7 @@ try {
     await page.getByLabel('ACP 消息', { exact: true }).fill('Offline draft');
     state.connectionError = 'Offline';
     const sidebar = page.getByRole('region', { name: 'ACP 会话列表', exact: true });
-    await sidebar.getByRole('button', { name: '刷新 User ACP', exact: true }).click();
+    await sidebar.getByRole('button', { name: '刷新 用户 ACP', exact: true }).click();
     await sidebar.getByRole('button', { name: '打开 ACP 会话 Conversation', exact: true }).waitFor();
     await page.reload();
     await sidebar.getByRole('button', { name: '打开 ACP 会话 Conversation', exact: true }).waitFor();

@@ -157,6 +157,7 @@ dependencies = [
  "agent-client-protocol",
  "anyhow",
  "aow-db",
+ "aow-i18n",
  "aow-protocol",
  "async-trait",
  "chrono",
@@ -186,6 +187,7 @@ dependencies = [
  "anyhow",
  "aow-config",
  "aow-db",
+ "aow-i18n",
  "aow-id",
  "aow-process",
  "chrono",
@@ -205,6 +207,7 @@ dependencies = [
  "anyhow",
  "aow-agents",
  "aow-config",
+ "aow-i18n",
  "aow-id",
  "aow-workspaces",
  "chrono",
@@ -224,6 +227,7 @@ dependencies = [
  "aow-automations",
  "aow-config",
  "aow-filesystem",
+ "aow-i18n",
  "aow-id",
  "aow-protocol",
  "aow-terminald-client",
@@ -241,6 +245,7 @@ name = "aow-config"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "aow-i18n",
  "aow-id",
  "libc",
  "serde",
@@ -262,6 +267,7 @@ dependencies = [
 name = "aow-filesystem"
 version = "0.1.0"
 dependencies = [
+ "aow-i18n",
  "aow-id",
  "aow-protocol",
  "bytes",
@@ -280,6 +286,7 @@ dependencies = [
 name = "aow-git-service"
 version = "0.1.0"
 dependencies = [
+ "aow-i18n",
  "aow-protocol",
  "notify",
  "tempfile",
@@ -287,6 +294,15 @@ dependencies = [
  "tokio",
  "tracing",
  "walkdir",
+]
+
+[[package]]
+name = "aow-i18n"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -302,6 +318,7 @@ name = "aow-im"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "aow-i18n",
  "aow-id",
  "axum",
  "base64 0.22.1",
@@ -328,6 +345,7 @@ dependencies = [
 name = "aow-operation-log"
 version = "0.1.0"
 dependencies = [
+ "aow-i18n",
  "chrono",
  "serde",
  "serde_json",
@@ -364,6 +382,7 @@ dependencies = [
  "aow-config",
  "aow-filesystem",
  "aow-git-service",
+ "aow-i18n",
  "aow-id",
  "aow-im",
  "aow-macos-log",
@@ -453,6 +472,7 @@ name = "aow-workspaces"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "aow-i18n",
  "serde",
  "serde_json",
  "tempfile",

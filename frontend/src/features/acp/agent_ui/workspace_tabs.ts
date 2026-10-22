@@ -1,3 +1,4 @@
+import { t } from '../../../lib/i18n';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SessionInfo } from '../types';
 import { discardComposerDraft, discardWorkspaceComposerDrafts } from './composer_drafts';
@@ -65,7 +66,7 @@ export function useAcpTabs(workspace: string) {
   const create = useCallback((agentId: string) => {
     // getRandomValues is available on LAN HTTP origins as well as secure contexts.
     const id = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
-    const tab = { id: `new:${id}`, agentId, title: `新会话 · ${agentId}` };
+    const tab = { id: `new:${id}`, agentId, title: t("acp.new_session", { value0: agentId }) };
     update([...current.current, tab]); return tab.id;
   }, [update]);
   const open = useCallback((session: SessionInfo) => {

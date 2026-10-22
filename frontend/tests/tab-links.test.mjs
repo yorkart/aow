@@ -43,6 +43,7 @@ try {
 
   async function fixture(t, { mobile = false, login = false, floating = false, extraFloatingTabs = [], global = false, missing = false, removedWorkspace = false, temporary = false, entry = 'target', editable = false, tabUrl, fileContents = {}, sessionMarkdown = 'Restored conclusion', sessionAgent = false, pinned = [], reviewTargets = [], preserveFloating = false, acp = false, acpHistory = [], acpSavedTabs = [], restoreAcpSessions = false, terminalUnavailable = false } = {}) {
     const context = await browser.newContext({ viewport: mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 } });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     const root = temporary ? '/private/tmp/aow-inbox-link' : global ? '/global' : worktrees[1].path;
     const target = terminal('target', root, 'Target Tab');
     const other = terminal('other', root, 'Other Tab');
@@ -196,6 +197,7 @@ try {
       });
     });
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     page.setDefaultTimeout(15000);
     page.on('pageerror', error => state.errors.push(`${page.url()}\n${error.stack ?? error.message}`));
     const destination = new URL(tabUrl ?? `/aow/${entry ? `tabs/${entry}` : ''}`, base);
@@ -599,8 +601,8 @@ try {
     const { page, state } = await fixture(t, { floating: true, preserveFloating: true });
     const floating = page.getByRole('dialog', { name: '浮动工作区', exact: true });
     await floating.getByRole('tab', { name: /Target Tab/ }).waitFor();
-    await floating.getByRole('button', { name: 'Inbox', exact: true }).click();
-    const panel = floating.getByRole('region', { name: 'Inbox', exact: true });
+    await floating.getByRole('button', { name: "收件箱", exact: true }).click();
+    const panel = floating.getByRole('region', { name: "收件箱", exact: true });
     await panel.getByRole('button', { name: '添加需求', exact: true }).click();
     await fillInboxEditor(panel.getByRole('textbox', { name: '新需求 Markdown' }), '全局需求，无需项目');
     await assertInboxAutosave(panel);
@@ -626,14 +628,14 @@ try {
     assert.equal(await labels.count(), 0);
     assert.equal(state.inbox[0].project_id, null);
     await page.reload();
-    await floating.getByRole('region', { name: 'Inbox', exact: true }).getByRole('article', { name: '全局需求，无需项目' }).waitFor();
+    await floating.getByRole('region', { name: "收件箱", exact: true }).getByRole('article', { name: '全局需求，无需项目' }).waitFor();
     await floating.getByRole('tab', { name: /Target Tab/ }).click();
     await floating.locator('.floating-workspace-host:not([hidden]) .terminal-pane').waitFor();
     assert.deepEqual(state.errors, []); assert.deepEqual(state.mutations, []);
   });
   await test('Inbox mobile entry captures globally, restores after refresh and returns to projects', async t => {
     const { page, state } = await fixture(t, { mobile: true, entry: '' });
-    await page.getByRole('button', { name: 'Inbox', exact: true }).click();
+    await page.getByRole('button', { name: "收件箱", exact: true }).click();
     await page.getByRole('button', { name: '添加需求', exact: true }).click();
     await fillInboxEditor(page.getByRole('textbox', { name: '新需求 Markdown' }), '手机上的想法');
     await assertInboxAutosave(page.locator('.inbox-panel'));
@@ -1168,7 +1170,7 @@ try {
     await page.reload();
     await desktopTarget(page).waitFor();
     await page.getByRole('button', { name: '新建窗体', exact: true }).click();
-    await page.getByRole('button', { name: 'Terminal', exact: true }).click();
+    await page.getByRole('button', { name: "终端", exact: true }).click();
     await expectPath(page, 'created');
     for (const [name, next] of [['Created Tab', 'target'], ['Target Tab', 'other'], ['Other Tab', undefined]]) {
       await page.getByRole('button', { name: `关闭 ${name}`, exact: true }).click();
@@ -1542,7 +1544,7 @@ try {
     }
     const ordinary = await fixture(t, { sessionAgent: true });
     await desktopTarget(ordinary.page).waitFor();
-    await ordinary.page.getByRole('button', { name: 'Conversation', exact: true }).click();
+    await ordinary.page.getByRole('button', { name: "对话", exact: true }).click();
     await ordinary.page.locator('.project-aow-session-row').filter({ hasText: 'Linked Conversation' }).click();
     await ordinary.page.waitForURL(url => url.pathname === '/aow/tabs/session/codex/session-one' && url.searchParams.get('cwd') === '/actual-session');
   });
@@ -1566,7 +1568,7 @@ try {
         { remote: 'upstream', host: 'git.example.com', repository: 'team/project', provider: 'custom', provider_name: 'Custom' },
       ],
     });
-    const picker = page.getByLabel('PR remote', { exact: true });
+    const picker = page.getByLabel("PR 远程仓库", { exact: true });
     await picker.waitFor();
     assert.equal(state.reads.filter(path => path.startsWith('/api/my-pull-requests')).length, 0);
     await picker.selectOption('upstream');

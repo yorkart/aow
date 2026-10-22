@@ -1,4 +1,4 @@
-// Host layout adapter: preserve the upstream implementation's entry grouping and each group's render state.
+import { t } from '../../../../lib/i18n';
 import { contentMarkdown, messageGroups, visibleContent, type MessageGroup } from './entry_view_state';
 import { object, text, type Data, type SessionSnapshot, type SessionTurn, type ThreadEntry, type TurnOverview } from '../../types';
 import { userTextPreview } from './user_text_images';
@@ -25,7 +25,7 @@ export function overviewPrompt(turn: TurnOverview) {
 
 function promptText(content: Data): string {
   if (content.type === 'text') return userTextPreview(text(content.text));
-  if (content.type === 'image') return '[图片]';
+  if (content.type === 'image') return t("acp.image");
   if (content.type === 'resource') return text(object(content.resource).text) || text(object(content.resource).uri);
   return text(content.name) || text(content.uri);
 }

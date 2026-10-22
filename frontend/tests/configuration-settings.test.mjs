@@ -16,6 +16,7 @@ try {
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
   async function fixture(t, width = 1280, withProjects = false, slowRestore = false) {
     const context = await browser.newContext({ viewport: { width, height: 800 } });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     const initial = { config_repo: '/repo', config_id: first };
     const state = { selection: initial, active: initial, saves: [], errors: [], failSave: false, projectsAvailable: withProjects, releaseRestore: undefined };
     const restoreGate = slowRestore ? new Promise(resolve => { state.releaseRestore = resolve; }) : Promise.resolve();
@@ -53,6 +54,7 @@ try {
       await route.fulfill({ json: data });
     });
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     page.on('pageerror', error => state.errors.push(error.message));
     if (withProjects) await page.addInitScript(() => localStorage.setItem('aow-active', '/repo/one'));
     if (slowRestore) await page.addInitScript(() => localStorage.setItem('aow-workspace-tabs:/repo/one', JSON.stringify({
@@ -61,9 +63,9 @@ try {
     })));
     await page.goto(`${base}/aow/?ui=desktop`);
     const open = async () => {
-      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      await page.getByRole('button', { name: "设置", exact: true }).click();
       const dialog = page.getByRole('region', { name: '设置', exact: true });
-      await dialog.getByRole('button', { name: /^Configuration/ }).click();
+      await dialog.getByRole('button', { name: /^配置/ }).click();
       await dialog.getByRole('radio').first().waitFor();
       return dialog;
     };
@@ -72,7 +74,7 @@ try {
 
   await test('Settings is a singleton project tab and retains drafts when moved', async t => {
     const { page, dialog } = await fixture(t, 1280, true);
-    const settings = page.getByRole('button', { name: 'Settings', exact: true });
+    const settings = page.getByRole('button', { name: "设置", exact: true });
     const draft = dialog.getByRole('textbox', { name: '配置仓库目录' });
     await draft.fill('/unsaved');
     const firstSurface = page.locator('.project-aow-surface').filter({ has: dialog });
@@ -102,7 +104,7 @@ try {
     state.releaseRestore();
     await page.waitForFunction(() => JSON.parse(localStorage.getItem('aow-workspace-tabs:/repo/one') || '{}').active === 'settings');
     assert.equal(await dialog.isVisible(), true);
-    assert.equal(await page.getByRole('tab', { name: 'Settings' }).getAttribute('aria-selected'), 'true');
+    assert.equal(await page.getByRole('tab', { name: "设置" }).getAttribute('aria-selected'), 'true');
   });
 
   await test('standalone Settings becomes a project tab without covering later project selections', async t => {
@@ -118,7 +120,7 @@ try {
     assert.equal(await draft.inputValue(), '/unsaved');
     await page.locator('button[title="/repo/two"]').first().click();
     await dialog.waitFor({ state: 'hidden' });
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('button', { name: "设置", exact: true }).click();
     await dialog.waitFor();
     assert.equal(await draft.inputValue(), '/unsaved');
   });
@@ -175,8 +177,8 @@ try {
     await dialog.getByRole('button', { name: '保存', exact: true }).click();
     await dialog.getByRole('alert').filter({ hasText: '无法写入 config.toml' }).waitFor();
     assert.equal(state.selection.config_id, first);
-    await dialog.getByRole('button', { name: /^Notes/ }).click();
-    await dialog.getByRole('button', { name: /^Configuration/ }).click();
+    await dialog.getByRole('button', { name: /^笔记/ }).click();
+    await dialog.getByRole('button', { name: /^配置/ }).click();
     assert.equal(await dialog.getByRole('radio', { name: second, exact: true }).isChecked(), true);
     page.once('dialog', prompt => prompt.dismiss());
     await dialog.getByRole('button', { name: '关闭', exact: true }).click();

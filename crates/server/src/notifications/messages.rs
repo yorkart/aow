@@ -22,37 +22,51 @@ pub(super) fn task_completed(event: &TaskStopNotification) -> Message {
         });
     }
     let project = if projects.is_empty() {
-        "未命名项目".into()
+        aow_i18n::text("server.untitled_project").into()
     } else {
         projects.join("、")
     };
     fields.push(Field {
-        label: "会话".into(),
-        value: format!("{}\nSession ID：{}", event.title, event.session_id),
+        label: aow_i18n::text("server.session").into(),
+        value: format!("{}\nSession ID: {}", event.title, event.session_id),
         url: None,
     });
     if let Some(usage) = event.usage {
         fields.push(Field {
-            label: "本轮 Token".into(),
-            value: format!(
-                "合计：{}\n输入：{} · 输出：{}\n缓存命中：{}（包含在输入中）",
-                format_token_count(usage.total_tokens),
-                format_token_count(usage.input_tokens),
-                format_token_count(usage.output_tokens),
-                format_token_count(usage.cached_input_tokens),
+            label: aow_i18n::text("server.tokens_this_turn").into(),
+            value: aow_i18n::message(
+                "server.total_input_output_cache_hits_included_in_input",
+                &[
+                    ("auto0", format_token_count(usage.total_tokens).to_string()),
+                    ("auto1", format_token_count(usage.input_tokens).to_string()),
+                    ("auto2", format_token_count(usage.output_tokens).to_string()),
+                    (
+                        "auto3",
+                        format_token_count(usage.cached_input_tokens).to_string(),
+                    ),
+                ],
             ),
             url: None,
         });
     }
     Message {
-        title: format!("{project}·{}·{agent}·完成", event.title),
+        title: aow_i18n::message(
+            "server.completed",
+            &[
+                ("p0", project.to_string()),
+                ("auto0", event.title.to_string()),
+                ("p2", agent.to_string()),
+            ],
+        ),
         fields,
-        body_label: "本轮结论".into(),
+        body_label: aow_i18n::text("server.final_response").into(),
         body: event
             .conclusion
             .as_deref()
             .filter(|text| !text.trim().is_empty())
-            .unwrap_or("未捕获到本轮结论。")
+            .unwrap_or(aow_i18n::text(
+                "server.no_final_response_captured_for_this_turn",
+            ))
             .into(),
         markdown: true,
         error: false,
@@ -84,40 +98,62 @@ fn format_token_count(count: u64) -> String {
 pub(super) fn automation_failure(event: &AutomationFailureNotification) -> Message {
     let run = &event.run;
     let mut fields = vec![Field {
-        label: "任务".into(),
-        value: format!(
-            "{}\nAgent：{}\n任务 ID：{}\n执行 ID：{}\n结束时间：{}\n耗时：{}\n退出码：{}",
-            run.task_name,
-            run.agent.id(),
-            run.task_id,
-            run.id,
-            run.finished_at
-                .map(|at| at.to_rfc3339())
-                .unwrap_or_else(|| "未知".into()),
-            run.duration_ms
-                .map(|ms| format!("{:.1} 秒", ms as f64 / 1000.0))
-                .unwrap_or_else(|| "未知".into()),
-            run.exit_code
-                .map(|code| code.to_string())
-                .unwrap_or_else(|| "无".into()),
+        label: aow_i18n::text("server.task").into(),
+        value: aow_i18n::message(
+            "server.agent_task_id_run_id_finished_duration_exit_code",
+            &[
+                ("auto0", run.task_name.to_string()),
+                ("auto1", run.agent.id().to_string()),
+                ("auto2", run.task_id.to_string()),
+                ("auto3", run.id.to_string()),
+                (
+                    "auto4",
+                    run.finished_at
+                        .map(|at| at.to_rfc3339())
+                        .unwrap_or_else(|| aow_i18n::text("server.unknown").into())
+                        .to_string(),
+                ),
+                (
+                    "auto5",
+                    run.duration_ms
+                        .map(|ms| {
+                            aow_i18n::message(
+                                "server.seconds",
+                                &[("auto0", format!("{:.1}", ms as f64 / 1000.0))],
+                            )
+                        })
+                        .unwrap_or_else(|| aow_i18n::text("server.unknown").into())
+                        .to_string(),
+                ),
+                (
+                    "auto6",
+                    run.exit_code
+                        .map(|code| code.to_string())
+                        .unwrap_or_else(|| aow_i18n::text("server.none_2").into())
+                        .to_string(),
+                ),
+            ],
         ),
         url: None,
     }];
     if let Some(url) = &event.run_url {
         fields.push(Field {
-            label: "执行记录".into(),
-            value: "查看执行记录".into(),
+            label: aow_i18n::text("server.run_record").into(),
+            value: aow_i18n::text("server.view_run_record").into(),
             url: Some(url.clone()),
         });
     }
     Message {
-        title: format!("自动化失败 · {}", run.task_name),
+        title: aow_i18n::message(
+            "server.automation_failed",
+            &[("auto0", run.task_name.to_string())],
+        ),
         fields,
-        body_label: "失败原因".into(),
+        body_label: aow_i18n::text("server.failure_reason").into(),
         body: run
             .message
             .as_deref()
-            .unwrap_or("未记录失败原因")
+            .unwrap_or(aow_i18n::text("server.no_failure_reason_recorded"))
             .chars()
             .take(2000)
             .collect(),

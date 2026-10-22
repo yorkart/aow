@@ -78,7 +78,7 @@ async fn explicit_ids_are_required_unique_and_immutable() {
             error["message"]
                 .as_str()
                 .unwrap()
-                .contains("创建后不可修改")
+                .contains("cannot be changed after creation")
         );
     }
     assert_eq!(

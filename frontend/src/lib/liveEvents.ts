@@ -1,3 +1,4 @@
+import { getLanguage } from './i18n';
 import { appUrl } from './basePath';
 
 type EventName = 'workspace' | 'operations' | 'task-stopped' | 'acp' | 'terminals';
@@ -15,6 +16,7 @@ function connect() {
   retry = undefined;
   const url = new URL(appUrl('/api/events/ws'), window.location.href);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  url.searchParams.set('lang', getLanguage());
   let current: WebSocket;
   try { current = new WebSocket(url); }
   catch { disconnected(); return; }

@@ -12,6 +12,7 @@ mod im_api;
 mod inbox;
 mod instances;
 mod local_cli;
+mod locale;
 mod notifications;
 mod operations;
 mod pull_requests;

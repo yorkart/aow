@@ -17,7 +17,10 @@ impl NotificationManager {
             return Ok(false);
         };
         provider
-            .send(&messages::automation_failure(&event), delivery_id)
+            .send(
+                &aow_i18n::with_language(self.language(), || messages::automation_failure(&event)),
+                delivery_id,
+            )
             .await?;
         Ok(true)
     }

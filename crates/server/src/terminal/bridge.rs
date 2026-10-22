@@ -79,7 +79,7 @@ pub(super) async fn bridge_terminal_socket(
                                 message = tungstenite::Message::Text(serde_json::to_string(&ClientMessage::Observe).unwrap().into());
                             }
                             Some(ClientMessage::Claim { force: true }) => {
-                                let lease = manager.agent_operation(&pane_id).and_then(|operation| operation.try_read_owned().map_err(|_| TerminalError::Conflict("Agent 正在初始化或提交任务，只能旁观".into())));
+                                let lease = manager.agent_operation(&pane_id).and_then(|operation| operation.try_read_owned().map_err(|_| TerminalError::Conflict(aow_i18n::text("server.agent_is_initializing_or_submitting_a_task_observation_only").into())));
                                 if manager.cli_agent(&pane_id).is_ok_and(|info| info.state.phase == aow_protocol::AgentTerminalPhase::Ready) && lease.is_ok() {
                                     browser_control_guard = lease.ok();
                                 } else {

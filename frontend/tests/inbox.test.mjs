@@ -28,6 +28,7 @@ try {
   }
   async function fixture(t, { items = [], executions = [], comments = {}, width = 1000, userAgent, floating = false, labelList = labels, branchFailure = false, branches = { branches: ['feature/test', 'main', 'origin/main', 'origin/release'], default_branch: 'origin/main' } } = {}) {
     const context = await browser.newContext({ viewport: { width, height: 720 }, userAgent });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     // Remote HTTP origins do not expose randomUUID; all user actions must still work.
     await context.addInitScript(() => Object.defineProperty(crypto, 'randomUUID', { value: undefined }));
     if (floating) await context.addInitScript(() => {
@@ -44,7 +45,8 @@ try {
           restore_cols: 80, restore_rows: 24, restore: 'Temporary Agent' }));
       });
     });
-    const page = await context.newPage(); page.setDefaultTimeout(8000);
+    const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } }); page.setDefaultTimeout(8000);
     const state = { revision: 0, labels: structuredClone(labelList), items: structuredClone(items), executions: structuredClone(executions), comments: structuredClone(comments), commentRequests: 0, commentFailure: false, requests: [], errors: [], captures: new Map(), fail: false, conflict: false, hold: undefined, captureLost: false, branchFailure, branchRequests: 0 };
     page.on('pageerror', error => state.errors.push(error.message));
     t.after(async () => { await context.close(); assert.deepEqual(state.errors, []); });
@@ -741,7 +743,7 @@ try {
     await fillInboxEditor(input, '#');
     await input.press('Escape');
     await page.getByText('先把想法记下来', { exact: true }).waitFor();
-    assert.equal(await page.getByRole('region', { name: 'Inbox', exact: true }).getByRole('alert').count(), 0);
+    assert.equal(await page.getByRole('region', { name: "收件箱", exact: true }).getByRole('alert').count(), 0);
     assert.equal(await page.evaluate(() => localStorage.getItem('aow-inbox-draft:new')), null);
     assert.deepEqual(state.requests.map(request => request.method), ['POST', 'DELETE']);
   });
@@ -897,7 +899,7 @@ try {
     assert.equal(await project.evaluate(element => element === document.activeElement), true);
     await project.press('ArrowDown');
     assert.equal(await projects.getByRole('option', { selected: true }).count(), 1);
-    assert.equal(await projects.getByRole('option', { name: 'Website', exact: true }).evaluate(element => element === document.activeElement), true);
+    assert.equal(await projects.getByRole('option', { name: "网站", exact: true }).evaluate(element => element === document.activeElement), true);
     await page.keyboard.press('Home');
     await page.keyboard.press('Enter');
     assert.equal(await project.innerText(), '所有项目');

@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useEffect, useState } from 'react';
 import { prApi } from './api';
 import type { ReviewTarget } from './types';
@@ -36,6 +37,6 @@ export function useReviewTarget(repository: string, visible: boolean) {
   const target = current?.targets.find(t => t.remote === current.remote);
   return { targets: current?.targets ?? [], remote: current?.remote ?? '', target, select,
     ready: !!current && !current.error && (current.targets.length === 0 || !!target),
-    error: current?.error ?? (current?.targets.length && !target ? '请选择要查询的 remote。' : ''),
+    error: current?.error ?? (current?.targets.length && !target ? t("pr.choose_a_remote_to_query") : ''),
     reload: () => setRevision(value => value + 1) };
 }

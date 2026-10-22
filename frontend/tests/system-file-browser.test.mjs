@@ -25,6 +25,7 @@ const deferred = () => { let resolve; const promise = new Promise((done) => { re
 
 async function fixture(browser, options = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, permissions: ['clipboard-read', 'clipboard-write'] });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
   const state = { reads: [], writes: [], errors: [], uploadGate: null, slowGate: null, failHome: options.failHome ?? false, deniedPaths: new Set(),
     pins: options.pins ?? { paths: [], revision: 0 }, pinMutations: [], failPinReads: false, failPinWrites: false, pinGate: null, delayedPin: '' };
   const directories = new Map([
@@ -97,6 +98,7 @@ async function fixture(browser, options = {}) {
     await route.fulfill(data ? { json: data } : { status: 404, json: { message: `Unexpected API: ${url.pathname}` } });
   });
   const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
   page.on('pageerror', (error) => state.errors.push(error.message));
   await page.goto(`${baseURL}/?ui=desktop`);
   await page.getByRole('button', { name: '浮动工作区', exact: true }).waitFor();
@@ -125,11 +127,11 @@ try {
   await test('home, shortcuts, tree navigation, clipboard, downloads and hidden state', async () => {
     const { context, page, state } = await fixture(browser);
     try {
-      assert.equal(await page.getByRole('button', { name: 'Settings', exact: true }).textContent(), '');
+      assert.equal(await page.getByRole('button', { name: "设置", exact: true }).textContent(), '');
       assert.equal(state.reads.length, 0, 'filesystem should load on first use');
       await openBrowser(page);
       await atPath(page, home);
-      assert.equal(await page.getByRole('button', { name: 'Home', exact: true }).getAttribute('aria-pressed'), 'true');
+      assert.equal(await page.getByRole('button', { name: "主目录", exact: true }).getAttribute('aria-pressed'), 'true');
       await page.getByRole('button', { name: `展开 ${home}/Documents`, exact: true }).click();
       await page.locator('.system-file-tree').getByRole('button', { name: 'nested', exact: true }).waitFor();
       await page.getByRole('button', { name: `展开 ${home}/Documents/nested`, exact: true }).click();
@@ -186,7 +188,7 @@ try {
       assert.equal(await page.getByRole('button', { name: '上级目录', exact: true }).isDisabled(), true);
       assert.ok(state.reads.includes('/api/fs/tree'));
       assert.ok(!state.reads.includes('/api/fs/tree/'));
-      await page.getByRole('button', { name: 'Home', exact: true }).click();
+      await page.getByRole('button', { name: "主目录", exact: true }).click();
       await atPath(page, home);
       await page.locator('.system-file-tree').getByRole('button', { name: 'Documents', exact: true }).click();
       await atPath(page, `${home}/Documents`);
@@ -246,7 +248,7 @@ try {
       await openBrowser(page);
       assert.deepEqual(await tree.evaluate((node) => [node.scrollLeft, node.scrollTop]), selectedScroll);
 
-      await page.getByRole('navigation', { name: '快捷导航', exact: true }).getByRole('button', { name: 'Home', exact: true }).click();
+      await page.getByRole('navigation', { name: '快捷导航', exact: true }).getByRole('button', { name: "主目录", exact: true }).click();
       await atPath(page, home);
       await row.evaluate((node) => {
         const tree = node.closest('.system-file-tree');
@@ -314,7 +316,7 @@ try {
       await page.locator('.system-file-uploads').getByText('Permission denied', { exact: true }).waitFor();
       await page.locator('.system-file-list').getByRole('button', { name: 'after-failure.txt', exact: true }).waitFor();
       assert.equal(await page.getByText('已上传', { exact: true }).count(), 4);
-      await page.getByRole('button', { name: 'Home', exact: true }).click();
+      await page.getByRole('button', { name: "主目录", exact: true }).click();
       await atPath(page, home);
       await page.locator('.system-file-list').getByRole('button', { name: 'upload #一.txt', exact: true }).waitFor();
       assert.deepEqual(state.errors, []);
@@ -329,7 +331,7 @@ try {
       await page.getByRole('textbox', { name: '目录路径' }).fill('/denied');
       await page.getByRole('button', { name: '前往', exact: true }).click();
       await page.getByRole('alert').getByText('无法打开 /denied：Permission denied', { exact: true }).waitFor();
-      assert.equal(await page.getByRole('button', { name: 'Home', exact: true }).getAttribute('aria-pressed'), 'true');
+      assert.equal(await page.getByRole('button', { name: "主目录", exact: true }).getAttribute('aria-pressed'), 'true');
       state.slowGate = deferred();
       await page.getByRole('textbox', { name: '目录路径' }).fill('/slow');
       const slowRequest = page.waitForRequest('**/api/fs/tree/slow');
@@ -420,7 +422,7 @@ try {
       await page.reload();
       await openBrowser(page);
       await atPath(page, `${home}/Documents`);
-      await page.getByRole('button', { name: 'Home', exact: true }).click();
+      await page.getByRole('button', { name: "主目录", exact: true }).click();
       await atPath(page, home);
       await bookmarks.getByRole('button', { name: `打开收藏 ${home}/Documents`, exact: true }).waitFor();
       assert.equal(await page.getByRole('button', { name: '取消 Pin 当前目录', exact: true }).getAttribute('aria-pressed'), 'true');
@@ -452,7 +454,7 @@ try {
       await bookmarks.getByRole('button', { name: '打开收藏 /missing', exact: true }).waitFor();
       await bookmarks.getByRole('button', { name: '打开收藏 /missing', exact: true }).click();
       await page.getByText('无法打开 /missing：Permission denied', { exact: true }).waitFor();
-      assert.equal(await page.getByRole('button', { name: 'Home', exact: true }).getAttribute('aria-pressed'), 'true');
+      assert.equal(await page.getByRole('button', { name: "主目录", exact: true }).getAttribute('aria-pressed'), 'true');
       state.failPinWrites = true;
       await page.getByRole('button', { name: 'Pin 当前目录', exact: true }).click();
       await bookmarks.getByText('收藏保存失败：Config write failed', { exact: true }).waitFor();
@@ -497,7 +499,7 @@ try {
       await page.getByRole('button', { name: '/tmp', exact: true }).click();
       await atPath(page, '/tmp');
       state.failHome = false;
-      await page.getByRole('button', { name: 'Home', exact: true }).click();
+      await page.getByRole('button', { name: "主目录", exact: true }).click();
       await atPath(page, home);
       assert.deepEqual(state.errors, []);
     } finally { await context.close(); }

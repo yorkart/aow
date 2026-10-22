@@ -15,7 +15,7 @@ export function acpControlFixture() {
       const owner = sessions.get(id)?.owner;
       return !!owner && owner.token === request.headers()['x-aow-acp-control'];
     },
-    install: page => page.routeWebSocket('**/api/acp/sessions/*/control', socket => {
+    install: page => page.routeWebSocket('**/api/acp/sessions/*/control*', socket => {
       const id = new URL(socket.url()).pathname.split('/').at(-2);
       let session = sessions.get(id);
       if (!session) { session = { peers: new Set() }; sessions.set(id, session); }

@@ -1,3 +1,4 @@
+import { t } from '../../../lib/i18n';
 import { useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { AgentIcon } from '../../agents/AgentIcon';
@@ -25,13 +26,13 @@ export function NewSessionMenu({ onCreate }: { onCreate: (agentId: string) => vo
   }, [revision]);
   return <>
     <div className="project-aow-menu-label">ACP</div>
-    {loading ? <div className="project-aow-menu-empty" role="status">正在加载 ACP Agent…</div>
+    {loading ? <div className="project-aow-menu-empty" role="status">{t("acp.loading_acp_agents")}</div>
       : error ? <>
-        <div className="project-aow-menu-empty" role="alert" title={error}>ACP Agent 加载失败</div>
-        <button type="button" onClick={() => setRevision(value => value + 1)}><RefreshCw /><span>重新加载 ACP Agent</span></button>
+        <div className="project-aow-menu-empty" role="alert" title={error}>{t("acp.failed_to_load_acp_agents")}</div>
+        <button type="button" onClick={() => setRevision(value => value + 1)}><RefreshCw /><span>{t("acp.reload_acp_agents")}</span></button>
       </> : agents.length ? agents.map(agent => <button type="button" data-workspace-open key={agent.id}
-        aria-label={`新建 ACP 会话：${agent.name}`} onClick={() => onCreate(agent.id)}>
+        aria-label={t("acp.new_acp_session", { value0: agent.name })} onClick={() => onCreate(agent.id)}>
         <AgentIcon agentId={agent.id.replace(/-acp$/, '').replace(/^claude-agent$/, 'claude')} /><span>{agent.name}</span>
-      </button>) : <div className="project-aow-menu-empty">暂无可用 ACP Agent<br />请在 Settings → ACP 安装。</div>}
+      </button>) : <div className="project-aow-menu-empty">{t("acp.no_acp_agents_available")}<br />{t("acp.install_one_in_settings_acp")}</div>}
   </>;
 }

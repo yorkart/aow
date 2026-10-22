@@ -62,41 +62,63 @@ impl Event {
             value,
             url: None,
         };
-        let message = Message {
-            title: format!("AoW · {}", self.title),
+        let message = aow_i18n::with_language(state.aow.notifications().language(), || Message {
+            title: format!(
+                "AoW · {}",
+                aow_i18n::text(if success {
+                    "server.login_successful"
+                } else {
+                    "server.login_failed"
+                })
+            ),
             fields: vec![
-                field("时间", self.evidence.timestamp),
-                field("事件 ID", self.evidence.event_id),
+                field(aow_i18n::text("server.time"), self.evidence.timestamp),
+                field(aow_i18n::text("server.event_id"), self.evidence.event_id),
                 field(
-                    "连接来源 IP",
-                    self.evidence.peer_ip.unwrap_or_else(|| "未知".into()),
+                    aow_i18n::text("server.connection_source_ip"),
+                    self.evidence
+                        .peer_ip
+                        .unwrap_or_else(|| aow_i18n::text("server.unknown").into()),
                 ),
                 field(
-                    "请求",
+                    aow_i18n::text("server.request"),
                     format!("{} {}", self.evidence.method, self.evidence.path),
                 ),
                 field(
-                    "账号（提交值）",
+                    aow_i18n::text("server.username_submitted_value"),
                     self.claimed_username
                         .as_deref()
                         .map(|s| clean(s, 256))
-                        .unwrap_or_else(|| "未提供".into()),
+                        .unwrap_or_else(|| aow_i18n::text("server.not_provided").into()),
                 ),
             ],
-            body_label: "审计详情".into(),
-            body: format!(
-                "HTTP {} · {}\nUser-Agent: {}\n转发 IP（未验证）: {}",
-                self.status.as_u16(),
-                self.reason,
-                self.evidence.user_agent.as_deref().unwrap_or("未知"),
-                self.evidence
-                    .x_forwarded_for_unverified
-                    .as_deref()
-                    .unwrap_or("无")
+            body_label: aow_i18n::text("server.audit_details").into(),
+            body: aow_i18n::message(
+                "server.http_user_agent_forwarded_ip_unverified",
+                &[
+                    ("auto0", format!("{}", self.status.as_u16())),
+                    ("auto1", self.reason.to_string()),
+                    (
+                        "auto2",
+                        self.evidence
+                            .user_agent
+                            .as_deref()
+                            .unwrap_or(aow_i18n::text("server.unknown"))
+                            .to_string(),
+                    ),
+                    (
+                        "auto3",
+                        self.evidence
+                            .x_forwarded_for_unverified
+                            .as_deref()
+                            .unwrap_or(aow_i18n::text("server.none_2"))
+                            .to_string(),
+                    ),
+                ],
             ),
             markdown: false,
             error: !success,
-        };
+        });
         state
             .aow
             .notifications()
@@ -119,9 +141,9 @@ impl Event {
                 "access_denied"
             },
             title: if page {
-                "未登录访问页面"
+                aow_i18n::text("server.unauthenticated_page_access")
             } else {
-                "未登录访问被拒绝"
+                aow_i18n::text("server.unauthenticated_access_denied")
             },
             status,
             reason: reason.into(),

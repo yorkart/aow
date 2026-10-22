@@ -130,7 +130,7 @@ impl ClientContext {
     ) {
         let context = self.clone();
         // The SDK dispatcher must remain free to process cancel, updates, and responses.
-        tokio::spawn(async move {
+        aow_i18n::spawn(async move {
             let result = context.dispatch(message).await;
             let response = match result {
                 Ok(value) => responder.respond(value),

@@ -1,3 +1,4 @@
+import { t, initializeLanguage } from './lib/i18n';
 import { appPath } from './lib/basePath';
 import { lazy, StrictMode, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -7,6 +8,7 @@ import { AowTabEntry } from './aow/AowTabEntry';
 import { initializeTheme } from './lib/theme/store';
 import './styles.css';
 
+initializeLanguage();
 initializeTheme();
 
 const mode = new URLSearchParams(window.location.search).get('ui');
@@ -18,7 +20,7 @@ const Aow = mobile
   : lazy(() => import('./aow/desktop'));
 const SharedSessionPage = lazy(() => import('./features/sessions/SharedSessionPage').then(module => ({ default: module.SharedSessionPage })));
 const shareRoute = /^\/share\/([^/]+)\/?$/.exec(appPath(window.location.pathname) ?? '');
-const fallback = <div role="status" style={{ padding: 24, color: 'var(--aow-text)', background: 'var(--aow-surface)', minHeight: '100dvh', fontFamily: 'system-ui' }}>正在打开 AoW…</div>;
+const fallback = <div role="status" style={{ padding: 24, color: 'var(--aow-text)', background: 'var(--aow-surface)', minHeight: '100dvh', fontFamily: 'system-ui' }}>{t("app.opening_aow")}</div>;
 
 const root = createRoot(document.getElementById('root')!);
 root.render(<StrictMode>{shareRoute

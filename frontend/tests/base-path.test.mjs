@@ -64,6 +64,7 @@ try {
   for (const base of ['', '/tools/aow']) {
     await test(`production build works at ${base || '/'}: login, deep links, assets, streams and mobile share`, { timeout: 60000 }, async t => {
       const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
       t.after(() => context.close());
       const origin = await startServer(t, base);
       const authStatus = await fetch(`${origin}${base}/api/auth/status`).then(response => response.json());
@@ -106,7 +107,7 @@ try {
             restore_cols: 80, restore_rows: 24, restore: '\x1b[2J\x1b[HPrefix terminal\r\n$ ' }));
         });
       });
-      await context.routeWebSocket('**/api/events/ws', socket => {
+      await context.routeWebSocket('**/api/events/ws*', socket => {
         // Keep the real authenticated, multiplexed connection and supply the
         // same terminal fixture through snapshots that REST used to provide.
         const upstream = socket.connectToServer();
@@ -119,8 +120,9 @@ try {
         });
       });
       const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
       const eventSockets = [];
-      page.on('websocket', socket => { if (socket.url().endsWith('/api/events/ws')) eventSockets.push(socket); });
+      page.on('websocket', socket => { if (new URL(socket.url()).pathname.endsWith('/api/events/ws')) eventSockets.push(socket); });
       page.setDefaultTimeout(15000);
       page.on('pageerror', error => errors.push(error.message));
       page.on('request', request => requests.add(new URL(request.url()).pathname));
@@ -158,6 +160,7 @@ try {
       const extraPages = [];
       for (let index = 0; index < 3; index++) {
         const extra = await context.newPage();
+    await extra.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
         extraPages.push(extra);
         await extra.goto(`${origin}${base}/aow/tabs/terminal/target?ui=desktop`);
         await extra.locator('.project-aow-center-tab.active').filter({ hasText: 'Prefix Terminal' }).waitFor();
@@ -173,9 +176,9 @@ try {
         assert.deepEqual(statuses, [200, 200, 200]);
       }
       await page.bringToFront();
-      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      await page.getByRole('button', { name: "设置", exact: true }).click();
       const settingsDialog = page.getByRole('dialog', { name: '设置', exact: true });
-      await settingsDialog.getByRole('button', { name: /^Configuration/ }).click();
+      await settingsDialog.getByRole('button', { name: /^配置/ }).click();
       await settingsDialog.getByRole('radio').first().waitFor();
       assert.equal(await settingsDialog.getByRole('button', { name: '保存', exact: true }).isEnabled(), true);
       await settingsDialog.getByRole('button', { name: '关闭', exact: true }).click();

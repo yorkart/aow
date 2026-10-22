@@ -41,7 +41,14 @@ impl AowManager {
             .inner
             .config
             .as_ref()
-            .ok_or_else(|| AowError::Invalid("当前服务未配置持久化数据目录".into()))?
+            .ok_or_else(|| {
+                AowError::Invalid(
+                    aow_i18n::text(
+                        "server.no_persistent_data_directory_configured_for_this_service",
+                    )
+                    .into(),
+                )
+            })?
             .selection();
         Ok(ConfigurationSettings {
             restart_required: selection != active_selection,
@@ -55,7 +62,14 @@ impl AowManager {
         self.inner
             .configuration_file
             .as_ref()
-            .ok_or_else(|| AowError::Invalid("当前服务未配置持久化数据目录".into()))?
+            .ok_or_else(|| {
+                AowError::Invalid(
+                    aow_i18n::text(
+                        "server.no_persistent_data_directory_configured_for_this_service",
+                    )
+                    .into(),
+                )
+            })?
             .lock()
             .map_err(|_| AowError::Poisoned)
     }
@@ -64,7 +78,7 @@ impl AowManager {
 async fn blocking<T: Send + 'static>(
     operation: impl FnOnce() -> Result<T, AowError> + Send + 'static,
 ) -> Result<Json<T>, Response> {
-    tokio::task::spawn_blocking(operation)
+    aow_i18n::spawn_blocking(operation)
         .await
         .map_err(|error| aow_response(AowError::Configuration(error.into())))?
         .map(Json)
@@ -198,7 +212,12 @@ mod tests {
         let invalid_query = format!("{endpoint}/versions?path={}", state_dir.display());
         let (code, error) = call(&router, "GET", &invalid_query, Value::Null).await;
         assert_eq!(code, StatusCode::BAD_REQUEST);
-        assert!(error["message"].as_str().unwrap().contains("Git 仓库"));
+        assert!(
+            error["message"]
+                .as_str()
+                .unwrap()
+                .contains("Git repository")
+        );
 
         let before = std::fs::read(state_dir.join("config.toml")).unwrap();
         let (code, _) = call(

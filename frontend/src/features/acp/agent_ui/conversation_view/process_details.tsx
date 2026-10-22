@@ -1,3 +1,4 @@
+import { t } from '../../../../lib/i18n';
 import { useProcessSync } from '../../sync/process';
 import type { Data, SessionSnapshot, TurnOverview } from '../../types';
 import { messageGroups } from './entry_view_state';
@@ -16,8 +17,8 @@ export interface RemoteProcess {
 export function ProcessDetails({ session, turn, busy, onAction, onOpenFile }: RemoteProcess) {
   const { data: details, error, reload } = useProcessSync(session.thread_id, turn.id, session.sync_generation, turn.revision);
   return <>
-    {error && <div className="acp-content"><p className="acp-error" role="alert">{error}</p><button type="button" onClick={reload}>重试加载处理过程</button></div>}
-    {!details && !error && <p className="acp-content acp-muted" role="status">正在加载处理过程…</p>}
+    {error && <div className="acp-content"><p className="acp-error" role="alert">{error}</p><button type="button" onClick={reload}>{t("acp.retry_loading_activity")}</button></div>}
+    {!details && !error && <p className="acp-content acp-muted" role="status">{t("acp.loading_activity")}</p>}
     {details && <LoadedProcess session={details} turn={turn} busy={busy} onAction={onAction} onOpenFile={onOpenFile} />}
   </>;
 }

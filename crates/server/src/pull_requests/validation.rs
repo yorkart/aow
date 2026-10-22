@@ -50,7 +50,7 @@ fn valid_id(s: &str) -> bool {
 pub(super) fn validate_settings(settings: &Settings) -> Result<()> {
     if settings.providers.len() > 32 {
         return Err(PullRequestError::Invalid(
-            "最多配置 32 个 Provider。".into(),
+            aow_i18n::text("server.at_most_32_providers_are_allowed").into(),
         ));
     }
     let mut ids = HashSet::new();
@@ -58,17 +58,18 @@ pub(super) fn validate_settings(settings: &Settings) -> Result<()> {
     for p in &settings.providers {
         if !valid_id(&p.id) || !ids.insert(&p.id) || p.id == "auto" {
             return Err(PullRequestError::Invalid(
-                "Provider ID 必须唯一，只能包含字母、数字、-、_，且不能为 auto。".into(),
+                aow_i18n::text("server.provider_ids_must_be_unique_contain_only_letters_digits")
+                    .into(),
             ));
         }
         if p.name.trim().is_empty() || p.script.trim().is_empty() || p.script.len() > SCRIPT_LIMIT {
             return Err(PullRequestError::Invalid(
-                "名称和脚本必填；脚本最大 1 MiB。".into(),
+                aow_i18n::text("server.name_and_script_are_required_script_limit_is_1").into(),
             ));
         }
         if p.hosts.is_empty() {
             return Err(PullRequestError::Invalid(
-                "请至少配置一个 remote 域名。".into(),
+                aow_i18n::text("server.configure_at_least_one_remote_domain").into(),
             ));
         }
         for host in &p.hosts {
@@ -78,13 +79,15 @@ pub(super) fn validate_settings(settings: &Settings) -> Result<()> {
                     .bytes()
                     .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || b".-_:[]".contains(&c))
             {
-                return Err(PullRequestError::Invalid(format!(
-                    "无效的 remote 域名：{host}"
+                return Err(PullRequestError::Invalid(aow_i18n::message(
+                    "server.invalid_remote_domain",
+                    &[("p0", host.to_string())],
                 )));
             }
             if p.enabled && !hosts.insert(host) {
-                return Err(PullRequestError::Invalid(format!(
-                    "多个启用的 Provider 匹配同一个域名：{host}"
+                return Err(PullRequestError::Invalid(aow_i18n::message(
+                    "server.multiple_enabled_providers_match_the_same_domain",
+                    &[("p0", host.to_string())],
                 )));
             }
         }
@@ -129,7 +132,7 @@ pub(super) fn parse_remote(raw: &str) -> Option<(String, String)> {
 pub(super) fn absolute(repo: &str) -> Result<()> {
     if !Path::new(repo).is_absolute() {
         return Err(PullRequestError::Invalid(
-            "repository path must be absolute".into(),
+            aow_i18n::text("errors.repository_path_must_be_absolute").into(),
         ));
     }
     Ok(())
@@ -137,7 +140,7 @@ pub(super) fn absolute(repo: &str) -> Result<()> {
 pub(super) fn positive(number: u64) -> Result<()> {
     if number == 0 {
         Err(PullRequestError::Invalid(
-            "PR number must be positive".into(),
+            aow_i18n::text("validation.pr_number_must_be_positive").into(),
         ))
     } else {
         Ok(())
@@ -151,7 +154,7 @@ pub(super) fn safe_path(path: &str) -> Result<()> {
             .any(|p| !matches!(p, Component::Normal(_)))
     {
         return Err(PullRequestError::Invalid(
-            "file path must be repository-relative".into(),
+            aow_i18n::text("validation.file_path_must_be_repository_relative").into(),
         ));
     }
     Ok(())

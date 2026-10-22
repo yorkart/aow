@@ -46,24 +46,30 @@ impl WorkspaceConfig {
                 .to_string_lossy()
                 .chars()
                 .any(char::is_control),
-            "工作区路径包含控制字符"
+            aow_i18n::message("workspaces.workspace_path_contains_control_characters", &[])
         );
         match self.workspace_mode {
             WorkspaceMode::Existing => ensure!(
                 self.workspace_path.is_absolute(),
-                "请选择要使用的 Worktree，路径必须为绝对路径"
+                aow_i18n::message("workspaces.choose_a_worktree_with_an_absolute_path", &[])
             ),
             WorkspaceMode::NewWorktree => ensure!(
                 !self.base_branch.trim().is_empty()
                     && self.base_branch.len() <= 1024
                     && !self.base_branch.trim().starts_with('-')
                     && !self.base_branch.chars().any(char::is_control),
-                "请选择有效的基准分支，长度不能超过 1024 字节"
+                aow_i18n::message(
+                    "workspaces.choose_a_valid_base_branch_up_to_1024_bytes",
+                    &[]
+                )
             ),
             WorkspaceMode::Temporary => {}
             WorkspaceMode::Dynamic => ensure!(
                 self.workspace_path.as_os_str().is_empty(),
-                "动态指定的工作区目录必须在执行时提供"
+                aow_i18n::message(
+                    "workspaces.dynamic_workspace_directory_must_be_provided_at_runtime",
+                    &[]
+                )
             ),
         }
         Ok(())

@@ -20,13 +20,14 @@ try {
   const base = `http://127.0.0.1:${server.httpServer.address().port}`;
   async function fixture(t, options = {}) {
     const page = await browser.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     t.after(async () => { await page.close(); assert.deepEqual(errors, []); });
     const state = { tabs: [tab('one'), tab('two', '/two')], metadata: empty(), boot: 'boot', revision: 1, error: null,
       peers: new Set(), requests: [], subscriptions: 0, unsubscriptions: 0, supported: true, ...options };
     state.snapshot = () => ({ boot_id: state.boot, revision: state.revision, tabs: state.tabs, metadata: state.metadata, error: state.error, agent_error: null });
-    await page.routeWebSocket('**/api/events/ws', socket => {
+    await page.routeWebSocket('**/api/events/ws*', socket => {
       const peer = { socket, active: false, send: data => socket.send(JSON.stringify({ event: 'terminals', data })) };
       state.peers.add(peer);
       if (state.supported) peer.send({ type: 'hello', protocol: 1 });

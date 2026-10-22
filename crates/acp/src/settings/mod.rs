@@ -17,9 +17,12 @@ pub struct SettingsDocument {
 }
 
 pub fn validate_settings(text: &str) -> Result<SettingsDocument> {
-    let value: serde_json::Value =
-        serde_json_lenient::from_str(text).context("ACP JSONC 配置无效")?;
-    ensure!(value.is_object(), "ACP 配置必须是 JSON 对象");
+    let value: serde_json::Value = serde_json_lenient::from_str(text)
+        .context(aow_i18n::text("acp.invalid_acp_jsonc_configuration"))?;
+    ensure!(
+        value.is_object(),
+        aow_i18n::message("acp.acp_configuration_must_be_a_json_object", &[])
+    );
     let settings: SettingsDocument = serde_json::from_value(value)?;
     for (id, agent) in &settings.agent_servers {
         ensure!(
@@ -30,16 +33,22 @@ pub fn validate_settings(text: &str) -> Result<SettingsDocument> {
                     .all(|c| c.is_ascii_alphanumeric() || b"-_.".contains(&c))
                 && id != "."
                 && id != "..",
-            "无效的 Agent ID: {id}"
+            aow_i18n::message("acp.invalid_agent_id", &[("p0", id.to_string())])
         );
         if let CustomAgentServerSettings::Custom { command, .. } = agent {
-            ensure!(!command.trim().is_empty(), "Agent {id} 缺少 command");
+            ensure!(
+                !command.trim().is_empty(),
+                aow_i18n::message("acp.agent_is_missing_command", &[("p0", id.to_string())])
+            );
         }
     }
     if let Some(id) = &settings.default_agent_id {
         ensure!(
             settings.agent_servers.contains_key(id),
-            "默认 ACP 实例不存在: {id}"
+            aow_i18n::message(
+                "acp.default_acp_instance_does_not_exist",
+                &[("p0", id.to_string())]
+            )
         );
     }
     Ok(settings)

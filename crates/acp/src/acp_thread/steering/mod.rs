@@ -197,7 +197,7 @@ pub(crate) fn disconnected(thread: &mut SessionSnapshot) {
             thread,
             pending.entry_start,
             "unknown",
-            Some("连接已断开，无法确认追加指令是否送达；请勿自动重发。".into()),
+            Some(aow_i18n::text("common.steeringUnknown").into()),
         );
     }
     thread.steering_pending = false;
@@ -211,7 +211,7 @@ pub(crate) fn disconnected(thread: &mut SessionSnapshot) {
     {
         if delivery.status == "sending" {
             delivery.status = "unknown".into();
-            delivery.error = Some("连接已断开，无法确认追加指令是否送达；请勿自动重发。".into());
+            delivery.error = Some(aow_i18n::text("common.steeringUnknown").into());
         }
     }
     thread.steering = SteeringState::default();

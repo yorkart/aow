@@ -1,3 +1,5 @@
+import { localizedFetch } from './localizedFetch';
+import { t } from './i18n';
 import { appUrl } from './basePath';
 
 export class HttpRequestError extends Error {}
@@ -7,11 +9,11 @@ export async function fetchWithTimeout(url: string, init?: RequestInit, timeoutM
   const signal = init?.signal ? AbortSignal.any([init.signal, controller.signal]) : controller.signal;
   const timer = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(appUrl(url), { ...init, signal });
+    return await localizedFetch(appUrl(url), { ...init, signal });
   } catch (error) {
     init?.signal?.throwIfAborted();
     if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new Error(`请求超时（${Math.round(timeoutMs / 1000)} 秒）`, { cause: error });
+      throw new Error(t("lib.request_timed_out_seconds", { value0: Math.round(timeoutMs / 1000) }), { cause: error });
     }
     throw error;
   } finally {
