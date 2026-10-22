@@ -73,10 +73,11 @@ export function ServerEnvironmentFields({ environment, busy }: {
 }) {
   const { document, values, fieldErrors, loading, error, saved, reload, save, edit } = environment;
   return <>
-    <h3>{t("settings.aow_service_environment_variables")}</h3>
     <div className="server-environment-actions">
-      <div className="environment-settings-toolbar">
-        {document ? <code className="server-environment-path" title={document.path}>{document.path}</code> : null}
+      <div className="project-aow-settings-heading environment-settings-heading">
+        <div><h3>{t("settings.aow_service_environment_variables")}</h3>
+          {document ? <p><code className="server-environment-path" title={document.path}>{document.path}</code></p> : null}
+        </div>
         <div className="environment-settings-buttons">
           <button type="button" className="project-aow-dialog-button" disabled={loading || busy} onClick={() => void reload()}>{t("settings.reload_file")}</button>
           <button type="button" className="project-aow-dialog-button primary" disabled={loading || busy || !document || !!Object.keys(fieldErrors).length} onClick={() => void save()}>{t("settings.save_server_env")}</button>

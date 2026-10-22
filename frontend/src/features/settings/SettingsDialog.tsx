@@ -401,15 +401,14 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
             <form className="project-aow-dialog-form" onSubmit={(event) => { event.preventDefault(); void saveEnvironment(); }}>
               <div className="project-aow-dialog-body">
                 <div className="project-aow-settings-heading"><div><h2>{t("navigation.environment")}</h2><p>{t("settings.configure_execution_path_and_edit_the_aow_service_environment")}</p></div></div>
-                <h3>{t("settings.path_directories_highest_priority_first")}</h3>
-                <div className="environment-settings-toolbar">
+                <div className="project-aow-settings-heading environment-settings-heading">
+                  <div><h3>{t("settings.path_directories_highest_priority_first")}</h3><p>{t("settings.one_absolute_server_directory_per_line_put_the_directory")}</p></div>
                   <div className="environment-settings-buttons">
                     <button type="button" className="project-aow-dialog-button" disabled={settingsLoading || settingsBusy} onClick={() => void readEnvironment()}><RefreshCw size={14} />{t("settings.read_from_local_environment")}</button>
                     <button type="submit" className="project-aow-dialog-button primary" disabled={settingsLoading || settingsBusy || !executionPath.trim()}>{settingsBusy ? t("acp.processing") : t("settings.save_path")}</button>
                   </div>
                 </div>
                 <div className="project-aow-dialog-field"><textarea aria-label={t("settings.path_directories")} spellCheck={false} rows={10} value={executionPath} disabled={settingsLoading || settingsBusy} onChange={(event) => { setExecutionPath(event.target.value); setEnvironmentSaved(false); setError(''); }} placeholder={'/opt/python/3.11/bin\n/usr/local/bin\n/usr/bin\n/bin'} required /></div>
-                <p className="project-aow-form-intro">{t("settings.one_absolute_server_directory_per_line_put_the_directory")}</p>
                 <p className="project-aow-form-intro">{t("settings.saved_settings_apply_to_future_executions_without_resaving_tasks")}</p>
                 {environmentSaved ? <p role="status">{t("settings.execution_environment_saved")}</p> : null}
                 {error ? <div className="project-aow-error" role="alert">{error}</div> : null}

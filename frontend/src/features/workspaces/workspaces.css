@@ -6,7 +6,7 @@
 .workspace-field button:disabled { opacity:.5; cursor:default; }
 .workspace-field .workspace-dynamic-options { display:flex; flex-wrap:wrap; gap:8px 20px; padding:5px 2px; }
 .workspace-field .workspace-dynamic-options > label { display:inline-flex; flex:0 0 auto; flex-direction:row; align-items:center; gap:6px; width:auto; margin:0; padding:0; color:var(--aow-text,var(--aow-text)); font-size:12px; cursor:pointer; }
-.workspace-field .workspace-dynamic-options input[type="radio"] { appearance:auto; -webkit-appearance:radio; flex:0 0 14px; width:14px; min-width:14px; height:14px; min-height:0; margin:0; padding:0; border:0; border-radius:50%; background:transparent; accent-color:var(--aow-accent,var(--aow-info)); cursor:inherit; }
+.workspace-field .workspace-dynamic-options input[type="radio"] { flex-shrink:0; cursor:inherit; }
 .workspace-field .workspace-dynamic-options > label:has(input:disabled) { opacity:.5; cursor:default; }
 .workspace-field .workspace-dynamic-options input:focus-visible { outline:1px solid var(--aow-accent,var(--aow-info)); outline-offset:3px; }
 .workspace-field .workspace-select { display:flex; min-width:0; flex-direction:row; align-items:center; gap:8px; padding:0 10px; background:var(--aow-panel,var(--aow-panel)); border:1px solid var(--aow-control-line,var(--aow-line-subtle)); border-radius:4px; }

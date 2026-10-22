@@ -23,9 +23,9 @@
 .automation-panel button:not(:where(.aow-panel-header *, .aow-icon-button)):focus-visible,.automation-detail-page button:focus-visible,.automation-editor button:focus-visible { outline:1px solid var(--aow-accent); outline-offset:1px; }
 .automation-panel svg,.automation-detail-page :where(svg.lucide),.automation-editor svg { width:13px; height:13px; flex-shrink:0; }
 .automation-detail-page .agent-icon { width:14px; height:14px; flex:0 0 14px; object-fit:contain; }
-.automation-detail-page input,.automation-detail-page select,.automation-editor input:not(.monaco-editor input),.automation-editor select,.automation-settings textarea { min-width:0; min-height:28px; padding:4px 8px; color:var(--aow-text); background:var(--aow-input); border:1px solid var(--aow-control-line); border-radius:3px; font:inherit; outline:none; }
-.automation-detail-page input:focus,.automation-detail-page select:focus,.automation-editor input:not(.monaco-editor input):focus,.automation-editor select:focus,.automation-settings textarea:focus { border-color:var(--aow-accent); }
-.automation-detail-page input::placeholder,.automation-editor input:not(.monaco-editor input)::placeholder,.automation-settings textarea::placeholder { color:var(--aow-muted); opacity:.75; }
+.automation-detail-page input:not([type="checkbox"]):not([type="radio"]),.automation-detail-page select,.automation-editor input:not(.monaco-editor input):not([type="checkbox"]):not([type="radio"]),.automation-editor select,.automation-settings textarea { min-width:0; min-height:28px; padding:4px 8px; color:var(--aow-text); background:var(--aow-input); border:1px solid var(--aow-control-line); border-radius:3px; font:inherit; outline:none; }
+.automation-detail-page input:not([type="checkbox"]):not([type="radio"]):focus,.automation-detail-page select:focus,.automation-editor input:not(.monaco-editor input):not([type="checkbox"]):not([type="radio"]):focus,.automation-editor select:focus,.automation-settings textarea:focus { border-color:var(--aow-accent); }
+.automation-detail-page input::placeholder,.automation-editor input:not(.monaco-editor input):not([type="checkbox"]):not([type="radio"])::placeholder,.automation-settings textarea::placeholder { color:var(--aow-muted); opacity:.75; }
 .automation-page-header { display:flex; flex:0 0 28px; align-items:center; justify-content:space-between; min-width:0; gap:8px; padding:0 5px 0 10px; background:var(--aow-header); border-bottom:1px solid var(--aow-line); }
 .automation-breadcrumb { display:flex; align-items:center; gap:7px; min-width:0; color:var(--aow-muted); font-size:11px; }
 .automation-breadcrumb > svg:first-child { color:var(--aow-icon-foreground, var(--aow-icon)); }
@@ -193,7 +193,7 @@
 .automation-settings h3 svg { color:var(--aow-icon-foreground, var(--aow-icon)); }
 .automation-settings label { display:flex; flex-direction:column; gap:5px; }
 .automation-settings label > span,.automation-settings .automation-agent-setting > span { color:var(--aow-muted); font-size:11px; }
-.automation-settings select,.automation-settings input,.automation-settings textarea { width:100%; font-size:11px; }
+.automation-settings select,.automation-settings input:not([type="checkbox"]):not([type="radio"]),.automation-settings textarea { width:100%; font-size:11px; }
 .automation-settings textarea { resize:vertical; min-height:65px; }
 .automation-settings .automation-agent-setting { display:flex; flex-direction:column; gap:5px; }
 .automation-settings .automation-agent-row { display:flex; align-items:center; gap:8px; min-width:0; }

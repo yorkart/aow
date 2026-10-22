@@ -22,7 +22,7 @@
 .mobile-settings .project-aow-form-intro { font-size:13px; line-height:1.7; }
 .mobile-settings .project-aow-dialog-field { min-width:0; display:flex; flex-direction:column; align-items:stretch; gap:8px; }
 .mobile-settings .project-aow-dialog-field > span { font-size:13px; }
-.mobile-settings .project-aow-dialog-field :is(input:not([type="checkbox"]), textarea),.mobile-settings select { min-width:0; width:100%; min-height:44px; padding:10px 12px; border:1px solid var(--m-line); border-radius:10px; background:var(--m-panel); color:var(--m-text); font-size:16px; line-height:1.5; }
+.mobile-settings .project-aow-dialog-field :is(input:not([type="checkbox"]):not([type="radio"]), textarea),.mobile-settings select { min-width:0; width:100%; min-height:44px; padding:10px 12px; border:1px solid var(--m-line); border-radius:10px; background:var(--m-panel); color:var(--m-text); font-size:16px; line-height:1.5; }
 .mobile-settings .project-aow-dialog-field input { height:44px; }
 .mobile-settings .project-aow-dialog-field textarea { resize:vertical; min-height:120px; }
 .mobile-settings input:focus,.mobile-settings textarea:focus,.mobile-settings select:focus { outline:1px solid var(--m-accent); outline-offset:-1px; }
