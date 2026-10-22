@@ -3353,6 +3353,18 @@ try {
       await dialog.locator('.review-provider-editor .monaco-editor').waitFor();
     };
     await open();
+    const checkboxLayout = await dialog.getByLabel('启用此 Provider', { exact: true }).evaluate(input => {
+      const label = input.closest('label');
+      const text = label.querySelector('span');
+      const box = input.getBoundingClientRect();
+      const caption = text.getBoundingClientRect();
+      return { display: getComputedStyle(label).display, gap: caption.left - box.right,
+        centerOffset: Math.abs(caption.top + caption.height / 2 - box.top - box.height / 2) };
+    });
+    assert.equal(checkboxLayout.display, 'flex');
+    assert.ok(checkboxLayout.gap >= 6, 'provider label keeps space between its checkmark and text');
+    assert.ok(checkboxLayout.centerOffset <= 1, 'provider checkbox and text share a vertical center');
+
     assert.equal(await dialog.getByLabel('CLI 命令', { exact: true }).count(), 0);
     const preview = dialog.getByRole('textbox', { name: 'Provider Python 脚本预览', exact: true });
     const initial = state.reviewProviders.providers[0].script;

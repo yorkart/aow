@@ -89,7 +89,7 @@ export function ReviewProviderSettings({ active, onBusyChange, onDirtyChange }: 
           <label className="project-aow-dialog-field"><span>{t("aow.display_name")}</span><input aria-label={t("pr.provider_display_name")} value={provider.name} disabled={busy} onChange={e => update({ name: e.target.value })} /></label>
           <label className="project-aow-dialog-field review-provider-hosts"><span>{t("pr.remote_domains_one_per_line")}</span><textarea aria-label={t("pr.remote_domains")} rows={3} spellCheck={false} value={provider.hosts.join('\n')} disabled={busy} onChange={e => update({ hosts: e.target.value.split('\n') })} /></label>
         </div>
-        <label className="project-aow-dialog-checkbox"><input type="checkbox" checked={provider.enabled} disabled={busy} onChange={e => update({ enabled: e.target.checked })} />{t("pr.enable_this_provider")}</label>
+        <label className="project-aow-dialog-checkbox"><input type="checkbox" checked={provider.enabled} disabled={busy} onChange={e => update({ enabled: e.target.checked })} /><span>{t("pr.enable_this_provider")}</span></label>
         <div className="review-provider-toolbar"><strong>{t("pr.python_script_read_only_preview")}</strong><button className="project-aow-dialog-button" disabled={busy} onClick={() => upload.current?.click()}><Upload size={14} />{t("pr.upload_script")}</button>
           <input ref={upload} type="file" aria-label={t("pr.upload_provider_script")} accept=".py,.txt,text/plain,text/x-python" hidden onChange={e => void readFile(e.target.files?.[0])} /></div>
         <p className="project-aow-form-intro">{t("pr.scripts_are_preview_only_edit_locally_upload_a_replacement")}</p>

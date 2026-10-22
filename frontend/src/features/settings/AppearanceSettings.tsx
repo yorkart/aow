@@ -37,7 +37,7 @@ export function AppearanceSettings() {
   return <div className="project-aow-dialog-body appearance-settings">
     <div className="project-aow-settings-heading"><div><h2>{t("navigation.appearance")}</h2><p>{t("settings.choose_a_workspace_theme_terminal_and_diff_palettes_can")}</p></div></div>
     <LanguageSettings />
-    <fieldset className="theme-picker">
+    <fieldset className="theme-picker color-theme-picker">
       <legend>{t("settings.color_theme")}</legend>
       <div className="theme-grid">
         {themes.map(item => <label className="theme-card" key={item.id} style={previewColors(item)}>

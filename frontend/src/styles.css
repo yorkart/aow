@@ -647,7 +647,7 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .project-aow-dialog textarea { width:100%; min-width:0; min-height:96px; resize:vertical; padding:7px 8px; color:var(--aow-text); background:var(--aow-input); border:1px solid var(--aow-control-line); border-radius:4px; outline:none; font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace; }
 .project-aow-dialog textarea:focus { border-color:var(--aow-accent); }
 .project-aow-dialog textarea:disabled { opacity:.5; }
-.project-aow-dialog form .project-aow-dialog-checkbox { display:flex; align-items:center; gap:6px; font-size:11px; cursor:pointer; }
+.project-aow-dialog .project-aow-dialog-checkbox { display:flex; align-items:center; gap:6px; font-size:11px; cursor:pointer; }
 .project-aow-dialog .project-aow-dialog-checkbox input { flex:0 0 14px; width:14px; height:14px; margin:0; padding:0; accent-color:var(--aow-accent); }
 .project-aow-dialog form h3 { margin:0; font-size:12px; font-weight:600; }
 .project-aow-dialog .project-aow-command-preview { min-width:0; margin:0; padding:8px 10px; background:var(--aow-surface); border-color:var(--aow-line); border-radius:4px; }
