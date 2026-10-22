@@ -11,14 +11,14 @@ use tokio::{
     time::timeout,
 };
 
-use super::{Provider, PullRequestError, Result, invalid_json};
+use super::{GitPlatformError, GitPlatformProvider, Result, invalid_json};
 
 pub(super) const OUTPUT_LIMIT: usize = 16 * 1024 * 1024;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub(super) async fn git(repo: &str, args: &[&str], paths: &[PathBuf]) -> Result<String> {
     let executable = resolve_executable("git", paths).ok_or_else(|| {
-        PullRequestError::Unavailable(
+        GitPlatformError::Unavailable(
             aow_i18n::text("server.git_not_found_check_settings_environment").into(),
         )
     })?;
@@ -36,29 +36,43 @@ pub(super) async fn git(repo: &str, args: &[&str], paths: &[PathBuf]) -> Result<
         .map_err(invalid_json)
 }
 pub(super) async fn run_adapter(
-    provider: &Provider,
+    provider: &GitPlatformProvider,
     request: Value,
     cwd: Option<&Path>,
     paths: &[PathBuf],
     script_path: Option<&Path>,
 ) -> Result<Value> {
-    let executable = resolve_executable("python3", paths).ok_or_else(|| {
-        PullRequestError::Unavailable(
-            aow_i18n::text("server.python3_not_found_check_settings_environment").into(),
+    if !super::validation::valid_filename(&provider.id)
+        || provider.script.len() > super::SCRIPT_LIMIT
+    {
+        return Err(super::invalid_json(
+            "upload a single .mjs provider using protocol v4",
+        ));
+    }
+    if request["operation"]
+        .as_str()
+        .is_none_or(|op| op != "describe" && !super::schema::OPERATIONS.contains(&op))
+    {
+        return Err(super::invalid_json(
+            "unsupported Git platform read operation",
+        ));
+    }
+    let executable = resolve_executable("node", paths).ok_or_else(|| {
+        GitPlatformError::Unavailable(
+            aow_i18n::text("server.node_not_found_check_settings_environment").into(),
         )
     })?;
     let mut command = Command::new(executable);
-    // Draft tests and in-memory embeddings use a temporary file. Saved providers
-    // execute their immutable managed file directly.
+    // Drafts are isolated from saved scripts, but keep the uploaded filename too.
     let draft;
+    let draft_path;
     let path = match script_path {
         Some(path) => path,
         None => {
-            use std::io::Write;
-            let mut file = tempfile::NamedTempFile::new()?;
-            file.write_all(provider.script.as_bytes())?;
-            draft = file;
-            draft.path()
+            draft = tempfile::tempdir()?;
+            draft_path = draft.path().join(&provider.id);
+            std::fs::write(&draft_path, &provider.script)?;
+            &draft_path
         }
     };
     command.arg(path);
@@ -73,15 +87,15 @@ pub(super) async fn run_adapter(
     )
     .await?;
     let value: Value = serde_json::from_slice(&bytes).map_err(invalid_json)?;
-    if value.get("version").and_then(Value::as_u64) != Some(2) {
+    if value.get("version").and_then(Value::as_u64) != Some(super::schema::VERSION) {
         return Err(invalid_json(
-            "expected version: 2; update the Provider script to the current PR protocol",
+            "expected version: 4; upload a Node.js .mjs provider using the current Git platform protocol",
         ));
     }
     match (value.get("result"), value.get("error")) {
         (Some(result), None) if result.is_object() => Ok(result.clone()),
         (None, Some(error)) if error["code"].is_string() && error["message"].is_string() => {
-            Err(PullRequestError::Command(format!(
+            Err(GitPlatformError::Command(format!(
                 "{}: {}",
                 error["code"].as_str().unwrap(),
                 error["message"].as_str().unwrap()
@@ -144,20 +158,20 @@ pub(super) async fn run_command(
                     return Err(error.into());
                 }
                 drop(stdin);
-                Ok::<_, PullRequestError>(())
+                Ok::<_, GitPlatformError>(())
             },
             read_limited(stdout, OUTPUT_LIMIT),
             read_limited(stderr, 64 * 1024),
-            async { Ok::<_, PullRequestError>(child.wait().await?) }
+            async { Ok::<_, GitPlatformError>(child.wait().await?) }
         )?;
         if !status.success() {
-            return Err(PullRequestError::Command(format!(
-                "Provider process exited {status}: {}",
+            return Err(GitPlatformError::Command(format!(
+                "GitPlatformProvider process exited {status}: {}",
                 String::from_utf8_lossy(&err).trim()
             )));
         }
         Ok(out)
     })
     .await
-    .map_err(|_| PullRequestError::Timeout)?
+    .map_err(|_| GitPlatformError::Timeout)?
 }

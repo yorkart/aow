@@ -8,7 +8,8 @@ use std::{
 use tokio::time::timeout;
 
 use super::{
-    ProviderManager, PullRequestError, Result, absolute, git, invalid_json, parse_remote, web_link,
+    GitPlatformError, GitPlatformProviderManager, Result, absolute, git, invalid_json,
+    parse_remote, web_link,
 };
 
 type AvatarResult = std::result::Result<Option<String>, String>;
@@ -25,7 +26,7 @@ struct CachedAvatar {
     result: AvatarResult,
 }
 
-impl ProviderManager {
+impl GitPlatformProviderManager {
     /// Optional repository metadata, independent of PR lists and branch state.
     pub async fn repository_avatar(&self, repo: &str, paths: &[PathBuf]) -> Result<Option<String>> {
         timeout(
@@ -33,7 +34,7 @@ impl ProviderManager {
             self.repository_avatar_inner(repo, paths),
         )
         .await
-        .map_err(|_| PullRequestError::Timeout)?
+        .map_err(|_| GitPlatformError::Timeout)?
     }
 
     async fn repository_avatar_inner(
@@ -70,7 +71,7 @@ impl ProviderManager {
             .repository_info
             .entries
             .lock()
-            .map_err(|_| PullRequestError::Command("Repository info cache lock failed".into()))?
+            .map_err(|_| GitPlatformError::Command("Repository info cache lock failed".into()))?
             .entry(repo.to_owned())
             .or_default()
             .clone();
@@ -80,13 +81,13 @@ impl ProviderManager {
             .as_ref()
             .filter(|value| value.source == source && value.expires > Instant::now())
         {
-            return value.result.clone().map_err(PullRequestError::Command);
+            return value.result.clone().map_err(GitPlatformError::Command);
         }
         let request = async {
             let description = self
                 .run_provider(
                     provider,
-                    json!({"version":2,"operation":"describe","repository":null,"params":{}}),
+                    json!({"version":super::schema::VERSION,"operation":"describe","repository":null,"params":{}}),
                     None,
                     paths,
                 )
@@ -97,19 +98,19 @@ impl ProviderManager {
                 .ok_or_else(|| invalid_json("describe requires operations"))?;
             if !operations
                 .iter()
-                .any(|op| op.as_str() == Some("repository_info"))
+                .any(|op| op.as_str() == Some("repository.info"))
             {
                 return Ok(None);
             }
             let result = self.run_provider(provider,
-                json!({"version":2,"operation":"repository_info",
+                json!({"version":super::schema::VERSION,"operation":"repository.info",
                     "repository":{"root":repo,"host":host,"path":path,"remote":remote},"params":{}}),
                 Some(Path::new(repo)), paths).await?;
             web_link(&result, "avatar_url")
         };
         let result = timeout(Duration::from_secs(8), request)
             .await
-            .map_err(|_| PullRequestError::Timeout)
+            .map_err(|_| GitPlatformError::Timeout)
             .and_then(|result| result)
             .map_err(|error| error.to_string());
         let ttl = if matches!(result, Ok(Some(_))) {
@@ -122,6 +123,6 @@ impl ProviderManager {
             expires: Instant::now() + Duration::from_secs(ttl),
             result: result.clone(),
         });
-        result.map_err(PullRequestError::Command)
+        result.map_err(GitPlatformError::Command)
     }
 }

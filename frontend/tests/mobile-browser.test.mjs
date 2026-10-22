@@ -229,7 +229,7 @@ try {
     await snapshot(page, 'project-avatar');
     const box = await card.boundingBox();
     avatarUrl = 'https://avatars.example.com/broken.svg';
-    await page.evaluate(() => window.dispatchEvent(new Event('aow-review-providers-changed')));
+    await page.evaluate(() => window.dispatchEvent(new Event('aow-git-platform-providers-changed')));
     await card.locator('svg.project-icon').waitFor();
     assert.deepEqual(await card.boundingBox(), box);
     assert.equal(await avatar.count(), 0);
@@ -1622,7 +1622,7 @@ try {
       unresolved_threads: [{ id: 'thread-1', path: null, line: null, status: 'open', author: 'Reviewer', body: 'Review feedback. '.repeat(80), updated_at: null }],
       files: [{ path: 'frontend/src/main.tsx', change_type: 'modified' }, { path: 'frontend/src/api.ts', change_type: 'modified' }],
     };
-    await context.route('**/api/review-targets?**', route => route.fulfill({ json: [] }));
+    await context.route('**/api/git-platform-targets?**', route => route.fulfill({ json: [] }));
     await context.route('**/api/my-pull-requests**', async (route) => {
       assert.equal(route.request().method(), 'GET');
       const url = new URL(route.request().url());

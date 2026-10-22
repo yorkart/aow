@@ -1,9 +1,9 @@
 import { t } from '../../lib/i18n';
 import { prApi } from '../../features/pr/api';
-import type { ReviewIdentity } from '../../features/pr/types';
+import type { GitPlatformIdentity } from '../../features/git-platform-providers/types';
 import type { TabRouteAdapter, TabTarget } from './types';
 import { absolutePath, length, required, segment, url } from './helpers';
-export const prTabId = (repository: string, number: number, target?: ReviewIdentity) =>
+export const prTabId = (repository: string, number: number, target?: GitPlatformIdentity) =>
   'pull-request:' + encodeURIComponent(repository) + ':' + number +
   (target?.provider && target.provider !== 'auto' || target?.remote ? ':' + encodeURIComponent(target?.provider ?? 'auto') + ':' + encodeURIComponent(target?.remote ?? '') : '');
 export const prRoute: TabRouteAdapter<Extract<TabTarget, { type: 'pr' }>> = {

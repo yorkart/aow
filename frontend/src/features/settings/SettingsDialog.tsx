@@ -1,7 +1,7 @@
 import { t } from '../../lib/i18n';
 import type { MutableRefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Bell, Bot, ChevronRight, FileText, GitPullRequest, MessageSquare, Network, NotebookPen, Palette, RefreshCw, Settings, SquareTerminal, X } from 'lucide-react';
+import { ArrowLeft, Bell, Bot, ChevronRight, FileText, GitBranch, MessageSquare, Network, NotebookPen, Palette, RefreshCw, Settings, SquareTerminal, X } from 'lucide-react';
 import { aowApi } from '../../aow/aowApi';
 import { parseNodeAddresses } from '../../aow/aowNodes';
 import type { AowSettings } from '../../aow/types';
@@ -14,7 +14,7 @@ import { argumentsDraft, normalizeArguments } from '../agents/arguments';
 import { environmentDraft, parseEnvironment } from '../agents/environment';
 import { agentTypes, builtinAgentType, aowAgentType, suggestedAgentExecutable } from '../agents/agentTypes';
 import { defaultEditorSettings, useEditorSettings } from '../editor/editorSettings';
-import { ReviewProviderSettings } from '../pr/ReviewProviderSettings';
+import { GitPlatformProviderSettings } from '../git-platform-providers/GitPlatformProviderSettings';
 import { AcpSettings } from '../acp';
 import { ConfigurationSettings } from '../configuration/ConfigurationSettings';
 import { NotificationSettingsPanel } from '../notifications/NotificationSettingsPanel';
@@ -38,7 +38,7 @@ const sections = [
   { id: 'agents', label: t("navigation.agents"), description: t("settings.configure_agent_launch_methods"), icon: Bot },
   { id: 'im', label: 'IM', description: t("settings.configure_feishu_and_wechat_bots"), icon: MessageSquare },
   { id: 'notifications', label: t("notifications.notifications_2"), description: t("settings.choose_task_completion_notifications"), icon: Bell },
-  { id: 'review', label: t("navigation.pull_requests"), description: t("settings.providers_cli_and_scripts"), icon: GitPullRequest },
+  { id: 'git-platforms', label: t("git_platform.title"), description: t("settings.providers_cli_and_scripts"), icon: GitBranch },
 ] as const;
 type Section = typeof sections[number]['id'];
 
@@ -49,7 +49,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
 }) {
   const [section, setSection] = useState<Section>(sections[0].id);
   const [overview, setOverview] = useState(mobile);
-  const [reviewDirty, setReviewDirty] = useState(false);
+  const [gitPlatformDirty, setGitPlatformDirty] = useState(false);
   const [acpDirty, setAcpDirty] = useState(false);
   const [configurationDirty, setConfigurationDirty] = useState(false);
   const [notificationDirty, setNotificationDirty] = useState(false);
@@ -81,7 +81,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
   const dialog = useRef<HTMLElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const dirty = acpDirty || reviewDirty || configurationDirty || serverEnvironment.dirty || mobile && (notificationDirty
+  const dirty = acpDirty || gitPlatformDirty || configurationDirty || serverEnvironment.dirty || mobile && (notificationDirty
     || !!settings && (notesBase !== settings.notes_base || nodeAddresses !== (settings.node_addresses ?? []).join('\n')
       || executionPath !== (settings.execution_path ?? []).join('\n') || editorWordWrap !== (settings.editor?.word_wrap ?? false))
     || JSON.stringify([agentId, agentType, displayName, command, args.text, env.text]) !== agentBaseline);
@@ -359,10 +359,10 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
           {!mobile && <LogoutButton disabled={busy || settingsBusy} />}
         </nav>
         <div className="project-aow-settings-content" hidden={mobile && overview}>
-          <div className="review-provider-settings-host" hidden={section !== 'review'}><ReviewProviderSettings active={section === 'review'} onBusyChange={setSettingsBusy} onDirtyChange={setReviewDirty} /></div>
+          <div className="git-platform-provider-settings-host" hidden={section !== 'git-platforms'}><GitPlatformProviderSettings active={section === 'git-platforms'} onBusyChange={setSettingsBusy} onDirtyChange={setGitPlatformDirty} /></div>
           <div className="configuration-settings-host" hidden={section !== 'configuration'}><ConfigurationSettings active={section === 'configuration'} onBusyChange={setSettingsBusy} onDirtyChange={setConfigurationDirty} /></div>
           <div className="configuration-settings-host" hidden={section !== 'acp'}><AcpSettings active={section === 'acp'} onBusyChange={setSettingsBusy} onDirtyChange={setAcpDirty} /></div>
-          {section === 'review' || section === 'configuration' || section === 'acp' ? null : section === 'appearance' ? <AppearanceSettings /> : section === 'nodes' ? (
+          {section === 'git-platforms' || section === 'configuration' || section === 'acp' ? null : section === 'appearance' ? <AppearanceSettings /> : section === 'nodes' ? (
             <form className="project-aow-dialog-form" onSubmit={event => { event.preventDefault(); void saveNodes(); }}>
               <div className="project-aow-dialog-body">
                 <div className="project-aow-settings-heading"><div><h2>{t("navigation.nodes")}</h2><p>{t("settings.configure_aow_deployments_on_other_machines_click_the_logo")}</p></div></div>

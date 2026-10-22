@@ -319,8 +319,8 @@
   "server.configuration_updated_reload_before_saving": "Configuration updated. Reload before saving.",
   "server.provider_script_execution_timed_out": "Provider script execution timed out",
   "server.provider_response_violates_the_protocol": "Provider response violates the protocol: {{p0}}",
-  "server.no_matching_pr_provider_configure_remote_domains_and_scripts": "No matching PR provider. Configure remote domains and scripts in Settings → Pull Requests.",
-  "server.multiple_remotes_match_pr_providers_choose_a_remote_first": "Multiple remotes match PR providers. Choose a remote first.",
+  "server.no_matching_git_platform_provider_configure_remote_domains_and_scripts": "No matching Git platform provider. Configure remote domains and scripts in Settings → Git platforms.",
+  "server.multiple_remotes_match_git_platform_providers_choose_a_remote_first": "Multiple remotes match Git platform providers. Choose a remote first.",
   "server.provider_disabled_refresh": "Provider disabled. Refresh.",
   "server.at_most_32_providers_are_allowed": "At most 32 providers are allowed.",
   "server.provider_ids_must_be_unique_contain_only_letters_digits": "Provider IDs must be unique, contain only letters, digits, hyphens, and underscores, and cannot be auto.",
@@ -621,5 +621,7 @@
   "inbox.invalid_file": "Invalid Inbox file: {{path}}",
   "inbox.invalid_comment": "Invalid Inbox comment: {{path}}:{{line}}",
   "inbox.deleted_requirement_exists": "Deleted requirement already exists: {{id}}",
-  "validation.authentication_expired": "Authentication expired"
+  "validation.authentication_expired": "Authentication expired",
+  "server.node_not_found_check_settings_environment": "node not found. Check Settings → Environment.",
+  "server.provider_filenames_must_be_unique_mjs": "Provider filenames must be unique (including case-insensitive comparisons), end in .mjs, begin with a letter or digit, and contain only letters, digits, dots, hyphens and underscores."
 }

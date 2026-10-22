@@ -8,7 +8,7 @@ use axum::{
 };
 use serde::Deserialize;
 
-use crate::{AppState, HttpError, pull_requests};
+use crate::{AppState, HttpError, git_platform_providers};
 
 #[derive(Deserialize)]
 pub(crate) struct RepositoryQuery {
@@ -110,13 +110,12 @@ pub(crate) async fn git_commit_detail(
         // Links are optional enrichment. A slow or broken Provider must not
         // prevent local commit metadata from being displayed.
         let links = tokio::time::timeout(std::time::Duration::from_secs(3), async {
-            let paths = state
-                .aow
-                .execution_path()
-                .await
-                .map_err(|e| pull_requests::PullRequestError::Command(e.to_string()))?;
+            let paths =
+                state.aow.execution_path().await.map_err(|e| {
+                    git_platform_providers::GitPlatformError::Command(e.to_string())
+                })?;
             state
-                .review_providers
+                .git_platform_providers
                 .commit_links(&query.repo, remote, &detail.id, &paths)
                 .await
         })

@@ -19,8 +19,8 @@ export function ProjectIcon({ project, size = 14 }: { project: AowProject; size?
   const key = JSON.stringify([project.id, project.registered_path, project.avatar_url, revision]);
   useEffect(() => {
     const refresh = () => setRevision(value => value + 1);
-    window.addEventListener('aow-review-providers-changed', refresh);
-    return () => window.removeEventListener('aow-review-providers-changed', refresh);
+    window.addEventListener('aow-git-platform-providers-changed', refresh);
+    return () => window.removeEventListener('aow-git-platform-providers-changed', refresh);
   }, []);
   useEffect(() => {
     if (project.builtin) return;

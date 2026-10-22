@@ -25,6 +25,7 @@ build: build-frontend test-vt-worker
 
 test: test-vt-worker
     if [ "$(uname -s)" = Darwin ]; then TMPDIR="$(node -p 'require("node:fs").realpathSync(require("node:os").tmpdir())')" cargo test --workspace -- --test-threads=4; else cargo test --workspace; fi
+    node --test git-platform-providers/tests/*.test.mjs
     node --test scripts/tests/*.test.mjs
     cd frontend && npm ci --ignore-scripts --no-audit --no-fund
     cd frontend && npm run typecheck

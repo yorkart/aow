@@ -32,7 +32,7 @@ function fixture(t) {
   write(join(tools, 'uname'), `#!/bin/sh\ncase "$1" in -s) echo Linux;; -m) echo ${machine};; esac\n`, true);
   mkdirSync(join(repo, 'vt-worker'), { recursive: true });
   for (const path of [
-    'skills/aow-agent/SKILL.md', 'skills/aow-acp/SKILL.md',
+    'skills/aow-agent/SKILL.md', 'skills/aow-acp/SKILL.md', 'git-platform-providers/github.mjs', 'git-platform-providers/gitlab.mjs',
     'scripts/package-release.sh', 'scripts/install-release.sh', 'scripts/install-local.sh',
     'scripts/start-server.sh', 'scripts/start-terminald.sh', 'scripts/replace-symlink.mjs', 'scripts/server-state-dir.sh',
     'scripts/start-launchd.sh', 'scripts/launchd-service.mjs', 'scripts/activate-terminald.mjs', 'scripts/service-health.mjs',
@@ -133,16 +133,36 @@ test('default version and skip-build create a complete package without invoking 
   assert.equal(spawnSync('tar', ['-xzf', archive, '-C', extracted]).status, 0);
   const manifest = JSON.parse(readFileSync(join(extracted, 'manifest.json')));
   assert.equal(manifest.reused_build_artifacts, true);
+  assert.equal(manifest.components.git_platform_providers, 'git-platform-providers');
+  assert.deepEqual(readdirSync(join(extracted, 'git-platform-providers')).sort(), ['github.mjs', 'gitlab.mjs']);
+  for (const id of ['github.mjs', 'gitlab.mjs']) {
+    assert.equal(readFileSync(join(extracted, 'git-platform-providers', id), 'utf8'), readFileSync(join(root, 'git-platform-providers', id), 'utf8'));
+  }
   assert.deepEqual(manifest.platform, { os: 'linux', arch: machine, target, libc: 'musl', linkage: 'static' });
   assert.equal(archive.endsWith(`aow-${manifest.release_id}.tar.gz`), true);
   for (const path of ['bin/aow-server', 'bin/aow-terminald', 'bin/aow-automation-runner',
-    'skills/aow-agent/SKILL.md', 'skills/aow-acp/SKILL.md',
+    'skills/aow-agent/SKILL.md', 'skills/aow-acp/SKILL.md', 'git-platform-providers/github.mjs', 'git-platform-providers/gitlab.mjs',
     'bin/aow-cli', 'bin/rg', 'licenses/ripgrep/COPYING', 'frontend/dist/index.html', 'scripts/start-server.sh', 'scripts/start-terminald.sh',
     'scripts/replace-symlink.mjs', 'scripts/server-state-dir.sh', 'packaging/bin/aow', 'packaging/bin/aow-server', 'packaging/bin/aow-terminald',
     'packaging/systemd/aow-server.service', 'packaging/systemd/aow-terminald.service']) {
     assert.equal(existsSync(join(extracted, path)), true, path);
   }
   assert.equal(existsSync(f.runtime), false);
+});
+
+test('provider resources are packaged and installed without a fixed platform filename list', t => {
+  const f = fixture(t);
+  for (const name of ['github.mjs', 'gitlab.mjs']) rmSync(join(f.repo, 'git-platform-providers', name));
+  const source = readFileSync(join(root, 'git-platform-providers/github.mjs'), 'utf8');
+  write(join(f.repo, 'git-platform-providers/forge.v2.mjs'), source);
+  write(join(f.repo, 'git-platform-providers/tests/fixture.test.mjs'), '// test only');
+  const packed = f.pack(['--version', 'custom-provider', '--skip-build']);
+  assert.equal(packed.status, 0, packed.stderr);
+  const installed = f.run('bash', ['scripts/install-local.sh', packed.stdout.trim(), '--skip-terminald']);
+  assert.equal(installed.status, 0, installed.stdout + installed.stderr);
+  const directory = join(f.runtime, 'releases/custom-provider/git-platform-providers');
+  assert.deepEqual(readdirSync(directory), ['forge.v2.mjs']);
+  assert.equal(readFileSync(join(directory, 'forge.v2.mjs'), 'utf8'), source);
 });
 
 test('shared web assets still build and validate all native binaries without npm', t => {

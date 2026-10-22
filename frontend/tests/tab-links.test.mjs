@@ -41,7 +41,7 @@ try {
   const base = `http://127.0.0.1:${server.httpServer.address().port}`;
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
 
-  async function fixture(t, { mobile = false, login = false, floating = false, extraFloatingTabs = [], global = false, missing = false, removedWorkspace = false, temporary = false, entry = 'target', editable = false, tabUrl, fileContents = {}, sessionMarkdown = 'Restored conclusion', sessionAgent = false, pinned = [], reviewTargets = [], preserveFloating = false, acp = false, acpHistory = [], acpSavedTabs = [], restoreAcpSessions = false, terminalUnavailable = false } = {}) {
+  async function fixture(t, { mobile = false, login = false, floating = false, extraFloatingTabs = [], global = false, missing = false, removedWorkspace = false, temporary = false, entry = 'target', editable = false, tabUrl, fileContents = {}, sessionMarkdown = 'Restored conclusion', sessionAgent = false, pinned = [], gitPlatformTargets = [], preserveFloating = false, acp = false, acpHistory = [], acpSavedTabs = [], restoreAcpSessions = false, terminalUnavailable = false } = {}) {
     const context = await browser.newContext({ viewport: mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 } });
     await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     const root = temporary ? '/private/tmp/aow-inbox-link' : global ? '/global' : worktrees[1].path;
@@ -169,7 +169,7 @@ try {
         data = { path, content: fileContents[path] ?? '# Linked document\n\nRestored from URL.', version: 'v1', language: 'markdown', mime: 'text/markdown', size: 38 };
       }
       else if (url.pathname === '/api/git/diff' || url.pathname === '/api/git/commit/diff') data = { repository: url.searchParams.get('repo'), path: url.searchParams.get('path'), staged: url.searchParams.get('staged') === 'true', patch: '@@ -1 +1 @@\n-before\n+after\n', original: 'before\n', modified: 'after\n', truncated: false };
-      else if (url.pathname === '/api/review-targets') data = reviewTargets;
+      else if (url.pathname === '/api/git-platform-targets') data = gitPlatformTargets;
       else if (url.pathname === '/api/my-pull-requests') data = { repository: root, current_branch: 'dev', current_user: { id: 'u', username: 'me' }, pull_requests: [{ ...pr, provider: url.searchParams.get('provider') || 'github', remote: url.searchParams.get('remote') || 'origin' }] };
       else if (url.pathname === '/api/my-pull-requests/42') {
         if (url.searchParams.get('provider') === 'missing') { await route.fulfill({ status: 503, json: { message: 'Provider 未配置或已停用。' } }); return; }
@@ -1563,7 +1563,7 @@ try {
   await test('mobile PR list selects a remote and carries provider into its detail route', async t => {
     const { page, state } = await fixture(t, { mobile: true,
       tabUrl: '/aow/#workspace=%2Fworkspace%2Flinked&view=pull-requests',
-      reviewTargets: [
+      gitPlatformTargets: [
         { remote: 'origin', host: 'github.com', repository: 'team/project', provider: 'github', provider_name: 'GitHub' },
         { remote: 'upstream', host: 'git.example.com', repository: 'team/project', provider: 'custom', provider_name: 'Custom' },
       ],

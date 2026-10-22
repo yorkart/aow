@@ -60,12 +60,12 @@
 .mobile-settings .configuration-versions,.mobile-settings .notification-channels { border-color:var(--m-line); border-radius:12px; padding:12px; gap:2px; }
 .mobile-settings .configuration-versions legend,.mobile-settings .notification-channels legend { font-size:12px; }
 .mobile-settings .configuration-version { min-height:48px; gap:12px; }
-.mobile-settings .review-provider-toolbar label { min-width:0; flex:1 1 100%; flex-direction:column; align-items:stretch; gap:8px; }
-.mobile-settings .review-provider-toolbar select { max-width:none; }
-.mobile-settings .review-provider-fields { grid-template-columns:minmax(0,1fr); margin:0; }
-.mobile-settings .review-provider-protocol { min-width:0; }
-.mobile-settings .review-provider-protocol summary { min-height:44px; padding-block:10px; }
-.mobile-settings .review-provider-protocol table { display:block; overflow:auto; }
+.mobile-settings .git-platform-provider-toolbar label { min-width:0; flex:1 1 100%; flex-direction:column; align-items:stretch; gap:8px; }
+.mobile-settings .git-platform-provider-toolbar select { max-width:none; }
+.mobile-settings .git-platform-provider-fields { grid-template-columns:minmax(0,1fr); margin:0; }
+.mobile-settings .git-platform-provider-protocol { min-width:0; }
+.mobile-settings .git-platform-provider-protocol summary { min-height:44px; padding-block:10px; }
+.mobile-settings .git-platform-provider-protocol table { display:block; overflow:auto; }
 .mobile-settings .im-wechat-step { border-radius:12px; padding:12px; }
 .mobile-settings .im-wechat-step-heading { flex-wrap:wrap; }
 .mobile-settings .im-wechat-step-heading h4 { font-size:13px; }

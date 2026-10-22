@@ -124,6 +124,30 @@ fn saves_commit_changes_skip_noops_and_preserve_unrelated_staging() {
 }
 
 #[test]
+fn provider_files_require_the_managed_directory_and_mjs_extension() {
+    let state = tempfile::tempdir().unwrap();
+    let config = ConfigRepository::initialize(state.path()).unwrap();
+    config
+        .save(
+            Path::new("git-platform-providers/Forge.v2.mjs"),
+            b"export {};\n",
+        )
+        .unwrap();
+    for path in [
+        "git-platform-provider/Forge.v2.mjs",
+        "git-platform-providers/forge.py",
+        "git-platform-providers/forge.js",
+        "git-platform-providers/nested/forge.mjs",
+    ] {
+        assert!(
+            config.save(Path::new(path), b"export {};\n").is_err(),
+            "{path}"
+        );
+        assert!(!config.directory().join(path).exists(), "{path}");
+    }
+}
+
+#[test]
 fn failed_commit_preserves_saved_file_and_retry_records_it() {
     let state = tempfile::tempdir().unwrap();
     let config = ConfigRepository::initialize(state.path()).unwrap();

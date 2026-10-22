@@ -1,0 +1,1325 @@
+{
+  "schema_format": "aow-git-platform-provider-tools",
+  "protocol_version": 4,
+  "description": "Implement a self-contained Node.js .mjs Git platform provider using this read-only process protocol. This endpoint documents APIs; it does not execute provider operations.",
+  "schema_dialect": "https://json-schema.org/draft/2020-12/schema",
+  "schema_references": "Local $ref pointers resolve against this entire document, including the shared root $defs. They require no network fetch.",
+  "runtime": {
+    "executable": "node",
+    "module_format": "ESM",
+    "file_extension": ".mjs",
+    "single_file": true,
+    "dependencies": "Use Node.js built-ins or code bundled into this file. External platform CLIs may be used and must already be installed and authenticated. No npm install is performed.",
+    "provider_id": "Exact uploaded filename, including .mjs.",
+    "storage": "git-platform-providers/<uploaded filename>; no generated filename or separate ID.",
+    "update": "Saving the same filename updates that provider. A different filename identifies a different provider.",
+    "working_directory": "repository.root for repository operations. No repository context for describe.",
+    "lifecycle": "One process per request. Read one UTF-8 JSON request from stdin through EOF, write one JSON response to stdout, then exit. Processes may run concurrently; do not rely on in-memory state between requests.",
+    "stdout": "Exactly one JSON object, optionally followed by a newline. Capture CLI stdout rather than forwarding it.",
+    "stderr": "Diagnostic logs only; never include credentials.",
+    "exit_codes": {
+      "0": "A valid success or error envelope was emitted.",
+      "nonzero": "Process failure; diagnostics are read from stderr."
+    },
+    "limits": {
+      "script_bytes": 1048576,
+      "stdout_bytes": 16777216,
+      "stderr_bytes": 65536,
+      "query_timeout_ms": 60000
+    },
+    "read_only": "No remote mutations are part of this protocol. Do not create, merge, edit, comment, approve, resolve discussions or retry CI.",
+    "filenameSchema": {
+      "type": "string",
+      "maxLength": 100,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\.mjs$",
+      "description": "Preserved exactly. Case-insensitive collisions are rejected across platforms."
+    },
+    "discovery": "At startup, scan direct .mjs files in the active config repository git-platform-providers/ directory, validate describe, then load them. No fixed platform list or prior manifest registration is required. Invalid files are skipped with server-side diagnostics."
+  },
+  "transport": {
+    "requestSchema": {
+      "$ref": "#/$defs/Request"
+    },
+    "success": "For an operation, emit {version:4,result:<value matching its outputSchema>}.",
+    "errorSchema": {
+      "$ref": "#/$defs/ErrorResponse"
+    },
+    "rules": [
+      "result and error are mutually exclusive; never return both.",
+      "All field names use snake_case except the schema descriptor's inputSchema/outputSchema.",
+      "Return every required field. null, an empty string and an empty list have distinct documented meanings.",
+      "PR/MR numbers must be positive JavaScript safe integers. Encode platform user/comment/check IDs as strings.",
+      "Treat GitLab merge requests as pull_requests in this platform-independent protocol.",
+      "AoW adds provider, provider_name and remote to application responses; scripts do not supply those identity fields."
+    ]
+  },
+  "tools": [
+    {
+      "name": "describe",
+      "required": true,
+      "description": "Declare this provider's display name, exact remote hosts and read capabilities. No repository context or authentication is needed.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$ref": "#/$defs/Description"
+      },
+      "rules": [
+        "Must not depend on a CLI being installed, logged in, or on network availability.",
+        "Provider ID is the uploaded filename, including .mjs. Do not return or override an ID."
+      ],
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      }
+    },
+    {
+      "name": "pull_requests.list",
+      "required": false,
+      "description": "List pull requests or merge requests authored by the authenticated account in the selected remote repository.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "enum": [
+              "open",
+              "all"
+            ],
+            "default": "open"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$ref": "#/$defs/ListResult"
+      },
+      "rules": [
+        "Default/open returns open requests, including drafts; all includes merged and closed requests.",
+        "Handle all platform pagination and filter by the authenticated author. Prefer updated_at descending.",
+        "An authentication, pagination or API failure is an error, not an empty result."
+      ],
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      }
+    },
+    {
+      "name": "pull_requests.detail",
+      "required": false,
+      "description": "Read the complete details of one PR/MR, including changed files, discussions, reviews and checks.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "number": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "number"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$ref": "#/$defs/DetailResult"
+      },
+      "rules": [
+        "Return every Summary field at the top level; number must match the request.",
+        "If the main PR/MR read fails, return error. Auxiliary failures may return partial data with explicit warnings.",
+        "unresolved_threads contains the open code discussions from threads.",
+        "Report file-list limits and any other incomplete data in warnings.",
+        "mergeable=null means unknown, true means the platform merge gate is satisfied, false means it is not."
+      ],
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      }
+    },
+    {
+      "name": "pull_requests.diff",
+      "required": false,
+      "description": "Read the before/after content and unified diff for one file belonging to a PR/MR.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "number": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "path": {
+            "type": "string",
+            "description": "Repository-relative file path; must belong to this PR/MR."
+          },
+          "patch_only": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "number",
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$ref": "#/$defs/DiffResult"
+      },
+      "rules": [
+        "number and path must equal the request. Validate that the file belongs to the requested PR/MR.",
+        "Use the platform comparison base (typically merge base), not the target branch's current tip.",
+        "Use an empty original for added files and an empty modified for deleted files; never disguise failed reads as empty content.",
+        "patch_only=true requires a unified diff for complete text files; original and modified may then be null.",
+        "Set binary or truncated when applicable and use null for unavailable content. Preserve missing-final-newline semantics."
+      ],
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      }
+    },
+    {
+      "name": "repository.info",
+      "required": false,
+      "description": "Read the repository owner or organization's avatar URL.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$ref": "#/$defs/RepositoryInfoResult"
+      },
+      "rules": [
+        "Return the repository owner's avatar, not the authenticated user's avatar.",
+        "Use null when no avatar exists; request and authentication failures are errors.",
+        "The URL must load in the user's browser without an Authorization header.",
+        "This read has a shorter deadline than normal PR queries; avoid unnecessary work."
+      ],
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      }
+    },
+    {
+      "name": "repository.commit_links",
+      "required": false,
+      "description": "Resolve the web URLs for the selected remote repository and a specific commit.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "commit": {
+            "type": "string",
+            "pattern": "^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$"
+          }
+        },
+        "required": [
+          "commit"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "$ref": "#/$defs/CommitLinksResult"
+      },
+      "rules": [
+        "Return both keys, using null for unavailable links.",
+        "The web host may differ from repository.host (e.g. SSH aliases).",
+        "Prefer local URL construction; the whole optional lookup has a three-second budget."
+      ],
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      }
+    }
+  ],
+  "$defs": {
+    "Repository": {
+      "type": "object",
+      "properties": {
+        "root": {
+          "type": "string",
+          "description": "Absolute local repository path; queries run with this working directory."
+        },
+        "host": {
+          "type": "string",
+          "description": "Matched remote host, including a non-default HTTP(S) port. SSH transport ports are excluded."
+        },
+        "path": {
+          "type": "string",
+          "description": "Remote repository path, with .git removed; nested groups are preserved."
+        },
+        "remote": {
+          "type": "string",
+          "description": "Selected Git fetch remote name."
+        }
+      },
+      "required": [
+        "root",
+        "host",
+        "path",
+        "remote"
+      ],
+      "additionalProperties": false
+    },
+    "User": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Platform identifier encoded as a string."
+        },
+        "username": {
+          "type": "string"
+        },
+        "display_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "username",
+        "display_name"
+      ],
+      "additionalProperties": false
+    },
+    "Summary": {
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "status": {
+          "enum": [
+            "open",
+            "closed",
+            "merged"
+          ]
+        },
+        "draft": {
+          "type": "boolean"
+        },
+        "title": {
+          "type": "string"
+        },
+        "source_branch": {
+          "type": "string"
+        },
+        "target_branch": {
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https?://",
+              "description": "Absolute HTTP(S) URL without embedded credentials, whitespace or access tokens."
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "created_at": {
+          "type": "string",
+          "description": "ISO 8601 timestamp; an empty string is allowed only when the platform does not supply it."
+        },
+        "updated_at": {
+          "type": "string",
+          "description": "ISO 8601 timestamp; an empty string is allowed only when the platform does not supply it."
+        }
+      },
+      "required": [
+        "number",
+        "status",
+        "draft",
+        "title",
+        "source_branch",
+        "target_branch",
+        "url",
+        "created_at",
+        "updated_at"
+      ],
+      "additionalProperties": false
+    },
+    "Comment": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string",
+          "description": "Author username."
+        },
+        "body": {
+          "type": "string",
+          "description": "Markdown comment body."
+        },
+        "created_at": {
+          "type": "string",
+          "description": "ISO 8601 timestamp; an empty string is allowed only when the platform does not supply it."
+        },
+        "updated_at": {
+          "type": "string",
+          "description": "ISO 8601 timestamp; an empty string is allowed only when the platform does not supply it."
+        }
+      },
+      "required": [
+        "id",
+        "author",
+        "body",
+        "created_at",
+        "updated_at"
+      ],
+      "additionalProperties": false
+    },
+    "Thread": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "Repository-relative file path, or null for general discussion."
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "line": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "enum": [
+            "open",
+            "resolved",
+            "comment"
+          ]
+        },
+        "author": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "ISO 8601 timestamp; an empty string is allowed only when the platform does not supply it."
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "comments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Comment"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "path",
+        "line",
+        "status",
+        "author",
+        "body",
+        "updated_at",
+        "comments"
+      ],
+      "additionalProperties": false
+    },
+    "File": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Repository-relative path using forward slashes; absolute paths and . or .. segments are forbidden."
+        },
+        "change_type": {
+          "enum": [
+            "A",
+            "M",
+            "D",
+            "R",
+            "C"
+          ]
+        },
+        "additions": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "deletions": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "change_type",
+        "additions",
+        "deletions"
+      ],
+      "additionalProperties": false
+    },
+    "Check": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "description": "Platform check execution status, e.g. queued, in_progress, completed."
+        },
+        "conclusion": {
+          "type": "string",
+          "description": "Platform conclusion, e.g. success, failure, cancelled, skipped. Empty when unavailable."
+        },
+        "details_url": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https?://",
+              "description": "Absolute HTTP(S) URL without embedded credentials, whitespace or access tokens."
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string",
+          "description": "Markdown check output, or empty if unavailable."
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "ISO 8601 timestamp; an empty string is allowed only when the platform does not supply it."
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "completed_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "ISO 8601 timestamp; an empty string is allowed only when the platform does not supply it."
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "status",
+        "conclusion",
+        "details_url",
+        "description",
+        "text",
+        "required",
+        "started_at",
+        "completed_at"
+      ],
+      "additionalProperties": false
+    },
+    "MergeCheck": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "passed": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "passed",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "ListResult": {
+      "type": "object",
+      "properties": {
+        "repository": {
+          "type": "string",
+          "description": "Echo repository.root; AoW overwrites this with its trusted local path."
+        },
+        "current_branch": {
+          "type": "string",
+          "description": "Current local branch, or HEAD when detached."
+        },
+        "current_user": {
+          "$ref": "#/$defs/User"
+        },
+        "pull_requests": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Summary"
+          }
+        }
+      },
+      "required": [
+        "repository",
+        "current_branch",
+        "current_user",
+        "pull_requests"
+      ],
+      "additionalProperties": false
+    },
+    "DetailResult": {
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "status": {
+          "enum": [
+            "open",
+            "closed",
+            "merged"
+          ]
+        },
+        "draft": {
+          "type": "boolean"
+        },
+        "title": {
+          "type": "string"
+        },
+        "source_branch": {
+          "type": "string"
+        },
+        "target_branch": {
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https?://",
+              "description": "Absolute HTTP(S) URL without embedded credentials, whitespace or access tokens."
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "created_at": {
+          "type": "string",
+          "description": "ISO 8601 timestamp; an empty string is allowed only when the platform does not supply it."
+        },
+        "updated_at": {
+          "type": "string",
+          "description": "ISO 8601 timestamp; an empty string is allowed only when the platform does not supply it."
+        },
+        "description": {
+          "type": "string",
+          "description": "Markdown body."
+        },
+        "changes_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "commits_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "review_status": {
+          "type": "string",
+          "description": "Use approved, changes_requested, review_required or unknown; other platform values may be displayed verbatim."
+        },
+        "check_summary_status": {
+          "enum": [
+            "passed",
+            "failed",
+            "pending",
+            "unknown"
+          ]
+        },
+        "mergeable": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reviewers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/User"
+          }
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Check"
+          }
+        },
+        "unresolved_threads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Thread"
+          }
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/File"
+          }
+        },
+        "author": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/User"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "merge_checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MergeCheck"
+          }
+        },
+        "threads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Thread"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "Explain incomplete or failed auxiliary reads."
+          }
+        },
+        "diverged_commits_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "milestone": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "number",
+        "status",
+        "draft",
+        "title",
+        "source_branch",
+        "target_branch",
+        "url",
+        "created_at",
+        "updated_at",
+        "description",
+        "changes_count",
+        "commits_count",
+        "review_status",
+        "check_summary_status",
+        "mergeable",
+        "reviewers",
+        "checks",
+        "unresolved_threads",
+        "files",
+        "author",
+        "labels",
+        "merge_checks",
+        "threads",
+        "warnings",
+        "diverged_commits_count",
+        "milestone"
+      ],
+      "additionalProperties": false
+    },
+    "DiffResult": {
+      "type": "object",
+      "properties": {
+        "repository": {
+          "type": "string",
+          "description": "Echo repository.root."
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "path": {
+          "type": "string",
+          "description": "Must equal params.path."
+        },
+        "original_path": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "Previous path for a renamed file."
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "original": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "Complete base text; empty for an added file. Null when omitted or unavailable."
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "modified": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "Complete head text; empty for a deleted file. Null when omitted or unavailable."
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "patch": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "Unified diff. Empty for no text changes; null only if unavailable, binary or truncated."
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "binary": {
+          "type": "boolean"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "repository",
+        "number",
+        "path",
+        "original_path",
+        "original",
+        "modified",
+        "patch",
+        "binary",
+        "truncated"
+      ],
+      "additionalProperties": false
+    },
+    "RepositoryInfoResult": {
+      "type": "object",
+      "properties": {
+        "avatar_url": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https?://",
+              "description": "Absolute HTTP(S) URL without embedded credentials, whitespace or access tokens."
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "avatar_url"
+      ],
+      "additionalProperties": false
+    },
+    "CommitLinksResult": {
+      "type": "object",
+      "properties": {
+        "remote_url": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https?://",
+              "description": "Absolute HTTP(S) URL without embedded credentials, whitespace or access tokens."
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "commit_url": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https?://",
+              "description": "Absolute HTTP(S) URL without embedded credentials, whitespace or access tokens."
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "remote_url",
+        "commit_url"
+      ],
+      "additionalProperties": false
+    },
+    "Description": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Display name, declared by the script."
+        },
+        "hosts": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 253,
+            "pattern": "^[a-z0-9.\\-_:\\[\\]]+$"
+          },
+          "description": "Exact lowercase remote hosts. No URL scheme, path or wildcard. At most one enabled provider may claim a host."
+        },
+        "operations": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "pull_requests.list",
+              "pull_requests.detail",
+              "pull_requests.diff",
+              "repository.info",
+              "repository.commit_links"
+            ]
+          },
+          "description": "Declare at least one supported read capability. describe is implicit. Business consumers select the capabilities they need; no pull request capability is mandatory.",
+          "minItems": 1
+        }
+      },
+      "required": [
+        "name",
+        "hosts",
+        "operations"
+      ],
+      "additionalProperties": false
+    },
+    "Error": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Prefer invalid_request, unsupported_version, unsupported_operation, dependency_missing, auth_required, permission_denied, not_found, rate_limited, upstream_error or internal_error."
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Actionable explanation, without credentials or tokens."
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "Request": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "version": {
+              "const": 4
+            },
+            "operation": {
+              "const": "describe"
+            },
+            "repository": {
+              "type": "null"
+            },
+            "params": {
+              "type": "object",
+              "properties": {},
+              "required": [],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "version",
+            "operation",
+            "repository",
+            "params"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "version": {
+              "const": 4
+            },
+            "operation": {
+              "const": "pull_requests.list"
+            },
+            "repository": {
+              "$ref": "#/$defs/Repository"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "state": {
+                  "enum": [
+                    "open",
+                    "all"
+                  ],
+                  "default": "open"
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "version",
+            "operation",
+            "repository",
+            "params"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "version": {
+              "const": 4
+            },
+            "operation": {
+              "const": "pull_requests.detail"
+            },
+            "repository": {
+              "$ref": "#/$defs/Repository"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "number": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "number"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "version",
+            "operation",
+            "repository",
+            "params"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "version": {
+              "const": 4
+            },
+            "operation": {
+              "const": "pull_requests.diff"
+            },
+            "repository": {
+              "$ref": "#/$defs/Repository"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "number": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Repository-relative file path; must belong to this PR/MR."
+                },
+                "patch_only": {
+                  "type": "boolean",
+                  "default": false
+                }
+              },
+              "required": [
+                "number",
+                "path"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "version",
+            "operation",
+            "repository",
+            "params"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "version": {
+              "const": 4
+            },
+            "operation": {
+              "const": "repository.info"
+            },
+            "repository": {
+              "$ref": "#/$defs/Repository"
+            },
+            "params": {
+              "type": "object",
+              "properties": {},
+              "required": [],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "version",
+            "operation",
+            "repository",
+            "params"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "version": {
+              "const": 4
+            },
+            "operation": {
+              "const": "repository.commit_links"
+            },
+            "repository": {
+              "$ref": "#/$defs/Repository"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "commit": {
+                  "type": "string",
+                  "pattern": "^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$"
+                }
+              },
+              "required": [
+                "commit"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "version",
+            "operation",
+            "repository",
+            "params"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ErrorResponse": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 4
+        },
+        "error": {
+          "$ref": "#/$defs/Error"
+        }
+      },
+      "required": [
+        "version",
+        "error"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "examples": [
+    {
+      "request": {
+        "version": 4,
+        "operation": "describe",
+        "repository": null,
+        "params": {}
+      },
+      "response": {
+        "version": 4,
+        "result": {
+          "name": "Example Forge",
+          "hosts": [
+            "git.example.com"
+          ],
+          "operations": [
+            "pull_requests.list",
+            "pull_requests.detail",
+            "pull_requests.diff"
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "version": 4,
+        "operation": "pull_requests.list",
+        "repository": {
+          "root": "/workspace/project",
+          "host": "git.example.com",
+          "path": "team/project",
+          "remote": "origin"
+        },
+        "params": {
+          "state": "open"
+        }
+      },
+      "response": {
+        "version": 4,
+        "result": {
+          "repository": "/workspace/project",
+          "current_branch": "feature",
+          "current_user": {
+            "id": "1",
+            "username": "alice",
+            "display_name": "Alice"
+          },
+          "pull_requests": []
+        }
+      }
+    },
+    {
+      "request": {
+        "version": 4,
+        "operation": "pull_requests.detail",
+        "repository": {
+          "root": "/workspace/project",
+          "host": "git.example.com",
+          "path": "team/project",
+          "remote": "origin"
+        },
+        "params": {
+          "number": 42
+        }
+      },
+      "response": {
+        "version": 4,
+        "error": {
+          "code": "auth_required",
+          "message": "Sign in to the platform CLI before querying pull requests."
+        }
+      }
+    }
+  ]
+}

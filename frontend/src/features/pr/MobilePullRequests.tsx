@@ -1,5 +1,5 @@
 import { t } from '../../lib/i18n';
-import { useReviewTarget } from './reviewProviders';
+import { usePullRequestTarget } from './usePullRequestTarget';
 import { lazy, Suspense, useState } from 'react';
 import { ArrowRight, ChevronRight, GitBranch, GitPullRequest, Search } from 'lucide-react';
 import { prApi } from './api';
@@ -14,7 +14,7 @@ const PullRequestDetailView = lazy(() => import('./PullRequestDetailView').then(
 export function MobilePullRequests({ route, visible, navigate, back }: {
   route: MobileRoute; visible: boolean; navigate: MobileNavigate; back: () => void;
 }) {
-  const selection = useReviewTarget(route.workspace, visible && !route.pr);
+  const selection = usePullRequestTarget(route.workspace, visible && !route.pr);
   const searchKey = `pull-requests.search.${route.workspace}`;
   const [query, setQuery] = useState(() => storedMobileValue(searchKey));
   const list = useMobileResource(`pull-requests.${route.workspace}.${selection.target?.provider}.${selection.remote}`, () => prApi.myPullRequests(route.workspace, selection.target), visible && !route.pr && selection.ready);

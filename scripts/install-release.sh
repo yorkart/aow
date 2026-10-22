@@ -133,7 +133,7 @@ JS
 
 validate_release() {
     node --input-type=module - "$1" "$2" "$os" "$arch" <<'JS'
-import { lstatSync, readFileSync } from 'node:fs';
+import { lstatSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 const [root, version, os, arch] = process.argv.slice(2);
@@ -162,10 +162,23 @@ try {
         'bin/aow-server', 'bin/aow-terminald',
         'bin/aow-automation-runner', 'bin/aow-cli', 'frontend/dist/index.html',
         ...(manifest.components?.skills ? ['skills', 'skills/aow-agent', 'skills/aow-agent/SKILL.md', 'skills/aow-acp', 'skills/aow-acp/SKILL.md'] : []),
+        ...(manifest.components?.git_platform_providers ? ['git-platform-providers'] : []),
         ...(manifest.components?.ripgrep ? ['bin/rg', 'licenses/ripgrep/manifest.json'] : [])]) {
         const info = lstatSync(join(root, path));
-        const directory = ['bin', 'frontend', 'frontend/dist', 'skills', 'skills/aow-agent', 'skills/aow-acp'].includes(path);
+        const directory = ['bin', 'frontend', 'frontend/dist', 'skills', 'skills/aow-agent', 'skills/aow-acp', 'git-platform-providers'].includes(path);
         if (!(directory ? info.isDirectory() : info.isFile())) throw new Error(`Invalid release entry: ${path}`);
+    }
+    if (manifest.components?.git_platform_providers) {
+        const names = readdirSync(join(root, 'git-platform-providers'));
+        const seen = new Set();
+        if (!names.length) throw new Error('Missing Git platform provider resources');
+        for (const name of names) {
+            if (!/^[A-Za-z0-9][A-Za-z0-9._-]*\.mjs$/.test(name) || name.length > 100
+                || seen.has(name.toLowerCase()) || !lstatSync(join(root, 'git-platform-providers', name)).isFile()) {
+                throw new Error(`Invalid Git platform provider resource: ${name}`);
+            }
+            seen.add(name.toLowerCase());
+        }
     }
     process.stdout.write(id);
 } catch (error) {
@@ -192,6 +205,7 @@ function equal(path) {
 try {
     const paths = ['manifest.json', 'bin', 'frontend', 'scripts', 'packaging'];
     if (JSON.parse(readFileSync(join(incoming, 'manifest.json'), 'utf8')).components?.skills) paths.push('skills');
+    if (JSON.parse(readFileSync(join(incoming, 'manifest.json'), 'utf8')).components?.git_platform_providers) paths.push('git-platform-providers');
     if (!paths.every(equal)) throw new Error('content differs');
 } catch (error) {
     console.error(`error: version already installed with different content; use a new version number (${error.message})`);

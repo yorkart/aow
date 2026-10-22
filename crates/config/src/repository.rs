@@ -215,7 +215,7 @@ impl ConfigRepository {
         ensure!(
             matches!(
                 relative.to_str(),
-                Some("inbox" | "automations/tasks" | "review-providers")
+                Some("inbox" | "automations/tasks" | "git-platform-providers")
             ),
             aow_i18n::message(
                 "config.unsupported_configuration_directory",

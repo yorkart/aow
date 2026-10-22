@@ -894,7 +894,8 @@ fn clipboard_app(manager: TerminalManager) -> Router {
         automations: None,
         operations: crate::operations::OperationService::in_memory(),
         workspace_events,
-        review_providers: crate::pull_requests::ProviderManager::default(),
+        git_platform_providers: crate::git_platform_providers::GitPlatformProviderManager::default(
+        ),
     })
 }
 
@@ -1645,7 +1646,8 @@ async fn pane_sessions_use_live_cwd_and_config_and_cache_readable_claude_snapsho
         automations: None,
         operations: crate::operations::OperationService::in_memory(),
         workspace_events,
-        review_providers: crate::pull_requests::ProviderManager::default(),
+        git_platform_providers: crate::git_platform_providers::GitPlatformProviderManager::default(
+        ),
     });
     let response = app
         .clone()

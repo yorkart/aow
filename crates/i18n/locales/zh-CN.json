@@ -319,8 +319,8 @@
   "server.configuration_updated_reload_before_saving": "配置已更新，请重新加载后保存。",
   "server.provider_script_execution_timed_out": "Provider 脚本执行超时",
   "server.provider_response_violates_the_protocol": "Provider 返回数据不符合协议：{{p0}}",
-  "server.no_matching_pr_provider_configure_remote_domains_and_scripts": "未找到匹配的 PR Provider，请在 Settings → Pull Requests 配置 remote 域名和脚本。",
-  "server.multiple_remotes_match_pr_providers_choose_a_remote_first": "多个 remote 匹配 PR Provider，请先选择 remote。",
+  "server.no_matching_git_platform_provider_configure_remote_domains_and_scripts": "未找到匹配的 Git 平台 Provider，请在 设置 → Git 平台 配置 remote 域名和脚本。",
+  "server.multiple_remotes_match_git_platform_providers_choose_a_remote_first": "多个 remote 匹配 Git 平台 Provider，请先选择 remote。",
   "server.provider_disabled_refresh": "Provider 已停用，请刷新。",
   "server.at_most_32_providers_are_allowed": "最多配置 32 个 Provider。",
   "server.provider_ids_must_be_unique_contain_only_letters_digits": "Provider ID 必须唯一，只能包含字母、数字、-、_，且不能为 auto。",
@@ -621,5 +621,7 @@
   "inbox.invalid_file": "Inbox 文件无效：{{path}}",
   "inbox.invalid_comment": "Inbox 评论无效：{{path}}:{{line}}",
   "inbox.deleted_requirement_exists": "已删除的需求已存在：{{id}}",
-  "validation.authentication_expired": "身份验证已过期"
+  "validation.authentication_expired": "身份验证已过期",
+  "server.node_not_found_check_settings_environment": "找不到 node，请检查 Settings → Environment。",
+  "server.provider_filenames_must_be_unique_mjs": "Provider 文件名必须唯一（包括忽略大小写比较），以 .mjs 结尾、字母或数字开头，且仅包含字母、数字、点、横线和下划线。"
 }

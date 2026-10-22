@@ -23,7 +23,7 @@ async function fixture(t, width = 390, mobile = true, virtualViewport = false, a
     agents: agents ?? [{ id: 'codex', agent_type: 'codex', display_name: 'Codex', source: 'detected', available: true, command: 'codex', executable: '/usr/bin/codex', args: [], env: {} }],
     notifications: { im: { providers: [{ provider: 'wechat', account_id: 'account', user_id: 'user' }] }, notifications: { agent_task_completed: { enabled: true, channels: ['page'] }, public_base_url: '' } },
     configuration: { config_repo: '/repo', config_id: versions[0] },
-    providers: { providers: [{ id: 'github', name: 'GitHub', hosts: ['github.com'], enabled: true, script: 'print("describe")' }] },
+    providers: { providers: [{ id: 'github.mjs', name: 'GitHub', hosts: ['github.com'], enabled: true, script: 'console.log("describe")' }] },
   };
   t.after(async () => { await context.close(); assert.deepEqual(state.errors, []); });
   await context.route('**/api/**', async route => {
@@ -88,10 +88,10 @@ async function fixture(t, width = 390, mobile = true, virtualViewport = false, a
       if (writing) state.configuration = body;
       data = { selection: state.configuration, active_selection: { config_repo: '/repo', config_id: versions[0] }, restart_required: state.configuration.config_id !== versions[0], changed: writing };
     } else if (path === '/api/aow/settings/configuration/versions') data = { config_repo: url.searchParams.get('path'), config_ids: versions, selected_id: null };
-    else if (path === '/api/aow/review-providers') {
+    else if (path === '/api/aow/git-platform-providers') {
       if (writing) state.providers = body;
       data = state.providers;
-    } else if (path === '/api/aow/review-providers/test') data = { operations: ['list', 'detail', 'diff'] };
+    } else if (path === '/api/aow/git-platform-providers/test') data = { name: 'GitHub', hosts: ['github.com'], operations: ['pull_requests.list', 'pull_requests.detail', 'pull_requests.diff'] };
     else if (path === '/api/aow/im/feishu') {
       state.notifications.im.providers = state.notifications.im.providers.filter(provider => provider.provider !== 'feishu');
       if (request.method() === 'PUT') state.notifications.im.providers.push({ provider: 'feishu', app_id: body.app_id });
@@ -474,6 +474,20 @@ try {
     assert.ok(state.writes.every(write => write.path === '/api/aow/settings/server-environment'), 'Enter in the table never submits the separate PATH form');
   });
 
+  for (const width of [320, 390]) await test(`mobile ${width}px uploads named mjs providers with derived metadata`, async t => {
+    const { state, page, dialog, choose, save } = await fixture(t, width);
+    await choose('Git 平台');
+    assert.equal(await dialog.getByRole('textbox', { name: 'Provider 显示名称' }).isEditable(), false);
+    await dialog.getByLabel('上传 Provider 脚本').setInputFiles({ name: 'github.mjs', mimeType: 'text/javascript', buffer: Buffer.from('console.log("uploaded")') });
+    await dialog.getByRole('status').filter({ hasText: '已读取文件内容' }).waitFor();
+    assert.equal(await dialog.getByLabel('提供方 ID', { exact: true }).inputValue(), 'github.mjs');
+    assert.equal(await dialog.getByLabel('Remote 域名', { exact: true }).inputValue(), 'github.com');
+    await save('Provider 配置和脚本已保存');
+    assert.equal(state.providers.providers.length, 1);
+    assert.equal(state.providers.providers[0].script, 'console.log("uploaded")');
+    await layout(page, dialog, 'pull-requests');
+  });
+
   for (const width of [320, 390]) await test(`mobile ${width}px exposes and saves every desktop settings category`, async t => {
     const { page, state, dialog, choose, save, trigger } = await fixture(t, width);
     assert.deepEqual(await dialog.locator('nav strong').allTextContents(), categories);
@@ -565,14 +579,14 @@ try {
     assert.deepEqual(state.notifications.notifications.agent_task_completed.channels, ['page', 'wechat', 'feishu']);
     await layout(page, dialog, 'notifications');
 
-    await choose('Pull Requests');
-    await dialog.getByRole('textbox', { name: 'Provider 显示名称' }).fill('Mobile GitHub');
-    await dialog.getByLabel('上传 Provider 脚本').setInputFiles({ name: 'provider.py', mimeType: 'text/x-python', buffer: Buffer.from('print("mobile provider")') });
+    await choose('Git 平台');
+    assert.equal(await dialog.getByRole('textbox', { name: 'Provider 显示名称' }).isEditable(), false);
+    await dialog.getByLabel('上传 Provider 脚本').setInputFiles({ name: 'github.mjs', mimeType: 'text/javascript', buffer: Buffer.from('console.log("mobile provider")') });
     await dialog.getByRole('status').filter({ hasText: '已读取文件内容' }).waitFor();
     await dialog.getByRole('button', { name: '检查协议' }).click();
     await dialog.getByRole('status').filter({ hasText: '协议检查通过' }).waitFor();
     await save('Provider 配置和脚本已保存');
-    assert.equal(state.providers.providers[0].script, 'print("mobile provider")');
+    assert.equal(state.providers.providers[0].script, 'console.log("mobile provider")');
     await layout(page, dialog, 'pull-requests');
     await page.setViewportSize({ width: 844, height: 390 });
     await page.waitForFunction(() => document.querySelector('.mobile-app').getBoundingClientRect().bottom <= window.innerHeight + 1);
@@ -647,8 +661,8 @@ try {
     assert.equal(state.settings.editor.word_wrap, true);
     await choose('Configuration');
     await dialog.getByRole('radio', { name: versions[1], exact: true }).check();
-    await choose('Pull Requests');
-    await dialog.getByRole('textbox', { name: 'Provider 显示名称' }).fill('Desktop GitHub');
+    await choose('Git 平台');
+    await dialog.getByRole('checkbox', { name: '启用此 Provider' }).uncheck();
     await save('Provider 配置和脚本已保存');
     await choose('Configuration');
     assert.equal(await dialog.getByRole('radio', { name: versions[1], exact: true }).isChecked(), true);

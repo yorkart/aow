@@ -1,7 +1,7 @@
 import { t, getLanguage } from '../../lib/i18n';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { GitMerge, GitPullRequest, GitPullRequestClosed, LoaderCircle, RefreshCw, UserRound } from 'lucide-react';
-import { useReviewTarget } from './reviewProviders';
+import { usePullRequestTarget } from './usePullRequestTarget';
 import { prApi } from './api';
 import type { PullRequestSummary, MyPullRequests } from './types';
 import { AowIconButton } from '../../components/AowIconButton';
@@ -59,7 +59,7 @@ function PullRequestRow({ pr, current, selected, onOpen }: {
 
 export function PullRequestsPanel({ repository, visible, activeNumber, activeProvider, activeRemote, onOpen }: Props) {
   const panelId = useId();
-  const selection = useReviewTarget(repository, visible);
+  const selection = usePullRequestTarget(repository, visible);
   const provider = selection.target?.provider;
   const remote = selection.target?.remote;
   const [collapsed, setCollapsed] = useState<Partial<Record<'user' | typeof sections[number]['status'], boolean>>>({});

@@ -39,7 +39,7 @@ const server = await createServer({
       if (req.method !== 'GET') { res.statusCode = 405; res.end(JSON.stringify({ message: 'Unexpected mutation' })); return; }
       const path = new URL(req.url, 'http://localhost').pathname;
       const project = { id: 'pr-project', name: 'AoW', registered_path: '/fixtures/default', common_git_dir: '/fixtures/default/.git', notes_path: '/notes', worktrees: ['default', 'empty', 'error'].map((name) => ({ id: name, project_id: 'pr-project', path: '/fixtures/' + name, branch: name === 'default' ? 'feature/pr-details' : name, head: 'abc', is_main: name === 'default', detached: false, locked: false, prunable: false, color: 'default' })) };
-      const data = { '/review-targets': [], '/auth/status': { configured: true, authenticated: true }, '/aow/projects': [project], '/aow/pinned-worktrees': { paths: [], revision: 0 }, '/aow/settings': { notes_base: '/notes' }, '/aow/agents': [], '/terminals': [], '/aow/agent-sessions': [], '/aow/automations': [], '/git/status': { repository: '/fixtures/default', branch: 'feature/pr-details', files: [], ahead: 0, behind: 0 } };
+      const data = { '/git-platform-targets': [], '/auth/status': { configured: true, authenticated: true }, '/aow/projects': [project], '/aow/pinned-worktrees': { paths: [], revision: 0 }, '/aow/settings': { notes_base: '/notes' }, '/aow/agents': [], '/terminals': [], '/aow/agent-sessions': [], '/aow/automations': [], '/git/status': { repository: '/fixtures/default', branch: 'feature/pr-details', files: [], ahead: 0, behind: 0 } };
       if (!(path in data)) { res.statusCode = 404; res.end(JSON.stringify({ message: 'No test fixture: ' + path })); return; }
       res.end(JSON.stringify(data[path]));
     });

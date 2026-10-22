@@ -26,7 +26,7 @@ export async function themePreviewServer(port = 0) {
             '/aow/notification-settings': { im: { providers: [] }, notifications: { agent_task_completed: { enabled: false, channels: [] } } },
             '/terminals': { tabs: [] }, '/terminals/agents': { agents: {}, titles: {}, processes: {} },
             '/aow/settings/configuration': { selection: { config_repo: '', config_id: '' }, active_selection: { config_repo: '', config_id: '' }, restart_required: false },
-            '/aow/review-providers': { providers: [] }, '/aow/acp/agents': [],
+            '/aow/git-platform-providers': { providers: [] }, '/aow/acp/agents': [],
             '/operations/active': [],
           };
           if (path === '/terminals/task-stops') {

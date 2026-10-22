@@ -1,4 +1,3 @@
-use aow_protocol::{MyPullRequests, PullRequestDetail, PullRequestDiff};
 use serde_json::{Value, json};
 use std::{
     collections::HashSet,
@@ -6,14 +5,61 @@ use std::{
 };
 
 use super::{
-    CommitLinks, Provider, ProviderManager, PullRequestError, Result, ReviewQuery, Target,
-    absolute, decode, git, invalid_json, parse_remote, positive, run_adapter, safe_path, web_link,
+    CommitLinks, GitPlatformError, GitPlatformProvider, GitPlatformProviderManager,
+    GitPlatformQuery, Result, Target, absolute, git, invalid_json, parse_remote, run_adapter,
+    web_link,
 };
 
-impl ProviderManager {
-    pub async fn targets(&self, repo: &str, paths: &[PathBuf]) -> Result<Vec<Target>> {
+pub(crate) struct Invocation {
+    pub result: Value,
+    pub target: Target,
+}
+
+impl GitPlatformProviderManager {
+    pub async fn targets(
+        &self,
+        repo: &str,
+        operations: &[&str],
+        paths: &[PathBuf],
+    ) -> Result<Vec<Target>> {
+        if operations
+            .iter()
+            .any(|op| !super::schema::OPERATIONS.contains(op))
+        {
+            return Err(invalid_json("unsupported Git platform read operation"));
+        }
         let providers = self.settings()?.providers;
-        Self::targets_for(repo, paths, &providers).await
+        let mut targets = Self::targets_for(repo, paths, &providers).await?;
+        if !operations.is_empty() {
+            let mut supported = HashSet::new();
+            for provider in &providers {
+                if targets.iter().any(|target| target.provider == provider.id) {
+                    let description = self.describe_provider(provider, paths).await?;
+                    if operations
+                        .iter()
+                        .all(|op| description.operations.iter().any(|item| item == op))
+                    {
+                        supported.insert(provider.id.clone());
+                    }
+                }
+            }
+            targets.retain(|target| supported.contains(&target.provider));
+        }
+        Ok(targets)
+    }
+
+    pub(super) async fn describe_provider(
+        &self,
+        provider: &GitPlatformProvider,
+        paths: &[PathBuf],
+    ) -> Result<super::description::Description> {
+        let script_path = self.config.as_ref().map(|config| {
+            config
+                .directory()
+                .join(super::settings::DIRECTORY)
+                .join(&provider.id)
+        });
+        super::description::describe_at(provider, paths, script_path.as_deref()).await
     }
 
     pub async fn commit_links(
@@ -39,7 +85,7 @@ impl ProviderManager {
         let description = self
             .run_provider(
                 provider,
-                json!({"version":2,"operation":"describe","repository":null,"params":{}}),
+                json!({"version":super::schema::VERSION,"operation":"describe","repository":null,"params":{}}),
                 None,
                 paths,
             )
@@ -50,13 +96,13 @@ impl ProviderManager {
             .ok_or_else(|| invalid_json("describe requires operations"))?;
         if !operations
             .iter()
-            .any(|op| op.as_str() == Some("commit_links"))
+            .any(|op| op.as_str() == Some("repository.commit_links"))
         {
             return Ok(None);
         }
         let result = self.run_provider(
             provider,
-            json!({"version":2,"operation":"commit_links",
+            json!({"version":super::schema::VERSION,"operation":"repository.commit_links",
                 "repository":{"root":repo,"host":target.host,"path":target.repository,"remote":target.remote},
                 "params":{"commit":commit}}),
             Some(Path::new(repo)),
@@ -70,16 +116,15 @@ impl ProviderManager {
 
     pub(super) async fn run_provider(
         &self,
-        provider: &Provider,
+        provider: &GitPlatformProvider,
         request: Value,
         cwd: Option<&Path>,
         paths: &[PathBuf],
     ) -> Result<Value> {
         let script_path = self.config.as_ref().map(|c| {
-            c.directory().join(format!(
-                "review-providers/{:x}.py",
-                md5::compute(provider.script.as_bytes())
-            ))
+            c.directory()
+                .join(super::settings::DIRECTORY)
+                .join(&provider.id)
         });
         run_adapter(provider, request, cwd, paths, script_path.as_deref()).await
     }
@@ -87,7 +132,7 @@ impl ProviderManager {
     pub(super) async fn targets_for(
         repo: &str,
         paths: &[PathBuf],
-        providers: &[Provider],
+        providers: &[GitPlatformProvider],
     ) -> Result<Vec<Target>> {
         absolute(repo)?;
         let names = git(repo, &["remote"], paths).await?;
@@ -115,11 +160,14 @@ impl ProviderManager {
     }
     pub async fn call(
         &self,
-        query: &ReviewQuery,
+        query: &GitPlatformQuery,
         operation: &str,
         params: Value,
         paths: &[PathBuf],
-    ) -> Result<Value> {
+    ) -> Result<Invocation> {
+        if !super::schema::OPERATIONS.contains(&operation) {
+            return Err(invalid_json("unsupported Git platform read operation"));
+        }
         let settings = self.settings()?;
         let targets = Self::targets_for(&query.repo, paths, &settings.providers).await?;
         let mut matches: Vec<_> = targets
@@ -138,18 +186,18 @@ impl ProviderManager {
         matches.retain(|t| seen.insert((t.provider.clone(), t.host.clone(), t.repository.clone())));
         let target = match matches.len() {
             0 => {
-                return Err(PullRequestError::Unavailable(
+                return Err(GitPlatformError::Unavailable(
                     aow_i18n::text(
-                        "server.no_matching_pr_provider_configure_remote_domains_and_scripts",
+                        "server.no_matching_git_platform_provider_configure_remote_domains_and_scripts",
                     )
                     .into(),
                 ));
             }
             1 => matches.remove(0),
             _ => {
-                return Err(PullRequestError::Invalid(
+                return Err(GitPlatformError::Invalid(
                     aow_i18n::text(
-                        "server.multiple_remotes_match_pr_providers_choose_a_remote_first",
+                        "server.multiple_remotes_match_git_platform_providers_choose_a_remote_first",
                     )
                     .into(),
                 ));
@@ -160,67 +208,22 @@ impl ProviderManager {
             .into_iter()
             .find(|p| p.id == target.provider && p.enabled)
             .ok_or_else(|| {
-                PullRequestError::Unavailable(
+                GitPlatformError::Unavailable(
                     aow_i18n::text("server.provider_disabled_refresh").into(),
                 )
             })?;
-        let request = json!({"version":2,"operation":operation,
+        let description = self.describe_provider(&provider, paths).await?;
+        if !description.operations.iter().any(|op| op == operation) {
+            return Err(GitPlatformError::Unavailable(format!(
+                "Provider {} does not support {operation}",
+                provider.id
+            )));
+        }
+        let request = json!({"version":super::schema::VERSION,"operation":operation,
             "repository":{"root":query.repo,"host":target.host,"path":target.repository,"remote":target.remote},"params":params});
         let result = self
             .run_provider(&provider, request, Some(Path::new(&query.repo)), paths)
             .await?;
-        let mut result = match operation {
-            "list" => {
-                let mut data: MyPullRequests = decode(result)?;
-                data.repository = query.repo.clone();
-                for pr in &data.pull_requests {
-                    positive(pr.number).map_err(invalid_json)?;
-                }
-                serde_json::to_value(data).unwrap()
-            }
-            "detail" => {
-                let data: PullRequestDetail = decode(result)?;
-                if Some(data.summary.number) != params["number"].as_u64() {
-                    return Err(invalid_json("detail number differs from request"));
-                }
-                for file in &data.files {
-                    safe_path(&file.path).map_err(invalid_json)?;
-                }
-                serde_json::to_value(data).unwrap()
-            }
-            "diff" => {
-                let mut data: PullRequestDiff = decode(result)?;
-                if Some(data.number) != params["number"].as_u64()
-                    || Some(data.path.as_str()) != params["path"].as_str()
-                {
-                    return Err(invalid_json("diff identity differs from request"));
-                }
-                if let Some(path) = &data.original_path {
-                    safe_path(path).map_err(invalid_json)?;
-                }
-                data.repository = query.repo.clone();
-                serde_json::to_value(data).unwrap()
-            }
-            _ => {
-                return Err(PullRequestError::Invalid(
-                    aow_i18n::text("validation.unknown_operation").into(),
-                ));
-            }
-        };
-        let attach = |value: &mut Value| {
-            value["provider"] = json!(target.provider);
-            value["provider_name"] = json!(target.provider_name);
-            value["remote"] = json!(target.remote);
-        };
-        attach(&mut result);
-        if let Some(items) = result
-            .get_mut("pull_requests")
-            .and_then(Value::as_array_mut)
-        {
-            for item in items {
-                attach(item);
-            }
-        }
-        Ok(result)
+        Ok(Invocation { result, target })
     }
 }
