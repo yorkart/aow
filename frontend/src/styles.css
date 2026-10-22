@@ -748,3 +748,12 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .markdown-preview a,.project-aow-snapshot-markdown a { color:var(--aow-link); }
 .markdown-preview a:hover,.project-aow-snapshot-markdown a:hover,.worktree-cleanup-result > button:hover:not(:disabled) { color:var(--aow-link-hover); }
 .project-aow-dialog .project-aow-command-preview summary:hover { color:var(--aow-text-hover); }
+.project-aow-projects > .project-navigator { flex-shrink:0; padding:0 9px; background:var(--aow-panel); border:0; }
+.project-aow-projects .project-navigator-trigger { flex:0 1 auto; border-radius:4px; }
+.project-aow-projects .project-navigator-trigger strong { flex:none; }
+.project-aow-projects .project-navigator-trigger:hover { background:var(--aow-subtle-hover); }
+.project-aow-projects .project-navigator-trigger > svg { transition:transform .1s; }
+.project-aow-projects .project-navigator-trigger > svg.project-navigator-open { transform:rotate(180deg); }
+.project-navigator > .aow-panel-header-actions { margin-left:auto; }
+.project-navigator-path { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+@media (prefers-reduced-motion:reduce) { .project-aow-projects .project-navigator-trigger > svg { transition:none; } }

@@ -397,6 +397,43 @@ try {
   const projectDock = page => page.getByRole('region', { name: 'Worktree 终端', exact: true });
   const readyDock = page => projectDock(page).locator('.terminal-emulator-shell:not(.restore-pending)').first().waitFor();
 
+  await test('Projects navigation lists every project and scrolls natural rows without changing collapse state', async t => {
+    const { page } = await fixture(t, { beforeOpen: ({ state }) => {
+      state.projects.push(...Array.from({ length: 30 }, (_, index) => ({
+        ...project, id: `extra-${index}`, name: `Project ${index}`, registered_path: `/projects/${index}`,
+        worktrees: [{ ...worktrees[0], id: `extra-wt-${index}`, project_id: `extra-${index}`, path: `/projects/${index}`, branch: 'main' }],
+      })));
+    } });
+    const sidebar = page.locator('.project-aow-projects');
+    const trigger = sidebar.locator('.project-navigator-trigger');
+    const viewport = sidebar.locator('.aow-panel-viewport');
+    const last = sidebar.locator('.project-aow-project').filter({ has: page.locator('.aow-panel-header-title strong', { hasText: /^Project 29$/ }) });
+    assert.equal(await sidebar.locator('.aow-panel-jump, [data-docked="top"], [data-docked="bottom"]').count(), 0);
+    await trigger.click();
+    const menu = page.getByRole('menu', { name: '项目', exact: true });
+    assert.equal(await menu.getByRole('menuitem').count(), 31);
+    await menu.getByRole('menuitem').filter({ hasText: 'Project 29' }).click();
+    await eventually(async () => await last.evaluate(element => {
+      const bounds = element.querySelector('.aow-panel-header').getBoundingClientRect();
+      const viewport = element.closest('.aow-panel-viewport').getBoundingClientRect();
+      return bounds.top >= viewport.top - 1 && bounds.bottom <= viewport.bottom + 1;
+    }));
+    assert.ok(await viewport.evaluate(element => element.scrollTop) > 0);
+    assert.equal(await trigger.isVisible(), true);
+    await last.getByRole('button', { name: '收起 Project 29', exact: true }).click();
+    assert.equal(await last.getAttribute('data-collapsed'), 'true');
+    await trigger.focus();
+    await page.keyboard.press('ArrowDown');
+    await menu.getByRole('menuitem').filter({ hasText: 'Project 29' }).click();
+    assert.equal(await last.getAttribute('data-collapsed'), 'true', 'locating preserves the user collapse choice');
+    await trigger.click();
+    await page.keyboard.press('Escape');
+    assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
+    assert.equal(await trigger.evaluate(element => element === document.activeElement), true);
+    await viewport.evaluate(element => { element.scrollTop = 0; });
+    assert.equal(await sidebar.locator('[data-docked="top"], [data-docked="bottom"]').count(), 0);
+  });
+
   await test('project terminal dock shares one tabless renderer across pages and isolates worktrees and restores after reload', async t => {
     const other = `${worktrees[0].path}/other.txt`;
     const { page, state } = await fixture(t, { beforeOpen: ({ state }) => {

@@ -5,7 +5,7 @@ import { appLocalStorage } from '../lib/basePath';
 import { subscribeWorkspaceChanges } from '../lib/workspaceEvents';
 import { useWorkspaceDocuments, updateSharedDocument, nextDocumentInstanceId, sharedDocument, isPreviewOwned, savingDocuments, failedDocuments } from '../features/editor/workspaceDocuments';
 import { useActiveDiffRefresh } from '../features/editor/useActiveDiffRefresh';
-import { Fragment, lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, lazy, memo, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { FloatingWorkspace } from './FloatingWorkspace';
 import { ProjectTerminalDockHost, ProjectTerminalDockProvider, useProjectTerminalDock } from './ProjectTerminalDock';
@@ -46,6 +46,7 @@ import { SourceControl } from '../features/git/SourceControl';
 import { TerminalWorkspace } from '../features/terminals/TerminalWorkspace';
 import { AowIconButton } from '../components/AowIconButton';
 import { useConfirmation } from '../components/ConfirmationDialog';
+import { ProjectNavigator } from './ProjectNavigator';
 import { AowPanel, AowPanelStack } from '../components/AowPanel';
 import { AowNodeSwitcher } from './AowNodeSwitcher';
 import { WorktreeIcon, worktreeColors, worktreeColorValues, worktreeIconGroups, worktreeIconLabel } from './WorktreeIcon';
@@ -2212,6 +2213,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
   ]), [floating.tabs, floating.hostedTabs]);
   const { isUnallocated, reportResources } = useWorktreeResources(projects, externalTabWorkspaces);
   const [agents, setAgents] = useState<AowAgent[]>([]);
+  const projectNavigationId = useId();
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
   const [activeWorktreePath, setActiveWorktreePath] = useState(() => initialEntry?.workspacePath ?? appLocalStorage.getItem('aow-active') ?? '');
   const selectWorktree = (path: string) => {
@@ -2679,7 +2681,8 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
     >
       <aside id="aow-project-sidebar" className="project-aow-projects" aria-label={t("aow.projects_sidebar")} hidden={!leftSidebarVisible}>
         <header className="project-aow-brand"><AowNodeSwitcher addresses={nodeAddresses} /><LeftSidebarToggle expanded onClick={hideLeftSidebar} /></header>
-        <AowPanelStack className="project-aow-project-list">
+        <ProjectNavigator projects={projects} projectId={id => `${projectNavigationId}-${id}`} actions={<><AowIconButton title={t("aow.refresh_all")} aria-label={t("aow.refresh_all")} onClick={() => void loadProjects()}><RefreshCw /></AowIconButton><AowIconButton title={t("aow.register_project")} aria-label={t("aow.register_project")} onClick={() => setShowRegisterProject(true)}><Plus /></AowIconButton></>} />
+        <AowPanelStack className="project-aow-project-list" dockHeaders={false}>
           {pinnedState.error ? <div className="project-aow-error" role="alert">{pinnedState.error}<button onClick={pinnedState.reload}>{t("aow.retry")}</button></div> : null}
           {pinnedEntries.length ? <AowPanel className="project-aow-pinned-panel" headerClassName="project-aow-section-title" title={t("navigation.pinned")} collapsible={false}>
           <section className="project-aow-pinned">
@@ -2702,7 +2705,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
             ><WorktreeIcon icon={entry.worktree.icon} style={{ color: worktreeColorValues[entry.worktree.color ?? 'default'] }} /><span><strong>{entry.worktree.detached ? t("git.detached_head") : entry.worktree.branch || basename(entry.worktree.path)}</strong><small>{entry.project.name} · {basename(entry.worktree.path)}</small></span>{entry.worktree.locked ? <i>{t("navigation.locked")}</i> : null}<WorktreeUnreadBadge count={unreadCounts.get(entry.worktree.path)} /></button>)}
           </section>
           </AowPanel> : null}
-          <AowPanel headerClassName="project-aow-section-title project-aow-project-list-title" title={t("navigation.projects")} collapsible={false} actions={<><AowIconButton title={t("aow.refresh_all")} aria-label={t("aow.refresh_all")} onClick={() => void loadProjects()}><RefreshCw /></AowIconButton><AowIconButton title={t("aow.register_project")} aria-label={t("aow.register_project")} onClick={() => setShowRegisterProject(true)}><Plus /></AowIconButton></>}>
+
           {error ? <div className="project-aow-error">{error}</div> : null}
           {loading ? <div className="project-aow-empty">{t("aow.loading")}</div> : null}
           {projects.map((project) => {
@@ -2710,7 +2713,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
               ...project.worktrees.filter(worktree => !compactWorktrees.has(worktree.path)),
               ...project.worktrees.filter(worktree => compactWorktrees.has(worktree.path)),
             ];
-            return <AowPanel key={project.id} className="project-aow-project" headerClassName="project-aow-project-row"
+            return <AowPanel key={project.id} id={`${projectNavigationId}-${project.id}`} className="project-aow-project" headerClassName="project-aow-project-row"
               headerBehavior="navigate" expandOnNavigate={false} togglePosition="end"
               title={project.name} tooltip={project.registered_path} icon={<ProjectIcon project={project} />} collapsed={collapsedProjects[project.id]}
               empty={!project.worktrees.length && !project.error} onCollapsedChange={collapsed => setCollapsedProjects(current => ({ ...current, [project.id]: collapsed }))}
@@ -2734,7 +2737,6 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
             </AowPanel>;
           })}
           {!loading && !projects.length ? <div className="project-aow-empty project-aow-onboarding"><FolderGit2 /><strong>{t("aow.no_projects")}</strong><span>{t("aow.register_a_local_git_repository_to_list_its_linked")}</span><button onClick={() => setShowRegisterProject(true)}><Plus />{t("aow.register_project")}</button></div> : null}
-          </AowPanel>
         </AowPanelStack>
         <div className="project-aow-sidebar-footer">
           <button title={t("navigation.settings")} aria-label={t("navigation.settings")} onClick={() => setSettingsLocation({ path: activeEntry?.worktree.path ?? '', request: {} })}><Settings /></button>
