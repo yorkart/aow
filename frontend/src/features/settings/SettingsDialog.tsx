@@ -49,7 +49,6 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
 }) {
   const [section, setSection] = useState<Section>(sections[0].id);
   const [overview, setOverview] = useState(mobile);
-  const [gitPlatformDirty, setGitPlatformDirty] = useState(false);
   const [acpDirty, setAcpDirty] = useState(false);
   const [configurationDirty, setConfigurationDirty] = useState(false);
   const [notificationDirty, setNotificationDirty] = useState(false);
@@ -81,7 +80,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
   const dialog = useRef<HTMLElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const dirty = acpDirty || gitPlatformDirty || configurationDirty || serverEnvironment.dirty || mobile && (notificationDirty
+  const dirty = acpDirty || configurationDirty || serverEnvironment.dirty || mobile && (notificationDirty
     || !!settings && (notesBase !== settings.notes_base || nodeAddresses !== (settings.node_addresses ?? []).join('\n')
       || executionPath !== (settings.execution_path ?? []).join('\n') || editorWordWrap !== (settings.editor?.word_wrap ?? false))
     || JSON.stringify([agentId, agentType, displayName, command, args.text, env.text]) !== agentBaseline);
@@ -359,7 +358,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
           {!mobile && <LogoutButton disabled={busy || settingsBusy} />}
         </nav>
         <div className="project-aow-settings-content" hidden={mobile && overview}>
-          <div className="git-platform-provider-settings-host" hidden={section !== 'git-platforms'}><GitPlatformProviderSettings active={section === 'git-platforms'} onBusyChange={setSettingsBusy} onDirtyChange={setGitPlatformDirty} /></div>
+          <div className="git-platform-provider-settings-host" hidden={section !== 'git-platforms'}><GitPlatformProviderSettings active={section === 'git-platforms'} onBusyChange={setSettingsBusy} /></div>
           <div className="configuration-settings-host" hidden={section !== 'configuration'}><ConfigurationSettings active={section === 'configuration'} onBusyChange={setSettingsBusy} onDirtyChange={setConfigurationDirty} /></div>
           <div className="configuration-settings-host" hidden={section !== 'acp'}><AcpSettings active={section === 'acp'} onBusyChange={setSettingsBusy} onDirtyChange={setAcpDirty} /></div>
           {section === 'git-platforms' || section === 'configuration' || section === 'acp' ? null : section === 'appearance' ? <AppearanceSettings /> : section === 'nodes' ? (

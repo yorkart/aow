@@ -109,7 +109,7 @@ mod tests {
         );
         let (status, _) = request(app, "PUT", "/api/aow/git-platform-providers", json!({
             "revision": current["revision"],
-            "providers": [{"id":"test.mjs","name":"Test","enabled":true,"hosts":["git.example.com"],"script":script}]
+            "providers": [{"id":"test.mjs","name":"Test","hosts":["git.example.com"],"script":script}]
         })).await;
         assert_eq!(status, StatusCode::OK);
     }

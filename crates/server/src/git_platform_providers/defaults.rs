@@ -44,7 +44,7 @@ pub(super) fn load(directory: &Path) -> anyhow::Result<Vec<GitPlatformProvider>>
                     ensure!(!names.contains(&id.to_ascii_lowercase()), "case-insensitive provider filename collision");
                     ensure!(providers.len() < 32, "at most 32 providers are allowed");
                     let mut provider = GitPlatformProvider {
-                        id: id.to_owned(), name: String::new(), hosts: vec![], enabled: true,
+                        id: id.to_owned(), name: String::new(), hosts: vec![],
                         script: read_script(&file)?,
                     };
                     let metadata = describe_at(&provider, &paths, Some(&file)).await?;

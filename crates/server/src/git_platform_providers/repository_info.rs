@@ -59,11 +59,7 @@ impl GitPlatformProviderManager {
         let Some((host, path)) = parse_remote(url.trim()) else {
             return Ok(None);
         };
-        let Some(provider) = settings
-            .providers
-            .iter()
-            .find(|p| p.enabled && p.hosts.contains(&host))
-        else {
+        let Some(provider) = settings.providers.iter().find(|p| p.hosts.contains(&host)) else {
             return Ok(None);
         };
         let source = json!([settings.revision, remote, host, path, paths]).to_string();

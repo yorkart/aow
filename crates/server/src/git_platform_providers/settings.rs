@@ -17,7 +17,6 @@ pub(super) const SCRIPT_LIMIT: usize = 1024 * 1024;
 pub struct GitPlatformProvider {
     pub id: String,
     pub name: String,
-    pub enabled: bool,
     pub hosts: Vec<String>,
     pub script: String,
 }
@@ -39,7 +38,6 @@ pub(super) struct Document {
 pub(super) struct StoredProvider {
     pub(super) id: String,
     pub(super) name: String,
-    pub(super) enabled: bool,
     pub(super) hosts: Vec<String>,
 }
 impl From<&GitPlatformProvider> for StoredProvider {
@@ -47,7 +45,6 @@ impl From<&GitPlatformProvider> for StoredProvider {
         Self {
             id: p.id.clone(),
             name: p.name.clone(),
-            enabled: p.enabled,
             hosts: p.hosts.clone(),
         }
     }
@@ -57,7 +54,6 @@ pub struct GitPlatformProviderManager {
     inner: Arc<Mutex<Settings>>,
     pub(super) config: Option<ConfigRepository>,
     bundled: Arc<Mutex<BTreeMap<String, String>>>,
-    retained: Arc<Mutex<Vec<StoredProvider>>>,
     pub(super) repository_info: Arc<RepositoryInfoCache>,
 }
 impl Default for GitPlatformProviderManager {
@@ -69,7 +65,6 @@ impl Default for GitPlatformProviderManager {
             })),
             config: None,
             bundled: Arc::default(),
-            retained: Arc::default(),
             repository_info: Arc::default(),
         }
     }
@@ -88,7 +83,6 @@ impl GitPlatformProviderManager {
         let manager = Self {
             config: Some(config),
             bundled: Arc::new(Mutex::new(loaded.bundled)),
-            retained: Arc::new(Mutex::new(loaded.retained)),
             ..Self::default()
         };
         if loaded.changed {
@@ -158,27 +152,7 @@ impl GitPlatformProviderManager {
             config
                 .save(&Path::new(DIRECTORY).join(&p.id), p.script.as_bytes())
                 .map_err(|e| GitPlatformError::Command(e.to_string()))?;
-            providers.push(StoredProvider {
-                id: p.id.clone(),
-                name: p.name.clone(),
-                enabled: p.enabled,
-                hosts: p.hosts.clone(),
-            });
-        }
-        for entry in self
-            .retained
-            .lock()
-            .map_err(|_| {
-                GitPlatformError::Command("GitPlatformProvider configuration lock failed".into())
-            })?
-            .iter()
-        {
-            if !providers.iter().any(|p| p.id == entry.id)
-                && std::fs::symlink_metadata(config.directory().join(DIRECTORY).join(&entry.id))
-                    .is_ok()
-            {
-                providers.push(entry.clone());
-            }
+            providers.push(StoredProvider::from(p));
         }
         let doc = Document {
             version: 3,

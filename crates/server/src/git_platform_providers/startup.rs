@@ -1,4 +1,4 @@
-//! Reconcile persisted enable flags and release resources with files in the active config.
+//! Reconcile release resources with validated scripts in the active config.
 use super::{
     GitPlatformProvider, Settings, defaults,
     settings::{CONFIG, DIRECTORY, Document, StoredProvider},
@@ -14,7 +14,6 @@ use std::{
 pub(super) struct Loaded {
     pub settings: Settings,
     pub bundled: BTreeMap<String, String>,
-    pub retained: Vec<StoredProvider>,
     pub changed: bool,
 }
 
@@ -93,36 +92,15 @@ pub(super) fn load(
             .unwrap_or(usize::MAX)
     });
     let mut hosts = HashSet::new();
-    for provider in &mut providers {
-        provider.enabled = document
-            .providers
-            .iter()
-            .find(|entry| entry.id == provider.id)
-            .is_none_or(|entry| entry.enabled);
-        if provider.enabled && provider.hosts.iter().any(|host| hosts.contains(host)) {
-            tracing::warn!(provider = %provider.id, "Disabling Git platform provider with conflicting remote domains");
-            provider.enabled = false;
+    providers.retain(|provider| {
+        if provider.hosts.iter().any(|host| hosts.contains(host)) {
+            tracing::warn!(provider = %provider.id, "Skipping Git platform provider with conflicting remote domains");
+            return false;
         }
-        if provider.enabled {
-            hosts.extend(provider.hosts.iter().cloned());
-        }
-    }
-    // Preserve enable flags for temporarily invalid scripts so repairing a disabled
-    // file cannot accidentally enable it. These records never cause scripts to load.
-    let retained: Vec<_> = document
-        .providers
-        .iter()
-        .filter(|entry| {
-            !providers.iter().any(|p| p.id == entry.id)
-                && std::fs::symlink_metadata(directory.join(&entry.id)).is_ok()
-        })
-        .cloned()
-        .collect();
-    let entries: Vec<_> = providers
-        .iter()
-        .map(StoredProvider::from)
-        .chain(retained.iter().cloned())
-        .collect();
+        hosts.extend(provider.hosts.iter().cloned());
+        true
+    });
+    let entries: Vec<_> = providers.iter().map(StoredProvider::from).collect();
     changed |= entries != document.providers;
     let settings = Settings {
         revision: document.revision,
@@ -132,7 +110,6 @@ pub(super) fn load(
     Ok(Loaded {
         settings,
         bundled: document.bundled,
-        retained,
         changed,
     })
 }

@@ -86,7 +86,7 @@ try {
     state.writes = [];
     state.settings = { notes_base: '/notes', execution_path: ['/usr/local/bin', '/usr/bin', '/bin'] };
     state.settingsUpdates = [];
-    state.gitPlatformProviders = { revision: 0, providers: [{ id: 'github.mjs', name: 'GitHub', enabled: true, hosts: ['github.com'], script: '// GitHub adapter\nconsole.log("initial");\n' }] };
+    state.gitPlatformProviders = { revision: 0, providers: [{ id: 'github.mjs', name: 'GitHub', hosts: ['github.com'], script: '// GitHub adapter\nconsole.log("initial");\n' }] };
     state.gitPlatformWrites = [];
     state.gitPlatformTests = [];
     state.gitPlatformTargets = [];
@@ -233,7 +233,7 @@ try {
           const update = request.postDataJSON();
           state.gitPlatformWrites.push(update);
           if (state.failGitPlatformSave) { await route.fulfill({ status: 409, json: { message: '配置已更新，请重新加载后保存。' } }); return; }
-          state.gitPlatformProviders = { ...update, revision: update.revision + 1 };
+          state.gitPlatformProviders = { ...update, revision: update.revision + 1, providers: update.providers.map(provider => ({ ...provider, name: provider.id === 'github.mjs' ? 'GitHub' : 'Custom Git', hosts: provider.id === 'github.mjs' ? ['github.com'] : ['git.example.com'] })) };
         }
         data = state.gitPlatformProviders;
       }
@@ -3406,86 +3406,70 @@ try {
     assert.equal(await checkbox.isChecked(), false);
   });
 
-  await test('Git platform providers preview scripts read-only, upload as drafts, and preserve failed saves', async t => {
+  await test('Git platform provider list uploads and removes immediately and preserves saved data on failure', async t => {
     const { page, state } = await fixture(t);
     const dialog = page.locator('.project-aow-settings');
+    const panel = dialog.getByRole('region', { name: 'Git 平台设置' });
+    const rows = panel.locator('tbody tr');
+    const row = id => rows.filter({ has: page.getByRole('cell', { name: id, exact: true }) });
     const open = async () => {
-      await page.getByRole('button', { name: "设置", exact: true }).click();
+      await page.getByRole('button', { name: '设置', exact: true }).click();
       await dialog.getByRole('button', { name: /Git 平台/ }).click();
-      await dialog.locator('.git-platform-provider-editor .monaco-editor').waitFor();
+      await row('github.mjs').waitFor();
     };
+    const upload = async (name, script) => panel.getByLabel('上传 Provider 脚本', { exact: true }).setInputFiles({ name, mimeType: 'text/javascript', buffer: Buffer.from(script) });
     await open();
-    const checkboxLayout = await dialog.getByLabel('启用此 Provider', { exact: true }).evaluate(input => {
-      const label = input.closest('label');
-      const text = label.querySelector('span');
-      const box = input.getBoundingClientRect();
-      const caption = text.getBoundingClientRect();
-      return { display: getComputedStyle(label).display, gap: caption.left - box.right,
-        centerOffset: Math.abs(caption.top + caption.height / 2 - box.top - box.height / 2) };
-    });
-    assert.equal(checkboxLayout.display, 'flex');
-    assert.ok(checkboxLayout.gap >= 6, 'provider label keeps space between its checkmark and text');
-    assert.ok(checkboxLayout.centerOffset <= 1, 'provider checkbox and text share a vertical center');
-
-    assert.equal(await dialog.getByLabel('CLI 命令', { exact: true }).count(), 0);
-    const preview = dialog.getByRole('textbox', { name: 'Provider 脚本预览', exact: true });
-    const initial = state.gitPlatformProviders.providers[0].script;
-    await eventually(async () => (await currentEditorWrap(page))?.content === initial);
-    assert.equal(await preview.isEditable(), false);
-    await preview.focus();
-    await page.keyboard.press('Control+A');
-    await page.keyboard.press('Backspace');
-    await page.keyboard.type('accidental typing');
-    await page.keyboard.insertText('# accidental paste\n');
-    assert.equal((await currentEditorWrap(page)).content, initial, 'typing, deletion and pasted input cannot change the script');
-    assert.equal(await dialog.getByRole('button', { name: '保存', exact: true }).isDisabled(), true);
+    assert.deepEqual(await row('github.mjs').locator('td').allTextContents(), ['github.mjs', 'GitHub', 'github.com', '移除']);
+    assert.equal(await panel.getByRole('textbox').count(), 0);
+    assert.equal(await panel.getByRole('checkbox').count(), 0);
+    assert.equal(await panel.getByRole('combobox').count(), 0);
+    assert.equal(await panel.locator('.monaco-editor, details, footer').count(), 0);
+    assert.equal(await panel.getByRole('button', { name: /保存|检查协议|放弃修改/ }).count(), 0);
+    assert.equal(await panel.locator('.project-aow-settings-heading').getByRole('button', { name: '上传脚本', exact: true }).isEnabled(), true);
+    await upload('custom.py', 'invalid extension');
+    await panel.getByRole('alert').waitFor();
+    assert.equal(state.gitPlatformWrites.length, 0);
     const uploaded = '// uploaded adapter\nconsole.log("hello 中文");\n';
-    await dialog.getByLabel('上传 Provider 脚本', { exact: true }).setInputFiles({ name: 'custom.mjs', mimeType: 'text/javascript', buffer: Buffer.from(uploaded) });
-    await eventually(async () => (await currentEditorWrap(page))?.content === uploaded);
-    assert.equal(await preview.isEditable(), false, 'uploaded scripts remain read-only');
-    for (const [name, value] of [['提供方 ID', 'custom.mjs'], ['Provider 显示名称', 'Custom Git'], ['Remote 域名', 'git.example.com']]) {
-      assert.equal(await dialog.getByLabel(name, { exact: true }).inputValue(), value);
-      assert.equal(await dialog.getByLabel(name, { exact: true }).isEditable(), false);
-    }
-    assert.equal(await dialog.getByRole('link', { name: /公开 API 规范/ }).getAttribute('href'), '/api/public/git-platform-provider-schema');
-    assert.equal(state.gitPlatformWrites.length, 0, 'upload only edits the draft');
-    await dialog.getByRole('button', { name: /环境/ }).click();
-    await dialog.getByRole('button', { name: /Git 平台/ }).click();
-    await eventually(async () => (await currentEditorWrap(page))?.content === uploaded);
-    await dialog.getByRole('button', { name: '检查协议', exact: true }).click();
-    await dialog.getByRole('status').filter({ hasText: '协议检查通过' }).waitFor();
-    assert.equal(state.gitPlatformTests[0].script, uploaded);
-    assert.equal(state.gitPlatformWrites.length, 0, 'testing a draft does not save it');
-    state.failGitPlatformSave = true;
-    await dialog.getByRole('button', { name: '保存', exact: true }).click();
-    await dialog.getByRole('alert').filter({ hasText: '配置已更新' }).waitFor();
-    assert.equal((await currentEditorWrap(page)).content, uploaded, 'failed saves keep the uploaded content');
-    state.failGitPlatformSave = false;
-    await dialog.getByLabel('启用此 Provider', { exact: true }).uncheck();
-    await dialog.getByRole('button', { name: '保存', exact: true }).click();
-    await dialog.getByRole('status').filter({ hasText: '已保存' }).waitFor();
+    await upload('custom.mjs', uploaded);
+    await panel.getByRole('status').filter({ hasText: '已上传并生效' }).waitFor();
+    assert.deepEqual(await row('custom.mjs').locator('td').allTextContents(), ['custom.mjs', 'Custom Git', 'git.example.com', '移除']);
     assert.equal(state.gitPlatformProviders.providers[1].script, uploaded);
-    assert.equal(state.gitPlatformProviders.providers[1].enabled, false);
-    assert.deepEqual(Object.keys(state.gitPlatformProviders.providers[1]).sort(), ['enabled', 'hosts', 'id', 'name', 'script']);
-    await page.screenshot({ path: '/tmp/aow-git-platform-provider-settings.png' });
+    assert.equal(state.gitPlatformWrites.length, 1, 'upload immediately persists the provider');
+    assert.deepEqual(Object.keys(state.gitPlatformProviders.providers[1]).sort(), ['hosts', 'id', 'name', 'script']);
+    await page.screenshot({ path: '/tmp/aow-git-platform-provider-list.png' });
     await dialog.getByRole('button', { name: '关闭', exact: true }).click();
     await open();
-    await dialog.getByRole('button', { name: '选择 Provider', exact: true }).click();
-    await page.getByRole('option', { name: /^Custom Git/ }).click();
-    await eventually(async () => (await currentEditorWrap(page))?.content === uploaded);
-    assert.equal(await dialog.getByLabel('启用此 Provider', { exact: true }).isChecked(), false);
-    await dialog.getByLabel('上传 Provider 脚本', { exact: true }).setInputFiles({ name: 'custom.mjs', mimeType: 'text/javascript', buffer: Buffer.from('// replacement\n') });
-    await eventually(async () => (await currentEditorWrap(page))?.content === '// replacement\n');
-    assert.equal(state.gitPlatformProviders.providers[1].script, uploaded, 'upload does not replace the saved script');
-    await dialog.getByRole('button', { name: '放弃修改', exact: true }).click();
-    await dialog.getByRole('button', { name: '选择 Provider', exact: true }).click();
-    await page.getByRole('option', { name: /^Custom Git/ }).click();
-    await eventually(async () => (await currentEditorWrap(page))?.content === uploaded);
-    await dialog.getByRole('button', { name: '移除', exact: true }).click();
-    await dialog.getByRole('button', { name: '保存', exact: true }).click();
-    await dialog.getByRole('status').filter({ hasText: '已保存' }).waitFor();
+    assert.equal(await rows.count(), 2);
+    await upload('CUSTOM.mjs', 'case conflict');
+    await panel.getByRole('alert').filter({ hasText: '大小写' }).waitFor();
+    assert.equal(state.gitPlatformWrites.length, 1);
+    state.failGitPlatformSave = true;
+    await upload('custom.mjs', '// failed replacement');
+    await panel.getByRole('alert').filter({ hasText: '配置已更新' }).waitFor();
+    assert.equal(state.gitPlatformProviders.providers[1].script, uploaded);
+    assert.equal(await rows.count(), 2);
+    state.failGitPlatformSave = false;
+    await panel.getByRole('button', { name: '重新加载', exact: true }).click();
+    await row('custom.mjs').waitFor();
+    await upload('custom.mjs', '// replacement');
+    await panel.getByRole('status').filter({ hasText: '已上传并生效' }).waitFor();
+    assert.equal(state.gitPlatformProviders.providers[1].script, '// replacement');
+    assert.equal(await rows.count(), 2, 'uploading the same filename replaces a provider');
+    state.failGitPlatformSave = true;
+    await row('custom.mjs').getByRole('button', { name: '移除', exact: true }).click();
+    await panel.getByRole('alert').waitFor();
+    assert.equal(await rows.count(), 2, 'failed removal preserves the current list');
+    state.failGitPlatformSave = false;
+    await row('custom.mjs').getByRole('button', { name: '移除', exact: true }).click();
+    await panel.getByRole('status').filter({ hasText: '已移除' }).waitFor();
     assert.equal(state.gitPlatformProviders.providers.length, 1);
-    assert.equal(state.settingsUpdates.length, 0, 'provider settings preserve other settings');
+    await row('github.mjs').getByRole('button', { name: '移除', exact: true }).click();
+    await panel.getByText('尚未配置 Provider，请上传 .mjs 文件。', { exact: true }).waitFor();
+    assert.equal(state.gitPlatformProviders.providers.length, 0);
+    await upload('custom.mjs', uploaded);
+    await row('custom.mjs').waitFor();
+    assert.equal(state.gitPlatformProviders.providers.length, 1, 'upload reactivates a deleted provider');
+    assert.equal(state.settingsUpdates.length, 0, 'provider changes preserve other settings');
   });
 
   await test('review remote selection keeps equal PR numbers in distinct provider tabs', async t => {

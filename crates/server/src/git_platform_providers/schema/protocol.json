@@ -980,7 +980,7 @@
             "maxLength": 253,
             "pattern": "^[a-z0-9.\\-_:\\[\\]]+$"
           },
-          "description": "Exact lowercase remote hosts. No URL scheme, path or wildcard. At most one enabled provider may claim a host."
+          "description": "Exact lowercase remote hosts. No URL scheme, path or wildcard. At most one provider may claim a host."
         },
         "operations": {
           "type": "array",

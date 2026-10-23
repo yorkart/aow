@@ -66,7 +66,6 @@ async fn test_provider(
         script: upload.script,
         name: String::new(),
         hosts: vec![],
-        enabled: true,
     };
     let paths = state
         .aow

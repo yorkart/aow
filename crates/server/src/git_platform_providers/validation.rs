@@ -74,9 +74,9 @@ pub(super) fn validate_settings(settings: &Settings) -> Result<()> {
                     &[("p0", host.to_string())],
                 )));
             }
-            if p.enabled && !hosts.insert(host) {
+            if !hosts.insert(host) {
                 return Err(GitPlatformError::Invalid(aow_i18n::message(
-                    "server.multiple_enabled_providers_match_the_same_domain",
+                    "server.multiple_providers_match_the_same_domain",
                     &[("p0", host.to_string())],
                 )));
             }

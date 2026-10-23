@@ -12,15 +12,15 @@ v4 统一使用 `pull_requests` 命名；GitLab MR 也转换为相同字段。�
 
 ## 配置和仓库匹配
 
-设置 → Git 平台 仅上传 `.mjs` 单文件。文件名（含扩展名）就是唯一 Provider ID，并原样保存；同名上传更新原 Provider，不同文件名新增 Provider。文件名最多 100 个 ASCII 字符，以字母或数字开头，其余只允许字母、数字、点、下划线和短横线；不允许大小写冲突。不改名，也不生成另一份随机文件名。显示名称和 Remote domains 由脚本的 `describe` 返回，页面只读展示；用户只管理上传、启用、停用和移除。
+设置 → Git 平台 仅上传 `.mjs` 单文件。文件名（含扩展名）就是唯一 Provider ID，并原样保存；同名上传更新原 Provider，不同文件名新增 Provider。文件名最多 100 个 ASCII 字符，以字母或数字开头，其余只允许字母、数字、点、下划线和短横线；不允许大小写冲突。不改名，也不生成另一份随机文件名。显示名称和 Remote domains 由脚本的 `describe` 返回，页面只读展示；用户通过上传和移除管理 Provider。
 
-上传时先运行 `describe` 校验，成功后形成浏览器草稿；保存时再次校验并持久化。检查协议也执行当前草稿，但不保存。单文件必须自包含，可用 Node.js 内置模块，不能依赖相邻文件或由 AoW 执行 npm install。脚本可以调用已安装的 CLI，运行时 Node.js 和工具通过 Settings → Environment 的 PATH 查找，登录状态由用户准备。
+上传时运行 `describe` 校验，成功后立即保存并生效；同名上传替换原脚本，移除立即删除对应脚本并停止使用。页面以列表展示 Provider ID、Display name 和 Remote domains，不提供启停开关、表单或脚本预览。单文件必须自包含，可用 Node.js 内置模块，不能依赖相邻文件或由 AoW 执行 npm install。脚本可以调用已安装的 CLI，运行时 Node.js 和工具通过 Settings → Environment 的 PATH 查找，登录状态由用户准备。
 
 GitHub、GitLab 默认实现位于源码 `git-platform-providers/github.mjs` 和 `git-platform-providers/gitlab.mjs`，随发布包携带，不嵌入 Rust。服务初始化时从包资源安装到配置仓库的 `git-platform-providers/`；开发构建从源码目录读取。首次初始化提供 `github.com` 和 `gitlab.com`，分别使用 `gh` 和 `glab`。企业自建实例可复制脚本，修改 `describe.hosts` 后以独立文件名上传。
 
-服务启动时扫描当前选中的配置仓库 `git-platform-providers/` 目录（默认位置为 `~/.local/state/aow/config-repo/<config-id>/git-platform-providers/`），不限定平台或文件名列表。直接放入该目录的 `.mjs` 文件无需预先登记，重启后会执行 `describe` 校验并加载名称、域名和只读能力。只扫描目录直属的普通文件；格式、大小或协议校验失败的脚本会跳过并记录服务端日志。相同域名冲突时保留已加载 Provider，将冲突项停用。
+服务启动时扫描当前选中的配置仓库 `git-platform-providers/` 目录（默认位置为 `~/.local/state/aow/config-repo/<config-id>/git-platform-providers/`），不限定平台或文件名列表。直接放入该目录的 `.mjs` 文件无需预先登记，重启后会执行 `describe` 校验并加载名称、域名和只读能力。只扫描目录直属的普通文件；格式、大小或协议校验失败的脚本会跳过并记录服务端日志。相同域名冲突时保留已加载 Provider，跳过冲突脚本并记录日志；通过设置上传时会拒绝域名冲突。
 
-启停状态和默认版本记录保存在当前配置仓库的 `git-platform-providers.json`，该清单不决定哪些 `.mjs` 文件可以被发现；脚本原样保存为 `git-platform-providers/<上传文件名>.mjs`，纳入配置版本记录。升级只更新仍与上一发布版本一致的默认源码，保留用户修改和启停状态；从设置中移除时也删除对应脚本文件；被移除的默认 Provider 不会因重启再次添加。配置中的摘要只记录默认版本更新依据，不参与文件命名。Settings 使用 revision 防止另一窗口覆盖新配置；发生冲突时重新打开设置并合并修改。
+Provider 元数据和默认版本记录保存在当前配置仓库的 `git-platform-providers.json`，该清单不决定哪些 `.mjs` 文件可以被发现；脚本原样保存为 `git-platform-providers/<上传文件名>.mjs`，纳入配置版本记录。升级只更新仍与上一发布版本一致的默认源码，保留用户修改和移除决定；从设置中移除时也删除对应脚本文件；被移除的默认 Provider 不会因重启再次添加。配置中的摘要只记录默认版本更新依据，不参与文件命名。Settings 使用 revision 防止另一窗口覆盖新配置；发生冲突时重新打开设置并合并修改。
 
 匹配 HTTPS、HTTP、ssh://、git:// 和 `git@host:owner/repo.git` 的 fetch remote，去掉 `.git`。HTTPS 非默认端口作为 host 的一部分，SSH 端口不参与域名匹配。域名精确匹配，不使用子串或通配符；SSH alias 可以直接由 describe.hosts 返回，脚本可自行映射到实际 API host。无匹配时提示配置。多个不同仓库匹配时，桌面和手机均要求选择 remote；选择按本地仓库保存在浏览器。相同远端仓库的多个 remote 别名可自动选定。Provider、remote 和 PR 编号共同保存在 Tab 与分享链接中。
 
@@ -56,7 +56,7 @@ GitHub、GitLab 默认实现位于源码 `git-platform-providers/github.mjs` 和
 {"version":4,"result":{"name":"Example Git","hosts":["git.example.com"],"operations":["pull_requests.list","pull_requests.detail","pull_requests.diff"]}}
 ```
 
-返回显示名称 `name`、精确域名数组 `hosts` 和能力数组 `operations`，至少声明一种协议支持的只读操作，无需实现 PR 能力。Pull Requests 功能只选择同时声明 `pull_requests.list`、`pull_requests.detail`、`pull_requests.diff` 的 Provider。名称会去除首尾空白，域名会转为小写。describe 不需要网络、平台 CLI 或登录状态，不返回 Provider ID。Settings 的“检查协议”执行当前预览的脚本（包括尚未保存的上传内容），不保存它，也不代表实际仓库查询已通过。
+返回显示名称 `name`、精确域名数组 `hosts` 和能力数组 `operations`，至少声明一种协议支持的只读操作，无需实现 PR 能力。Pull Requests 功能只选择同时声明 `pull_requests.list`、`pull_requests.detail`、`pull_requests.diff` 的 Provider。名称会去除首尾空白，域名会转为小写。describe 不需要网络、平台 CLI 或登录状态，不返回 Provider ID。上传时校验 describe 不代表实际仓库查询已通过。
 
 支持提交外链时，在 `operations` 中追加 `"repository.commit_links"`。应用只在脚本声明此能力后调用。
 
@@ -90,7 +90,7 @@ GitHub、GitLab 默认实现位于源码 `git-platform-providers/github.mjs` 和
 
 两个字段均需返回；无法提供的链接填 `null`。链接必须是无账号密码的绝对 HTTP(S) URL。脚本可以将 SSH alias、仓库路径或 remote host 映射到不同的网页域名和路径，应用不要求链接域名等于 remote 域名。
 
-提交详情由本地 Git 提供，remote 优先取当前分支的 tracking remote，其次为 origin，再取其他 remote。应用只调用该 remote 匹配的已启用 Provider，不借用其他 remote 的 Provider。Git 服务层不识别 GitHub、GitLab 等平台，也不将 clone URL 推断为网页 URL。
+提交详情由本地 Git 提供，remote 优先取当前分支的 tracking remote，其次为 origin，再取其他 remote。应用只调用该 remote 匹配的 Provider，不借用其他 remote 的 Provider。Git 服务层不识别 GitHub、GitLab 等平台，也不将 clone URL 推断为网页 URL。
 
 链接解析是可选补充，总预算为 3 秒（包含配置读取、remote 匹配、describe 和 repository.commit_links）。没有匹配的 Provider、未声明能力或返回 null 时不显示外链；脚本失败、链接无效或超时时也保留完整的本地提交详情，错误记录在服务端日志中，不回退到内置 URL 拼接规则。脚本宜在本地直接生成链接，避免网络请求延迟提交详情。
 

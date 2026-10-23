@@ -8,7 +8,7 @@ const server = await productionPreview();
 const base = `http://127.0.0.1:${server.httpServer.address().port}`;
 const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
 const versions = ['550e8400-e29b-41d4-a716-446655440000', '550e8400-e29b-41d4-a716-446655440001'];
-const categories = ['Appearance', 'Configuration', 'Nodes', 'Editor', 'Notes', 'Environment', 'ACP', 'Agents', 'IM', '通知', 'Pull Requests'];
+const categories = ['外观', '配置', '节点', '编辑器', '笔记', '环境', 'ACP', 'Agent', 'IM', '通知', 'Git 平台'];
 
 async function fixture(t, width = 390, mobile = true, virtualViewport = false, agents) {
   const context = await browser.newContext({ viewport: { width, height: 844 }, isMobile: mobile, hasTouch: mobile });
@@ -23,7 +23,7 @@ async function fixture(t, width = 390, mobile = true, virtualViewport = false, a
     agents: agents ?? [{ id: 'codex', agent_type: 'codex', display_name: 'Codex', source: 'detected', available: true, command: 'codex', executable: '/usr/bin/codex', args: [], env: {} }],
     notifications: { im: { providers: [{ provider: 'wechat', account_id: 'account', user_id: 'user' }] }, notifications: { agent_task_completed: { enabled: true, channels: ['page'] }, public_base_url: '' } },
     configuration: { config_repo: '/repo', config_id: versions[0] },
-    providers: { providers: [{ id: 'github.mjs', name: 'GitHub', hosts: ['github.com'], enabled: true, script: 'console.log("describe")' }] },
+    providers: { revision: 0, providers: [{ id: 'github.mjs', name: 'GitHub', hosts: ['github.com'], script: 'console.log("describe")' }] },
   };
   t.after(async () => { await context.close(); assert.deepEqual(state.errors, []); });
   await context.route('**/api/**', async route => {
@@ -89,7 +89,7 @@ async function fixture(t, width = 390, mobile = true, virtualViewport = false, a
       data = { selection: state.configuration, active_selection: { config_repo: '/repo', config_id: versions[0] }, restart_required: state.configuration.config_id !== versions[0], changed: writing };
     } else if (path === '/api/aow/settings/configuration/versions') data = { config_repo: url.searchParams.get('path'), config_ids: versions, selected_id: null };
     else if (path === '/api/aow/git-platform-providers') {
-      if (writing) state.providers = body;
+      if (writing) state.providers = { ...body, revision: body.revision + 1, providers: body.providers.map(provider => ({ ...provider, name: 'GitHub', hosts: ['github.com'] })) };
       data = state.providers;
     } else if (path === '/api/aow/git-platform-providers/test') data = { name: 'GitHub', hosts: ['github.com'], operations: ['pull_requests.list', 'pull_requests.detail', 'pull_requests.diff'] };
     else if (path === '/api/aow/im/feishu') {
@@ -123,7 +123,7 @@ async function fixture(t, width = 390, mobile = true, virtualViewport = false, a
   await dialog.getByRole('navigation', { name: '设置分类' }).waitFor();
   const choose = async name => {
     if (mobile && await dialog.getByRole('button', { name: '返回设置分类' }).isVisible()) await dialog.getByRole('button', { name: '返回设置分类' }).click();
-    await dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button', { name: new RegExp(`^${{"Agent": "Agent", "环境": "环境", "编辑器": "编辑器", "笔记": "笔记", "节点": "节点", "外观": "外观", "配置": "配置"}[name] ?? name}`) }).click();
+    await dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button', { name: new RegExp(`^${{"Agents": "Agent", "Environment": "环境", "Editor": "编辑器", "Notes": "笔记", "Nodes": "节点", "Appearance": "外观", "Configuration": "配置"}[name] ?? name}`) }).click();
   };
   const save = async text => {
     await dialog.getByRole('button', { name: '保存', exact: true }).click();
@@ -475,17 +475,23 @@ try {
   });
 
   for (const width of [320, 390]) await test(`mobile ${width}px uploads named mjs providers with derived metadata`, async t => {
-    const { state, page, dialog, choose, save } = await fixture(t, width);
+    const { state, page, dialog, choose } = await fixture(t, width);
     await choose('Git 平台');
-    assert.equal(await dialog.getByRole('textbox', { name: 'Provider 显示名称' }).isEditable(), false);
+    assert.equal(await dialog.getByRole('heading', { name: 'Git 平台', exact: true }).isVisible(), true);
+    await dialog.getByRole('cell', { name: /GitHub$/ }).waitFor();
+    assert.equal(await dialog.getByRole('region', { name: 'Git 平台设置' }).getByRole('checkbox').count(), 0);
     await dialog.getByLabel('上传 Provider 脚本').setInputFiles({ name: 'github.mjs', mimeType: 'text/javascript', buffer: Buffer.from('console.log("uploaded")') });
-    await dialog.getByRole('status').filter({ hasText: '已读取文件内容' }).waitFor();
-    assert.equal(await dialog.getByLabel('提供方 ID', { exact: true }).inputValue(), 'github.mjs');
-    assert.equal(await dialog.getByLabel('Remote 域名', { exact: true }).inputValue(), 'github.com');
-    await save('Provider 配置和脚本已保存');
+    await dialog.getByRole('status').filter({ hasText: '已上传并生效' }).waitFor();
+    assert.equal(await dialog.getByRole('cell', { name: /github\.mjs$/ }).count(), 1);
+    assert.equal(await dialog.getByRole('cell', { name: /github\.com$/ }).count(), 1);
     assert.equal(state.providers.providers.length, 1);
     assert.equal(state.providers.providers[0].script, 'console.log("uploaded")');
-    await layout(page, dialog, 'pull-requests');
+    assert.equal(Object.hasOwn(state.providers.providers[0], 'enabled'), false);
+    await layout(page, dialog, 'git-platforms');
+    await dialog.getByRole('button', { name: '移除', exact: true }).click();
+    await dialog.getByRole('status').filter({ hasText: '已移除' }).waitFor();
+    assert.equal(state.providers.providers.length, 0);
+    await dialog.getByText('尚未配置 Provider，请上传 .mjs 文件。', { exact: true }).waitFor();
   });
 
   for (const width of [320, 390]) await test(`mobile ${width}px exposes and saves every desktop settings category`, async t => {
@@ -580,12 +586,10 @@ try {
     await layout(page, dialog, 'notifications');
 
     await choose('Git 平台');
-    assert.equal(await dialog.getByRole('textbox', { name: 'Provider 显示名称' }).isEditable(), false);
+    await dialog.getByRole('cell', { name: /GitHub$/ }).waitFor();
+    assert.equal(await dialog.getByRole('region', { name: 'Git 平台设置' }).getByRole('checkbox').count(), 0);
     await dialog.getByLabel('上传 Provider 脚本').setInputFiles({ name: 'github.mjs', mimeType: 'text/javascript', buffer: Buffer.from('console.log("mobile provider")') });
-    await dialog.getByRole('status').filter({ hasText: '已读取文件内容' }).waitFor();
-    await dialog.getByRole('button', { name: '检查协议' }).click();
-    await dialog.getByRole('status').filter({ hasText: '协议检查通过' }).waitFor();
-    await save('Provider 配置和脚本已保存');
+    await dialog.getByRole('status').filter({ hasText: '已上传并生效' }).waitFor();
     assert.equal(state.providers.providers[0].script, 'console.log("mobile provider")');
     await layout(page, dialog, 'pull-requests');
     await page.setViewportSize({ width: 844, height: 390 });
@@ -662,8 +666,9 @@ try {
     await choose('Configuration');
     await dialog.getByRole('radio', { name: versions[1], exact: true }).check();
     await choose('Git 平台');
-    await dialog.getByRole('checkbox', { name: '启用此 Provider' }).uncheck();
-    await save('Provider 配置和脚本已保存');
+    await dialog.getByRole('button', { name: '移除', exact: true }).click();
+    await dialog.getByRole('status').filter({ hasText: '已移除' }).waitFor();
+    assert.equal(state.providers.providers.length, 0);
     await choose('Configuration');
     assert.equal(await dialog.getByRole('radio', { name: versions[1], exact: true }).isChecked(), true);
     page.once('dialog', prompt => prompt.dismiss());

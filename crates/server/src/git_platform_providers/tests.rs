@@ -21,7 +21,6 @@ fn provider(script: &str) -> GitPlatformProvider {
     GitPlatformProvider {
         id: "custom.mjs".into(),
         name: "Custom".into(),
-        enabled: true,
         hosts: vec!["git.example.com".into()],
         script: script.into(),
     }
@@ -216,9 +215,8 @@ fn original_filenames_persist_and_default_updates_preserve_customization_and_del
     )
     .unwrap();
     assert!(doc["providers"][0].get("script_file").is_none());
-    let mut changed = initial.clone();
-    changed.providers[0].enabled = false;
-    manager.save(changed).unwrap();
+    assert!(doc["providers"][0].get("enabled").is_none());
+    manager.save(initial.clone()).unwrap();
     assert!(matches!(
         manager.save(initial),
         Err(GitPlatformError::Conflict)
@@ -232,7 +230,6 @@ fn original_filenames_persist_and_default_updates_preserve_customization_and_del
             .unwrap();
     let mut next = manager.settings().unwrap();
     assert_eq!(next.providers[0].script, updated.script);
-    assert!(!next.providers[0].enabled);
     next.providers[0].script.push_str("\n// user edit");
     let custom = next.providers[0].script.clone();
     manager.save(next).unwrap();
@@ -247,6 +244,7 @@ fn original_filenames_persist_and_default_updates_preserve_customization_and_del
     assert_eq!(next.providers[0].script, custom);
     next.providers.clear();
     manager.save(next).unwrap();
+    assert!(!file.exists());
     let manager =
         GitPlatformProviderManager::persistent_with_defaults(dir.path(), vec![later]).unwrap();
     assert!(manager.settings().unwrap().providers.is_empty());
@@ -291,7 +289,7 @@ fn duplicate_domains_and_case_colliding_filenames_are_rejected() {
         providers: vec![first, second],
     };
     assert!(validate_settings(&settings).is_err());
-    settings.providers[1].enabled = false;
+    settings.providers[1].hosts = vec!["other.example.com".into()];
     assert!(validate_settings(&settings).is_ok());
     settings.providers[1].id = "CUSTOM.mjs".into();
     assert!(validate_settings(&settings).is_err());
@@ -496,8 +494,13 @@ async fn validates_metadata_envelopes_process_limits_and_read_only_operations() 
 }
 
 #[tokio::test]
-async fn upload_and_save_derive_metadata_from_mjs_and_reject_stale_revisions() {
-    let app = crate::build_router(AppState::new(PathBuf::new()));
+async fn uploads_activate_immediately_and_removal_stops_routing_without_enable_flags() {
+    let state = AppState::new(PathBuf::new());
+    let manager = state.git_platform_providers.clone();
+    let app = crate::build_router(state);
+    let repo = repository();
+    remote(repo.path(), "origin", "git@git.example.com:team/one.git");
+    let root = repo.path().to_str().unwrap();
     let response = app
         .clone()
         .oneshot(
@@ -542,10 +545,66 @@ async fn upload_and_save_derive_metadata_from_mjs_and_reject_stale_revisions() {
                     .unwrap(),
             )
             .unwrap();
+            assert!(value["providers"][0].get("enabled").is_none());
             assert_eq!(value["providers"][0]["name"], "Custom");
             assert_eq!(value["providers"][0]["hosts"], json!(["git.example.com"]));
         }
     }
+    assert_eq!(manager.targets(root, &[], &paths()).await.unwrap().len(), 1);
+    assert!(
+        manager
+            .repository_avatar(root, &paths())
+            .await
+            .unwrap()
+            .is_some()
+    );
+    let saved = manager.settings().unwrap();
+    let mut failed_upload = saved.clone();
+    failed_upload.providers[0].script = "console.log('invalid')".into();
+    let mut toggle = serde_json::to_value(&saved).unwrap();
+    toggle["providers"][0]["enabled"] = json!(false);
+    for invalid in [serde_json::to_value(failed_upload).unwrap(), toggle] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::put("/api/aow/git-platform-providers")
+                    .header("content-type", "application/json")
+                    .body(Body::from(invalid.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(!response.status().is_success());
+        assert_eq!(manager.settings().unwrap().revision, saved.revision);
+        assert_eq!(manager.settings().unwrap().providers[0].script, FIXTURE);
+    }
+    let response = app
+        .clone()
+        .oneshot(
+            Request::put("/api/aow/git-platform-providers")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({"revision":saved.revision,"providers":[]}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(
+        manager
+            .targets(root, &[], &paths())
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        manager
+            .repository_avatar(root, &paths())
+            .await
+            .unwrap()
+            .is_none()
+    );
     let response = app
         .oneshot(
             Request::post("/api/aow/git-platform-providers/test")
@@ -561,23 +620,20 @@ async fn upload_and_save_derive_metadata_from_mjs_and_reject_stale_revisions() {
 }
 
 #[test]
-fn python_providers_are_rejected_even_when_disabled() {
+fn python_providers_are_rejected() {
     let manager = GitPlatformProviderManager::default();
-    for enabled in [true, false] {
-        let settings = Settings {
-            revision: 0,
-            providers: vec![GitPlatformProvider {
-                id: "custom.py".into(),
-                enabled,
-                ..provider(FIXTURE)
-            }],
-        };
-        assert!(matches!(
-            manager.save(settings),
-            Err(GitPlatformError::Invalid(_))
-        ));
-        assert!(manager.settings().unwrap().providers.is_empty());
-    }
+    let settings = Settings {
+        revision: 0,
+        providers: vec![GitPlatformProvider {
+            id: "custom.py".into(),
+            ..provider(FIXTURE)
+        }],
+    };
+    assert!(matches!(
+        manager.save(settings),
+        Err(GitPlatformError::Invalid(_))
+    ));
+    assert!(manager.settings().unwrap().providers.is_empty());
 }
 
 #[tokio::test]
@@ -743,11 +799,9 @@ fn discovers_unregistered_files_and_refreshes_metadata_from_the_active_directory
         .unwrap();
     let manager =
         GitPlatformProviderManager::persistent_with_defaults(state.path(), vec![]).unwrap();
-    let mut settings = manager.settings().unwrap();
+    let settings = manager.settings().unwrap();
     assert_eq!(settings.providers[0].id, "forge.v2.mjs");
     assert_eq!(settings.providers[0].name, "My Forge");
-    settings.providers[0].enabled = false;
-    manager.save(settings).unwrap();
     let changed = script
         .replace("My Forge", "New Forge")
         .replace("git.example.com", "new.example.com");
@@ -763,7 +817,6 @@ fn discovers_unregistered_files_and_refreshes_metadata_from_the_active_directory
     let settings = manager.settings().unwrap();
     assert_eq!(settings.providers[0].name, "New Forge");
     assert_eq!(settings.providers[0].hosts, ["new.example.com"]);
-    assert!(!settings.providers[0].enabled);
     let again = GitPlatformProviderManager::persistent_with_defaults(state.path(), vec![]).unwrap();
     assert_eq!(again.settings().unwrap().revision, settings.revision);
     let mut removed = settings;
@@ -786,7 +839,7 @@ fn discovers_unregistered_files_and_refreshes_metadata_from_the_active_directory
 }
 
 #[test]
-fn discovery_skips_invalid_files_and_keeps_disabled_flags_when_a_script_is_repaired() {
+fn discovery_skips_invalid_files_and_loads_repaired_scripts() {
     let state = tempfile::tempdir().unwrap();
     let config = aow_config::ConfigRepository::initialize(state.path()).unwrap();
     config
@@ -795,11 +848,7 @@ fn discovery_skips_invalid_files_and_keeps_disabled_flags_when_a_script_is_repai
             FIXTURE.as_bytes(),
         )
         .unwrap();
-    let manager =
-        GitPlatformProviderManager::persistent_with_defaults(state.path(), vec![]).unwrap();
-    let mut next = manager.settings().unwrap();
-    next.providers[0].enabled = false;
-    manager.save(next).unwrap();
+    GitPlatformProviderManager::persistent_with_defaults(state.path(), vec![]).unwrap();
     let directory = config.directory().join("git-platform-providers");
     std::fs::write(directory.join("custom.mjs"), "console.log('invalid')").unwrap();
     std::fs::write(directory.join("another.mjs"), FIXTURE).unwrap();
@@ -831,19 +880,24 @@ fn discovery_skips_invalid_files_and_keeps_disabled_flags_when_a_script_is_repai
             .collect::<Vec<_>>(),
         ["another.mjs"]
     );
-    std::fs::write(directory.join("custom.mjs"), FIXTURE).unwrap();
+    std::fs::write(
+        directory.join("custom.mjs"),
+        FIXTURE.replace("git.example.com", "repaired.example.com"),
+    )
+    .unwrap();
     let loaded = GitPlatformProviderManager::persistent_with_defaults(state.path(), vec![])
         .unwrap()
         .settings()
         .unwrap();
     assert_eq!(loaded.providers.len(), 2);
-    assert!(
-        !loaded
+    assert_eq!(
+        loaded
             .providers
             .iter()
             .find(|p| p.id == "custom.mjs")
             .unwrap()
-            .enabled
+            .hosts,
+        ["repaired.example.com"]
     );
 }
 
@@ -879,22 +933,8 @@ fn discovery_follows_the_selected_configuration_and_preserves_existing_domain_ow
         .unwrap()
         .settings()
         .unwrap();
-    assert!(
-        loaded
-            .providers
-            .iter()
-            .find(|p| p.id == "second.mjs")
-            .unwrap()
-            .enabled
-    );
-    assert!(
-        !loaded
-            .providers
-            .iter()
-            .find(|p| p.id == "aaa.mjs")
-            .unwrap()
-            .enabled
-    );
+    assert_eq!(loaded.providers.len(), 1);
+    assert_eq!(loaded.providers[0].id, "second.mjs");
 }
 
 #[test]

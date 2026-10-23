@@ -142,10 +142,7 @@ impl GitPlatformProviderManager {
             let Some((host, repository)) = parse_remote(url.trim()) else {
                 continue;
             };
-            let Some(provider) = providers
-                .iter()
-                .find(|p| p.enabled && p.hosts.contains(&host))
-            else {
+            let Some(provider) = providers.iter().find(|p| p.hosts.contains(&host)) else {
                 continue;
             };
             targets.push(Target {
@@ -206,10 +203,10 @@ impl GitPlatformProviderManager {
         let provider = settings
             .providers
             .into_iter()
-            .find(|p| p.id == target.provider && p.enabled)
+            .find(|p| p.id == target.provider)
             .ok_or_else(|| {
                 GitPlatformError::Unavailable(
-                    aow_i18n::text("server.provider_disabled_refresh").into(),
+                    aow_i18n::text("server.provider_unavailable_refresh").into(),
                 )
             })?;
         let description = self.describe_provider(&provider, paths).await?;
