@@ -1,36 +1,46 @@
 use std::{ffi::OsStr, path::Path};
 
-pub const REPOSITORY_DIRECTORY: &str = "config-repo";
 pub(super) const REGISTRIES: [&str; 3] =
     ["aow-projects.json", "aow-agents.json", "aow-settings.json"];
 pub(super) fn is_configuration(path: &Path) -> bool {
     if REGISTRIES.iter().any(|name| path == Path::new(name))
-        || path == Path::new("review-providers.json")
-        || path == Path::new("inbox/labels.json")
-        || path == Path::new("acp/settings.json")
+        || path == Path::new("git-platform-providers.json")
+        || path == Path::new("data/inbox/labels.json")
+        || path == Path::new("aow-acp.json")
     {
         return true;
     }
     let parts: Vec<_> = path.components().collect();
-    if parts.len() == 5
-        && parts[0].as_os_str() == "inbox"
-        && parts[1].as_os_str() == "requirements"
-        && matches!(parts[2].as_os_str().to_str(), Some("active" | "deleted"))
-        && parts[3]
+    if path.parent() == Some(Path::new("git-platform-providers"))
+        && path.extension().is_some_and(|ext| ext == "mjs")
+    {
+        return path.file_stem().and_then(OsStr::to_str).is_some_and(|id| {
+            !id.is_empty()
+                && id.len() <= 96
+                && id.as_bytes()[0].is_ascii_alphanumeric()
+                && id
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || b"._-".contains(&byte))
+        });
+    }
+    if parts.len() == 6
+        && parts[0].as_os_str() == "data"
+        && parts[1].as_os_str() == "inbox"
+        && parts[2].as_os_str() == "requirements"
+        && matches!(parts[3].as_os_str().to_str(), Some("active" | "deleted"))
+        && parts[4]
             .as_os_str()
             .to_str()
             .is_some_and(aow_id::is_valid_id)
         && matches!(
-            parts[4].as_os_str().to_str(),
+            parts[5].as_os_str().to_str(),
             Some("requirement.json" | "comments.jsonl")
         )
     {
         return true;
     }
-    ((path.parent() == Some(Path::new("automations/tasks"))
-        && path.extension().is_some_and(|ext| ext == "json"))
-        || (path.parent() == Some(Path::new("review-providers"))
-            && path.extension().is_some_and(|ext| ext == "py")))
+    path.parent() == Some(Path::new("automations/tasks"))
+        && path.extension().is_some_and(|ext| ext == "json")
         && path.file_stem().and_then(OsStr::to_str).is_some_and(|id| {
             !id.is_empty()
                 && id.len() <= 96

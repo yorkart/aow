@@ -1,7 +1,8 @@
+import { t } from '../lib/i18n';
 import { appUrl } from '../lib/basePath';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { parseTabUrl, resolveTabTarget, tabLocationUrl, tabTargetUrl, type ResolvedTab, type TabTarget } from './tabRoutes';
-import { TabNavigationContext } from './tabNavigation';
+import { TabNavigationCancelContext, TabNavigationContext } from './tabNavigation';
 export { useAowTabNavigation } from './tabNavigation';
 export { aowTabUrl } from './tabRoutes';
 
@@ -60,6 +61,7 @@ export function AowTabEntry({ children }: { children: (entry?: ResolvedTab) => R
     setError('');
     pending.current = 'loading';
     void Promise.resolve().then(async () => {
+      if (controller.signal.aborted) return;
       const target = parseTabUrl(new URL(request.url));
       if (!target) {
         pending.current = undefined;
@@ -70,7 +72,7 @@ export function AowTabEntry({ children }: { children: (entry?: ResolvedTab) => R
       const resolved = await resolveTabTarget(target, controller.signal);
       if (controller.signal.aborted) return;
       pending.current = tabTargetUrl(resolved.target);
-      setEntry(resolved); setLoading(false); setOpened(true);
+      setEntry({ ...resolved, signal: controller.signal }); setLoading(false); setOpened(true);
     }).catch(reason => {
       if (!controller.signal.aborted) { setError(reason instanceof Error ? reason.message : String(reason)); setLoading(false); }
     });
@@ -88,12 +90,19 @@ export function AowTabEntry({ children }: { children: (entry?: ResolvedTab) => R
       const resolved = await resolveTabTarget(target, controller.signal);
       if (controller.signal.aborted) return;
       pending.current = tabTargetUrl(resolved.target);
-      setError(''); setLoading(false); setOpened(true); setEntry(resolved);
+      setError(''); setLoading(false); setOpened(true); setEntry({ ...resolved, signal: controller.signal });
     } catch (reason) {
       if (controller.signal.aborted) return;
       pending.current = undefined;
       throw reason;
     }
+  }, []);
+  const cancelNavigation = useCallback(() => {
+    if (!pending.current) return;
+    navigation.current?.abort();
+    pending.current = undefined;
+    setEntry(undefined);
+    setError(''); setLoading(false); setOpened(true);
   }, []);
   const syncTab = useCallback((value?: TabTarget | string, hash = window.location.hash, visible = true) => {
     const target: TabTarget | undefined = typeof value === 'string' ? { type: 'terminal', tabId: value } : value;
@@ -108,14 +117,14 @@ export function AowTabEntry({ children }: { children: (entry?: ResolvedTab) => R
   }, [taskTabActivity]);
   const blocked = loading || !!error;
   useEffect(() => { if (blocked) taskTabActivity.update(); }, [blocked, taskTabActivity]);
-  return <TabNavigationContext.Provider value={navigateTab}><TabLocationContext.Provider value={syncTab}><TabLocationErrorContext.Provider value={setError}>
+  return <TabNavigationContext.Provider value={navigateTab}><TabNavigationCancelContext.Provider value={cancelNavigation}><TabLocationContext.Provider value={syncTab}><TabLocationErrorContext.Provider value={setError}>
     <TaskTabActivityContext.Provider value={taskTabActivity}>
       <div style={{ display: blocked ? 'none' : 'contents' }}>{opened && children(entry)}</div>
     </TaskTabActivityContext.Provider>
     {blocked && <main className="aow-auth"><section className="aow-auth-card">
-      <h1>{error ? '无法打开 Tab' : '正在定位 Tab…'}</h1>
-      {error ? <><p role="alert">{error}</p><button onClick={() => setRequest({ url: window.location.href })}>重试</button></> : <p role="status">正在读取内容所在的工作区。</p>}
-      <p><a href={tabLocationUrl(undefined)}>返回工作台</a></p>
+      <h1>{error ? t("aow.unable_to_open_tab") : t("aow.locating_tab")}</h1>
+      {error ? <><p role="alert">{error}</p><button onClick={() => setRequest({ url: window.location.href })}>{t("aow.retry")}</button></> : <p role="status">{t("aow.loading_the_workspace_containing_this_content")}</p>}
+      <p><a href={tabLocationUrl(undefined)}>{t("aow.back_to_workspace")}</a></p>
     </section></main>}
-  </TabLocationErrorContext.Provider></TabLocationContext.Provider></TabNavigationContext.Provider>;
+  </TabLocationErrorContext.Provider></TabLocationContext.Provider></TabNavigationCancelContext.Provider></TabNavigationContext.Provider>;
 }

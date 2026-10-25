@@ -43,7 +43,7 @@ impl TerminalManager {
         }
         let weak = Arc::downgrade(&self.inner);
         aow.notifications().start();
-        tokio::spawn(async move {
+        aow_i18n::spawn(async move {
             let mut registry = registry::Registry::default();
             let mut interval = tokio::time::interval(poll_interval);
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -64,7 +64,7 @@ impl TerminalManager {
                     .collect();
                 // Read before removing exited agents so a short-lived CLI's
                 // final record is consumed; deleted shell instances are removed first.
-                let result = tokio::task::spawn_blocking(move || {
+                let result = aow_i18n::spawn_blocking(move || {
                     registry.retain_instances(&instances);
                     let events = registry.poll();
                     (registry, events)
@@ -168,7 +168,7 @@ impl TerminalManager {
                         }
                         let roots = SessionRoots::from_configuration(home, &environment);
                         let candidate_identity = identity.clone();
-                        let candidates = tokio::task::spawn_blocking(move || {
+                        let candidates = aow_i18n::spawn_blocking(move || {
                             registry::candidates(&candidate_identity, roots)
                         })
                         .await;
@@ -179,7 +179,7 @@ impl TerminalManager {
                             continue;
                         }
                         let instance = pane.id.clone();
-                        let result = tokio::task::spawn_blocking(move || {
+                        let result = aow_i18n::spawn_blocking(move || {
                             registry.refresh(instance, identity, candidates);
                             registry
                         })

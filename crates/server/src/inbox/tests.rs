@@ -178,39 +178,22 @@ fn custom_labels_remove_references_atomically_and_survive_restart() {
     let reopened = InboxStore::persistent(root.path()).unwrap();
     assert_eq!(reopened.snapshot().unwrap().labels[0].name, "Waiting");
     assert_eq!(reopened.item(&item.id).unwrap().markdown, "需求");
-    let config = aow_config::ConfigRepository::open(root.path())
-        .unwrap()
-        .unwrap();
-    let output = std::process::Command::new("git")
-        .args(["status", "--porcelain"])
-        .current_dir(config.directory())
-        .output()
-        .unwrap();
-    assert!(output.stdout.is_empty());
-    std::fs::write(config.directory().join("inbox/labels.json"), b"corrupt").unwrap();
+    let config = aow_config::ConfigStore::open(root.path()).unwrap();
+    std::fs::write(
+        config.directory().join("data/inbox/labels.json"),
+        b"corrupt",
+    )
+    .unwrap();
     assert!(InboxStore::persistent(root.path()).is_err());
 }
 
 #[test]
-fn config_commit_failure_preserves_durable_capture_and_retry_does_not_duplicate() {
+fn capture_retry_does_not_duplicate_persisted_items() {
     let root = tempfile::tempdir().unwrap();
     let store = InboxStore::persistent(root.path()).unwrap();
-    let config = aow_config::ConfigRepository::open(root.path())
-        .unwrap()
-        .unwrap();
-    let lock = config.directory().parent().unwrap().join(".git/index.lock");
-    std::fs::write(&lock, "busy").unwrap();
-    assert!(
-        store
-            .capture(Capture {
-                request_key: "key".into(),
-                markdown: "keep me".into()
-            })
-            .is_err()
-    );
+    capture(&store, "key", "keep me");
     let snapshot = store.snapshot().unwrap();
     assert_eq!(snapshot.items.len(), 1);
-    std::fs::remove_file(lock).unwrap();
     let retry = capture(&store, "key", "keep me");
     assert_eq!(retry.id, snapshot.items[0].id);
     assert_eq!(
@@ -312,10 +295,8 @@ fn executions_keep_input_snapshot_deduplicate_and_recover_without_resubmission()
     let recovered = reopened.snapshot().unwrap().executions.remove(0);
     assert_eq!(recovered.phase, RunPhase::Interrupted);
     assert_eq!(recovered.markdown, retried.markdown);
-    let config = aow_config::ConfigRepository::open(root.path())
-        .unwrap()
-        .unwrap();
-    let saved = std::fs::read_to_string(config.directory().join("inbox/labels.json")).unwrap();
+    let config = aow_config::ConfigStore::open(root.path()).unwrap();
+    let saved = std::fs::read_to_string(config.directory().join("data/inbox/labels.json")).unwrap();
     assert!(!saved.contains("request_key"));
     assert!(!saved.contains("executions"));
 }
@@ -407,16 +388,14 @@ fn requirement_directories_keep_append_only_comments_and_are_moved_on_deletion()
     let root = tempfile::tempdir().unwrap();
     let store = InboxStore::persistent(root.path()).unwrap();
     let item = capture(&store, "requirement", "# 原始需求");
-    let config = aow_config::ConfigRepository::open(root.path())
-        .unwrap()
-        .unwrap();
+    let config = aow_config::ConfigStore::open(root.path()).unwrap();
     let active = config
         .directory()
-        .join("inbox/requirements/active")
+        .join("data/inbox/requirements/active")
         .join(&item.id);
     let deleted = config
         .directory()
-        .join("inbox/requirements/deleted")
+        .join("data/inbox/requirements/deleted")
         .join(&item.id);
     assert_eq!(std::fs::read_dir(&active).unwrap().count(), 2);
     assert_eq!(std::fs::read(active.join("comments.jsonl")).unwrap(), b"");
@@ -492,32 +471,18 @@ fn requirement_directories_keep_append_only_comments_and_are_moved_on_deletion()
             .items
             .is_empty()
     );
-    let status = std::process::Command::new("git")
-        .args(["status", "--porcelain"])
-        .current_dir(config.directory())
-        .output()
-        .unwrap();
-    assert!(status.stdout.is_empty());
 }
 
 #[test]
-fn comment_commit_failure_is_durable_and_retry_does_not_append_again() {
+fn comment_retry_does_not_append_again() {
     let root = tempfile::tempdir().unwrap();
     let store = InboxStore::persistent(root.path()).unwrap();
     let item = capture(&store, "capture", "需求");
-    let config = aow_config::ConfigRepository::open(root.path())
-        .unwrap()
+    store
+        .append_comment(&item.id, comment("result", "完成"))
         .unwrap();
-    let lock = config.directory().parent().unwrap().join(".git/index.lock");
-    std::fs::write(&lock, "busy").unwrap();
-    assert!(
-        store
-            .append_comment(&item.id, comment("result", "完成"))
-            .is_err()
-    );
     let saved = store.comments(&item.id).unwrap();
     assert_eq!(saved.len(), 1);
-    std::fs::remove_file(lock).unwrap();
     let retry = store
         .append_comment(&item.id, comment("result", "完成"))
         .unwrap();
@@ -561,7 +526,7 @@ fn concurrent_comment_appends_remain_individual_json_lines() {
 #[test]
 fn legacy_inbox_data_is_ignored_and_invalid_jsonl_is_reported() {
     let root = tempfile::tempdir().unwrap();
-    let config = aow_config::ConfigRepository::initialize(root.path()).unwrap();
+    let config = aow_config::ConfigStore::initialize(root.path()).unwrap();
     std::fs::write(
         config.directory().join("inbox.json"),
         b"discarded legacy data",
@@ -572,7 +537,7 @@ fn legacy_inbox_data_is_ignored_and_invalid_jsonl_is_reported() {
     let item = capture(&store, "capture", "需求");
     let path = config
         .directory()
-        .join("inbox/requirements/active")
+        .join("data/inbox/requirements/active")
         .join(&item.id)
         .join("comments.jsonl");
     std::fs::write(path, b"not a JSON comment\n").unwrap();
@@ -590,10 +555,8 @@ fn failed_multi_file_update_restores_previous_requirements_and_registry() {
         input.label_ids = vec!["todo".into()];
         items.push(store.update(&item.id, input).unwrap());
     }
-    let config = aow_config::ConfigRepository::open(root.path())
-        .unwrap()
-        .unwrap();
-    let inbox = config.directory().join("inbox");
+    let config = aow_config::ConfigStore::open(root.path()).unwrap();
+    let inbox = config.directory().join("data/inbox");
     let first = inbox
         .join("requirements/active")
         .join(&items[0].id)
@@ -729,7 +692,12 @@ async fn api_captures_without_project_checks_binding_and_refuses_unbound_executi
         json!({"expected_revision":1,"request_key":"dynamic","agent":"codex","workspace_mode":"dynamic"}),
     ).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert!(result["message"].as_str().unwrap().contains("仅手动任务"));
+    assert!(
+        result["message"]
+            .as_str()
+            .unwrap()
+            .contains("Only manual tasks")
+    );
     let (status, _) = request(
         &app,
         "PUT",

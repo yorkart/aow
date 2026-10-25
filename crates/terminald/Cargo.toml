@@ -9,6 +9,7 @@ name = "aow-terminald"
 path = "src/main.rs"
 
 [dependencies]
+aow-filesystem = { path = "../filesystem" }
 aow-id = { path = "../id" }
 anyhow.workspace = true
 axum.workspace = true

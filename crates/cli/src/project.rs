@@ -39,7 +39,7 @@ enum ProjectCommand {
 }
 
 pub fn execute(args: ProjectArgs, state_dir: PathBuf) -> Result<Value> {
-    let client = TerminaldClient::new(state_dir.join("cli/cli.sock"));
+    let client = TerminaldClient::new(state_dir.join("runtime/cli/cli.sock"));
     let path = match args.command {
         ProjectCommand::List => "/v1/projects".to_owned(),
         ProjectCommand::Get { project_id } => format!("/v1/projects/{project_id}"),

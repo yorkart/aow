@@ -1,5 +1,5 @@
 //! Reconcile submission-order steering with consumption-order history. Input
-//! order and the entire non-steering transcript must agree before reclassification.
+//! order and the non-steering transcript must agree before reclassification.
 use crate::facade::{SessionSnapshot, ThreadEntry};
 use std::collections::{BTreeMap, VecDeque};
 
@@ -66,21 +66,59 @@ fn normalize(
             previous.entry.content["text"] = format!("{before}{text}").into();
             previous.indices.push(index);
         } else {
-            let mut entry = entry.clone();
-            if entry.kind == "tool"
-                && let Some(content) = entry.content.as_object_mut()
-            {
-                // Live tools end in tool_call_update; replay can send the
-                // same completed tool in one tool_call notification.
-                content.remove("sessionUpdate");
-            }
             result.push(Message {
-                entry,
+                entry: entry.clone(),
                 indices: vec![index],
             });
         }
     }
+    // Concurrent calls can be replayed in a different order. Only reorder a
+    // contiguous tool batch for comparison, never across a message boundary.
+    let mut start = 0;
+    while start < result.len() {
+        if result[start].entry.kind != "tool" {
+            start += 1;
+            continue;
+        }
+        let end = result[start..]
+            .iter()
+            .position(|message| message.entry.kind != "tool")
+            .map_or(result.len(), |offset| start + offset);
+        result[start..end].sort_by(|a, b| a.entry.id.cmp(&b.entry.id));
+        start = end;
+    }
     result
+}
+
+fn same_message(before: &ThreadEntry, after: &ThreadEntry) -> bool {
+    if before.kind != after.kind {
+        return false;
+    }
+    if before.kind == "tool" {
+        // A native replay can replace inline output with terminal references,
+        // omit rawOutput, and rebuild terminal metadata. Those are display
+        // representations, not new calls. Verify the stable call identity and
+        // invocation/status fields while retaining the replayed tool verbatim.
+        return !before.id.is_empty()
+            && before.id == after.id
+            && ["name", "kind", "title", "rawInput", "status"]
+                .iter()
+                .all(|key| before.content[key] == after.content[key]);
+    }
+    let content_matches = before.content == after.content
+        || before.kind == "thought"
+            && before.message_id.is_some()
+            && before.content["type"] == "text"
+            && after.content["type"] == "text"
+            && before.content["text"]
+                .as_str()
+                .zip(after.content["text"].as_str())
+                .is_some_and(|(a, b)| a.trim() == b.trim());
+    // Live reasoning adds paragraph separators that history omits. This is
+    // comparison-only: preserve the native text and still require its identity.
+    content_matches
+        && (!matches!(before.kind.as_str(), "assistant" | "thought")
+            || before.message_id == after.message_id)
 }
 
 pub(super) fn reconcile(previous: &SessionSnapshot, replay: &mut SessionSnapshot) -> bool {
@@ -159,13 +197,10 @@ pub(super) fn reconcile(previous: &SessionSnapshot, replay: &mut SessionSnapshot
         steering.contains_key(&index)
     });
     if before.len() != after.len()
-        || before.iter().zip(&after).any(|(a, b)| {
-            a.entry.kind != b.entry.kind
-                || a.entry.content != b.entry.content
-                || matches!(a.entry.kind.as_str(), "assistant" | "thought")
-                    && a.entry.message_id != b.entry.message_id
-                || a.entry.kind == "tool" && a.entry.id != b.entry.id
-        })
+        || before
+            .iter()
+            .zip(&after)
+            .any(|(a, b)| !same_message(&a.entry, &b.entry))
     {
         return false;
     }

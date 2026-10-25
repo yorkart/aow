@@ -1,56 +1,17 @@
-import { useEffect, useState } from 'react';
-import { terminalApi } from './terminalApi';
+import { useMemo } from 'react';
+import { useTerminalState } from './useTerminalState';
+import { emptyTerminalMetadata } from './terminalStore';
 import type { TerminalAgentList } from './types';
 
-const emptyMetadata: TerminalAgentList = { agents: {}, titles: {}, processes: {}, activity: {} };
-
-function sameValues(a: Record<string, string | null>, b: Record<string, string | null>) {
-  return Object.keys(a).length === Object.keys(b).length
-    && Object.entries(a).every(([id, value]) => b[id] === value);
-}
-
-function sameActivity(a: TerminalAgentList['activity'], b: TerminalAgentList['activity']) {
-  return Object.keys(a).length === Object.keys(b).length
-    && Object.entries(a).every(([id, activity]) => b[id]?.cwd === activity.cwd
-      && b[id]?.foreground_command === activity.foreground_command);
-}
-
-export function useTerminalAgents(workspaceRoot: string, enabled: boolean) {
-  const [snapshot, setSnapshot] = useState({ root: workspaceRoot, metadata: emptyMetadata });
-
-  useEffect(() => {
-    if (!enabled) return;
-    const controller = new AbortController();
-    let pending = false;
-    const update = (metadata: TerminalAgentList) => {
-      if (controller.signal.aborted) return;
-      setSnapshot(previous => previous.root === workspaceRoot
-        && sameValues(previous.metadata.agents, metadata.agents)
-        && sameValues(previous.metadata.titles, metadata.titles)
-        && sameActivity(previous.metadata.activity, metadata.activity)
-        && Object.keys(previous.metadata.processes).length === Object.keys(metadata.processes).length
-        && Object.entries(previous.metadata.processes).every(([id, process]) => {
-          const next = metadata.processes[id];
-          return next?.pid === process.pid && next.start_time === process.start_time && next.cwd === process.cwd;
-        })
-        ? previous : { root: workspaceRoot, metadata });
+export function useTerminalAgents(workspaceRoot: string, enabled: boolean): TerminalAgentList {
+  const snapshot = useTerminalState(enabled);
+  return useMemo(() => {
+    if (!enabled || !snapshot.tabs) return emptyTerminalMetadata;
+    const panes = new Set(snapshot.tabs.filter(tab => tab.workspace_root === workspaceRoot).flatMap(tab => tab.panes.map(pane => pane.id)));
+    const select = <T,>(values: Record<string, T>) => Object.fromEntries(Object.entries(values).filter(([id]) => panes.has(id)));
+    return {
+      agents: select(snapshot.metadata.agents), titles: select(snapshot.metadata.titles),
+      processes: select(snapshot.metadata.processes), activity: select(snapshot.metadata.activity),
     };
-    const refresh = async () => {
-      if (pending || document.visibilityState !== 'visible') return;
-      pending = true;
-      try { update(await terminalApi.agents(workspaceRoot, controller.signal)); }
-      catch { /* A failed poll is not evidence that the agent exited. */ }
-      finally { pending = false; }
-    };
-    void refresh();
-    const timer = window.setInterval(() => void refresh(), 1500);
-    document.addEventListener('visibilitychange', refresh);
-    return () => {
-      controller.abort();
-      window.clearInterval(timer);
-      document.removeEventListener('visibilitychange', refresh);
-    };
-  }, [workspaceRoot, enabled]);
-
-  return snapshot.root === workspaceRoot ? snapshot.metadata : emptyMetadata;
+  }, [enabled, workspaceRoot, snapshot.tabs, snapshot.metadata]);
 }

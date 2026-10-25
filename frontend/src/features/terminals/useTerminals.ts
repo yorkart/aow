@@ -3,7 +3,8 @@ import { terminalApi } from './terminalApi';
 import { isCliTerminal } from './terminalPresentation';
 import { useTerminalAgents } from './useTerminalAgents';
 import type { TerminalLayout, TerminalPaneStatus, TerminalTab } from './types';
-import { subscribeWorkspaceChanges } from '../../lib/workspaceEvents';
+import { useTerminalState } from './useTerminalState';
+import { terminalStore } from './terminalStore';
 
 function message(reason: unknown) {
   return reason instanceof Error ? reason.message : String(reason);
@@ -25,20 +26,18 @@ function sameLayout(left: TerminalLayout | null, right: TerminalLayout | null): 
 }
 
 export function useTerminals(workspaceRoot: string, enabled: boolean) {
+  const snapshot = useTerminalState(enabled);
+  const session = terminalStore.session();
   const [tabs, setTabs] = useState<TerminalTab[]>([]);
   const [activeId, setActiveId] = useState<string>();
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const busyRef = useRef(busy);
-  busyRef.current = busy;
-  const requestGeneration = useRef(0);
   const busyGeneration = useRef(0);
   const workspaceGeneration = useRef(0);
   const workspaceRootRef = useRef(workspaceRoot);
   const stateRootRef = useRef(workspaceRoot);
-  const loadedRootRef = useRef<string | undefined>(undefined);
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
 
@@ -47,46 +46,14 @@ export function useTerminals(workspaceRoot: string, enabled: boolean) {
     workspaceGeneration.current += 1;
   }
 
-  const load = useCallback(async (quiet = false) => {
-    if (workspaceRootRef.current !== workspaceRoot || (quiet && busyRef.current)) return;
-    const generation = ++requestGeneration.current;
-    const rootGeneration = workspaceGeneration.current;
-    loadedRootRef.current = workspaceRoot;
-    if (!quiet) { setLoading(true); setError(''); }
-    try {
-      const nextTabs = await terminalApi.list(workspaceRoot);
-      if (requestGeneration.current !== generation
-        || workspaceGeneration.current !== rootGeneration
-        || workspaceRootRef.current !== workspaceRoot) return;
-      stateRootRef.current = workspaceRoot;
-      setTabs(current => {
-        const previousById = new Map(current.map(tab => [tab.id, tab]));
-        return nextTabs.map(tab => {
-          const previous = previousById.get(tab.id);
-          // A fresh JSON object must not reset TerminalWorkspace's active drag.
-          return previous && sameLayout(previous.layout, tab.layout)
-            ? { ...tab, layout: previous.layout }
-            : tab;
-        });
-      });
-      setLoaded(true);
-      setError('');
-      setActiveId((current) => nextTabs.some((tab) => tab.id === current) ? current : nextTabs.find(tab => !isCliTerminal(tab))?.id);
-    } catch (reason) {
-      if (requestGeneration.current === generation
-        && workspaceGeneration.current === rootGeneration
-        && workspaceRootRef.current === workspaceRoot) setError(message(reason));
-    } finally {
-      if (requestGeneration.current === generation
-        && workspaceGeneration.current === rootGeneration
-        && workspaceRootRef.current === workspaceRoot) setLoading(false);
-    }
-  }, [workspaceRoot]);
+  const load = useCallback(async () => {
+    if (!terminalStore.isCurrentSession(session) || workspaceRootRef.current !== workspaceRoot) return;
+    setError('');
+    await terminalStore.refresh();
+  }, [workspaceRoot, session]);
 
   useEffect(() => {
-    requestGeneration.current += 1;
     busyGeneration.current += 1;
-    loadedRootRef.current = undefined;
     stateRootRef.current = workspaceRoot;
     setTabs([]);
     setLoaded(false);
@@ -97,32 +64,29 @@ export function useTerminals(workspaceRoot: string, enabled: boolean) {
   }, [workspaceRoot]);
 
   useEffect(() => {
-    if (enabled && loadedRootRef.current !== workspaceRoot) void load();
-  }, [enabled, load]);
-
-  useEffect(() => {
-    if (!enabled) return;
-    let pending = false;
-    let queued = false;
-    let disposed = false;
-    const refresh = () => {
-      if (pending) { queued = true; return; }
-      if (document.visibilityState === 'visible' && !pending) {
-        pending = true;
-        void load(true).finally(() => {
-          pending = false;
-          if (queued && !disposed) { queued = false; refresh(); }
-        });
-      }
-    };
-    const timer = window.setInterval(refresh, 3000);
-    const unsubscribe = subscribeWorkspaceChanges(change => { if (change.reset || change.terminals) refresh(); });
-    return () => { disposed = true; unsubscribe(); window.clearInterval(timer); };
-  }, [enabled, load]);
+    if (snapshot.status === 'denied') {
+      busyGeneration.current += 1;
+      setTabs([]); setActiveId(undefined); setLoaded(false); setLoading(false); setBusy(false); setError('');
+      return;
+    }
+    if (!enabled || busy) return;
+    if (!snapshot.tabs) { setLoading(!snapshot.error); return; }
+    const nextTabs = snapshot.tabs.filter(tab => tab.workspace_root === workspaceRoot);
+    stateRootRef.current = workspaceRoot;
+    setTabs(current => {
+      const previousById = new Map(current.map(tab => [tab.id, tab]));
+      return nextTabs.map(tab => {
+        const previous = previousById.get(tab.id);
+        // Preserve layout identity while a pane divider is being dragged.
+        return previous && sameLayout(previous.layout, tab.layout) ? { ...tab, layout: previous.layout } : tab;
+      });
+    });
+    setLoaded(true); setLoading(false);
+    setActiveId(current => nextTabs.some(tab => tab.id === current) ? current : nextTabs.find(tab => !isCliTerminal(tab))?.id);
+  }, [enabled, workspaceRoot, snapshot.tabs, snapshot.error, snapshot.status, busy]);
 
   const create = useCallback(async (agentId?: string) => {
-    if (workspaceRootRef.current !== workspaceRoot) return null;
-    requestGeneration.current += 1;
+    if (!terminalStore.isCurrentSession(session) || workspaceRootRef.current !== workspaceRoot) return null;
     const operationGeneration = ++busyGeneration.current;
     const rootGeneration = workspaceGeneration.current;
     setLoading(false);
@@ -130,47 +94,49 @@ export function useTerminals(workspaceRoot: string, enabled: boolean) {
     setError('');
     try {
       const tab = await terminalApi.create(workspaceRoot, { cwd: workspaceRoot, agentId });
-      if (workspaceGeneration.current !== rootGeneration
+      if (!terminalStore.isCurrentSession(session) || workspaceGeneration.current !== rootGeneration
         || workspaceRootRef.current !== workspaceRoot) return null;
       stateRootRef.current = workspaceRoot;
+      terminalStore.replace(tab);
       setTabs((items) => [...items.filter((item) => item.id !== tab.id), tab]);
       setActiveId(tab.id);
       return tab;
     } catch (reason) {
-      if (workspaceGeneration.current === rootGeneration
+      if (terminalStore.isCurrentSession(session) && workspaceGeneration.current === rootGeneration
         && workspaceRootRef.current === workspaceRoot) setError(message(reason));
       return null;
     } finally {
-      if (busyGeneration.current === operationGeneration
+      if (terminalStore.isCurrentSession(session) && busyGeneration.current === operationGeneration
         && workspaceGeneration.current === rootGeneration
         && workspaceRootRef.current === workspaceRoot) setBusy(false);
     }
-  }, [workspaceRoot]);
+  }, [workspaceRoot, session]);
 
   const rename = useCallback(async (tabId: string, nextName: string) => {
     const name = nextName.trim();
-    if (!name) return;
+    if (!name || !terminalStore.isCurrentSession(session)) return;
     const root = workspaceRootRef.current;
     const rootGeneration = workspaceGeneration.current;
     const operationGeneration = ++busyGeneration.current;
-    requestGeneration.current += 1;
     setLoading(false);
     setBusy(true);
     setError('');
     try {
       const updated = await terminalApi.rename(tabId, name);
-      if (workspaceGeneration.current !== rootGeneration || workspaceRootRef.current !== root) return;
+      if (!terminalStore.isCurrentSession(session) || workspaceGeneration.current !== rootGeneration || workspaceRootRef.current !== root) return;
+      terminalStore.update(items => items.map(tab => tab.id === tabId ? { ...(updated ?? tab), name, name_is_custom: true } : tab));
       setTabs((items) => items.map((tab) => tab.id === tabId ? { ...(updated ?? tab), name, name_is_custom: true } : tab));
     } catch (reason) {
-      if (workspaceGeneration.current === rootGeneration && workspaceRootRef.current === root) setError(message(reason));
+      if (terminalStore.isCurrentSession(session) && workspaceGeneration.current === rootGeneration && workspaceRootRef.current === root) setError(message(reason));
     } finally {
-      if (busyGeneration.current === operationGeneration
+      if (terminalStore.isCurrentSession(session) && busyGeneration.current === operationGeneration
         && workspaceGeneration.current === rootGeneration
         && workspaceRootRef.current === root) setBusy(false);
     }
-  }, []);
+  }, [session]);
 
   const reorder = useCallback(async (tabIds: string[]) => {
+    if (!terminalStore.isCurrentSession(session)) return;
     const root = workspaceRootRef.current;
     const rootGeneration = workspaceGeneration.current;
     const previousIds = tabsRef.current.map((tab) => tab.id);
@@ -178,39 +144,44 @@ export function useTerminals(workspaceRoot: string, enabled: boolean) {
       || previousIds.some((id) => !tabIds.includes(id))
       || previousIds.every((id, index) => id === tabIds[index])) return;
     const operationGeneration = ++busyGeneration.current;
-    requestGeneration.current += 1;
     setLoading(false);
     setBusy(true);
     setError('');
     setTabs((items) => reorderTabs(items, tabIds));
     try {
       const reordered = await terminalApi.reorder(root, tabIds);
-      if (workspaceGeneration.current !== rootGeneration || workspaceRootRef.current !== root) return;
+      if (!terminalStore.isCurrentSession(session) || workspaceGeneration.current !== rootGeneration || workspaceRootRef.current !== root) return;
       stateRootRef.current = root;
+      terminalStore.update(items => {
+        const ordered = reorderTabs(items.filter(tab => tab.workspace_root === root), reordered.map(tab => tab.id));
+        let index = 0;
+        return items.map(tab => tab.workspace_root === root ? ordered[index++] : tab);
+      });
       setTabs((items) => reorderTabs(items, reordered.map((tab) => tab.id)));
     } catch (reason) {
-      if (workspaceGeneration.current === rootGeneration && workspaceRootRef.current === root) {
+      if (terminalStore.isCurrentSession(session) && workspaceGeneration.current === rootGeneration && workspaceRootRef.current === root) {
         setTabs((items) => reorderTabs(items, previousIds));
         setError(message(reason));
       }
     } finally {
-      if (busyGeneration.current === operationGeneration
+      if (terminalStore.isCurrentSession(session) && busyGeneration.current === operationGeneration
         && workspaceGeneration.current === rootGeneration
         && workspaceRootRef.current === root) setBusy(false);
     }
-  }, []);
+  }, [session]);
 
   const close = useCallback(async (tabId: string) => {
+    if (!terminalStore.isCurrentSession(session)) return;
     const root = workspaceRootRef.current;
     const rootGeneration = workspaceGeneration.current;
     const operationGeneration = ++busyGeneration.current;
-    requestGeneration.current += 1;
     setLoading(false);
     setBusy(true);
     setError('');
     try {
       await terminalApi.close(tabId);
-      if (workspaceGeneration.current !== rootGeneration || workspaceRootRef.current !== root) return;
+      if (!terminalStore.isCurrentSession(session) || workspaceGeneration.current !== rootGeneration || workspaceRootRef.current !== root) return;
+      terminalStore.remove(tabId);
       setTabs((items) => {
         const index = items.findIndex((item) => item.id === tabId);
         const remaining = items.filter((item) => item.id !== tabId);
@@ -220,15 +191,17 @@ export function useTerminals(workspaceRoot: string, enabled: boolean) {
         return remaining;
       });
     } catch (reason) {
-      if (workspaceGeneration.current === rootGeneration && workspaceRootRef.current === root) setError(message(reason));
+      if (terminalStore.isCurrentSession(session) && workspaceGeneration.current === rootGeneration && workspaceRootRef.current === root) setError(message(reason));
     } finally {
-      if (busyGeneration.current === operationGeneration
+      if (terminalStore.isCurrentSession(session) && busyGeneration.current === operationGeneration
         && workspaceGeneration.current === rootGeneration
         && workspaceRootRef.current === root) setBusy(false);
     }
-  }, []);
+  }, [session]);
 
   const remove = useCallback((tabId: string) => {
+    if (!terminalStore.isCurrentSession(session)) return;
+    terminalStore.remove(tabId);
     setTabs((items) => {
       const index = items.findIndex((item) => item.id === tabId);
       if (index < 0) return items;
@@ -238,11 +211,11 @@ export function useTerminals(workspaceRoot: string, enabled: boolean) {
         : current);
       return remaining;
     });
-  }, []);
+  }, [session]);
 
   const replace = useCallback((updated: TerminalTab) => {
-    if (updated.workspace_root !== workspaceRootRef.current) return;
-    requestGeneration.current += 1;
+    if (!terminalStore.isCurrentSession(session) || updated.workspace_root !== workspaceRootRef.current) return;
+    terminalStore.replace(updated);
     setLoading(false);
     setTabs((items) => items.some((tab) => tab.id === updated.id)
       ? items.map((tab) => tab.id === updated.id
@@ -251,21 +224,21 @@ export function useTerminals(workspaceRoot: string, enabled: boolean) {
           : updated
         : tab)
       : [...items, updated]);
-  }, []);
+  }, [session]);
 
   const updatePaneStatus = useCallback((tabId: string, paneId: string, status: TerminalPaneStatus, exitCode?: number | null) => {
     const currentRoot = workspaceRootRef.current;
-    if (stateRootRef.current !== currentRoot
+    if (!terminalStore.isCurrentSession(session) || stateRootRef.current !== currentRoot
       || !tabsRef.current.some((tab) => tab.id === tabId && tab.workspace_root === currentRoot)) return;
-    requestGeneration.current += 1;
     setLoading(false);
+    terminalStore.updatePaneStatus(tabId, paneId, status, exitCode);
     setTabs((items) => items.map((tab) => tab.id === tabId ? {
       ...tab,
       panes: tab.panes.map((pane) => pane.id === paneId
         ? { ...pane, status, ...(exitCode === undefined ? {} : { exit_code: exitCode }) }
         : pane),
     } : tab));
-  }, []);
+  }, [session]);
 
   const currentTabs = stateRootRef.current === workspaceRoot ? tabs : [];
   const { agents: detectedAgents, titles: terminalTitles, processes: agentProcesses, activity: terminalActivity } = useTerminalAgents(workspaceRoot, enabled && currentTabs.length > 0);
@@ -276,7 +249,7 @@ export function useTerminals(workspaceRoot: string, enabled: boolean) {
   );
 
   return {
-    tabs: currentTabs, activeId: currentActiveId, activeTab, loaded, loading, busy, error, detectedAgents, terminalTitles, agentProcesses, terminalActivity,
+    tabs: currentTabs, activeId: currentActiveId, activeTab, loaded, loading, busy, error: error || snapshot.error, detectedAgents, terminalTitles, agentProcesses, terminalActivity,
     activate: setActiveId, create, rename, reorder, close, remove, replace, updatePaneStatus, reload: load,
   };
 }

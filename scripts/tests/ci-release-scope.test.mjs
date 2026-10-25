@@ -17,6 +17,8 @@ test('main and manual runs always build packages; ordinary PR changes run the te
 
 test('release tooling, native dependencies and build configuration require every platform', () => {
   for (const path of [
+    'git-platform-providers/github.mjs', 'git-platform-providers/gitlab.mjs',
+    'skills/aow-agent/SKILL.md', 'skills/aow-acp/SKILL.md',
     'scripts/package-release.sh', 'scripts/tests/macos-release.test.mjs',
     'packaging/bin/aow', '.github/workflows/release.yml', '.cargo/config.toml',
     'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'rust-toolchain',

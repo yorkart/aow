@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useMemo, useState, type ReactNode } from 'react';
 import { CaseSensitive, Files, ListFilter, LoaderCircle, NotebookPen, Regex, Search, SlidersHorizontal, WholeWord, X } from 'lucide-react';
 import { AowPanelStack } from '../../components/AowPanel';
@@ -30,33 +31,33 @@ export function ExplorerSearch({ projectRoot, notesRoot, visible, onOpen, childr
       <div className="explorer-search-input">
         <div className="explorer-search-query">
           {project.loading || notes.loading ? <LoaderCircle className="spinning" size={15} /> : content ? <Search size={15} /> : <ListFilter size={15} />}
-          <input aria-label="搜索 Project 和 Notes" placeholder={content ? '搜索文件内容' : '按文件名或路径查找'} value={query} spellCheck={false}
+          <input aria-label={t("files.search_project_and_notes")} placeholder={content ? t("files.search_file_contents") : t("files.find_by_file_name_or_path")} value={query} spellCheck={false}
             onChange={event => setQuery(event.currentTarget.value)} onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)}
             onKeyDown={event => { if (event.nativeEvent.isComposing) return; if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setQuery(''); } if (event.key === 'Enter') setRefresh(value => value + 1); }} />
-          {query ? <ExplorerSearchButton label="清空搜索" onClick={() => setQuery('')}><X size={14} /></ExplorerSearchButton> : null}
+          {query ? <ExplorerSearchButton label={t("files.clear_search")} onClick={() => setQuery('')}><X size={14} /></ExplorerSearchButton> : null}
           {content ? <>
-            <ExplorerSearchButton label="区分大小写" aria-pressed={options.case_sensitive} onClick={() => toggle('case_sensitive')}><CaseSensitive size={16} /></ExplorerSearchButton>
-            <ExplorerSearchButton label="全词匹配" aria-pressed={options.whole_word} onClick={() => toggle('whole_word')}><WholeWord size={16} /></ExplorerSearchButton>
-            <ExplorerSearchButton label="正则表达式" aria-pressed={options.use_regex} onClick={() => toggle('use_regex')}><Regex size={16} /></ExplorerSearchButton>
+            <ExplorerSearchButton label={t("files.case_sensitive")} aria-pressed={options.case_sensitive} onClick={() => toggle('case_sensitive')}><CaseSensitive size={16} /></ExplorerSearchButton>
+            <ExplorerSearchButton label={t("files.whole_word")} aria-pressed={options.whole_word} onClick={() => toggle('whole_word')}><WholeWord size={16} /></ExplorerSearchButton>
+            <ExplorerSearchButton label={t("files.regular_expression")} aria-pressed={options.use_regex} onClick={() => toggle('use_regex')}><Regex size={16} /></ExplorerSearchButton>
           </> : null}
         </div>
-        <div className="explorer-search-modes" role="group" aria-label="搜索模式">
-          <button aria-pressed={!content} onClick={() => setOptions(previous => ({ ...previous, mode: 'name' }))}>文件</button>
-          <button aria-pressed={content} onClick={() => setOptions(previous => ({ ...previous, mode: 'content' }))}>内容</button>
-          {content ? <ExplorerSearchButton className="explorer-search-filter-toggle" label="搜索范围" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(value => !value)}><SlidersHorizontal size={14} /></ExplorerSearchButton> : null}
+        <div className="explorer-search-modes" role="group" aria-label={t("files.search_mode")}>
+          <button aria-pressed={!content} onClick={() => setOptions(previous => ({ ...previous, mode: 'name' }))}>{t("aow.files")}</button>
+          <button aria-pressed={content} onClick={() => setOptions(previous => ({ ...previous, mode: 'content' }))}>{t("files.content")}</button>
+          {content ? <ExplorerSearchButton className="explorer-search-filter-toggle" label={t("files.search_scope")} aria-expanded={filtersOpen} onClick={() => setFiltersOpen(value => !value)}><SlidersHorizontal size={14} /></ExplorerSearchButton> : null}
         </div>
       </div>
       {content && filtersOpen ? <div className="explorer-search-filters">
-        <label>包含文件<input value={options.include_pattern} placeholder="*.ts, src/**" onChange={event => setOptions(previous => ({ ...previous, include_pattern: event.target.value }))} /></label>
-        <label>排除文件<input value={options.exclude_pattern} placeholder="dist/**, *.min.js" onChange={event => setOptions(previous => ({ ...previous, exclude_pattern: event.target.value }))} /></label>
-        <label className="explorer-search-check"><input type="checkbox" checked={options.include_ignored} onChange={() => toggle('include_ignored')} />包含被忽略的文件</label>
-        <span>搜索磁盘上的文本文件（单文件最多 5 MiB）。</span>
+        <label>{t("files.include_files")}<input value={options.include_pattern} placeholder="*.ts, src/**" onChange={event => setOptions(previous => ({ ...previous, include_pattern: event.target.value }))} /></label>
+        <label>{t("files.exclude_files")}<input value={options.exclude_pattern} placeholder="dist/**, *.min.js" onChange={event => setOptions(previous => ({ ...previous, exclude_pattern: event.target.value }))} /></label>
+        <label className="explorer-search-check"><input type="checkbox" checked={options.include_ignored} onChange={() => toggle('include_ignored')} />{t("files.include_ignored_files")}</label>
+        <span>{t("files.search_text_files_on_disk_up_to_5_mib")}</span>
       </div> : null}
     </div>
     <div className="explorer-search-body" hidden={searching}>{children}</div>
     {searching ? <AowPanelStack className="project-aow-explorer-stack explorer-search-results">
-      <SearchResultTree key={`project:${project.key}`} root={projectRoot} title="Project Explorer" icon={<Files />} source="project" state={project} content={content} onOpen={onOpen} onRefresh={() => setRefresh(value => value + 1)} />
-      <SearchResultTree key={`notes:${notes.key}`} root={notesRoot} title="Notes Explorer" icon={<NotebookPen />} source="notes" state={notes} content={content} onOpen={onOpen} onRefresh={() => setRefresh(value => value + 1)} />
+      <SearchResultTree key={`project:${project.key}`} root={projectRoot} title={t("navigation.project_explorer")} icon={<Files />} source="project" state={project} content={content} onOpen={onOpen} onRefresh={() => setRefresh(value => value + 1)} />
+      <SearchResultTree key={`notes:${notes.key}`} root={notesRoot} title={t("navigation.notes_explorer")} icon={<NotebookPen />} source="notes" state={notes} content={content} onOpen={onOpen} onRefresh={() => setRefresh(value => value + 1)} />
     </AowPanelStack> : null}
   </div>;
 }

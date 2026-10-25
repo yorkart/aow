@@ -29,10 +29,10 @@ fn thread(id: &str) -> SessionSnapshot {
     thread
 }
 fn upsert(snapshot: SessionSnapshot) -> DbOperation {
-    DbOperation::Upsert(
-        Box::new(ThreadMetadata::from_snapshot(&snapshot, None)),
-        Arc::new(Mutex::new(snapshot)),
-    )
+    DbOperation {
+        metadata: Box::new(ThreadMetadata::from_snapshot(&snapshot, None)),
+        snapshot: Arc::new(Mutex::new(snapshot)),
+    }
 }
 fn count(connection: &Connection, table: &str) -> i64 {
     connection
@@ -56,16 +56,6 @@ fn load_snapshot(connection: &Connection, id: &str) -> Result<Option<SessionSnap
     row.map(|row| snapshot_store::decode(id, row)).transpose()
 }
 
-// Corresponding upstream tests: test_dedup_db_operations_keeps_latest_operation_for_session,
-// test_dedup_db_operations_keeps_latest_insert_for_same_session, and preserves_distinct_sessions.
-#[test]
-fn dedup_db_operations_keeps_latest_operation_for_session() {
-    let operations = ThreadMetadataStore::dedup_db_operations(vec![
-        upsert(thread("a")),
-        DbOperation::Delete("a".into()),
-    ]);
-    assert!(matches!(&operations[..], [DbOperation::Delete(id)] if id == "a"));
-}
 #[test]
 fn dedup_db_operations_keeps_latest_insert_and_distinct_sessions() {
     let mut latest = thread("a");
@@ -76,7 +66,9 @@ fn dedup_db_operations_keeps_latest_insert_and_distinct_sessions() {
         upsert(latest),
     ]);
     assert_eq!(operations.len(), 2);
-    assert!(operations.iter().any(|op| matches!(op, DbOperation::Upsert(metadata, snapshot) if metadata.thread_id == "a" && metadata.title == "Latest" && snapshot.lock().unwrap().title == "Latest")));
+    assert!(operations.iter().any(|op| op.metadata.thread_id == "a"
+        && op.metadata.title == "Latest"
+        && op.snapshot.lock().unwrap().title == "Latest"));
     assert!(operations.iter().any(|op| op.id() == "b"));
 }
 

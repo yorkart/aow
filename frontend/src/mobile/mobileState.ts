@@ -172,9 +172,16 @@ export function useMobileViewport(title: string) {
       update();
       schedule();
       clearTimeout(settled);
-      settled = window.setTimeout(schedule, 300);
+      // Login can mount this hook while the keyboard is closing. WebViews may
+      // restore visualViewport after mounting/focusout without another resize.
+      let remaining = 10;
+      const recheck = () => {
+        schedule();
+        if (--remaining > 0) settled = window.setTimeout(recheck, 100);
+      };
+      settled = window.setTimeout(recheck, 100);
     };
-    update();
+    settle();
     viewport?.addEventListener('resize', schedule);
     viewport?.addEventListener('scroll', schedule);
     window.addEventListener('resize', settle);

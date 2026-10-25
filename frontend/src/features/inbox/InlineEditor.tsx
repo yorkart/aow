@@ -1,10 +1,11 @@
+import { t } from '../../lib/i18n';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { IDisposable, editor } from 'monaco-editor';
 import { EditorShortcutHint } from './EditorShortcutHint';
 
 const Editor = lazy(() => import('../editor/MonacoEditor'));
 
-export function InlineEditor({ value, onChange, onFinish, onComposing, status, label = '需求 Markdown', seamless = false, initialHeight }: {
+export function InlineEditor({ value, onChange, onFinish, onComposing, status, label = t("inbox.requirement_markdown"), seamless = false, initialHeight }: {
   value: string; onChange: (text: string) => void; onFinish: () => void; onComposing: (value: boolean) => void; status: string; label?: string;
   seamless?: boolean; initialHeight?: number;
 }) {
@@ -38,12 +39,12 @@ export function InlineEditor({ value, onChange, onFinish, onComposing, status, l
         const escape = event.key === 'Escape' && (event.target as Element).matches('[role="textbox"]');
         if (finish || escape) { event.preventDefault(); event.stopPropagation(); onFinish(); }
       }}>
-      <Suspense fallback={<div className="inbox-editor-loading" style={{ height }} role="status">正在加载编辑器…</div>}>
-        <Editor language="markdown" theme="vs-dark" value={value} height={height} saveViewState={false}
-          loading={<span className="inbox-editor-loading">正在加载编辑器…</span>}
+      <Suspense fallback={<div className="inbox-editor-loading" style={{ height }} role="status">{t("aow.loading_editor")}</div>}>
+        <Editor language="markdown" value={value} height={height} saveViewState={false}
+          loading={<span className="inbox-editor-loading">{t("aow.loading_editor")}</span>}
           onMount={mount} onChange={text => onChange(text ?? '')}
           options={{
-            ariaLabel: label, placeholder: '写下需求，支持 Markdown…', automaticLayout: true,
+            ariaLabel: label, placeholder: t("inbox.describe_your_requirement_markdown_supported"), automaticLayout: true,
             fontSize: 13, lineHeight: 22, wordWrap: 'on', wrappingIndent: 'none',
             lineNumbers: 'off', lineNumbersMinChars: 0, lineDecorationsWidth: 0, glyphMargin: false, folding: false,
             minimap: { enabled: false }, overviewRulerLanes: 0, overviewRulerBorder: false, hideCursorInOverviewRuler: true,

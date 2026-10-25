@@ -38,7 +38,7 @@ impl FeishuClient {
                 .redirect(reqwest::redirect::Policy::none())
                 .retry(reqwest::retry::never())
                 .build()
-                .context("无法初始化飞书 HTTP 客户端")?,
+                .context(aow_i18n::text("im.unable_to_initialize_feishu_http_client"))?,
             base_url: BASE_URL.to_owned(),
             app_id,
             app_secret,
@@ -70,12 +70,16 @@ impl FeishuClient {
         let value = response["tenant_access_token"]
             .as_str()
             .filter(|token| !token.is_empty())
-            .context("飞书未返回 tenant_access_token")?
+            .context(aow_i18n::text(
+                "im.feishu_did_not_return_tenant_access_token",
+            ))?
             .to_owned();
         let seconds = response["expire"]
             .as_u64()
             .filter(|seconds| *seconds > 0 && *seconds <= 7200)
-            .context("飞书返回了无效的 token 有效期")?;
+            .context(aow_i18n::text(
+                "im.feishu_returned_an_invalid_token_lifetime",
+            ))?;
         let margin = 60.min(seconds / 10);
         *cached = Some(CachedToken {
             value: value.clone(),
@@ -131,7 +135,10 @@ impl FeishuClient {
             if let Some(body) = body {
                 request = request.json(body);
             }
-            let response = request.send().await.context("飞书网络请求失败")?;
+            let response = request
+                .send()
+                .await
+                .context(aow_i18n::text("im.feishu_network_request_failed"))?;
             let status = response.status();
             let delay = response
                 .headers()
@@ -139,7 +146,10 @@ impl FeishuClient {
                 .and_then(|value| value.to_str().ok())
                 .and_then(|value| value.parse::<u64>().ok())
                 .unwrap_or(1);
-            let bytes = response.bytes().await.context("无法读取飞书响应")?;
+            let bytes = response
+                .bytes()
+                .await
+                .context(aow_i18n::text("im.unable_to_read_feishu_response"))?;
             let data = serde_json::from_slice::<Value>(&bytes).ok();
             let limited = status == StatusCode::TOO_MANY_REQUESTS
                 || data
@@ -150,7 +160,7 @@ impl FeishuClient {
                     tokio::time::sleep(Duration::from_secs(delay.max(1))).await;
                     continue;
                 }
-                bail!("飞书请求受到限流");
+                bail!(aow_i18n::message("im.feishu_request_rate_limited", &[]));
             }
             // Feishu may return token errors with HTTP 401/400. Preserve the code
             // for the authentication layer; never log the response body or secrets.
@@ -160,7 +170,10 @@ impl FeishuClient {
             {
                 return Ok(data);
             }
-            bail!("飞书响应无效（HTTP {}）", status.as_u16());
+            bail!(aow_i18n::message(
+                "im.invalid_feishu_response_http",
+                &[("auto0", format!("{}", status.as_u16()))]
+            ));
         }
         unreachable!()
     }
@@ -169,13 +182,18 @@ impl FeishuClient {
         let response = self.authenticated(Method::GET, APP_PATH, None).await?;
         let app = &response["data"]["app"];
         if app["owner"]["type"].as_u64() != Some(2) {
-            bail!("飞书应用 owner 不是企业内部成员，请配置企业自建应用机器人");
+            bail!(aow_i18n::message(
+                "im.the_feishu_app_owner_is_not_an_internal_member",
+                &[]
+            ));
         }
         app["owner"]["owner_id"]
             .as_str()
             .filter(|id| id.starts_with("ou_") && id.len() > 3)
             .map(str::to_owned)
-            .context("飞书未返回有效的 owner Open ID")
+            .context(aow_i18n::text(
+                "im.feishu_did_not_return_a_valid_owner_open_id",
+            ))
     }
     async fn send_cards(&self, build: impl FnOnce(&str) -> Result<Vec<Value>>) -> Result<()> {
         // Serialize whole notifications so their parts stay in order. Pace each
@@ -193,7 +211,15 @@ impl FeishuClient {
             *next = Instant::now() + Duration::from_millis(250);
             self.authenticated(Method::POST, MESSAGE_PATH, Some(&message))
                 .await
-                .with_context(|| format!("飞书卡片发送失败（{}/{total}）", index + 1))?;
+                .with_context(|| {
+                    aow_i18n::message(
+                        "im.failed_to_send_feishu_card",
+                        &[
+                            ("auto0", format!("{}", index + 1)),
+                            ("p1", format!("{}", total)),
+                        ],
+                    )
+                })?;
         }
         Ok(())
     }
@@ -211,15 +237,21 @@ fn check_code(response: &Value) -> Result<()> {
         Some(0) => Ok(()),
         Some(code) => {
             let hint = match code {
-                99991672 | 99991676 => {
-                    "请检查 application:application:self_manage 和 im:message:send_as_bot 权限"
-                }
-                230013 => "请确认 owner 在应用可用范围内",
-                _ => "请检查飞书应用配置及权限",
+                99991672 | 99991676 => aow_i18n::text(
+                    "im.check_application_application_self_manage_and_im_message_send",
+                ),
+                230013 => aow_i18n::text("im.confirm_the_owner_is_within_the_app_s_availability"),
+                _ => aow_i18n::text("im.check_feishu_app_configuration_and_permissions"),
             };
-            Err(anyhow!("飞书接口错误 {code}：{hint}"))
+            Err(anyhow!(aow_i18n::message(
+                "im.feishu_api_error",
+                &[("p0", format!("{}", code)), ("p1", hint.to_string())]
+            )))
         }
-        None => Err(anyhow!("飞书响应缺少状态码")),
+        None => Err(anyhow!(aow_i18n::message(
+            "im.feishu_response_is_missing_a_status_code",
+            &[]
+        ))),
     }
 }
 

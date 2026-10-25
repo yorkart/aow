@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type DragEvent as ReactDragEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { t } from '../../lib/i18n';
+import { useCallback, useEffect, useRef, useState, type DragEvent as ReactDragEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { Columns2, GripVertical, LoaderCircle, Maximize2, Minimize2, Rows2, SquareTerminal, X } from 'lucide-react';
 import { terminalApi } from './terminalApi';
 import type { TerminalAgentProcess, TerminalLayout, TerminalPane, TerminalPaneActivity, TerminalPaneStatus, TerminalSplitAxis, TerminalTab } from './types';
@@ -14,6 +15,8 @@ import { useConfirmation } from '../../components/ConfirmationDialog';
 
 interface Props {
   visible: boolean;
+  autoFocus?: boolean;
+  focusRequest?: number;
   tab?: TerminalTab;
   loading: boolean;
   detectedAgents: Record<string, string | null>;
@@ -53,10 +56,10 @@ interface PaneDropTarget {
 }
 
 const paneDropLabels: Record<PaneDropDirection, string> = {
-  left: '移到左侧',
-  right: '移到右侧',
-  top: '移到上方',
-  bottom: '移到下方',
+  left: t("terminals.move_left"),
+  right: t("terminals.move_right"),
+  top: t("terminals.move_up"),
+  bottom: t("terminals.move_down"),
 };
 
 function removePaneFromLayout(layout: TerminalLayout, paneId: string): TerminalLayout | null {
@@ -153,10 +156,16 @@ function splitShortcutLabel(axis: TerminalSplitAxis) {
   return axis === 'row' ? 'Ctrl+Shift+E' : 'Ctrl+Shift+O';
 }
 
-export function TerminalWorkspace({ visible, tab, loading, detectedAgents, terminalTitles, agentProcesses = {}, terminalActivity = {}, onTabChange, onTabClosed, onPaneStatus, onReload }: Props) {
+export function TerminalWorkspace({ visible, autoFocus = true, focusRequest, tab, loading, detectedAgents, terminalTitles, agentProcesses = {}, terminalActivity = {}, onTabChange, onTabClosed, onPaneStatus, onReload }: Props) {
   const { confirm, confirmationDialog } = useConfirmation();
   const [layout, setLayout] = useState<TerminalLayout | null>(() => tab ? fallbackLayout(tab) : null);
   const [activePaneId, setActivePaneId] = useState<string>();
+  const [paneFocusRequests, setPaneFocusRequests] = useState<Record<string, number>>({});
+  // Explicit pane actions request focus even in embedded workspaces that suppress passive autofocus.
+  const focusPane = useCallback((id: string) => {
+    setActivePaneId(id);
+    setPaneFocusRequests(current => ({ ...current, [id]: (current[id] ?? 0) + 1 }));
+  }, []);
   const [draggingPaneId, setDraggingPaneId] = useState<string>();
   const [paneDropTarget, setPaneDropTarget] = useState<PaneDropTarget>();
   const [maximizedPaneIds, setMaximizedPaneIds] = useState<Record<string, string>>({});
@@ -164,6 +173,7 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
   const [operation, setOperation] = useState('');
   const rebuildingRef = useRef(false);
   const layoutRef = useRef(layout);
+  const layoutTabIdRef = useRef(tab?.id);
   const draggingPaneIdRef = useRef<string | undefined>(undefined);
   const tabRef = useRef(tab);
   const revisionRef = useRef(tab?.revision);
@@ -199,10 +209,25 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
 
   useEffect(() => {
     const next = tab ? fallbackLayout(tab) : null;
-    setLayout(next);
-    layoutRef.current = next;
+    const sameTab = layoutTabIdRef.current === tab?.id;
+    layoutTabIdRef.current = tab?.id;
     revisionRef.current = tab?.revision;
     const ids = paneIds(next);
+    const draftIds = paneIds(layoutRef.current);
+    // Snapshots acknowledge persisted layouts. Keep a newer local draft until
+    // its save finishes, but still accept remote pane additions and removals.
+    if (sameTab && (savingRef.current || pendingLayoutRef.current)) {
+      if (ids.length === draftIds.length && ids.every(id => draftIds.includes(id))) return;
+      // A remote structural change invalidates queued saves of the old pane set.
+      saveEpochRef.current += 1;
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = undefined;
+      pendingLayoutRef.current = undefined;
+      flushRequestedRef.current = false;
+      savingRef.current = false;
+    }
+    setLayout(next);
+    layoutRef.current = next;
     setActivePaneId((current) => current && ids.includes(current)
       ? current
       : maximizedPaneId && ids.includes(maximizedPaneId) ? maximizedPaneId : ids[0]);
@@ -216,9 +241,9 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
     if (!visible || !selection || appliedSelection.current === selection || tab?.id !== selection.tabId
       || !tab.panes.some(pane => pane.id === selection.paneId)) return;
     appliedSelection.current = selection;
-    setActivePaneId(selection.paneId);
+    focusPane(selection.paneId);
     if (maximizedPaneId) setMaximizedPaneId(tab.id, selection.paneId);
-  }, [visible, selection, tab, maximizedPaneId]);
+  }, [visible, selection, tab, maximizedPaneId, focusPane]);
 
   useEffect(() => {
     saveEpochRef.current += 1;
@@ -260,11 +285,22 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
       const updated = await terminalApi.updateLayout(currentTab.id, candidate, revisionRef.current);
       if (updated) {
         const stillActive = saveEpochRef.current === saveEpoch && tabRef.current?.id === currentTab.id;
+        if (!stillActive && tabRef.current?.id === currentTab.id) return;
         if (stillActive) revisionRef.current = updated.revision;
-        onTabChange({ ...updated, layout: stillActive ? layoutRef.current ?? updated.layout : updated.layout });
+        // Shared state contains only committed server data; unsaved divider
+        // movements remain in this workspace until their own response arrives.
+        onTabChange(updated);
       }
     } catch (reason) {
-      if (saveEpochRef.current === saveEpoch) setError(`布局保存失败：${message(reason)}`);
+      if (saveEpochRef.current === saveEpoch) {
+        setError(t("terminals.failed_to_save_layout", { value0: message(reason) }));
+        if (!pendingLayoutRef.current) {
+          const current = tabRef.current;
+          const next = current ? fallbackLayout(current) : null;
+          layoutRef.current = next;
+          setLayout(next);
+        }
+      }
     } finally {
       if (saveEpochRef.current === saveEpoch) {
         savingRef.current = false;
@@ -381,7 +417,7 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
     if (next) {
       layoutRef.current = next;
       setLayout(next);
-      setActivePaneId(sourcePaneId);
+      focusPane(sourcePaneId);
       setError('');
       queueLayoutSave(next, true);
     }
@@ -400,12 +436,12 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
       if (updated) {
         onTabChange(updated);
         const ids = paneIds(updated.layout);
-        setActivePaneId(ids.find((id) => !tab.panes.some((oldPane) => oldPane.id === id)) ?? pane.id);
+        focusPane(ids.find((id) => !tab.panes.some((oldPane) => oldPane.id === id)) ?? pane.id);
       } else {
         onReload();
       }
     } catch (reason) {
-      setError(`分屏失败：${message(reason)}`);
+      setError(t("terminals.failed_to_split_pane", { value0: message(reason) }));
     } finally {
       setOperation('');
     }
@@ -435,7 +471,7 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
 
   const togglePaneMaximized = (pane: TerminalPane) => {
     if (!tab || tab.panes.length <= 1 || operation) return;
-    setActivePaneId(pane.id);
+    focusPane(pane.id);
     setDraggingPaneId(undefined);
     draggingPaneIdRef.current = undefined;
     setPaneDropTarget(undefined);
@@ -444,7 +480,7 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
 
   const selectMaximizedPane = (paneId: string) => {
     if (!tab || !maximizedPaneId || paneId === maximizedPaneId) return;
-    setActivePaneId(paneId);
+    focusPane(paneId);
     setMaximizedPaneId(tab.id, paneId);
   };
 
@@ -452,13 +488,13 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
     if (!tab) return;
     const closingLastPane = tab.panes.length === 1;
     if (!await confirm({
-      title: closingLastPane ? '关闭终端？' : '关闭终端窗口？',
+      title: closingLastPane ? t("terminals.close_terminal") : t("terminals.close_terminal_window"),
       description: closingLastPane
-        ? `这是“${tab.name}”的最后一个窗口，关闭后也会关闭对应的终端标签页。`
-        : '将关闭以下终端窗口。',
+        ? t("terminals.this_is_the_last_window_of_closing_it_also", { value0: tab.name })
+        : t("terminals.the_following_terminal_window_will_close"),
       items: [{ id: pane.id, label: terminalPaneTitle(pane, detectedAgents, terminalTitles, terminalActivity, agentProcesses), detail: terminalActivity[pane.id]?.cwd || pane.cwd, icon: <SquareTerminal /> }],
-      warning: '此窗口中仍在运行的命令将被终止，此操作无法撤销。',
-      confirmLabel: closingLastPane ? '关闭终端' : '关闭窗口',
+      warning: t("terminals.running_commands_in_this_window_will_be_terminated_this"),
+      confirmLabel: closingLastPane ? t("terminals.close_terminal_2") : t("terminals.close_window"),
       danger: true,
     })) return;
     if (tabRef.current?.id !== tab.id || !tabRef.current.panes.some((item) => item.id === pane.id)) return;
@@ -467,13 +503,13 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
     try {
       const updated = await terminalApi.closePane(tab.id, pane.id);
       if (updated) {
-        if (maximizedPaneId === pane.id) {
+        if (maximizedPaneId === pane.id || activePaneId === pane.id) {
           const currentIds = paneIds(layoutRef.current);
           const closedIndex = currentIds.indexOf(pane.id);
           const remainingIds = paneIds(fallbackLayout(updated));
           const nextPaneId = remainingIds[Math.min(Math.max(closedIndex, 0), remainingIds.length - 1)];
-          setMaximizedPaneId(tab.id, updated.panes.length > 1 ? nextPaneId : undefined);
-          setActivePaneId(nextPaneId);
+          if (maximizedPaneId) setMaximizedPaneId(tab.id, updated.panes.length > 1 ? nextPaneId : undefined);
+          if (nextPaneId) focusPane(nextPaneId);
         }
         onTabChange(updated);
       } else {
@@ -481,7 +517,7 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
         onTabClosed(tab.id);
       }
     } catch (reason) {
-      setError(`关闭 pane 失败：${message(reason)}`);
+      setError(t("terminals.failed_to_close_pane", { value0: message(reason) }));
     } finally {
       setOperation('');
     }
@@ -494,7 +530,9 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
     setOperation('rebuild');
     setError('');
     try {
-      onTabChange(await terminalApi.rebuild(tab.id));
+      const updated = await terminalApi.rebuild(tab.id);
+      onTabChange(updated);
+      if (updated.panes[0]) focusPane(updated.panes[0].id);
     } catch (reason) {
       setError(message(reason));
     } finally {
@@ -516,7 +554,7 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
   const renderLayout = (node: TerminalLayout, path: number[] = []): ReactNode => {
     if (node.type === 'pane') {
       const pane = tab?.panes.find((item) => item.id === node.pane_id);
-      if (!pane) return <div className="terminal-pane-missing">Pane {node.pane_id} 不存在</div>;
+      if (!pane) return <div className="terminal-pane-missing">{t("navigation.pane")}{node.pane_id} {t("terminals.not_found")}</div>;
       const agentId = terminalPaneAgent(pane, detectedAgents);
       const title = terminalPaneTitle(pane, detectedAgents, terminalTitles, terminalActivity, agentProcesses);
       const paneBusy = operation === 'rebuild' || operation.endsWith(`:${pane.id}`);
@@ -547,6 +585,9 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
             header={sessionButton => <header
             className={`terminal-pane-header ${paneDraggable ? 'draggable' : ''}`}
             draggable={paneDraggable}
+            onPointerDown={event => {
+              if (event.button === 0 && !(event.target instanceof Element && event.target.closest('button'))) focusPane(pane.id);
+            }}
             onDragStart={(event) => startPaneDrag(event, pane.id)}
             onDragEnd={finishPaneDrag}
             onDoubleClick={(event) => {
@@ -554,20 +595,20 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
               togglePaneMaximized(pane);
             }}
           >
-            <GripVertical className="terminal-pane-drag-handle" aria-label="拖动 pane 调整布局" />
+            <GripVertical className="terminal-pane-drag-handle" aria-label={t("terminals.drag_pane_to_rearrange_layout")} />
             <TerminalLifecycleDot className="terminal-pane-status" state={terminalPaneLifecycle(pane)} />
             {agentId ? <AgentIcon agentId={agentId} /> : <SquareTerminal />}
-            <span className="terminal-pane-name" title={`${title}\n路径：${terminalActivity[pane.id]?.cwd || pane.cwd || '未知'}`}>
+            <span className="terminal-pane-name" title={t("terminals.path", { value0: title, value1: terminalActivity[pane.id]?.cwd || pane.cwd || t("pr.unknown") })}>
               {title}
             </span>
             {sessionButton}
             {agentId && <TerminalHostingButton tab={tab!} pane={pane} onChange={onTabChange} />}
-            <button title={`向右分屏（${splitShortcutLabel('row')}）`} aria-label="向右分屏" disabled={paneBusy} onClick={() => void split(pane, 'row')}><Columns2 /></button>
-            <button title={`向下分屏（${splitShortcutLabel('column')}）`} aria-label="向下分屏" disabled={paneBusy} onClick={() => void split(pane, 'column')}><Rows2 /></button>
+            <button title={t("terminals.split_right", { value0: splitShortcutLabel('row') })} aria-label={t("terminals.split_right_2")} disabled={paneBusy} onClick={() => void split(pane, 'row')}><Columns2 /></button>
+            <button title={t("terminals.split_down", { value0: splitShortcutLabel('column') })} aria-label={t("terminals.split_down_2")} disabled={paneBusy} onClick={() => void split(pane, 'column')}><Rows2 /></button>
             {tab!.panes.length > 1 ? (
               <button
-                title={paneMaximized ? '恢复布局' : '最大化 shell 窗口'}
-                aria-label={paneMaximized ? '恢复布局' : '最大化 shell 窗口'}
+                title={paneMaximized ? t("terminals.restore_layout") : t("terminals.maximize_shell_window")}
+                aria-label={paneMaximized ? t("terminals.restore_layout") : t("terminals.maximize_shell_window")}
                 aria-pressed={paneMaximized}
                 disabled={paneBusy}
                 onClick={() => togglePaneMaximized(pane)}
@@ -575,9 +616,9 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
                 {paneMaximized ? <Minimize2 /> : <Maximize2 />}
               </button>
             ) : null}
-            <button title="关闭 pane" aria-label="关闭 pane" disabled={paneBusy} onClick={() => void closePane(pane)}>{paneBusy ? <LoaderCircle className="spinning" /> : <X />}</button>
+            <button title={t("terminals.close_pane")} aria-label={t("terminals.close_pane")} disabled={paneBusy} onClick={() => void closePane(pane)}>{paneBusy ? <LoaderCircle className="spinning" /> : <X />}</button>
           </header>}
-            terminal={terminalVisible => <TerminalInputPane key={`${tab!.id}:${pane.id}`} visible={terminalVisible} tabId={tab!.id} pane={pane} active={activePaneId === pane.id} onFocus={() => setActivePaneId(pane.id)} onStatus={(status, code) => markStatus(pane.id, status, code)}
+            terminal={terminalVisible => <TerminalInputPane key={`${tab!.id}:${pane.id}`} visible={terminalVisible} autoFocus={autoFocus} focusRequest={(focusRequest ?? 0) + (paneFocusRequests[pane.id] ?? 0)} tabId={tab!.id} pane={pane} active={activePaneId === pane.id} onFocus={() => setActivePaneId(pane.id)} onStatus={(status, code) => markStatus(pane.id, status, code)}
               onRebuild={canRebuild ? () => void rebuild() : undefined} rebuilding={operation === 'rebuild'} />}
           />
         </section>
@@ -602,15 +643,15 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
   };
 
   if (loading && !tab) {
-    return <main className="terminal-workspace terminal-workspace-empty">{confirmationDialog}<LoaderCircle className="spinning" /><span>正在加载终端…</span></main>;
+    return <main className="terminal-workspace terminal-workspace-empty">{confirmationDialog}<LoaderCircle className="spinning" /><span>{t("terminals.loading_terminal")}</span></main>;
   }
   if (!tab) {
     return (
       <main className="terminal-workspace terminal-workspace-empty">
         {confirmationDialog}
         <div className="terminal-empty-guide">
-          <h2>Terminal</h2>
-          <p>从左侧新建一个终端，并通过终端标签页菜单修改窗口名称。</p>
+          <h2>{t("navigation.terminal")}</h2>
+          <p>{t("terminals.create_a_terminal_from_the_left_sidebar_rename_windows")}</p>
         </div>
       </main>
     );
@@ -618,9 +659,9 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
   return (
     <main ref={terminalWorkspace} className="terminal-workspace">
       {confirmationDialog}
-      {error ? <div className="terminal-workspace-error" role="alert">{error}<button onClick={() => setError('')}>关闭</button></div> : null}
+      {error ? <div className="terminal-workspace-error" role="alert">{error}<button onClick={() => setError('')}>{t("aow.close")}</button></div> : null}
       {maximizedPaneId ? (
-        <nav className="terminal-pane-tabs-shell" aria-label="Terminal 窗口">
+        <nav className="terminal-pane-tabs-shell" aria-label={t("terminals.terminal_window")}>
           <div className="terminal-pane-tabs" role="tablist">
             {naturalPaneOrder.map((paneId) => {
               const pane = tab.panes.find((item) => item.id === paneId);
@@ -635,7 +676,7 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
                   role="tab"
                   className={selected ? 'active' : ''}
                   aria-selected={selected}
-                  title={`${title}\n${terminalActivity[pane.id]?.cwd || pane.cwd || '未知路径'}`}
+                  title={`${title}\n${terminalActivity[pane.id]?.cwd || pane.cwd || t("common.unknown_path")}`}
                   onClick={() => selectMaximizedPane(pane.id)}
                 >
                   <TerminalLifecycleDot className="terminal-pane-status" state={terminalPaneLifecycle(pane)} />
@@ -657,7 +698,7 @@ export function TerminalWorkspace({ visible, tab, loading, detectedAgents, termi
           if (!(next instanceof Node) || !event.currentTarget.contains(next)) setPaneDropTarget(undefined);
         }}
       >
-        {layout ? renderLayout(layout) : <div className="terminal-workspace-empty">这个终端没有可用的 pane。</div>}
+        {layout ? renderLayout(layout) : <div className="terminal-workspace-empty">{t("terminals.this_terminal_has_no_available_panes")}</div>}
       </div>
     </main>
   );

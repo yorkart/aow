@@ -1,3 +1,4 @@
+import { t, getLanguage } from '../../lib/i18n';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { History, LoaderCircle, RefreshCw } from 'lucide-react';
 import type { AowAgent } from '../agents/types';
@@ -65,7 +66,7 @@ function relativeTime(value: string) {
     ['year', 31_536_000], ['month', 2_592_000], ['week', 604_800],
     ['day', 86_400], ['hour', 3_600], ['minute', 60],
   ];
-  const formatter = new Intl.RelativeTimeFormat('zh-CN', { numeric: 'auto' });
+  const formatter = new Intl.RelativeTimeFormat(getLanguage(), { numeric: 'auto' });
   for (const [unit, size] of ranges) {
     if (Math.abs(seconds) >= size) return formatter.format(Math.round(seconds / size), unit);
   }
@@ -75,7 +76,7 @@ function relativeTime(value: string) {
 function absoluteTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat(getLanguage(), {
     dateStyle: 'medium',
     timeStyle: 'medium',
   }).format(date);
@@ -137,7 +138,7 @@ export function AgentSessions({ worktreePath, agents, activeSessionId, visible, 
     for (const section of sections) void load(section.id);
   }, [load, sections, visible]);
 
-  return <AowPanelStack className="project-aow-sessions" role="region" aria-label="Conversation">
+  return <AowPanelStack className="project-aow-sessions" role="region" aria-label={t("navigation.conversation")}>
     {sections.map((section) => {
       const state = states[section.id] ?? emptyState;
       const isCollapsed = collapsed[section.id] ?? (state.loaded && !state.error && state.sessions.length === 0);
@@ -145,23 +146,23 @@ export function AgentSessions({ worktreePath, agents, activeSessionId, visible, 
       return <AowPanel className="project-aow-agent-sessions" key={section.id} bodyClassName="project-aow-agent-session-list" bodyRole="list"
           title={section.title} icon={<AgentIcon agentId={section.id} />} collapsed={isCollapsed}
           controlsId={sectionId} onCollapsedChange={next => setCollapsed(current => ({ ...current, [section.id]: next }))}
-          actions={<AowIconButton title={`刷新 ${section.title} Sessions`} aria-label={`刷新 ${section.title} Sessions`} disabled={state.loading} onClick={() => void load(section.id)}>
+          actions={<AowIconButton title={t("sessions.refresh_sessions", { value0: section.title })} aria-label={t("sessions.refresh_sessions", { value0: section.title })} disabled={state.loading} onClick={() => void load(section.id)}>
             <RefreshCw className={state.loading ? 'spinning' : ''} />
           </AowIconButton>}
         >
-          {!state.loaded && !state.loading ? <div className="project-aow-session-state"><History />等待打开 Conversation 加载</div> : null}
-          {state.loading && !state.sessions.length ? <div className="project-aow-session-state"><LoaderCircle className="spinning" />正在扫描本地会话…</div> : null}
+          {!state.loaded && !state.loading ? <div className="project-aow-session-state"><History />{t("sessions.open_conversation_to_load")}</div> : null}
+          {state.loading && !state.sessions.length ? <div className="project-aow-session-state"><LoaderCircle className="spinning" />{t("sessions.scanning_local_sessions")}</div> : null}
           {state.error ? <div className="project-aow-session-state error">{state.error}</div> : null}
-          {state.loaded && !state.loading && !state.error && !state.sessions.length ? <div className="project-aow-session-state">暂无 Session</div> : null}
+          {state.loaded && !state.loading && !state.error && !state.sessions.length ? <div className="project-aow-session-state">{t("sessions.no_sessions")}</div> : null}
           {state.sessions.map((session) => <AowListRow className={`project-aow-session-row${activeSessionId === session.id ? ' active' : ''}`}
             icon={<AgentIcon agentId={session.agent} />}
-            role="listitem" key={session.id} title={session.title} tooltip={session.cwd} menuLabel="会话操作" onOpen={() => onOpen(session)}
+            role="listitem" key={session.id} title={session.title} tooltip={session.cwd} menuLabel={t("acp.session_actions")} onOpen={() => onOpen(session)}
             menuExpanded={menu?.session.id === session.id} onMenu={(x, y) => setMenu({ session, x, y })}>
             <span className="project-aow-session-meta"><code>{session.session_id}</code><time dateTime={session.updated_at} title={absoluteTime(session.updated_at)}>{relativeTime(session.updated_at)}</time></span>
           </AowListRow>)}
       </AowPanel>;
     })}
-    {!sections.length ? <div className="project-aow-session-empty"><History /><strong>暂无可用的 Session Agent</strong><span>请先注册 Claude Code、Codex、TraeCode CLI、Hermes 或 Pi。</span></div> : null}
+    {!sections.length ? <div className="project-aow-session-empty"><History /><strong>{t("sessions.no_session_agents_available")}</strong><span>{t("sessions.register_claude_code_codex_traecode_cli_hermes_or_pi")}</span></div> : null}
     {visible && menu ? <AgentSessionMenu {...menu} agents={agents} onOpen={onOpen} onResume={onResume} onClose={closeMenu} /> : null}
   </AowPanelStack>;
 }

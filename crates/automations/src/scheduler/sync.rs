@@ -94,7 +94,9 @@ impl Scheduler {
             self.bootout_launchd(&label).await?;
             for (path, _) in files {
                 if enabled {
-                    let domain = domain.as_deref().context("缺少 launchd 用户域")?;
+                    let domain = domain
+                        .as_deref()
+                        .context(aow_i18n::text("automations.missing_launchd_user_domain"))?;
                     // A Background timer must not also load when the user later
                     // logs into Aqua and launchd scans ~/Library/LaunchAgents.
                     let content = render::launchd_schedule(

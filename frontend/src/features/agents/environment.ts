@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 export interface EnvironmentDraft {
   text: string;
   values: Record<string, string>;
@@ -25,11 +26,11 @@ export function parseEnvironment(draft: EnvironmentDraft): Record<string, string
     const separator = line.indexOf('=');
     const key = line.slice(0, separator).trim();
     if (separator < 1 || !/^[A-Za-z0-9_]+$/.test(key)) {
-      throw new Error(`Environment variables 第 ${index + 1} 行格式无效，请使用 key=value，变量名只能包含字母、数字和下划线。`);
+      throw new Error(t("agents.invalid_environment_variable_on_line_use_key_value_with", { value0: index + 1 }));
     }
-    if (values.has(key)) throw new Error(`Environment variables 第 ${index + 1} 行的变量名重复，请每个变量只填写一次。`);
+    if (values.has(key)) throw new Error(t("agents.duplicate_environment_variable_name_on_line_define_each_variable", { value0: index + 1 }));
     const value = knownLines.get(line) ?? line.slice(separator + 1);
-    if (value.includes('\0')) throw new Error(`Environment variables 第 ${index + 1} 行的值不能包含空字符。`);
+    if (value.includes('\0')) throw new Error(t("agents.the_environment_variable_value_on_line_cannot_contain_a", { value0: index + 1 }));
     values.set(key, value);
   }
   return Object.fromEntries(values);

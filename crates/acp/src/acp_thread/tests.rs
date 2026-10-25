@@ -162,9 +162,13 @@ fn compaction_retains_one_entry_and_applies_patch_semantics() {
     assert_eq!(thread.entries[0].content["summary"][0]["text"], "**Hello**");
     update(
         &mut thread,
-        json!({"sessionUpdate":"compaction_summary_chunk","compactionId":"c","content":{"type":"text","text":"ignored after completion"}}),
+        json!({"sessionUpdate":"compaction_summary_chunk","compactionId":"c","content":{"type":"text","text":" after failure"}}),
     );
-    assert_eq!(thread.entries[0].content["summary"][0]["text"], "**Hello**");
+    assert_eq!(
+        thread.entries[0].content["summary"][0]["text"],
+        "**Hello** after failure"
+    );
+    assert_eq!(thread.entries[0].content["status"], "failed");
     update(
         &mut thread,
         json!({"sessionUpdate":"compaction_update","compactionId":"c","status":"completed","summary":[{"type":"text","text":"Replacement"}],"error":null}),
@@ -181,12 +185,63 @@ fn compaction_retains_one_entry_and_applies_patch_semantics() {
     assert_eq!(thread.entries[0].content["summary"], json!([]));
     update(
         &mut thread,
-        json!({"sessionUpdate":"compaction_summary_chunk","compactionId":"unknown","content":{"type":"text","text":"ignored"}}),
+        json!({"sessionUpdate":"compaction_summary_chunk","compactionId":"unknown","content":{"type":"text","text":"first chunk"}}),
     );
-    assert_eq!(thread.entries.len(), 1);
+    assert_eq!(thread.entries.len(), 2);
+    assert_eq!(thread.entries[1].content["status"], "in_progress");
+    assert_eq!(
+        thread.entries[1].content["summary"][0]["text"],
+        "first chunk"
+    );
     update(
         &mut thread,
         json!({"sessionUpdate":"compaction_update","compactionId":"next","status":"in_progress"}),
     );
-    assert_eq!(thread.entries.len(), 2);
+    assert_eq!(thread.entries.len(), 3);
+}
+
+#[test]
+fn compaction_chunks_preserve_identity_status_and_metadata_after_reload() {
+    use agent_client_protocol::schema::v1;
+
+    for status in ["in_progress", "completed", "failed", "cancelled", "_future"] {
+        let mut thread = thread();
+        let chunk = |text| {
+            serde_json::to_value(v1::SessionUpdate::CompactionSummaryChunk(
+                v1::CompactionSummaryChunk::new(
+                    "c",
+                    v1::ContentBlock::Text(v1::TextContent::new(text)),
+                )
+                .meta(v1::Meta::from_iter([("chunk".into(), json!(true))])),
+            ))
+            .unwrap()
+        };
+        AcpThread::handle_session_update(&mut thread, chunk("first"));
+        let entry_id = thread.entries[0].id.clone();
+        assert_eq!(thread.entries[0].content["status"], "in_progress");
+        assert!(thread.entries[0].content.get("_meta").is_none());
+        AcpThread::handle_session_update(
+            &mut thread,
+            json!({
+                "sessionUpdate":"compaction_update","compactionId":"c","status":status,
+                "_meta":{"retained":true}
+            }),
+        );
+        AcpThread::handle_session_update(
+            &mut thread,
+            json!({
+                "sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"interleaved"}
+            }),
+        );
+        let mut restored: SessionSnapshot =
+            serde_json::from_value(serde_json::to_value(thread).unwrap()).unwrap();
+        AcpThread::handle_session_update(&mut restored, chunk(" second"));
+        assert_eq!(restored.entries.len(), 2);
+        let entry = &restored.entries[0];
+        assert_eq!(entry.id, entry_id);
+        assert_eq!(entry.content["status"], status);
+        assert_eq!(entry.content["summary"][0]["text"], "first second");
+        assert_eq!(entry.content["_meta"], json!({"retained":true}));
+        assert_eq!(restored.entries[1].content["text"], "interleaved");
+    }
 }

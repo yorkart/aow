@@ -3,6 +3,7 @@ Description=AoW terminal daemon
 
 [Service]
 Type=exec
+EnvironmentFile=-%h/.aow/server.env
 UnsetEnvironment=AOW_TERMINALD_VT_WORKER
 ExecStart=%h/.local/lib/aow/bin/aow-terminald
 RuntimeDirectory=aow-terminald

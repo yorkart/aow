@@ -6,12 +6,12 @@ license.workspace = true
 
 [features]
 default = []
-launch = ["dep:serde", "dep:thiserror", "dep:anyhow", "dep:serde_json", "dep:tokio", "dep:aow-config"]
+launch = ["dep:serde", "dep:thiserror", "dep:anyhow", "dep:serde_json", "dep:tokio"]
 sessions = ["dep:anyhow", "dep:chrono", "dep:serde", "dep:serde_json", "dep:thiserror", "dep:walkdir", "dep:tokio", "dep:aow-db", "dep:aow-id", "dep:aow-process"]
-automation = ["dep:anyhow", "dep:serde", "dep:serde_json", "dep:tokio", "dep:aow-config"]
+automation = ["dep:anyhow", "dep:serde", "dep:serde_json", "dep:tokio"]
 
 [dependencies]
-aow-config = { path = "../config", optional = true }
+aow-i18n = { path = "../i18n" }
 aow-db = { path = "../db", optional = true }
 aow-id = { path = "../id", optional = true }
 aow-process = { path = "../process", optional = true }

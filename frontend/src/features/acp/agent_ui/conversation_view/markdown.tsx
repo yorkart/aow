@@ -1,4 +1,4 @@
-// MarkdownFont::Agent and the default code-block controls, using the host's sanitizer.
+import { t } from '../../../../lib/i18n';
 import { memo, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { WrapText } from 'lucide-react';
@@ -9,7 +9,7 @@ import type { OpenFile } from './content';
 function CodeActions({ container, source }: { container: HTMLElement; source: string }) {
   const [wrap, setWrap] = useState(false);
   useEffect(() => { container.classList.toggle('acp-code-wrap', wrap); }, [container, wrap]);
-  return createPortal(<span className="acp-code-actions"><CopyButton text={source} label="复制代码" /><button type="button" className="acp-quiet-button" aria-label="代码自动换行" title="代码自动换行" aria-pressed={wrap} onClick={() => setWrap(value => !value)}><WrapText size={13} /></button></span>, container);
+  return createPortal(<span className="acp-code-actions"><CopyButton text={source} label={t("acp.copy_code")} /><button type="button" className="acp-quiet-button" aria-label={t("acp.wrap_code")} title={t("acp.wrap_code")} aria-pressed={wrap} onClick={() => setWrap(value => !value)}><WrapText size={13} /></button></span>, container);
 }
 
 export const AgentMarkdown = memo(function AgentMarkdown({ text, onOpenFile, controls = true, message = false }: { text: string; onOpenFile: OpenFile; controls?: boolean; message?: boolean }) {

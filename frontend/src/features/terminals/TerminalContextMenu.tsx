@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { RefreshCw, Trash2 } from 'lucide-react';
@@ -44,11 +45,11 @@ export function TerminalContextMenu({ x, y, title, onClose, onOpen, onOpenFloati
 
   const action = (callback: () => void) => () => { onClose(); callback(); };
   return createPortal(<div ref={menu} className="project-aow-context-menu project-aow-terminal-menu"
-    style={{ left: position.x, top: position.y }} role="menu" aria-label={`${title} 终端操作`}
+    style={{ left: position.x, top: position.y }} role="menu" aria-label={t("terminals.terminal_actions", { value0: title })}
     onPointerDown={event => event.stopPropagation()} onContextMenu={event => event.preventDefault()}>
     <button role="menuitem" onClick={action(onOpen)}><WorkspaceMenuLabel action="open" /></button>
     {onOpenFloating ? <button role="menuitem" onClick={action(onOpenFloating)}><WorkspaceMenuLabel action="floating" /></button> : null}
-    {onRebuild ? <button role="menuitem" disabled={rebuilding} onClick={action(onRebuild)}><RefreshCw />{rebuilding ? '重建中…' : '重建'}</button> : null}
-    <button className="danger" role="menuitem" onClick={action(onDestroy)}><Trash2 />销毁</button>
+    {onRebuild ? <button role="menuitem" disabled={rebuilding} onClick={action(onRebuild)}><RefreshCw />{rebuilding ? t("terminals.rebuilding") : t("terminals.rebuild")}</button> : null}
+    <button className="danger" role="menuitem" onClick={action(onDestroy)}><Trash2 />{t("terminals.destroy")}</button>
   </div>, container ?? document.body);
 }

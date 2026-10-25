@@ -4,7 +4,6 @@ import { text, type ThreadEntry } from '../../types';
 // the middle of a Markdown token; render that agent message continuously and
 // keep the delivery card after it. Never mutate entries used by sync cursors.
 export function coalesceSteeringChunks(entries: ThreadEntry[]): ThreadEntry[] {
-  if (!entries.some(entry => entry.kind === 'steering')) return entries;
   const result: ThreadEntry[] = [];
   let previousText: number | undefined;
   for (const entry of entries) {
@@ -21,5 +20,3 @@ export function coalesceSteeringChunks(entries: ThreadEntry[]): ThreadEntry[] {
   }
   return result;
 }
-
-export const isSteeringDialogue = (entry: ThreadEntry) => entry.kind === 'assistant' || entry.kind === 'steering';

@@ -17,6 +17,14 @@ pub struct AgentInfo {
     pub name: String,
     pub description: String,
     pub version: Option<String>,
+    #[serde(default)]
+    pub icon: Option<String>,
+    #[serde(default)]
+    pub repository: Option<String>,
+    #[serde(default)]
+    pub website: Option<String>,
+    #[serde(default)]
+    pub license_url: Option<String>,
     pub configured: bool,
     pub supported: bool,
     pub installed: bool,
@@ -139,6 +147,15 @@ pub struct SessionSnapshot {
     pub plan: Value,
     #[serde(default)]
     pub notices: Vec<ThreadEntry>,
+    /// Current session-info extension metadata, replaced by top-level key.
+    #[serde(default)]
+    pub session_meta: std::collections::BTreeMap<String, Value>,
+    #[serde(default)]
+    pub session_meta_revision: u64,
+    #[serde(skip)]
+    pub(crate) session_meta_suppressed: bool,
+    #[serde(default)]
+    pub session_meta_revisions: std::collections::BTreeMap<String, u64>,
     /// Display-only terminal state, accumulated independently of tool metadata patches.
     #[serde(default)]
     pub terminals: std::collections::BTreeMap<String, Value>,
@@ -185,9 +202,11 @@ pub struct TurnOverview {
     pub revision: u64,
     pub user: Vec<ThreadEntry>,
     pub conclusion: Vec<ThreadEntry>,
-    /// Steered turns expose their dialogue independently of final-answer inference.
+    /// Steering cards and final replies, also used by clients without process segments.
     #[serde(default)]
     pub messages: Option<Vec<ThreadEntry>>,
+    #[serde(default)]
+    pub process_segments: Vec<ProcessSegment>,
     pub tool_count: usize,
     pub progress_count: usize,
     pub running: bool,
@@ -195,6 +214,14 @@ pub struct TurnOverview {
     pub compacting: bool,
     pub status: Option<String>,
     pub error: Option<String>,
+    pub permission_tool_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ProcessSegment {
+    pub id: String,
+    pub tool_count: usize,
+    pub progress_count: usize,
     pub permission_tool_ids: Vec<String>,
 }
 
@@ -214,6 +241,7 @@ pub struct TurnOverviewPatch {
     pub conclusion: Vec<ThreadEntry>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub messages: Option<DialoguePatch>,
+    pub process_segments: Vec<ProcessSegment>,
     pub tool_count: usize,
     pub progress_count: usize,
     pub running: bool,

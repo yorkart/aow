@@ -1,7 +1,9 @@
+import { t } from '../lib/i18n';
 import { ListRowMenuContext } from '../components/ListRowMenuContext';
 import { appLocalStorage } from '../lib/basePath';
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import type { FileEntry } from '../features/files/types';
 import type { TerminalTab } from '../features/terminals/types';
 import type { AowAgent } from '../features/agents/types';
 import { isWorkspaceTabKind, type WorkspaceTab, type TabRevealRequest } from './WorkspaceTabs';
@@ -13,9 +15,11 @@ interface WorkspaceHost { portal: HTMLDivElement | null; activeId?: string; visi
 export interface WorkspaceCommands {
   tabs: WorkspaceTab[];
   reveal: (id: string) => void;
-  create: (kind: 'markdown' | 'text' | 'terminal' | 'files', agent?: AowAgent) => void;
+  create: (kind: 'markdown' | 'text' | 'terminal', agent?: AowAgent) => void;
+  openFile: (entry: FileEntry) => void;
   createAcp: (agentId: string) => void;
   close: (id: string) => void;
+  closePreview: (id: string) => void;
   // Closing a group dismisses its views; terminal instances keep running.
   closeMany: (ids: string[]) => Promise<void>;
   canRename: (id: string) => boolean;
@@ -23,6 +27,8 @@ export interface WorkspaceCommands {
 }
 const storageKey = 'aow-floating-tabs-v1';
 const hostedStorageKey = 'aow-hosted-terminals-v1';
+interface PreviewTab { workspace: string; id: string; floating: boolean }
+const previewStorageKey = 'aow-preview-tabs-v1';
 export function readStored<T>(key: string, fallback: T): T {
   try { return JSON.parse(appLocalStorage.getItem(key) ?? 'null') ?? fallback; } catch { return fallback; }
 }
@@ -38,7 +44,8 @@ export function withFloatingOpen<T>(action: () => T): T {
 function initialTabs(): FloatingTab[] {
   const value = readStored<unknown>(storageKey, []);
   return Array.isArray(value) ? value.filter((tab): tab is FloatingTab => tab && typeof tab.workspace === 'string'
-    && typeof tab.id === 'string' && typeof tab.label === 'string' && isWorkspaceTabKind(tab.kind))
+    && typeof tab.id === 'string' && typeof tab.label === 'string' && isWorkspaceTabKind(tab.kind)
+    && tab.kind !== 'browser' && tab.kind !== 'inbox' && tab.kind !== 'settings')
     .map(tab => ({ ...tab, targetId: tab.targetId ?? tab.id.slice(tab.id.indexOf(':') + 1),
       terminal: Array.isArray(tab.terminal?.panes) ? tab.terminal : undefined })) : [];
 }
@@ -89,9 +96,33 @@ function useFloatingController() {
   const [showRequest, setShowRequest] = useState(0);
   const visible = open && !autoHidden;
   const [portal, setPortal] = useState<HTMLDivElement | null>(null);
+  const [dockPortal, setDockPortal] = useState<HTMLDivElement | null>(null);
   const [sidebar, setSidebar] = useState<HTMLDivElement | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const sources = useRef(new Map<string, WorkspaceCommands>());
+  const [previewTabs, setPreviewTabs] = useState<PreviewTab[]>(() => {
+    const saved = readStored<unknown>(previewStorageKey, []);
+    return Array.isArray(saved) ? saved.filter((tab): tab is PreviewTab => tab && typeof tab.workspace === 'string'
+      && typeof tab.id === 'string' && tab.id.startsWith('document:') && typeof tab.floating === 'boolean') : [];
+  });
+  const previewTabsRef = useRef(previewTabs);
+  const updatePreviews = useCallback((update: (tabs: PreviewTab[]) => PreviewTab[]) => {
+    const next = update(previewTabsRef.current);
+    previewTabsRef.current = next;
+    setPreviewTabs(next);
+  }, []);
+  const pinPreview = useCallback((workspace: string, id: string) => {
+    if (!previewTabsRef.current.some(tab => tab.workspace === workspace && tab.id === id)) return;
+    updatePreviews(items => items.filter(tab => tab.workspace !== workspace || tab.id !== id));
+  }, [updatePreviews]);
+  const openPreview = useCallback((workspace: string, id: string, floating: boolean) => {
+    const previous = previewTabsRef.current.find(tab => tab.floating === floating && (floating || tab.workspace === workspace));
+    if (previous?.workspace === workspace && previous.id === id) return;
+    updatePreviews(items => [...items.filter(tab => tab !== previous && (tab.workspace !== workspace || tab.id !== id)), { workspace, id, floating }]);
+    // The owner retains edited or saving documents as regular tabs.
+    if (previous) sources.current.get(previous.workspace)?.closePreview(previous.id);
+  }, [updatePreviews]);
+  useEffect(() => persist(previewStorageKey, previewTabs), [previewTabs]);
   const returnFocus = useRef<HTMLElement | null>(null);
   const [globalRoot, setGlobalRoot] = useState('');
   const show = useCallback(() => {
@@ -100,18 +131,18 @@ function useFloatingController() {
     setShowRequest(value => value + 1);
     setOpen(true);
   }, []);
-  const openInbox = useCallback(() => { setActiveKey('inbox'); show(); }, [show]);
   const minimize = useCallback(() => { setOpen(false); setAutoHidden(false); returnFocus.current?.focus({ preventScroll: true }); }, []);
   const togglePinned = useCallback(() => { setPinned(value => !value); setAutoHidden(false); }, []);
   const add = useCallback((workspace: string, id: string, initial?: WorkspaceTab & { external?: boolean }) => {
     removeHosted(workspace, id);
+    if (previewTabsRef.current.some(tab => tab.workspace === workspace && tab.id === id && !tab.floating)) pinPreview(workspace, id);
     const descriptor = sources.current.get(workspace)?.tabs.find(tab => tab.id === id) ?? initial;
-    const tab: FloatingTab = { workspace, ...(descriptor ?? { id, label: '正在打开…', kind: 'file', pending: true, targetId: id.slice(id.indexOf(':') + 1) }) };
+    const tab: FloatingTab = { workspace, ...(descriptor ?? { id, label: t("aow.opening_2"), kind: 'file', pending: true, targetId: id.slice(id.indexOf(':') + 1) }) };
     setTabs(items => items.some(item => tabKey(item) === tabKey(tab)) ? items : [...items, tab]);
     setActiveKey(tabKey(tab));
     setTabRevealRequest({ tabId: tabKey(tab) });
     show();
-  }, [show, removeHosted]);
+  }, [show, removeHosted, pinPreview]);
   const hostTerminal = useCallback((workspace: string, host: string, descriptor: WorkspaceTab) => {
     setTabs(items => items.filter(tab => tab.workspace !== workspace || tab.id !== descriptor.id));
     const tab = { ...(sources.current.get(workspace)?.tabs.find(tab => tab.id === descriptor.id) ?? descriptor), workspace, host };
@@ -126,19 +157,22 @@ function useFloatingController() {
   }, []);
   const remove = useCallback((workspace: string, id: string) => {
     setTabs(items => items.filter(tab => tab.workspace !== workspace || tab.id !== id));
-  }, []);
+    pinPreview(workspace, id);
+  }, [pinPreview]);
   const replaceDocument = useCallback((workspace: string, oldId: string, newId: string) => {
     const before = { workspace, id: `document:${oldId}` };
     const after = { workspace, id: `document:${newId}` };
     setTabs(items => items.map(tab => tabKey(tab) === tabKey(before) ? { ...tab, id: after.id } : tab)
       .filter((tab, index, all) => all.findIndex(item => tabKey(item) === tabKey(tab)) === index));
     setActiveKey(key => key === tabKey(before) ? tabKey(after) : key);
-  }, []);
+    updatePreviews(items => items.map(tab => tab.workspace === workspace && tab.id === before.id ? { ...tab, id: after.id } : tab));
+  }, [updatePreviews]);
   const retainWorkspaces = useCallback((paths: string[]) => {
     setTabs(items => items.filter(tab => tab.external || paths.includes(tab.workspace)));
     setHostedTabs(items => items.filter(tab => paths.includes(tab.workspace) && paths.includes(tab.host)));
     setTerminalRequests(items => items.filter(tab => paths.includes(tab.workspace_root)));
-  }, []);
+    updatePreviews(items => items.filter(tab => paths.includes(tab.workspace)));
+  }, [updatePreviews]);
   const publish = useCallback((workspace: string, commands: WorkspaceCommands) => {
     sources.current.set(workspace, commands);
     const update = <T extends FloatingTab,>(items: T[]): T[] => {
@@ -146,7 +180,7 @@ function useFloatingController() {
       const next = items.map(item => {
         const tab = item.workspace === workspace ? commands.tabs.find(tab => tab.id === item.id) : undefined;
         if (!tab || !item.pending && tab.label === item.label && tab.kind === item.kind && tab.renameable === item.renameable
-          && tab.targetId === item.targetId && tab.dirty === item.dirty && tab.acpAgentId === item.acpAgentId && JSON.stringify(tab.terminal) === JSON.stringify(item.terminal)) return item;
+          && tab.targetId === item.targetId && tab.dirty === item.dirty && tab.preview === item.preview && tab.acpAgentId === item.acpAgentId && JSON.stringify(tab.terminal) === JSON.stringify(item.terminal)) return item;
         changed = true;
         return { ...item, ...tab, pending: false };
       });
@@ -157,7 +191,7 @@ function useFloatingController() {
   }, []);
   useEffect(() => persist(hostedStorageKey, hostedTabs), [hostedTabs]);
   useEffect(() => {
-    if (activeKey !== 'inbox' && !tabs.some(tab => tabKey(tab) === activeKey)) setActiveKey(tabs.length ? tabKey(tabs[tabs.length - 1]) : '');
+    if (!tabs.some(tab => tabKey(tab) === activeKey)) setActiveKey(tabs.length ? tabKey(tabs[tabs.length - 1]) : '');
     persist(storageKey, tabs);
   }, [tabs, activeKey]);
   useEffect(() => persist('aow-floating-active', activeKey), [activeKey]);
@@ -170,9 +204,10 @@ function useFloatingController() {
     if (source) source.close(tab.id);
     else remove(tab.workspace, tab.id);
   };
-  return { inboxOpen: activeKey === 'inbox', openInbox, tabs, tabRevealRequest, contains, active, open, visible, pinned, togglePinned, autoHidden, setAutoHidden, showRequest, portal, setPortal, sidebar, setSidebar, sidebarOpen, setSidebarOpen,
-    globalRoot, setGlobalRoot, sources, show, minimize, add, restore, remove, replaceDocument, retainWorkspaces, publish, select, close,
-    hostedTabs, hosts, publishHost, hostTerminal, removeHosted, terminalRequests, requestTerminal, acknowledgeTerminal, cancelTerminalRequest };
+  return { tabs, tabRevealRequest, contains, active, open, visible, pinned, togglePinned, autoHidden, setAutoHidden, showRequest, portal, setPortal, sidebar, setSidebar, sidebarOpen, setSidebarOpen,
+    dockPortal, setDockPortal, globalRoot, setGlobalRoot, sources, show, minimize, add, restore, remove, replaceDocument, retainWorkspaces, publish, select, close,
+    hostedTabs, hosts, publishHost, hostTerminal, removeHosted, terminalRequests, requestTerminal, acknowledgeTerminal, cancelTerminalRequest,
+    previewTabs, openPreview, pinPreview };
 }
 const FloatingContext = createContext<ReturnType<typeof useFloatingController> | null>(null);
 export function FloatingWorkspaceProvider({ children }: { children: ReactNode }) {
@@ -215,7 +250,7 @@ export function FloatingOpenMenu({ children }: { children: ReactNode }) {
     event.preventDefault(); event.stopPropagation();
     const bounds = element.getBoundingClientRect();
     open(element, event.clientX || bounds.x, event.clientY || bounds.bottom);
-  }}>{children}{target ? <div ref={menu} className="project-aow-context-menu" role="menu" aria-label="选择打开位置"
+  }}>{children}{target ? <div ref={menu} className="project-aow-context-menu" role="menu" aria-label={t("aow.choose_where_to_open")}
     style={{ left: target.x, top: target.y }} onPointerDown={event => event.stopPropagation()} onMouseDown={event => event.preventDefault()}>
     <button role="menuitem" onClick={() => { target.element.click(); setTarget(undefined); }}><WorkspaceMenuLabel action="open" /></button>
     <button role="menuitem" onClick={() => { withFloatingOpen(() => target.element.click()); setTarget(undefined); }}><WorkspaceMenuLabel action="floating" /></button>

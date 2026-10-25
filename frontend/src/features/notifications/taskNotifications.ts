@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import type { TaskTabTarget } from '../../aow/AowTabEntry';
 import { storageKey } from '../../lib/basePath';
 import { parseTokenUsage, type TokenUsage } from '../../lib/tokenUsage';
@@ -98,13 +99,13 @@ function createNotificationQueue() {
           ? [{ ...data, key: notice.key, receivedAt: notice.receivedAt, popupClosed: notice.popupClosed === true }] : [];
       });
       publish(notices.reverse(), '');
-    }).catch(() => publish(undefined, '通知暂时无法保存，刷新页面后可能丢失。'));
+    }).catch(() => publish(undefined, t("notifications.notifications_cannot_be_saved_right_now_and_may_be")));
     return operations;
   };
   const enqueue = (operation: () => Promise<void>) => {
     // Loading, incoming events and dismissals share one queue; restoration cannot
     // overwrite a new event or resurrect a notice dismissed while loading.
-    operations = initialize().then(operation).catch(() => publish(undefined, '通知保存失败，请重试。'));
+    operations = initialize().then(operation).catch(() => publish(undefined, t("notifications.failed_to_save_notifications_try_again")));
   };
   return {
     subscribe(listener: () => void) {
@@ -120,8 +121,8 @@ function createNotificationQueue() {
         let storageError = snapshot.storageError;
         try {
           if (database) key = Number(await transaction(database, 'readwrite', store => store.add({ ...data, receivedAt })));
-          else storageError = '通知暂时无法保存，刷新页面后可能丢失。';
-        } catch { storageError = '通知暂时无法保存，刷新页面后可能丢失。'; }
+          else storageError = t("notifications.notifications_cannot_be_saved_right_now_and_may_be");
+        } catch { storageError = t("notifications.notifications_cannot_be_saved_right_now_and_may_be"); }
         publish([{ ...data, receivedAt, key }, ...snapshot.notices], storageError);
       });
     },

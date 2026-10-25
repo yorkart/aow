@@ -1,9 +1,10 @@
+import { localizedFetch } from './localizedFetch';
 import { appUrl } from './basePath';
 
 class AowHttpError extends Error {}
 
 export async function aowRequest<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(appUrl(url), {
+  const response = await localizedFetch(appUrl(url), {
     ...init,
     headers: init?.body === undefined
       ? init?.headers

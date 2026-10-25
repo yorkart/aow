@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { closeSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readlinkSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { closeSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readlinkSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -192,7 +192,7 @@ test('local install uses the same account, upgrade and terminald lifecycle and p
   assert.notEqual(missingAccount.status, 0);
   assert.equal(existsSync(join(f.runtime, 'latest')), false);
   const customBin = join(f.home, 'custom bin');
-  const result = local(latest, ['--repo', 'example/fork'], { AOW_USER_BIN_DIR: customBin }, 'admin\nnew-password\nnew-password\ny\n');
+  const result = local(latest, ['--repo', 'example/fork'], { AOW_USER_BIN_DIR: customBin }, 'admin\nnew-password\nnew-password\n');
   assert.equal(result.status, 0, result.stdout + result.stderr);
   for (const component of ['server', 'terminald']) {
     assert.equal(readlinkSync(join(f.runtime, `active/${component}`)), '../releases/local-1');
@@ -200,12 +200,12 @@ test('local install uses the same account, upgrade and terminald lifecycle and p
   assertCredentials(f.log(f.accountFile), 'new-password');
   const settings = f.log(join(f.runtime, 'update.json'));
   assert.deepEqual(JSON.parse(settings), { repository: 'example/fork', user_bin_dir: customBin });
-  const config = join(f.home, '.config/aow/server.env');
+  const config = join(f.home, '.aow/server.env');
   write(config, 'AOW_SERVER_PORT=8283\n');
   const next = localPackage(f, 'local-2');
   rmSync(latest);
   symlinkSync(basename(next), latest);
-  const upgraded = local(latest, [], { AOW_USER_BIN_DIR: '' }, 'n\n');
+  const upgraded = local(latest, ['--skip-terminald'], { AOW_USER_BIN_DIR: '' });
   assert.equal(upgraded.status, 0, upgraded.stdout + upgraded.stderr);
   assert.equal(readlinkSync(join(f.runtime, 'active/server')), '../releases/local-2');
   assert.equal(readlinkSync(join(f.runtime, 'active/terminald')), '../releases/local-1');
@@ -217,6 +217,7 @@ test('local install uses the same account, upgrade and terminald lifecycle and p
   const reinstalled = local(next, [], { AOW_USER_BIN_DIR: '' });
   assert.equal(reinstalled.status, 0, reinstalled.stdout + reinstalled.stderr);
   assert.match(reinstalled.stdout, /Keeping existing immutable release/);
+  assert.equal(readlinkSync(join(f.runtime, 'active/terminald')), '../releases/local-2');
   f.pack('v3.0.0');
   const updated = f.manager(['update'], {}, undefined, customBin);
   assert.equal(updated.status, 0, updated.stdout + updated.stderr);
@@ -373,7 +374,7 @@ test('GitHub latest resolution rejects an unexpected redirect before requesting 
   }
 });
 
-test('piped install with an existing account uses its pinned GitHub release and skips terminald without a TTY', t => {
+test('piped install with an existing account uses its pinned GitHub release and starts terminald without a TTY', t => {
   const f = fixture(t);
   f.pack();
   const result = f.run([], { SERVICE_INACTIVE: '1' });
@@ -393,18 +394,19 @@ test('piped install with an existing account uses its pinned GitHub release and 
     repository: 'yorkart/aow', user_bin_dir: f.userBin,
   });
   assert.match(f.log(f.serviceLog), /enable --now aow-server/);
-  assert.doesNotMatch(f.log(f.serviceLog), /terminald|restart/);
-  assert.equal(existsSync(join(f.runtime, 'active/terminald')), false);
+  assert.match(f.log(f.serviceLog), /enable --now aow-terminald/);
+  assert.doesNotMatch(f.log(f.serviceLog), /restart/);
+  assert.equal(readlinkSync(join(f.runtime, 'active/terminald')), '../releases/1.2.3');
   assert.equal(f.log(f.accountFile), credentials('old-password'));
-  assert.doesNotMatch(result.stdout + result.stderr, /请输入登录账号|请输入登录密码/);
-  assert.match(result.stdout, /Skipped terminald/);
+  assert.doesNotMatch(result.stdout + result.stderr, /请输入登录账号|请输入登录密码|Enter lowercase y|请输入 y/);
+  assert.match(result.stdout, /services are active/);
   f.assertClean();
 });
 
 test('first piped install requires an account and confirmed password before starting services', t => {
   const f = fixture(t, { withAccount: false });
   f.pack();
-  const result = f.run([], { SERVICE_INACTIVE: '1' }, 'admin\nnew-password\nnew-password\ny\n');
+  const result = f.run([], { SERVICE_INACTIVE: '1' }, 'admin\nnew-password\nnew-password\n');
   assert.ifError(result.error);
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assertCredentials(f.log(f.accountFile), 'new-password');
@@ -520,18 +522,17 @@ test('aow account cancellation, no terminal, help and invalid arguments preserve
   assert.deepEqual(readdirSync(dirname(f.accountFile)), ['credentials.json']);
 });
 
-for (const source of ['default', 'xdg', 'state environment', 'server.env', 'server environment']) {
+for (const source of ['default', 'state environment', 'server.env', 'server environment']) {
   test(`install and aow account share the ${source} state directory`, t => {
     const f = fixture(t, { withAccount: false });
-    const state = source === 'default' ? join(f.home, '.local/state/aow')
-      : source === 'xdg' ? join(f.temp, 'xdg state/aow') : join(f.temp, 'chosen state');
+    const state = source === 'default' ? join(f.home, '.aow')
+      : join(f.temp, 'chosen state');
     const extra = { AOW_STATE_DIR: '', XDG_STATE_HOME: '' };
-    if (source === 'xdg') extra.XDG_STATE_HOME = dirname(state);
     if (source === 'state environment') extra.AOW_STATE_DIR = state;
     if (source.startsWith('server')) {
       extra.AOW_STATE_DIR = join(f.temp, 'unused state');
       const configured = source === 'server.env' ? state : join(f.temp, 'unused configured state');
-      write(join(f.home, '.config/aow/server.env'), `AOW_SERVER_STATE_DIR="${configured}"\n`);
+      write(join(f.home, '.aow/server.env'), `AOW_SERVER_STATE_DIR="${configured}"\n`);
       if (source === 'server environment') extra.AOW_SERVER_STATE_DIR = state;
     }
     f.pack();
@@ -599,21 +600,21 @@ test('installation and update create command links under symlinked HOME', t => {
   f.assertClean();
 });
 
-test('upgrade retains configuration, old releases and unconfirmed terminald state', t => {
+test('--skip-terminald retains configuration, old releases and terminald state', t => {
   const f = fixture(t);
   f.pack('1.0.0');
-  assert.equal(f.run().status, 0);
+  assert.equal(f.run(['--skip-terminald']).status, 0);
   mkdirSync(join(f.runtime, 'active'), { recursive: true });
   symlinkSync('../releases/1.0.0', join(f.runtime, 'active/terminald'));
   symlinkSync('/previous/node', join(f.runtime, 'node'));
   write(join(f.runtime, '.aow-terminald-node-target'), '/previous/node\n');
-  const config = join(f.home, '.config/aow/server.env');
+  const config = join(f.home, '.aow/server.env');
   const state = join(f.temp, 'existing state path');
   write(config, `AOW_SERVER_PORT=8283\nAOW_SERVER_STATE_DIR="${state}"\n`);
   const account = join(state, 'credentials.json');
   write(account, 'existing account digest');
   f.pack('1.2.3');
-  const result = f.run();
+  const result = f.run(['--skip-terminald']);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(readlinkSync(join(f.runtime, 'active/server')), '../releases/1.2.3');
   assert.equal(readlinkSync(join(f.runtime, 'active/terminald')), '../releases/1.0.0');
@@ -626,39 +627,65 @@ test('upgrade retains configuration, old releases and unconfirmed terminald stat
   f.assertClean();
 });
 
-for (const reply of ['n\n', '\n', 'Y\n', 'yes\n', ' y\n', 'y \n']) {
-  test(`terminal reply ${JSON.stringify(reply)} skips terminald and keeps server active`, t => {
+for (const reply of [undefined, '', 'y\n']) {
+  test(`--skip-terminald skips all terminald activation with terminal input ${JSON.stringify(reply)}`, t => {
     const f = fixture(t);
     f.pack();
-    const result = f.run([], {}, reply);
+    const result = f.run(['--skip-terminald'], {}, reply);
     assert.ifError(result.error);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.match(f.log(f.serviceLog), /restart aow-server/);
     assert.doesNotMatch(f.log(f.serviceLog), /terminald/);
     assert.match(result.stdout, /Skipped terminald/);
+    assert.doesNotMatch(result.stdout + result.stderr, /Enter lowercase y|请输入 y/);
+    assert.equal(existsSync(join(f.runtime, 'active/terminald')), false);
+    assert.equal(existsSync(join(f.runtime, 'node')), false);
     f.assertClean();
   });
 }
 
-test('only y at the controlling terminal starts terminald, after server activation', t => {
+for (const reply of [undefined, '', 'n\n']) {
+  test(`default install restarts terminald after server activation with terminal input ${JSON.stringify(reply)}`, t => {
+    const f = fixture(t);
+    f.pack();
+    const result = f.run([], {}, reply);
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const services = f.log(f.serviceLog);
+    assert.ok(services.indexOf('restart aow-server') < services.indexOf('restart aow-terminald'));
+    assert.equal(readlinkSync(join(f.runtime, 'active/terminald')), '../releases/1.2.3');
+    assert.equal(existsSync(join(f.runtime, 'node')), true);
+    assert.doesNotMatch(result.stdout + result.stderr, /Enter lowercase y|请输入 y/);
+    f.assertClean();
+  });
+}
+
+test('default update keeps the managed Node executable usable when it is first on PATH', t => {
   const f = fixture(t);
-  f.pack();
-  const result = f.run([], {}, 'y\n');
-  assert.ifError(result.error);
-  assert.equal(result.status, 0, result.stdout + result.stderr);
-  const services = f.log(f.serviceLog);
-  assert.ok(services.indexOf('restart aow-server') < services.indexOf('restart aow-terminald'));
-  assert.equal(readlinkSync(join(f.runtime, 'active/terminald')), '../releases/1.2.3');
-  assert.equal(existsSync(join(f.runtime, 'node')), true);
+  f.pack('1.0.0');
+  const installed = f.run();
+  assert.equal(installed.status, 0, installed.stdout + installed.stderr);
+  f.pack('2.0.0');
+  const updated = f.manager(['update'], { PATH: `${f.runtime}:${f.env.PATH}` });
+  assert.equal(updated.status, 0, updated.stdout + updated.stderr);
+  const node = join(f.runtime, 'node');
+  assert.equal(readlinkSync(node), realpathSync(process.execPath));
+  assert.equal(readFileSync(join(f.runtime, '.aow-terminald-node-target'), 'utf8'), `${readlinkSync(node)}\n`);
+  const version = spawnSync(node, ['--version'], { encoding: 'utf8', timeout: 5000 });
+  assert.ifError(version.error);
+  assert.equal(version.status, 0, version.stderr);
+  assert.equal(version.stdout.trim(), process.version);
+  assert.equal(readlinkSync(join(f.runtime, 'active/terminald')), '../releases/2.0.0');
   f.assertClean();
 });
 
-test('a terminald failure after y is reported as a failure, not a skip', t => {
+test('a default terminald activation failure is reported as a failure, not a skip', t => {
   const f = fixture(t);
   f.pack();
-  const result = f.run([], { FAIL_TERMINALD_RESTART: '1' }, 'y\n');
+  const result = f.run([], { FAIL_TERMINALD_RESTART: '1' });
   assert.notEqual(result.status, 0);
-  assert.match(result.stdout, /terminald activation failed/);
+  assert.match(result.stdout + result.stderr, /terminald activation failed/);
+  assert.doesNotMatch(result.stdout + result.stderr, /Skipped terminald/);
   assert.equal(readlinkSync(join(f.runtime, 'active/server')), '../releases/1.2.3');
   f.assertClean();
 });
@@ -738,12 +765,11 @@ test('an unmanaged CLI entry is preserved and prevents activation', t => {
 });
 
 
-test('aow update uses the saved repository and refreshed installer while preserving state and terminald', t => {
+test('aow update uses the saved repository and refreshed installer while preserving state and updating terminald', t => {
   const f = fixture(t);
   f.pack('1.0.0');
   assert.equal(f.run().status, 0);
-  symlinkSync('../releases/1.0.0', join(f.runtime, 'active/terminald'));
-  const config = join(f.home, '.config/aow/server.env');
+  const config = join(f.home, '.aow/server.env');
   write(config, 'AOW_SERVER_PORT=8283\n');
   const account = join(f.env.AOW_STATE_DIR, 'credentials.json');
   write(account, 'keep-account');
@@ -757,11 +783,11 @@ test('aow update uses the saved repository and refreshed installer while preserv
   assert.match(result.stdout, /Updated by refreshed installer 2.0.0/);
   assert.equal(f.log(f.downloadLog), `${githubBase}/aow-install.sh\n${githubDownloads}/2.0.0/SHA256SUMS\n${githubDownloads}/2.0.0/aow-${platform}.tar.gz\n`);
   assert.equal(readlinkSync(join(f.runtime, 'active/server')), '../releases/2.0.0');
-  assert.equal(readlinkSync(join(f.runtime, 'active/terminald')), '../releases/1.0.0');
+  assert.equal(readlinkSync(join(f.runtime, 'active/terminald')), '../releases/2.0.0');
   assert.equal(readlinkSync(join(f.userBin, 'aow-cli')), join(f.runtime, 'releases/2.0.0/bin/aow-cli'));
   assert.equal(readFileSync(config, 'utf8'), 'AOW_SERVER_PORT=8283\n');
   assert.equal(readFileSync(account, 'utf8'), 'keep-account');
-  assert.doesNotMatch(f.log(f.serviceLog), /terminald/);
+  assert.match(f.log(f.serviceLog), /restart aow-terminald/);
   f.assertClean();
 });
 
@@ -830,16 +856,25 @@ for (const failure of ['download', 'empty installer', 'malformed installer', 'co
   });
 }
 
-test('aow update only restarts terminald after lowercase y at its controlling terminal', t => {
+test('aow update --skip-terminald preserves terminald for this invocation only', t => {
   const f = fixture(t);
   f.pack('1.0.0');
   assert.equal(f.run().status, 0);
   f.pack('2.0.0');
-  const skipped = f.manager(['update'], {}, 'n\n');
-  assert.equal(skipped.status, 0, skipped.stdout + skipped.stderr);
-  assert.equal(existsSync(join(f.runtime, 'active/terminald')), false);
+  const nodeTarget = readlinkSync(join(f.runtime, 'node'));
+  const unit = join(f.home, '.config/systemd/user/aow-terminald.service');
+  const previousUnit = f.log(unit);
   writeFileSync(f.serviceLog, '');
-  const accepted = f.manager(['update'], {}, 'y\n');
+  const skipped = f.manager(['update', '--skip-terminald', '--version', '2.0.0', '--repo', 'yorkart/aow']);
+  assert.equal(skipped.status, 0, skipped.stdout + skipped.stderr);
+  assert.equal(readlinkSync(join(f.runtime, 'active/server')), '../releases/2.0.0');
+  assert.equal(readlinkSync(join(f.runtime, 'active/terminald')), '../releases/1.0.0');
+  assert.equal(readlinkSync(join(f.runtime, 'node')), nodeTarget);
+  assert.equal(f.log(unit), previousUnit);
+  assert.doesNotMatch(f.log(f.serviceLog), /terminald/);
+  assert.match(skipped.stdout, /Skipped terminald/);
+  writeFileSync(f.serviceLog, '');
+  const accepted = f.manager(['update']);
   assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
   assert.equal(readlinkSync(join(f.runtime, 'active/terminald')), '../releases/2.0.0');
   const services = f.log(f.serviceLog);

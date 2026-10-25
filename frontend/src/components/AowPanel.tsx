@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n';
 import { createContext, useCallback, useContext, useId, useLayoutEffect, useRef, useState, type HTMLAttributes, type ReactNode } from 'react';
 import { AowPanelHeader, type AowPanelHeaderProps } from './AowPanelHeader';
 import './aow-panel.css';
@@ -12,7 +13,7 @@ function panelAnchors(viewport: HTMLElement) {
 // Keep the real header and its placeholder. Docked headers use the stack as
 // their fixed-position containing block, so the browser holds them still even
 // when scrolling is composited before JavaScript can update the layout.
-export function AowPanelStack({ children, className = '', ...props }: HTMLAttributes<HTMLDivElement>) {
+export function AowPanelStack({ children, className = '', dockHeaders = true, ...props }: HTMLAttributes<HTMLDivElement> & { dockHeaders?: boolean }) {
   const viewport = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const [overflowPanels, setOverflowPanels] = useState<{ id: string; title: string }[]>([]);
@@ -22,14 +23,15 @@ export function AowPanelStack({ children, className = '', ...props }: HTMLAttrib
       const scroller = viewport.current;
       if (!scroller || !anchor.isConnected) return;
       const anchors = panelAnchors(scroller);
-      const previous = crowded.current ? 0 : anchors.slice(0, anchors.indexOf(anchor)).reduce((sum, item) => sum + item.offsetHeight, 0);
+      const previous = !dockHeaders ? parseFloat(getComputedStyle(scroller).scrollPaddingTop) || 0 : crowded.current ? 0 : anchors.slice(0, anchors.indexOf(anchor)).reduce((sum, item) => sum + item.offsetHeight, 0);
       const top = scroller.scrollTop + anchor.getBoundingClientRect().top - scroller.getBoundingClientRect().top - previous;
       scroller.scrollTo({ top: Math.max(0, top), behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
     });
-  }, []);
+  }, [dockHeaders]);
 
   useLayoutEffect(() => {
     const scroller = viewport.current!;
+    if (!dockHeaders) return;
     let frame = 0;
     let disposed = false;
     const measure = () => {
@@ -84,11 +86,11 @@ export function AowPanelStack({ children, className = '', ...props }: HTMLAttrib
       resize.disconnect(); mutations.disconnect();
       scroller.removeEventListener('scroll', schedule);
     };
-  }, []);
+  }, [dockHeaders]);
 
   return <PanelStackContext.Provider value={navigate}>
     <div {...props} className={`aow-panel-stack ${className}`}>
-      {overflowPanels.length ? <select className="aow-panel-jump" aria-label="快速定位面板" value="" onChange={event => {
+      {overflowPanels.length ? <select className="aow-panel-jump" aria-label={t("components.quick_navigation_panel")} value="" onChange={event => {
         const anchor = document.getElementById(event.target.value);
         if (!anchor) return;
         // Titles may toggle or be plain labels; jumping only opens a collapsed panel.
@@ -96,7 +98,7 @@ export function AowPanelStack({ children, className = '', ...props }: HTMLAttrib
           anchor.querySelector<HTMLButtonElement>('.aow-panel-toggle, .aow-panel-header-title[aria-expanded]')?.click();
         }
         navigate(anchor);
-      }}><option value="" disabled>快速定位面板</option>{overflowPanels.map(panel => <option key={panel.id} value={panel.id}>{panel.title}</option>)}</select> : null}
+      }}><option value="" disabled>{t("components.quick_navigation_panel")}</option>{overflowPanels.map(panel => <option key={panel.id} value={panel.id}>{panel.title}</option>)}</select> : null}
       <div ref={viewport} className="aow-panel-viewport">
         <div ref={content} className="aow-panel-content">{children}</div>
       </div>
@@ -106,6 +108,7 @@ export function AowPanelStack({ children, className = '', ...props }: HTMLAttrib
 
 interface Props extends Omit<AowPanelHeaderProps, 'onToggle' | 'onNavigate' | 'children' | 'className'> {
   children: ReactNode;
+  id?: string;
   className?: string;
   headerClassName?: string;
   bodyClassName?: string;
@@ -124,7 +127,7 @@ export function usePanelCollapsed(empty: boolean, controlled?: boolean, onChange
   return [collapsed, change] as const;
 }
 
-export function AowPanel({ children, className = '', headerClassName, bodyClassName, bodyRole, empty = false, collapsible = true, headerBehavior = 'navigate', expandOnNavigate = true,
+export function AowPanel({ children, id: sectionId, className = '', headerClassName, bodyClassName, bodyRole, empty = false, collapsible = true, headerBehavior = 'navigate', expandOnNavigate = true,
   collapsed: controlled, onCollapsedChange, controlsId, ...header }: Props) {
   const id = useId();
   const anchor = useRef<HTMLDivElement>(null);
@@ -147,7 +150,7 @@ export function AowPanel({ children, className = '', headerClassName, bodyClassN
     return () => header.removeEventListener('wheel', wheel);
   }, []);
   const bodyId = controlsId ?? `${id}-body`;
-  return <section className={`aow-panel ${className}`} aria-label={header.title} data-collapsed={collapsed || undefined}>
+  return <section id={sectionId} className={`aow-panel ${className}`} aria-label={header.title} data-collapsed={collapsed || undefined}>
     <div ref={anchor} id={`${id}-anchor`} data-panel-anchor data-panel-title={header.title}>
       <AowPanelHeader {...header} className={headerClassName} collapsed={collapsed} controlsId={bodyId}
         onToggle={collapsible ? () => change(!collapsed) : undefined}

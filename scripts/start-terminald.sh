@@ -153,6 +153,8 @@ install_node_link() {
             "$node_version" "$node_path" >&2
         exit 1
     fi
+    # PATH may select our managed link; resolve it before replacing that link.
+    node_path=$("$node_path" -e 'process.stdout.write(require("node:fs").realpathSync(process.argv[1]))' "$node_path")
     if [ -e "$node_link" ] && [ ! -L "$node_link" ]; then
         printf 'error: refusing to replace non-symlink Node path: %s\n' "$node_link" >&2
         exit 1
@@ -205,7 +207,7 @@ if [ -L "$active_dir/terminald" ]; then
 fi
 
 # This is intentionally the only path that changes the terminald service or
-# its managed Node link. The installer only activates it after confirmation.
+# its managed Node link. The installer opts in unless --skip-terminald is set.
 install_node_link
 set_active_release "$release"
 if ! install_unit || ! systemctl --user daemon-reload \

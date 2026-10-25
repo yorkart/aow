@@ -49,6 +49,16 @@ impl NotificationManager {
         })
     }
 
+    pub(crate) fn language(&self) -> aow_i18n::Language {
+        self.inner
+            .state
+            .lock()
+            .unwrap()
+            .document
+            .notifications
+            .language
+    }
+
     pub(crate) fn view(&self) -> SettingsView {
         self.inner.state.lock().unwrap().document.view()
     }
@@ -99,10 +109,14 @@ impl NotificationManager {
                 }
             }
             SettingsUpdate::Notifications {
+                language,
                 agent_task_completed,
                 public_base_url,
             } => {
                 next.notifications.agent_task_completed = agent_task_completed;
+                if let Some(language) = language {
+                    next.notifications.language = language;
+                }
                 if let Some(url) = public_base_url {
                     next.notifications.public_base_url =
                         normalize_public_base_url(&url).map_err(AowError::Invalid)?;

@@ -33,7 +33,7 @@ async fn call(app: &Router, content: Option<Value>) -> (StatusCode, Value) {
 #[tokio::test]
 async fn edits_the_actual_file_verbatim_and_can_create_or_clear_it() {
     let directory = tempfile::tempdir().unwrap();
-    let path = directory.path().join(".config/aow/server.env");
+    let path = directory.path().join(".aow/server.env");
     let app = router(path.clone());
     let (status, initial) = call(&app, None).await;
     assert_eq!(status, StatusCode::OK);

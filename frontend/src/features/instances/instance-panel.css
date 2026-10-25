@@ -5,9 +5,10 @@
 .instance-panel-body[hidden] { display: none; }
 .instance-panel-empty { margin: 0; padding: 10px; color: var(--muted); font-size: 12px; }
 .instance-panel-count { flex: none; margin-left: auto; padding: 0 5px; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
-.instance-worktree-group.active { background: var(--aow-sidebar-selection); }
+/* Current worktree is a quiet group cue; selection belongs to the opened row. */
+.instance-worktree-group.active { background: var(--aow-worktree-current-background); }
 .instance-worktree-heading { display: flex; align-items: center; gap: 4px; width: 100%; min-height: 27px; padding: 4px 8px; color: var(--aow-text); text-align: left; cursor: pointer; }
-.instance-worktree-heading:hover { color: var(--aow-text-hover); background: var(--hover); }
+.instance-worktree-heading:hover { color: var(--aow-text-hover); background: var(--aow-list-highlight); }
 .instance-worktree-heading:focus-visible { outline: 1px solid var(--aow-accent); outline-offset: -1px; }
 .instance-worktree-heading > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 /* Center the chevron in the pane's 20px gutter without moving the branch label. */

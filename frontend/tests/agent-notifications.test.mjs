@@ -16,7 +16,8 @@ let preferences = { enabled: true, channels: ['page'] };
 let providers = [];
 let storedSecret;
 let publicBaseUrl = "";
-const settings = () => ({ im: { providers }, notifications: { agent_task_completed: preferences, public_base_url: publicBaseUrl } });
+let notificationLanguage = 'en-US';
+const settings = () => ({ im: { providers }, notifications: { agent_task_completed: preferences, public_base_url: publicBaseUrl, language: notificationLanguage } });
 const server = await createServer({
   configFile: false,
   cacheDir: 'node_modules/.vite-notifications-tests',
@@ -28,7 +29,7 @@ const server = await createServer({
       next();
     });
     server.httpServer.on('upgrade', (request, socket, head) => {
-      if (request.url === '/api/events/ws') events.handleUpgrade(request, socket, head, ws => events.emit('connection', ws));
+      if (new URL(request.url, 'http://localhost').pathname === '/api/events/ws') events.handleUpgrade(request, socket, head, ws => events.emit('connection', ws));
     });
     server.middlewares.use('/api/aow/notification-settings', async (request, response) => {
       response.setHeader('Content-Type', 'application/json');
@@ -46,7 +47,7 @@ const server = await createServer({
             storedSecret = provider.app_secret || storedSecret;
             return { provider: 'feishu', app_id: provider.app_id, secret_configured: true };
           });
-        } else { preferences = update.agent_task_completed; publicBaseUrl = update.public_base_url ?? publicBaseUrl; }
+        } else { notificationLanguage = update.language ?? notificationLanguage; preferences = update.agent_task_completed; publicBaseUrl = update.public_base_url ?? publicBaseUrl; }
       }
       response.end(JSON.stringify(settings()));
     });
@@ -110,6 +111,7 @@ try {
   const base = `http://127.0.0.1:${server.httpServer.address().port}`;
   await test('ACP completions share popups and unread state, navigate by thread and suppress the active session only', async t => {
     const page = await browser.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => page.close());
     await page.goto(`${base}/tests/agent-notifications-preview.html`);
     await waitConnections(1);
@@ -148,19 +150,20 @@ try {
   });
   await test('per-turn token usage is displayed and retained across notification restoration', async t => {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => page.close());
     await page.goto(`${base}/tests/agent-notifications-preview.html`);
     await waitConnections(1);
     const usage = { input_tokens: 1000, output_tokens: 200, total_tokens: 1200, cached_input_tokens: 500,
       cache_write_input_tokens: 0, reasoning_output_tokens: 100 };
     send({ ...notice('usage'), usage });
-    await page.getByText('本轮 1.2K tokens', { exact: true }).waitFor();
+    await page.getByText('本轮 1200 tokens', { exact: true }).waitFor();
     assert.match(await page.locator('.token-usage').getAttribute('title'), /推理（包含在输出中）：100/);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     await page.screenshot({ path: '/tmp/aow-token-notification.png' });
     await page.reload();
     await waitConnections(1);
-    await page.getByText('本轮 1.2K tokens', { exact: true }).waitFor();
+    await page.getByText('本轮 1200 tokens', { exact: true }).waitFor();
     send({ ...notice('invalid-usage'), usage: { ...usage, total_tokens: -1 } });
     send(notice('legacy-usage'));
     await page.waitForFunction(() => document.querySelectorAll('.agent-task-notice').length === 3);
@@ -169,6 +172,7 @@ try {
 
   await test('live stops produce independent, dismissible notices without stealing focus', async t => {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => page.close());
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -186,7 +190,7 @@ try {
     await page.getByRole('button', { name: '关闭通知：AoW · one', exact: true }).waitFor();
     assert.equal(await page.getByRole('button', { name: '移除通知' }).count(), 0);
     assert.equal(await page.getByText('同名任务', { exact: true }).count(), 0);
-    assert.equal(await page.getByText('Session ID', { exact: false }).count(), 0);
+    assert.equal(await page.getByText("会话 ID", { exact: false }).count(), 0);
     assert.equal(await page.getByLabel('继续工作').evaluate(element => document.activeElement === element), true);
     send(notice('two', 'traecli'));
     send(notice('one'));
@@ -233,6 +237,7 @@ try {
   });
   await test('older notices fold into a persistent, scrollable stack and disappear permanently when dismissed', async t => {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => page.close());
     await page.goto(`${base}/tests/agent-notifications-preview.html`);
     await waitConnections(1);
@@ -286,6 +291,7 @@ try {
   });
   await test('closing popups with the keyboard updates folded and expanded lists without reopening them on remount', async t => {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => page.close());
     await page.goto(`${base}/tests/agent-notifications-preview.html`);
     await waitConnections(1);
@@ -322,6 +328,7 @@ try {
   });
   await test('the queue retains more than 200 notices without evicting old entries', async t => {
     const page = await browser.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => page.close());
     await page.goto(`${base}/tests/agent-notifications-preview.html`);
     await waitConnections(1);
@@ -346,6 +353,7 @@ try {
   });
   await test('live notifications still work when browser storage is unavailable', async t => {
     const page = await browser.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => page.close());
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -366,6 +374,7 @@ try {
   });
   await test('IM credentials and completion channels can be configured and persist across reload', async t => {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => page.close());
     await page.goto(`${base}/tests/agent-notifications-preview.html`);
     await waitConnections(1);
@@ -387,6 +396,10 @@ try {
     assert.equal(storedSecret, 'test-secret');
     await page.getByRole('button', { name: '通知设置', exact: true }).click();
     await page.getByLabel('飞书推送', { exact: true }).check();
+    const languagePicker = page.getByRole('button', { name: '通知语言', exact: true });
+    assert.match(await languagePicker.innerText(), /English/);
+    await languagePicker.click();
+    await page.getByRole('option', { name: '简体中文', exact: true }).click();
     await page.getByRole('button', { name: '使用当前访问地址', exact: true }).click();
     assert.equal(await page.getByLabel('AoW 访问地址').inputValue(), base);
     await page.getByLabel('AoW 访问地址').fill('https://aow.example.com');
@@ -400,6 +413,8 @@ try {
     await page.getByLabel('飞书推送', { exact: true }).waitFor();
     assert.equal(await page.getByLabel('飞书推送', { exact: true }).isChecked(), true);
     assert.equal(await page.getByLabel('AoW 访问地址').inputValue(), 'https://aow.example.com');
+    assert.equal(notificationLanguage, 'zh-CN');
+    assert.match(await page.getByRole('button', { name: '通知语言', exact: true }).innerText(), /简体中文/);
     assert.equal(await page.getByLabel('页面提示', { exact: true }).isChecked(), false);
     await page.getByRole('button', { name: 'IM 设置', exact: true }).click();
     await page.getByRole('button', { name: '移除飞书配置', exact: true }).click();
@@ -429,6 +444,7 @@ try {
     preferences = { enabled: true, channels: ['page'] };
     providers = [{ provider: 'feishu', app_id: 'cli_existing', secret_configured: true }];
     const page = await browser.newPage({ viewport: { width: 1100, height: 1000 } });
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => page.close());
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -535,6 +551,7 @@ try {
     preferences = { enabled: true, channels: ['page'] };
     providers = [{ provider: 'wechat', account_id: 'bot', user_id: 'scanner' }];
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => page.close());
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -634,7 +651,9 @@ try {
     let resolveHeld;
     const held = new Promise(resolve => { resolveHeld = resolve; });
     const desktop = await browser.newPage({ viewport: { width: 1100, height: 1000 } });
+    await desktop.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await mobile.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => Promise.all([desktop.close(), mobile.close()]));
     for (const page of [desktop, mobile]) {
       await page.route('**/api/aow/im/wechat**', async route => {
@@ -699,6 +718,7 @@ try {
   await test('expired QR can be refreshed and leaving settings cancels pending login', async t => {
     preferences = { enabled: true, channels: ['page'] }; providers = [];
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => page.close());
     let starts = 0;
     const cancelled = [];

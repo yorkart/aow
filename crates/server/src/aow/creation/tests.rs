@@ -277,7 +277,12 @@ async fn checkout_timeout_reports_partial_resources_and_skips_refresh() {
     let failed = finished(&state, &job.id).await;
     assert_eq!(failed.steps[3].status, Status::TimedOut);
     assert_eq!(failed.steps[4].status, Status::Skipped);
-    assert!(failed.error.unwrap().contains("分支或目录可能已创建"));
+    assert!(
+        failed
+            .error
+            .unwrap()
+            .contains("branch or directory may already exist")
+    );
     assert!(Path::new(&failed.path).is_dir());
     helpers_stopped(&marker).await;
 }

@@ -19,6 +19,7 @@ try {
 
   async function fixture(t, bracketed = true, explorer = false, platform) {
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     page.setDefaultTimeout(15_000);
     t.after(() => page.close());
     if (platform) await page.addInitScript(platform => {

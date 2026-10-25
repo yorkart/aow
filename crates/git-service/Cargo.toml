@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+aow-i18n = { path = "../i18n" }
 aow-protocol = { path = "../protocol" }
 notify.workspace = true
 thiserror.workspace = true

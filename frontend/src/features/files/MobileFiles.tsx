@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { ChevronRight, FileText } from 'lucide-react';
 import { filesApi } from './api';
 import { DirectoryTypeIcon, FileTypeIcon } from './FileTypeIcon';
@@ -19,19 +20,19 @@ export function MobileFiles({ route, workspace, notesPath, visible, navigate, ba
   const base: Partial<MobileRoute> = { workspace: route.workspace, view: 'files', notes: route.notes, fileSource: route.fileSource };
   if (route.file) return <MobileFileReader path={route.file} workspace={workspace} back={back} />;
   return <section className="mobile-content-page">
-    <MobilePageHeader title={directory === root ? (route.notes === '1' ? 'Notes' : '文件') : basename(directory)}
-      subtitle={directory === root ? '浏览工作区内容' : directory.slice(root.length + 1)} back={directory === root ? undefined : back}
+    <MobilePageHeader title={directory === root ? (route.notes === '1' ? t("navigation.notes") : t("aow.files")) : basename(directory)}
+      subtitle={directory === root ? t("files.browse_workspace_contents") : directory.slice(root.length + 1)} back={directory === root ? undefined : back}
       actions={<MobileRefresh reload={listing.reload} loading={listing.loading} />} />
-    <div className="mobile-segments" role="tablist" aria-label="文件来源">
-      <button role="tab" aria-selected={route.notes !== '1'} onClick={() => navigate({ workspace: route.workspace, view: 'files' }, true)}><DirectoryTypeIcon />项目文件</button>
-      <button role="tab" aria-selected={route.notes === '1'} onClick={() => navigate({ workspace: route.workspace, view: 'files', notes: '1' }, true)}><FileText size={16} />Notes</button>
+    <div className="mobile-segments" role="tablist" aria-label={t("files.file_source")}>
+      <button role="tab" aria-selected={route.notes !== '1'} onClick={() => navigate({ workspace: route.workspace, view: 'files' }, true)}><DirectoryTypeIcon />{t("files.project_files")}</button>
+      <button role="tab" aria-selected={route.notes === '1'} onClick={() => navigate({ workspace: route.workspace, view: 'files', notes: '1' }, true)}><FileText size={16} />{t("navigation.notes")}</button>
     </div>
     <div className="mobile-scroll" ref={scroll}>
-      <MobileState loading={listing.loading && !listing.data} error={listing.error} retry={listing.reload} empty={listing.data?.entries.length === 0 ? '这个目录是空的。' : undefined} />
+      <MobileState loading={listing.loading && !listing.data} error={listing.error} retry={listing.reload} empty={listing.data?.entries.length === 0 ? t("files.this_directory_is_empty") : undefined} />
       <div className="mobile-list">{listing.data?.entries.slice().sort((a, b) => Number(b.kind === 'directory') - Number(a.kind === 'directory') || a.name.localeCompare(b.name))
         .map((entry) => <button key={entry.path} className="mobile-list-row" onClick={() => navigate({ ...base, ...(entry.kind === 'directory' ? { directory: entry.path } : { directory, file: entry.path }) })}>
           <div className="mobile-row-icon">{entry.kind === 'directory' ? <DirectoryTypeIcon /> : <FileTypeIcon path={entry.path} />}</div>
-          <div className="mobile-row-main"><strong>{entry.name}</strong><span>{entry.kind === 'directory' ? '文件夹' : `${Math.max(1, Math.ceil(entry.size / 1024))} KB`}</span></div><ChevronRight size={17} />
+          <div className="mobile-row-main"><strong>{entry.name}</strong><span>{entry.kind === 'directory' ? t("files.folder") : `${Math.max(1, Math.ceil(entry.size / 1024))} KB`}</span></div><ChevronRight size={17} />
         </button>)}</div>
     </div>
   </section>;
@@ -53,11 +54,11 @@ function MobileFileReader({ path, workspace, back }: { path: string; workspace: 
   });
   const scroll = useMobileScroll(`file.${path}`, !!data.data);
   return <section className="mobile-content-page">
-    <MobilePageHeader title={basename(path)} subtitle="文件预览" back={back} actions={<MobileRefresh reload={data.reload} loading={data.loading} />} />
+    <MobilePageHeader title={basename(path)} subtitle={t("files.file_preview")} back={back} actions={<MobileRefresh reload={data.reload} loading={data.loading} />} />
     <div className="mobile-scroll mobile-file-reader" ref={scroll}>
       <MobileState loading={data.loading && !data.data} error={data.error} retry={data.reload} />
       {image && <img className="mobile-file-image" src={filesApi.rawUrl(path)} alt={basename(path)} />}
-      {pdf && <><a className="mobile-button" href={filesApi.rawUrl(path)}>打开 PDF</a><iframe className="mobile-pdf" title={basename(path)} src={filesApi.rawUrl(path)} /></>}
+      {pdf && <><a className="mobile-button" href={filesApi.rawUrl(path)}>{t("files.open_pdf")}</a><iframe className="mobile-pdf" title={basename(path)} src={filesApi.rawUrl(path)} /></>}
       {data.data && !image && !pdf && (data.data.html ? <div className="mobile-markdown" dangerouslySetInnerHTML={{ __html: data.data.content }} />
         : markdown ? <MarkdownFileContent text={data.data.content} className="mobile-markdown" workspace={workspace} path={path} /> : <pre className="mobile-code">{data.data.content}</pre>)}
     </div>

@@ -96,27 +96,48 @@ impl Api {
         }
         // reqwest errors include query parameters. Never expose QR/verification codes,
         // upstream response bodies or credentials in logs/API errors.
-        let mut response = request
-            .send()
-            .await
-            .map_err(|_| anyhow!("微信网络请求失败或超时"))?;
+        let mut response = request.send().await.map_err(|_| {
+            anyhow!(aow_i18n::message(
+                "im.wechat_network_request_failed_or_timed_out",
+                &[]
+            ))
+        })?;
         let status = response.status();
-        ensure!(status.is_success(), "微信接口 HTTP {}", status.as_u16());
+        ensure!(
+            status.is_success(),
+            aow_i18n::message(
+                "im.wechat_api_http",
+                &[("auto0", format!("{}", status.as_u16()))]
+            )
+        );
         let mut bytes = Vec::new();
         while let Some(chunk) = response
             .chunk()
             .await
-            .map_err(|_| anyhow!("无法读取微信响应"))?
+            .map_err(|_| anyhow!(aow_i18n::message("im.unable_to_read_wechat_response", &[])))?
         {
-            ensure!(bytes.len() + chunk.len() <= 2 * 1024 * 1024, "微信响应过大");
+            ensure!(
+                bytes.len() + chunk.len() <= 2 * 1024 * 1024,
+                aow_i18n::message("im.wechat_response_too_large", &[])
+            );
             bytes.extend_from_slice(&chunk);
         }
-        serde_json::from_slice(&bytes).map_err(|_| anyhow!("微信接口返回无效 JSON"))
+        serde_json::from_slice(&bytes).map_err(|_| {
+            anyhow!(aow_i18n::message(
+                "im.wechat_api_returned_invalid_json",
+                &[]
+            ))
+        })
     }
 }
 
 pub(super) fn validate_base(value: &str) -> Result<String> {
-    let url = Url::parse(value).map_err(|_| anyhow!("微信返回了无效的服务地址"))?;
+    let url = Url::parse(value).map_err(|_| {
+        anyhow!(aow_i18n::message(
+            "im.wechat_returned_an_invalid_service_url",
+            &[]
+        ))
+    })?;
     let host = url.host_str().unwrap_or_default();
     ensure!(
         url.scheme() == "https"
@@ -127,7 +148,7 @@ pub(super) fn validate_base(value: &str) -> Result<String> {
             && matches!(url.path(), "" | "/")
             && url.query().is_none()
             && url.fragment().is_none(),
-        "微信返回了不受信任的服务地址"
+        aow_i18n::message("im.wechat_returned_an_untrusted_service_url", &[])
     );
     Ok(url.origin().ascii_serialization())
 }
@@ -149,11 +170,17 @@ pub(super) fn stale_context(data: &Value) -> bool {
 }
 
 pub(super) fn check(data: &Value) -> Result<()> {
-    ensure!(data.is_object(), "微信响应格式无效");
+    ensure!(
+        data.is_object(),
+        aow_i18n::message("im.invalid_wechat_response_format", &[])
+    );
     for field in ["ret", "errcode"] {
         ensure!(
             data.get(field).is_none_or(|code| code.as_i64().is_some()),
-            "微信响应状态码格式无效（{field}）"
+            aow_i18n::message(
+                "im.invalid_wechat_response_status_code_format",
+                &[("p0", field.to_string())]
+            )
         );
     }
     // iLink status fields are optional: successful getupdates/sendmessage
@@ -162,13 +189,18 @@ pub(super) fn check(data: &Value) -> Result<()> {
     let code = data["errcode"].as_i64();
     if ret.is_some_and(|code| code != 0) || code.is_some_and(|code| code != 0) {
         if stale_context(data) {
-            bail!("微信会话尚未就绪或已失效，请先向 Bot 发一条消息；仍失败时重新扫码绑定");
+            bail!(aow_i18n::message(
+                "im.wechat_session_is_not_ready_or_has_expired_send",
+                &[]
+            ));
         }
-        bail!(
-            "微信接口错误（ret={}，errcode={}）",
-            ret.unwrap_or(0),
-            code.unwrap_or(0)
-        );
+        bail!(aow_i18n::message(
+            "im.wechat_api_error_ret_errcode",
+            &[
+                ("auto0", format!("{}", ret.unwrap_or(0))),
+                ("auto1", format!("{}", code.unwrap_or(0)))
+            ]
+        ));
     }
     Ok(())
 }

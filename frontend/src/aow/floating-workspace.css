@@ -1,12 +1,14 @@
 .workspace-open-boundary { display:contents; }
-.floating-workspace-trigger { position:fixed; z-index:46; width:34px; height:34px; display:grid; place-items:center; color:var(--aow-icon-foreground, var(--aow-icon)); background:var(--aow-sidebar-background); border:1px solid var(--aow-control-line); border-radius:7px; box-shadow:0 3px 12px #0008; cursor:grab; touch-action:none; }
+.floating-workspace-trigger { position:fixed; z-index:46; width:34px; height:34px; display:grid; place-items:center; color:var(--aow-icon-foreground, var(--aow-icon)); background:var(--aow-sidebar-background); border:1px solid var(--aow-control-line); border-radius:7px; box-shadow:0 3px 12px var(--aow-shadow); cursor:grab; touch-action:none; }
 .floating-workspace-trigger:hover { color:var(--aow-icon-hover); background-image:linear-gradient(var(--aow-sidebar-selection),var(--aow-sidebar-selection)); }
 .floating-workspace-trigger svg { width:16px; height:16px; }
-.floating-workspace { position:fixed; z-index:45; display:flex; flex-direction:column; color:var(--aow-text); background:var(--aow-surface); border:1px solid var(--aow-control-line); border-radius:3px; box-shadow:0 18px 70px #000a; outline:none; font-size:12px; }
+.floating-workspace { position:fixed; z-index:45; display:flex; flex-direction:column; color:var(--aow-text); background:var(--aow-surface); border:1px solid var(--aow-control-line); border-radius:3px; box-shadow:0 18px 70px var(--aow-shadow); outline:none; font-size:12px; }
 .floating-workspace-header { cursor:grab; touch-action:none; }
 .floating-workspace-window-actions { display:flex; align-items:center; gap:6px; padding:0 4px; margin-left:auto; flex-shrink:0; height:100%; }
 .floating-workspace-window-actions .floating-workspace-pin[aria-pressed="true"] { color:var(--aow-accent); }
 .floating-workspace-body { flex:1; min-height:0; display:flex; overflow:hidden; border-radius:0 0 3px 3px; }
+.floating-workspace-main { flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; }
+.floating-workspace-dock { display:contents; }
 .floating-workspace-content { position:relative; flex:1; min-width:0; min-height:0; overflow:hidden; }
 .floating-workspace-host { position:absolute; inset:0; display:flex; flex-direction:column; overflow:hidden; }
 .floating-workspace-host[hidden] { display:none; }
@@ -21,17 +23,8 @@
 .floating-workspace-empty button:disabled { opacity:.45; cursor:default; }
 .floating-workspace-empty svg { width:17px; height:17px; }
 .floating-workspace-resize { position:absolute; right:0; bottom:0; width:15px; height:15px; cursor:nwse-resize; touch-action:none; border-right:3px solid var(--aow-muted); border-bottom:3px solid var(--aow-muted); border-radius:0 0 8px 0; }
-.floating-workspace .system-file-browser { width:100%; height:100%; margin:0; border:0; border-radius:0; box-shadow:none; display:flex; flex-direction:column; }
-.floating-workspace .system-file-body { grid-template-columns:minmax(110px,150px) minmax(150px,210px) minmax(0,1fr); }
-@media (max-width:900px) { .floating-workspace .system-file-shortcuts { display:none; } .floating-workspace .system-file-body { grid-template-columns:180px minmax(0,1fr); } }
 
-.floating-workspace .system-file-browser[hidden] { display:none; }
 
-.floating-workspace-error { position:absolute; bottom:0; left:0; right:0; z-index:5; display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--aow-panel); color:#f48771; border-top:1px solid var(--aow-control-line); }
+.floating-workspace-error { position:absolute; bottom:0; left:0; right:0; z-index:5; display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--aow-panel); color:var(--aow-error); border-top:1px solid var(--aow-control-line); }
 .floating-workspace-error button { margin-left:auto; }
 .floating-workspace-error svg { width:16px; height:16px; }
-
-.floating-workspace-inbox { position:absolute; inset:0; }
-.floating-workspace-inbox[hidden] { display:none; }
-.floating-workspace-inbox-tab { display:flex; align-items:center; align-self:stretch; gap:6px; padding:0 13px; flex-shrink:0; background:transparent; border:0; border-right:1px solid var(--aow-control-line); color:var(--aow-muted); font:inherit; cursor:pointer; }
-.floating-workspace-inbox-tab.active { color:var(--aow-accent); box-shadow:inset 0 -2px var(--aow-accent); }

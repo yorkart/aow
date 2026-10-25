@@ -19,7 +19,7 @@ impl NotificationManager {
             return;
         };
         let weak = Arc::downgrade(&self.inner);
-        tokio::spawn(async move {
+        aow_i18n::spawn(async move {
             while let Some(delivery) = receiver.recv().await {
                 let Some(inner) = weak.upgrade() else {
                     break;
@@ -44,10 +44,16 @@ impl NotificationManager {
                         .map(|provider| (provider.config.kind(), provider.provider.clone()))
                         .collect()
                 };
+                let language = inner.state.lock().unwrap().document.notifications.language;
                 drop(inner);
                 for (kind, provider) in providers {
                     if let Err(error) = provider
-                        .send(&messages::task_completed(&delivery.event), &delivery.id)
+                        .send(
+                            &aow_i18n::with_language(language, || {
+                                messages::task_completed(&delivery.event)
+                            }),
+                            &delivery.id,
+                        )
                         .await
                     {
                         tracing::warn!(provider = ?kind, session_id = %delivery.event.session_id, %error, "agent notification delivery failed");

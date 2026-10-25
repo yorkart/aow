@@ -26,7 +26,7 @@ impl TerminalManager {
                     .map(|pane| (pane.id.clone(), pane))
                     .collect::<HashMap<_, _>>()
             };
-            let actual = runtimes
+            let mut actual = runtimes
                 .into_iter()
                 .map(|runtime| (runtime.id.clone(), runtime))
                 .collect::<HashMap<_, _>>();
@@ -48,27 +48,19 @@ impl TerminalManager {
             // panes as fresh running shells.
             for pane in desired.values() {
                 if !actual.contains_key(&pane.id) && pane.restart_on_daemon_restart {
-                    self.inner
+                    let runtime = self
+                        .inner
                         .terminald
                         .create(&pane.id, &self.runtime_spec(pane))
                         .await
                         .map_err(map_client_error)?;
+                    actual.insert(pane.id.clone(), runtime);
                 }
             }
             self.mark_missing_nonrestart_panes(&desired, &actual)?;
 
-            let mut reconciled = HashMap::new();
-            for id in desired.keys() {
-                if let Some(runtime) = self
-                    .inner
-                    .terminald
-                    .get(id)
-                    .await
-                    .map_err(map_client_error)?
-                {
-                    reconciled.insert(id.clone(), runtime);
-                }
-            }
+            // The daemon list already contains every runtime's status and size.
+            // Reuse it instead of issuing another RPC for each pane.
             let after = self
                 .inner
                 .terminald
@@ -86,7 +78,7 @@ impl TerminalManager {
             }
 
             self.record_daemon_instance(after.instance_id)?;
-            return self.apply_runtime_statuses(&reconciled);
+            return self.apply_runtime_statuses(&actual);
         }
         Err(TerminalError::DaemonUnavailable(
             "terminald restarted repeatedly during reconciliation".to_owned(),

@@ -1,5 +1,9 @@
+import { t } from '../../lib/i18n';
 import { useEffect, useState } from 'react';
 import { aowRequest } from '../../lib/aowRequest';
+import { readServerEnvironment, serverEnvironmentFields, serverEnvironmentGroups, validateServerEnvironment, writeServerEnvironment } from './serverEnvironment';
+import type { ServerEnvironmentValues } from './serverEnvironment';
+import './server-environment.css';
 
 interface ServerEnvironment {
   path: string;
@@ -14,7 +18,7 @@ const message = (reason: unknown) => reason instanceof Error ? reason.message : 
 
 export function useServerEnvironment(active: boolean, onBusyChange: (busy: boolean) => void) {
   const [document, setDocument] = useState<ServerEnvironment>();
-  const [content, setContent] = useState('');
+  const [values, setValues] = useState<ServerEnvironmentValues>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
@@ -26,58 +30,80 @@ export function useServerEnvironment(active: boolean, onBusyChange: (busy: boole
     void aowRequest<ServerEnvironment>(endpoint, { cache: 'no-store' })
       .then(next => {
         if (cancelled) return;
-        setDocument(next); setContent(next.content); setError('');
+        setDocument(next); setValues(readServerEnvironment(next.content, next.platform)); setError('');
       })
       .catch(reason => { if (!cancelled) setError(message(reason)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [active, document]);
 
-  const dirty = !!document && content !== document.content;
+  const original = document ? readServerEnvironment(document.content, document.platform) : {};
+  const dirty = !!document && serverEnvironmentFields.some(({ key }) => (values[key] ?? '') !== (original[key] ?? ''));
+  const fieldErrors = validateServerEnvironment(values);
   const reload = async () => {
-    if (dirty && !window.confirm('重新读取会放弃 server.env 的未保存修改，是否继续？')) return;
+    if (dirty && !window.confirm(t("settings.reloading_will_discard_unsaved_server_env_changes_continue"))) return;
     setLoading(true); onBusyChange(true); setError(''); setSaved(false);
     try {
       const next = await aowRequest<ServerEnvironment>(endpoint, { cache: 'no-store' });
-      setDocument(next); setContent(next.content);
+      setDocument(next); setValues(readServerEnvironment(next.content, next.platform));
     } catch (reason) { setError(message(reason)); }
     finally { setLoading(false); onBusyChange(false); }
   };
   const save = async () => {
-    if (!document) return;
+    if (!document || Object.keys(fieldErrors).length) return;
     onBusyChange(true); setError(''); setSaved(false);
     try {
+      const content = writeServerEnvironment(document.content, values, document.platform);
       const next = await aowRequest<ServerEnvironment>(endpoint, {
         method: 'PUT', body: JSON.stringify({ content, revision: document.revision }),
       });
-      setDocument(next); setContent(next.content); setSaved(true);
+      setDocument(next); setValues(readServerEnvironment(next.content, next.platform)); setSaved(true);
     } catch (reason) { setError(message(reason)); }
     finally { onBusyChange(false); }
   };
-  const edit = (text: string) => {
-    // Textareas normalize line endings; preserve an existing CRLF document.
-    const crlf = document?.content.includes('\r\n') && !document.content.replaceAll('\r\n', '').includes('\n');
-    setContent(crlf ? text.replaceAll('\n', '\r\n') : text);
+  const edit = (key: string, value: string) => {
+    setValues(current => ({ ...current, [key]: value }));
     setError(''); setSaved(false);
   };
-  return { document, content, loading, error, saved, dirty, reload, save, edit };
+  return { document, values, fieldErrors, loading, error, saved, dirty, reload, save, edit };
 }
 
 export function ServerEnvironmentFields({ environment, busy }: {
   environment: ReturnType<typeof useServerEnvironment>; busy: boolean;
 }) {
-  const { document, content, loading, error, saved, reload, save, edit } = environment;
+  const { document, values, fieldErrors, loading, error, saved, reload, save, edit } = environment;
   return <>
-    <h3>AoW 服务环境变量</h3>
-    <p className="project-aow-form-intro">直接编辑服务所在机器的 <code>~/.config/aow/server.env</code>，保留注释、引号和空行。每行填写 KEY=value，不写 export。</p>
-    {document ? <small className="project-aow-dialog-path-hint">文件：<code title={document.path}>{document.path}</code>{document.exists ? '' : '（尚不存在，保存时创建）'}</small> : null}
-    <label className="project-aow-dialog-field"><span>server.env 文件内容</span><textarea aria-label="server.env 文件内容" spellCheck={false} autoCapitalize="off" autoCorrect="off" rows={10} value={content} disabled={loading || busy || !document} onChange={event => edit(event.target.value)} placeholder={'# AoW 服务配置\nAOW_SERVER_HOST=127.0.0.1\nAOW_SERVER_PORT=8282'} /></label>
-    <p className="project-aow-form-intro">保存仅更新文件，当前运行的服务保持原配置。</p>
-    {document?.platform === 'linux' ? <p className="project-aow-form-intro">保存后在服务器执行 <code>systemctl --user restart aow-server.service</code> 生效。</p> : document?.platform === 'macos' ? <p className="project-aow-form-intro">HTTP_PROXY、HTTPS_PROXY、ALL_PROXY、NO_PROXY（含小写形式）在 Web 服务启动时读取；仅修改代理可直接重新执行 AoW 安装命令，由服务账户重启 Web 服务生效。其他配置仍由安装器加载，LaunchDaemon 模式可能需要本地管理员重新登记。</p> : null}
-    <p className="project-aow-form-intro">直接运行二进制时不读取此文件，请通过启动参数或进程环境配置。</p>
-    <div className="project-aow-settings-heading"><button type="button" className="project-aow-dialog-button" disabled={loading || busy} onClick={() => void reload()}>重新读取文件</button><button type="button" className="project-aow-dialog-button primary" disabled={loading || busy || !document} onClick={() => void save()}>保存 server.env</button></div>
-    {loading ? <p role="status">正在读取 server.env…</p> : null}
-    {saved ? <p role="status">server.env 已保存，请按上述步骤加载配置。</p> : null}
-    {error ? <div className="project-aow-error" role="alert">{error}</div> : null}
+    <div className="server-environment-actions">
+      <div className="project-aow-settings-heading environment-settings-heading">
+        <div><h3>{t("settings.aow_service_environment_variables")}</h3>
+          {document ? <p><code className="server-environment-path" title={document.path}>{document.path}</code></p> : null}
+        </div>
+        <div className="environment-settings-buttons">
+          <button type="button" className="project-aow-dialog-button" disabled={loading || busy} onClick={() => void reload()}>{t("settings.reload_file")}</button>
+          <button type="button" className="project-aow-dialog-button primary" disabled={loading || busy || !document || !!Object.keys(fieldErrors).length} onClick={() => void save()}>{t("settings.save_server_env")}</button>
+        </div>
+      </div>
+      {loading ? <p role="status">{t("settings.reading_server_env")}</p> : null}
+      {saved ? <p role="status">{t("settings.server_env_saved")}</p> : null}
+      {error ? <div className="project-aow-error" role="alert">{error}</div> : null}
+    </div>
+    <div className="server-environment-groups">
+      {serverEnvironmentGroups.map(group => <table className="server-environment-table" key={group.title}>
+        <caption>{group.title}</caption>
+        <thead><tr><th scope="col">{t("settings.setting_key")}</th><th scope="col">{t("settings.description")}</th><th scope="col">{t("settings.example_value")}</th><th scope="col">{t("settings.current_value")}</th></tr></thead>
+        <tbody>{group.fields.map(field => <tr key={field.key}>
+          <th scope="row"><label htmlFor={`server-env-${field.key}`}><code>{field.key}</code></label></th>
+          <td id={`server-env-${field.key}-description`}>{field.description}</td>
+          <td><code>{field.example}</code></td>
+          <td><div className="project-aow-dialog-field">
+            <input id={`server-env-${field.key}`} aria-label={field.key} aria-describedby={`server-env-${field.key}-description${fieldErrors[field.key] ? ` server-env-${field.key}-error` : ''}`} aria-invalid={!!fieldErrors[field.key]}
+              spellCheck={false} autoCapitalize="off" autoCorrect="off" autoComplete="off" inputMode={field.key === 'AOW_SERVER_PORT' || field.key.startsWith('AOW_AUTH_SESSION_') ? 'numeric' : 'text'}
+              value={values[field.key] ?? ''} disabled={loading || busy || !document} onChange={event => edit(field.key, event.target.value)} placeholder={t("settings.not_configured")}
+              onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); void save(); } }} />
+            {fieldErrors[field.key] ? <small className="server-environment-error" id={`server-env-${field.key}-error`}>{fieldErrors[field.key]}</small> : null}
+          </div></td>
+        </tr>)}</tbody>
+      </table>)}
+    </div>
   </>;
 }

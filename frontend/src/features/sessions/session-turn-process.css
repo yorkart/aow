@@ -4,29 +4,29 @@
 .session-process-tool.has-details { display:block; }
 .session-tool-toggle { display:flex; align-items:center; flex-wrap:wrap; gap:4px 9px; width:100%; min-height:26px; padding:0; color:var(--aow-text); text-align:left; font:inherit; cursor:pointer; border-radius:4px; }
 .session-tool-toggle:hover { color:var(--aow-text-hover); }
-.session-tool-toggle:focus-visible,.session-tool-input > summary:focus-visible { outline:2px solid #7ca8df; outline-offset:3px; }
+.session-tool-toggle:focus-visible,.session-tool-input > summary:focus-visible { outline:2px solid var(--aow-accent); outline-offset:3px; }
 .session-tool-chevron { flex-shrink:0; color:var(--aow-icon-foreground, var(--aow-icon)); transition:transform .15s; }
 .session-tool-toggle[aria-expanded=true] .session-tool-chevron { transform:rotate(90deg); }
 .session-process-tool > .session-tool-preview { display:block; margin:3px 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--aow-text-secondary); font-size:11px; }
-.session-tool-detail { min-width:0; margin-top:8px; padding:10px; border:1px solid #ffffff0c; border-radius:6px; background:#00000018; }
-.session-process-tool.failed .session-tool-detail { border-color:#df96902a; }
+.session-tool-detail { min-width:0; margin-top:8px; padding:10px; border:1px solid var(--aow-line-subtle); border-radius:6px; background:var(--aow-overlay); }
+.session-process-tool.failed .session-tool-detail { border-color:var(--aow-error-border); }
 .session-tool-text + .session-tool-text,.session-tool-input + .session-tool-text { margin-top:10px; }
 .session-tool-text-label { display:flex; flex-wrap:wrap; gap:4px 10px; margin-bottom:3px; color:var(--aow-text-secondary); font-size:11px; }
-.session-tool-text-label > span { color:#c4ab7e; }
-.session-tool-text pre { max-height:320px; margin:0; padding:7px 9px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; color:var(--aow-text); background:#00000020; border-radius:4px; font:11px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace; tab-size:4; }
-.session-tool-text pre:focus-visible { outline:1px solid #7ca8df; outline-offset:1px; }
-.session-tool-text.error pre { color:#e4aaa4; }
+.session-tool-text-label > span { color:var(--aow-warning); }
+.session-tool-text pre { max-height:320px; margin:0; padding:7px 9px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; color:var(--aow-text); background:var(--aow-overlay); border-radius:4px; font:11px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace; tab-size:4; }
+.session-tool-text pre:focus-visible { outline:1px solid var(--aow-accent); outline-offset:1px; }
+.session-tool-text.error pre { color:var(--aow-error); }
 .session-tool-input { margin-top:8px; }
 .session-tool-input > summary { cursor:pointer; color:var(--aow-text-secondary); font-size:11px; }
 .session-tool-metadata { display:flex; flex-wrap:wrap; gap:4px 18px; margin:8px 0; color:var(--aow-text-secondary); font-size:11px; }
 .session-process-item .session-tool-empty { margin-top:8px; color:var(--aow-muted); font-size:11px; }
 .mobile-app .session-tool-toggle { min-height:36px; }
 .session-process-status { display:inline-flex; align-items:center; gap:4px; margin-left:auto; color:var(--aow-muted); font-size:10px; white-space:nowrap; }
-.session-process-status.completed { color:#85b59c; }
-.session-process-status.failed,.session-turn-pending.failed { color:#df9690; }
-.session-process-status.interrupted { color:#d0b581; }
-.session-process-status.in_progress { color:#86b5ea; }
-.session-process-notice { margin:0; padding:0 14px 8px; color:#9f927d; font-size:11px; }
+.session-process-status.completed { color:var(--aow-success); }
+.session-process-status.failed,.session-turn-pending.failed { color:var(--aow-error); }
+.session-process-status.interrupted { color:var(--aow-warning); }
+.session-process-status.in_progress { color:var(--aow-info); }
+.session-process-notice { margin:0; padding:0 14px 8px; color:var(--aow-warning); font-size:11px; }
 .session-turn-pending { display:flex; align-items:center; gap:8px; margin:16px 0 0; color:var(--aow-text-secondary); font-size:12px; line-height:1.7; }
 .session-turn-pending > svg { flex-shrink:0; }
 @media (prefers-reduced-motion:reduce) { .session-tool-chevron { transition:none; } }

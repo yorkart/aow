@@ -24,13 +24,15 @@ const environment = {
 };
 const daemonKeys = new Set(['HOME', 'USER', 'LOGNAME', 'SHELL', 'PATH', 'LANG', 'LC_ALL', 'LC_CTYPE',
   'AOW_RUNTIME_ROOT', 'AOW_SERVER_HOST', 'AOW_SERVER_PORT', 'AOW_SERVER_STATE_DIR', 'AOW_STATE_DIR',
-  'AOW_TERMINALD_SOCKET', 'AOW_BASE_PATH', 'AOW_AUTH_SECURE_COOKIE', 'XDG_STATE_HOME', 'XDG_RUNTIME_DIR', 'AOW_LOG_MODE']);
+  'AOW_TERMINALD_SOCKET', 'AOW_BASE_PATH', 'AOW_AUTH_SECURE_COOKIE',
+  'AOW_AUTH_SESSION_MAX_AGE_SECONDS', 'AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS',
+  'AOW_LOG_MODE']);
 const proxyKeys = new Set(['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY',
   'http_proxy', 'https_proxy', 'all_proxy', 'no_proxy']);
 if (process.env.USER) environment.USER = process.env.USER;
 // Match server_state_dir's environment > server.env > state-dir defaults.
 try {
-  for (const line of readFileSync(join(home, '.config/aow/server.env'), 'utf8').split(/\r?\n/)) {
+  for (const line of readFileSync(join(home, '.aow/server.env'), 'utf8').split(/\r?\n/)) {
     if (!line.trim() || line.trimStart().startsWith('#')) continue;
     const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
     if (!match) throw new Error('Unsupported server.env line; use KEY=value or KEY="value"');
@@ -47,7 +49,8 @@ try {
   if (error.code !== 'ENOENT') throw error;
 }
 for (const key of ['AOW_SERVER_HOST', 'AOW_SERVER_PORT', 'AOW_SERVER_STATE_DIR',
-  'AOW_STATE_DIR', 'AOW_TERMINALD_SOCKET', 'AOW_BASE_PATH', 'AOW_AUTH_SECURE_COOKIE', 'XDG_STATE_HOME', 'XDG_RUNTIME_DIR']) {
+  'AOW_STATE_DIR', 'AOW_TERMINALD_SOCKET', 'AOW_BASE_PATH', 'AOW_AUTH_SECURE_COOKIE',
+  'AOW_AUTH_SESSION_MAX_AGE_SECONDS', 'AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS']) {
   if (process.env[key]) environment[key] = process.env[key];
 }
 // These paths define the installation and cannot be redirected by server.env.
@@ -113,7 +116,5 @@ writeFileSync(resolve(destination, '../health.json'), JSON.stringify({
   host: host === '0.0.0.0' ? '127.0.0.1' : host === '::' ? '::1' : host,
   port: Number(environment.AOW_SERVER_PORT || 8282),
   basePath: environment.AOW_BASE_PATH || '',
-  socket: environment.AOW_TERMINALD_SOCKET || (environment.XDG_RUNTIME_DIR
-    ? join(environment.XDG_RUNTIME_DIR, 'aow-terminald/terminald.sock')
-    : `/tmp/aow-terminald-${process.getuid()}/terminald.sock`),
+  socket: environment.AOW_TERMINALD_SOCKET || join(environment.AOW_STATE_DIR || join(home, '.aow'), 'runtime/terminald/terminald.sock'),
 }), { mode: 0o600 });

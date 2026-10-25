@@ -35,7 +35,9 @@ pub(in crate::aow) fn submit(
     requests: Vec<RemovalRequest>,
 ) -> Result<RemovalJob, AowError> {
     if requests.is_empty() || requests.len() > 200 {
-        return Err(AowError::Invalid("每次请选择 1～200 个 Worktree".into()));
+        return Err(AowError::Invalid(
+            aow_i18n::text("server.select_1_200_worktrees_per_batch").into(),
+        ));
     }
     let mut paths = HashSet::new();
     for request in &requests {
@@ -51,7 +53,9 @@ pub(in crate::aow) fn submit(
             })
             || !paths.insert(request.path.clone())
         {
-            return Err(AowError::Invalid("Worktree 路径无效或重复".into()));
+            return Err(AowError::Invalid(
+                aow_i18n::text("server.invalid_or_duplicate_worktree_path").into(),
+            ));
         }
     }
     let job = RemovalJob {
@@ -89,7 +93,7 @@ pub(in crate::aow) fn submit(
             .any(|item| paths.contains(&item.path) && item.status.active())
         {
             return Err(AowError::RemovalConflict(
-                "所选 Worktree 已在清理队列中".into(),
+                aow_i18n::text("server.selected_worktree_is_already_in_the_cleanup_queue").into(),
             ));
         }
         project_lock = removals.project_lock(&job.project_id)?;
@@ -111,6 +115,7 @@ pub(in crate::aow) fn submit(
         next.push(job.clone());
         *jobs = next;
         for item in &job.items {
+            state.acp.set_workspace_removing(&item.path, true);
             if let Err(error) = state.terminals.set_workspace_removing(&item.path, true) {
                 tracing::error!(%error, path = %item.path, "failed to reserve workspace for removal");
             }
@@ -120,7 +125,7 @@ pub(in crate::aow) fn submit(
         id: job.id.clone(),
         kind: "worktree.remove",
         source: "web",
-        title: "删除 Worktree".into(),
+        title: aow_i18n::text("server.delete_worktree").into(),
         project_id: Some(job.project_id.clone()),
         resource: None,
         total: Some(job.items.len()),

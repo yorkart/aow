@@ -1,3 +1,4 @@
+import { t } from '../../../../lib/i18n';
 import type { Data } from '../../types';
 
 export type EditorPart = { type: 'text'; text: string } | { type: 'image'; id: string };
@@ -18,7 +19,7 @@ export function promptContent(draft: ComposerDraft): Data[] {
   return draft.parts.map(part => {
     if (part.type === 'text') return { type: 'text', text: part.text };
     const image = draft.images[part.id];
-    if (image?.status !== 'ready') throw new Error('Wait for images to finish processing.');
+    if (image?.status !== 'ready') throw new Error(t("common.wait_for_images_to_finish_processing"));
     return { type: 'image', data: image.data, mimeType: image.mimeType };
   });
 }

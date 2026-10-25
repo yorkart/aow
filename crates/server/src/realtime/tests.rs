@@ -17,9 +17,19 @@ async fn multiplexes_snapshots_changes_and_live_notifications_and_resyncs_on_rec
             let stops = sender.subscribe();
             let acp = fixture.acp.clone();
             let changes = acp.subscribe_sync();
+            let terminals = fixture.terminals.clone();
             async move {
                 ws.on_upgrade(move |mut socket| async move {
-                    let _ = forward(&mut socket, workspace, operations, stops, acp, changes).await;
+                    let _ = forward(
+                        &mut socket,
+                        workspace,
+                        operations,
+                        stops,
+                        acp,
+                        changes,
+                        terminals,
+                    )
+                    .await;
                 })
             }
         }),
@@ -90,7 +100,9 @@ async fn next(
             match socket.next().await.unwrap().unwrap() {
                 ClientMessage::Text(text) => {
                     let value: Value = serde_json::from_str(&text).unwrap();
-                    if value["event"] == "acp" && value["data"]["type"] == "hello" {
+                    if (value["event"] == "acp" || value["event"] == "terminals")
+                        && value["data"]["type"] == "hello"
+                    {
                         continue;
                     }
                     return value;

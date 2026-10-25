@@ -28,7 +28,10 @@ pub(super) fn removed_directory_path(path: &Path) -> Result<PathBuf, AowError> {
         })
     {
         return Err(AowError::Invalid(
-            "removed session worktree path must be absolute and normalized".to_owned(),
+            aow_i18n::text(
+                "validation.removed_session_worktree_path_must_be_absolute_and_normalized",
+            )
+            .to_owned(),
         ));
     }
     Ok(path.to_path_buf())
@@ -129,7 +132,10 @@ impl AowManager {
             })
             .map(|cached| cached.locator.clone())
             .ok_or_else(|| {
-                AowError::Invalid("agent session is not in the scanned worktree".to_owned())
+                AowError::Invalid(
+                    aow_i18n::text("validation.agent_session_is_not_in_the_scanned_worktree")
+                        .to_owned(),
+                )
             })?;
         Ok(locator)
     }

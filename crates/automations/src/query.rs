@@ -123,7 +123,9 @@ impl AutomationQuery {
         self.store.get_task(task_id)?;
         self.store
             .read_run_detail(task_id, run_id)?
-            .context("执行记录缺少完整的开始事件")
+            .context(aow_i18n::text(
+                "automations.run_record_is_missing_a_complete_start_event",
+            ))
     }
 
     pub fn runs(&self, task_id: &str, before: Option<&str>, limit: usize) -> Result<RunPage> {

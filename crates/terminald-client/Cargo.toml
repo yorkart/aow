@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+aow-filesystem = { path = "../filesystem" }
 bytes.workspace = true
 http.workspace = true
 http-body-util.workspace = true

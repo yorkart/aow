@@ -64,6 +64,7 @@ try {
 
   async function open(t, initial = data()) {
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     page.setDefaultTimeout(10_000);
     t.after(() => page.close());
     const errors = [], mutations = [], sockets = [], inputs = [], snapshots = [];
@@ -145,7 +146,7 @@ try {
     const { page, pane, snapshots } = await open(t, pi);
     await update(page, { detectedAgents: { one: 'pi', two: null }, terminalTitles: { one: pi.title } });
     assert.equal(await pane.locator('.terminal-pane-name').innerText(), 'π - demo');
-    await pane.getByRole('button', { name: 'Autopilot', exact: true }).waitFor();
+    await pane.getByRole('button', { name: "托管", exact: true }).waitFor();
     await pane.getByRole('button', { name: '切换到会话详情' }).click();
     await pane.getByRole('heading', { name: 'Pi task' }).waitFor();
     assert.match(await pane.locator('.terminal-agent-session-toolbar').innerText(), /当前会话 · pi-one/);

@@ -144,6 +144,6 @@ fn no_conclusion_is_explicit_and_oversized_metadata_fails_before_delivery() {
         messages(&event, "ou_owner", "delivery")
             .unwrap_err()
             .to_string()
-            .contains("基础信息过长")
+            .contains("metadata")
     );
 }

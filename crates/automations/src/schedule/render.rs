@@ -73,7 +73,10 @@ impl Schedule {
                                 weekday.map(|f| f.plist_values(0, 6)).unwrap_or(vec![None])
                             {
                                 if entries.len() >= 4096 {
-                                    bail!("该 Cron 展开超过 4096 项，请简化计划");
+                                    bail!(aow_i18n::message(
+                                        "automations.cron_expands_to_more_than_4096_entries_simplify_the",
+                                        &[]
+                                    ));
                                 }
                                 let fields = [
                                     ("Minute", minute),

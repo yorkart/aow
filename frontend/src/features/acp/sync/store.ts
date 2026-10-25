@@ -1,3 +1,4 @@
+import { t } from '../../../lib/i18n';
 import { LiveEvents } from '../../../lib/liveEvents';
 import { acpApi } from '../api';
 import { AcpRequestError } from '../request';
@@ -147,7 +148,7 @@ export class ResourceStore {
   }
   disconnected(denied: boolean) {
     this.id = ''; this.ready = false; this.dirty = true; this.epoch++; this.controller?.abort(); clearTimeout(this.retry); this.retry = undefined;
-    if (denied) this.publish({ data: undefined, head: undefined, error: '登录已失效', loading: false });
+    if (denied) this.publish({ data: undefined, head: undefined, error: t("acp.login_expired"), loading: false });
   }
   receive(head: Head, ready: boolean) {
     const old = this.state.head;
@@ -192,7 +193,7 @@ export class ResourceStore {
     const release = this.subscribe(() => changed(), true);
     const boundary = () => new Promise<void>((resolve, reject) => {
       changed = () => {
-        if (this.state.deleted || this.state.status === 'denied') reject(new Error(this.state.error || '资源已不可用'));
+        if (this.state.deleted || this.state.status === 'denied') reject(new Error(this.state.error || t("acp.resource_unavailable")));
         else if (this.ready) resolve();
       };
       changed();
@@ -205,7 +206,7 @@ export class ResourceStore {
         if (this.retry || this.state.error) throw new Error(this.state.error);
         if (!this.ready) await boundary();
       } while (this.pending || this.dirty);
-      if (this.state.data === undefined) throw new Error('资源尚未同步');
+      if (this.state.data === undefined) throw new Error(t("acp.resource_not_synced_yet"));
       return this.state.data;
     } finally { release(); }
   }
@@ -252,7 +253,7 @@ export class ResourceStore {
         this.accept(next);
         if (wanted && next.revision < wanted.revision) {
           this.dirty = true;
-          if (current && current.sync_generation === next.sync_generation && current.revision >= next.revision) throw new Error('等待服务端提交最新会话版本');
+          if (current && current.sync_generation === next.sync_generation && current.revision >= next.revision) throw new Error(t("acp.waiting_for_the_server_to_commit_the_latest_session"));
         }
       } else {
         // A newer invalidation may have arrived during this read. Do not flash

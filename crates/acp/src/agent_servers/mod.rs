@@ -1,5 +1,6 @@
 pub(crate) mod acp;
 mod completion;
+mod fork;
 mod identity;
 mod imports;
 mod installation;
@@ -9,6 +10,7 @@ mod prompt;
 mod recovery;
 mod steering;
 mod sync;
+mod workspace;
 
 use crate::acp_thread::normalize_config_options;
 use crate::facade::{AcpHost, AgentInfo, ConnectionInfo, Content, SessionInfo, SessionSnapshot};
@@ -49,8 +51,15 @@ struct ServiceInner {
 }
 
 impl AgentServerStore {
-    pub fn new(host: Arc<dyn AcpHost>, state_directory: Option<PathBuf>) -> Result<Self> {
-        let cache = state_directory.clone().unwrap_or_else(|| {
+    pub fn new(
+        host: Arc<dyn AcpHost>,
+        state_directory: Option<PathBuf>,
+        cache_directory: Option<PathBuf>,
+    ) -> Result<Self> {
+        let registry = cache_directory
+            .as_ref()
+            .map(|path| path.join("registry.json"));
+        let cache = cache_directory.unwrap_or_else(|| {
             std::env::temp_dir().join(format!("aow-acp-{}", std::process::id()))
         });
         let metadata_host = host.clone();
@@ -61,11 +70,7 @@ impl AgentServerStore {
         Ok(Self {
             inner: Arc::new(ServiceInner {
                 host,
-                registry: AgentRegistryStore::new(
-                    state_directory
-                        .as_ref()
-                        .map(|path| path.join("registry.json")),
-                ),
+                registry: AgentRegistryStore::new(registry),
                 cache,
                 threads: Arc::new(Mutex::new(threads)),
                 events,
@@ -78,6 +83,20 @@ impl AgentServerStore {
                 installations: Mutex::new(HashMap::new()),
             }),
         })
+    }
+    pub async fn select_agent_id(&self, explicit: Option<&str>) -> Result<String> {
+        if let Some(id) = explicit {
+            ensure!(
+                !id.is_empty(),
+                aow_i18n::message("acp.acp_agent_id_cannot_be_empty", &[])
+            );
+            return Ok(id.to_owned());
+        }
+        let settings = validate_settings(&self.inner.host.settings().await?)?;
+        settings
+            .default_agent_id
+            .or_else(|| settings.agent_servers.keys().next().cloned())
+            .context(aow_i18n::text("acp.no_acp_instance_configured"))
     }
     pub async fn agents(&self) -> Result<Vec<AgentInfo>> {
         let raw = self.inner.host.settings().await?;
@@ -92,6 +111,10 @@ impl AgentServerStore {
                 name: id.clone(),
                 description: String::new(),
                 version: None,
+                icon: None,
+                repository: None,
+                website: None,
+                license_url: None,
                 configured: true,
                 supported: true,
                 installed: self.installed(id, &values, execution_path.as_deref()),
@@ -124,6 +147,10 @@ impl AgentServerStore {
                     name: entry.name,
                     description: entry.description,
                     version: Some(entry.version),
+                    icon: entry.icon,
+                    repository: entry.repository,
+                    website: entry.website,
+                    license_url: entry.license_url,
                     supported,
                 }
             })
@@ -187,6 +214,12 @@ impl AgentServerStore {
         thread_id: Option<&str>,
     ) -> Result<ConnectionInfo> {
         let _guard = self.inner.connect_lock.lock().await;
+        self.inner
+            .threads
+            .lock()
+            .unwrap()
+            .workspace_version(&cwd.to_string_lossy())?;
+        ensure!(cwd.is_dir(), "ACP working directory must be a directory");
         progress.set("configuration");
         let raw_settings = self.inner.host.settings().await?;
         let settings = validate_settings(&raw_settings)?;
@@ -404,6 +437,9 @@ impl AgentServerStore {
         let previous = self.snapshot(&id).ok();
         if let Some(previous) = &previous {
             thread.title = previous.title.clone();
+            thread.session_meta = previous.session_meta.clone();
+            thread.session_meta_revision = previous.session_meta_revision;
+            thread.session_meta_revisions = previous.session_meta_revisions.clone();
             thread.revision = previous.revision;
         }
         thread.modes = result.get("modes").cloned().unwrap_or(json!({}));
@@ -469,6 +505,12 @@ impl AgentServerStore {
             "Agent does not support session loading"
         );
         let identity = connection.load_identity.lock().await;
+        self.inner
+            .threads
+            .lock()
+            .unwrap()
+            .workspace_version(&connection.info.cwd)?;
+        ensure!(connection.connected(), "ACP adapter is disconnected");
         let existing = self
             .inner
             .threads
@@ -504,10 +546,15 @@ impl AgentServerStore {
             }
         };
         drop(identity);
-        self.open_session(connection, session_id.to_owned(), id, true)
+        self.open_session(connection, session_id.to_owned(), id, true, true)
             .await
     }
     pub async fn resume(&self, id: &str) -> Result<SessionSnapshot> {
+        self.inner
+            .threads
+            .lock()
+            .unwrap()
+            .ensure_session_available(id)?;
         let result = self.resume_inner(id).await;
         if let Err(error) = &result {
             let thread = self.snapshot(id)?;
@@ -548,7 +595,7 @@ impl AgentServerStore {
                 connection.supports("resume"),
                 "Agent does not support session loading or resuming"
             );
-            self.open_session(connection, session_id, id.into(), false)
+            self.open_session(connection, session_id, id.into(), false, true)
                 .await
         }
         .await;
@@ -641,6 +688,7 @@ impl AgentServerStore {
             return Ok(());
         }
         self.inner.threads.lock().unwrap().update(id, |thread| {
+            AcpThread::clear_session_meta(thread);
             thread.steering.cancelled = true;
             if let Some(pending) = &mut thread.steering.pending {
                 pending.cancelled = true;

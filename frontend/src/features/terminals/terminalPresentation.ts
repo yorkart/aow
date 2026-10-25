@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import type { TerminalAgentProcess, TerminalLayout, TerminalPane, TerminalPaneActivity, TerminalTab } from './types';
 import { agentTypes } from '../agents/agentTypes';
 
@@ -69,7 +70,7 @@ export function terminalTabPresentation(tab: TerminalTab, detected: Record<strin
   let title = tab.name;
   // Unknown naming intent (old servers) preserves the existing label.
   if (tab.name_is_custom === false) {
-    if (agentCount > 1) title = `${agentCount} agents`;
+    if (agentCount > 1) title = t("terminals.agent_count", { count: agentCount });
     else if (agentCount === 1) {
       const pane = tab.panes.find(pane => pane.id === agents[0].id)!;
       title = agentTitle(pane, detected, titles) || tab.name;

@@ -1,3 +1,4 @@
+import { t } from '../../../../lib/i18n';
 import { createImageId, emptyDraft, hasPendingImages, MAX_PROMPT_BYTES, promptContent, type ComposerDraft } from './model';
 import { MAX_IMAGE_BYTES } from './image';
 
@@ -6,9 +7,9 @@ import { MAX_IMAGE_BYTES } from './image';
 const MIME_TYPE = 'application/x-aow-acp-draft+json';
 
 export function writeClipboard(data: DataTransfer, draft: ComposerDraft) {
-  if (hasPendingImages(draft)) throw new Error('Wait for images to finish processing or remove failed images before copying or cutting.');
+  if (hasPendingImages(draft)) throw new Error(t("common.wait_for_images_to_finish_processing_or_remove_failed"));
   const payload = JSON.stringify({ version: 1, content: promptContent(draft) });
-  if (new Blob([payload]).size > MAX_PROMPT_BYTES) throw new Error('Selection exceeds 32 MiB. Copy fewer images at a time.');
+  if (new Blob([payload]).size > MAX_PROMPT_BYTES) throw new Error(t("common.selection_exceeds_32_mib_copy_fewer_images_at_a"));
   data.setData(MIME_TYPE, payload);
   data.setData('text/plain', draft.parts.map(part => part.type === 'text' ? part.text : 'Image').join(''));
 }
@@ -16,7 +17,7 @@ export function writeClipboard(data: DataTransfer, draft: ComposerDraft) {
 export function readClipboard(data: DataTransfer): ComposerDraft | undefined {
   if (!data.types.includes(MIME_TYPE)) return undefined;
   const payload = data.getData(MIME_TYPE);
-  if (new Blob([payload]).size > MAX_PROMPT_BYTES) throw new Error('Clipboard content exceeds 32 MiB.');
+  if (new Blob([payload]).size > MAX_PROMPT_BYTES) throw new Error(t("common.clipboard_content_exceeds_32_mib"));
   try {
     const parsed = JSON.parse(payload);
     if (parsed?.version !== 1 || !Array.isArray(parsed.content)) throw new Error();
@@ -30,5 +31,5 @@ export function readClipboard(data: DataTransfer): ComposerDraft | undefined {
       } else throw new Error();
     }
     return draft;
-  } catch { throw new Error('Invalid ACP clipboard content. Copy the selection again.'); }
+  } catch { throw new Error(t("common.invalid_acp_clipboard_content_copy_the_selection_again")); }
 }

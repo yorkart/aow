@@ -12,7 +12,10 @@ impl AgentAutomation for Claude {
             let key = argument.split('=').next().unwrap_or(argument);
             anyhow::ensure!(
                 !["-c", "-r", "-p"].iter().any(|flag| key.starts_with(flag)),
-                "Claude 启动参数与自动化新会话模式冲突: {key}"
+                aow_i18n::message(
+                    "agents.claude_launch_arguments_conflict_with_automation_new_session_mode",
+                    &[("p0", key.to_string())]
+                )
             );
         }
         Ok(())

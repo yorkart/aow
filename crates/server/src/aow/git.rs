@@ -104,7 +104,7 @@ mod tests {
         let cwd = directory.path().to_path_buf();
         git_output(&cwd, &["init", "-q"]).await.unwrap();
         let marker = cwd.join("pids");
-        let task = tokio::spawn(async move {
+        let task = aow_i18n::spawn(async move {
             command_output(
                 &cwd,
                 &[
@@ -183,7 +183,7 @@ mod tests {
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}/repo.git", listener.local_addr().unwrap());
-        let server = tokio::spawn(async move {
+        let server = aow_i18n::spawn(async move {
             while let Ok((mut stream, _)) = listener.accept().await {
                 let mut request = [0_u8; 4096];
                 let _ = stream.read(&mut request).await;

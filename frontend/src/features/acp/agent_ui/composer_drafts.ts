@@ -23,6 +23,10 @@ export function discardComposerDraft(workspace: string, tabId: string) {
   drafts.delete(key(workspace, tabId));
 }
 
+export function discardWorkspaceComposerDrafts(workspace: string) {
+  for (const id of drafts.keys()) if (JSON.parse(id)[0] === workspace) drafts.delete(id);
+}
+
 export function useComposerDraft(workspace: string, tabId: string) {
   const draft = useMemo(() => {
     const id = key(workspace, tabId);

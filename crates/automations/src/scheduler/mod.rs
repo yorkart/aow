@@ -94,14 +94,22 @@ impl Scheduler {
                 .output(),
         )
         .await
-        .context("系统定时器操作超时")??;
+        .context(aow_i18n::text(
+            "automations.system_timer_operation_timed_out",
+        ))??;
         ensure!(
             output.status.success(),
-            "系统定时器操作失败: {}",
-            String::from_utf8_lossy(&output.stderr)
-                .chars()
-                .take(2000)
-                .collect::<String>()
+            aow_i18n::message(
+                "automations.system_timer_operation_failed",
+                &[(
+                    "auto0",
+                    String::from_utf8_lossy(&output.stderr)
+                        .chars()
+                        .take(2000)
+                        .collect::<String>()
+                        .to_string()
+                )]
+            )
         );
         Ok(String::from_utf8_lossy(&output.stdout).into_owned())
     }
@@ -120,13 +128,16 @@ impl Scheduler {
     async fn check_ready(&self) -> Result<Option<String>> {
         ensure!(
             self.platform != Platform::Unsupported,
-            "自动化支持 Linux systemd 和 macOS launchd"
+            aow_i18n::message(
+                "automations.automations_support_linux_systemd_and_macos_launchd",
+                &[]
+            )
         );
         ensure!(
             self.runner.is_absolute()
                 && fs::metadata(&self.runner)
                     .is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0),
-            "请先通过 GitHub Releases 安装 AoW"
+            aow_i18n::message("automations.install_aow_from_github_releases_first", &[])
         );
         if self.platform == Platform::Launchd {
             return self.launchd_domain().await.map(Some);

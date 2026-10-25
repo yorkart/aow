@@ -1,9 +1,10 @@
+import { t } from '../../lib/i18n';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check } from 'lucide-react';
 
 export type InstanceSort = 'branch' | 'createdAt';
-const sortOptions = [{ value: 'branch', label: '按分支名' }, { value: 'createdAt', label: '按创建时间' }] as const;
+const sortOptions = [{ value: 'branch', label: t("instances.by_branch_name") }, { value: 'createdAt', label: t("instances.by_creation_time") }] as const;
 
 export function InstanceScopeMenu({ anchor, checked, sortBy, onSortChange, onChange, onClose, container, label }: {
   container?: HTMLElement;
@@ -50,7 +51,7 @@ export function InstanceScopeMenu({ anchor, checked, sortBy, onSortChange, onCha
     style={{ left: position.x, top: position.y }} role="menu" aria-label={label}>
     <button role="menuitemcheckbox" aria-checked={checked} onClick={() => {
       onChange(!checked); onClose(); anchor.focus();
-    }}><Check style={{ visibility: checked ? 'visible' : 'hidden' }} />显示所有Worktree</button>
+    }}><Check style={{ visibility: checked ? 'visible' : 'hidden' }} />{t("instances.show_all_worktrees")}</button>
     {checked ? <>
       <div className="instance-scope-menu-separator" role="separator" />
       {sortOptions.map(option => <button key={option.value} role="menuitemradio" aria-checked={sortBy === option.value}

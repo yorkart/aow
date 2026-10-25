@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n';
 import type { ReactNode } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { AowIconButton } from './AowIconButton';
@@ -21,7 +22,7 @@ export interface AowPanelHeaderProps {
 export function AowPanelHeader({ title, tooltip, icon, className, collapsed = false, controlsId, onToggle, onNavigate, togglePosition = 'start', details, actions, children }: AowPanelHeaderProps) {
   const { triggerProps: tooltipProps, closeTooltip, tooltip: tooltipPopup } = useAowTooltip(tooltip);
   const content = <>{onToggle && !onNavigate && togglePosition === 'start' ? <ChevronRight className={collapsed ? undefined : 'expanded'} /> : null}{icon}<strong>{title}</strong>{details}</>;
-  const toggle = onToggle && (onNavigate || togglePosition === 'end') ? <AowIconButton className="aow-panel-toggle" aria-label={`${collapsed ? '展开' : '收起'} ${title}`} aria-expanded={!collapsed} aria-controls={controlsId}
+  const toggle = onToggle && (onNavigate || togglePosition === 'end') ? <AowIconButton className="aow-panel-toggle" aria-label={`${collapsed ? t("aow.expand") : t("aow.collapse")} ${title}`} aria-expanded={!collapsed} aria-controls={controlsId}
     onClick={() => { closeTooltip(); onToggle(); }}><ChevronRight className={collapsed ? undefined : 'expanded'} /></AowIconButton> : null;
 
   return <header className={`side-title aow-panel-header${className ? ` ${className}` : ''}`} onClick={togglePosition === 'end' && onToggle ? event => {
@@ -31,7 +32,7 @@ export function AowPanelHeader({ title, tooltip, icon, className, collapsed = fa
   } : undefined}>
     {togglePosition === 'start' ? toggle : null}
     {onNavigate
-      ? <button className="aow-panel-header-title" type="button" aria-label={`定位 ${title}`} {...tooltipProps} onClick={() => { closeTooltip(); onNavigate(); }}>{content}</button>
+      ? <button className="aow-panel-header-title" type="button" aria-label={t("components.locate", { value0: title })} {...tooltipProps} onClick={() => { closeTooltip(); onNavigate(); }}>{content}</button>
       : onToggle
       ? <button className="aow-panel-header-title" type="button" aria-label={togglePosition === 'end' ? title : undefined} aria-expanded={!collapsed} aria-controls={controlsId}
         {...tooltipProps} onClick={() => { closeTooltip(); onToggle(); }}>{content}</button>

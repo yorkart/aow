@@ -42,7 +42,10 @@ impl RunWriter {
         persist: impl FnOnce(&mut File, &[u8]) -> std::io::Result<()>,
     ) -> Result<()> {
         if let Some(error) = &self.failure {
-            bail!("执行记录此前写入失败，已停止追加: {error}");
+            bail!(aow_i18n::message(
+                "automations.run_record_previously_failed_to_write_appending_stopped",
+                &[("p0", error.to_string())]
+            ));
         }
         let mut line = serde_json::to_vec(event)?;
         line.push(b'\n');
@@ -54,7 +57,9 @@ impl RunWriter {
             // The runner may report only the error from its final append.
             self.failure = Some(error.to_string());
         }
-        result.context("写入执行记录失败，已停止追加")
+        result.context(aow_i18n::text(
+            "automations.failed_to_write_run_record_appending_stopped",
+        ))
     }
 
     pub fn output_writer(&self, output: RunOutput) -> Result<File> {

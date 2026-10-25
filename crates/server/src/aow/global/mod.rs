@@ -8,7 +8,7 @@ impl AowManager {
             return Ok(());
         };
         let _operation = self.inner.project_operation.lock().await;
-        let directory = state_directory.join("repos").join(FLOATING_PROJECT_ID);
+        let directory = state_directory.join("data/repos").join(FLOATING_PROJECT_ID);
         tokio::fs::create_dir_all(&directory).await?;
         if !directory.join(".git").exists() {
             // Keep initialization compatible with Git versions before 2.28.
@@ -30,7 +30,7 @@ impl AowManager {
             .unwrap();
         let mut project = state.projects.remove(index);
         project.id = FLOATING_PROJECT_ID.into();
-        project.name = "浮动工作区".into();
+        project.name = aow_i18n::text("server.floating_workspace").into();
         project.builtin = true;
         // There is one floating builtin project. Restored records can have a
         // different identity or another machine's repository path.

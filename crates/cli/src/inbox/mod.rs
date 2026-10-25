@@ -216,7 +216,7 @@ pub fn execute(args: InboxArgs, state_dir: PathBuf) -> Result<Value> {
         Operation::Post(_, body) => body["request_key"].as_str().map(str::to_owned),
         _ => None,
     };
-    let client = TerminaldClient::new(state_dir.join("cli/cli.sock"));
+    let client = TerminaldClient::new(state_dir.join("runtime/cli/cli.sock"));
     tokio::runtime::Runtime::new()?.block_on(async {
         tokio::time::timeout(Duration::from_secs(30), async {
             match operation {

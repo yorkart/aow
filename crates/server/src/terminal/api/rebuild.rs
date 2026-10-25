@@ -7,7 +7,7 @@ pub(super) async fn rebuild_terminal(
     AxumPath(tab_id): AxumPath<String>,
 ) -> Result<Json<TerminalTab>, HttpError> {
     // Finish committing or rolling back even if the browser disconnects.
-    tokio::spawn(async move {
+    aow_i18n::spawn(async move {
         let previous = state
             .terminals
             .get(&tab_id)
@@ -20,7 +20,8 @@ pub(super) async fn rebuild_terminal(
             if pane.kind == TerminalPaneKind::Agent {
                 let agent_id = pane.agent_id.as_deref().ok_or_else(|| {
                     terminal_http_error(TerminalError::Invalid(
-                        "终端缺少 Agent 配置，无法重建".into(),
+                        aow_i18n::text("server.terminal_has_no_agent_configuration_cannot_rebuild")
+                            .into(),
                     ))
                 })?;
                 if pane.agent_terminal.is_some()
@@ -29,7 +30,10 @@ pub(super) async fn rebuild_terminal(
                         .is_none()
                 {
                     return Err(terminal_http_error(TerminalError::Invalid(
-                        "该 Agent 不支持交互式初始化".into(),
+                        aow_i18n::text(
+                            "server.this_agent_does_not_support_interactive_initialization",
+                        )
+                        .into(),
                     )));
                 }
                 // Credentials and PATH come from the current workspace profile;
@@ -64,7 +68,7 @@ pub(super) async fn rebuild_terminal(
                     .expect("validated interactive adapter");
                 let manager = state.terminals.clone();
                 let pane_id = pane.id.clone();
-                tokio::spawn(async move {
+                aow_i18n::spawn(async move {
                     if let Err(error) = manager
                         .initialize_agent_lifecycle(
                             &pane_id,

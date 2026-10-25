@@ -147,6 +147,39 @@ impl AcpThread {
                 thread.changes.push(Change::Field("usage"));
             }
             "session_info_update" => {
+                if thread.session_meta_suppressed {
+                    if let Some(title) = update["title"].as_str() {
+                        thread.title = title.to_owned();
+                        thread.changes.push(Change::Field("title"));
+                    }
+                    return;
+                }
+                let next_revision = thread.session_meta_revision.saturating_add(1);
+                match update.get("_meta") {
+                    Some(Value::Object(metadata)) => {
+                        for key in metadata.keys() {
+                            thread
+                                .session_meta_revisions
+                                .insert(key.clone(), next_revision);
+                        }
+                        thread.session_meta.extend(
+                            metadata
+                                .iter()
+                                .map(|(key, value)| (key.clone(), value.clone())),
+                        );
+                    }
+                    Some(Value::Null) => {
+                        thread.session_meta.clear();
+                        thread.session_meta_revisions.clear();
+                    }
+                    _ => {}
+                }
+                if matches!(update.get("_meta"), Some(Value::Object(_) | Value::Null)) {
+                    thread.session_meta_revision = next_revision;
+                    thread.changes.push(Change::Field("session_meta"));
+                    thread.changes.push(Change::Field("session_meta_revision"));
+                    thread.changes.push(Change::Field("session_meta_revisions"));
+                }
                 if let Some(title) = update["title"].as_str() {
                     thread.title = title.to_owned();
                     thread.changes.push(Change::Field("title"));
@@ -162,6 +195,19 @@ impl AcpThread {
                 Self::push(thread, "extension", update);
             }
         }
+    }
+
+    pub(crate) fn clear_session_meta(thread: &mut SessionSnapshot) {
+        thread.session_meta_suppressed = true;
+        if thread.session_meta.is_empty() && thread.session_meta_revisions.is_empty() {
+            return;
+        }
+        thread.session_meta.clear();
+        thread.session_meta_revisions.clear();
+        thread.session_meta_revision = thread.session_meta_revision.saturating_add(1);
+        thread.changes.push(Change::Field("session_meta"));
+        thread.changes.push(Change::Field("session_meta_revisions"));
+        thread.changes.push(Change::Field("session_meta_revision"));
     }
 
     pub(crate) fn push(thread: &mut SessionSnapshot, kind: &str, content: Value) {
@@ -225,6 +271,10 @@ impl AcpThread {
             turns: Vec::new(),
             plan: Value::Null,
             notices: Vec::new(),
+            session_meta: Default::default(),
+            session_meta_revision: 0,
+            session_meta_suppressed: false,
+            session_meta_revisions: Default::default(),
             terminals: Default::default(),
             permissions: Vec::new(),
             modes: json!({}),

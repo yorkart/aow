@@ -27,5 +27,5 @@
 .explorer-match-count { flex:none; padding:0 5px; border-radius:8px; color:var(--aow-muted); background:var(--aow-header); font-size:10px; }
 .explorer-match-line { min-width:24px; flex:none; margin-right:5px; color:var(--aow-muted); text-align:right; font-size:10px; }
 .explorer-match-text { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:pre; }
-.explorer-match-text mark { color:inherit; background:var(--aow-search-match-background,#8a602b80); }
+.explorer-match-text mark { color:inherit; background:var(--aow-search-match-background,var(--aow-warning-background)); }
 .explorer-match-text mark:empty { border-left:1px solid var(--accent); }

@@ -1,6 +1,7 @@
+import { getLanguage } from './i18n';
 import { appUrl } from './basePath';
 
-type EventName = 'workspace' | 'operations' | 'task-stopped' | 'acp';
+type EventName = 'workspace' | 'operations' | 'task-stopped' | 'acp' | 'terminals';
 const subscribers = new Set<LiveEvents>();
 const snapshots = new Map<EventName, string>();
 let socket: WebSocket | undefined;
@@ -15,6 +16,7 @@ function connect() {
   retry = undefined;
   const url = new URL(appUrl('/api/events/ws'), window.location.href);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  url.searchParams.set('lang', getLanguage());
   let current: WebSocket;
   try { current = new WebSocket(url); }
   catch { disconnected(); return; }
@@ -30,11 +32,11 @@ function connect() {
     if (socket !== current || typeof event.data !== 'string') return;
     let envelope: { event?: EventName; data?: unknown };
     try { envelope = JSON.parse(event.data); } catch { return; }
-    if (!envelope || !['workspace', 'operations', 'task-stopped', 'acp'].includes(envelope.event ?? '') || envelope.data === undefined) return;
+    if (!envelope || !['workspace', 'operations', 'task-stopped', 'acp', 'terminals'].includes(envelope.event ?? '') || envelope.data === undefined) return;
     const name = envelope.event!;
     const data = JSON.stringify(envelope.data);
     // State snapshots may be replayed to late subscribers; notifications never are.
-    if (name !== 'task-stopped' && (name !== 'acp' || (envelope.data as { type?: string })?.type === 'hello')) snapshots.set(name, data);
+    if (name !== 'task-stopped' && (!['acp', 'terminals'].includes(name) || (envelope.data as { type?: string })?.type === 'hello')) snapshots.set(name, data);
     for (const listener of subscribers) if (listener.name === name) listener.receive(data);
   };
   current.onerror = () => current.close();

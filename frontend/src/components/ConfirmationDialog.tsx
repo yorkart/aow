@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n';
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { TriangleAlert, X } from 'lucide-react';
@@ -18,7 +19,7 @@ export interface ConfirmationOptions {
   danger?: boolean;
 }
 
-export function ConfirmationDialog({ title, description, items, warning, confirmLabel = '确认', danger = false, onResult }: ConfirmationOptions & {
+export function ConfirmationDialog({ title, description, items, warning, confirmLabel = t("components.confirm"), danger = false, onResult }: ConfirmationOptions & {
   onResult: (confirmed: boolean) => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -71,7 +72,7 @@ export function ConfirmationDialog({ title, description, items, warning, confirm
     >
       <header>
         <h2 id={`${id}-title`}>{title}</h2>
-        <button type="button" title="关闭对话框" aria-label="关闭对话框" onClick={() => onResult(false)}><X /></button>
+        <button type="button" title={t("components.close_dialog")} aria-label={t("components.close_dialog")} onClick={() => onResult(false)}><X /></button>
       </header>
       <div className="confirmation-body">
         <p id={`${id}-description`}>{description}</p>
@@ -84,7 +85,7 @@ export function ConfirmationDialog({ title, description, items, warning, confirm
         {warning ? <div className="confirmation-warning" id={`${id}-warning`}><TriangleAlert aria-hidden="true" /><p>{warning}</p></div> : null}
       </div>
       <footer>
-        <button ref={cancelRef} type="button" onClick={() => onResult(false)}>取消</button>
+        <button ref={cancelRef} type="button" onClick={() => onResult(false)}>{t("aow.cancel")}</button>
         <button type="button" className={danger ? 'danger' : 'primary'} onClick={() => onResult(true)}>{confirmLabel}</button>
       </footer>
     </dialog>,

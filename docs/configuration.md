@@ -2,15 +2,17 @@
 
 ## 监听地址与服务配置
 
-在 **Settings → Environment → AoW 服务环境变量** 中直接编辑并保存 `~/.config/aow/server.env`，也可以在服务器上编辑该文件。文件不存在时，页面保存会创建它；注释、引号和空行按原文保留。每行写 `KEY=value`，不写 `export`；路径使用绝对路径，修改时保留其他配置。
+在 **Settings → Environment → AoW 服务环境变量** 中通过表格配置并保存 `~/.aow/server.env`。表格按服务配置、登录会话、基础运行环境和代理配置分组，列出全部 22 个支持的可配置项，每项都有说明和 Value 示例，只需填写当前值。已有配置会自动读取；未配置的项留空，示例和默认值不会自动写入。清空已有值会删除该项的所有重复定义，恢复未设置状态。代理变量的大小写形式分别配置和保存。
 
-页面保存只更新本机文件，不写入配置 Git 仓库，也不会自动重启服务。按下方“使配置生效”的步骤加载配置。文件被其他窗口或外部程序修改时，保存会提示冲突并保留草稿，请重新读取后再编辑。Environment 中的执行 PATH 仍单独保存，对后续启动的 Agent 和自动化任务生效。
+文件不存在时，页面保存会创建它；未修改的配置、注释、引号和空行按原文保留，表格未管理的配置也会保留。也可以在服务器上直接编辑该文件，每行写 `KEY=value`，不写 `export`；路径使用绝对路径，修改时保留其他配置。表格输入值时无需添加包裹引号。
+
+页面保存只更新本机文件，不会自动重启服务。按下方“使配置生效”的步骤加载配置。文件被其他窗口或外部程序修改时，保存会提示冲突并保留草稿，请重新读取后再编辑。Environment 中的执行 PATH 仍单独保存，对后续启动的 Agent 和自动化任务生效。
 
 ```dotenv
 AOW_SERVER_HOST=127.0.0.1
 AOW_SERVER_PORT=8282
 
-# 自定义数据目录（默认 ~/.local/state/aow）
+# 自定义数据目录（默认 ~/.aow）
 # AOW_SERVER_STATE_DIR=/path/to/state
 
 # terminald 的 socket 路径，须与其监听路径一致
@@ -36,7 +38,7 @@ IPv6 浏览器地址使用方括号，例如 `http://[::1]:8282/`。若改为 IP
 
 macOS **LaunchDaemon** 模式会将监听地址等服务配置写入由 root 管理的系统 plist。这些配置变化时，安装器先准备请求并以退出码 78 提示本地管理员登记；登记后回到服务账户重跑安装验证。仅程序版本或下方代理变量变化不需要重新登记，步骤见 [安装说明](release-installation.md)。
 
-LaunchDaemon 的 `server.env` 仅接受服务配置和基本运行环境：`AOW_SERVER_HOST`、`AOW_SERVER_PORT`、`AOW_SERVER_STATE_DIR`、`AOW_STATE_DIR`、`AOW_TERMINALD_SOCKET`、`AOW_BASE_PATH`、`AOW_AUTH_SECURE_COOKIE`、`XDG_STATE_HOME`、`XDG_RUNTIME_DIR`、`PATH`、`SHELL`、`LANG`、`LC_ALL`、`LC_CTYPE`。账户身份、HOME、运行目录和日志模式由安装器固定。系统 plist 可被其他本机账户读取，不要在其中填写 API 密钥或口令；其他环境变量会被拒绝。
+LaunchDaemon 的 `server.env` 仅接受服务配置和基本运行环境：`AOW_SERVER_HOST`、`AOW_SERVER_PORT`、`AOW_SERVER_STATE_DIR`、`AOW_STATE_DIR`、`AOW_TERMINALD_SOCKET`、`AOW_BASE_PATH`、`AOW_AUTH_SECURE_COOKIE`、`AOW_AUTH_SESSION_MAX_AGE_SECONDS`、`AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS`、`PATH`、`SHELL`、`LANG`、`LC_ALL`、`LC_CTYPE`。账户身份、HOME、运行目录和日志模式由安装器固定。系统 plist 可被其他本机账户读取，不要在其中填写 API 密钥或口令；其他环境变量会被拒绝。
 
 另外支持标准代理变量 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY` 及其小写形式，例如：
 
@@ -46,14 +48,14 @@ HTTPS_PROXY=http://127.0.0.1:7890
 NO_PROXY=localhost,127.0.0.1,::1
 ```
 
-安装后的 Web 服务启动脚本每次启动时从 `server.env` 读取代理变量，传给服务器及其子进程（包括 ACP 的 npm 安装）。代理值按文本读取，不执行 shell 表达式，也不写入系统 plist。仅修改代理时，已有 LaunchDaemon 的服务账户可直接运行 `just install` 更新并重启 Web 服务，无需 sudo 或重新登记；使用本地源码更新时先执行 `just package`。保存文件不会改变正在运行的进程，terminald 的环境也不会随之改变。
+安装后的 Web 服务启动脚本每次启动时从 `server.env` 读取代理变量，传给服务器及其子进程（包括 ACP 的 npm 安装）。代理值按文本读取，不执行 shell 表达式，也不写入系统 plist。仅修改代理时，已有 LaunchDaemon 的服务账户可直接运行 `just install --skip-terminald` 更新并重启 Web 服务，无需 sudo 或重新登记；使用本地源码更新时先执行 `just package`。保存文件不会改变正在运行的进程，terminald 的环境也不会随之改变。
 
 LaunchDaemon 默认 PATH 包含 `~/.local/bin`、AoW 管理的 Node 入口、`~/.cargo/bin` 和常用系统/Homebrew 目录，不继承安装终端的完整 PATH；开发 shell 可在服务账户自己的 `.zprofile` / `.zshrc` 中初始化 Node 和其他工具链。
 
 修改 `AOW_TERMINALD_SOCKET` 时，terminald 也需配置同一路径：
 
 - **Linux**：执行 `systemctl --user edit aow-terminald.service`，添加以下配置，再执行 `systemctl --user daemon-reload` 和 `systemctl --user restart aow-terminald.service aow-server.service`。
-- **macOS**：重新执行安装，在 terminald 重启提示中输入小写 `y`。
+- **macOS**：重新执行安装，不带 `--skip-terminald`，默认会更新并重启 terminald。
 
 ```ini
 [Service]
@@ -98,7 +100,21 @@ AOW_AUTH_SECURE_COOKIE=true
 
 直接运行二进制也可使用 `--secure-cookies`。该设置为登录和清除会话的 Cookie 添加 `Secure`；它不为后端启用 TLS，反向代理仍需负责 HTTPS、HTTP 跳转和 HSTS。代理应保留浏览器请求的 `Host`，以便登录/退出请求检查 `Origin`。服务端不根据客户端可伪造的 `X-Forwarded-Proto` 降低 Cookie 安全设置。只接受 `true` 或 `false`，本机 HTTP 默认为 `false`。
 
-登录会话最长保留 12 小时，30 分钟没有工作台 API 请求或终端输入时过期；登录状态轮询和终端输出不延长空闲期限。桌面在 Settings 中、手机在项目首页右上角可退出登录。退出、会话过期、修改账号/密码后，旧会话的新请求和终端输入会被拒绝，已建立的终端和事件流最迟在下一次会话检查时断开（约 1 秒）；这不会结束 terminald 中的进程。
+登录会话默认最长保留 12 小时，默认空闲 30 分钟后过期。可在 **Settings → Environment → AoW 服务环境变量** 中编辑 `~/.aow/server.env`，分别配置这两项，单位为秒：
+
+```dotenv
+# 从登录成功开始计算的最长有效期，默认 12 小时
+AOW_AUTH_SESSION_MAX_AGE_SECONDS=43200
+
+# 从最后一次有效活动开始计算的空闲超时，默认 30 分钟
+AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS=1800
+```
+
+未设置的项使用各自默认值。只接受大于 0 的整数秒；空值、0、负数、小数、带单位的值及超出 64 位无符号整数范围的值会导致启动报错。两项独立生效，任一达到就需要重新登录；空闲时间大于最长有效期时，仍由最长有效期限制会话。工作台 API 请求和终端输入会刷新空闲计时，登录状态轮询和终端输出不会刷新；有效活动不会延长从登录开始计算的最长有效期。
+
+保存后按上面的“使配置生效”步骤重新加载配置并重启 Web 服务；macOS LaunchDaemon 模式修改这两项也需重新登记系统 plist。直接运行二进制时，可设置上述环境变量，或使用优先级更高的 `--session-max-age-seconds`、`--session-idle-timeout-seconds` 参数。配置在启动时读取，不会热更新。
+
+桌面在 Settings 中、手机在项目首页右上角可退出登录。退出、会话过期、修改账号/密码后，旧会话的新请求和终端输入会被拒绝，已建立的终端和事件流最迟在下一次会话检查时断开（约 1 秒）；这不会结束 terminald 中的进程。
 
 登录校验全局最多并发 2 个，最多突发 10 次，此后每 6 秒恢复一次额度。连续 5 次凭据错误后开始退避，最长 60 秒；被限流时返回 `429` 和 `Retry-After`。这些限制不使用客户端提交的账号名或转发 IP 来创建独立额度。重启服务会清空内存会话和限流状态。
 
@@ -112,32 +128,66 @@ AOW_AUTH_SECURE_COOKIE=true
 
 `peer_ip` 是服务实际收到的 TCP 连接来源。经过反向代理或 SSH 隧道时，它可能是代理/隧道端点；`X-Forwarded-For`、`X-Real-IP`、`Forwarded` 会另外记录为 `*_unverified`，不能直接当作已验证的客户端 IP。回溯时应结合可信反向代理的访问日志；代理应覆盖来自客户端的伪造转发头。
 
-日志位于服务数据目录的 `operation-logs/operations.YYYY-MM-DD-HH.log`（默认 `~/.local/state/aow/operation-logs/`），按小时轮转，最多保留 720 个文件。登录结果先写入日志，再交给独立的有界通知队列；满队列会等待，未登录访问的日志不受通知队列影响。各渠道的发送成功、失败或 30 秒超时都会使用同一事件 ID 追加记录；投递失败不改变登录结果，也不会阻止其他渠道尝试。队列不跨服务重启恢复，已落盘的审计日志保留；通知未送达时可据此排查。底层 IM 渠道可能有自身的速率限制。
+日志位于服务数据目录的 `state/operation-logs/operations.YYYY-MM-DD-HH.log`（默认 `~/.aow/state/operation-logs/`），按小时轮转，最多保留 720 个文件。登录结果先写入日志，再交给独立的有界通知队列；满队列会等待，未登录访问的日志不受通知队列影响。各渠道的发送成功、失败或 30 秒超时都会使用同一事件 ID 追加记录；投递失败不改变登录结果，也不会阻止其他渠道尝试。队列不跨服务重启恢复，已落盘的审计日志保留；通知未送达时可据此排查。底层 IM 渠道可能有自身的速率限制。
 
-## 配置仓库与版本
+## 配置与数据目录
 
-在 **Settings → Configuration** 中输入服务所在机器上的 Git 仓库根目录，点击“读取版本”，再单选一个配置版本目录并保存。输入配置版本目录时，会自动定位到父仓库并选中该版本；非 Git 仓库或普通子目录会提示错误。
+AoW 默认使用 `~/.aow/` 作为应用目录。应用设置、项目登记、Agent 配置分别保存为根目录下的 `aow-settings.json`、`aow-projects.json`、`aow-agents.json`；ACP 使用 `aow-acp.json`，支持 JSONC 注释和尾逗号。通知配置与登录凭据也保存在根目录。
 
-选择保存在数据目录下的 `config.toml`（默认 `~/.local/state/aow/config.toml`）：
+- `automations/tasks/`：自动化任务定义。
+- `git-platform-providers/` 与 `git-platform-providers.json`：Provider 脚本和设置。
+- `skills/`：安装的技能。
+- `data/`：Inbox 内容、ACP 会话、Notes 和应用管理的仓库。
+- `state/`：终端与实例状态、自动化执行记录、IM 状态和操作日志。
+- `cache/`：ACP 下载与安装缓存、剪贴板图片。
+- `runtime/`：CLI 与 terminald 的本机通信 socket。
 
-```toml
-config-repo = "/absolute/path/to/config-repo"
-config-id = "g123456789ab"
-```
-
-实际配置目录是 `<config-repo>/<config-id>/`。保存有变化时会提示重启 AoW 服务；重启前，运行中的服务继续使用原版本。再次打开 Settings 可以查看已保存的选择和当前运行版本。保存相同选择不会重复写入文件。
-
-服务在启动时将 `config.toml` 载入内存，运行期间不再读取该文件。Settings 查询从内存返回；保存使用内存中的配置文档写入文件，并更新待重启的选择，当前生效版本不变。外部编辑文件也只有重启服务后才会加载。
-
-配置版本只通过 `config.toml` 选择，旧 `__current__` 文件会被忽略，不读取或迁移。缺少 `config.toml` 时，服务按首次初始化创建默认配置；用户可在 **Settings → Configuration** 中重新选择已有仓库和版本，保存后重启服务。
-
-`config.toml` 当前只使用这两个顶层字段。保存版本选择会保留其他字段和注释，未来可扩展分层配置；当前尚未实现全局、用户和项目配置的覆盖规则。
+配置保存采用文件锁和原子写入。使用自定义应用目录时，服务、CLI 和自动化执行器必须使用同一个目录。
 
 ## Notes 目录与登录账户
 
-- **Notes 目录**：在 **Settings → Notes** 中修改，默认 `~/aow`。保存后仅更新新注册项目使用的默认根目录，已有项目仍使用原 Notes 路径。如需切换，请在项目菜单中使用「绑定 Notes 目录」：目录已存在时直接使用，不存在时自动创建；两处操作均不迁移笔记。
+- **Notes 目录**：在 **Settings → Notes** 中修改，默认 `~/.aow/data/notes`。保存后仅更新新注册项目使用的默认根目录，已有项目仍使用原 Notes 路径。如需切换，请在项目菜单中使用「绑定 Notes 目录」：目录已存在时直接使用，不存在时自动创建；两处操作均不迁移笔记。
 - **登录账户**：在服务器终端执行 `aow account`。手动使用自定义数据目录时，执行 `AOW_SERVER_STATE_DIR=/path/to/state aow account`；按提示输入账号、密码并确认密码，修改后重新登录网页。
 
-账户仅保存在服务所在机器的数据目录中（默认 `~/.local/state/aow/credentials.json`），权限为 `0600`。当前使用一个本地账户，保存账号、随机盐和 PBKDF2-HMAC-SHA256 密码哈希，不保存明文密码。账户不进入配置 Git 仓库。首次安装必须设置，后续升级保留；忘记密码可在服务器终端重新运行 `aow account`，无需重启服务。旧 `pin.md5` 不再读取，也不会自动转换成账户。
+账户仅保存在服务所在机器的数据目录中（默认 `~/.aow/credentials.json`），权限为 `0600`。当前使用一个本地账户，保存账号、随机盐和 PBKDF2-HMAC-SHA256 密码哈希，不保存明文密码。首次安装必须设置，后续升级保留；忘记密码可在服务器终端重新运行 `aow account`，无需重启服务。旧 `pin.md5` 不再读取，也不会自动转换成账户。
 
 服务日志和故障排查见 [安装说明](release-installation.md)。
+
+## Default CLI instances
+
+Agent and ACP defaults are independent. For `aow-cli agent create` and
+`aow-cli acp create`, an explicit `--agent-id` takes precedence. When omitted,
+the server selects the corresponding saved default, or the first listed instance
+when no default is set. Old configurations need no migration. An empty list or
+an unavailable selection fails explicitly; AoW does not silently try another instance.
+
+In Settings → Agents, select **默认 Agent 实例**. This stores the root
+`default_agent_id` field in `aow-agents.json`, separately
+from profile data. Selecting a detected instance preserves automatic discovery.
+Editing a profile does not change the default selection. Deleting the
+default profile restores the first-item fallback. Agent order matches the Agent
+list, including detected profiles and configured instance ordering.
+
+In Settings → ACP, select **默认 ACP 实例** and save, or set the root
+`default_agent_id` field in `aow-acp.json`:
+
+```jsonc
+{
+  "default_agent_id": "work-acp",
+  "agent_servers": {
+    "work-acp": { "type": "custom", "command": "my-acp-adapter", "args": [] }
+  }
+}
+```
+
+Remove `default_agent_id` (or set it to `null`) to use the first configured adapter.
+ACP adapters are listed by ID; the fallback uses that same order. A configured
+default must reference an existing adapter.
+
+## Bundled CLI skills
+
+The repository maintains `skills/aow-agent/SKILL.md` and `skills/aow-acp/SKILL.md`.
+Release packages include both skills. Local and release installation copy them to
+`~/.aow/skills/aow-agent/SKILL.md` and `~/.aow/skills/aow-acp/SKILL.md`, and updates
+refresh those files while preserving unrelated skills. No links are created in
+`~/.agents/skills/` or other skill discovery directories.

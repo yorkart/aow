@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mkdir, readFile } from 'node:fs/promises';
 import { productionPreview } from './fixtures/production-preview.mjs';
+import { installLiveEvents } from './fixtures/live-events.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const server = process.env.MOBILE_TEST_URL ? null : await productionPreview();
@@ -133,10 +134,13 @@ async function fixture(context, pins = { paths: [], revision: 0, failWrites: fal
       });
     });
   }
-  return {
+  const state = {
     messages, sockets, mutations, errors, agents, titles, terminalTabs,
     observeAfterSupersede(socket) { observedPaths.add(new URL(socket.url()).pathname); },
   };
+  await installLiveEvents(context, undefined, () => ({ tabs: state.terminalError ? null : terminalTabs,
+    metadata: { agents, titles }, error: state.terminalError ?? null, agent_error: null }));
+  return state;
 }
 
 async function visible(page, selector) { await page.locator(`${selector}:visible`).first().waitFor({ state: 'visible' }); }
@@ -178,8 +182,35 @@ async function noOverflow(page) {
 let browser;
 try {
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
+  await test('mobile login restores full height when keyboard dismissal emits no resize', async t => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
+    t.after(() => context.close());
+    await context.addInitScript(() => {
+      Object.defineProperty(window, 'visualViewport', { value: Object.assign(new EventTarget(), { height: 844, width: 390, offsetTop: 0 }) });
+    });
+    const state = await fixture(context);
+    await context.route('**/api/auth/status', route => route.fulfill({ json: { configured: true, authenticated: false } }));
+    await context.route('**/api/auth/login', route => route.fulfill({ json: { configured: true, authenticated: true } }));
+    const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
+    await page.goto(`${baseURL}/?ui=mobile`);
+    await page.getByLabel('账号', { exact: true }).fill('admin');
+    await page.getByLabel('密码', { exact: true }).fill('test-password');
+    await page.evaluate(() => { window.visualViewport.height = 420; });
+    await page.getByRole('button', { name: '登录', exact: true }).click();
+    await page.locator('.mobile-app').waitFor();
+    await page.waitForFunction(() => document.documentElement.style.getPropertyValue('--mobile-height') === '420px');
+    // The login fields have unmounted, so neither focusout nor resize is heard
+    // by the new app when the WebView finishes dismissing the keyboard.
+    await page.evaluate(() => { window.visualViewport.height = 844; });
+    await page.waitForFunction(() => document.documentElement.style.getPropertyValue('--mobile-height') === '844px');
+    assert.equal((await page.locator('.mobile-app').boundingBox()).height, 844);
+    assert.deepEqual(state.errors, []);
+  });
   await test('mobile project avatars load directly and fall back without changing the project card layout', async t => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => context.close());
     const state = await fixture(context);
     let avatarUrl = 'https://avatars.example.com/owner.svg';
@@ -187,6 +218,7 @@ try {
     await context.route('https://avatars.example.com/**', route => route.request().url().includes('broken') ? route.abort()
       : route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" rx="12" fill="#3267cf"/><circle cx="32" cy="24" r="10" fill="white"/><path d="M12 58a20 20 0 0 1 40 0" fill="white"/></svg>' }));
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.goto(`${baseURL}/?ui=mobile`);
     const card = page.locator('.mobile-project-card').first();
     const avatar = card.locator('img.project-icon');
@@ -197,7 +229,7 @@ try {
     await snapshot(page, 'project-avatar');
     const box = await card.boundingBox();
     avatarUrl = 'https://avatars.example.com/broken.svg';
-    await page.evaluate(() => window.dispatchEvent(new Event('aow-review-providers-changed')));
+    await page.evaluate(() => window.dispatchEvent(new Event('aow-git-platform-providers-changed')));
     await card.locator('svg.project-icon').waitFor();
     assert.deepEqual(await card.boundingBox(), box);
     assert.equal(await avatar.count(), 0);
@@ -209,6 +241,7 @@ try {
   });
   for (const width of [320, 390]) await test(`mobile terminal creation waits for a Terminal or Agent choice at ${width}px`, async t => {
     const context = await browser.newContext({ viewport: { width, height: 844 }, isMobile: true, hasTouch: true });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => context.close());
     const state = await fixture(context);
     const created = [];
@@ -228,6 +261,7 @@ try {
       await route.fulfill({ json: tab });
     });
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.goto(`${baseURL}/m#workspace=${encodeURIComponent(workspace)}&view=terminal`);
     const trigger = page.getByRole('button', { name: '新建终端', exact: true });
     const menu = page.getByRole('menu', { name: '新建终端或 Agent', exact: true });
@@ -235,7 +269,7 @@ try {
     await menu.getByRole('menuitem', { name: 'Review Codex', exact: true }).waitFor();
     assert.equal(await trigger.getAttribute('aria-expanded'), 'true');
     assert.equal(await trigger.getAttribute('aria-controls'), await menu.getAttribute('id'));
-    assert.deepEqual(await menu.getByRole('menuitem').allTextContents(), ['Terminal', 'Codex', 'Review Codex']);
+    assert.deepEqual(await menu.getByRole('menuitem').allTextContents(), ['终端', 'Codex', 'Review Codex']);
     assert.deepEqual(created, [], 'opening the menu does not create a process');
     const bounds = await menu.boundingBox();
     const anchor = await trigger.boundingBox();
@@ -252,12 +286,12 @@ try {
     await page.getByRole('button', { name: '刷新', exact: true }).tap();
     await menu.waitFor({ state: 'hidden' });
     await trigger.tap();
-    await page.getByRole('button', { name: 'Conversation', exact: true }).tap();
+    await page.getByRole('button', { name: "对话", exact: true }).tap();
     await menu.waitFor({ state: 'hidden' });
     await page.getByRole('button', { name: '终端', exact: true }).tap();
     assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
     assert.deepEqual(created, [], 'dismissing the menu or leaving the page does not create a process');
-    for (const [index, choice] of ['Terminal', 'Review Codex'].entries()) {
+    for (const [index, choice] of ['终端', 'Review Codex'].entries()) {
       await trigger.tap();
       await menu.getByRole('menuitem', { name: choice, exact: true }).tap();
       await menu.waitFor({ state: 'hidden' });
@@ -274,27 +308,30 @@ try {
 
   await test('mobile terminal creation keeps Terminal available when Agent loading fails or the list is empty', async t => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => context.close());
     const state = await fixture(context);
     let failed = true;
     await context.route('**/api/aow/agents?**', route => route.fulfill(failed
       ? { status: 500, json: { message: 'Agent service unavailable' } } : { json: [] }));
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.goto(`${baseURL}/m#workspace=${encodeURIComponent(workspace)}&view=terminal`);
     await page.getByRole('button', { name: '新建终端', exact: true }).tap();
     const menu = page.getByRole('menu', { name: '新建终端或 Agent', exact: true });
     await menu.getByRole('alert').waitFor();
-    assert.equal(await menu.getByRole('menuitem', { name: 'Terminal', exact: true }).isEnabled(), true);
+    assert.equal(await menu.getByRole('menuitem', { name: "终端", exact: true }).isEnabled(), true);
     failed = false;
     await menu.getByRole('menuitem', { name: '重新加载 Agent', exact: true }).tap();
     await menu.getByText('未发现可用 Agent', { exact: true }).waitFor();
-    assert.equal(await menu.getByRole('menuitem', { name: 'Terminal', exact: true }).isEnabled(), true);
+    assert.equal(await menu.getByRole('menuitem', { name: "终端", exact: true }).isEnabled(), true);
     assert.deepEqual(state.mutations, []);
     assert.deepEqual(state.errors, []);
   });
 
   await test('mobile terminal catalog opens worktree instances in the main workspace without duplicating terminals', async t => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => context.close());
     const state = await fixture(context);
     const feature = project.worktrees[1].path;
@@ -304,6 +341,7 @@ try {
       { id: 'unrelated', name: '其他项目实例', workspace_root: '/workspace/unrelated', layout: leaf('unrelated-pane'), panes: [pane('unrelated-pane', 'Shell')] },
     );
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.goto(`${baseURL}/m#workspace=${encodeURIComponent(workspace)}&view=terminal`);
     await visible(page, '.mobile-terminal-tabs');
     const header = page.locator('.mobile-header-actions');
@@ -317,16 +355,16 @@ try {
       await catalog.getByRole('button', { name: `${group} 显示范围`, exact: true }).click();
       await page.getByRole('menuitemcheckbox', { name: '显示所有Worktree' }).click();
     };
-    await scope('User Terminals');
+    await scope('用户终端');
     await catalog.getByRole('button', { name: /远程 Shell/, exact: false }).first().waitFor();
     assert.equal(await catalog.locator('.terminal-panel-row').filter({ hasText: '远程 CLI' }).count(), 0, 'each terminal group has its own scope');
-    await scope('CLI Terminals');
+    await scope('CLI 终端');
     const remoteCli = catalog.locator('.terminal-panel-row').filter({ hasText: '远程 CLI' });
     await remoteCli.locator('.terminal-panel-open').waitFor();
     assert.equal(await catalog.getByText('其他项目实例', { exact: true }).count(), 0);
     assert.equal(await page.locator('.mobile-terminal-tabs [role="tab"]').count(), 4, 'browsing does not add tabs');
     assert.equal(state.sockets.length, 0, 'listing all worktrees never attaches to their terminals');
-    await catalog.getByRole('button', { name: 'User Terminals 显示范围', exact: true }).click();
+    await catalog.getByRole('button', { name: '用户终端 显示范围', exact: true }).click();
     await page.getByRole('menuitemradio', { name: '按创建时间' }).click();
     assert.match(await catalog.locator('.terminal-panel-row').first().textContent(), /远程 Shell/);
     await snapshot(page, 'mobile-terminal-catalog');
@@ -351,8 +389,8 @@ try {
     assert.equal(state.sockets.length, socketCount, 'opening the list and selecting the active instance keeps its connection');
 
     await header.getByRole('button', { name: '终端列表', exact: true }).click();
-    await scope('User Terminals');
-    await catalog.getByRole('button', { name: 'User Terminals 显示范围', exact: true }).click();
+    await scope('用户终端');
+    await catalog.getByRole('button', { name: '用户终端 显示范围', exact: true }).click();
     await page.keyboard.press('Escape');
     await page.getByRole('menu', { name: '终端显示范围' }).waitFor({ state: 'hidden' });
     await catalog.waitFor();
@@ -375,7 +413,7 @@ try {
     assert.equal(await catalog.locator('.terminal-panel-row').filter({ hasText: '远程 Shell' }).count(), 0, 'scope choice is remembered');
     await remoteCli.locator('.terminal-panel-open').waitFor();
     state.terminalTabs.splice(state.terminalTabs.findIndex(tab => tab.id === 'remote-cli'), 1);
-    await catalog.getByRole('button', { name: '刷新 CLI Terminals', exact: true }).click();
+    await catalog.getByRole('button', { name: '刷新 CLI 终端', exact: true }).click();
     await remoteCli.waitFor({ state: 'hidden' });
     await catalog.getByRole('button', { name: '关闭终端列表' }).click();
     assert.equal(await page.getByRole('tab', { name: '远程 CLI', exact: true }).count(), 0);
@@ -386,18 +424,20 @@ try {
 
   await test('mobile catalog remains available when empty and scopes non-main worktrees locally', async t => {
     const context = await browser.newContext({ viewport: { width: 320, height: 640 }, isMobile: true, hasTouch: true });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => context.close());
     const state = await fixture(context);
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.goto(`${baseURL}/m#workspace=${encodeURIComponent(project.worktrees[1].path)}&view=terminal`);
     await page.getByRole('button', { name: '终端列表', exact: true }).click();
     const catalog = page.getByRole('dialog', { name: '终端列表' });
     assert.equal(await catalog.getByRole('button', { name: /显示范围/ }).count(), 0);
     assert.equal(await catalog.locator('.terminal-panel-row').count(), 0, 'other worktrees are not listed');
-    const toggle = catalog.getByRole('button', { name: '展开 User Terminals', exact: true });
+    const toggle = catalog.getByRole('button', { name: '展开 用户终端', exact: true });
     assert.equal(await toggle.getAttribute('aria-expanded'), 'false', 'empty panels start collapsed');
     await toggle.click();
-    assert.equal(await catalog.getByRole('button', { name: '收起 User Terminals', exact: true }).getAttribute('aria-expanded'), 'true');
+    assert.equal(await catalog.getByRole('button', { name: '收起 用户终端', exact: true }).getAttribute('aria-expanded'), 'true');
     await catalog.getByText('暂无终端', { exact: true }).first().waitFor();
     await noOverflow(page);
     await page.mouse.click(5, 200);
@@ -409,6 +449,7 @@ try {
 
   await test('mobile catalog rebuilds an interrupted active terminal and selects its new pane', async t => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => context.close());
     const state = await fixture(context);
     const old = state.terminalTabs.find(tab => tab.id === 'tab-b');
@@ -423,6 +464,7 @@ try {
       await route.fulfill({ json: old });
     });
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.goto(`${baseURL}/m#workspace=${encodeURIComponent(workspace)}&view=terminal`);
     await page.getByRole('tab', { name: '服务', exact: true }).click();
     await page.getByRole('button', { name: '终端列表', exact: true }).click();
@@ -439,41 +481,42 @@ try {
     assert.deepEqual(state.errors, []);
   });
 
-  await test('mobile catalog retries project loading and confirms destruction inside the drawer', async t => {
+  await test('mobile catalog preserves shared snapshots during errors and confirms destruction inside the drawer', async t => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => context.close());
     const state = await fixture(context);
     state.terminalTabs.push({ id: 'remote-delete', name: '远程待销毁', workspace_root: project.worktrees[1].path,
       layout: leaf('delete-pane'), panes: [pane('delete-pane', 'Shell')] });
-    let failList = true;
     let deletes = 0;
     await context.route('**/api/terminals**', async route => {
       const url = new URL(route.request().url());
-      if (url.pathname === '/api/terminals' && !url.searchParams.has('workspace_root') && failList) {
-        await route.fulfill({ status: 503, json: { message: '暂时无法加载项目终端' } });
-      } else if (url.pathname === '/api/terminals/remote-delete' && route.request().method() === 'DELETE') {
+      if (url.pathname === '/api/terminals/remote-delete' && route.request().method() === 'DELETE') {
         deletes += 1;
         state.terminalTabs.splice(state.terminalTabs.findIndex(tab => tab.id === 'remote-delete'), 1);
         await route.fulfill({ status: 204 });
       } else await route.fallback();
     });
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.goto(`${baseURL}/m#workspace=${encodeURIComponent(workspace)}&view=terminal`);
     await visible(page, '.mobile-terminal-tabs');
+    state.terminalError = '暂时无法加载项目终端';
     await page.getByRole('button', { name: '终端列表', exact: true }).click();
     const catalog = page.getByRole('dialog', { name: '终端列表', exact: true });
-    await catalog.getByRole('button', { name: 'User Terminals 显示范围', exact: true }).click();
+    await catalog.getByRole('button', { name: '用户终端 显示范围', exact: true }).click();
     const menu = page.getByRole('menu', { name: '终端显示范围' });
     const bounds = await menu.boundingBox();
     assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 390 && bounds.y >= 0 && bounds.y + bounds.height <= 844);
     await menu.getByRole('menuitemcheckbox', { name: '显示所有Worktree' }).click();
-    await catalog.getByRole('alert').filter({ hasText: '暂时无法加载项目终端' }).waitFor();
-    assert.equal(await catalog.locator('.terminal-panel-row').count(), 2, 'local instances remain available after a project loading error');
-    failList = false;
-    await catalog.getByRole('button', { name: '刷新 User Terminals', exact: true }).click();
+    const error = catalog.getByRole('alert').filter({ hasText: '暂时无法加载项目终端' });
+    await error.waitFor();
+    assert.equal(await catalog.locator('.terminal-panel-row').count(), 3, 'cached instances remain available after a shared snapshot error');
+    state.terminalError = null;
+    await catalog.getByRole('button', { name: '刷新 用户终端', exact: true }).click();
     const row = catalog.locator('.terminal-panel-row').filter({ hasText: '远程待销毁' });
     await row.waitFor();
-    assert.equal(await catalog.getByRole('alert').count(), 0);
+    await error.waitFor({ state: 'detached' });
     await row.getByRole('button', { name: '远程待销毁 终端操作', exact: true }).click();
     await page.getByRole('menuitem', { name: '销毁', exact: true }).click();
     const confirmation = page.getByRole('alertdialog', { name: '销毁终端？' });
@@ -493,9 +536,11 @@ try {
 
   await test('mobile terminal agent icons update per pane without taking terminal control', async t => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => context.close());
     const state = await fixture(context);
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.goto(`${baseURL}/m#workspace=${encodeURIComponent(workspace)}&view=terminal`);
     await visible(page, '.mobile-terminal-tabs');
     state.agents.shell = 'claude';
@@ -516,6 +561,7 @@ try {
 
   await test('mobile agent titles follow individual panes before any terminal attachment', async t => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => context.close());
     const state = await fixture(context);
     state.terminalTabs[0].name_is_custom = false;
@@ -531,6 +577,7 @@ try {
     state.titles.server = '服务端任务';
     state.titles.logs = '新的日志任务';
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.goto(`${baseURL}/m#workspace=${encodeURIComponent(workspace)}&view=terminal`);
     await page.getByRole('tab', { name: '修复登录', exact: true }).waitFor();
     await page.getByRole('tab', { name: '调整布局', exact: true }).waitFor();
@@ -548,8 +595,10 @@ try {
 
   await test('mobile navigation, readers, back stack and desktop entry', async () => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     const state = await fixture(context);
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.goto(baseURL);
     await visible(page, '.mobile-project-card');
     await snapshot(page, 'mobile-projects');
@@ -567,7 +616,7 @@ try {
     assert.ok(terminalBox.height >= 660, 'terminal gets the space freed by removing the zoom and scroll toolbar');
     assert.equal(await page.locator('.mobile-terminal-tools').count(), 0);
     await snapshot(page, 'mobile-terminal-before-claim');
-    await page.getByRole('button', { name: 'Conversation', exact: true }).click();
+    await page.getByRole('button', { name: "对话", exact: true }).click();
     assert.equal(await page.locator('.mobile-header-actions button').count(), 0, 'terminal header actions disappear on other pages');
     await page.getByRole('button', { name: /实现手机端工作台/ }).click();
     await visible(page, '.mobile-message.assistant');
@@ -584,7 +633,7 @@ try {
     assert.equal(new URL(page.url()).pathname, '/aow/tabs/files');
     assert.equal(new URL(page.url()).searchParams.get('path'), workspace + '/src');
     await visible(page, '.mobile-list-row');
-    await page.getByRole('tab', { name: 'Notes' }).click();
+    await page.getByRole('tab', { name: "笔记" }).click();
     await page.getByRole('button', { name: /README.md/ }).click();
     assert.equal(new URL(page.url()).pathname, '/aow/tabs/file');
     assert.equal(new URL(page.url()).searchParams.get('source'), 'notes');
@@ -601,7 +650,7 @@ try {
     assert.match(await page.locator('.mobile-automation-markdown').innerText(), /巡检要求/);
     await page.getByRole('button', { name: /已完成/ }).click();
     await visible(page, '.mobile-automation-result article');
-    assert.match(await page.locator('.mobile-automation-details').innerText(), /Run ID\s*run-one/);
+    assert.match(await page.locator('.mobile-automation-details').innerText(), /执行 ID\s*run-one/);
     assert.match(await page.locator('.mobile-automation-result').innerText(), /本次巡检结果/);
     assert.doesNotMatch(await page.locator('.mobile-automation-result').innerText(), /巡检要求/);
     await noOverflow(page);
@@ -616,10 +665,12 @@ try {
 
   await test('mobile automation history remains available when task details are missing', async t => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => context.close());
     const state = await fixture(context);
     await context.route('**/api/aow/automations/task-one', route => route.fulfill({ status: 404, json: { message: '自动化任务已删除' } }));
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.goto(`${baseURL}/m#workspace=${encodeURIComponent(workspace)}&view=automations&task=task-one`);
     await visible(page, '.mobile-state.error');
     await visible(page, '.mobile-section-label');
@@ -631,8 +682,10 @@ try {
 
   await test('terminal control, bytes, responsive geometry, keyboard and pane switching', async () => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     const state = await fixture(context);
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.goto(`${baseURL}/m#workspace=${encodeURIComponent(workspace)}&view=terminal`);
     await visible(page, '.mobile-terminal-tabs');
     await page.getByRole('button', { name: '接管终端', exact: true }).click();
@@ -730,8 +783,10 @@ try {
   });
   await test('direct terminal soft keyboard sends spaces, punctuation and IME text exactly once', async () => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     const state = await fixture(context);
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.goto(`${baseURL}/m#workspace=${encodeURIComponent(workspace)}&view=terminal`);
     await visible(page, '.mobile-terminal-tabs');
     const textarea = page.locator('.mobile-terminal-panel:not([hidden]) .xterm-helper-textarea');
@@ -818,8 +873,10 @@ try {
 
   await test('keyboard button tracks native shell focus and buffered composer input', async () => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     const state = await fixture(context);
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.goto(`${baseURL}/m#workspace=${encodeURIComponent(workspace)}&view=terminal`);
     await page.getByRole('button', { name: '接管终端', exact: true }).click();
     await terminalReady(page);
@@ -913,8 +970,10 @@ try {
 
   await test('keyboard focus and dismissal preserve terminal content rows', async () => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     const state = await fixture(context);
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.goto(`${baseURL}/m#workspace=${encodeURIComponent(workspace)}&view=terminal`);
     await page.getByRole('button', { name: '接管终端', exact: true }).click();
     await terminalReady(page);
@@ -996,8 +1055,10 @@ try {
 
   await test('touch and wheel scroll terminal history and TUI contents', async () => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     const state = await fixture(context);
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.goto(`${baseURL}/m#workspace=${encodeURIComponent(workspace)}&view=terminal`);
     await page.getByRole('button', { name: '接管终端', exact: true }).click();
     await terminalReady(page);
@@ -1069,6 +1130,7 @@ try {
 
   await test('pinch changes terminal font size, refits the grid and remembers each pane', async t => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => context.close());
     await context.addInitScript(() => {
       if (!['http:', 'https:'].includes(location.protocol)) return;
@@ -1077,6 +1139,7 @@ try {
     });
     const state = await fixture(context);
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.goto(`${baseURL}/m#workspace=${encodeURIComponent(workspace)}&view=terminal`);
     await page.getByRole('button', { name: '接管终端', exact: true }).click();
     await terminalReady(page);
@@ -1136,12 +1199,14 @@ try {
 
   await test('mobile CLI lifecycle and connection messages match the terminal catalog', async t => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => context.close());
     const state = await fixture(context, undefined, 40, true);
     const cliPane = pane('cli-state', 'CLI state', { agent_terminal: { phase: 'starting', error: null } });
     state.terminalTabs.push({ id: 'cli-state-tab', name: 'CLI state', workspace_root: workspace, revision: 1,
       layout: leaf(cliPane.id), panes: [cliPane] });
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.goto(`${baseURL}/m#workspace=${encodeURIComponent(workspace)}&view=terminal`);
     await page.getByRole('button', { name: '终端列表', exact: true }).click();
     const row = page.locator('.terminal-panel-row').filter({ hasText: 'CLI state' });
@@ -1165,11 +1230,11 @@ try {
     await row.getByRole('img', { name: '未连接', exact: true }).waitFor();
     assert.equal(await welcome.locator('[role="status"]').textContent(), '初始化中 · 服务器返回了无效的终端控制状态');
     cliPane.agent_terminal.phase = 'failed';
-    await page.getByRole('button', { name: '刷新 CLI Terminals', exact: true }).click();
+    await page.getByRole('button', { name: '刷新 CLI 终端', exact: true }).click();
     await page.locator('[id="mobile-terminal-cli-state-tab:cli-state"] .mobile-dot.failed').waitFor();
     assert.match(await welcome.locator('[role="status"]').textContent(), /^启动失败 · 服务器返回了无效的终端控制状态/);
     cliPane.status = 'exited';
-    await page.getByRole('button', { name: '刷新 CLI Terminals', exact: true }).click();
+    await page.getByRole('button', { name: '刷新 CLI 终端', exact: true }).click();
     await page.locator('[id="mobile-terminal-cli-state-tab:cli-state"] .mobile-dot.exited').waitFor();
     assert.equal(await row.locator('.terminal-panel-status-label').textContent(), '已退出');
     assert.deepEqual(state.errors, []);
@@ -1177,8 +1242,10 @@ try {
 
   await test('terminal observer renders output without enabling input until explicit takeover', async () => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     const state = await fixture(context, undefined, 40, true);
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.goto(`${baseURL}/m#workspace=${encodeURIComponent(workspace)}&view=terminal`);
     await visible(page, '.mobile-terminal-tabs');
     await page.getByRole('button', { name: '接管终端', exact: true }).click();
@@ -1200,8 +1267,10 @@ try {
 
   await test('a superseded controller reconnects as an observer without retaking input', async () => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     const state = await fixture(context, undefined, 40, true);
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.goto(baseURL + '/m#workspace=' + encodeURIComponent(workspace) + '&view=terminal');
     await visible(page, '.mobile-terminal-tabs');
     await page.getByRole('button', { name: '接管终端', exact: true }).click();
@@ -1235,11 +1304,13 @@ try {
 
   await test('iOS keyboard uses visual height, removes safe-area gaps and preserves terminal geometry', async () => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await context.addInitScript(() => {
       Object.defineProperty(window, 'visualViewport', { value: Object.assign(new EventTarget(), { height: 844, width: 390, offsetTop: 0 }) });
     });
     const state = await fixture(context, undefined, 140, true);
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.goto(`${baseURL}/m#workspace=${encodeURIComponent(workspace)}&view=terminal`);
     await visible(page, '.mobile-terminal-tabs');
     await page.setViewportSize({ width: 390, height: 760 });
@@ -1326,11 +1397,13 @@ try {
 
   await test('keyboard animation moves a fixed terminal surface before each paint', async () => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3 });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await context.addInitScript(() => {
       Object.defineProperty(window, 'visualViewport', { value: Object.assign(new EventTarget(), { height: 844, width: 390, offsetTop: 0 }) });
     });
     const state = await fixture(context);
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.goto(`${baseURL}/m#workspace=${encodeURIComponent(workspace)}&view=terminal`);
     await page.evaluate(() => document.documentElement.style.setProperty('--mobile-safe-bottom', '34px'));
     await page.getByRole('button', { name: '接管终端', exact: true }).click();
@@ -1390,9 +1463,11 @@ try {
     const pins = { paths: ['/server-only'], revision: 1, failWrites: true };
     const desktopContext = await browser.newContext({ viewport: { width: 1440, height: 900 },
       storageState: { cookies: [], origins: [{ origin: new URL(baseURL).origin, localStorage: [{ name: 'aow-pinned-worktrees', value: JSON.stringify(legacy) }] }] } });
+    await desktopContext.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => desktopContext.close());
     const desktopState = await fixture(desktopContext, pins);
     const desktop = await desktopContext.newPage();
+    await desktop.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await desktop.goto(`${baseURL}/?ui=desktop`);
     await desktop.getByRole('alert').filter({ hasText: '置顶同步失败' }).waitFor();
     assert.deepEqual(await desktop.evaluate(() => JSON.parse(localStorage.getItem('aow-pinned-worktrees'))), legacy, 'failed migration keeps the original browser records');
@@ -1405,11 +1480,13 @@ try {
     assert.equal(await desktop.evaluate(() => localStorage.getItem('aow-pinned-worktrees-migrated')), '1');
 
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => context.close());
     const state = await fixture(context, pins);
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.goto(`${baseURL}/m`);
-    const pinned = page.getByRole('region', { name: 'Pinned', exact: true });
+    const pinned = page.getByRole('region', { name: "已置顶", exact: true });
     await visible(page, '.mobile-pinned .mobile-worktree-row');
     assert.deepEqual(await pinned.locator('.mobile-worktree-row strong').allTextContents(), ['feat/mobile-experience', 'main']);
     assert.equal(await page.evaluate(() => localStorage.getItem('aow-pinned-worktrees')), null, 'phone sees desktop pins with independent browser storage');
@@ -1442,7 +1519,7 @@ try {
     await desktop.evaluate(() => window.dispatchEvent(new Event('focus')));
     await desktop.waitForFunction(() => document.querySelectorAll('.project-aow-pinned > button').length === 2);
     await desktop.locator('.project-aow-pinned > button').filter({ hasText: 'feat/mobile-experience' }).click({ button: 'right' });
-    await desktop.getByRole('menuitem', { name: 'Unpin', exact: true }).click();
+    await desktop.getByRole('menuitem', { name: "取消置顶", exact: true }).click();
     await desktop.waitForFunction(() => document.querySelectorAll('.project-aow-pinned > button').length === 1);
     await page.getByRole('button', { name: '刷新', exact: true }).click();
     await page.waitForFunction(() => document.querySelectorAll('.mobile-pinned .mobile-worktree-row').length === 1);
@@ -1458,6 +1535,7 @@ try {
 
   await test('mobile conversation renders Mermaid in production after navigation and refresh', async () => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     const state = await fixture(context);
     const diagrams = [
       '```mermaid', 'flowchart LR', '  A[用户请求] --> B[处理任务]', '  B --> C[完成]', '```', '',
@@ -1470,9 +1548,10 @@ try {
     } }));
     try {
       const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
       await page.goto(`${baseURL}/m`);
       await page.getByRole('button', { name: /main.*主目录/ }).click();
-      await page.getByRole('button', { name: 'Conversation', exact: true }).click();
+      await page.getByRole('button', { name: "对话", exact: true }).click();
       await page.getByRole('button', { name: /实现手机端工作台/ }).click();
       const rendered = page.locator('.mobile-conversation .project-aow-snapshot-flowchart > svg');
       async function expectDiagrams() {
@@ -1502,15 +1581,17 @@ try {
 
   await test('desktop defers Monaco until a task editor is opened', async () => {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     const state = await fixture(context);
     try {
       const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
       await page.goto(`${baseURL}/aow/?ui=desktop`);
       await page.locator('.project-aow-worktrees > button').first().click();
       await visible(page, '.terminal-emulator-shell:not(.restore-pending)');
       const editorLoaded = () => page.evaluate(() => typeof window.MonacoEnvironment !== 'undefined');
       assert.equal(await editorLoaded(), false, 'a terminal-only workspace must not initialize Monaco');
-      await page.getByRole('button', { name: 'Automation', exact: true }).click();
+      await page.getByRole('button', { name: "自动化", exact: true }).click();
       await page.locator('.automation-panel-row').first().waitFor();
       assert.equal(await editorLoaded(), false, 'listing tasks must not load their editor');
       await page.getByRole('button', { name: '创建自动化', exact: true }).click();
@@ -1528,6 +1609,7 @@ try {
 
   await test('PR detail fills the workspace and preserves inline diff and tab interactions', async () => {
     const context = await browser.newContext({ viewport: { width: 2200, height: 1000 } });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     const state = await fixture(context);
     const pr = {
       number: 3099, status: 'open', draft: false, title: 'Full-width PR layout',
@@ -1540,7 +1622,7 @@ try {
       unresolved_threads: [{ id: 'thread-1', path: null, line: null, status: 'open', author: 'Reviewer', body: 'Review feedback. '.repeat(80), updated_at: null }],
       files: [{ path: 'frontend/src/main.tsx', change_type: 'modified' }, { path: 'frontend/src/api.ts', change_type: 'modified' }],
     };
-    await context.route('**/api/review-targets?**', route => route.fulfill({ json: [] }));
+    await context.route('**/api/git-platform-targets?**', route => route.fulfill({ json: [] }));
     await context.route('**/api/my-pull-requests**', async (route) => {
       assert.equal(route.request().method(), 'GET');
       const url = new URL(route.request().url());
@@ -1557,11 +1639,12 @@ try {
     } }));
     try {
       const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
       await page.goto(baseURL + '/?ui=desktop');
       const projectButton = page.getByRole('button', { name: /^(展开|收起) AoW$/ });
       if (await projectButton.getAttribute('aria-expanded') === 'false') await projectButton.click();
       await page.locator('.project-aow-worktrees > button').first().click();
-      await page.getByRole('button', { name: 'Pull Requests', exact: true }).click();
+      await page.getByRole('button', { name: "拉取请求", exact: true }).click();
       await page.locator('.my-pr-row').click();
       const detail = page.getByRole('article', { name: `PR #${pr.number} 详情`, exact: true });
       await detail.waitFor();
@@ -1603,7 +1686,7 @@ try {
       await noOverflow(page);
       await detail.getByRole('tab', { name: /文件变更/ }).click();
       assert.equal(await fileButtons.nth(1).getAttribute('aria-expanded'), 'true', 'switching tabs preserves expanded files');
-      await page.getByRole('button', { name: 'Source Control', exact: true }).click();
+      await page.getByRole('button', { name: "源代码管理", exact: true }).click();
       await page.locator('.change-row:visible').first().click();
       await visible(page, '.project-aow-document-host .monaco-diff-editor');
       assert.deepEqual(state.mutations, [], 'PR layout interactions remain read-only');
@@ -1615,12 +1698,14 @@ try {
 
   await test('desktop terminal links use a dismissible workspace confirmation', async () => {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     const state = await fixture(context);
     const nativeDialogs = [];
     const destination = 'https://example.com/terminal-link?from=aow';
     await context.route('https://example.com/**', (route) => route.fulfill({ contentType: 'text/html', body: '<h1>Link destination</h1>' }));
     try {
       const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
       page.on('dialog', async (dialog) => { nativeDialogs.push(dialog.message()); await dialog.dismiss(); });
       await page.goto(baseURL + '/?ui=desktop');
       const projectButton = page.getByRole('button', { name: /^(展开|收起) AoW$/ });
@@ -1762,6 +1847,7 @@ try {
 
   await test('desktop opens files by absolute, home and current-worktree-relative paths', async () => {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, permissions: ['clipboard-read', 'clipboard-write'] });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     const state = await fixture(context);
     let homeUnavailable = false;
     await context.route('**/api/fs/home', route => route.fulfill(homeUnavailable
@@ -1769,6 +1855,7 @@ try {
       : { json: { path: '/home/test-user', entries: [] } }));
     try {
       const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
       const showDialog = async () => {
         await page.getByRole('button', { name: '新建窗体', exact: true }).click();
         await page.getByRole('button', { name: '打开文件', exact: true }).click();
@@ -1800,7 +1887,7 @@ try {
 
       await page.locator('.project-aow-worktrees > button').nth(1).click();
       const feature = project.worktrees[1].path;
-      await page.getByRole('button', { name: 'Explorer', exact: true }).click();
+      await page.getByRole('button', { name: "资源管理器", exact: true }).click();
       await page.locator(`.tree-row[data-tree-path="${feature}/src"]`).click();
       await page.locator(`.tree-row[data-tree-path="${feature}/src/README.md"]`).click({ button: 'right' });
       await page.getByRole('menuitem', { name: '复制 • 相对路径', exact: true }).click();
@@ -1830,9 +1917,11 @@ try {
 
   await test('desktop keeps split layout and resizes its terminal normally', async t => {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => context.close());
     const state = await fixture(context);
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.goto(baseURL + '/?ui=desktop');
     await visible(page, '.project-aow');
     const projectButton = page.getByRole('button', { name: /^(展开|收起) AoW$/ });

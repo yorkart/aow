@@ -25,12 +25,13 @@ const deferred = () => { let resolve; const promise = new Promise((done) => { re
 
 async function fixture(browser, options = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, permissions: ['clipboard-read', 'clipboard-write'] });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
   const state = { reads: [], writes: [], errors: [], uploadGate: null, slowGate: null, failHome: options.failHome ?? false, deniedPaths: new Set(),
     pins: options.pins ?? { paths: [], revision: 0 }, pinMutations: [], failPinReads: false, failPinWrites: false, pinGate: null, delayedPin: '' };
   const directories = new Map([
     ['/', [file('/', 'home', 'directory'), file('/', 'tmp', 'directory'), ...Array.from({ length: 45 }, (_, index) => file('/', `folder-${index}`, 'directory'))]],
     ['/home', [file('/home', 'test', 'directory')]],
-    [home, [file(home, 'Documents', 'directory'), file(home, '.config', 'directory'), file(home, specialName), ...Array.from({ length: 70 }, (_, index) => file(home, `file-${String(index).padStart(2, '0')}.txt`))]],
+    [home, [file(home, 'Documents', 'directory'), file(home, '.config', 'directory'), file(home, specialName), file(home, 'image.png'), ...Array.from({ length: 70 }, (_, index) => file(home, `file-${String(index).padStart(2, '0')}.txt`))]],
     [`${home}/Documents`, [file(`${home}/Documents`, 'nested', 'directory')]],
     [`${home}/Documents/nested`, [file(`${home}/Documents/nested`, longDirectoryName, 'directory')]],
     [`${home}/.config`, []],
@@ -97,25 +98,34 @@ async function fixture(browser, options = {}) {
     await route.fulfill(data ? { json: data } : { status: 404, json: { message: `Unexpected API: ${url.pathname}` } });
   });
   const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
   page.on('pageerror', (error) => state.errors.push(error.message));
   await page.goto(`${baseURL}/?ui=desktop`);
   await page.getByRole('button', { name: '浮动工作区', exact: true }).waitFor();
-  return { context, page, state };
+  return { context, page, state, directories };
 }
 
 async function openBrowser(page) {
-  const trigger = page.getByRole('button', { name: '浮动工作区', exact: true });
-  await trigger.waitFor();
-  if (await trigger.getAttribute('aria-expanded') !== 'true') await trigger.click();
-  await page.getByRole('dialog', { name: '浮动工作区' }).waitFor();
-  if (!await page.locator('.system-file-browser').isVisible()) {
-    await page.getByRole('button', { name: '打开系统文件浏览器', exact: true }).click();
-    await page.locator('.system-file-browser').waitFor();
-  }
+  await page.getByRole('button', { name: '打开系统文件浏览器', exact: true }).click();
+  await page.locator('.system-file-browser').waitFor();
 }
 
 async function atPath(page, path) {
   await page.waitForFunction((value) => document.querySelector('.system-file-address input')?.value === value && document.querySelector('.system-file-list')?.getAttribute('aria-busy') === 'false', path);
+}
+
+const treeDirectory = (page, path) => page.locator('.system-file-tree').getByTitle(path, { exact: true });
+const listEntry = (page, name) => page.locator('.system-file-list').getByRole('button', { name, exact: true });
+async function openMenu(page, target) {
+  await target.click({ button: 'right' });
+  const menu = page.getByRole('menu');
+  await menu.waitFor();
+  return menu;
+}
+async function menuAction(page, target, name) {
+  const menu = await openMenu(page, target);
+  await menu.getByRole('menuitem', { name, exact: true }).click();
+  await menu.waitFor({ state: 'hidden' });
 }
 
 let browser;
@@ -125,23 +135,24 @@ try {
   await test('home, shortcuts, tree navigation, clipboard, downloads and hidden state', async () => {
     const { context, page, state } = await fixture(browser);
     try {
-      assert.equal(await page.getByRole('button', { name: 'Settings', exact: true }).textContent(), '');
+      assert.equal(await page.getByRole('button', { name: "设置", exact: true }).textContent(), '');
       assert.equal(state.reads.length, 0, 'filesystem should load on first use');
       await openBrowser(page);
       await atPath(page, home);
-      assert.equal(await page.getByRole('button', { name: 'Home', exact: true }).getAttribute('aria-pressed'), 'true');
+      assert.equal(await page.getByRole('button', { name: "主目录", exact: true }).getAttribute('aria-pressed'), 'true');
+      await page.getByRole('button', { name: `展开 ${home}`, exact: true }).click();
       await page.getByRole('button', { name: `展开 ${home}/Documents`, exact: true }).click();
       await page.locator('.system-file-tree').getByRole('button', { name: 'nested', exact: true }).waitFor();
       await page.getByRole('button', { name: `展开 ${home}/Documents/nested`, exact: true }).click();
       const longName = page.locator('.system-file-tree').getByRole('button', { name: longDirectoryName, exact: true }).locator('span');
       await longName.waitFor();
       assert.equal(await longName.evaluate((node) => node.clientWidth >= node.scrollWidth), true, 'long directory names should retain their full width');
-      await page.getByRole('button', { name: `复制路径 ${specialName}`, exact: true }).click();
+      await menuAction(page, listEntry(page, specialName), '复制完整路径');
       assert.equal(await page.evaluate(() => navigator.clipboard.readText()), `${home}/${specialName}`);
-      await page.getByRole('button', { name: '复制路径 Documents', exact: true }).click();
+      await menuAction(page, listEntry(page, 'Documents'), '复制完整路径');
       assert.equal(await page.evaluate(() => navigator.clipboard.readText()), `${home}/Documents`);
       const downloadEvent = page.waitForEvent('download');
-      await page.getByRole('link', { name: `下载 ${specialName}`, exact: true }).click();
+      await menuAction(page, listEntry(page, specialName), '下载');
       const download = await downloadEvent;
       // Chromium replaces characters that cannot be used in filenames on every platform.
       assert.equal(download.suggestedFilename(), specialName.replace('?', '_'));
@@ -163,9 +174,9 @@ try {
         return tree.scrollWidth > tree.clientWidth && body.scrollWidth === body.clientWidth && document.documentElement.scrollWidth === window.innerWidth;
       }), true, 'horizontal overflow must stay inside the directory tree');
       const reads = state.reads.length;
-      await page.getByRole('button', { name: '最小化浮动工作区' }).click();
-      await page.getByRole('dialog').waitFor({ state: 'hidden' });
-      assert.equal(await page.locator('.system-file-browser').count(), 1, 'hidden dialog remains mounted');
+      await page.getByRole('button', { name: '关闭 系统文件浏览器', exact: true }).click();
+      await page.getByRole('tab', { name: '系统文件浏览器', exact: true }).waitFor({ state: 'hidden' });
+      assert.equal(await page.locator('.system-file-browser').count(), 1, 'closed browser remains mounted');
       await openBrowser(page);
       await atPath(page, home);
       assert.equal(state.reads.length, reads, 'reopening must not reload directories');
@@ -183,25 +194,25 @@ try {
       await page.getByRole('button', { name: '/', exact: true }).first().click();
       await atPath(page, '/');
       assert.equal(await page.locator('.system-file-tree').evaluate((node) => node.scrollLeft), 0, 'navigating to the root should reveal its name again');
-      assert.equal(await page.getByRole('button', { name: '上级目录', exact: true }).isDisabled(), true);
+      assert.equal(await page.getByRole('button', { name: '上级目录', exact: true }).count(), 0);
+      assert.equal(await page.getByRole('button', { name: '后退', exact: true }).isEnabled(), true);
       assert.ok(state.reads.includes('/api/fs/tree'));
       assert.ok(!state.reads.includes('/api/fs/tree/'));
-      await page.getByRole('button', { name: 'Home', exact: true }).click();
+      await page.getByRole('button', { name: "主目录", exact: true }).click();
       await atPath(page, home);
       await page.locator('.system-file-tree').getByRole('button', { name: 'Documents', exact: true }).click();
       await atPath(page, `${home}/Documents`);
-      await page.getByRole('button', { name: '复制当前目录路径' }).click();
+      await menuAction(page, page.locator('.system-file-tree [aria-current="location"]'), '复制完整路径');
       assert.equal(await page.evaluate(() => navigator.clipboard.readText()), `${home}/Documents`);
       await page.keyboard.press('Escape');
-      await page.getByRole('dialog').waitFor({ state: 'hidden' });
-      assert.equal(await page.getByRole('button', { name: '浮动工作区', exact: true }).evaluate((node) => node === document.activeElement), true);
+      await page.getByRole('tab', { name: '系统文件浏览器', exact: true }).waitFor({ state: 'hidden' });
       await openBrowser(page);
       await atPath(page, `${home}/Documents`);
       assert.deepEqual(state.errors, []);
     } finally { await context.close(); }
   });
 
-  await test('deep tree actions stay at the viewport edge and work without horizontal scrolling', async () => {
+  await test('deep directory context menus work at every horizontal scroll position and retain scroll state', async () => {
     const { context, page, state } = await fixture(browser, { deepTree: true, pins: { paths: [deepDirectoryPath], revision: 1 } });
     try {
       await openBrowser(page);
@@ -209,65 +220,200 @@ try {
       await page.getByRole('button', { name: `打开收藏 ${deepDirectoryPath}`, exact: true }).click();
       await atPath(page, deepDirectoryPath);
       const tree = page.locator('.system-file-tree');
-      const name = tree.getByRole('button', { name: longDirectoryName, exact: true });
-      await name.waitFor();
-      const row = name.locator('..');
-      const actions = row.locator('.system-file-tree-actions');
+      const row = treeDirectory(page, deepDirectoryPath).locator('..');
+      await row.waitFor();
       const maxScroll = await tree.evaluate((node) => node.scrollWidth - node.clientWidth);
       assert.ok(maxScroll > 400, 'the fixture must overflow substantially');
       const bounds = await tree.boundingBox();
-      let actionRight;
       for (const target of [0, Math.floor(maxScroll / 2), maxScroll]) {
         const scrollLeft = await tree.evaluate((node, value) => { node.scrollLeft = value; return node.scrollLeft; }, target);
-        const actionBounds = await actions.boundingBox();
-        assert.ok(actionBounds.x >= bounds.x && actionBounds.x + actionBounds.width <= bounds.x + bounds.width);
-        const right = actionBounds.x + actionBounds.width;
-        if (actionRight !== undefined) assert.ok(Math.abs(right - actionRight) <= 1, 'actions must remain at the same viewport position');
-        actionRight = right;
-        assert.equal(await actions.evaluate((node) => getComputedStyle(node).backgroundColor === getComputedStyle(node.parentElement).backgroundColor), true);
-        const copy = row.getByRole('button', { name: `复制路径 ${deepDirectoryPath}`, exact: true });
-        const copyBounds = await copy.boundingBox();
-        // Use pointer coordinates so Playwright cannot scroll the button into view for us.
-        await page.mouse.click(copyBounds.x + copyBounds.width / 2, copyBounds.y + copyBounds.height / 2);
+        // Flush the scroll event before opening a menu that dismisses on scrolling.
+        await page.evaluate(() => new Promise(requestAnimationFrame));
+        const rowBounds = await row.boundingBox();
+        await page.mouse.click(bounds.x + 50, rowBounds.y + rowBounds.height / 2, { button: 'right' });
+        const menu = page.getByRole('menu');
+        await menu.waitFor();
+        assert.deepEqual(await menu.getByRole('menuitem').allTextContents(), [state.pins.paths.includes(deepDirectoryPath) ? '取消 Pin' : 'Pin', '复制完整路径']);
+        await menu.getByRole('menuitem', { name: '复制完整路径', exact: true }).click();
         assert.equal(await page.evaluate(() => navigator.clipboard.readText()), deepDirectoryPath);
         assert.equal(await tree.evaluate((node) => node.scrollLeft), scrollLeft);
-        const pin = row.locator('.system-file-tree-pin');
-        const wasPinned = await pin.getAttribute('aria-pressed') === 'true';
-        const pinBounds = await pin.boundingBox();
-        await page.mouse.click(pinBounds.x + pinBounds.width / 2, pinBounds.y + pinBounds.height / 2);
-        await page.waitForFunction(({ path, expected }) => {
-          const pin = [...document.querySelectorAll('.system-file-tree-name')].find((node) => node.title === path)?.parentElement.querySelector('.system-file-tree-pin');
-          return pin?.getAttribute('aria-pressed') === String(expected) && !pin.disabled;
-        }, { path: deepDirectoryPath, expected: !wasPinned });
+        await page.mouse.click(bounds.x + 50, rowBounds.y + rowBounds.height / 2, { button: 'right' });
+        const wasPinned = state.pins.paths.includes(deepDirectoryPath);
+        const saved = page.waitForResponse((response) => response.request().method() === 'PATCH' && response.url().endsWith('/pinned-directories'));
+        await menu.getByRole('menuitem', { name: wasPinned ? '取消 Pin' : 'Pin', exact: true }).click();
+        await saved;
+        assert.equal(state.pins.paths.includes(deepDirectoryPath), !wasPinned);
         assert.equal(await tree.evaluate((node) => node.scrollLeft), scrollLeft);
       }
       const selectedScroll = await tree.evaluate((node) => [node.scrollLeft, node.scrollTop]);
-      await page.getByRole('button', { name: '最小化浮动工作区' }).click();
+      await page.getByRole('button', { name: '关闭 系统文件浏览器', exact: true }).click();
       await openBrowser(page);
       assert.deepEqual(await tree.evaluate((node) => [node.scrollLeft, node.scrollTop]), selectedScroll);
-
-      await page.getByRole('navigation', { name: '快捷导航', exact: true }).getByRole('button', { name: 'Home', exact: true }).click();
-      await atPath(page, home);
-      await row.evaluate((node) => {
-        const tree = node.closest('.system-file-tree');
-        const top = node.getBoundingClientRect().top - tree.getBoundingClientRect().top;
-        tree.scrollTop += top - 70;
-        tree.scrollLeft = 0;
-      });
-      const hoverBounds = await actions.boundingBox();
-      await page.mouse.move(hoverBounds.x + 5, hoverBounds.y + 10);
-      assert.equal(await row.locator('.system-file-tree-copy').evaluate((node) => getComputedStyle(node).opacity), '1', 'hover reveals actions even when indentation is outside the viewport');
-      await page.mouse.move(10, 10);
-      const beforeFocus = await tree.evaluate((node) => node.scrollLeft);
-      await row.locator('.system-file-tree-copy').focus();
-      assert.equal(await row.locator('.system-file-tree-copy').evaluate((node) => getComputedStyle(node).opacity), '1');
+      const name = treeDirectory(page, deepDirectoryPath);
+      await name.evaluate((node) => node.focus({ preventScroll: true }));
+      await page.keyboard.press('Shift+F10');
+      await page.getByRole('menu').waitFor();
+      await page.keyboard.press('End');
       await page.keyboard.press('Enter');
       assert.equal(await page.evaluate(() => navigator.clipboard.readText()), deepDirectoryPath);
-      assert.equal(await tree.evaluate((node) => node.scrollLeft), beforeFocus, 'keyboard actions must not move the horizontal viewport');
+      assert.deepEqual(await tree.evaluate((node) => [node.scrollLeft, node.scrollTop]), selectedScroll);
+      assert.deepEqual(state.errors, []);
+    } finally { await context.close(); }
+  });
+
+  await test('single toolbar, Go refresh, context menu contents, selection and dismissal', async () => {
+    const { context, page, state, directories } = await fixture(browser);
+    try {
+      await openBrowser(page);
+      await atPath(page, home);
+      const toolbar = page.locator('.system-file-toolbar');
+      assert.deepEqual(await toolbar.locator('button, input:not([type=file])').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('aria-label') || node.textContent)), ['后退', '前进', '目录路径', '前往', '上传文件']);
+      const tops = await toolbar.locator('button, input:not([type=file])').evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().top));
+      assert.ok(tops.every((top) => top === tops[0]));
+      assert.equal(await toolbar.getByRole('button', { name: '上传文件', exact: true }).textContent(), '');
+      assert.equal(await page.locator('.system-file-tree-actions, .system-file-entry-actions').count(), 0);
+      assert.equal(await page.locator('.system-file-list th').count(), 3);
+      directories.get(home).push(file(home, 'new-from-server.txt'));
+      await page.getByRole('button', { name: '前往', exact: true }).click();
+      await listEntry(page, 'new-from-server.txt').waitFor();
+      assert.ok(state.reads.includes(`/api/fs/tree${home}`));
+
+      let menu = await openMenu(page, listEntry(page, 'Documents'));
+      assert.deepEqual(await menu.getByRole('menuitem').allTextContents(), ['Pin', '复制完整路径']);
+      assert.equal(await listEntry(page, 'Documents').locator('xpath=ancestor::tr').getAttribute('aria-selected'), 'true');
+      await atPath(page, home);
+      await page.keyboard.press('Escape');
+      await menu.waitFor({ state: 'hidden' });
+      assert.equal(await page.locator('.system-file-browser').isVisible(), true);
+      menu = await openMenu(page, listEntry(page, specialName));
+      assert.deepEqual(await menu.getByRole('menuitem').allTextContents(), ['打开', '复制完整路径', '下载']);
+      // A queued scroll event from revealing the row must not dismiss its new menu.
+      await page.locator('.system-file-list').dispatchEvent('scroll');
+      assert.equal(await menu.isVisible(), true);
+      await page.keyboard.press('ArrowDown');
+      assert.equal(await page.evaluate(() => document.activeElement.textContent), '复制完整路径');
+      await toolbar.getByRole('textbox').click();
+      await menu.waitFor({ state: 'hidden' });
+      menu = await openMenu(page, listEntry(page, 'image.png'));
+      assert.deepEqual(await menu.getByRole('menuitem').allTextContents(), ['复制完整路径', '下载']);
+      await page.locator('.system-file-list').evaluate((node) => { node.scrollTop = 40; });
+      await menu.waitFor({ state: 'hidden' });
+      const last = listEntry(page, 'new-from-server.txt');
+      await last.scrollIntoViewIfNeeded();
+      const row = last.locator('xpath=ancestor::tr');
+      const rowBounds = await row.boundingBox();
+      await page.mouse.click(rowBounds.x + rowBounds.width - 5, rowBounds.y + rowBounds.height - 5, { button: 'right' });
+      await menu.waitFor();
+      const menuBounds = await menu.boundingBox();
+      const viewport = page.viewportSize();
+      assert.ok(menuBounds.x >= 0 && menuBounds.x + menuBounds.width <= viewport.width);
+      assert.ok(menuBounds.y >= 0 && menuBounds.y + menuBounds.height <= viewport.height);
       if (process.env.FILE_TEST_SCREENSHOTS) {
         await mkdir(process.env.FILE_TEST_SCREENSHOTS, { recursive: true });
-        await page.screenshot({ path: `${process.env.FILE_TEST_SCREENSHOTS}/system-file-tree-actions.png` });
+        await page.screenshot({ path: `${process.env.FILE_TEST_SCREENSHOTS}/system-file-context-menu.png` });
       }
+      await page.setViewportSize({ width: 1100, height: 800 });
+      await menu.waitFor({ state: 'hidden' });
+      await openMenu(page, last);
+      await page.getByRole('button', { name: '关闭 系统文件浏览器', exact: true }).click();
+      await menu.waitFor({ state: 'hidden' });
+      await openBrowser(page);
+      assert.equal(await page.getByRole('menu').count(), 0);
+      assert.deepEqual(state.errors, []);
+    } finally { await context.close(); }
+  });
+
+  await test('tree selection preserves expansion and list directories require double click', async () => {
+    const { context, page, state } = await fixture(browser);
+    try {
+      await openBrowser(page);
+      await atPath(page, home);
+      await page.getByRole('button', { name: `展开 ${home}`, exact: true }).click();
+      const documents = `${home}/Documents`;
+      const tree = page.locator('.system-file-tree');
+      await treeDirectory(page, documents).click();
+      await atPath(page, documents);
+      assert.equal(await page.getByRole('button', { name: `展开 ${documents}`, exact: true }).getAttribute('aria-expanded'), 'false');
+      assert.equal(await tree.getByRole('button', { name: 'nested', exact: true }).count(), 0);
+      await treeDirectory(page, documents).dblclick();
+      await tree.getByRole('button', { name: 'nested', exact: true }).waitFor();
+      await page.getByRole('button', { name: `折叠 ${documents}`, exact: true }).click();
+      await atPath(page, documents);
+      assert.equal(await tree.getByRole('button', { name: 'nested', exact: true }).count(), 0);
+      await treeDirectory(page, documents).click();
+      await atPath(page, documents);
+      assert.equal(await page.getByRole('button', { name: `展开 ${documents}`, exact: true }).getAttribute('aria-expanded'), 'false');
+      await page.getByRole('button', { name: '主目录', exact: true }).click();
+      await atPath(page, home);
+      await listEntry(page, 'Documents').click();
+      await atPath(page, home);
+      assert.equal(await listEntry(page, 'Documents').locator('xpath=ancestor::tr').getAttribute('aria-selected'), 'true');
+      await listEntry(page, 'Documents').dblclick();
+      await atPath(page, documents);
+      assert.equal(await page.getByRole('button', { name: `展开 ${documents}`, exact: true }).getAttribute('aria-expanded'), 'false');
+      await listEntry(page, 'nested').focus();
+      await page.keyboard.press('Enter');
+      await atPath(page, `${documents}/nested`);
+      assert.equal(await page.getByRole('button', { name: `折叠 ${documents}`, exact: true }).getAttribute('aria-expanded'), 'true', 'only ancestors expand to reveal the new location');
+      assert.equal(await page.getByRole('button', { name: `展开 ${documents}/nested`, exact: true }).getAttribute('aria-expanded'), 'false');
+      assert.deepEqual(state.errors, []);
+    } finally { await context.close(); }
+  });
+
+  await test('back and forward follow successful visits, preserve refresh history and discard abandoned branches', async () => {
+    const { context, page, state } = await fixture(browser);
+    try {
+      await openBrowser(page);
+      await atPath(page, home);
+      const back = page.getByRole('button', { name: '后退', exact: true });
+      const forward = page.getByRole('button', { name: '前进', exact: true });
+      const go = page.getByRole('button', { name: '前往', exact: true });
+      const address = page.getByRole('textbox', { name: '目录路径', exact: true });
+      assert.equal(await back.isDisabled(), true);
+      assert.equal(await forward.isDisabled(), true);
+      await go.click();
+      await atPath(page, home);
+      assert.equal(await back.isDisabled(), true, 'refresh must not add a visit');
+      await listEntry(page, 'Documents').dblclick();
+      await atPath(page, `${home}/Documents`);
+      await page.getByRole('button', { name: '/tmp', exact: true }).click();
+      await atPath(page, '/tmp');
+      state.deniedPaths.add(`${home}/Documents`);
+      await back.click();
+      await page.getByRole('alert').getByText(`无法打开 ${home}/Documents：Permission denied`, { exact: true }).waitFor();
+      await atPath(page, '/tmp');
+      assert.equal(await forward.isDisabled(), true, 'failed history navigation must leave the cursor unchanged');
+      state.deniedPaths.clear();
+      await back.click();
+      await atPath(page, `${home}/Documents`);
+      await go.click();
+      await atPath(page, `${home}/Documents`);
+      assert.equal(await forward.isEnabled(), true, 'refresh must preserve forward history');
+      await forward.click();
+      await atPath(page, '/tmp');
+      await back.click();
+      await atPath(page, `${home}/Documents`);
+      await address.fill('/denied');
+      await go.click();
+      await page.getByRole('alert').getByText('无法打开 /denied：Permission denied', { exact: true }).waitFor();
+      assert.equal(await forward.isEnabled(), true, 'failed new visits must preserve forward history');
+      await back.click();
+      await atPath(page, home);
+      assert.equal(await back.isDisabled(), true);
+      await forward.click();
+      await atPath(page, `${home}/Documents`);
+      await address.fill(`${home}/.config`);
+      await go.click();
+      await atPath(page, `${home}/.config`);
+      assert.equal(await forward.isDisabled(), true, 'a new visit discards the forward branch');
+      await page.getByRole('button', { name: '关闭 系统文件浏览器', exact: true }).click();
+      await openBrowser(page);
+      await atPath(page, `${home}/.config`);
+      await back.click();
+      await atPath(page, `${home}/Documents`);
+      await back.click();
+      await atPath(page, home);
+      assert.equal(await back.isDisabled(), true, 'repeated visits to the current directory must not duplicate history');
       assert.deepEqual(state.errors, []);
     } finally { await context.close(); }
   });
@@ -287,7 +433,7 @@ try {
       await page.getByLabel('上传进度 upload #一.txt', { exact: true }).waitFor();
       await page.getByRole('button', { name: '/tmp', exact: true }).click();
       await atPath(page, '/tmp');
-      await page.getByRole('button', { name: '最小化浮动工作区' }).click();
+      await page.getByRole('button', { name: '关闭 系统文件浏览器', exact: true }).click();
       state.uploadGate.resolve();
       await page.waitForFunction(() => document.querySelectorAll('.system-file-uploads .system-file-success').length === 2);
       assert.deepEqual(state.writes.map((item) => item.path), [`${home}/upload #一.txt`, `${home}/upload-two.txt`]);
@@ -314,7 +460,7 @@ try {
       await page.locator('.system-file-uploads').getByText('Permission denied', { exact: true }).waitFor();
       await page.locator('.system-file-list').getByRole('button', { name: 'after-failure.txt', exact: true }).waitFor();
       assert.equal(await page.getByText('已上传', { exact: true }).count(), 4);
-      await page.getByRole('button', { name: 'Home', exact: true }).click();
+      await page.getByRole('button', { name: "主目录", exact: true }).click();
       await atPath(page, home);
       await page.locator('.system-file-list').getByRole('button', { name: 'upload #一.txt', exact: true }).waitFor();
       assert.deepEqual(state.errors, []);
@@ -329,7 +475,7 @@ try {
       await page.getByRole('textbox', { name: '目录路径' }).fill('/denied');
       await page.getByRole('button', { name: '前往', exact: true }).click();
       await page.getByRole('alert').getByText('无法打开 /denied：Permission denied', { exact: true }).waitFor();
-      assert.equal(await page.getByRole('button', { name: 'Home', exact: true }).getAttribute('aria-pressed'), 'true');
+      assert.equal(await page.getByRole('button', { name: "主目录", exact: true }).getAttribute('aria-pressed'), 'true');
       state.slowGate = deferred();
       await page.getByRole('textbox', { name: '目录路径' }).fill('/slow');
       const slowRequest = page.waitForRequest('**/api/fs/tree/slow');
@@ -349,13 +495,14 @@ try {
           return !!window.fallbackCopy;
         };
       });
-      await page.getByRole('button', { name: '复制当前目录路径' }).click();
+      await menuAction(page, page.locator('.system-file-tree [aria-current="location"]'), '复制完整路径');
       assert.equal(await page.evaluate(() => window.fallbackCopy), '/tmp');
       await page.getByRole('textbox', { name: '目录路径' }).fill('~/.config');
       await page.getByRole('button', { name: '前往', exact: true }).click();
       await atPath(page, `${home}/.config`);
+      await page.getByRole('button', { name: `展开 ${home}/.config`, exact: true }).click();
       state.deniedPaths.add(`${home}/.config`);
-      await page.getByRole('button', { name: '刷新当前目录', exact: true }).click();
+      await page.getByRole('button', { name: '前往', exact: true }).click();
       await page.locator('.system-file-tree-error').getByRole('button', { name: '重试', exact: true }).waitFor();
       state.deniedPaths.clear();
       const retryResponse = page.waitForResponse(`**/api/fs/tree${home}/.config`);
@@ -382,14 +529,15 @@ try {
       assert.ok(columns[0].right <= columns[1].left && columns[1].right <= columns[2].left);
       assert.ok(columns.every((column) => column.top === columns[0].top && column.width > 100));
       assert.equal(await shortcuts.getByRole('navigation', { name: '快捷导航' }).getByRole('button').count(), 3);
-      await page.getByRole('button', { name: 'Pin 当前目录', exact: true }).click();
+      await menuAction(page, treeDirectory(page, home), 'Pin');
       await bookmarks.getByRole('button', { name: `打开收藏 ${home}`, exact: true }).waitFor();
-      await page.locator('.system-file-list').getByRole('button', { name: 'Pin Documents', exact: true }).click();
+      await menuAction(page, listEntry(page, 'Documents'), 'Pin');
       await bookmarks.getByRole('button', { name: `打开收藏 ${home}/Documents`, exact: true }).waitFor();
-      await tree.getByRole('button', { name: `Pin ${home}/.config`, exact: true }).click();
+      await page.getByRole('button', { name: `展开 ${home}`, exact: true }).click();
+      await menuAction(page, treeDirectory(page, `${home}/.config`), 'Pin');
       await bookmarks.getByRole('button', { name: `打开收藏 ${home}/.config`, exact: true }).waitFor();
       assert.deepEqual(state.pins.paths, [home, `${home}/Documents`, `${home}/.config`]);
-      assert.equal(await page.locator('.system-file-list').getByRole('button', { name: `Pin ${specialName}`, exact: true }).count(), 0);
+      assert.equal(await page.locator('.system-file-list').getByRole('button', { name: `固定 ${specialName}`, exact: true }).count(), 0);
 
       await tree.getByRole('button', { name: '折叠 /', exact: true }).click();
       await bookmarks.getByRole('button', { name: `打开收藏 ${home}/Documents`, exact: true }).click();
@@ -408,7 +556,7 @@ try {
         const rowBounds = row.getBoundingClientRect();
         return rowBounds.top >= bounds.top && rowBounds.bottom <= bounds.bottom;
       });
-      await page.getByRole('button', { name: '最小化浮动工作区' }).click();
+      await page.getByRole('button', { name: '关闭 系统文件浏览器', exact: true }).click();
       await openBrowser(page);
       await atPath(page, `${home}/Documents`);
       assert.equal(await bookmarks.locator('li').count(), 3);
@@ -420,15 +568,16 @@ try {
       await page.reload();
       await openBrowser(page);
       await atPath(page, `${home}/Documents`);
-      await page.getByRole('button', { name: 'Home', exact: true }).click();
+      await page.getByRole('button', { name: "主目录", exact: true }).click();
       await atPath(page, home);
       await bookmarks.getByRole('button', { name: `打开收藏 ${home}/Documents`, exact: true }).waitFor();
-      assert.equal(await page.getByRole('button', { name: '取消 Pin 当前目录', exact: true }).getAttribute('aria-pressed'), 'true');
-      await bookmarks.getByRole('button', { name: `取消 Pin ${home}/Documents`, exact: true }).click();
+      assert.deepEqual(await (await openMenu(page, treeDirectory(page, home))).getByRole('menuitem').allTextContents(), ['取消 Pin', '复制完整路径']);
+      await page.keyboard.press('Escape');
+      await bookmarks.getByRole('button', { name: `取消固定 ${home}/Documents`, exact: true }).click();
       await bookmarks.getByRole('button', { name: `打开收藏 ${home}/Documents`, exact: true }).waitFor({ state: 'hidden' });
-      await tree.getByRole('button', { name: `取消 Pin ${home}/.config`, exact: true }).click();
+      await menuAction(page, treeDirectory(page, `${home}/.config`), '取消 Pin');
       await bookmarks.getByRole('button', { name: `打开收藏 ${home}/.config`, exact: true }).waitFor({ state: 'hidden' });
-      await page.getByRole('button', { name: '取消 Pin 当前目录', exact: true }).click();
+      await menuAction(page, treeDirectory(page, home), '取消 Pin');
       await bookmarks.getByText('Pin 常用目录，在这里快速访问。', { exact: true }).waitFor();
       await page.reload();
       await openBrowser(page);
@@ -452,16 +601,16 @@ try {
       await bookmarks.getByRole('button', { name: '打开收藏 /missing', exact: true }).waitFor();
       await bookmarks.getByRole('button', { name: '打开收藏 /missing', exact: true }).click();
       await page.getByText('无法打开 /missing：Permission denied', { exact: true }).waitFor();
-      assert.equal(await page.getByRole('button', { name: 'Home', exact: true }).getAttribute('aria-pressed'), 'true');
+      assert.equal(await page.getByRole('button', { name: "主目录", exact: true }).getAttribute('aria-pressed'), 'true');
       state.failPinWrites = true;
-      await page.getByRole('button', { name: 'Pin 当前目录', exact: true }).click();
+      await menuAction(page, treeDirectory(page, home), 'Pin');
       await bookmarks.getByText('收藏保存失败：Config write failed', { exact: true }).waitFor();
       assert.equal(await bookmarks.getByRole('button', { name: `打开收藏 ${home}`, exact: true }).count(), 0);
-      await bookmarks.getByRole('button', { name: '取消 Pin /missing', exact: true }).click();
+      await bookmarks.getByRole('button', { name: '取消固定 /missing', exact: true }).click();
       await bookmarks.getByText('收藏保存失败：Config write failed', { exact: true }).waitFor();
       assert.equal(await bookmarks.getByRole('button', { name: '打开收藏 /missing', exact: true }).count(), 1);
       state.failPinWrites = false;
-      await bookmarks.getByRole('button', { name: '取消 Pin /missing', exact: true }).click();
+      await bookmarks.getByRole('button', { name: '取消固定 /missing', exact: true }).click();
       await bookmarks.getByText('Pin 常用目录，在这里快速访问。', { exact: true }).waitFor();
       assert.deepEqual(state.pins.paths, []);
       assert.deepEqual(state.errors, []);
@@ -476,13 +625,14 @@ try {
       state.delayedPin = home;
       state.pinGate = deferred();
       const firstSave = page.waitForRequest((request) => request.method() === 'PATCH' && request.url().endsWith('/api/aow/pinned-directories') && request.postDataJSON().add?.includes(home));
-      await page.getByRole('button', { name: 'Pin 当前目录', exact: true }).click();
+      await menuAction(page, treeDirectory(page, home), 'Pin');
       await firstSave;
-      await page.locator('.system-file-list').getByRole('button', { name: 'Pin Documents', exact: true }).click();
+      await menuAction(page, listEntry(page, 'Documents'), 'Pin');
       const bookmarks = page.getByRole('region', { name: '收藏目录', exact: true });
       await bookmarks.getByRole('button', { name: `打开收藏 ${home}/Documents`, exact: true }).waitFor();
       state.pinGate.resolve();
-      await page.waitForFunction(() => !document.querySelector('.system-file-toolbar .system-file-pin').disabled);
+      await bookmarks.getByRole('button', { name: `取消固定 ${home}`, exact: true }).waitFor();
+      await page.waitForFunction(() => ![...document.querySelectorAll('.system-file-bookmarks .system-file-pin')].some((button) => button.disabled));
       assert.equal(await bookmarks.getByRole('button', { name: `打开收藏 ${home}/Documents`, exact: true }).count(), 1);
       assert.equal(await bookmarks.locator('li').count(), 2);
       assert.deepEqual(state.errors, []);
@@ -497,7 +647,7 @@ try {
       await page.getByRole('button', { name: '/tmp', exact: true }).click();
       await atPath(page, '/tmp');
       state.failHome = false;
-      await page.getByRole('button', { name: 'Home', exact: true }).click();
+      await page.getByRole('button', { name: "主目录", exact: true }).click();
       await atPath(page, home);
       assert.deepEqual(state.errors, []);
     } finally { await context.close(); }

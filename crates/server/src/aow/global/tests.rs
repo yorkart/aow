@@ -1,6 +1,31 @@
 use super::*;
 
 #[tokio::test]
+async fn relative_application_home_initializes_with_absolute_notes_paths() {
+    let current = std::env::current_dir().unwrap();
+    let temporary = tempfile::Builder::new()
+        .prefix(".aow-relative-home-")
+        .tempdir_in(&current)
+        .unwrap();
+    let relative = temporary
+        .path()
+        .strip_prefix(&current)
+        .unwrap()
+        .join("home");
+    let manager = AowManager::persistent(&relative).unwrap();
+    manager.initialize_global().await.unwrap();
+    let expected = temporary
+        .path()
+        .join("home/data/notes")
+        .canonicalize()
+        .unwrap();
+    assert_eq!(Path::new(&manager.settings().unwrap().notes_base), expected);
+    let project = manager.project(FLOATING_PROJECT_ID).await.unwrap();
+    assert!(Path::new(&project.notes_path).starts_with(&expected));
+    assert!(Path::new(&project.notes_path).is_dir());
+}
+
+#[tokio::test]
 async fn initializes_real_global_repository_once_and_reuses_regular_project_registration() {
     let temp = tempfile::tempdir().unwrap();
     let manager = AowManager::persistent_with_notes_base(
@@ -17,7 +42,7 @@ async fn initializes_real_global_repository_once_and_reuses_regular_project_regi
     assert_eq!(project.worktrees[0].branch, "main");
     assert_eq!(
         Path::new(&project.registered_path),
-        std::fs::canonicalize(temp.path().join("state/repos/__aow_floating")).unwrap()
+        std::fs::canonicalize(temp.path().join("state/data/repos/__aow_floating")).unwrap()
     );
     assert!(Path::new(&project.registered_path).join(".git").is_dir());
     assert_eq!(
@@ -75,26 +100,11 @@ async fn restored_configuration_replaces_stale_builtin_identity_and_uses_the_loc
         original.persist_projects(&registry.projects).unwrap();
     }
     let config = original.inner.config.as_ref().unwrap();
-    let clone = temp.path().join("cloned-config");
-    git_output(
-        temp.path(),
-        &[
-            "clone",
-            config.directory().parent().unwrap().to_str().unwrap(),
-            clone.to_str().unwrap(),
-        ],
-    )
-    .await
-    .unwrap();
     let state = temp.path().join("new-state");
     std::fs::create_dir(&state).unwrap();
-    let selected = clone.join(config.directory().file_name().unwrap());
-    aow_config::save_selection(
-        &state,
-        &aow_config::ConfigSelection {
-            config_repo: clone.clone(),
-            config_id: config.selection().config_id,
-        },
+    std::fs::copy(
+        config.directory().join("aow-projects.json"),
+        state.join("aow-projects.json"),
     )
     .unwrap();
     let restored =
@@ -106,21 +116,12 @@ async fn restored_configuration_replaces_stale_builtin_identity_and_uses_the_loc
     assert_eq!(projects[0].id, FLOATING_PROJECT_ID);
     assert_eq!(
         Path::new(&projects[0].registered_path),
-        std::fs::canonicalize(state.join("repos/__aow_floating")).unwrap()
+        std::fs::canonicalize(state.join("data/repos/__aow_floating")).unwrap()
     );
     assert!(
         Path::new(&old_project.registered_path)
             .join(".git")
             .is_dir()
-    );
-    assert!(!selected.join("repos").exists());
-    assert!(!state.join("config-repo").exists());
-    assert!(
-        git_output(&clone, &["status", "--porcelain"])
-            .await
-            .unwrap()
-            .trim()
-            .is_empty()
     );
 }
 

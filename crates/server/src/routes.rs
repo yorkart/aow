@@ -9,11 +9,11 @@ use tower_http::{compression::CompressionLayer, trace::TraceLayer};
 use crate::{
     AppState, aow, aow_root, aow_root_redirect, auth, automations, base_path, create_fs_entry,
     delete_fs_entry, fs_path, fs_root, fs_root_redirect, git_commit_detail, git_commit_diff,
-    git_commit_files, git_diff, git_ignored, git_log, git_pull, git_push, git_repositories,
-    git_status, health, help_page, im_api, list_home, list_path, list_root, my_pull_request_detail,
-    my_pull_request_diff, my_pull_requests, notifications, operations, pull_requests, raw_file,
-    read_text, rename_file_path, rename_fs_entry, root_redirect, session_shares, spa_or_asset,
-    terminal, write_file,
+    git_commit_files, git_diff, git_ignored, git_log, git_platform_providers, git_pull, git_push,
+    git_repositories, git_status, health, help_page, im_api, list_home, list_path, list_root,
+    my_pull_request_detail, my_pull_request_diff, my_pull_requests, notifications, operations,
+    raw_file, read_text, rename_file_path, rename_fs_entry, root_redirect, session_shares,
+    spa_or_asset, terminal, write_file,
 };
 
 pub fn build_router(state: AppState) -> Router {
@@ -90,7 +90,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(crate::acp::routes())
         .route("/api/instances", get(crate::instances::list))
         .route("/api/instances/{reference}", get(crate::instances::get))
-        .merge(pull_requests::routes())
+        .merge(git_platform_providers::routes())
         .merge(notifications::routes())
         .merge(im_api::routes())
         .merge(operations::routes())
@@ -103,6 +103,7 @@ pub fn build_router(state: AppState) -> Router {
             state.clone(),
             auth::require_auth,
         ))
+        .layer(axum::middleware::from_fn(crate::locale::middleware))
         .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http())
         .with_state(state);

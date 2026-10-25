@@ -1,3 +1,4 @@
+import { t as translate } from '../../lib/i18n';
 import { sessionsApi } from '../../features/sessions/api';
 import type { AowAgentSession } from '../../features/sessions/types';
 import type { TabRouteAdapter, TabTarget } from './types';
@@ -21,7 +22,7 @@ export const sessionRoute: TabRouteAdapter<Extract<TabTarget, { type: 'session' 
   async resolve(t) {
     const session = t.taskId && t.runId ? await sessionsApi.automationRunSession(t.taskId, t.runId)
       : (await sessionsApi.agentSessions(t.cwd, t.agent)).find(s => s.session_id === t.sessionId);
-    if (!session || session.agent !== t.agent || session.session_id !== t.sessionId) throw new Error('该 Conversation Session 已不存在或无法读取。');
+    if (!session || session.agent !== t.agent || session.session_id !== t.sessionId) throw new Error(translate("aow.this_conversation_session_no_longer_exists_or_cannot_be"));
     return { session, target: { ...t, cwd: session.cwd, taskId: undefined, runId: undefined } };
   },
   open: (_, resolved, actions) => actions.session(resolved.session!, resolved.session!.cwd),

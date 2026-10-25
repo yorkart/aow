@@ -25,7 +25,7 @@ async function bounded(promise, label, milliseconds = 5000) {
   try { return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(label)), milliseconds); })]); }
   finally { clearTimeout(timer); }
 }
-async function fixture(t, { secure = false, base = '' } = {}) {
+async function fixture(t, { secure = false, base = '', maxAge = 43200, idleTimeout = 1800, serverArgs = [] } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'aow-auth-security-'));
   const state = join(root, 'state');
   const children = [];
@@ -49,7 +49,9 @@ async function fixture(t, { secure = false, base = '' } = {}) {
   await writeFile(join(state, 'aow-settings.json'), JSON.stringify({ version: 1, notes_base: join(root, 'notes') }));
   const start = (name, args) => {
     const child = spawn(join(repo, 'target/debug', name), args, { cwd: repo,
-      env: { ...process.env, AOW_BASE_PATH: base, AOW_AUTH_SECURE_COOKIE: String(secure) }, stdio: ['ignore', 'pipe', 'pipe'] });
+      env: { ...process.env, AOW_BASE_PATH: base, AOW_AUTH_SECURE_COOKIE: String(secure),
+        AOW_AUTH_SESSION_MAX_AGE_SECONDS: String(maxAge), AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS: String(idleTimeout) },
+      stdio: ['ignore', 'pipe', 'pipe'] });
     child.output = '';
     child.stdout.on('data', chunk => child.output += chunk);
     child.stderr.on('data', chunk => child.output += chunk);
@@ -59,7 +61,7 @@ async function fixture(t, { secure = false, base = '' } = {}) {
   start('aow-terminald', ['--socket', socket, '--vt-node', process.execPath]);
   await until(() => exists(socket), 'terminald socket');
   const server = start('aow-server', ['--host', '127.0.0.1', '--port', '0', '--state-dir', state,
-    '--terminald-socket', socket, '--frontend', join(repo, 'frontend/dist')]);
+    '--terminald-socket', socket, '--frontend', join(repo, 'frontend/dist'), ...serverArgs]);
   let origin;
   await until(() => { origin = /AoW: (http:\/\/127\.0\.0\.1:\d+)/.exec(server.output)?.[1]; return !!origin; }, 'server startup');
   const url = path => origin + base + path;
@@ -145,13 +147,45 @@ await test('HTTPS cookie configuration survives a subpath login and logout', { t
   assert.equal((await fetch(f.url('/api/fs/tree'), { headers: { cookie } })).status, 401);
 });
 
+await test('configured idle timeout expires despite login status polling', { timeout: 30000 }, async t => {
+  const f = await fixture(t, { maxAge: 60, idleTimeout: 2 });
+  const login = await f.login();
+  assert.equal(login.status, 200);
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+  assert.equal((await fetch(f.url('/api/auth/status'), { headers: { cookie } }).then(response => response.json())).authenticated, true);
+  await until(async () => !(await fetch(f.url('/api/auth/status'), { headers: { cookie } }).then(response => response.json())).authenticated, 'idle session expiry');
+  assert.equal((await fetch(f.url('/api/fs/tree'), { headers: { cookie } })).status, 401);
+  assert.equal((await f.login()).status, 200);
+});
+
+await test('CLI session limits override environment and active requests cannot extend maximum age', { timeout: 30000 }, async t => {
+  const f = await fixture(t, { maxAge: 60, idleTimeout: 60,
+    serverArgs: ['--session-max-age-seconds', '5', '--session-idle-timeout-seconds', '2'] });
+  const login = await f.login();
+  assert.equal(login.status, 200);
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+  const started = Date.now();
+  let lastAccepted = started;
+  await until(async () => {
+    const response = await fetch(f.url('/api/fs/tree'), { headers: { cookie } });
+    if (response.status === 401) return true;
+    assert.equal(response.status, 200);
+    lastAccepted = Date.now();
+    return false;
+  }, 'absolute session expiry during active use');
+  assert.ok(lastAccepted - started >= 2500, 'active requests must refresh the two-second idle deadline');
+  assert.equal((await fetch(f.url('/api/auth/status'), { headers: { cookie } }).then(response => response.json())).authenticated, false);
+});
+
 const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
 try {
   await test('untrusted HTML and SVG download without authenticated script execution; images still render', { timeout: 30000 }, async t => {
     const f = await fixture(t);
-    const context = await browser.newContext(); t.after(() => context.close());
+    const context = await browser.newContext();
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } }); t.after(() => context.close());
     assert.equal((await context.request.post(f.url('/api/auth/login'), { data: { username: 'admin', password: 'test-password' } })).status(), 200);
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.goto(f.url('/aow/?ui=mobile'));
     await page.getByRole('button', { name: '退出登录' }).waitFor();
     const marker = join(f.root, 'must-not-be-written.txt');
@@ -178,9 +212,11 @@ try {
   });
   await test('PDF keeps its inline media response without plugin-blocking sandbox headers', { timeout: 30000 }, async t => {
     const f = await fixture(t);
-    const context = await browser.newContext(); t.after(() => context.close());
+    const context = await browser.newContext();
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } }); t.after(() => context.close());
     await context.request.post(f.url('/api/auth/login'), { data: { username: 'admin', password: 'test-password' } });
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.setContent('<p>PDF preview fixture</p>');
     const path = join(f.root, 'preview.pdf');
     await writeFile(path, await page.pdf());
@@ -198,11 +234,13 @@ try {
     await test(`${mobile ? 'mobile' : 'desktop'} logout UI clears the session and returns to login`, { timeout: 30000 }, async t => {
       const f = await fixture(t, { base: '/tools/aow' });
       const context = await browser.newContext({ viewport: { width: mobile ? 390 : 1440, height: 900 } });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
       t.after(() => context.close());
       assert.equal((await context.request.post(f.url('/api/auth/login'), { data: { username: 'admin', password: 'test-password' } })).status(), 200);
       const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
       await page.goto(f.url(`/aow/?ui=${mobile ? 'mobile' : 'desktop'}`));
-      if (!mobile) await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      if (!mobile) await page.getByRole('button', { name: "设置", exact: true }).click();
       await page.getByRole('button', { name: '退出登录', exact: true }).click();
       await page.getByRole('heading', { name: '登录 AoW', exact: true }).waitFor();
       assert.equal((await context.request.get(f.url('/api/fs/tree'))).status(), 401);

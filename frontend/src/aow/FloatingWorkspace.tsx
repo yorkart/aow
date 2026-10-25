@@ -1,16 +1,14 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { t } from '../lib/i18n';
+import { useEffect, useRef, useState } from 'react';
 import type { AowProject } from './types';
-import { useAowTabLocation } from './AowTabEntry';
-import { terminalApi } from '../features/terminals/terminalApi';
-import { Inbox, NotebookPen, Files, Maximize2, Minimize2, Minus, PanelsTopLeft, Pin, PinOff, SquareTerminal, X, PanelRight } from 'lucide-react';
+import { useCancelAowTabNavigation } from './tabNavigation';
+import { NotebookPen, Maximize2, Minimize2, Minus, PanelsTopLeft, Pin, PinOff, SquareTerminal, X, PanelRight } from 'lucide-react';
 import { persist, readStored, useFloatingWorkspace, type FloatingTab } from './floatingWorkspaceState';
 import type { AowAgent } from '../features/agents/types';
 import { WorkspaceTabs, type WorkspaceTab } from './WorkspaceTabs';
 import { useFloatingAutoHide } from './useFloatingAutoHide';
 import { FloatingTerminal } from './FloatingTerminal';
 import './floating-workspace.css';
-
-const InboxPanel = lazy(() => import('../features/inbox/InboxPanel').then(module => ({ default: module.InboxPanel })));
 
 interface Bounds { left: number; top: number; width: number; height: number }
 const defaultBounds = () => ({ left: Math.max(12, (window.innerWidth - 1000) / 2), top: 65, width: Math.min(1100, window.innerWidth - 24), height: Math.min(720, window.innerHeight - 100) });
@@ -21,9 +19,7 @@ function clamp(bounds: Bounds): Bounds {
 }
 export function FloatingWorkspace({ agents, projects, activeLocation = true }: { agents: AowAgent[]; projects: AowProject[]; activeLocation?: boolean }) {
   const floating = useFloatingWorkspace();
-  const syncLocation = useAowTabLocation();
-  const [inboxVisited, setInboxVisited] = useState(floating.inboxOpen);
-  useEffect(() => { if (floating.inboxOpen) setInboxVisited(true); }, [floating.inboxOpen]);
+  const cancelTabNavigation = useCancelAowTabNavigation();
   const [bounds, setBounds] = useState(() => {
     const stored = readStored<Bounds>('aow-floating-bounds', defaultBounds());
     return clamp(stored && [stored.left, stored.top, stored.width, stored.height].every(Number.isFinite) ? stored : defaultBounds());
@@ -68,16 +64,16 @@ export function FloatingWorkspace({ agents, projects, activeLocation = true }: {
     if (floating.visible) panelRef.current?.focus({ preventScroll: true });
     else if (document.activeElement instanceof HTMLElement && panelRef.current?.contains(document.activeElement)) document.activeElement.blur();
   }, [floating.visible]);
-  const create = (kind: 'markdown' | 'text' | 'terminal' | 'files', agent?: AowAgent) => {
+  const create = (kind: 'markdown' | 'text' | 'terminal', agent?: AowAgent) => {
+    cancelTabNavigation();
     floating.sources.current.get(floating.globalRoot)?.create(kind, agent);
   };
   const actions = <>
-    <button disabled={!floating.globalRoot} onClick={() => create('markdown')}><NotebookPen />新建 Markdown</button>
-    <button disabled={!floating.globalRoot} onClick={() => create('terminal')}><SquareTerminal />新建 Terminal</button>
-    <button disabled={!floating.globalRoot} onClick={() => create('files')}><Files />打开系统文件浏览器</button>
+    <button disabled={!floating.globalRoot} onClick={() => create('markdown')}><NotebookPen />{t("aow.new_markdown")}</button>
+    <button disabled={!floating.globalRoot} onClick={() => create('terminal')}><SquareTerminal />{t("aow.new_terminal")}</button>
   </>;
   return <>
-    <button className="floating-workspace-trigger" style={launcher} title="浮动工作区" aria-label="浮动工作区" aria-expanded={floating.visible}
+    <button className="floating-workspace-trigger" style={launcher} title={t("aow.floating_workspace")} aria-label={t("aow.floating_workspace")} aria-expanded={floating.visible}
       onPointerDown={event => { if (event.button) return; launcherDrag.current = { x: event.clientX, y: event.clientY, ...launcher, moved: false }; event.currentTarget.setPointerCapture(event.pointerId); }}
       onPointerMove={event => { const start = launcherDrag.current; if (!start) return;
         if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 4) start.moved = true;
@@ -85,10 +81,11 @@ export function FloatingWorkspace({ agents, projects, activeLocation = true }: {
       onPointerUp={() => { if (!launcherDrag.current?.moved) { if (floating.visible) floating.minimize(); else floating.show(); } launcherDrag.current = undefined; }}
       onPointerCancel={() => { launcherDrag.current = undefined; }}
       onClick={event => { if (event.detail === 0) { if (floating.visible) floating.minimize(); else floating.show(); } }}><PanelsTopLeft /></button>
-    <div ref={panelRef} data-floating-workspace className={`floating-workspace${maximized ? ' maximized' : ''}`} role="dialog" aria-label="浮动工作区" aria-hidden={!floating.visible} inert={!floating.visible}
+    <div ref={panelRef} data-floating-workspace className={`floating-workspace${maximized ? ' maximized' : ''}`} role="dialog" aria-label={t("aow.floating_workspace")} aria-hidden={!floating.visible} inert={!floating.visible}
       tabIndex={-1} style={{ ...(maximized ? { left: 8, top: 8, width: window.innerWidth - 16, height: window.innerHeight - 16 } : bounds), visibility: floating.visible ? 'visible' : 'hidden', pointerEvents: floating.visible ? undefined : 'none' }}>
       <WorkspaceTabs workspaceKey="floating" revealRequest={floating.tabRevealRequest} tabs={tabs} activeId={floating.active ? tabKey(floating.active) : undefined} visible={floating.visible} agents={agents}
-        onActivate={tab => floating.select(sourceTab(tab))} onCloseTab={tab => floating.close(sourceTab(tab))} onCloseTabs={closeTabs}
+        onActivate={tab => { cancelTabNavigation(); floating.select(sourceTab(tab)); }} onCloseTab={tab => { cancelTabNavigation(); floating.close(sourceTab(tab)); }} onCloseTabs={targets => { cancelTabNavigation(); return closeTabs(targets); }}
+        onPin={tab => { const source = sourceTab(tab); floating.pinPreview(source.workspace, source.id); }}
         onCanRename={tab => {
           const source = sourceTab(tab);
           setOperationError('');
@@ -104,15 +101,14 @@ export function FloatingWorkspace({ agents, projects, activeLocation = true }: {
           floating.remove(source.workspace, source.id);
           floating.sources.current.get(source.workspace)?.reveal(source.id);
         }}
-        onOpenBrowser={() => create('files')} onCreateNote={kind => create(kind === 'md' ? 'markdown' : 'text')}
-        onCreateTerminal={agent => create('terminal', agent)} newLabel="浮动工作区新建" tabListLabel="浮动工作区标签"
-        onCreateAcp={floating.globalRoot ? agentId => floating.sources.current.get(floating.globalRoot)?.createAcp(agentId) : undefined}
-        leadingControls={<button className={`floating-workspace-inbox-tab${floating.inboxOpen ? ' active' : ''}`} aria-label="Inbox" aria-pressed={floating.inboxOpen} onClick={() => { floating.openInbox(); syncLocation(undefined); }}><Inbox size={15} />Inbox</button>}
+        onCreateNote={kind => create(kind === 'md' ? 'markdown' : 'text')}
+        onCreateTerminal={agent => create('terminal', agent)} newLabel={t("aow.new_in_floating_workspace")} tabListLabel={t("aow.floating_workspace_tabs")}
+        onCreateAcp={floating.globalRoot ? agentId => { cancelTabNavigation(); floating.sources.current.get(floating.globalRoot)?.createAcp(agentId); } : undefined}
         controls={<div className="floating-workspace-window-actions">
-          <button title="全局项目面板" aria-label="全局项目面板" aria-pressed={floating.sidebarOpen} onClick={() => floating.setSidebarOpen(!floating.sidebarOpen)}><PanelRight /></button>
-          <button className="floating-workspace-pin" title={floating.pinned ? '取消固定：移出后自动隐藏' : '固定显示浮动工作区'} aria-label="固定显示浮动工作区" aria-pressed={floating.pinned} onClick={floating.togglePinned}>{floating.pinned ? <Pin /> : <PinOff />}</button>
-          <button title={maximized ? '还原浮动工作区' : '最大化浮动工作区'} aria-label={maximized ? '还原浮动工作区' : '最大化浮动工作区'} onClick={() => setMaximized(!maximized)}>{maximized ? <Minimize2 /> : <Maximize2 />}</button>
-          <button title="最小化浮动工作区" aria-label="最小化浮动工作区" onClick={floating.minimize}><Minus /></button>
+          <button title={t("aow.global_projects_panel")} aria-label={t("aow.global_projects_panel")} aria-pressed={floating.sidebarOpen} onClick={() => floating.setSidebarOpen(!floating.sidebarOpen)}><PanelRight /></button>
+          <button className="floating-workspace-pin" title={floating.pinned ? t("aow.unpin_hide_when_the_pointer_leaves") : t("aow.pin_floating_workspace")} aria-label={t("aow.pin_floating_workspace")} aria-pressed={floating.pinned} onClick={floating.togglePinned}>{floating.pinned ? <Pin /> : <PinOff />}</button>
+          <button title={maximized ? t("aow.restore_floating_workspace") : t("aow.maximize_floating_workspace")} aria-label={maximized ? t("aow.restore_floating_workspace") : t("aow.maximize_floating_workspace")} onClick={() => setMaximized(!maximized)}>{maximized ? <Minimize2 /> : <Maximize2 />}</button>
+          <button title={t("aow.minimize_floating_workspace")} aria-label={t("aow.minimize_floating_workspace")} onClick={floating.minimize}><Minus /></button>
         </div>}
         headerProps={{
           className: 'floating-workspace-header',
@@ -123,23 +119,18 @@ export function FloatingWorkspace({ agents, projects, activeLocation = true }: {
           onPointerUp: () => { drag.current = undefined; }, onPointerCancel: () => { drag.current = undefined; },
         }}
       />
-      {operationError ? <div className="project-aow-inline-error" role="alert">{operationError}<button aria-label="关闭错误提示" onClick={() => setOperationError('')}><X /></button></div> : null}
+      {operationError ? <div className="project-aow-inline-error" role="alert">{operationError}<button aria-label={t("aow.dismiss_error")} onClick={() => setOperationError('')}><X /></button></div> : null}
       <div className="floating-workspace-body">
+        <div className="floating-workspace-main">
         <div className="floating-workspace-content" ref={floating.setPortal}>
-          {inboxVisited && <div className="floating-workspace-inbox" hidden={!floating.inboxOpen}><Suspense fallback={<p>正在加载 Inbox…</p>}>
-            <InboxPanel visible={floating.visible && floating.inboxOpen} projects={projects} agents={agents} onOpenTerminal={async id => {
-              const tab = await terminalApi.get(id);
-              const external = !projects.some(project => project.worktrees.some(worktree => worktree.path === tab.workspace_root)) && tab.workspace_root !== floating.globalRoot;
-              if (!external) floating.requestTerminal(tab);
-              floating.add(tab.workspace_root, `terminal:${tab.id}`, { id: `terminal:${tab.id}`, kind: 'agent', label: tab.name, targetId: tab.id, external });
-            }} />
-          </Suspense></div>}
           {floating.tabs.filter(tab => tab.external && !projects.some(project => project.worktrees.some(worktree => worktree.path === tab.workspace)) && tab.workspace !== floating.globalRoot).map(tab => <FloatingTerminal key={tabKey(tab)} entry={tab} activeLocation={activeLocation} />)}
-          {!floating.tabs.length && !floating.inboxOpen ? <div className="floating-workspace-empty">{actions}{!floating.globalRoot ? <p>正在加载全局项目…</p> : null}</div> : null}
+          {!floating.tabs.length ? <div className="floating-workspace-empty">{actions}{!floating.globalRoot ? <p>{t("aow.loading_global_projects")}</p> : null}</div> : null}
+        </div>
+        <div className="floating-workspace-dock" ref={floating.setDockPortal} />
         </div>
         <div className="floating-workspace-sidebar" hidden={!floating.sidebarOpen} ref={floating.setSidebar} />
       </div>
-      {!maximized ? <div className="floating-workspace-resize" role="separator" aria-label="调整浮动工作区大小"
+      {!maximized ? <div className="floating-workspace-resize" role="separator" aria-label={t("aow.resize_floating_workspace")}
         onPointerDown={event => { drag.current = { x: event.clientX, y: event.clientY, bounds, resize: true }; event.currentTarget.setPointerCapture(event.pointerId); }}
         onPointerMove={event => { const start = drag.current; if (!start?.resize) return; setBounds(clamp({ ...start.bounds, width: start.bounds.width + event.clientX - start.x, height: start.bounds.height + event.clientY - start.y })); }}
         onPointerUp={() => { drag.current = undefined; }} onPointerCancel={() => { drag.current = undefined; }} /> : null}

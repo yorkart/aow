@@ -2,6 +2,7 @@ export type AowAgentType = 'claude' | 'codex' | 'traecli' | 'hermes' | 'pi';
 
 export interface AowAgent {
   id: string;
+  is_default?: boolean;
   agent_type: AowAgentType | null;
   display_name: string;
   source: 'detected' | 'configured';

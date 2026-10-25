@@ -30,7 +30,7 @@ impl AcpHost for Host {
     }
     async fn settings(&self) -> Result<String> {
         let manager = self.manager.clone();
-        Ok(tokio::task::spawn_blocking(move || manager.acp_settings())
+        Ok(aow_i18n::spawn_blocking(move || manager.acp_settings())
             .await??
             .content)
     }
@@ -67,13 +67,16 @@ pub(crate) fn service(
     page: tokio::sync::broadcast::Sender<crate::terminal::notifications::TaskStopNotification>,
     workspace_events: crate::workspace_events::WorkspaceEvents,
 ) -> Result<AcpService> {
-    AcpService::new(
+    AcpService::with_storage(
         Arc::new(Host {
             manager,
             page,
             workspace_events,
             state_directory: directory.as_ref().map(std::fs::canonicalize).transpose()?,
         }),
-        directory.map(|directory| directory.join("acp")),
+        directory
+            .as_ref()
+            .map(|directory| directory.join("data/acp")),
+        directory.map(|directory| directory.join("cache/acp")),
     )
 }

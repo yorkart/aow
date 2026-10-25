@@ -26,10 +26,14 @@ impl Progress {
     pub(super) fn skip(&self, index: usize) {
         self.update(|job| {
             job.steps[index].status = Status::Skipped;
-            job.steps[index].message = Some("未勾选更新主仓库".into());
+            job.steps[index].message =
+                Some(aow_i18n::text("server.main_repository_update_was_not_selected").into());
         });
-        self.operation
-            .event(Level::Info, "已跳过更新主仓库", Some(index + 1));
+        self.operation.event(
+            Level::Info,
+            aow_i18n::text("server.main_repository_update_skipped"),
+            Some(index + 1),
+        );
     }
 
     pub(super) fn finish(&self, status: Status, message: String, path: Option<String>) {
@@ -49,7 +53,12 @@ impl Progress {
                     step.message = Some(message.clone());
                 } else if step.status == Status::Pending {
                     step.status = Status::Skipped;
-                    step.message = Some("前序步骤未完成，未执行".into());
+                    step.message = Some(
+                        aow_i18n::text(
+                            "server.not_executed_because_a_previous_step_did_not_finish",
+                        )
+                        .into(),
+                    );
                 }
             }
         });
@@ -69,7 +78,7 @@ pub(super) async fn step<T>(
     index: usize,
     future: impl Future<Output = Result<T, AowError>>,
 ) -> Result<T, AowError> {
-    let title = model::STEP_TITLES[index];
+    let title = aow_i18n::text(model::STEP_TITLES[index]);
     let limit = progress.map_or(model::STEP_TIMEOUT, |progress| progress.timeout);
     if let Some(progress) = progress {
         progress.update(|job| {
@@ -81,7 +90,13 @@ pub(super) async fn step<T>(
             step.timeout_ms = limit.as_millis() as u64;
         });
         progress.operation.progress(
-            format!("{title} · 超时上限 {} 秒", limit.as_secs()),
+            aow_i18n::message(
+                "server.timeout_seconds",
+                &[
+                    ("p0", title.to_string()),
+                    ("auto0", format!("{}", limit.as_secs())),
+                ],
+            ),
             Some(index),
         );
     }
@@ -89,9 +104,12 @@ pub(super) async fn step<T>(
     let result = tokio::time::timeout(limit, future)
         .await
         .unwrap_or_else(|_| {
-            Err(AowError::Timeout(format!(
-                "{title}超时（{} 秒），已停止执行",
-                limit.as_secs()
+            Err(AowError::Timeout(aow_i18n::message(
+                "server.timed_out_seconds_execution_stopped",
+                &[
+                    ("p0", title.to_string()),
+                    ("auto0", format!("{}", limit.as_secs())),
+                ],
             )))
         });
     if let Some(progress) = progress {
@@ -101,23 +119,40 @@ pub(super) async fn step<T>(
             Err(_) => Status::Failed,
         };
         let message = match &result {
-            Ok(_) => format!(
-                "{title}完成 · 耗时 {:.1} 秒",
-                started.elapsed().as_secs_f64()
+            Ok(_) => aow_i18n::message(
+                "server.completed_duration_seconds",
+                &[
+                    ("p0", title.to_string()),
+                    ("auto0", format!("{:.1}", started.elapsed().as_secs_f64())),
+                ],
             ),
-            Err(error) => format!(
-                "{title}{} · 耗时 {:.1} 秒：{error}{}",
-                if status == Status::TimedOut {
-                    "超时"
-                } else {
-                    "失败"
-                },
-                started.elapsed().as_secs_f64(),
-                if index >= 3 {
-                    "。分支或目录可能已创建，请刷新项目并检查实际状态。"
-                } else {
-                    ""
-                }
+            Err(error) => aow_i18n::message(
+                "server.duration_seconds",
+                &[
+                    ("p0", title.to_string()),
+                    (
+                        "auto0",
+                        (if status == Status::TimedOut {
+                            aow_i18n::text("server.timed_out")
+                        } else {
+                            aow_i18n::text("server.failed")
+                        })
+                        .to_string(),
+                    ),
+                    ("auto1", format!("{:.1}", started.elapsed().as_secs_f64())),
+                    ("p3", format!("{}", error)),
+                    (
+                        "auto2",
+                        (if index >= 3 {
+                            aow_i18n::text(
+                                "server.a_branch_or_directory_may_already_exist_refresh_projects",
+                            )
+                        } else {
+                            ""
+                        })
+                        .to_string(),
+                    ),
+                ],
             ),
         };
         progress.update(|job| {

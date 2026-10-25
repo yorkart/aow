@@ -3,7 +3,7 @@ Description=AoW web server
 
 [Service]
 Type=exec
-EnvironmentFile=-%h/.config/aow/server.env
+EnvironmentFile=-%h/.aow/server.env
 ExecStart=%h/.local/lib/aow/bin/aow-server
 UMask=0077
 Restart=on-failure

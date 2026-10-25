@@ -7,7 +7,7 @@ mod tests;
 use self::operations::{DbOperation, DbOperations};
 use crate::{acp_thread::snapshot_store, facade::SessionSnapshot};
 use anyhow::Result;
-use aow_db::acp::AcpDb;
+use aow_db::acp::{AcpDb, ThreadWrite};
 use std::{
     collections::HashMap,
     path::Path,
@@ -114,13 +114,19 @@ impl ThreadMetadataStore {
             .insert(metadata.thread_id.clone(), metadata.clone());
         // Queue a handle, not a deep copy. The writer captures the latest state
         // once per checkpoint, after notifications have coalesced.
-        self.pending_thread_ops
-            .enqueue(DbOperation::Upsert(Box::new(metadata), source.clone()));
+        self.pending_thread_ops.enqueue(DbOperation {
+            metadata: Box::new(metadata),
+            snapshot: source.clone(),
+        });
     }
-    pub(crate) fn delete(&mut self, thread_id: &str) {
-        self.threads.remove(thread_id);
-        self.pending_thread_ops
-            .enqueue(DbOperation::Delete(thread_id.into()));
+    /// The caller holds ThreadStore's lock, excluding concurrent saves for this ID.
+    /// Drain earlier writes, then delete synchronously: a failed deletion must not
+    /// enter the background retry queue or run after the caller reports failure.
+    pub(crate) fn delete_durable(&mut self, id: &str) -> Result<()> {
+        self.pending_thread_ops.flush()?;
+        self.db.write(&[ThreadWrite::Delete(id)])?;
+        self.threads.remove(id);
+        Ok(())
     }
     pub(crate) fn load_thread(&self, id: &str) -> Result<Option<SessionSnapshot>> {
         self.db

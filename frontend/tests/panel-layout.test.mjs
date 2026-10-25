@@ -16,6 +16,7 @@ try {
   const viewport = page => page.locator('.aow-panel-viewport');
   async function fixture(t, { nested = false } = {}) {
     const page = await browser.newPage({ viewport: { width: 900, height: 640 }, reducedMotion: 'reduce' });
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     page.setDefaultTimeout(8000);
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));

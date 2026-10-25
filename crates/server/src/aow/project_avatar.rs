@@ -33,7 +33,7 @@ pub(super) async fn get_avatar(
             .await
             .map_err(|error| error.to_string())?;
         state
-            .review_providers
+            .git_platform_providers
             .repository_avatar(&stored.registered_path, &paths)
             .await
             .map_err(|error| error.to_string())
@@ -102,13 +102,14 @@ mod tests {
     }
 
     async fn provider(app: &Router, result: &str) {
-        let (_, current) = request(app, "GET", "/api/aow/review-providers", Value::Null).await;
+        let (_, current) =
+            request(app, "GET", "/api/aow/git-platform-providers", Value::Null).await;
         let script = format!(
-            "import json,sys\nr=json.load(sys.stdin)\nif r['operation']=='describe':\n result={{'operations':['list','detail','diff','repository_info']}}\nelse:\n assert r['operation']=='repository_info'\n result={result}\nprint(json.dumps({{'version':2,'result':result}}))"
+            "import {{readFileSync}} from 'node:fs';\nconst r=JSON.parse(readFileSync(0,'utf8'));\nconst result=r.operation==='describe'?{{name:'Test',hosts:['git.example.com'],operations:['repository.info']}}:({result});\nconsole.log(JSON.stringify({{version:4,result}}));"
         );
-        let (status, _) = request(app, "PUT", "/api/aow/review-providers", json!({
+        let (status, _) = request(app, "PUT", "/api/aow/git-platform-providers", json!({
             "revision": current["revision"],
-            "providers": [{"id":"test","name":"Test","enabled":true,"hosts":["git.example.com"],"script":script}]
+            "providers": [{"id":"test.mjs","name":"Test","hosts":["git.example.com"],"script":script}]
         })).await;
         assert_eq!(status, StatusCode::OK);
     }
@@ -142,7 +143,7 @@ mod tests {
             AowManager::persistent_with_notes_base(&state_dir, directory.path().join("notes"))
                 .unwrap();
         manager.lock_settings().unwrap().execution_path =
-            Some(vec!["/usr/bin".into(), "/bin".into()]);
+            Some(std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()).collect());
         let mut state = AppState::new(PathBuf::new());
         state.aow = manager.clone();
         let app = crate::build_router(state);
@@ -178,9 +179,9 @@ mod tests {
             Some("https://avatars.example.com/team.png")
         );
 
-        provider(&app, "1/0").await;
+        provider(&app, "(()=>{throw new Error('unavailable')})()").await;
         assert_eq!(request(&app, "GET", &endpoint, Value::Null).await.1, avatar);
-        provider(&app, "{'avatar_url':None}").await;
+        provider(&app, "{'avatar_url':null}").await;
         assert!(request(&app, "GET", &endpoint, Value::Null).await.1["avatar_url"].is_null());
         assert!(manager.project(id).await.unwrap().avatar_url.is_none());
 

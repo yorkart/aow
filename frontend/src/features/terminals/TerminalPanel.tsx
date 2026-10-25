@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Eye, EyeOff, Glasses, ShieldCheck, SquareTerminal, Unplug, UserRound } from 'lucide-react';
 import type { TerminalTab } from './types';
@@ -19,8 +20,8 @@ import { InstancePanelGroups } from '../instances/InstancePanelGroups';
 import './terminal-panel.css';
 
 const terminalGroups = [
-  { id: 'user', cli: false, title: 'User Terminals', icon: UserRound, tooltip: '用户创建' },
-  { id: 'cli', cli: true, title: 'CLI Terminals', icon: SquareTerminal, tooltip: <><code>aow-cli agent</code> 创建</> },
+  { id: 'user', cli: false, title: t("common.user_terminals"), icon: UserRound, tooltip: t("terminals.created_by_user") },
+  { id: 'cli', cli: true, title: t("common.cli_terminals"), icon: SquareTerminal, tooltip: <><code>aow-cli agent</code>  {t("acp.create")}</> },
 ] as const;
 
 export type TerminalGroup = typeof terminalGroups[number]['id'];
@@ -32,7 +33,7 @@ function terminalCreatedAt(tab: TerminalTab) {
   return Number.isFinite(timestamp) ? timestamp : Number.MAX_SAFE_INTEGER;
 }
 
-export function TerminalPanel({ tabs, descendantTabs = tabs, detectedAgents, titles, openedIds, activeId, onOpen, onOpenPane, onOpenFloating, onTerminate, onRebuild, onReload,
+export function TerminalPanel({ tabs, descendantTabs = tabs, detectedAgents, titles, openedIds, activeId, onOpen, onOpenPane, onOpenFloating, canOpenFloating, onTerminate, onRebuild, onReload,
   worktrees, activeWorktreePath, showAll = { user: false, cli: false }, onShowAllChange,
   sortBy = { user: 'branch', cli: 'branch' }, onSortChange, loading = false, error, menuContainer }: {
   tabs: TerminalTab[];
@@ -44,6 +45,7 @@ export function TerminalPanel({ tabs, descendantTabs = tabs, detectedAgents, tit
   onOpen: (tab: TerminalTab) => void;
   onOpenPane?: (tab: TerminalTab, paneId: string) => void;
   onOpenFloating?: (tab: TerminalTab) => void;
+  canOpenFloating?: (tab: TerminalTab) => boolean;
   onTerminate: (id: string) => Promise<void>;
   onRebuild: (id: string) => Promise<void>;
   onReload: () => void;
@@ -86,8 +88,8 @@ export function TerminalPanel({ tabs, descendantTabs = tabs, detectedAgents, tit
   const { confirm, confirmationDialog } = useConfirmation();
   const terminate = async (tab: TerminalTab) => {
     const title = terminalTabPresentation(tab, detectedAgents, titles).title;
-    if (await confirm({ title: '销毁终端？', description: `销毁 ${title} 及其全部窗格。`,
-      warning: '此操作会结束正在运行的进程和任务，worktree 和已保存的会话记录会保留。', confirmLabel: '销毁', danger: true })) {
+    if (await confirm({ title: t("terminals.destroy_terminal"), description: t("terminals.destroy_and_all_its_panes", { value0: title }),
+      warning: t("terminals.this_ends_running_processes_and_tasks_worktrees_and_saved"), confirmLabel: t("terminals.destroy"), danger: true })) {
       await onTerminate(tab.id);
     }
   };
@@ -106,7 +108,7 @@ export function TerminalPanel({ tabs, descendantTabs = tabs, detectedAgents, tit
       openClassName="terminal-panel-open" key={tab.id}
       title={presentation.title} tooltip={presentation.title}
       icon={<AgentIcon agentId={presentation.agentId ?? pane?.agent_id} />} onOpen={() => onOpen(tab)}
-      menuLabel="终端操作" menuExpanded={contextMenu?.tabId === tab.id}
+      menuLabel={t("terminals.terminal_actions_2")} menuExpanded={contextMenu?.tabId === tab.id}
       onMenu={(x, y) => { setContextMenu({ tabId: tab.id, x, y }); }}>
       <small className="terminal-panel-status">
         <TerminalLifecycleDot className="terminal-panel-status-dot" state={state.lifecycle} />
@@ -129,12 +131,12 @@ export function TerminalPanel({ tabs, descendantTabs = tabs, detectedAgents, tit
       loading: !!worktrees && showAll[id] && loading, error: worktrees && showAll[id] ? error : undefined,
     }))} worktrees={worktrees} activeWorktreePath={activeWorktreePath} showAll={showAll} sortBy={sortBy}
       onShowAllChange={onShowAllChange} onSortChange={onSortChange} onScopeMenuOpen={dismissMenu}
-      onReload={() => { onReload(); graph.reload(); }} noun="终端"
+      onReload={() => { onReload(); graph.reload(); }} noun={t("terminals.terminal")}
       itemKey={tab => tab.id} itemWorkspace={tab => tab.workspace_root} itemCreatedAt={terminalCreatedAt}
       renderItem={renderTab} menuContainer={menuContainer} />
     {contextMenu && menuTab ? <TerminalContextMenu container={menuContainer} x={contextMenu.x} y={contextMenu.y}
       title={terminalTabPresentation(menuTab, detectedAgents, titles).title} onClose={dismissMenu}
-      onOpen={() => onOpen(menuTab)} onOpenFloating={onOpenFloating ? () => onOpenFloating(menuTab) : undefined}
+      onOpen={() => onOpen(menuTab)} onOpenFloating={onOpenFloating && (canOpenFloating?.(menuTab) ?? true) ? () => onOpenFloating(menuTab) : undefined}
       onRebuild={menuTab.panes.length > 0 && menuTab.panes.every(pane => pane.status !== 'running')
         ? () => void rebuild(menuTab.id) : undefined} rebuilding={rebuilding.has(menuTab.id)}
       onDestroy={() => void terminate(menuTab)} /> : null}

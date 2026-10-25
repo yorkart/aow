@@ -73,7 +73,7 @@ export async function acpEventsFixture(page, initial) {
       }
     });
   }
-  await page.routeWebSocket('**/api/events/ws', socket => {
+  await page.routeWebSocket('**/api/events/ws*', socket => {
     const peer = { socket, subscriptions: new Map(), send: data => socket.send(JSON.stringify({ event: 'acp', data })) };
     peers.add(peer);
     socket.send(JSON.stringify({ event: 'workspace', data: workspace() }));

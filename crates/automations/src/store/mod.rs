@@ -10,7 +10,7 @@ mod writer;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use aow_config::ConfigRepository;
+use aow_config::ConfigStore;
 
 pub use files::{atomic_write, new_run_id, private_dir, valid_component};
 pub use history::RunCursor;
@@ -25,11 +25,11 @@ pub struct Store {
     pub state_dir: PathBuf,
     pub root: PathBuf,
     pub config_dir: PathBuf,
-    config: Option<ConfigRepository>,
+    config: ConfigStore,
 }
 impl Store {
     pub fn new(state_dir: PathBuf) -> Result<Self> {
-        ConfigRepository::initialize(&state_dir)?;
+        ConfigStore::initialize(&state_dir)?;
         let store = Self::open(state_dir)?;
         private_dir(&store.root)?;
         private_dir(&store.root.join("runs"))?;
@@ -43,12 +43,9 @@ impl Store {
         } else {
             std::env::current_dir()?.join(state_dir)
         };
-        let root = state_dir.join("automations");
-        let config = ConfigRepository::open(&state_dir)?;
-        let config_dir = config
-            .as_ref()
-            .map(|config| config.directory().to_path_buf())
-            .unwrap_or_else(|| state_dir.clone());
+        let root = state_dir.join("state/automations");
+        let config = ConfigStore::open(&state_dir)?;
+        let config_dir = state_dir.clone();
         Ok(Self {
             state_dir,
             root,

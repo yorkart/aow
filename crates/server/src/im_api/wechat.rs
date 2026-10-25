@@ -84,20 +84,23 @@ pub(super) async fn disconnect(State(state): State<AppState>) -> Response {
 
 pub(super) async fn test_send(State(state): State<AppState>) -> Response {
     let Some(client) = state.aow.notifications().wechat() else {
-        return error("请先扫码绑定微信 Bot");
+        return error(aow_i18n::text("im.scan_to_link_a_wechat_bot_first"));
     };
     let message = Message {
-        title: "AoW 微信推送测试".into(),
+        title: aow_i18n::text("server.aow_wechat_push_test").into(),
         fields: vec![],
-        body_label: "测试消息".into(),
-        body: "微信通知已连通。可在 Settings → 通知中启用微信推送。".into(),
+        body_label: aow_i18n::text("server.test_message").into(),
+        body: aow_i18n::text(
+            "server.wechat_notifications_are_connected_enable_wechat_push_in_settings",
+        )
+        .into(),
         markdown: false,
         error: false,
     };
     match client.send_test(&message).await {
         Ok(verification) => (
             [(CACHE_CONTROL, "no-store")],
-            Json(json!({"message":"测试消息已发送。", "verification": verification})),
+            Json(json!({"message":aow_i18n::text("server.test_message_sent"), "verification": verification})),
         )
             .into_response(),
         Err(reason) => error(reason),
@@ -116,7 +119,7 @@ pub(super) async fn test_receipt(
     Json(input): Json<ReceiptInput>,
 ) -> Response {
     let Some(client) = state.aow.notifications().wechat() else {
-        return error("请先扫码绑定微信 Bot");
+        return error(aow_i18n::text("im.scan_to_link_a_wechat_bot_first"));
     };
     match client
         .record_test_receipt(&input.test_id, input.received)

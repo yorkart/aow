@@ -36,7 +36,7 @@ pub(super) fn spawn(
         return;
     }
     drop(workers);
-    tokio::spawn(async move {
+    aow_i18n::spawn(async move {
         if let Err(error) = run(
             &state,
             &pane_id,
@@ -93,19 +93,27 @@ async fn run(
             }
             ensure!(
                 current.phase != TerminalHostingPhase::Submitting,
-                "AoW 在提交反馈期间重启，送达状态未知，请接管后确认，未自动重发"
+                aow_i18n::message(
+                    "server.aow_restarted_while_submitting_feedback_delivery_status_is_unknown",
+                    &[]
+                )
             );
             let source = source::read(manager, pane_id).await?;
             ensure!(
                 source::matches(&current, &source),
-                "Agent 进程或会话已变化，请接管后重新配置托管"
+                aow_i18n::message(
+                    "server.agent_process_or_session_changed_take_control_and_reconfigure",
+                    &[]
+                )
             );
             tokio::time::timeout(
                 Duration::from_secs(10),
                 AgentConnection::claim_with_force(&manager.inner.terminald, pane_id, true),
             )
             .await
-            .context("恢复托管控制权超时")??
+            .context(aow_i18n::text(
+                "server.timed_out_restoring_autopilot_control",
+            ))??
         }
     };
     // Only a new enable passes this flag. Persist the first run before polling
@@ -131,17 +139,17 @@ async fn run(
         tokio::select! {
             message = connection.socket.next() => {
                 if let Some(aow_protocol::TerminalAttachServerMessage::Control { state }) = AgentConnection::check(message)? {
-                    ensure!(state == aow_protocol::TerminalControlState::Claimed, "托管控制权已丢失，请接管后重试");
+                    ensure!(state == aow_protocol::TerminalControlState::Claimed, aow_i18n::message("server.autopilot_control_lost_take_control_and_retry", &[]));
                 }
             }
             event = completions.recv() => {
-                let event = event.context("任务完成事件订阅中断或积压丢失，请接管后重新启用托管")?;
+                let event = event.context(aow_i18n::text("server.task_completion_event_subscription_interrupted_or_events_lost_due"))?;
                 if accepts(&hosting, pane_id, &event) {
                     start_review(state, pane_id, hosting, Some(event)).await?;
                 }
             }
             _ = interval.tick() => {
-                ensure!(sessions::same_process(&hosting.process), "Agent 进程已变化，请接管后重新配置托管");
+                ensure!(sessions::same_process(&hosting.process), aow_i18n::message("server.agent_process_changed_take_control_and_reconfigure_autopilot", &[]));
                 step(state, pane_id, hosting, &mut completions, &mut connection).await?;
             }
         }
@@ -172,12 +180,15 @@ async fn start_review(
     let source = source::read(&state.terminals, pane_id).await?;
     ensure!(
         source::matches(&hosting, &source),
-        "Agent 进程或会话已变化，请接管后重新配置托管"
+        aow_i18n::message(
+            "server.agent_process_or_session_changed_take_control_and_reconfigure",
+            &[]
+        )
     );
     let automation = state
         .automations
         .as_ref()
-        .context("Automation 服务不可用")?;
+        .context(aow_i18n::text("server.automation_service_unavailable"))?;
     let task = automation.hosting_task(&hosting.task_id, hosting.task_revision)?;
     hosting.source_turn_id = event.as_ref().and_then(|event| event.turn_id.clone());
     hosting.run_id = Some(aow_automations::store::new_run_id());
@@ -198,13 +209,22 @@ async fn step(
     let automation = state
         .automations
         .as_ref()
-        .context("Automation 服务不可用")?;
+        .context(aow_i18n::text("server.automation_service_unavailable"))?;
     match hosting.phase {
         TerminalHostingPhase::Waiting => {}
         TerminalHostingPhase::Reviewing => {
-            let run_id = hosting.run_id.as_deref().context("缺少运行 ID")?;
+            let run_id = hosting
+                .run_id
+                .as_deref()
+                .context(aow_i18n::text("server.run_id_missing"))?;
             let Some(run) = automation.hosted_run(&hosting.task_id, run_id)? else {
-                ensure!(elapsed(&hosting) < 90, "Runner 启动超时，尚未生成执行记录");
+                ensure!(
+                    elapsed(&hosting) < 90,
+                    aow_i18n::message(
+                        "server.runner_startup_timed_out_no_run_record_created_yet",
+                        &[]
+                    )
+                );
                 return Ok(());
             };
             if !run.status.terminal() {
@@ -213,7 +233,9 @@ async fn step(
             ensure!(
                 run.status == RunStatus::Completed,
                 "{}",
-                run.message.as_deref().unwrap_or("托管任务未正常完成")
+                run.message.as_deref().unwrap_or(aow_i18n::text(
+                    "server.autopilot_task_did_not_complete_normally"
+                ))
             );
             transition(&mut hosting, TerminalHostingPhase::Collecting);
             save(state, pane_id, &hosting)?;
@@ -222,9 +244,12 @@ async fn step(
             let run = automation
                 .hosted_run(
                     &hosting.task_id,
-                    hosting.run_id.as_deref().context("缺少运行 ID")?,
+                    hosting
+                        .run_id
+                        .as_deref()
+                        .context(aow_i18n::text("server.run_id_missing"))?,
                 )?
-                .context("执行记录已丢失")?;
+                .context(aow_i18n::text("server.run_record_lost"))?;
             let result = automation.run_result(&run)?;
             let source = source::read(&state.terminals, pane_id).await?;
             // Slow scheduler/history I/O never delays a human takeover. Only
@@ -240,11 +265,17 @@ async fn step(
             }
             ensure!(
                 sessions::same_process(&hosting.process),
-                "原 Agent 进程已变化，未提交托管结论"
+                aow_i18n::message(
+                    "server.original_agent_process_changed_autopilot_conclusion_not_submitted",
+                    &[]
+                )
             );
             ensure!(
                 source::matches(&hosting, &source),
-                "原 Agent 进程或会话已变化，未提交托管结论"
+                aow_i18n::message(
+                    "server.original_agent_process_or_session_changed_autopilot_conclusion_not",
+                    &[]
+                )
             );
             // A passing final review still wins when all feedback slots are used.
             // Keep the outcome for observers and stop without submitting any text.
@@ -264,13 +295,18 @@ async fn step(
             *completions = completions.resubscribe();
             tokio::time::timeout(Duration::from_secs(15), connection.submit(&result))
                 .await
-                .context("反馈提交超时，送达状态未知，请接管确认，未自动重发")??;
+                .context(aow_i18n::text(
+                    "server.feedback_submission_timed_out_delivery_status_is_unknown_take",
+                ))??;
             hosting.input_count += 1;
             transition(&mut hosting, TerminalHostingPhase::Waiting);
             save(state, pane_id, &hosting)?;
         }
         TerminalHostingPhase::Submitting => {
-            anyhow::bail!("反馈送达状态未知，请接管确认，未自动重发")
+            anyhow::bail!(aow_i18n::message(
+                "server.feedback_delivery_status_unknown_take_control_to_confirm_no",
+                &[]
+            ))
         }
         TerminalHostingPhase::Completed
         | TerminalHostingPhase::LimitReached
@@ -284,7 +320,7 @@ fn save(state: &AppState, pane_id: &str, hosting: &TerminalHosting) -> Result<()
         state
             .terminals
             .set_hosting(pane_id, Some(&hosting.id), Some(hosting.clone()))?,
-        "托管已解除"
+        aow_i18n::message("server.autopilot_disabled", &[])
     );
     state.workspace_events.terminals_changed();
     Ok(())

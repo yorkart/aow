@@ -30,6 +30,7 @@ export const acpApi = {
     window.dispatchEvent(new CustomEvent(authenticationCompleted, { detail: id }));
   },
   create: (agent_id: string, cwd: string) => acpRequest<SessionSnapshot>(`${root}/sessions`, post({ agent_id, cwd })),
+  fork: (thread_id: string, token: string) => acpRequest<SessionSnapshot>(`${root}/sessions/${encodeURIComponent(thread_id)}/fork?view=overview`, { ...post(), headers: { 'X-Aow-Acp-Control': token } }),
   remoteSessions: (connection: string, cursor?: string) => acpRequest<{ sessions: Data[]; nextCursor?: string }>(`${root}/connections/${encodeURIComponent(connection)}/sessions${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
   importSessions: (connection: string, sessions: SessionImport[]) => acpRequest<SessionInfo[]>(`${root}/connections/${encodeURIComponent(connection)}/import`, post(sessions)),
   sessions: (cwd: string, signal?: AbortSignal) => acpRequest<SessionInfo[]>(`${root}/sessions?cwd=${encodeURIComponent(cwd)}`, { signal }),

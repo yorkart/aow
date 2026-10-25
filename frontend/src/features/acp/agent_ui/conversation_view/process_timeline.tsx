@@ -1,3 +1,4 @@
+import { t } from '../../../../lib/i18n';
 import { useContext, useId, type ReactNode } from 'react';
 import { Brain, ChevronRight, MessageSquare, Wrench } from 'lucide-react';
 import { useProcessExpansion } from '../../../../components/conversation/ConversationProcess';
@@ -16,9 +17,9 @@ function ToolGroup({ groups, running, permissionTools, renderGroup }: {
   const failed = groups.some(group => ['failed', 'rejected', 'cancelled', 'canceled'].includes(String(group.entries[0].content.status)));
   return <div className="session-tool-group acp-process-tool-group">
     <button type="button" className="session-tool-group-toggle" aria-expanded={expanded} aria-controls={contentId}
-      disabled={required} aria-label={`${expanded ? '收起' : '展开'}工具执行：${groups.length} 次调用`} onClick={toggle}>
-      <span className="session-tool-group-summary">工具执行</span><span className="session-tool-group-count">{groups.length} 次调用</span>
-      <span className="acp-process-status">{required ? '等待授权' : pending ? <><SpinnerLabel />执行中</> : failed ? '包含失败或中断' : null}</span>
+      disabled={required} aria-label={t("acp.tool_execution_calls", { value0: expanded ? t("aow.collapse") : t("aow.expand"), value1: groups.length })} onClick={toggle}>
+      <span className="session-tool-group-summary">{t("acp.tool_execution")}</span><span className="session-tool-group-count">{t("acp.call_count", { count: groups.length })}</span>
+      <span className="acp-process-status">{required ? t("acp.awaiting_permission") : pending ? <><SpinnerLabel />{t("aow.running")}</> : failed ? t("acp.includes_failures_or_interruptions") : null}</span>
       <ChevronRight className="session-tool-group-chevron" size={13} aria-hidden="true" />
     </button>
     <div id={contentId} className="acp-process-group-body" hidden={!expanded}>{expanded && groups.map(renderGroup)}</div>

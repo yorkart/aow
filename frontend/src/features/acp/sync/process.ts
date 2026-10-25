@@ -1,3 +1,4 @@
+import { t } from '../../../lib/i18n';
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { acpApi } from '../api';
 import { applySessionUpdates } from '../session_updates';
@@ -43,8 +44,8 @@ class Process {
         let next = applySessionUpdates(current, await acpApi.process(this.thread, this.turn, current, controller.signal));
         if (!next) next = applySessionUpdates(undefined, await acpApi.process(this.thread, this.turn, undefined, controller.signal));
         if (controller.signal.aborted) return;
-        if (!next || next.sync_generation !== this.generation) throw new Error('会话已更新，请重新展开处理过程。');
-        if (next.revision < this.wanted && next.revision === current?.revision) throw new Error('处理过程尚未同步，请重试。');
+        if (!next || next.sync_generation !== this.generation) throw new Error(t("acp.session_updated_expand_activity_again"));
+        if (next.revision < this.wanted && next.revision === current?.revision) throw new Error(t("acp.activity_has_not_synced_yet_try_again"));
         this.publish({ data: next, error: '' });
       } catch (error) {
         if (!controller.signal.aborted) this.publish({ ...this.state, error: error instanceof Error ? error.message : String(error) });

@@ -1,4 +1,4 @@
-// Display-only terminal output from the adapter; no process or input channel.
+import { t } from '../../../../lib/i18n';
 import { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -49,7 +49,7 @@ export function TerminalOutput({ terminal, pending }: { terminal?: Data; pending
   }, [output]);
   const exit = object(terminal?.exit_status);
   return <div className="acp-terminal-output" data-exit-code={typeof exit.exitCode === 'number' ? exit.exitCode : undefined}>
-    <div ref={container} className="acp-terminal-screen acp-code" aria-label="命令输出" hidden={!output} />
-    {!output && <p className="acp-muted">{pending ? '等待命令输出…' : terminal ? '命令未产生输出' : 'Agent 未提供终端输出'}</p>}
+    <div ref={container} className="acp-terminal-screen acp-code" aria-label={t("acp.command_output")} hidden={!output} />
+    {!output && <p className="acp-muted">{pending ? t("acp.waiting_for_command_output") : terminal ? t("acp.the_command_produced_no_output") : t("acp.the_agent_did_not_provide_terminal_output")}</p>}
   </div>;
 }

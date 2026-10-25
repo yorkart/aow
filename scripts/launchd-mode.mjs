@@ -99,18 +99,21 @@ export function registrationHint(runtime) {
   console.error('Exit code 78 means administrator registration is required and startup has not been verified; just reports this incomplete installation as failed.');
 }
 
-export function registrationRequired(service) {
+export function registrationRequired(service, skipTerminald = false) {
   if (service.mode !== 'launchdaemon') return false;
-  if (!readDaemon('server')) return true;
-  const result = launchctl(['print', `system/${daemonLabel('server')}`]);
-  if (result.status === 0) return false;
-  if (missingDomain(result)) return true;
-  throw new Error(`Cannot inspect LaunchDaemon registration: ${result.stderr.trim()}`);
+  for (const component of skipTerminald ? ['server'] : ['server', 'terminald']) {
+    if (!readDaemon(component)) return true;
+    const result = launchctl(['print', `system/${daemonLabel(component)}`]);
+    if (result.status === 0) continue;
+    if (missingDomain(result)) return true;
+    throw new Error(`Cannot inspect ${component} LaunchDaemon registration: ${result.stderr.trim()}`);
+  }
+  return false;
 }
 
 function firstInstallHint(service) {
   const quotedUser = `'${service.user.replaceAll("'", "'\\''")}'`;
-  console.error(`First-time LaunchDaemon setup for ${service.user} requires an administrator account.`);
+  console.error(`LaunchDaemon setup for ${service.user} requires an administrator account.`);
   console.error('From an administrator-owned, trusted AoW checkout on this Mac, run:');
   console.error(`  just install --user ${quotedUser}`);
   console.error('The administrator installer will prepare files as the target user, register services, and verify startup.');
@@ -120,20 +123,23 @@ function firstInstallHint(service) {
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const [command, runtime, destination] = process.argv.slice(2);
+    const args = process.argv.slice(2);
+    const skipTerminald = args.at(-1) === '--skip-terminald';
+    if (skipTerminald) args.pop();
+    const [command, runtime, destination] = args;
     if (command === 'hint') registrationHint(runtime);
     else if (command === 'check-install') {
       const service = resolveService(runtime);
-      process.stdout.write(JSON.stringify({ ...service, registrationRequired: registrationRequired(service) }) + '\n');
+      process.stdout.write(JSON.stringify({ ...service, registrationRequired: registrationRequired(service, skipTerminald) }) + '\n');
     } else if (command === 'resolve') {
       const service = resolveService(runtime);
-      if (destination && process.env.AOW_INSTALL_MANAGED !== '1' && registrationRequired(service)) {
+      if (destination && process.env.AOW_INSTALL_MANAGED !== '1' && registrationRequired(service, skipTerminald)) {
         firstInstallHint(service);
         process.exitCode = 78;
       } else {
         if (destination) writeFileSync(destination, JSON.stringify(service) + '\n', { mode: 0o600 });
         process.stdout.write(service.mode + '\n');
       }
-    } else throw new Error('Usage: launchd-mode.mjs resolve|check-install|hint RUNTIME [OUTPUT]');
+    } else throw new Error('Usage: launchd-mode.mjs resolve|check-install|hint RUNTIME [OUTPUT] [--skip-terminald]');
   } catch (error) { console.error(`error: ${error.message}`); process.exitCode = 1; }
 }

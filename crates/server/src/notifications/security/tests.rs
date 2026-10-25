@@ -42,6 +42,7 @@ async fn login_notifies_all_providers_while_anonymous_access_only_logs() {
         .unwrap();
     manager
         .update(SettingsUpdate::Notifications {
+            language: None,
             agent_task_completed: TaskCompletedSettings {
                 enabled: false,
                 channels: vec![],

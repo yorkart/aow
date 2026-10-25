@@ -34,8 +34,9 @@ enum AcpCommand {
     /// Create and start an ACP session, optionally submitting a first task.
     #[command(after_help = HELP)]
     Create {
+        /// Saved ACP adapter ID; omitted uses its default, then the first configured adapter.
         #[arg(long)]
-        agent_id: String,
+        agent_id: Option<String>,
         #[arg(long, value_parser = crate::parse_id)]
         project_id: String,
         #[arg(long)]
@@ -95,7 +96,7 @@ pub fn execute(args: AcpArgs, state_dir: PathBuf) -> Result<Value> {
             cwd.join(path)
         }
     };
-    let client = TerminaldClient::new(absolute(state_dir).join("cli/cli.sock"));
+    let client = TerminaldClient::new(absolute(state_dir).join("runtime/cli/cli.sock"));
     let timeout = match &args.command {
         AcpCommand::Create { timeout, .. } | AcpCommand::Submit { timeout, .. } => timeout + 20,
         _ => 20,

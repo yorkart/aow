@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { filesApi } from './api';
 import type { PinnedDirectories } from './types';
@@ -25,7 +26,7 @@ export function usePinnedDirectories() {
       const result = await filesApi.pinnedDirectories();
       if (generation === reloadRef.current) accept(result);
     } catch (reason) {
-      if (generation === reloadRef.current) setError(`收藏加载失败：${reason instanceof Error ? reason.message : String(reason)}`);
+      if (generation === reloadRef.current) setError(t("files.failed_to_load_favorites", { value0: reason instanceof Error ? reason.message : String(reason) }));
     } finally {
       if (generation === reloadRef.current) setLoading(false);
     }
@@ -41,7 +42,7 @@ export function usePinnedDirectories() {
     try {
       accept(await filesApi.updatePinnedDirectories(pinned ? { remove: [path] } : { add: [path] }));
     } catch (reason) {
-      setError(`收藏保存失败：${reason instanceof Error ? reason.message : String(reason)}`);
+      setError(t("files.failed_to_save_favorites", { value0: reason instanceof Error ? reason.message : String(reason) }));
     } finally {
       pendingRef.current.delete(path);
       setPending(new Set(pendingRef.current));

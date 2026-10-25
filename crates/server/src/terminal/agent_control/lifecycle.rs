@@ -12,8 +12,11 @@ impl TerminalManager {
         let state = self.lock_state()?;
         let (tab, pane) = find_pane(&state.tabs, pane_id)
             .ok_or_else(|| TerminalError::PaneNotFound(pane_id.into()))?;
-        info(&state.tabs[tab], &state.tabs[tab].panes[pane])
-            .ok_or_else(|| TerminalError::Invalid("pane was not created by agent create".into()))
+        info(&state.tabs[tab], &state.tabs[tab].panes[pane]).ok_or_else(|| {
+            TerminalError::Invalid(
+                aow_i18n::text("validation.pane_was_not_created_by_agent_create").into(),
+            )
+        })
     }
 
     pub(in crate::terminal) fn agent_operation(
@@ -63,7 +66,7 @@ impl TerminalManager {
         let operation = self.agent_operation(pane_id)?;
         let _lease = operation.write_owned().await;
         if let Some(log) = log {
-            log.progress("等待 Agent 就绪", None);
+            log.progress(aow_i18n::text("server.wait_for_agent_readiness"), None);
         }
         let result =
             tokio::time::timeout(timeout, self.initialize_agent(pane_id, adapter, task, log)).await;
@@ -100,11 +103,11 @@ impl TerminalManager {
         })
         .await?;
         if let Some(log) = log {
-            log.progress("Agent 终端已就绪", None);
+            log.progress(aow_i18n::text("server.agent_terminal_ready"), None);
         }
         if let Some(task) = task {
             if let Some(log) = log {
-                log.progress("提交初始任务", None);
+                log.progress(aow_i18n::text("server.submit_initial_task"), None);
             }
             connection.submit(task).await?;
             let mut progress = self.cli_agent(pane_id)?.state;

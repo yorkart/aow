@@ -18,7 +18,7 @@
 curl -fsSL https://github.com/yorkart/aow/releases/latest/download/aow-install.sh | bash
 ```
 
-安装器从 GitHub Release 获取对应平台的包，校验后安装并启动 Web 服务。首次安装必须在终端输入登录账号、密码并确认密码，保存后才启动服务；提示启动 terminald 时输入小写 `y`，才能使用 Terminal。升级时重启 terminald 会结束它管理的现有终端会话。
+安装器从 GitHub Release 获取对应平台的包，校验后安装并启动 Web 服务。首次安装必须在终端输入登录账号、密码并确认密码，保存后才启动服务。安装和升级默认一并更新并启动或重启 terminald，无需额外确认；重启会结束它管理的现有终端会话。需要在本次操作中保留 terminald 当前状态时，使用 `just install --skip-terminald`、`aow update --skip-terminald`，或将上方管道命令中的 `bash` 改为 `bash -s -- --skip-terminald`。
 
 LaunchDaemon 首次安装会暂停，等待本地管理员登记后再启动服务。服务以安装账户运行，无需登录该账户的桌面；后续程序更新不需要管理员权限，系统服务配置变化时需再次登记。
 
@@ -38,7 +38,7 @@ Web 服务默认仅监听 `127.0.0.1:8282`，在本机打开 `http://127.0.0.1:8
 
 ### 通过 IP 直接访问（需显式开启）
 
-在 `~/.config/aow/server.env` 中选择一种绑定方式（仅保留一项，指定地址请替换为网卡的实际 IP；其他示例使用时取消注释）：
+在 `~/.aow/server.env` 中选择一种绑定方式（仅保留一项，指定地址请替换为网卡的实际 IP；其他示例使用时取消注释）：
 
 ```dotenv
 # 指定 IPv4 地址

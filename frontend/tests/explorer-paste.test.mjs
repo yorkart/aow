@@ -46,6 +46,7 @@ let browser;
 
 async function fixture(t, { panelMode = false } = {}) {
   const context = await browser.newContext({ viewport: { width: 1100, height: 800 }, reducedMotion: 'reduce', permissions: ['clipboard-read', 'clipboard-write'] });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
   const state = { writes: [], errors: [], gate: null, fail: false, refreshFails: false };
   const directories = new Map([
     ['/project', [entry('/project/assets', 'directory'), entry('/project/other', 'directory'), entry('/project/readme.txt')]],
@@ -73,7 +74,8 @@ async function fixture(t, { panelMode = false } = {}) {
     }
     await route.fulfill({ status: 404, json: { message: url.pathname } });
   });
-  const page = await context.newPage(); page.setDefaultTimeout(8000);
+  const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } }); page.setDefaultTimeout(8000);
   page.setDefaultNavigationTimeout(30000);
   page.on('pageerror', error => state.errors.push(error.stack ?? error.message));
   t.after(async () => { state.gate?.resolve(); await context.close(); assert.deepEqual(state.errors, []); });

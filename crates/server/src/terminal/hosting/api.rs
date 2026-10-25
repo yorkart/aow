@@ -23,10 +23,10 @@ pub(in crate::terminal) async fn enable(
 ) -> Result<Json<TerminalTab>, HttpError> {
     if request.max_inputs == 0 {
         return Err(terminal_http_error(TerminalError::Invalid(
-            "最多自动输入次数必须为正整数".into(),
+            aow_i18n::text("server.maximum_automatic_inputs_must_be_a_positive_integer").into(),
         )));
     }
-    tokio::spawn(async move {
+    aow_i18n::spawn(async move {
         enable_inner(state, tab_id, pane_id, request)
             .await
             .map(Json)
@@ -47,7 +47,7 @@ async fn enable_inner(
     let automation = state
         .automations
         .as_ref()
-        .context("Automation 服务不可用")?;
+        .context(aow_i18n::text("server.automation_service_unavailable"))?;
     let task = automation.hosting_task(&request.task_id, request.revision)?;
     let source = source::read(manager, &pane_id).await?;
     state
@@ -58,20 +58,26 @@ async fn enable_inner(
     let _gate = gate.lock().await;
     ensure!(
         manager.hosting(&pane_id)?.is_none(),
-        "该实例已托管，请先接管"
+        aow_i18n::message(
+            "server.this_instance_is_already_managed_by_autopilot_take_control",
+            &[]
+        )
     );
     let tab = manager.get_snapshot(&tab_id)?;
     let pane = tab
         .panes
         .iter()
         .find(|pane| pane.id == pane_id)
-        .context("实例不存在")?;
-    ensure!(pane.status == TerminalPaneStatus::Running, "终端已结束");
+        .context(aow_i18n::text("server.instance_does_not_exist"))?;
+    ensure!(
+        pane.status == TerminalPaneStatus::Running,
+        aow_i18n::message("server.terminal_ended", &[])
+    );
     ensure!(
         pane.agent_terminal
             .as_ref()
             .is_none_or(|agent| agent.phase == aow_protocol::AgentTerminalPhase::Ready),
-        "Agent 尚未就绪"
+        aow_i18n::message("server.agent_not_ready_yet", &[])
     );
     let hosting = TerminalHosting {
         id: aow_id::new_id(),
@@ -113,7 +119,10 @@ async fn enable_inner(
             failed.phase = TerminalHostingPhase::Failed;
             failed.error = Some(match result {
                 Ok(Err(error)) => error.to_string(),
-                _ => "获取托管控制权超时，请接管后重试".into(),
+                _ => aow_i18n::text(
+                    "server.timed_out_acquiring_autopilot_control_take_control_and_retry",
+                )
+                .into(),
             });
             manager.set_hosting(&pane_id, Some(&failed.id.clone()), Some(failed))?;
         }

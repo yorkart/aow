@@ -1,11 +1,8 @@
+import { loadModule } from './helpers/load-module.mjs';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
-import ts from 'typescript';
 
-const source = await readFile(new URL('../src/features/agents/environment.ts', import.meta.url), 'utf8');
-const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 } });
-const { environmentDraft, parseEnvironment } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
+const { environmentDraft, parseEnvironment } = await loadModule(new URL('../src/features/agents/environment.ts', import.meta.url));
 const parse = text => parseEnvironment({ text, values: {} });
 
 test('environment entries preserve equals signs, empty values, whitespace, and literal shell syntax', () => {

@@ -17,7 +17,10 @@ impl Field {
                 Some((range, step)) => (range, step.parse::<u32>()?),
                 None => (piece, 1),
             };
-            ensure!(step > 0 && step <= max + 1, "Cron 步长无效");
+            ensure!(
+                step > 0 && step <= max + 1,
+                aow_i18n::message("automations.invalid_cron_step", &[])
+            );
             let (start, end) = if range == "*" {
                 (min, max)
             } else if let Some((start, end)) = range.split_once('-') {
@@ -28,13 +31,19 @@ impl Field {
             };
             ensure!(
                 start >= min && end <= max && start <= end,
-                "Cron 字段超出范围 {min}–{max}"
+                aow_i18n::message(
+                    "automations.cron_field_is_outside_the_range",
+                    &[("p0", format!("{}", min)), ("p1", format!("{}", max))]
+                )
             );
             values.extend((start..=end).step_by(step as usize));
         }
         values.sort_unstable();
         values.dedup();
-        ensure!(!values.is_empty(), "Cron 字段不能为空");
+        ensure!(
+            !values.is_empty(),
+            aow_i18n::message("automations.cron_field_cannot_be_empty", &[])
+        );
         Ok(Self {
             values,
             wildcard: text.starts_with('*'),
@@ -57,11 +66,17 @@ pub struct Schedule {
 
 impl Schedule {
     pub fn parse(value: &str) -> Result<Self> {
-        ensure!(value.len() <= 256, "Cron 表达式过长");
+        ensure!(
+            value.len() <= 256,
+            aow_i18n::message("automations.cron_expression_too_long", &[])
+        );
         let fields: Vec<_> = value.split_whitespace().collect();
         ensure!(
             fields.len() == 5,
-            "Cron 需要五个数字字段：分 时 日 月 星期；支持 *、列表、范围和步长"
+            aow_i18n::message(
+                "automations.cron_requires_five_numeric_fields_minute_hour_day_month",
+                &[]
+            )
         );
         let mut weekday = Field::parse(fields[4], 0, 7)?;
         weekday.values.iter_mut().for_each(|v| {

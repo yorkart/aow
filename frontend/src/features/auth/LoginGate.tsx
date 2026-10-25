@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { ReactNode, useEffect, useState } from 'react';
 import { authStatus } from './authApi';
 import { AuthScreen } from './AuthScreen';
@@ -13,7 +14,7 @@ export function LoginGate({ children }: { children: ReactNode }) {
     let active = true;
     void authStatus()
       .then((next) => { if (active) setStatus(next); })
-      .catch((error: unknown) => { if (active) setLoadError(error instanceof Error ? error.message : '无法读取登录状态'); });
+      .catch((error: unknown) => { if (active) setLoadError(error instanceof Error ? error.message : t("auth.unable_to_read_login_status")); });
     return () => { active = false; };
   }, []);
 
@@ -29,23 +30,23 @@ export function LoginGate({ children }: { children: ReactNode }) {
     return () => { active = false; window.clearInterval(timer); document.removeEventListener('visibilitychange', check); };
   }, [status?.authenticated]);
 
-  if (loadError) return <AuthScreen title="无法连接 AoW" detail={loadError} retry={() => window.location.reload()} />;
-  if (!status) return <AuthScreen title="正在检查登录状态…" />;
-  if (!status.configured) return <AuthScreen title="尚未配置登录方式" detail={status.message ?? '请在服务器上完成登录配置。'} />;
+  if (loadError) return <AuthScreen title={t("auth.unable_to_connect_to_aow")} detail={loadError} retry={() => window.location.reload()} />;
+  if (!status) return <AuthScreen title={t("auth.checking_login_status")} />;
+  if (!status.configured) return <AuthScreen title={t("auth.no_login_method_configured")} detail={status.message ?? t("auth.complete_login_configuration_on_the_server")} />;
   if (status.authenticated) return <>{children}</>;
   return <LoginMethods status={status} onSuccess={setStatus} />;
 }
 
 function LoginMethods({ status, onSuccess }: { status: AuthStatus } & LoginMethodProps) {
   const [selected, setSelected] = useState<string>();
-  const available = (status.methods ?? [{ id: 'password', label: '账号密码', configured: true }])
+  const available = (status.methods ?? [{ id: 'password', label: t("auth.username_and_password"), configured: true }])
     .filter(method => method.configured && loginMethods.has(method.id));
   const method = available.find(method => method.id === selected) ?? available[0];
   const Form = method && loginMethods.get(method.id);
-  if (!Form) return <AuthScreen title="当前页面不支持此登录方式" detail="请刷新页面或更新客户端后重试。" retry={() => window.location.reload()} />;
+  if (!Form) return <AuthScreen title={t("auth.this_login_method_is_unsupported_by_this_page")} detail={t("auth.refresh_the_page_or_update_the_client_and_try")} retry={() => window.location.reload()} />;
 
-  return <AuthScreen title="登录 AoW">
-    {available.length > 1 && <div className="aow-auth-methods" role="group" aria-label="登录方式">
+  return <AuthScreen title={t("auth.sign_in_to_aow")}>
+    {available.length > 1 && <div className="aow-auth-methods" role="group" aria-label={t("auth.login_method")}>
       {available.map(option => <button key={option.id} type="button" aria-pressed={method.id === option.id} onClick={() => setSelected(option.id)}>{option.label}</button>)}
     </div>}
     <Form key={method.id} onSuccess={onSuccess} />

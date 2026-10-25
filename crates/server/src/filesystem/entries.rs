@@ -97,7 +97,7 @@ pub(crate) async fn delete_fs_entry(
         return Err(HttpError::new(
             StatusCode::BAD_REQUEST,
             "root_delete_forbidden",
-            "filesystem root cannot be deleted",
+            aow_i18n::text("http.root_delete_forbidden"),
             Some(path.to_string_lossy().into_owned()),
         ));
     }
@@ -110,7 +110,7 @@ pub(crate) async fn delete_fs_entry(
         return Err(HttpError::new(
             StatusCode::BAD_REQUEST,
             "unsupported_entry",
-            "only files, directories, and symbolic links can be deleted",
+            aow_i18n::text("http.unsupported_delete_entry"),
             Some(path.to_string_lossy().into_owned()),
         ));
     }
@@ -145,7 +145,7 @@ fn validate_fs_entry_path(path: &Path) -> Result<(), HttpError> {
         return Err(HttpError::new(
             StatusCode::BAD_REQUEST,
             "invalid_path",
-            "path must not contain . or .. components",
+            aow_i18n::text("http.relative_path_components"),
             Some(path.to_string_lossy().into_owned()),
         ));
     }

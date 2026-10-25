@@ -42,6 +42,7 @@ let browser;
 
 async function fixture(t) {
   const context = await browser.newContext({ viewport: { width: 1100, height: 800 }, reducedMotion: 'reduce' });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
   const state = { requests: [], cancelled: [], errors: [], gates: [] };
   await context.route('**/api/**', async route => {
     const request = route.request(), url = new URL(request.url());
@@ -64,7 +65,8 @@ async function fixture(t) {
     }
     return route.fulfill({ status: 404 });
   });
-  const page = await context.newPage(); page.setDefaultTimeout(10000); page.setDefaultNavigationTimeout(30000);
+  const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } }); page.setDefaultTimeout(10000); page.setDefaultNavigationTimeout(30000);
   page.on('pageerror', error => state.errors.push(error.message));
   t.after(async () => { state.gates.forEach(resolve => resolve()); await context.close(); assert.deepEqual(state.errors, []); });
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/search-test`);
@@ -80,11 +82,11 @@ try {
     await page.locator('[data-tree-path="/project/src"]').click();
     await page.locator('[data-tree-path="/project/src/original.txt"]').waitFor();
     await input.fill('search');
-    const results = page.getByRole('tree', { name: 'Project Explorer 搜索结果' });
+    const results = page.getByRole('tree', { name: '项目资源管理器 搜索结果' });
     await results.getByText('search.txt', { exact: true }).waitFor();
     assert.deepEqual(new Set(state.requests.map(request => request.root)), new Set(['/project', '/notes']));
     assert.equal(await results.getByRole('treeitem', { name: 'deep 1' }).getAttribute('aria-level'), '3');
-    await page.getByRole('tree', { name: 'Notes Explorer 搜索结果' }).getByText('search.txt', { exact: true }).click();
+    await page.getByRole('tree', { name: '笔记资源管理器 搜索结果' }).getByText('search.txt', { exact: true }).click();
     assert.equal((await page.evaluate(() => window.opened)).source, 'notes');
     await page.getByRole('button', { name: '清空搜索' }).click();
     await page.locator('[data-tree-path="/project/src/original.txt"]').waitFor({ state: 'visible' });
@@ -96,7 +98,7 @@ try {
     await page.getByRole('button', { name: '区分大小写' }).click();
     await page.getByRole('button', { name: '全词匹配' }).click();
     await page.getByRole('button', { name: '正则表达式' }).click();
-    const results = page.getByRole('tree', { name: 'Project Explorer 搜索结果' });
+    const results = page.getByRole('tree', { name: '项目资源管理器 搜索结果' });
     await results.locator('mark').waitFor();
     assert.equal(await results.locator('mark').textContent(), 'needle');
     if (process.env.AOW_EXPLORER_SCREENSHOT) await page.screenshot({ path: process.env.AOW_EXPLORER_SCREENSHOT });
@@ -127,11 +129,11 @@ try {
     await input.fill('slow');
     await page.waitForTimeout(450);
     await input.fill('latest');
-    await page.getByRole('tree', { name: 'Project Explorer 搜索结果' }).waitFor();
+    await page.getByRole('tree', { name: '项目资源管理器 搜索结果' }).waitFor();
     assert.ok(state.cancelled.length >= 2);
     state.gates.forEach(resolve => resolve()); state.gates.length = 0;
     await page.evaluate(() => window.changeRoot('/other'));
-    await page.getByRole('tree', { name: 'Project Explorer 搜索结果' }).getByText('other', { exact: true }).waitFor();
+    await page.getByRole('tree', { name: '项目资源管理器 搜索结果' }).getByText('other', { exact: true }).waitFor();
     await input.fill('none');
     await page.getByText('无匹配文件', { exact: true }).first().waitFor();
     await input.fill('network-failure');
@@ -153,7 +155,7 @@ try {
   await test('large filtered trees virtualize rows and keyboard navigation keeps the query fixed', async t => {
     const { page, input } = await fixture(t);
     await input.fill('many');
-    const results = page.getByRole('tree', { name: 'Project Explorer 搜索结果' });
+    const results = page.getByRole('tree', { name: '项目资源管理器 搜索结果' });
     await results.getByText('file-0000.txt', { exact: true }).waitFor();
     assert.ok(await page.getByRole('treeitem').count() < 80);
     const top = (await input.boundingBox()).y;

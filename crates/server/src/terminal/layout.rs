@@ -3,7 +3,7 @@ use super::*;
 pub(super) fn validate_ratio(ratio: f32) -> Result<f32, TerminalError> {
     if !ratio.is_finite() || !(0.05..=0.95).contains(&ratio) {
         return Err(TerminalError::Invalid(
-            "split ratio must be between 0.05 and 0.95".to_owned(),
+            aow_i18n::text("validation.split_ratio_must_be_between_0_05_and_0_95").to_owned(),
         ));
     }
     Ok(ratio)
@@ -97,7 +97,7 @@ pub(super) fn validate_layout(
     collect_layout_panes(layout, 0, &mut found)?;
     if found != expected {
         return Err(TerminalError::Invalid(
-            "layout must contain every pane exactly once".to_owned(),
+            aow_i18n::text("validation.layout_must_contain_every_pane_exactly_once").to_owned(),
         ));
     }
     Ok(())

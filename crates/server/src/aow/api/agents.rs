@@ -7,10 +7,32 @@ pub(super) fn routes() -> Router<AppState> {
             get(list_agents).post(register_agent).patch(reorder_agents),
         )
         .route(
+            "/api/aow/agents/settings/default",
+            axum::routing::put(set_default_agent),
+        )
+        .route(
             "/api/aow/agents/{id}",
             delete(remove_agent).put(update_agent),
         )
 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DefaultAgentRequest {
+    agent_id: Option<String>,
+}
+
+async fn set_default_agent(
+    State(state): State<AppState>,
+    Json(request): Json<DefaultAgentRequest>,
+) -> Result<StatusCode, Response> {
+    state
+        .aow
+        .set_default_agent(request.agent_id)
+        .await
+        .map_err(aow_response)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 async fn list_agents(
     State(state): State<AppState>,
     Query(_query): Query<AgentsQuery>,

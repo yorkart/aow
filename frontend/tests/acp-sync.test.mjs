@@ -13,12 +13,13 @@ try {
   const base = `http://127.0.0.1:${server.httpServer.address().port}`;
   async function fixture(t, options = {}) {
     const page = await browser.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     t.after(async () => { await page.close(); assert.deepEqual(errors, []); });
     const session = { thread_id: 'thread', session_id: 'remote', agent_id: 'test', cwd: '/repo', title: 'Test', status: 'idle', sync_generation: 'g1', revision: 1, overview: [], entries: [], permissions: [], modes: {}, config_options: [], commands: [], usage: null };
     const state = { session, peers: new Set(), counts: {}, subscriptions: 0, sockets: 0, boot: 'b1', version: 1, active: 0, maxActive: 0, gate: undefined, deleted: false, supported: true, ...options };
     const head = resource => ({ resource, boot_id: state.boot, version: state.version, deleted: state.deleted, ...(resource.kind === 'session' ? { session: { generation: session.sync_generation, revision: session.revision, info: session } } : {}) });
-    await page.routeWebSocket('**/api/events/ws', socket => {
+    await page.routeWebSocket('**/api/events/ws*', socket => {
       state.sockets++;
       const peer = { socket, subscriptions: new Map(), send: data => socket.send(JSON.stringify({ event: 'acp', data })) };
       state.peers.add(peer);

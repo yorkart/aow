@@ -54,7 +54,8 @@ impl AowManager {
         {
             if !Path::new(path).is_absolute() || path.contains('\0') {
                 return Err(AowError::Invalid(
-                    "pinned worktree must be an absolute path".to_owned(),
+                    aow_i18n::text("validation.pinned_worktree_must_be_an_absolute_path")
+                        .to_owned(),
                 ));
             }
         }
@@ -110,7 +111,8 @@ impl AowManager {
         let normalize = |path: String| -> Result<String, AowError> {
             if !Path::new(&path).is_absolute() || path.contains('\0') {
                 return Err(AowError::Invalid(
-                    "pinned directory must be an absolute path".to_owned(),
+                    aow_i18n::text("validation.pinned_directory_must_be_an_absolute_path")
+                        .to_owned(),
                 ));
             }
             let path = path.trim_end_matches('/');

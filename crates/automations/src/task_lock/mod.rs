@@ -51,7 +51,7 @@ impl Store {
         valid_component(task_id)?;
         ensure!(
             (1..=10).contains(&max_concurrent_runs),
-            "最大同时执行数必须为 1–10"
+            aow_i18n::text("automations.maximum_concurrency_must_be_between_1_and_10")
         );
         for slot in 1..=max_concurrent_runs {
             if let Some(lock) = self.try_task_lock(task_id, &format!("slot-{slot}.lock"))? {
@@ -89,10 +89,16 @@ impl Store {
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
                 Err(error) => return Err(error.into()),
             };
-            ensure!(file.metadata()?.is_file(), "任务锁不是普通文件");
+            ensure!(
+                file.metadata()?.is_file(),
+                aow_i18n::text("common.lockNotFile")
+            );
             let mut contents = String::new();
             file.take(64 * 1024 + 1).read_to_string(&mut contents)?;
-            ensure!(contents.len() <= 64 * 1024, "任务锁信息过大");
+            ensure!(
+                contents.len() <= 64 * 1024,
+                aow_i18n::text("common.lockTooLarge")
+            );
             let mut lines = contents
                 .split_inclusive('\n')
                 .filter(|line| line.ends_with('\n'));
@@ -142,7 +148,10 @@ impl Store {
         if !try_exclusive(&file)? {
             return Ok(None);
         }
-        ensure!(file.metadata()?.len() <= 64 * 1024, "任务锁信息过大");
+        ensure!(
+            file.metadata()?.len() <= 64 * 1024,
+            aow_i18n::text("common.lockTooLarge")
+        );
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
         let mut lines = contents.lines();

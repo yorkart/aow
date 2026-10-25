@@ -1,4 +1,4 @@
-// Port of config_options.rs: config providers replace legacy modes; selections persist defaults.
+import { t } from '../../../lib/i18n';
 import { useEffect, useState } from 'react';
 import { Check, ChevronDown, Star } from 'lucide-react';
 import { applyEdits, modify, parse } from 'jsonc-parser';
@@ -19,24 +19,24 @@ const matches = (value: string, query: string) => {
 };
 function SelectOption({ option, favorites, disabled, onChange, onFavorite }: { option: Data; favorites: string[]; disabled: boolean; onChange: (value: string) => void; onFavorite?: (value: string) => void }) {
   const [query, setQuery] = useState('');
-  const all = choices(option); const current = all.find(choice => choice.value === option.currentValue)?.name || 'Unknown';
+  const all = choices(option); const current = all.find(choice => choice.value === option.currentValue)?.name || t("acp.unknown_config_value");
   const filtered = all.filter(choice => matches(choice.name, query));
   const favoriteChoices = filtered.filter(choice => favorites.includes(choice.value));
   const entries: ({ label: string } | Choice)[] = [];
   if (favoriteChoices.length) {
-    entries.push({ label: '收藏' }, ...favoriteChoices);
-    if (!filtered[0]?.group) entries.push({ label: '所有选项' });
+    entries.push({ label: t("acp.favorites") }, ...favoriteChoices);
+    if (!filtered[0]?.group) entries.push({ label: t("acp.all_options") });
   }
   let group: string | undefined;
   for (const choice of filtered) { if (choice.group !== group && choice.group) entries.push({ label: choice.group }); group = choice.group; entries.push(choice); }
   return <Popover label={text(option.name)} disabled={disabled} above trigger={<><span className="acp-option-value" title={text(option.description)}>{current}</span><ChevronDown size={12} /></>}>
     {close => <><div className="acp-menu-heading">{text(option.name)}</div>
-      {all.length >= 5 && <input className="acp-menu-search" aria-label={`搜索 ${text(option.name)}`} placeholder="选择选项…" value={query} onChange={event => setQuery(event.target.value)} />}
+      {all.length >= 5 && <input className="acp-menu-search" aria-label={t("acp.search", { value0: text(option.name) })} placeholder={t("acp.choose_an_option")} value={query} onChange={event => setQuery(event.target.value)} />}
       <div className="acp-menu-options">{entries.map((entry, index) => 'label' in entry ? <div className="acp-menu-heading" key={index}>{entry.label}</div>
         : <div className="acp-choice" key={`${entry.value}:${index}`}>
           <button type="button" role="menuitemradio" aria-checked={entry.value === option.currentValue} title={entry.description} onClick={() => { onChange(entry.value); setQuery(''); close(); }}><span>{entry.name}</span>{entry.value === option.currentValue && <Check size={14} />}</button>
-          {onFavorite && <button type="button" className="acp-favorite" aria-label={`${favorites.includes(entry.value) ? '取消收藏' : '收藏'} ${entry.name}`} aria-pressed={favorites.includes(entry.value)} onClick={() => onFavorite(entry.value)}><Star size={13} fill={favorites.includes(entry.value) ? 'currentColor' : 'none'} /></button>}
-        </div>)}{!filtered.length && <p className="acp-menu-heading">没有匹配的选项。</p>}</div>
+          {onFavorite && <button type="button" className="acp-favorite" aria-label={`${favorites.includes(entry.value) ? t("common.remove_favorite") : t("acp.favorites")} ${entry.name}`} aria-pressed={favorites.includes(entry.value)} onClick={() => onFavorite(entry.value)}><Star size={13} fill={favorites.includes(entry.value) ? 'currentColor' : 'none'} /></button>}
+        </div>)}{!filtered.length && <p className="acp-menu-heading">{t("acp.no_matching_options")}</p>}</div>
     </>}
   </Popover>;
 }
@@ -72,8 +72,8 @@ export function ConfigOptions({ session, disabled, onAction }: { session: Sessio
   };
   const modern = session.config_options_supported || session.config_options.length > 0;
   const modes = list(session.modes?.availableModes);
-  return <div className="acp-config-options" aria-label="会话配置">
-    {!modern && !!modes.length && <SelectOption option={{ name: '模式', currentValue: session.modes.currentModeId, options: modes.map(mode => ({ value: mode.id, name: mode.name, description: mode.description })) }} favorites={[]} disabled={disabled || saving} onChange={value => { void change('', value, true); }} />}
+  return <div className="acp-config-options" aria-label={t("acp.session_configuration")}>
+    {!modern && !!modes.length && <SelectOption option={{ name: t("acp.mode"), currentValue: session.modes.currentModeId, options: modes.map(mode => ({ value: mode.id, name: mode.name, description: mode.description })) }} favorites={[]} disabled={disabled || saving} onChange={value => { void change('', value, true); }} />}
     {modern && session.config_options.map(option => {
       const id = text(option.configId) || text(option.id);
       if (option.type === 'select') return <SelectOption key={id} option={option} favorites={Array.isArray(favorites[id]) ? favorites[id] : []} disabled={disabled || saving} onChange={value => { void change(id, value); }} onFavorite={value => { void toggleFavorite(id, value); }} />;

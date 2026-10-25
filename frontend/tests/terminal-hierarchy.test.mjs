@@ -22,6 +22,7 @@ try {
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
   async function fixture(t, tabs = data(), instances = []) {
     const page = await browser.newPage({ viewport: { width: 900, height: 700 } });
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     page.setDefaultTimeout(8000);
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -35,8 +36,8 @@ try {
 
   await test('all original items retain status; each independently expands its descendants across groups and worktrees', async t => {
     const { page } = await fixture(t);
-    assert.equal(await page.getByRole('region', { name: 'User Terminals', exact: true }).count(), 1);
-    assert.equal(await page.getByRole('region', { name: 'CLI Terminals', exact: true }).count(), 1);
+    assert.equal(await page.getByRole('region', { name: "用户终端", exact: true }).count(), 1);
+    assert.equal(await page.getByRole('region', { name: "CLI 终端", exact: true }).count(), 1);
     assert.equal(await page.locator('.terminal-family').count(), 4);
     assert.equal(await page.locator('.terminal-panel-status').count(), 4);
     assert.equal(await page.locator('.terminal-descendant').count(), 0);
@@ -52,7 +53,7 @@ try {
     assert.equal(await root(page, 'a').locator('.terminal-panel-row').evaluate(el => el.getBoundingClientRect().height), before.height);
     await root(page, 'a').getByRole('button', { name: 'feat/tests · 检查测试结果', exact: true }).click();
     assert.equal(await page.getByLabel('Opened pane').textContent(), 'c:pc');
-    await page.getByRole('button', { name: '刷新 User Terminals', exact: true }).click();
+    await page.getByRole('button', { name: '刷新 用户终端', exact: true }).click();
     assert.equal(await root(page, 'a').locator('[data-pane-id="pc"]').count(), 1);
     await page.locator('.terminal-panel').screenshot({ path: '/tmp/aow-terminal-hierarchy.png' });
     await expandRoot(page, 'a');
@@ -91,7 +92,7 @@ try {
     assert.equal(await page.getByLabel('Opened pane').textContent(), 'acp:thread-two');
     instances[2].title = '已更新的验证结果';
     const refreshed = page.waitForResponse(response => new URL(response.url()).pathname === '/api/instances');
-    await page.getByRole('button', { name: '刷新 User Terminals', exact: true }).click();
+    await page.getByRole('button', { name: '刷新 用户终端', exact: true }).click();
     await refreshed;
     await branch.getByRole('button', { name: 'main · ACP · 已更新的验证结果', exact: true }).waitFor();
   });

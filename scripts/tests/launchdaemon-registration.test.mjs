@@ -32,13 +32,17 @@ with tempfile.TemporaryDirectory(prefix='aow-registration-') as temporary:
             'StandardOutPath': '/dev/null', 'StandardErrorPath': '/dev/null',
             'EnvironmentVariables': {'HOME': str(home), 'USER': account.pw_name,
                 'LOGNAME': account.pw_name, 'AOW_RUNTIME_ROOT': str(runtime),
-                'AOW_LOG_MODE': 'unified', 'AOW_SERVER_PORT': port, 'AOW_AUTH_SECURE_COOKIE': 'true'},
+                'AOW_LOG_MODE': 'unified', 'AOW_SERVER_PORT': port, 'AOW_AUTH_SECURE_COOKIE': 'true',
+                'AOW_AUTH_SESSION_MAX_AGE_SECONDS': '86400', 'AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS': '7200'},
         }
     request = {'version': 1, 'user': account.pw_name, 'uid': account.pw_uid,
                'home': str(home), 'runtime': str(runtime),
                'components': {name: config(name) for name in ['server', 'terminald']}}
     valid = m.validate_request(request, account)
     assert [name for name, _ in valid] == ['terminald', 'server']
+    for _, configuration in valid:
+        assert configuration['EnvironmentVariables']['AOW_AUTH_SESSION_MAX_AGE_SECONDS'] == '86400'
+        assert configuration['EnvironmentVariables']['AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS'] == '7200'
     proxied = copy.deepcopy(request)
     proxy_environment = {
         'HTTP_PROXY': 'http://127.0.0.1:7890', 'HTTPS_PROXY': 'http://127.0.0.1:7890',

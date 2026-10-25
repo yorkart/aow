@@ -67,6 +67,12 @@ impl AcpDebugLogStore {
             .collect()
     }
 
+    pub(crate) fn remove_connection(&self, id: &str) {
+        let mut store = self.state.lock().unwrap();
+        store.connections.remove(id);
+        store.archived.retain(|archived| archived != id);
+    }
+
     pub(crate) fn remove_thread(&self, thread_id: &str) {
         let mut store = self.state.lock().unwrap();
         store.connections.retain(|_, log| {

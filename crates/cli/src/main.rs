@@ -26,13 +26,11 @@ Queries do not initialize, migrate,
 repair, or clean state. Help and version work without a state directory.
 
 State directory precedence:
-  --state-dir PATH > AOW_STATE_DIR > $XDG_STATE_HOME/aow
-  > $HOME/.local/state/aow (normally ~/.local/state/aow).
+  --state-dir PATH > AOW_STATE_DIR > $HOME/.aow.
   Without these environment variables: the OS temp directory/aow-<pid>.
   A server started with a custom --state-dir requires the same path here.
-  config.toml selects a Git repository (config-repo) and configuration directory (config-id).
-  Run history stays in the local state directory. Without config.toml, queries
-  read configuration in the state directory without initializing a repository.
+  Configuration files live directly in the application home.
+  Automation definitions live in automations/tasks; run history lives in state/automations.
 
 Output: one JSON value on stdout; errors are JSON {error:{code,message}} on stderr.
 Exit codes: 0 operation/help success, 1 I/O/service failure, 2 invalid arguments,

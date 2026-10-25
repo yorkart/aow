@@ -41,7 +41,7 @@ impl TerminalManager {
         }
         if request.shell.is_some() {
             return Err(TerminalError::Invalid(
-                "shell cannot be combined with agent_id".to_owned(),
+                aow_i18n::text("validation.shell_cannot_be_combined_with_agent_id").to_owned(),
             ));
         }
         let requested_name = request.name.as_deref().map(validate_name).transpose()?;
@@ -64,7 +64,7 @@ impl TerminalManager {
                     std::env::temp_dir().join(format!("aow-{}", std::process::id()))
                 });
             aow_agents::pi_bridge::prepare(
-                &state.join("agents/pi"),
+                &state.join("data/agents/pi"),
                 &pane_id,
                 &mut launch.args,
                 &mut launch.env,
@@ -101,6 +101,7 @@ impl TerminalManager {
                 name_is_custom: Some(requested_name.is_some()),
                 name: requested_name.unwrap_or_else(|| launch.display_name.clone()),
                 workspace_root,
+                dock_project_id: None,
                 layout: TerminalLayout::Pane {
                     pane_id: pane_id.clone(),
                 },

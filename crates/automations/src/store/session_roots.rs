@@ -42,7 +42,9 @@ impl Store {
         {
             environment.insert("HOME".into(), cwd.join(home));
         }
-        let home = environment.get("HOME").context("无法确定 Agent 的 HOME")?;
+        let home = environment
+            .get("HOME")
+            .context(aow_i18n::text("automations.unable_to_determine_agent_home"))?;
         // This also freezes native indirection such as Hermes active_profile.
         let roots = SessionRoots::from_configuration(home, &environment);
         atomic_write(
@@ -52,8 +54,9 @@ impl Store {
     }
 
     pub fn run_session_roots(&self, task_id: &str, run_id: &str) -> Result<SessionRoots> {
-        let bytes = std::fs::read(self.run_path(task_id, run_id)?.join(FILE))
-            .context("本次运行缺少会话目录记录")?;
+        let bytes = std::fs::read(self.run_path(task_id, run_id)?.join(FILE)).context(
+            aow_i18n::text("automations.this_run_has_no_session_directory_record"),
+        )?;
         Ok(serde_json::from_slice(&bytes)?)
     }
 }

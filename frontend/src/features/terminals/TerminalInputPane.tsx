@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type ComponentProps } from 'react';
 import { ChevronUp } from 'lucide-react';
 import type { TerminalPaneControls } from './terminalPresentation';
@@ -8,7 +9,7 @@ import './terminal-input.css';
 const TerminalInputEditor = lazy(() => import('./TerminalInputEditor'));
 const DEFAULT_INPUT_HEIGHT = 80;
 
-type Props = Pick<ComponentProps<typeof TerminalPaneView>, 'visible' | 'tabId' | 'pane' | 'active' | 'onFocus' | 'onStatus' | 'onRebuild' | 'rebuilding'>;
+type Props = Pick<ComponentProps<typeof TerminalPaneView>, 'visible' | 'autoFocus' | 'focusRequest' | 'tabId' | 'pane' | 'active' | 'onFocus' | 'onStatus' | 'onRebuild' | 'rebuilding'>;
 
 export function TerminalInputPane(props: Props) {
   const isMacOS = navigator.userAgent.includes('Macintosh');
@@ -73,7 +74,7 @@ export function TerminalInputPane(props: Props) {
     if (!draft.trim() || composing.current) return;
     try {
       if (!controls.current?.submit(draft)) {
-        setError('终端暂时无法接收输入，草稿已保留');
+        setError(t("terminals.terminal_cannot_receive_input_right_now_draft_retained"));
         return;
       }
       setDraft('');
@@ -81,7 +82,7 @@ export function TerminalInputPane(props: Props) {
       dismiss();
       controls.current.focus();
     } catch {
-      setError('发送失败，草稿已保留');
+      setError(t("terminals.failed_to_send_draft_retained"));
     }
   };
 
@@ -90,12 +91,12 @@ export function TerminalInputPane(props: Props) {
     <div className="terminal-input-surface" style={{ transform: `translateY(-${shown ? editorHeight : 0}px)` }}>
       <TerminalPaneView {...props} controlsRef={controls} inputSuspended={shown} onConnectionChange={setConnection} />
     </div>
-    {ready && !shown ? <button type="button" className="terminal-input-trigger" aria-label="打开终端输入编辑器"
+    {ready && !shown ? <button type="button" className="terminal-input-trigger" aria-label={t("terminals.open_terminal_input_editor")}
       onClick={() => { props.onFocus(); setError(''); setOpen(true); }}>
-      <span><ChevronUp aria-hidden="true" />点击编辑输入</span>
+      <span><ChevronUp aria-hidden="true" />{t("terminals.click_to_edit_input")}</span>
     </button> : null}
     {shown ? <div ref={composer} className="terminal-input-composer" style={{ height: editorHeight }}
-      role="group" aria-label="终端输入编辑器" tabIndex={-1}
+      role="group" aria-label={t("terminals.terminal_input_editor")} tabIndex={-1}
       onBlurCapture={event => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) dismiss();
       }}
@@ -115,7 +116,7 @@ export function TerminalInputPane(props: Props) {
           controls.current?.focus();
         }
       }}>
-      <div className="terminal-input-resize" role="separator" aria-label="调整输入编辑器高度"
+      <div className="terminal-input-resize" role="separator" aria-label={t("terminals.resize_input_editor_height")}
         aria-orientation="horizontal" tabIndex={0} aria-valuenow={Math.round(editorHeight)}
         aria-valuemin={minHeight} aria-valuemax={maxHeight}
         onKeyDown={event => {
@@ -142,11 +143,11 @@ export function TerminalInputPane(props: Props) {
         }}
         onLostPointerCapture={() => { drag.current = null; setDragging(false); }} />
       <div className="terminal-input-editor">
-        <Suspense fallback={<span className="terminal-input-loading">正在加载编辑器…</span>}>
+        <Suspense fallback={<span className="terminal-input-loading">{t("aow.loading_editor")}</span>}>
           <TerminalInputEditor value={draft} onChange={setDraft} onComposing={active => { composing.current = active; }} />
         </Suspense>
       </div>
-      <div className="terminal-input-hint">Enter 换行 · {isMacOS ? '⌘ + Enter' : 'Ctrl + Enter'} 提交</div>
+      <div className="terminal-input-hint">{t("terminals.enter_for_a_new_line")} {isMacOS ? '⌘ + Enter' : 'Ctrl + Enter'} {t("inbox.submit")}</div>
       {error ? <div className="terminal-input-error" role="alert">{error}</div> : null}
     </div> : null}
   </div>;

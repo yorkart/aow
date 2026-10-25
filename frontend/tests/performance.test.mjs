@@ -15,6 +15,7 @@ try {
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
   async function fixture(t) {
     const context = await browser.newContext({ viewport: { width: 1100, height: 900 }, reducedMotion: 'reduce' });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     const state = { errors: [], paths: ['/a', '/b'], pinRequests: 0, pinGate: null, failPins: false, gitRequests: [], statusGate: null, logGate: null, failStatus: false, branch: 'main', commits: structuredClone(commits) };
     state.gitCommands = [];
     state.commandGate = null;
@@ -57,6 +58,7 @@ try {
       await route.fulfill(data === undefined ? { status: 404, json: { message: 'Unknown fixture endpoint' } } : { json: data });
     });
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     page.setDefaultTimeout(10000);
     page.on('pageerror', error => state.errors.push(error.message));
     await page.clock.install({ time: new Date('2026-09-16T00:00:00Z') });
@@ -70,6 +72,48 @@ try {
     await page.getByRole('button', { name: `定位 ${title}`, exact: true }).click();
     await page.clock.runFor(32);
   }
+
+  await test('commit previews stay hovered while opened diff files retain the themed active background', async t => {
+    const { page, state } = await fixture(t);
+    state.commitFiles = ['first.txt', 'second.txt'].map(path => ({ path, status: 'M', original_path: null }));
+    const commit = page.locator('.commit-node').first();
+    const heading = commit.locator('.commit-row');
+    await heading.scrollIntoViewIfNeeded();
+    await heading.hover();
+    await page.clock.runFor(500);
+    assert.equal(await commit.evaluate(element => element.classList.contains('selected')), false);
+    await heading.click();
+    const first = commit.locator('.change-row').filter({ hasText: 'first.txt' });
+    const second = commit.locator('.change-row').filter({ hasText: 'second.txt' });
+    await first.click();
+    await page.waitForFunction(() => document.querySelector('.commit-changes .change-row[aria-current="true"]'));
+    assert.equal(await first.getAttribute('aria-current'), 'true');
+    assert.equal(await commit.evaluate(element => element.classList.contains('selected')), true);
+    for (const theme of ['aow-dark', 'jetbrains-light']) {
+      await page.evaluate(async id => (await import('/src/lib/theme/store.ts')).setTheme(id), theme);
+      await second.hover();
+      const colors = await commit.evaluate(element => {
+        const color = token => {
+          const probe = document.createElement('span'); probe.style.backgroundColor = `var(${token})`;
+          element.append(probe); const value = getComputedStyle(probe).backgroundColor; probe.remove(); return value;
+        };
+        return {
+          hovered: getComputedStyle(element.querySelector('.change-row:not(.selected)')).backgroundColor,
+          selected: getComputedStyle(element.querySelector('.change-row.selected')).backgroundColor,
+          heading: getComputedStyle(element.querySelector('.commit-row')).backgroundColor,
+          hover: color('--aow-list-highlight'), active: color('--aow-list-selection'),
+        };
+      });
+      assert.equal(colors.hovered, colors.hover, `${theme} hover`);
+      assert.equal(colors.selected, colors.active, `${theme} active file`);
+      assert.equal(colors.heading, colors.active, `${theme} active commit`);
+      await first.hover();
+      assert.equal(await first.evaluate(element => getComputedStyle(element).backgroundColor), colors.active, 'hover must not replace active background');
+    }
+    await second.click();
+    assert.equal(await second.getAttribute('aria-current'), 'true');
+    assert.equal(await first.getAttribute('aria-current'), null);
+  });
 
   await test('commit graph keeps HEAD as the mainline and connects across expanded file lists', async t => {
     const { page, state } = await fixture(t);
@@ -121,7 +165,7 @@ try {
       await page.locator('.commit-changes .change-row').waitFor();
       await connected();
       await page.getByRole('button', { name: 'Commits 视图选项', exact: true }).click();
-      await page.getByRole('menuitemradio', { name: 'View as Tree', exact: true }).click();
+      await page.getByRole('menuitemradio', { name: "树形视图", exact: true }).click();
       await page.locator('.commit-changes .source-change-tree').waitFor();
       await connected();
       if (process.env.AOW_GIT_GRAPH_SCREENSHOT) await page.locator('.source-control').screenshot({ path: process.env.AOW_GIT_GRAPH_SCREENSHOT });
@@ -161,7 +205,7 @@ try {
     await menu.waitFor({ state: 'detached' });
     assert.equal(await commitsMenu.evaluate(element => element === document.activeElement), true);
     await changes.click();
-    await menu.getByRole('menuitemradio', { name: 'View as Tree', exact: true }).click();
+    await menu.getByRole('menuitemradio', { name: "树形视图", exact: true }).click();
     await page.locator('.changes-list .source-change-tree').waitFor();
     await navigate(page, 'Commits');
     await page.locator('.commit-row').first().click();
@@ -170,10 +214,10 @@ try {
     await page.locator('.commit-changes .change-row').first().waitFor();
     assert.equal(await page.locator('.commit-changes .source-change-tree').count(), 0);
     await commitsMenu.click();
-    await menu.getByRole('menuitemradio', { name: 'View as Tree', exact: true }).click();
+    await menu.getByRole('menuitemradio', { name: "树形视图", exact: true }).click();
     await page.locator('.commit-changes .source-change-tree').waitFor();
     await changes.click();
-    await menu.getByRole('menuitemradio', { name: 'View as list', exact: true }).click();
+    await menu.getByRole('menuitemradio', { name: "列表视图", exact: true }).click();
     assert.equal(await page.locator('.changes-list .source-change-tree').count(), 0);
     assert.equal(await page.locator('.commit-changes .source-change-tree').count(), 1);
     await commitsMenu.click();
@@ -379,7 +423,7 @@ try {
     await list.locator('.change-row').first().waitFor();
     assert.equal(await scroller.evaluate(element => element.scrollTop), scrollTop);
     await page.getByRole('button', { name: 'Changes 视图选项', exact: true }).click();
-    await page.getByRole('menuitemradio', { name: 'View as Tree', exact: true }).click();
+    await page.getByRole('menuitemradio', { name: "树形视图", exact: true }).click();
     await scroller.evaluate(element => { element.scrollTop = 0; });
     const folder = list.locator('.change-folder-row[title="dir-00"]');
     await folder.click();

@@ -24,7 +24,7 @@ struct Saved {
 
 impl InstanceStore {
     pub(crate) fn persistent(directory: &Path) -> anyhow::Result<Self> {
-        let path = directory.join("instances.json");
+        let path = directory.join("state/instances.json");
         let mut records = BTreeMap::new();
         match std::fs::read(&path) {
             Ok(bytes) => {
@@ -71,9 +71,9 @@ impl InstanceStore {
                 .get(&item.instance)
                 .is_some_and(|previous| previous.parent != item.parent)
             {
-                return Err(HttpError::internal(
-                    "instance creation parent cannot change",
-                ));
+                return Err(HttpError::internal(aow_i18n::text(
+                    "validation.instance_creation_parent_cannot_change",
+                )));
             }
             next.insert(item.instance.clone(), item);
         }

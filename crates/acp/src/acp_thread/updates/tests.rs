@@ -159,7 +159,7 @@ fn mixed_protocol_deltas_reconstruct_the_authoritative_snapshot() -> Result<()> 
         json!({"sessionUpdate":"current_mode_update", "currentModeId":"mode"}),
         json!({"sessionUpdate":"config_option_update", "configOptions":[]}),
         json!({"sessionUpdate":"available_commands_update", "availableCommands":[]}),
-        json!({"sessionUpdate":"session_info_update", "title":"new title"}),
+        json!({"sessionUpdate":"session_info_update", "title":"new title", "_meta":{"trae":{"queueStatus":{"state":"waiting","message":"Queue position: 2"}}}}),
         json!({"sessionUpdate":"usage_update", "used":42}),
         json!({"sessionUpdate":"future_extension", "value":true}),
     ] {
@@ -239,6 +239,100 @@ fn streaming_hot_path_sample() -> Result<()> {
             json!({"history_mib":history_mib, "updates":500, "snapshot_bytes":snapshot_bytes, "delta_bytes":delta_bytes,
             "update_p50_ns":durations[250], "update_p95_ns":durations[475]})
         );
+    }
+    Ok(())
+}
+
+#[test]
+fn session_metadata_replaces_top_level_keys_and_keeps_ready_payloads() -> Result<()> {
+    let mut store = store()?;
+    let before = store.snapshot("local")?;
+    let history_size = before.entries.len();
+    for metadata in [
+        json!({"trae":{"queueStatus":{"state":"waiting","message":"Queue position: 2"},"old":true},"other":{"value":1}}),
+        json!({"trae":{"queueStatus":{"state":"ready","position":null,"message":null}}}),
+    ] {
+        store.session_update(
+            "local",
+            json!({"sessionUpdate":"session_info_update","_meta":metadata}),
+        )?;
+    }
+    store.session_update(
+        "local",
+        json!({"sessionUpdate":"session_info_update","title":"Updated"}),
+    )?;
+    let current = store.snapshot("local")?;
+    assert_eq!(current.entries.len(), history_size);
+    assert_eq!(current.session_meta_revision, 2);
+    assert_eq!(current.session_meta_revisions["trae"], 2);
+    assert_eq!(current.session_meta_revisions["other"], 1);
+    assert_eq!(current.session_meta["other"], json!({"value":1}));
+    assert_eq!(
+        current.session_meta["trae"],
+        json!({"queueStatus":{"state":"ready","position":null,"message":null}})
+    );
+    let thread = store.thread("local")?;
+    let delta = serde_json::to_value(since(
+        &thread.lock().unwrap(),
+        &before.sync_generation,
+        before.revision,
+    ))?;
+    assert_eq!(
+        delta["fields"]["session_meta"],
+        serde_json::to_value(&current.session_meta)?
+    );
+    let overview = crate::acp_thread::overview::snapshot(&mut thread.lock().unwrap());
+    assert_eq!(overview.session_meta, current.session_meta);
+    assert_eq!(
+        overview.session_meta_revisions,
+        current.session_meta_revisions
+    );
+    store.session_update(
+        "local",
+        json!({"sessionUpdate":"session_info_update","_meta":null}),
+    )?;
+    assert!(store.snapshot("local")?.session_meta.is_empty());
+    assert!(store.snapshot("local")?.session_meta_revisions.is_empty());
+    Ok(())
+}
+
+#[test]
+fn metadata_is_cleared_at_turn_boundaries_and_late_updates_stay_hidden() -> Result<()> {
+    let mut store = store()?;
+    let queue = json!({"sessionUpdate":"session_info_update","_meta":{"trae":{"queueStatus":{"message":"Waiting"}}}});
+    store.session_update("local", queue.clone())?;
+    store.update("local", |thread| {
+        let start = thread.entries.len();
+        AcpThread::push(thread, "user", json!({"type":"text","text":"New task"}));
+        crate::acp_thread::turns::start(thread, start);
+    })?;
+    assert!(store.snapshot("local")?.session_meta.is_empty());
+    store.session_update("local", queue.clone())?;
+    store.update("local", AcpThread::clear_session_meta)?;
+    assert!(store.snapshot("local")?.session_meta.is_empty());
+    store.session_update("local", queue.clone())?;
+    assert!(store.snapshot("local")?.session_meta.is_empty());
+    store.session_update(
+        "local",
+        json!({"sessionUpdate":"session_info_update","title":"New title"}),
+    )?;
+    assert_eq!(store.snapshot("local")?.title, "New title");
+
+    for status in ["idle", "disconnected"] {
+        store.update("local", |thread| {
+            thread.status = "working".into();
+            let start = thread.entries.len();
+            AcpThread::push(thread, "user", json!({"type":"text","text":"Next"}));
+            crate::acp_thread::turns::start(thread, start);
+        })?;
+        store.session_update("local", queue.clone())?;
+        assert!(!store.snapshot("local")?.session_meta.is_empty());
+        store.update("local", |thread| thread.status = status.into())?;
+        let ended = store.snapshot("local")?;
+        assert!(ended.session_meta.is_empty());
+        assert!(ended.session_meta_revisions.is_empty());
+        store.session_update("local", queue.clone())?;
+        assert!(store.snapshot("local")?.session_meta.is_empty());
     }
     Ok(())
 }

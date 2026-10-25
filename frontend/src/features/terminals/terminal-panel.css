@@ -8,6 +8,6 @@
 .terminal-panel-status-separator { flex: none; color: var(--muted); }
 .terminal-panel-status-dot { flex: 0 0 6px; width: 6px; height: 6px; }
 .terminal-panel-status > svg { flex: 0 0 13px; width: 13px; height: 13px; }
-.terminal-panel-status > .terminal-panel-state-active { color: #73c991; }
-.project-aow-terminal-menu .danger { margin-top: 3px; color: #d99a94; border-top: 1px solid var(--aow-line); border-radius: 0 0 3px 3px; }
-.project-aow-terminal-menu .danger:hover, .project-aow-terminal-menu .danger:focus-visible { color: var(--aow-text-hover); background: #7a302b; }
+.terminal-panel-status > .terminal-panel-state-active { color: var(--aow-success); }
+.project-aow-terminal-menu .danger { margin-top: 3px; color: var(--aow-error); border-top: 1px solid var(--aow-line); border-radius: 0 0 3px 3px; }
+.project-aow-terminal-menu .danger:hover, .project-aow-terminal-menu .danger:focus-visible { color: var(--aow-text-hover); background: var(--aow-error-background); }

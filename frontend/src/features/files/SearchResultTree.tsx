@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useId, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { ChevronRight, RefreshCw } from 'lucide-react';
 import { AowPanel, usePanelListViewport } from '../../components/AowPanel';
@@ -28,14 +29,14 @@ export function SearchResultTree({ root, title, icon, source, state, content, on
   const select = (index: number) => { const row = rows[index]; if (row) { setSelected(row.id); viewport.reveal(index); } };
   const selectedIndex = Math.max(0, rows.findIndex(row => row.id === selected));
   return <AowPanel className="explorer explorer-section" title={title} icon={icon} collapsed={panelCollapsed} onCollapsedChange={setPanelCollapsed}
-    actions={<AowIconButton title="刷新搜索" aria-label={`刷新 ${title} 搜索`} onClick={onRefresh}><RefreshCw /></AowIconButton>}>
+    actions={<AowIconButton title={t("files.refresh_search")} aria-label={t("files.refresh_search_2", { value0: title })} onClick={onRefresh}><RefreshCw /></AowIconButton>}>
     <div className="explorer-search-status" role="status">
-      {state.loading ? '正在搜索…' : state.error ? null : `${state.result?.files.length ?? 0} 个文件${content ? `，${state.result?.total_matches ?? 0} 处匹配` : ''}`}
-      {state.result?.truncated ? <span>结果不完整，已达到数量、时间或输出限制；请缩小搜索范围。</span> : null}
+      {state.loading ? t("files.searching") : state.error ? null : t("files.files", { count: state.result?.files.length ?? 0, value0: state.result?.files.length ?? 0, value1: content ? t("common.matches", { value0: state.result?.total_matches ?? 0 }) : '' })}
+      {state.result?.truncated ? <span>{t("files.results_are_incomplete_because_a_count_time_or_output")}</span> : null}
     </div>
     {state.error ? <div className="side-error" role="alert">{state.error}</div> : null}
-    {!state.loading && !state.error && !state.result?.files.length ? <div className="explorer-search-status">无匹配文件</div> : null}
-    {state.result?.files.length ? <div role="tree" tabIndex={0} aria-label={`${title} 搜索结果`} aria-activedescendant={`${id}-${selectedIndex}`}
+    {!state.loading && !state.error && !state.result?.files.length ? <div className="explorer-search-status">{t("files.no_matching_files")}</div> : null}
+    {state.result?.files.length ? <div role="tree" tabIndex={0} aria-label={t("files.search_results", { value0: title })} aria-activedescendant={`${id}-${selectedIndex}`}
       onKeyDown={event => {
         const row = rows[selectedIndex];
         if (event.key === 'ArrowDown') select(Math.min(rows.length - 1, selectedIndex + 1));

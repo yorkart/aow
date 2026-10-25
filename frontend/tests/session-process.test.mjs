@@ -1,11 +1,8 @@
+import { loadModule } from './helpers/load-module.mjs';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
-import ts from 'typescript';
 
-const source = await readFile(new URL('../src/features/sessions/sessionProcessPresentation.ts', import.meta.url), 'utf8');
-const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 } });
-const { groupSessionActivities, toolSummary, toolGroupStatus } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
+const { groupSessionActivities, toolSummary, toolGroupStatus } = await loadModule(new URL('../src/features/sessions/sessionProcessPresentation.ts', import.meta.url));
 const tool = (id, text, extra = {}) => ({ id, kind: 'tool', text, status: 'completed', timestamp: null, ...extra });
 
 test('only adjacent tools merge, preserving order and commentary boundaries without mutating input', () => {

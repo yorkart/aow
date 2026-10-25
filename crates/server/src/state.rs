@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use aow_terminald_client::TerminaldClient;
 
 use crate::{
-    BasePath, TerminalError, aow, auth, automations, operations, pull_requests, session_shares,
-    terminal, workspace_events,
+    BasePath, TerminalError, aow, auth, automations, git_platform_providers, operations,
+    session_shares, terminal, workspace_events,
 };
 
 #[derive(Clone)]
@@ -23,7 +23,7 @@ pub struct AppState {
     pub(crate) automations: Option<automations::AutomationManager>,
     pub(crate) operations: operations::OperationService,
     pub(crate) workspace_events: workspace_events::WorkspaceEvents,
-    pub(crate) review_providers: pull_requests::ProviderManager,
+    pub(crate) git_platform_providers: git_platform_providers::GitPlatformProviderManager,
 }
 
 impl AppState {
@@ -57,7 +57,7 @@ impl AppState {
             terminals,
             aow,
             automations: None,
-            review_providers: pull_requests::ProviderManager::default(),
+            git_platform_providers: git_platform_providers::GitPlatformProviderManager::default(),
             operations: operations::OperationService::in_memory(),
             workspace_events,
         }
@@ -102,12 +102,16 @@ impl AppState {
             inbox: crate::inbox::InboxStore::persistent(&state_dir)
                 .map_err(|e| TerminalError::Invalid(format!("failed to initialize inbox: {e}")))?,
             workspace_events,
-            review_providers: pull_requests::ProviderManager::persistent(&state_dir)
-                .map_err(|e| TerminalError::Invalid(e.to_string()))?,
+            git_platform_providers: git_platform_providers::GitPlatformProviderManager::persistent(
+                &state_dir,
+            )
+            .map_err(|e| TerminalError::Invalid(e.to_string()))?,
             base_path: BasePath::default(),
             frontend_dist,
-            operations: operations::OperationService::persistent(&state_dir.join("operation-logs"))
-                .map_err(|error| TerminalError::Invalid(error.to_string()))?,
+            operations: operations::OperationService::persistent(
+                &state_dir.join("state/operation-logs"),
+            )
+            .map_err(|error| TerminalError::Invalid(error.to_string()))?,
             auth: auth::AuthService::persistent(&state_dir),
             session_shares: session_shares::SessionShares::persistent(&state_dir).map_err(
                 |error| {
@@ -135,6 +139,12 @@ impl AppState {
         self
     }
 
+    /// Sets login session limits before serving requests or cloning the state.
+    pub fn with_session_timeouts(mut self, timeouts: crate::SessionTimeouts) -> Self {
+        self.auth.set_session_timeouts(timeouts);
+        self
+    }
+
     /// Reconciles durable terminal tabs with the external terminal daemon.
     /// A later terminal request retries this operation if startup happens
     /// while the daemon is unavailable.
@@ -145,7 +155,7 @@ impl AppState {
     /// The ACP writer runs outside Tokio; explicitly drain it before the runtime exits.
     pub async fn flush_acp_history(&self) -> anyhow::Result<()> {
         let service = self.acp.clone();
-        tokio::task::spawn_blocking(move || service.flush_threads_on_quit()).await?
+        aow_i18n::spawn_blocking(move || service.flush_threads_on_quit()).await?
     }
 
     pub fn start_agent_notifications(&self) {
@@ -160,7 +170,7 @@ impl AppState {
 }
 
 pub async fn initialize_aow_state(path: &Path) -> anyhow::Result<()> {
-    pull_requests::ProviderManager::persistent(path)?;
+    git_platform_providers::GitPlatformProviderManager::persistent(path)?;
     aow::AowManager::persistent(path)?
         .initialize_global()
         .await?;

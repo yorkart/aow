@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { AowAgent } from '../agents/types';
@@ -48,14 +49,14 @@ export function AgentSessionMenu({ x, y, session, agents, onOpen, onResume, onCl
 
   const action = (callback: () => void) => () => { onClose(); callback(); };
   return createPortal(<div ref={menu} className="project-aow-context-menu project-aow-session-menu"
-    style={{ left: position.x, top: position.y }} role="menu" aria-label={`${session.title} 会话操作`}
+    style={{ left: position.x, top: position.y }} role="menu" aria-label={t("sessions.session_actions", { value0: session.title })}
     onPointerDown={event => event.stopPropagation()} onContextMenu={event => event.preventDefault()}>
     <button role="menuitem" onClick={action(() => onOpen(session))}><WorkspaceMenuLabel action="open" /></button>
     <button role="menuitem" onClick={action(() => withFloatingOpen(() => onOpen(session)))}><WorkspaceMenuLabel action="floating" /></button>
     {profiles.length ? <hr /> : null}
-    {profiles.map(agent => <button key={agent.id} role="menuitem" title={`Resume · ${agent.display_name}`}
+    {profiles.map(agent => <button key={agent.id} role="menuitem" title={t("sessions.resume_with_agent", { agent: agent.display_name })}
       onClick={action(() => onResume(session, agent))}>
-      <AgentIcon agentId={session.agent} /><span>Resume · {agent.display_name}</span>
+      <AgentIcon agentId={session.agent} /><span>{t("sessions.resume_with_agent", { agent: agent.display_name })}</span>
     </button>)}
   </div>, document.body);
 }

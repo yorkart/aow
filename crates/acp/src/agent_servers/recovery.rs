@@ -178,6 +178,7 @@ impl AgentServerStore {
         session_id: String,
         id: String,
         replay: bool,
+        apply_defaults: bool,
     ) -> Result<SessionSnapshot> {
         if let Ok(previous) = self.session_connection(&id) {
             ensure!(
@@ -243,8 +244,17 @@ impl AgentServerStore {
                         let load = waiter.0.clone();
                         let connection = connection.clone();
                         let session_id = session_id.clone();
-                        tokio::spawn(async move {
-                            run_load(owner, connection, session_id, load, previous, replay).await;
+                        aow_i18n::spawn(async move {
+                            run_load(
+                                owner,
+                                connection,
+                                session_id,
+                                load,
+                                previous,
+                                replay,
+                                apply_defaults,
+                            )
+                            .await;
                         });
                     }
                     waiter.0.wait(true).await?;
@@ -408,6 +418,7 @@ async fn run_load(
     load: Arc<Load>,
     previous: Option<String>,
     replay: bool,
+    apply_defaults: bool,
 ) {
     let started = std::time::Instant::now();
     let method = if replay {
@@ -493,7 +504,7 @@ async fn run_load(
         let _ = connection
             .context
             .discard_load(&session_id, previous.as_deref());
-    } else {
+    } else if apply_defaults {
         // Installation has won the race. Defaults may perform further RPCs without the state lock.
         if let Err(error) = service.apply_defaults(&load.thread_id).await {
             tracing::warn!(%error, "Failed to apply recovered session defaults");

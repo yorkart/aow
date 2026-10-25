@@ -20,6 +20,7 @@ function Preview() {
   }, []);
   const openCommitDiff = useCallback((repo, commit, file) => {
     opened.current.push({ repo, commit: commit.id, file });
+    setSelected(`commit-diff:${repo}:${commit.id}:${file.path}`);
   }, []);
   window.performancePreview = { renders: renders.current, opened: opened.current, setVisible, update: () => update(value => value + 1), updatePins };
   return <>

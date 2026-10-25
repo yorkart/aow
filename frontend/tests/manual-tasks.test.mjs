@@ -15,6 +15,7 @@ try {
     created_at: '2026-09-23T00:00:00Z', updated_at: '2026-09-23T00:00:00Z', scheduler_error: null, next_run_at: null, last_run: null, is_running: false };
   async function fixture(t, { history = [], dynamic = false } = {}) {
     const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     page.setDefaultTimeout(15000);
     t.after(() => page.close());
     const errors = [], runs = [], saves = [], historyRequests = [];

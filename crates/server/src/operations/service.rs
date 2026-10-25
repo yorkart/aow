@@ -48,7 +48,12 @@ impl OperationService {
                             tracing::error!(%error, "operation log write failed");
                             let mut state =
                                 runtime.lock().unwrap_or_else(|error| error.into_inner());
-                            state.log_error = Some("操作日志写入失败，部分记录可能不完整".into());
+                            state.log_error = Some(
+                                aow_i18n::text(
+                                    "server.failed_to_write_operation_log_some_records_may_be",
+                                )
+                                .into(),
+                            );
                             state.revision += 1;
                             changes.send_replace(state.snapshot());
                         }
@@ -106,7 +111,8 @@ impl OperationService {
         {
             tracing::error!(%event_id, "audit log persistence failed");
             let mut state = self.inner.runtime.lock().unwrap();
-            state.log_error = Some("审计日志写入失败，部分记录可能不完整".into());
+            state.log_error =
+                Some(aow_i18n::text("server.failed_to_write_audit_log_some_records_may_be").into());
             state.revision += 1;
             self.inner.changes.send_replace(state.snapshot());
         } else {
@@ -125,7 +131,7 @@ impl OperationService {
             project_id: spec.project_id.map(|value| bounded(&value, 256)),
             resource: spec.resource.map(|value| bounded(&value, 4096)),
             created_at: chrono::Utc::now().to_rfc3339(),
-            message: "排队中".into(),
+            message: aow_i18n::text("server.queued").into(),
             completed: 0,
             total: spec.total,
             outcome: None,
@@ -145,7 +151,7 @@ impl OperationService {
             &spec.id,
             "started",
             Level::Info,
-            "操作已接受".into(),
+            aow_i18n::text("server.operation_accepted").into(),
             None,
             None,
             None,
@@ -223,7 +229,10 @@ impl OperationService {
                 })
                 .is_err()
         {
-            state.log_error = Some("操作日志队列已满或不可用，部分记录可能不完整".into());
+            state.log_error = Some(
+                aow_i18n::text("server.operation_log_queue_is_full_or_unavailable_some_records")
+                    .into(),
+            );
             tracing::error!(operation_id = id, "operation log queue unavailable");
         }
         state.revision += 1;

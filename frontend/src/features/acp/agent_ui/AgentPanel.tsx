@@ -1,4 +1,4 @@
-// Counterpart of the upstream implementation's session archive: history and imports live here.
+import { t } from '../../../lib/i18n';
 import { useEffect, useMemo, useState } from 'react';
 import { useInstanceGraph } from '../../instances/useInstanceGraph';
 import { InstanceDescendants, indexTerminalChildren } from '../../terminals/TerminalDescendants';
@@ -67,8 +67,8 @@ export function AgentPanel({ workspace, visible, activeThreadId, onOpen }: {
     return () => { cancelled = true; };
   }, [visible, workspace, refresh]);
   const remove = async (session: SessionInfo) => {
-    if (!await confirm({ title: '删除 ACP 会话？', description: `删除会话“${session.title}”。`,
-      warning: '支持远端删除的 Agent 也会删除远端记录。', confirmLabel: '删除', danger: true })) return;
+    if (!await confirm({ title: t("acp.delete_acp_session"), description: t("acp.delete_session", { value0: session.title }),
+      warning: t("acp.for_agents_supporting_remote_deletion_the_remote_record_will"), confirmLabel: t("acp.delete"), danger: true })) return;
     setOpening(session.thread_id); setError('');
     try { await acpApi.remove(session.thread_id); removeAcpSessionTabs(session.cwd, session.thread_id); }
     catch (reason) { setError(failure(reason)); } finally { setOpening(''); }
@@ -87,28 +87,28 @@ export function AgentPanel({ workspace, visible, activeThreadId, onOpen }: {
     index={childrenIndex} worktrees={worktrees} detectedAgents={{}} titles={{}} unreadTerminalIds={new Set()}>
     <AowListRow className={`acp-panel-row${activeThreadId === session.thread_id ? ' active' : ''}`}
       title={session.title} tooltip={session.title} disabled={!!opening} active={activeThreadId === session.thread_id}
-      openLabel={`打开 ACP 会话 ${session.title}`} onOpen={() => { void open(session); }} menuLabel="会话操作"
+      openLabel={t("acp.open_acp_session", { value0: session.title })} onOpen={() => { void open(session); }} menuLabel={t("acp.session_actions")}
       icon={<AgentIcon agentId={session.agent_id.replace(/-acp$/, '').replace(/^claude-agent$/, 'claude')} />}
-      titlePrefix={session.status === 'working' ? <><span role="status" aria-label="Agent 正在处理…"><SpinnerLabel /></span>{' '}</> : undefined}
-      actions={<AowIconButton className="aow-list-row-menu" title="删除会话" aria-label={`删除 ACP 会话 ${session.title}`} disabled={!!opening}
+      titlePrefix={session.status === 'working' ? <><span role="status" aria-label={t("aow.agent_is_working")}><SpinnerLabel /></span>{' '}</> : undefined}
+      actions={<AowIconButton className="aow-list-row-menu" title={t("acp.delete_session_2")} aria-label={t("acp.delete_acp_session_2", { value0: session.title })} disabled={!!opening}
         onClick={() => { void remove(session); }}><Trash2 /></AowIconButton>}>
       <small title={`${session.agent_id} · ${sessionDisplayTime(session)}`}>{timestamp(sessionDisplayTime(session)) || session.agent_id}</small>
       {unread.has(session.thread_id) && <TaskCompletion />}
     </AowListRow>
   </InstanceDescendants>;
-  return <section className="acp-history-panel" aria-label="ACP 会话列表">
-    <div className="acp-session-search"><Search size={13} /><input aria-label="搜索 ACP 会话" placeholder="搜索会话…" value={search} onChange={event => setSearch(event.target.value)} /></div>
+  return <section className="acp-history-panel" aria-label={t("acp.acp_session_list")}>
+    <div className="acp-session-search"><Search size={13} /><input aria-label={t("acp.search_acp_sessions")} placeholder={t("acp.search_sessions")} value={search} onChange={event => setSearch(event.target.value)} /></div>
     {(error || graph.error) && <p className="acp-error" role="alert">{error || graph.error}</p>}
     <InstancePanelGroups groups={[
-      { id: 'user', title: 'User ACP', icon: <UserRound />, tooltip: '用户创建或导入', items: matches.filter(session => session.source !== 'cli'),
+      { id: 'user', title: t("common.user_acp"), icon: <UserRound />, tooltip: t("acp.created_or_imported_by_user"), items: matches.filter(session => session.source !== 'cli'),
         ...synced.statusFor(workspace, scopes.user),
-        actions: <AowIconButton title="导入 ACP 会话" aria-label="导入 ACP 会话" disabled={busy} onClick={() => setImporting(true)}><Download /></AowIconButton> },
-      { id: 'cli', title: 'CLI ACP', icon: <SquareTerminal />, tooltip: <><code>aow-cli acp</code> 创建</>, items: matches.filter(session => session.source === 'cli'),
+        actions: <AowIconButton title={t("acp.import_acp_sessions")} aria-label={t("acp.import_acp_sessions")} disabled={busy} onClick={() => setImporting(true)}><Download /></AowIconButton> },
+      { id: 'cli', title: t("common.cli_acp"), icon: <SquareTerminal />, tooltip: <><code>aow-cli acp</code>  {t("acp.create")}</>, items: matches.filter(session => session.source === 'cli'),
         ...synced.statusFor(workspace, scopes.cli) },
     ]} worktrees={worktrees} activeWorktreePath={workspace} showAll={scopes} sortBy={sorts}
       onShowAllChange={setScope} onSortChange={setSort}
       onReload={() => { synced.reload(); graph.reload(); setRefresh(value => value + 1); }}
-      noun="ACP 会话" empty={search ? '没有匹配的会话。' : '暂无会话'}
+      noun={t("acp.acp_sessions")} empty={search ? t("acp.no_matching_sessions") : t("acp.no_sessions")}
       itemKey={session => session.thread_id} itemWorkspace={session => session.cwd}
       itemCreatedAt={session => { const time = Date.parse(session.created_at); return Number.isFinite(time) ? time : Number.MAX_SAFE_INTEGER; }} renderItem={renderSession} />
     {importing && <ThreadImport workspace={workspace} agents={agents} existing={local} onClose={() => setImporting(false)} />}

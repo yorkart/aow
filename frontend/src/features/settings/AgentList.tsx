@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useRef, useState } from 'react';
 import { Copy, GripVertical, Pencil, Trash2 } from 'lucide-react';
 import { AgentIcon } from '../agents/AgentIcon';
@@ -8,10 +9,11 @@ interface Drag {
   id: string; x: number; y: number; moved: boolean; over?: string; after: boolean;
 }
 
-export function AgentList({ agents, busy, editingAgentId, onEdit, onCopy, onRemove, onReorder }: {
+export function AgentList({ agents, busy, editingAgentId, onEdit, onCopy, onRemove, onReorder, onDefaultChange }: {
   agents: AowAgent[]; busy: boolean; editingAgentId?: string;
   onEdit: (agent: AowAgent) => void; onCopy: (agent: AowAgent) => void; onRemove: (id: string) => void;
   onReorder: (type: AowAgent['agent_type'], ids: string[]) => Promise<void>;
+  onDefaultChange: (id: string) => void;
 }) {
   const drag = useRef<Drag | undefined>(undefined);
   const saving = useRef(false);
@@ -27,10 +29,10 @@ export function AgentList({ agents, busy, editingAgentId, onEdit, onCopy, onRemo
     ids.splice(index + Number(after), 0, id);
     if (ids.every((item, position) => item === items[position].id)) return;
     saving.current = true;
-    setError(''); setStatus('正在保存顺序…');
+    setError(''); setStatus(t("settings.saving_order"));
     try {
       await onReorder(type, ids);
-      setStatus('顺序已保存');
+      setStatus(t("settings.order_saved"));
     } catch (reason) {
       setStatus(''); setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -38,8 +40,8 @@ export function AgentList({ agents, busy, editingAgentId, onEdit, onCopy, onRemo
     }
   };
   return <div className="project-aow-agent-list">
-    <p className="project-aow-form-intro">拖动手柄调整组内顺序，自动保存并同步到 Agent 菜单。Auto detected 固定在组首。</p>
-    {[...agentTypes, { id: undefined, label: '未设置类型' }].map(type => {
+    <p className="project-aow-form-intro">{t("settings.drag_handles_to_reorder_within_groups_changes_autosave_and")}</p>
+    {[...agentTypes, { id: undefined, label: t("settings.type_not_set") }].map(type => {
       const group = agents.filter(agent => aowAgentType(agent) === type.id);
       if (!group.length) return null;
       const configured = group.filter(agent => agent.source === 'configured');
@@ -47,7 +49,7 @@ export function AgentList({ agents, busy, editingAgentId, onEdit, onCopy, onRemo
       return <section className="project-aow-agent-group" aria-label={type.label} key={type.id ?? 'unknown'}>
         <h3>{type.label}</h3>
         {ordered.map(agent => <div className={`project-aow-agent-row${dragging?.id === agent.id ? ' dragging' : ''}${dragging?.over === agent.id ? dragging.after ? ' drop-after' : ' drop-before' : ''}`} data-agent-id={agent.id} key={agent.id}>
-          {agent.source === 'configured' ? <button type="button" className="project-aow-agent-drag" aria-label={`调整 ${agent.display_name} 的顺序`} title="拖动排序，或使用上下方向键" aria-disabled={busy || configured.length < 2}
+          {agent.source === 'configured' ? <button type="button" className="project-aow-agent-drag" aria-label={t("settings.reorder", { value0: agent.display_name })} title={t("inbox.drag_to_reorder_or_use_the_up_and_down")} aria-disabled={busy || configured.length < 2}
             onPointerDown={event => {
               if (busy || saving.current || configured.length < 2 || event.button !== 0 || !event.isPrimary) return;
               drag.current = { id: agent.id, x: event.clientX, y: event.clientY, moved: false, after: false };
@@ -85,17 +87,21 @@ export function AgentList({ agents, busy, editingAgentId, onEdit, onCopy, onRemo
               const next = configured[configured.indexOf(agent) + (event.key === 'ArrowUp' ? -1 : 1)];
               if (next) void move(type.id ?? null, configured, agent.id, next.id, event.key === 'ArrowDown');
             }}><GripVertical /></button> : <span className="project-aow-agent-drag-placeholder" />}
-          <span className={`project-aow-agent-dot ${agent.available ? 'available' : ''}`} title={agent.available ? '可用' : '不可用，请检查类型和执行路径'} />
+          <span className={`project-aow-agent-dot ${agent.available ? 'available' : ''}`} title={agent.available ? t("settings.available") : t("settings.unavailable_check_the_type_and_executable_path")} />
           <AgentIcon agentId={aowAgentType(agent)} />
           <div className="project-aow-agent-identity"><strong title={agent.display_name}>{agent.display_name}</strong><span title={agent.id}>{agent.id}</span></div>
-          <small>{agent.source === 'detected' ? 'Auto detected' : 'Configured'}</small>
-          <button type="button" className="project-aow-agent-edit" title={`编辑 ${agent.display_name}`} aria-pressed={editingAgentId === agent.id} disabled={busy} onClick={() => onEdit(agent)}><Pencil /></button>
-          <button type="button" className="project-aow-agent-copy" title={`复制 ${agent.display_name}`} disabled={busy} onClick={() => onCopy(agent)}><Copy /></button>
-          {agent.source === 'configured' && <button type="button" title="移除配置" disabled={busy} onClick={() => onRemove(agent.id)}><Trash2 /></button>}
+          <div className="project-aow-agent-options">
+            <small>{agent.source === 'detected' ? t("common.auto_detected") : t("im.configured")}</small>
+            <label className="project-aow-agent-default" title={agent.is_default ? t("acp.clear_default_and_use_the_first_item") : t("acp.set_as_default_instance")}>
+              <input type="checkbox" aria-label={t("settings.default_agent", { value0: agent.display_name })} checked={!!agent.is_default} disabled={busy || !aowAgentType(agent)} onChange={event => onDefaultChange(event.target.checked ? agent.id : '')} />{t("aow.default")}</label>
+          </div>
+          <button type="button" className="project-aow-agent-edit" title={t("settings.edit", { value0: agent.display_name })} aria-pressed={editingAgentId === agent.id} disabled={busy} onClick={() => onEdit(agent)}><Pencil /></button>
+          <button type="button" className="project-aow-agent-copy" title={t("components.copy", { value0: agent.display_name })} disabled={busy} onClick={() => onCopy(agent)}><Copy /></button>
+          {agent.source === 'configured' ? <button type="button" title={t("settings.remove_configuration")} disabled={busy} onClick={() => onRemove(agent.id)}><Trash2 /></button> : <span className="project-aow-agent-action-placeholder" aria-hidden="true" />}
         </div>)}
       </section>;
     })}
-    {!agents.length && <p className="project-aow-empty">尚未发现本地 Agent，可在下方注册。</p>}
+    {!agents.length && <p className="project-aow-empty">{t("settings.no_local_agents_found_click_add_agent_to_register")}</p>}
     {status && <p role="status">{status}</p>}
     {error && <div className="project-aow-error" role="alert">{error}</div>}
   </div>;

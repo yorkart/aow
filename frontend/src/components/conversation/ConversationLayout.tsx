@@ -1,11 +1,12 @@
+import { t } from '../../lib/i18n';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { ArrowDown, ArrowDownToLine, UserRound } from 'lucide-react';
+import { ArrowDown, UserRound } from 'lucide-react';
 import '../conversation-theme.css';
 import './conversation-layout.css';
 
 export type ConversationStatus = 'completed' | 'failed' | 'interrupted' | 'in_progress' | 'unknown';
 export const conversationStatusNames: Record<ConversationStatus, string> = {
-  completed: '已完成', failed: '失败', interrupted: '已中断', in_progress: '进行中', unknown: '执行结果未知',
+  completed: t("aow.completed"), failed: t("aow.failed"), interrupted: t("aow.interrupted"), in_progress: t("components.in_progress"), unknown: t("components.execution_result_unknown"),
 };
 
 export interface ConversationTurn {
@@ -25,10 +26,9 @@ interface HeaderProps {
   workspace?: string;
   metadata?: ReactNode;
   actions?: ReactNode;
-  onLatest?: () => void;
 }
 
-export function ConversationHeader({ title, agentIcon, workspace, metadata, actions, onLatest }: HeaderProps) {
+export function ConversationHeader({ title, agentIcon, workspace, metadata, actions }: HeaderProps) {
   return <header className="project-aow-snapshot-header">
     {agentIcon}
     <div className="project-aow-snapshot-heading">
@@ -36,7 +36,6 @@ export function ConversationHeader({ title, agentIcon, workspace, metadata, acti
       {workspace && <span className="project-aow-snapshot-workspace" title={workspace}>{workspace.split(/[/\\]/).filter(Boolean).at(-1) || workspace}</span>}
     </div>
     {metadata}
-    {onLatest && <button className="project-aow-snapshot-latest" type="button" onClick={onLatest}><ArrowDownToLine /><span>最新一轮</span></button>}
     {actions}
   </header>;
 }
@@ -58,7 +57,7 @@ export function ConversationAgentMessage({ agentName, agentIcon, agentClassName 
 function promptPreview(text: string) {
   const normalized = text.replace(/\s+/g, ' ').trim();
   const characters = Array.from(normalized);
-  return characters.length > 32 ? `${characters.slice(0, 32).join('')}…` : normalized || '空白输入';
+  return characters.length > 32 ? `${characters.slice(0, 32).join('')}…` : normalized || t("components.empty_input");
 }
 
 // Presentation only: callers supply message contents and retain their process renderers.
@@ -85,6 +84,7 @@ export function ConversationLayout({ sessionId, turns, header, agentClassName, c
   const localRef = useRef<HTMLDivElement>(null);
   const conversationRef = scrollRef ?? localRef;
   const footerRef = useRef<HTMLDivElement>(null);
+  const accessoryRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
   const turnRefs = useRef<Array<HTMLElement | null>>([]);
   const navigationRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -94,19 +94,24 @@ export function ConversationLayout({ sessionId, turns, header, agentClassName, c
   const turnCount = turns.length;
   const hasMessages = turnCount > 0 || !!leadingContent;
   const hasFooter = !!footer;
+  const hasAccessory = !!accessory;
   const setFollow = (value: boolean) => { followRef.current = value; setFollowing(value); };
 
   useLayoutEffect(() => {
     const conversation = conversationRef.current;
-    const footer = footerRef.current;
-    if (!conversation || !footer) return;
-    // The fixed footer must use the same available width as the scrolling transcript.
-    const alignFooter = () => { footer.style.paddingInlineEnd = `${conversation.offsetWidth - conversation.clientWidth}px`; };
-    alignFooter();
-    const observer = new ResizeObserver(alignFooter);
+    if (!conversation) return;
+    // Fixed accessories and the footer share the scrolling transcript's available width.
+    const alignFixedContent = () => {
+      const padding = `${conversation.offsetWidth - conversation.clientWidth}px`;
+      for (const element of [accessoryRef.current, footerRef.current]) {
+        if (element) element.style.paddingInlineEnd = padding;
+      }
+    };
+    alignFixedContent();
+    const observer = new ResizeObserver(alignFixedContent);
     observer.observe(conversation);
     return () => observer.disconnect();
-  }, [conversationRef, hasFooter]);
+  }, [conversationRef, hasFooter, hasAccessory]);
 
   useEffect(() => {
     turnRefs.current.length = turnCount;
@@ -173,7 +178,7 @@ export function ConversationLayout({ sessionId, turns, header, agentClassName, c
   };
 
   return <section className={`aow-conversation-layout aow-conversation-theme ${className}`} aria-label={label}>
-    <ConversationHeader {...header} onLatest={!alternateContent && turnCount > 1 ? () => navigateToTurn(turnCount - 1) : undefined} />
+    <ConversationHeader {...header} />
     {banner}
     {alternateContent}
     <div className={`project-aow-snapshot-body${turnCount ? '' : ' without-navigation'}`} hidden={!!alternateContent}>
@@ -188,19 +193,19 @@ export function ConversationLayout({ sessionId, turns, header, agentClassName, c
             {leadingContent}
             {turns.map((turn, index) => <article className="project-aow-snapshot-turn" key={turn.id} ref={node => { turnRefs.current[index] = node; }}>
               <section className="project-aow-snapshot-message user">
-                <header className="project-aow-snapshot-message-header"><UserRound size={22} /><strong>User</strong>{turn.userMeta}</header>
+                <header className="project-aow-snapshot-message-header"><UserRound size={22} /><strong>{t("navigation.user")}</strong>{turn.userMeta}</header>
                 <div className="project-aow-snapshot-bubble">{turn.user}</div>
               </section>
               <ConversationAgentMessage agentName={header.agentName} agentIcon={header.agentIcon} agentClassName={agentClassName} metadata={turn.assistantMeta}>{turn.assistant}</ConversationAgentMessage>
             </article>)}
           </div>
         </div>
-        {live && !following && hasMessages && <div className="conversation-follow"><button type="button" onClick={() => { setFollow(true); scrollToEnd(); }}><ArrowDown size={13} />跳到最新消息</button></div>}
-        {accessory}
+        {live && !following && hasMessages && <div className="conversation-follow"><button type="button" onClick={() => { setFollow(true); scrollToEnd(); }}><ArrowDown size={13} />{t("components.jump_to_latest_message")}</button></div>}
+        {accessory && <div ref={accessoryRef} className="conversation-accessory">{accessory}</div>}
         {footer && <div ref={footerRef} className={`conversation-footer${!hasMessages ? ' empty' : ''}${footerExpanded ? ' expanded' : ''}`}>{footer}</div>}
       </div>
-      {turnCount > 0 && <nav className="project-aow-snapshot-navigation" aria-label="用户输入导航">
-        <header><strong>对话导航</strong><span>{turnCount}</span></header>
+      {turnCount > 0 && <nav className="project-aow-snapshot-navigation" aria-label={t("components.user_input_navigation")}>
+        <header><strong>{t("components.conversation_navigation")}</strong><span>{turnCount}</span></header>
         <ol>{turns.map((turn, index) => <li key={turn.id}>
           <button className={activeTurn === index ? 'active' : undefined} type="button" title={turn.prompt} aria-current={activeTurn === index ? 'location' : undefined} ref={node => { navigationRefs.current[index] = node; }} onClick={() => navigateToTurn(index)}>
             <span>{index + 1}</span><strong>{promptPreview(turn.prompt)}</strong>

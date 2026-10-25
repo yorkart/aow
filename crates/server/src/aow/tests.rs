@@ -229,7 +229,9 @@ async fn automation_cwd_accepts_worktree_subdirectories_but_rejects_other_reposi
             .await
             .unwrap_err();
         assert!(
-            error.to_string().contains("工作区不属于所选项目"),
+            error
+                .to_string()
+                .contains("Workspace does not belong to the selected project"),
             "{error}"
         );
     }
@@ -1544,6 +1546,7 @@ fn agent_launch_resolves_env_shebang_with_discovered_path() {
 #[test]
 fn agent_launch_adds_configured_environment_with_global_path() {
     let agent = AgentRegistration {
+        is_default: false,
         id: "custom".to_owned(),
         agent_type: Some(AgentType::Codex),
         display_name: "Custom Agent".to_owned(),

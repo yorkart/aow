@@ -41,6 +41,7 @@ pub(crate) fn routes() -> Router<AppState> {
         )
         .route("/api/acp/sessions", get(sessions).post(prepare_session))
         .route("/api/acp/sessions/{thread_id}/metadata", get(session_info))
+        .route("/api/acp/sessions/{thread_id}/fork", post(fork_session))
         .route(
             "/api/acp/sessions/{thread_id}/process",
             get(session_process),
@@ -99,7 +100,7 @@ pub(super) fn error(error: anyhow::Error) -> HttpError {
 async fn settings(
     State(state): State<AppState>,
 ) -> Result<Json<crate::aow::AcpSettingsFile>, HttpError> {
-    tokio::task::spawn_blocking(move || state.aow.acp_settings())
+    aow_i18n::spawn_blocking(move || state.aow.acp_settings())
         .await
         .map_err(|e| HttpError::internal(e.to_string()))?
         .map(Json)
@@ -251,6 +252,23 @@ async fn session_info(
     Path(thread_id): Path<String>,
 ) -> Result<Json<aow_acp::SessionInfo>, HttpError> {
     state.acp.session_info(&thread_id).map(Json).map_err(error)
+}
+async fn fork_session(
+    State(state): State<AppState>,
+    Path(thread_id): Path<String>,
+    Query(query): Query<ViewQuery>,
+    headers: HeaderMap,
+) -> Result<Json<aow_acp::SessionSnapshot>, HttpError> {
+    let controller = state.acp_controls.session(&thread_id);
+    let _lifecycle = controller.authorize_lifecycle(&headers, false).await?;
+    crate::instances::preserve_parent(&state, Some(&aow_protocol::InstanceRef::acp(&thread_id)))?;
+    let fork = state.acp.fork_session(&thread_id).await.map_err(error)?;
+    state
+        .instances
+        .record_all(vec![crate::instances::acp(&aow_acp::SessionInfo::from(
+            &fork,
+        ))])?;
+    view_snapshot(&state, &fork.thread_id, &query)
 }
 async fn session_connection(
     State(state): State<AppState>,
@@ -469,7 +487,7 @@ async fn answer_connection(
         return Err(HttpError::new(
             StatusCode::CONFLICT,
             "acp_control_required",
-            "请通过持有控制权的会话回答此请求",
+            aow_i18n::text("server.answer_this_request_through_the_session_holding_control"),
             None,
         ));
     }

@@ -1,3 +1,4 @@
+import { t, getLanguage } from '../../lib/i18n';
 import { useEffect, useState } from 'react';
 import { MarkdownContent } from '../../components/MarkdownContent';
 import { inboxApi } from './api';
@@ -15,11 +16,11 @@ export function InboxComments({ itemId, count }: { itemId: string; count: number
     }).catch(reason => { if (active) setError(inboxError(reason)); });
     return () => { active = false; };
   }, [itemId, count, attempt]);
-  return <section id={`inbox-comments-${itemId}`} className="inbox-comments" aria-label="需求评论">
-    {!comments && !error && <p className="inbox-comments-loading" role="status">正在加载评论…</p>}
-    {error && <p className="inbox-error" role="alert">{error}<button type="button" onClick={() => setAttempt(value => value + 1)}>重试加载评论</button></p>}
+  return <section id={`inbox-comments-${itemId}`} className="inbox-comments" aria-label={t("inbox.requirement_comments")}>
+    {!comments && !error && <p className="inbox-comments-loading" role="status">{t("inbox.loading_comments")}</p>}
+    {error && <p className="inbox-error" role="alert">{error}<button type="button" onClick={() => setAttempt(value => value + 1)}>{t("inbox.retry_loading_comments")}</button></p>}
     {comments && <ol>{comments.map(comment => <li key={comment.id} data-comment-id={comment.id}>
-      <header><span>{comment.author.name}</span><time dateTime={comment.created_at}>{new Date(comment.created_at).toLocaleString()}</time></header>
+      <header><span>{comment.author.name}</span><time dateTime={comment.created_at}>{new Date(comment.created_at).toLocaleString(getLanguage())}</time></header>
       <MarkdownContent text={comment.content} readOnly className="inbox-markdown" />
     </li>)}</ol>}
   </section>;

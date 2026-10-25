@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { newestRunFirst } from './runOrder';
 import type { AutomationLocation } from '../../aow/tabRoutes';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -35,7 +36,7 @@ function SessionValue({ value, onOpen }: { value: string; onOpen: () => void }) 
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => { if (!copied) return; const timer = window.setTimeout(() => setCopied(false), 1500); return () => window.clearTimeout(timer); }, [copied]);
-  return <span className="automation-copy"><button data-workspace-open className="automation-session-link" title="打开 Agent Session" onClick={onOpen}><code>{value}</code></button><button aria-label="复制会话 ID" title={error || '复制会话 ID'} onClick={async () => { try { await navigator.clipboard.writeText(value); setCopied(true); setError(''); } catch { setError('复制失败，请选中文本复制'); } }}>{copied ? <Check /> : <Copy />}</button>{error ? <small role="status">{error}</small> : null}</span>;
+  return <span className="automation-copy"><button data-workspace-open className="automation-session-link" title={t("automations.open_agent_session")} onClick={onOpen}><code>{value}</code></button><button aria-label={t("automations.copy_session_id")} title={error || t("automations.copy_session_id")} onClick={async () => { try { await navigator.clipboard.writeText(value); setCopied(true); setError(''); } catch { setError(t("automations.copy_failed_select_and_copy_the_text")); } }}>{copied ? <Check /> : <Copy />}</button>{error ? <small role="status">{error}</small> : null}</span>;
 }
 
 function shellQuote(value: string) {
@@ -134,27 +135,27 @@ function RunHistory({ taskId, visible, refreshKey, onOpenSession, expanded, onEx
 
   return <div className="automation-history">
     {error ? <div className="automation-error" role="alert">{error}</div> : null}
-    {loading ? <div className="automation-empty"><LoaderCircle className="automation-spin" /><span>正在加载执行历史…</span></div>
-      : !runs.length ? <div className="automation-empty"><History /><h3>暂无执行记录</h3><p>按计划运行或点击“立即运行”后，执行记录会显示在这里。</p></div>
-        : <><div className="automation-run-heading"><span>执行时间</span><span>工作区</span><span>参数</span><span>耗时</span><span>状态</span></div>
+    {loading ? <div className="automation-empty"><LoaderCircle className="automation-spin" /><span>{t("automations.loading_run_history")}</span></div>
+      : !runs.length ? <div className="automation-empty"><History /><h3>{t("automations.no_runs_yet")}</h3><p>{t("automations.runs_appear_here_after_a_scheduled_run_or_after")}</p></div>
+        : <><div className="automation-run-heading"><span>{t("automations.run_time")}</span><span>{t("automations.workspace")}</span><span>{t("automations.arguments")}</span><span>{t("automations.duration")}</span><span>{t("automations.status")}</span></div>
           {runs.map((run) => <div className="automation-run" key={run.id}>
             <button className="automation-run-summary" aria-expanded={expanded === run.id} onClick={() => { onExpandedChange(expanded === run.id ? undefined : run.id); setOutput(undefined); setOutputError(''); }}>
-              <span>{expanded === run.id ? <ChevronDown /> : <ChevronRight />}<span>{dateTime(run.started_at)}<small>{run.source === 'manual' ? '手动运行' : '计划运行'}</small></span></span>
+              <span>{expanded === run.id ? <ChevronDown /> : <ChevronRight />}<span>{dateTime(run.started_at)}<small>{run.source === 'manual' ? t("automations.manual_run") : t("automations.scheduled_run")}</small></span></span>
               <span className="automation-ellipsis" title={run.workspace_path ?? ''}>{run.branch || run.workspace_path?.split('/').pop() || '—'}</span>
               <RunParameterSummary run={run} />
               <span>{displayedDuration(run, refreshedAt)}</span><RunBadge run={run} />
             </button>
             {expanded === run.id ? <div className="automation-run-detail"><dl>
-              <div className="automation-full-width"><dt>Session ID</dt><dd>{run.session_id ? <SessionValue value={run.session_id} onOpen={() => onOpenSession(run)} /> : run.status === 'running' || run.status === 'preparing' ? '等待 Agent 会话…' : '未获取'}</dd></div>
-              <div><dt>开始时间</dt><dd>{dateTime(run.started_at)}</dd></div><div><dt>结束时间</dt><dd>{dateTime(run.finished_at)}</dd></div>
-              <div className="automation-full-width"><dt>工作区</dt><dd><code>{run.workspace_path ?? '—'}</code></dd></div>
-              <div className="automation-full-width"><dt>分支</dt><dd><code>{run.branch ?? '—'}</code></dd></div>
-              <div><dt>进程 ID</dt><dd>{run.agent_pid ?? '—'}</dd></div><div><dt>退出码</dt><dd>{run.exit_code ?? '—'}</dd></div>
-              <div className="automation-full-width"><dt>Agent 命令</dt><dd><code>{run.agent_command?.map(shellQuote).join(' ') ?? '—'}</code></dd></div>
-              <div className="automation-full-width"><dt>Run ID</dt><dd><code>{run.id}</code></dd></div>
-            </dl><RunParameters run={run} /><div className="automation-run-output"><div className="automation-run-output-heading"><span>执行输出</span><div><button className={output?.runId === run.id && output.kind === 'stdio' ? 'active' : ''} disabled={outputLoading} onClick={() => void loadOutput(run.id, 'stdio')}>stdio</button><button className={output?.runId === run.id && output.kind === 'stderr' ? 'active' : ''} disabled={outputLoading} onClick={() => void loadOutput(run.id, 'stderr')}>stderr</button></div></div>{outputLoading ? <p className="automation-output-state">正在读取输出…</p> : null}{outputError ? <p className="automation-output-state error">{outputError}</p> : null}{output?.runId === run.id ? <pre>{output.content || '(空)'}</pre> : null}</div>{run.message ? <p className={`automation-run-message ${run.status}`}>{run.message}</p> : null}</div> : null}
+              <div className="automation-full-width"><dt>{t("navigation.session_id")}</dt><dd>{run.session_id ? <SessionValue value={run.session_id} onOpen={() => onOpenSession(run)} /> : run.status === 'running' || run.status === 'preparing' ? t("automations.waiting_for_agent_session") : t("automations.not_retrieved")}</dd></div>
+              <div><dt>{t("automations.start_time")}</dt><dd>{dateTime(run.started_at)}</dd></div><div><dt>{t("automations.end_time")}</dt><dd>{dateTime(run.finished_at)}</dd></div>
+              <div className="automation-full-width"><dt>{t("automations.workspace")}</dt><dd><code>{run.workspace_path ?? '—'}</code></dd></div>
+              <div className="automation-full-width"><dt>{t("automations.branch")}</dt><dd><code>{run.branch ?? '—'}</code></dd></div>
+              <div><dt>{t("automations.process_id")}</dt><dd>{run.agent_pid ?? '—'}</dd></div><div><dt>{t("automations.exit_code")}</dt><dd>{run.exit_code ?? '—'}</dd></div>
+              <div className="automation-full-width"><dt>{t("acp.agent_command")}</dt><dd><code>{run.agent_command?.map(shellQuote).join(' ') ?? '—'}</code></dd></div>
+              <div className="automation-full-width"><dt>{t("navigation.run_id")}</dt><dd><code>{run.id}</code></dd></div>
+            </dl><RunParameters run={run} /><div className="automation-run-output"><div className="automation-run-output-heading"><span>{t("automations.run_output")}</span><div><button className={output?.runId === run.id && output.kind === 'stdio' ? 'active' : ''} disabled={outputLoading} onClick={() => void loadOutput(run.id, 'stdio')}>stdio</button><button className={output?.runId === run.id && output.kind === 'stderr' ? 'active' : ''} disabled={outputLoading} onClick={() => void loadOutput(run.id, 'stderr')}>stderr</button></div></div>{outputLoading ? <p className="automation-output-state">{t("automations.reading_output")}</p> : null}{outputError ? <p className="automation-output-state error">{outputError}</p> : null}{output?.runId === run.id ? <pre>{output.content || t("automations.empty")}</pre> : null}</div>{run.message ? <p className={`automation-run-message ${run.status}`}>{run.message}</p> : null}</div> : null}
           </div>)}
-          {hasMore ? <button className="automation-load-more" disabled={moreBusy} onClick={() => void loadMore()}>{moreBusy ? '加载中…' : '加载更早的记录'}</button> : null}
+          {hasMore ? <button className="automation-load-more" disabled={moreBusy} onClick={() => void loadMore()}>{moreBusy ? t("automations.loading") : t("automations.load_earlier_records")}</button> : null}
         </>}
   </div>;
 }
@@ -232,7 +233,7 @@ export function AutomationDetail({ taskId, visible, refreshKey: taskRefreshKey =
       if (kind === 'run') {
         const result = await automationApi.run(task.id, task.revision);
         setTab('runs'); setRefreshKey((value) => value + 1);
-        setNotice(result.run_id ? '已提交运行，等待 Runner 启动。' : '任务仍在执行，已跳过本次触发。');
+        setNotice(result.run_id ? t("automations.run_submitted_waiting_for_the_runner_to_start") : t("automations.task_is_still_running_this_trigger_was_skipped"));
       } else if (kind === 'delete') {
         await automationApi.remove(task.id);
         onTaskChanged(); onTaskDeleted(task.id);
@@ -246,13 +247,13 @@ export function AutomationDetail({ taskId, visible, refreshKey: taskRefreshKey =
   };
 
   const controls = task ? <div className="automation-actions">
-    <button title="立即运行" aria-label="立即运行" className="automation-primary" disabled={busy || (task.max_concurrent_runs === 1 && task.is_running) || status?.ready === false} onClick={() => void action('run')}><Play /><span>立即运行</span></button>
-    <button title="编辑" aria-label="编辑" disabled={busy} onClick={() => setEditorOpen(true)}><Pencil /></button>
-    {task.kind !== 'manual' ? <button title={task.enabled ? '暂停' : '启用'} aria-label={task.enabled ? '暂停' : '启用'} disabled={busy} onClick={() => void action('toggle')}>{task.enabled ? <Pause /> : <Zap />}</button> : null}
-    <button title="删除" aria-label="删除" className="automation-danger" disabled={busy} onClick={() => void action('delete')}><Trash2 /></button>
+    <button title={t("automations.run_now")} aria-label={t("automations.run_now")} className="automation-primary" disabled={busy || (task.max_concurrent_runs === 1 && task.is_running) || status?.ready === false} onClick={() => void action('run')}><Play /><span>{t("automations.run_now")}</span></button>
+    <button title={t("acp.edit")} aria-label={t("acp.edit")} disabled={busy} onClick={() => setEditorOpen(true)}><Pencil /></button>
+    {task.kind !== 'manual' ? <button title={task.enabled ? t("automations.pause") : t("automations.enable")} aria-label={task.enabled ? t("automations.pause") : t("automations.enable")} disabled={busy} onClick={() => void action('toggle')}>{task.enabled ? <Pause /> : <Zap />}</button> : null}
+    <button title={t("acp.delete")} aria-label={t("acp.delete")} className="automation-danger" disabled={busy} onClick={() => void action('delete')}><Trash2 /></button>
   </div> : null;
 
-  return <section className="automation-detail-page" aria-label="自动化详情">
+  return <section className="automation-detail-page" aria-label={t("automations.automation_details")}>
     {task ? <header className="automation-detail-heading">
       {task.kind === 'manual' ? <MousePointerClick /> : <CalendarClock />}
       <div className="automation-detail-title">
@@ -262,28 +263,28 @@ export function AutomationDetail({ taskId, visible, refreshKey: taskRefreshKey =
       <AutomationTaskBadge task={task} />
       {controls}
     </header> : null}
-    {error ? <div className="automation-error" role="alert"><span>{error}</span><button aria-label="关闭错误提示" onClick={() => setError('')}><X /></button></div> : null}
-    {notice ? <div className="automation-notice" role="status"><span>{notice}</span><button aria-label="关闭提示" onClick={() => setNotice('')}><X /></button></div> : null}
-    {!task && !error ? <div className="automation-empty"><LoaderCircle className="automation-spin" /><span>正在加载自动化…</span></div> : null}
+    {error ? <div className="automation-error" role="alert"><span>{error}</span><button aria-label={t("aow.dismiss_error")} onClick={() => setError('')}><X /></button></div> : null}
+    {notice ? <div className="automation-notice" role="status"><span>{notice}</span><button aria-label={t("automations.dismiss_message")} onClick={() => setNotice('')}><X /></button></div> : null}
+    {!task && !error ? <div className="automation-empty"><LoaderCircle className="automation-spin" /><span>{t("automations.loading_automation")}</span></div> : null}
     {task ? <>
-      <nav className="automation-tabs" aria-label="自动化详情"><button className={tab === 'overview' ? 'active' : ''} aria-current={tab === 'overview' ? 'page' : undefined} onClick={() => setTab('overview')}>概述</button><button className={tab === 'runs' ? 'active' : ''} aria-current={tab === 'runs' ? 'page' : undefined} onClick={() => setTab('runs')}>执行历史</button></nav>
+      <nav className="automation-tabs" aria-label={t("automations.automation_details")}><button className={tab === 'overview' ? 'active' : ''} aria-current={tab === 'overview' ? 'page' : undefined} onClick={() => setTab('overview')}>{t("automations.overview")}</button><button className={tab === 'runs' ? 'active' : ''} aria-current={tab === 'runs' ? 'page' : undefined} onClick={() => setTab('runs')}>{t("automations.run_history")}</button></nav>
       <div className="automation-detail-scroll"><div className="automation-detail">
-        {task.scheduler_error ? <div className="automation-error"><span>{task.scheduler_error}</span><button disabled={busy} onClick={() => void action('sync')}><RefreshCw />重新同步</button></div> : null}
+        {task.scheduler_error ? <div className="automation-error"><span>{task.scheduler_error}</span><button disabled={busy} onClick={() => void action('sync')}><RefreshCw />{t("automations.resync")}</button></div> : null}
         {tab === 'runs' ? <RunHistory expanded={expandedRun} onExpandedChange={setExpandedRun} key={task.id} taskId={task.id} visible={pollingVisible} refreshKey={refreshKey} onOpenSession={onOpenSession} /> : <div className="automation-overview">
           <div className="automation-metrics">
-            <div><span>{task.kind === 'manual' ? <MousePointerClick /> : <CalendarClock />}{task.kind === 'manual' ? '执行方式' : '运行计划'}</span><strong>{task.kind === 'manual' ? '手动运行' : scheduleName(task.cron, task.interval_seconds)}</strong><small>{task.max_concurrent_runs === 1 ? '禁止重叠执行，执行中自动跳过' : `最多同时执行 ${task.max_concurrent_runs} 个任务`}</small></div>
-            {task.kind === 'manual' ? <div><span><FileText />执行变量</span><strong>{variableNames(task.prompt_bindings).length} 个变量</strong><small>{task.workspace_mode === 'dynamic' ? '每次运行前指定工作区' : task.prompt_bindings?.length ? '每次运行前填写' : '点击运行即可执行'}</small></div> : <div><span><Clock3 />下次运行</span><strong>{task.enabled ? task.interval_seconds ? '等待系统触发' : dateTime(task.next_run_at) : '已暂停'}</strong><small>{task.interval_seconds ? task.max_concurrent_runs === 1 ? '结束后等待下一次触发' : '达到并发上限时跳过，不排队' : task.cron}</small></div>}
-            <div><span><History />最近运行</span><strong>{task.last_run ? dateTime(task.last_run.started_at) : '暂无记录'}</strong>{task.last_run ? <RunBadge run={task.last_run} /> : <small>等待首次运行</small>}</div>
+            <div><span>{task.kind === 'manual' ? <MousePointerClick /> : <CalendarClock />}{task.kind === 'manual' ? t("automations.execution_method") : t("automations.schedule")}</span><strong>{task.kind === 'manual' ? t("automations.manual_run") : scheduleName(task.cron, task.interval_seconds)}</strong><small>{task.max_concurrent_runs === 1 ? t("automations.overlapping_runs_disabled_skip_while_running") : t("automations.run_up_to_tasks_concurrently", { value0: task.max_concurrent_runs })}</small></div>
+            {task.kind === 'manual' ? <div><span><FileText />{t("automations.run_variables")}</span><strong>{variableNames(task.prompt_bindings).length} {t("automations.variables")}</strong><small>{task.workspace_mode === 'dynamic' ? t("automations.specify_workspace_before_each_run") : task.prompt_bindings?.length ? t("automations.enter_before_each_run") : t("automations.click_run_to_execute")}</small></div> : <div><span><Clock3 />{t("automations.next_run")}</span><strong>{task.enabled ? task.interval_seconds ? t("automations.waiting_for_system_trigger") : dateTime(task.next_run_at) : t("automations.paused")}</strong><small>{task.interval_seconds ? task.max_concurrent_runs === 1 ? t("automations.wait_for_the_next_trigger_after_completion") : t("automations.skip_when_concurrency_limit_is_reached_no_queue") : task.cron}</small></div>}
+            <div><span><History />{t("automations.latest_run")}</span><strong>{task.last_run ? dateTime(task.last_run.started_at) : t("automations.no_records")}</strong>{task.last_run ? <RunBadge run={task.last_run} /> : <small>{t("automations.waiting_for_first_run")}</small>}</div>
           </div>
-          {task.kind === 'manual' && task.prompt_bindings?.length ? <section className="automation-variables" aria-label="任务变量"><strong>执行时填写的变量</strong><div className="automation-variable-list">{variableNames(task.prompt_bindings).map(name => <code key={name}>{name}</code>)}</div></section> : null}
-          <dl className="automation-configuration"><div><dt>Agent</dt><dd><AgentIcon agentId={task.agent} />{agentNames[task.agent]}</dd></div><div><dt>执行权限</dt><dd>{executionPermission(task.agent, task.yolo)}</dd></div><div><dt>失败提醒</dt><dd>{task.failure_notification === 'feishu' ? '飞书 Bot' : task.failure_notification === 'wechat' ? '微信 Bot' : '不提醒'}</dd></div><div><dt>工作区方式</dt><dd>{workspaceNames[task.workspace_mode]}</dd></div><div><dt>任务结束清理</dt><dd>{task.workspace_mode === 'new_worktree' ? '强制清理 Worktree' : task.workspace_mode === 'temporary' ? '自动清理临时目录' : '—'}</dd></div><div><dt>基础分支</dt><dd>{task.workspace_mode !== 'new_worktree' ? '—' : <code>{task.base_branch}</code>}</dd></div><div><dt>更新时间</dt><dd>{dateTime(task.updated_at)}</dd></div><div className="automation-full-width"><dt>任务 ID</dt><dd><code>{task.id}</code></dd></div>{task.workspace_mode === 'existing' && <div className="automation-full-width"><dt>工作区</dt><dd><code>{task.workspace_path}</code></dd></div>}</dl>
-          <section className="automation-prompt-preview"><h3><FileText />任务内容</h3><MarkdownContent readOnly text={task.prompt} className="automation-prompt-markdown" /></section>
+          {task.kind === 'manual' && task.prompt_bindings?.length ? <section className="automation-variables" aria-label={t("automations.task_variables")}><strong>{t("automations.variables_provided_at_runtime")}</strong><div className="automation-variable-list">{variableNames(task.prompt_bindings).map(name => <code key={name}>{name}</code>)}</div></section> : null}
+          <dl className="automation-configuration"><div><dt>Agent</dt><dd><AgentIcon agentId={task.agent} />{agentNames[task.agent]}</dd></div><div><dt>{t("automations.execution_permissions")}</dt><dd>{executionPermission(task.agent, task.yolo)}</dd></div><div><dt>{t("automations.failure_notifications")}</dt><dd>{task.failure_notification === 'feishu' ? t("automations.feishu_bot") : task.failure_notification === 'wechat' ? t("automations.wechat_bot") : t("automations.no_notifications")}</dd></div><div><dt>{t("automations.workspace_mode")}</dt><dd>{workspaceNames[task.workspace_mode]}</dd></div><div><dt>{t("automations.cleanup_after_completion")}</dt><dd>{task.workspace_mode === 'new_worktree' ? t("automations.force_worktree_cleanup") : task.workspace_mode === 'temporary' ? t("automations.automatically_clean_up_temporary_directory") : '—'}</dd></div><div><dt>{t("automations.base_branch")}</dt><dd>{task.workspace_mode !== 'new_worktree' ? '—' : <code>{task.base_branch}</code>}</dd></div><div><dt>{t("automations.updated_at")}</dt><dd>{dateTime(task.updated_at)}</dd></div><div className="automation-full-width"><dt>{t("automations.task_id")}</dt><dd><code>{task.id}</code></dd></div>{task.workspace_mode === 'existing' && <div className="automation-full-width"><dt>{t("automations.workspace")}</dt><dd><code>{task.workspace_path}</code></dd></div>}</dl>
+          <section className="automation-prompt-preview"><h3><FileText />{t("automations.task_content")}</h3><MarkdownContent readOnly text={task.prompt} className="automation-prompt-markdown" /></section>
         </div>}
       </div></div>
     </> : null}
     {runTask ? <ManualRunDialog task={runTask} onClose={() => setRunTask(undefined)} onStarted={runId => {
       setRunTask(undefined); setTab('runs'); setRefreshKey(value => value + 1);
-      setNotice(runId ? '已提交运行，等待 Runner 启动。' : '任务仍在执行，已跳过本次触发。'); void refresh(true);
+      setNotice(runId ? t("automations.run_submitted_waiting_for_the_runner_to_start") : t("automations.task_is_still_running_this_trigger_was_skipped")); void refresh(true);
     }} /> : null}
     {editorOpen && task ? <AutomationEditor task={task} project={project} agents={agents} timezone={status?.timezone} onClose={() => setEditorOpen(false)} onSaved={(updated) => { setEditorOpen(false); apply(updated); void refresh(true); }} /> : null}
     {confirmationDialog}

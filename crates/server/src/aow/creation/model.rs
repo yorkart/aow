@@ -3,11 +3,11 @@ use std::time::{Duration, Instant};
 
 pub(super) const STEP_TIMEOUT: Duration = Duration::from_secs(120);
 pub(super) const STEP_TITLES: [&str; 5] = [
-    "等待仓库可用",
-    "检查分支和目标路径",
-    "更新主仓库（git pull）",
-    "创建 Worktree",
-    "刷新项目列表",
+    "server.waiting_for_repository_availability",
+    "server.checking_branch_and_target_path",
+    "server.update_main_repository_git_pull",
+    "server.create_worktree_2",
+    "server.refresh_project_list",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -68,7 +68,7 @@ impl CreationJob {
             steps: STEP_TITLES
                 .iter()
                 .map(|title| CreationStep {
-                    title: (*title).into(),
+                    title: aow_i18n::text(title).into(),
                     status: Status::Pending,
                     started_at: None,
                     duration_ms: None,

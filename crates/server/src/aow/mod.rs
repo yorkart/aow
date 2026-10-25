@@ -9,11 +9,10 @@ pub(crate) use aow_agents::environment::discover_path as discovery_path;
 pub(crate) use aow_agents::launch::AgentLaunch;
 use aow_agents::launch::{AgentRegistration, AgentType};
 use axum::{
-    Json, Router,
+    Json,
     extract::{Path as AxumPath, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::get,
 };
 use serde::{Deserialize, Serialize};
 
@@ -22,7 +21,6 @@ use git::git_output;
 
 mod agents;
 mod api;
-mod configuration;
 mod creation;
 mod error;
 mod git;
@@ -41,11 +39,13 @@ mod worktrees;
 use sessions::CachedSessionLocator;
 
 #[cfg(test)]
+use axum::Router;
+#[cfg(test)]
 use registry::RegistryDocument;
 pub(crate) use registry::atomic_save_document;
 use registry::{
     AGENTS_FILE, PROJECTS_FILE, REGISTRY_VERSION, RegistryState, StoredAgent, StoredProject,
-    load_registry,
+    load_agents, load_registry,
 };
 
 use agents::{AgentsQuery, RegisterAgentRequest, ReorderAgentsRequest};
@@ -80,8 +80,7 @@ pub(crate) struct AowManager {
 struct AowInner {
     notifications: crate::notifications::NotificationManager,
     state_dir: Option<PathBuf>,
-    config: Option<aow_config::ConfigRepository>,
-    configuration_file: Option<Mutex<aow_config::ConfigFile>>,
+    config: Option<aow_config::ConfigStore>,
     projects_path: Option<PathBuf>,
     agents_path: Option<PathBuf>,
     settings_path: Option<PathBuf>,
@@ -111,7 +110,6 @@ impl AowManager {
                 notifications: crate::notifications::NotificationManager::in_memory(),
                 state_dir: None,
                 config: None,
-                configuration_file: None,
                 projects_path: None,
                 agents_path: None,
                 settings_path: None,
@@ -128,20 +126,19 @@ impl AowManager {
     }
 
     pub(crate) fn persistent(state_dir: &Path) -> Result<Self, AowError> {
-        Self::persistent_with_notes_base(state_dir, default_notes_base())
+        let state_dir = std::path::absolute(state_dir)?;
+        Self::persistent_with_notes_base(&state_dir, state_dir.join("data/notes"))
     }
 
     fn persistent_with_notes_base(state_dir: &Path, notes_base: PathBuf) -> Result<Self, AowError> {
         let config =
-            aow_config::ConfigRepository::initialize(state_dir).map_err(AowError::Configuration)?;
+            aow_config::ConfigStore::initialize(state_dir).map_err(AowError::Configuration)?;
         let state_dir = std::fs::canonicalize(state_dir)?;
-        let configuration_file =
-            aow_config::ConfigFile::load(&state_dir).map_err(AowError::Configuration)?;
         let projects_path = config.directory().join(PROJECTS_FILE);
         let agents_path = config.directory().join(AGENTS_FILE);
         let settings_path = config.directory().join(SETTINGS_FILE);
         let projects = load_registry(&projects_path)?;
-        let agents = load_registry(&agents_path)?;
+        let (agents, default_agent_id) = load_agents(&agents_path)?;
         let settings = load_settings(&settings_path, notes_base)?;
         let notifications = crate::notifications::NotificationManager::persistent(&state_dir)?;
         let removals = removal::RemovalJobs::in_memory();
@@ -150,11 +147,14 @@ impl AowManager {
                 notifications,
                 state_dir: Some(state_dir),
                 config: Some(config),
-                configuration_file: Some(Mutex::new(configuration_file)),
                 projects_path: Some(projects_path),
                 agents_path: Some(agents_path),
                 settings_path: Some(settings_path),
-                state: Mutex::new(RegistryState { projects, agents }),
+                state: Mutex::new(RegistryState {
+                    projects,
+                    agents,
+                    default_agent_id,
+                }),
                 settings: Mutex::new(settings),
                 session_locators: Mutex::new(HashMap::new()),
                 project_operation: Arc::new(tokio::sync::Mutex::new(())),

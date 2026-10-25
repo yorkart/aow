@@ -428,37 +428,14 @@ fn running_interrupted_and_corrupt_records_have_distinct_results() {
 }
 
 #[test]
-fn external_configuration_keeps_local_run_history_and_legacy_reads_work() {
-    let (temp, store, task) = fixture();
+fn configuration_and_run_history_are_read_from_the_same_home_without_writes() {
+    let (_temp, store, task) = fixture();
     let run_id = "20260913T090000000Z_0001";
     finished(&store, &task, run_id);
-    let clone = temp.path().join("external config clone");
-    let result = Command::new("git")
-        .arg("clone")
-        .arg(store.config_dir.parent().unwrap())
-        .arg(&clone)
-        .output()
-        .unwrap();
-    assert!(result.status.success(), "{result:?}");
-    let selected = clone.join(store.config_dir.file_name().unwrap());
-    aow_config::save_selection(
-        &store.state_dir,
-        &aow_config::ConfigSelection {
-            config_repo: clone,
-            config_id: store
-                .config_dir
-                .file_name()
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .to_owned(),
-        },
-    )
-    .unwrap();
-    let switched = Store::open(store.state_dir.clone()).unwrap();
     let mut changed = task.clone();
-    changed.input.name = "From external configuration".into();
-    switched.save_task(&changed).unwrap();
+    changed.input.name = "Updated configuration".into();
+    store.save_task(&changed).unwrap();
+    let before = snapshot(&store.state_dir);
     assert_eq!(
         success(&store.state_dir, &["automation", "get", &task.id])["name"],
         changed.input.name
@@ -470,30 +447,14 @@ fn external_configuration_keeps_local_run_history_and_legacy_reads_work() {
         )["status"],
         "failed"
     );
-    assert_eq!(
-        store.get_task(&task.id).unwrap().input.name,
-        task.input.name
+    assert_eq!(snapshot(&store.state_dir), before);
+    assert!(
+        store
+            .task_path(&task.id)
+            .unwrap()
+            .starts_with(store.state_dir.join("automations/tasks"))
     );
-    assert_eq!(switched.root, store.root);
-    assert!(!selected.join("automations/runs").exists());
-
-    let legacy = temp.path().join("legacy-state");
-    fs::create_dir_all(legacy.join("automations/tasks")).unwrap();
-    fs::copy(
-        store.task_path(&task.id).unwrap(),
-        legacy
-            .join("automations/tasks")
-            .join(format!("{}.json", task.id)),
-    )
-    .unwrap();
-    let before = snapshot(&legacy);
-    assert_eq!(
-        success(&legacy, &["automation", "get", &task.id])["name"],
-        task.input.name
-    );
-    assert_eq!(snapshot(&legacy), before);
-    assert!(!legacy.join("__current__").exists());
-    assert!(!legacy.join("config.toml").exists());
+    assert_eq!(store.root, store.state_dir.join("state/automations"));
 }
 
 #[test]

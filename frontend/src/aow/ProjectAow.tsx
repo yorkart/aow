@@ -1,11 +1,17 @@
+import { t } from '../lib/i18n';
+import { WorktreeStatusPath } from './WorktreeStatusPath';
+import { GlobalTabSlot, useGlobalWorkspaceTabs, type GlobalTabHost } from './GlobalWorkspaceTabs';
 import { SettingsDialog } from '../features/settings/SettingsDialog';
 import { appLocalStorage } from '../lib/basePath';
 import { subscribeWorkspaceChanges } from '../lib/workspaceEvents';
-import { useWorkspaceDocuments, updateSharedDocument, nextDocumentInstanceId, sharedDocument, isPreviewOwned, savingDocuments, failedDocuments } from '../features/editor/workspaceDocuments';
-import { Fragment, lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useWorkspaceDocuments, updateSharedDocument, nextDocumentInstanceId, sharedDocument, workspaceDocument, isPreviewOwned, savingDocuments, failedDocuments } from '../features/editor/workspaceDocuments';
+import { useActiveDiffRefresh } from '../features/editor/useActiveDiffRefresh';
+import { Fragment, lazy, memo, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { FloatingWorkspace } from './FloatingWorkspace';
+import { ProjectTerminalDockHost, ProjectTerminalDockProvider, useProjectTerminalDock } from './ProjectTerminalDock';
 import { useAowTabLocation, useAowTabLocationError } from './AowTabEntry';
+import { useCancelAowTabNavigation } from './tabNavigation';
 import { captureTabTarget, openTabTarget, tabCenterId, type ResolvedTab, type TabOpenActions, type AutomationLocation } from './tabRoutes';
 import { diffDocument } from './tabRoutes/diff';
 import { prTabId } from './tabRoutes/pr';
@@ -13,7 +19,7 @@ import { FloatingWorkspaceProvider, FloatingOpenMenu, useFloatingWorkspace, open
 import type { SetStateAction, CSSProperties, DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from 'react';
 import {
   ArrowUp, Bell, CalendarClock, Check, ChevronRight, CornerDownLeft, FileText, Files, FolderGit2, FolderOpen, GitBranch, GitBranchPlus, GitPullRequest, MessageSquare, MoreHorizontal,
-  LoaderCircle, NotebookPen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pin, PinOff, Plus, RefreshCw, Settings, SquareTerminal, Trash2, X,
+  Inbox, LoaderCircle, NotebookPen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pin, PinOff, Plus, RefreshCw, Settings, SquareTerminal, Trash2, X,
 } from 'lucide-react';
 import { gitApi } from '../features/git/api';
 import { filesApi } from '../features/files/api';
@@ -22,6 +28,8 @@ import { EditorSettingsProvider, useWordWrapOverrides } from '../features/editor
 import { AutomationDetail } from '../features/automations/AutomationDetail';
 import { AutomationPanel } from '../features/automations/AutomationPanel';
 import type { AutomationRun, AutomationTask } from '../features/automations/types';
+import { removeAcpWorkspaceTabs, pruneAcpWorkspaceTabs, savedAcpTabs } from '../features/acp/agent_ui/workspace_tabs';
+import { acpApi } from '../features/acp/api';
 import { AcpPanel, AcpSessionTab, ProjectAcpPanelProvider, useAcpTabs } from '../features/acp';
 import { TerminalPanel } from '../features/terminals/TerminalPanel';
 import { isCliTerminal, terminalTabPresentation } from '../features/terminals/terminalPresentation';
@@ -39,6 +47,7 @@ import { SourceControl } from '../features/git/SourceControl';
 import { TerminalWorkspace } from '../features/terminals/TerminalWorkspace';
 import { AowIconButton } from '../components/AowIconButton';
 import { useConfirmation } from '../components/ConfirmationDialog';
+import { ProjectNavigator } from './ProjectNavigator';
 import { AowPanel, AowPanelStack } from '../components/AowPanel';
 import { AowNodeSwitcher } from './AowNodeSwitcher';
 import { WorktreeIcon, worktreeColors, worktreeColorValues, worktreeIconGroups, worktreeIconLabel } from './WorktreeIcon';
@@ -76,6 +85,8 @@ import { AcpIcon } from '../features/agents/AcpIcon';
 import { sessionsApi } from '../features/sessions/api';
 import type { WorktreeRemovalJob, WorktreeRemovalPreview } from './types';
 
+const InboxPanel = lazy(() => import('../features/inbox/InboxPanel').then(module => ({ default: module.InboxPanel })));
+const emptyGlobalTabs: GlobalTabHost[] = [];
 const EditorArea = lazy(() => loadEditorArea().then((module) => ({ default: module.EditorArea })));
 const imageExtensions = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'avif']);
 const textExtensions = new Set(['rs', 'ts', 'tsx', 'js', 'jsx', 'py', 'go', 'java', 'c', 'cc', 'cpp', 'h', 'hpp', 'css', 'html', 'xml', 'toml', 'yaml', 'yml', 'sh', 'bash', 'txt', 'log', 'ini', 'conf']);
@@ -241,13 +252,13 @@ function WorktreeContextMenu({
     };
   }, [onClose]);
 
-  return <div ref={menu} className="project-aow-context-menu project-aow-worktree-menu" style={{ left: position.x, top: position.y }} role="menu" aria-label={`${state.worktree.path} 操作`} onPointerDown={(event) => event.stopPropagation()}>
+  return <div ref={menu} className="project-aow-context-menu project-aow-worktree-menu" style={{ left: position.x, top: position.y }} role="menu" aria-label={t("aow.actions", { value0: state.worktree.path })} onPointerDown={(event) => event.stopPropagation()}>
     <div className="project-aow-context-path" title={state.worktree.path}>{state.project.name} · {state.worktree.branch || basename(state.worktree.path)}</div>
-    <button role="menuitem" onClick={() => { onTogglePin(); onClose(); }}>{pinned ? <PinOff /> : <Pin />}{pinned ? 'Unpin' : 'Pin to top'}</button>
-    <div className="project-aow-worktree-icon-picker" role="group" aria-label="Worktree 图标">
-      <div className="project-aow-worktree-icon-label">图标</div>
+    <button role="menuitem" onClick={() => { onTogglePin(); onClose(); }}>{pinned ? <PinOff /> : <Pin />}{pinned ? t("common.unpin_worktree") : t("common.pin_to_top")}</button>
+    <div className="project-aow-worktree-icon-picker" role="group" aria-label={t("aow.worktree_icon")}>
+      <div className="project-aow-worktree-icon-label">{t("aow.icon")}</div>
       <button className="project-aow-worktree-icon-default" role="menuitemradio" aria-checked={(state.worktree.icon ?? 'default') === 'default'} disabled={savingAppearance} onClick={() => { onIconChange('default'); onClose(); }}>
-        <WorktreeIcon style={{ color: worktreeColorValues[state.worktree.color ?? 'default'] }} />默认图标{(state.worktree.icon ?? 'default') === 'default' ? <Check /> : null}
+        <WorktreeIcon style={{ color: worktreeColorValues[state.worktree.color ?? 'default'] }} />{t("aow.default_icon")}{(state.worktree.icon ?? 'default') === 'default' ? <Check /> : null}
       </button>
       {worktreeIconGroups.map((group) => <div key={group.label} className="project-aow-worktree-icons" role="group" aria-label={group.label}>
         {group.icons.map((icon) => <button key={icon} className={`project-aow-worktree-icon${state.worktree.icon === icon ? ' selected' : ''}`}
@@ -258,8 +269,8 @@ function WorktreeContextMenu({
       </div>)}
     </div>
     <div className="project-aow-worktree-color-picker">
-      <div className="project-aow-worktree-color-label">图标颜色</div>
-      <div className="project-aow-worktree-colors" role="group" aria-label="Worktree 图标颜色">
+      <div className="project-aow-worktree-color-label">{t("aow.icon_color")}</div>
+      <div className="project-aow-worktree-colors" role="group" aria-label={t("aow.worktree_icon_color")}>
         {worktreeColors.map((color) => {
           const selected = (state.worktree.color ?? 'default') === color.id;
           return <button
@@ -277,7 +288,7 @@ function WorktreeContextMenu({
         })}
       </div>
     </div>
-    <button className="danger" role="menuitem" disabled={state.worktree.is_main} title={state.worktree.is_main ? '主 Worktree 不能删除' : '删除 Worktree'} onClick={() => { onRemove(); onClose(); }}><Trash2 />{state.worktree.is_main ? '主 Worktree 不可删除' : '删除 Worktree'}</button>
+    <button className="danger" role="menuitem" disabled={state.worktree.is_main} title={state.worktree.is_main ? t("aow.the_main_worktree_cannot_be_deleted") : t("aow.delete_worktree")} onClick={() => { onRemove(); onClose(); }}><Trash2 />{state.worktree.is_main ? t("aow.cannot_delete_the_main_worktree") : t("aow.delete_worktree")}</button>
   </div>;
 }
 
@@ -310,18 +321,18 @@ function RemoveWorktreeDialog({ state, onClose, onSubmitted }: {
 
   return <div className="project-aow-modal-backdrop" onPointerDown={() => { if (!busy) onClose(); }}>
     <section className="project-aow-modal project-aow-dialog project-aow-remove-worktree" role="dialog" aria-modal="true" aria-labelledby="remove-worktree-title" onPointerDown={(event) => event.stopPropagation()}>
-      <header><div><Trash2 /><strong id="remove-worktree-title">{preview.dirty ? '强制删除 Worktree' : '删除 Worktree'}</strong><span title={state.worktree.branch || basename(state.worktree.path)}>{state.worktree.branch || basename(state.worktree.path)}</span></div><button type="button" title="关闭" aria-label="关闭" disabled={busy} onClick={onClose}><X /></button></header>
+      <header><div><Trash2 /><strong id="remove-worktree-title">{preview.dirty ? t("aow.force_delete_worktree") : t("aow.delete_worktree")}</strong><span title={state.worktree.branch || basename(state.worktree.path)}>{state.worktree.branch || basename(state.worktree.path)}</span></div><button type="button" title={t("aow.close")} aria-label={t("aow.close")} disabled={busy} onClick={onClose}><X /></button></header>
       <div className="project-aow-dialog-body project-aow-remove-body">
-        <p className="project-aow-form-intro">将删除 linked worktree 目录及其 Git worktree 元数据，不会删除对应 branch。</p>
+        <p className="project-aow-form-intro">{t("aow.delete_the_linked_worktree_directory_and_its_git_metadata")}</p>
         <code className="project-aow-remove-path" title={state.worktree.path}>{state.worktree.path}</code>
-        {affectedTabs ? <p>同时关闭并清理该 Worktree 的 {preview.terminal_tabs} 个 Terminal、{preview.agent_tabs} 个 Agent 及其持久化会话元数据。</p> : <p>该 Worktree 当前没有需要关闭的 Terminal 或 Agent。</p>}
+        {affectedTabs ? <p>{t("worktree.cleanup_resources", { terminals: t("worktree.terminals", { count: preview.terminal_tabs }), agents: t("worktree.agents", { count: preview.agent_tabs }) })}</p> : <p>{t("aow.this_worktree_has_no_terminals_or_agents_to_close")}</p>}
         {preview.dirty ? <div className="project-aow-dirty-warning">
-          <strong>检测到 {preview.change_count} 项未提交内容，强制删除后无法从 AoW 恢复：</strong>
-          <pre>{preview.changes.join('\n')}{preview.truncated ? '\n…更多变更未显示' : ''}</pre>
-        </div> : <div className="project-aow-clean-note">Git 工作区当前没有未提交内容。</div>}
+          <strong>{t("worktree.uncommitted", { count: preview.change_count })}</strong>
+          <pre>{preview.changes.join('\n')}{preview.truncated ? t("aow.additional_changes_omitted") : ''}</pre>
+        </div> : <div className="project-aow-clean-note">{t("aow.the_git_worktree_has_no_uncommitted_changes")}</div>}
         {error ? <div className="project-aow-error" role="alert">{error}</div> : null}
       </div>
-      <footer className="project-aow-dialog-footer"><button type="button" className="project-aow-dialog-button" disabled={busy} onClick={onClose}>取消</button><button type="button" className={`project-aow-dialog-button ${preview.dirty ? 'danger' : 'primary'}`} disabled={busy} onClick={() => void remove()}>{busy ? '清理中…' : preview.dirty ? '强制删除' : '删除 Worktree'}</button></footer>
+      <footer className="project-aow-dialog-footer"><button type="button" className="project-aow-dialog-button" disabled={busy} onClick={onClose}>{t("aow.cancel")}</button><button type="button" className={`project-aow-dialog-button ${preview.dirty ? 'danger' : 'primary'}`} disabled={busy} onClick={() => void remove()}>{busy ? t("aow.cleaning_up") : preview.dirty ? t("aow.force_delete") : t("aow.delete_worktree")}</button></footer>
     </section>
   </div>;
 }
@@ -363,12 +374,12 @@ function ProjectMenu({ state, onClose, onCreateWorktree, onCleanup, onBindNotes,
 
   const action = (callback: () => void) => () => { onClose(); callback(); };
 
-  return <div ref={menu} className="project-aow-context-menu project-aow-project-menu" style={{ left: position.x, top: position.y }} role="menu" aria-label={`${state.project.name} 操作`} onPointerDown={(event) => event.stopPropagation()}>
+  return <div ref={menu} className="project-aow-context-menu project-aow-project-menu" style={{ left: position.x, top: position.y }} role="menu" aria-label={t("aow.actions", { value0: state.project.name })} onPointerDown={(event) => event.stopPropagation()}>
     <div className="project-aow-context-path" title={state.project.registered_path}>{state.project.name}</div>
-    <button role="menuitem" onClick={action(onCreateWorktree)}><GitBranchPlus />创建 Worktree</button>
-    <button role="menuitem" onClick={action(onCleanup)}><Trash2 />批量清理 Worktree</button>
-    <button role="menuitem" onClick={action(onBindNotes)}><NotebookPen />绑定 Notes 目录</button>
-    <button className="danger" role="menuitem" onClick={action(onRemove)}><Trash2 />移除 Project</button>
+    <button role="menuitem" onClick={action(onCreateWorktree)}><GitBranchPlus />{t("aow.create_worktree")}</button>
+    <button role="menuitem" onClick={action(onCleanup)}><Trash2 />{t("aow.bulk_worktree_cleanup")}</button>
+    <button role="menuitem" onClick={action(onBindNotes)}><NotebookPen />{t("aow.bind_notes_directory")}</button>
+    <button className="danger" role="menuitem" onClick={action(onRemove)}><Trash2 />{t("aow.remove_project")}</button>
   </div>;
 }
 
@@ -384,7 +395,7 @@ function BindNotesDialog({ project, onClose, onBound }: {
   const bind = async () => {
     const target = path.trim();
     if (!target.startsWith('/')) {
-      setError('Notes 目录必须是服务端上的绝对路径。');
+      setError(t("aow.the_notes_directory_must_be_an_absolute_path_on"));
       return;
     }
     setBusy(true);
@@ -399,15 +410,15 @@ function BindNotesDialog({ project, onClose, onBound }: {
 
   return <div className="project-aow-modal-backdrop" onPointerDown={() => { if (!busy) onClose(); }}>
     <section className="project-aow-modal project-aow-dialog project-aow-bind-notes" role="dialog" aria-modal="true" aria-labelledby="bind-notes-title" onPointerDown={(event) => event.stopPropagation()}>
-      <header><div><NotebookPen /><strong id="bind-notes-title">绑定 Notes 目录</strong><span title={project.name}>{project.name}</span></div><button type="button" title="关闭" aria-label="关闭" disabled={busy} onClick={onClose}><X /></button></header>
+      <header><div><NotebookPen /><strong id="bind-notes-title">{t("aow.bind_notes_directory")}</strong><span title={project.name}>{project.name}</span></div><button type="button" title={t("aow.close")} aria-label={t("aow.close")} disabled={busy} onClick={onClose}><X /></button></header>
       <form className="project-aow-dialog-form" onSubmit={(event) => { event.preventDefault(); void bind(); }}>
         <div className="project-aow-dialog-body">
-          <p className="project-aow-form-intro">绑定已有目录并使用其中的笔记，目录不存在时会自动创建。仅切换路径，不迁移笔记。</p>
-          <label className="project-aow-dialog-field"><span>Notes 路径</span><input className="project-aow-dialog-monospace" aria-describedby="bind-notes-current" autoFocus autoComplete="off" spellCheck={false} value={path} disabled={busy} onChange={(event) => { setPath(event.target.value); setError(''); }} placeholder="/absolute/path/to/project-notes" required /></label>
-          <small id="bind-notes-current" className="project-aow-dialog-path-hint">当前目录：<code title={project.notes_path}>{project.notes_path}</code></small>
+          <p className="project-aow-form-intro">{t("aow.use_notes_from_an_existing_directory_or_create_it")}</p>
+          <label className="project-aow-dialog-field"><span>{t("aow.notes_path")}</span><input className="project-aow-dialog-monospace" aria-describedby="bind-notes-current" autoFocus autoComplete="off" spellCheck={false} value={path} disabled={busy} onChange={(event) => { setPath(event.target.value); setError(''); }} placeholder="/absolute/path/to/project-notes" required /></label>
+          <small id="bind-notes-current" className="project-aow-dialog-path-hint">{t("aow.current_directory")}<code title={project.notes_path}>{project.notes_path}</code></small>
           {error ? <div className="project-aow-error" role="alert">{error}</div> : null}
         </div>
-        <footer className="project-aow-dialog-footer"><button type="button" className="project-aow-dialog-button" disabled={busy} onClick={onClose}>取消</button><button type="submit" className="project-aow-dialog-button primary" disabled={busy || !path.trim()}>{busy ? '绑定中…' : '绑定目录'}</button></footer>
+        <footer className="project-aow-dialog-footer"><button type="button" className="project-aow-dialog-button" disabled={busy} onClick={onClose}>{t("aow.cancel")}</button><button type="submit" className="project-aow-dialog-button primary" disabled={busy || !path.trim()}>{busy ? t("aow.binding") : t("aow.bind_directory")}</button></footer>
       </form>
     </section>
   </div>;
@@ -444,12 +455,12 @@ function OpenFileDialog({ worktreePath, onClose, onOpen }: {
 
   return <div className="project-aow-modal-backdrop" onPointerDown={() => { if (!busy) onClose(); }}>
     <section className="project-aow-modal project-aow-open-file" role="dialog" aria-modal="true" aria-labelledby="open-file-title" onPointerDown={(event) => event.stopPropagation()}>
-      <header><div><FileText /><strong id="open-file-title">打开文件</strong><span>输入绝对或相对路径</span></div><button title="关闭" disabled={busy} onClick={onClose}><X /></button></header>
+      <header><div><FileText /><strong id="open-file-title">{t("aow.open_file")}</strong><span>{t("aow.enter_an_absolute_or_relative_path")}</span></div><button title={t("aow.close")} disabled={busy} onClick={onClose}><X /></button></header>
       <form onSubmit={(event) => { event.preventDefault(); void open(); }}>
-        <p className="project-aow-form-intro">相对路径基于当前 Worktree，~/ 指向用户主目录。可写文本支持编辑与自动保存。</p>
-        <label><span>文件路径</span><input autoFocus spellCheck={false} value={path} disabled={busy} onChange={(event) => { setPath(event.target.value); setError(''); }} placeholder="src/main.ts、/absolute/path/to/file 或 ~/file" required /></label>
+        <p className="project-aow-form-intro">{t("aow.relative_paths_use_the_current_worktree_refers_to_the")}</p>
+        <label><span>{t("aow.file_path")}</span><input autoFocus spellCheck={false} value={path} disabled={busy} onChange={(event) => { setPath(event.target.value); setError(''); }} placeholder={t("aow.src_main_ts_absolute_path_to_file_or_file")} required /></label>
         {error ? <div className="project-aow-error" role="alert">{error}</div> : null}
-        <footer><button type="button" disabled={busy} onClick={onClose}>取消</button><button className="primary" disabled={busy || !path.trim()}>{busy ? '打开中…' : '打开文件'}</button></footer>
+        <footer><button type="button" disabled={busy} onClick={onClose}>{t("aow.cancel")}</button><button className="primary" disabled={busy || !path.trim()}>{busy ? t("aow.opening") : t("aow.open_file")}</button></footer>
       </form>
     </section>
   </div>;
@@ -496,7 +507,7 @@ function RegisterProjectDialog({ onClose, onRegistered }: {
     const target = directory?.trim();
     const request = ++browserRequest.current;
     if (target && !target.startsWith('/')) {
-      setBrowserError('请输入服务端上的绝对目录路径。');
+      setBrowserError(t("aow.enter_an_absolute_directory_path_on_the_server"));
       setBrowserLoading(false);
       return;
     }
@@ -548,53 +559,53 @@ function RegisterProjectDialog({ onClose, onRegistered }: {
 
   return <div className="project-aow-modal-backdrop" onPointerDown={() => { if (!busy) onClose(); }}>
     <section className="project-aow-modal project-aow-dialog project-aow-register-project" role="dialog" aria-modal="true" aria-labelledby="register-project-title" onPointerDown={(event) => event.stopPropagation()}>
-      <header><div><FolderGit2 /><strong id="register-project-title">注册项目</strong></div><button type="button" title="关闭" aria-label="关闭" disabled={busy} onClick={onClose}><X /></button></header>
+      <header><div><FolderGit2 /><strong id="register-project-title">{t("aow.register_project")}</strong></div><button type="button" title={t("aow.close")} aria-label={t("aow.close")} disabled={busy} onClick={onClose}><X /></button></header>
       <form className="project-aow-dialog-form" onSubmit={(event) => { event.preventDefault(); if (step === 'directory') void chooseBrowserDirectory(); else void register(); }}>
         <div className="project-aow-dialog-body">
-          <ol className="project-aow-register-steps" aria-label="注册步骤">
-            <li aria-current={step === 'directory' ? 'step' : undefined}><span>1</span>选择仓库目录</li>
-            <li aria-current={step === 'details' ? 'step' : undefined}><span>2</span>填写项目信息</li>
+          <ol className="project-aow-register-steps" aria-label={t("aow.registration_steps")}>
+            <li aria-current={step === 'directory' ? 'step' : undefined}><span>1</span>{t("aow.choose_repository_directory")}</li>
+            <li aria-current={step === 'details' ? 'step' : undefined}><span>2</span>{t("aow.enter_project_details")}</li>
           </ol>
           {step === 'directory' ? <>
-            <p className="project-aow-form-intro" id="register-project-directory-hint">浏览或粘贴主仓库 / Worktree 的绝对路径，点击「下一步」确认目录。</p>
-            <section className="project-aow-directory-picker" aria-label="选择仓库目录">
+            <p className="project-aow-form-intro" id="register-project-directory-hint">{t("aow.browse_or_paste_the_absolute_path_of_the_main")}</p>
+            <section className="project-aow-directory-picker" aria-label={t("aow.choose_repository_directory")}>
               <div className="project-aow-directory-toolbar">
-                <button type="button" title="服务端根目录" aria-label="服务端根目录" disabled={browserLoading || browserPath === '/'} onClick={() => void loadBrowserDirectory('/')}><span>/</span></button>
-                <button type="button" title="上级目录" aria-label="上级目录" disabled={browserLoading || browserPath === '/'} onClick={() => void loadBrowserDirectory(dirname(browserPath || '/'))}><ArrowUp /></button>
-                <div className="project-aow-directory-address"><input aria-label="目录路径" aria-describedby="register-project-directory-hint" autoFocus autoComplete="off" spellCheck={false} placeholder="粘贴目录的绝对路径" readOnly={browserLoading} value={browserPathInput} onChange={(event) => { setBrowserPathInput(event.target.value); setBrowserError(''); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); if (!browserLoading && browserPathInput.trim()) void loadBrowserDirectory(browserPathInput); } }} /><button type="button" disabled={browserLoading || !browserPathInput.trim()} onClick={() => void loadBrowserDirectory(browserPathInput)}>转到</button></div>
-                <button type="button" title="刷新当前目录" aria-label="刷新当前目录" disabled={browserLoading || !browserPath} onClick={() => void loadBrowserDirectory(browserPath)}><RefreshCw className={browserLoading ? 'spinning' : ''} /></button>
+                <button type="button" title={t("aow.server_root_directory")} aria-label={t("aow.server_root_directory")} disabled={browserLoading || browserPath === '/'} onClick={() => void loadBrowserDirectory('/')}><span>/</span></button>
+                <button type="button" title={t("aow.parent_directory")} aria-label={t("aow.parent_directory")} disabled={browserLoading || browserPath === '/'} onClick={() => void loadBrowserDirectory(dirname(browserPath || '/'))}><ArrowUp /></button>
+                <div className="project-aow-directory-address"><input aria-label={t("aow.directory_path")} aria-describedby="register-project-directory-hint" autoFocus autoComplete="off" spellCheck={false} placeholder={t("aow.paste_an_absolute_directory_path")} readOnly={browserLoading} value={browserPathInput} onChange={(event) => { setBrowserPathInput(event.target.value); setBrowserError(''); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); if (!browserLoading && browserPathInput.trim()) void loadBrowserDirectory(browserPathInput); } }} /><button type="button" disabled={browserLoading || !browserPathInput.trim()} onClick={() => void loadBrowserDirectory(browserPathInput)}>{t("aow.go")}</button></div>
+                <button type="button" title={t("aow.refresh_current_directory")} aria-label={t("aow.refresh_current_directory")} disabled={browserLoading || !browserPath} onClick={() => void loadBrowserDirectory(browserPath)}><RefreshCw className={browserLoading ? 'spinning' : ''} /></button>
               </div>
               <div className="project-aow-directory-list" aria-busy={browserLoading}>
-                {browserLoading ? <div className="project-aow-directory-state"><LoaderCircle className="spinning" />正在读取目录…</div> : null}
+                {browserLoading ? <div className="project-aow-directory-state"><LoaderCircle className="spinning" />{t("aow.reading_directory")}</div> : null}
                 {!browserLoading && browserError ? <div className="project-aow-directory-state error" role="alert">{browserError}</div> : null}
                 {!browserLoading && !browserError ? browserDirectories.map((directory) => <button type="button" key={directory.path} title={directory.path} onClick={() => void loadBrowserDirectory(directory.path)}><DirectoryTypeIcon /><span>{directory.name}</span><ChevronRight /></button>) : null}
-                {!browserLoading && !browserError && !browserDirectories.length ? <div className="project-aow-directory-state">此目录下没有子目录</div> : null}
+                {!browserLoading && !browserError && !browserDirectories.length ? <div className="project-aow-directory-state">{t("aow.no_subdirectories_here")}</div> : null}
               </div>
-              <div className="project-aow-directory-footer"><code title={browserPath}>{browserPath || (browserLoading ? '正在定位目录…' : '尚未选择目录')}</code></div>
+              <div className="project-aow-directory-footer"><code title={browserPath}>{browserPath || (browserLoading ? t("aow.locating_directory") : t("aow.no_directory_selected"))}</code></div>
             </section>
           </> : <>
-            <p className="project-aow-form-intro">确认项目信息后注册，自动发现并列出关联的 Worktrees。</p>
-            <div className="project-aow-register-preview" aria-label="项目注册预览">
+            <p className="project-aow-form-intro">{t("aow.confirm_the_project_details_to_register_it_and_discover")}</p>
+            <div className="project-aow-register-preview" aria-label={t("aow.project_registration_preview")}>
               <FolderGit2 />
               <div><strong title={previewName}>{previewName}</strong><code title={normalizedPath}>{normalizedPath}</code></div>
             </div>
             <div className="project-aow-dialog-field">
-              <label htmlFor="register-project-name">显示名称 <em>可选</em></label>
-              <input id="register-project-name" autoFocus autoComplete="off" value={name} disabled={busy} onChange={(event) => { setName(event.target.value); if (error) setError(''); }} placeholder="默认使用仓库目录名" maxLength={120} />
+              <label htmlFor="register-project-name">{t("aow.display_name")} <em>{t("aow.optional")}</em></label>
+              <input id="register-project-name" autoFocus autoComplete="off" value={name} disabled={busy} onChange={(event) => { setName(event.target.value); if (error) setError(''); }} placeholder={t("aow.defaults_to_the_repository_directory_name")} maxLength={120} />
             </div>
             <div className="project-aow-dialog-field">
-              <label htmlFor="register-project-notes">Notes 路径 <em>可选</em></label>
-              <input id="register-project-notes" className="project-aow-dialog-monospace" aria-describedby="register-project-notes-hint" autoComplete="off" spellCheck={false} value={notesPath} disabled={busy} onChange={(event) => { setNotesPath(event.target.value); if (error) setError(''); }} placeholder="留空时自动映射" />
-              <small id="register-project-notes-hint">可绑定已有目录；留空时按仓库地址映射，本地仓库映射到 localhost。{notesBase ? <span className="project-aow-dialog-path-hint">根目录：<code title={notesBase}>{notesBase}</code></span> : null}</small>
+              <label htmlFor="register-project-notes">{t("aow.notes_path")} <em>{t("aow.optional")}</em></label>
+              <input id="register-project-notes" className="project-aow-dialog-monospace" aria-describedby="register-project-notes-hint" autoComplete="off" spellCheck={false} value={notesPath} disabled={busy} onChange={(event) => { setNotesPath(event.target.value); if (error) setError(''); }} placeholder={t("aow.leave_blank_for_automatic_mapping")} />
+              <small id="register-project-notes-hint">{t("aow.bind_an_existing_directory_or_leave_blank_to_map")}{notesBase ? <span className="project-aow-dialog-path-hint">{t("aow.root_directory")}<code title={notesBase}>{notesBase}</code></span> : null}</small>
             </div>
             {error ? <div className="project-aow-error project-aow-register-error" role="alert">{error}</div> : null}
           </>}
         </div>
         <footer className="project-aow-dialog-footer">
-          <button type="button" className="project-aow-dialog-button" disabled={busy} onClick={onClose}>取消</button>
-          {step === 'directory' ? <button key="next" type="submit" className="project-aow-dialog-button primary" disabled={browserLoading || !!browserError || !browserPathInput.trim()}>下一步<ChevronRight /></button> : <>
-            <button type="button" className="project-aow-dialog-button" disabled={busy} onClick={() => { setStep('directory'); setError(''); }}>上一步</button>
-            <button key="register" type="submit" className="project-aow-dialog-button primary" disabled={busy || !normalizedPath}>{busy ? <><LoaderCircle className="spinning" />正在注册…</> : <><Plus />注册项目</>}</button>
+          <button type="button" className="project-aow-dialog-button" disabled={busy} onClick={onClose}>{t("aow.cancel")}</button>
+          {step === 'directory' ? <button key="next" type="submit" className="project-aow-dialog-button primary" disabled={browserLoading || !!browserError || !browserPathInput.trim()}>{t("aow.next")}<ChevronRight /></button> : <>
+            <button type="button" className="project-aow-dialog-button" disabled={busy} onClick={() => { setStep('directory'); setError(''); }}>{t("aow.back")}</button>
+            <button key="register" type="submit" className="project-aow-dialog-button primary" disabled={busy || !normalizedPath}>{busy ? <><LoaderCircle className="spinning" />{t("aow.registering")}</> : <><Plus />{t("aow.register_project")}</>}</button>
           </>}
         </footer>
       </form>
@@ -638,30 +649,30 @@ function CreateWorktreeDialog({ project, initial, onClose, onSubmitted }: {
       const result = await aowApi.createWorktree(project.id, { branch, baseRef, path, pullFirst });
       onSubmitted(result, mounted.current);
     } catch (reason) {
-      if (mounted.current) { setError(`创建任务提交失败：${message(reason)}`); setBusy(false); }
+      if (mounted.current) { setError(t("aow.failed_to_submit_creation_task", { value0: message(reason) })); setBusy(false); }
       submitting.current = false;
     }
   };
 
   return <div className="project-aow-modal-backdrop" onPointerDown={onClose}>
     <section className="project-aow-modal project-aow-dialog project-aow-create-worktree" role="dialog" aria-modal="true" aria-labelledby="create-worktree-title" onPointerDown={(event) => event.stopPropagation()}>
-      <header><div><GitBranchPlus /><strong id="create-worktree-title">创建 Worktree</strong><span title={project.name}>{project.name}</span></div><button type="button" title="关闭" aria-label="关闭" onClick={onClose}><X /></button></header>
+      <header><div><GitBranchPlus /><strong id="create-worktree-title">{t("aow.create_worktree")}</strong><span title={project.name}>{project.name}</span></div><button type="button" title={t("aow.close")} aria-label={t("aow.close")} onClick={onClose}><X /></button></header>
       <form className="project-aow-dialog-form" onSubmit={(event) => { event.preventDefault(); void create(); }}>
         <div className="project-aow-dialog-body">
-          <p className="project-aow-form-intro">从指定分支或提交创建新的 Worktree。</p>
-          <label className="project-aow-dialog-field"><span>新分支</span><input className="project-aow-dialog-monospace" autoFocus autoComplete="off" spellCheck={false} value={branch} onChange={(event) => changeBranch(event.target.value)} placeholder="feature/my-change" required disabled={busy} /></label>
-          <label className="project-aow-dialog-field"><span>起始分支或提交</span><input className="project-aow-dialog-monospace" autoComplete="off" spellCheck={false} value={baseRef} onChange={(event) => setBaseRef(event.target.value)} placeholder="main、origin/main 或 commit SHA" required disabled={busy} /></label>
-          <label className="project-aow-dialog-checkbox" title="创建前先对主仓库执行 git pull，失败则取消创建。无需更新时可取消勾选。"><input type="checkbox" checked={pullFirst} onChange={(event) => setPullFirst(event.target.checked)} disabled={busy} /><span>创建前更新主仓库（git pull）</span></label>
+          <p className="project-aow-form-intro">{t("aow.create_a_new_worktree_from_a_branch_or_commit")}</p>
+          <label className="project-aow-dialog-field"><span>{t("aow.new_branch")}</span><input className="project-aow-dialog-monospace" autoFocus autoComplete="off" spellCheck={false} value={branch} onChange={(event) => changeBranch(event.target.value)} placeholder="feature/my-change" required disabled={busy} /></label>
+          <label className="project-aow-dialog-field"><span>{t("aow.starting_branch_or_commit")}</span><input className="project-aow-dialog-monospace" autoComplete="off" spellCheck={false} value={baseRef} onChange={(event) => setBaseRef(event.target.value)} placeholder={t("aow.main_origin_main_or_commit_sha")} required disabled={busy} /></label>
+          <label className="project-aow-dialog-checkbox" title={t("aow.run_git_pull_on_the_main_repository_before_creation")}><input type="checkbox" checked={pullFirst} onChange={(event) => setPullFirst(event.target.checked)} disabled={busy} /><span>{t("aow.update_main_repository_before_creation_git_pull")}</span></label>
           <div className="project-aow-dialog-field">
-            <label htmlFor="create-worktree-path">Worktree 路径</label>
+            <label htmlFor="create-worktree-path">{t("aow.worktree_path")}</label>
             <input id="create-worktree-path" className="project-aow-dialog-monospace" aria-describedby="create-worktree-path-hint" autoComplete="off" spellCheck={false} value={path} onChange={(event) => { setPathEdited(true); setPath(event.target.value); }} placeholder="/absolute/path/to/worktree" required disabled={busy} />
-            <small id="create-worktree-path-hint">目标路径必须是尚不存在的绝对路径。</small>
+            <small id="create-worktree-path-hint">{t("aow.the_target_must_be_an_absolute_path_that_does")}</small>
           </div>
-          <details className="project-aow-command-preview"><summary>查看 Git 命令</summary><code>{command}</code></details>
-          <p className="project-aow-form-intro" role="status">{busy ? '正在提交后台任务…' : '提交后可关闭弹框，从底部状态栏查看每一步进度。每步最多等待 2 分钟。'}</p>
+          <details className="project-aow-command-preview"><summary>{t("aow.view_git_command")}</summary><code>{command}</code></details>
+          <p className="project-aow-form-intro" role="status">{busy ? t("aow.submitting_background_task") : t("aow.after_submission_close_this_dialog_and_follow_progress_in")}</p>
           {error ? <div className="project-aow-error" role="alert">{error}</div> : null}
         </div>
-        <footer className="project-aow-dialog-footer"><button type="button" className="project-aow-dialog-button" onClick={onClose}>关闭</button><button type="submit" className="project-aow-dialog-button primary" disabled={busy || !branch.trim() || !baseRef.trim() || !path.trim()}>{busy ? '提交中…' : '创建 Worktree'}</button></footer>
+        <footer className="project-aow-dialog-footer"><button type="button" className="project-aow-dialog-button" onClick={onClose}>{t("aow.close")}</button><button type="submit" className="project-aow-dialog-button primary" disabled={busy || !branch.trim() || !baseRef.trim() || !path.trim()}>{busy ? t("aow.submitting") : t("aow.create_worktree")}</button></footer>
       </form>
     </section>
   </div>;
@@ -669,7 +680,7 @@ function CreateWorktreeDialog({ project, initial, onClose, onSubmitted }: {
 
 
 function LeftSidebarToggle({ expanded = false, onClick }: { expanded?: boolean; onClick: () => void }) {
-  const label = expanded ? '隐藏左侧栏' : '显示左侧栏';
+  const label = expanded ? t("aow.hide_left_sidebar") : t("aow.show_left_sidebar");
   return <button type="button" className="project-aow-left-toggle" title={label} aria-label={label}
     aria-expanded={expanded} aria-controls="aow-project-sidebar" onClick={onClick}>
     {expanded ? <PanelLeftClose /> : <PanelLeftOpen />}
@@ -678,11 +689,13 @@ function LeftSidebarToggle({ expanded = false, onClick }: { expanded?: boolean; 
 
 function WorktreeUnreadBadge({ count = 0 }: { count?: number }) {
   if (!count) return null;
-  const label = `${count} 条未读通知`;
+  const label = t("aow.unread_notifications", { count: count, value0: count });
   return <span className="project-aow-worktree-unread" title={label} aria-label={label}>{count}</span>;
 }
 
 interface WorkspaceSurfaceProps {
+  globalTabs?: GlobalTabHost[];
+  browserPath?: string;
   initialEntry?: ResolvedTab;
   locationSource?: 'center' | 'floating';
   worktree: AowWorktree;
@@ -700,19 +713,18 @@ interface WorkspaceSurfaceProps {
 }
 
 const WorkspaceSurface = memo(function WorkspaceSurface({
-  worktree, project, active, agents, onShowLeftSidebar, rightSidebarVisible, onHideRightSidebar,
+  globalTabs: allGlobalTabs = emptyGlobalTabs, browserPath = '', worktree, project, active, agents, onShowLeftSidebar, rightSidebarVisible, onHideRightSidebar,
   onShowRightSidebar, onStartRightResize, notesRefresh, onNotesChanged: onProjectNotesChanged, onResourcesChanged, initialEntry, locationSource,
 }: WorkspaceSurfaceProps) {
   const floating = useFloatingWorkspace();
-  const [browserOpened, setBrowserOpened] = useState(() => !!project.builtin && floating.tabs.some(tab => tab.id === 'system-files'));
-  const [browserTab, setBrowserTab] = useState(browserOpened);
+  const terminalDock = useProjectTerminalDock();
+  const globalTabs = useMemo(() => allGlobalTabs.filter(tab => tab.workspace === worktree.path), [allGlobalTabs, worktree.path]);
   const restoring = useRef(true);
   const [restored, setRestored] = useState(false);
   const initialEntryApplied = useRef<ResolvedTab | undefined>(undefined);
-  const [browserPath, setBrowserPath] = useState('');
-  const [browserRequest, setBrowserRequest] = useState<{ path: string }>();
   const [automationLocations, setAutomationLocations] = useState<Record<string, AutomationLocation>>({});
   const syncTabLocation = useAowTabLocation();
+  const cancelTabNavigation = useCancelAowTabNavigation();
   const reportTabLocationError = useAowTabLocationError();
   const [tabRevealRequest, setTabRevealRequest] = useState<TabRevealRequest>();
   const routeToFloating = useCallback((id: string, requested = openingInFloatingWorkspace()) => {
@@ -747,10 +759,10 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const onNotesChanged = useCallback((directory: string) => onProjectNotesChanged(project.id, directory), [project.id, onProjectNotesChanged]);
   const terminals = useTerminals(worktree.path, true);
   const [terminalVisibility, setTerminalVisibility] = useState<Record<string, boolean>>({});
-  const openedTerminals = useMemo(() => terminals.tabs.filter(tab => terminalVisibility[tab.id]
+  const openedTerminals = useMemo(() => terminals.tabs.filter(tab => !terminalDock.owns(tab) && (terminalVisibility[tab.id]
     ?? (floating.hostedTabs.some(item => item.workspace === worktree.path && item.targetId === tab.id)
-      || floating.tabs.some(item => item.workspace === worktree.path && item.targetId === tab.id) || !isCliTerminal(tab))),
-  [terminals.tabs, terminalVisibility, floating.hostedTabs, floating.tabs, worktree.path]);
+      || floating.tabs.some(item => item.workspace === worktree.path && item.targetId === tab.id) || !isCliTerminal(tab)))),
+  [terminals.tabs, terminalVisibility, floating.hostedTabs, floating.tabs, worktree.path, terminalDock.owns]);
   const [documents, setDocuments] = useWorkspaceDocuments(worktree.path);
   const { wordWrapFor, setWordWrap } = useWordWrapOverrides(documents);
   const [sessionPreviews, setSessionPreviews] = useState<SessionPreview[]>([]);
@@ -761,6 +773,18 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const [automationRefreshKey, setAutomationRefreshKey] = useState(0);
   const [activeDocumentId, setActiveDocumentId] = useState<string>();
   const [activeCenterId, setActiveCenterId] = useState<string>();
+  const globalRequests = useRef(new Set<object>());
+  const restoreSelectionOverridden = useRef(false);
+  useLayoutEffect(() => {
+    const opened = globalTabs.filter(tab => !globalRequests.current.has(tab.request));
+    globalRequests.current = new Set(globalTabs.map(tab => tab.request));
+    const tab = opened.at(-1);
+    if (!tab) return;
+    restoreSelectionOverridden.current = true;
+    setActiveCenterId(tab.id);
+    setActiveDocumentId(undefined);
+    setTabRevealRequest({ tabId: tab.id });
+  }, [globalTabs]);
   const [hostPortal, setHostPortal] = useState<HTMLDivElement | null>(null);
   useLayoutEffect(() => {
     floating.publishHost(worktree.path, { portal: hostPortal, activeId: activeCenterId, visible: active });
@@ -773,10 +797,12 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   );
   const showAllTerminals = canShowAllTerminals && (terminalScopes.user || terminalScopes.cli);
   const localPanelTerminals = terminals.loaded ? terminals.tabs : projectTerminals.tabs.filter(tab => tab.workspace_root === worktree.path);
-  const panelTerminals = showAllTerminals
+  const scopedPanelTerminals = showAllTerminals
     ? [...localPanelTerminals, ...projectTerminals.tabs.filter(tab => tab.workspace_root !== worktree.path
       && terminalScopes[isCliTerminal(tab) ? 'cli' : 'user'])]
     : terminals.tabs;
+  const panelTerminals = terminalDock.tab && !scopedPanelTerminals.some(tab => tab.id === terminalDock.tab!.id)
+    ? [...scopedPanelTerminals, terminalDock.tab] : scopedPanelTerminals;
   const [filesExplorerCollapsed, setFilesExplorerCollapsed] = useState<boolean>();
   const [notesExplorerCollapsed, setNotesExplorerCollapsed] = useState<boolean>();
   const [showOpenFile, setShowOpenFile] = useState(false);
@@ -790,7 +816,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const savingDocumentIds = useRef(savingDocuments);
   const autoSavePendingAfterSave = useRef(new Set<string>());
 
-  const documentRefreshes = useRef(new Map<string, { instanceId?: number; controller: AbortController }>());
+  const documentRefreshes = useRef(new Map<string, { instanceId?: number; controller: AbortController; background: boolean }>());
   const refreshedPreviewUrls = useRef(new Set<string>());
   const sessionSnapshotRequestIds = useRef(new Map<string, number>());
 
@@ -802,7 +828,8 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     targetId: document.id,
     renameable: document.explorerSource !== 'external',
     dirty: document.dirty,
-  })), [documents]);
+    preview: floating.previewTabs.some(tab => tab.workspace === worktree.path && tab.id === `document:${document.id}`),
+  })), [documents, floating.previewTabs, worktree.path]);
   const sessionTabs = useMemo<CenterTab[]>(() => sessionPreviews.map(({ session }) => ({
     id: `session:${session.id}`,
     kind: 'session',
@@ -810,7 +837,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     targetId: session.id,
   })), [sessionPreviews]);
   const automationTabs = useMemo<CenterTab[]>(() => openAutomationTaskIds.map((id) => ({
-    id: `automation:${id}`, kind: 'automation', label: automationTasks[id]?.name ?? '自动化任务', targetId: id,
+    id: `automation:${id}`, kind: 'automation', label: automationTasks[id]?.name ?? t("aow.automated_tasks"), targetId: id,
     automationKind: automationTasks[id]?.kind,
   })), [automationTasks, openAutomationTaskIds]);
   const acpTabs = useMemo<CenterTab[]>(() => acp.tabs.map(tab => ({
@@ -820,9 +847,9 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     id: prTabId(pr.repository ?? worktree.path, pr.number, pr), kind: 'pullRequest', label: `PR #${pr.number}`, targetId: prTabId(pr.repository ?? worktree.path, pr.number, pr),
   })), [openPullRequests]);
   const ownedCenterTabs = useMemo(() => groupWorkspaceTabs([
-    ...(browserTab ? [{ id: 'system-files', kind: 'browser' as const, label: '系统文件浏览器', targetId: 'system-files' }] : []),
+    ...globalTabs,
     ...terminalTabs, ...acpTabs, ...sessionTabs, ...automationTabs, ...pullRequestTabs, ...documentTabs,
-  ]).flatMap(group => group.tabs), [automationTabs, acpTabs, documentTabs, pullRequestTabs, sessionTabs, terminalTabs, browserTab]);
+  ]).flatMap(group => group.tabs), [automationTabs, acpTabs, documentTabs, pullRequestTabs, sessionTabs, terminalTabs, globalTabs]);
   const centerTabs = useMemo(() => groupWorkspaceTabs([...ownedCenterTabs, ...hostedTabs])
     .flatMap(group => group.tabs), [ownedCenterTabs, hostedTabs]);
   const hasFrontendTabs = centerTabs.length > 0 ? true : restored ? false : undefined;
@@ -868,9 +895,16 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const gitRoot = sidebarPath('git');
   const sessionRoot = sidebarPath('sessions');
 
+  const previousContentTab = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const selected = centerTabs.find(tab => tab.id === activeCenterId);
+    if (selected && centerTabGroup(selected) !== 'global') previousContentTab.current = selected.id;
+  }, [activeCenterId, centerTabs]);
   useEffect(() => {
     if (activeCenterId && centerTabs.some((tab) => tab.id === activeCenterId)) return;
-    const candidate = terminalTabs.find((tab) => tab.targetId === terminals.activeId) ?? centerTabs[0];
+    const closedGlobal = activeCenterId === 'settings' || activeCenterId === 'inbox' || activeCenterId === 'system-files';
+    const candidate = (closedGlobal ? centerTabs.find(tab => tab.id === previousContentTab.current) : undefined)
+      ?? terminalTabs.find((tab) => tab.targetId === terminals.activeId) ?? centerTabs[0];
     setActiveCenterId(candidate?.id);
     if (candidate && (candidate.kind === 'file' || candidate.kind === 'diff')) setActiveDocumentId(candidate.targetId);
     else setActiveDocumentId(undefined);
@@ -928,8 +962,18 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     setRightView('acp'); setActiveDocumentId(undefined); setActiveCenterId(`acp:${id}`); routeToFloating(`acp:${id}`);
   };
   const createAcp = (agentId: string) => activateAcp(acp.create(agentId));
+  const selectTab = <T,>(action: () => T): T => { restoreSelectionOverridden.current = true; cancelTabNavigation(); return action(); };
 
+  const showProjectTerminal = () => {
+    const selectedId = locationSource === 'floating' ? floatingId : activeCenterId;
+    const page = centerTabs.find(tab => tab.id === selectedId && centerTabGroup(tab) !== 'terminal')
+      ?? centerTabs.find(tab => centerTabGroup(tab) !== 'terminal');
+    if (!page) { setOperationError(t("aow.open_a_file_diff_or_another_non_terminal_page")); return; }
+    activateCenter(page);
+    terminalDock.show();
+  };
   const openTerminal = (tab: TerminalTab, targetFloating = openingInFloatingWorkspace()) => {
+    if (terminalDock.owns(tab)) { showProjectTerminal(); return; }
     if (tab.workspace_root !== worktree.path) {
       const descriptor = terminalCenterTab(tab, projectTerminals.agents, projectTerminals.titles);
       floating.requestTerminal(tab);
@@ -1065,7 +1109,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     }
   };
 
-  const openExplorerFile = useCallback(async (entry: FileEntry, source: 'project' | 'notes' | 'external', targetFloating = openingInFloatingWorkspace()) => {
+  const openExplorerFile = useCallback(async (entry: FileEntry, source: 'project' | 'notes' | 'external', targetFloating = openingInFloatingWorkspace(), preview = false) => {
     const id = entry.path;
     setRightView('files');
     if (source === 'notes') setNotesExplorerCollapsed(false);
@@ -1073,8 +1117,9 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     setActiveDocumentId(id);
     routeToFloating(`document:${id}`, targetFloating);
     setActiveCenterId(`document:${id}`);
-    if (documentsRef.current.some((document) => document.id === id)) return;
+    if (workspaceDocument(worktree.path, id)) return;
     const existing = sharedDocument(id);
+    if (preview && !existing?.dirty && !existing?.saving) floating.openPreview(worktree.path, `document:${id}`, targetFloating || !!project.builtin);
     if (existing) { setDocuments(items => items.some(item => item.id === id) ? items : [...items, existing]); return; }
     const kind = previewKind(entry.path);
     const instanceId = nextDocumentInstanceId();
@@ -1094,13 +1139,13 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
       return;
     }
     if (kind === 'unsupported') {
-      setDocuments((items) => [...items, { ...base, readOnly: true, loading: false, error: '当前文件类型暂不支持预览。' }]);
+      setDocuments((items) => [...items, { ...base, readOnly: true, loading: false, error: t("aow.preview_is_unavailable_for_this_file_type") }]);
       return;
     }
     setDocuments((items) => [...items, base]);
     try {
       const text = await filesApi.readText(entry.path);
-      setDocuments((items) => items.map((document) => document.id === id && document.instanceId === instanceId ? {
+      updateSharedDocument(base, document => ({
         ...document,
         content: text.content,
         savedContent: text.content,
@@ -1108,19 +1153,17 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
         language: text.language,
         mime: text.mime,
         loading: false,
-      } : document));
+      }));
     } catch (reason) {
-      setDocuments((items) => items.map((document) => document.id === id && document.instanceId === instanceId
-        ? { ...document, kind: 'unsupported', error: message(reason), loading: false }
-        : document));
+      updateSharedDocument(base, document => ({ ...document, kind: 'unsupported', error: message(reason), loading: false }));
     }
-  }, [documents]);
+  }, [floating.openPreview, worktree.path, project.builtin, routeToFloating]);
 
   const searchRevealSequence = useRef(0);
   const openSearchFile = async (path: string, source: 'project' | 'notes', match?: SearchMatch) => {
     const sequence = ++searchRevealSequence.current;
     await openExplorerFile({ path, name: basename(path), kind: 'file', readonly: false, size: 0,
-      modified_ms: null, hidden: false, mode: 0, links: 1, uid: 0, gid: 0, is_symlink: false, link_target: null }, source);
+      modified_ms: null, hidden: false, mode: 0, links: 1, uid: 0, gid: 0, is_symlink: false, link_target: null }, source, openingInFloatingWorkspace(), true);
     if (match && sequence === searchRevealSequence.current) {
       setDocuments(items => items.map(document => document.id === path ? { ...document,
         markdownView: document.kind === 'markdown' ? 'editor' : document.markdownView,
@@ -1156,22 +1199,39 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     autoSaveTimers.current.delete(id);
   }, []);
 
-  const refreshDocument = useCallback(async (id: string) => {
+  const refreshDocument = useCallback(async (id: string, { signal, background = false }: { signal?: AbortSignal; background?: boolean } = {}) => {
     const target = documentsRef.current.find((item) => item.id === id);
-    if (!target || target.loading || target.saving || savingDocumentIds.current.has(id) || documentRefreshes.current.has(id)) return;
+    const pending = documentRefreshes.current.get(id);
+    if (!target || target.loading || target.saving || signal?.aborted || savingDocumentIds.current.has(id)
+      || (pending && (background || !pending.background))) return;
+    // An explicit refresh takes priority over a background poll already in flight.
+    pending?.controller.abort();
     clearAutoSave(id);
     const controller = new AbortController();
-    const request = { instanceId: target.instanceId, controller };
+    const request = { instanceId: target.instanceId, controller, background };
     documentRefreshes.current.set(id, request);
     const matches = (item: OpenDocument) => item.id === id && item.instanceId === target.instanceId;
     const current = () => !controller.signal.aborted && documentsRef.current.some(matches);
-    setDocuments((items) => items.map((item) => matches(item) ? { ...item, refreshing: true, refreshError: undefined } : item));
+    const cancel = () => {
+      controller.abort();
+      if (documentRefreshes.current.get(id) !== request) return;
+      documentRefreshes.current.delete(id);
+      if (!background) setDocuments(items => items.map(item => matches(item) ? { ...item, refreshing: false } : item));
+    };
+    signal?.addEventListener('abort', cancel, { once: true });
+    if (!background) setDocuments((items) => items.map((item) => matches(item) ? { ...item, refreshing: true, refreshError: undefined } : item));
     try {
       const kind = target.diffSource ? 'diff' : previewKind(target.path);
       if (target.diffSource) {
         const diff = await readDocumentDiff(target, controller.signal);
         if (!current()) return;
-        setDocuments((items) => items.map((item) => matches(item) ? { ...item, ...diff, refreshing: false, error: undefined } : item));
+        const latest = sharedDocument(id);
+        // Polls must leave the shared document and editor untouched when the
+        // rendered diff is unchanged. Explicit refreshes still update the view.
+        if (background && latest && matches(latest) && latest.kind === diff.kind
+          && latest.content === diff.content && latest.originalContent === diff.originalContent && latest.language === diff.language
+          && !latest.refreshing && !latest.error && !latest.refreshError) return;
+        setDocuments((items) => items.map((item) => matches(item) ? { ...item, ...diff, refreshing: false, error: undefined, refreshError: undefined } : item));
       } else if (kind === 'image' || kind === 'pdf') {
         const blob = await filesApi.readBlob(target.path, controller.signal);
         if (!current()) return;
@@ -1179,7 +1239,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
         refreshedPreviewUrls.current.add(imageUrl);
         setDocuments((items) => items.map((item) => matches(item) ? { ...item, kind, imageUrl, refreshing: false, error: undefined } : item));
       } else if (kind === 'unsupported') {
-        throw new Error('当前文件类型暂不支持预览。');
+        throw new Error(t("aow.preview_is_unavailable_for_this_file_type"));
       } else {
         const text = await filesApi.readText(target.path, controller.signal);
         if (!current()) return;
@@ -1196,9 +1256,11 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
         }));
       }
     } catch (reason) {
+      if (background && sharedDocument(id)?.refreshError === message(reason)) return;
       if (current()) setDocuments((items) => items.map((item) => matches(item)
         ? { ...item, refreshing: false, refreshError: message(reason) } : item));
     } finally {
+      signal?.removeEventListener('abort', cancel);
       if (documentRefreshes.current.get(id) === request) documentRefreshes.current.delete(id);
     }
   }, [clearAutoSave]);
@@ -1231,7 +1293,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
       if (autoSavePendingAfterSave.current.has(id)) autoSaveFailedIds.current.delete(id);
       else autoSaveFailedIds.current.add(id);
       updateSharedDocument(target, item => ({ ...item, saving: false }));
-      setOperationError(`${target.explorerSource === 'notes' ? 'Notes' : '文件'}保存失败：${message(reason)}`);
+      setOperationError(t("aow.failed_to_save", { value0: target.explorerSource === 'notes' ? 'Notes' : t("aow.files"), value1: message(reason) }));
     } finally {
       savingDocumentIds.current.delete(id);
       autoSavePendingAfterSave.current.delete(id);
@@ -1249,6 +1311,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const changeDocument = (id: string, content: string) => {
     const target = documentsRef.current.find((document) => document.id === id);
     if (!target) return;
+    if (content !== target.content) floating.pinPreview(worktree.path, `document:${id}`);
     if (savingDocumentIds.current.has(id)) autoSavePendingAfterSave.current.add(id);
     const next = { ...target, content, dirty: content !== target.savedContent };
     setDocuments((items) => items.map((item) => item.id === id
@@ -1302,7 +1365,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const keepLocalDocument = (id: string) => {
     const target = documents.find((item) => item.id === id);
     if (!target?.pendingExternal) return;
-    if (!window.confirm('下次保存会用当前编辑内容覆盖磁盘上的新版本，确定继续吗？')) return;
+    if (!window.confirm(t("aow.the_next_save_will_overwrite_the_newer_version_on"))) return;
     clearAutoSave(id);
     autoSaveFailedIds.current.delete(id);
     autoSavePendingAfterSave.current.delete(id);
@@ -1375,9 +1438,9 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     const affectedDocuments = documents.filter((document) => document.explorerSource === source
       && (document.path === path || (directory && document.path.startsWith(`${path}/`))));
     const dirtyDocuments = affectedDocuments.filter((document) => document.dirty);
-    if (dirtyDocuments.length && !window.confirm(`${dirtyDocuments.length} 个将被删除的文件包含未保存更改。确定继续吗？`)) return;
+    if (dirtyDocuments.length && !window.confirm(t("aow.files_to_delete_contain_unsaved_changes_continue", { value0: dirtyDocuments.length }))) return;
     const location = source === 'notes' ? 'Notes' : 'Project';
-    if (!window.confirm(`删除 ${location} 中的${directory ? '目录及其全部内容' : '文件'}“${label}”？`)) return;
+    if (!window.confirm(t("aow.delete_in", { value0: location, value1: directory ? t("common.directory_and_all_its_contents") : t("aow.files"), value2: label }))) return;
     setOperationError('');
     try {
       await filesApi.deleteEntry(path);
@@ -1405,12 +1468,12 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const renameExplorerEntry = async (source: 'project' | 'notes', path: string, requestedName: string) => {
     const name = requestedName.trim();
     if (!name || name === '.' || name === '..' || /[/\\\0]/.test(name) || new TextEncoder().encode(name).length > 255) {
-      throw new Error('名称无效：请输入不含路径分隔符且不超过 255 字节的名称。');
+      throw new Error(t("aow.invalid_name_enter_a_name_without_path_separators_up"));
     }
     const existingDocument = documents.find((document) => document.explorerSource === source && document.path === path);
     if (existingDocument) return renameAowFile(existingDocument.id, name);
     if (documents.some((document) => document.explorerSource === source && document.path.startsWith(`${path}/`))) {
-      throw new Error('该目录中有文件正在工作区打开，请先关闭对应 Tab。');
+      throw new Error(t("aow.files_from_this_directory_are_open_in_the_workspace"));
     }
     const result = await filesApi.renameEntry(path, name);
     if (source === 'notes') onNotesChanged(dirname(path));
@@ -1421,28 +1484,31 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     return result;
   };
 
-  const openDocumentDiff = useCallback(async (base: OpenDocument) => {
+  const openDocumentDiff = useCallback(async (base: OpenDocument, preview = false) => {
     const id = base.id;
     setRightView('git');
     setActiveDocumentId(id);
     routeToFloating(`document:${id}`);
     setActiveCenterId(`document:${id}`);
-    if (documentsRef.current.some(document => document.id === id)) return;
+    if (workspaceDocument(worktree.path, id)) return;
+    if (preview) floating.openPreview(worktree.path, `document:${id}`, openingInFloatingWorkspace() || !!project.builtin);
+    const existing = sharedDocument(id);
+    if (existing) { setDocuments(items => [...items, existing]); return; }
     const document = { ...base, instanceId: nextDocumentInstanceId() };
     setDocuments(items => [...items, document]);
     try {
       const diff = await readDocumentDiff(document);
-      setDocuments(items => items.map(item => item.id === id && item.instanceId === document.instanceId ? { ...item, ...diff, loading: false } : item));
+      updateSharedDocument(document, item => ({ ...item, ...diff, loading: false }));
     } catch (reason) {
-      setDocuments(items => items.map(item => item.id === id && item.instanceId === document.instanceId ? { ...item, loading: false, error: message(reason) } : item));
+      updateSharedDocument(document, item => ({ ...item, loading: false, error: message(reason) }));
     }
-  }, []);
+  }, [floating.openPreview, worktree.path, project.builtin, routeToFloating]);
   const openDiff = useCallback((repo: string, file: GitFileStatus, staged: boolean) => openDocumentDiff(diffDocument({
     type: 'diff', workspace: worktree.id, repository: repo, path: file.path, source: staged ? 'staged' : 'working', untracked: file.worktree_status === '?',
-  })), [openDocumentDiff]);
+  }), true), [openDocumentDiff]);
   const openCommitDiff = useCallback((repo: string, commit: GitCommit, file: GitCommitFile) => openDocumentDiff(diffDocument({
     type: 'diff', workspace: worktree.id, repository: repo, path: file.path, source: 'commit', commit: commit.id, originalPath: file.original_path ?? undefined,
-  })), [openDocumentDiff]);
+  }), true), [openDocumentDiff]);
 
   const openPullRequest = useCallback((value: PullRequestSummary, repository = worktree.path) => {
     const pr = { ...value, repository };
@@ -1457,9 +1523,21 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     setActiveCenterId(prTabId(repository, pr.number, pr));
   }, []);
 
+  const closePreviewDocument = (tabId: string) => {
+    const id = tabId.slice('document:'.length);
+    const document = workspaceDocument(worktree.path, id);
+    if (!document || document.dirty || document.saving || document.pendingExternal || savingDocumentIds.current.has(id)) return;
+    clearAutoSave(id);
+    autoSaveFailedIds.current.delete(id);
+    autoSavePendingAfterSave.current.delete(id);
+    setDocuments(items => items.filter(item => item.id !== id));
+    revokeBlobUrl(document.imageUrl);
+    void loadEditorArea().then(module => module.disposeEditorModels([document]));
+  };
+
   const closeDocument = (id: string) => {
     const closing = documents.find((document) => document.id === id);
-    if (closing?.dirty && !window.confirm(`“${closing.name}”有未保存的更改，确定关闭吗？`)) return false;
+    if (closing?.dirty && !window.confirm(t("aow.has_unsaved_changes_close_it", { value0: closing.name }))) return false;
     clearAutoSave(id);
     autoSaveFailedIds.current.delete(id);
     autoSavePendingAfterSave.current.delete(id);
@@ -1545,7 +1623,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   };
 
   const closeTab = async (tab: CenterTab) => {
-    if (tab.kind === 'browser') { setBrowserTab(false); floating.remove(worktree.path, tab.id); return; }
+    if (centerTabGroup(tab) === 'global') { globalTabs.find(item => item.id === tab.id)?.close(); return; }
     if (centerTabGroup(tab) === 'terminal') {
       hideTerminalTabs([tab]);
     }
@@ -1564,7 +1642,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
       hideTerminalTabs(targets);
       return;
     }
-    if (group === 'browser') {
+    if (group === 'global') {
       for (const tab of targets) await closeTab(tab);
       return;
     }
@@ -1605,11 +1683,11 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     if (tab.kind === 'file') {
       const document = documents.find(item => item.id === tab.targetId);
       if (!document || document.loading) {
-        setOperationError('文件仍在加载，请稍后再重命名。');
+        setOperationError(t("aow.the_file_is_still_loading_try_renaming_it_later"));
         return false;
       }
       if (document.dirty) {
-        setOperationError('文件有未保存的更改，请先保存后再重命名。');
+        setOperationError(t("aow.save_unsaved_changes_before_renaming_this_file"));
         return false;
       }
     }
@@ -1621,16 +1699,16 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     const name = requestedName.trim();
     if (!name || name === '.' || name === '..' || name.includes('/') || name.includes(String.fromCharCode(92))
       || name.includes(String.fromCharCode(0)) || new TextEncoder().encode(name).length > 255) {
-      throw new Error('文件名无效：请输入不含路径分隔符且不超过 255 字节的单个文件名。');
+      throw new Error(t("aow.invalid_file_name_enter_a_single_name_without_path"));
     }
 
     const document = documents.find((item) => item.id === oldPath);
-    if (document?.loading) throw new Error('文件仍在加载，请稍后再重命名。');
-    if (document?.dirty) throw new Error('文件有未保存的更改，请先保存后再重命名。');
+    if (document?.loading) throw new Error(t("aow.the_file_is_still_loading_try_renaming_it_later"));
+    if (document?.dirty) throw new Error(t("aow.save_unsaved_changes_before_renaming_this_file"));
 
     const expectedPath = joinPath(dirname(oldPath), name);
     if (documents.some((item) => item.id !== oldPath && item.path === expectedPath)) {
-      throw new Error('该文件已在工作区中打开，请先关闭对应 Tab。');
+      throw new Error(t("aow.this_file_is_already_open_in_the_workspace_close"));
     }
 
     const result = await filesApi.renameEntry(oldPath, name);
@@ -1662,7 +1740,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
         imageUrl: kind === 'image' || kind === 'pdf'
           ? filesApi.rawUrl(result.path)
           : undefined,
-        error: readError || (kind === 'unsupported' ? '当前文件类型暂不支持预览。' : undefined),
+        error: readError || (kind === 'unsupported' ? t("aow.preview_is_unavailable_for_this_file_type") : undefined),
         originalContent: undefined,
         pendingExternal: undefined,
         refreshError: undefined,
@@ -1689,7 +1767,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     }
     if (tab.renameable === false) return;
     const name = requestedName.trim();
-    if (!name) throw new Error('名称不能为空。');
+    if (!name) throw new Error(t("aow.name_cannot_be_empty"));
     if (tab.kind === 'terminal' || tab.kind === 'agent') {
       await terminals.rename(tab.targetId, name);
       return;
@@ -1699,13 +1777,13 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     try {
       await renameAowFile(tab.targetId, name);
     } catch (reason) {
-      throw new Error(`文件重命名失败：${message(reason)}`, { cause: reason });
+      throw new Error(t("aow.failed_to_rename_file", { value0: message(reason) }), { cause: reason });
     }
   };
 
   const gitWorktree = project.worktrees.find(item => item.path === gitRoot) ?? worktree;
   const repository = useMemo<RepositorySummary>(() => ({
-    path: gitRoot, name: project.name, branch: gitWorktree.detached ? 'detached' : gitWorktree.branch,
+    path: gitRoot, name: project.name, branch: gitWorktree.detached ? t("git.detached_head") : gitWorktree.branch,
   }), [project.name, gitWorktree.branch, gitWorktree.detached, gitRoot]);
   const activeNotePath = sidebarDocument?.explorerSource === 'notes' ? sidebarDocument.path : undefined;
 
@@ -1716,12 +1794,15 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     setTerminalVisibility(saved.terminalVisibility ?? Object.fromEntries((saved.openedCliTerminals ?? []).filter(id => typeof id === 'string').map(id => [id, true])));
     const pending = (Array.isArray(saved.documents) ? saved.documents : []).filter(item => typeof item.path === 'string' && item.path.length < 8192).map(async item => {
       if (item.diffSource) {
+        if (workspaceDocument(worktree.path, item.id)) return;
+        const existing = sharedDocument(item.id);
+        if (existing) { setDocuments(items => [...items, existing]); return; }
         const document = { ...item, content: undefined, savedContent: undefined, loading: true, instanceId: nextDocumentInstanceId() };
-        setDocuments(items => items.some(value => value.id === document.id) ? items : [...items, document]);
+        setDocuments(items => [...items, document]);
         try {
           const diff = await readDocumentDiff(document);
-          if (!cancelled) setDocuments(items => items.map(value => value.id === document.id ? { ...value, ...diff, loading: false } : value));
-        } catch (reason) { if (!cancelled) setDocuments(items => items.map(value => value.id === document.id ? { ...value, loading: false, error: message(reason) } : value)); }
+          updateSharedDocument(document, value => ({ ...value, ...diff, loading: false }));
+        } catch (reason) { updateSharedDocument(document, value => ({ ...value, loading: false, error: message(reason) })); }
       } else {
         await openExplorerFile({ name: basename(item.path), path: item.path, kind: 'file', readonly: item.readOnly ?? false,
           size: 0, modified_ms: null, hidden: false, mode: 0, links: 1, uid: 0, gid: 0, is_symlink: false, link_target: null }, item.explorerSource ?? 'external');
@@ -1737,10 +1818,12 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     }
     for (const pr of saved.pullRequests ?? []) if (typeof pr.number === 'number') openPullRequest(pr, pr.repository ?? worktree.path);
     for (const task of saved.tasks ?? []) if (typeof task.id === 'string') openAutomation(task);
+    // A newly mounted owner may already host a global tab before saved tabs open.
+    if (globalTabs.length) { setActiveCenterId(globalTabs.at(-1)!.id); setActiveDocumentId(undefined); }
     restoring.current = false;
     void Promise.allSettled(pending).then(() => {
       if (cancelled) return;
-      if (saved.active) setActiveCenterId(/^pull-request:\d+$/.test(saved.active) ? prTabId(worktree.path, Number(saved.active.slice('pull-request:'.length))) : saved.active);
+      if (saved.active && !restoreSelectionOverridden.current) setActiveCenterId(/^pull-request:\d+$/.test(saved.active) ? prTabId(worktree.path, Number(saved.active.slice('pull-request:'.length))) : saved.active);
       setRestored(true);
     });
     return () => { cancelled = true; };
@@ -1758,11 +1841,12 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const routeActions = useRef<TabOpenActions>(null!);
   routeActions.current = {
     terminal: id => {
-      if (!terminals.tabs.some(tab => tab.id === id)) throw new Error('该 Tab 已关闭或不存在。');
+      if (id === terminalDock.terminalId) { showProjectTerminal(); return; }
+      if (!terminals.tabs.some(tab => tab.id === id)) throw new Error(t("aow.this_tab_has_been_closed_or_no_longer_exists"));
       setTerminalVisibility(items => ({ ...items, [id]: true }));
       setActiveCenterId(`terminal:${id}`); setActiveDocumentId(undefined); terminals.activate(id); routeToFloating(`terminal:${id}`);
     },
-    files: path => { setBrowserRequest({ path }); setBrowserOpened(true); setBrowserTab(true); setActiveCenterId('system-files'); routeToFloating('system-files', true); },
+    files: () => undefined, // Global file-browser links are handled by ProjectAowContents.
     file: (path, source) => openExplorerFile({ name: basename(path), path, kind: 'file', readonly: false, size: 0, modified_ms: null, hidden: false, mode: 0, links: 1, uid: 0, gid: 0, is_symlink: false, link_target: null }, source),
     diff: target => openDocumentDiff(diffDocument(target)),
     pullRequest: openPullRequest,
@@ -1793,7 +1877,8 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   }, [restored, terminals.loaded, terminals.loading, terminals.error, terminals.tabs, initialEntry,
     floating.hostedTabs, floating.terminalRequests, floating.removeHosted, worktree.path]);
   useEffect(() => {
-    if (!initialEntry || initialEntryApplied.current === initialEntry || !restored || !terminals.loaded || terminals.loading) return;
+    if (!initialEntry || initialEntry.signal?.aborted || initialEntryApplied.current === initialEntry || !restored) return;
+    if (initialEntry.target.type === 'terminal' && (!terminals.loaded || terminals.loading)) return;
     const hosted = hostedTabs.find(tab => tab.id === tabCenterId(initialEntry) && tab.workspace === initialEntry.workspacePath);
     if (hosted) {
       initialEntryApplied.current = initialEntry;
@@ -1808,33 +1893,44 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
       return;
     }
     initialEntryApplied.current = initialEntry;
-    void Promise.resolve().then(() => openTabTarget(initialEntry, routeActions.current)).catch(reason => reportTabLocationError(message(reason)));
+    void Promise.resolve().then(() => {
+      if (!initialEntry.signal?.aborted) return openTabTarget(initialEntry, routeActions.current);
+    }).catch(reason => { if (!initialEntry.signal?.aborted) reportTabLocationError(message(reason)); });
   }, [initialEntry, restored, terminals.loaded, terminals.loading, terminals.tabs, terminals.replace, hostedTabs, reportTabLocationError]);
   const locationCenterId = locationSource === 'floating' ? floatingId : activeCenterId;
   // The center can retain a floated tab's placeholder while its content is hidden.
   const locationTabVisible = locationSource === 'floating' || (!isFloating(locationCenterId ?? '') && !hostedLocation(locationCenterId ?? ''));
+  useActiveDiffRefresh(
+    locationSource && locationTabVisible
+      ? documents.find(item => item.diffSource && `document:${item.id}` === locationCenterId) : undefined,
+    (id, signal, trigger) => refreshDocument(id, { signal, background: trigger === 'interval' }),
+  );
   useEffect(() => {
-    if (!locationSource || !restored || !terminals.loaded || terminals.loading) return;
+    if (!locationSource || !restored) return;
     const tab = centerTabs.find(tab => tab.id === locationCenterId);
     if (locationCenterId && !tab) return;
+    // Only terminal locations need the inventory. ACP and documents can be
+    // ready while the first terminal snapshot is still pending or has failed.
+    if (tab && (tab.kind === 'terminal' || tab.kind === 'agent') && (!terminals.loaded || terminals.loading)) return;
     const target = captureTabTarget({ workspace: worktree.id, workspacePath: worktree.path, tab, documents,
       sessions: sessionPreviews, acpTabs: acp.tabs, pullRequests: openPullRequests, browserPath, automationLocations });
     // A new ACP view has no link until the backend assigns its session ID.
     // Clear the previous URL while it connects; other async resources retain theirs.
-    if (tab && !target && tab.kind !== 'acp') return;
+    if (tab && !target && tab.kind !== 'acp' && centerTabGroup(tab) !== 'global') return;
     syncTabLocation(target, '', locationTabVisible);
   }, [initialEntry, locationSource, locationCenterId, locationTabVisible, restored, terminals.loaded, terminals.loading, centerTabs,
     documents, sessionPreviews, acp.tabs, openPullRequests, browserPath, automationLocations, worktree.id, worktree.path, syncTabLocation]);
-  const commandsRef = useRef({ createTerminal, createAcp, createTemporaryNote, closeTab, closeTabsInGroup, centerTabs, canRenameTab, renameTab });
-  commandsRef.current = { createTerminal, createAcp, createTemporaryNote, closeTab, closeTabsInGroup, centerTabs, canRenameTab, renameTab };
+  const commandsRef = useRef({ openExplorerFile, createTerminal, createAcp, createTemporaryNote, closeTab, closePreviewDocument, closeTabsInGroup, centerTabs, canRenameTab, renameTab });
+  commandsRef.current = { openExplorerFile, createTerminal, createAcp, createTemporaryNote, closeTab, closePreviewDocument, closeTabsInGroup, centerTabs, canRenameTab, renameTab };
   useEffect(() => {
     floating.publish(worktree.path, {
-      tabs: ownedCenterTabs,
+      tabs: ownedCenterTabs.filter(tab => centerTabGroup(tab) !== 'global'),
+      openFile: entry => { cancelTabNavigation(); void commandsRef.current.openExplorerFile(entry, 'external'); },
       reveal: id => setTabRevealRequest({ tabId: id }),
+      closePreview: id => commandsRef.current.closePreviewDocument(id),
       createAcp: agentId => commandsRef.current.createAcp(agentId),
       create: (kind, agent) => {
-        if (kind === 'files') { setBrowserOpened(true); setBrowserTab(true); floating.add(worktree.path, 'system-files'); }
-        else if (kind === 'markdown' || kind === 'text') void commandsRef.current.createTemporaryNote(kind === 'markdown' ? 'md' : 'txt');
+        if (kind === 'markdown' || kind === 'text') void commandsRef.current.createTemporaryNote(kind === 'markdown' ? 'md' : 'txt');
         else void commandsRef.current.createTerminal(agent);
       },
       close: id => {
@@ -1877,18 +1973,18 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     previousTabs.current = ownedCenterTabs;
   }, [ownedCenterTabs, floating.remove, floating.removeHosted, worktree.path]);
   const renderEditor = (selectedDocumentId?: string) => (
-          <Suspense fallback={<div className="project-aow-empty">正在加载编辑器…</div>}>
+          <Suspense fallback={<div className="project-aow-empty">{t("aow.loading_editor")}</div>}>
             <EditorArea
               workspace={worktree.id}
               documents={documents}
               activeId={selectedDocumentId}
               wordWrapOverride={wordWrapFor(selectedDocumentId)}
               onWordWrapChange={setWordWrap}
-              onActivate={(id) => { setActiveDocumentId(id); setActiveCenterId(`document:${id}`); }}
+              onActivate={(id) => selectTab(() => { setActiveDocumentId(id); setActiveCenterId(`document:${id}`); })}
               onClose={closeDocument}
               onCloseOthers={(id) => {
                 const dirty = documents.filter((document) => document.id !== id && document.dirty);
-                if (dirty.length && !window.confirm(`有 ${dirty.length} 个文件包含未保存的更改，确定关闭其他文件吗？`)) return false;
+                if (dirty.length && !window.confirm(t("aow.files_have_unsaved_changes_close_other_files", { value0: dirty.length }))) return false;
                 for (const document of documents) {
                   if (document.id !== id) revokeBlobUrl(document.imageUrl);
                 }
@@ -1897,7 +1993,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
               }}
               onCloseAll={() => {
                 const dirty = documents.filter((document) => document.dirty);
-                if (dirty.length && !window.confirm(`有 ${dirty.length} 个文件包含未保存的更改，确定全部关闭吗？`)) return false;
+                if (dirty.length && !window.confirm(t("aow.files_have_unsaved_changes_close_all_files", { value0: dirty.length }))) return false;
                 for (const document of documents) revokeBlobUrl(document.imageUrl);
                 setDocuments([]);
                 return true;
@@ -1917,27 +2013,27 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
 
   const renderSidebar = () => (
     <aside className="project-aow-right" hidden={!rightSidebarVisible}>
-      <nav aria-label="AoW side views">
-        <button className={rightView === 'terminals' ? 'active' : ''} title="Terminal" aria-label="Terminal 面板" onClick={() => setRightView('terminals')}><SquareTerminal /></button>
-        <button className={rightView === 'acp' ? 'active' : ''} title="ACP" aria-label="ACP 面板" onClick={() => setRightView('acp')}><AcpIcon /></button>
-        <button className={rightView === 'sessions' ? 'active' : ''} title="Conversation" aria-label="Conversation" onClick={() => setRightView('sessions')}><MessageSquare /></button>
-        <button className={rightView === 'automations' ? 'active' : ''} title="Automation" aria-label="Automation" onClick={() => setRightView('automations')}><CalendarClock /></button>
+      <nav aria-label={t("navigation.aow_side_views")}>
+        <button className={rightView === 'terminals' ? 'active' : ''} title={t("navigation.terminal")} aria-label={t("aow.terminal_panel")} onClick={() => setRightView('terminals')}><SquareTerminal /></button>
+        <button className={rightView === 'acp' ? 'active' : ''} title="ACP" aria-label={t("aow.acp_panel")} onClick={() => setRightView('acp')}><AcpIcon /></button>
+        <button className={rightView === 'sessions' ? 'active' : ''} title={t("navigation.conversation")} aria-label={t("navigation.conversation")} onClick={() => setRightView('sessions')}><MessageSquare /></button>
+        <button className={rightView === 'automations' ? 'active' : ''} title={t("navigation.automation")} aria-label={t("navigation.automation")} onClick={() => setRightView('automations')}><CalendarClock /></button>
         <span className="project-aow-view-separator" aria-hidden="true" />
-        <button className={rightView === 'files' && (!project.builtin || rightSidebarVisible) ? 'active' : ''} title="Explorer" aria-label="Explorer" onClick={() => setRightView('files')}><FolderOpen /></button>
-        <button className={rightView === 'git' ? 'active' : ''} title="Source Control" aria-label="Source Control" onClick={() => setRightView('git')}><GitBranch /></button>
-        <button className={rightView === 'pullRequests' ? 'active' : ''} title="Pull Requests" aria-label="Pull Requests" onClick={() => setRightView('pullRequests')}><GitPullRequest /></button>
-        <button className="project-aow-right-hide" title="隐藏右侧栏" aria-label="隐藏右侧栏" onClick={onHideRightSidebar}><PanelRightClose /></button>
+        <button className={rightView === 'files' && (!project.builtin || rightSidebarVisible) ? 'active' : ''} title={t("navigation.explorer")} aria-label={t("navigation.explorer")} onClick={() => setRightView('files')}><FolderOpen /></button>
+        <button className={rightView === 'git' ? 'active' : ''} title={t("navigation.source_control")} aria-label={t("navigation.source_control")} onClick={() => setRightView('git')}><GitBranch /></button>
+        <button className={rightView === 'pullRequests' ? 'active' : ''} title={t("navigation.pull_requests")} aria-label={t("navigation.pull_requests")} onClick={() => setRightView('pullRequests')}><GitPullRequest /></button>
+        <button className="project-aow-right-hide" title={t("aow.hide_right_sidebar")} aria-label={t("aow.hide_right_sidebar")} onClick={onHideRightSidebar}><PanelRightClose /></button>
       </nav>
       <div className="project-aow-right-content" hidden={rightView !== 'files'}>
         <ExplorerSearch key={`search:${worktree.path}:${project.id}`} projectRoot={explorerRoot} notesRoot={project.notes_path}
-          visible={active && rightSidebarVisible && rightView === 'files'} onOpen={(path, source, match) => void openSearchFile(path, source, match)}
+          visible={active && rightSidebarVisible && rightView === 'files'} onOpen={(path, source, match) => void selectTab(() => openSearchFile(path, source, match))}
           projectRefresh={explorerRefresh.generation} notesRefresh={notesRefresh.generation}>
         <AowPanelStack className="project-aow-explorer-stack">
           <Explorer
             key={`files:${worktree.path}`} root={explorerRoot}
-            title="Project Explorer" titleIcon={<Files />} aowHeader collapsed={filesExplorerCollapsed} onCollapsedChange={setFilesExplorerCollapsed}
+            title={t("navigation.project_explorer")} titleIcon={<Files />} aowHeader collapsed={filesExplorerCollapsed} onCollapsedChange={setFilesExplorerCollapsed}
             activePath={sidebarDocument?.explorerSource === 'project' ? sidebarDocument.path : undefined}
-            lockedRoot titleCase renameDirectories onRootChange={() => undefined} onOpenFile={(entry) => void openExplorerFile(entry, 'project')}
+            lockedRoot titleCase renameDirectories onRootChange={() => undefined} onOpenFile={(entry) => void selectTab(() => openExplorerFile(entry, 'project', openingInFloatingWorkspace(), true))}
             onRenameFile={(path, name) => renameExplorerEntry('project', path, name)}
             onCreateFile={(directory, name) => createExplorerEntry('project', directory, name, 'file')}
             onCreateDirectory={(directory, name) => createExplorerEntry('project', directory, name, 'directory')}
@@ -1945,9 +2041,9 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
           />
           <Explorer
             key={`notes:${project.id}:${project.notes_path}`} root={project.notes_path}
-            title="Notes Explorer" titleIcon={<NotebookPen />} aowHeader collapsed={notesExplorerCollapsed} onCollapsedChange={setNotesExplorerCollapsed}
+            title={t("navigation.notes_explorer")} titleIcon={<NotebookPen />} aowHeader collapsed={notesExplorerCollapsed} onCollapsedChange={setNotesExplorerCollapsed}
             activePath={activeNotePath} lockedRoot titleCase renameDirectories
-            onRootChange={() => undefined} onOpenFile={(entry) => void openExplorerFile(entry, 'notes')}
+            onRootChange={() => undefined} onOpenFile={(entry) => void selectTab(() => openExplorerFile(entry, 'notes', openingInFloatingWorkspace(), true))}
             onRenameFile={(path, name) => renameExplorerEntry('notes', path, name)}
             onCreateFile={(directory, name) => createExplorerEntry('notes', directory, name, 'file')}
             onCreateDirectory={(directory, name) => createExplorerEntry('notes', directory, name, 'directory')}
@@ -1957,24 +2053,24 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
         </ExplorerSearch>
       </div>
       <div className="project-aow-right-content" hidden={rightView !== 'git'}>
-        <SourceControl key={`git:${worktree.path}`} root={gitRoot} fixedRepository={repository} titleCase aowHeader refreshGeneration={sourceControlRefresh} visible={active && rightSidebarVisible && rightView === 'git'} activeDocumentId={sidebarDocument?.id} onOpenDiff={openDiff} onOpenCommitDiff={openCommitDiff} />
+        <SourceControl key={`git:${worktree.path}`} root={gitRoot} fixedRepository={repository} titleCase aowHeader refreshGeneration={sourceControlRefresh} visible={active && rightSidebarVisible && rightView === 'git'} activeDocumentId={sidebarDocument?.id} onOpenDiff={(repo, file, staged) => selectTab(() => openDiff(repo, file, staged))} onOpenCommitDiff={(repo, commit, file) => selectTab(() => openCommitDiff(repo, commit, file))} />
       </div>
       <div className="project-aow-right-content" hidden={rightView !== 'pullRequests'}>
-        <PullRequestsPanel key={'pull-requests:' + worktree.path} repository={worktree.path} visible={active && rightSidebarVisible && rightView === 'pullRequests'} activeNumber={activePullRequest?.number} activeProvider={activePullRequest?.provider} activeRemote={activePullRequest?.remote} onOpen={openPullRequest} />
+        <PullRequestsPanel key={'pull-requests:' + worktree.path} repository={worktree.path} visible={active && rightSidebarVisible && rightView === 'pullRequests'} activeNumber={activePullRequest?.number} activeProvider={activePullRequest?.provider} activeRemote={activePullRequest?.remote} onOpen={pr => selectTab(() => openPullRequest(pr))} />
       </div>
       <div className="project-aow-right-content" hidden={rightView !== 'sessions'}>
-        <AgentSessions key={`sessions:${worktree.path}`} worktreePath={sessionRoot} agents={agents} activeSessionId={activeSessionId} visible={active && rightSidebarVisible && rightView === 'sessions'} onOpen={openSession} onResume={(session, agent) => void createTerminal(agent, session, sessionRoot)} />
+        <AgentSessions key={`sessions:${worktree.path}`} worktreePath={sessionRoot} agents={agents} activeSessionId={activeSessionId} visible={active && rightSidebarVisible && rightView === 'sessions'} onOpen={session => selectTab(() => openSession(session))} onResume={(session, agent) => void selectTab(() => createTerminal(agent, session, sessionRoot))} />
       </div>
       <div className="project-aow-right-content" hidden={rightView !== 'terminals'}>
         <TerminalPanel tabs={panelTerminals} descendantTabs={[...localPanelTerminals, ...projectTerminals.tabs.filter(tab => tab.workspace_root !== worktree.path)]}
-          activeId={activeTerminalId} activeWorktreePath={worktree.path}
+          activeId={terminalDock.visible ? terminalDock.terminalId : activeTerminalId} activeWorktreePath={worktree.path}
           detectedAgents={{ ...projectTerminals.agents, ...terminals.detectedAgents }}
           titles={{ ...projectTerminals.titles, ...terminals.terminalTitles }}
           worktrees={canShowAllTerminals ? project.worktrees : undefined} showAll={canShowAllTerminals ? terminalScopes : undefined}
           onShowAllChange={setScope}
           sortBy={terminalSorts} onSortChange={setSort}
           loading={showAllTerminals && projectTerminals.loading} error={showAllTerminals ? projectTerminals.error : undefined}
-          openedIds={new Set([...openedTerminals.map(tab => tab.id), ...hostedTabs.map(tab => tab.targetId)])}
+          openedIds={new Set([...openedTerminals.map(tab => tab.id), ...hostedTabs.map(tab => tab.targetId), ...(terminalDock.visible && terminalDock.terminalId ? [terminalDock.terminalId] : [])])}
           onReload={() => { void terminals.reload(); projectTerminals.reload(); }}
           onRebuild={async id => {
             const tab = await terminalApi.rebuild(id);
@@ -1988,22 +2084,23 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
               catch (reason) { setOperationError(message(reason)); }
             }
           }}
-          onOpen={openTerminal} onOpenFloating={tab => openTerminal(tab, true)} />
+          onOpen={tab => selectTab(() => openTerminal(tab))} onOpenFloating={tab => selectTab(() => openTerminal(tab, true))} canOpenFloating={tab => !terminalDock.owns(tab)} />
       </div>
       <div className="project-aow-right-content" hidden={rightView !== 'acp'}>
-        <AcpPanel key={`acp:${worktree.path}`} workspace={worktree.path} visible={active && rightSidebarVisible && rightView === 'acp'} activeThreadId={acp.tabs.find(tab => `acp:${tab.id}` === sidebarActiveId)?.thread_id} onOpen={session => activateAcp(acp.open(session))} />
+        <AcpPanel key={`acp:${worktree.path}`} workspace={worktree.path} visible={active && rightSidebarVisible && rightView === 'acp'} activeThreadId={acp.tabs.find(tab => `acp:${tab.id}` === sidebarActiveId)?.thread_id} onOpen={session => selectTab(() => activateAcp(acp.open(session)))} />
       </div>
       <div className="project-aow-right-content" hidden={rightView !== 'automations'}>
-        <AutomationPanel project={project} agents={agents} activeTaskId={activeCenterId?.startsWith('automation:') ? activeCenterId.slice('automation:'.length) : undefined} refreshKey={automationRefreshKey} onOpenTask={openAutomation} onTaskChanged={taskChanged} onTaskDeleted={taskDeleted} />
+        <AutomationPanel project={project} agents={agents} activeTaskId={activeCenterId?.startsWith('automation:') ? activeCenterId.slice('automation:'.length) : undefined} refreshKey={automationRefreshKey} onOpenTask={task => selectTab(() => openAutomation(task))} onTaskChanged={taskChanged} onTaskDeleted={taskDeleted} />
       </div>
     </aside>
   );
   return <WorkspaceMarkdownProvider workspace={worktree.id} directory={worktree.path}><FloatingOpenMenu><section className="project-aow-surface" hidden={!active || project.builtin}>
     <main className="project-aow-center">
       <WorkspaceTabs workspaceKey={`project:${worktree.path}`} revealRequest={tabRevealRequest} tabs={centerTabs} activeId={activeCenterId} visible={active && !project.builtin} agents={agents}
-        onActivate={activateCenter} onCloseTab={closeTab} onCloseTabs={(targets, selected) => closeTabsInGroup(selected, targets.map(tab => tab.id))}
+        onActivate={tab => selectTab(() => activateCenter(tab))} onCloseTab={tab => selectTab(() => closeTab(tab))} onCloseTabs={(targets, selected) => selectTab(() => closeTabsInGroup(selected, targets.map(tab => tab.id)))}
+        onPin={tab => floating.pinPreview(worktree.path, tab.id)}
         onCanRename={canRenameTab} onRename={renameTab} onError={setOperationError}
-        destination={tab => hostedTab(tab.id) ? 'restore' : 'floating'} onOpenElsewhere={tab => {
+        destination={tab => centerTabGroup(tab) === 'global' ? undefined : hostedTab(tab.id) ? 'restore' : 'floating'} onOpenElsewhere={tab => {
           const hosted = hostedTab(tab.id);
           if (hosted) {
             floating.removeHosted(hosted.workspace, hosted.id);
@@ -2011,16 +2108,18 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
           } else floating.add(worktree.path, tab.id);
         }}
         onOpenFile={() => { setOpenFileFloating(openingInFloatingWorkspace()); setShowOpenFile(true); }}
-        onCreateNote={kind => void createTemporaryNote(kind)} onCreateTerminal={agent => void createTerminal(agent)} onCreateAcp={createAcp}
+        onCreateNote={kind => void selectTab(() => createTemporaryNote(kind))} onCreateTerminal={agent => void selectTab(() => createTerminal(agent))} onCreateAcp={agentId => selectTab(() => createAcp(agentId))}
         leadingControls={onShowLeftSidebar ? <LeftSidebarToggle onClick={onShowLeftSidebar} /> : null}
-        controls={!rightSidebarVisible ? <button className="project-aow-right-show" title="显示右侧栏" aria-label="显示右侧栏" onClick={onShowRightSidebar}><PanelRightOpen /></button> : null}
+        controls={!rightSidebarVisible ? <button className="project-aow-right-show" title={t("aow.show_right_sidebar")} aria-label={t("aow.show_right_sidebar")} onClick={onShowRightSidebar}><PanelRightOpen /></button> : null}
       />
       {operationError || terminals.error ? <div className="project-aow-inline-error">{operationError || terminals.error}<button onClick={() => setOperationError('')}><X /></button></div> : null}
       <div className="project-aow-center-content">
+        {globalTabs.map(tab => <GlobalTabSlot key={tab.id} tab={tab} hidden={activeCenterId !== tab.id} />)}
         <div ref={setHostPortal} />
         {openedTerminals.map((tab) => <Fragment key={tab.id}>{projectContent(`terminal:${tab.id}`, <div className="project-aow-terminal-host" hidden={!tabVisible(`terminal:${tab.id}`)}>
           <TerminalWorkspace
             visible={tabLive(`terminal:${tab.id}`)}
+            autoFocus={!!locationSource || !!hostedLocation(`terminal:${tab.id}`)}
             tab={tab}
             loading={terminals.loading}
             detectedAgents={terminals.detectedAgents}
@@ -2038,7 +2137,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
         </div>
         {floatingId?.startsWith('document:') && floating.portal ? createPortal(<div className="floating-workspace-host">{renderEditor(floatingId.slice(9))}</div>, floating.portal, worktree.path + ':editor') : null}
         {acp.tabs.map(tab => <Fragment key={tab.id}>{projectContent(`acp:${tab.id}`, <div className="acp-tab-host" hidden={!tabVisible(`acp:${tab.id}`)}>
-          <AcpSessionTab tab={tab} workspace={worktree.path} visible={tabLive(`acp:${tab.id}`)} onSessionChange={acp.changed} onOpenSession={session => activateAcp(acp.open(session))} onOpenFile={(path, line) => { void openExternalFile(path).then(() => { setRightView('acp'); if (line && Number.isFinite(line)) setDocuments(items => items.map(document => document.path === path ? { ...document, revealLocation: { line, revision: Date.now() } } : document)); }).catch(reason => setOperationError(message(reason))); }} />
+          <AcpSessionTab tab={tab} workspace={worktree.path} visible={tabLive(`acp:${tab.id}`)} onSessionChange={acp.changed} onOpenSession={session => selectTab(() => activateAcp(acp.open(session)))} onOpenFile={(path, line) => { void selectTab(() => openExternalFile(path)).then(() => { setRightView('acp'); if (line && Number.isFinite(line)) setDocuments(items => items.map(document => document.path === path ? { ...document, revealLocation: { line, revision: Date.now() } } : document)); }).catch(reason => setOperationError(message(reason))); }} />
         </div>)}</Fragment>)}
         {sessionPreviews.map((preview) => <Fragment key={preview.session.id}>{projectContent(`session:${preview.session.id}`, <div className="project-aow-session-host" hidden={!tabVisible(`session:${preview.session.id}`)}>
           <SessionSnapshotView
@@ -2075,23 +2174,24 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
             onOpenSession={(run) => openAutomationSession(taskId, run)}
           />
         </div>)}</Fragment>)}
-        {browserOpened && floating.portal ? createPortal(<div className="floating-workspace-host" hidden={floatingId !== 'system-files' || !browserTab}><SystemFileBrowser navigationRequest={browserRequest} onPathChange={setBrowserPath} open={floating.visible && floatingId === 'system-files' && browserTab} onHide={floating.minimize} onOpenFile={entry => void openExplorerFile(entry, 'external', true)} /></div>, floating.portal, 'system-file-browser') : null}
         {activeCenterId && isFloating(activeCenterId) && !project.builtin ? <div className="project-aow-empty project-aow-tab-away">
-          <span>此 Tab 正在浮动工作区显示。</span>
-          <button type="button" onClick={() => floating.remove(worktree.path, activeCenterId)}><CornerDownLeft aria-hidden="true" />移回当前工作区</button>
+          <span>{t("aow.this_tab_is_displayed_in_the_floating_workspace")}</span>
+          <button type="button" onClick={() => floating.remove(worktree.path, activeCenterId)}><CornerDownLeft aria-hidden="true" />{t("aow.move_to_current_workspace")}</button>
         </div> : null}
         {activeCenterId && hostedLocation(activeCenterId) ? <div className="project-aow-empty project-aow-tab-away">
-          <span>此 Tab 正在其他工作区显示。</span>
-          <button type="button" onClick={() => floating.removeHosted(worktree.path, activeCenterId)}><CornerDownLeft aria-hidden="true" />移回当前工作区</button>
+          <span>{t("aow.this_tab_is_displayed_in_another_workspace")}</span>
+          <button type="button" onClick={() => floating.removeHosted(worktree.path, activeCenterId)}><CornerDownLeft aria-hidden="true" />{t("aow.move_to_current_workspace")}</button>
         </div> : null}
-        {!activeCenterId ? <div className="project-aow-welcome"><ProjectIcon project={project} size={32} /><h2>{project.name}</h2><p>{worktree.path}</p><span>点击 + 新建 Terminal 或启动本地 Agent；从右侧打开文件和 Git Diff。</span></div> : null}
+        {!activeCenterId ? <div className="project-aow-welcome"><ProjectIcon project={project} size={32} /><h2>{project.name}</h2><p>{worktree.path}</p><span>{t("aow.click_to_create_a_terminal_or_start_a_local")}</span></div> : null}
       </div>
+      <ProjectTerminalDockHost active={locationSource === 'center' && locationTabVisible && centerTabs.some(tab => tab.id === activeCenterId && centerTabGroup(tab) !== 'terminal')} />
     </main>
-    <div className="project-aow-right-resizer" role="separator" aria-label="调整右侧栏宽度" aria-orientation="vertical" onPointerDown={onStartRightResize} />
+    <div className="project-aow-right-resizer" role="separator" aria-label={t("aow.resize_right_sidebar")} aria-orientation="vertical" onPointerDown={onStartRightResize} />
     {project.builtin && floating.sidebar ? createPortal(renderSidebar(), floating.sidebar) : renderSidebar()}
+    {floating.dockPortal ? createPortal(<ProjectTerminalDockHost active={locationSource === 'floating' && centerTabs.some(tab => tab.id === floatingId && centerTabGroup(tab) !== 'terminal')} />, floating.dockPortal) : null}
     {showOpenFile ? <OpenFileDialog worktreePath={worktree.path} onClose={() => setShowOpenFile(false)} onOpen={path => openFileFloating ? withFloatingOpen(() => openExternalFile(path)) : openExternalFile(path)} /> : null}
     {(operationError || terminals.error) && floating.portal && (project.builtin || floatingId) ? createPortal(
-      <div className="floating-workspace-error" role="alert">{operationError || terminals.error}<button aria-label="关闭错误提示" onClick={() => setOperationError('')}><X /></button></div>, floating.portal) : null}
+      <div className="floating-workspace-error" role="alert">{operationError || terminals.error}<button aria-label={t("aow.dismiss_error")} onClick={() => setOperationError('')}><X /></button></div>, floating.portal) : null}
   </section></FloatingOpenMenu></WorkspaceMarkdownProvider>;
 });
 
@@ -2100,6 +2200,8 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
   const { confirm, confirmationDialog } = useConfirmation();
   const unreadCounts = useWorktreeUnreadCounts();
   const syncTabLocation = useAowTabLocation();
+  const cancelTabNavigation = useCancelAowTabNavigation();
+  const initialEntryApplied = useRef<ResolvedTab | undefined>(undefined);
   const reportTabLocationError = useAowTabLocationError();
   const [floatingFocused, setFloatingFocused] = useState(floating.visible);
   const [globalProject, setGlobalProject] = useState<AowProject>();
@@ -2113,6 +2215,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
   }, []);
   const operations = useOperations();
   const [bottomPanel, setBottomPanel] = useState<{ type: 'logs'; operationId?: string } | { type: 'notifications' }>();
+  const [terminalDockControls, setTerminalDockControls] = useState<HTMLSpanElement | null>(null);
   const logPanel = bottomPanel?.type === 'logs' ? bottomPanel : undefined;
   const notificationButton = useRef<HTMLButtonElement>(null);
   const removals = useWorktreeRemovals();
@@ -2130,13 +2233,27 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
   ]), [floating.tabs, floating.hostedTabs]);
   const { isUnallocated, reportResources } = useWorktreeResources(projects, externalTabWorkspaces);
   const [agents, setAgents] = useState<AowAgent[]>([]);
+  const projectNavigationId = useId();
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
   const [activeWorktreePath, setActiveWorktreePath] = useState(() => initialEntry?.workspacePath ?? appLocalStorage.getItem('aow-active') ?? '');
+  const selectWorktree = (path: string) => {
+    cancelTabNavigation();
+    setActiveWorktreePath(path);
+    setFloatingFocused(false);
+  };
   const [visitedWorktrees, setVisitedWorktrees] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showRegisterProject, setShowRegisterProject] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
+  const settingsClose = useRef<() => void>(() => undefined);
+  const globalTabs = useGlobalWorkspaceTabs(settingsClose);
+  const [standaloneTabId, setStandaloneTabId] = useState<string>();
+  const [browserPath, setBrowserPath] = useState('');
+  const [browserRequest, setBrowserRequest] = useState<{ path: string }>();
+  const [browserVisited, setBrowserVisited] = useState(false);
+  const settingsTab = globalTabs.tabs.find(tab => tab.kind === 'settings');
+  const inboxTab = globalTabs.tabs.find(tab => tab.kind === 'inbox');
+  const browserTab = globalTabs.tabs.find(tab => tab.kind === 'browser');
   const [nodeAddresses, setNodeAddresses] = useState<string[]>();
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(() => storedWidth(leftSidebarWidthStorageKey, defaultLeftSidebarWidth, minLeftSidebarWidth, maxLeftSidebarWidth));
   const [leftSidebarVisible, setLeftSidebarVisible] = useState(() => appLocalStorage.getItem(leftSidebarVisibleStorageKey) !== 'false');
@@ -2258,15 +2375,33 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
 
   const worktreeEntries = useMemo(() => projects.flatMap((project) => project.worktrees.map((worktree) => ({ project, worktree }))), [projects]);
   const activeEntry = worktreeEntries.find(({ worktree }) => worktree.path === activeWorktreePath);
+  const openGlobalTab = (kind: GlobalTabHost['kind']) => {
+    cancelTabNavigation();
+    setFloatingFocused(false);
+    globalTabs.open(kind, activeEntry?.worktree.path ?? '');
+    setStandaloneTabId(kind === 'browser' ? 'system-files' : kind);
+    if (kind === 'browser') setBrowserVisited(true);
+  };
+  const globalTabVisible = (tab?: GlobalTabHost) => !!tab && (tab.workspace === ''
+    ? !activeEntry && standaloneTabId === tab.id
+    : !!floating.hosts[tab.workspace]?.visible && floating.hosts[tab.workspace]?.activeId === tab.id);
+  useEffect(() => {
+    if (!loading) globalTabs.adoptWorkspace(activeEntry?.worktree.path ?? '', worktreeEntries.map(entry => entry.worktree.path));
+  }, [loading, activeEntry?.worktree.path, worktreeEntries, globalTabs.adoptWorkspace]);
+  const standaloneTabs = globalTabs.tabs.filter(tab => tab.workspace === '');
+  useEffect(() => {
+    if (!standaloneTabs.some(tab => tab.id === standaloneTabId)) setStandaloneTabId(standaloneTabs.at(-1)?.id);
+  }, [standaloneTabs, standaloneTabId]);
   const contextMenuEntry = worktreeContextMenu && worktreeEntries.find(({ worktree }) => worktree.path === worktreeContextMenu.worktree.path);
-  const locationInFloating = floating.visible && (!!floating.active || floating.inboxOpen) && (floatingFocused || !activeEntry);
+  const locationInFloating = floating.visible && !!floating.active && (floatingFocused || !activeEntry);
   const locationSource = (path: string) => locationInFloating
     ? floating.active?.workspace === path ? 'floating' as const : undefined
     : activeWorktreePath === path ? 'center' as const : undefined;
   useEffect(() => { setFloatingFocused(false); }, [activeWorktreePath]);
   useEffect(() => { if (floating.showRequest) setFloatingFocused(true); }, [floating.showRequest]);
   useEffect(() => {
-    if (!initialEntry || loading) return;
+    if (!initialEntry || initialEntry.signal?.aborted || initialEntryApplied.current === initialEntry || loading) return;
+    initialEntryApplied.current = initialEntry;
     const owner = [...projects, ...(globalProject ? [globalProject] : [])]
       .find(project => project.worktrees.some(worktree => worktree.path === initialEntry.workspacePath));
     if (!owner) {
@@ -2274,7 +2409,19 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
         const tab = initialEntry.terminal;
         floating.add(tab.workspace_root, `terminal:${tab.id}`, { ...terminalCenterTab(tab, {}, {}), external: true });
         setFloatingFocused(true);
-      } else reportTabLocationError('目标 Tab 所属工作区不存在或已被移除。');
+      } else reportTabLocationError(t("aow.the_workspace_for_this_tab_no_longer_exists_or"));
+      return;
+    }
+    if (initialEntry.target.type === 'files') {
+      const path = owner.builtin ? activeEntry?.worktree.path ?? worktreeEntries[0]?.worktree.path ?? '' : initialEntry.workspacePath;
+      if (path) setActiveWorktreePath(path);
+      // Acknowledge the legacy location before publishing the new worktree owner.
+      if (owner.builtin && path) syncTabLocation(initialEntry.target);
+      globalTabs.open('browser', path);
+      setBrowserVisited(true);
+      setBrowserRequest({ path: initialEntry.target.path });
+      setStandaloneTabId('system-files');
+      setFloatingFocused(false);
       return;
     }
     const hosted = floating.hostedTabs.find(tab => tab.workspace === initialEntry.workspacePath && tab.id === tabCenterId(initialEntry));
@@ -2283,10 +2430,14 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
     const inFloating = owner.builtin || floating.contains(initialEntry.workspacePath, tabCenterId(initialEntry));
     setFloatingFocused(!!inFloating);
     if (inFloating) floating.add(initialEntry.workspacePath, tabCenterId(initialEntry));
-  }, [initialEntry, loading, projects, globalProject, floating.add, floating.contains, floating.hostedTabs, reportTabLocationError]);
+  }, [initialEntry, loading, projects, globalProject, floating.add, floating.contains, floating.hostedTabs, reportTabLocationError, syncTabLocation]);
   useEffect(() => {
-    if (!loading && !activeEntry && !locationInFloating) syncTabLocation();
-  }, [loading, activeEntry, locationInFloating, syncTabLocation]);
+    if (loading || activeEntry || locationInFloating) return;
+    if (browserTab?.workspace === '' && standaloneTabId === 'system-files') {
+      const workspace = globalProject?.worktrees[0]?.id;
+      if (workspace && browserPath) syncTabLocation({ type: 'files', workspace, path: browserPath });
+    } else syncTabLocation();
+  }, [loading, activeEntry, locationInFloating, browserTab, standaloneTabId, browserPath, globalProject, syncTabLocation]);
   const pinnedEntries = useMemo(() => {
     const entries = new Map(worktreeEntries.map((entry) => [entry.worktree.path, entry]));
     return [...pinnedWorktrees].flatMap((path) => {
@@ -2390,7 +2541,12 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
     const pointerId = event.pointerId;
     const startX = event.clientX;
     const startWidth = side === 'left' ? leftSidebarWidth : rightSidebarWidth;
-    const layoutWidth = layoutRef.current?.getBoundingClientRect().width ?? window.innerWidth;
+    const layout = layoutRef.current;
+    const layoutStyle = layout ? getComputedStyle(layout) : undefined;
+    const panelGap = parseFloat(layoutStyle?.getPropertyValue('--project-aow-panel-gap') ?? '') || 0;
+    const layoutWidth = (layout?.clientWidth ?? window.innerWidth)
+      - (parseFloat(layoutStyle?.paddingLeft ?? '') || 0) - (parseFloat(layoutStyle?.paddingRight ?? '') || 0)
+      - (Number(leftSidebarVisible) + Number(rightSidebarVisible)) * panelGap;
     handle.setPointerCapture(pointerId);
     document.body.classList.add('resizing-project-aow');
 
@@ -2426,16 +2582,16 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
   const projectRegistered = async (project: AowProject) => {
     await loadProjects();
     setCollapsedProjects(current => ({ ...current, [project.id]: false }));
-    setActiveWorktreePath(project.worktrees[0]?.path ?? project.registered_path);
+    selectWorktree(project.worktrees[0]?.path ?? project.registered_path);
     setShowRegisterProject(false);
   };
 
   const removeProject = async (project: AowProject) => {
     if (!await confirm({
-      title: '移除 Project？',
-      description: '移除后将取消该项目的注册，不会删除磁盘上的仓库或 Worktree。',
+      title: t("aow.remove_project_2"),
+      description: t("aow.unregister_this_project_its_repository_and_worktrees_will_remain"),
       items: [{ id: project.id, label: project.name, detail: project.registered_path, icon: <ProjectIcon project={project} /> }],
-      confirmLabel: '移除 Project',
+      confirmLabel: t("aow.remove_project"),
       danger: true,
     })) return;
     try { await aowApi.removeProject(project.id); await loadProjects(); } catch (reason) { setError(message(reason)); }
@@ -2494,23 +2650,33 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
         ?? project.worktrees[0]?.path
         ?? '';
     });
+    removeAcpWorkspaceTabs(removedPath);
     appLocalStorage.removeItem(`aow-workspace-tabs:${removedPath}`);
   };
 
   useEffect(() => {
-    const completed = removals.jobs.flatMap(job => job.items.filter(item => item.status === 'succeeded')
-      .map(item => ({ key: `${job.id}:${item.path}`, projectId: job.project_id, path: item.path })))
+    const completed = removals.jobs.flatMap(job => job.items.filter(item => !removalActive(item))
+      .map(item => ({ key: `${job.id}:${item.path}`, projectId: job.project_id, path: item.path, status: item.status })))
       .filter(item => !handledRemovals.current.has(item.key));
     if (!completed.length || applyingRemovals.current) return;
     applyingRemovals.current = true;
-    void aowApi.projects().then(all => {
+    void aowApi.projects().then(async all => {
       for (const item of completed) {
         const project = all.find(project => project.id === item.projectId);
         // History must never remove a newly created worktree at an old path.
-        if (project && !project.worktrees.some(worktree => worktree.path === item.path)) worktreeRemoved(project, item.path);
+        if (item.status === 'succeeded') {
+          if (project && !project.worktrees.some(worktree => worktree.path === item.path)) worktreeRemoved(project, item.path);
+        } else {
+          // ACP cleanup can succeed before Terminal or directory removal fails.
+          const checked = savedAcpTabs(item.path).flatMap(tab => tab.thread_id ? [tab.thread_id] : []);
+          if (checked.length) {
+            const sessions = await acpApi.sessions(item.path);
+            pruneAcpWorkspaceTabs(item.path, checked, new Set(sessions.map(session => session.thread_id)));
+          }
+        }
         handledRemovals.current.add(item.key);
       }
-    }).catch(reason => setError(`Worktree 已删除，但刷新项目失败：${message(reason)}`))
+    }).catch(reason => setError(t("aow.cleanup_finished_but_workspace_resources_could_not_be_refreshed", { value0: message(reason) })))
       .finally(() => { applyingRemovals.current = false; });
   }, [removals.jobs]);
 
@@ -2555,110 +2721,126 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
   }, []);
 
   useEffect(() => {
-    document.title = activeEntry ? `${activeEntry.project.name} · ${activeEntry.worktree.branch || 'detached'} · AoW` : 'Project AoW';
+    document.title = activeEntry ? `${activeEntry.project.name} · ${activeEntry.worktree.branch || t("git.detached_head")} · AoW` : 'Project AoW';
   }, [activeEntry]);
 
   return <div className="project-aow"
-    onPointerDownCapture={event => setFloatingFocused(!!(event.target as HTMLElement).closest('[data-floating-workspace]'))}
-    onFocusCapture={event => setFloatingFocused(!!(event.target as HTMLElement).closest('[data-floating-workspace]'))}>
+    onPointerDownCapture={event => { if (!(event.target as HTMLElement).closest('.project-terminal-dock-controls')) setFloatingFocused(!!(event.target as HTMLElement).closest('[data-floating-workspace]')); }}
+    onFocusCapture={event => { if (!(event.target as HTMLElement).closest('.project-terminal-dock-controls')) setFloatingFocused(!!(event.target as HTMLElement).closest('[data-floating-workspace]')); }}>
     <div
       className={`project-aow-layout${leftSidebarVisible ? '' : ' left-sidebar-hidden'}${rightSidebarVisible ? '' : ' right-sidebar-hidden'}`}
       ref={layoutRef}
       style={{ '--project-left-width': `${leftSidebarWidth}px`, '--project-right-width': `${rightSidebarWidth}px` } as CSSProperties}
     >
-      <aside id="aow-project-sidebar" className="project-aow-projects" aria-label="项目侧边栏" hidden={!leftSidebarVisible}>
-        <header className="project-aow-brand"><AowNodeSwitcher addresses={nodeAddresses} /><LeftSidebarToggle expanded onClick={hideLeftSidebar} /></header>
-        <AowPanelStack className="project-aow-project-list">
-          {pinnedState.error ? <div className="project-aow-error" role="alert">{pinnedState.error}<button onClick={pinnedState.reload}>重试</button></div> : null}
-          {pinnedEntries.length ? <AowPanel className="project-aow-pinned-panel" headerClassName="project-aow-section-title" title="Pinned" collapsible={false}>
-          <section className="project-aow-pinned">
-            {pinnedEntries.map((entry) => <button
-              key={entry.worktree.path}
-              className={[
-                entry.worktree.path === activeWorktreePath ? 'active' : '',
-                entry.worktree.path === draggingPinnedPath ? 'dragging' : '',
-                pinnedDropTarget?.path === entry.worktree.path ? `drop-${pinnedDropTarget.position}` : '',
-              ].filter(Boolean).join(' ')}
-              disabled={busyWorktrees.has(entry.worktree.path)}
-              draggable={!busyWorktrees.has(entry.worktree.path)}
-              onClick={() => { if (!suppressPinnedClickRef.current) setActiveWorktreePath(entry.worktree.path); }}
-              onContextMenu={(event) => openWorktreeContextMenu(event, entry)}
-              onDragStart={(event) => startPinnedDrag(event, entry.worktree.path)}
-              onDragOver={(event) => updatePinnedDropTarget(event, entry.worktree.path)}
-              onDrop={(event) => dropPinnedWorktree(event, entry.worktree.path)}
-              onDragEnd={finishPinnedDrag}
-              title={entry.worktree.path}
-            ><WorktreeIcon icon={entry.worktree.icon} style={{ color: worktreeColorValues[entry.worktree.color ?? 'default'] }} /><span><strong>{entry.worktree.detached ? 'detached' : entry.worktree.branch || basename(entry.worktree.path)}</strong><small>{entry.project.name} · {basename(entry.worktree.path)}</small></span>{entry.worktree.locked ? <i>locked</i> : null}<WorktreeUnreadBadge count={unreadCounts.get(entry.worktree.path)} /></button>)}
-          </section>
-          </AowPanel> : null}
-          <AowPanel headerClassName="project-aow-section-title project-aow-project-list-title" title="Projects" collapsible={false} actions={<><AowIconButton title="刷新全部" aria-label="刷新全部" onClick={() => void loadProjects()}><RefreshCw /></AowIconButton><AowIconButton title="注册项目" aria-label="注册项目" onClick={() => setShowRegisterProject(true)}><Plus /></AowIconButton></>}>
-          {error ? <div className="project-aow-error">{error}</div> : null}
-          {loading ? <div className="project-aow-empty">正在加载…</div> : null}
-          {projects.map((project) => {
-            const orderedWorktrees = [
-              ...project.worktrees.filter(worktree => !compactWorktrees.has(worktree.path)),
-              ...project.worktrees.filter(worktree => compactWorktrees.has(worktree.path)),
-            ];
-            return <AowPanel key={project.id} className="project-aow-project" headerClassName="project-aow-project-row"
-              headerBehavior="navigate" expandOnNavigate={false} togglePosition="end"
-              title={project.name} tooltip={project.registered_path} icon={<ProjectIcon project={project} />} collapsed={collapsedProjects[project.id]}
-              empty={!project.worktrees.length && !project.error} onCollapsedChange={collapsed => setCollapsedProjects(current => ({ ...current, [project.id]: collapsed }))}
-              actions={<><AowIconButton title="刷新 Worktree" aria-label={`刷新 ${project.name} Worktree`} onClick={() => {
-                void aowApi.refreshProject(project.id).then(updated => setProjects(items => items.map(item => item.id === project.id ? updated : item)))
-                  .catch(reason => setError(message(reason)));
-              }}><RefreshCw /></AowIconButton><AowIconButton title="Project 操作" aria-label={`${project.name} Project 操作`} aria-haspopup="menu"
-                aria-expanded={projectMenu?.project.id === project.id} onClick={event => openProjectMenu(event, project)}><MoreHorizontal /></AowIconButton></>}>
-              {project.error ? <div className="project-aow-project-error">{project.error}</div> : null}
-              {orderedWorktrees.length ? <div className="project-aow-worktrees">{orderedWorktrees.map((worktree) => {
-                const compact = compactWorktrees.has(worktree.path);
-                const branch = worktree.detached ? 'detached' : worktree.branch || basename(worktree.path);
-                return <button key={worktree.id} disabled={busyWorktrees.has(worktree.path)} className={[
-                  worktree.path === activeWorktreePath ? 'active' : '', compact ? 'compact' : '',
-                ].filter(Boolean).join(' ')} onClick={() => setActiveWorktreePath(worktree.path)} onContextMenu={(event) => openWorktreeContextMenu(event, { project, worktree })} title={worktree.path}>
-                  {compact ? <><span className="project-aow-worktree-dot" aria-hidden="true" /><span className="project-aow-worktree-branch">{branch}</span></>
-                    : <><WorktreeIcon icon={worktree.icon} style={{ color: worktreeColorValues[worktree.color ?? 'default'] }} /><span><strong>{branch}</strong><small>{basename(worktree.path)}{worktree.is_main ? ' · main worktree' : ''}</small></span>{worktree.locked ? <i>locked</i> : null}</>}
-                  <WorktreeUnreadBadge count={unreadCounts.get(worktree.path)} />
-                </button>;
-              })}</div> : null}
-            </AowPanel>;
-          })}
-          {!loading && !projects.length ? <div className="project-aow-empty project-aow-onboarding"><FolderGit2 /><strong>暂无项目</strong><span>注册本机 Git 仓库后，这里会自动列出它的 linked worktrees。</span><button onClick={() => setShowRegisterProject(true)}><Plus />注册项目</button></div> : null}
-          </AowPanel>
-        </AowPanelStack>
+      <aside id="aow-project-sidebar" className="project-aow-projects" aria-label={t("aow.projects_sidebar")} hidden={!leftSidebarVisible}>
+        <div className="project-aow-project-panel">
+          <header className="project-aow-brand"><AowNodeSwitcher addresses={nodeAddresses} /><LeftSidebarToggle expanded onClick={hideLeftSidebar} /></header>
+          <AowPanelStack className="project-aow-project-list" dockHeaders={false}>
+            {pinnedState.error ? <div className="project-aow-error" role="alert">{pinnedState.error}<button onClick={pinnedState.reload}>{t("aow.retry")}</button></div> : null}
+            {pinnedEntries.length ? <AowPanel className="project-aow-pinned-panel" headerClassName="project-aow-section-title" title={t("navigation.pinned")} collapsible={false}>
+            <section className="project-aow-pinned">
+              {pinnedEntries.map((entry) => <button
+                key={entry.worktree.path}
+                className={[
+                  entry.worktree.path === activeWorktreePath ? 'active' : '',
+                  entry.worktree.path === draggingPinnedPath ? 'dragging' : '',
+                  pinnedDropTarget?.path === entry.worktree.path ? `drop-${pinnedDropTarget.position}` : '',
+                ].filter(Boolean).join(' ')}
+                disabled={busyWorktrees.has(entry.worktree.path)}
+                draggable={!busyWorktrees.has(entry.worktree.path)}
+                onClick={() => { if (!suppressPinnedClickRef.current) selectWorktree(entry.worktree.path); }}
+                onContextMenu={(event) => openWorktreeContextMenu(event, entry)}
+                onDragStart={(event) => startPinnedDrag(event, entry.worktree.path)}
+                onDragOver={(event) => updatePinnedDropTarget(event, entry.worktree.path)}
+                onDrop={(event) => dropPinnedWorktree(event, entry.worktree.path)}
+                onDragEnd={finishPinnedDrag}
+                title={entry.worktree.path}
+              ><WorktreeIcon icon={entry.worktree.icon} style={{ color: worktreeColorValues[entry.worktree.color ?? 'default'] }} /><span><strong>{entry.worktree.detached ? t("git.detached_head") : entry.worktree.branch || basename(entry.worktree.path)}</strong><small>{entry.project.name} · {basename(entry.worktree.path)}</small></span>{entry.worktree.locked ? <i>{t("navigation.locked")}</i> : null}<WorktreeUnreadBadge count={unreadCounts.get(entry.worktree.path)} /></button>)}
+            </section>
+            </AowPanel> : null}
+            <ProjectNavigator projects={projects} projectId={id => `${projectNavigationId}-${id}`} actions={<><AowIconButton title={t("aow.refresh_all")} aria-label={t("aow.refresh_all")} onClick={() => void loadProjects()}><RefreshCw /></AowIconButton><AowIconButton title={t("aow.register_project")} aria-label={t("aow.register_project")} onClick={() => setShowRegisterProject(true)}><Plus /></AowIconButton></>} />
+            {error ? <div className="project-aow-error">{error}</div> : null}
+            {loading ? <div className="project-aow-empty">{t("aow.loading")}</div> : null}
+            {projects.map((project) => {
+              const orderedWorktrees = [
+                ...project.worktrees.filter(worktree => !compactWorktrees.has(worktree.path)),
+                ...project.worktrees.filter(worktree => compactWorktrees.has(worktree.path)),
+              ];
+              return <AowPanel key={project.id} id={`${projectNavigationId}-${project.id}`} className="project-aow-project" headerClassName="project-aow-project-row"
+                headerBehavior="navigate" expandOnNavigate={false} togglePosition="end"
+                title={project.name} tooltip={project.registered_path} icon={<ProjectIcon project={project} />} collapsed={collapsedProjects[project.id]}
+                empty={!project.worktrees.length && !project.error} onCollapsedChange={collapsed => setCollapsedProjects(current => ({ ...current, [project.id]: collapsed }))}
+                actions={<><AowIconButton title={t("aow.refresh_worktrees")} aria-label={t("aow.refresh_worktrees_2", { value0: project.name })} onClick={() => {
+                  void aowApi.refreshProject(project.id).then(updated => setProjects(items => items.map(item => item.id === project.id ? updated : item)))
+                    .catch(reason => setError(message(reason)));
+                }}><RefreshCw /></AowIconButton><AowIconButton title={t("aow.project_actions")} aria-label={t("aow.project_actions_2", { value0: project.name })} aria-haspopup="menu"
+                  aria-expanded={projectMenu?.project.id === project.id} onClick={event => openProjectMenu(event, project)}><MoreHorizontal /></AowIconButton></>}>
+                {project.error ? <div className="project-aow-project-error">{project.error}</div> : null}
+                {orderedWorktrees.length ? <div className="project-aow-worktrees">{orderedWorktrees.map((worktree) => {
+                  const compact = compactWorktrees.has(worktree.path);
+                  const branch = worktree.detached ? t("git.detached_head") : worktree.branch || basename(worktree.path);
+                  return <button key={worktree.id} disabled={busyWorktrees.has(worktree.path)} className={[
+                    worktree.path === activeWorktreePath ? 'active' : '', compact ? 'compact' : '',
+                  ].filter(Boolean).join(' ')} onClick={() => selectWorktree(worktree.path)} onContextMenu={(event) => openWorktreeContextMenu(event, { project, worktree })} title={worktree.path}>
+                    {compact ? <><span className="project-aow-worktree-dot" aria-hidden="true" /><span className="project-aow-worktree-branch">{branch}</span></>
+                      : <><WorktreeIcon icon={worktree.icon} style={{ color: worktreeColorValues[worktree.color ?? 'default'] }} /><span><strong>{branch}</strong><small>{basename(worktree.path)}{worktree.is_main ? t("common.main_worktree") : ''}</small></span>{worktree.locked ? <i>{t("navigation.locked")}</i> : null}</>}
+                    <WorktreeUnreadBadge count={unreadCounts.get(worktree.path)} />
+                  </button>;
+                })}</div> : null}
+              </AowPanel>;
+            })}
+            {!loading && !projects.length ? <div className="project-aow-empty project-aow-onboarding"><FolderGit2 /><strong>{t("aow.no_projects")}</strong><span>{t("aow.register_a_local_git_repository_to_list_its_linked")}</span><button onClick={() => setShowRegisterProject(true)}><Plus />{t("aow.register_project")}</button></div> : null}
+          </AowPanelStack>
+        </div>
         <div className="project-aow-sidebar-footer">
-          <button title="Settings" aria-label="Settings" onClick={() => setShowSettings(true)}><Settings /></button>
+          <button title={t("navigation.settings")} aria-label={t("navigation.settings")} onClick={() => openGlobalTab('settings')}><Settings /></button>
+          <button title={t("navigation.inbox")} aria-label={t("navigation.inbox")} onClick={() => openGlobalTab('inbox')}><Inbox /></button>
+          <button title={t("aow.open_system_file_browser")} aria-label={t("aow.open_system_file_browser")} onClick={() => openGlobalTab('browser')}><Files /></button>
         </div>
       </aside>
-      <div className="project-aow-left-resizer" role="separator" aria-label="调整项目栏宽度" aria-orientation="vertical" onPointerDown={(event) => startSidebarResize('left', event)} />
-      <div className="project-aow-surfaces">
-        {projects.map(project => <ProjectTerminalPanelProvider key={project.id} project={project}><ProjectAcpPanelProvider project={project}>
-          {project.worktrees.filter(worktree => !busyWorktrees.has(worktree.path)).filter(worktree => visitedWorktrees.has(worktree.path) || floating.tabs.some(tab => tab.workspace === worktree.path)
-            || floating.hostedTabs.some(tab => tab.workspace === worktree.path || tab.host === worktree.path)).map(worktree => <WorkspaceSurface locationSource={locationSource(worktree.path)} initialEntry={initialEntry && (initialEntry.workspacePath === worktree.path
-              || floating.hostedTabs.some(tab => tab.host === worktree.path && tab.workspace === initialEntry.workspacePath && tab.id === tabCenterId(initialEntry))) ? initialEntry : undefined} key={worktree.path} project={project} worktree={worktree} active={worktree.path === activeWorktreePath} agents={agents} onShowLeftSidebar={leftSidebarVisible ? undefined : showLeftSidebar} rightSidebarVisible={rightSidebarVisible} onHideRightSidebar={hideRightSidebar} onShowRightSidebar={showRightSidebar} onStartRightResize={startRightResize} notesRefresh={notesRefreshByProject[project.id] ?? initialExplorerRefresh} onNotesChanged={notesChanged} onResourcesChanged={reportResources} />)}
-        </ProjectAcpPanelProvider></ProjectTerminalPanelProvider>)}
-        {activeEntry && busyWorktrees.has(activeEntry.worktree.path) ? <div className="project-aow-no-context"><LoaderCircle className="spinning" /><p>该 Worktree 正在清理，可继续使用其他工作区。</p><button onClick={() => setCleanupProjectId(activeEntry.project.id)}>查看清理进度</button></div> : null}
-        {!activeEntry && !leftSidebarVisible ? <nav className="project-aow-center-tabs project-aow-empty-toolbar"><LeftSidebarToggle onClick={showLeftSidebar} /></nav> : null}
-        {!activeEntry ? <div className="project-aow-no-context"><FolderGit2 /><h1>Project AoW</h1><p>从左侧注册并选择一个 Project Worktree。</p></div> : null}
+      <div className="project-aow-left-resizer" role="separator" aria-label={t("aow.resize_projects_sidebar")} aria-orientation="vertical" onPointerDown={(event) => startSidebarResize('left', event)} />
+      <div className="project-aow-workspace">
+        <div className="project-aow-surfaces">
+          {projects.map(project => <ProjectTerminalPanelProvider key={project.id} project={project}><ProjectAcpPanelProvider project={project}>
+            {project.worktrees.filter(worktree => !busyWorktrees.has(worktree.path)).filter(worktree => visitedWorktrees.has(worktree.path) || globalTabs.tabs.some(tab => tab.workspace === worktree.path) || floating.tabs.some(tab => tab.workspace === worktree.path)
+              || floating.hostedTabs.some(tab => tab.workspace === worktree.path || tab.host === worktree.path)).map(worktree => <ProjectTerminalDockProvider key={worktree.path} project={project} worktree={worktree} controls={terminalDockControls} onShow={() => setBottomPanel(undefined)}><WorkspaceSurface globalTabs={globalTabs.tabs} browserPath={browserPath} locationSource={locationSource(worktree.path)} initialEntry={initialEntry && initialEntry.target.type !== 'files' && (initialEntry.workspacePath === worktree.path
+                || floating.hostedTabs.some(tab => tab.host === worktree.path && tab.workspace === initialEntry.workspacePath && tab.id === tabCenterId(initialEntry))) ? initialEntry : undefined} key={worktree.path} project={project} worktree={worktree} active={worktree.path === activeWorktreePath} agents={agents} onShowLeftSidebar={leftSidebarVisible ? undefined : showLeftSidebar} rightSidebarVisible={rightSidebarVisible} onHideRightSidebar={hideRightSidebar} onShowRightSidebar={showRightSidebar} onStartRightResize={startRightResize} notesRefresh={notesRefreshByProject[project.id] ?? initialExplorerRefresh} onNotesChanged={notesChanged} onResourcesChanged={reportResources} /></ProjectTerminalDockProvider>)}
+          </ProjectAcpPanelProvider></ProjectTerminalPanelProvider>)}
+          {activeEntry && busyWorktrees.has(activeEntry.worktree.path) ? <div className="project-aow-no-context"><LoaderCircle className="spinning" /><p>{t("aow.this_worktree_is_being_cleaned_up_other_workspaces_remain")}</p><button onClick={() => setCleanupProjectId(activeEntry.project.id)}>{t("aow.view_cleanup_progress")}</button></div> : null}
+          {!activeEntry && !leftSidebarVisible ? <nav className="project-aow-center-tabs project-aow-empty-toolbar"><LeftSidebarToggle onClick={showLeftSidebar} /></nav> : null}
+          {standaloneTabs.length > 0 && !activeEntry ? <div className="project-aow-global-standalone">
+            <WorkspaceTabs workspaceKey="global" tabs={standaloneTabs} activeId={standaloneTabId} visible agents={agents}
+              revealRequest={standaloneTabs.find(tab => tab.id === standaloneTabId)?.request} onActivate={tab => setStandaloneTabId(tab.id)}
+              onCloseTab={tab => standaloneTabs.find(item => item.id === tab.id)?.close()}
+              onCloseTabs={tabs => { for (const tab of tabs) standaloneTabs.find(item => item.id === tab.id)?.close(); }}
+              onCanRename={() => false} onRename={() => undefined} onError={setError} destination={() => undefined} onOpenElsewhere={() => undefined}
+              onCreateNote={kind => floating.sources.current.get(floating.globalRoot)?.create(kind === 'md' ? 'markdown' : 'text')}
+              onCreateTerminal={agent => floating.sources.current.get(floating.globalRoot)?.create('terminal', agent)} />
+            <div className="project-aow-center-content">{standaloneTabs.map(tab => <GlobalTabSlot key={tab.id} tab={tab} hidden={standaloneTabId !== tab.id} />)}</div>
+          </div> : null}
+          {!activeEntry && !standaloneTabs.length ? <div className="project-aow-no-context"><FolderGit2 /><h1>Project AoW</h1><p>{t("aow.register_and_select_a_project_worktree_from_the_left")}</p></div> : null}
+        </div>
+        <footer className="project-aow-status"><WorktreeStatusPath key={activeEntry?.worktree.path} path={activeEntry?.worktree.path} />
+          <div className="project-aow-status-actions">
+            <OperationStatus operations={operations.operations} ready={!!operations.boot_id} error={operations.log_error || operations.error} logOpen={!!logPanel}
+              beforeLogs={<span className="project-terminal-dock-controls" ref={setTerminalDockControls} />}
+              onOpenOperation={operation => {
+                if (operation.kind === 'worktree.remove' && operation.project_id && projects.some(project => project.id === operation.project_id)) {
+                  setCleanupProjectId(operation.project_id); void removals.refresh();
+                } else if (operation.kind === 'worktree.create') {
+                  setCreationJobId(operation.id); void creations.refresh();
+                } else setBottomPanel({ type: 'logs', operationId: operation.id });
+              }}
+              onOpenLogs={operationId => setBottomPanel(current => operationId ? { type: 'logs', operationId } : current?.type === 'logs' && !current.operationId ? undefined : { type: 'logs' })} />
+            <button ref={notificationButton} type="button" className="task-notification-toggle" title={t("aow.reminder")} aria-label={t("aow.reminder")} aria-expanded={bottomPanel?.type === 'notifications'} aria-controls="task-notification-panel"
+              onClick={() => setBottomPanel(current => current?.type === 'notifications' ? undefined : { type: 'notifications' })}><Bell size={13} aria-hidden="true" /></button>
+          </div>
+        </footer>
+        {logPanel && <OperationLogPanel key={logPanel.operationId ?? 'all'} initialOperationId={logPanel.operationId} operations={operations.operations}
+          revision={operations.revision} bootId={operations.boot_id} logError={operations.log_error} onClose={() => setBottomPanel(undefined)} />}
+        {bottomPanel?.type === 'notifications' && <TaskNotificationPanel onClose={() => { setBottomPanel(undefined); notificationButton.current?.focus({ preventScroll: true }); }} />}
       </div>
     </div>
-    <footer className="project-aow-status"><span>{activeEntry?.worktree.path ?? 'No active worktree'}</span>
-      <div className="project-aow-status-actions">
-        <OperationStatus operations={operations.operations} ready={!!operations.boot_id} error={operations.log_error || operations.error} logOpen={!!logPanel}
-          onOpenOperation={operation => {
-            if (operation.kind === 'worktree.remove' && operation.project_id && projects.some(project => project.id === operation.project_id)) {
-              setCleanupProjectId(operation.project_id); void removals.refresh();
-            } else if (operation.kind === 'worktree.create') {
-              setCreationJobId(operation.id); void creations.refresh();
-            } else setBottomPanel({ type: 'logs', operationId: operation.id });
-          }}
-          onOpenLogs={operationId => setBottomPanel(current => operationId ? { type: 'logs', operationId } : current?.type === 'logs' && !current.operationId ? undefined : { type: 'logs' })} />
-        <button ref={notificationButton} type="button" className="task-notification-toggle" title="提醒" aria-label="提醒" aria-expanded={bottomPanel?.type === 'notifications'} aria-controls="task-notification-panel"
-          onClick={() => setBottomPanel(current => current?.type === 'notifications' ? undefined : { type: 'notifications' })}><Bell size={13} aria-hidden="true" /></button>
-      </div>
-    </footer>
-    {logPanel && <OperationLogPanel key={logPanel.operationId ?? 'all'} initialOperationId={logPanel.operationId} operations={operations.operations}
-      revision={operations.revision} bootId={operations.boot_id} logError={operations.log_error} onClose={() => setBottomPanel(undefined)} />}
-    {bottomPanel?.type === 'notifications' && <TaskNotificationPanel onClose={() => { setBottomPanel(undefined); notificationButton.current?.focus({ preventScroll: true }); }} />}
     {worktreeContextMenu && contextMenuEntry ? <WorktreeContextMenu state={{ ...worktreeContextMenu, ...contextMenuEntry }} savingAppearance={savingWorktreeAppearance} pinned={pinnedWorktrees.has(worktreeContextMenu.worktree.path)} onClose={() => setWorktreeContextMenu(undefined)} onTogglePin={() => togglePinnedWorktree(worktreeContextMenu.worktree.path)} onColorChange={(color) => void changeWorktreeAppearance(contextMenuEntry, { color })} onIconChange={(icon) => void changeWorktreeAppearance(contextMenuEntry, { icon })} onRemove={() => void inspectWorktreeRemoval(worktreeContextMenu)} /> : null}
     {removeWorktreeState ? <RemoveWorktreeDialog state={removeWorktreeState} onClose={() => setRemoveWorktreeState(undefined)} onSubmitted={removalSubmitted} /> : null}
     {projectMenu ? <ProjectMenu state={projectMenu} onClose={() => setProjectMenu(undefined)} onCreateWorktree={() => { setCreationRetry(undefined); setCreateWorktreeProject(projectMenu.project); }} onCleanup={() => { setCleanupProjectId(projectMenu.project.id); void removals.refresh(); }} onBindNotes={() => setBindNotesProject(projectMenu.project)} onRemove={() => void removeProject(projectMenu.project)} /> : null}
@@ -2676,15 +2858,28 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
       onOpen={job => {
         if (projects.some(project => project.worktrees.some(worktree => worktree.path === job.path))) {
           setCollapsedProjects(current => ({ ...current, [job.project_id]: false }));
-          setActiveWorktreePath(job.path); setCreationJobId(undefined);
-        } else { void loadProjects(true); setError('正在刷新项目，请确认 Worktree 仍存在后重试。'); }
+          selectWorktree(job.path); setCreationJobId(undefined);
+        } else { void loadProjects(true); setError(t("aow.projects_are_refreshing_confirm_the_worktree_still_exists_and")); }
       }} /> }
     {bindNotesProject ? <BindNotesDialog project={bindNotesProject} onClose={() => setBindNotesProject(undefined)} onBound={notesBound} /> : null}
-    {showSettings ? <SettingsDialog agents={agents} onClose={() => setShowSettings(false)} onNodesChange={setNodeAddresses} onReload={async () => { await Promise.all([loadAgents(), loadProjects()]); }} /> : null}
+    {settingsTab ? createPortal(<SettingsDialog embedded closeRequest={settingsClose} agents={agents} onClose={() => globalTabs.close('settings')} onNodesChange={setNodeAddresses} onReload={async () => { await Promise.all([loadAgents(), loadProjects()]); }} />, globalTabs.elements.settings) : null}
+    {inboxTab ? createPortal(<Suspense fallback={<p>{t("aow.loading_inbox")}</p>}>
+      <InboxPanel visible={globalTabVisible(inboxTab)} projects={projects} agents={agents} onOpenTerminal={async id => {
+        const tab = await terminalApi.get(id);
+        const external = !projects.some(project => project.worktrees.some(worktree => worktree.path === tab.workspace_root)) && tab.workspace_root !== floating.globalRoot;
+        if (!external) floating.requestTerminal(tab);
+        floating.add(tab.workspace_root, `terminal:${tab.id}`, { ...terminalCenterTab(tab, {}, {}), external });
+      }} />
+    </Suspense>, globalTabs.elements.inbox) : null}
+    {/* Keep a closed browser attached but hidden so uploads and scroll positions survive. */}
+    <div hidden ref={node => { if (node && !browserTab) node.appendChild(globalTabs.elements.browser); }} />
+    {browserVisited ? createPortal(<SystemFileBrowser navigationRequest={browserRequest} onPathChange={setBrowserPath}
+      open={globalTabVisible(browserTab)} onHide={() => globalTabs.close('browser')}
+      onOpenFile={entry => floating.sources.current.get(browserTab?.workspace || floating.globalRoot)?.openFile(entry)} />, globalTabs.elements.browser) : null}
     <FloatingWorkspace agents={agents} projects={projects} activeLocation={locationInFloating} />
-    {globalProject && globalProject.worktrees[0] && (floating.open || floating.tabs.length > 0) ? <ProjectTerminalPanelProvider key={globalProject.id} project={globalProject}><ProjectAcpPanelProvider project={globalProject}>
-      <WorkspaceSurface locationSource={locationSource(floating.globalRoot)} initialEntry={globalProject.worktrees.some(worktree => worktree.path === initialEntry?.workspacePath) ? initialEntry : undefined} project={globalProject} worktree={globalProject.worktrees.find(worktree => worktree.is_main) ?? globalProject.worktrees[0]} active={floating.visible} agents={agents} rightSidebarVisible={floating.sidebarOpen} onHideRightSidebar={() => floating.setSidebarOpen(false)} onShowRightSidebar={() => floating.setSidebarOpen(true)} onStartRightResize={() => undefined} notesRefresh={notesRefreshByProject[globalProject.id] ?? initialExplorerRefresh} onNotesChanged={notesChanged} />
-    </ProjectAcpPanelProvider></ProjectTerminalPanelProvider> : null}
+    {globalProject && globalProject.worktrees[0] && (floating.open || floating.tabs.length > 0 || browserVisited || standaloneTabs.length > 0) ? <ProjectTerminalDockProvider key={globalProject.id} project={globalProject} worktree={globalProject.worktrees.find(worktree => worktree.is_main) ?? globalProject.worktrees[0]} controls={terminalDockControls} onShow={() => setBottomPanel(undefined)}><ProjectTerminalPanelProvider project={globalProject}><ProjectAcpPanelProvider project={globalProject}>
+      <WorkspaceSurface locationSource={locationSource(floating.globalRoot)} initialEntry={initialEntry?.target.type !== 'files' && globalProject.worktrees.some(worktree => worktree.path === initialEntry?.workspacePath) ? initialEntry : undefined} project={globalProject} worktree={globalProject.worktrees.find(worktree => worktree.is_main) ?? globalProject.worktrees[0]} active={floating.visible} agents={agents} rightSidebarVisible={floating.sidebarOpen} onHideRightSidebar={() => floating.setSidebarOpen(false)} onShowRightSidebar={() => floating.setSidebarOpen(true)} onStartRightResize={() => undefined} notesRefresh={notesRefreshByProject[globalProject.id] ?? initialExplorerRefresh} onNotesChanged={notesChanged} />
+    </ProjectAcpPanelProvider></ProjectTerminalPanelProvider></ProjectTerminalDockProvider> : null}
   </div>;
 }
 

@@ -139,7 +139,7 @@ async fn cli_import_rebinds_saved_tasks_and_isolates_failures() {
     let server = crate::local_cli::start_local_cli(state, &state_dir)
         .await
         .unwrap();
-    let client = TerminaldClient::new(state_dir.join("cli/cli.sock"));
+    let client = TerminaldClient::new(state_dir.join("runtime/cli/cli.sock"));
     let source = json!({
         "id":"12345678", "revision":99, "created_at":"2020-01-01T00:00:00Z", "updated_at":"2020-01-01T00:00:00Z",
         "name":"迁移任务", "prompt":"检查最近变更\n保留换行", "agent":"codex", "kind":"scheduled",
@@ -859,7 +859,12 @@ async fn api_validates_temporary_and_dynamic_workspace_tasks() {
     });
     let (code, result) = call(&router, "POST", "/api/aow/automations", input.clone()).await;
     assert_eq!(code, StatusCode::BAD_REQUEST, "{result}");
-    assert!(result["message"].as_str().unwrap().contains("仅手动任务"));
+    assert!(
+        result["message"]
+            .as_str()
+            .unwrap()
+            .contains("Only manual tasks")
+    );
     input["kind"] = "manual".into();
     input["cron"] = "".into();
     let (code, dynamic) = call(&router, "POST", "/api/aow/automations", input).await;
@@ -939,7 +944,7 @@ async fn api_validates_temporary_and_dynamic_workspace_tasks() {
                 .hosting_task(id, fixed.revision)
                 .unwrap_err()
                 .to_string()
-                .contains("动态指定")
+                .contains("dynamic")
         );
         let (code, result) = call(
             &router,

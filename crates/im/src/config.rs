@@ -85,13 +85,13 @@ impl ImConfig {
                     || app_id.len() > 256
                     || app_id.chars().any(char::is_whitespace)
                 {
-                    return Err("请填写有效的飞书 App ID".into());
+                    return Err(aow_i18n::text("im.enter_a_valid_feishu_app_id").into());
                 }
                 if app_secret.is_empty()
                     || app_secret.len() > 4096
                     || app_secret.chars().any(char::is_control)
                 {
-                    return Err("请填写有效的飞书 App Secret".into());
+                    return Err(aow_i18n::text("im.enter_a_valid_feishu_app_secret").into());
                 }
                 Ok(())
             }
@@ -106,7 +106,7 @@ impl ImConfigUpdate {
                 .iter()
                 .find(|config| config.kind() == ImKind::Wechat)
                 .cloned()
-                .ok_or("请先扫码绑定微信 Bot")?,
+                .ok_or(aow_i18n::text("im.scan_to_link_a_wechat_bot_first"))?,
             Self::Feishu { app_id, app_secret } => {
                 let app_id = app_id.trim().to_owned();
                 let secret = app_secret
@@ -120,7 +120,9 @@ impl ImConfigUpdate {
                             _ => None,
                         })
                     })
-                    .ok_or("请填写飞书 App Secret；更换 App ID 时需要同时填写新密钥")?;
+                    .ok_or(aow_i18n::text(
+                        "im.enter_the_feishu_app_secret_changing_the_app_id",
+                    ))?;
                 ImConfig::Feishu {
                     app_id,
                     app_secret: secret.trim().to_owned(),

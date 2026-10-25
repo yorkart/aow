@@ -20,9 +20,11 @@ input.on('line', line => {
   if (!message.method) { const callback = pending.get(message.id); pending.delete(message.id); callback?.(message); return; }
   const { id, method, params } = message;
   if (method === 'initialize') {
+    if (params.protocolVersion !== 1) throw new Error('Must negotiate ACP v1');
     if (params.clientCapabilities.terminal) throw new Error('Must not advertise terminal capability');
+    if (params.clientCapabilities.subagents != null) throw new Error('Must not advertise subagent support');
     if (!params.clientCapabilities._meta?.terminal_output) throw new Error('Must advertise display-only terminal output');
-    reply(id, { protocolVersion: 1, agentInfo: { name: 'test-agent', version: process.env.MARKER || '1' }, agentCapabilities: { promptCapabilities: { image: process.env.NO_IMAGES !== '1' }, loadSession: process.env.NO_LOAD !== '1', sessionCapabilities: { list: {}, close: {}, delete: {}, ...(process.env.RESUME_ONLY === '1' ? { resume: {} } : {}) } }, authMethods: [{ id: 'login', name: 'Login' }] });
+    reply(id, { protocolVersion: Number(process.env.PROTOCOL_VERSION ?? 1), agentInfo: { name: 'test-agent', version: process.env.MARKER || '1' }, agentCapabilities: { promptCapabilities: { image: process.env.NO_IMAGES !== '1' }, loadSession: process.env.NO_LOAD !== '1', sessionCapabilities: { list: {}, close: {}, delete: {}, ...(process.env.RESUME_ONLY === '1' ? { resume: {} } : {}) } }, authMethods: [{ id: 'login', name: 'Login' }] });
   } else if (method === 'session/new') {
     reply(id, { sessionId: 'session-1', modes: { currentModeId: 'ask', availableModes: [{ id: 'ask', name: 'Ask' }, { id: 'code', name: 'Code' }] }, ...(process.env.LEGACY_MODES === '1' ? {} : { configOptions: process.env.EMPTY_CONFIG === '1' ? [] : process.env.NULL_CONFIG === '1' ? null : options }) });
   } else if (method === 'session/load') {
@@ -91,9 +93,9 @@ input.on('line', line => {
       update({ sessionUpdate: 'plan', entries: [{ content: 'Read file', priority: 'high', status: 'completed' }] });
       update({ sessionUpdate: 'notice', severity: 'warning', title: 'Rate limit', description: 'Please **wait** before retrying.' });
       chunk('agent_message_chunk', 'lo**');
-      update({ sessionUpdate: 'compaction_update', compactionId: 'compact-1', status: 'in_progress' });
-      for (const text of ['**Sum', 'mary**']) update({ sessionUpdate: 'compaction_summary_chunk', compactionId: 'compact-1', content: { type: 'text', text } });
+      update({ sessionUpdate: 'compaction_summary_chunk', compactionId: 'compact-1', content: { type: 'text', text: '**Sum' } });
       update({ sessionUpdate: 'compaction_update', compactionId: 'compact-1', status: 'completed' });
+      update({ sessionUpdate: 'compaction_summary_chunk', compactionId: 'compact-1', content: { type: 'text', text: 'mary**' } });
       finish(id); return;
     }
     if (text === 'files') {

@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useEffect, useState } from 'react';
 import { AlertTriangle, CircleCheck } from 'lucide-react';
 import { aowApi } from '../../aow/aowApi';
@@ -7,13 +8,13 @@ import type { TerminalHosting } from './types';
 import './terminal-hosting.css';
 
 const hostingPhases: Record<TerminalHosting['phase'], string> = {
-  waiting: '等待本轮完成', reviewing: '检查中', collecting: '读取结论', submitting: '提交反馈', failed: '已暂停',
-  completed: '审查通过', limit_reached: '已达输入上限',
+  waiting: t("terminals.waiting_for_this_turn_to_finish"), reviewing: t("terminals.checking"), collecting: t("terminals.reading_conclusion"), submitting: t("terminals.submitting_feedback"), failed: t("automations.paused"),
+  completed: t("terminals.review_passed"), limit_reached: t("terminals.input_limit_reached"),
 };
 
 export function hostingStatus(hosting: TerminalHosting) {
-  const state = hosting.phase === 'completed' ? '托管已结束' : hosting.phase === 'limit_reached' ? '托管已停止' : '托管中';
-  return `${state} · ${hosting.task_name} · ${hostingPhases[hosting.phase]} · 已输入 ${hosting.input_count}/${hosting.max_inputs} 次`;
+  const state = hosting.phase === 'completed' ? t("terminals.autopilot_finished") : hosting.phase === 'limit_reached' ? t("terminals.autopilot_stopped") : t("terminals.autopilot_active");
+  return t("terminals.inputs", { value0: state, value1: hosting.task_name, value2: hostingPhases[hosting.phase], value3: hosting.input_count, value4: hosting.max_inputs });
 }
 
 export function TerminalHostingDetails({ hosting }: { hosting: TerminalHosting }) {
@@ -21,7 +22,7 @@ export function TerminalHostingDetails({ hosting }: { hosting: TerminalHosting }
   const [target, setTarget] = useState<TabTarget>();
   const [error, setError] = useState('');
   const completed = hosting.phase === 'completed';
-  const message = hosting.error || (hosting.phase === 'limit_reached' ? '请接管后处理剩余审查结论。' : '');
+  const message = hosting.error || (hosting.phase === 'limit_reached' ? t("terminals.take_control_to_address_the_remaining_review_findings") : '');
   const show = Boolean(message) || completed;
   useEffect(() => {
     let active = true;
@@ -29,7 +30,7 @@ export function TerminalHostingDetails({ hosting }: { hosting: TerminalHosting }
     if (!show || !hosting.run_id) return;
     void aowApi.projects().then(projects => {
       const worktree = projects.flatMap(project => project.worktrees).find(worktree => worktree.path === hosting.workspace_root);
-      if (!worktree) throw new Error('执行记录所属工作区已移除');
+      if (!worktree) throw new Error(t("terminals.the_workspace_for_this_run_has_been_removed"));
       if (active) setTarget({ type: 'automation', workspace: worktree.id, taskId: hosting.task_id, runId: hosting.run_id!, view: 'runs' });
     }).catch(reason => { if (active) setError(reason instanceof Error ? reason.message : String(reason)); });
     return () => { active = false; };
@@ -42,6 +43,6 @@ export function TerminalHostingDetails({ hosting }: { hosting: TerminalHosting }
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       event.preventDefault();
       void navigate(target).catch(reason => setError(reason instanceof Error ? reason.message : String(reason)));
-    }}>查看本次执行</a>}
+    }}>{t("terminals.view_this_run")}</a>}
   </div>;
 }

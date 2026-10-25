@@ -1,16 +1,18 @@
+import { localizedFetch } from '../../lib/localizedFetch';
+import { t } from '../../lib/i18n';
 import type { TaskInput, RunOutput, AutomationRun, AutomationTask, SchedulerStatus } from './types';
 import { appUrl } from '../../lib/basePath';
 import { runCursor } from './runOrder';
 
 const base = appUrl('/api/aow/automations');
 async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
-  const response = await fetch(`${base}${path}`, {
+  const response = await localizedFetch(`${base}${path}`, {
     method, headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => null) as { message?: string } | null;
-    throw new Error(payload?.message ?? `请求失败 (${response.status})`);
+    throw new Error(payload?.message ?? t("automations.request_failed", { value0: response.status }));
   }
   return response.status === 204 ? undefined as T : response.json() as Promise<T>;
 }
@@ -27,10 +29,10 @@ export const automationApi = {
   runs: (id: string, before?: AutomationRun, limit = 50) => request<AutomationRun[]>(`/${id}/runs?limit=${limit}${before ? `&before=${encodeURIComponent(runCursor(before))}` : ''}`),
   runDetail: (id: string, runId: string) => request<AutomationRun>(`/${id}/runs/${runId}`),
   runOutput: async (id: string, runId: string, output: RunOutput) => {
-    const response = await fetch(`${base}/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/output/${output}`);
+    const response = await localizedFetch(`${base}/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/output/${output}`);
     if (!response.ok) {
       const payload = await response.json().catch(() => null) as { message?: string } | null;
-      throw new Error(payload?.message ?? `请求失败 (${response.status})`);
+      throw new Error(payload?.message ?? t("automations.request_failed", { value0: response.status }));
     }
     return response.text();
   },

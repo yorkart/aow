@@ -1,0 +1,20 @@
+.git-platform-provider-settings-host:not([hidden]) { display: flex; flex: 1; min-height: 0; min-width: 0; }
+.git-platform-provider-settings-host > section { flex: 1; }
+.git-platform-provider-settings { min-width: 0; }
+.git-platform-provider-settings .project-aow-settings-heading { align-items: center; }
+.git-platform-provider-settings .project-aow-settings-heading h2 { display: block; margin: 0; }
+.git-platform-provider-settings .project-aow-settings-heading button { flex-shrink: 0; }
+.git-platform-provider-list { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.git-platform-provider-list th, .git-platform-provider-list td { padding: 12px 8px; text-align: left; vertical-align: middle; overflow-wrap: anywhere; border-bottom: 1px solid var(--aow-line); }
+.git-platform-provider-list th { color: var(--aow-muted); font-weight: 500; }
+.git-platform-provider-list th:last-child { width: 90px; }
+.git-platform-provider-list .git-platform-provider-actions { text-align: right; }
+.review-remote-picker { padding: 8px 12px; display: flex; gap: 8px; align-items: center; }
+.review-remote-picker select { min-width: 0; max-width: 100%; flex: 1; }
+@media (max-width: 700px) {
+  .git-platform-provider-list thead { display: none; }
+  .git-platform-provider-list tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--aow-line); }
+  .git-platform-provider-list td { grid-column: 1; padding: 4px 0; border: 0; }
+  .git-platform-provider-list td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 2px; color: var(--aow-muted); font-size: 11px; }
+  .git-platform-provider-list .git-platform-provider-actions { grid-column: 2; grid-row: 1 / 4; align-self: center; }
+}

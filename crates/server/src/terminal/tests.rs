@@ -84,6 +84,7 @@ pub(super) fn tab_with(layout: TerminalLayout, panes: Vec<TerminalPane>) -> Term
         id: "tab-1".to_owned(),
         name: "Terminal".to_owned(),
         name_is_custom: None,
+        dock_project_id: None,
         workspace_root: "/tmp".to_owned(),
         layout,
         panes,
@@ -188,7 +189,8 @@ fn recursive_layout_replace_remove_and_validation() {
 #[test]
 fn persistent_load_preserves_running_desired_state() {
     let directory = TempDir::new().unwrap();
-    let state_path = directory.path().join(METADATA_FILE);
+    let state_path = directory.path().join("state").join(METADATA_FILE);
+    std::fs::create_dir_all(state_path.parent().unwrap()).unwrap();
     let mut original = tab_with(
         TerminalLayout::Pane {
             pane_id: "running".into(),
@@ -668,7 +670,8 @@ async fn retired_pane_rename_route_does_not_change_metadata() {
 #[test]
 fn persistent_load_gives_legacy_panes_a_directory_name() {
     let directory = TempDir::new().unwrap();
-    let state_path = directory.path().join(METADATA_FILE);
+    let state_path = directory.path().join("state").join(METADATA_FILE);
+    std::fs::create_dir_all(state_path.parent().unwrap()).unwrap();
     let state = serde_json::json!({
         "version": METADATA_VERSION,
         "tabs": [{
@@ -708,7 +711,8 @@ fn persistent_load_gives_legacy_panes_a_directory_name() {
 #[test]
 fn legacy_pane_custom_names_are_discarded_while_tab_names_survive() {
     let directory = TempDir::new().unwrap();
-    let state_path = directory.path().join(METADATA_FILE);
+    let state_path = directory.path().join("state").join(METADATA_FILE);
+    std::fs::create_dir_all(state_path.parent().unwrap()).unwrap();
     let mut tab = serde_json::to_value(tab_for("tab", "/workspace")).unwrap();
     tab["name"] = serde_json::json!("My tab");
     tab["name_is_custom"] = serde_json::json!(true);
@@ -893,7 +897,8 @@ fn clipboard_app(manager: TerminalManager) -> Router {
         automations: None,
         operations: crate::operations::OperationService::in_memory(),
         workspace_events,
-        review_providers: crate::pull_requests::ProviderManager::default(),
+        git_platform_providers: crate::git_platform_providers::GitPlatformProviderManager::default(
+        ),
     })
 }
 
@@ -1103,7 +1108,7 @@ fn clipboard_cleanup_removes_expired_files() {
 fn persistent_manager_uses_absolute_directory_and_cleans_on_creation() {
     let root = TempDir::new().unwrap();
     let state_dir = root.path().join("state");
-    let directory = state_dir.join(CLIPBOARD_DIRECTORY);
+    let directory = state_dir.join("cache").join(CLIPBOARD_DIRECTORY);
     std::fs::create_dir_all(&directory).unwrap();
     let expired = directory.join("expired.png");
     std::fs::write(&expired, b"expired").unwrap();
@@ -1644,7 +1649,8 @@ async fn pane_sessions_use_live_cwd_and_config_and_cache_readable_claude_snapsho
         automations: None,
         operations: crate::operations::OperationService::in_memory(),
         workspace_events,
-        review_providers: crate::pull_requests::ProviderManager::default(),
+        git_platform_providers: crate::git_platform_providers::GitPlatformProviderManager::default(
+        ),
     });
     let response = app
         .clone()

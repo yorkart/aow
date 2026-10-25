@@ -4,7 +4,7 @@ pub(super) async fn validate_absolute_directory(value: &str) -> Result<PathBuf, 
     let path = Path::new(value);
     if !path.is_absolute() {
         return Err(AowError::Invalid(
-            "project path must be absolute".to_owned(),
+            aow_i18n::text("validation.project_path_must_be_absolute").to_owned(),
         ));
     }
     canonical_directory(path).await
@@ -15,7 +15,7 @@ pub(super) async fn validate_new_worktree_path(value: &str) -> Result<PathBuf, A
     let path = PathBuf::from(value);
     if value.is_empty() || value.len() > 4096 || !path.is_absolute() || value.contains('\0') {
         return Err(AowError::Invalid(
-            "worktree path must be an absolute path".to_owned(),
+            aow_i18n::text("validation.worktree_path_must_be_an_absolute_path").to_owned(),
         ));
     }
     if tokio::fs::try_exists(&path).await? {
@@ -25,11 +25,15 @@ pub(super) async fn validate_new_worktree_path(value: &str) -> Result<PathBuf, A
         )));
     }
     let parent = path.parent().ok_or_else(|| {
-        AowError::Invalid("worktree path must have a parent directory".to_owned())
+        AowError::Invalid(
+            aow_i18n::text("validation.worktree_path_must_have_a_parent_directory").to_owned(),
+        )
     })?;
     let parent = canonical_directory(parent).await?;
     let name = path.file_name().ok_or_else(|| {
-        AowError::Invalid("worktree path must include a directory name".to_owned())
+        AowError::Invalid(
+            aow_i18n::text("validation.worktree_path_must_include_a_directory_name").to_owned(),
+        )
     })?;
     Ok(parent.join(name))
 }

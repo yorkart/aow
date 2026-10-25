@@ -1,3 +1,4 @@
+import { t, getLanguage } from '../../lib/i18n';
 export function parsePullRequestNumber(value?: string): number | undefined {
   if (!value || !/^\d+$/.test(value)) return undefined;
   const number = Number(value);
@@ -14,17 +15,17 @@ export function stateClass(value: string): 'passed' | 'failed' | 'pending' | 'ne
 
 export function stateLabel(value: string): string {
   const labels: Record<string, string> = {
-    open: '进行中', closed: '已关闭', merged: '已合并', draft: '草稿',
-    passed: '已通过', succeeded: '已通过', success: '已通过', approved: '已通过', all_passed: '全部通过',
-    failed: '未通过', failure: '未通过', disapproved: '请求修改', rejected: '请求修改', some_failed: '部分未通过',
-    pending: '等待中', running: '运行中', in_progress: '运行中', queued: '排队中',
-    warning: '有警告', not_passed: '待通过', unreviewed: '待审阅',
-    timed_out: '已超时', canceled: '已取消', cancelled: '已取消', operation_required: '需要处理',
-    completed: '已完成', skipped: '已跳过', neutral: '无结论', no_checks: '暂无检查',
-    changes_requested: '请求修改', review_required: '待审阅', action_required: '需要处理', startup_failure: '启动失败', error: '错误', expected: '等待中', comment: '一般讨论',
-    unknown: '状态未知', resolved: '已解决',
+    open: t("components.in_progress"), closed: t("pr.closed"), merged: t("pr.merged"), draft: t("pr.draft"),
+    passed: t("pr.passed"), succeeded: t("pr.passed"), success: t("pr.passed"), approved: t("pr.passed"), all_passed: t("pr.all_passed"),
+    failed: t("pr.failed"), failure: t("pr.failed"), disapproved: t("pr.changes_requested"), rejected: t("pr.changes_requested"), some_failed: t("pr.some_failed"),
+    pending: t("aow.waiting"), running: t("pr.running"), in_progress: t("pr.running"), queued: t("aow.queued"),
+    warning: t("pr.warnings"), not_passed: t("pr.pending_approval"), unreviewed: t("pr.awaiting_review"),
+    timed_out: t("pr.timed_out"), canceled: t("acp.canceled"), cancelled: t("acp.canceled"), operation_required: t("pr.action_required"),
+    completed: t("aow.completed"), skipped: t("aow.skipped"), neutral: t("pr.no_conclusion"), no_checks: t("pr.no_checks"),
+    changes_requested: t("pr.changes_requested"), review_required: t("pr.awaiting_review"), action_required: t("pr.action_required"), startup_failure: t("pr.failed_to_start"), error: t("operations.error"), expected: t("aow.waiting"), comment: t("pr.general_discussion"),
+    unknown: t("pr.unknown_status"), resolved: t("pr.resolved"),
   };
-  return labels[value.toLowerCase()] || value || '状态未知';
+  return labels[value.toLowerCase()] || value || t("pr.unknown_status");
 }
 
 export function safeExternalUrl(value?: string | null): string | undefined {
@@ -36,20 +37,20 @@ export function safeExternalUrl(value?: string | null): string | undefined {
 }
 
 export function formatPrTime(value?: string | null): string {
-  if (!value) return '未提供';
+  if (!value) return t("pr.not_provided");
   const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return '未提供';
-  return new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(date);
+  if (!Number.isFinite(date.getTime())) return t("pr.not_provided");
+  return new Intl.DateTimeFormat(getLanguage(), { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(date);
 }
 
 export function mergeCheckLabel(name: string): string {
   const labels: Record<string, string> = {
-    merge_state: '合并状态',
-    checkNoConflict: '分支无冲突', checkReviewPassed: '代码审阅', checkCheckRun: 'CI 检查',
-    checkCheckRuns: 'CI 检查', checkCheckRunPassed: 'CI 检查', checkAllThreadsResolved: '讨论已解决',
-    checkNoUnresolvedThreads: '讨论已解决', checkNotDraft: '已准备好审阅',
-    checkSourceBranchExists: '源分支可用', checkTargetBranchExists: '目标分支可用',
-    checkFastForward: '可快进合并', checkPullRequestOpen: 'PR 处于开启状态',
+    merge_state: t("pr.merge_status"),
+    checkNoConflict: t("pr.no_branch_conflicts"), checkReviewPassed: t("pr.code_review"), checkCheckRun: t("pr.ci_checks"),
+    checkCheckRuns: t("pr.ci_checks"), checkCheckRunPassed: t("pr.ci_checks"), checkAllThreadsResolved: t("pr.discussions_resolved"),
+    checkNoUnresolvedThreads: t("pr.discussions_resolved"), checkNotDraft: t("pr.ready_for_review"),
+    checkSourceBranchExists: t("pr.source_branch_available"), checkTargetBranchExists: t("pr.target_branch_available"),
+    checkFastForward: t("pr.fast_forward_merge_possible"), checkPullRequestOpen: t("pr.pr_is_open"),
   };
   return labels[name] || name;
 }

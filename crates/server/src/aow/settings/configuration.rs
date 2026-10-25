@@ -57,7 +57,7 @@ impl AowManager {
 }
 
 pub(in crate::aow) fn default_notes_base() -> PathBuf {
-    crate::PROCESS_HOME.join("aow")
+    aow_filesystem::default_state_dir().join("data/notes")
 }
 
 pub(in crate::aow) async fn prepare_notes_base_directory(path: &Path) -> Result<PathBuf, AowError> {
@@ -83,9 +83,9 @@ pub(super) fn normalize_node_addresses(addresses: Vec<String>) -> Result<Vec<Str
                 && url.password().is_none()
         });
         let Some(url) = url else {
-            return Err(AowError::Invalid(format!(
-                "第 {} 个节点地址无效，请填写完整的 http:// 或 https:// 地址（不含用户名和密码）。",
-                index + 1
+            return Err(AowError::Invalid(aow_i18n::message(
+                "server.invalid_node_address_at_entry_enter_a_full_http",
+                &[("auto0", format!("{}", index + 1))],
             )));
         };
         let address = url.to_string();
@@ -112,7 +112,10 @@ pub(in crate::aow) fn load_settings(
             let notes_base = PathBuf::from(document.notes_base);
             if !notes_base.is_absolute() {
                 return Err(AowError::Invalid(
-                    "configured Notes root directory must be an absolute path".to_owned(),
+                    aow_i18n::text(
+                        "validation.configured_notes_root_directory_must_be_an_absolute_path",
+                    )
+                    .to_owned(),
                 ));
             }
             Ok(AowSettings {

@@ -1,12 +1,13 @@
+import { t } from '../../lib/i18n';
 import type { TerminalPane, TerminalTab } from './types';
 
 export const terminalLifecycleLabels = {
-  starting: '初始化中', running: '运行中', failed: '启动失败',
-  exited: '已退出', interrupted: '已中断', closed: '已关闭',
+  starting: t("terminals.initializing"), running: t("pr.running"), failed: t("pr.failed_to_start"),
+  exited: t("terminals.exited"), interrupted: t("aow.interrupted"), closed: t("pr.closed"),
 } as const;
 export type TerminalLifecycle = keyof typeof terminalLifecycleLabels;
-export const terminalDisplayLabels = { shown: '已显示', hidden: '已隐藏' } as const;
-export const terminalControlLabels = { controlled: '已接管', observing: '旁观中', disconnected: '未连接' } as const;
+export const terminalDisplayLabels = { shown: t("terminals.visible"), hidden: t("terminals.hidden") } as const;
+export const terminalControlLabels = { controlled: t("terminals.controlling"), observing: t("terminals.observing"), disconnected: t("terminals.disconnected") } as const;
 export type TerminalControl = keyof typeof terminalControlLabels;
 
 // Emulator attachment progress includes replaying a finished process. UI control
@@ -14,8 +15,8 @@ export type TerminalControl = keyof typeof terminalControlLabels;
 export type TerminalConnectionState = 'connecting' | 'connected' | 'observing' | 'waiting' | 'disconnected' | 'exited' | 'interrupted';
 
 const connectionLabels: Record<TerminalConnectionState, string> = {
-  connecting: '连接中', connected: terminalControlLabels.controlled, observing: terminalControlLabels.observing,
-  waiting: '此终端正在其他窗口使用', disconnected: '连接中断',
+  connecting: t("terminals.connecting"), connected: terminalControlLabels.controlled, observing: terminalControlLabels.observing,
+  waiting: t("terminals.this_terminal_is_in_use_in_another_window"), disconnected: t("terminals.connection_interrupted"),
   exited: terminalLifecycleLabels.exited, interrupted: terminalLifecycleLabels.interrupted,
 };
 
@@ -55,6 +56,6 @@ export function terminalPaneStatusMessage(pane: TerminalPane, connection: Termin
   if (lifecycle === 'exited' || lifecycle === 'interrupted') return terminalLifecycleLabels[lifecycle];
   const detail = message || connectionLabels[connection];
   if (lifecycle === 'starting') return `${terminalLifecycleLabels[lifecycle]} · ${detail}`;
-  if (lifecycle === 'failed') return `${terminalLifecycleLabels[lifecycle]} · ${detail} · ${pane.agent_terminal?.error || '请查看终端输出'}`;
+  if (lifecycle === 'failed') return `${terminalLifecycleLabels[lifecycle]} · ${detail} · ${pane.agent_terminal?.error || t("common.check_terminal_output")}`;
   return detail;
 }
