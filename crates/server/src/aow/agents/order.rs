@@ -41,7 +41,10 @@ impl AowManager {
             .collect::<std::collections::HashSet<_>>();
         if request.ids.len() != group.len() || requested != group {
             return Err(AowError::Invalid(
-                "Agent 列表已变化，请刷新后仅对同类型的配置实例排序".to_owned(),
+                aow_i18n::text(
+                    "server.agent_list_changed_refresh_and_reorder_only_configurations_of",
+                )
+                .to_owned(),
             ));
         }
         let mut agents = state.agents.clone();
@@ -55,7 +58,7 @@ impl AowManager {
                     .unwrap_or(0),
             )
         });
-        self.persist_agents(&agents)?;
+        self.persist_agents(&agents, state.default_agent_id.as_deref())?;
         state.agents = agents;
         Ok(())
     }

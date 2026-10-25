@@ -45,10 +45,9 @@ impl LoginLimiter {
     }
 
     fn begin_at(&self, now: Instant) -> Result<Attempt, HttpError> {
-        let mut state = self
-            .0
-            .lock()
-            .map_err(|_| HttpError::internal("登录限流不可用"))?;
+        let mut state = self.0.lock().map_err(|_| {
+            HttpError::internal(aow_i18n::text("server.login_rate_limiter_unavailable"))
+        })?;
         state.tokens = (state.tokens
             + now.duration_since(state.updated).as_secs_f64() / REFILL_SECONDS)
             .min(BURST);
@@ -103,7 +102,7 @@ fn limited(seconds: u64) -> HttpError {
     let mut error = HttpError::new(
         StatusCode::TOO_MANY_REQUESTS,
         "login_rate_limited",
-        "登录尝试过于频繁，请稍后重试",
+        aow_i18n::text("server.too_many_login_attempts_try_again_later"),
         None,
     );
     error.extra_headers.insert(

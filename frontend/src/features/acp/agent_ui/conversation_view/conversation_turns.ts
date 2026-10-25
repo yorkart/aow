@@ -1,8 +1,8 @@
-// Host layout adapter: preserve the upstream implementation's entry grouping and each group's render state.
+import { t } from '../../../../lib/i18n';
 import { contentMarkdown, messageGroups, visibleContent, type MessageGroup } from './entry_view_state';
-import { object, text, type Data, type SessionSnapshot, type SessionTurn, type ThreadEntry, type TurnOverview } from '../../types';
+import { object, text, type Data, type ProcessSegment, type SessionSnapshot, type SessionTurn, type ThreadEntry, type TurnOverview } from '../../types';
 import { userTextPreview } from './user_text_images';
-import { coalesceSteeringChunks, isSteeringDialogue } from './steering_messages';
+import { coalesceSteeringChunks } from './steering_messages';
 
 function dialogueReply(entries: ThreadEntry[]) {
   return coalesceSteeringChunks(entries).filter(entry => entry.kind === 'assistant')
@@ -10,11 +10,12 @@ function dialogueReply(entries: ThreadEntry[]) {
 }
 
 export function overviewPresentation(turn: TurnOverview): ReturnType<typeof turnPresentation> {
+  const steering = new Map(messageGroups((turn.messages ?? []).filter(entry => entry.kind === 'steering'), false, false).map(group => [group.id, group]));
   return {
     running: turn.running, waiting: turn.waiting, status: turn.status ?? undefined,
     process: [], conclusion: messageGroups(turn.conclusion, false, false),
-    messages: turn.messages ? messageGroups(turn.messages, turn.running, turn.waiting) : undefined,
-    reply: dialogueReply(turn.messages ?? turn.conclusion),
+    segments: (turn.process_segments ?? [{ ...turn, id: turn.id }]).map(segment => ({ ...segment, process: [], steering: steering.get(segment.id) })),
+    reply: dialogueReply(turn.conclusion),
     error: turn.error,
   };
 }
@@ -25,7 +26,7 @@ export function overviewPrompt(turn: TurnOverview) {
 
 function promptText(content: Data): string {
   if (content.type === 'text') return userTextPreview(text(content.text));
-  if (content.type === 'image') return '[图片]';
+  if (content.type === 'image') return t("acp.image");
   if (content.type === 'resource') return text(object(content.resource).text) || text(object(content.resource).uri);
   return text(content.name) || text(content.uri);
 }
@@ -47,14 +48,24 @@ export function conversationTurns(groups: MessageGroup[]) {
 // ACP has no final-message flag. Only a trailing complete agent message is a
 // candidate; a later tool/thought must never promote earlier progress to a final.
 export function finalMessageEntries(entries: ThreadEntry[]): ThreadEntry[] {
-  const relevant = entries.filter(entry => ['user', 'steering', 'tool', 'summary', 'compaction_update'].includes(entry.kind)
-    || ['assistant', 'thought'].includes(entry.kind) && visibleContent(entry.content));
-  const last = relevant.at(-1);
+  const isRelevant = (entry: ThreadEntry) => ['user', 'steering', 'tool', 'summary', 'compaction_update'].includes(entry.kind)
+    || ['assistant', 'thought'].includes(entry.kind) && visibleContent(entry.content);
+  const visible = entries.filter(isRelevant);
+  const last = visible.at(-1);
   if (last?.kind !== 'assistant') return [];
-  const result = [last];
+  // Whitespace fragments can carry Markdown indentation and the coalesced
+  // message's render ID. Keep them when the final message identity is known.
+  const relevant = last.message_id ? entries.filter(entry => isRelevant(entry)
+    || entry.kind === 'assistant' && entry.message_id === last.message_id && entry.content.type === 'text') : visible;
+  const result = [relevant.at(-1)!];
   let messageId = last.message_id;
   for (let index = relevant.length - 2; index >= 0; index--) {
     const entry = relevant[index];
+    if (entry.kind === 'steering' && messageId) {
+      let before = index - 1;
+      while (before >= 0 && relevant[before].kind === 'steering') before--;
+      if (before >= 0 && relevant[before].kind === 'assistant' && relevant[before].message_id === messageId) continue;
+    }
     if (entry.kind !== 'assistant' || messageId && entry.message_id && messageId !== entry.message_id) break;
     messageId ||= entry.message_id;
     result.unshift(entry);
@@ -75,18 +86,38 @@ export function turnPresentation(response: MessageGroup[], entries: ThreadEntry[
     else if (session.stop_reason) status = 'interrupted';
   }
   const candidate = !running && (!status || status === 'completed') ? finalMessageEntries(entries) : [];
-  const dialogue = entries.some(entry => entry.kind === 'steering') ? entries.filter(isSteeringDialogue) : undefined;
   const finalIds = new Set(candidate.map(entry => entry.id));
   const select = (final: boolean) => response.flatMap(group => {
-    const selected = group.entries.filter(entry => finalIds.has(entry.id) === final && (final || !dialogue || !isSteeringDialogue(entry)));
+    const selected = group.entries.filter(entry => finalIds.has(entry.id) === final);
     return selected.length ? [{ ...group, id: selected[0].id, entries: selected }] : [];
   });
+  const process = select(false);
+  const permissionTools = new Set(session.permissions.map(permission => text(object(permission.request.toolCall).toolCallId)));
   return {
-    running, waiting, status, process: select(false), conclusion: select(true),
-    messages: dialogue ? messageGroups(dialogue, running, waiting) : undefined,
-    reply: dialogueReply(dialogue ?? candidate),
+    running, waiting, status, process, conclusion: select(true),
+    segments: processSegments(process, entries[0]?.kind === 'user' ? entries[0].id : 'leading', permissionTools),
+    reply: dialogueReply(candidate),
     error: recorded?.error,
   };
+}
+
+export interface PresentedSegment extends ProcessSegment { process: MessageGroup[]; steering?: MessageGroup }
+
+// Steering is a visual boundary within a turn, never a new task or a final answer.
+export function processSegments(groups: MessageGroup[], id: string, permissionTools = new Set<string>()): PresentedSegment[] {
+  const segment = (id: string, steering?: MessageGroup): PresentedSegment => ({ id, steering, process: [], tool_count: 0, progress_count: 0, permission_tool_ids: [] });
+  const segments = [segment(id)];
+  for (const group of groups) {
+    if (group.kind === 'user') continue;
+    if (group.kind === 'steering') { segments.push(segment(group.id, group)); continue; }
+    const current = segments.at(-1)!;
+    current.process.push(group);
+    if (group.kind === 'tool') {
+      current.tool_count++;
+      if (permissionTools.has(group.id)) current.permission_tool_ids.push(group.id);
+    } else current.progress_count++;
+  }
+  return segments;
 }
 
 export function groupProcess(groups: MessageGroup[]) {

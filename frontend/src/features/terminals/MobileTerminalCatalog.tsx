@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { List, X } from 'lucide-react';
 
@@ -33,8 +34,8 @@ export function MobileTerminalCatalog({ id, onClose, returnFocus, children }: {
       if (event.key === 'Escape' && event.currentTarget.querySelector('[role="menu"]')) event.preventDefault();
     }}>
     <header className="mobile-terminal-catalog-header">
-      <List size={20} /><h2 ref={title} id={`${id}-title`} tabIndex={-1}>终端列表</h2>
-      <button className="mobile-icon-button" aria-label="关闭终端列表" onClick={onClose}><X size={21} /></button>
+      <List size={20} /><h2 ref={title} id={`${id}-title`} tabIndex={-1}>{t("terminals.terminal_list")}</h2>
+      <button className="mobile-icon-button" aria-label={t("terminals.close_terminal_list")} onClick={onClose}><X size={21} /></button>
     </header>
     {dialog && children(dialog)}
   </dialog>;

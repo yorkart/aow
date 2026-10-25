@@ -52,7 +52,9 @@ pub(super) async fn execute(
     concurrency_slot.register(&mut command);
     let agent_command = command_argv(&command);
     store.capture_session_roots(&task.id, id, command.as_std())?;
-    let mut child = command.spawn().context("无法启动 Agent")?;
+    let mut child = command
+        .spawn()
+        .context(aow_i18n::text("automations.unable_to_start_agent"))?;
     let _group = ProcessGroup(child.id().unwrap());
     writer.append(&RunEvent::AgentStarted {
         pid: child.id().unwrap(),
@@ -60,15 +62,21 @@ pub(super) async fn execute(
     })?;
     let stdin = child.stdin.take();
     let prompt = task.input.prompt.clone();
-    let input = tokio::spawn(async move {
+    let input = aow_i18n::spawn(async move {
         if let Some(mut stdin) = stdin {
             stdin.write_all(prompt.as_bytes()).await?;
             stdin.shutdown().await?;
         }
         Ok::<_, std::io::Error>(())
     });
-    let stdout = child.stdout.take().context("Agent 未提供标准输出")?;
-    let stderr = child.stderr.take().context("Agent 未提供错误输出")?;
+    let stdout = child
+        .stdout
+        .take()
+        .context(aow_i18n::text("automations.agent_did_not_provide_stdout"))?;
+    let stderr = child
+        .stderr
+        .take()
+        .context(aow_i18n::text("automations.agent_did_not_provide_stderr"))?;
     let stdout_file = tokio::fs::File::from_std(writer.output_writer(RunOutput::Stdio)?);
     let stderr_file = tokio::fs::File::from_std(writer.output_writer(RunOutput::Stderr)?);
     let (tx, mut rx) = mpsc::channel(1);
@@ -81,8 +89,8 @@ pub(super) async fn execute(
     } else {
         reporter.clone()
     };
-    let output = tokio::spawn(agent::capture_stdout(stdout, stdout_file, stdout_reporter));
-    let errors = tokio::spawn(agent::capture_stderr(stderr, stderr_file, reporter));
+    let output = aow_i18n::spawn(agent::capture_stdout(stdout, stdout_file, stdout_reporter));
+    let errors = aow_i18n::spawn(agent::capture_stderr(stderr, stderr_file, reporter));
     drop(tx);
     let mut received_session = specified_id;
     let mut channel_open = true;
@@ -95,7 +103,7 @@ pub(super) async fn execute(
                 None => channel_open = false,
             },
             status = child.wait() => break status.map_err(Into::into),
-            _ = &mut session_deadline, if received_session.is_none() && session_mode == SessionIdMode::FromOutput => break Err(anyhow::anyhow!("Agent 启动 60 秒内未返回会话 ID")),
+            _ = &mut session_deadline, if received_session.is_none() && session_mode == SessionIdMode::FromOutput => break Err(anyhow::anyhow!(aow_i18n::message("automations.agent_did_not_return_a_session_id_within_60", &[]))),
         }
     };
     let exited_at = chrono::Utc::now();
@@ -141,15 +149,19 @@ pub(super) async fn execute(
             status.code(),
             Some(
                 if stderr.stderr_tail.as_deref().unwrap_or_default().is_empty() {
-                    format!("Agent 退出: {status}")
+                    aow_i18n::message("automations.agent_exited", &[("p0", format!("{}", status))])
                 } else {
                     stderr.stderr_tail.unwrap_or_default()
                 },
             ),
         ));
     }
-    input_result.context("无法将任务内容发送给 Agent")?;
-    let session_id = received_session.context("Agent 已退出，但没有返回会话 ID")?;
+    input_result.context(aow_i18n::text(
+        "automations.unable_to_send_task_content_to_agent",
+    ))?;
+    let session_id = received_session.context(aow_i18n::text(
+        "automations.agent_exited_without_returning_a_session_id",
+    ))?;
     super::result::capture(store, task, id, session_id, exited_at).await?;
     Ok((RunStatus::Completed, status.code(), None))
 }

@@ -30,6 +30,7 @@ impl AgentServerStore {
             );
         }
         let mut store = self.inner.threads.lock().unwrap();
+        ensure!(connection.connected(), "ACP adapter is disconnected");
         let mut existing: HashSet<_> = store
             .metadata
             .entries()

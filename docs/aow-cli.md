@@ -259,7 +259,7 @@ aow-cli agent create --help
 aow-cli automation runs list --help
 ```
 
-数据目录默认是 `~/.local/state/aow`，也可由 `AOW_STATE_DIR` 或 `XDG_STATE_HOME` 指定；`--state-dir` 优先。服务使用自定义目录时，CLI 必须指定同一目录。`--state-dir` 和 `--compact` 均可放在子命令前后。
+数据目录默认是 `~/.aow`，也可由 `AOW_STATE_DIR` 指定；`--state-dir` 优先。服务使用自定义目录时，CLI 必须指定同一目录。`--state-dir` 和 `--compact` 均可放在子命令前后。
 
 AoW 启动或重建终端 Agent 时，会在进程环境中设置指向当前服务实例的 `AOW_STATE_DIR`，覆盖 Agent 配置中的同名值；Agent 及其继承环境的子进程可以直接使用 `aow-cli`。这不会修改保存的 Agent 配置。已有运行中的 Agent 不会自动获得新环境，需要重新创建或重建后生效。
 

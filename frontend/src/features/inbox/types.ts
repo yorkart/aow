@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import type { WorkspaceConfig, WorkspaceMode } from '../workspaces/types';
 
 export interface InboxLabel { id: string; name: string; color: string }
@@ -20,5 +21,5 @@ export interface InboxExecuteOptions extends WorkspaceConfig {
   append_prompt: string;
 }
 export interface InboxSnapshot { revision: number; labels: InboxLabel[]; items: InboxItem[]; executions: InboxExecution[]; comment_counts: Record<string, number> }
-export const previewTitle = (markdown: string) => markdown.split(/\r?\n/, 1)[0].replace(/^\s{0,3}#{1,6}\s+/, '').trim() || '未命名需求';
+export const previewTitle = (markdown: string) => markdown.split(/\r?\n/, 1)[0].replace(/^\s{0,3}#{1,6}\s+/, '').trim() || t("inbox.untitled_requirement");
 export const inboxError = (error: unknown) => error instanceof Error ? error.message : String(error);

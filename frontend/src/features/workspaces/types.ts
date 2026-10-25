@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 export type WorkspaceMode = 'new_worktree' | 'existing' | 'temporary' | 'dynamic';
 
 export interface WorkspaceConfig {
@@ -7,7 +8,7 @@ export interface WorkspaceConfig {
 }
 
 export const workspaceNames: Record<WorkspaceMode, string> = {
-  new_worktree: '新建 Worktree', existing: '已有 Worktree', temporary: '临时工作区', dynamic: '动态指定',
+  new_worktree: t("workspaces.new_worktree"), existing: t("workspaces.existing_worktree"), temporary: t("workspaces.temporary_workspace"), dynamic: t("workspaces.choose_at_runtime"),
 };
 
 /** Send only the fields used by the selected mode. */

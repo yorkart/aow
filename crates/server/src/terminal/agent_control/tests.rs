@@ -159,7 +159,7 @@ impl Fixture {
         let cli = crate::start_local_cli(state.clone(), &state_dir)
             .await
             .unwrap();
-        let client = TerminaldClient::new(state_dir.join("cli/cli.sock"));
+        let client = TerminaldClient::new(state_dir.join("runtime/cli/cli.sock"));
         Self {
             directory,
             state_dir,
@@ -183,7 +183,7 @@ impl Fixture {
                 acp_connection_id: None,
             }),
             no_parent: true,
-            agent: "codex".into(),
+            agent: Some("codex".into()),
             project_id: self.project_id.clone(),
             parent: None,
             cwd: self.repo.to_string_lossy().into_owned(),
@@ -370,8 +370,13 @@ time.sleep(30)
                 .clone();
             let extension_path = Path::new(extension.as_str().unwrap());
             assert!(
-                extension_path
-                    .starts_with(fixture.state_dir.canonicalize().unwrap().join("agents/pi"))
+                extension_path.starts_with(
+                    fixture
+                        .state_dir
+                        .canonicalize()
+                        .unwrap()
+                        .join("data/agents/pi")
+                )
             );
             assert!(
                 std::fs::read_to_string(extension_path)
@@ -574,7 +579,7 @@ async fn rejected_runtime_does_not_leave_a_lineage_record() {
     )
     .await;
     let mut request = fixture.request();
-    request.agent = "broken-agent".into();
+    request.agent = Some("broken-agent".into());
     request.no_parent = false;
     request.parent = Some(aow_protocol::InstanceRef::terminal(&parent.panes[0].id));
     let error = fixture
@@ -609,7 +614,7 @@ async fn rejected_runtime_does_not_leave_a_lineage_record() {
 #[tokio::test]
 async fn failed_lineage_persistence_cleans_up_the_started_runtime() {
     let fixture = Fixture::with_storage("ready", true).await;
-    std::fs::create_dir(fixture.state_dir.join("instances.json")).unwrap();
+    std::fs::create_dir(fixture.state_dir.join("state/instances.json")).unwrap();
     let result = fixture
         .client
         .post_json::<_, AgentTerminalInfo>("/v1/agents", &fixture.request())
@@ -711,12 +716,9 @@ async fn agent_parentage_is_validated_returned_and_survives_parent_removal() {
                 && item["parent"] == json!({"kind":"terminal", "id":child.pane_id}))
     );
 
-    let path = manager.inner.metadata_path.as_ref().unwrap();
-    let reloaded = TerminalManager::persistent(
-        path.parent().unwrap().to_path_buf(),
-        manager.inner.terminald.clone(),
-    )
-    .unwrap();
+    let reloaded =
+        TerminalManager::persistent(fixture.state_dir.clone(), manager.inner.terminald.clone())
+            .unwrap();
     assert_eq!(
         reloaded.cli_agent(&child.pane_id).unwrap().parent,
         child.parent
@@ -1102,7 +1104,7 @@ async fn reuses_prepared_worktree_without_reset() {
     );
     std::fs::write(worktree.join("keep.txt"), "local changes").unwrap();
     let mut request = fixture.request();
-    request.agent = "traecli".into();
+    request.agent = Some("traecli".into());
     request.cwd = worktree.join(".").to_string_lossy().into_owned();
     request.task = Some("task immediately after input readiness".into());
     let first: AgentTerminalInfo = fixture
@@ -1336,7 +1338,7 @@ async fn cli_codex_skips_update_menu_without_changing_profile_or_manual_launch()
     )
     .await;
     let mut request = fixture.request();
-    request.agent = id.into();
+    request.agent = Some(id.into());
     request.task = Some("task after skipping update".into());
     let created: AgentTerminalInfo = fixture
         .client
@@ -1382,7 +1384,7 @@ async fn startup_without_task_is_ready_without_writing_any_input() {
     let fixture = Fixture::new("ready").await;
     for agent in ["codex", "traecli"] {
         let mut request = fixture.request();
-        request.agent = agent.into();
+        request.agent = Some(agent.into());
         let result: AgentTerminalInfo = fixture
             .client
             .post_json("/v1/agents", &request)
@@ -1515,7 +1517,7 @@ async fn disconnected_cli_creation_still_finishes_and_logs_without_task_contents
     assert!(
         page.items
             .iter()
-            .any(|record| record.message == "提交初始任务")
+            .any(|record| record.message == "Submit initial task")
     );
     assert!(
         !serde_json::to_string(&page)
@@ -1624,7 +1626,7 @@ async fn native_pi_submits_through_terminald_and_resolves_its_session() {
         "env":{"PI_CODING_AGENT_DIR":profile,"PI_CODING_AGENT_SESSION_DIR":profile.join("sessions"),"PI_OFFLINE":"1"}
     })).await;
     let mut request = fixture.request();
-    request.agent = "pi".into();
+    request.agent = Some("pi".into());
     request.task = Some("Offline Pi terminal integration".into());
     let created: AgentTerminalInfo = fixture
         .client
@@ -2059,11 +2061,18 @@ async fn recreated_profile_is_used_by_cli_without_rebinding_existing_terminals()
     profile["id"] = json!("Work_codex-2");
     let saved = request(&app, "POST", "/api/aow/agents", profile).await;
     assert_eq!(saved["id"], "Work_codex-2");
+    request(
+        &app,
+        "PUT",
+        "/api/aow/agents/settings/default",
+        json!({"agent_id":"Work_codex-2"}),
+    )
+    .await;
     let before = fixture.state.terminals.get(&created.tab_id).await.unwrap();
     assert_eq!(before.panes[0].agent_profile_id.as_deref(), Some("codex"));
     assert_eq!(before.panes[0].agent_id.as_deref(), Some("codex"));
     let mut next = fixture.request();
-    next.agent = "Work_codex-2".into();
+    next.agent = None;
     let created: AgentTerminalInfo = fixture.client.post_json("/v1/agents", &next).await.unwrap();
     assert_eq!(created.state.phase, AgentTerminalPhase::Ready);
     let tab = fixture.state.terminals.get(&created.tab_id).await.unwrap();

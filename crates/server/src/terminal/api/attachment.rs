@@ -14,8 +14,9 @@ pub(super) async fn attach_terminal_pane(
         .ensure_pane(&tab_id, &pane_id)
         .map_err(terminal_http_error)?;
     let manager = state.terminals.clone();
-    Ok(websocket
-        .on_upgrade(move |socket| async move {
+    Ok(crate::locale::upgrade(
+        websocket,
+        move |socket| async move {
             match manager
                 .attach(
                     &tab_id,
@@ -43,8 +44,8 @@ pub(super) async fn attach_terminal_pane(
                 }
                 Err(error) => reject_terminal_socket(socket, error).await,
             }
-        })
-        .into_response())
+        },
+    ))
 }
 
 pub(super) async fn reject_terminal_socket(mut browser: WebSocket, error: TerminalError) {

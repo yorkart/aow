@@ -88,7 +88,7 @@ async fn create(
         .await
         .map_err(IntoResponse::into_response)?;
     let base_path = state.base_path.clone();
-    tokio::task::spawn_blocking(move || state.session_shares.create(locator))
+    aow_i18n::spawn_blocking(move || state.session_shares.create(locator))
         .await
         .map_err(|_| lock_error().into_response())?
         .map(|mut info| {
@@ -102,7 +102,7 @@ async fn revoke(
     State(state): State<AppState>,
     AxumPath(id): AxumPath<String>,
 ) -> Result<StatusCode, HttpError> {
-    tokio::task::spawn_blocking(move || state.session_shares.revoke(&id))
+    aow_i18n::spawn_blocking(move || state.session_shares.revoke(&id))
         .await
         .map_err(|_| lock_error())??;
     Ok(StatusCode::NO_CONTENT)

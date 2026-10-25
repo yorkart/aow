@@ -28,6 +28,8 @@ impl AgentServerStore {
             "This agent does not support images"
         );
         let mut threads = self.inner.threads.lock().unwrap();
+        threads.ensure_session_available(id)?;
+        ensure!(!threads.forking.contains(id), "ACP session is being forked");
         let thread = threads.threads.get(id).context("ACP session not found")?;
         let thread = thread.lock().unwrap();
         let admitted = match steering_id {
@@ -138,7 +140,7 @@ impl AgentServerStore {
         drop(threads);
         let service = self.clone();
         let id = id.to_owned();
-        tokio::spawn(async move {
+        aow_i18n::spawn(async move {
             let result = pending.block_task().await.and_then(|result| {
                 serde_json::to_value(result)
                     .map_err(agent_client_protocol::Error::into_internal_error)
@@ -158,6 +160,7 @@ impl AgentServerStore {
                 let succeeded = result.is_ok();
                 let mut completed = None;
                 let saved = threads.update(&id, |thread| {
+                    AcpThread::clear_session_meta(thread);
                     thread.active_prompt = None;
                     thread.last_prompt_usage = usage.clone();
                     thread.pending_user_echo.clear();

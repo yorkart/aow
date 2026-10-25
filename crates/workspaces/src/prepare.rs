@@ -57,9 +57,11 @@ fn sibling_directory(main: &Path, name: &str) -> Result<PathBuf> {
             && name
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || "-_/".contains(c)),
-        "工作区名称无效"
+        aow_i18n::message("workspaces.invalid_workspace_name", &[])
     );
-    let parent = main.parent().context("主仓库没有可用的父目录")?;
+    let parent = main.parent().context(aow_i18n::text(
+        "workspaces.main_repository_has_no_available_parent_directory",
+    ))?;
     Ok(parent.join(format!(".aow-{}", name.replace('/', "-"))))
 }
 
@@ -69,7 +71,9 @@ pub async fn worktree_directory(
     git: &impl GitExecutor,
 ) -> Result<PathBuf> {
     let trees = worktrees(repository, git).await?;
-    let main = trees.first().context("项目没有可用的 Worktree")?;
+    let main = trees.first().context(aow_i18n::text(
+        "workspaces.project_has_no_available_worktrees",
+    ))?;
     sibling_directory(&main.path, name)
 }
 
@@ -82,7 +86,10 @@ pub async fn prepare(
     config.validate()?;
     ensure!(
         config.workspace_mode != WorkspaceMode::Dynamic,
-        "请在执行时指定工作区目录"
+        aow_i18n::message(
+            "automations.specify_a_workspace_directory_for_this_run",
+            &[]
+        )
     );
     if config.workspace_mode == WorkspaceMode::Temporary {
         ensure!(
@@ -90,12 +97,14 @@ pub async fn prepare(
                 && name
                     .chars()
                     .all(|c| c.is_ascii_alphanumeric() || "-_/".contains(c)),
-            "工作区名称无效"
+            aow_i18n::message("workspaces.invalid_workspace_name", &[])
         );
         let temporary = tempfile::Builder::new()
             .prefix(&format!("aow-{}-", name.replace('/', "-")))
             .tempdir()
-            .context("无法创建临时工作区")?;
+            .context(aow_i18n::text(
+                "workspaces.unable_to_create_temporary_workspace",
+            ))?;
         let directory = temporary.path().canonicalize()?;
         let _ = temporary.keep();
         return Ok(PreparedWorkspace {
@@ -105,14 +114,20 @@ pub async fn prepare(
             created: true,
         });
     }
-    let repository = repository.canonicalize().context("项目目录不存在")?;
+    let repository = repository.canonicalize().context(aow_i18n::text(
+        "workspaces.project_directory_does_not_exist",
+    ))?;
     let trees = worktrees(&repository, git).await?;
-    let main = trees.first().context("项目没有可用的 Worktree")?;
+    let main = trees.first().context(aow_i18n::text(
+        "workspaces.project_has_no_available_worktrees",
+    ))?;
     if config.workspace_mode == WorkspaceMode::Existing {
         let directory = config
             .workspace_path
             .canonicalize()
-            .context("工作区目录不存在")?;
+            .context(aow_i18n::text(
+                "workspaces.workspace_directory_does_not_exist",
+            ))?;
         // Automation hosting can execute inside a Worktree subdirectory. Git
         // ownership also excludes nested repositories and submodules.
         let worktree_root = if trees.iter().any(|tree| tree.path == directory) {
@@ -128,7 +143,9 @@ pub async fn prepare(
         let selected = trees
             .iter()
             .find(|tree| tree.path == worktree_root)
-            .context("工作区不属于所选项目")?;
+            .context(aow_i18n::text(
+                "server.workspace_does_not_belong_to_the_selected_project",
+            ))?;
         return Ok(PreparedWorkspace {
             directory,
             workspace_mode: config.workspace_mode,
@@ -143,7 +160,7 @@ pub async fn prepare(
     {
         ensure!(
             existing.path == directory,
-            "本次执行的分支已被其他 Worktree 使用"
+            aow_i18n::message("workspaces.the_branch_for_this_run_is_already_used_by", &[])
         );
         return Ok(PreparedWorkspace {
             directory,
@@ -173,7 +190,9 @@ pub async fn prepare(
             "-b",
             name,
             "--",
-            directory.to_str().context("工作区路径不是 UTF-8")?,
+            directory
+                .to_str()
+                .context(aow_i18n::text("automations.workspace_path_is_not_utf_8"))?,
             base.trim(),
         ],
     )

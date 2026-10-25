@@ -45,7 +45,7 @@ impl HttpError {
         let mut error = Self::new(
             StatusCode::RANGE_NOT_SATISFIABLE,
             "range_not_satisfiable",
-            "requested byte range is not satisfiable",
+            aow_i18n::text("errors.requested_byte_range_is_not_satisfiable"),
             None,
         );
         error.extra_headers.insert(
@@ -81,19 +81,19 @@ impl From<FsError> for HttpError {
             FsError::PathNotAbsolute(path) => Self::new(
                 StatusCode::BAD_REQUEST,
                 "path_not_absolute",
-                "path must be absolute",
+                aow_i18n::text("errors.path_must_be_absolute_2"),
                 Some(path),
             ),
             FsError::NotDirectory(path) => Self::new(
                 StatusCode::BAD_REQUEST,
                 "not_directory",
-                "path is not a directory",
+                aow_i18n::text("errors.path_is_not_a_directory_2"),
                 Some(path),
             ),
             FsError::NotFile(path) => Self::new(
                 StatusCode::BAD_REQUEST,
                 "not_file",
-                "path is not a regular file",
+                aow_i18n::text("errors.path_is_not_a_regular_file_2"),
                 Some(path),
             ),
             FsError::TooLarge {
@@ -109,13 +109,13 @@ impl From<FsError> for HttpError {
             FsError::NotUtf8(path) => Self::new(
                 StatusCode::UNSUPPORTED_MEDIA_TYPE,
                 "not_utf8",
-                "file is not UTF-8",
+                aow_i18n::text("errors.file_is_not_utf"),
                 Some(path),
             ),
             FsError::Binary(path) => Self::new(
                 StatusCode::UNSUPPORTED_MEDIA_TYPE,
                 "binary_file",
-                "file contains NUL bytes",
+                aow_i18n::text("errors.file_contains_nul_bytes_2"),
                 Some(path),
             ),
             FsError::VersionConflict {
@@ -131,13 +131,13 @@ impl From<FsError> for HttpError {
             FsError::InvalidFileName(name) => Self::new(
                 StatusCode::BAD_REQUEST,
                 "invalid_file_name",
-                "name must be a single non-empty file name",
+                aow_i18n::text("errors.name_must_be_a_single_non_empty_file_name"),
                 Some(name),
             ),
             FsError::AlreadyExists(path) => Self::new(
                 StatusCode::CONFLICT,
                 "destination_exists",
-                "a file or directory with that name already exists",
+                aow_i18n::text("errors.a_file_or_directory_with_that_name_already_exists"),
                 Some(path),
             ),
             FsError::Stream(message) => Self::new(
@@ -157,13 +157,13 @@ impl From<git::GitError> for HttpError {
             git::GitError::PathNotAbsolute(path) => Self::new(
                 StatusCode::BAD_REQUEST,
                 "path_not_absolute",
-                "repository path must be absolute",
+                aow_i18n::text("errors.repository_path_must_be_absolute"),
                 Some(path),
             ),
             git::GitError::NotRepository(path) => Self::new(
                 StatusCode::NOT_FOUND,
                 "git_repository_not_found",
-                "the terminal's current directory is not inside a Git repository",
+                aow_i18n::text("errors.the_terminal_s_current_directory_is_not_inside_a"),
                 Some(path),
             ),
             git::GitError::Timeout => Self::new(

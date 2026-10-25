@@ -20,7 +20,7 @@ async fn inbox_cli_and_web_share_revisions_comments_events_and_soft_deletion() {
     let server = start_local_cli(state.clone(), directory.path())
         .await
         .unwrap();
-    let client = TerminaldClient::new(directory.path().join("cli/cli.sock"));
+    let client = TerminaldClient::new(directory.path().join("runtime/cli/cli.sock"));
     let mut changes = state.workspace_events.subscribe();
     let app = crate::build_router(state);
     let captured: Value = client
@@ -111,12 +111,10 @@ async fn inbox_cli_and_web_share_revisions_comments_events_and_soft_deletion() {
             ..
         })
     ));
-    let config = aow_config::ConfigRepository::open(directory.path())
-        .unwrap()
-        .unwrap();
+    let config = aow_config::ConfigStore::open(directory.path()).unwrap();
     let deleted = config
         .directory()
-        .join("inbox/requirements/deleted")
+        .join("data/inbox/requirements/deleted")
         .join(id);
     assert!(deleted.join("requirement.json").is_file());
     assert!(
@@ -135,7 +133,7 @@ async fn project_queries_return_registry_metadata_without_git_or_terminald() {
     let server = start_local_cli(state.clone(), directory.path())
         .await
         .unwrap();
-    let client = TerminaldClient::new(directory.path().join("cli/cli.sock"));
+    let client = TerminaldClient::new(directory.path().join("runtime/cli/cli.sock"));
     assert_eq!(
         client.get_json::<Value>("/v1/projects").await.unwrap(),
         json!({"items":[]})

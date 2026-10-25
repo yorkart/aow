@@ -1,3 +1,5 @@
+import { localizedFetch } from '../../lib/localizedFetch';
+import { t } from '../../lib/i18n';
 import { useCallback, useEffect, useState } from 'react';
 import { appUrl } from '../../lib/basePath';
 import { subscribeWorkspaceChanges } from '../../lib/workspaceEvents';
@@ -18,8 +20,8 @@ export function useInstanceGraph(active = true) {
       if (controller.signal.aborted || document.visibilityState !== 'visible') return;
       pending = true;
       try {
-        const response = await fetch(appUrl('/api/instances'), { signal: controller.signal });
-        if (!response.ok) throw new Error('无法加载实例创建关系');
+        const response = await localizedFetch(appUrl('/api/instances'), { signal: controller.signal });
+        if (!response.ok) throw new Error(t("instances.unable_to_load_instance_creation_relationships"));
         const result: { items?: InstanceInfo[] } = await response.json();
         if (!controller.signal.aborted) { setItems(result.items ?? []); setError(''); }
       } catch (reason) {

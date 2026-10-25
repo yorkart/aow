@@ -100,7 +100,10 @@ impl Scheduler {
                 let plist = launchd_schedule(&label, &args, task, false)?;
                 Ok(vec![(self.directory.join(format!("{label}.plist")), plist)])
             }
-            Platform::Unsupported => anyhow::bail!("不支持的系统定时器"),
+            Platform::Unsupported => anyhow::bail!(aow_i18n::message(
+                "automations.unsupported_system_timer",
+                &[]
+            )),
         }
     }
 }

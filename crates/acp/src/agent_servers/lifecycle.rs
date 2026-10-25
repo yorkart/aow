@@ -18,6 +18,13 @@ impl AgentServerStore {
         }
         let cwd = tokio::fs::canonicalize(cwd).await?;
         ensure!(cwd.is_dir(), "ACP working directory must be a directory");
+        let workspace = cwd.to_string_lossy().into_owned();
+        let version = self
+            .inner
+            .threads
+            .lock()
+            .unwrap()
+            .workspace_version(&workspace)?;
         let settings = validate_settings(&self.inner.host.settings().await?)?;
         ensure!(
             settings.agent_servers.contains_key(agent_id),
@@ -33,7 +40,13 @@ impl AgentServerStore {
         thread.source = creation.source;
         thread.status = "disconnected".into();
         let id = thread.thread_id.clone();
-        self.inner.threads.lock().unwrap().insert(thread)?;
+        let mut threads = self.inner.threads.lock().unwrap();
+        ensure!(
+            threads.workspace_version(&workspace)? == version,
+            "ACP workspace was removed"
+        );
+        threads.insert(thread)?;
+        drop(threads);
         self.snapshot(&id)
     }
 

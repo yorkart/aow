@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { sessionImageReferences } from './sessionImageReferences';
@@ -40,9 +41,9 @@ function ImagePreview({ anchor, id, onClose, onEnter, onLeave }: {
   return createPortal(<div ref={preview} id={id} role="tooltip" className="session-image-preview" style={position}
     onMouseEnter={onEnter} onMouseLeave={onLeave}>
     <div className="session-image-preview-canvas">
-      {status !== 'error' && <img src={anchor.href} alt={anchor.textContent ?? '图片预览'}
+      {status !== 'error' && <img src={anchor.href} alt={anchor.textContent ?? t("sessions.image_preview")}
         className={status === 'loaded' ? 'loaded' : undefined} onLoad={() => setStatus('loaded')} onError={() => setStatus('error')} />}
-      {status !== 'loaded' && <span role="status">{status === 'error' ? '图片无法加载，文件可能已移除或当前无法访问。' : '正在加载图片…'}</span>}
+      {status !== 'loaded' && <span role="status">{status === 'error' ? t("sessions.image_unavailable_the_file_may_have_been_removed_or") : t("files.loading_image")}</span>}
     </div>
     <div className="session-image-preview-caption">{anchor.textContent}</div>
   </div>, document.body);

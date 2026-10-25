@@ -61,7 +61,7 @@ pub(super) fn execute(args: CreateArgs, state_dir: PathBuf) -> Result<Value> {
             format!("expected one automation JSON object: {error}"),
         )
     })?;
-    let client = TerminaldClient::new(state_dir.join("cli/cli.sock"));
+    let client = TerminaldClient::new(state_dir.join("runtime/cli/cli.sock"));
     let request = json!({"project_id": args.project_id, "configuration": configuration});
     tokio::runtime::Runtime::new()?.block_on(async {
         tokio::time::timeout(

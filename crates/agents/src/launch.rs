@@ -11,7 +11,7 @@ pub use crate::codex_terminal::prepare as prepare_codex_terminal;
 
 #[derive(Debug, Error)]
 pub enum LaunchError {
-    #[error("agent not found or unavailable: {0}")]
+    #[error("{translated}", translated = aow_i18n::message("errors.agent_not_found_or_unavailable", &[("p0", .0.to_string())]))]
     Unavailable(String),
     #[error("{0}")]
     Invalid(String),
@@ -60,6 +60,7 @@ impl AgentType {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct AgentRegistration {
+    pub is_default: bool,
     pub id: String,
     /// None only for legacy registrations that still need a type selected.
     pub agent_type: Option<AgentType>,
@@ -148,7 +149,10 @@ impl AgentRegistration {
 
     pub fn into_launch(self, paths: &[PathBuf]) -> Result<AgentLaunch, LaunchError> {
         let agent_type = self.agent_type.ok_or_else(|| {
-            LaunchError::Invalid(format!("请先为 {} 设置 Agent 类型", self.display_name))
+            LaunchError::Invalid(aow_i18n::message(
+                "agents.set_the_agent_type_for_first",
+                &[("auto0", self.display_name.to_string())],
+            ))
         })?;
         let executable = self
             .executable
@@ -236,6 +240,7 @@ mod tests {
     #[test]
     fn legacy_codex_profile_matching_ignores_only_the_effective_isolation_flag() {
         let registration = AgentRegistration {
+            is_default: false,
             id: "work".into(),
             agent_type: Some(AgentType::Codex),
             display_name: "work".into(),
@@ -263,6 +268,7 @@ mod tests {
             assert!(!registration.matches_terminal_arguments(&args), "{args:?}");
         }
         let registration = AgentRegistration {
+            is_default: false,
             args: vec!["--".into(), "prompt".into()],
             ..registration
         };

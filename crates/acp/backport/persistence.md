@@ -12,7 +12,7 @@ for its own versioned, serialized thread bodies. These are different responsibil
 
 AoW ports the metadata-store structure and preserves its existing offline display
 and resume-only-agent support with an **AoW-only snapshot cache**. Both now live in
-`<state directory>/acp/threads.sqlite`. A cached body is a versioned JSON blob
+`~/.aow/data/acp/threads.sqlite`. A cached body is a versioned JSON blob
 inside SQLite, following the serialization boundary in `agent::db`; it is not a
 standalone JSON file or a log of every protocol notification. Imported sessions
 have only metadata and an empty `needs_load` placeholder until explicitly opened.
@@ -95,12 +95,10 @@ its cached body; the tab URL no longer carries workspace identity.
 
 ## Host storage paths
 
-The active layout is `<state directory>/acp` and
-`<configuration directory>/acp/settings.json`. Configuration is prepared at this
-path before upgrading. The service opens only the active state directory;
-former directories are left untouched and do not trigger migration, conflict
-checks or installation-receipt rewrites. An empty ACP directory starts with empty
-local history and requires Registry adapters to be installed again.
+AoW stores ACP configuration in `~/.aow/aow-acp.json`, conversation data in
+`~/.aow/data/acp/`, and adapter downloads and installation receipts in
+`~/.aow/cache/acp/`. The host passes the data and cache directories separately
+to the ACP facade.
 
 ## Snapshot storage
 

@@ -35,6 +35,115 @@ fn history() -> Result<ThreadStore> {
 }
 
 #[test]
+fn recorded_codex_steering_keeps_final_replies_visible_to_dialogue_clients() -> Result<()> {
+    let recording: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/codex-steering-recording.json"
+    ))?;
+    let mut projections = serde_json::Map::new();
+    for capture in recording["captures"].as_array().unwrap() {
+        if let Some(before) = capture.get("before_steer") {
+            let mut thread: SessionSnapshot = serde_json::from_value(before.clone())?;
+            let view = snapshot(&mut thread);
+            let turn = &view.overview.as_ref().unwrap()[0];
+            assert!(turn.running);
+            assert!(turn.conclusion.is_empty());
+            if let Some(expected_overview) = capture.get("before_steer_overview") {
+                assert_eq!(serde_json::to_value(&view.overview)?, *expected_overview);
+            }
+            projections.insert(
+                format!("{}-before-steer", capture["name"].as_str().unwrap()),
+                serde_json::to_value(view.overview)?,
+            );
+        }
+        let mut thread: SessionSnapshot = serde_json::from_value(capture["snapshot"].clone())?;
+        let expected = thread.entries.last().unwrap().clone();
+        assert_eq!(thread.stop_reason.as_deref(), Some("end_turn"));
+        assert_eq!(expected.kind, "assistant");
+        let view = snapshot(&mut thread);
+        let turn = &view.overview.as_ref().unwrap()[0];
+        assert_eq!(turn.conclusion.len(), 1);
+        assert_eq!(turn.conclusion[0].content, expected.content);
+        assert_eq!(turn.process_segments.len(), 2);
+        // Already-open clients select messages in preference to conclusion.
+        // A steering-only projection reproduces the missing answer screenshot.
+        assert!(
+            turn.messages
+                .as_ref()
+                .unwrap()
+                .iter()
+                .any(|entry| entry.id == expected.id),
+            "{}: legacy dialogue selection must include the recorded final reply",
+            capture["name"]
+        );
+        if let Some(expected_overview) = capture.get("overview") {
+            assert_eq!(serde_json::to_value(&view.overview)?, *expected_overview);
+        }
+        projections.insert(
+            capture["name"].as_str().unwrap().into(),
+            serde_json::to_value(view.overview)?,
+        );
+    }
+    if let Ok(path) = std::env::var("AOW_ACP_RECORD_PROJECTIONS") {
+        std::fs::write(path, serde_json::to_vec_pretty(&projections)?)?;
+    }
+    Ok(())
+}
+
+#[test]
+fn recorded_codex_load_keeps_steering_despite_tool_transport_changes() -> Result<()> {
+    let recording: Value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/codex-steering-replay.json"
+    ))?;
+    let previous: SessionSnapshot = serde_json::from_value(recording["live"].clone())?;
+    let mut replay = previous.clone();
+    replay.entries.clear();
+    replay.turns.clear();
+    for update in recording["updates"].as_array().unwrap() {
+        AcpThread::handle_session_update(&mut replay, update.clone());
+    }
+    for (index, entry) in replay.entries.iter_mut().enumerate() {
+        if entry.kind != "tool" {
+            entry.id = format!("reloaded-{index}");
+        }
+    }
+    assert_eq!(
+        replay
+            .entries
+            .iter()
+            .filter(|entry| entry.kind == "user")
+            .count(),
+        2
+    );
+    crate::acp_thread::turns::restore(&previous, &mut replay);
+    assert_eq!(
+        replay
+            .entries
+            .iter()
+            .filter(|entry| entry.kind == "steering")
+            .count(),
+        1
+    );
+    assert_eq!(replay.turns.len(), 1);
+    let view = snapshot(&mut replay);
+    let turns = view.overview.as_ref().unwrap();
+    assert_eq!(turns.len(), 1);
+    assert_eq!(turns[0].process_segments.len(), 2);
+    assert_eq!(
+        turns[0].conclusion.last().unwrap().content,
+        previous.entries.last().unwrap().content
+    );
+    if let Some(expected) = recording.get("reloaded") {
+        assert_eq!(serde_json::to_value(&view.overview)?, expected["overview"]);
+    }
+    if let Ok(path) = std::env::var("AOW_ACP_RECORD_REPLAY") {
+        // Share the actual reducer/restoration result with the browser regression.
+        replay.overview = view.overview;
+        std::fs::write(path, serde_json::to_vec_pretty(&replay)?)?;
+    }
+    Ok(())
+}
+
+#[test]
 fn browser_projections_preserve_creation_metadata() -> Result<()> {
     let mut store = history()?;
     let parent = Some(aow_protocol::InstanceRef::terminal("parent"));
@@ -239,7 +348,7 @@ fn failed_and_tool_only_turns_never_promote_progress_to_a_conclusion() -> Result
 }
 
 #[test]
-fn steered_dialogue_survives_streaming_completion_and_reload_without_hiding_tools() -> Result<()> {
+fn steering_segments_preserve_progress_through_streaming_completion_and_reload() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let mut store = ThreadStore::new(Some(directory.path().into()), || {})?;
     let mut thread = AcpThread::new_snapshot(
@@ -267,9 +376,15 @@ fn steered_dialogue_survives_streaming_completion_and_reload_without_hiding_tool
     let before = snapshot(&mut source.lock().unwrap());
     let turn = &before.overview.as_ref().unwrap()[0];
     assert!(turn.conclusion.is_empty(), "streaming is not completion");
-    assert_eq!(turn.messages.as_ref().unwrap().len(), 4);
-    assert_eq!(turn.progress_count, 0, "dialogue is not folded progress");
+    assert_eq!(turn.messages.as_ref().unwrap().len(), 1);
+    assert_eq!(turn.progress_count, 2, "agent progress stays folded");
     assert_eq!(turn.tool_count, 2);
+    assert_eq!(turn.process_segments.len(), 2);
+    assert_eq!(
+        turn.process_segments[0].progress_count, 1,
+        "split message stays in its original segment"
+    );
+    assert_eq!(turn.process_segments[1].progress_count, 1);
     let turn_id = turn.id.clone();
     store.session_update("local", json!({"sessionUpdate":"agent_message_chunk", "messageId":"constraints", "content":{"type":"text", "text":" documented."}}))?;
     let SessionUpdates::Overview { turns, .. } = since(
@@ -279,14 +394,27 @@ fn steered_dialogue_survives_streaming_completion_and_reload_without_hiding_tool
     ) else {
         panic!("streaming overview update")
     };
-    assert_eq!(
-        serde_json::to_value(&turns[0].messages)?["entries"][0]["text"],
-        " documented."
+    assert!(
+        turns[0].messages.is_none(),
+        "progress bodies are fetched only with expanded activity"
     );
     store.update("local", |thread| {
         thread.status = "idle".into();
         thread.stop_reason = Some("end_turn".into());
     })?;
+    let SessionUpdates::Snapshot {
+        snapshot: completed,
+    } = since(
+        &mut source.lock().unwrap(),
+        &before.sync_generation,
+        before.revision,
+    )
+    else {
+        panic!("completion resets the dialogue baseline");
+    };
+    let completed_turn = &completed.overview.as_ref().unwrap()[0];
+    assert_eq!(completed_turn.messages.as_ref().unwrap().len(), 2);
+    assert_eq!(completed_turn.conclusion.len(), 1);
     drop(source);
     drop(store);
     let mut restored = ThreadStore::new(Some(directory.path().into()), || {})?;
@@ -295,7 +423,12 @@ fn steered_dialogue_survives_streaming_completion_and_reload_without_hiding_tool
     let view = snapshot(&mut thread);
     let turn = &view.overview.as_ref().unwrap()[0];
     assert_eq!(turn.status.as_deref(), Some("completed"));
-    assert_eq!(turn.messages.as_ref().unwrap().len(), 4);
+    assert_eq!(turn.messages.as_ref().unwrap().len(), 2);
+    assert_eq!(turn.progress_count, 1);
+    assert_eq!(
+        turn.process_segments[1].progress_count, 0,
+        "final reply is excluded from activity"
+    );
     assert_eq!(
         turn.conclusion.len(),
         1,
@@ -321,6 +454,135 @@ fn steered_dialogue_survives_streaming_completion_and_reload_without_hiding_tool
     assert_eq!(
         thread.entries[2].content["text"], "Read **the ",
         "saved arrival order is unchanged"
+    );
+    Ok(())
+}
+
+#[test]
+fn final_message_crosses_only_identified_steering_fragments() {
+    let entry = |id: &str, kind: &str, message_id: Option<&str>| ThreadEntry {
+        id: id.into(),
+        kind: kind.into(),
+        message_id: message_id.map(str::to_owned),
+        content: json!({"type":"text", "text":id}),
+        delivery: None,
+    };
+    let head = entry("**hello", "assistant", Some("reply"));
+    let steer = entry("instruction", "steering", None);
+    let tail = entry("world**", "assistant", Some("reply"));
+    let entries = [head.clone(), steer.clone(), steer.clone(), tail.clone()];
+    assert_eq!(
+        final_entries(&[
+            entry("    ", "assistant", Some("reply")),
+            steer.clone(),
+            tail.clone()
+        ])
+        .len(),
+        2,
+        "whitespace fragments retain the final message's first render ID"
+    );
+    assert_eq!(
+        final_entries(&entries)
+            .iter()
+            .map(|entry| entry.id.as_str())
+            .collect::<Vec<_>>(),
+        ["**hello", "world**"]
+    );
+    for boundary in [
+        entry("tool", "tool", None),
+        entry("thought", "thought", None),
+        entry("different", "assistant", Some("other")),
+    ] {
+        assert_eq!(
+            final_entries(&[head.clone(), boundary, steer.clone(), tail.clone()]).len(),
+            1
+        );
+    }
+    assert!(
+        final_entries(&[head, steer]).is_empty(),
+        "a steer after a reply is not completion"
+    );
+    assert_eq!(
+        final_entries(&[
+            entry("head", "assistant", None),
+            entry("steer", "steering", None),
+            entry("tail", "assistant", None)
+        ])
+        .len(),
+        1
+    );
+}
+
+#[test]
+fn multiple_steers_keep_tool_updates_and_permissions_in_the_original_segment() -> Result<()> {
+    let mut store = history()?;
+    store.update("local", |thread| {
+        thread.status = "working".into();
+        thread.permissions.push(crate::facade::Permission {
+            id: "permission".into(),
+            kind: "permission".into(),
+            request: json!({"toolCall":{"toolCallId":"tool-1"}}),
+        });
+        for (kind, value) in [
+            ("steering", "First change"),
+            ("assistant", "Working"),
+            ("steering", "Second change"),
+            ("assistant", "Continuing"),
+        ] {
+            AcpThread::push(thread, kind, json!({"type":"text", "text":value}));
+        }
+    })?;
+    let source = store.thread("local")?;
+    let before = snapshot(&mut source.lock().unwrap());
+    let before_turn = before.overview.as_ref().unwrap().last().unwrap();
+    assert_eq!(before_turn.process_segments.len(), 3);
+    assert_eq!(
+        before_turn.process_segments[0].permission_tool_ids,
+        ["tool-1"]
+    );
+    assert!(
+        before_turn.process_segments[1..]
+            .iter()
+            .all(|segment| segment.permission_tool_ids.is_empty())
+    );
+    assert!(
+        before.overview.as_ref().unwrap()[0].process_segments[0]
+            .permission_tool_ids
+            .is_empty()
+    );
+    store.session_update(
+        "local",
+        json!({"sessionUpdate":"tool_call_update", "toolCallId":"tool-1", "status":"completed"}),
+    )?;
+    let after = snapshot(&mut source.lock().unwrap());
+    let after_turn = after.overview.as_ref().unwrap().last().unwrap();
+    assert_eq!(
+        after_turn
+            .process_segments
+            .iter()
+            .map(|segment| segment.id.as_str())
+            .collect::<Vec<_>>(),
+        before_turn
+            .process_segments
+            .iter()
+            .map(|segment| segment.id.as_str())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        after_turn
+            .process_segments
+            .iter()
+            .map(|segment| segment.tool_count)
+            .collect::<Vec<_>>(),
+        [1, 0, 0]
+    );
+    assert_eq!(
+        after_turn
+            .process_segments
+            .iter()
+            .map(|segment| segment.progress_count)
+            .collect::<Vec<_>>(),
+        [1, 1, 1]
     );
     Ok(())
 }
@@ -509,7 +771,7 @@ fn visibility_changes_with_stable_boundaries_keep_incremental_updates() -> Resul
 }
 
 #[test]
-fn steering_streams_only_changed_dialogue_and_resets_invalid_projection_cursors() -> Result<()> {
+fn steering_overviews_exclude_progress_bodies_and_reset_invalid_projection_cursors() -> Result<()> {
     let mut store = ThreadStore::new(None, || {})?;
     let mut thread = AcpThread::new_snapshot(
         "local".into(),
@@ -546,15 +808,13 @@ fn steering_streams_only_changed_dialogue_and_resets_invalid_projection_cursors(
         before.revision,
     ))?;
     assert_eq!(delta["kind"], "overview");
-    assert_eq!(delta["turns"][0]["messages"]["kind"], "delta");
+    assert!(delta["turns"][0].get("messages").is_none());
     assert_eq!(
-        delta["turns"][0]["messages"]["entries"][0]["kind"],
-        "append_text"
+        delta["turns"][0]["process_segments"][1]["progress_count"],
+        1
     );
-    assert_eq!(delta["turns"][0]["messages"]["entries"][0]["index"], 1);
-    assert_eq!(delta["turns"][0]["messages"]["entries"][0]["text"], "中z");
     let bytes = serde_json::to_vec(&delta)?.len();
-    eprintln!("steered dialogue delta: {bytes} bytes for a 1 MiB baseline");
+    eprintln!("steered overview delta: {bytes} bytes for a 1 MiB transcript");
     assert!(bytes < 8192);
     assert!(
         source.lock().unwrap().overview_cache.turns[0]

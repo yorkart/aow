@@ -136,7 +136,7 @@ impl AowManager {
             || !Path::new(requested_path).is_absolute()
         {
             return Err(AowError::Invalid(
-                "worktree path must be an absolute path".to_owned(),
+                aow_i18n::text("validation.worktree_path_must_be_an_absolute_path").to_owned(),
             ));
         }
         let stored = self
@@ -160,12 +160,13 @@ impl AowManager {
             })?;
         if worktree.is_main {
             return Err(AowError::Invalid(
-                "the main worktree cannot be removed".to_owned(),
+                aow_i18n::text("validation.the_main_worktree_cannot_be_removed").to_owned(),
             ));
         }
         if worktree.locked {
             return Err(AowError::Invalid(
-                "locked worktrees must be unlocked before removal".to_owned(),
+                aow_i18n::text("validation.locked_worktrees_must_be_unlocked_before_removal")
+                    .to_owned(),
             ));
         }
         let git_cwd = project

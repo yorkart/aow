@@ -1,9 +1,10 @@
+import { t } from '../lib/i18n';
 import { FolderOpen, PanelsTopLeft, Undo2 } from 'lucide-react';
 
 const actions = {
-  open: { label: '打开', icon: FolderOpen },
-  floating: { label: '打开 · 浮动工作区', icon: PanelsTopLeft },
-  restore: { label: '还原', icon: Undo2 },
+  open: { label: t("aow.open"), icon: FolderOpen },
+  floating: { label: t("aow.open_floating_workspace"), icon: PanelsTopLeft },
+  restore: { label: t("aow.restore"), icon: Undo2 },
 };
 
 export type WorkspaceMenuAction = keyof typeof actions;

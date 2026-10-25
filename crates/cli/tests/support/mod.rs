@@ -47,8 +47,8 @@ fn run_many_with_env(
     environment: &[(&str, &str)],
 ) -> (Output, Vec<(String, Value)>) {
     let directory = tempfile::tempdir().unwrap();
-    std::fs::create_dir(directory.path().join("cli")).unwrap();
-    let listener = UnixListener::bind(directory.path().join("cli/cli.sock")).unwrap();
+    std::fs::create_dir_all(directory.path().join("runtime/cli")).unwrap();
+    let listener = UnixListener::bind(directory.path().join("runtime/cli/cli.sock")).unwrap();
     let server = thread::spawn(move || {
         let mut requests = Vec::new();
         for (status, reply) in replies {

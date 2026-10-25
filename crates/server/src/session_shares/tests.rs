@@ -422,7 +422,7 @@ async fn a_revoked_share_waiting_for_another_reader_cannot_return_cached_content
 fn a_failed_save_does_not_publish_a_share() {
     let dir = tempfile::tempdir().unwrap();
     let shares = SessionShares::persistent(dir.path()).unwrap();
-    std::fs::create_dir(dir.path().join(SHARES_FILE)).unwrap();
+    std::fs::create_dir_all(dir.path().join("data").join(SHARES_FILE)).unwrap();
     assert!(shares.create(locator(dir.path())).is_err());
     assert!(shares.find("codex", "test-session").unwrap().is_none());
 }

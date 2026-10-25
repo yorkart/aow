@@ -1,0 +1,35 @@
+.environment-settings-heading { justify-content:space-between; flex-wrap:wrap; }
+.environment-settings-heading > :first-child { flex:1 1 240px; }
+.environment-settings-heading h3 { margin:0 0 4px; color:var(--aow-text-strong); font-size:13px; font-weight:600; }
+.environment-settings-heading > .environment-settings-buttons { flex:0 1 auto; }
+.environment-settings-buttons { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:6px; max-width:100%; margin-left:auto; }
+.server-environment-groups { min-width:0; container-type:inline-size; }
+.server-environment-actions { position:sticky; top:0; z-index:1; display:flex; flex-direction:column; gap:8px; background:var(--aow-panel); }
+.server-environment-path { color:var(--aow-muted); font:11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace; overflow-wrap:anywhere; }
+.server-environment-table { width:100%; table-layout:fixed; border-collapse:collapse; margin-bottom:18px; color:var(--aow-text); font-size:11px; line-height:1.6; }
+.server-environment-table caption { padding:0 0 8px; color:var(--aow-text-strong); font-size:12px; font-weight:600; text-align:left; }
+.server-environment-table :is(th,td) { padding:8px; border:1px solid var(--aow-line); text-align:left; vertical-align:top; overflow-wrap:anywhere; }
+.server-environment-table thead { background:var(--aow-header); }
+.server-environment-table th { font-weight:500; }
+.server-environment-table th:nth-child(1) { width:25%; }
+.server-environment-table th:nth-child(2) { width:29%; }
+.server-environment-table th:nth-child(3) { width:21%; }
+.server-environment-table th:nth-child(4) { width:25%; }
+.server-environment-table code { font:11px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace; white-space:normal; }
+.project-aow-dialog .server-environment-table label { display:block; }
+.server-environment-table .project-aow-dialog-field { display:flex; flex-direction:column; gap:4px; }
+.server-environment-table .server-environment-error { color:var(--aow-danger); }
+.server-environment-table input[aria-invalid="true"] { border-color:var(--aow-error-border); }
+@container (max-width:540px) {
+  .server-environment-table { display:block; font-size:12px; }
+  .server-environment-table caption { display:block; font-size:13px; }
+  .server-environment-table thead { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+  .server-environment-table tbody { display:block; }
+  .server-environment-table tr { display:flex; flex-direction:column; gap:6px; padding:12px; border:1px solid var(--aow-line); border-bottom:0; }
+  .server-environment-table tr:last-child { border-bottom:1px solid var(--aow-line); }
+  .server-environment-table :is(th,td) { display:block; width:100%; padding:0; border:0; }
+  .server-environment-table th:nth-child(1) { width:100%; }
+  .server-environment-table code { font-size:11px; }
+  .server-environment-table td:nth-child(3)::before { content:"示例："; color:var(--aow-muted); }
+  .server-environment-table td:last-child { padding-top:2px; }
+}

@@ -86,7 +86,7 @@ impl Controller {
             HttpError::new(
                 StatusCode::CONFLICT,
                 "acp_control_required",
-                "ACP session is controlled by another client",
+                aow_i18n::text("http.acp_control_conflict"),
                 None,
             )
         })?;
@@ -186,7 +186,7 @@ impl Controller {
             Err(HttpError::new(
                 StatusCode::CONFLICT,
                 "acp_control_required",
-                "当前页面没有会话控制权，请先接管会话",
+                aow_i18n::text("common.controlRequired"),
                 None,
             ))
         }

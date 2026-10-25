@@ -1019,7 +1019,7 @@ async fn aow_is_served_and_workspace_route_is_not_served() {
             .to_vec(),
     )
     .unwrap();
-    assert!(browser.contains("<th>权限</th>"));
+    assert!(browser.contains("<th>Permissions</th>"));
     assert!(browser.contains("Project AoW"));
     assert!(browser.contains("/aow/"));
 

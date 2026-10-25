@@ -27,7 +27,10 @@ impl ToolText {
                 .into_iter()
                 .rev()
                 .collect();
-            format!("{head}\n… 中间内容已截断 …\n{tail}")
+            aow_i18n::message(
+                "agents.middle_content_truncated",
+                &[("p0", head.to_string()), ("p1", tail.to_string())],
+            )
         } else {
             text
         };

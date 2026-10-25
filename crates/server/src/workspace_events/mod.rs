@@ -108,7 +108,7 @@ impl WorkspaceEvents {
     pub(crate) fn start(&self, aow: AowManager) {
         let mut task = self.0.task.lock().unwrap();
         if task.is_none() {
-            *task = Some(tokio::spawn(run(
+            *task = Some(aow_i18n::spawn(run(
                 aow,
                 self.0.changes.clone(),
                 self.0.reconcile.clone(),

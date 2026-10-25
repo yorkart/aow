@@ -15,7 +15,18 @@ impl AcpService {
         self.0.sync_event(resource)
     }
     pub fn new(host: Arc<dyn AcpHost>, state_directory: Option<PathBuf>) -> Result<Self> {
-        Ok(Self(AgentServerStore::new(host, state_directory)?))
+        Self::with_storage(host, state_directory.clone(), state_directory)
+    }
+    pub fn with_storage(
+        host: Arc<dyn AcpHost>,
+        state_directory: Option<PathBuf>,
+        cache_directory: Option<PathBuf>,
+    ) -> Result<Self> {
+        Ok(Self(AgentServerStore::new(
+            host,
+            state_directory,
+            cache_directory,
+        )?))
     }
     pub async fn agents(&self) -> Result<Vec<AgentInfo>> {
         self.0.agents().await
@@ -73,6 +84,14 @@ impl AcpService {
     }
     pub async fn new_session(&self, connection_id: &str) -> Result<SessionSnapshot> {
         self.0.new_session(connection_id).await
+    }
+    /// Branch an idle, connected session using the agent's negotiated fork capability.
+    pub async fn fork_session(&self, thread_id: &str) -> Result<SessionSnapshot> {
+        self.0.fork_session(thread_id).await
+    }
+    /// Resolve an explicit CLI adapter or the configured default.
+    pub async fn select_agent_id(&self, explicit: Option<&str>) -> Result<String> {
+        self.0.select_agent_id(explicit).await
     }
     /// Persist identity before connecting; the controlling view then calls resume.
     pub async fn prepare_session(&self, agent_id: &str, cwd: PathBuf) -> Result<SessionSnapshot> {
@@ -184,6 +203,14 @@ impl AcpService {
     }
     pub async fn close_session(&self, thread_id: &str) -> Result<()> {
         self.0.close_session(thread_id).await
+    }
+    /// Block admission while the host removes a workspace; unrelated workspaces stay available.
+    pub fn set_workspace_removing(&self, cwd: &str, removing: bool) {
+        self.0.set_workspace_removing(cwd, removing);
+    }
+    /// Remove only AoW-owned state. Never sends session/delete to an agent.
+    pub async fn delete_workspace(&self, cwd: &str) -> Result<usize> {
+        self.0.delete_workspace(cwd).await
     }
     pub async fn delete_session(&self, thread_id: &str) -> Result<()> {
         self.0.delete_session(thread_id).await

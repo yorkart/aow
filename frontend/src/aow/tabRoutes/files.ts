@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import type { DocumentSource } from '../../features/editor/types';
 import type { TabRouteAdapter, TabTarget } from './types';
 import { absolutePath, length, required, url } from './helpers';
@@ -17,7 +18,7 @@ export const fileRoute: TabRouteAdapter<Extract<TabTarget, { type: 'file' }>> = 
   parse(parts, q) {
     length(parts, 1);
     const source = (q.get('source') ?? 'project') as DocumentSource;
-    if (!sources.has(source)) throw new Error('无法识别文件来源。');
+    if (!sources.has(source)) throw new Error(t("aow.unrecognized_file_source"));
     return { type: 'file', workspace: required(q, 'workspace'), path: absolutePath(required(q, 'path')), source };
   },
   url: t => url('file', { workspace: t.workspace, path: t.path, source: t.source }),

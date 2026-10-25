@@ -18,8 +18,10 @@ try {
 
   async function pageFor(t, mobile = false) {
     const context = await browser.newContext({ viewport: { width: mobile ? 390 : 1280, height: mobile ? 844 : 900 }, permissions: ['clipboard-read', 'clipboard-write'] });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => context.close());
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     t.after(() => assert.deepEqual(errors, []));
@@ -49,7 +51,12 @@ try {
         return route.fulfill({ status: 404, json: { message: 'unexpected request' } });
       });
       await page.goto(`${origin}/tests/session-snapshot-preview.html${mobile ? '?mobile' : ''}`);
-      await page.getByRole('button', { name: '分享会话', exact: true }).click();
+      const shareButton = page.getByRole('button', { name: '分享', exact: true });
+      assert.equal(await shareButton.innerText(), '');
+      assert.equal(await shareButton.getAttribute('title'), null);
+      await shareButton.hover();
+      await page.getByRole('tooltip').filter({ hasText: /^分享$/ }).waitFor();
+      await page.getByRole('button', { name: '分享', exact: true }).click();
       await page.getByText('持有链接的人无需登录', { exact: false }).waitFor();
       await page.getByRole('button', { name: '创建并复制链接' }).click();
       await page.getByText('链接已复制', { exact: true }).waitFor();
@@ -58,7 +65,7 @@ try {
       assert.equal(await page.locator('.session-share-dialog').evaluate(node => node.getBoundingClientRect().width <= innerWidth), true);
       await page.screenshot({ path: join(screenshotDir, `dialog-${mobile ? 'mobile' : 'desktop'}.png`) });
       await page.getByRole('button', { name: '关闭分享窗口' }).click();
-      await page.getByRole('button', { name: '分享会话', exact: true }).click();
+      await page.getByRole('button', { name: '分享', exact: true }).click();
       await page.getByRole('button', { name: '复制链接', exact: true }).click();
       await page.getByText('链接已复制', { exact: true }).waitFor();
       assert.equal(creations, 1);
@@ -91,7 +98,7 @@ try {
       await page.goto(`${origin}/share/public-token`);
       await page.getByText('会话分享 · 只读').waitFor();
       await page.locator('.project-aow-snapshot-conclusion').first().waitFor();
-      assert.equal(await page.getByRole('button', { name: '分享会话', exact: true }).count(), 0);
+      assert.equal(await page.getByRole('button', { name: '分享', exact: true }).count(), 0);
       assert.equal(await page.locator('.aow-auth').count(), 0);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       assert.equal(await page.evaluate(() => window.__unsafe), undefined);

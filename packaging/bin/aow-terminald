@@ -6,7 +6,7 @@ runtime_root=${AOW_RUNTIME_ROOT:-${HOME:?HOME must be set}/.local/lib/aow}
 active_release=$runtime_root/active/terminald
 
 if [ ! -d "$active_release" ]; then
-    printf 'error: no active AoW terminald release; run the AoW installer and enter y to activate terminald\n' >&2
+    printf 'error: no active AoW terminald release; run the AoW installer without --skip-terminald to activate terminald\n' >&2
     exit 1
 fi
 
@@ -29,10 +29,8 @@ fi
 
 if [ -n "${AOW_TERMINALD_SOCKET:-}" ]; then
     socket=$AOW_TERMINALD_SOCKET
-elif [ -n "${XDG_RUNTIME_DIR:-}" ]; then
-    socket=$XDG_RUNTIME_DIR/aow-terminald/terminald.sock
 else
-    socket=/tmp/aow-terminald-$(id -u)/terminald.sock
+    socket=${AOW_STATE_DIR:-${HOME:?HOME must be set}/.aow}/runtime/terminald/terminald.sock
 fi
 
 exec "$terminald" --socket "$socket" --vt-node "$node"

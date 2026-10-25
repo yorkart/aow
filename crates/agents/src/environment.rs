@@ -47,7 +47,7 @@ fn validate_agent_environment(environment: &BTreeMap<String, String>) -> Result<
                     && value.len() <= 32 * 1024
                     && !value.contains('\0')
             }),
-        "Agent 环境变量配置无效"
+        aow_i18n::message("agents.invalid_agent_environment_configuration", &[])
     );
     Ok(())
 }
@@ -60,15 +60,25 @@ pub async fn load_agent_environment_from(
 ) -> Result<BTreeMap<String, String>> {
     let path = config_dir.join(AGENTS_FILE);
     let document: AgentRegistryDocument = match tokio::fs::read(&path).await {
-        Ok(bytes) => serde_json::from_slice(&bytes)
-            .with_context(|| format!("无法读取 Agent 环境变量配置：{}", path.display()))?,
+        Ok(bytes) => serde_json::from_slice(&bytes).with_context(|| {
+            aow_i18n::message(
+                "agents.unable_to_read_agent_environment_configuration",
+                &[("auto0", format!("{}", path.display()))],
+            )
+        })?,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(BTreeMap::new()),
-        Err(error) => return Err(error).context("无法读取 Agent 环境变量配置"),
+        Err(error) => {
+            return Err(error).context(aow_i18n::text(
+                "agents.unable_to_read_agent_environment_configuration_2",
+            ));
+        }
     };
     ensure!(
         document.version == REGISTRY_VERSION,
-        "不支持的 Agent 配置版本：{}",
-        document.version
+        aow_i18n::message(
+            "agents.unsupported_agent_configuration_version",
+            &[("auto0", format!("{}", document.version))]
+        )
     );
     let environment = document
         .items
@@ -83,19 +93,27 @@ pub async fn load_agent_environment_from(
 pub fn normalize_path(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
     ensure!(
         !paths.is_empty() && paths.len() <= 512,
-        "PATH 必须包含 1–512 个目录"
+        aow_i18n::message("agents.path_must_contain_1_512_directories", &[])
     );
     let mut seen = HashSet::new();
     let mut normalized = Vec::new();
     for path in paths {
-        let text = path.to_str().context("PATH 目录必须是有效的 UTF-8")?;
+        let text = path.to_str().context(aow_i18n::text(
+            "agents.path_directories_must_be_valid_utf_8",
+        ))?;
         ensure!(
             path.is_absolute() && !text.contains(':') && !text.chars().any(char::is_control),
-            "PATH 每项必须是绝对目录路径，不能包含冒号或控制字符：{text}"
+            aow_i18n::message(
+                "agents.each_path_entry_must_be_an_absolute_directory_without",
+                &[("p0", text.to_string())]
+            )
         );
         ensure!(
             !path.is_file(),
-            "PATH 应填写目录，不能填写可执行文件：{text}"
+            aow_i18n::message(
+                "agents.path_must_contain_directories_not_executable_files",
+                &[("p0", text.to_string())]
+            )
         );
         if seen.insert(path.clone()) {
             normalized.push(path);
@@ -103,16 +121,21 @@ pub fn normalize_path(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
     }
     ensure!(
         path_value(&normalized)?.len() <= 64 * 1024,
-        "PATH 不能超过 64 KiB"
+        aow_i18n::message("agents.path_must_not_exceed_64_kib", &[])
     );
     Ok(normalized)
 }
 
 pub fn path_value(paths: &[PathBuf]) -> Result<String> {
     std::env::join_paths(paths)
-        .context("无法生成 PATH")?
+        .context(aow_i18n::text("agents.unable_to_construct_path"))?
         .into_string()
-        .map_err(|_| anyhow::anyhow!("PATH 目录必须是有效的 UTF-8"))
+        .map_err(|_| {
+            anyhow::anyhow!(aow_i18n::message(
+                "agents.path_directories_must_be_valid_utf_8",
+                &[]
+            ))
+        })
 }
 
 /// Discover defaults only. Saved Settings always take precedence over discovery.
@@ -158,30 +181,40 @@ pub async fn discover_path() -> Vec<PathBuf> {
 }
 
 /// Reload once per execution, including when the Web service is offline.
-/// Missing settings (including pre-upgrade installations) use local discovery;
+/// Missing settings use local discovery;
 /// malformed settings fail explicitly instead of silently selecting another runtime.
 pub async fn load_path(state_dir: &Path) -> Result<Vec<PathBuf>> {
-    load_path_from(&aow_config::configuration_directory(state_dir)?).await
+    load_path_from(state_dir).await
 }
 
-/// Use the same configuration selection as the task loaded by the runner.
+/// Read from the same application home as the task loaded by the runner.
 pub async fn load_path_from(config_dir: &Path) -> Result<Vec<PathBuf>> {
     let path = config_dir.join(SETTINGS_FILE);
     match tokio::fs::read(&path).await {
         Ok(bytes) => {
-            let document: SettingsDocument = serde_json::from_slice(&bytes)
-                .with_context(|| format!("无法读取执行环境配置：{}", path.display()))?;
+            let document: SettingsDocument = serde_json::from_slice(&bytes).with_context(|| {
+                aow_i18n::message(
+                    "agents.unable_to_read_execution_environment_configuration",
+                    &[("auto0", format!("{}", path.display()))],
+                )
+            })?;
             ensure!(
                 document.version == 1,
-                "不支持的 AoW 配置版本：{}",
-                document.version
+                aow_i18n::message(
+                    "agents.unsupported_aow_configuration_version",
+                    &[("auto0", format!("{}", document.version))]
+                )
             );
             if let Some(paths) = document.execution_path {
                 return normalize_path(paths);
             }
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => return Err(error).context("无法读取执行环境配置"),
+        Err(error) => {
+            return Err(error).context(aow_i18n::text(
+                "agents.unable_to_read_execution_environment_configuration_2",
+            ));
+        }
     }
     normalize_path(discover_path().await)
 }

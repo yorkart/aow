@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { appUrl } from '../../lib/basePath';
 import { terminalApi } from '../../features/terminals/terminalApi';
 import { aowApi } from '../aowApi';
@@ -22,7 +23,7 @@ export function parseTabUrl(url: URL): TabTarget | undefined {
   const adapter = registry.get(parts[0] as TabTarget['type']);
   if (adapter) return adapter.parse(parts, url.searchParams);
   if (parts.length === 1 && parts[0]) return { type: 'terminal', tabId: parts[0] }; // Legacy notification links.
-  throw new Error('无法识别此 Tab 链接。');
+  throw new Error(t("aow.unrecognized_tab_link"));
 }
 export const tabTargetUrl = (target: TabTarget) => registry.get(target.type)!.url(target);
 export const aowTabUrl = (tabId: string) => tabTargetUrl({ type: 'terminal', tabId });
@@ -47,7 +48,7 @@ export async function resolveTabTarget(target: TabTarget, signal: AbortSignal): 
       return { target, workspacePath: terminal.workspace_root, terminal };
     }
   }
-  if (!context) throw new Error('目标 Tab 所属工作区不存在或已被移除。');
+  if (!context) throw new Error(t("aow.the_workspace_for_this_tab_no_longer_exists_or"));
   const resolved = await registry.get(target.type)!.resolve(target, context, signal);
   signal.throwIfAborted();
   return { target, workspacePath: context.worktree.path, terminal, ...located, ...resolved };

@@ -1,7 +1,8 @@
+import { t } from '../../lib/i18n';
 import type { ReactNode } from 'react';
 import './composer-status.css';
 
-export function ComposerStatus({ icon, title, description, actions, children, label = '会话状态', alert = false }: {
+export function ComposerStatus({ icon, title, description, actions, children, label = t("components.session_status"), alert = false }: {
   icon: ReactNode; title: string; description?: ReactNode; actions?: ReactNode; children?: ReactNode; label?: string; alert?: boolean;
 }) {
   return <section className="conversation-composer-status" aria-label={label}>

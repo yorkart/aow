@@ -47,7 +47,7 @@ pub(super) async fn enrich(
             running.push((id, cwd, path));
         }
     }
-    let Ok(processes) = tokio::task::spawn_blocking(move || {
+    let Ok(processes) = aow_i18n::spawn_blocking(move || {
         running
             .into_iter()
             .filter_map(|(id, cwd, path)| {

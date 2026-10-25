@@ -25,6 +25,7 @@ build: build-frontend test-vt-worker
 
 test: test-vt-worker
     if [ "$(uname -s)" = Darwin ]; then TMPDIR="$(node -p 'require("node:fs").realpathSync(require("node:os").tmpdir())')" cargo test --workspace -- --test-threads=4; else cargo test --workspace; fi
+    node --test git-platform-providers/tests/*.test.mjs
     node --test scripts/tests/*.test.mjs
     cd frontend && npm ci --ignore-scripts --no-audit --no-fund
     cd frontend && npm run typecheck
@@ -42,4 +43,4 @@ run-dev:
     cd frontend && npm run dev
 
 run-terminald: build-vt-worker
-    vt_node=$(command -v node) || { printf '%s\n' 'error: Node.js 20 or newer is required; install Node.js 20+ first' >&2; exit 1; }; if [ -n "${XDG_RUNTIME_DIR:-}" ]; then terminal_runtime_dir="$XDG_RUNTIME_DIR/aow-terminald"; else terminal_runtime_dir="/tmp/aow-terminald-$(id -u)"; fi; install -d -m 700 "$terminal_runtime_dir"; cargo run -p aow-terminald -- --socket "$terminal_runtime_dir/terminald.sock" --vt-node "$vt_node"
+    vt_node=$(command -v node) || { printf '%s\n' 'error: Node.js 20 or newer is required; install Node.js 20+ first' >&2; exit 1; }; terminal_runtime_dir="${AOW_STATE_DIR:-$HOME/.aow}/runtime/terminald"; install -d -m 700 "$terminal_runtime_dir"; cargo run -p aow-terminald -- --socket "$terminal_runtime_dir/terminald.sock" --vt-node "$vt_node"

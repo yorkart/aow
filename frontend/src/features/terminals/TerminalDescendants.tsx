@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useId, useState, type ReactNode } from 'react';
 import { ChevronRight } from 'lucide-react';
 import type { AowWorktree } from '../../aow/types';
@@ -56,10 +57,10 @@ function Descendant({ entry, ancestors, ...props }: Props & { entry: Entry; ance
   const visited = new Set([...ancestors, key]);
   const children = descendants([key], visited, props.index);
   const worktree = props.worktrees?.find(worktree => worktree.path === info.cwd);
-  const branch = worktree?.branch || (worktree?.detached ? 'detached' : info.cwd.split('/').filter(Boolean).at(-1)) || info.cwd;
+  const branch = worktree?.branch || (worktree?.detached ? t("git.detached_head") : info.cwd.split('/').filter(Boolean).at(-1)) || info.cwd;
   const title = tab && pane ? (tab.panes.length === 1 ? terminalTabPresentation(tab, props.detectedAgents, props.titles).title
     : terminalPaneTitle(pane, props.detectedAgents, props.titles)) : info.title;
-  const label = `${branch ? `${branch} · ` : ''}${info.kind === 'acp' ? 'ACP · ' : ''}${title}${info.deleted ? '（已删除）' : ''}`;
+  const label = `${branch ? `${branch} · ` : ''}${info.kind === 'acp' ? 'ACP · ' : ''}${title}${info.deleted ? t("common.deleted") : ''}`;
   const open = async () => {
     setError('');
     if (tab && pane && props.onOpen) { props.onOpen(tab, pane.id); return; }
@@ -73,7 +74,7 @@ function Descendant({ entry, ancestors, ...props }: Props & { entry: Entry; ance
   };
   return <li className="terminal-descendant" data-instance={key} data-pane-id={info.kind === 'terminal' ? info.id : undefined}>
     <div className={`terminal-descendant-row${tab?.id === props.activeId && props.activeId ? ' active' : ''}`}>
-      {children.length ? <button type="button" className="terminal-children-toggle" aria-label={`${expanded ? '收起' : '展开'} ${label} 的子实例`}
+      {children.length ? <button type="button" className="terminal-children-toggle" aria-label={t("terminals.child_instances_of", { value0: expanded ? t("aow.collapse") : t("aow.expand"), value1: label })}
         aria-expanded={expanded} aria-controls={bodyId} onClick={() => setExpanded(value => !value)}>
         <ChevronRight className={expanded ? 'expanded' : undefined} />
       </button> : <span className="terminal-children-spacer" />}
@@ -98,7 +99,7 @@ export function InstanceDescendants({ roots, title, tabId, children: row, ...pro
   const children = descendants(ids, ancestors, props.index);
   return <div className="terminal-family" data-tab-id={tabId} data-instance={ids[0]}>
     <div className={`terminal-family-root${children.length ? ' has-children' : ''}`}>
-      {children.length ? <button type="button" className="terminal-children-toggle" aria-label={`${expanded ? '收起' : '展开'} ${title} 的子实例`}
+      {children.length ? <button type="button" className="terminal-children-toggle" aria-label={t("terminals.child_instances_of", { value0: expanded ? t("aow.collapse") : t("aow.expand"), value1: title })}
         aria-expanded={expanded} aria-controls={bodyId} onClick={() => setExpanded(value => !value)}>
         <ChevronRight className={expanded ? 'expanded' : undefined} />
       </button> : null}

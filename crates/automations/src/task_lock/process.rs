@@ -107,7 +107,7 @@ pub(super) fn boot_identity() -> Result<String> {
                 0,
             )
         } == 0,
-        "无法读取系统启动时间"
+        aow_i18n::message("automations.unable_to_read_system_boot_time", &[])
     );
     Ok(String::from_utf8(boot[..size].to_vec())?
         .trim_end_matches('\0')
@@ -130,13 +130,19 @@ fn process_info(pid: i32) -> Result<Option<ProcessInfo>> {
     };
     let fields = text
         .rsplit_once(") ")
-        .context("进程状态无效")?
+        .context(aow_i18n::text("automations.invalid_process_state"))?
         .1
         .split_whitespace()
         .collect::<Vec<_>>();
-    ensure!(fields.len() > 19, "进程状态不完整");
+    ensure!(
+        fields.len() > 19,
+        aow_i18n::message("automations.incomplete_process_state", &[])
+    );
     let ticks = unsafe { libc::sysconf(libc::_SC_CLK_TCK) };
-    ensure!(ticks > 0, "无法读取进程时钟频率");
+    ensure!(
+        ticks > 0,
+        aow_i18n::message("automations.unable_to_read_process_clock_frequency", &[])
+    );
     Ok(Some(ProcessInfo {
         group: fields[2].parse()?,
         started: fields[19].parse::<u64>()? * (1_000_000_000 / ticks as u64),
@@ -163,7 +169,10 @@ fn process_info(pid: i32) -> Result<Option<ProcessInfo>> {
         }
         return Err(error.into());
     }
-    ensure!(result == size, "进程状态不完整");
+    ensure!(
+        result == size,
+        aow_i18n::message("automations.incomplete_process_state", &[])
+    );
     Ok(Some(ProcessInfo {
         group: info.pbi_pgid as i32,
         started: info.pbi_start_tvsec * 1_000_000_000 + info.pbi_start_tvusec * 1000,
@@ -173,7 +182,10 @@ fn process_info(pid: i32) -> Result<Option<ProcessInfo>> {
 
 pub(super) fn group_alive(process: &Process) -> Result<bool> {
     let group = process.process_group;
-    ensure!(group > 1, "任务锁中的进程组无效");
+    ensure!(
+        group > 1,
+        aow_i18n::message("automations.invalid_process_group_in_task_lock", &[])
+    );
     if unsafe { libc::kill(-group, 0) } != 0 {
         let error = std::io::Error::last_os_error();
         match error.raw_os_error() {
@@ -219,7 +231,10 @@ fn group_pids(group: i32) -> Result<Vec<i32>> {
     loop {
         let size =
             unsafe { libc::proc_listpids(PROC_PGRP_ONLY, group as u32, std::ptr::null_mut(), 0) };
-        ensure!(size >= 0, "无法读取进程组");
+        ensure!(
+            size >= 0,
+            aow_i18n::message("automations.unable_to_read_process_group", &[])
+        );
         let mut pids = vec![0i32; size as usize / 4 + 32];
         let capacity = pids.len() * 4;
         let bytes = unsafe {
@@ -230,7 +245,10 @@ fn group_pids(group: i32) -> Result<Vec<i32>> {
                 capacity as i32,
             )
         };
-        ensure!(bytes >= 0, "无法读取进程组");
+        ensure!(
+            bytes >= 0,
+            aow_i18n::message("automations.unable_to_read_process_group", &[])
+        );
         if (bytes as usize) < capacity {
             pids.truncate(bytes as usize / 4);
             return Ok(pids);

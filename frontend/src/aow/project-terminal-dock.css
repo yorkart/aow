@@ -1,0 +1,12 @@
+.project-terminal-dock { position:relative; flex:0 1 auto; min-height:80px; max-height:65%; display:flex; flex-direction:column; border-top:1px solid var(--aow-control-line); background:var(--aow-surface); }
+.project-terminal-dock[hidden] { display:none; }
+.project-terminal-dock-resize { position:absolute; top:-3px; left:0; right:0; height:6px; z-index:5; cursor:row-resize; touch-action:none; }
+.project-terminal-dock-resize::after { content:""; position:absolute; left:0; right:0; top:2px; height:1px; background:transparent; }
+.project-terminal-dock-resize:hover::after,.project-terminal-dock-resize:active::after,.project-terminal-dock-resize:focus-visible::after { background:var(--accent); }
+.project-terminal-dock-resize:focus-visible { outline:none; }
+.project-terminal-dock-host,.project-terminal-dock-renderer { flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
+.project-terminal-dock-renderer > .terminal-workspace { flex:1; min-height:0; }
+.project-terminal-dock-controls { display:contents; }
+.operation-status .project-terminal-dock-toggle[aria-expanded="true"] { --aow-icon-foreground:var(--aow-icon-active); background:transparent; }
+.project-terminal-dock-error,.project-terminal-dock-loading { display:flex; align-items:center; gap:8px; padding:8px; }
+.project-terminal-dock-error { color:var(--aow-text); }

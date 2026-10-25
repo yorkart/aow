@@ -189,9 +189,9 @@ async fn unavailable_result_preserves_process_status_and_failed_runs_have_no_res
         let error = store.read_run_result(&run).unwrap_err().to_string();
         assert!(
             error.contains(if exit == 0 {
-                "未找到本次运行的会话记录"
+                "No session record found for this run"
             } else {
-                "任务尚未成功结束"
+                "Task has not completed successfully"
             }),
             "{error}"
         );
@@ -442,7 +442,7 @@ async fn hermes_without_a_durable_session_id_does_not_claim_success() {
     task.input.agent = AgentKind::Hermes;
     let run = execute(&store, &task).await;
     assert_eq!(run.status, RunStatus::Failed);
-    assert!(run.message.unwrap().contains("会话 ID"));
+    assert!(run.message.unwrap().contains("session ID"));
 }
 
 #[tokio::test]
@@ -681,7 +681,7 @@ async fn missing_session_nonzero_exit_and_paused_tasks_have_distinct_results() {
     let (_directory, store, mut task) = fixture("cat >/dev/null");
     let missing = execute(&store, &task).await;
     assert_eq!(missing.status, RunStatus::Failed);
-    assert!(missing.message.unwrap().contains("会话 ID"));
+    assert!(missing.message.unwrap().contains("session ID"));
     executable(
         &task.launch.executable,
         "cat >/dev/null\nprintf 'authentication failed' >&2\nexit 17",
@@ -1684,7 +1684,11 @@ async fn dynamic_manual_runs_require_a_directory_and_keep_the_template_reusable(
         .dispatch(&store, &task, RunSource::Manual)
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("执行时指定工作区"));
+    assert!(
+        error
+            .to_string()
+            .contains("workspace directory for this run")
+    );
     for name in ["first", "second"] {
         let cwd = task.repository_path.join(name);
         fs::create_dir(&cwd).unwrap();
@@ -1984,7 +1988,7 @@ async fn hosted_runner_uses_flag_without_context_and_records_concurrency_rejecti
             .unwrap(),
     )
     .unwrap();
-    assert!(prompt.starts_with("你正在执行一次审查任务，请遵循任务原有的执行和输出要求。审查通过时，在最终输出的最后另起一行，单独追加标记：[AOW_HOSTING_DONE]。\n\n审查任务：\nReview 检查 🧪 $HOME `literal`, retain the configured JSON output\n"));
+    assert!(prompt.starts_with("You are performing a review. Follow the original task's execution and output requirements. When the review passes, append this marker alone on a new line at the end of the final output: [AOW_HOSTING_DONE].\n\nReview task:\nReview 检查 🧪 $HOME `literal`, retain the configured JSON output\n"));
     assert!(!prompt.contains("审查上下文："));
     assert!(!prompt.contains("hosting-context.json"));
     assert!(!prompt.contains("{{task}}"));
@@ -2031,7 +2035,7 @@ async fn hosted_runner_uses_flag_without_context_and_records_concurrency_rejecti
     );
     let skipped = store.read_run(&task.id, &busy_id).unwrap().unwrap();
     assert_eq!(skipped.status, RunStatus::Skipped);
-    assert!(skipped.message.unwrap().contains("并发限制"));
+    assert!(skipped.message.unwrap().contains("concurrency limit"));
     assert!(
         store
             .take_manual_request(&task.id, &busy_id)

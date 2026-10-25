@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n';
 import { appUrl } from '../lib/basePath';
 import { WorkspaceMarkdownProvider } from '../features/files/WorkspaceMarkdown';
 import { LogoutButton } from '../features/auth/LogoutButton';
@@ -28,11 +29,11 @@ const MobilePullRequests = lazy(() => import('../features/pr/MobilePullRequests'
 const MobileSettings = lazy(() => import('./MobileSettings').then(module => ({ default: module.MobileSettings })));
 
 const navigation = [
-  { id: 'terminal', label: '终端', icon: TerminalSquare },
-  { id: 'sessions', label: 'Conversation', icon: MessageSquare },
+  { id: 'terminal', label: t("terminals.terminal"), icon: TerminalSquare },
+  { id: 'sessions', label: t("navigation.conversation"), icon: MessageSquare },
   { id: 'acp', label: 'ACP', icon: Sparkles },
-  { id: 'automations', label: '自动化', icon: CalendarClock },
-  { id: 'files', label: '文件', icon: FolderOpen },
+  { id: 'automations', label: t("aow.automations"), icon: CalendarClock },
+  { id: 'files', label: t("aow.files"), icon: FolderOpen },
   { id: 'git', label: 'Git', icon: GitBranch },
   { id: 'pull-requests', label: 'PR', icon: GitPullRequest },
 ] as const;
@@ -52,23 +53,23 @@ export function MobileAow({ initialEntry }: { initialEntry?: ResolvedTab } = {})
   const settingsButton = useRef<HTMLButtonElement>(null);
   const project = projects.data?.find((item) => item.worktrees.some((worktree) => worktree.path === route.workspace));
   const worktree = project?.worktrees.find((item) => item.path === route.workspace);
-  useMobileViewport(project?.name ?? '项目');
+  useMobileViewport(project?.name ?? t("automations.project"));
   const goHome = () => navigate({});
   const fallback = { workspace: route.workspace, view: route.view, ...(route.view === 'files' && route.notes ? { notes: route.notes } : {}) };
   return <div className="mobile-app">
     <div className="mobile-main" inert={showSettings}>
       <header className="mobile-app-header">
-        {route.view === 'inbox' ? <><button className="mobile-icon-button" aria-label="返回项目列表" onClick={goHome}><ArrowLeft size={21} /></button><strong>Inbox</strong></> : worktree ? <>
-          <button className="mobile-icon-button" aria-label="返回项目列表" onClick={goHome}><ArrowLeft size={21} /></button>
-          <button className="mobile-brand-title" onClick={goHome}><strong>{project?.name}</strong><span>{worktree.branch || 'Detached HEAD'}</span></button>
+        {route.view === 'inbox' ? <><button className="mobile-icon-button" aria-label={t("mobile.back_to_projects")} onClick={goHome}><ArrowLeft size={21} /></button><strong>{t("navigation.inbox")}</strong></> : worktree ? <>
+          <button className="mobile-icon-button" aria-label={t("mobile.back_to_projects")} onClick={goHome}><ArrowLeft size={21} /></button>
+          <button className="mobile-brand-title" onClick={goHome}><strong>{project?.name}</strong><span>{worktree.branch || t("git.detached_head")}</span></button>
         </> : <MobileNodeSwitcher addresses={nodeAddresses} />}
         <div className="mobile-header-actions" ref={setHeaderActions} />
-        {route.view !== 'inbox' && <button className="mobile-icon-button" aria-label="Inbox" title="Inbox" onClick={() => navigate({ view: 'inbox' })}><Inbox size={20} /></button>}
-        {!worktree && <button ref={settingsButton} className="mobile-icon-button" aria-label="设置" title="设置" onClick={() => setShowSettings(true)}><Settings size={20} /></button>}
+        {route.view !== 'inbox' && <button className="mobile-icon-button" aria-label={t("navigation.inbox")} title={t("navigation.inbox")} onClick={() => navigate({ view: 'inbox' })}><Inbox size={20} /></button>}
+        {!worktree && <button ref={settingsButton} className="mobile-icon-button" aria-label={t("settings.settings")} title={t("settings.settings")} onClick={() => setShowSettings(true)}><Settings size={20} /></button>}
         {!worktree && <LogoutButton className="mobile-icon-button" compact />}
       </header>
       {route.view === 'inbox' ? <Suspense fallback={<MobileState loading />}><MobileInbox projects={projects.data ?? []} navigate={navigate} /></Suspense> : route.workspace ? project && worktree ? <MobileWorkspace initialTabId={route.terminal} key={worktree.path} project={project} worktree={worktree} route={route} navigate={navigate} back={() => back(fallback)} headerActions={headerActions} />
-        : <div className="mobile-home"><MobileState loading={projects.loading} error={projects.error} retry={projects.reload} empty="工作区不存在或已被移除。" /><button className="mobile-button" onClick={goHome}><Home size={17} />返回项目</button></div>
+        : <div className="mobile-home"><MobileState loading={projects.loading} error={projects.error} retry={projects.reload} empty={t("mobile.workspace_does_not_exist_or_has_been_removed")} /><button className="mobile-button" onClick={goHome}><Home size={17} />{t("mobile.back_to_project")}</button></div>
         : <MobileHome projects={projects.data?.filter(project => !project.builtin) ?? []} loading={projects.loading} error={projects.error} reload={projects.reload} navigate={navigate} />}
     </div>
     {showSettings && <Suspense fallback={<div className="mobile-settings-loading"><MobileState loading /></div>}>
@@ -102,29 +103,29 @@ function MobileHome({ projects, loading, error, reload, navigate }: {
     return next;
   });
   return <main className="mobile-home mobile-scroll" ref={scroll}>
-    <div className="mobile-home-heading"><div><span className="mobile-eyebrow">WORKSPACE</span><h1>你的项目</h1></div><MobileRefresh reload={() => { reload(); pinnedState.reload(); }} loading={loading || pinnedState.loading} /></div>
-    <label className="mobile-search"><Search size={18} /><input type="search" aria-label="搜索项目或分支" placeholder="搜索项目、分支…" value={query} onChange={(event) => { setQuery(event.target.value); saveMobileValue('project-search', event.target.value); }} /></label>
-    {(!query || pinnedEntries.length > 0) && <section className="mobile-pinned" aria-label="Pinned">
-      <div className="mobile-home-section"><h3 className="mobile-section-label"><Pin size={13} />Pinned</h3><span>{pinnedEntries.length}</span></div>
+    <div className="mobile-home-heading"><div><span className="mobile-eyebrow">{t("navigation.workspace_label")}</span><h1>{t("mobile.your_projects")}</h1></div><MobileRefresh reload={() => { reload(); pinnedState.reload(); }} loading={loading || pinnedState.loading} /></div>
+    <label className="mobile-search"><Search size={18} /><input type="search" aria-label={t("mobile.search_projects_or_branches")} placeholder={t("mobile.search_projects_branches")} value={query} onChange={(event) => { setQuery(event.target.value); saveMobileValue('project-search', event.target.value); }} /></label>
+    {(!query || pinnedEntries.length > 0) && <section className="mobile-pinned" aria-label={t("navigation.pinned")}>
+      <div className="mobile-home-section"><h3 className="mobile-section-label"><Pin size={13} />{t("navigation.pinned")}</h3><span>{pinnedEntries.length}</span></div>
       {pinnedState.error && <p className="mobile-inline-error" role="alert">{pinnedState.error}</p>}
       {pinnedEntries.length > 0 ? <div className="mobile-project-card">
         {pinnedEntries.map(({ project, worktree }) => <MobileWorktreeRow key={worktree.path} project={project} worktree={worktree} pinned showProject open={open} togglePin={togglePin} />)}
-      </div> : <p className="mobile-pinned-empty">{pinnedState.loading ? '正在同步置顶…' : '点击工作区右侧的图钉，置顶常用工作区。'}</p>}
+      </div> : <p className="mobile-pinned-empty">{pinnedState.loading ? t("mobile.syncing_pinned_state") : t("mobile.click_the_pin_beside_a_workspace_to_keep_it")}</p>}
     </section>}
-    {!query && recent && <section className="mobile-recent"><h3 className="mobile-section-label">继续上次的工作</h3><button className="mobile-resume-card" onClick={() => open(recent.path)}>
-      <div className="mobile-resume-icon"><WorktreeIcon icon={recent.icon} size={24} style={{ color: worktreeColorValues[recent.color ?? 'default'] }} /></div><div className="mobile-row-main"><strong>{recentProject!.name}</strong><span><GitBranch size={13} />{recent.branch || 'Detached HEAD'}</span></div><ArrowUpRight size={20} />
+    {!query && recent && <section className="mobile-recent"><h3 className="mobile-section-label">{t("mobile.continue_your_last_work")}</h3><button className="mobile-resume-card" onClick={() => open(recent.path)}>
+      <div className="mobile-resume-icon"><WorktreeIcon icon={recent.icon} size={24} style={{ color: worktreeColorValues[recent.color ?? 'default'] }} /></div><div className="mobile-row-main"><strong>{recentProject!.name}</strong><span><GitBranch size={13} />{recent.branch || t("git.detached_head")}</span></div><ArrowUpRight size={20} />
     </button></section>}
-    <div className="mobile-home-section"><h3 className="mobile-section-label">全部项目</h3><span>{projects.length}</span></div>
-    <MobileState error={error} loading={loading && !projects.length} retry={reload} empty={!loading && !filtered.length ? (query ? '没有匹配的项目或分支。' : '暂无项目，请先在桌面端注册工作区。') : undefined} />
+    <div className="mobile-home-section"><h3 className="mobile-section-label">{t("mobile.all_projects")}</h3><span>{projects.length}</span></div>
+    <MobileState error={error} loading={loading && !projects.length} retry={reload} empty={!loading && !filtered.length ? (query ? t("mobile.no_matching_projects_or_branches") : t("mobile.no_projects_yet_register_a_workspace_on_desktop_first")) : undefined} />
     {filtered.map((project) => <section className="mobile-project-card" key={project.id}>
-      <header><div className="mobile-project-icon"><ProjectIcon project={project} size={28} /></div><div className="mobile-row-main"><h2>{project.name}</h2><span>{project.worktrees.length} 个工作区</span></div></header>
+      <header><div className="mobile-project-icon"><ProjectIcon project={project} size={28} /></div><div className="mobile-row-main"><h2>{project.name}</h2><span>{project.worktrees.length} {t("mobile.workspaces")}</span></div></header>
       {project.error && <p className="mobile-inline-error">{project.error}</p>}
       {project.worktrees.map((worktree) => <MobileWorktreeRow key={worktree.path} project={project} worktree={worktree} pinned={pinned.has(worktree.path)} open={open} togglePin={togglePin} />)}
     </section>)}
-    {projects.length > 0 && <p className="mobile-home-footer">{projects.reduce((total, project) => total + project.worktrees.length, 0)} 个工作区 · 随时查看，继续工作</p>}
+    {projects.length > 0 && <p className="mobile-home-footer">{projects.reduce((total, project) => total + project.worktrees.length, 0)} {t("mobile.workspaces_check_in_and_continue_working_anytime")}</p>}
     <footer className="mobile-home-links">
-      <a href={appUrl('/?ui=desktop')}><ArrowUpRight size={15} />打开桌面版</a>
-      {window.aowHost?.close && <button onClick={() => window.aowHost?.close?.()}><X size={15} />关闭工作台</button>}
+      <a href={appUrl('/?ui=desktop')}><ArrowUpRight size={15} />{t("mobile.open_desktop_version")}</a>
+      {window.aowHost?.close && <button onClick={() => window.aowHost?.close?.()}><X size={15} />{t("mobile.close_workspace")}</button>}
     </footer>
   </main>;
 }
@@ -132,14 +133,14 @@ function MobileHome({ projects, loading, error, reload, navigate }: {
 function MobileWorktreeRow({ project, worktree, pinned, showProject, open, togglePin }: {
   project: AowProject; worktree: AowWorktree; pinned: boolean; showProject?: boolean; open: (path: string) => void; togglePin: (path: string) => void;
 }) {
-  const branch = worktree.branch || 'Detached HEAD';
+  const branch = worktree.branch || t("git.detached_head");
   const label = `${project.name} · ${branch}`;
   return <div className="mobile-worktree-item">
     <button className="mobile-worktree-row" onClick={() => open(worktree.path)}>
       <WorktreeIcon icon={worktree.icon} size={17} style={{ color: worktreeColorValues[worktree.color ?? 'default'] }} /><div className="mobile-row-main"><strong>{branch}</strong><span>{showProject ? `${project.name} · ` : ''}{worktree.path.split('/').filter(Boolean).pop()}</span></div>
-      {worktree.is_main && <span className="mobile-badge">主目录</span>}<ChevronRight size={15} />
+      {worktree.is_main && <span className="mobile-badge">{t("mobile.home_directory")}</span>}<ChevronRight size={15} />
     </button>
-    <button className="mobile-pin-button" aria-label={`${pinned ? '取消置顶' : '置顶'} ${label}`} aria-pressed={pinned} title={pinned ? '取消置顶' : '置顶'} onClick={() => togglePin(worktree.path)}>
+    <button className="mobile-pin-button" aria-label={`${pinned ? t("mobile.unpin") : t("mobile.pin")} ${label}`} aria-pressed={pinned} title={pinned ? t("mobile.unpin") : t("mobile.pin")} onClick={() => togglePin(worktree.path)}>
       {pinned ? <PinOff size={16} /> : <Pin size={16} />}
     </button>
   </div>;
@@ -165,7 +166,7 @@ function MobileWorkspace({ project, worktree, route, navigate, back, headerActio
         </Suspense>
       </div>)}
     </div>
-    <nav className="mobile-bottom-nav" aria-label="工作区导航">
+    <nav className="mobile-bottom-nav" aria-label={t("mobile.workspace_navigation")}>
       {navigation.map(({ id, label, icon: Icon }) => <button key={id} aria-label={label} title={label} aria-current={route.view === id ? 'page' : undefined}
       onClick={() => navigate({ workspace: worktree.path, view: id }, true)}><Icon size={28} /></button>)}</nav>
   </main></WorkspaceMarkdownProvider>;

@@ -1,0 +1,15 @@
+.theme-workbench { height:100%; display:grid; grid-template-columns:minmax(480px,1.1fr) minmax(420px,1fr); color:var(--aow-text); background:var(--aow-surface); }
+.theme-preview-settings { min-height:0; overflow:auto; padding:20px; border-right:1px solid var(--aow-line); background:var(--aow-panel); }
+.theme-preview-surfaces { min-width:0; min-height:0; display:grid; grid-template-rows:42px minmax(190px,1fr) 160px minmax(220px,1fr); }
+.theme-preview-surfaces > header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:0 14px; background:var(--aow-header); border-bottom:1px solid var(--aow-line); font-size:12px; }
+.theme-preview-surfaces > header > span { color:var(--aow-muted); font-size:10px; }
+.theme-preview-code { min-height:0; display:grid; grid-template-columns:1fr 1fr; overflow:hidden; }
+.theme-preview-code > section { min-width:0; }
+.theme-preview-terminal { min-height:0; display:flex; border-block:1px solid var(--aow-line); }
+.theme-preview-conversation { min-height:0; overflow:auto; padding:16px 24px; background:var(--conversation-background); }
+.theme-preview-conversation .project-aow-snapshot-flowchart svg { max-height:120px; }
+@media (max-width:820px) {
+  .theme-workbench { display:block; overflow:auto; }
+  .theme-preview-settings { overflow:visible; padding:12px; border:0; }
+  .theme-preview-surfaces { min-height:740px; }
+}

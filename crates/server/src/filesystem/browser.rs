@@ -35,6 +35,19 @@ pub(crate) async fn fs_path(
 
 async fn fs_browser(path: PathBuf, base_path: &BasePath) -> Result<Response, HttpError> {
     let base = base_path.as_str();
+    let language = aow_i18n::current_language().tag();
+    let copy_server_path = aow_i18n::text("browser.copyServerPath");
+    let browser_title = aow_i18n::text("browser.browserTitle");
+    let upload = aow_i18n::text("browser.upload");
+    let uploading = aow_i18n::text("browser.uploading");
+    let permissions = aow_i18n::text("browser.permissions");
+    let links = aow_i18n::text("browser.links");
+    let size = aow_i18n::text("browser.size");
+    let modified = aow_i18n::text("browser.modified");
+    let kind = aow_i18n::text("browser.kind");
+    let name = aow_i18n::text("browser.name");
+    let actions = aow_i18n::text("browser.actions");
+
     let listing = list_directory(&path).await?;
     let home = PROCESS_HOME.to_string_lossy();
     let rows = listing
@@ -43,11 +56,11 @@ async fn fs_browser(path: PathBuf, base_path: &BasePath) -> Result<Response, Htt
         .map(|entry| {
             let encoded = encode_absolute(&entry.path);
             let kind = match (entry.is_symlink, &entry.kind) {
-                (true, _) => "符号链接",
-                (_, aow_protocol::FileKind::Directory) => "目录",
-                (_, aow_protocol::FileKind::File) => "文件",
-                (_, aow_protocol::FileKind::Symlink) => "符号链接",
-                (_, aow_protocol::FileKind::Other) => "其他",
+                (true, _) => aow_i18n::text("server.symbolic_link"),
+                (_, aow_protocol::FileKind::Directory) => aow_i18n::text("server.directory"),
+                (_, aow_protocol::FileKind::File) => aow_i18n::text("server.file"),
+                (_, aow_protocol::FileKind::Symlink) => aow_i18n::text("server.symbolic_link"),
+                (_, aow_protocol::FileKind::Other) => aow_i18n::text("server.other"),
             };
             let directory = matches!(
                 entry.kind,
@@ -61,7 +74,7 @@ async fn fs_browser(path: PathBuf, base_path: &BasePath) -> Result<Response, Htt
                 .map(|target| format!(" → {}", escape_html(target)))
                 .unwrap_or_default();
             format!(
-                "<tr><td><code>{}</code></td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{kind}</td><td><a href=\"{base}/fs{encoded}{slash}\">{icon} {}{slash}</a>{link}</td><td><button class=\"copy\" data-path=\"{}\" title=\"复制服务器路径\">⧉</button></td></tr>",
+                "<tr><td><code>{}</code></td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{kind}</td><td><a href=\"{base}/fs{encoded}{slash}\">{icon} {}{slash}</a>{link}</td><td><button class=\"copy\" data-path=\"{}\" title=\"{copy_server_path}\">⧉</button></td></tr>",
                 mode_string(entry.mode),
                 entry.links,
                 entry.uid,
@@ -85,11 +98,11 @@ async fn fs_browser(path: PathBuf, base_path: &BasePath) -> Result<Response, Htt
         encoded_current.trim_end_matches('/')
     );
     let html = format!(
-        r#"<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>文件浏览器 - {current}</title><style>
+        r#"<!doctype html><html lang="{language}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{browser_title} - {current}</title><style>
 body{{margin:0;background:#1e1e1e;color:#ccc;font:12px system-ui}}a{{color:#4daafc;text-decoration:none}}header{{display:flex;align-items:center;gap:5px;padding:7px;border-bottom:1px solid #444}}header code{{flex:1;overflow:hidden;text-overflow:ellipsis}}button,.button{{padding:4px 8px;border:1px solid #555;border-radius:4px;background:#2d2d2d;color:#ddd;cursor:pointer}}main{{padding:6px}}table{{width:100%;border-collapse:collapse}}th,td{{padding:4px 7px;border-bottom:1px solid #393939;text-align:left}}tr:hover{{background:#292929}}.copy{{padding:2px 7px}}#status{{color:#9cdcfe}}
-</style></head><body><header><a class="button" href="{base}/fs{parent}/">..</a><a class="button" href="{base}/fs{home}/">Home</a><a class="button" href="{base}/fs/tmp/">/tmp</a><a class="button" href="{base}/aow/">Project AoW</a><code>{current}</code><input id="files" type="file" multiple><button id="upload">上传</button><span id="status"></span></header><main><table><thead><tr><th>权限</th><th>链接</th><th>UID</th><th>GID</th><th>大小</th><th>修改时间</th><th>类型</th><th>名称</th><th>操作</th></tr></thead><tbody>{rows}</tbody></table></main><script>
+</style></head><body><header><a class="button" href="{base}/fs{parent}/">..</a><a class="button" href="{base}/fs{home}/">Home</a><a class="button" href="{base}/fs/tmp/">/tmp</a><a class="button" href="{base}/aow/">Project AoW</a><code>{current}</code><input id="files" type="file" multiple><button id="upload">{upload}</button><span id="status"></span></header><main><table><thead><tr><th>{permissions}</th><th>{links}</th><th>UID</th><th>GID</th><th>{size}</th><th>{modified}</th><th>{kind}</th><th>{name}</th><th>{actions}</th></tr></thead><tbody>{rows}</tbody></table></main><script>
 document.addEventListener('click',async e=>{{const b=e.target.closest('.copy');if(b){{await navigator.clipboard.writeText(b.dataset.path);b.textContent='✓';setTimeout(()=>b.textContent='⧉',1000)}}}});
-document.getElementById('upload').onclick=async()=>{{const files=[...document.getElementById('files').files];for(const file of files){{document.getElementById('status').textContent='上传 '+file.name;const response=await fetch('{upload_base}/'+encodeURIComponent(file.name),{{method:'PUT',body:file}});if(!response.ok)throw new Error(await response.text())}}location.reload()}};
+document.getElementById('upload').onclick=async()=>{{const files=[...document.getElementById('files').files];for(const file of files){{document.getElementById('status').textContent='{uploading} '+file.name;const response=await fetch('{upload_base}/'+encodeURIComponent(file.name),{{method:'PUT',body:file}});if(!response.ok)throw new Error(await response.text())}}location.reload()}};
 </script></body></html>"#,
         parent = encode_absolute(&parent.to_string_lossy()).trim_end_matches('/'),
         home = encode_absolute(&home).trim_end_matches('/')

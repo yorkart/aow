@@ -22,7 +22,9 @@ impl Store {
     pub(super) fn read(&self) -> Result<Document, HttpError> {
         // Never replace a symlink with a regular file when saving this editor.
         if fs::symlink_metadata(&self.path).is_ok_and(|metadata| !metadata.is_file()) {
-            return Err(invalid("server.env 必须是普通文件，不能是符号链接或目录。"));
+            return Err(invalid(aow_i18n::text(
+                "server.server_env_must_be_a_regular_file_not_a",
+            )));
         }
         let (content, exists) = match OpenOptions::new()
             .read(true)
@@ -31,7 +33,9 @@ impl Store {
         {
             Ok(file) => {
                 if !file.metadata()?.is_file() {
-                    return Err(invalid("server.env 必须是普通文件。"));
+                    return Err(invalid(aow_i18n::text(
+                        "server.server_env_must_be_a_regular_file",
+                    )));
                 }
                 let mut content = String::new();
                 file.take((MAX_BYTES + 1) as u64)
@@ -59,26 +63,24 @@ impl Store {
 
     pub(super) fn save(&self, request: SaveRequest) -> Result<Document, HttpError> {
         validate(&request.content)?;
-        let _guard = self
-            .operation
-            .lock()
-            .map_err(|_| HttpError::internal("server.env lock poisoned"))?;
+        let _guard = self.operation.lock().map_err(|_| {
+            HttpError::internal(aow_i18n::text("validation.server_env_lock_poisoned"))
+        })?;
         let current = self.read()?;
         if current.revision != request.revision {
             return Err(HttpError::new(
                 StatusCode::CONFLICT,
                 "server_environment_changed",
-                "server.env 已被其他窗口或外部程序修改，请重新读取文件后再保存。当前草稿已保留。",
+                aow_i18n::text("server.server_env_changed_in_another_window_or_external_program"),
                 None,
             ));
         }
         if current.exists && current.content == request.content {
             return Ok(current);
         }
-        let parent = self
-            .path
-            .parent()
-            .ok_or_else(|| HttpError::internal("server.env has no parent"))?;
+        let parent = self.path.parent().ok_or_else(|| {
+            HttpError::internal(aow_i18n::text("validation.server_env_has_no_parent"))
+        })?;
         fs::DirBuilder::new()
             .recursive(true)
             .mode(0o700)
@@ -98,10 +100,14 @@ impl Store {
 
 fn validate(content: &str) -> Result<(), HttpError> {
     if content.len() > MAX_BYTES {
-        return Err(invalid("server.env 不能超过 256 KiB。"));
+        return Err(invalid(aow_i18n::text(
+            "server.server_env_must_not_exceed_256_kib",
+        )));
     }
     if content.contains('\0') {
-        return Err(invalid("server.env 不能包含空字符。"));
+        return Err(invalid(aow_i18n::text(
+            "server.server_env_cannot_contain_null_characters",
+        )));
     }
     // This is a file editor: retain comments, quoting, duplicates and whitespace
     // verbatim, leaving environment syntax interpretation to the service loader.

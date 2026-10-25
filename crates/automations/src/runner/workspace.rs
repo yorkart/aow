@@ -23,7 +23,10 @@ impl Drop for TemporaryCleanup {
         if let Err(error) = std::fs::remove_dir_all(&self.0)
             && error.kind() != std::io::ErrorKind::NotFound
         {
-            eprintln!("清理临时工作区失败 {}: {error}", self.0.display());
+            eprintln!(
+                "failed to clean up temporary workspace {}: {error}",
+                self.0.display()
+            );
         }
     }
 }
@@ -55,14 +58,20 @@ async fn git(task: &Task, cwd: &Path, args: &[&str], slot: &ConcurrencySlot) -> 
     let _group = ProcessGroup(child.id().unwrap());
     let output = tokio::time::timeout(Duration::from_secs(120), child.wait_with_output())
         .await
-        .context("Git 操作超时")??;
+        .context(aow_i18n::text("automations.git_operation_timed_out"))??;
     ensure!(
         output.status.success(),
-        "Git 操作失败: {}",
-        String::from_utf8_lossy(&output.stderr)
-            .chars()
-            .take(1000)
-            .collect::<String>()
+        aow_i18n::message(
+            "automations.git_operation_failed",
+            &[(
+                "auto0",
+                String::from_utf8_lossy(&output.stderr)
+                    .chars()
+                    .take(1000)
+                    .collect::<String>()
+                    .to_string()
+            )]
+        )
     );
     Ok(String::from_utf8(output.stdout)?
         .trim_end_matches(['\r', '\n'])
@@ -94,7 +103,10 @@ pub(super) async fn prepare(
     })
 }
 pub(super) fn cleanup_failure(outcome: Result<Outcome>, error: anyhow::Error) -> Result<Outcome> {
-    let cleanup = format!("清理 Worktree 失败: {error:#}");
+    let cleanup = aow_i18n::message(
+        "automations.failed_to_clean_up_worktree",
+        &[("p0", format!("{:#}", error))],
+    );
     match outcome {
         Ok((_, exit_code, message)) => Ok((
             RunStatus::Failed,
@@ -128,10 +140,9 @@ pub(super) async fn cleanup_worktree(
     if !directory.exists() {
         return Ok(());
     }
-    let root = task
-        .repository_path
-        .canonicalize()
-        .context("项目目录不存在，无法清理 Worktree")?;
+    let root = task.repository_path.canonicalize().context(aow_i18n::text(
+        "automations.project_directory_missing_cannot_clean_up_worktree",
+    ))?;
     git(
         task,
         &root,
@@ -139,7 +150,9 @@ pub(super) async fn cleanup_worktree(
             "worktree",
             "remove",
             "--force",
-            directory.to_str().context("工作区路径不是 UTF-8")?,
+            directory
+                .to_str()
+                .context(aow_i18n::text("automations.workspace_path_is_not_utf_8"))?,
         ],
         concurrency_slot,
     )

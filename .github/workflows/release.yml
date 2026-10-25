@@ -97,6 +97,8 @@ jobs:
         run: |
           npm --prefix vt-worker ci --ignore-scripts --no-audit --no-fund
           npm --prefix vt-worker test
+      - name: Test Git platform providers
+        run: node --test git-platform-providers/tests/*.test.mjs
       - name: Test Rust workspace
         run: |
           if [[ "$RUNNER_OS" == macOS ]]; then

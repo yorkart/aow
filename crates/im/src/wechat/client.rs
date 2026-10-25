@@ -20,11 +20,14 @@ use super::{
 impl Credentials {
     pub fn validate(&self) -> Result<()> {
         api::validate_base(&self.base_url)?;
-        ensure!(aow_id::is_valid_id(&self.binding_id), "无效的微信绑定 ID");
+        ensure!(
+            aow_id::is_valid_id(&self.binding_id),
+            aow_i18n::message("im.invalid_wechat_binding_id", &[])
+        );
         for value in [&self.account_id, &self.user_id, &self.bot_token] {
             ensure!(
                 !value.is_empty() && value.len() <= 4096 && !value.chars().any(char::is_control),
-                "微信凭证不完整或无效"
+                aow_i18n::message("im.incomplete_or_invalid_wechat_credentials", &[])
             );
         }
         Ok(())
@@ -35,11 +38,12 @@ impl WechatClient {
     pub fn new(credentials: Credentials, state_dir: Option<&Path>) -> Result<Self> {
         credentials.validate()?;
         let path = state_dir.map(|root| {
-            root.join("im/wechat")
+            root.join("state/im/wechat")
                 .join(format!("{}.json", credentials.binding_id))
         });
         let session = match path.as_ref().map(std::fs::read) {
-            Some(Ok(bytes)) => serde_json::from_slice(&bytes).context("无法读取微信会话状态")?,
+            Some(Ok(bytes)) => serde_json::from_slice(&bytes)
+                .context(aow_i18n::text("im.unable_to_read_wechat_session_state"))?,
             Some(Err(error)) if error.kind() != std::io::ErrorKind::NotFound => {
                 return Err(error.into());
             }
@@ -99,7 +103,9 @@ impl WechatClient {
             .verification
             .clone()
             .filter(|verification| verification.test_id == test_id)
-            .context("测试记录已更新，请刷新微信设置后重试")?;
+            .context(aow_i18n::text(
+                "im.test_record_updated_refresh_wechat_settings_and_try_again",
+            ))?;
         verification.receipt = if received {
             TestReceipt::Confirmed
         } else {
@@ -175,7 +181,10 @@ impl Drop for WechatClient {
 impl Inner {
     pub(super) fn update_session(&self, update: impl FnOnce(&mut Session)) -> Result<()> {
         let mut session = self.session.lock().unwrap();
-        ensure!(self.active.load(Ordering::Acquire), "微信绑定已移除或替换");
+        ensure!(
+            self.active.load(Ordering::Acquire),
+            aow_i18n::message("im.wechat_binding_removed_or_replaced", &[])
+        );
         let mut next = session.clone();
         update(&mut next);
         if next == *session {
@@ -191,13 +200,15 @@ impl Inner {
 
 fn save_session(path: &Path, session: &Session) -> Result<()> {
     use std::io::Write;
-    let parent = path.parent().context("微信会话路径无效")?;
+    let parent = path
+        .parent()
+        .context(aow_i18n::text("im.invalid_wechat_session_path"))?;
     std::fs::create_dir_all(parent)?;
     // NamedTempFile creates mode 0600; persist atomically replaces old content.
     let mut file = tempfile::NamedTempFile::new_in(parent)?;
     file.write_all(&serde_json::to_vec(session)?)?;
     file.as_file().sync_all()?;
     file.persist(path)
-        .map_err(|_| anyhow::anyhow!("无法保存微信会话"))?;
+        .map_err(|_| anyhow::anyhow!(aow_i18n::message("im.unable_to_save_wechat_session", &[])))?;
     Ok(())
 }

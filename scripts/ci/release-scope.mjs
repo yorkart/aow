@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 export function requiresNativePackages(event, paths = []) {
   if (event !== 'pull_request') return true;
   return paths.some(path =>
-    /^(scripts|packaging|vendor|\.cargo|vt-worker)\//.test(path)
+    /^(scripts|packaging|skills|git-platform-providers|vendor|\.cargo|vt-worker)\//.test(path)
     || path === '.github/workflows/release.yml'
     || /^(Cargo\.(toml|lock)|rust-toolchain(\.toml)?)$/.test(path)
     || /^crates\/[^/]+\/(Cargo\.toml|build\.rs)$/.test(path)

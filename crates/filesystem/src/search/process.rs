@@ -16,13 +16,11 @@ use super::{
 pub enum SearchError {
     #[error("{0}")]
     Invalid(String),
-    #[error(
-        "未找到 ripgrep。请重新安装完整的 AoW 发布包，或在 AoW 服务所在机器安装：macOS 使用 brew install ripgrep；Debian/Ubuntu 使用 sudo apt install ripgrep。"
-    )]
+    #[error("{message}", message = aow_i18n::text("filesystem.ripgrep_not_found_reinstall_the_complete_aow_release_or"))]
     Unavailable,
-    #[error("搜索已取消")]
+    #[error("{message}", message = aow_i18n::text("filesystem.search_canceled"))]
     Cancelled,
-    #[error("搜索失败：{0}")]
+    #[error("{message}", message = aow_i18n::message("filesystem.search_failed", &[("p0", .0.to_string())]))]
     Failed(String),
     #[error(transparent)]
     Io(#[from] std::io::Error),
@@ -67,7 +65,9 @@ pub async fn search_files(
         return Ok(FileSearchResult::default());
     }
     if !tokio::fs::metadata(&request.root).await?.is_dir() {
-        return Err(SearchError::Invalid("搜索路径不是目录".into()));
+        return Err(SearchError::Invalid(
+            aow_i18n::text("filesystem.search_path_is_not_a_directory").into(),
+        ));
     }
     execute(ripgrep()?, args, request, cancel, Duration::from_secs(15)).await
 }
@@ -97,7 +97,7 @@ pub(super) async fn execute(
         })?;
     let mut output = BufReader::new(child.stdout.take().unwrap());
     let mut stderr = child.stderr.take().unwrap();
-    let mut diagnostics = tokio::spawn(async move {
+    let mut diagnostics = aow_i18n::spawn(async move {
         let mut bytes = Vec::new();
         let _ = (&mut stderr).take(4096).read_to_end(&mut bytes).await;
         let _ = tokio::io::copy(&mut stderr, &mut tokio::io::sink()).await;

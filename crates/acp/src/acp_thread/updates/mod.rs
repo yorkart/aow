@@ -171,6 +171,12 @@ fn since_inner(
                 "config_options_supported" => Value::from(thread.config_options_supported),
                 "commands" => thread.commands.clone(),
                 "usage" => thread.usage.clone(),
+                "session_meta" => {
+                    serde_json::to_value(&thread.session_meta).expect("serializable metadata")
+                }
+                "session_meta_revisions" => serde_json::to_value(&thread.session_meta_revisions)
+                    .expect("serializable revisions"),
+                "session_meta_revision" => Value::from(thread.session_meta_revision),
                 "notices" => serde_json::to_value(&thread.notices).expect("serializable notices"),
                 _ => unreachable!("unknown session field"),
             };

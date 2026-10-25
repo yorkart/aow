@@ -89,7 +89,7 @@ impl SessionShares {
     }
 
     pub(crate) fn persistent(state_dir: &Path) -> anyhow::Result<Self> {
-        let path = state_dir.join(SHARES_FILE);
+        let path = state_dir.join("data").join(SHARES_FILE);
         let records = match std::fs::read(&path) {
             Ok(bytes) => {
                 let document: SharesDocument = serde_json::from_slice(&bytes)?;
@@ -126,7 +126,11 @@ impl SessionShares {
                     shares: entries.values().map(|entry| entry.record.clone()).collect(),
                 },
             )
-            .map_err(|_| HttpError::internal("无法保存会话分享设置"))?;
+            .map_err(|_| {
+                HttpError::internal(aow_i18n::text(
+                    "server.unable_to_save_session_sharing_settings",
+                ))
+            })?;
         }
         Ok(())
     }
@@ -217,14 +221,16 @@ impl SessionShares {
 }
 
 pub(super) fn lock_error() -> HttpError {
-    HttpError::internal("会话分享设置暂不可用")
+    HttpError::internal(aow_i18n::text(
+        "server.session_sharing_settings_temporarily_unavailable",
+    ))
 }
 
 fn invalid_share() -> HttpError {
     HttpError::new(
         StatusCode::NOT_FOUND,
         "session_share_not_found",
-        "分享链接无效或已取消",
+        aow_i18n::text("server.share_link_invalid_or_revoked"),
         None,
     )
 }
@@ -233,7 +239,7 @@ fn unavailable() -> HttpError {
     HttpError::new(
         StatusCode::GONE,
         "shared_session_unavailable",
-        "会话记录已不可用",
+        aow_i18n::text("server.session_record_unavailable"),
         None,
     )
 }
@@ -241,9 +247,13 @@ fn unavailable() -> HttpError {
 pub(super) async fn read_snapshot(
     locator: AgentSessionLocator,
 ) -> Result<AgentSessionSnapshot, HttpError> {
-    tokio::task::spawn_blocking(move || snapshot::read(locator))
+    aow_i18n::spawn_blocking(move || snapshot::read(locator))
         .await
-        .map_err(|_| HttpError::internal("读取会话失败，请稍后重试"))?
+        .map_err(|_| {
+            HttpError::internal(aow_i18n::text(
+                "server.failed_to_read_session_try_again_later",
+            ))
+        })?
         .map_err(|error| match error {
             snapshot::SnapshotError::NotFound | snapshot::SnapshotError::Invalid(_) => {
                 unavailable()
@@ -251,6 +261,8 @@ pub(super) async fn read_snapshot(
             snapshot::SnapshotError::Io(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 unavailable()
             }
-            _ => HttpError::internal("读取会话失败，请稍后重试"),
+            _ => HttpError::internal(aow_i18n::text(
+                "server.failed_to_read_session_try_again_later",
+            )),
         })
 }

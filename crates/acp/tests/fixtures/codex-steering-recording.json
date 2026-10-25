@@ -1,0 +1,1666 @@
+{
+  "provenance": {
+    "adapter": "@agentclientprotocol/codex-acp",
+    "version": "2.2.2",
+    "steer": "Also summarize README.md.",
+    "sources": [
+      "Anonymized reported sessions",
+      "Anonymized installed-adapter live and load recordings"
+    ],
+    "redactions": "All prompts, replies, reasoning, commands, paths, identifiers and timestamps are synthetic. Consistent identifier/text mappings preserve equality, event order, whitespace boundaries, delivery states, tool transport differences, parallel-call reordering and turn outcomes."
+  },
+  "captures": [
+    {
+      "name": "reported",
+      "snapshot": {
+        "version": 1,
+        "thread_id": "fixture-id-001",
+        "source": "user",
+        "created_at": "2000-01-01T00:00:00+00:00",
+        "session_id": "fixture-id-002",
+        "agent_id": "codex-acp",
+        "cwd": "/repo",
+        "title": "Fixture conversation",
+        "status": "idle",
+        "needs_load": false,
+        "recovery": null,
+        "revision": 1101,
+        "sync_generation": "fixture-id-003",
+        "updated_at": "2000-01-01T00:00:02+00:00",
+        "interacted_at": "2000-01-01T00:00:01+00:00",
+        "entries": [
+          {
+            "id": "fixture-id-004",
+            "kind": "user",
+            "content": {
+              "type": "text",
+              "text": "Explain example project 1."
+            }
+          },
+          {
+            "id": "fixture-id-005",
+            "kind": "thought",
+            "message_id": "fixture-id-006",
+            "content": {
+              "type": "text",
+              "text": "\n\n**Inspecting example step 1**"
+            }
+          },
+          {
+            "id": "fixture-id-007",
+            "kind": "assistant",
+            "message_id": "fixture-id-008",
+            "content": {
+              "type": "text",
+              "text": "Progress update 1: I will inspect the example files."
+            }
+          },
+          {
+            "id": "fixture-id-009",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-009",
+              "kind": "execute",
+              "title": "Fixture tool-002",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-010",
+            "kind": "thought",
+            "message_id": "fixture-id-011",
+            "content": {
+              "type": "text",
+              "text": "\n\n**Inspecting example step 2**"
+            }
+          },
+          {
+            "id": "fixture-id-012",
+            "kind": "assistant",
+            "message_id": "fixture-id-013",
+            "content": {
+              "type": "text",
+              "text": "Progress update 2: I will inspect the example files."
+            }
+          },
+          {
+            "id": "fixture-id-014",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-014",
+              "kind": "execute",
+              "title": "Fixture tool-003",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-015",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-015",
+              "kind": "execute",
+              "title": "Fixture tool-004",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-016",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-016",
+              "kind": "execute",
+              "title": "Fixture tool-005",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-017",
+            "kind": "steering",
+            "content": {
+              "type": "text",
+              "text": "Also summarize README.md."
+            },
+            "delivery": {
+              "status": "injected",
+              "error": null
+            }
+          },
+          {
+            "id": "fixture-id-018",
+            "kind": "thought",
+            "message_id": "fixture-id-019",
+            "content": {
+              "type": "text",
+              "text": "\n\n**Inspecting example step 3**"
+            }
+          },
+          {
+            "id": "fixture-id-020",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-020",
+              "kind": "read",
+              "title": "Fixture tool-006",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-021",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-021",
+              "kind": "execute",
+              "title": "Fixture tool-007",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-022",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-022",
+              "kind": "execute",
+              "title": "Fixture tool-008",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-023",
+            "kind": "thought",
+            "message_id": "fixture-id-024",
+            "content": {
+              "type": "text",
+              "text": "\n\n**Inspecting example step 4**"
+            }
+          },
+          {
+            "id": "fixture-id-025",
+            "kind": "assistant",
+            "message_id": "fixture-id-026",
+            "content": {
+              "type": "text",
+              "text": "Progress update 3: I will inspect the example files."
+            }
+          },
+          {
+            "id": "fixture-id-027",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-027",
+              "kind": "execute",
+              "title": "Fixture tool-009",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-028",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-028",
+              "kind": "execute",
+              "title": "Fixture tool-010",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-029",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-029",
+              "kind": "execute",
+              "title": "Fixture tool-011",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-030",
+            "kind": "thought",
+            "message_id": "fixture-id-031",
+            "content": {
+              "type": "text",
+              "text": "\n\n**Inspecting example step 5**"
+            }
+          },
+          {
+            "id": "fixture-id-032",
+            "kind": "assistant",
+            "message_id": "fixture-id-033",
+            "content": {
+              "type": "text",
+              "text": "Example project 1 summary.\n\n- Module A handles requests.\n- Module B presents results.\n\nREADME describes setup, usage, and testing.\n\n| Component | Purpose |\n| --- | --- |\n| Module A | Request handling |\n| Module B | Result display |\n\nSee [README.md](/repo/README.md)."
+            }
+          }
+        ],
+        "turns": [
+          {
+            "user_entry_id": "fixture-id-004",
+            "status": "completed",
+            "stop_reason": "end_turn",
+            "error": null
+          }
+        ],
+        "plan": null,
+        "notices": [],
+        "session_meta": {},
+        "session_meta_revision": 3,
+        "session_meta_revisions": {},
+        "terminals": {},
+        "permissions": [],
+        "modes": {},
+        "config_options": [],
+        "config_options_supported": true,
+        "auth_required": false,
+        "commands": [],
+        "usage": null,
+        "error": null,
+        "stop_reason": "end_turn",
+        "steering_pending": false,
+        "steering_untracked": false
+      },
+      "overview": [
+        {
+          "id": "fixture-id-004",
+          "revision": 1101,
+          "user": [
+            {
+              "id": "fixture-id-004",
+              "kind": "user",
+              "content": {
+                "type": "text",
+                "text": "Explain example project 1."
+              }
+            }
+          ],
+          "conclusion": [
+            {
+              "id": "fixture-id-032",
+              "kind": "assistant",
+              "message_id": "fixture-id-033",
+              "content": {
+                "type": "text",
+                "text": "Example project 1 summary.\n\n- Module A handles requests.\n- Module B presents results.\n\nREADME describes setup, usage, and testing.\n\n| Component | Purpose |\n| --- | --- |\n| Module A | Request handling |\n| Module B | Result display |\n\nSee [README.md](/repo/README.md)."
+              }
+            }
+          ],
+          "messages": [
+            {
+              "id": "fixture-id-017",
+              "kind": "steering",
+              "content": {
+                "type": "text",
+                "text": "Also summarize README.md."
+              },
+              "delivery": {
+                "status": "injected",
+                "error": null
+              }
+            },
+            {
+              "id": "fixture-id-032",
+              "kind": "assistant",
+              "message_id": "fixture-id-033",
+              "content": {
+                "type": "text",
+                "text": "Example project 1 summary.\n\n- Module A handles requests.\n- Module B presents results.\n\nREADME describes setup, usage, and testing.\n\n| Component | Purpose |\n| --- | --- |\n| Module A | Request handling |\n| Module B | Result display |\n\nSee [README.md](/repo/README.md)."
+              }
+            }
+          ],
+          "process_segments": [
+            {
+              "id": "fixture-id-004",
+              "tool_count": 4,
+              "progress_count": 2,
+              "permission_tool_ids": []
+            },
+            {
+              "id": "fixture-id-017",
+              "tool_count": 6,
+              "progress_count": 3,
+              "permission_tool_ids": []
+            }
+          ],
+          "tool_count": 10,
+          "progress_count": 5,
+          "running": false,
+          "waiting": false,
+          "compacting": false,
+          "status": "completed",
+          "error": null,
+          "permission_tool_ids": []
+        }
+      ]
+    },
+    {
+      "name": "live",
+      "snapshot": {
+        "thread_id": "fixture-id-034",
+        "source": "user",
+        "created_at": "2000-01-01T00:00:03+00:00",
+        "session_id": "fixture-id-035",
+        "agent_id": "recorded",
+        "cwd": "/repo",
+        "title": "Fixture conversation",
+        "status": "idle",
+        "needs_load": false,
+        "recovery": null,
+        "revision": 2092,
+        "sync_generation": "fixture-id-036",
+        "updated_at": "2000-01-01T00:00:07+00:00",
+        "interacted_at": "2000-01-01T00:00:06+00:00",
+        "entries": [
+          {
+            "id": "fixture-id-037",
+            "kind": "user",
+            "content": {
+              "type": "text",
+              "text": "Explain example project 2."
+            }
+          },
+          {
+            "id": "fixture-id-038",
+            "kind": "assistant",
+            "message_id": "fixture-id-039",
+            "content": {
+              "type": "text",
+              "text": "Progress update 4: I will inspect the example files."
+            }
+          },
+          {
+            "id": "fixture-id-040",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-040",
+              "kind": "execute",
+              "title": "Fixture tool-013",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-041",
+            "kind": "steering",
+            "content": {
+              "type": "text",
+              "text": "Also summarize README.md."
+            },
+            "delivery": {
+              "status": "injected",
+              "error": null
+            }
+          },
+          {
+            "id": "fixture-id-042",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-042",
+              "kind": "read",
+              "title": "Fixture tool-014",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-043",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-043",
+              "kind": "execute",
+              "title": "Fixture tool-015",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-044",
+            "kind": "thought",
+            "message_id": "fixture-id-045",
+            "content": {
+              "type": "text",
+              "text": "\n\n**Inspecting example step 6**"
+            }
+          },
+          {
+            "id": "fixture-id-046",
+            "kind": "assistant",
+            "message_id": "fixture-id-047",
+            "content": {
+              "type": "text",
+              "text": "Progress update 5: I will inspect the example files."
+            }
+          },
+          {
+            "id": "fixture-id-048",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-048",
+              "kind": "execute",
+              "title": "Fixture tool-016",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-049",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-049",
+              "kind": "execute",
+              "title": "Fixture tool-017",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-050",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-050",
+              "kind": "read",
+              "title": "Fixture tool-018",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-051",
+            "kind": "thought",
+            "message_id": "fixture-id-052",
+            "content": {
+              "type": "text",
+              "text": "\n\n**Inspecting example step 7**"
+            }
+          },
+          {
+            "id": "fixture-id-053",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-053",
+              "kind": "read",
+              "title": "Fixture tool-019",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-054",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-054",
+              "kind": "execute",
+              "title": "Fixture tool-020",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-055",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-055",
+              "kind": "execute",
+              "title": "Fixture tool-021",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-056",
+            "kind": "thought",
+            "message_id": "fixture-id-057",
+            "content": {
+              "type": "text",
+              "text": "\n\n**Inspecting example step 8**"
+            }
+          },
+          {
+            "id": "fixture-id-058",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-058",
+              "kind": "execute",
+              "title": "Fixture tool-022",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-059",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-059",
+              "kind": "execute",
+              "title": "Fixture tool-023",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-060",
+            "kind": "thought",
+            "message_id": "fixture-id-061",
+            "content": {
+              "type": "text",
+              "text": "\n\n**Inspecting example step 9**"
+            }
+          },
+          {
+            "id": "fixture-id-062",
+            "kind": "assistant",
+            "message_id": "fixture-id-063",
+            "content": {
+              "type": "text",
+              "text": "Progress update 6: I will inspect the example files."
+            }
+          },
+          {
+            "id": "fixture-id-064",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-064",
+              "kind": "execute",
+              "title": "Fixture tool-024",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-065",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-065",
+              "kind": "execute",
+              "title": "Fixture tool-025",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-066",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-066",
+              "kind": "execute",
+              "title": "Fixture tool-026",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-067",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-067",
+              "kind": "execute",
+              "title": "Fixture tool-027",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-068",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-068",
+              "kind": "execute",
+              "title": "Fixture tool-028",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-069",
+            "kind": "thought",
+            "message_id": "fixture-id-070",
+            "content": {
+              "type": "text",
+              "text": "\n\n**Inspecting example step 10**"
+            }
+          },
+          {
+            "id": "fixture-id-071",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-071",
+              "kind": "execute",
+              "title": "Fixture tool-029",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-072",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-072",
+              "kind": "execute",
+              "title": "Fixture tool-030",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-073",
+            "kind": "thought",
+            "message_id": "fixture-id-074",
+            "content": {
+              "type": "text",
+              "text": "\n\n**Inspecting example step 11**"
+            }
+          },
+          {
+            "id": "fixture-id-075",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-075",
+              "kind": "execute",
+              "title": "Fixture tool-031",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-076",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-076",
+              "kind": "execute",
+              "title": "Fixture tool-032",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-077",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-077",
+              "kind": "execute",
+              "title": "Fixture tool-033",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-078",
+            "kind": "thought",
+            "message_id": "fixture-id-079",
+            "content": {
+              "type": "text",
+              "text": "\n\n**Inspecting example step 12**"
+            }
+          },
+          {
+            "id": "fixture-id-080",
+            "kind": "assistant",
+            "message_id": "fixture-id-081",
+            "content": {
+              "type": "text",
+              "text": "Progress update 7: I will inspect the example files."
+            }
+          },
+          {
+            "id": "fixture-id-082",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-082",
+              "kind": "execute",
+              "title": "Fixture tool-034",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-083",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-083",
+              "kind": "execute",
+              "title": "Fixture tool-035",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-084",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-084",
+              "kind": "execute",
+              "title": "Fixture tool-036",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-085",
+            "kind": "thought",
+            "message_id": "fixture-id-086",
+            "content": {
+              "type": "text",
+              "text": "\n\n**Inspecting example step 13**"
+            }
+          },
+          {
+            "id": "fixture-id-087",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-087",
+              "kind": "execute",
+              "title": "Fixture tool-037",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-088",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-088",
+              "kind": "execute",
+              "title": "Fixture tool-038",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-089",
+            "kind": "assistant",
+            "message_id": "fixture-id-090",
+            "content": {
+              "type": "text",
+              "text": "Example project 2 summary.\n\n- Module A handles requests.\n- Module B presents results.\n\nREADME describes setup, usage, and testing.\n\n| Component | Purpose |\n| --- | --- |\n| Module A | Request handling |\n| Module B | Result display |\n\nSee [README.md](/repo/README.md)."
+            }
+          }
+        ],
+        "turns": [
+          {
+            "user_entry_id": "fixture-id-037",
+            "status": "completed",
+            "stop_reason": "end_turn",
+            "error": null
+          }
+        ],
+        "plan": null,
+        "notices": [],
+        "session_meta": {},
+        "session_meta_revision": 3,
+        "session_meta_revisions": {},
+        "terminals": {},
+        "permissions": [],
+        "modes": {},
+        "config_options": [],
+        "config_options_supported": true,
+        "auth_required": false,
+        "commands": [],
+        "usage": null,
+        "error": null,
+        "stop_reason": "end_turn",
+        "steering_pending": false,
+        "steering_untracked": false
+      },
+      "before_steer": {
+        "thread_id": "fixture-id-034",
+        "source": "user",
+        "created_at": "2000-01-01T00:00:03+00:00",
+        "session_id": "fixture-id-035",
+        "agent_id": "recorded",
+        "cwd": "/repo",
+        "title": "Fixture conversation",
+        "status": "working",
+        "needs_load": false,
+        "recovery": null,
+        "revision": 50,
+        "sync_generation": "fixture-id-036",
+        "updated_at": "2000-01-01T00:00:05+00:00",
+        "interacted_at": "2000-01-01T00:00:04+00:00",
+        "entries": [
+          {
+            "id": "fixture-id-037",
+            "kind": "user",
+            "content": {
+              "type": "text",
+              "text": "Explain example project 2."
+            }
+          },
+          {
+            "id": "fixture-id-038",
+            "kind": "assistant",
+            "message_id": "fixture-id-039",
+            "content": {
+              "type": "text",
+              "text": "Progress update 4: I will inspect the example files."
+            }
+          },
+          {
+            "id": "fixture-id-040",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call",
+              "toolCallId": "fixture-id-040",
+              "kind": "execute",
+              "title": "Fixture tool-013",
+              "status": "in_progress"
+            }
+          }
+        ],
+        "turns": [
+          {
+            "user_entry_id": "fixture-id-037",
+            "status": "in_progress",
+            "stop_reason": null,
+            "error": null
+          }
+        ],
+        "plan": null,
+        "notices": [],
+        "session_meta": {},
+        "session_meta_revision": 1,
+        "session_meta_revisions": {},
+        "terminals": {},
+        "permissions": [],
+        "modes": {},
+        "config_options": [],
+        "config_options_supported": true,
+        "auth_required": false,
+        "commands": [],
+        "usage": null,
+        "error": null,
+        "stop_reason": null,
+        "steering_pending": false,
+        "steering_untracked": false
+      },
+      "overview": [
+        {
+          "id": "fixture-id-037",
+          "revision": 2092,
+          "user": [
+            {
+              "id": "fixture-id-037",
+              "kind": "user",
+              "content": {
+                "type": "text",
+                "text": "Explain example project 2."
+              }
+            }
+          ],
+          "conclusion": [
+            {
+              "id": "fixture-id-089",
+              "kind": "assistant",
+              "message_id": "fixture-id-090",
+              "content": {
+                "type": "text",
+                "text": "Example project 2 summary.\n\n- Module A handles requests.\n- Module B presents results.\n\nREADME describes setup, usage, and testing.\n\n| Component | Purpose |\n| --- | --- |\n| Module A | Request handling |\n| Module B | Result display |\n\nSee [README.md](/repo/README.md)."
+              }
+            }
+          ],
+          "messages": [
+            {
+              "id": "fixture-id-041",
+              "kind": "steering",
+              "content": {
+                "type": "text",
+                "text": "Also summarize README.md."
+              },
+              "delivery": {
+                "status": "injected",
+                "error": null
+              }
+            },
+            {
+              "id": "fixture-id-089",
+              "kind": "assistant",
+              "message_id": "fixture-id-090",
+              "content": {
+                "type": "text",
+                "text": "Example project 2 summary.\n\n- Module A handles requests.\n- Module B presents results.\n\nREADME describes setup, usage, and testing.\n\n| Component | Purpose |\n| --- | --- |\n| Module A | Request handling |\n| Module B | Result display |\n\nSee [README.md](/repo/README.md)."
+              }
+            }
+          ],
+          "process_segments": [
+            {
+              "id": "fixture-id-037",
+              "tool_count": 1,
+              "progress_count": 1,
+              "permission_tool_ids": []
+            },
+            {
+              "id": "fixture-id-041",
+              "tool_count": 25,
+              "progress_count": 8,
+              "permission_tool_ids": []
+            }
+          ],
+          "tool_count": 26,
+          "progress_count": 9,
+          "running": false,
+          "waiting": false,
+          "compacting": false,
+          "status": "completed",
+          "error": null,
+          "permission_tool_ids": []
+        }
+      ],
+      "before_steer_overview": [
+        {
+          "id": "fixture-id-037",
+          "revision": 50,
+          "user": [
+            {
+              "id": "fixture-id-037",
+              "kind": "user",
+              "content": {
+                "type": "text",
+                "text": "Explain example project 2."
+              }
+            }
+          ],
+          "conclusion": [],
+          "messages": null,
+          "process_segments": [
+            {
+              "id": "fixture-id-037",
+              "tool_count": 1,
+              "progress_count": 1,
+              "permission_tool_ids": []
+            }
+          ],
+          "tool_count": 1,
+          "progress_count": 1,
+          "running": true,
+          "waiting": false,
+          "compacting": false,
+          "status": "in_progress",
+          "error": null,
+          "permission_tool_ids": []
+        }
+      ]
+    },
+    {
+      "name": "reported-main",
+      "snapshot": {
+        "version": 1,
+        "thread_id": "fixture-id-091",
+        "source": "user",
+        "created_at": "2000-01-01T00:00:08+00:00",
+        "session_id": "fixture-id-092",
+        "agent_id": "codex-acp",
+        "cwd": "/repo",
+        "title": "Fixture conversation",
+        "status": "idle",
+        "needs_load": false,
+        "recovery": null,
+        "revision": 865,
+        "sync_generation": "fixture-id-093",
+        "updated_at": "2000-01-01T00:00:10+00:00",
+        "interacted_at": "2000-01-01T00:00:09+00:00",
+        "entries": [
+          {
+            "id": "fixture-id-094",
+            "kind": "user",
+            "message_id": "fixture-id-095",
+            "content": {
+              "type": "text",
+              "text": "Explain example project 1."
+            }
+          },
+          {
+            "id": "fixture-id-096",
+            "kind": "thought",
+            "message_id": "fixture-id-097",
+            "content": {
+              "type": "text",
+              "text": "**Inspecting example step 14**"
+            }
+          },
+          {
+            "id": "fixture-id-098",
+            "kind": "assistant",
+            "message_id": "fixture-id-099",
+            "content": {
+              "type": "text",
+              "text": "Progress update 8: I will inspect the example files."
+            }
+          },
+          {
+            "id": "fixture-id-100",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-100",
+              "name": "exec_command",
+              "kind": "execute",
+              "title": "Fixture tool-039",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-101",
+            "kind": "thought",
+            "message_id": "fixture-id-102",
+            "content": {
+              "type": "text",
+              "text": "**Inspecting example step 15**"
+            }
+          },
+          {
+            "id": "fixture-id-103",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-103",
+              "name": "exec_command",
+              "kind": "execute",
+              "title": "Fixture tool-040",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-104",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-104",
+              "name": "exec_command",
+              "kind": "execute",
+              "title": "Fixture tool-041",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-105",
+            "kind": "steering",
+            "message_id": "fixture-id-106",
+            "content": {
+              "type": "text",
+              "text": "Also summarize README.md."
+            },
+            "delivery": {
+              "status": "injected",
+              "error": null
+            }
+          },
+          {
+            "id": "fixture-id-107",
+            "kind": "thought",
+            "message_id": "fixture-id-108",
+            "content": {
+              "type": "text",
+              "text": "**Inspecting example step 16**"
+            }
+          },
+          {
+            "id": "fixture-id-109",
+            "kind": "assistant",
+            "message_id": "fixture-id-110",
+            "content": {
+              "type": "text",
+              "text": "Progress update 9: I will inspect the example files."
+            }
+          },
+          {
+            "id": "fixture-id-111",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-111",
+              "name": "exec_command",
+              "kind": "read",
+              "title": "Fixture tool-042",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-112",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-112",
+              "name": "exec_command",
+              "kind": "execute",
+              "title": "Fixture tool-043",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-113",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-113",
+              "name": "exec_command",
+              "kind": "search",
+              "title": "Fixture tool-044",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-114",
+            "kind": "thought",
+            "message_id": "fixture-id-115",
+            "content": {
+              "type": "text",
+              "text": "**Inspecting example step 17**"
+            }
+          },
+          {
+            "id": "fixture-id-116",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-116",
+              "name": "exec_command",
+              "kind": "execute",
+              "title": "Fixture tool-045",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-117",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-117",
+              "name": "exec_command",
+              "kind": "execute",
+              "title": "Fixture tool-046",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-118",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-118",
+              "name": "exec_command",
+              "kind": "search",
+              "title": "Fixture tool-047",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-119",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-119",
+              "name": "exec_command",
+              "kind": "execute",
+              "title": "Fixture tool-048",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-120",
+            "kind": "thought",
+            "message_id": "fixture-id-121",
+            "content": {
+              "type": "text",
+              "text": "**Inspecting example step 18**"
+            }
+          },
+          {
+            "id": "fixture-id-122",
+            "kind": "assistant",
+            "message_id": "fixture-id-123",
+            "content": {
+              "type": "text",
+              "text": "Example project 3 summary.\n\n- Module A handles requests.\n- Module B presents results.\n\nREADME describes setup, usage, and testing.\n\n| Component | Purpose |\n| --- | --- |\n| Module A | Request handling |\n| Module B | Result display |\n\nSee [README.md](/repo/README.md)."
+            }
+          }
+        ],
+        "turns": [
+          {
+            "user_entry_id": "fixture-id-094",
+            "status": "completed",
+            "stop_reason": "end_turn",
+            "error": null
+          }
+        ],
+        "plan": null,
+        "notices": [],
+        "session_meta": {},
+        "session_meta_revision": 3,
+        "session_meta_revisions": {},
+        "terminals": {},
+        "permissions": [],
+        "modes": {},
+        "config_options": [],
+        "config_options_supported": true,
+        "auth_required": false,
+        "commands": [],
+        "usage": null,
+        "error": null,
+        "stop_reason": "end_turn",
+        "steering_pending": false,
+        "steering_untracked": false
+      },
+      "provenance": "Anonymized reported history; turn membership verified against native completion events before replacing content and identifiers.",
+      "overview": [
+        {
+          "id": "fixture-id-094",
+          "revision": 865,
+          "user": [
+            {
+              "id": "fixture-id-094",
+              "kind": "user",
+              "message_id": "fixture-id-095",
+              "content": {
+                "type": "text",
+                "text": "Explain example project 1."
+              }
+            }
+          ],
+          "conclusion": [
+            {
+              "id": "fixture-id-122",
+              "kind": "assistant",
+              "message_id": "fixture-id-123",
+              "content": {
+                "type": "text",
+                "text": "Example project 3 summary.\n\n- Module A handles requests.\n- Module B presents results.\n\nREADME describes setup, usage, and testing.\n\n| Component | Purpose |\n| --- | --- |\n| Module A | Request handling |\n| Module B | Result display |\n\nSee [README.md](/repo/README.md)."
+              }
+            }
+          ],
+          "messages": [
+            {
+              "id": "fixture-id-105",
+              "kind": "steering",
+              "message_id": "fixture-id-106",
+              "content": {
+                "type": "text",
+                "text": "Also summarize README.md."
+              },
+              "delivery": {
+                "status": "injected",
+                "error": null
+              }
+            },
+            {
+              "id": "fixture-id-122",
+              "kind": "assistant",
+              "message_id": "fixture-id-123",
+              "content": {
+                "type": "text",
+                "text": "Example project 3 summary.\n\n- Module A handles requests.\n- Module B presents results.\n\nREADME describes setup, usage, and testing.\n\n| Component | Purpose |\n| --- | --- |\n| Module A | Request handling |\n| Module B | Result display |\n\nSee [README.md](/repo/README.md)."
+              }
+            }
+          ],
+          "process_segments": [
+            {
+              "id": "fixture-id-094",
+              "tool_count": 3,
+              "progress_count": 2,
+              "permission_tool_ids": []
+            },
+            {
+              "id": "fixture-id-105",
+              "tool_count": 7,
+              "progress_count": 3,
+              "permission_tool_ids": []
+            }
+          ],
+          "tool_count": 10,
+          "progress_count": 5,
+          "running": false,
+          "waiting": false,
+          "compacting": false,
+          "status": "completed",
+          "error": null,
+          "permission_tool_ids": []
+        }
+      ]
+    },
+    {
+      "name": "reported-fork",
+      "snapshot": {
+        "version": 1,
+        "thread_id": "fixture-id-124",
+        "source": "user",
+        "created_at": "2000-01-01T00:00:11+00:00",
+        "parent": {
+          "kind": "acp",
+          "id": "fixture-id-091"
+        },
+        "session_id": "fixture-id-125",
+        "agent_id": "codex-acp",
+        "cwd": "/repo",
+        "title": "Fixture conversation",
+        "status": "idle",
+        "needs_load": false,
+        "recovery": null,
+        "revision": 7,
+        "sync_generation": "fixture-id-126",
+        "updated_at": "2000-01-01T00:00:12+00:00",
+        "interacted_at": "2000-01-01T00:00:11+00:00",
+        "entries": [
+          {
+            "id": "fixture-id-127",
+            "kind": "user",
+            "message_id": "fixture-id-095",
+            "content": {
+              "type": "text",
+              "text": "Explain example project 1."
+            }
+          },
+          {
+            "id": "fixture-id-128",
+            "kind": "thought",
+            "message_id": "fixture-id-097",
+            "content": {
+              "type": "text",
+              "text": "**Inspecting example step 14**"
+            }
+          },
+          {
+            "id": "fixture-id-129",
+            "kind": "assistant",
+            "message_id": "fixture-id-099",
+            "content": {
+              "type": "text",
+              "text": "Progress update 8: I will inspect the example files."
+            }
+          },
+          {
+            "id": "fixture-id-100",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-100",
+              "name": "exec_command",
+              "kind": "execute",
+              "title": "Fixture tool-039",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-130",
+            "kind": "thought",
+            "message_id": "fixture-id-102",
+            "content": {
+              "type": "text",
+              "text": "**Inspecting example step 15**"
+            }
+          },
+          {
+            "id": "fixture-id-103",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-103",
+              "name": "exec_command",
+              "kind": "execute",
+              "title": "Fixture tool-040",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-104",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-104",
+              "name": "exec_command",
+              "kind": "execute",
+              "title": "Fixture tool-041",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-131",
+            "kind": "steering",
+            "message_id": "fixture-id-106",
+            "content": {
+              "type": "text",
+              "text": "Also summarize README.md."
+            },
+            "delivery": {
+              "status": "injected",
+              "error": null
+            }
+          },
+          {
+            "id": "fixture-id-132",
+            "kind": "thought",
+            "message_id": "fixture-id-108",
+            "content": {
+              "type": "text",
+              "text": "**Inspecting example step 16**"
+            }
+          },
+          {
+            "id": "fixture-id-133",
+            "kind": "assistant",
+            "message_id": "fixture-id-110",
+            "content": {
+              "type": "text",
+              "text": "Progress update 9: I will inspect the example files."
+            }
+          },
+          {
+            "id": "fixture-id-111",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-111",
+              "name": "exec_command",
+              "kind": "read",
+              "title": "Fixture tool-042",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-112",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-112",
+              "name": "exec_command",
+              "kind": "execute",
+              "title": "Fixture tool-043",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-113",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-113",
+              "name": "exec_command",
+              "kind": "search",
+              "title": "Fixture tool-044",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-134",
+            "kind": "thought",
+            "message_id": "fixture-id-115",
+            "content": {
+              "type": "text",
+              "text": "**Inspecting example step 17**"
+            }
+          },
+          {
+            "id": "fixture-id-116",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-116",
+              "name": "exec_command",
+              "kind": "execute",
+              "title": "Fixture tool-045",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-117",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-117",
+              "name": "exec_command",
+              "kind": "execute",
+              "title": "Fixture tool-046",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-118",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-118",
+              "name": "exec_command",
+              "kind": "search",
+              "title": "Fixture tool-047",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-119",
+            "kind": "tool",
+            "content": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "fixture-id-119",
+              "name": "exec_command",
+              "kind": "execute",
+              "title": "Fixture tool-048",
+              "status": "completed"
+            }
+          },
+          {
+            "id": "fixture-id-135",
+            "kind": "thought",
+            "message_id": "fixture-id-121",
+            "content": {
+              "type": "text",
+              "text": "**Inspecting example step 18**"
+            }
+          },
+          {
+            "id": "fixture-id-136",
+            "kind": "assistant",
+            "message_id": "fixture-id-123",
+            "content": {
+              "type": "text",
+              "text": "Example project 3 summary.\n\n- Module A handles requests.\n- Module B presents results.\n\nREADME describes setup, usage, and testing.\n\n| Component | Purpose |\n| --- | --- |\n| Module A | Request handling |\n| Module B | Result display |\n\nSee [README.md](/repo/README.md)."
+            }
+          }
+        ],
+        "turns": [
+          {
+            "user_entry_id": "fixture-id-127",
+            "status": "completed",
+            "stop_reason": "end_turn",
+            "error": null
+          }
+        ],
+        "plan": null,
+        "notices": [],
+        "session_meta": {},
+        "session_meta_revision": 0,
+        "session_meta_revisions": {},
+        "terminals": {},
+        "permissions": [],
+        "modes": {},
+        "config_options": [],
+        "config_options_supported": true,
+        "auth_required": false,
+        "commands": [],
+        "usage": null,
+        "error": null,
+        "stop_reason": "end_turn",
+        "steering_pending": false,
+        "steering_untracked": false
+      },
+      "provenance": "Anonymized reported history; turn membership verified against native completion events before replacing content and identifiers.",
+      "overview": [
+        {
+          "id": "fixture-id-127",
+          "revision": 7,
+          "user": [
+            {
+              "id": "fixture-id-127",
+              "kind": "user",
+              "message_id": "fixture-id-095",
+              "content": {
+                "type": "text",
+                "text": "Explain example project 1."
+              }
+            }
+          ],
+          "conclusion": [
+            {
+              "id": "fixture-id-136",
+              "kind": "assistant",
+              "message_id": "fixture-id-123",
+              "content": {
+                "type": "text",
+                "text": "Example project 3 summary.\n\n- Module A handles requests.\n- Module B presents results.\n\nREADME describes setup, usage, and testing.\n\n| Component | Purpose |\n| --- | --- |\n| Module A | Request handling |\n| Module B | Result display |\n\nSee [README.md](/repo/README.md)."
+              }
+            }
+          ],
+          "messages": [
+            {
+              "id": "fixture-id-131",
+              "kind": "steering",
+              "message_id": "fixture-id-106",
+              "content": {
+                "type": "text",
+                "text": "Also summarize README.md."
+              },
+              "delivery": {
+                "status": "injected",
+                "error": null
+              }
+            },
+            {
+              "id": "fixture-id-136",
+              "kind": "assistant",
+              "message_id": "fixture-id-123",
+              "content": {
+                "type": "text",
+                "text": "Example project 3 summary.\n\n- Module A handles requests.\n- Module B presents results.\n\nREADME describes setup, usage, and testing.\n\n| Component | Purpose |\n| --- | --- |\n| Module A | Request handling |\n| Module B | Result display |\n\nSee [README.md](/repo/README.md)."
+              }
+            }
+          ],
+          "process_segments": [
+            {
+              "id": "fixture-id-127",
+              "tool_count": 3,
+              "progress_count": 2,
+              "permission_tool_ids": []
+            },
+            {
+              "id": "fixture-id-131",
+              "tool_count": 7,
+              "progress_count": 3,
+              "permission_tool_ids": []
+            }
+          ],
+          "tool_count": 10,
+          "progress_count": 5,
+          "running": false,
+          "waiting": false,
+          "compacting": false,
+          "status": "completed",
+          "error": null,
+          "permission_tool_ids": []
+        }
+      ]
+    }
+  ]
+}

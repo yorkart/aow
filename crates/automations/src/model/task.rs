@@ -87,14 +87,17 @@ impl TaskInput {
         if self.kind == TaskKind::Manual {
             ensure!(
                 self.cron.is_empty() && self.interval_seconds.is_none(),
-                "手动任务无需运行计划"
+                aow_i18n::message("automations.manual_tasks_do_not_require_a_schedule", &[])
             );
             return Ok(());
         }
         if let Some(seconds) = self.interval_seconds {
             ensure!(
                 (1..=2_678_400).contains(&seconds),
-                "运行间隔必须为 1 秒至 31 天"
+                aow_i18n::message(
+                    "automations.run_interval_must_be_between_1_second_and_31",
+                    &[]
+                )
             );
         } else {
             crate::Schedule::parse(&self.cron)?;
@@ -105,21 +108,33 @@ impl TaskInput {
     pub fn validate(&self) -> Result<()> {
         ensure!(
             !self.name.trim().is_empty() && self.name.len() <= 200,
-            "名称不能为空且不能超过 200 字节"
+            aow_i18n::message(
+                "automations.name_must_not_be_empty_or_exceed_200_bytes",
+                &[]
+            )
         );
         ensure!(
             !self.prompt.trim().is_empty() && self.prompt.len() <= 64 * 1024,
-            "任务内容不能为空且不能超过 64 KiB"
+            aow_i18n::message(
+                "automations.task_content_must_not_be_empty_or_exceed_64",
+                &[]
+            )
         );
         self.workspace.validate()?;
         ensure!(
             self.workspace.workspace_mode != WorkspaceMode::Dynamic
                 || self.kind == TaskKind::Manual,
-            "仅手动任务支持动态指定工作区"
+            aow_i18n::message(
+                "automations.only_manual_tasks_support_dynamic_workspaces",
+                &[]
+            )
         );
         ensure!(
             (1..=10).contains(&self.max_concurrent_runs),
-            "最大同时执行数必须为 1–10"
+            aow_i18n::message(
+                "automations.maximum_concurrency_must_be_between_1_and_10",
+                &[]
+            )
         );
         self.validate_schedule()?;
         self.validate_bindings()?;
@@ -129,7 +144,7 @@ impl TaskInput {
     pub fn validate_bindings(&self) -> Result<()> {
         ensure!(
             self.kind == TaskKind::Manual || self.prompt_bindings.is_empty(),
-            "仅手动任务支持输入变量"
+            aow_i18n::message("automations.only_manual_tasks_support_input_variables", &[])
         );
         let mut previous_end = 0;
         for binding in &self.prompt_bindings {
@@ -139,7 +154,10 @@ impl TaskInput {
                     && binding.start < binding.end
                     && self.prompt.get(binding.start..binding.end)
                         == Some(binding.placeholder.as_str()),
-                "变量配置与任务内容不一致，请编辑任务后重新保存"
+                aow_i18n::message(
+                    "automations.variable_configuration_does_not_match_task_content_edit_and",
+                    &[]
+                )
             );
             previous_end = binding.end;
         }
@@ -149,18 +167,32 @@ impl TaskInput {
     /// Resolve a per-run directory on an execution copy, leaving the template intact.
     pub fn resolve_workspace(&mut self, path: Option<PathBuf>) -> Result<()> {
         if self.workspace.workspace_mode != WorkspaceMode::Dynamic {
-            ensure!(path.is_none(), "仅动态指定的任务支持执行时传入工作区目录");
+            ensure!(
+                path.is_none(),
+                aow_i18n::message(
+                    "automations.only_dynamic_tasks_accept_a_workspace_directory_at_runtime",
+                    &[]
+                )
+            );
             return Ok(());
         }
         ensure!(
             self.kind == TaskKind::Manual,
-            "仅手动任务支持动态指定工作区"
+            aow_i18n::message(
+                "automations.only_manual_tasks_support_dynamic_workspaces",
+                &[]
+            )
         );
         let workspace = WorkspaceConfig {
             workspace_mode: WorkspaceMode::Existing,
             workspace_path: path
                 .filter(|path| !path.as_os_str().is_empty())
-                .ok_or_else(|| anyhow::anyhow!("请在执行时指定工作区目录"))?,
+                .ok_or_else(|| {
+                    anyhow::anyhow!(aow_i18n::message(
+                        "automations.specify_a_workspace_directory_for_this_run",
+                        &[]
+                    ))
+                })?,
             base_branch: String::new(),
         };
         workspace.validate()?;
@@ -175,7 +207,7 @@ impl TaskInput {
                 .prompt_bindings
                 .iter()
                 .any(|binding| &binding.name == name)),
-            "包含未配置的变量"
+            aow_i18n::message("automations.contains_unconfigured_variables", &[])
         );
         let mut prompt = String::new();
         let mut offset = 0;
@@ -183,14 +215,31 @@ impl TaskInput {
             let value = values
                 .get(&binding.name)
                 .filter(|value| !value.trim().is_empty())
-                .ok_or_else(|| anyhow::anyhow!("请填写变量：{}", binding.name))?;
+                .ok_or_else(|| {
+                    anyhow::anyhow!(aow_i18n::message(
+                        "automations.enter_a_value_for_variable",
+                        &[("auto0", binding.name.to_string())]
+                    ))
+                })?;
             prompt.push_str(&self.prompt[offset..binding.start]);
             prompt.push_str(value);
-            ensure!(prompt.len() <= 64 * 1024, "替换后的任务内容不能超过 64 KiB");
+            ensure!(
+                prompt.len() <= 64 * 1024,
+                aow_i18n::message(
+                    "automations.expanded_task_content_must_not_exceed_64_kib",
+                    &[]
+                )
+            );
             offset = binding.end;
         }
         prompt.push_str(&self.prompt[offset..]);
-        ensure!(prompt.len() <= 64 * 1024, "替换后的任务内容不能超过 64 KiB");
+        ensure!(
+            prompt.len() <= 64 * 1024,
+            aow_i18n::message(
+                "automations.expanded_task_content_must_not_exceed_64_kib",
+                &[]
+            )
+        );
         Ok(prompt)
     }
 }

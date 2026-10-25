@@ -8,27 +8,27 @@ use crate::HttpError;
 
 #[derive(Debug, Error)]
 pub(crate) enum AowError {
-    #[error("invalid AoW request: {0}")]
+    #[error("{translated}", translated = aow_i18n::message("errors.invalid_aow_request", &[("p0", .0.to_string())]))]
     Invalid(String),
-    #[error("project not found: {0}")]
+    #[error("{translated}", translated = aow_i18n::message("errors.project_not_found", &[("p0", .0.to_string())]))]
     ProjectNotFound(String),
-    #[error("worktree has {0} uncommitted change(s); force removal is required")]
+    #[error("{translated}", translated = aow_i18n::message("errors.worktree_has_uncommitted_change_s_force_removal_is_required", &[("p0", .0.to_string())]))]
     DirtyWorktree(usize),
     #[error("{0}")]
     RemovalConflict(String),
-    #[error("Agent ID 已存在：{0}")]
+    #[error("{message}", message = aow_i18n::message("server.agent_id_already_exists", &[("p0", .0.to_string())]))]
     AgentIdConflict(String),
-    #[error("agent not found or unavailable: {0}")]
+    #[error("{translated}", translated = aow_i18n::message("errors.agent_not_found_or_unavailable", &[("p0", .0.to_string())]))]
     AgentNotFound(String),
-    #[error("git command failed: {0}")]
+    #[error("{translated}", translated = aow_i18n::message("errors.git_command_failed", &[("p0", .0.to_string())]))]
     Git(String),
     #[error("{0}")]
     Timeout(String),
     #[error("{0}")]
     CreationConflict(String),
-    #[error("configuration repository: {0:#}")]
+    #[error("{translated}", translated = aow_i18n::message("errors.configuration_storage", &[("p0", format!("{:#}", .0))]))]
     Configuration(#[source] anyhow::Error),
-    #[error("AoW state lock is poisoned")]
+    #[error("{translated}", translated = aow_i18n::text("errors.aow_state_lock_is_poisoned"))]
     Poisoned,
     #[error(transparent)]
     Io(#[from] std::io::Error),

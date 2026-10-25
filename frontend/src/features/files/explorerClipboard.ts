@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 const imageExtensions: Record<string, string> = {
   'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp',
   'image/bmp': 'bmp', 'image/tiff': 'tiff', 'image/avif': 'avif', 'image/svg+xml': 'svg',
@@ -5,7 +6,7 @@ const imageExtensions: Record<string, string> = {
 
 function screenshotFile(blob: Blob): File {
   const extension = imageExtensions[blob.type.toLowerCase()];
-  if (!extension) throw new Error(`暂不支持此剪贴板图片格式：${blob.type}`);
+  if (!extension) throw new Error(t("files.unsupported_clipboard_image_format", { value0: blob.type }));
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').replace(/\.\d+Z$/, '');
   return new File([blob], `screenshot-${stamp}.${extension}`, { type: blob.type });
 }

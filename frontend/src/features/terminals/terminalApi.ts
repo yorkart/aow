@@ -1,3 +1,6 @@
+import { getLanguage } from '../../lib/i18n';
+import { localizedFetch } from '../../lib/localizedFetch';
+import { t } from '../../lib/i18n';
 import { appUrl } from '../../lib/basePath';
 import { defaultTerminalPaneName } from './terminalPresentation';
 import type { TerminalAgentList, TerminalLayout, TerminalPane, TerminalPaneStatus, TerminalPaneSessions, TerminalAgentProcess, TerminalSplitAxis, TerminalTab } from './types';
@@ -33,7 +36,7 @@ async function request(url: string, init?: RequestInit, timeoutMs = 15_000, exte
   else externalSignal?.addEventListener('abort', abortFromExternal, { once: true });
   const timer = window.setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
   try {
-    const response = await fetch(url, {
+    const response = await localizedFetch(url, {
       ...init,
       signal: controller.signal,
       headers: init?.body === undefined
@@ -45,7 +48,7 @@ async function request(url: string, init?: RequestInit, timeoutMs = 15_000, exte
     return payload;
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
-      if (timedOut) throw new Error(`终端请求超时（${Math.round(timeoutMs / 1000)} 秒）`, { cause: error });
+      if (timedOut) throw new Error(t("terminals.terminal_request_timed_out_seconds", { value0: Math.round(timeoutMs / 1000) }), { cause: error });
     }
     throw error;
   } finally {
@@ -129,6 +132,7 @@ function normalizeTab(value: unknown): TerminalTab | null {
     id: item.id,
     name: typeof item.name === 'string' && item.name.trim() ? item.name : 'Terminal',
     ...(typeof item.name_is_custom === 'boolean' ? { name_is_custom: item.name_is_custom } : {}),
+    ...(typeof item.dock_project_id === 'string' ? { dock_project_id: item.dock_project_id } : {}),
     workspace_root: typeof item.workspace_root === 'string' ? item.workspace_root : '',
     layout: normalizeLayout(item.layout),
     panes: Array.isArray(item.panes)
@@ -149,36 +153,49 @@ export function tabFromPayload(payload: unknown): TerminalTab | null {
   return normalizeTab(envelope?.tab ?? envelope?.terminal);
 }
 
+export function agentsFromPayload(value: unknown): TerminalAgentList {
+  const payload = asRecord(value);
+  const agents = asRecord(payload?.agents);
+  if (!agents) throw new Error(t("terminals.server_returned_invalid_terminal_agent_data"));
+  return {
+    agents: Object.fromEntries(Object.entries(agents).filter((entry): entry is [string, string | null] =>
+      entry[1] === null || typeof entry[1] === 'string' && entry[1].length > 0)),
+    titles: Object.fromEntries(Object.entries(asRecord(payload?.titles) ?? {})
+      .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].trim().length > 0)),
+    processes: Object.fromEntries(Object.entries(asRecord(payload?.processes) ?? {}).flatMap(([id, value]) => {
+      const process = asRecord(value);
+      return process && Number.isInteger(process.pid) && (process.pid as number) > 0
+        && typeof process.start_time === 'string' && typeof process.cwd === 'string'
+        ? [[id, process as unknown as TerminalAgentProcess]] : [];
+    })),
+    activity: Object.fromEntries(Object.entries(asRecord(payload?.activity) ?? {}).flatMap(([id, value]) => {
+      const activity = asRecord(value);
+      if (!activity) return [];
+      const cwd = typeof activity.cwd === 'string' ? activity.cwd : undefined;
+      const foreground_command = typeof activity.foreground_command === 'string'
+        ? activity.foreground_command : undefined;
+      return cwd || foreground_command ? [[id, { cwd, foreground_command }]] : [];
+    })),
+  };
+}
+
 function terminalPath(tabId: string, suffix = '') {
   return `${TERMINALS_PATH}/${encodeURIComponent(tabId)}${suffix}`;
 }
 
 export const terminalApi = {
+  async projectDock(projectId: string, workspaceRoot: string, legacyTerminalId?: string): Promise<TerminalTab> {
+    const tab = tabFromPayload(await request(`${TERMINALS_PATH}/project-dock/${encodeURIComponent(projectId)}`, {
+      method: 'POST', body: JSON.stringify({ workspace_root: workspaceRoot, legacy_terminal_id: legacyTerminalId }),
+    }));
+    if (!tab || tab.dock_project_id !== projectId || tab.workspace_root !== workspaceRoot) throw new Error(t("terminals.server_returned_an_invalid_worktree_terminal"));
+    return tab;
+  },
+
   async agents(workspaceRoot?: string, signal?: AbortSignal): Promise<TerminalAgentList> {
     const query = new URLSearchParams(workspaceRoot === undefined ? {} : { workspace_root: workspaceRoot });
     const payload = asRecord(await request(`${TERMINALS_PATH}/agents?${query}`, undefined, 5_000, signal));
-    const agents = asRecord(payload?.agents);
-    if (!agents) throw new Error('服务器返回了无效的终端 Agent 数据');
-    return {
-      agents: Object.fromEntries(Object.entries(agents).filter((entry): entry is [string, string | null] =>
-        entry[1] === null || typeof entry[1] === 'string' && entry[1].length > 0)),
-      titles: Object.fromEntries(Object.entries(asRecord(payload?.titles) ?? {})
-        .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].trim().length > 0)),
-      processes: Object.fromEntries(Object.entries(asRecord(payload?.processes) ?? {}).flatMap(([id, value]) => {
-        const process = asRecord(value);
-        return process && Number.isInteger(process.pid) && (process.pid as number) > 0
-          && typeof process.start_time === 'string' && typeof process.cwd === 'string'
-          ? [[id, process as unknown as TerminalAgentProcess]] : [];
-      })),
-      activity: Object.fromEntries(Object.entries(asRecord(payload?.activity) ?? {}).flatMap(([id, value]) => {
-        const activity = asRecord(value);
-        if (!activity) return [];
-        const cwd = typeof activity.cwd === 'string' ? activity.cwd : undefined;
-        const foreground_command = typeof activity.foreground_command === 'string'
-          ? activity.foreground_command : undefined;
-        return cwd || foreground_command ? [[id, { cwd, foreground_command }]] : [];
-      })),
-    };
+    return agentsFromPayload(payload);
   },
 
   async paneSessions(tabId: string, paneId: string, signal?: AbortSignal): Promise<TerminalPaneSessions> {
@@ -190,7 +207,7 @@ export const terminalApi = {
     const tab = tabFromPayload(await request(terminalPath(tabId, `/panes/${encodeURIComponent(paneId)}/hosting`), {
       method: 'PUT', body: JSON.stringify({ task_id: taskId, revision, max_inputs: maxInputs, run_on_enable: runOnEnable }),
     }, 30_000));
-    if (!tab) throw new Error('服务器返回了无效的托管状态');
+    if (!tab) throw new Error(t("terminals.server_returned_invalid_autopilot_state"));
     return tab;
   },
 
@@ -205,10 +222,10 @@ export const terminalApi = {
   async get(tabId: string, signal?: AbortSignal): Promise<TerminalTab> {
     try {
       const tab = tabFromPayload(await request(terminalPath(tabId), undefined, 15_000, signal));
-      if (!tab) throw new Error('服务器返回了无效的终端数据');
+      if (!tab) throw new Error(t("terminals.server_returned_invalid_terminal_data"));
       return tab;
     } catch (reason) {
-      if (reason instanceof TerminalHttpError && reason.status === 404) throw new Error('该 Tab 已关闭或不存在。', { cause: reason });
+      if (reason instanceof TerminalHttpError && reason.status === 404) throw new Error(t("aow.this_tab_has_been_closed_or_no_longer_exists"), { cause: reason });
       throw reason;
     }
   },
@@ -225,7 +242,7 @@ export const terminalApi = {
       }),
     });
     const tab = tabFromPayload(payload);
-    if (!tab) throw new Error('服务器返回了无效的终端数据');
+    if (!tab) throw new Error(t("terminals.server_returned_invalid_terminal_data"));
     return tab;
   },
 
@@ -252,7 +269,7 @@ export const terminalApi = {
 
   async rebuild(tabId: string): Promise<TerminalTab> {
     const tab = tabFromPayload(await request(terminalPath(tabId, '/rebuild'), { method: 'POST' }));
-    if (!tab) throw new Error('服务器返回了无效的终端数据');
+    if (!tab) throw new Error(t("terminals.server_returned_invalid_terminal_data"));
     return tab;
   },
 
@@ -288,7 +305,7 @@ export const terminalApi = {
     }, 30_000, signal);
     const response = asRecord(payload);
     if (typeof response?.path !== 'string' || response.path.length === 0) {
-      throw new Error('服务器返回了无效的图片路径');
+      throw new Error(t("terminals.server_returned_an_invalid_image_path"));
     }
     return { path: response.path };
   },
@@ -303,6 +320,7 @@ export const terminalApi = {
   webSocketUrl(tabId: string, paneId: string, resume?: { epoch: string; after: number }) {
     const url = new URL(terminalPath(tabId, `/panes/${encodeURIComponent(paneId)}/ws`), window.location.href);
     url.protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    url.searchParams.set('lang', getLanguage());
     url.searchParams.set('control', 'v2');
     // Full VT restores must only be sent to clients that understand the
     // accompanying snapshot geometry. Unknown query parameters are ignored
@@ -313,8 +331,8 @@ export const terminalApi = {
     // this capability and retain their existing waiting behavior.
     url.searchParams.set('observer', 'v1');
     if (resume !== undefined) {
-      if (!resume.epoch) throw new RangeError('终端续传 epoch 不能为空');
-      if (!Number.isSafeInteger(resume.after) || resume.after < 0) throw new RangeError('终端续传位置必须是非负安全整数');
+      if (!resume.epoch) throw new RangeError(t("terminals.terminal_resume_epoch_cannot_be_empty"));
+      if (!Number.isSafeInteger(resume.after) || resume.after < 0) throw new RangeError(t("terminals.terminal_resume_position_must_be_a_nonnegative_safe_integer"));
       url.searchParams.set('epoch', resume.epoch);
       url.searchParams.set('after', String(resume.after));
     }

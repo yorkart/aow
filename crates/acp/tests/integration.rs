@@ -38,6 +38,123 @@ fn prompt(value: &str) -> Vec<Content> {
 }
 
 #[tokio::test]
+#[ignore = "uses an installed authenticated adapter for real inference; requires AOW_ACP_RECORD_ADAPTER, AOW_ACP_RECORD_CWD and AOW_ACP_RECORD_DIR"]
+async fn record_installed_codex_steering() -> Result<()> {
+    let output = PathBuf::from(std::env::var("AOW_ACP_RECORD_DIR")?);
+    let cwd = PathBuf::from(std::env::var("AOW_ACP_RECORD_CWD")?);
+    std::fs::create_dir_all(&output)?;
+    let host = Arc::new(Host {
+        completions: Default::default(),
+        execution_path: None,
+        settings: RwLock::new(
+            json!({"agent_servers":{"recorded":{"type":"custom", "command":"node", "args":[
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/record-acp.mjs"),
+            output.join("wire.jsonl"), "node", std::env::var("AOW_ACP_RECORD_ADAPTER")?
+        ], "default_mode":"read-only"}}})
+            .to_string(),
+        ),
+    });
+    let service = AcpService::new(host, Some(output.join("state")))?;
+    let connection = service.connect("recorded", cwd).await?;
+    anyhow::ensure!(
+        connection.extensions["steering"]["supported"] == true,
+        "adapter does not support steering"
+    );
+    let session = service.new_session(&connection.id).await?;
+    let id = &session.thread_id;
+    std::fs::write(
+        output.join("connection.json"),
+        serde_json::to_vec_pretty(&connection)?,
+    )?;
+    service.start_prompt(id, prompt("Inspect this example project and explain its main functions and structure. Read files without modifying them."))?;
+    let mut steered = false;
+    let mut events = service.subscribe_sync();
+    let result = tokio::time::timeout(Duration::from_secs(240), async {
+        loop {
+            let snapshot = service.snapshot(id)?;
+            if !steered && snapshot.entries.iter().any(|entry| entry.kind == "tool") {
+                std::fs::write(
+                    output.join("before-steer.json"),
+                    serde_json::to_vec_pretty(&snapshot)?,
+                )?;
+                service.start_steering(id, prompt("Also summarize README.md."))?;
+                steered = true;
+                eprintln!("Injected steer after the first real tool call");
+            }
+            if snapshot.status != "working" && !snapshot.steering_pending {
+                anyhow::ensure!(
+                    steered,
+                    "the prompt ended before steering could be injected"
+                );
+                break;
+            }
+            if !snapshot.permissions.is_empty() {
+                anyhow::bail!("read-only recording unexpectedly requested permission");
+            }
+            let _ = events.recv().await;
+        }
+        Ok::<_, anyhow::Error>(())
+    })
+    .await;
+    std::fs::write(
+        output.join("final.json"),
+        serde_json::to_vec_pretty(&service.snapshot(id)?)?,
+    )?;
+    std::fs::write(
+        output.join("overview.json"),
+        serde_json::to_vec_pretty(&service.overview(id)?)?,
+    )?;
+    if !matches!(&result, Ok(Ok(()))) {
+        let _ = service.cancel(id);
+    }
+    service.close_session(id).await?;
+    let reloaded = service.resume(id).await?;
+    std::fs::write(
+        output.join("reloaded.json"),
+        serde_json::to_vec_pretty(&reloaded)?,
+    )?;
+    std::fs::write(
+        output.join("reloaded-overview.json"),
+        serde_json::to_vec_pretty(&service.overview(id)?)?,
+    )?;
+    service.close_session(id).await?;
+    service.disconnect(&connection.id)?;
+    result??;
+    eprintln!("Recorded live ACP conversation in {}", output.display());
+    Ok(())
+}
+
+#[tokio::test]
+async fn unsupported_protocol_versions_fail_before_session_creation_and_allow_retry() -> Result<()>
+{
+    for version in [0, 2, u16::MAX] {
+        let directory = tempfile::tempdir()?;
+        let host = host(false);
+        let mut settings: Value = serde_json::from_str(&host.settings.read().unwrap())?;
+        settings["agent_servers"]["test"]["env"]["PROTOCOL_VERSION"] = version.to_string().into();
+        *host.settings.write().unwrap() = settings.to_string();
+        let service = AcpService::new(host.clone(), None)?;
+        let error = service
+            .connect("test", directory.path().into())
+            .await
+            .unwrap_err();
+        // The SDK can reject negotiation before our response-version guard is reached.
+        assert!(error.to_string().contains("protocol version"), "{error:#}");
+        assert!(service.sessions(None).is_empty());
+
+        settings["agent_servers"]["test"]["env"]["PROTOCOL_VERSION"] = "1".into();
+        *host.settings.write().unwrap() = settings.to_string();
+        let connection = service.connect("test", directory.path().into()).await?;
+        let session = service.new_session(&connection.id).await?;
+        service.start_prompt(&session.thread_id, prompt("retry"))?;
+        let snapshot = wait_for(&service, &session.thread_id, |value| value.status == "idle").await;
+        assert_eq!(snapshot.stop_reason.as_deref(), Some("end_turn"));
+        service.disconnect(&connection.id)?;
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn sidebar_recency_changes_only_when_a_prompt_is_submitted() -> Result<()> {
     for resume_only in [false, true] {
         let directory = tempfile::tempdir()?;
@@ -551,6 +668,11 @@ async fn activity_streams_and_dismissed_notices_survive_reload() -> Result<()> {
     let snapshot = restored.snapshot(&session.thread_id)?;
     assert!(snapshot.notices.is_empty());
     assert_eq!(snapshot.entries.len(), 3);
+    assert_eq!(
+        snapshot.entries[2].content["summary"][0]["text"],
+        "**Summary**"
+    );
+    assert_eq!(snapshot.entries[2].content["status"], "completed");
     assert_eq!(snapshot.plan["entries"][0]["status"], "completed");
     service.clear_plan(&session.thread_id)?;
     let cleared = service.snapshot(&session.thread_id)?;
@@ -563,6 +685,39 @@ async fn activity_streams_and_dismissed_notices_survive_reload() -> Result<()> {
     service.start_prompt(&session.thread_id, prompt("activity"))?;
     let next = wait_for(&service, &session.thread_id, |value| value.status == "idle").await;
     assert_eq!(next.plan["entries"][0]["status"], "completed");
+    Ok(())
+}
+
+#[tokio::test]
+async fn plan_is_retained_after_completion_and_cleared_when_the_next_turn_starts() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let service = AcpService::new(host(false), None)?;
+    let connection = service.connect("test", directory.path().into()).await?;
+    let session = service.new_session(&connection.id).await?;
+    service.start_prompt(&session.thread_id, prompt("activity"))?;
+    let completed = wait_for(&service, &session.thread_id, |value| value.status == "idle").await;
+    assert_eq!(completed.plan["entries"][0]["status"], "completed");
+
+    // A rejected send must not erase the plan of the completed turn.
+    assert!(service.start_prompt(&session.thread_id, vec![]).is_err());
+    assert_eq!(service.snapshot(&session.thread_id)?.plan, completed.plan);
+
+    // This prompt stays running and emits no replacement plan.
+    service.start_prompt(&session.thread_id, prompt("checkpoint"))?;
+    let working = service.snapshot(&session.thread_id)?;
+    assert_eq!(working.status, "working");
+    assert!(working.plan.is_null());
+    assert!(service.overview(&session.thread_id)?.plan.is_null());
+    assert!(working.revision > completed.revision);
+    service.cancel(&session.thread_id)?;
+    let cancelled = wait_for(&service, &session.thread_id, |value| value.status == "idle").await;
+    assert!(cancelled.plan.is_null());
+
+    // New plan updates must still appear and remain after the new turn finishes.
+    service.start_prompt(&session.thread_id, prompt("activity"))?;
+    let next = wait_for(&service, &session.thread_id, |value| value.status == "idle").await;
+    assert_eq!(next.plan["entries"][0]["status"], "completed");
+    service.disconnect(&connection.id)?;
     Ok(())
 }
 

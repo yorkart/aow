@@ -348,7 +348,7 @@ fn rejects_untrusted_credential_destinations_and_unsafe_session_paths() {
         credentials.binding_id = id.into();
         assert_eq!(
             credentials.validate().unwrap_err().to_string(),
-            "无效的微信绑定 ID"
+            "Invalid WeChat binding ID"
         );
         assert!(WechatClient::new(credentials, None).is_err());
     }
@@ -375,7 +375,7 @@ fn binding_ids_are_opaque_strings_and_preserve_their_session_paths() {
             .unwrap();
         assert!(
             root.path()
-                .join("im/wechat")
+                .join("state/im/wechat")
                 .join(format!("{id}.json"))
                 .is_file()
         );
@@ -392,7 +392,7 @@ async fn setup_progress_survives_restart_and_context_loss_without_assuming_recei
     let root = tempfile::tempdir().unwrap();
     let path = root
         .path()
-        .join("im/wechat")
+        .join("state/im/wechat")
         .join(format!("{}.json", credentials().binding_id));
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     // Existing installations have no verification field.

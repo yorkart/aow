@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useCallback, useEffect, useState } from 'react';
 import { notificationsApi } from '../notifications/api';
 import type { NotificationSettings } from '../notifications/types';
@@ -34,29 +35,29 @@ export function ImSettingsPanel({ onBusyChange, onDirtyChange }: { onBusyChange:
     try {
       const next = remove ? await imApi.removeFeishu() : await imApi.saveFeishu(appId.trim(), secret.trim() || undefined);
       setSettings(next); setAppId(next.im.providers.find(provider => provider.provider === 'feishu')?.app_id ?? '');
-      setSecret(''); setSaved('IM 配置已保存。');
+      setSecret(''); setSaved(t("im.im_configuration_saved"));
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
     finally { setBusy(false); }
   };
   const unavailable = loading || busy || wechatBusy || !settings;
   return <div className="notification-settings-form project-aow-dialog-form">
     <div className="project-aow-dialog-body">
-      <div className="project-aow-settings-heading"><div><h2>IM</h2><p>配置机器人，在飞书或微信中接收通知。</p></div></div>
-      {loading && <p role="status">加载配置中…</p>}
+      <div className="project-aow-settings-heading"><div><h2>IM</h2><p>{t("im.configure_bots_to_receive_notifications_in_feishu_or_wechat")}</p></div></div>
+      {loading && <p role="status">{t("im.loading_configuration")}</p>}
       <WechatSettings provider={wechat} disabled={loading || busy || !settings} onChanged={refresh} onBusyChange={setWechatBusy} />
       <form id="im-feishu-settings" onSubmit={event => { event.preventDefault(); void save(); }}>
-        <h3>飞书 Bot {feishu && <small className="notification-configured">已配置</small>}</h3>
-        <label className="project-aow-dialog-field"><span>App ID</span><input aria-label="飞书 App ID" value={appId} disabled={unavailable} spellCheck={false} autoComplete="off" onChange={event => { setAppId(event.target.value); changed(); }} placeholder="cli_…" required /></label>
-        <label className="project-aow-dialog-field"><span>App Secret</span><input aria-label="飞书 App Secret" type="password" value={secret} disabled={unavailable} autoComplete="new-password" onChange={event => { setSecret(event.target.value); changed(); }} placeholder={feishu?.app_id === appId.trim() ? '已保存，留空保留现有密钥' : '填写应用密钥'} required={!feishu || feishu.app_id !== appId.trim()} /></label>
-        <p className="project-aow-form-intro">使用企业自建应用，在飞书开发者后台开启机器人能力并发布。消息发送给应用所有者，所有者需在可用范围内。</p>
-        <p className="project-aow-form-intro">需要开通“管理应用自身资源”和“以应用的身份发消息”权限。保存后，可在“通知”中选择飞书推送。</p>
+        <h3>{t("automations.feishu_bot")} {feishu && <small className="notification-configured">{t("im.configured")}</small>}</h3>
+        <label className="project-aow-dialog-field"><span>App ID</span><input aria-label={t("im.feishu_app_id")} value={appId} disabled={unavailable} spellCheck={false} autoComplete="off" onChange={event => { setAppId(event.target.value); changed(); }} placeholder="cli_…" required /></label>
+        <label className="project-aow-dialog-field"><span>App Secret</span><input aria-label={t("im.feishu_app_secret")} type="password" value={secret} disabled={unavailable} autoComplete="new-password" onChange={event => { setSecret(event.target.value); changed(); }} placeholder={feishu?.app_id === appId.trim() ? t("im.saved_leave_blank_to_keep_the_current_secret") : t("im.enter_app_secret")} required={!feishu || feishu.app_id !== appId.trim()} /></label>
+        <p className="project-aow-form-intro">{t("im.use_an_enterprise_custom_app_enable_bot_capabilities_and")}</p>
+        <p className="project-aow-form-intro">{t("im.enable_permissions_to_manage_the_app_s_own_resources")}</p>
       </form>
       {saved && <p role="status">{saved}</p>}
       {error && <div role="alert" className="project-aow-error">{error}</div>}
     </div>
     <footer className="project-aow-dialog-footer">
-      {feishu && <button type="button" className="project-aow-dialog-button" disabled={unavailable} onClick={() => void save(true)}>移除飞书配置</button>}
-      <button type="submit" form="im-feishu-settings" className="project-aow-dialog-button primary" disabled={unavailable || !appId.trim()}>{busy ? '保存中…' : '保存'}</button>
+      {feishu && <button type="button" className="project-aow-dialog-button" disabled={unavailable} onClick={() => void save(true)}>{t("im.remove_feishu_configuration")}</button>}
+      <button type="submit" form="im-feishu-settings" className="project-aow-dialog-button primary" disabled={unavailable || !appId.trim()}>{busy ? t("automations.saving") : t("acp.save")}</button>
     </footer>
   </div>;
 }

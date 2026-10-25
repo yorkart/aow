@@ -83,24 +83,31 @@ impl Store {
             .read(true)
             .custom_flags(libc::O_NOFOLLOW)
             .open(self.run_events_path(task_id, run_id)?)?;
-        ensure!(file.metadata()?.is_file(), "执行记录不是普通文件");
+        ensure!(
+            file.metadata()?.is_file(),
+            aow_i18n::message("automations.run_record_is_not_a_regular_file", &[])
+        );
         // The complete start event is published before writers append to the
         // journal. Read just this immutable header when ordering the history.
         let mut line = Vec::new();
         BufReader::new(file.take(MAX_RUN_EVENTS_BYTES + 1)).read_until(b'\n', &mut line)?;
         ensure!(
             line.len() as u64 <= MAX_RUN_EVENTS_BYTES,
-            "执行记录超过大小限制"
+            aow_i18n::message("automations.run_record_exceeds_size_limit", &[])
         );
         if !line.ends_with(b"\n") {
             return Ok(None);
         }
-        let event: StartedEvent =
-            serde_json::from_slice(&line).context("执行记录包含无效开始事件")?;
-        ensure!(event.kind == "started", "执行记录缺少开始事件");
+        let event: StartedEvent = serde_json::from_slice(&line).context(aow_i18n::text(
+            "automations.run_record_contains_an_invalid_start_event",
+        ))?;
+        ensure!(
+            event.kind == "started",
+            aow_i18n::message("automations.run_record_is_missing_a_start_event", &[])
+        );
         ensure!(
             event.run.id == run_id && event.run.task_id == task_id,
-            "执行文件 ID 不匹配"
+            aow_i18n::message("automations.run_file_id_mismatch", &[])
         );
         Ok(Some(event.run.started_at))
     }

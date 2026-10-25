@@ -53,7 +53,7 @@ impl SearchRequests {
             return Err(HttpError::new(
                 StatusCode::BAD_REQUEST,
                 "invalid_search_id",
-                "无效的搜索请求 ID",
+                aow_i18n::text("server.invalid_search_request_id"),
                 None,
             ));
         }
@@ -67,7 +67,7 @@ impl SearchRequests {
             return Err(HttpError::new(
                 StatusCode::TOO_MANY_REQUESTS,
                 "search_busy",
-                "搜索请求过多，请稍后重试",
+                aow_i18n::text("server.too_many_search_requests_try_again_later"),
                 None,
             ));
         }
@@ -81,7 +81,7 @@ impl SearchRequests {
             return Err(HttpError::new(
                 StatusCode::CONFLICT,
                 "duplicate_search_id",
-                "搜索请求 ID 已在使用",
+                aow_i18n::text("server.search_request_id_is_already_in_use"),
                 None,
             ));
         }

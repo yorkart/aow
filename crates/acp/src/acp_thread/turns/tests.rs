@@ -232,12 +232,23 @@ fn replay_verifies_repeated_inputs_images_and_tools_and_keeps_unconsumed_cards()
 
 #[test]
 fn replay_rejects_mismatched_output_identity_content_and_ambiguous_delivery() {
-    for mismatch in ["identity", "content", "image", "ambiguous"] {
+    for mismatch in [
+        "identity",
+        "content",
+        "image",
+        "tool_id",
+        "tool_input",
+        "tool_status",
+        "ambiguous",
+    ] {
         let (mut previous, mut replay) = steering_replay();
         match mismatch {
             "identity" => replay.entries[1].message_id = Some("unrelated".into()),
             "content" => replay.entries[1].content["text"] = "Different answer".into(),
             "image" => replay.entries[5].content["data"] = "different".into(),
+            "tool_id" => replay.entries[2].id = "different-call".into(),
+            "tool_input" => replay.entries[2].content["rawInput"] = json!({"command":"different"}),
+            "tool_status" => replay.entries[2].content["status"] = "failed".into(),
             _ => previous.entries[2].delivery.as_mut().unwrap().status = "unknown".into(),
         }
         restore(&previous, &mut replay);

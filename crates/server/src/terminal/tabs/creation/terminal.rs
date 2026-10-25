@@ -5,14 +5,33 @@ impl TerminalManager {
         &self,
         request: CreateTerminalRequest,
     ) -> Result<TerminalTab, TerminalError> {
+        self.create_shell(request, None).await
+    }
+
+    pub(in crate::terminal) async fn create_shell(
+        &self,
+        request: CreateTerminalRequest,
+        project_dock: Option<(&str, Option<&str>)>,
+    ) -> Result<TerminalTab, TerminalError> {
         self.ensure_creation_available(&request)?;
         if request.resume_session_id.is_some() {
             return Err(TerminalError::Invalid(
-                "resume_session_id requires agent_id".to_owned(),
+                aow_i18n::text("validation.resume_session_id_requires_agent_id").to_owned(),
             ));
         }
         self.reconcile().await?;
         let _operation = self.inner.operation.lock().await;
+        // The lookup, optional legacy adoption and creation share the operation
+        // lock with deletion/rebuild, so concurrent browsers cannot allocate twice.
+        if let Some((project_id, legacy_id)) = project_dock
+            && let Some(tab) = self.existing_project_dock(
+                project_id,
+                request.workspace_root.as_deref().unwrap_or_default(),
+                legacy_id,
+            )?
+        {
+            return Ok(tab);
+        }
         let requested_name = request.name.as_deref().map(validate_name).transpose()?;
         let cwd = resolve_cwd(request.cwd.as_deref(), request.workspace_root.as_deref())?;
         validate_directory(&cwd).await?;
@@ -24,7 +43,8 @@ impl TerminalManager {
         let shell = normalize_shell(request.shell.as_deref())?;
         if request.agent_id.is_some() {
             return Err(TerminalError::Invalid(
-                "agent_id is only accepted by the AoW terminal endpoint".to_owned(),
+                aow_i18n::text("validation.agent_id_is_only_accepted_by_the_aow_terminal_endpoint")
+                    .to_owned(),
             ));
         }
         let (rows, cols) = terminal_size(request.rows, request.cols)?;
@@ -63,6 +83,7 @@ impl TerminalManager {
                 name,
                 name_is_custom,
                 workspace_root,
+                dock_project_id: project_dock.map(|(id, _)| id.to_owned()),
                 layout: TerminalLayout::Pane {
                     pane_id: pane_id.clone(),
                 },

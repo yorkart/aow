@@ -1,4 +1,4 @@
-//! Retained compaction state follows the upstream implementation's upsert/append lifecycle.
+//! Retained compaction state follows the ACP schema's upsert/append lifecycle.
 use super::updates::Change;
 use super::{AcpThread, normalize_content};
 use crate::facade::SessionSnapshot;
@@ -8,18 +8,7 @@ pub(super) fn update(thread: &mut SessionSnapshot, update: Value) {
     let Some(id) = update["compactionId"].as_str() else {
         return;
     };
-    let index = thread
-        .entries
-        .iter()
-        .position(|entry| entry.kind == "compaction_update" && entry.content["compactionId"] == id)
-        .unwrap_or_else(|| {
-            AcpThread::push(
-                thread,
-                "compaction_update",
-                json!({"compactionId":id,"summary":[]}),
-            );
-            thread.entries.len() - 1
-        });
+    let index = ensure_entry(thread, id);
     let state = &mut thread.entries[index].content;
     state["status"] = update["status"].clone();
     // Missing patches retain state; explicit null clears it.
@@ -45,19 +34,12 @@ pub(super) fn update(thread: &mut SessionSnapshot, update: Value) {
 }
 
 pub(super) fn append_summary(thread: &mut SessionSnapshot, chunk: Value) {
-    let Some((index, entry)) = thread
-        .entries
-        .iter_mut()
-        .enumerate()
-        .rev()
-        .find(|(_, entry)| {
-            entry.kind == "compaction_update"
-                && entry.content["compactionId"] == chunk["compactionId"]
-                && entry.content["status"] == "in_progress"
-        })
-    else {
+    let Some(id) = chunk["compactionId"].as_str() else {
         return;
     };
+    // A first-seen chunk starts a compaction; later chunks append without changing its status.
+    let index = ensure_entry(thread, id);
+    let entry = &mut thread.entries[index];
     if let Some(summary) = entry.content["summary"].as_array_mut() {
         append_block(summary, normalize_content(chunk["content"].clone()));
     }
@@ -65,6 +47,21 @@ pub(super) fn append_summary(thread: &mut SessionSnapshot, chunk: Value) {
         index,
         text_start: None,
     });
+}
+
+fn ensure_entry(thread: &mut SessionSnapshot, id: &str) -> usize {
+    thread
+        .entries
+        .iter()
+        .position(|entry| entry.kind == "compaction_update" && entry.content["compactionId"] == id)
+        .unwrap_or_else(|| {
+            AcpThread::push(
+                thread,
+                "compaction_update",
+                json!({"compactionId":id,"status":"in_progress","summary":[]}),
+            );
+            thread.entries.len() - 1
+        })
 }
 
 fn append_block(blocks: &mut Vec<Value>, block: Value) {

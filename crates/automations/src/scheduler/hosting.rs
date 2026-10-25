@@ -11,13 +11,19 @@ impl Scheduler {
         variables: BTreeMap<String, String>,
     ) -> Result<()> {
         let result = async {
-            ensure!(task.input.kind == TaskKind::Manual, "托管仅支持手动任务");
+            ensure!(
+                task.input.kind == TaskKind::Manual,
+                aow_i18n::message("automations.autopilot_supports_only_manual_tasks", &[])
+            );
             task.input.render_prompt(&variables)?;
             ensure!(
                 store
                     .concurrency_slot(&task.id, task.input.max_concurrent_runs)?
                     .is_some(),
-                "手动任务正在执行，已达到并发限制"
+                aow_i18n::message(
+                    "automations.manual_task_is_running_and_the_concurrency_limit_has",
+                    &[]
+                )
             );
             store.save_manual_request(
                 id,
@@ -39,7 +45,10 @@ impl Scheduler {
                     at: chrono::Utc::now(),
                     status: crate::RunStatus::Failed,
                     exit_code: None,
-                    message: Some(format!("托管任务启动失败: {error:#}")),
+                    message: Some(aow_i18n::message(
+                        "automations.failed_to_start_autopilot_task",
+                        &[("p0", format!("{:#}", error))],
+                    )),
                     duration_ms: 0,
                 })?;
             }

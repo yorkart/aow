@@ -231,3 +231,37 @@ fn invalid_parent_flags_and_help_do_not_initialize_state() {
     }
     assert!(!state.exists());
 }
+
+#[test]
+fn omitted_profile_is_resolved_by_the_server_for_both_commands() {
+    for command in ["agent", "acp"] {
+        let reply = if command == "agent" {
+            json!({"pane_id":"child","tab_id":"tab","cwd":"/repo","agent":"selected","status":"running","phase":"ready","task_submitted":false,"error":null})
+        } else {
+            json!({"thread_id":"child","phase":"ready"})
+        };
+        let (output, _, body) = support::run(
+            &[
+                command,
+                "create",
+                "--project-id",
+                "project",
+                "--cwd",
+                "/repo",
+            ],
+            None,
+            200,
+            reply,
+        );
+        assert!(output.status.success(), "{output:?}");
+        assert!(
+            body.get(if command == "agent" {
+                "agent"
+            } else {
+                "agent_id"
+            })
+            .is_none(),
+            "{body}"
+        );
+    }
+}

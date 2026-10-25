@@ -1,3 +1,4 @@
+import { t, getLanguage } from '../../lib/i18n';
 import { LiveEvents } from '../../lib/liveEvents';
 import { TokenUsageBadge } from '../../components/TokenUsageBadge';
 import { useEffect, useId, useRef, useState } from 'react';
@@ -14,25 +15,25 @@ const visibleNoticeCount = 5;
 function TaskNoticeCard({ notice }: { notice: TaskNotice }) {
   const { projectName, tabName, failure, opening, canOpen, open, dismiss } = useTaskNotice(notice);
   return <article className="agent-task-notice" role="status">
-    <button type="button" className="agent-task-notice-open" aria-label={`打开通知：${projectName} · ${tabName}`}
+    <button type="button" className="agent-task-notice-open" aria-label={t("notifications.open_notification", { value0: projectName, value1: tabName })}
       disabled={opening || !canOpen} aria-busy={opening} onClick={() => void open()}>
       <span className="agent-task-notice-agent" title={agentNames[notice.agent] ?? notice.agent}><AgentIcon agentId={notice.agent.replace(/-acp$/, '').replace(/^claude-agent$/, 'claude')} /></span>
       <span className="agent-task-notice-content">
         <span className="agent-task-notice-heading"><strong title={projectName}>{projectName}</strong>
-          <time dateTime={new Date(notice.receivedAt).toISOString()} title={new Date(notice.receivedAt).toLocaleString()}>
-            {new Date(notice.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          <time dateTime={new Date(notice.receivedAt).toISOString()} title={new Date(notice.receivedAt).toLocaleString(getLanguage())}>
+            {new Date(notice.receivedAt).toLocaleTimeString(getLanguage(), { hour: '2-digit', minute: '2-digit' })}
           </time>
         </span>
         <span className="agent-task-notice-tab" title={tabName}>{tabName}</span>
         <TokenUsageBadge usage={notice.usage} />
       </span>
     </button>
-    <button type="button" className="agent-task-notice-close" aria-label={`关闭通知：${projectName} · ${tabName}`}
-      title="关闭弹框，保留未读提醒" disabled={opening}
+    <button type="button" className="agent-task-notice-close" aria-label={t("notifications.dismiss_notification", { value0: projectName, value1: tabName })}
+      title={t("notifications.close_popup_and_keep_unread_reminder")} disabled={opening}
       onClick={() => taskNotifications.closePopups(item => item.key === notice.key)}><X size={14} aria-hidden="true" /></button>
     {failure && <div className="agent-task-notice-failure">
       <span className="agent-task-notice-error" role="alert">{failure}</span>
-      <button type="button" className="agent-task-notice-remove" onClick={dismiss}>移除通知</button>
+      <button type="button" className="agent-task-notice-remove" onClick={dismiss}>{t("notifications.remove_notification")}</button>
     </div>}
   </article>;
 }
@@ -75,21 +76,21 @@ export function AgentTaskNotifications() {
   const visibleNotices = expanded ? notices : notices.slice(0, visibleNoticeCount);
   const foldedCount = notices.length - visibleNoticeCount;
   const collapse = () => { setExpanded(false); list.current?.scrollTo({ top: 0 }); };
-  return <section className={`agent-task-notifications${expanded ? ' is-expanded' : ''}`} aria-label="任务完成提醒"
+  return <section className={`agent-task-notifications${expanded ? ' is-expanded' : ''}`} aria-label={t("notifications.task_completion_reminder")}
     onKeyDown={event => { if (expanded && event.key === 'Escape') { event.stopPropagation(); collapse(); } }}>
     {(notices.length > 1 || expanded) && <div className="agent-task-notifications-toolbar">
-      <span>{notices.length} 条待处理</span>
-      {expanded && <button onClick={collapse} aria-expanded="true" aria-controls={listId}><ChevronUp size={14} />收起</button>}
-      {notices.length > 1 && <button className="agent-task-notifications-clear" title="关闭全部弹框，保留未读提醒" onClick={() => taskNotifications.closePopups(() => true)}>全部关闭</button>}
+      <span>{notices.length} {t("notifications.pending")}</span>
+      {expanded && <button onClick={collapse} aria-expanded="true" aria-controls={listId}><ChevronUp size={14} />{t("aow.collapse")}</button>}
+      {notices.length > 1 && <button className="agent-task-notifications-clear" title={t("notifications.close_all_popups_and_keep_unread_reminders")} onClick={() => taskNotifications.closePopups(() => true)}>{t("notifications.close_all")}</button>}
     </div>}
     {storageError && <div className="agent-task-notifications-storage-error" role="alert">{storageError}</div>}
     <div className="agent-task-notifications-list" id={listId} ref={list} tabIndex={expanded ? 0 : undefined}
-      aria-label="待处理通知" aria-live="polite" aria-relevant="additions">
+      aria-label={t("notifications.pending_notifications")} aria-live="polite" aria-relevant="additions">
       {visibleNotices.map(notice => <TaskNoticeCard key={notice.key} notice={notice} />)}
     </div>
     {!expanded && foldedCount > 0 && <button className="agent-task-notifications-stack" aria-expanded="false" aria-controls={listId}
       onClick={() => { setExpanded(true); list.current?.scrollTo({ top: 0 }); }}>
-      <Layers size={18} aria-hidden="true" /><span><strong>还有 {foldedCount} 条通知</strong><small>展开查看全部</small></span><ChevronDown size={16} aria-hidden="true" />
+      <Layers size={18} aria-hidden="true" /><span><strong>{t("notifications.more")} {foldedCount} {t("notifications.notifications")}</strong><small>{t("notifications.expand_to_view_all")}</small></span><ChevronDown size={16} aria-hidden="true" />
     </button>}
   </section>;
 }

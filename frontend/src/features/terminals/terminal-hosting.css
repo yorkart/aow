@@ -1,5 +1,5 @@
 .terminal-pane-header .terminal-hosting-button { width:auto; display:flex; gap:4px; align-items:center; padding:0 6px; font-size:11px; }
-.terminal-hosting-menu { position:fixed; z-index:1300; width:min(320px,calc(100vw - 16px)); max-height:min(350px,calc(100vh - 16px)); overflow:auto; padding:12px; border:1px solid var(--aow-line); border-radius:8px; background:var(--aow-panel,#252526); color:var(--aow-text); box-shadow:0 8px 28px #0006; font-size:12px; }
+.terminal-hosting-menu { position:fixed; z-index:1300; width:min(320px,calc(100vw - 16px)); max-height:min(350px,calc(100vh - 16px)); overflow:auto; padding:12px; border:1px solid var(--aow-line); border-radius:8px; background:var(--aow-panel,var(--aow-header)); color:var(--aow-text); box-shadow:0 8px 28px var(--aow-shadow); font-size:12px; }
 .terminal-hosting-menu > strong { display:block; margin-bottom:10px; }
 .terminal-hosting-create { padding:0; border:0; background:transparent; color:var(--aow-link); font:inherit; cursor:pointer; }
 .terminal-hosting-create:hover:not(:disabled) { color:var(--aow-link-hover); text-decoration:underline; }
@@ -12,20 +12,20 @@
 .terminal-hosting-tasks > button { display:flex; flex-direction:column; gap:4px; width:100%; padding:9px 8px; background:transparent; border:0; color:inherit; text-align:left; cursor:pointer; font:inherit; }
 .terminal-hosting-tasks > button + button { border-top:1px solid var(--aow-line); }
 .terminal-hosting-tasks > p { margin:0; padding:9px 8px; }
-.terminal-hosting-tasks > button:hover,.terminal-hosting-tasks > button:focus-visible { background:var(--aow-selection,#284259); }
+.terminal-hosting-tasks > button:hover,.terminal-hosting-tasks > button:focus-visible { background:var(--aow-list-highlight); }
 .terminal-hosting-tasks small { color:var(--aow-muted); line-height:1.5; overflow-wrap:anywhere; }
 .terminal-hosting-menu p { color:var(--aow-muted); line-height:1.6; }
 .terminal-hosting-menu p svg { width:14px; height:14px; vertical-align:middle; margin-right:5px; }
 .terminal-hosting-menu .terminal-hosting-menu-error { color:var(--aow-error); }
 .terminal-connection.hosting { opacity:1; flex-wrap:wrap; justify-content:center; pointer-events:auto; max-width:min(560px,calc(100% - 24px)); }
-.terminal-hosting-details { display:flex; align-items:flex-start; gap:6px; flex-basis:100%; color:#f0c36e; padding-top:6px; border-top:1px solid #705b31; font-size:12px; }
+.terminal-hosting-details { display:flex; align-items:flex-start; gap:6px; flex-basis:100%; color:var(--aow-warning); padding-top:6px; border-top:1px solid var(--aow-warning-border); font-size:12px; }
 .terminal-hosting-details > svg { flex-shrink:0; margin-top:2px; }
 .terminal-hosting-details > span { overflow-wrap:anywhere; white-space:normal; }
-.terminal-hosting-details > a { flex-shrink:0; color:#8fc7ff; text-decoration:underline; pointer-events:auto; }
+.terminal-hosting-details > a { flex-shrink:0; color:var(--aow-info); text-decoration:underline; pointer-events:auto; }
 @media (max-width:600px) { .terminal-hosting-details { flex-wrap:wrap; } .terminal-hosting-details > span { flex:1; } .terminal-hosting-details > a { margin-left:20px; } }
 
-.mobile-terminal-hosting { position:absolute; z-index:6; left:12px; right:12px; bottom:12px; padding:9px; background:#252526f5; border:1px solid #3d6f9b; border-radius:7px; font-size:12px; }
-.mobile-terminal-hosting > div:first-child { display:flex; align-items:center; justify-content:space-between; gap:8px; color:#8fc7ff; }
+.mobile-terminal-hosting { position:absolute; z-index:6; left:12px; right:12px; bottom:12px; padding:9px; background:var(--aow-elevated); border:1px solid var(--aow-control-line); border-radius:7px; font-size:12px; }
+.mobile-terminal-hosting > div:first-child { display:flex; align-items:center; justify-content:space-between; gap:8px; color:var(--aow-info); }
 .mobile-terminal-hosting .terminal-hosting-details { margin-top:8px; }
 .mobile-app .terminal-hosting-button { display:flex; gap:4px; align-items:center; width:auto; font-size:12px; }
 
@@ -34,6 +34,6 @@
 .terminal-hosting-run-on-enable { display:flex; align-items:center; gap:6px; min-height:28px; margin-bottom:4px; cursor:pointer; }
 .terminal-hosting-run-on-enable input { flex-shrink:0; margin:0; accent-color:var(--aow-accent); }
 .terminal-hosting-menu .terminal-hosting-limit-hint { margin:0 0 10px; font-size:11px; }
-.terminal-hosting-details.completed { color:#86c995; border-color:#3a6945; }
+.terminal-hosting-details.completed { color:var(--aow-success); border-color:var(--aow-success-border); }
 .mobile-terminal-hosting > div:first-child > span { min-width:0; overflow-wrap:anywhere; }
 .mobile-terminal-hosting > div:first-child > button { flex-shrink:0; }

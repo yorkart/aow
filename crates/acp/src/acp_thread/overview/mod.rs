@@ -1,6 +1,7 @@
 //! Browser projections: collapsed turns carry no process bodies or terminal output.
 //! Indexes and cached overviews are live-only and never enter the offline snapshot.
 mod dialogue;
+mod segments;
 use super::{AcpThread, updates::Change};
 use crate::facade::{
     SessionSnapshot, SessionUpdates, ThreadEntry, TurnOverview, TurnOverviewPatch,
@@ -105,6 +106,7 @@ pub(crate) fn since(
                     .then(|| turn.user.clone()),
                     conclusion: turn.conclusion.clone(),
                     messages: dialogue::since(thread, cached.dialogue.as_deref(), revision),
+                    process_segments: turn.process_segments.clone(),
                     tool_count: turn.tool_count,
                     progress_count: turn.progress_count,
                     running: turn.running,
@@ -186,6 +188,9 @@ pub(super) fn metadata(thread: &SessionSnapshot) -> SessionSnapshot {
     result.interacted_at = thread.interacted_at.clone();
     result.plan = thread.plan.clone();
     result.notices = thread.notices.clone();
+    result.session_meta = thread.session_meta.clone();
+    result.session_meta_revision = thread.session_meta_revision;
+    result.session_meta_revisions = thread.session_meta_revisions.clone();
     result.permissions = thread.permissions.clone();
     result.modes = thread.modes.clone();
     result.config_options = thread.config_options.clone();
@@ -379,16 +384,14 @@ fn summarize(
     }
     let conclusion: Vec<_> =
         if !running && status.as_deref().is_none_or(|status| status == "completed") {
-            final_entries(entries)
-                .into_iter()
-                .filter(|entry| visible_content(&entry.content))
-                .cloned()
-                .collect()
+            final_entries(entries).into_iter().cloned().collect()
         } else {
             Vec::new()
         };
-    // ACP does not identify every completed answer. Keep dialogue visible for
-    // steered turns without promoting intermediate messages to final answers.
+    let displayed_ids: BTreeSet<_> = conclusion.iter().map(|entry| entry.id.as_str()).collect();
+    // Older clients choose messages instead of conclusion, so this projection
+    // must include both steering and the final reply. Intermediate agent progress
+    // stays folded, while segment-aware clients render conclusion separately.
     let dialogue = entries
         .iter()
         .any(|entry| entry.kind == "steering")
@@ -396,32 +399,21 @@ fn summarize(
             entries
                 .iter()
                 .enumerate()
-                .filter(|(_, entry)| dialogue::visible(entry))
+                .filter(|(_, entry)| {
+                    dialogue::visible(entry) || displayed_ids.contains(entry.id.as_str())
+                })
                 .map(|(index, _)| range.start + index)
                 .collect::<Vec<_>>()
         });
-    let displayed_ids: BTreeSet<_> = conclusion.iter().map(|entry| entry.id.as_str()).collect();
-    let mut tool_count = 0;
-    let mut progress_count = 0;
-    let mut last_kind = "";
-    for entry in entries.iter().filter(|entry| {
-        entry.kind != "user"
-            && !displayed_ids.contains(entry.id.as_str())
-            && !(dialogue.is_some() && dialogue::visible(entry))
-            && visible(entry, thread)
-    }) {
-        let kind = if entry.kind == "thought" {
-            "assistant"
-        } else {
-            entry.kind.as_str()
-        };
-        if kind == "tool" {
-            tool_count += 1;
-        } else if kind != "assistant" || last_kind != kind {
-            progress_count += 1;
-        }
-        last_kind = kind;
-    }
+    let process_segments = segments::summarize(entries, thread, &displayed_ids, &id, latest);
+    let tool_count = process_segments
+        .iter()
+        .map(|segment| segment.tool_count)
+        .sum();
+    let progress_count = process_segments
+        .iter()
+        .map(|segment| segment.progress_count)
+        .sum();
     CachedTurn {
         dialogue,
         summary: TurnOverview {
@@ -437,6 +429,7 @@ fn summarize(
             }),
             conclusion,
             messages: None,
+            process_segments,
             tool_count,
             progress_count,
             running,
@@ -465,23 +458,49 @@ fn summarize(
 // Match the browser's conservative final-message boundary, including invisible
 // tool endings but excluding unsupported/empty message content.
 fn final_entries(entries: &[ThreadEntry]) -> Vec<&ThreadEntry> {
+    let is_relevant = |entry: &&ThreadEntry| {
+        matches!(
+            entry.kind.as_str(),
+            "user" | "steering" | "tool" | "summary" | "compaction_update"
+        ) || matches!(entry.kind.as_str(), "assistant" | "thought")
+            && visible_content(&entry.content)
+    };
+    let Some(last) = entries
+        .iter()
+        .rev()
+        .find(is_relevant)
+        .filter(|entry| entry.kind == "assistant")
+    else {
+        return Vec::new();
+    };
+    // Preserve whitespace fragments of the identified final message, including
+    // its first render ID and Markdown indentation across a steering card.
     let relevant: Vec<_> = entries
         .iter()
         .filter(|entry| {
-            matches!(
-                entry.kind.as_str(),
-                "user" | "steering" | "tool" | "summary" | "compaction_update"
-            ) || matches!(entry.kind.as_str(), "assistant" | "thought")
-                && visible_content(&entry.content)
+            is_relevant(entry)
+                || last.message_id.is_some()
+                    && entry.kind == "assistant"
+                    && entry.message_id == last.message_id
+                    && entry.content["type"] == "text"
         })
         .collect();
-    let Some(last) = relevant.last().filter(|entry| entry.kind == "assistant") else {
-        return Vec::new();
-    };
     let mut message_id = last.message_id.as_deref();
     let mut start = relevant.len() - 1;
     while start > 0 {
         let entry = relevant[start - 1];
+        if entry.kind == "steering" && message_id.is_some() {
+            let before = relevant[..start - 1]
+                .iter()
+                .rev()
+                .find(|entry| entry.kind != "steering");
+            if before.is_some_and(|entry| {
+                entry.kind == "assistant" && entry.message_id.as_deref() == message_id
+            }) {
+                start -= 1;
+                continue;
+            }
+        }
         if entry.kind != "assistant"
             || matches!((message_id, entry.message_id.as_deref()), (Some(a), Some(b)) if a != b)
         {
@@ -490,7 +509,11 @@ fn final_entries(entries: &[ThreadEntry]) -> Vec<&ThreadEntry> {
         message_id = message_id.or(entry.message_id.as_deref());
         start -= 1;
     }
-    relevant[start..].to_vec()
+    relevant[start..]
+        .iter()
+        .copied()
+        .filter(|entry| entry.kind == "assistant")
+        .collect()
 }
 
 fn visible_content(content: &Value) -> bool {

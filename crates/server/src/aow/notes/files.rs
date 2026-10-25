@@ -17,7 +17,7 @@ pub(in crate::aow) struct TemporaryNoteResult {
 pub(in crate::aow) async fn prepare_notes_directory(path: &Path) -> Result<String, AowError> {
     if !path.is_absolute() {
         return Err(AowError::Invalid(
-            "Notes directory must be an absolute path".to_owned(),
+            aow_i18n::text("validation.notes_directory_must_be_an_absolute_path").to_owned(),
         ));
     }
     tokio::fs::create_dir_all(path).await?;
@@ -62,6 +62,7 @@ pub(in crate::aow) async fn create_temporary_note_file(
         }
     }
     Err(AowError::Invalid(
-        "could not allocate a unique temporary note name after 5 attempts".to_owned(),
+        aow_i18n::text("validation.could_not_allocate_a_unique_temporary_note_name_after_5")
+            .to_owned(),
     ))
 }

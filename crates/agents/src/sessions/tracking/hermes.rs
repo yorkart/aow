@@ -14,7 +14,7 @@ impl AgentSessionTracker for Hermes {
             .to_string_lossy()
             .into_owned();
         let pid = context.pid;
-        tokio::task::spawn_blocking(move || resolve(&root, &cwd, pid))
+        aow_i18n::spawn_blocking(move || resolve(&root, &cwd, pid))
             .await
             .unwrap_or(SessionResolution::Unavailable)
     }

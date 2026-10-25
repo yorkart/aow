@@ -17,7 +17,7 @@ fn manager(state: &AppState) -> Result<&AutomationManager, (StatusCode, Json<ser
     state.automations.as_ref().ok_or_else(|| {
         (
             StatusCode::SERVICE_UNAVAILABLE,
-            Json(serde_json::json!({ "message": "自动化需要持久化状态目录" })),
+            Json(serde_json::json!({ "message": aow_i18n::text("server.automations_require_a_persistent_state_directory") })),
         )
     })
 }

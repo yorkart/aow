@@ -1,3 +1,4 @@
+import { t, getLanguage } from '../../lib/i18n';
 import { useEffect, useRef, useState } from 'react';
 import { Bell, ExternalLink, Trash2, X } from 'lucide-react';
 import { AgentIcon } from '../agents/AgentIcon';
@@ -13,7 +14,7 @@ function NotificationRow({ notice }: { notice: TaskNotice }) {
     <span className="task-notification-agent" title={notice.agent}><AgentIcon agentId={notice.agent.replace(/-acp$/, '').replace(/^claude-agent$/, 'claude')} /></span>
     <div className="task-notification-content">
       <div className="task-notification-heading"><strong>{notice.title || tabName}</strong>
-        <time dateTime={new Date(notice.receivedAt).toISOString()}>{new Date(notice.receivedAt).toLocaleString()}</time>
+        <time dateTime={new Date(notice.receivedAt).toISOString()}>{new Date(notice.receivedAt).toLocaleString(getLanguage())}</time>
       </div>
       <div>{projectName} · {tabName}</div>
       <small className="task-notification-workspace">{workspaces}</small>
@@ -21,9 +22,9 @@ function NotificationRow({ notice }: { notice: TaskNotice }) {
       {failure && <div className="task-notification-error" role="alert">{failure}</div>}
     </div>
     <div className="task-notification-actions">
-      <button type="button" aria-label={`打开提醒：${projectName} · ${tabName}`} title="打开来源 Tab" disabled={opening || !canOpen} aria-busy={opening}
-        onClick={() => void open()}><ExternalLink size={14} />查看</button>
-      <button type="button" aria-label={`移除提醒：${projectName} · ${tabName}`} title="强制清理这条提醒" disabled={opening} onClick={dismiss}><Trash2 size={14} />移除</button>
+      <button type="button" aria-label={t("notifications.open_reminder", { value0: projectName, value1: tabName })} title={t("notifications.open_source_tab")} disabled={opening || !canOpen} aria-busy={opening}
+        onClick={() => void open()}><ExternalLink size={14} />{t("notifications.view")}</button>
+      <button type="button" aria-label={t("notifications.remove_reminder", { value0: projectName, value1: tabName })} title={t("notifications.force_clear_this_reminder")} disabled={opening} onClick={dismiss}><Trash2 size={14} />{t("notifications.remove")}</button>
     </div>
   </article>;
 }
@@ -40,23 +41,23 @@ export function TaskNotificationPanel({ onClose }: { onClose: () => void }) {
     const keys = new Set(notices.map(notice => notice.key));
     taskNotifications.dismiss(notice => keys.has(notice.key));
   };
-  return <section id="task-notification-panel" ref={panel} tabIndex={-1} className="task-notification-panel" aria-label="提醒" style={{ height }} onKeyDown={event => {
+  return <section id="task-notification-panel" ref={panel} tabIndex={-1} className="task-notification-panel" aria-label={t("aow.reminder")} style={{ height }} onKeyDown={event => {
     if (event.key === 'Escape') { event.stopPropagation(); onClose(); }
   }}>
-    <div className="task-notification-resize" role="separator" aria-label="调整提醒面板高度" aria-orientation="horizontal" tabIndex={0}
+    <div className="task-notification-resize" role="separator" aria-label={t("notifications.resize_reminders_panel_height")} aria-orientation="horizontal" tabIndex={0}
       onPointerDown={event => { resize.current = { y: event.clientY, height }; event.currentTarget.setPointerCapture(event.pointerId); }}
       onPointerMove={event => { if (resize.current) resizeTo(resize.current.height + resize.current.y - event.clientY); }}
       onPointerUp={() => { resize.current = undefined; }} onPointerCancel={() => { resize.current = undefined; }}
       onKeyDown={event => { if (event.key === 'ArrowUp' || event.key === 'ArrowDown') { event.preventDefault(); resizeTo(height + (event.key === 'ArrowUp' ? 20 : -20)); } }} />
-    <header><div><Bell size={15} /><strong>提醒</strong></div>
-      <div><button type="button" title="强制清理全部待处理提醒" disabled={!notices.length} onClick={clear}><Trash2 size={14} />清空全部</button>
-        <button type="button" aria-label="关闭提醒面板" title="关闭" onClick={onClose}><X size={15} /></button></div>
+    <header><div><Bell size={15} /><strong>{t("aow.reminder")}</strong></div>
+      <div><button type="button" title={t("notifications.force_clear_all_pending_reminders")} disabled={!notices.length} onClick={clear}><Trash2 size={14} />{t("notifications.clear_all")}</button>
+        <button type="button" aria-label={t("notifications.close_reminders_panel")} title={t("aow.close")} onClick={onClose}><X size={15} /></button></div>
     </header>
     {storageError && <div className="task-notification-error" role="alert">{storageError}</div>}
     <div className="task-notification-list">
       {notices.map(notice => <NotificationRow key={notice.key} notice={notice} />)}
-      {!notices.length && <div className="task-notification-empty">暂无待处理提醒</div>}
+      {!notices.length && <div className="task-notification-empty">{t("notifications.no_pending_reminders")}</div>}
     </div>
-    <footer>{notices.length} 条待处理提醒 · 包含已关闭弹框的提醒</footer>
+    <footer>{notices.length} {t("notifications.pending_reminders_includes_reminders_with_closed_popups")}</footer>
   </section>;
 }

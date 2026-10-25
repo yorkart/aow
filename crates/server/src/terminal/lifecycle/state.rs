@@ -32,6 +32,7 @@ impl TerminalManager {
                 task_stops: tokio::sync::broadcast::channel(128).0,
                 task_completions: tokio::sync::broadcast::channel(128).0,
                 notifications_started: std::sync::atomic::AtomicBool::new(false),
+                sync: sync::TerminalSync::default(),
             }),
         };
         manager.start_clipboard_cleanup();
@@ -42,9 +43,9 @@ impl TerminalManager {
         state_dir: PathBuf,
         terminald: TerminaldClient,
     ) -> Result<Self, TerminalError> {
-        std::fs::create_dir_all(&state_dir)?;
+        std::fs::create_dir_all(state_dir.join("state"))?;
         let clipboard = clipboard::ClipboardStorage::persistent(&state_dir)?;
-        let metadata_path = state_dir.join(METADATA_FILE);
+        let metadata_path = state_dir.join("state").join(METADATA_FILE);
         let mut tabs = match std::fs::read(&metadata_path) {
             Ok(bytes) => {
                 let persisted: PersistedState = serde_json::from_slice(&bytes)?;
@@ -93,6 +94,7 @@ impl TerminalManager {
                 task_stops: tokio::sync::broadcast::channel(128).0,
                 task_completions: tokio::sync::broadcast::channel(128).0,
                 notifications_started: std::sync::atomic::AtomicBool::new(false),
+                sync: sync::TerminalSync::default(),
             }),
         };
         manager.start_clipboard_cleanup();
@@ -131,15 +133,17 @@ impl TerminalManager {
         &self,
         state: &ManagerState,
     ) -> Result<(), TerminalError> {
-        let Some(path) = &self.inner.metadata_path else {
-            return Ok(());
-        };
-        atomic_save(
-            path,
-            &PersistedState {
-                version: METADATA_VERSION,
-                tabs: state.tabs.clone(),
-            },
-        )
+        if let Some(path) = &self.inner.metadata_path {
+            atomic_save(
+                path,
+                &PersistedState {
+                    version: METADATA_VERSION,
+                    tabs: state.tabs.clone(),
+                },
+            )?;
+        }
+        // Publish only committed state, while the state lock still orders writers.
+        self.inner.sync.publish_tabs(state.tabs.clone());
+        Ok(())
     }
 }

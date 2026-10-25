@@ -30,7 +30,7 @@ test('real launchd activates isolated native services, restarts crashes, and rol
     rmSync(directory, { recursive: true, force: true });
   });
   execFileSync('/bin/launchctl', ['print', domain], { stdio: 'ignore' });
-  for (const path of ['scripts', 'packaging/bin', 'home/state', 'home/.config/aow']) {
+  for (const path of ['scripts', 'packaging/bin', 'home/state', 'home/.aow']) {
     mkdirSync(join(directory, path), { recursive: true });
   }
   mkdirSync(join(runtime, 'bin'), { recursive: true });
@@ -51,7 +51,7 @@ test('real launchd activates isolated native services, restarts crashes, and rol
     AOW_SERVER_HOST: '127.0.0.1', AOW_SERVER_PORT: String(port),
     AOW_TERMINALD_SOCKET: socket, XDG_CONFIG_HOME: join(home, '.config'),
     XDG_STATE_HOME: '', XDG_RUNTIME_DIR: '', AOW_LOG_MODE: '', AOW_BASE_PATH: '' };
-  writeFileSync(join(home, '.config/aow/server.env'), 'AOW_BASE_PATH=/tools/aow/\n');
+  writeFileSync(join(home, '.aow/server.env'), 'AOW_BASE_PATH=/tools/aow/\n');
   execFileSync(join(root, 'target/debug/aow-server'), ['--initialize-state', '--state-dir', state], { env, stdio: 'pipe' });
   writeFileSync(join(state, 'credentials.json'), credentials(), { mode: 0o600 });
   for (const version of ['1.0.0', '2.0.0']) {

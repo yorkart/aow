@@ -1,4 +1,4 @@
-// thread_import.rs: discover on explicit entry, select agents, then save only metadata.
+import { t } from '../../../lib/i18n';
 import { useEffect, useRef, useState } from 'react';
 import { LoaderCircle } from 'lucide-react';
 import { acpApi, sessionsChanged } from '../api';
@@ -80,19 +80,19 @@ export function ThreadImport({ agents, existing, workspace, onClose }: {
     finally { window.dispatchEvent(new Event(sessionsChanged)); if (active.current) setBusy(false); }
   };
   return <dialog ref={dialog} className="acp-import-dialog" aria-labelledby="acp-import-title" aria-describedby="acp-import-description" onCancel={event => { event.preventDefault(); if (!busy) onClose(); }} onKeyDown={event => event.stopPropagation()}>
-    <h2 id="acp-import-title">导入外部 Agent 会话</h2>
-    <p id="acp-import-description">选择 Agent，将当前工作区中尚未加入历史的会话导入。确认后加入会话列表，打开会话时加载内容。</p>
+    <h2 id="acp-import-title">{t("acp.import_external_agent_sessions")}</h2>
+    <p id="acp-import-description">{t("acp.choose_an_agent_and_import_sessions_from_this_workspace")}</p>
     <div className="acp-import-agents">{rows.map(row => {
       const total = candidates(row).length;
       return <div key={row.agent.id} className="acp-import-agent">
-        <label><input type="checkbox" aria-label={`导入 ${row.agent.name}`} checked={!!total && !excluded.has(row.agent.id)} disabled={busy || !!row.loading || !!row.auth || !!row.error || !total} onChange={event => { const checked = event.target.checked; setExcluded(previous => { const next = new Set(previous); if (checked) next.delete(row.agent.id); else next.add(row.agent.id); return next; }); }} /><strong>{row.agent.name}</strong>
-          {row.loading ? <span role="status"><LoaderCircle className="acp-spinner" size={14} />正在查找会话…</span> : <span>{row.unsupported ? '不支持列出会话' : row.error || row.auth ? '暂不可用' : `${total} 个可导入会话`}</span>}
+        <label><input type="checkbox" aria-label={t("acp.import", { value0: row.agent.name })} checked={!!total && !excluded.has(row.agent.id)} disabled={busy || !!row.loading || !!row.auth || !!row.error || !total} onChange={event => { const checked = event.target.checked; setExcluded(previous => { const next = new Set(previous); if (checked) next.delete(row.agent.id); else next.add(row.agent.id); return next; }); }} /><strong>{row.agent.name}</strong>
+          {row.loading ? <span role="status"><LoaderCircle className="acp-spinner" size={14} />{t("acp.finding_sessions")}</span> : <span>{row.unsupported ? t("acp.session_listing_unsupported") : row.error || row.auth ? t("acp.unavailable") : t("acp.sessions_available_to_import", { count: total, value0: total })}</span>}
         </label>
         {row.error && <p className="acp-error" role="alert">{row.error}</p>}
-        {row.auth && row.connection ? <Authentication connection={row.connection} pending={!!row.authenticating} onAuthenticate={method => authenticate(row, method)} /> : row.error && <button type="button" disabled={busy || row.loading} onClick={() => retry(row)}>重试 {row.agent.name}</button>}
+        {row.auth && row.connection ? <Authentication connection={row.connection} pending={!!row.authenticating} onAuthenticate={method => authenticate(row, method)} /> : row.error && <button type="button" disabled={busy || row.loading} onClick={() => retry(row)}>{t("aow.retry")} {row.agent.name}</button>}
       </div>;
-    })}{!rows.length && <p>没有已安装的 Agent。请先在 Settings → ACP 安装。</p>}</div>
+    })}{!rows.length && <p>{t("acp.no_agents_installed_install_one_in_settings_acp_first")}</p>}</div>
     {error && <p className="acp-error" role="alert">{error}</p>}
-    <footer><button type="button" disabled={busy} onClick={onClose}>取消</button><button type="button" disabled={busy || !count} onClick={() => { void importSelected(); }}>{busy ? '正在导入…' : `导入 ${count} 个会话`}</button></footer>
+    <footer><button type="button" disabled={busy} onClick={onClose}>{t("aow.cancel")}</button><button type="button" disabled={busy || !count} onClick={() => { void importSelected(); }}>{busy ? t("acp.importing") : t("acp.import_sessions", { count: count, value0: count })}</button></footer>
   </dialog>;
 }

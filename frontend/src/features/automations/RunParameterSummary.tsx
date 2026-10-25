@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { AutomationRun } from './types';
@@ -44,12 +45,12 @@ export function RunParameterSummary({ run }: { run: AutomationRun }) {
     };
   }, [open]);
 
-  if (!entries.length) return <span className="automation-parameter-summary automation-muted">{run.source === 'manual' && run.variables == null ? '未记录' : '—'}</span>;
+  if (!entries.length) return <span className="automation-parameter-summary automation-muted">{run.source === 'manual' && run.variables == null ? t("automations.not_recorded") : '—'}</span>;
   return <span ref={anchor} className="automation-parameter-summary" aria-describedby={open ? tooltipId : undefined}
     onPointerEnter={event => { if (event.pointerType !== 'touch') { keepOpen(); setOpen(true); } }} onPointerLeave={closeSoon}
     onClick={() => setOpen(false)}>
     <code>{text}</code>
-    {open ? createPortal(<div ref={tooltip} id={tooltipId} role="tooltip" aria-label="执行参数" className="automation-parameter-tooltip" style={position}
+    {open ? createPortal(<div ref={tooltip} id={tooltipId} role="tooltip" aria-label={t("automations.run_arguments")} className="automation-parameter-tooltip" style={position}
       onPointerEnter={keepOpen} onPointerLeave={closeSoon} onPointerDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()}>
       {entries.map(([key, value]) => <div className="automation-parameter-tooltip-row" key={key}><code>{key}</code><span>=</span><code>{value}</code></div>)}
     </div>, document.body) : null}

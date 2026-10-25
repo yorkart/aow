@@ -623,16 +623,12 @@ async fn run_hosting_case(case: HostingCase) {
                         assert_eq!(request["variables"]["session_id"], "source-session");
                         assert_eq!(
                             request["variables"]["turn_id"],
-                            if immediate {
-                                "（无）"
-                            } else {
-                                "after-enable"
-                            }
+                            if immediate { "(none)" } else { "after-enable" }
                         );
                         assert_eq!(
                             request["variables"]["conclusion"],
                             if immediate {
-                                "（无）"
+                                "(none)"
                             } else {
                                 "Implementation finished"
                             }
@@ -660,12 +656,12 @@ async fn run_hosting_case(case: HostingCase) {
                     if runs.len() == 1 {
                         let prompt = std::fs::read_to_string(home.join("review-prompt")).unwrap();
                         assert!(prompt.contains(if immediate {
-                            "Review （无） in "
+                            "Review (none) in "
                         } else {
                             "Review Implementation finished in "
                         }));
                         assert!(prompt.contains(if immediate {
-                            "session source-session turn （无）"
+                            "session source-session turn (none)"
                         } else {
                             "session source-session turn after-enable"
                         }));
@@ -718,8 +714,10 @@ async fn run_hosting_case(case: HostingCase) {
         ]
     );
     let prompt = std::fs::read_to_string(home.join("review-prompt")).unwrap();
-    assert!(prompt.starts_with("你正在执行一次审查任务，请遵循任务原有的执行和输出要求。"));
-    assert!(prompt.contains("单独追加标记：[AOW_HOSTING_DONE]。\n\n审查任务：\nReview "));
+    assert!(prompt.starts_with(
+        "You are performing a review. Follow the original task's execution and output requirements."
+    ));
+    assert!(prompt.contains("append this marker alone on a new line at the end of the final output: [AOW_HOSTING_DONE].\n\nReview task:\nReview "));
     assert!(!prompt.contains("审查上下文："));
     assert!(!prompt.contains("hosting-context.json"));
     assert!(!prompt.contains("Terminal"));

@@ -51,15 +51,16 @@ impl RemovalJobs {
         error: Option<String>,
     ) -> Result<(), AowError> {
         let mut jobs = self.lock()?;
-        let job = jobs
-            .iter_mut()
-            .find(|job| job.id == id)
-            .ok_or_else(|| AowError::Invalid("清理任务不存在".into()))?;
+        let job = jobs.iter_mut().find(|job| job.id == id).ok_or_else(|| {
+            AowError::Invalid(aow_i18n::text("server.cleanup_task_does_not_exist").into())
+        })?;
         let item = job
             .items
             .iter_mut()
             .find(|item| item.path == path)
-            .ok_or_else(|| AowError::Invalid("清理项目不存在".into()))?;
+            .ok_or_else(|| {
+                AowError::Invalid(aow_i18n::text("server.cleanup_project_does_not_exist").into())
+            })?;
         item.status = status;
         item.error = error;
         if job.items.iter().all(|item| !item.status.active()) {

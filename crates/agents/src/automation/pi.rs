@@ -28,7 +28,10 @@ impl AgentAutomation for Pi {
                     && !["-c", "-r", "-p", "-h", "-v"]
                         .iter()
                         .any(|flag| key.starts_with(flag)),
-                "Pi 启动参数与自动化新会话模式冲突: {key}"
+                aow_i18n::message(
+                    "agents.pi_launch_arguments_conflict_with_automation_new_session_mode",
+                    &[("p0", key.to_string())]
+                )
             );
         }
         Ok(())

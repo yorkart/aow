@@ -36,7 +36,7 @@ fn retained_ancestry_survives_restart_and_rejects_reparenting() {
 fn failed_persistence_does_not_publish_a_creation_record() {
     let directory = tempfile::tempdir().unwrap();
     let store = InstanceStore::persistent(directory.path()).unwrap();
-    std::fs::create_dir(directory.path().join("instances.json")).unwrap();
+    std::fs::create_dir_all(directory.path().join("state/instances.json")).unwrap();
     assert!(
         store
             .record_all(vec![InstanceInfo {

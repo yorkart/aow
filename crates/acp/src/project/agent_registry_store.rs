@@ -13,6 +13,10 @@ pub(crate) struct RegistryEntry {
     pub name: String,
     pub version: String,
     pub description: String,
+    pub icon: Option<String>,
+    pub repository: Option<String>,
+    pub website: Option<String>,
+    pub license_url: Option<String>,
     pub distribution: RegistryDistribution,
 }
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -86,5 +90,31 @@ pub(crate) fn current_platform_key() -> Option<&'static str> {
         ("windows", "aarch64") => Some("windows-aarch64"),
         ("windows", "x86_64") => Some("windows-x86_64"),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RegistryEntry;
+
+    #[test]
+    fn registry_metadata_survives_cache_roundtrip_and_older_entries_remain_readable() {
+        let mut entry = serde_json::json!({
+            "id": "demo", "name": "Demo", "version": "1.0.0",
+            "description": "Demo adapter", "distribution": {}
+        });
+        let legacy: RegistryEntry = serde_json::from_value(entry.clone()).unwrap();
+        assert!(legacy.icon.is_none());
+        assert!(legacy.repository.is_none());
+        assert!(legacy.website.is_none());
+        assert!(legacy.license_url.is_none());
+        for field in ["icon", "repository", "website", "license_url"] {
+            entry[field] = format!("https://example.com/{field}").into();
+        }
+        let parsed: RegistryEntry = serde_json::from_value(entry.clone()).unwrap();
+        let cached = serde_json::to_value(parsed).unwrap();
+        for field in ["icon", "repository", "website", "license_url"] {
+            assert_eq!(cached[field], entry[field]);
+        }
     }
 }

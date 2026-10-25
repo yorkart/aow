@@ -3,6 +3,7 @@ import './monaco';
 import { useEffect, useRef } from 'react';
 import type { editor } from 'monaco-editor';
 import Editor, { DiffEditor as MonacoDiffEditor, type EditorProps, type DiffEditorProps } from '@monaco-editor/react';
+import { useTheme } from '../../lib/theme/useTheme';
 
 const defaultOptions = { unicodeHighlight: { ambiguousCharacters: false } };
 
@@ -13,6 +14,7 @@ const defaultOptions = { unicodeHighlight: { ambiguousCharacters: false } };
 // unsupported browsers use Monaco's own fallback. Consumers must use Monaco's
 // composition events.
 export default function MonacoEditor({ options, revealLocation, onMount, ...props }: EditorProps & { revealLocation?: { line: number; column?: number; length?: number; revision: number } }) {
+  const theme = useTheme();
   const instance = useRef<editor.IStandaloneCodeEditor | undefined>(undefined);
   useEffect(() => {
     if (!revealLocation || !instance.current) return;
@@ -23,7 +25,7 @@ export default function MonacoEditor({ options, revealLocation, onMount, ...prop
     instance.current.revealRangeInCenter(range);
     if (revealLocation.column !== undefined) instance.current.focus();
   }, [revealLocation, props.path]);
-  return <Editor {...props} onMount={(mounted, monaco) => {
+  return <Editor {...props} theme={`aow-${theme.id}`} onMount={(mounted, monaco) => {
     instance.current = mounted;
     if (revealLocation) {
       const lineNumber = Math.max(1, Math.floor(revealLocation.line)), column = Math.max(1, Math.floor(revealLocation.column ?? 1));
@@ -37,5 +39,6 @@ export default function MonacoEditor({ options, revealLocation, onMount, ...prop
 }
 
 export function DiffEditor({ options, ...props }: DiffEditorProps) {
-  return <MonacoDiffEditor {...props} options={{ ...defaultOptions, editContext: !options?.readOnly && !options?.domReadOnly, ...options }} />;
+  const theme = useTheme();
+  return <MonacoDiffEditor {...props} theme={`aow-${theme.id}`} options={{ ...defaultOptions, editContext: !options?.readOnly && !options?.domReadOnly, ...options }} />;
 }

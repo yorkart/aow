@@ -56,8 +56,12 @@ pub async fn start_local_cli(state: AppState, state_dir: &Path) -> anyhow::Resul
         std::fs::metadata(&directory)?.uid() == uid,
         "CLI socket directory must belong to the current user"
     );
-    let directory = directory.join("cli");
-    match std::fs::DirBuilder::new().mode(0o700).create(&directory) {
+    let directory = directory.join("runtime/cli");
+    match std::fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(&directory)
+    {
         Ok(()) => {}
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
         Err(error) => return Err(error.into()),
@@ -119,7 +123,7 @@ pub async fn start_local_cli(state: AppState, state_dir: &Path) -> anyhow::Resul
         .route("/v1/agents/{pane_id}/submit", post(agent_control::submit))
         .with_state(state);
     let (shutdown, receiver) = tokio::sync::oneshot::channel();
-    let task = tokio::spawn(async move {
+    let task = aow_i18n::spawn(async move {
         let _guard = guard;
         axum::serve(listener, router)
             .with_graceful_shutdown(async {

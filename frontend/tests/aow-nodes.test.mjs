@@ -20,7 +20,7 @@ try {
       'https://example.com/tools/aow/m/', 'https://example.com/tools/other/', 'https://example.com/',
     ], 'https://example.com/tools/aow'), ['https://example.com/tools/other/', 'https://example.com/']);
     for (const invalid of ['node.example', '//node.example', 'https:node.example', 'javascript:alert(1)', 'file:///tmp/node', 'https://user:password@node.example']) {
-      assert.throws(() => parseNodeAddresses(`https://valid.example\n\n${invalid}`), /第 3 行地址无效/);
+      assert.throws(() => parseNodeAddresses(`https://valid.example\n\n${invalid}`), /Invalid address on line 3/);
     }
   });
 
@@ -31,6 +31,7 @@ try {
     const context = await browser.newContext(mobile
       ? { viewport: { width, height: 844 }, isMobile: true, hasTouch: true }
       : { viewport: { width: 1280, height: 800 } });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     const state = { settings: { notes_base: '/notes', execution_path: ['/usr/bin'], editor: { word_wrap: false }, ...(addresses ? { node_addresses: addresses } : {}) }, updates: [], errors: [], failSave: false };
     t.after(async () => { await context.close(); assert.deepEqual(state.errors, []); });
     await context.route('**/api/**', async route => {
@@ -51,6 +52,7 @@ try {
       await route.fulfill({ json: data });
     });
     const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     page.on('pageerror', error => state.errors.push(error.message));
     await page.goto(mobile ? `${base}/m` : `${base}/aow/?ui=desktop`);
     await page.getByRole('button', { name: '切换 AoW 节点', exact: true }).waitFor();
@@ -59,9 +61,9 @@ try {
   const trigger = page => page.getByRole('button', { name: '切换 AoW 节点', exact: true });
   const menu = page => page.getByRole('menu', { name: '其他 AoW 节点' });
   async function openSettings(page) {
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    const dialog = page.getByRole('dialog', { name: '设置', exact: true });
-    await dialog.getByRole('button', { name: /^Nodes/ }).click();
+    await page.getByRole('button', { name: "设置", exact: true }).click();
+    const dialog = page.getByRole('region', { name: '设置', exact: true });
+    await dialog.getByRole('button', { name: /^节点/ }).click();
     return dialog;
   }
 

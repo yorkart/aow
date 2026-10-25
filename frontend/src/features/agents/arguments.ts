@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 export interface ArgumentsDraft {
   text: string;
   // Values already displayed as individual arguments must not be shell-parsed again.
@@ -65,7 +66,7 @@ function splitCommand(source: string): string[] {
       started = true;
     }
   }
-  if (quote) throw new Error('Arguments 中的引号未闭合，请补全后再保存。');
+  if (quote) throw new Error(t("agents.arguments_contain_an_unclosed_quote_complete_it_before_saving"));
   flush();
   return values;
 }

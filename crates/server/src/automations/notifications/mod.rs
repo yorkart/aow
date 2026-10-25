@@ -87,8 +87,10 @@ fn candidate(
                     DeliveryStatus::Unconfirmed,
                     state.delivery_id,
                     Some(
-                        "发送过程中 Server 退出，无法确认发送结果；为避免重复提醒，不自动重发"
-                            .into(),
+                        aow_i18n::text(
+                            "server.server_exited_during_delivery_delivery_status_is_unknown_no",
+                        )
+                        .into(),
                     ),
                 )?;
             }
@@ -187,8 +189,7 @@ where
 {
     let scan_store = store.clone();
     let scan_warnings = warnings.clone();
-    let Some(scan) =
-        tokio::task::spawn_blocking(move || scan(&scan_store, &scan_warnings)).await??
+    let Some(scan) = aow_i18n::spawn_blocking(move || scan(&scan_store, &scan_warnings)).await??
     else {
         return Ok(());
     };
@@ -196,7 +197,7 @@ where
         let delivery_id = aow_id::new_id();
         let claim_path = path.clone();
         let claim_id = delivery_id.clone();
-        if let Err(error) = tokio::task::spawn_blocking(move || {
+        if let Err(error) = aow_i18n::spawn_blocking(move || {
             save(&claim_path, DeliveryStatus::Sending, Some(claim_id), None)
         })
         .await?
@@ -213,19 +214,23 @@ where
             Ok(true) => (DeliveryStatus::Sent, None),
             Ok(false) => (
                 DeliveryStatus::SkippedMissingBot,
-                Some(format!(
-                    "当前环境未配置{} Bot，跳过本次提醒",
-                    match channel {
-                        FailureNotification::Feishu => "飞书",
-                        FailureNotification::Wechat => "微信",
-                    }
+                Some(aow_i18n::message(
+                    "server.no_bot_configured_in_this_environment_notification_skipped",
+                    &[(
+                        "auto0",
+                        (match channel {
+                            FailureNotification::Feishu => aow_i18n::text("server.feishu"),
+                            FailureNotification::Wechat => aow_i18n::text("server.wechat"),
+                        })
+                        .to_string(),
+                    )],
                 )),
             ),
             Err(error) => (DeliveryStatus::Failed, Some(format!("{error:#}"))),
         };
         tracing::info!(task_id = %run.task_id, run_id = %run.id, ?status, ?message, "automation failure notification processed");
         if let Err(error) =
-            tokio::task::spawn_blocking(move || save(&path, status, Some(delivery_id), message))
+            aow_i18n::spawn_blocking(move || save(&path, status, Some(delivery_id), message))
                 .await?
         {
             warnings.report("persist notification result", &run.task_id, &run.id, &error);
@@ -234,7 +239,7 @@ where
     // Offline failures must be observed before the normal retention policy can
     // remove old journals. Delivery state is removed along with its run directory.
     if prune {
-        tokio::task::spawn_blocking(move || {
+        aow_i18n::spawn_blocking(move || {
             store.prune_run_history_with_errors(
                 super::RUN_HISTORY_RETENTION,
                 |task_id, run_id| {

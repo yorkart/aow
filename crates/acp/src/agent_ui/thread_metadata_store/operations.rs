@@ -11,17 +11,14 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub(super) enum DbOperation {
-    // The second payload is AoW's offline display cache, not upstream metadata.
-    Upsert(Box<ThreadMetadata>, Arc<Mutex<SessionSnapshot>>),
-    Delete(String),
+// Only saves are retried. Deletion is an explicit synchronous transaction.
+pub(super) struct DbOperation {
+    pub metadata: Box<ThreadMetadata>,
+    pub snapshot: Arc<Mutex<SessionSnapshot>>,
 }
 impl DbOperation {
     pub(super) fn id(&self) -> &str {
-        match self {
-            Self::Upsert(thread, _) => &thread.thread_id,
-            Self::Delete(id) => id,
-        }
+        &self.metadata.thread_id
     }
 }
 #[derive(Default)]
@@ -95,7 +92,7 @@ impl DbOperations {
                 tracing::error!(%error, "ACP database write failed; pending state retained for retry");
                 let mut state = lock.lock().unwrap();
                 for operation in operations {
-                    // A newer update/delete queued during I/O always wins over this failed write.
+                    // A newer save queued during I/O always wins over this failed write.
                     state
                         .operations
                         .entry(operation.id().to_owned())
@@ -118,28 +115,15 @@ impl DbOperations {
         // store and SQLite locks. Never keep a live-session lock during I/O.
         let snapshots: Vec<_> = operations
             .iter()
-            .map(|operation| match operation {
-                DbOperation::Upsert(metadata, source) => {
-                    let snapshot = source.lock().unwrap().clone();
-                    let metadata = ThreadMetadata::from_snapshot(&snapshot, Some(metadata));
-                    Ok(Some((
-                        metadata.into_record()?,
-                        snapshot_store::encode(&snapshot)?,
-                    )))
-                }
-                DbOperation::Delete(_) => Ok(None),
+            .map(|operation| {
+                let snapshot = operation.snapshot.lock().unwrap().clone();
+                let metadata = ThreadMetadata::from_snapshot(&snapshot, Some(&operation.metadata));
+                Ok((metadata.into_record()?, snapshot_store::encode(&snapshot)?))
             })
             .collect::<Result<_>>()?;
-        let writes: Vec<_> = operations
+        let writes: Vec<_> = snapshots
             .iter()
-            .zip(&snapshots)
-            .map(|(operation, snapshot)| match (operation, snapshot) {
-                (DbOperation::Upsert(_, _), Some((metadata, snapshot))) => {
-                    ThreadWrite::Upsert { metadata, snapshot }
-                }
-                (DbOperation::Delete(id), _) => ThreadWrite::Delete(id),
-                _ => unreachable!(),
-            })
+            .map(|(metadata, snapshot)| ThreadWrite::Upsert { metadata, snapshot })
             .collect();
         db.write(&writes)
     }

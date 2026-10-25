@@ -18,7 +18,10 @@ impl Scheduler {
                 Err(error) => errors.push(format!("{domain}: {error:#}")),
             }
         }
-        anyhow::bail!("无法访问 launchd 用户域：{}", errors.join("；"))
+        anyhow::bail!(aow_i18n::message(
+            "automations.unable_to_access_launchd_user_domain",
+            &[("auto0", errors.join("；").to_string())]
+        ))
     }
 
     /// A GUI login can appear or disappear between syncs. Remove the old job

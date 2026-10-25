@@ -19,6 +19,10 @@ pub(crate) fn routes() -> Router<AppState> {
             "/api/terminals",
             get(tabs::list_terminals).post(tabs::create_terminal),
         )
+        .route(
+            "/api/terminals/project-dock/{project_id}",
+            post(project_dock::open),
+        )
         .route("/api/terminals/order", put(tabs::reorder_terminals))
         .route("/api/terminals/agents", get(tabs::list_terminal_agents))
         .route("/api/terminals/task-stops", get(notifications::events))

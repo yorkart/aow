@@ -38,7 +38,13 @@ pub(super) fn messages(message: &Message, owner: &str, delivery_id: &str) -> Res
             reserve,
         )?)? <= MAX_REQUEST_BYTES)
     };
-    ensure!(fits("")?, "飞书通知基础信息过长，无法放入卡片");
+    ensure!(
+        fits("")?,
+        aow_i18n::message(
+            "im.feishu_notification_metadata_is_too_long_for_a_card",
+            &[]
+        )
+    );
     let fences = Fences::parse(text);
     let mut fragments = Vec::new();
     let mut start = 0;
@@ -63,7 +69,13 @@ pub(super) fn messages(message: &Message, owner: &str, delivery_id: &str) -> Res
             }
         }
         let mut end = boundaries[lo];
-        ensure!(end > start, "飞书通知基础信息过长，无法容纳结论");
+        ensure!(
+            end > start,
+            aow_i18n::message(
+                "im.feishu_notification_metadata_leaves_no_room_for_the_conclusion",
+                &[]
+            )
+        );
         if end < text.len() {
             // Prefer a paragraph, then a whole line, unless that wastes more
             // than half the card. Never trim: every original byte is retained.
@@ -91,11 +103,17 @@ pub(super) fn messages(message: &Message, owner: &str, delivery_id: &str) -> Res
         {
             end = line.start;
         }
-        ensure!(end > start, "结论中的代码块标记行过长，无法分片");
+        ensure!(
+            end > start,
+            aow_i18n::message("im.a_code_fence_line_in_the_conclusion_is_too", &[])
+        );
         let fragment = fences.fragment(text, start..end);
         // A shorter preferred boundary can need a closing fence of its own.
         if !fits(&fragment)? {
-            bail!("结论的代码块标记过长，无法放入卡片");
+            bail!(aow_i18n::message(
+                "im.a_code_fence_in_the_conclusion_is_too_long",
+                &[]
+            ));
         }
         fragments.push(fragment);
         start = end;
@@ -114,7 +132,10 @@ pub(super) fn messages(message: &Message, owner: &str, delivery_id: &str) -> Res
                 index + 1,
                 total,
             )?;
-            ensure!(size(&message)? <= MAX_REQUEST_BYTES, "飞书卡片超出大小限制");
+            ensure!(
+                size(&message)? <= MAX_REQUEST_BYTES,
+                aow_i18n::message("im.feishu_card_exceeds_size_limit", &[])
+            );
             Ok(message)
         })
         .collect()

@@ -8,7 +8,7 @@ impl TerminalManager {
     ) -> Result<TerminalTab, TerminalError> {
         if request.name.is_none() {
             return Err(TerminalError::Invalid(
-                "terminal update must include name".to_owned(),
+                aow_i18n::text("validation.terminal_update_must_include_name").to_owned(),
             ));
         }
         let name = request.name.as_deref().map(validate_name).transpose()?;
@@ -20,7 +20,7 @@ impl TerminalManager {
             .any(|pane| pane.agent_terminal.is_some())
         {
             return Err(TerminalError::Invalid(
-                "CLI-created terminal tabs cannot be renamed".to_owned(),
+                aow_i18n::text("validation.cli_created_terminal_tabs_cannot_be_renamed").to_owned(),
             ));
         }
         let old = state.tabs[index].clone();
@@ -42,13 +42,13 @@ impl TerminalManager {
     ) -> Result<TerminalTabList, TerminalError> {
         if request.workspace_root.trim().is_empty() {
             return Err(TerminalError::Invalid(
-                "workspace_root cannot be empty".to_owned(),
+                aow_i18n::text("validation.workspace_root_cannot_be_empty").to_owned(),
             ));
         }
         let requested_ids = request.tab_ids.iter().collect::<HashSet<_>>();
         if requested_ids.len() != request.tab_ids.len() {
             return Err(TerminalError::Invalid(
-                "terminal order contains duplicate tab ids".to_owned(),
+                aow_i18n::text("validation.terminal_order_contains_duplicate_tab_ids").to_owned(),
             ));
         }
 

@@ -48,18 +48,23 @@ impl AowManager {
         aow_acp::validate_settings(&content)?;
         let operation = self.inner.project_operation.clone().lock_owned().await;
         let manager = self.clone();
-        tokio::task::spawn_blocking(move || {
+        aow_i18n::spawn_blocking(move || {
             let _operation = operation;
             let previous = manager.acp_settings()?;
             ensure!(
                 previous.revision == revision,
-                "ACP 配置已被其他窗口或程序修改，请重新加载后再保存"
+                aow_i18n::message(
+                    "server.acp_configuration_changed_in_another_window_or_program_reload",
+                    &[]
+                )
             );
             manager
                 .inner
                 .config
                 .as_ref()
-                .context("当前服务未配置持久化目录")?
+                .context(aow_i18n::text(
+                    "server.no_persistent_directory_configured_for_this_service",
+                ))?
                 .save(
                     std::path::Path::new(aow_acp::SETTINGS_PATH),
                     content.as_bytes(),
@@ -75,7 +80,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn jsonc_has_a_separate_versioned_file_and_preserves_unknown_fields() {
+    async fn jsonc_has_a_separate_file_and_preserves_unknown_fields() {
         let temporary = tempfile::tempdir().unwrap();
         let manager = AowManager::persistent_with_notes_base(
             temporary.path(),
@@ -83,7 +88,7 @@ mod tests {
         )
         .unwrap();
         let initial = manager.acp_settings().unwrap();
-        assert!(initial.path.ends_with("/acp/settings.json"));
+        assert!(initial.path.ends_with("/aow-acp.json"));
         let content = "// retain this comment\n{\"agent_servers\":{\"demo\":{\"type\":\"custom\",\"command\":\"node\",\"future\":{\"unknown\":true},},},\"future_root\":42,}\n";
         let saved = manager
             .save_acp_settings(content.into(), initial.revision.clone())
@@ -112,13 +117,6 @@ mod tests {
                     .contains("agent_servers")
             );
         }
-        let repository = manager.inner.config.as_ref().unwrap();
-        let output = std::process::Command::new("git")
-            .arg("-C")
-            .arg(repository.directory())
-            .args(["ls-files", "--error-unmatch", "acp/settings.json"])
-            .output()
-            .unwrap();
-        assert!(output.status.success());
+        assert!(!temporary.path().join(".git").exists());
     }
 }

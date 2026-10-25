@@ -210,7 +210,12 @@ async fn only_failed_opted_in_runs_notify_and_missing_bot_does_not_replay() {
         state(&store, "failed").status,
         DeliveryStatus::SkippedMissingBot
     );
-    assert!(state(&store, "failed").message.unwrap().contains("未配置"));
+    assert!(
+        state(&store, "failed")
+            .message
+            .unwrap()
+            .contains("configured")
+    );
     for id in ["complete", "skip", "interrupt", "crashed", "disabled"] {
         assert_eq!(state(&store, id).status, DeliveryStatus::NotRequested);
     }

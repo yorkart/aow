@@ -1,7 +1,9 @@
+import { t } from '../../lib/i18n';
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Copy, LoaderCircle, Share2, X } from 'lucide-react';
 import { sessionShareApi, type SessionShare } from './sessionShareApi';
+import { ConversationAction } from '../../components/conversation/ConversationAction';
 import type { AowAgentSession } from './types';
 import './session-share.css';
 
@@ -10,7 +12,7 @@ interface Props { session: AowAgentSession; workspacePath: string }
 export function SessionShareButton(props: Props) {
   const [open, setOpen] = useState(false);
   return <>
-    <button type="button" className="session-share-button" title="分享会话" aria-label="分享会话" onClick={() => setOpen(true)}><Share2 size={16} /><span>分享</span></button>
+    <ConversationAction className="session-share-button" label={t("sessions.share")} onClick={() => setOpen(true)}><Share2 size={16} /></ConversationAction>
     {open && <ShareDialog key={`${props.session.id}:${props.workspacePath}`} {...props} close={() => setOpen(false)} />}
   </>;
 }
@@ -32,24 +34,24 @@ function ShareDialog({ session, workspacePath, close }: Props & { close: () => v
     dialog.showModal();
     const controller = new AbortController();
     void sessionShareApi.info(session, controller.signal).then(setShare).catch(reason => {
-      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : '无法读取分享设置');
+      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : t("sessions.unable_to_read_sharing_settings"));
     }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => { controller.abort(); dialog.close(); };
   }, [session.agent, session.session_id]);
 
   const copy = async (value: string) => {
     try {
-      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+      if (!navigator.clipboard?.writeText) throw new Error(t("common.clipboard_unavailable_2"));
       await navigator.clipboard.writeText(value);
-      setNotice('链接已复制');
+      setNotice(t("sessions.link_copied"));
     } catch {
       // HTTP deployments may not expose Clipboard API. Keep the link selectable.
       const input = linkRef.current;
       if (input) { input.value = value; input.focus(); input.select(); }
       try {
-        if (!input || !document.execCommand('copy')) throw new Error('copy failed');
-        setNotice('链接已复制');
-      } catch { setNotice('链接已生成，请选中链接手动复制'); }
+        if (!input || !document.execCommand('copy')) throw new Error(t("common.copy_failed"));
+        setNotice(t("sessions.link_copied"));
+      } catch { setNotice(t("sessions.link_generated_select_it_and_copy_manually")); }
     }
   };
 
@@ -58,7 +60,7 @@ function ShareDialog({ session, workspacePath, close }: Props & { close: () => v
     busyRef.current = true;
     setBusy(true); setError(''); setNotice('');
     try { await action(); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : '操作失败，请重试'); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : t("sessions.action_failed_try_again")); }
     finally { busyRef.current = false; setBusy(false); }
   };
 
@@ -71,21 +73,21 @@ function ShareDialog({ session, workspacePath, close }: Props & { close: () => v
     if (!share) return;
     await sessionShareApi.revoke(share.id);
     setShare(null);
-    setNotice('已取消分享，旧链接已失效');
+    setNotice(t("sessions.sharing_canceled_the_old_link_is_no_longer_valid"));
   });
 
   return createPortal(<dialog ref={dialogRef} className="session-share-dialog" aria-labelledby={`${id}-title`} aria-describedby={`${id}-description`}
     onCancel={event => { event.preventDefault(); if (!busyRef.current) close(); }} onKeyDown={event => event.stopPropagation()}>
-    <header><h2 id={`${id}-title`}>分享会话</h2><button type="button" aria-label="关闭分享窗口" disabled={busy} onClick={close}><X size={18} /></button></header>
+    <header><h2 id={`${id}-title`}>{t("sessions.share_session")}</h2><button type="button" aria-label={t("sessions.close_sharing_window")} disabled={busy} onClick={close}><X size={18} /></button></header>
     <p className="session-share-title">{session.title}</p>
-    <p id={`${id}-description`}>持有链接的人无需登录，即可只读查看此会话及后续对话，包括处理过程和工具详情。可以随时取消分享。</p>
-    <label htmlFor={`${id}-link`}>分享链接</label>
-    <input ref={linkRef} id={`${id}-link`} value={url} readOnly placeholder={loading ? '正在读取分享设置…' : '创建后显示分享链接'} onFocus={event => event.currentTarget.select()} />
+    <p id={`${id}-description`}>{t("sessions.anyone_with_the_link_can_view_this_session_and")}</p>
+    <label htmlFor={`${id}-link`}>{t("sessions.share_link")}</label>
+    <input ref={linkRef} id={`${id}-link`} value={url} readOnly placeholder={loading ? t("sessions.reading_sharing_settings") : t("sessions.the_share_link_appears_after_creation")} onFocus={event => event.currentTarget.select()} />
     {error && <p className="session-share-error" role="alert">{error}</p>}
-    {notice && <p className="session-share-notice" role="status">{notice === '链接已复制' && <Check size={14} />}{notice}</p>}
-    <footer>{share && <button type="button" className="danger" disabled={busy || loading} onClick={() => void revoke()}>取消分享</button>}
+    {notice && <p className="session-share-notice" role="status">{notice === t("sessions.link_copied") && <Check size={14} />}{notice}</p>}
+    <footer>{share && <button type="button" className="danger" disabled={busy || loading} onClick={() => void revoke()}>{t("sessions.stop_sharing")}</button>}
       <button type="button" className="primary" disabled={busy || loading} onClick={() => void createAndCopy()}>
-        {busy || loading ? <LoaderCircle size={15} className="spinning" /> : <Copy size={15} />}{share ? '复制链接' : '创建并复制链接'}
+        {busy || loading ? <LoaderCircle size={15} className="spinning" /> : <Copy size={15} />}{share ? t("sessions.copy_link") : t("sessions.create_and_copy_link")}
       </button></footer>
   </dialog>, document.body);
 }

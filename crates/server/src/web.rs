@@ -96,7 +96,7 @@ pub(crate) async fn spa_or_asset(
         return Err(HttpError::new(
             StatusCode::NOT_FOUND,
             "route_not_found",
-            "route not found",
+            aow_i18n::text("http.route_not_found"),
             Some(uri.path().to_owned()),
         ));
     }

@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import type { DirectoryListing, TextFile, PinnedDirectories } from './types';
 import { fetchWithTimeout, HttpRequestError, request } from '../../lib/http';
 import { aowRequest } from '../../lib/aowRequest';
@@ -78,12 +79,12 @@ export const filesApi = {
         if (request.status >= 200 && request.status < 300) resolve(request.response);
         else reject(new Error(request.response?.message ?? `HTTP ${request.status}`));
       };
-      request.onerror = () => reject(new Error('上传失败，请检查网络连接'));
-      request.ontimeout = () => reject(new Error('上传超时（120 秒）'));
-      request.onabort = () => reject(new Error('上传已取消'));
+      request.onerror = () => reject(new Error(t("files.upload_failed_check_your_network_connection")));
+      request.ontimeout = () => reject(new Error(t("files.upload_timed_out_120_seconds")));
+      request.onabort = () => reject(new Error(t("files.upload_canceled")));
       const abort = () => request.abort();
       request.onloadend = () => options?.signal?.removeEventListener('abort', abort);
-      if (options?.signal?.aborted) { reject(new Error('上传已取消')); return; }
+      if (options?.signal?.aborted) { reject(new Error(t("files.upload_canceled"))); return; }
       options?.signal?.addEventListener('abort', abort, { once: true });
       request.send(file);
     });

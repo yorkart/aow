@@ -34,10 +34,7 @@ async fn run() -> Result<()> {
     };
 
     if options.initialize_only {
-        if options.initialize_if_missing
-            && let Some(config) = aow_config::ConfigRepository::open(&options.state_dir)?
-            && config.directory().join("aow-projects.json").exists()
-        {
+        if options.initialize_if_missing && options.state_dir.join("aow-projects.json").exists() {
             return Ok(());
         }
         aow_server::initialize_aow_state(&options.state_dir).await?;
@@ -60,7 +57,8 @@ async fn run() -> Result<()> {
         options.terminald_socket,
     )?
     .with_base_path(base_path)
-    .with_secure_cookies(options.secure_cookies);
+    .with_secure_cookies(options.secure_cookies)
+    .with_session_timeouts(options.session_timeouts);
     state.initialize_global_workspace().await?;
     if let Err(error) = state.reconcile_terminals().await {
         tracing::warn!(%error, "initial terminald reconciliation failed; terminal requests will retry");

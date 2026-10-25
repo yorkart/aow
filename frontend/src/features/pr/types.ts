@@ -1,10 +1,10 @@
+import type { GitPlatformIdentity } from '../git-platform-providers/types';
+
 export interface PullRequestUser { id: string; username: string; display_name: string }
 
-export interface ReviewIdentity { provider?: string; remote?: string; provider_name?: string }
 
-export interface ReviewTarget { remote: string; host: string; repository: string; provider: string; provider_name: string }
 
-export interface PullRequestSummary extends ReviewIdentity {
+export interface PullRequestSummary extends GitPlatformIdentity {
   number: number;
   status: string;
   draft: boolean;
@@ -16,7 +16,7 @@ export interface PullRequestSummary extends ReviewIdentity {
   updated_at: string;
 }
 
-export interface MyPullRequests extends ReviewIdentity {
+export interface MyPullRequests extends GitPlatformIdentity {
   repository: string;
   current_branch: string;
   current_user: PullRequestUser;
@@ -82,9 +82,3 @@ export interface PullRequestDiff {
   binary: boolean;
   truncated: boolean;
 }
-
-export interface ReviewProvider {
-  id: string; name: string; enabled: boolean; hosts: string[]; script: string;
-}
-
-export interface ReviewProviderSettings { revision: number; providers: ReviewProvider[] }

@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertCircle, LoaderCircle, Share2 } from 'lucide-react';
 import { SessionSnapshotView } from './SessionSnapshotView';
@@ -34,7 +35,7 @@ export function SharedSessionPage({ token }: { token: string }) {
           setSnapshot(undefined);
           setUnavailable(true);
         }
-        setError(reason instanceof Error ? reason.message : '读取会话失败，请稍后重试');
+        setError(reason instanceof Error ? reason.message : t("sessions.failed_to_read_session_try_again_later"));
       } finally {
         // A hidden tab may abort this request and start another one immediately
         // on becoming visible. Its old completion must not replace the new timer.
@@ -61,13 +62,13 @@ export function SharedSessionPage({ token }: { token: string }) {
   }, [token]);
 
   return <main className="shared-session-page">
-    <div className="shared-session-banner"><Share2 size={15} /><strong>会话分享 · 只读</strong><span>内容每 10 秒自动更新</span></div>
+    <div className="shared-session-banner"><Share2 size={15} /><strong>{t("sessions.shared_session_read_only")}</strong><span>{t("sessions.content_updates_automatically_every_10_seconds")}</span></div>
     {snapshot ? <SessionSnapshotView session={{ id: `${snapshot.agent}:${snapshot.session_id}`, agent: snapshot.agent, title: snapshot.title }}
       snapshot={snapshot} loading={loading} error={error} onRefresh={refresh} publicView />
       : <div className="shared-session-state" role={error ? 'alert' : 'status'}>
         {loading ? <LoaderCircle className="spinning" /> : <AlertCircle />}
-        <p>{error || '正在读取分享会话…'}</p>
-        {!loading && !unavailable && <button type="button" onClick={refresh}>重试</button>}
+        <p>{error || t("sessions.reading_shared_session")}</p>
+        {!loading && !unavailable && <button type="button" onClick={refresh}>{t("aow.retry")}</button>}
       </div>}
   </main>;
 }

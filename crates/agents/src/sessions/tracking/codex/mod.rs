@@ -54,7 +54,7 @@ impl AgentSessionTracker for Codex {
         let roots = SessionRoots::from_configuration(home, context.environment);
         let cwd = PathBuf::from(context.cwd);
         let title = codex_like::normalized_title(context.title, context.cwd);
-        tokio::task::spawn_blocking(move || resolve(pid, &roots.codex, &cwd, &title, fallback))
+        aow_i18n::spawn_blocking(move || resolve(pid, &roots.codex, &cwd, &title, fallback))
             .await
             .unwrap_or(SessionResolution::Unavailable)
     }

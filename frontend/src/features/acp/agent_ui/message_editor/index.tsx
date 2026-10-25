@@ -1,5 +1,4 @@
-// MessageEditor / MentionSet browser adapter. The DOM owns native selection,
-// IME and undo; the view-owned draft survives portal remounts.
+import { t } from '../../../../lib/i18n';
 import { useLayoutEffect, useRef, useState, type ClipboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { text, failure, type Data } from '../../types';
@@ -80,8 +79,8 @@ export function MessageEditor({ draft, onChange, commands: advertised, supportsI
     return image?.status === 'error' ? [image.error] : [];
   });
   return <>
-    {!!commands.length && !disabled && <div className="acp-command-menu" role="listbox" aria-label="Agent 命令">{commands.map((command, index) => <button type="button" key={text(command.name)} role="option" aria-selected={index === commandIndex % commands.length} onMouseDown={event => event.preventDefault()} onClick={() => chooseCommand(text(command.name))}><strong>{text(command.name)}</strong><span>{text(command.description)}</span></button>)}</div>}
-    <div ref={editor} className="acp-message-editor" role="textbox" aria-label="ACP 消息" aria-multiline="true" aria-disabled={disabled} data-placeholder={placeholder} contentEditable={!disabled} suppressContentEditableWarning
+    {!!commands.length && !disabled && <div className="acp-command-menu" role="listbox" aria-label={t("acp.agent_command")}>{commands.map((command, index) => <button type="button" key={text(command.name)} role="option" aria-selected={index === commandIndex % commands.length} onMouseDown={event => event.preventDefault()} onClick={() => chooseCommand(text(command.name))}><strong>{text(command.name)}</strong><span>{text(command.description)}</span></button>)}</div>}
+    <div ref={editor} className="acp-message-editor" role="textbox" aria-label={t("acp.acp_messages")} aria-multiline="true" aria-disabled={disabled} data-placeholder={placeholder} contentEditable={!disabled} suppressContentEditableWarning
       onInput={edited}
       onCopy={event => copySelection(event)} onCut={event => copySelection(event, true)}
       onPaste={event => {
@@ -121,6 +120,6 @@ export function MessageEditor({ draft, onChange, commands: advertised, supportsI
         } else if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); onSubmit(); }
       }} />
     {(error || failedImages.length > 0) && <p className="acp-error acp-image-error" role="alert">{error || failedImages.join(' ')}</p>}
-    {preview && selectedImage?.status === 'ready' && createPortal(<div className="acp-image-preview" role="tooltip" style={{ left: Math.max(8, Math.min(preview.rect.left, window.innerWidth - 328)), ...(preview.rect.top > Math.min(300, window.innerHeight * .4 + 20) ? { bottom: window.innerHeight - preview.rect.top + 6 } : { top: preview.rect.bottom + 6 }) }}><img alt="Image preview" src={`data:${selectedImage.mimeType};base64,${selectedImage.data}`} /></div>, document.body)}
+    {preview && selectedImage?.status === 'ready' && createPortal(<div className="acp-image-preview" role="tooltip" style={{ left: Math.max(8, Math.min(preview.rect.left, window.innerWidth - 328)), ...(preview.rect.top > Math.min(300, window.innerHeight * .4 + 20) ? { bottom: window.innerHeight - preview.rect.top + 6 } : { top: preview.rect.bottom + 6 }) }}><img alt={t("navigation.image_preview")} src={`data:${selectedImage.mimeType};base64,${selectedImage.data}`} /></div>, document.body)}
   </>;
 }

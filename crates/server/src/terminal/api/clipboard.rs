@@ -14,7 +14,8 @@ pub(super) async fn upload_terminal_clipboard_image(
             .and_then(|value| value.parse::<u64>().ok())
             .ok_or_else(|| {
                 terminal_http_error(TerminalError::Invalid(
-                    "Content-Length must be a non-negative integer".to_owned(),
+                    aow_i18n::text("validation.content_length_must_be_a_non_negative_integer")
+                        .to_owned(),
                 ))
             })?;
         if content_length > MAX_CLIPBOARD_IMAGE_BYTES {

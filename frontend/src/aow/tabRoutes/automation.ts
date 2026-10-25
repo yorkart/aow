@@ -1,3 +1,4 @@
+import { t as translate } from '../../lib/i18n';
 import { automationApi } from '../../features/automations/api';
 import type { TabRouteAdapter, TabTarget } from './types';
 import { length, required, segment, url } from './helpers';
@@ -19,7 +20,7 @@ export const automationRoute: TabRouteAdapter<Extract<TabTarget, { type: 'automa
   },
   async resolve(t, context) {
     const task = await automationApi.detail(t.taskId);
-    if (task.project_id !== context.project.id) throw new Error('自动化任务不属于该工作区的项目。');
+    if (task.project_id !== context.project.id) throw new Error(translate("aow.this_automation_belongs_to_a_different_workspace_project"));
     if (t.runId) await automationApi.runDetail(t.taskId, t.runId);
     return { task };
   },

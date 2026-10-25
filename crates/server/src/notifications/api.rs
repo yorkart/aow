@@ -28,13 +28,13 @@ async fn update_settings(
     Json(update): Json<SettingsUpdate>,
 ) -> Result<impl axum::response::IntoResponse, HttpError> {
     let manager = state.aow.notifications().clone();
-    let settings = tokio::task::spawn_blocking(move || manager.update(update))
+    let settings = aow_i18n::spawn_blocking(move || manager.update(update))
         .await
         .map_err(|_| {
             HttpError::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "notification_settings_failed",
-                "无法保存通知配置",
+                aow_i18n::text("server.unable_to_save_notification_configuration"),
                 None,
             )
         })?

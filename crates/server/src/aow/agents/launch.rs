@@ -22,7 +22,11 @@ impl AowManager {
             .iter()
             .find(|tree| tree.is_main)
             .or_else(|| project.worktrees.first())
-            .ok_or_else(|| AowError::Invalid("项目没有可用的 Worktree。".into()))?;
+            .ok_or_else(|| {
+                AowError::Invalid(
+                    aow_i18n::text("server.project_has_no_available_worktrees").into(),
+                )
+            })?;
         self.agent_worktree_path(project_id, &main.path).await
     }
 
@@ -71,7 +75,9 @@ impl AowManager {
                 .iter()
                 .any(|worktree| Path::new(&worktree.path) == requested)
         {
-            return Err(AowError::Invalid("工作区不属于所选项目".into()));
+            return Err(AowError::Invalid(
+                aow_i18n::text("server.workspace_does_not_belong_to_the_selected_project").into(),
+            ));
         }
         Ok((project.name, PathBuf::from(project.registered_path)))
     }
@@ -148,7 +154,10 @@ impl AowManager {
                 .collect();
             if candidates.len() != 1 {
                 return Err(AowError::Invalid(
-                    "无法唯一确定该终端原来的 Agent 配置，请检查 Agent 配置后重试".into(),
+                    aow_i18n::text(
+                        "server.unable_to_identify_the_terminal_s_original_agent_configuration",
+                    )
+                    .into(),
                 ));
             }
             candidates[0].id.clone()
@@ -162,7 +171,10 @@ impl AowManager {
         };
         if Some(launch.agent_type.id()) != pane.agent_id.as_deref() {
             return Err(AowError::Invalid(
-                "原 Agent 配置的类型已改变，无法重建".into(),
+                aow_i18n::text(
+                    "server.the_original_agent_configuration_s_type_changed_cannot_rebuild",
+                )
+                .into(),
             ));
         }
         Ok(launch)

@@ -15,17 +15,22 @@ pub(super) async fn capture(
 ) -> Result<()> {
     let roots = store.run_session_roots(&task.id, run_id)?;
     let agent = task.input.agent.agent();
-    let result = tokio::task::spawn_blocking(move || -> Result<String> {
-        let session =
-            find_session(agent.id(), &session_id, roots).context("未找到本次运行的会话记录")?;
+    let result = aow_i18n::spawn_blocking(move || -> Result<String> {
+        let session = find_session(agent.id(), &session_id, roots).context(aow_i18n::text(
+            "automations.no_session_record_found_for_this_run",
+        ))?;
         agent
             .session_tracking()
-            .context("Agent 不支持读取执行结果")?
+            .context(aow_i18n::text(
+                "automations.agent_does_not_support_reading_execution_results",
+            ))?
             .completed_run_result(&session.locator(), exited_at)?
-            .context("未获取到任务最终结论")
+            .context(aow_i18n::text(
+                "automations.no_final_task_response_retrieved",
+            ))
     })
     .await
-    .context("执行结果读取中断")
+    .context(aow_i18n::text("automations.result_reading_interrupted"))
     .and_then(|result| result);
     store.write_run_result(&task.id, run_id, result)
 }

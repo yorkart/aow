@@ -3,8 +3,7 @@ use crate::facade::{DialoguePatch, EntryPatch, SessionSnapshot, ThreadEntry};
 use std::collections::BTreeMap;
 
 pub(super) fn visible(entry: &ThreadEntry) -> bool {
-    matches!(entry.kind.as_str(), "assistant" | "steering")
-        && super::visible_content(&entry.content)
+    entry.kind == "steering" && super::visible_content(&entry.content)
 }
 
 pub(super) fn since(
@@ -24,8 +23,7 @@ pub(super) fn since(
             if let Change::Entry { index, text_start } = change
                 && let Ok(position) = indices.binary_search(index)
             {
-                // A first steering card enables the dialogue projection. The
-                // previous browser view may never have fetched earlier answers.
+                // A new card can establish the projection's initial baseline.
                 if thread.entries[*index].kind == "steering" {
                     return Some(DialoguePatch::Reset {
                         entries: indices

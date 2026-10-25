@@ -1,11 +1,8 @@
+import { loadModule } from './helpers/load-module.mjs';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
-import ts from 'typescript';
 
-const source = await readFile(new URL('../src/features/agents/arguments.ts', import.meta.url), 'utf8');
-const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 } });
-const { argumentsDraft, normalizeArguments, pasteArguments } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
+const { argumentsDraft, normalizeArguments, pasteArguments } = await loadModule(new URL('../src/features/agents/arguments.ts', import.meta.url));
 const parse = (text, executable = 'codex') => normalizeArguments({ text, values: [] }, executable);
 
 test('pasted Codex command preserves TOML quotes through normalization and later edits', () => {

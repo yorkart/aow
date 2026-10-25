@@ -37,7 +37,7 @@ pub(super) async fn blocking<T: Send + 'static>(
     f: impl FnOnce(InboxStore) -> Result<T, HttpError> + Send + 'static,
 ) -> Result<T, HttpError> {
     let store = state.inbox.clone();
-    tokio::task::spawn_blocking(move || f(store))
+    aow_i18n::spawn_blocking(move || f(store))
         .await
         .map_err(|e| HttpError::internal(e.to_string()))?
 }

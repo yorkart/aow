@@ -23,7 +23,7 @@ pub fn execute(args: InstanceArgs, state_dir: PathBuf) -> Result<Value> {
     let client = TerminaldClient::new(
         std::env::current_dir()?
             .join(state_dir)
-            .join("cli/cli.sock"),
+            .join("runtime/cli/cli.sock"),
     );
     let path = match args.command {
         InstanceCommand::List => "/v1/instances".to_owned(),

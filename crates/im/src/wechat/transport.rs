@@ -57,7 +57,10 @@ impl ImProvider for WechatClient {
 impl Inner {
     pub(super) async fn send(&self, message: &Message, delivery_id: &str) -> Result<()> {
         let inner = self;
-        ensure!(inner.active.load(Ordering::Acquire), "微信绑定已移除或替换");
+        ensure!(
+            inner.active.load(Ordering::Acquire),
+            aow_i18n::message("im.wechat_binding_removed_or_replaced", &[])
+        );
         let context = inner.session.lock().unwrap().context_token.clone();
         let mut body = json!({"msg": {
             "from_user_id":"", "to_user_id":inner.credentials.user_id,

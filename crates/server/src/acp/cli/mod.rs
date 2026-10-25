@@ -47,10 +47,11 @@ async fn create(
         .map_err(instances::invalid)?;
     validate(request.task.as_deref(), request.timeout_seconds)?;
     // The operation is independent of the requesting CLI, including preparation and first prompt.
-    tokio::spawn(async move {
+    aow_i18n::spawn(async move {
         let cwd = state.aow.agent_worktree_path(&request.project_id, &request.cwd).await.map_err(crate::aow::aow_http_error)?;
         let parent = instances::creation_parent(&state, request.parent, request.caller.as_ref(), request.no_parent)?;
-        let session = state.acp.prepare_session_with_options(&request.agent_id, cwd.into(), aow_acp::SessionCreation { source: aow_acp::SessionSource::Cli, parent }).await.map_err(super::api::error)?;
+        let agent_id = state.acp.select_agent_id(request.agent_id.as_deref()).await.map_err(super::api::error)?;
+        let session = state.acp.prepare_session_with_options(&agent_id, cwd.into(), aow_acp::SessionCreation { source: aow_acp::SessionSource::Cli, parent }).await.map_err(super::api::error)?;
         let id = session.thread_id;
         let info = state.acp.session_info(&id).map_err(super::api::error)?;
         if let Err(error) = state.instances.record_all(vec![instances::acp(&info)]) {
@@ -96,7 +97,7 @@ fn start(
 ) -> Result<tokio::task::JoinHandle<Result<bool, HttpError>>, HttpError> {
     let controller = state.acp_controls.session(&id);
     let lease = controller.claim_cli()?;
-    Ok(tokio::spawn(async move {
+    Ok(aow_i18n::spawn(async move {
         let _lifecycle = controller.authorize_restore(&lease.headers).await?;
         state.acp.resume(&id).await.map_err(super::api::error)?;
         // A browser takeover during initialization revokes admission of the pending prompt.

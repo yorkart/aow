@@ -53,6 +53,8 @@ pub(super) struct ImSettings {
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct NotificationSettings {
+    #[serde(default)]
+    pub(super) language: aow_i18n::Language,
     pub(super) agent_task_completed: TaskCompletedSettings,
     #[serde(default)]
     pub(super) public_base_url: String,
@@ -79,35 +81,41 @@ impl Default for Document {
 impl Document {
     pub(super) fn validate(&self) -> Result<(), String> {
         if self.version != 1 {
-            return Err("不支持的通知配置版本".into());
+            return Err(
+                aow_i18n::text("server.unsupported_notification_configuration_version").into(),
+            );
         }
         normalize_public_base_url(&self.notifications.public_base_url)?;
         let mut providers = HashSet::new();
         for provider in &self.im.providers {
             provider.validate()?;
             if !providers.insert(provider.kind()) {
-                return Err("IM 配置重复".into());
+                return Err(aow_i18n::text("server.duplicate_im_configuration").into());
             }
         }
         let settings = &self.notifications.agent_task_completed;
         if settings.enabled && settings.channels.is_empty() {
-            return Err("启用 Agent 任务完成通知后，至少选择一种通知方式".into());
+            return Err(aow_i18n::text(
+                "server.select_at_least_one_notification_method_when_enabling_agent",
+            )
+            .into());
         }
         let mut channels = HashSet::new();
         for channel in &settings.channels {
             if !channels.insert(channel) {
-                return Err("通知方式重复".into());
+                return Err(aow_i18n::text("server.duplicate_notification_method").into());
             }
             if let Some(kind) = channel.provider()
                 && !providers.contains(&kind)
             {
                 let name = if kind == ImKind::Feishu {
-                    "飞书"
+                    aow_i18n::text("server.feishu")
                 } else {
-                    "微信"
+                    aow_i18n::text("server.wechat")
                 };
-                return Err(format!(
-                    "请先配置{name}机器人；移除机器人前请取消选择{name}推送"
+                return Err(aow_i18n::message(
+                    "server.configure_the_bot_first_deselect_push_before_removing_the",
+                    &[("p0", name.to_string()), ("p1", name.to_string())],
                 ));
             }
         }
@@ -152,6 +160,7 @@ pub(crate) enum SettingsUpdate {
         providers: Vec<ImConfigUpdate>,
     },
     Notifications {
+        language: Option<aow_i18n::Language>,
         agent_task_completed: TaskCompletedSettings,
         // Older clients only update delivery preferences and preserve the URL.
         public_base_url: Option<String>,
@@ -163,7 +172,7 @@ pub(super) fn normalize_public_base_url(value: &str) -> Result<String, String> {
         return Ok(String::new());
     }
     let invalid =
-        || "请填写有效的 AoW HTTP(S) 部署地址，可含 Base Path，不含账号、查询参数或片段".to_owned();
+        || aow_i18n::text("server.enter_a_valid_aow_http_s_deployment_url_optionally").to_owned();
     let url = reqwest::Url::parse(value).map_err(|_| invalid())?;
     if value.len() > 2048
         || !matches!(url.scheme(), "http" | "https")

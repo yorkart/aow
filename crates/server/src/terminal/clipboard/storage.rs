@@ -9,7 +9,7 @@ use super::*;
 impl ClipboardStorage {
     pub(in crate::terminal) fn persistent(state_dir: &Path) -> Result<Self, TerminalError> {
         let state_dir = absolute_path(state_dir)?;
-        let directory = state_dir.join(CLIPBOARD_DIRECTORY);
+        let directory = state_dir.join("cache").join(CLIPBOARD_DIRECTORY);
         create_private_directory(&directory, true)?;
         let storage = Self {
             directory: std::fs::canonicalize(directory)?,

@@ -42,7 +42,7 @@ impl Dispatcher {
             return;
         }
         if let Some(mut receiver) = self.receiver.lock().unwrap().take() {
-            tokio::spawn(async move {
+            aow_i18n::spawn(async move {
                 while let Some(delivery) = receiver.recv().await {
                     // One unavailable provider must not prevent another from sending.
                     futures_util::future::join_all(delivery.providers.iter().map(
@@ -117,7 +117,7 @@ async fn delivery_result(
     record.timestamp = chrono::Utc::now().to_rfc3339();
     record.kind = "auth.notification".into();
     record.event = "notification_delivery".into();
-    record.title = "认证通知投递".into();
+    record.title = aow_i18n::text("server.authentication_notification_delivery").into();
     record.message = serde_json::json!({"provider": provider, "result": result}).to_string();
     record.level = if success { Level::Info } else { Level::Error };
     record.outcome = Some(if success {

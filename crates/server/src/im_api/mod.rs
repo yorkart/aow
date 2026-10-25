@@ -42,10 +42,10 @@ fn error(error: impl std::fmt::Display) -> Response {
 
 async fn update(state: &AppState, input: SettingsUpdate) -> Response {
     let manager = state.aow.notifications().clone();
-    match tokio::task::spawn_blocking(move || manager.update(input)).await {
+    match aow_i18n::spawn_blocking(move || manager.update(input)).await {
         Ok(Ok(view)) => ([(CACHE_CONTROL, "no-store")], Json(view)).into_response(),
         Ok(Err(reason)) => error(reason),
-        Err(_) => error("无法保存 IM 配置"),
+        Err(_) => error(aow_i18n::text("server.unable_to_save_im_configuration")),
     }
 }
 

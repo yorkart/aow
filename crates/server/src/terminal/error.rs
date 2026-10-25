@@ -6,31 +6,31 @@ use crate::HttpError;
 
 #[derive(Debug, Error)]
 pub enum TerminalError {
-    #[error("terminal tab not found: {0}")]
+    #[error("{translated}", translated = aow_i18n::message("errors.terminal_tab_not_found", &[("p0", .0.to_string())]))]
     TabNotFound(String),
-    #[error("terminal pane not found: {0}")]
+    #[error("{translated}", translated = aow_i18n::message("errors.terminal_pane_not_found", &[("p0", .0.to_string())]))]
     PaneNotFound(String),
-    #[error("invalid terminal request: {0}")]
+    #[error("{translated}", translated = aow_i18n::message("errors.invalid_terminal_request", &[("p0", .0.to_string())]))]
     Invalid(String),
-    #[error("terminal state conflict: {0}")]
+    #[error("{translated}", translated = aow_i18n::message("errors.terminal_state_conflict", &[("p0", .0.to_string())]))]
     Conflict(String),
-    #[error("WebSocket origin is not allowed: {0}")]
+    #[error("{translated}", translated = aow_i18n::message("errors.websocket_origin_is_not_allowed", &[("p0", .0.to_string())]))]
     ForbiddenOrigin(String),
-    #[error("clipboard image exceeds the {MAX_CLIPBOARD_IMAGE_BYTES}-byte limit")]
+    #[error("{translated}", translated = aow_i18n::message("errors.clipboard_image_exceeds_the_byte_limit", &[("p0", MAX_CLIPBOARD_IMAGE_BYTES.to_string())]))]
     ClipboardImageTooLarge,
-    #[error("clipboard image must be PNG, JPEG, GIF, or WebP")]
+    #[error("{translated}", translated = aow_i18n::text("errors.clipboard_image_must_be_png_jpeg_gif_or_webp"))]
     UnsupportedClipboardImage,
-    #[error("clipboard image storage quota is exhausted")]
+    #[error("{translated}", translated = aow_i18n::text("errors.clipboard_image_storage_quota_is_exhausted"))]
     ClipboardQuotaExceeded,
-    #[error("clipboard image storage is unavailable: {0}")]
+    #[error("{translated}", translated = aow_i18n::message("errors.clipboard_image_storage_is_unavailable", &[("p0", .0.to_string())]))]
     ClipboardStorage(String),
-    #[error("terminald is unavailable: {0}")]
+    #[error("{translated}", translated = aow_i18n::message("errors.terminald_is_unavailable", &[("p0", .0.to_string())]))]
     DaemonUnavailable(String),
-    #[error("terminald request failed: {0}")]
+    #[error("{translated}", translated = aow_i18n::message("errors.terminald_request_failed", &[("p0", .0.to_string())]))]
     Daemon(String),
-    #[error("failed to start terminal: {0}")]
+    #[error("{translated}", translated = aow_i18n::message("errors.failed_to_start_terminal", &[("p0", .0.to_string())]))]
     RuntimeCreate(String),
-    #[error("terminal state lock is poisoned")]
+    #[error("{translated}", translated = aow_i18n::text("errors.terminal_state_lock_is_poisoned"))]
     Poisoned,
     #[error(transparent)]
     Io(#[from] std::io::Error),

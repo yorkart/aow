@@ -3,7 +3,8 @@ use axum::{
     extract::{Path as AxumPath, Query, State},
 };
 
-use super::{DiffQuery, PullRequestError, PullRequestListQuery, ReviewQuery, positive, safe_path};
+use super::{DiffQuery, PullRequestListQuery, positive, safe_path};
+use crate::git_platform_providers::{GitPlatformError, GitPlatformQuery};
 use crate::{AppState, HttpError};
 
 pub(crate) async fn my_pull_requests(
@@ -15,42 +16,40 @@ pub(crate) async fn my_pull_requests(
         None => serde_json::json!({}),
     };
     Ok(Json(
-        state
-            .review_providers
-            .call(
-                &query.target,
-                "list",
-                params,
-                &state
-                    .aow
-                    .execution_path()
-                    .await
-                    .map_err(|e| PullRequestError::Command(e.to_string()))?,
-            )
-            .await?,
+        super::call(
+            &state.git_platform_providers,
+            &query.target,
+            "pull_requests.list",
+            params,
+            &state
+                .aow
+                .execution_path()
+                .await
+                .map_err(|e| GitPlatformError::Command(e.to_string()))?,
+        )
+        .await?,
     ))
 }
 
 pub(crate) async fn my_pull_request_detail(
     State(state): State<AppState>,
     AxumPath(number): AxumPath<u64>,
-    Query(query): Query<ReviewQuery>,
+    Query(query): Query<GitPlatformQuery>,
 ) -> Result<Json<serde_json::Value>, HttpError> {
     positive(number)?;
     Ok(Json(
-        state
-            .review_providers
-            .call(
-                &query,
-                "detail",
-                serde_json::json!({"number":number}),
-                &state
-                    .aow
-                    .execution_path()
-                    .await
-                    .map_err(|e| PullRequestError::Command(e.to_string()))?,
-            )
-            .await?,
+        super::call(
+            &state.git_platform_providers,
+            &query,
+            "pull_requests.detail",
+            serde_json::json!({"number":number}),
+            &state
+                .aow
+                .execution_path()
+                .await
+                .map_err(|e| GitPlatformError::Command(e.to_string()))?,
+        )
+        .await?,
     ))
 }
 
@@ -61,5 +60,18 @@ pub(crate) async fn my_pull_request_diff(
 ) -> Result<Json<serde_json::Value>, HttpError> {
     positive(number)?;
     safe_path(&query.path)?;
-    Ok(Json(state.review_providers.call(&query.target, "diff", serde_json::json!({"number":number,"path":query.path,"patch_only":query.patch_only}), &state.aow.execution_path().await.map_err(|e| PullRequestError::Command(e.to_string()))?).await?))
+    Ok(Json(
+        super::call(
+            &state.git_platform_providers,
+            &query.target,
+            "pull_requests.diff",
+            serde_json::json!({"number":number,"path":query.path,"patch_only":query.patch_only}),
+            &state
+                .aow
+                .execution_path()
+                .await
+                .map_err(|e| GitPlatformError::Command(e.to_string()))?,
+        )
+        .await?,
+    ))
 }

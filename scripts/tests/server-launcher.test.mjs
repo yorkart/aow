@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 const launcher = fileURLToPath(new URL('../../packaging/bin/aow-server', import.meta.url));
+const terminalLauncher = fileURLToPath(new URL('../../packaging/bin/aow-terminald', import.meta.url));
 const generator = fileURLToPath(new URL('../launchd-service.mjs', import.meta.url));
 const proxyKeys = ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'all_proxy', 'no_proxy'];
 const quote = value => `'${value.replaceAll("'", "'\\''")}'`;
@@ -22,7 +23,7 @@ function fixture(t) {
   writeFileSync(join(release, 'frontend/dist/index.html'), '<html></html>');
   // Capture the arguments passed to the binary by the real installed launcher.
   writeFileSync(join(release, 'bin/aow-server'), '#!/bin/sh\nprintf "%s\\n" "$@"\n', { mode: 0o700 });
-  mkdirSync(join(home, '.config/aow'), { recursive: true });
+  mkdirSync(join(home, '.aow'), { recursive: true });
   const env = { ...process.env, HOME: home, AOW_RUNTIME_ROOT: runtime };
   for (const key of Object.keys(env)) {
     if (key.startsWith('AOW_') && key !== 'AOW_RUNTIME_ROOT') delete env[key];
@@ -51,10 +52,34 @@ test('installed server listens on loopback unless a host is explicitly configure
   }
 });
 
+test('systemd services load the same application home and socket overrides', t => {
+  const f = fixture(t);
+  const configuration = join(f.home, '.aow/server.env');
+  const paths = ['server', 'terminald'].map(component => {
+    const unit = readFileSync(new URL(`../../packaging/systemd/aow-${component}.service`, import.meta.url), 'utf8');
+    return unit.match(/^EnvironmentFile=-(.+)$/m)?.[1].replaceAll('%h', f.home);
+  });
+  assert.deepEqual(paths, [configuration, configuration]);
+  symlinkSync('../releases/test', join(f.runtime, 'active/terminald'));
+  symlinkSync(process.execPath, join(f.runtime, 'node'));
+  writeFileSync(join(f.release, 'bin/aow-terminald'), '#!/bin/sh\nprintf "%s\\n" "$@"\n', { mode: 0o700 });
+  const home = join(f.home, 'custom application home');
+  for (const override of ['', join(f.home, 'custom.sock')]) {
+    writeFileSync(configuration, `AOW_STATE_DIR="${home}"\nAOW_TERMINALD_SOCKET="${override}"\n`);
+    // Model the EnvironmentFile entries for these fixtures; no system services are changed.
+    const loaded = Object.fromEntries(readFileSync(paths[1], 'utf8').trim().split('\n').map(line => {
+      const separator = line.indexOf('=');
+      return [line.slice(0, separator), line.slice(separator + 2, -1)];
+    }));
+    const args = f.run('/bin/sh', [terminalLauncher], loaded).trim().split('\n');
+    assert.equal(args[args.indexOf('--socket') + 1], override || join(home, 'runtime/terminald/terminald.sock'));
+  }
+});
+
 test('launchd preserves host opt-ins and probes the same interface as the installed server', t => {
   const f = fixture(t);
   const plist = join(f.home, 'server.plist');
-  const config = join(f.home, '.config/aow/server.env');
+  const config = join(f.home, '.aow/server.env');
   const cases = [
     { content: '', extra: {}, host: '127.0.0.1', health: '127.0.0.1' },
     { content: 'AOW_SERVER_HOST=\n', extra: {}, host: '127.0.0.1', health: '127.0.0.1' },
@@ -80,7 +105,7 @@ test('launchd preserves host opt-ins and probes the same interface as the instal
 
 test('server launcher reloads literal proxy settings on every start without changing service options', t => {
   const f = fixture(t);
-  const config = join(f.home, '.config/aow/server.env');
+  const config = join(f.home, '.aow/server.env');
   const marker = join(f.home, 'must-not-execute');
   const capture = `console.log(JSON.stringify(Object.fromEntries(${JSON.stringify([...proxyKeys, 'AOW_SERVER_HOST'])}.map(key => [key, process.env[key] ?? null]))))`;
   writeFileSync(join(f.release, 'bin/aow-server'), `#!/bin/sh\nexec ${quote(process.execPath)} -e ${quote(capture)}\n`, { mode: 0o700 });
@@ -112,7 +137,7 @@ for (const mode of ['launchagent', 'launchdaemon']) {
       return readFileSync(plist, 'utf8');
     };
     const baseline = generate();
-    writeFileSync(join(f.home, '.config/aow/server.env'), proxyKeys.map(key => `${key}=http://127.0.0.1:7890`).join('\n'));
+    writeFileSync(join(f.home, '.aow/server.env'), proxyKeys.map(key => `${key}=http://127.0.0.1:7890`).join('\n'));
     assert.equal(generate(), baseline);
   });
 }

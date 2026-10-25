@@ -29,6 +29,7 @@ pub(crate) struct AcpConnection {
     pub(super) loads: super::recovery::Loads,
     pub(super) load_identity: tokio::sync::Mutex<()>,
     stop: CancellationToken,
+    stopped: CancellationToken,
 }
 
 pub(super) struct StdioContext {
@@ -63,6 +64,8 @@ impl AcpConnection {
             debug_log,
         } = transport::spawn_stdio(&cwd, command, runtime.execution_path, runtime.debug_log)?;
         let stop = CancellationToken::new();
+        let stopped = CancellationToken::new();
+        let exited = stopped.clone();
         let initialization_guard = stop.clone().drop_guard();
         let context = Arc::new(ClientContext {
             events: runtime.events,
@@ -112,8 +115,8 @@ impl AcpConnection {
                     futures::future::pending::<Result<(), agent_client_protocol::Error>>().await
                 },
             );
-        tokio::spawn(async move {
-            let stderr_task = tokio::spawn(stderr);
+        aow_i18n::spawn(async move {
+            let stderr_task = aow_i18n::spawn(stderr);
             tokio::pin!(io);
             let reason = tokio::select! {
                 result = &mut io => format!("ACP connection closed: {result:?}"),
@@ -129,6 +132,7 @@ impl AcpConnection {
             lifetime.cancel();
             exit_context.disconnected(&reason);
             exit_log.archive();
+            exited.cancel();
         });
         let connection = tokio::time::timeout(Duration::from_secs(30), received)
             .await?
@@ -153,8 +157,10 @@ impl AcpConnection {
             }
         };
         ensure!(
-            response.protocol_version >= ProtocolVersion::V1,
-            "Unsupported ACP protocol version"
+            response.protocol_version == ProtocolVersion::V1,
+            "Unsupported ACP protocol version: expected {}, received {}",
+            ProtocolVersion::V1,
+            response.protocol_version
         );
         let result = Self {
             info: ConnectionInfo {
@@ -182,9 +188,14 @@ impl AcpConnection {
             loads: Default::default(),
             load_identity: Default::default(),
             stop,
+            stopped,
         };
         initialization_guard.disarm();
         Ok(result)
+    }
+    pub(crate) async fn wait_stopped(&self) -> Result<()> {
+        tokio::time::timeout(Duration::from_secs(5), self.stopped.cancelled()).await?;
+        Ok(())
     }
     pub(crate) fn connected(&self) -> bool {
         !self.stop.is_cancelled()
@@ -241,7 +252,7 @@ impl AcpConnection {
         // Dropping its response future would cancel locally without rolling back the agent.
         let result = if matches!(
             method,
-            "session/prompt" | "authenticate" | "session/load" | "session/resume"
+            "session/prompt" | "authenticate" | "session/load" | "session/resume" | "session/fork"
         ) {
             pending.await.map_err(anyhow::Error::from)
         } else {

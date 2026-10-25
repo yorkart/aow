@@ -28,7 +28,7 @@ pub(super) fn validate_request(request: &mut CreateWorktreeRequest) -> Result<()
         })
     {
         return Err(AowError::Invalid(
-            "worktree path must be an absolute, normalized path".into(),
+            aow_i18n::text("validation.worktree_path_must_be_an_absolute_normalized_path").into(),
         ));
     }
     Ok(())
@@ -101,7 +101,7 @@ impl AowManager {
                 let main = parse_worktrees(id, &output).into_iter().find(|worktree| worktree.is_main)
                     .ok_or_else(|| AowError::Git("project has no main worktree".into()))?;
                 git_output(Path::new(&main.path), &["pull"]).await.map_err(|error| {
-                    let message = format!("git pull failed in main worktree {}: {error}\n可先在终端检查 git pull，或取消勾选「创建前更新主仓库」后重试。", main.path);
+                    let message = format!("git pull failed in main worktree {}: {error}\nCheck git pull in the terminal, or disable updating the main repository before creation and retry.", main.path);
                     if matches!(error, AowError::Timeout(_)) { AowError::Timeout(message) } else { AowError::Git(message) }
                 })?;
                 Ok(())

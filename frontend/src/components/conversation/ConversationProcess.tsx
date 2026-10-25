@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { ChevronRight } from 'lucide-react';
 import './conversation-process.css';
@@ -15,10 +16,10 @@ export function ConversationProcess({ expanded, onToggle, summary, required = fa
   const contentId = useId();
   return <div className={`session-turn-process${expanded ? ' expanded' : ''}`}>
     <button type="button" className="session-process-toggle" aria-expanded={expanded} aria-controls={contentId}
-      disabled={required} aria-label={expanded ? '收起处理过程' : '展开处理过程'} onClick={onToggle}>
+      disabled={required} aria-label={expanded ? t("components.collapse_activity") : t("components.expand_activity")} onClick={onToggle}>
       <ChevronRight size={14} className="session-process-chevron" aria-hidden="true" />
-      <span>处理过程</span><span className="session-process-count">{summary}</span>
-      <span className="session-process-action">{required ? '等待操作' : expanded ? '收起' : '展开'}</span>
+      <span>{t("components.activity")}</span><span className="session-process-count">{summary}</span>
+      <span className="session-process-action">{required ? t("components.waiting_for_action") : expanded ? t("aow.collapse") : t("aow.expand")}</span>
     </button>
     <div id={contentId} hidden={!expanded}>{children}</div>
   </div>;

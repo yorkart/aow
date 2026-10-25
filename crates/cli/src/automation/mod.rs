@@ -74,7 +74,7 @@ enum RunsCommand {
 fn parse_run_cursor(value: &str) -> std::result::Result<String, String> {
     value
         .parse::<RunCursor>()
-        .map_err(|_| "执行分页游标不合法".to_owned())?;
+        .map_err(|_| aow_i18n::text("automations.invalid_run_pagination_cursor").to_owned())?;
     Ok(value.to_owned())
 }
 

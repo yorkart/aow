@@ -31,10 +31,17 @@ impl FromStr for RunCursor {
     type Err = anyhow::Error;
 
     fn from_str(value: &str) -> Result<Self> {
-        ensure!(value.len() <= 256, "执行分页游标不合法");
-        let (time, id) = value.split_once('/').context("执行分页游标不合法")?;
-        valid_component(id).context("执行分页游标不合法")?;
-        let started_at = time.parse().context("执行分页游标不合法")?;
+        ensure!(
+            value.len() <= 256,
+            aow_i18n::message("automations.invalid_run_pagination_cursor", &[])
+        );
+        let (time, id) = value
+            .split_once('/')
+            .context(aow_i18n::text("automations.invalid_run_pagination_cursor"))?;
+        valid_component(id).context(aow_i18n::text("automations.invalid_run_pagination_cursor"))?;
+        let started_at = time
+            .parse()
+            .context(aow_i18n::text("automations.invalid_run_pagination_cursor"))?;
         Ok(Self {
             started_at,
             id: id.into(),

@@ -10,11 +10,11 @@ pub(super) fn spawn(
 ) {
     // Own the task independently of the HTTP request and catch worker panics so
     // no item is left permanently running and terminal creation is unblocked.
-    tokio::spawn(async move {
+    aow_i18n::spawn(async move {
         let worker_state = state.clone();
         let inner_job = worker_job.clone();
         let worker_operation = operation.clone();
-        let worker = tokio::spawn(async move {
+        let worker = aow_i18n::spawn(async move {
             let _project = project_lock.lock().await;
             let _permit = worker_state
                 .aow
@@ -44,18 +44,24 @@ pub(super) fn spawn(
                     })
                     .unwrap_or(false);
                 if active {
+                    state.acp.set_workspace_removing(&item.path, false);
                     let _ = state.terminals.set_workspace_removing(&item.path, false);
                     let _ = state.aow.inner.removals.update(
                         &worker_job.id,
                         &item.path,
                         RemovalStatus::Interrupted,
-                        Some(format!("清理任务中断：{error}")),
+                        Some(aow_i18n::message(
+                            "server.cleanup_task_interrupted",
+                            &[("p0", format!("{}", error))],
+                        )),
                     );
                 }
             }
             operation.finish(
                 Outcome::Interrupted,
-                "清理任务中断，部分结果未确认，请检查 Worktree 状态",
+                aow_i18n::text(
+                    "server.cleanup_task_interrupted_some_results_are_unconfirmed_check_worktree",
+                ),
             );
         } else if let Ok(jobs) = state.aow.inner.removals.lock()
             && let Some(job) = jobs.iter().find(|job| job.id == worker_job.id)
@@ -75,7 +81,13 @@ pub(super) fn spawn(
             };
             operation.finish(
                 outcome,
-                format!("Worktree 清理完成：成功 {succeeded}，失败 {failed}"),
+                aow_i18n::message(
+                    "server.worktree_cleanup_finished_succeeded_failed",
+                    &[
+                        ("p0", format!("{}", succeeded)),
+                        ("p1", format!("{}", failed)),
+                    ],
+                ),
             );
         }
     });
@@ -83,7 +95,10 @@ pub(super) fn spawn(
 
 pub(super) async fn run_job(state: &AppState, job: &RemovalJob, operation: &Handle) {
     for (index, item) in job.items.iter().enumerate() {
-        operation.progress(format!("正在检查 {}", item.path), Some(index));
+        operation.progress(
+            aow_i18n::message("server.checking", &[("auto0", item.path.to_string())]),
+            Some(index),
+        );
         let outcome = async {
             state
                 .aow
@@ -103,13 +118,38 @@ pub(super) async fn run_job(state: &AppState, job: &RemovalJob, operation: &Hand
                 .terminals
                 .set_workspace_removing(&item.path, true)
                 .map_err(|error| AowError::Invalid(error.to_string()))?;
-            operation.progress(format!("清理 Terminal / Agent：{}", item.path), Some(index));
+            state.acp.set_workspace_removing(&item.path, true);
+            operation.progress(
+                aow_i18n::message(
+                    "server.clean_up_local_acp_resources",
+                    &[("auto0", item.path.to_string())],
+                ),
+                Some(index),
+            );
+            state
+                .acp
+                .delete_workspace(&item.path)
+                .await
+                .map_err(|error| AowError::Invalid(error.to_string()))?;
+            operation.progress(
+                aow_i18n::message(
+                    "server.clean_up_terminals_and_agents",
+                    &[("auto0", item.path.to_string())],
+                ),
+                Some(index),
+            );
             state
                 .terminals
                 .delete_workspace(&item.path)
                 .await
                 .map_err(|error| AowError::Invalid(error.to_string()))?;
-            operation.progress(format!("删除 Worktree 目录：{}", item.path), Some(index));
+            operation.progress(
+                aow_i18n::message(
+                    "server.delete_worktree_directory",
+                    &[("auto0", item.path.to_string())],
+                ),
+                Some(index),
+            );
             state
                 .aow
                 .remove_worktree_files(&job.project_id, &item.path, item.force)
@@ -128,11 +168,15 @@ pub(super) async fn run_job(state: &AppState, job: &RemovalJob, operation: &Hand
                 Level::Info
             },
             match &error {
-                Some(error) => format!("删除失败 {}：{error}", item.path),
-                None => format!("已删除 {}", item.path),
+                Some(error) => aow_i18n::message(
+                    "server.failed_to_delete",
+                    &[("auto0", item.path.to_string()), ("p1", error.to_string())],
+                ),
+                None => aow_i18n::message("server.deleted", &[("auto0", item.path.to_string())]),
             },
             Some(index + 1),
         );
+        state.acp.set_workspace_removing(&item.path, false);
         let _ = state.terminals.set_workspace_removing(&item.path, false);
         if let Err(error) = state
             .aow

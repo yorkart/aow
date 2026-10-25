@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { aowApi } from './aowApi';
 import type { WorktreeRemovalItem, WorktreeRemovalJob } from './types';
@@ -5,7 +6,7 @@ import { operationsChangedEvent } from '../features/operations/operations';
 
 export const removalActive = (item: WorktreeRemovalItem) => item.status === 'queued' || item.status === 'running';
 export const removalStatusLabel: Record<WorktreeRemovalItem['status'], string> = {
-  queued: '排队中', running: '删除中', succeeded: '已删除', failed: '删除失败', interrupted: '已中断',
+  queued: t("aow.queued"), running: t("aow.deleting"), succeeded: t("aow.deleted"), failed: t("aow.deletion_failed"), interrupted: t("aow.interrupted"),
 };
 
 export function useWorktreeRemovals() {
@@ -28,7 +29,7 @@ export function useWorktreeRemovals() {
         setError('');
       }
     } catch (reason) {
-      if (mounted.current) setError(`无法更新清理进度：${reason instanceof Error ? reason.message : String(reason)}`);
+      if (mounted.current) setError(t("aow.unable_to_update_cleanup_progress", { value0: reason instanceof Error ? reason.message : String(reason) }));
     } finally { pending.current = false; }
   }, []);
   const submitted = useCallback((job: WorktreeRemovalJob) => {

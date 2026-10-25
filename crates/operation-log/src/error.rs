@@ -2,16 +2,16 @@ use std::io;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("日志读写失败：{0}")]
+    #[error("{message}", message = aow_i18n::message("operation-log.log_read_write_failed", &[("p0", .0.to_string())]))]
     Io(#[from] io::Error),
-    #[error("日志格式错误：{0}")]
+    #[error("{message}", message = aow_i18n::message("operation-log.invalid_log_format", &[("p0", .0.to_string())]))]
     Json(#[from] serde_json::Error),
-    #[error("日志游标无效")]
+    #[error("{message}", message = aow_i18n::text("operation-log.invalid_log_cursor"))]
     InvalidCursor,
-    #[error("日志文件已过期或发生变更，请刷新日志")]
+    #[error("{message}", message = aow_i18n::text("operation-log.log_file_expired_or_changed_refresh_logs"))]
     CursorExpired,
-    #[error("日志查询参数无效")]
+    #[error("{message}", message = aow_i18n::text("operation-log.invalid_log_query_parameters"))]
     InvalidOptions,
-    #[error("单条日志超过大小限制")]
+    #[error("{message}", message = aow_i18n::text("operation-log.log_entry_exceeds_size_limit"))]
     RecordTooLarge,
 }

@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useEffect, useRef, useState } from 'react';
 import { inboxApi } from './api';
 import { readDraft, saveDraft } from './drafts';
@@ -138,7 +139,7 @@ export function useInboxDraft(key: string, mutate: <T>(action: () => Promise<T>)
   // The ref owns the current draft, including changes made while a write is pending.
   }, []);
   return { draft, editing, saving, removing: !!draft?.remove, error, conflict: conflict(),
-    status: draft?.remove ? (error || conflict() ? '移除失败' : '移除中…') : saving ? '保存中…' : error || conflict() ? '未保存' : draft && empty(draft.markdown) ? '编辑中' : draft && dirty(draft) ? '等待保存' : '已保存',
+    status: draft?.remove ? (error || conflict() ? t("inbox.removal_failed") : t("inbox.removing")) : saving ? t("automations.saving") : error || conflict() ? t("inbox.unsaved") : draft && empty(draft.markdown) ? t("inbox.editing") : draft && dirty(draft) ? t("inbox.waiting_to_save") : t("configuration.saved"),
     begin, update, finish, resolve, retry: flush,
     setComposing: (value: boolean) => { composing.current = value; if (value) stopTimer(); else schedule(); } };
 }

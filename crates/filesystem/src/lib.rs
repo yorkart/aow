@@ -13,7 +13,7 @@ pub use error::FsError;
 pub use files::{open_file, read_text_file};
 pub use limits::DEFAULT_MAX_TEXT_BYTES;
 pub use metadata::version_for_metadata;
-pub use paths::{absolute_path, default_state_dir};
+pub use paths::{absolute_path, default_state_dir, default_terminald_socket};
 pub use rename::{rename_entry, rename_file};
 pub use search::{SearchError, search_files};
 pub use write::{write_atomic_stream, write_unique_stream};

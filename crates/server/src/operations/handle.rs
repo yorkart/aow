@@ -14,7 +14,8 @@ impl Drop for HandleInner {
             &self.id,
             "finished",
             Level::Warn,
-            "执行过程已中断，结果未确认；请检查资源状态".into(),
+            aow_i18n::text("server.execution_interrupted_result_unconfirmed_check_resource_state")
+                .into(),
             None,
             Some(Outcome::Interrupted),
             None,
@@ -60,7 +61,7 @@ impl Handle {
             &self.inner.id,
             "resource",
             Level::Info,
-            "关联资源已更新".into(),
+            aow_i18n::text("server.associated_resource_updated").into(),
             None,
             None,
             Some(resource),

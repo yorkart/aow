@@ -3,15 +3,19 @@ export const object = (value: unknown): Data => value && typeof value === 'objec
 export const list = (value: unknown): Data[] => Array.isArray(value) ? value.map(object) : [];
 export const text = (value: unknown): string => typeof value === 'string' ? value : '';
 export const failure = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
-export interface AgentInfo { id: string; name: string; description: string; configured: boolean; supported: boolean; installed: boolean; version?: string }
+export interface AgentInfo { id: string; name: string; description: string; configured: boolean; supported: boolean; installed: boolean; version?: string; icon?: string | null; repository?: string | null; website?: string | null; license_url?: string | null }
 export interface ConnectionInfo { id: string; agent_id: string; cwd: string; agent_info: Data; capabilities: Data; auth_methods: Data[]; prompt_capabilities?: Data; extensions?: Data }
 export interface ConnectionStatus { operation_id?: string; phase: string; detail?: string; running: boolean; elapsed_seconds: number }
 export interface Permission { id: string; kind: string; request: Data }
 export interface ThreadEntry { id: string; kind: string; message_id?: string; content: Data; delivery?: { status: 'sending' | 'injected' | 'started' | 'failed' | 'cancelled' | 'unknown'; error?: string | null } }
 export interface SessionTurn { user_entry_id: string; status: 'in_progress' | 'completed' | 'failed' | 'interrupted' | 'unknown'; stop_reason?: string | null; error?: string | null }
+export interface ProcessSegment {
+  id: string; tool_count: number; progress_count: number; permission_tool_ids: string[];
+}
 export interface TurnOverview {
   id: string; revision: number; user: ThreadEntry[]; conclusion: ThreadEntry[];
   messages?: ThreadEntry[] | null;
+  process_segments?: ProcessSegment[];
   tool_count: number; progress_count: number; running: boolean; waiting: boolean; compacting: boolean;
   status?: SessionTurn['status'] | null; error?: string | null; permission_tool_ids: string[];
 }
@@ -31,6 +35,9 @@ export interface SessionSnapshot {
   config_options_supported?: boolean; auth_required?: boolean;
   terminals?: Record<string, Data>;
   plan?: Data; notices?: ThreadEntry[];
+  session_meta?: Data;
+  session_meta_revision?: number;
+  session_meta_revisions?: Record<string, number>;
 }
 export interface SettingsFile { path: string; content: string; revision: string }
 export interface DebugMessage { request_method?: string; timestamp: string; direction: string; message: string; connection_id: string; thread_id: string | null; session_id: string | null; scope: 'thread' | 'connection' | 'unattributed' }

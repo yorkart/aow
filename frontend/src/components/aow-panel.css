@@ -6,8 +6,8 @@
 .aow-panel > [data-panel-anchor] > .aow-panel-header { position:relative; z-index:10; margin:0; }
 .aow-panel > [data-panel-anchor] > .aow-panel-header[data-docked="top"],
 .aow-panel > [data-panel-anchor] > .aow-panel-header[data-docked="bottom"] { position:fixed; top:calc(var(--panel-viewport-top) + var(--panel-dock-offset)); left:var(--panel-viewport-left); width:var(--panel-viewport-width); }
-.aow-panel-header[data-docked="top"] { box-shadow:0 1px 3px #0005; }
-.aow-panel-header[data-docked="bottom"] { box-shadow:0 -1px 3px #0005; }
+.aow-panel-header[data-docked="top"] { box-shadow:0 1px 3px var(--aow-shadow); }
+.aow-panel-header[data-docked="bottom"] { box-shadow:0 -1px 3px var(--aow-shadow); }
 /* Header controls already occupy the reserved area; focusing them must not
    scroll the viewport again and dismiss a just-opened menu. */
 .aow-panel-header button { scroll-margin-top:calc(-1 * var(--panel-scroll-top,0px)); scroll-margin-bottom:calc(-1 * var(--panel-scroll-bottom,0px)); }

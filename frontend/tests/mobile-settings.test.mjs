@@ -7,22 +7,21 @@ import { productionPreview } from './fixtures/production-preview.mjs';
 const server = await productionPreview();
 const base = `http://127.0.0.1:${server.httpServer.address().port}`;
 const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
-const versions = ['550e8400-e29b-41d4-a716-446655440000', '550e8400-e29b-41d4-a716-446655440001'];
-const categories = ['Configuration', 'Nodes', 'Editor', 'Notes', 'Environment', 'ACP', 'Agents', 'IM', '通知', 'Pull Requests'];
+const categories = ['外观', '节点', '编辑器', '笔记', '环境', 'ACP', 'Agent', 'IM', '通知', 'Git 平台'];
 
 async function fixture(t, width = 390, mobile = true, virtualViewport = false, agents) {
   const context = await browser.newContext({ viewport: { width, height: 844 }, isMobile: mobile, hasTouch: mobile });
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
   if (virtualViewport) await context.addInitScript(() => {
     Object.defineProperty(window, 'visualViewport', { value: Object.assign(new EventTarget(), { height: 844, width: 390, offsetTop: 0 }) });
   });
   const state = {
-    errors: [], writes: [], projects: [], failSave: false, failEnvironmentRead: false, holdSave: undefined,
-    serverEnvironment: { path: '/home/aow/.config/aow/server.env', content: '# Existing comment\nAOW_SERVER_PORT=8282\n', revision: 'first', exists: true, platform: 'linux' },
+    errors: [], writes: [], projects: [], failSave: false, failAgentRefresh: false, failEnvironmentRead: false, holdSave: undefined,
+    serverEnvironment: { path: '/home/aow/.aow/server.env', content: '# Existing comment\nAOW_SERVER_PORT=8282\n', revision: 'first', exists: true, platform: 'linux' },
     settings: { notes_base: '/notes', execution_path: ['/usr/bin', '/bin'], node_addresses: [], editor: { word_wrap: false } },
     agents: agents ?? [{ id: 'codex', agent_type: 'codex', display_name: 'Codex', source: 'detected', available: true, command: 'codex', executable: '/usr/bin/codex', args: [], env: {} }],
     notifications: { im: { providers: [{ provider: 'wechat', account_id: 'account', user_id: 'user' }] }, notifications: { agent_task_completed: { enabled: true, channels: ['page'] }, public_base_url: '' } },
-    configuration: { config_repo: '/repo', config_id: versions[0] },
-    providers: { providers: [{ id: 'github', name: 'GitHub', hosts: ['github.com'], enabled: true, script: 'print("describe")' }] },
+    providers: { revision: 0, providers: [{ id: 'github.mjs', name: 'GitHub', hosts: ['github.com'], script: 'console.log("describe")' }] },
   };
   t.after(async () => { await context.close(); assert.deepEqual(state.errors, []); });
   await context.route('**/api/**', async route => {
@@ -55,7 +54,11 @@ async function fixture(t, width = 390, mobile = true, virtualViewport = false, a
       }
       data = state.serverEnvironment;
     } else if (path === '/api/aow/settings/discovered-path') data = ['/opt/bin', '/usr/bin', '/bin'];
-    else if (path === '/api/aow/agents') {
+    else if (path === '/api/aow/agents/settings/default') {
+      assert.deepEqual(Object.keys(body), ['agent_id']);
+      state.agents = state.agents.map(agent => ({ ...agent, is_default: agent.id === body.agent_id }));
+      await route.fulfill({ status: 204 }); return;
+    } else if (path === '/api/aow/agents') {
       if (request.method() === 'PATCH') {
         const group = state.agents.filter(agent => agent.source === 'configured' && agent.agent_type === body.agent_type);
         assert.deepEqual([...body.ids].sort(), group.map(agent => agent.id).sort());
@@ -67,7 +70,10 @@ async function fixture(t, width = 390, mobile = true, virtualViewport = false, a
         const agent = { ...body, id: body.id, available: true, source: 'configured', executable: body.command };
         state.agents = [...state.agents.filter(item => item.id !== agent.id), agent];
         data = agent;
-      } else data = state.agents;
+      } else {
+        if (state.failAgentRefresh && url.searchParams.get('refresh') === 'true') { await route.fulfill({ status: 503, json: { message: 'Agent 列表读取失败' } }); return; }
+        data = state.agents;
+      }
     } else if (path.startsWith('/api/aow/agents/') && request.method() === 'PUT') {
       const existing = decodeURIComponent(path.split('/').at(-1));
       assert.equal(body.id, existing, 'editing preserves the Agent ID');
@@ -76,14 +82,10 @@ async function fixture(t, width = 390, mobile = true, virtualViewport = false, a
     } else if (path.startsWith('/api/aow/agents/') && request.method() === 'DELETE') {
       state.agents = state.agents.filter(agent => agent.id !== path.split('/').at(-1));
       await route.fulfill({ status: 204 }); return;
-    } else if (path === '/api/aow/settings/configuration') {
-      if (writing) state.configuration = body;
-      data = { selection: state.configuration, active_selection: { config_repo: '/repo', config_id: versions[0] }, restart_required: state.configuration.config_id !== versions[0], changed: writing };
-    } else if (path === '/api/aow/settings/configuration/versions') data = { config_repo: url.searchParams.get('path'), config_ids: versions, selected_id: null };
-    else if (path === '/api/aow/review-providers') {
-      if (writing) state.providers = body;
+    } else if (path === '/api/aow/git-platform-providers') {
+      if (writing) state.providers = { ...body, revision: body.revision + 1, providers: body.providers.map(provider => ({ ...provider, name: 'GitHub', hosts: ['github.com'] })) };
       data = state.providers;
-    } else if (path === '/api/aow/review-providers/test') data = { operations: ['list', 'detail', 'diff'] };
+    } else if (path === '/api/aow/git-platform-providers/test') data = { name: 'GitHub', hosts: ['github.com'], operations: ['pull_requests.list', 'pull_requests.detail', 'pull_requests.diff'] };
     else if (path === '/api/aow/im/feishu') {
       state.notifications.im.providers = state.notifications.im.providers.filter(provider => provider.provider !== 'feishu');
       if (request.method() === 'PUT') state.notifications.im.providers.push({ provider: 'feishu', app_id: body.app_id });
@@ -99,10 +101,11 @@ async function fixture(t, width = 390, mobile = true, virtualViewport = false, a
     await route.fulfill({ json: data });
   });
   const page = await context.newPage();
+    await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
   page.setDefaultTimeout(10000);
   page.on('pageerror', error => state.errors.push(error.message));
   await page.goto(`${base}/${mobile ? 'm' : 'aow/?ui=desktop'}`);
-  const trigger = page.getByRole('button', { name: mobile ? '设置' : 'Settings', exact: true });
+  const trigger = page.getByRole('button', { name: mobile ? '设置' : "设置", exact: true });
   await trigger.waitFor();
   if (mobile) {
     const logout = await page.getByRole('button', { name: '退出登录', exact: true }).boundingBox();
@@ -110,11 +113,11 @@ async function fixture(t, width = 390, mobile = true, virtualViewport = false, a
     assert.ok(logout.x >= settings.x + settings.width, 'Logout sits immediately to the right of Settings');
   }
   await trigger.click();
-  const dialog = page.getByRole('dialog');
+  const dialog = page.locator('.project-aow-settings, .settings-action-dialog');
   await dialog.getByRole('navigation', { name: '设置分类' }).waitFor();
   const choose = async name => {
     if (mobile && await dialog.getByRole('button', { name: '返回设置分类' }).isVisible()) await dialog.getByRole('button', { name: '返回设置分类' }).click();
-    await dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button', { name: new RegExp(`^${name}`) }).click();
+    await dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button', { name: new RegExp(`^${{"Agents": "Agent", "Environment": "环境", "Editor": "编辑器", "Notes": "笔记", "Nodes": "节点", "Appearance": "外观"}[name] ?? name}`) }).click();
   };
   const save = async text => {
     await dialog.getByRole('button', { name: '保存', exact: true }).click();
@@ -144,6 +147,63 @@ async function layout(page, dialog, name) {
 }
 
 try {
+  await test('a saved Agent closes its form even when refresh fails, and retry only reloads the list', async t => {
+    const { page, state, dialog, choose } = await fixture(t);
+    await choose('Agents');
+    await dialog.getByRole('button', { name: '新增 Agent', exact: true }).click();
+    const action = page.getByRole('dialog', { name: '新增 Agent', exact: true });
+    await action.getByRole('textbox', { name: 'Agent ID', exact: true }).fill('saved-before-refresh');
+    await action.getByRole('combobox', { name: 'Agent 类型' }).selectOption('codex');
+    await action.getByRole('textbox', { name: "显示名称" }).fill('Saved Agent');
+    state.failAgentRefresh = true;
+    await action.getByRole('button', { name: '注册', exact: true }).click();
+    await action.waitFor({ state: 'hidden' });
+    await dialog.getByRole('status').filter({ hasText: 'Saved Agent 配置已保存' }).waitFor();
+    await dialog.getByRole('alert').filter({ hasText: '列表刷新失败' }).waitFor();
+    assert.equal(state.writes.filter(write => write.method === 'POST').length, 1);
+    state.failAgentRefresh = false;
+    await dialog.getByRole('button', { name: '重试刷新', exact: true }).click();
+    await dialog.getByRole('button', { name: '编辑 Saved Agent', exact: true }).waitFor();
+    assert.equal(await dialog.getByRole('button', { name: '重试刷新', exact: true }).count(), 0);
+    assert.equal(state.writes.filter(write => write.method === 'POST').length, 1);
+  });
+
+  for (const mobile of [false, true]) await test(`${mobile ? 'mobile' : 'desktop'} default Agent row options submit only the ID and preserve detected profiles`, async t => {
+    const profile = { id: 'codex', agent_type: 'codex', display_name: 'Codex', source: 'detected', available: true, command: 'codex', executable: '/usr/bin/codex', args: [], env: {} };
+    const { page, state, dialog, choose } = await fixture(t, mobile ? 320 : 1280, mobile, false, [
+      profile, { ...profile, id: 'work-codex', display_name: 'Work Codex', source: 'configured' },
+    ]);
+    await choose('Agents');
+    assert.equal(await dialog.getByRole('combobox', { name: '默认 Agent 实例', exact: true }).count(), 0);
+    const detected = dialog.getByRole('checkbox', { name: '默认 Agent：Codex', exact: true });
+    const configured = dialog.getByRole('checkbox', { name: '默认 Agent：Work Codex', exact: true });
+    const waitDefault = (name, checked) => page.waitForFunction(({ name, checked }) => {
+      const option = document.querySelector(`[aria-label="默认 Agent：${name}"]`);
+      return option && option.checked === checked && !option.disabled;
+    }, { name, checked });
+    // Simulate another window changing launch data after this page loaded.
+    state.agents[0] = { ...state.agents[0], args: ['--latest'], env: { MODE: 'latest' } };
+    await detected.click();
+    await waitDefault('Codex', true);
+    assert.deepEqual(state.writes, [{ path: '/api/aow/agents/settings/default', method: 'PUT', body: { agent_id: 'codex' } }]);
+    assert.equal(state.agents[0].source, 'detected');
+    assert.deepEqual(state.agents[0].args, ['--latest']);
+    assert.deepEqual(state.agents[0].env, { MODE: 'latest' });
+    state.failSave = true;
+    await configured.click();
+    await dialog.getByRole('alert').filter({ hasText: '配置写入失败' }).waitFor();
+    assert.equal(await detected.isChecked(), true);
+    assert.equal(await configured.isChecked(), false);
+    state.failSave = false;
+    await configured.click();
+    await waitDefault('Work Codex', true);
+    assert.equal(await detected.isChecked(), false);
+    assert.deepEqual(state.writes.at(-1).body, { agent_id: 'work-codex' });
+    await configured.click();
+    await waitDefault('Work Codex', false);
+    assert.deepEqual(state.writes.at(-1).body, { agent_id: null });
+    assert.equal(state.agents[0].source, 'detected');
+  });
   for (const mobile of [false, true]) await test(`${mobile ? 'touch' : 'mouse'} Agent sorting stays within type, pins detected entries, and persists the compact list`, async t => {
     const agent = (id, type, name, source = 'configured') => ({ id, agent_type: type, display_name: name, source,
       available: true, command: `/usr/bin/${type}`, executable: `/usr/bin/${type}`, args: ['--model', 'example'], env: { MODE: 'work' } });
@@ -159,6 +219,14 @@ try {
     assert.deepEqual(await ids(), initial.map(agent => agent.id));
     assert.deepEqual(await dialog.locator('.project-aow-agent-group > h3').allTextContents(), ['Claude Code', 'Codex']);
     assert.equal(await row('codex').getByRole('button', { name: /^调整/ }).count(), 0);
+    assert.equal(await row('codex').getByRole('button', { name: '移除配置', exact: true }).count(), 0);
+    const controls = await dialog.locator('.project-aow-agent-row').evaluateAll(rows => rows.map(row => [
+      row.querySelector('.project-aow-agent-default'),
+      row.querySelector('.project-aow-agent-edit'),
+      row.querySelector('.project-aow-agent-copy'),
+      row.querySelector('.project-aow-agent-action-placeholder, button[title="移除配置"]'),
+    ].map(control => control.getBoundingClientRect().x)));
+    for (const positions of controls) assert.ok(positions.every((x, index) => Math.abs(x - controls[0][index]) < 1), 'default, edit, copy and remove columns align for detected and configured agents');
     assert.equal(await row('work-claude').getByRole('button', { name: /^调整/ }).getAttribute('aria-disabled'), 'true');
     assert.equal(await dialog.locator('.project-aow-agent-row .agent-icon').count(), initial.length);
     assert.equal(await dialog.locator('.project-aow-agent-list').getByText('/usr/bin/codex', { exact: true }).count(), 0);
@@ -219,12 +287,23 @@ try {
   });
 
   for (const mobile of [false, true]) await test(`${mobile ? 'mobile' : 'desktop'} Agent IDs are required, unique, immutable, and can be replaced by delete and create`, async t => {
-    const { state, dialog, choose } = await fixture(t, mobile ? 390 : 1280, mobile);
+    const { page, state, dialog, choose } = await fixture(t, mobile ? 390 : 1280, mobile);
     await choose('Agents');
+    assert.equal(await dialog.getByRole('textbox', { name: 'Agent ID', exact: true }).count(), 0);
+    await dialog.getByRole('button', { name: '新增 Agent', exact: true }).click();
+    const action = page.getByRole('dialog', { name: '新增 Agent', exact: true });
+    await action.waitFor();
+    assert.equal(await action.evaluate(element => element.scrollWidth <= element.clientWidth), true);
+    const bounds = await action.boundingBox();
+    assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= page.viewportSize().width);
+    await page.keyboard.press('Escape');
+    await action.waitFor({ state: 'hidden' });
+    assert.equal(await page.locator('.project-aow-settings').isVisible(), true);
+    await dialog.getByRole('button', { name: '新增 Agent', exact: true }).click();
     const id = dialog.getByRole('textbox', { name: 'Agent ID', exact: true });
     await dialog.getByRole('combobox', { name: 'Agent 类型' }).selectOption('codex');
-    await dialog.getByRole('textbox', { name: 'Display name' }).fill('Work Codex');
-    await dialog.getByRole('textbox', { name: 'Executable' }).fill('/usr/bin/codex');
+    await dialog.getByRole('textbox', { name: "显示名称" }).fill('Work Codex');
+    await dialog.getByRole('textbox', { name: "可执行文件" }).fill('/usr/bin/codex');
     for (const value of ['', 'with space', 'bad.id', '中文']) {
       await id.fill(value);
       await dialog.getByRole('button', { name: '注册', exact: true }).click();
@@ -243,13 +322,13 @@ try {
     await dialog.getByRole('button', { name: '编辑 Work Codex', exact: true }).click();
     assert.equal(await id.inputValue(), 'Work_codex-2');
     assert.equal(await id.isEditable(), false);
-    await dialog.getByRole('textbox', { name: 'Display name' }).fill('Updated Work Codex');
+    await dialog.getByRole('textbox', { name: "显示名称" }).fill('Updated Work Codex');
     state.failSave = true;
     await dialog.getByRole('button', { name: '保存配置', exact: true }).click();
     await dialog.getByRole('alert').filter({ hasText: '配置写入失败' }).waitFor();
     assert.equal(await id.inputValue(), 'Work_codex-2');
     assert.equal(await id.isEditable(), false);
-    assert.equal(await dialog.getByRole('textbox', { name: 'Display name' }).inputValue(), 'Updated Work Codex');
+    assert.equal(await dialog.getByRole('textbox', { name: "显示名称" }).inputValue(), 'Updated Work Codex');
     state.failSave = false;
     await dialog.getByRole('button', { name: '保存配置', exact: true }).click();
     await dialog.getByRole('status').filter({ hasText: 'Updated Work Codex 配置已保存' }).waitFor();
@@ -257,15 +336,16 @@ try {
     assert.equal(state.writes.at(-1).path, '/api/aow/agents/Work_codex-2');
     assert.equal(state.writes.at(-1).body.id, 'Work_codex-2');
     assert.equal(state.agents.find(agent => agent.id === 'Work_codex-2').display_name, 'Updated Work Codex');
-    await dialog.getByRole('button', { name: '编辑 Updated Work Codex', exact: true }).click();
+    assert.equal(await dialog.getByRole('textbox', { name: 'Agent ID', exact: true }).count(), 0);
     await dialog.locator('.project-aow-agent-row').filter({ hasText: 'Work_codex-2' }).getByRole('button', { name: '移除配置' }).click();
     await dialog.locator('.project-aow-agent-row').filter({ hasText: 'Work_codex-2' }).waitFor({ state: 'detached' });
     assert.equal(state.writes.at(-1).method, 'DELETE');
+    await dialog.getByRole('button', { name: '新增 Agent', exact: true }).click();
     assert.equal(await id.inputValue(), '');
     assert.equal(await id.isEditable(), true);
     await id.fill('New_codex-3');
     await dialog.getByRole('combobox', { name: 'Agent 类型' }).selectOption('codex');
-    await dialog.getByRole('textbox', { name: 'Display name' }).fill('New Work Codex');
+    await dialog.getByRole('textbox', { name: "显示名称" }).fill('New Work Codex');
     await dialog.getByRole('button', { name: '注册', exact: true }).click();
     await dialog.getByRole('status').filter({ hasText: 'New Work Codex 配置已保存' }).waitFor();
     assert.equal(state.writes.at(-1).method, 'POST');
@@ -283,10 +363,9 @@ try {
     assert.equal(await dialog.getByRole('button', { name: '保存 server.env', exact: true }).isDisabled(), true);
     state.failEnvironmentRead = false;
     await dialog.getByRole('button', { name: '重新读取文件', exact: true }).click();
-    await dialog.getByText(/LaunchDaemon 模式可能需要本地管理员重新登记/).waitFor();
-    const editor = dialog.getByRole('textbox', { name: 'server.env 文件内容', exact: true });
-    await page.waitForFunction(() => document.querySelector('textarea[aria-label="server.env 文件内容"]')?.value.includes('8282'));
-    await editor.fill('# Comment\nAOW_SERVER_PORT=8283\n');
+    const editor = dialog.getByRole('textbox', { name: 'AOW_SERVER_PORT', exact: true });
+    await page.waitForFunction(() => document.querySelector('input[aria-label="AOW_SERVER_PORT"]')?.value === '8282');
+    await editor.fill('8283');
     await dialog.getByRole('button', { name: '保存 server.env', exact: true }).click();
     await dialog.getByRole('status').filter({ hasText: 'server.env 已保存' }).waitFor();
     assert.equal(state.serverEnvironment.content, '# Comment\r\nAOW_SERVER_PORT=8283\r\n');
@@ -295,22 +374,22 @@ try {
   for (const mobile of [false, true]) await test(`${mobile ? 'mobile' : 'desktop'} server.env edits preserve drafts and save the file independently of PATH`, async t => {
     const { page, state, dialog, choose, trigger } = await fixture(t, mobile ? 320 : 1280, mobile);
     const close = () => dialog.getByRole('button', { name: mobile ? '关闭设置' : '关闭', exact: true });
+    state.serverEnvironment.content = '# Keep comment\n\nAOW_SERVER_PORT="8282"\nCUSTOM=$HOME=a=b\n';
     await choose('Environment');
-    const editor = dialog.getByRole('textbox', { name: 'server.env 文件内容', exact: true });
-    await page.waitForFunction(() => document.querySelector('textarea[aria-label="server.env 文件内容"]')?.value.includes('8282'));
-    await dialog.getByText('systemctl --user restart aow-server.service', { exact: true }).waitFor();
+    const editor = dialog.getByRole('textbox', { name: 'AOW_SERVER_PORT', exact: true });
+    await page.waitForFunction(() => document.querySelector('input[aria-label="AOW_SERVER_PORT"]')?.value === '8282');
     const content = '# Keep comment\n\nAOW_SERVER_PORT="8283"\nCUSTOM=$HOME=a=b\n';
-    await editor.fill(content);
+    await editor.fill('8283');
     await choose('Editor');
     await choose('Environment');
-    assert.equal(await editor.inputValue(), content, 'category changes retain drafts');
+    assert.equal(await editor.inputValue(), '8283', 'category changes retain drafts');
     page.once('dialog', prompt => prompt.dismiss());
     await close().click();
-    assert.equal(await editor.inputValue(), content, 'cancelled close retains draft');
+    assert.equal(await editor.inputValue(), '8283', 'cancelled close retains draft');
     state.failSave = true;
     await dialog.getByRole('button', { name: '保存 server.env', exact: true }).click();
     await dialog.getByRole('alert').filter({ hasText: '配置写入失败' }).waitFor();
-    assert.equal(await editor.inputValue(), content);
+    assert.equal(await editor.inputValue(), '8283');
     assert.equal(state.serverEnvironment.content.includes('8282'), true);
     state.failSave = false;
     await dialog.getByRole('button', { name: '保存 server.env', exact: true }).click();
@@ -322,35 +401,97 @@ try {
     await close().click();
     await trigger.click();
     await choose('Environment');
-    await page.waitForFunction(() => document.querySelector('textarea[aria-label="server.env 文件内容"]')?.value.includes('8283'));
-    await editor.fill('LOCAL=draft\n');
-    state.serverEnvironment.content = 'EXTERNAL=updated\n';
+    await page.waitForFunction(() => document.querySelector('input[aria-label="AOW_SERVER_PORT"]')?.value === '8283');
+    await editor.fill('8284');
+    state.serverEnvironment.content = 'EXTERNAL=updated\nAOW_SERVER_PORT=9000\n';
     state.serverEnvironment.revision = 'external';
     await dialog.getByRole('button', { name: '保存 server.env', exact: true }).click();
     await dialog.getByRole('alert').filter({ hasText: '已被外部程序修改' }).waitFor();
-    assert.equal(await editor.inputValue(), 'LOCAL=draft\n');
+    assert.equal(await editor.inputValue(), '8284');
     page.once('dialog', prompt => prompt.dismiss());
     await dialog.getByRole('button', { name: '重新读取文件', exact: true }).click();
-    assert.equal(await editor.inputValue(), 'LOCAL=draft\n');
+    assert.equal(await editor.inputValue(), '8284');
     page.once('dialog', prompt => prompt.accept());
     await dialog.getByRole('button', { name: '重新读取文件', exact: true }).click();
-    await page.waitForFunction(() => document.querySelector('textarea[aria-label="server.env 文件内容"]')?.value === 'EXTERNAL=updated\n');
+    await page.waitForFunction(() => document.querySelector('input[aria-label="AOW_SERVER_PORT"]')?.value === '9000');
     await editor.fill('');
     await dialog.getByRole('button', { name: '保存 server.env', exact: true }).click();
     await dialog.getByRole('status').filter({ hasText: 'server.env 已保存' }).waitFor();
-    assert.equal(state.serverEnvironment.content, '', 'blank content clears the file');
+    assert.equal(state.serverEnvironment.content, 'EXTERNAL=updated\n', 'clearing a value preserves unmanaged configuration');
+  });
+
+  for (const mobile of [false, true]) await test(`${mobile ? 'mobile' : 'desktop'} environment table lists all keys and saves proxies and session limits without filling defaults`, async t => {
+    const { page, state, dialog, choose } = await fixture(t, mobile ? 320 : 1280, mobile);
+    state.serverEnvironment.exists = false;
+    state.serverEnvironment.revision = 'missing';
+    state.serverEnvironment.content = '';
+    await choose('Environment');
+    await dialog.locator('.server-environment-actions').getByText(state.serverEnvironment.path, { exact: true }).waitFor();
+    const tables = dialog.locator('.server-environment-table');
+    assert.equal(await tables.count(), 4);
+    const inputs = tables.getByRole('textbox');
+    assert.equal(await inputs.count(), 22);
+    assert.deepEqual(await inputs.evaluateAll(elements => elements.map(element => element.value)), Array(22).fill(''));
+    assert.equal(await dialog.getByRole('textbox', { name: 'HOME', exact: true }).count(), 0);
+    for (const row of await tables.locator('tbody tr').all()) {
+      assert.ok(await row.locator('td').nth(0).textContent(), 'each key has a description');
+      assert.ok(await row.locator('td').nth(1).textContent(), 'each key has an example');
+    }
+    const values = {
+      HTTP_PROXY: 'http://127.0.0.1:7890', HTTPS_PROXY: 'http://127.0.0.1:7891', ALL_PROXY: 'socks5://127.0.0.1:1080', NO_PROXY: 'localhost,127.0.0.1,::1',
+      http_proxy: 'http://127.0.0.1:7892', https_proxy: 'http://127.0.0.1:7893', all_proxy: 'socks5://127.0.0.1:1081', no_proxy: 'example.com',
+      AOW_AUTH_SESSION_MAX_AGE_SECONDS: '86400', AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS: '7200',
+    };
+    for (const [key, value] of Object.entries(values)) await dialog.getByRole('textbox', { name: key, exact: true }).fill(value);
+    await layout(page, dialog, 'server-environment-table');
+    const save = dialog.getByRole('button', { name: '保存 server.env', exact: true });
+    const duration = dialog.getByRole('textbox', { name: 'AOW_AUTH_SESSION_MAX_AGE_SECONDS', exact: true });
+    for (const invalid of ['0', '-1', '1.5', '12h', '18446744073709551616']) {
+      await duration.fill(invalid);
+      assert.equal(await duration.getAttribute('aria-invalid'), 'true');
+      assert.equal(await save.isDisabled(), true);
+      assert.equal(state.writes.length, 0);
+    }
+    await duration.fill(values.AOW_AUTH_SESSION_MAX_AGE_SECONDS);
+    await save.click();
+    await dialog.getByRole('status').filter({ hasText: 'server.env 已保存' }).waitFor();
+    assert.deepEqual(Object.fromEntries(state.serverEnvironment.content.trim().split('\n').map(line => line.split('='))), values);
+    assert.equal(state.serverEnvironment.exists, true);
+    assert.equal(state.serverEnvironment.content.includes('AOW_SERVER_HOST'), false, 'examples and defaults stay unset');
+    await dialog.getByRole('textbox', { name: 'HTTP_PROXY', exact: true }).fill('');
+    await duration.fill('');
+    await duration.press('Enter');
+    await dialog.getByRole('status').filter({ hasText: 'server.env 已保存' }).waitFor();
+    assert.equal(state.serverEnvironment.content.includes('HTTP_PROXY='), false);
+    assert.equal(state.serverEnvironment.content.includes('AOW_AUTH_SESSION_MAX_AGE_SECONDS='), false);
+    assert.ok(state.serverEnvironment.content.includes(`http_proxy=${values.http_proxy}\n`));
+    assert.ok(state.writes.every(write => write.path === '/api/aow/settings/server-environment'), 'Enter in the table never submits the separate PATH form');
+  });
+
+  for (const width of [320, 390]) await test(`mobile ${width}px uploads named mjs providers with derived metadata`, async t => {
+    const { state, page, dialog, choose } = await fixture(t, width);
+    await choose('Git 平台');
+    assert.equal(await dialog.getByRole('heading', { name: 'Git 平台', exact: true }).isVisible(), true);
+    await dialog.getByRole('cell', { name: /GitHub$/ }).waitFor();
+    assert.equal(await dialog.getByRole('region', { name: 'Git 平台设置' }).getByRole('checkbox').count(), 0);
+    await dialog.getByLabel('上传 Provider 脚本').setInputFiles({ name: 'github.mjs', mimeType: 'text/javascript', buffer: Buffer.from('console.log("uploaded")') });
+    await dialog.getByRole('status').filter({ hasText: '已上传并生效' }).waitFor();
+    assert.equal(await dialog.getByRole('cell', { name: /github\.mjs$/ }).count(), 1);
+    assert.equal(await dialog.getByRole('cell', { name: /github\.com$/ }).count(), 1);
+    assert.equal(state.providers.providers.length, 1);
+    assert.equal(state.providers.providers[0].script, 'console.log("uploaded")');
+    assert.equal(Object.hasOwn(state.providers.providers[0], 'enabled'), false);
+    await layout(page, dialog, 'git-platforms');
+    await dialog.getByRole('button', { name: '移除', exact: true }).click();
+    await dialog.getByRole('status').filter({ hasText: '已移除' }).waitFor();
+    assert.equal(state.providers.providers.length, 0);
+    await dialog.getByText('尚未配置 Provider，请上传 .mjs 文件。', { exact: true }).waitFor();
   });
 
   for (const width of [320, 390]) await test(`mobile ${width}px exposes and saves every desktop settings category`, async t => {
     const { page, state, dialog, choose, save, trigger } = await fixture(t, width);
     assert.deepEqual(await dialog.locator('nav strong').allTextContents(), categories);
     await layout(page, dialog, 'overview');
-    await choose('Configuration');
-    await dialog.getByRole('radio', { name: versions[1], exact: true }).check();
-    await save('重启服务后生效');
-    assert.equal(state.configuration.config_id, versions[1]);
-    await layout(page, dialog, 'configuration');
-
     await choose('Nodes');
     await dialog.getByRole('textbox', { name: '节点地址', exact: true }).fill('https://phone-node.example.com');
     await save('节点地址已保存');
@@ -364,7 +505,7 @@ try {
     await layout(page, dialog, 'editor');
 
     await choose('Notes');
-    const notes = dialog.getByRole('textbox', { name: 'Notes root' });
+    const notes = dialog.getByRole('textbox', { name: "笔记根目录" });
     assert.equal(await notes.evaluate(element => element === document.activeElement), false, 'opening a category does not pop up the keyboard');
     await notes.fill('/notes/mobile');
     await save('Notes root 已保存');
@@ -382,13 +523,14 @@ try {
     await layout(page, dialog, 'environment');
 
     await choose('Agents');
+    await dialog.getByRole('button', { name: '新增 Agent', exact: true }).click();
     await dialog.getByRole('combobox', { name: 'Agent 类型' }).selectOption('codex');
-    assert.equal(await dialog.getByRole('textbox', { name: 'Executable' }).inputValue(), '/usr/bin/codex');
+    assert.equal(await dialog.getByRole('textbox', { name: "可执行文件" }).inputValue(), '/usr/bin/codex');
     await dialog.getByRole('textbox', { name: 'Agent ID', exact: true }).fill('Mobile_codex-1');
-    await dialog.getByRole('textbox', { name: 'Display name' }).fill('手机 Codex');
-    await dialog.getByRole('textbox', { name: 'Executable' }).fill('/usr/bin/codex');
-    await dialog.getByRole('textbox', { name: 'Arguments', exact: true }).fill('--model\ngpt-6');
-    await dialog.getByRole('textbox', { name: 'Environment variables' }).fill('MODE=mobile');
+    await dialog.getByRole('textbox', { name: "显示名称" }).fill('手机 Codex');
+    await dialog.getByRole('textbox', { name: "可执行文件" }).fill('/usr/bin/codex');
+    await dialog.getByRole('textbox', { name: "参数", exact: true }).fill('--model\ngpt-6');
+    await dialog.getByRole('textbox', { name: "环境变量" }).fill('MODE=mobile');
     await dialog.getByRole('button', { name: '注册', exact: true }).click();
     await dialog.getByRole('status').filter({ hasText: '手机 Codex 配置已保存' }).waitFor();
     assert.deepEqual(state.agents.at(-1).args, ['--model', 'gpt-6']);
@@ -399,15 +541,15 @@ try {
     const copy = dialog.getByRole('button', { name: '复制 手机 Codex', exact: true });
     assert.equal(await copy.evaluate(element => element.getBoundingClientRect().width), 44);
     await copy.click();
-    assert.equal(await dialog.getByRole('textbox', { name: 'Display name' }).inputValue(), '手机 Codex（副本）');
-    assert.equal(await dialog.getByRole('textbox', { name: 'Arguments', exact: true }).inputValue(), '--model\ngpt-6');
-    assert.equal(await dialog.getByRole('textbox', { name: 'Environment variables' }).inputValue(), 'MODE=mobile');
+    assert.equal(await dialog.getByRole('textbox', { name: "显示名称" }).inputValue(), '手机 Codex（副本）');
+    assert.equal(await dialog.getByRole('textbox', { name: "参数", exact: true }).inputValue(), '--model\ngpt-6');
+    assert.equal(await dialog.getByRole('textbox', { name: "环境变量" }).inputValue(), 'MODE=mobile');
     page.once('dialog', prompt => prompt.dismiss());
-    await dialog.getByRole('button', { name: '关闭设置' }).click();
-    assert.equal(await dialog.getByRole('textbox', { name: 'Display name' }).inputValue(), '手机 Codex（副本）', 'copied drafts retain unsaved-change protection');
+    await dialog.getByRole('button', { name: '关闭对话框' }).click();
+    assert.equal(await dialog.getByRole('textbox', { name: "显示名称" }).inputValue(), '手机 Codex（副本）', 'copied drafts retain unsaved-change protection');
     assert.equal(await dialog.getByRole('textbox', { name: 'Agent ID', exact: true }).inputValue(), '');
     await dialog.getByRole('textbox', { name: 'Agent ID', exact: true }).fill('Mobile_codex-copy');
-    await dialog.getByRole('textbox', { name: 'Environment variables' }).fill('MODE=copied');
+    await dialog.getByRole('textbox', { name: "环境变量" }).fill('MODE=copied');
     await dialog.getByRole('button', { name: '注册', exact: true }).click();
     await dialog.getByRole('status').filter({ hasText: '手机 Codex（副本） 配置已保存' }).waitFor();
     assert.equal(state.agents.length, 3);
@@ -431,14 +573,12 @@ try {
     assert.deepEqual(state.notifications.notifications.agent_task_completed.channels, ['page', 'wechat', 'feishu']);
     await layout(page, dialog, 'notifications');
 
-    await choose('Pull Requests');
-    await dialog.getByRole('textbox', { name: 'Provider 显示名称' }).fill('Mobile GitHub');
-    await dialog.getByLabel('上传 Provider 脚本').setInputFiles({ name: 'provider.py', mimeType: 'text/x-python', buffer: Buffer.from('print("mobile provider")') });
-    await dialog.getByRole('status').filter({ hasText: '已读取文件内容' }).waitFor();
-    await dialog.getByRole('button', { name: '检查协议' }).click();
-    await dialog.getByRole('status').filter({ hasText: '协议检查通过' }).waitFor();
-    await save('Provider 配置和脚本已保存');
-    assert.equal(state.providers.providers[0].script, 'print("mobile provider")');
+    await choose('Git 平台');
+    await dialog.getByRole('cell', { name: /GitHub$/ }).waitFor();
+    assert.equal(await dialog.getByRole('region', { name: 'Git 平台设置' }).getByRole('checkbox').count(), 0);
+    await dialog.getByLabel('上传 Provider 脚本').setInputFiles({ name: 'github.mjs', mimeType: 'text/javascript', buffer: Buffer.from('console.log("mobile provider")') });
+    await dialog.getByRole('status').filter({ hasText: '已上传并生效' }).waitFor();
+    assert.equal(state.providers.providers[0].script, 'console.log("mobile provider")');
     await layout(page, dialog, 'pull-requests');
     await page.setViewportSize({ width: 844, height: 390 });
     await page.waitForFunction(() => document.querySelector('.mobile-app').getBoundingClientRect().bottom <= window.innerHeight + 1);
@@ -504,24 +644,17 @@ try {
     await page.getByRole('heading', { name: '你的项目' }).waitFor();
   });
 
-  await test('desktop shares categories and keeps editor, configuration, and provider save behavior', async t => {
-    const { page, state, dialog, choose, save } = await fixture(t, 1280, false);
+  await test('desktop shares categories and keeps editor and provider save behavior', async t => {
+    const { state, dialog, choose, save } = await fixture(t, 1280, false);
     assert.deepEqual(await dialog.locator('nav strong').allTextContents(), categories);
     await choose('Editor');
     await dialog.getByRole('checkbox', { name: /Word Wrap/ }).check();
     await save('已保存 Editor 配置');
     assert.equal(state.settings.editor.word_wrap, true);
-    await choose('Configuration');
-    await dialog.getByRole('radio', { name: versions[1], exact: true }).check();
-    await choose('Pull Requests');
-    await dialog.getByRole('textbox', { name: 'Provider 显示名称' }).fill('Desktop GitHub');
-    await save('Provider 配置和脚本已保存');
-    await choose('Configuration');
-    assert.equal(await dialog.getByRole('radio', { name: versions[1], exact: true }).isChecked(), true);
-    page.once('dialog', prompt => prompt.dismiss());
-    await dialog.getByRole('button', { name: '关闭', exact: true }).click();
-    assert.equal(await dialog.isVisible(), true);
-    await save('重启服务后生效');
+    await choose('Git 平台');
+    await dialog.getByRole('button', { name: '移除', exact: true }).click();
+    await dialog.getByRole('status').filter({ hasText: '已移除' }).waitFor();
+    assert.equal(state.providers.providers.length, 0);
     await dialog.getByRole('button', { name: '关闭', exact: true }).click();
   });
 

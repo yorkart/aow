@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useCallback, useId, useState, type ReactNode } from 'react';
 import { ChevronRight, MoreHorizontal, RefreshCw } from 'lucide-react';
 import type { AowWorktree } from '../../aow/types';
@@ -66,9 +67,9 @@ export function InstancePanelGroups<T>({ groups, worktrees, activeWorktreePath, 
           onCollapsedChange={next => setCollapsedGroups(groups => ({ ...groups, [id]: next }))}
           details={grouped ? <span className="instance-panel-count">{items.length}</span> : undefined}
           actions={<>
-            <AowIconButton title={`刷新${noun}列表`} aria-label={`刷新 ${title}`} onClick={onReload}><RefreshCw /></AowIconButton>
+            <AowIconButton title={t("instances.refresh_list", { value0: noun })} aria-label={t("files.refresh_2", { value0: title })} onClick={onReload}><RefreshCw /></AowIconButton>
             {actions}
-            {worktrees && onShowAllChange ? <AowIconButton title={`${noun}显示范围`} aria-label={`${title} 显示范围`}
+            {worktrees && onShowAllChange ? <AowIconButton title={t("instances.scope", { value0: noun })} aria-label={t("instances.display_scope", { value0: title })}
               aria-haspopup="menu" aria-expanded={scopeMenu?.group === id}
               className={grouped ? 'instance-scope-active' : undefined}
               onClick={event => {
@@ -78,8 +79,8 @@ export function InstancePanelGroups<T>({ groups, worktrees, activeWorktreePath, 
               }}><MoreHorizontal /></AowIconButton> : null}
           </>}>
           {groupError ? <p className="instance-panel-error" role="alert">{groupError}</p> : null}
-          {groupLoading ? <p className="instance-panel-empty" role="status">正在加载{noun}…</p> : null}
-          {!items.length && !groupLoading ? <p className="instance-panel-empty">{empty ?? `暂无${noun}`}</p> : grouped ? sections
+          {groupLoading ? <p className="instance-panel-empty" role="status">{t("instances.loading")}{noun}…</p> : null}
+          {!items.length && !groupLoading ? <p className="instance-panel-empty">{empty ?? t("instances.no", { value0: noun })}</p> : grouped ? sections
             .map(({ key: sectionKey, worktree, members }, index) => {
               const key = `${id}:${sectionKey}`;
               const collapsed = collapsedWorktrees[key] ?? false;
@@ -90,7 +91,7 @@ export function InstancePanelGroups<T>({ groups, worktrees, activeWorktreePath, 
                   aria-current={active ? 'true' : undefined} aria-expanded={!collapsed} aria-controls={groupId}
                   onClick={() => setCollapsedWorktrees(groups => ({ ...groups, [key]: !groups[key] }))}>
                   <ChevronRight className={collapsed ? undefined : 'expanded'} />
-                  <span>{worktree.is_main ? '主仓库 · ' : ''}{worktreeName(worktree)}</span>
+                  <span>{worktree.is_main ? t("instances.main_repository") : ''}{worktreeName(worktree)}</span>
                   <small className="instance-panel-count">{members.length}</small>
                 </button>
                 <div id={groupId} hidden={collapsed}>{members.map(renderItem)}</div>
@@ -99,7 +100,7 @@ export function InstancePanelGroups<T>({ groups, worktrees, activeWorktreePath, 
         </AowPanel>;
       })}
     </AowPanelStack>
-    {scopeMenu && worktrees && onShowAllChange ? <InstanceScopeMenu label={`${noun}显示范围`} container={menuContainer} anchor={scopeMenu.anchor} checked={showAll[scopeMenu.group]}
+    {scopeMenu && worktrees && onShowAllChange ? <InstanceScopeMenu label={t("instances.scope", { value0: noun })} container={menuContainer} anchor={scopeMenu.anchor} checked={showAll[scopeMenu.group]}
       sortBy={sortBy[scopeMenu.group]} onSortChange={value => onSortChange?.(scopeMenu.group, value)}
       onChange={value => onShowAllChange(scopeMenu.group, value)} onClose={dismissScopeMenu} /> : null}
   </>;

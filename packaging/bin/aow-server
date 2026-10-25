@@ -30,7 +30,7 @@ fi
 # Proxy settings belong to this user process, not the system LaunchDaemon plist.
 # Read them on every start as literal data; never source server.env as shell code.
 load_proxy_environment() {
-    proxy_file=${HOME:?HOME must be set}/.config/aow/server.env
+    proxy_file=${HOME:?HOME must be set}/.aow/server.env
     [ -f "$proxy_file" ] || return 0
     while IFS= read -r proxy_line || [ -n "$proxy_line" ]; do
         case "$proxy_line" in *=*) ;; *) continue ;; esac

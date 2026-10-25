@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { withFloatingOpen } from '../../aow/floatingWorkspaceState';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ClipboardEvent, CSSProperties, MouseEvent, ReactNode } from 'react';
@@ -253,7 +254,7 @@ export function Explorer({ root, activePath, onRootChange, onOpenFile, onRenameF
       // Read File objects synchronously while the native paste data is available.
       const { files, hasDirectories } = pastedFiles(event.clipboardData);
       if (!files.length && !hasDirectories) {
-        if (pasteHint) setPasteHint({ ...pasteHint, message: '剪贴板中没有可上传的文件或图片，请选择文件上传。' });
+        if (pasteHint) setPasteHint({ ...pasteHint, message: t("files.no_files_or_images_to_upload_in_the_clipboard") });
         return;
       }
       event.preventDefault();
@@ -261,7 +262,7 @@ export function Explorer({ root, activePath, onRootChange, onOpenFile, onRenameF
       const directory = pasteHint?.directory ?? selection?.directory ?? root;
       setContextMenu(undefined);
       enqueueFiles(directory, files);
-      if (hasDirectories) setError('暂不支持整目录粘贴，请选择目录中的文件。');
+      if (hasDirectories) setError(t("files.pasting_directories_is_not_supported_select_files_within_the"));
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
   };
 
@@ -278,16 +279,16 @@ export function Explorer({ root, activePath, onRootChange, onOpenFile, onRenameF
       treeList.current?.focus({ preventScroll: true });
     };
     if (!window.isSecureContext || !navigator.clipboard?.read) {
-      fallback('浏览器无法直接读取剪贴板，请按 Ctrl/Cmd+V 粘贴，或选择文件上传。');
+      fallback(t("files.the_browser_cannot_read_the_clipboard_directly_press_ctrl"));
       return;
     }
     try {
       const files = await readClipboardImages();
       if (generation !== clipboardGeneration.current) return;
       if (files.length) enqueueFiles(directory, files);
-      else fallback('请按 Ctrl/Cmd+V 粘贴文件，或选择文件上传。');
+      else fallback(t("files.press_ctrl_cmd_v_to_paste_files_or_choose"));
     } catch {
-      fallback('无法读取剪贴板，请按 Ctrl/Cmd+V 粘贴，或选择文件上传。');
+      fallback(t("files.unable_to_read_clipboard_press_ctrl_cmd_v_or"));
     }
   };
 
@@ -326,7 +327,7 @@ export function Explorer({ root, activePath, onRootChange, onOpenFile, onRenameF
     try {
       const result = await onRenameFile(current.path, nextName);
       setRename(undefined);
-      setStatus(`已重命名为 ${result.name}`);
+      setStatus(t("files.renamed_to", { value0: result.name }));
     } catch (reason) {
       setRename({ ...pending, busy: false });
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -394,7 +395,7 @@ export function Explorer({ root, activePath, onRootChange, onOpenFile, onRenameF
         const input = document.createElement('textarea');
         input.value = text; input.readOnly = true; input.style.position = 'fixed'; input.style.opacity = '0';
         document.body.appendChild(input); input.select();
-        if (!document.execCommand('copy')) throw new Error('浏览器拒绝复制操作');
+        if (!document.execCommand('copy')) throw new Error(t("files.the_browser_denied_the_copy_operation"));
         input.remove();
       }
     } catch (reason) {
@@ -439,7 +440,7 @@ export function Explorer({ root, activePath, onRootChange, onOpenFile, onRenameF
     if (row.type === 'root') {
       return <div
         style={style}
-        className="tree-row workspace-root-node"
+        className={`tree-row workspace-root-node${selection?.path === root ? ' selected' : ''}`}
         data-tree-path={root} data-tree-directory={root}
         title={root}
         draggable
@@ -454,7 +455,7 @@ export function Explorer({ root, activePath, onRootChange, onOpenFile, onRenameF
       </div>;
     }
     if (row.type === 'parent') {
-      return <div style={{ ...style, '--tree-depth': 1 } as CSSProperties} className="tree-row parent-workspace-node" title={`上级目录：${row.path}`} onClick={() => onRootChange(row.path)}>
+      return <div style={{ ...style, '--tree-depth': 1 } as CSSProperties} className="tree-row parent-workspace-node" title={t("files.parent_directory", { value0: row.path })} onClick={() => onRootChange(row.path)}>
         <span className="chevron" />
         <FolderUp className="parent-folder" />
         <span className="tree-label">..</span>
@@ -476,7 +477,7 @@ export function Explorer({ root, activePath, onRootChange, onOpenFile, onRenameF
           value={creation.draft}
           maxLength={255}
           autoFocus
-          aria-label={directory ? '新目录名' : '新文件名'}
+          aria-label={directory ? t("files.new_directory_name") : t("files.new_file_name")}
           disabled={creation.busy}
           onChange={(event) => {
             const draft = event.currentTarget.value;
@@ -517,7 +518,7 @@ export function Explorer({ root, activePath, onRootChange, onOpenFile, onRenameF
           defaultValue={rename.draft}
           maxLength={255}
           autoFocus
-          aria-label="新文件名"
+          aria-label={t("files.new_file_name")}
           disabled={rename.busy}
           onFocus={(event) => event.currentTarget.select()}
           onClick={(event) => event.stopPropagation()}
@@ -538,23 +539,23 @@ export function Explorer({ root, activePath, onRootChange, onOpenFile, onRenameF
   const content = <>
       <div className="explorer-body" hidden={collapsed}>
         {!lockedRoot ? <div className="root-controls">
-          <button title="系统根目录" onClick={() => onRootChange('/')}>/</button>
+          <button title={t("files.system_root_directory")} onClick={() => onRootChange('/')}>/</button>
         </div> : null}
         {error ? <div className="side-error">{error}</div> : null}
         {status ? <div className="explorer-status">{status}</div> : null}
         {pasteHint ? <div className="explorer-paste-hint" role="status">
-          <span>{pasteHint.message}</span><small title={pasteHint.directory}>上传到：{pasteHint.directory}</small>
-          <button onClick={() => { fileInputDestination.current = pasteHint.directory; fileInput.current?.click(); }}>选择文件上传</button>
-          <button aria-label="取消粘贴" onClick={() => setPasteHint(undefined)}>取消</button>
+          <span>{pasteHint.message}</span><small title={pasteHint.directory}>{t("files.upload_to")}{pasteHint.directory}</small>
+          <button onClick={() => { fileInputDestination.current = pasteHint.directory; fileInput.current?.click(); }}>{t("files.choose_files_to_upload")}</button>
+          <button aria-label={t("files.cancel_paste")} onClick={() => setPasteHint(undefined)}>{t("aow.cancel")}</button>
         </div> : null}
-        <input ref={fileInput} type="file" multiple hidden aria-label="选择粘贴上传文件" onChange={(event) => {
+        <input ref={fileInput} type="file" multiple hidden aria-label={t("files.choose_files_for_paste_upload")} onChange={(event) => {
           const files = Array.from(event.currentTarget.files ?? []);
           event.currentTarget.value = '';
           if (files.length && (fileInputDestination.current === root || fileInputDestination.current.startsWith(root === '/' ? '/' : `${root}/`))) {
             enqueueFiles(fileInputDestination.current, files);
           }
         }} />
-        <div ref={treeList} className="tree-list" tabIndex={0} aria-label={`${title ?? 'Explorer'} 文件树`}
+        <div ref={treeList} className="tree-list" tabIndex={0} aria-label={t("files.file_tree", { value0: title ?? t("navigation.file_explorer") })}
           onPointerDown={(event) => {
             if (isEditableTarget(event.target)) return;
             treeList.current?.focus({ preventScroll: true });
@@ -576,15 +577,15 @@ export function Explorer({ root, activePath, onRootChange, onOpenFile, onRenameF
           </div> : <FixedSizeList ref={virtualList} height={height} width="100%" itemCount={displayRows.length} itemSize={24}
             itemData={{ render: Row, rows: displayRows }} itemKey={virtualRowKey}>{VirtualRow}</FixedSizeList>}
         </div>
-        {upload.uploads.length ? <section className="explorer-uploads" aria-label="粘贴上传任务">
-          <header><span>{uploading ? '正在上传…' : '上传记录'}</span>
-            {uploading ? <button onClick={upload.cancel}>取消上传</button> : null}<button onClick={upload.clear}>清除已结束</button>
+        {upload.uploads.length ? <section className="explorer-uploads" aria-label={t("files.paste_upload_tasks")}>
+          <header><span>{uploading ? t("files.uploading") : t("files.upload_history")}</span>
+            {uploading ? <button onClick={upload.cancel}>{t("files.cancel_upload")}</button> : null}<button onClick={upload.clear}>{t("files.clear_finished")}</button>
           </header>
           <ul>{upload.uploads.map((item) => <li key={item.id}>
             <span title={item.path ?? `${item.directory}/${item.file.name}`}>{item.path?.split('/').pop() ?? item.file.name}</span>
-            {item.status === 'uploading' ? <progress aria-label={`上传进度 ${item.file.name}`} value={item.loaded} max={Math.max(1, item.file.size)} /> : null}
-            <small role="status">{item.status === 'waiting' ? '等待上传' : item.status === 'success' ? '已上传' : item.status === 'error' ? '上传失败' : `${Math.min(100, Math.round(item.loaded / Math.max(1, item.file.size) * 100))}%`}</small>
-            {item.status === 'error' ? <button onClick={() => upload.retry(item)}>重试</button> : null}
+            {item.status === 'uploading' ? <progress aria-label={t("files.upload_progress", { value0: item.file.name })} value={item.loaded} max={Math.max(1, item.file.size)} /> : null}
+            <small role="status">{item.status === 'waiting' ? t("files.waiting_to_upload") : item.status === 'success' ? t("files.uploaded") : item.status === 'error' ? t("files.upload_failed") : `${Math.min(100, Math.round(item.loaded / Math.max(1, item.file.size) * 100))}%`}</small>
+            {item.status === 'error' ? <button onClick={() => upload.retry(item)}>{t("aow.retry")}</button> : null}
             {item.error ? <small className="explorer-upload-error">{item.error}</small> : null}
           </li>)}</ul>
         </section> : null}
@@ -609,17 +610,17 @@ export function Explorer({ root, activePath, onRootChange, onOpenFile, onRenameF
         onDelete={contextMenu.path !== root && onDeleteEntry ? () => onDeleteEntry(contextMenu.path, contextMenu.directory) : undefined}
       /> : null}
     </>;
-  if (aowHeader) return <AowPanel className="explorer explorer-section" title={title ?? 'Explorer'} icon={titleIcon}
+  if (aowHeader) return <AowPanel className="explorer explorer-section" title={title ?? t("navigation.file_explorer")} icon={titleIcon}
     collapsed={collapsed} onCollapsedChange={changeCollapsed}
-    actions={<AowIconButton title="刷新" aria-label={`刷新 ${title ?? 'Explorer'}`} onClick={() => setRefreshKey(key => key + 1)}><RefreshCw /></AowIconButton>}>
+    actions={<AowIconButton title={t("files.refresh")} aria-label={t("files.refresh_2", { value0: title ?? t("navigation.file_explorer") })} onClick={() => setRefreshKey(key => key + 1)}><RefreshCw /></AowIconButton>}>
     <div onPaste={paste}>{content}</div>
   </AowPanel>;
   return <section className={`side-view explorer${onCollapsedChange ? ' explorer-section' : ''}${collapsed ? ' collapsed' : ''}`} onPaste={paste}>
     <div className="side-title">
       {onCollapsedChange ? <button className="explorer-section-toggle" type="button" aria-expanded={!collapsed} onClick={() => changeCollapsed(!collapsed)}>
-        <ChevronRight className={collapsed ? undefined : 'expanded'} />{titleIcon}<strong>{title ?? (titleCase ? 'Explorer' : 'EXPLORER')}</strong>
-      </button> : <strong>{title ?? (titleCase ? 'Explorer' : 'EXPLORER')}</strong>}
-      <button className="explorer-refresh" title="刷新" aria-label={`刷新 ${title ?? 'Explorer'}`} onClick={() => setRefreshKey(key => key + 1)}><RefreshCw size={14} /></button>
+        <ChevronRight className={collapsed ? undefined : 'expanded'} />{titleIcon}<strong>{title ?? (titleCase ? t("navigation.explorer") : t("common.explorer"))}</strong>
+      </button> : <strong>{title ?? (titleCase ? t("navigation.explorer") : t("common.explorer"))}</strong>}
+      <button className="explorer-refresh" title={t("files.refresh")} aria-label={t("files.refresh_2", { value0: title ?? t("navigation.file_explorer") })} onClick={() => setRefreshKey(key => key + 1)}><RefreshCw size={14} /></button>
     </div>{content}
   </section>;
 }

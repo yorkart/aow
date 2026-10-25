@@ -11,6 +11,9 @@ let instance = 0;
 export const nextDocumentInstanceId = () => ++instance;
 export const savingDocuments = new Set<string>();
 export const failedDocuments = new Set<string>();
+export function workspaceDocument(workspace: string, id: string) {
+  return owners.get(workspace)?.find(document => document.id === id);
+}
 export function sharedDocument(id: string) {
   for (const documents of owners.values()) {
     const found = documents.find(document => document.id === id);

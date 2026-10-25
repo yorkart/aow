@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Bot, LoaderCircle, Search } from 'lucide-react';
@@ -36,7 +37,7 @@ export function TerminalHostingButton({ tab, pane, onChange }: {
     setLoading(true); setError(''); setSearch(''); setTasks([]); setProject(undefined); setCreating(false);
     void aowApi.projects().then(projects => {
       const project = projects.find(project => project.worktrees.some(worktree => worktree.path === tab.workspace_root));
-      if (!project) throw new Error('当前工作区未关联项目');
+      if (!project) throw new Error(t("terminals.current_workspace_is_not_linked_to_a_project"));
       if (active) setProject(project);
       return automationApi.list(project.id);
     }).then(tasks => { if (active) setTasks(tasks.filter(task => task.kind === 'manual' && task.workspace_mode === 'dynamic')); })
@@ -76,30 +77,30 @@ export function TerminalHostingButton({ tab, pane, onChange }: {
   };
   const matches = tasks.filter(task => `${task.name} ${task.prompt}`.toLowerCase().includes(search.toLowerCase()));
   return <>
-    <button ref={button} type="button" className="terminal-hosting-button" title="选择手动任务并开启托管" aria-label="Autopilot"
+    <button ref={button} type="button" className="terminal-hosting-button" title={t("terminals.choose_a_manual_task_and_enable_autopilot")} aria-label={t("navigation.autopilot")}
       aria-haspopup="dialog" aria-expanded={Boolean(position)} disabled={Boolean(pane.hosting) || pane.status !== 'running' || busy || creating}
       onClick={event => {
         event.stopPropagation();
         if (position) setPosition(undefined); else openMenu();
-      }}><Bot />Autopilot</button>
-    {position && createPortal(<div ref={popup} className="terminal-hosting-menu" style={position} role="dialog" aria-label="选择托管任务"
+      }}><Bot />{t("navigation.autopilot")}</button>
+    {position && createPortal(<div ref={popup} className="terminal-hosting-menu" style={position} role="dialog" aria-label={t("terminals.choose_autopilot_task")}
       onPointerDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()}>
-      <strong>选择托管任务</strong>
-      <p className="terminal-hosting-limit-hint">仅支持<button type="button" className="terminal-hosting-create" title="创建手动任务" disabled={!project || busy || creating} onClick={() => setCreating(true)}><strong>动态指定工作区</strong></button>的手动任务</p>
-      <label className="terminal-hosting-limit">最多自动输入次数<input type="number" min="1" step="1" aria-label="最多自动输入次数" value={maxInputs} disabled={busy} onChange={event => setMaxInputs(event.target.value)} /></label>
-      <p className="terminal-hosting-limit-hint">达到上限后仍会做最后一次审查，不再自动输入。</p>
-      <label className="terminal-hosting-run-on-enable"><input type="checkbox" checked={runOnEnable} disabled={busy} onChange={event => setRunOnEnable(event.target.checked)} />开启托管后立即执行一次</label>
-      <p className="terminal-hosting-limit-hint">不等待当前任务结束；取消勾选则等待下一次完成事件。</p>
-      {!validLimit && <p className="terminal-hosting-menu-error" role="alert">请输入有效的正整数</p>}
-      <label className="terminal-hosting-search"><Search /><input autoFocus placeholder="搜索手动任务…" aria-label="搜索手动任务" value={search} onChange={event => setSearch(event.target.value)} /></label>
+      <strong>{t("terminals.choose_autopilot_task")}</strong>
+      <p className="terminal-hosting-limit-hint">{t("terminals.supports_only")}<button type="button" className="terminal-hosting-create" title={t("automations.create_manual_task")} disabled={!project || busy || creating} onClick={() => setCreating(true)}><strong>{t("terminals.dynamic_workspace")}</strong></button>{t("terminals.manual_tasks")}</p>
+      <label className="terminal-hosting-limit">{t("terminals.maximum_automatic_inputs")}<input type="number" min="1" step="1" aria-label={t("terminals.maximum_automatic_inputs")} value={maxInputs} disabled={busy} onChange={event => setMaxInputs(event.target.value)} /></label>
+      <p className="terminal-hosting-limit-hint">{t("terminals.at_the_limit_run_one_final_review_without_sending")}</p>
+      <label className="terminal-hosting-run-on-enable"><input type="checkbox" checked={runOnEnable} disabled={busy} onChange={event => setRunOnEnable(event.target.checked)} />{t("terminals.run_immediately_when_autopilot_starts")}</label>
+      <p className="terminal-hosting-limit-hint">{t("terminals.do_not_wait_for_the_current_task_to_finish")}</p>
+      {!validLimit && <p className="terminal-hosting-menu-error" role="alert">{t("terminals.enter_a_valid_positive_integer")}</p>}
+      <label className="terminal-hosting-search"><Search /><input autoFocus placeholder={t("terminals.search_manual_tasks")} aria-label={t("terminals.search_manual_tasks_2")} value={search} onChange={event => setSearch(event.target.value)} /></label>
       <div className="terminal-hosting-tasks">
-        {loading ? <p role="status"><LoaderCircle className="spinning" />加载中…</p> : matches.map(task => <button key={task.id} type="button" disabled={busy || creating || !validLimit} onClick={() => void select(task)}>
+        {loading ? <p role="status"><LoaderCircle className="spinning" />{t("automations.loading")}</p> : matches.map(task => <button key={task.id} type="button" disabled={busy || creating || !validLimit} onClick={() => void select(task)}>
           <span>{task.name}</span><small>{task.prompt.replace(/\s+/g, ' ').slice(0, 100)}</small>
         </button>)}
-        {!loading && !matches.length && <p>{tasks.length ? '没有匹配的任务' : '暂无可用任务，点击上方「动态指定工作区」创建手动任务。'}</p>}
+        {!loading && !matches.length && <p>{tasks.length ? t("terminals.no_matching_tasks") : t("terminals.no_tasks_available_click_dynamic_workspace_above_to_create")}</p>}
       </div>
-      {busy && <p role="status">正在开启托管…</p>}
-      {creating && <p role="status">正在打开创建弹框…</p>}
+      {busy && <p role="status">{t("terminals.starting_autopilot")}</p>}
+      {creating && <p role="status">{t("terminals.opening_creation_dialog")}</p>}
       {error && <p className="terminal-hosting-menu-error" role="alert">{error}</p>}
     </div>, document.body)}
     {editor && <AutomationEditor kind="manual" initialWorkspaceMode="dynamic" project={editor.project} agents={editor.agents}
