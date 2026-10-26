@@ -6,6 +6,27 @@ import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 
 const script = resolve('scripts/migrate-aow-home.py');
+
+function legacySQLiteRun(f, cli = 'system', ...args) {
+  return spawnSync('python3', ['-c', `
+import runpy, sys
+from unittest.mock import patch
+import sqlite3
+script, home, state, cli = sys.argv[1:5]
+sys.argv = [script, '--home', home, '--state-dir', state, *sys.argv[5:]]
+with patch('sqlite3.sqlite_version_info', (3, 35, 5)), patch('sqlite3.sqlite_version', '3.35.5'), patch('sqlite3.connect', side_effect=sqlite3.DatabaseError('malformed database schema (schema_migrations) - near "STRICT": syntax error')):
+    if cli == 'missing':
+        with patch('shutil.which', return_value=None):
+            runpy.run_path(script, run_name='__main__')
+    elif cli == 'old':
+        from subprocess import CompletedProcess
+        with patch('shutil.which', return_value='/old/sqlite3'), patch('subprocess.run', return_value=CompletedProcess([], 0, '[{"version":"3.35.5"}]', '')):
+            runpy.run_path(script, run_name='__main__')
+    else:
+        runpy.run_path(script, run_name='__main__')
+`, script, f.home, f.state, cli, ...args], { encoding: 'utf8' });
+}
+
 function fixture(t, homeName) {
   const temporary = realpathSync(mkdtempSync(join(tmpdir(), 'aow-migrate-')));
   const home = homeName ? join(temporary, homeName) : temporary;
@@ -104,46 +125,90 @@ test('relocates ACP JSONC paths while preserving comments, and creates private d
   assert.equal(readFileSync(join(f.config, 'acp/settings.json'), 'utf8'), source);
 });
 
-test('copies committed SQLite WAL data and relocates ACP workspace metadata without editing transcripts or sources', t => {
-  const f = fixture(t);
-  const source = join(f.state, 'acp/threads.sqlite');
-  const cwd = join(f.state, 'repos/global');
-  rmSync(source);
-  const prepared = spawnSync('python3', ['-c', `
-import json, os, sqlite3, sys
-db = sqlite3.connect(sys.argv[1])
-db.execute('PRAGMA journal_mode=WAL')
-db.execute('PRAGMA wal_autocheckpoint=0')
-db.execute('CREATE TABLE sidebar_threads(thread_id TEXT PRIMARY KEY, folder_paths TEXT)')
-db.execute('CREATE TABLE acp_thread_snapshots(thread_id TEXT PRIMARY KEY, data_type TEXT, data BLOB)')
-db.execute('INSERT INTO sidebar_threads VALUES (?, ?)', ('thread', json.dumps([sys.argv[2]])))
-db.execute('INSERT INTO acp_thread_snapshots VALUES (?, ?, ?)', ('thread', 'json', json.dumps({'cwd': sys.argv[2], 'message': sys.argv[2]}).encode()))
-db.commit()
-os._exit(0)
-`, source, cwd], { encoding: 'utf8' });
-  assert.equal(prepared.status, 0, prepared.stderr);
-  const suffixes = ['', '-wal', '-shm'];
-  const originals = suffixes.map(suffix => readFileSync(source + suffix));
-  assert.equal(f.run('--dry-run').status, 0);
-  assert.equal(existsSync(join(f.destination, 'data/acp/threads.sqlite')), false);
-  const result = f.run();
-  assert.equal(result.status, 0, result.stderr);
-  const target = join(f.destination, 'data/acp/threads.sqlite');
-  const read = spawnSync('python3', ['-c', `
-import json, sqlite3, sys
-db = sqlite3.connect(sys.argv[1])
-print(json.dumps([json.loads(db.execute('SELECT folder_paths FROM sidebar_threads').fetchone()[0]), json.loads(db.execute('SELECT data FROM acp_thread_snapshots').fetchone()[0])]))
+for (const mode of ['ordinary tables', 'STRICT tables', 'STRICT tables with old Python SQLite']) {
+  test(`copies SQLite WAL data and relocates only ACP workspace metadata: ${mode}`, t => {
+    if (mode.endsWith('old Python SQLite')) {
+      const cli = spawnSync('sqlite3', ['-init', '/dev/null', '-batch', '-bail', ':memory:', 'CREATE TABLE probe(id TEXT) STRICT;'], { encoding: 'utf8' });
+      if (cli.status !== 0) return t.skip('Requires sqlite3 CLI 3.37.0 or newer');
+    }
+    const f = fixture(t, "用户 'quoted ? home");
+    if (mode.endsWith('old Python SQLite')) f.run = (...args) => legacySQLiteRun(f, 'system', ...args);
+    const source = join(f.state, 'acp/threads.sqlite');
+    const cwd = join(f.state, 'repos/global');
+    const thread = "thread 'quoted?; -- 用户\n.next";
+    rmSync(source);
+    const prepared = spawnSync(process.execPath, ['--input-type=module', '-e', `
+import { readFileSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
+const [source, cwd, thread, mode] = process.argv.slice(1);
+const db = new DatabaseSync(source);
+for (const schema of ['crates/db/src/sqlite/sql/initialize.sql', 'crates/db/src/acp/migrations/sidebar_threads/001_create_sidebar_threads.sql', 'crates/db/src/acp/migrations/acp_thread_snapshots/001_create_snapshots.sql']) {
+  const sql = readFileSync(schema, 'utf8');
+  db.exec(mode === 'ordinary tables' ? sql.replaceAll(' STRICT;', ';') : sql);
+}
+db.exec('PRAGMA wal_autocheckpoint=0');
+db.prepare('INSERT INTO schema_migrations VALUES (?, ?)').run('acp', 1);
+db.prepare('INSERT INTO sidebar_threads(thread_id, title, updated_at, folder_paths) VALUES (?, ?, ?, ?)').run(thread, cwd, '2026-01-01', JSON.stringify([cwd]));
+db.prepare('INSERT INTO acp_thread_snapshots VALUES (?, ?, ?)').run(thread, 'json', Buffer.from(JSON.stringify({ cwd, message: cwd })));
+db.prepare('INSERT INTO sidebar_threads(thread_id, title, updated_at) VALUES (?, ?, ?)').run('binary', 'unchanged', '2026-01-01');
+db.prepare('INSERT INTO acp_thread_snapshots VALUES (?, ?, ?)').run('binary', 'binary', Buffer.from([0, 255, 39]));
+process.exit(0);
+`, source, cwd, thread, mode], { encoding: 'utf8' });
+    assert.equal(prepared.status, 0, prepared.stderr);
+    const suffixes = ['', '-wal', '-shm'];
+    const originals = suffixes.map(suffix => readFileSync(source + suffix));
+    assert.ok(originals[1].length > 0);
+    assert.equal(f.run('--dry-run').status, 0);
+    assert.equal(existsSync(join(f.destination, 'data/acp/threads.sqlite')), false);
+    const result = f.run();
+    assert.equal(result.status, 0, result.stderr);
+    const target = join(f.destination, 'data/acp/threads.sqlite');
+    const read = spawnSync(process.execPath, ['--input-type=module', '-e', `
+import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
+const db = new DatabaseSync(process.argv[1]);
+const thread = db.prepare('SELECT title, folder_paths FROM sidebar_threads WHERE folder_paths IS NOT NULL').get();
+const snapshot = db.prepare("SELECT data, typeof(data) AS type FROM acp_thread_snapshots WHERE data_type='json'").get();
+assert.equal(snapshot.type, 'blob');
+assert.equal(db.prepare('PRAGMA integrity_check').get().integrity_check, 'ok');
+assert.equal(db.prepare('SELECT version FROM schema_migrations').get().version, 1);
+assert.equal(db.prepare("SELECT hex(data) AS data FROM acp_thread_snapshots WHERE data_type='binary'").get().data, '00FF27');
+console.log(JSON.stringify([JSON.parse(thread.folder_paths), JSON.parse(Buffer.from(snapshot.data).toString()), thread.title, db.prepare('SELECT sql FROM sqlite_master WHERE name=?').get('schema_migrations').sql]));
+db.close();
 `, target], { encoding: 'utf8' });
-  assert.equal(read.status, 0, read.stderr);
-  const relocated = join(f.destination, 'data/repos/global');
-  assert.deepEqual(JSON.parse(read.stdout), [[relocated], { cwd: relocated, message: cwd }]);
-  for (const [index, suffix] of suffixes.entries()) assert.deepEqual(readFileSync(source + suffix), originals[index]);
-  assert.equal(existsSync(target + '-wal'), false);
-  assert.equal(existsSync(target + '-shm'), false);
-  const repeated = f.run();
-  assert.equal(repeated.status, 0, repeated.stderr);
-  assert.match(repeated.stdout, /0 to copy/);
-});
+    assert.equal(read.status, 0, read.stderr);
+    const relocated = join(f.destination, 'data/repos/global');
+    const [folders, snapshot, title, schema] = JSON.parse(read.stdout);
+    assert.deepEqual([folders, snapshot, title], [[relocated], { cwd: relocated, message: cwd }, cwd]);
+    assert.equal(schema.endsWith('STRICT'), mode !== 'ordinary tables');
+    for (const [index, suffix] of suffixes.entries()) assert.deepEqual(readFileSync(source + suffix), originals[index]);
+    assert.equal(existsSync(target + '-wal'), false);
+    assert.equal(existsSync(target + '-shm'), false);
+    const repeated = f.run();
+    assert.equal(repeated.status, 0, repeated.stderr);
+    assert.match(repeated.stdout, /0 to copy/);
+  });
+}
+
+for (const cli of ['missing', 'old']) {
+  test(`explains the SQLite requirement without copying files when the CLI is ${cli}`, t => {
+    const f = fixture(t);
+    const source = join(f.state, 'acp/threads.sqlite');
+    const original = Buffer.from('SQLite format 3\0fixture');
+    f.write(source, original);
+    for (const args of [[], ['--dry-run']]) {
+      const result = legacySQLiteRun(f, cli, ...args);
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /Python .* uses SQLite 3\.35\.5/);
+      assert.match(result.stderr, /Install sqlite3 3\.37\.0 or newer on PATH/);
+      assert.doesNotMatch(result.stderr, /Traceback/);
+      assert.deepEqual(readFileSync(source), original);
+      assert.equal(existsSync(join(f.destination, 'credentials.json')), false);
+      assert.equal(existsSync(join(f.destination, 'data')), false);
+      assert.equal(readFileSync(join(f.destination, 'skills/custom/SKILL.md'), 'utf8'), 'existing skill');
+    }
+  });
+}
 
 test('relocates copied Git worktree pointers and reports external scheduled task registrations', t => {
   const f = fixture(t);

@@ -10,8 +10,66 @@ import re
 import shutil
 import sqlite3
 import stat
+import subprocess
 import sys
 import tempfile
+
+
+def update_database(database, build_updates):
+    """Prefer Python's SQLite; use a current CLI when its library cannot read STRICT tables."""
+    checkpoint = 'PRAGMA wal_checkpoint(TRUNCATE); PRAGMA journal_mode=DELETE;'
+    try:
+        connection = sqlite3.connect(database)
+        try:
+            for statement, parameters in build_updates(lambda sql: connection.execute(sql).fetchall()):
+                connection.execute(statement, parameters)
+            connection.commit()
+            connection.executescript(checkpoint)
+        finally:
+            connection.close()
+        return
+    except sqlite3.DatabaseError as error:
+        if sqlite3.sqlite_version_info >= (3, 37, 0) or 'near "STRICT": syntax error' not in str(error):
+            raise
+
+    command = shutil.which('sqlite3')
+
+    def run(path, sql):
+        result = subprocess.run(
+            [command, '-init', os.devnull, '-batch', '-bail', '-json', str(path)],
+            input=sql, capture_output=True, encoding='utf-8', check=False,
+        )
+        if result.returncode:
+            raise sqlite3.DatabaseError(result.stderr.strip())
+        return result.stdout
+
+    requirement = (
+        f'Python ({sys.executable}) uses SQLite {sqlite3.sqlite_version}, which cannot read STRICT tables. '
+        'Install sqlite3 3.37.0 or newer on PATH, or rerun this script with a Python linked to SQLite 3.37.0 or newer.'
+    )
+    if command is None:
+        raise ValueError(requirement)
+    try:
+        version = json.loads(run(':memory:', 'SELECT sqlite_version() AS version;'))[0]['version']
+        if tuple(int(part) for part in version.split('.')) < (3, 37, 0):
+            raise ValueError(f'sqlite3 CLI uses SQLite {version}')
+    except (OSError, sqlite3.Error, ValueError) as error:
+        raise ValueError(f'{requirement} CLI check failed: {error}') from error
+
+    def query(sql):
+        return [tuple(row.values()) for row in json.loads(run(database, sql) or '[]')]
+
+    statements = ['BEGIN;']
+    for statement, parameters in build_updates(query):
+        # Hex literals preserve BLOB/TEXT types and keep paths and IDs out of CLI syntax.
+        for value in parameters:
+            literal = "X'" + (value if isinstance(value, bytes) else value.encode('utf-8')).hex() + "'"
+            if isinstance(value, str):
+                literal = f'CAST({literal} AS TEXT)'
+            statement = statement.replace('?', literal, 1)
+        statements.append(statement + ';')
+    statements.extend(['COMMIT;', checkpoint])
+    run(database, '\n'.join(statements))
 
 
 def environment_path(value):
@@ -300,6 +358,26 @@ class Migration:
                 return relocated.encode()
         return None
 
+    def database_updates(self, query):
+        updates = []
+        tables = {row[0] for row in query("SELECT name FROM sqlite_master WHERE type='table';")}
+        if 'sidebar_threads' in tables:
+            for thread_id, folders in query('SELECT thread_id, folder_paths FROM sidebar_threads;'):
+                if folders:
+                    previous = json.loads(folders)
+                    relocated = self.relocate(previous)
+                    if relocated != previous:
+                        updates.append(('UPDATE sidebar_threads SET folder_paths=? WHERE thread_id=?', (json.dumps(relocated), thread_id)))
+        if 'acp_thread_snapshots' in tables:
+            for thread_id, data in query("SELECT thread_id, hex(data) AS data FROM acp_thread_snapshots WHERE data_type='json';"):
+                previous = json.loads(bytes.fromhex(data))
+                relocated = dict(previous)
+                if 'cwd' in relocated:
+                    relocated['cwd'] = self.relocate(relocated['cwd'])
+                if relocated != previous:
+                    updates.append(('UPDATE acp_thread_snapshots SET data=? WHERE thread_id=?', (json.dumps(relocated, ensure_ascii=False).encode(), thread_id)))
+        return updates
+
     def prepare_database(self):
         """Relocate ACP workspace references in a private copy, including its WAL."""
         relative = Path('data/acp/threads.sqlite')
@@ -315,29 +393,7 @@ class Migration:
             wal = Path(str(source) + '-wal')
             if wal.is_file():
                 shutil.copyfile(wal, Path(str(database) + '-wal'))
-            connection = sqlite3.connect(database)
-            try:
-                tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-                if 'sidebar_threads' in tables:
-                    for thread_id, folders in connection.execute('SELECT thread_id, folder_paths FROM sidebar_threads').fetchall():
-                        if folders:
-                            previous = json.loads(folders)
-                            relocated = self.relocate(previous)
-                            if relocated != previous:
-                                connection.execute('UPDATE sidebar_threads SET folder_paths=? WHERE thread_id=?', (json.dumps(relocated), thread_id))
-                if 'acp_thread_snapshots' in tables:
-                    for thread_id, data in connection.execute("SELECT thread_id, data FROM acp_thread_snapshots WHERE data_type='json'").fetchall():
-                        previous = json.loads(data)
-                        relocated = dict(previous)
-                        if 'cwd' in relocated:
-                            relocated['cwd'] = self.relocate(relocated['cwd'])
-                        if relocated != previous:
-                            connection.execute('UPDATE acp_thread_snapshots SET data=? WHERE thread_id=?', (json.dumps(relocated, ensure_ascii=False).encode(), thread_id))
-                connection.commit()
-                connection.execute('PRAGMA wal_checkpoint(TRUNCATE)')
-                connection.execute('PRAGMA journal_mode=DELETE')
-            finally:
-                connection.close()
+            update_database(database, self.database_updates)
             content = database.read_bytes()
         for suffix in ('-wal', '-shm'):
             sidecar = Path(str(relative) + suffix)
