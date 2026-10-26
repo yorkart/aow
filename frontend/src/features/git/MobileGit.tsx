@@ -1,29 +1,48 @@
 import { t } from '../../lib/i18n';
-import { GitBranch } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowDown, ArrowUp, GitBranch } from 'lucide-react';
 import { gitApi } from './api';
 import { filesApi } from '../files/api';
-import { FileTypeIcon } from '../files/FileTypeIcon';
-import { MobilePageHeader, MobileRefresh, MobileState } from '../../mobile/MobilePrimitives';
-import { useMobileResource, useMobileScroll, type MobileRoute } from '../../mobile/mobileState';
-import type { MobileNavigate } from '../../mobile/mobileState';
+import { MobileGitFileRow } from './MobileGitFileRow';
+import { MobileGitCommits } from './MobileGitCommits';
+import { MobilePageHeader, MobilePanelTabs, MobileRefresh, MobileState } from '../../mobile/MobilePrimitives';
+import { useMobileResource, useMobileScroll, type MobileRoute, type MobileNavigate } from '../../mobile/mobileState';
+import './mobile-git.css';
+
+const views = [{ id: 'changes', label: t("common.changes") }, { id: 'commits', label: t("common.commits") }] as const;
 
 export function MobileGit({ route, visible, navigate, back }: { route: MobileRoute; visible: boolean; navigate: MobileNavigate; back: () => void }) {
-  const status = useMobileResource(`git.${route.workspace}`, () => gitApi.gitStatus(route.workspace), visible && !route.diff);
-  const scroll = useMobileScroll(`git.${route.workspace}`, !!status.data);
+  const [refresh, setRefresh] = useState(0);
+  const [expandedCommit, setExpandedCommit] = useState<string>();
+  const view = route.gitView === 'commits' || route.commit ? 'commits' : 'changes';
+  const repository = route.repository ?? route.workspace;
+  const status = useMobileResource(`git.${repository}`, () => gitApi.gitStatus(repository), visible && !route.diff);
+  const scroll = useMobileScroll(`git.${repository}.${view}`, !!status.data && !route.diff);
   if (route.diff) return <MobileDiff route={route} back={back} />;
-  return <section className="mobile-content-page">
-    <MobilePageHeader title={t("git.git_changes")} actions={<MobileRefresh reload={status.reload} loading={status.loading} />} />
-    <div className="mobile-scroll" ref={scroll}>
-      {status.data && <div className="mobile-branch-card"><GitBranch size={23} /><div><strong>{status.data.branch || t("git.detached_head")}</strong><span>{t("git.change_summary", { count: status.data.files.length, ahead: status.data.ahead, behind: status.data.behind })}</span></div></div>}
-      <MobileState loading={status.loading && !status.data} error={status.error} retry={status.reload} empty={status.data?.files.length === 0 ? t("git.clean_worktree_no_changed_files") : undefined} />
-      <div className="mobile-list">{status.data?.files.map((file) => <div key={file.path} className="mobile-git-row">
-        <div className="mobile-git-file"><FileTypeIcon path={file.path} /><span>{file.path}</span></div>
-        <div className="mobile-git-actions">
-          {file.index_status !== ' ' && file.index_status !== '?' && <button onClick={() => navigate({ workspace: route.workspace, view: 'git', diff: file.path, staged: '1' })}><b>{file.index_status}</b>{t("git.staged_view_diff")}</button>}
-          {file.worktree_status !== ' ' && <button onClick={() => navigate({ workspace: route.workspace, view: 'git', diff: file.path, untracked: file.worktree_status === '?' ? '1' : undefined })}><b>{file.worktree_status}</b>{file.worktree_status === '?' ? t("git.untracked") : t("automations.workspace")} {t("git.view_diff")}</button>}
-        </div>
-      </div>)}</div>
-    </div>
+  const staged = status.data?.files.filter(file => file.index_status !== ' ' && file.index_status !== '?') ?? [];
+  const working = status.data?.files.filter(file => file.worktree_status !== ' ') ?? [];
+  return <section className="mobile-content-page mobile-source-control">
+    <MobilePageHeader title={t("navigation.source_control")} actions={<MobileRefresh reload={() => { status.reload(); setRefresh(value => value + 1); }} loading={status.loading} />} />
+    <MobilePanelTabs label={t("navigation.source_control")} items={views} selected={view}
+      onSelect={gitView => navigate({ workspace: route.workspace, repository: route.repository, view: 'git', gitView }, true)} />
+    {status.data && <div className="mobile-source-branch"><GitBranch size={16} /><strong>{status.data.branch || t("git.detached_head")}</strong>
+      <span title={t("git.change_summary", { count: status.data.files.length, ahead: status.data.ahead, behind: status.data.behind })}>
+        <ArrowUp size={13} />{status.data.ahead}<ArrowDown size={13} />{status.data.behind}
+      </span>
+    </div>}
+    {view === 'commits' ? <MobileGitCommits route={route} visible={visible} refresh={refresh} expanded={expandedCommit} onExpand={setExpandedCommit} navigate={navigate} />
+      : <div className="mobile-scroll mobile-source-list" ref={scroll}>
+        <MobileState loading={status.loading && !status.data} error={status.error} retry={status.reload}
+          empty={status.data?.files.length === 0 ? t("git.clean_worktree_no_changed_files") : undefined} />
+        {[{ id: 'staged', label: t("git.staged_changes"), files: staged }, { id: 'working', label: t("git.worktree_changes"), files: working }].map(group => group.files.length > 0 &&
+          <section key={group.id} className="mobile-source-group" aria-label={group.label}>
+            <header><h3>{group.label}</h3><span>{group.files.length}</span></header>
+            {group.files.map(file => <MobileGitFileRow key={file.path} path={file.path} originalPath={file.original_path}
+              status={group.id === 'staged' ? file.index_status : file.worktree_status}
+              onOpen={() => navigate({ workspace: route.workspace, repository: route.repository, view: 'git', diff: file.path,
+                staged: group.id === 'staged' ? '1' : undefined, untracked: group.id === 'working' && file.worktree_status === '?' ? '1' : undefined })} />)}
+          </section>)}
+      </div>}
   </section>;
 }
 

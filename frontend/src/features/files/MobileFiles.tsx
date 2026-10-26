@@ -1,41 +1,51 @@
 import { t } from '../../lib/i18n';
-import { ChevronRight, FileText } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import { filesApi } from './api';
-import { DirectoryTypeIcon, FileTypeIcon } from './FileTypeIcon';
 import { MarkdownFileContent } from './MarkdownFileContent';
-import { MobilePageHeader, MobileRefresh, MobileState } from '../../mobile/MobilePrimitives';
-import { useMobileResource, useMobileScroll, type MobileRoute } from '../../mobile/mobileState';
-import type { MobileNavigate } from '../../mobile/mobileState';
+import { MobileFileTree } from './MobileFileTree';
+import { MobilePageHeader, MobilePanelTabs, MobileRefresh, MobileState } from '../../mobile/MobilePrimitives';
+import { saveMobileValue, useMobileResource, useMobileScroll, type MobileRoute, type MobileNavigate } from '../../mobile/mobileState';
+import './mobile-files.css';
 
 const basename = (path: string) => path.split('/').filter(Boolean).pop() ?? path;
-function within(root: string, path: string) { return path === root || path.startsWith(`${root.replace(/\/$/, '')}/`); }
+function within(root: string, path: string) { return !!root && (path === root || path.startsWith(`${root.replace(/\/$/, '')}/`)); }
+const sources = [
+  { id: 'projects', label: t("files.project_files") },
+  { id: 'notes', label: t("files.notes_files") },
+] as const;
 
 export function MobileFiles({ route, workspace, notesPath, visible, navigate, back }: {
   route: MobileRoute; workspace: string; notesPath: string; visible: boolean; navigate: MobileNavigate; back: () => void;
 }) {
-  const root = route.notes === '1' ? notesPath : route.workspace;
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [refresh, setRefresh] = useState(0);
+  const path = route.directory ?? route.file ?? '';
+  const source = route.notes === '1' || route.fileSource === 'notes' || within(notesPath, path) ? 'notes' : 'projects';
+  const root = source === 'notes' ? notesPath : route.workspace;
   const directory = route.directory && (route.fileSource === 'external' || within(root, route.directory)) ? route.directory : root;
-  const listing = useMobileResource(`directory.${directory}`, () => filesApi.listDirectory(directory), visible && !route.file);
-  const scroll = useMobileScroll(`directory.${directory}`, !!listing.data);
-  const base: Partial<MobileRoute> = { workspace: route.workspace, view: 'files', notes: route.notes, fileSource: route.fileSource };
-  if (route.file) return <MobileFileReader path={route.file} workspace={workspace} back={back} />;
-  return <section className="mobile-content-page">
-    <MobilePageHeader title={directory === root ? (route.notes === '1' ? t("navigation.notes") : t("aow.files")) : basename(directory)}
-      subtitle={directory === root ? t("files.browse_workspace_contents") : directory.slice(root.length + 1)} back={directory === root ? undefined : back}
-      actions={<MobileRefresh reload={listing.reload} loading={listing.loading} />} />
-    <div className="mobile-segments" role="tablist" aria-label={t("files.file_source")}>
-      <button role="tab" aria-selected={route.notes !== '1'} onClick={() => navigate({ workspace: route.workspace, view: 'files' }, true)}><DirectoryTypeIcon />{t("files.project_files")}</button>
-      <button role="tab" aria-selected={route.notes === '1'} onClick={() => navigate({ workspace: route.workspace, view: 'files', notes: '1' }, true)}><FileText size={16} />{t("navigation.notes")}</button>
+  const scrollKey = `file-tree.${source}.${directory}`;
+  const scroll = useMobileScroll(scrollKey, !!directory && !route.file);
+  const base: Partial<MobileRoute> = { workspace: route.workspace, view: 'files', notes: source === 'notes' ? '1' : undefined,
+    fileSource: source === 'notes' ? 'notes' : within(route.workspace, directory) ? 'project' : 'external' };
+  const parent = directory.replace(/\/$/, '').slice(0, directory.replace(/\/$/, '').lastIndexOf('/')) || '/';
+  return <><section className="mobile-content-page mobile-explorer" hidden={!!route.file}>
+    <MobilePageHeader title={t("navigation.explorer")} actions={<MobileRefresh reload={() => setRefresh(value => value + 1)} />} />
+    <MobilePanelTabs label={t("files.file_source")} items={sources} selected={source} onSelect={id => navigate({ workspace: route.workspace, view: 'files',
+      notes: id === 'notes' ? '1' : undefined }, true)} />
+    <div className="mobile-files-location">
+      {directory !== root && <button className="mobile-icon-button" aria-label={t("mobile.back")} onClick={() => navigate({ ...base, directory: parent === root ? undefined : parent })}><ArrowLeft size={18} /></button>}
+      <span title={directory}>{directory}</span>
     </div>
-    <div className="mobile-scroll" ref={scroll}>
-      <MobileState loading={listing.loading && !listing.data} error={listing.error} retry={listing.reload} empty={listing.data?.entries.length === 0 ? t("files.this_directory_is_empty") : undefined} />
-      <div className="mobile-list">{listing.data?.entries.slice().sort((a, b) => Number(b.kind === 'directory') - Number(a.kind === 'directory') || a.name.localeCompare(b.name))
-        .map((entry) => <button key={entry.path} className="mobile-list-row" onClick={() => navigate({ ...base, ...(entry.kind === 'directory' ? { directory: entry.path } : { directory, file: entry.path }) })}>
-          <div className="mobile-row-icon">{entry.kind === 'directory' ? <DirectoryTypeIcon /> : <FileTypeIcon path={entry.path} />}</div>
-          <div className="mobile-row-main"><strong>{entry.name}</strong><span>{entry.kind === 'directory' ? t("files.folder") : `${Math.max(1, Math.ceil(entry.size / 1024))} KB`}</span></div><ChevronRight size={17} />
-        </button>)}</div>
+    <div className="mobile-scroll mobile-file-tree-scroll" ref={scroll}>
+      <MobileFileTree directory={directory} expanded={expanded} refresh={refresh} visible={visible && !route.file}
+        onToggle={path => setExpanded(current => { const next = new Set(current); if (!next.delete(path)) next.add(path); return next; })}
+        onOpen={file => {
+          saveMobileValue(`scroll.${scrollKey}`, String(scroll.current?.scrollTop ?? 0));
+          navigate({ ...base, directory, file });
+        }} />
     </div>
-  </section>;
+  </section>{route.file && <MobileFileReader path={route.file} workspace={workspace} back={back} />}</>;
 }
 
 function MobileFileReader({ path, workspace, back }: { path: string; workspace: string; back: () => void }) {

@@ -862,6 +862,7 @@
     "preview_unavailable": "无法直接预览"
   },
   "files": {
+    "notes_files": "笔记文件",
     "no_files_or_images_to_upload_in_the_clipboard": "剪贴板中没有可上传的文件或图片，请选择文件上传。",
     "pasting_directories_is_not_supported_select_files_within_the": "暂不支持整目录粘贴，请选择目录中的文件。",
     "the_browser_cannot_read_the_clipboard_directly_press_ctrl": "浏览器无法直接读取剪贴板，请按 Ctrl/Cmd+V 粘贴，或选择文件上传。",
@@ -990,6 +991,7 @@
     "unpin_path": "取消固定 {{path}}"
   },
   "git": {
+    "no_commits": "暂无提交记录。",
     "commit_details": "提交详情：{{value0}}",
     "loading_commit_details": "正在加载提交详情…",
     "committer": "提交者：",

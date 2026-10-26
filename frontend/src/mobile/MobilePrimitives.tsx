@@ -20,6 +20,22 @@ export function MobileRefresh({ reload, loading }: { reload: () => void; loading
   return <button className="mobile-icon-button" aria-label={t("files.refresh")} disabled={loading} onClick={reload}><RefreshCw size={18} className={loading ? 'spinning' : ''} /></button>;
 }
 
+export function MobilePanelTabs<T extends string>({ label, items, selected, onSelect }: {
+  label: string; items: readonly { id: T; label: string }[]; selected: T; onSelect: (id: T) => void;
+}) {
+  return <div className="mobile-panel-tabs" role="tablist" aria-label={label}>
+    {items.map((item, index) => <button key={item.id} type="button" role="tab" aria-selected={selected === item.id}
+      tabIndex={selected === item.id ? 0 : -1} onClick={() => onSelect(item.id)} onKeyDown={event => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+          : (index + (event.key === 'ArrowRight' ? 1 : -1) + items.length) % items.length;
+        event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role=tab]')[next]?.focus();
+        onSelect(items[next].id);
+      }}>{item.label}</button>)}
+  </div>;
+}
+
 export function mobileTime(value: string) {
   return new Date(value).toLocaleString(getLanguage(), { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 }

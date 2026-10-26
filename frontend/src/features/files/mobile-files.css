@@ -1,0 +1,13 @@
+.mobile-explorer>.mobile-page-header { min-height:48px; padding:2px 8px 2px 16px; }
+.mobile-explorer>.mobile-page-header h2 { font-size:15px; letter-spacing:0; }
+.mobile-files-location { display:flex; flex-shrink:0; align-items:center; gap:4px; min-height:40px; padding:0 12px; border-bottom:1px solid var(--m-line); color:var(--m-muted); }
+.mobile-files-location>span { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:12px; }
+.mobile-files-location .mobile-icon-button { width:36px; height:44px; flex-basis:36px; border-radius:4px; }
+.mobile-file-tree-scroll { padding:4px 0 16px; }
+.mobile-file-tree ul { margin:0; padding:0; list-style:none; }
+.mobile-file-row { display:flex; align-items:center; gap:8px; width:100%; min-height:44px; padding:6px 16px; text-align:left; }
+.mobile-file-row>span:last-child { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
+.mobile-file-row>svg { color:var(--aow-icon-foreground,var(--aow-icon)); }
+.mobile-file-chevron { width:16px; flex:0 0 16px; }
+.mobile-file-row:hover { background:var(--aow-hover); }
+.mobile-file-tree-state .mobile-state { min-height:44px; padding:8px 16px; font-size:12px; }

@@ -14,6 +14,7 @@ export interface MobileRoute {
   directory?: string;
   file?: string;
   notes?: string;
+  gitView?: 'changes' | 'commits';
   session?: string;
   acpSession?: string;
   agent?: string;

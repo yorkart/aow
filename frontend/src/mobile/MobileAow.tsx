@@ -55,7 +55,9 @@ export function MobileAow({ initialEntry }: { initialEntry?: ResolvedTab } = {})
   const worktree = project?.worktrees.find((item) => item.path === route.workspace);
   useMobileViewport(project?.name ?? t("automations.project"));
   const goHome = () => navigate({});
-  const fallback = { workspace: route.workspace, view: route.view, ...(route.view === 'files' && route.notes ? { notes: route.notes } : {}) };
+  const fallback: Partial<MobileRoute> = { workspace: route.workspace, view: route.view,
+    ...(route.view === 'files' && route.notes ? { notes: route.notes } : {}),
+    ...(route.view === 'git' ? { gitView: route.gitView ?? (route.commit ? 'commits' : 'changes'), repository: route.repository } : {}) };
   return <div className="mobile-app">
     <div className="mobile-main" inert={showSettings}>
       <header className="mobile-app-header">

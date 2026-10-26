@@ -1,0 +1,29 @@
+.mobile-source-control>.mobile-page-header { min-height:48px; padding:2px 8px 2px 16px; }
+.mobile-source-control>.mobile-page-header h2 { font-size:15px; letter-spacing:0; }
+.mobile-source-branch { display:flex; flex-shrink:0; align-items:center; gap:8px; min-height:40px; padding:8px 16px; border-bottom:1px solid var(--m-line); font-size:12px; }
+.mobile-source-branch strong { flex:1; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-weight:500; }
+.mobile-source-branch>span { display:flex; align-items:center; gap:4px; color:var(--m-muted); font-size:11px; }
+.mobile-source-list { padding-bottom:16px; }
+.mobile-source-group>header { display:flex; align-items:center; gap:8px; min-height:36px; padding:6px 16px; background:var(--m-panel); border-bottom:1px solid var(--m-line); }
+.mobile-source-group h3 { flex:1; font-size:12px; font-weight:600; }
+.mobile-source-group>header>span { padding:0 6px; border-radius:8px; background:var(--aow-elevated); color:var(--m-muted); font-size:11px; }
+.mobile-source-file { display:flex; align-items:center; gap:8px; width:100%; min-height:44px; padding:8px 16px; text-align:left; }
+.mobile-source-status { width:18px; flex-shrink:0; text-align:center; font:600 11px var(--aow-font-mono,monospace); color:var(--aow-warning); }
+.mobile-source-status[data-status=A],.mobile-source-status[data-status="?"] { color:var(--aow-success); }
+.mobile-source-status[data-status=D],.mobile-source-status[data-status=U] { color:var(--aow-error); }
+.mobile-source-status[data-status=R],.mobile-source-status[data-status=C] { color:var(--aow-info); }
+.mobile-source-file-path { display:flex; flex:1; flex-direction:column; gap:2px; min-width:0; font-size:13px; }
+.mobile-source-file-path>span,.mobile-source-file-path>small { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.mobile-source-file-path>small { color:var(--m-muted); font-size:11px; }
+.mobile-source-file>svg:last-child { color:var(--m-muted); }
+.mobile-source-commit { border-bottom:1px solid var(--m-line); }
+.mobile-commit-heading { display:flex; align-items:center; gap:8px; width:100%; min-height:60px; padding:10px 16px; text-align:left; }
+.mobile-commit-heading>svg { color:var(--m-muted); }
+.mobile-commit-text { display:flex; flex:1; flex-direction:column; gap:4px; min-width:0; }
+.mobile-commit-text strong { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:13px; font-weight:500; }
+.mobile-commit-text>span { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; color:var(--m-muted); font-size:11px; }
+.mobile-commit-text code { font-size:inherit; }
+.mobile-commit-local { padding:1px 5px; border:1px solid var(--m-line); border-radius:4px; color:var(--m-muted); font-size:10px; }
+.mobile-commit-files { padding-left:16px; background:var(--m-panel); }
+.mobile-commit-files .mobile-state { min-height:60px; padding:12px 16px; font-size:12px; }
+.mobile-source-file:hover,.mobile-commit-heading:hover { background:var(--aow-hover); }

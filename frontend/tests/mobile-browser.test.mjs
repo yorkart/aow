@@ -626,20 +626,20 @@ try {
     await visible(page, '.mobile-session-row');
     await page.getByRole('button', { name: '文件', exact: true }).click();
     await page.getByRole('button', { name: /src 文件夹/ }).click();
-    await page.getByRole('button', { name: /README.md/ }).click();
+    await page.locator('.mobile-file-tree .mobile-file-tree').getByRole('button', { name: 'README.md', exact: true }).click();
     await visible(page, '.mobile-file-reader h1');
     assert.equal(await page.evaluate(() => window.__unsafe), undefined);
     await page.getByRole('button', { name: '返回', exact: true }).click();
     assert.equal(new URL(page.url()).pathname, '/aow/tabs/files');
-    assert.equal(new URL(page.url()).searchParams.get('path'), workspace + '/src');
-    await visible(page, '.mobile-list-row');
-    await page.getByRole('tab', { name: "笔记" }).click();
+    assert.equal(new URL(page.url()).searchParams.get('path'), workspace);
+    await visible(page, '.mobile-file-row');
+    await page.getByRole('tab', { name: "笔记文件" }).click();
     await page.getByRole('button', { name: /README.md/ }).click();
     assert.equal(new URL(page.url()).pathname, '/aow/tabs/file');
     assert.equal(new URL(page.url()).searchParams.get('source'), 'notes');
     await visible(page, '.mobile-file-reader h1');
     await page.getByRole('button', { name: 'Git', exact: true }).click();
-    await page.getByRole('button', { name: /已暂存.*查看 Diff/ }).click();
+    await page.getByRole('region', { name: '已暂存变更' }).getByRole('button', { name: /frontend\/src\/main.tsx/ }).click();
     await visible(page, '.mobile-diff .added');
     assert.match(await page.locator('.mobile-diff').innerText(), /mobile/);
     await page.getByRole('button', { name: '自动化', exact: true }).click();
@@ -661,6 +661,142 @@ try {
     assert.deepEqual(state.errors, []);
     assert.deepEqual(state.mutations, []);
     await context.close();
+  });
+
+  await test('mobile explorer switches sources, expands folders and restores previews', async t => {
+    for (const width of [320, 390]) await t.test(`${width}px`, async t => {
+      const context = await browser.newContext({ viewport: { width, height: 844 }, isMobile: true, hasTouch: true });
+      t.after(() => context.close());
+      await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'en-US'); } catch { /* Storage is unavailable on the initial blank document. */ } });
+      const state = await fixture(context);
+      let failDirectory = true;
+      let largeListing = false;
+      await context.route('**/api/fs/tree**', route => {
+        const path = decodeURIComponent(new URL(route.request().url()).pathname.slice('/api/fs/tree'.length)) || '/';
+        if (path.endsWith('/restricted') && failDirectory) return route.fulfill({ status: 403, json: { message: 'Directory access denied' } });
+        const entries = path.endsWith('/empty') || path.endsWith('/restricted') ? [] : [
+          ...(path === workspace ? ['src', 'empty', 'restricted'].map(name => ({ name, path: `${path}/${name}`, kind: 'directory', size: 0 })) : []),
+          { name: path.endsWith('/src') ? 'a-very-long-component-filename-for-mobile-layout.tsx' : 'README.md',
+            path: `${path}/${path.endsWith('/src') ? 'a-very-long-component-filename-for-mobile-layout.tsx' : 'README.md'}`, kind: 'file', size: 4096 },
+        ];
+        if (largeListing && path === workspace) entries.push(...Array.from({ length: 30 }, (_, index) => ({ name: `file-${String(index).padStart(2, '0')}.ts`, path: `${path}/file-${String(index).padStart(2, '0')}.ts`, kind: 'file', size: 100 })));
+        return route.fulfill({ json: { path, entries } });
+      });
+      const page = await context.newPage();
+      await page.goto(`${baseURL}/?ui=mobile#${new URLSearchParams({ workspace, view: 'files' })}`);
+      const tabs = page.getByRole('tablist', { name: 'File source' });
+      await tabs.waitFor();
+      assert.deepEqual(await tabs.getByRole('tab').allTextContents(), ['Project files', 'Notes files']);
+      await page.getByRole('button', { name: 'src Folder', exact: true }).click();
+      const nestedFile = page.getByRole('button', { name: 'a-very-long-component-filename-for-mobile-layout.tsx', exact: true });
+      await nestedFile.waitFor();
+      assert.equal(await page.getByRole('button', { name: 'src Folder', exact: true }).getAttribute('aria-expanded'), 'true');
+      const box = await nestedFile.boundingBox();
+      assert.ok(box.height >= 44 && box.height <= 48, 'tree rows are compact while retaining touch targets');
+      await noOverflow(page);
+      await snapshot(page, `mobile-explorer-${width}`);
+      await nestedFile.click();
+      await visible(page, '.mobile-code');
+      assert.equal(new URL(page.url()).searchParams.get('source'), 'project');
+      await page.getByRole('button', { name: 'Back', exact: true }).click();
+      await nestedFile.waitFor();
+      await page.getByRole('button', { name: 'empty Folder', exact: true }).click();
+      await page.getByText('This directory is empty.', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'restricted Folder', exact: true }).click();
+      await page.getByRole('alert').filter({ hasText: 'Directory access denied' }).waitFor();
+      failDirectory = false;
+      await page.getByRole('alert').getByRole('button', { name: 'Reload' }).click();
+      await page.getByRole('alert').waitFor({ state: 'hidden' });
+      await tabs.getByRole('tab', { name: 'Notes files', exact: true }).click();
+      await page.reload();
+      await tabs.getByRole('tab', { name: 'Notes files', exact: true, selected: true }).waitFor();
+      await page.getByRole('button', { name: 'README.md', exact: true }).click();
+      await visible(page, '.mobile-file-reader h1');
+      assert.equal(new URL(page.url()).searchParams.get('source'), 'notes');
+      await page.getByRole('button', { name: 'Back', exact: true }).click();
+      largeListing = true;
+      await tabs.getByRole('tab', { name: 'Project files', exact: true }).click();
+      await page.getByRole('button', { name: 'file-29.ts', exact: true }).click();
+      await visible(page, '.mobile-code');
+      await page.getByRole('button', { name: 'Back', exact: true }).click();
+      await page.waitForFunction(() => document.querySelector('.mobile-file-tree-scroll')?.scrollTop > 500);
+      assert.deepEqual(state.errors, []);
+      assert.deepEqual(state.mutations, []);
+    });
+  });
+
+  await test('mobile source control groups changes and opens commit files and diffs', async t => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    t.after(() => context.close());
+    await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'en-US'); } catch { /* Storage is unavailable on the initial blank document. */ } });
+    const state = await fixture(context);
+    const reads = [];
+    let failCommitFiles = true;
+    let emptyLog = false;
+    await context.route('**/api/git/status?**', route => route.fulfill({ json: { repository: workspace, branch: 'feature/mobile-explorer-and-source-control', ahead: 2, behind: 1,
+      files: [{ path: 'src/main.tsx', index_status: 'M', worktree_status: 'M', original_path: null },
+        { path: 'src/new-file-with-a-long-name.tsx', index_status: '?', worktree_status: '?', original_path: null },
+        { path: 'src/renamed.ts', index_status: 'R', worktree_status: ' ', original_path: 'src/old.ts' }] } }));
+    await context.route('**/api/git/log?**', route => route.fulfill({ json: { repository: workspace, upstream: 'origin/main', upstream_commit: 'commit-two',
+      commits: emptyLog ? [] : [{ id: 'commit-one', short_id: 'abcdef1', author: 'Developer', authored_at: '2026-10-26T01:00:00Z', subject: 'Align mobile navigation and lists', parents: ['commit-two'], is_pushed: false },
+        { id: 'commit-two', short_id: 'abcdef2', author: 'Developer', authored_at: '2026-10-25T01:00:00Z', subject: 'Add a compact explorer', parents: [], is_pushed: true }] } }));
+    await context.route('**/api/git/commit/files?**', route => failCommitFiles
+      ? route.fulfill({ status: 503, json: { message: 'Commit files unavailable' } })
+      : route.fulfill({ json: { repository: workspace, commit: 'commit-one', files: [{ path: 'src/renamed.ts', status: 'R', original_path: 'src/old.ts' }] } }));
+    await context.route('**/api/git/commit/diff?**', route => {
+      reads.push(new URL(route.request().url()).searchParams);
+      return route.fulfill({ json: { repository: workspace, path: 'src/renamed.ts', patch: '@@ -1 +1 @@\n-old\n+new', truncated: false } });
+    });
+    const page = await context.newPage();
+    await page.goto(`${baseURL}/?ui=mobile#${new URLSearchParams({ workspace, view: 'git' })}`);
+    const tabs = page.getByRole('tablist', { name: 'Source Control' });
+    await tabs.waitFor();
+    assert.deepEqual(await tabs.getByRole('tab').allTextContents(), ['Changes', 'Commits']);
+    const staged = page.getByRole('region', { name: 'Staged changes', exact: true });
+    const working = page.getByRole('region', { name: 'Worktree changes', exact: true });
+    await staged.getByRole('button', { name: /src\/main.tsx/ }).waitFor();
+    assert.equal(await staged.locator('.mobile-source-file').count(), 2);
+    assert.equal(await working.locator('.mobile-source-file').count(), 2);
+    await noOverflow(page);
+    await snapshot(page, 'mobile-source-changes');
+    await staged.getByRole('button', { name: /src\/main.tsx/ }).click();
+    await visible(page, '.mobile-diff .added');
+    assert.equal(new URL(page.url()).searchParams.get('source'), 'staged');
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await working.getByRole('button', { name: /src\/main.tsx/ }).click();
+    await visible(page, '.mobile-diff .added');
+    assert.equal(new URL(page.url()).searchParams.get('source'), 'working');
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await working.getByRole('button', { name: /src\/new-file/ }).click();
+    assert.equal(new URL(page.url()).searchParams.get('untracked'), '1');
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await tabs.getByRole('tab', { name: 'Commits', exact: true }).click();
+    await page.reload();
+    await tabs.getByRole('tab', { name: 'Commits', exact: true, selected: true }).waitFor();
+    const commit = page.getByRole('button', { name: /Align mobile navigation and lists/ });
+    await commit.click();
+    await page.getByRole('alert').filter({ hasText: 'Commit files unavailable' }).waitFor();
+    failCommitFiles = false;
+    await page.getByRole('alert').getByRole('button', { name: 'Reload' }).click();
+    const commitFile = page.locator('.mobile-commit-files').getByRole('button', { name: /src\/renamed.ts/ });
+    await commitFile.waitFor();
+    await snapshot(page, 'mobile-source-commits');
+    await page.setViewportSize({ width: 320, height: 844 });
+    await noOverflow(page);
+    await commitFile.click();
+    await visible(page, '.mobile-diff .added');
+    assert.equal(reads.at(-1).get('commit'), 'commit-one');
+    assert.equal(reads.at(-1).get('original_path'), 'src/old.ts');
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await tabs.getByRole('tab', { name: 'Commits', exact: true, selected: true }).waitFor();
+    await commitFile.waitFor();
+    await commit.click();
+    await commitFile.waitFor({ state: 'hidden' });
+    emptyLog = true;
+    await page.locator('.mobile-source-control').getByRole('button', { name: 'Refresh', exact: true }).click();
+    await page.getByText('No commits yet.', { exact: true }).waitFor();
+    assert.deepEqual(state.errors, []);
+    assert.deepEqual(state.mutations, []);
   });
 
   await test('mobile automation history remains available when task details are missing', async t => {
