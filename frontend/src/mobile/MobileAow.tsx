@@ -30,8 +30,8 @@ const MobileSettings = lazy(() => import('./MobileSettings').then(module => ({ d
 
 const navigation = [
   { id: 'terminal', label: t("terminals.terminal"), icon: TerminalSquare },
-  { id: 'sessions', label: t("navigation.conversation"), icon: MessageSquare },
   { id: 'acp', label: 'ACP', icon: Sparkles },
+  { id: 'sessions', label: t("navigation.conversation"), icon: MessageSquare },
   { id: 'automations', label: t("aow.automations"), icon: CalendarClock },
   { id: 'files', label: t("aow.files"), icon: FolderOpen },
   { id: 'git', label: 'Git', icon: GitBranch },
