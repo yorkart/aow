@@ -37,7 +37,7 @@ function TokenUsage({ usage }: { usage: Data | null }) {
   });
   return <span className={`acp-token-usage${percent >= 85 ? ' warning' : ''}`} role="img" aria-label={title} title={title}><svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" opacity=".25" /><circle cx="8" cy="8" r="6" pathLength="100" strokeDasharray={`${Math.min(100, Math.max(0, percent))} 100`} transform="rotate(-90 8 8)" /></svg></span>;
 }
-export function ThreadView({ session, workspace, tabId, busy: pending, supportsImages = false, supportsSteering = false, composerStatus, headerActions, notice, alternateContent, onAction, onOpenFile: openHostFile }: { session: SessionSnapshot; workspace: string; tabId: string; busy: boolean; supportsImages?: boolean; supportsSteering?: boolean; composerStatus?: ReactNode; headerActions?: ReactNode; notice?: ReactNode; alternateContent?: ReactNode; onAction: (action: Data) => Promise<boolean>; onOpenFile: OpenFile }) {
+export function ThreadView({ session, workspace, tabId, busy: pending, supportsImages = false, supportsSteering = false, composerStatus, headerActions, headerContent, notice, alternateContent, onAction, onOpenFile: openHostFile }: { session: SessionSnapshot; workspace: string; tabId: string; busy: boolean; supportsImages?: boolean; supportsSteering?: boolean; composerStatus?: ReactNode; headerActions?: ReactNode; headerContent?: ReactNode; notice?: ReactNode; alternateContent?: ReactNode; onAction: (action: Data) => Promise<boolean>; onOpenFile: OpenFile }) {
   const busy = pending || !!composerStatus;
   const showThinking = useContext(ThinkingVisibility);
   const [draft, setDraft] = useComposerDraft(workspace, tabId);
@@ -101,7 +101,7 @@ export function ThreadView({ session, workspace, tabId, busy: pending, supportsI
     sessionId={session.thread_id}
     revision={session.revision}
     label={t("acp.acp_conversation")}
-    header={{ title: session.title, agentName: session.agent_id, agentIcon, workspace: session.cwd, actions: headerActions }}
+    header={{ title: session.title, agentName: session.agent_id, agentIcon, workspace: session.cwd, actions: headerActions }} headerContent={headerContent}
     alternateContent={alternateContent}
     live
     followRequest={followRequest}

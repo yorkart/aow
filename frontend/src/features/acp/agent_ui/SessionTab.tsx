@@ -7,6 +7,7 @@ import { ConversationAction } from '../../../components/conversation/Conversatio
 import { useConfirmation } from '../../../components/ConfirmationDialog';
 import { ConversationLayout } from '../../../components/conversation/ConversationLayout';
 import { ConversationIds } from '../../../components/conversation/ConversationIds';
+import { MobileConversationHeader, type MobileConversationAction } from '../../../mobile/MobileConversationHeader';
 import { ComposerStatus } from '../../../components/conversation/ComposerStatus';
 import { AgentIcon } from '../../agents/AgentIcon';
 import { useAcpControl } from '../../acp-control/sessionControl';
@@ -46,9 +47,9 @@ function resumeSession(id: string, token: string) {
   return pending;
 }
 
-export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenSession, onOpenFile }: {
+export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenSession, onOpenFile, onBack }: {
   tab: AcpTab; workspace: string; visible: boolean;
-  onSessionChange: (id: string, session: SessionInfo) => void; onOpenSession: (session: SessionInfo) => void; onOpenFile: OpenFile;
+  onSessionChange: (id: string, session: SessionInfo) => void; onOpenSession: (session: SessionInfo) => void; onOpenFile: OpenFile; onBack?: () => void;
 }) {
   const [connection, setConnection] = useState<ConnectionInfo>();
   const [prepared, setPrepared] = useState<SessionSnapshot>();
@@ -180,13 +181,18 @@ export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenSes
       } else retry();
     })().catch(reason => recordFailure(reason, token)).finally(() => setAuthBusy(false));
   };
-  const headerActions = <><ConversationIds identifiers={[
+  const identifiers = [
     { label: t("navigation.thread_id"), value: thread_id },
     { label: t("navigation.session_id"), value: session?.session_id },
     { label: t("navigation.connection_id"), value: connectionId },
-  ]} />{thread_id && <>
-      <ConversationAction label={t("acp.show_thinking")} aria-pressed={showThinking} onClick={() => setShowThinking(value => !value)}><Brain size={16} /></ConversationAction>
-      {!!object(connection?.capabilities?.sessionCapabilities).fork && <ConversationAction label={t("acp.fork_session")} disabled={!token || busy || restoring || recovering || needsResume || session?.status !== 'idle'} onClick={async () => {
+  ];
+  const actions: MobileConversationAction[] = [];
+  if (thread_id) {
+    actions.push({ label: t("acp.show_thinking"), icon: <Brain size={16} />, checked: showThinking, onClick: () => setShowThinking(value => !value) });
+    if (object(connection?.capabilities?.sessionCapabilities).fork) actions.push({
+      label: t("acp.fork_session"), icon: <GitFork size={16} />,
+      disabled: !token || busy || restoring || recovering || needsResume || session?.status !== 'idle',
+      onClick: async () => {
         if (!token || !session) return;
         if (!await confirm({ title: t("acp.confirm_fork_session"), description: t("acp.fork_session_description", { value0: session.title }),
           confirmLabel: t("acp.fork_session") })) return;
@@ -196,9 +202,18 @@ export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenSes
           window.dispatchEvent(new Event(sessionsChanged));
           onOpenSession(fork);
         });
-      }}><GitFork size={16} /></ConversationAction>}
-      <ConversationAction label={logs ? t("acp.back_to_session") : t("acp.acp_protocol_logs")} disabled={busy} onClick={() => { if (logs) setLogs(undefined); else void run(async () => setLogs(await acpApi.logs(thread_id))); }}>{logs ? <MessagesSquare size={16} /> : <ScrollText size={16} />}</ConversationAction>
-  </>}</>;
+      },
+    });
+    actions.push({ label: logs ? t("acp.back_to_session") : t("acp.acp_protocol_logs"), icon: logs ? <MessagesSquare size={16} /> : <ScrollText size={16} />, disabled: busy,
+      onClick: () => { if (logs) setLogs(undefined); else void run(async () => setLogs(await acpApi.logs(thread_id))); },
+    });
+  }
+  const headerActions = <><ConversationIds identifiers={identifiers} />{actions.map(action => <ConversationAction key={action.label}
+    label={action.label} aria-pressed={action.checked} disabled={action.disabled} onClick={action.onClick}>{action.icon}</ConversationAction>)}</>;
+  const statusLabel = !session ? t("acp.opening_session") : restoring || recovering ? t("acp.restoring_session")
+    : ({ idle: t("acp.session_ready"), working: t("aow.running"), disconnected: t("terminals.disconnected") } as Record<string, string>)[session.status] ?? session.status;
+  const headerContent = onBack && <MobileConversationHeader title={session?.title ?? tab.title} subtitle={`${tab.agentId} · ${statusLabel}`}
+    back={onBack} backLabel={t("acp.back_to_acp_sessions")} identifiers={[...identifiers, { label: t("automations.workspace"), value: session?.cwd ?? workspace }]} actions={actions} />;
   const connectionRequests = !authRequired && (!thread_id || token) && requests.length > 0 ? <div className="acp-content">{requests.map(request => <PermissionRequest key={request.id} permission={request} busy={answerBusy} onAnswer={response => { if (!connectionId) return; setAnswerBusy(true); void acpApi.answerConnection(connectionId, request.id, response).catch(recordFailure).finally(() => setAnswerBusy(false)); }} />)}</div> : undefined;
   // Show one blocking reason at the composer. Ownership takes precedence over
   // agent authentication and recovery, which only the controlling page can act on.
@@ -240,9 +255,9 @@ export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenSes
   return <ThinkingVisibility.Provider value={showThinking}><section className="acp-session-tab aow-conversation-theme" aria-label={t("acp.acp_session_content")}>
     {!session && <ConversationLayout sessionId={tab.id} label={t("acp.acp_conversation")} turns={[]}
       header={{ title: tab.title, agentName: tab.agentId, agentIcon: <AgentIcon agentId={tab.agentId.replace(/-acp$/, '').replace(/^claude-agent$/, 'claude')} />, workspace, actions: headerActions }}
-      alternateContent={alternateContent} footer={composerStatus}
+      headerContent={headerContent} alternateContent={alternateContent} footer={composerStatus}
     />}
-    {session && <div className="acp-thread-host"><ThreadView session={session} workspace={workspace} tabId={tab.id} busy={busy || restoring || recovering} supportsImages={!!connection?.prompt_capabilities?.image} supportsSteering={object(connection?.extensions?.steering).supported === true} composerStatus={composerStatus} headerActions={headerActions} notice={notice} alternateContent={alternateContent} onAction={action} onOpenFile={onOpenFile} /></div>}
+    {session && <div className="acp-thread-host"><ThreadView session={session} workspace={workspace} tabId={tab.id} busy={busy || restoring || recovering} supportsImages={!!connection?.prompt_capabilities?.image} supportsSteering={object(connection?.extensions?.steering).supported === true} composerStatus={composerStatus} headerActions={headerActions} headerContent={headerContent} notice={notice} alternateContent={alternateContent} onAction={action} onOpenFile={onOpenFile} /></div>}
     {confirmationDialog}
   </section></ThinkingVisibility.Provider>;
 }

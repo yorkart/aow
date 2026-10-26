@@ -160,7 +160,7 @@ function MobileWorkspace({ project, worktree, route, navigate, back, headerActio
         <Suspense fallback={<MobileState loading />}>
           {id === 'terminal' && <MobileTerminals initialTabId={initialTabId} project={project} worktree={worktree} visible={route.view === id} headerActions={headerActions} />}
           {id === 'sessions' && <MobileSessions route={route} visible={route.view === id} navigate={navigate} back={back} />}
-          {id === 'acp' && <MobileAcpSessions workspace={worktree.path} route={route} visible={route.view === id} navigate={navigate} headerActions={headerActions} />}
+          {id === 'acp' && <MobileAcpSessions workspace={worktree.path} route={route} visible={route.view === id} navigate={navigate} />}
           {id === 'files' && <MobileFiles route={route} workspace={worktree.id} notesPath={project.notes_path} visible={route.view === id} navigate={navigate} back={back} />}
           {id === 'git' && <MobileGit route={route} visible={route.view === id} navigate={navigate} back={back} />}
           {id === 'pull-requests' && <MobilePullRequests route={route} visible={route.view === id} navigate={navigate} back={back} />}

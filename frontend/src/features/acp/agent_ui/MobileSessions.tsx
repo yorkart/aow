@@ -1,6 +1,5 @@
 import { t } from '../../../lib/i18n';
-import { ChevronRight, List, LoaderCircle } from 'lucide-react';
-import { createPortal } from 'react-dom';
+import { ChevronRight, LoaderCircle } from 'lucide-react';
 import { TaskCompletion } from '../../../components/TaskCompletion';
 import { MobilePageHeader, MobileRefresh, MobileState, mobileTime } from '../../../mobile/MobilePrimitives';
 import { useMobileScroll, type MobileNavigate, type MobileRoute } from '../../../mobile/mobileState';
@@ -10,8 +9,8 @@ import { useSessionsSync } from '../sync/hooks';
 import { compareSessionActivity, sessionDisplayTime } from '../session_activity';
 import { SessionPage } from './SessionPage';
 
-export function MobileSessions({ workspace, route, visible, navigate, headerActions }: {
-  workspace: string; route: MobileRoute; visible: boolean; navigate: MobileNavigate; headerActions: HTMLElement | null;
+export function MobileSessions({ workspace, route, visible, navigate }: {
+  workspace: string; route: MobileRoute; visible: boolean; navigate: MobileNavigate;
 }) {
   const showList = visible && !route.acpSession;
   const key = `acp.sessions.${workspace}`;
@@ -20,11 +19,10 @@ export function MobileSessions({ workspace, route, visible, navigate, headerActi
   const unread = useUnreadAcpThreadIds();
   const sessions = list.data?.filter(session => session.cwd === workspace)
     .sort(compareSessionActivity);
-  if (visible && route.acpSession) return <>
-    {headerActions && createPortal(<button className="mobile-icon-button" aria-label={t("acp.back_to_acp_sessions")} title={t("acp.back_to_acp_sessions")}
-      onClick={() => navigate({ workspace, view: 'acp' }, true)}><List size={20} /></button>, headerActions)}
-    <SessionPage workspace={workspace} thread_id={route.acpSession} onOpenSession={session => navigate({ workspace: session.cwd, view: 'acp', acpSession: session.thread_id })} onOpenFile={path => navigate({ workspace, view: 'files', file: path, fileSource: 'external' })} />
-  </>;
+  if (visible && route.acpSession) return <SessionPage workspace={workspace} thread_id={route.acpSession}
+    onBack={() => navigate({ workspace, view: 'acp' }, true)}
+    onOpenSession={session => navigate({ workspace: session.cwd, view: 'acp', acpSession: session.thread_id })}
+    onOpenFile={path => navigate({ workspace, view: 'files', file: path, fileSource: 'external' })} />;
   return <section className="mobile-content-page" aria-label={t("acp.acp_session_list")}>
     <MobilePageHeader title="ACP" subtitle={t("acp.local_session_records")} actions={<MobileRefresh reload={list.reload} loading={list.loading} />} />
     <div className="mobile-scroll" ref={scroll}>

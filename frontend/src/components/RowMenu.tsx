@@ -50,7 +50,7 @@ export function RowMenu({ id, label, role = 'menu', anchor, onClose, children, c
     data-floating-workspace={anchor.current?.closest('[data-floating-workspace]') ? '' : undefined} role={role} aria-label={label} tabIndex={-1} style={position} onKeyDown={event => {
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close.current(); anchor.current?.focus(); return; }
     if (role === 'dialog' || !['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
-    const items = [...(menu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled), [role="option"]:not(:disabled)') ?? [])];
+    const items = [...(menu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled), [role="menuitemcheckbox"]:not(:disabled), [role="option"]:not(:disabled)') ?? [])];
     if (!items.length) return;
     event.preventDefault();
     const current = items.indexOf(document.activeElement as HTMLButtonElement);

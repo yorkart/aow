@@ -17,7 +17,7 @@ try {
   await mkdir(screenshotDir, { recursive: true });
 
   async function pageFor(t, mobile = false) {
-    const context = await browser.newContext({ viewport: { width: mobile ? 390 : 1280, height: mobile ? 844 : 900 }, permissions: ['clipboard-read', 'clipboard-write'] });
+    const context = await browser.newContext({ viewport: { width: mobile ? 390 : 1280, height: mobile ? 844 : 900 }, hasTouch: mobile, permissions: ['clipboard-read', 'clipboard-write'] });
     await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => context.close());
     const page = await context.newPage();
@@ -51,12 +51,39 @@ try {
         return route.fulfill({ status: 404, json: { message: 'unexpected request' } });
       });
       await page.goto(`${origin}/tests/session-snapshot-preview.html${mobile ? '?mobile' : ''}`);
-      const shareButton = page.getByRole('button', { name: '分享', exact: true });
-      assert.equal(await shareButton.innerText(), '');
-      assert.equal(await shareButton.getAttribute('title'), null);
-      await shareButton.hover();
-      await page.getByRole('tooltip').filter({ hasText: /^分享$/ }).waitFor();
-      await page.getByRole('button', { name: '分享', exact: true }).click();
+      const openShare = async () => {
+        if (mobile) {
+          await page.getByRole('button', { name: '更多操作', exact: true }).tap();
+          await page.getByRole('menuitem', { name: '分享', exact: true }).tap();
+          assert.equal(await page.getByRole('menu').count(), 0);
+        } else await page.getByRole('button', { name: '分享', exact: true }).click();
+      };
+      if (!mobile) {
+        const shareButton = page.getByRole('button', { name: '分享', exact: true });
+        assert.equal(await shareButton.innerText(), '');
+        assert.equal(await shareButton.getAttribute('title'), null);
+        await shareButton.hover();
+        await page.getByRole('tooltip').filter({ hasText: /^分享$/ }).waitFor();
+      } else {
+        const header = page.locator('.mobile-page-header');
+        assert.deepEqual(await header.getByRole('button').evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label'))), ['返回', '会话信息', '更多操作']);
+        await header.getByRole('button', { name: '会话信息', exact: true }).tap();
+        const info = page.getByRole('dialog', { name: '会话信息', exact: true });
+        await info.getByText(session.session_id, { exact: true }).waitFor();
+        await info.getByText(session.cwd, { exact: true }).waitFor();
+        await info.getByRole('button', { name: '复制 会话 ID', exact: true }).tap();
+        assert.equal(await page.evaluate(() => navigator.clipboard.readText()), session.session_id);
+        await page.keyboard.press('Escape');
+        for (const width of [390, 320]) {
+          await page.setViewportSize({ width, height: 844 });
+          await page.screenshot({ path: join(screenshotDir, `conversation-header-${width}.png`) });
+          for (const button of await header.getByRole('button').all()) {
+            const box = await button.boundingBox();
+            assert.ok(box.width >= 44 && box.height >= 44 && box.x >= 0 && box.x + box.width <= width);
+          }
+        }
+      }
+      await openShare();
       await page.getByText('持有链接的人无需登录', { exact: false }).waitFor();
       await page.getByRole('button', { name: '创建并复制链接' }).click();
       await page.getByText('链接已复制', { exact: true }).waitFor();
@@ -65,7 +92,7 @@ try {
       assert.equal(await page.locator('.session-share-dialog').evaluate(node => node.getBoundingClientRect().width <= innerWidth), true);
       await page.screenshot({ path: join(screenshotDir, `dialog-${mobile ? 'mobile' : 'desktop'}.png`) });
       await page.getByRole('button', { name: '关闭分享窗口' }).click();
-      await page.getByRole('button', { name: '分享', exact: true }).click();
+      await openShare();
       await page.getByRole('button', { name: '复制链接', exact: true }).click();
       await page.getByText('链接已复制', { exact: true }).waitFor();
       assert.equal(creations, 1);

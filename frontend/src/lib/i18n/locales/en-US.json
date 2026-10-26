@@ -331,6 +331,7 @@
     "waiting_for_action": "Waiting for action"
   },
   "acp": {
+    "session_ready": "Ready",
     "shared_connection": "Shared connection",
     "acp_protocol_logs": "ACP protocol logs",
     "back_to_session": "Back to session",
@@ -1851,6 +1852,8 @@
     "reasoning_included_in_output": "Reasoning (included in output): {{value0}}"
   },
   "mobile": {
+    "session_information": "Session information",
+    "more_actions": "More actions",
     "back_to_projects": "Back to projects",
     "workspace_does_not_exist_or_has_been_removed": "Workspace does not exist or has been removed.",
     "back_to_project": "Back to project",

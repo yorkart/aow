@@ -8,10 +8,10 @@ export function MobileState({ loading, error, empty, retry }: { loading?: boolea
   return empty ? <div className="mobile-state"><p>{empty}</p></div> : null;
 }
 
-export function MobilePageHeader({ title, subtitle, back, actions }: { title: string; subtitle?: string; back?: () => void; actions?: ReactNode }) {
+export function MobilePageHeader({ title, subtitle, back, backLabel = t("mobile.back"), actions }: { title: string; subtitle?: string; back?: () => void; backLabel?: string; actions?: ReactNode }) {
   return <header className="mobile-page-header">
-    {back && <button className="mobile-icon-button" aria-label={t("mobile.back")} onClick={back}><ArrowLeft size={21} /></button>}
-    <div className="mobile-heading"><h2>{title}</h2>{subtitle && <span>{subtitle}</span>}</div>
+    {back && <button type="button" className="mobile-icon-button" aria-label={backLabel} onClick={back}><ArrowLeft size={21} /></button>}
+    <div className="mobile-heading"><h2 title={title}>{title}</h2>{subtitle && <span>{subtitle}</span>}</div>
     {actions}
   </header>;
 }

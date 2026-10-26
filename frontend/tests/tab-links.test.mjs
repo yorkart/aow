@@ -492,7 +492,58 @@ try {
     await page.getByText('Retained reply for older', { exact: true }).waitFor();
     const editor = page.getByLabel('ACP 消息', { exact: true });
     await editor.fill('保留手机端草稿');
-    await page.screenshot({ path: join(screenshotDir, 'aow-mobile-acp-conversation.png') });
+    const header = page.locator('.acp-session-tab .mobile-page-header');
+    assert.deepEqual(await header.getByRole('button').evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label'))), ['返回 ACP 会话列表', '会话信息', '更多操作']);
+    assert.equal(await page.locator('.mobile-app-header .lucide-list').count(), 0);
+    await header.getByRole('button', { name: '会话信息', exact: true }).click();
+    const info = page.getByRole('dialog', { name: '会话信息', exact: true });
+    await info.getByText('older', { exact: true }).waitFor();
+    await info.getByText('remote-older', { exact: true }).waitFor();
+    await info.getByText(older.cwd, { exact: true }).waitFor();
+    await header.getByRole('button', { name: '会话信息', exact: true }).click();
+    await info.waitFor({ state: 'hidden' });
+    const more = header.getByRole('button', { name: '更多操作', exact: true });
+    const menu = page.getByRole('menu', { name: '更多操作', exact: true });
+    const detailUrl = page.url();
+    for (const dismiss of ['repeat', 'escape', 'outside']) {
+      await more.click();
+      await menu.waitFor();
+      if (dismiss === 'repeat') await more.click();
+      else if (dismiss === 'escape') await page.keyboard.press('Escape');
+      else await header.getByRole('heading').click();
+      await menu.waitFor({ state: 'hidden' });
+      assert.equal(page.url(), detailUrl);
+    }
+    await more.click();
+    assert.equal(await menu.getByRole('menuitem', { name: '分叉会话', exact: true }).count(), 0, 'unsupported fork stays hidden');
+    const thinking = menu.getByRole('menuitemcheckbox', { name: '显示 Thinking', exact: true });
+    assert.equal(await thinking.getAttribute('aria-checked'), 'false');
+    await thinking.click();
+    await menu.waitFor({ state: 'hidden' });
+    await more.click();
+    assert.equal(await thinking.getAttribute('aria-checked'), 'true');
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await menu.getByRole('menuitem', { name: 'ACP 协议日志', exact: true }).evaluate(node => node === document.activeElement), true);
+    await page.route('**/api/acp/sessions/older/logs', route => route.fulfill({ json: [] }));
+    await menu.getByRole('menuitem', { name: 'ACP 协议日志', exact: true }).click();
+    await page.locator('.acp-logs').waitFor();
+    await more.click();
+    await menu.getByRole('menuitem', { name: '返回会话', exact: true }).click();
+    await editor.waitFor();
+    assert.equal(await editor.innerText(), '保留手机端草稿');
+    for (const width of [390, 320]) {
+      await page.setViewportSize({ width, height: 844 });
+      for (const button of await header.getByRole('button').all()) {
+        const box = await button.boundingBox();
+        assert.ok(box.width >= 44 && box.height >= 44 && box.x >= 0 && box.x + box.width <= width);
+      }
+      await more.click();
+      const bounds = await menu.boundingBox();
+      assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width);
+      await page.screenshot({ path: join(screenshotDir, `aow-mobile-acp-menu-${width}.png`) });
+      await more.click();
+      await page.screenshot({ path: join(screenshotDir, `aow-mobile-acp-conversation-${width}.png`) });
+    }
     await page.getByRole('button', { name: '返回 ACP 会话列表', exact: true }).click();
     await list.waitFor();
     await list.getByRole('button', { name: '打开 ACP 会话 检查项目配置', exact: true }).click();
@@ -512,6 +563,89 @@ try {
     assert.equal(await list.locator('.mobile-list-row').count(), 2);
     assert.deepEqual(state.acpWrites, ['POST /api/acp/sessions/older/actions', 'POST /api/acp/sessions/newer/actions'], 'opening restores existing sessions once without creating duplicates');
     assert.equal(state.acpSessions.length, 3);
+  });
+
+  await test('mobile ACP menu respects fork availability and preserves the source draft', async t => {
+    const source = { ...acpSession('source'), status: 'working' };
+    const { page, state } = await fixture(t, { acp: true, mobile: true, acpHistory: [source] });
+    await page.route('**/api/acp/sessions/*/connection', route => route.fulfill({ json: {
+      id: 'acp-connection', agent_id: 'test', cwd: source.cwd, auth_methods: [], capabilities: { sessionCapabilities: { fork: {} } },
+    } }));
+    await page.route('**/api/acp/sessions/source/fork?*', async route => {
+      state.acpWrites.push(route.request().method() + ' /api/acp/sessions/source/fork');
+      const fork = { ...acpSession('fork'), status: 'idle', title: 'Forked conversation' };
+      state.acpSessions.push(fork);
+      await route.fulfill({ json: fork });
+    });
+    await page.getByRole('navigation', { name: '工作区导航' }).getByRole('button', { name: 'ACP', exact: true }).click();
+    await page.getByRole('button', { name: '打开 ACP 会话 Saved ACP source', exact: true }).click();
+    await page.getByText('Retained reply for source', { exact: true }).waitFor();
+    const more = page.locator('.mobile-page-header').getByRole('button', { name: '更多操作', exact: true });
+    const forkAction = page.getByRole('menuitem', { name: '分叉会话', exact: true });
+    await more.click();
+    await forkAction.waitFor();
+    assert.equal(await forkAction.isDisabled(), true, 'working sessions cannot fork');
+    state.acpSessions[0].status = 'idle';
+    await page.reload();
+    const editor = page.getByLabel('ACP 消息', { exact: true });
+    await editor.fill('Keep source draft');
+    await more.click();
+    await forkAction.click();
+    const confirmation = page.getByRole('alertdialog', { name: '分叉会话？', exact: true });
+    await confirmation.waitFor();
+    assert.equal(await page.getByRole('menu').count(), 0);
+    await confirmation.getByRole('button', { name: '取消', exact: true }).click();
+    assert.deepEqual(state.acpWrites, []);
+    assert.equal(await editor.innerText(), 'Keep source draft');
+    await more.click();
+    await forkAction.click();
+    await confirmation.getByRole('button', { name: '分叉会话', exact: true }).click();
+    await page.getByRole('heading', { name: 'Forked conversation', exact: true }).waitFor();
+    await editor.waitFor();
+    assert.equal(await editor.innerText(), '');
+    await page.getByRole('button', { name: '返回 ACP 会话列表', exact: true }).click();
+    await page.getByRole('button', { name: '打开 ACP 会话 Saved ACP source', exact: true }).click();
+    await editor.waitFor();
+    assert.equal(await editor.innerText(), 'Keep source draft');
+    assert.deepEqual(state.acpWrites, ['POST /api/acp/sessions/source/fork']);
+  });
+
+  await test('mobile ACP detail keeps list navigation available while loading and after a failure', async t => {
+    const sessions = Array.from({ length: 20 }, (_, i) => acpSession(`item-${i}`));
+    const { page } = await fixture(t, { acp: true, mobile: true, acpHistory: sessions });
+    await page.getByRole('navigation', { name: '工作区导航' }).getByRole('button', { name: 'ACP', exact: true }).click();
+    const list = page.getByRole('region', { name: 'ACP 会话列表', exact: true });
+    const row = list.getByRole('button', { name: '打开 ACP 会话 Saved ACP item-19', exact: true });
+    await row.scrollIntoViewIfNeeded();
+    const scrollTop = await list.locator('.mobile-scroll').evaluate(node => node.scrollTop);
+    assert.ok(scrollTop > 0);
+    let release;
+    const pending = new Promise(resolve => { release = resolve; });
+    t.after(() => release());
+    await page.route('**/api/acp/sessions/item-19/metadata', async route => { await pending; await route.fulfill({ status: 503, json: { message: 'Session temporarily unavailable' } }); });
+    await row.click();
+    const back = page.locator('.mobile-page-header').getByRole('button', { name: '返回 ACP 会话列表', exact: true });
+    await back.waitFor();
+    await back.click();
+    await list.waitFor();
+    assert.equal(await list.locator('.mobile-scroll').evaluate(node => node.scrollTop), scrollTop);
+    await row.click();
+    await back.waitFor();
+    release();
+    await page.getByRole('alert').filter({ hasText: 'Session temporarily unavailable' }).waitFor();
+    await back.click();
+    await list.waitFor();
+    assert.equal(await list.locator('.mobile-scroll').evaluate(node => node.scrollTop), scrollTop);
+    assert.equal(await list.getByRole('button', { name: '返回 ACP 会话列表', exact: true }).count(), 0);
+  });
+
+  await test('mobile ACP direct entry returns to its list', async t => {
+    const { page } = await fixture(t, { acp: true, mobile: true, acpHistory: [acpSession()], tabUrl: '/aow/tabs/acp/acp-local' });
+    await page.getByText('Retained reply for acp-local', { exact: true }).waitFor();
+    await page.getByRole('button', { name: '返回 ACP 会话列表', exact: true }).click();
+    await page.getByRole('region', { name: 'ACP 会话列表', exact: true }).waitFor();
+    await page.reload();
+    await page.getByRole('button', { name: '打开 ACP 会话 Saved ACP acp-local', exact: true }).waitFor();
   });
 
   await test('mobile ACP lists handle empty workspaces, refresh failures and workspace changes', async t => {

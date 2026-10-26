@@ -13,11 +13,11 @@ export function SessionShareButton(props: Props) {
   const [open, setOpen] = useState(false);
   return <>
     <ConversationAction className="session-share-button" label={t("sessions.share")} onClick={() => setOpen(true)}><Share2 size={16} /></ConversationAction>
-    {open && <ShareDialog key={`${props.session.id}:${props.workspacePath}`} {...props} close={() => setOpen(false)} />}
+    {open && <SessionShareDialog key={`${props.session.id}:${props.workspacePath}`} {...props} close={() => setOpen(false)} />}
   </>;
 }
 
-function ShareDialog({ session, workspacePath, close }: Props & { close: () => void }) {
+export function SessionShareDialog({ session, workspacePath, close }: Props & { close: () => void }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const linkRef = useRef<HTMLInputElement>(null);
   const busyRef = useRef(false);

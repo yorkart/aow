@@ -1,0 +1,6 @@
+.mobile-conversation-menu { font-size:14px; border-radius:10px; }
+.mobile-conversation-menu button { min-height:44px; gap:10px; padding:10px; border-radius:6px; touch-action:manipulation; }
+.mobile-conversation-menu button > span { flex:1; }
+.mobile-conversation-menu svg { flex-shrink:0; width:18px; height:18px; }
+.conversation-ids-panel.mobile-conversation-info .conversation-id-row { grid-template-columns:80px minmax(0,1fr) 44px; gap:6px; }
+.conversation-ids-panel.mobile-conversation-info .conversation-id-row button { width:44px; height:44px; }

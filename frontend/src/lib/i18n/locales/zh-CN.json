@@ -331,6 +331,7 @@
     "waiting_for_action": "等待操作"
   },
   "acp": {
+    "session_ready": "就绪",
     "shared_connection": "共享连接",
     "acp_protocol_logs": "ACP 协议日志",
     "back_to_session": "返回会话",
@@ -1851,6 +1852,8 @@
     "reasoning_included_in_output": "推理（包含在输出中）：{{value0}}"
   },
   "mobile": {
+    "session_information": "会话信息",
+    "more_actions": "更多操作",
     "back_to_projects": "返回项目列表",
     "workspace_does_not_exist_or_has_been_removed": "工作区不存在或已被移除。",
     "back_to_project": "返回项目",

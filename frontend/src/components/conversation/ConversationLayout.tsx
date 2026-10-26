@@ -61,10 +61,11 @@ function promptPreview(text: string) {
 }
 
 // Presentation only: callers supply message contents and retain their process renderers.
-export function ConversationLayout({ sessionId, turns, header, agentClassName, className = '', label, revision, banner, alternateContent, state, leadingContent, accessory, footer, footerExpanded = false, live = false, followRequest = 0, scrollClassName = '', scrollRef }: {
+export function ConversationLayout({ sessionId, turns, header, headerContent, agentClassName, className = '', label, revision, banner, alternateContent, state, leadingContent, accessory, footer, footerExpanded = false, live = false, followRequest = 0, scrollClassName = '', scrollRef }: {
   sessionId: string;
   turns: ConversationTurn[];
   header: HeaderProps;
+  headerContent?: ReactNode;
   agentClassName?: string;
   className?: string;
   label: string;
@@ -178,7 +179,7 @@ export function ConversationLayout({ sessionId, turns, header, agentClassName, c
   };
 
   return <section className={`aow-conversation-layout aow-conversation-theme ${className}`} aria-label={label}>
-    <ConversationHeader {...header} />
+    {headerContent ?? <ConversationHeader {...header} />}
     {banner}
     {alternateContent}
     <div className={`project-aow-snapshot-body${turnCount ? '' : ' without-navigation'}`} hidden={!!alternateContent}>

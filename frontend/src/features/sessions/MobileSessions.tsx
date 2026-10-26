@@ -1,9 +1,11 @@
 import { t } from '../../lib/i18n';
-import { ChevronRight, MessageSquare } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronRight, MessageSquare, RefreshCw, Share2 } from 'lucide-react';
+import { MobileConversationHeader } from '../../mobile/MobileConversationHeader';
 import { TokenUsageBadge } from '../../components/TokenUsageBadge';
 import { sessionsApi } from './api';
 import { AgentIcon } from '../agents/AgentIcon';
-import { SessionShareButton } from './SessionShareButton';
+import { SessionShareDialog } from './SessionShareButton';
 import { SessionMessageContent } from './SessionMessageContent';
 import { WorkspaceMarkdownProvider } from '../files/WorkspaceMarkdown';
 import { SessionTurnPending, SessionTurnProcess } from './SessionTurnProcess';
@@ -25,7 +27,7 @@ export function MobileSessions({ route, visible, navigate, back }: { route: Mobi
   const scroll = useMobileScroll(`sessions.${route.cwd ?? route.workspace}`, !!list.data);
   const selected = list.data?.sessions.find((session) => session.id === route.session || session.agent === route.agent && session.agent + ':' + session.session_id === route.session);
   return <section className="mobile-content-page">
-    {route.session ? selected ? <MobileSessionReader session={selected} workspace={route.cwd ?? selected.cwd} back={back} />
+    {route.session ? selected ? <MobileSessionReader key={selected.id} session={selected} workspace={route.cwd ?? selected.cwd} back={back} />
       : <><MobilePageHeader title={t("sessions.session")} back={back} /><MobileState loading={list.loading} error={list.error} retry={list.reload} empty={t("sessions.session_not_found_return_to_the_list_and_refresh")} /></>
       : <>
         <MobilePageHeader title={t("navigation.conversation")} subtitle={t("acp.local_session_records")} actions={<MobileRefresh reload={list.reload} loading={list.loading} />} />
@@ -43,11 +45,19 @@ export function MobileSessions({ route, visible, navigate, back }: { route: Mobi
 }
 
 export function MobileSessionReader({ session, workspace, back }: { session: AowAgentSession; workspace: string; back: () => void }) {
+  const [sharing, setSharing] = useState(false);
   const snapshot = useMobileResource(`snapshot.${workspace}.${session.id}`, () => sessionsApi.agentSessionSnapshot(session, workspace));
   const scroll = useMobileScroll(`snapshot.${workspace}.${session.id}`, !!snapshot.data);
   return <WorkspaceMarkdownProvider directory={workspace}><section className="mobile-content-page">
-    <MobilePageHeader title={session.title} subtitle={snapshot.data ? t("sessions.turns", { value0: session.agent, value1: statusNames[snapshot.data.status], value2: snapshot.data.turns.length }) : session.agent}
-      back={back} actions={<>{snapshot.data && <SessionShareButton session={session} workspacePath={workspace} />}<MobileRefresh reload={snapshot.reload} loading={snapshot.loading} /></>} />
+    <MobileConversationHeader title={session.title} subtitle={snapshot.data ? `${session.agent} · ${statusNames[snapshot.data.status]}` : session.agent}
+      back={back} identifiers={[
+        { label: t("navigation.session_id"), value: session.session_id },
+        { label: t("automations.workspace"), value: workspace },
+      ]} actions={[
+        { label: t("sessions.share"), icon: <Share2 size={18} />, disabled: !snapshot.data, onClick: () => setSharing(true) },
+        { label: t("files.refresh"), icon: <RefreshCw size={18} />, disabled: snapshot.loading, onClick: snapshot.reload },
+      ]} />
+    {sharing && <SessionShareDialog session={session} workspacePath={workspace} close={() => setSharing(false)} />}
     <div className="mobile-scroll mobile-conversation" ref={scroll}>
       <MobileState error={snapshot.error} loading={snapshot.loading && !snapshot.data} retry={snapshot.reload} empty={snapshot.data?.turns.length === 0 ? t("sessions.this_session_has_no_conversation_to_display_yet") : undefined} />
       {snapshot.data && <p className="mobile-reader-meta"><MessageSquare size={13} />{t("sessions.snapshot_updated")} {mobileTime(snapshot.data.captured_at)}{snapshot.data.truncated && t("sessions.showing_the_latest_200_turns_only")}</p>}

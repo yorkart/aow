@@ -20,7 +20,7 @@ function IdentifierRow({ label, value }: Identifier) {
   </div>;
 }
 
-export function ConversationIds({ identifiers }: { identifiers: Identifier[] }) {
+export function ConversationIds({ identifiers, mobile = false, label = t("components.session_ids") }: { identifiers: Identifier[]; mobile?: boolean; label?: string }) {
   const id = useId();
   const button = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -57,7 +57,7 @@ export function ConversationIds({ identifiers }: { identifiers: Identifier[] }) 
     };
     // Replacing the hovered copy icon can suppress its ancestors' leave event.
     const move = (event: PointerEvent) => {
-      if (event.pointerType === 'touch') return;
+      if (mobile || event.pointerType === 'touch') return;
       if (button.current?.contains(event.target as Node) || panel.current?.contains(event.target as Node)) cancelClose();
       else if (timer.current === undefined) scheduleClose();
     };
@@ -80,20 +80,20 @@ export function ConversationIds({ identifiers }: { identifiers: Identifier[] }) 
       window.removeEventListener('resize', close);
       window.removeEventListener('scroll', scroll, true);
     };
-  }, [open, close, cancelClose, scheduleClose]);
+  }, [open, close, cancelClose, scheduleClose, mobile]);
 
   return <>
-    <button ref={button} type="button" className="conversation-ids-trigger" aria-label={t("components.session_ids")} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? id : undefined}
-      onPointerLeave={scheduleClose}
+    <button ref={button} type="button" className={`conversation-ids-trigger${mobile ? ' mobile-icon-button' : ''}`} aria-label={label} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? id : undefined}
+      onPointerLeave={mobile ? undefined : scheduleClose}
       onBlur={event => { if (!contains(event.relatedTarget)) scheduleClose(); }}
-      onClick={show} onKeyDown={event => {
+      onClick={mobile && open ? close : show} onKeyDown={event => {
         if (event.key === 'Tab' && !event.shiftKey && open) {
           const first = panel.current?.querySelector<HTMLButtonElement>('button:not(:disabled)');
           if (first) { event.preventDefault(); first.focus(); }
         }
-      }}><Info size={16} /></button>
-    {open && createPortal(<div ref={panel} id={id} role="dialog" aria-label={t("components.session_ids")} className="conversation-ids-panel aow-conversation-theme" style={position}
-      onPointerEnter={cancelClose} onPointerLeave={scheduleClose} onFocus={cancelClose}
+      }}><Info size={mobile ? 20 : 16} /></button>
+    {open && createPortal(<div ref={panel} id={id} role="dialog" aria-label={label} className={`conversation-ids-panel aow-conversation-theme${mobile ? ' mobile-conversation-info' : ''}`} style={position}
+      onPointerEnter={cancelClose} onPointerLeave={mobile ? undefined : scheduleClose} onFocus={cancelClose}
       onBlur={event => { if (!contains(event.relatedTarget)) scheduleClose(); }}
       onKeyDown={event => {
         if (event.key !== 'Tab') return;

@@ -1702,9 +1702,9 @@ try {
       }
       await expectDiagrams();
       const refreshed = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/session-one/snapshot'));
-      await page.getByRole('button', { name: '刷新', exact: true }).click();
+      await page.getByRole('button', { name: '更多操作', exact: true }).click();
+      await page.getByRole('menuitem', { name: '刷新', exact: true }).click();
       await (await refreshed).finished();
-      await page.locator('button[aria-label="刷新"]:enabled').waitFor();
       await expectDiagrams();
       await page.reload();
       await expectDiagrams();

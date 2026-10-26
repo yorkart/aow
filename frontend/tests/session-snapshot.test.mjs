@@ -34,6 +34,10 @@ try {
   const toggles = (page) => page.locator('.session-process-toggle');
   const expanded = (page) => toggles(page).evaluateAll((nodes) => nodes.map((node) => node.getAttribute('aria-expanded')));
   async function update(page, patch) { await page.evaluate((patch) => window.sessionPreview.update(patch), patch); }
+  async function refreshMobile(page) {
+    await page.getByRole('button', { name: '更多操作', exact: true }).click();
+    await page.getByRole('menuitem', { name: '刷新', exact: true }).click();
+  }
   async function noOverflow(page) {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     for (const element of await page.locator('.project-aow-snapshot-conversation, .mobile-conversation, .session-turn-process').all()) {
@@ -65,7 +69,7 @@ try {
         makeTurn('usage-3', 'Legacy', 'No usage reported', []),
       ] };
       updateSnapshot(next);
-      if (mobile) await page.getByRole('button', { name: '刷新', exact: true }).click();
+      if (mobile) await refreshMobile(page);
       else await update(page, { snapshot: next });
       await page.getByText('No usage reported', { exact: true }).waitFor();
       assert.deepEqual(await page.locator('.token-usage-input').allTextContents(), ['1K tokens', '2K tokens']);
@@ -164,7 +168,7 @@ try {
       });
       if (mobile) {
         updateSnapshot(next);
-        await page.getByRole('button', { name: '刷新', exact: true }).click();
+        await refreshMobile(page);
       } else await update(page, { snapshot: next });
       const messages = page.locator(mobile ? '.mobile-message.user' : '.project-aow-snapshot-message.user');
       const first = messages.first();
@@ -314,11 +318,11 @@ try {
     const { page, updateSnapshot } = await open(t, true);
     assert.deepEqual(await expanded(page), ['false', 'false']);
     await toggles(page).first().click();
-    await page.getByRole('button', { name: '刷新', exact: true }).click();
+    await refreshMobile(page);
     assert.deepEqual(await expanded(page), ['true', 'false']);
     const next = { ...snapshot, status: 'in_progress', turns: [...snapshot.turns, makeTurn('mobile-new', '新一轮', null, [{ kind: 'tool', text: 'exec_command', status: 'in_progress' }], 'in_progress')] };
     updateSnapshot(next);
-    await page.getByRole('button', { name: '刷新', exact: true }).click();
+    await refreshMobile(page);
     await page.locator('.mobile-turn').nth(2).waitFor();
     assert.deepEqual(await expanded(page), ['true', 'false', 'true']);
     await page.setViewportSize({ width: 320, height: 740 });
@@ -327,7 +331,7 @@ try {
     failed.status = 'failed';
     failed.turns.at(-1).status = 'failed';
     updateSnapshot(failed);
-    await page.getByRole('button', { name: '刷新', exact: true }).click();
+    await refreshMobile(page);
     await page.getByText('本轮执行失败，未生成最终结论。').waitFor();
     assert.deepEqual(await expanded(page), ['true', 'false', 'false']);
   });
@@ -390,9 +394,8 @@ try {
         if (mobile) {
           updateSnapshot(next);
           const response = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/snapshot'));
-          await page.getByRole('button', { name: '刷新', exact: true }).click();
+          await refreshMobile(page);
           await (await response).finished();
-          await page.locator('button[aria-label="刷新"]:enabled').waitFor();
         } else await update(page, { snapshot: next });
       }
       await show();
@@ -445,7 +448,7 @@ try {
       async function show(value) {
         if (mobile) {
           updateSnapshot(value);
-          await page.getByRole('button', { name: '刷新', exact: true }).click();
+          await refreshMobile(page);
         } else await update(page, { snapshot: value });
       }
       await show(next);
