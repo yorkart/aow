@@ -1,18 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { AowProject } from '../../aow/types';
 import { useInstancePanelPreferences } from '../instances/useInstancePanelPreferences';
-import type { TerminalGroup } from './TerminalPanel';
-import type { InstanceSort } from '../instances/InstanceScopeMenu';
 import { useProjectTerminals } from './useProjectTerminals';
 
-type Scopes = Record<TerminalGroup, boolean>;
-type Sorts = Record<TerminalGroup, InstanceSort>;
-type ProjectTerminalPanelState = {
+type ProjectTerminalPanelState = ReturnType<typeof useInstancePanelPreferences> & {
   inventory: ReturnType<typeof useProjectTerminals>;
-  scopes: Scopes;
-  sorts: Sorts;
-  setScope: (group: TerminalGroup, value: boolean) => void;
-  setSort: (group: TerminalGroup, value: InstanceSort) => void;
   subscribe: () => () => void;
 };
 

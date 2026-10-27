@@ -1,9 +1,9 @@
 import { t } from '../../lib/i18n';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Eye, EyeOff, Glasses, ShieldCheck, SquareTerminal, Unplug, UserRound } from 'lucide-react';
+import { Eye, EyeOff, Glasses, ShieldCheck, SquareTerminal, Unplug } from 'lucide-react';
 import type { TerminalTab } from './types';
 import type { AowWorktree } from '../../aow/types';
-import { isCliTerminal, terminalTabPresentation } from './terminalPresentation';
+import { terminalTabPresentation } from './terminalPresentation';
 import { terminalControlLabels, terminalDisplayLabels, terminalLifecycleLabels } from './terminalState';
 import { requestTerminalPaneSelection, useTerminalStates } from './terminalViewState';
 import { useInstanceGraph } from '../instances/useInstanceGraph';
@@ -16,15 +16,9 @@ import { AowListRow } from '../../components/AowListRow';
 import { useConfirmation } from '../../components/ConfirmationDialog';
 import { TerminalContextMenu } from './TerminalContextMenu';
 import type { InstanceSort } from '../instances/InstanceScopeMenu';
-import { InstancePanelGroups } from '../instances/InstancePanelGroups';
+import { InstancePanel } from '../instances/InstancePanel';
 import './terminal-panel.css';
 
-const terminalGroups = [
-  { id: 'user', cli: false, title: t("common.user_terminals"), icon: UserRound, tooltip: t("terminals.created_by_user") },
-  { id: 'cli', cli: true, title: t("common.cli_terminals"), icon: SquareTerminal, tooltip: <><code>aow-cli agent</code>  {t("acp.create")}</> },
-] as const;
-
-export type TerminalGroup = typeof terminalGroups[number]['id'];
 const terminalDisplayIcons = { shown: Eye, hidden: EyeOff };
 const terminalControlIcons = { observing: Glasses, controlled: ShieldCheck, disconnected: Unplug };
 
@@ -34,8 +28,8 @@ function terminalCreatedAt(tab: TerminalTab) {
 }
 
 export function TerminalPanel({ tabs, descendantTabs = tabs, detectedAgents, titles, openedIds, activeId, onOpen, onOpenPane, onOpenFloating, canOpenFloating, onTerminate, onRebuild, onReload,
-  worktrees, activeWorktreePath, showAll = { user: false, cli: false }, onShowAllChange,
-  sortBy = { user: 'branch', cli: 'branch' }, onSortChange, loading = false, error, menuContainer }: {
+  worktrees, activeWorktreePath, showAll = false, onShowAllChange,
+  sortBy = 'branch', onSortChange, loading = false, error, menuContainer }: {
   tabs: TerminalTab[];
   descendantTabs?: TerminalTab[];
   detectedAgents: Record<string, string | null>;
@@ -51,10 +45,10 @@ export function TerminalPanel({ tabs, descendantTabs = tabs, detectedAgents, tit
   onReload: () => void;
   worktrees?: AowWorktree[];
   activeWorktreePath?: string;
-  showAll?: Record<TerminalGroup, boolean>;
-  onShowAllChange?: (group: TerminalGroup, showAll: boolean) => void;
-  sortBy?: Record<TerminalGroup, InstanceSort>;
-  onSortChange?: (group: TerminalGroup, sortBy: InstanceSort) => void;
+  showAll?: boolean;
+  onShowAllChange?: (showAll: boolean) => void;
+  sortBy?: InstanceSort;
+  onSortChange?: (sortBy: InstanceSort) => void;
   loading?: boolean;
   error?: string;
   menuContainer?: HTMLElement;
@@ -126,10 +120,9 @@ export function TerminalPanel({ tabs, descendantTabs = tabs, detectedAgents, tit
   return <section className="terminal-panel">
     {graph.error && <p className="terminal-panel-error" role="alert">{graph.error}</p>}
     {rebuildError ? <p className="terminal-panel-error" role="alert">{rebuildError}</p> : null}
-    <InstancePanelGroups groups={terminalGroups.map(({ id, cli, title, icon: Icon, tooltip }) => ({
-      id, title, icon: <Icon />, tooltip, items: tabs.filter(tab => isCliTerminal(tab) === cli),
-      loading: !!worktrees && showAll[id] && loading, error: worktrees && showAll[id] ? error : undefined,
-    }))} worktrees={worktrees} activeWorktreePath={activeWorktreePath} showAll={showAll} sortBy={sortBy}
+    <InstancePanel title={t("terminals.terminal")} icon={<SquareTerminal />} items={tabs}
+      loading={!!worktrees && showAll && loading} error={worktrees && showAll ? error : undefined}
+      worktrees={worktrees} activeWorktreePath={activeWorktreePath} showAll={showAll} sortBy={sortBy}
       onShowAllChange={onShowAllChange} onSortChange={onSortChange} onScopeMenuOpen={dismissMenu}
       onReload={() => { onReload(); graph.reload(); }} noun={t("terminals.terminal")}
       itemKey={tab => tab.id} itemWorkspace={tab => tab.workspace_root} itemCreatedAt={terminalCreatedAt}

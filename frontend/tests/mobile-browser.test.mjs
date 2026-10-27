@@ -351,20 +351,19 @@ try {
     const catalog = page.getByRole('dialog', { name: '终端列表', exact: true });
     await catalog.waitFor();
     assert.equal(await catalog.locator('.terminal-panel-row').count(), 2);
-    const scope = async group => {
-      await catalog.getByRole('button', { name: `${group} 显示范围`, exact: true }).click();
+    const scope = async () => {
+      await catalog.getByRole('button', { name: '终端 显示范围', exact: true }).click();
       await page.getByRole('menuitemcheckbox', { name: '显示所有Worktree' }).click();
     };
-    await scope('用户终端');
+    await scope();
     await catalog.getByRole('button', { name: /远程 Shell/, exact: false }).first().waitFor();
-    assert.equal(await catalog.locator('.terminal-panel-row').filter({ hasText: '远程 CLI' }).count(), 0, 'each terminal group has its own scope');
-    await scope('CLI 终端');
+    assert.equal(await catalog.locator('.instance-panel-group').count(), 1, 'all terminal origins share one panel');
     const remoteCli = catalog.locator('.terminal-panel-row').filter({ hasText: '远程 CLI' });
     await remoteCli.locator('.terminal-panel-open').waitFor();
     assert.equal(await catalog.getByText('其他项目实例', { exact: true }).count(), 0);
     assert.equal(await page.locator('.mobile-terminal-tabs [role="tab"]').count(), 4, 'browsing does not add tabs');
     assert.equal(state.sockets.length, 0, 'listing all worktrees never attaches to their terminals');
-    await catalog.getByRole('button', { name: '用户终端 显示范围', exact: true }).click();
+    await catalog.getByRole('button', { name: '终端 显示范围', exact: true }).click();
     await page.getByRole('menuitemradio', { name: '按创建时间' }).click();
     assert.match(await catalog.locator('.terminal-panel-row').first().textContent(), /远程 Shell/);
     await snapshot(page, 'mobile-terminal-catalog');
@@ -389,8 +388,8 @@ try {
     assert.equal(state.sockets.length, socketCount, 'opening the list and selecting the active instance keeps its connection');
 
     await header.getByRole('button', { name: '终端列表', exact: true }).click();
-    await scope('用户终端');
-    await catalog.getByRole('button', { name: '用户终端 显示范围', exact: true }).click();
+    await scope();
+    await catalog.getByRole('button', { name: '终端 显示范围', exact: true }).click();
     await page.keyboard.press('Escape');
     await page.getByRole('menu', { name: '终端显示范围' }).waitFor({ state: 'hidden' });
     await catalog.waitFor();
@@ -400,6 +399,7 @@ try {
     assert.equal(await header.getByRole('button', { name: '终端列表', exact: true }).evaluate(button => button === document.activeElement), true);
 
     await header.getByRole('button', { name: '终端列表', exact: true }).click();
+    await scope();
     await remoteCli.locator('.terminal-panel-open').click();
     await terminalReady(page);
     assert.match(state.sockets.at(-1).url(), /\/remote-cli\/panes\/remote-cli-pane\/ws/);
@@ -410,10 +410,10 @@ try {
     assert.equal(await page.getByRole('tab', { name: '远程 CLI', exact: true }).getAttribute('aria-selected'), 'true', 'returning restores hosted tabs and selection');
     assert.equal(await page.getByRole('tab', { name: '远程 Shell', exact: true }).count(), 1);
     await header.getByRole('button', { name: '终端列表', exact: true }).click();
-    assert.equal(await catalog.locator('.terminal-panel-row').filter({ hasText: '远程 Shell' }).count(), 0, 'scope choice is remembered');
+    assert.equal(await catalog.locator('.terminal-panel-row').filter({ hasText: '远程 Shell' }).count(), 1, 'shared scope choice is remembered');
     await remoteCli.locator('.terminal-panel-open').waitFor();
     state.terminalTabs.splice(state.terminalTabs.findIndex(tab => tab.id === 'remote-cli'), 1);
-    await catalog.getByRole('button', { name: '刷新 CLI 终端', exact: true }).click();
+    await catalog.getByRole('button', { name: '刷新 终端', exact: true }).click();
     await remoteCli.waitFor({ state: 'hidden' });
     await catalog.getByRole('button', { name: '关闭终端列表' }).click();
     assert.equal(await page.getByRole('tab', { name: '远程 CLI', exact: true }).count(), 0);
@@ -434,10 +434,10 @@ try {
     const catalog = page.getByRole('dialog', { name: '终端列表' });
     assert.equal(await catalog.getByRole('button', { name: /显示范围/ }).count(), 0);
     assert.equal(await catalog.locator('.terminal-panel-row').count(), 0, 'other worktrees are not listed');
-    const toggle = catalog.getByRole('button', { name: '展开 用户终端', exact: true });
+    const toggle = catalog.getByRole('button', { name: '展开 终端', exact: true });
     assert.equal(await toggle.getAttribute('aria-expanded'), 'false', 'empty panels start collapsed');
     await toggle.click();
-    assert.equal(await catalog.getByRole('button', { name: '收起 用户终端', exact: true }).getAttribute('aria-expanded'), 'true');
+    assert.equal(await catalog.getByRole('button', { name: '收起 终端', exact: true }).getAttribute('aria-expanded'), 'true');
     await catalog.getByText('暂无终端', { exact: true }).first().waitFor();
     await noOverflow(page);
     await page.mouse.click(5, 200);
@@ -504,7 +504,7 @@ try {
     state.terminalError = '暂时无法加载项目终端';
     await page.getByRole('button', { name: '终端列表', exact: true }).click();
     const catalog = page.getByRole('dialog', { name: '终端列表', exact: true });
-    await catalog.getByRole('button', { name: '用户终端 显示范围', exact: true }).click();
+    await catalog.getByRole('button', { name: '终端 显示范围', exact: true }).click();
     const menu = page.getByRole('menu', { name: '终端显示范围' });
     const bounds = await menu.boundingBox();
     assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 390 && bounds.y >= 0 && bounds.y + bounds.height <= 844);
@@ -513,7 +513,7 @@ try {
     await error.waitFor();
     assert.equal(await catalog.locator('.terminal-panel-row').count(), 3, 'cached instances remain available after a shared snapshot error');
     state.terminalError = null;
-    await catalog.getByRole('button', { name: '刷新 用户终端', exact: true }).click();
+    await catalog.getByRole('button', { name: '刷新 终端', exact: true }).click();
     const row = catalog.locator('.terminal-panel-row').filter({ hasText: '远程待销毁' });
     await row.waitFor();
     await error.waitFor({ state: 'detached' });
@@ -1366,11 +1366,11 @@ try {
     await row.getByRole('img', { name: '未连接', exact: true }).waitFor();
     assert.equal(await welcome.locator('[role="status"]').textContent(), '初始化中 · 服务器返回了无效的终端控制状态');
     cliPane.agent_terminal.phase = 'failed';
-    await page.getByRole('button', { name: '刷新 CLI 终端', exact: true }).click();
+    await page.getByRole('button', { name: '刷新 终端', exact: true }).click();
     await page.locator('[id="mobile-terminal-cli-state-tab:cli-state"] .mobile-dot.failed').waitFor();
     assert.match(await welcome.locator('[role="status"]').textContent(), /^启动失败 · 服务器返回了无效的终端控制状态/);
     cliPane.status = 'exited';
-    await page.getByRole('button', { name: '刷新 CLI 终端', exact: true }).click();
+    await page.getByRole('button', { name: '刷新 终端', exact: true }).click();
     await page.locator('[id="mobile-terminal-cli-state-tab:cli-state"] .mobile-dot.exited').waitFor();
     assert.equal(await row.locator('.terminal-panel-status-label').textContent(), '已退出');
     assert.deepEqual(state.errors, []);

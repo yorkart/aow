@@ -26,7 +26,7 @@ try {
     const session = { thread_id: 'local', session_id: 'remote', agent_id: 'test', cwd: '/repo', title: 'Conversation', status: 'idle', revision: 1, updated_at: '', entries: [], permissions: [], modes: {}, config_options: [], commands: [], usage: null };
     let state = initial.sharedState || { session, created: false, actions: [], saved: '', connectionGate: undefined, connectionError: '', connectionStatus: null, installGate: undefined, installError: '', installStatus: null, installed: false, installCalls: 0, connections: 0, listCalls: [], imports: [], loads: 0, deletes: 0, authRequired: false, authenticated: false, sessions: [], content: '// keep comment\n{ "agent_servers": {}, "future": { "keep": true }, }\n' };
     Object.assign(state, initial);
-    if (initial.panelScopes) await page.addInitScript(scopes => {
+    if (initial.panelScopes !== undefined) await page.addInitScript(scopes => {
       localStorage.setItem('aow-project-acp-scope:acp-preview', JSON.stringify(scopes));
     }, initial.panelScopes);
     state = await acpEventsFixture(page, state);
@@ -184,7 +184,7 @@ try {
       await route.fulfill({ json: data });
     });
     await page.goto(`${origin}/tests/acp-preview.html${settings ? '?settings' : ''}`);
-    if (!settings) await page.waitForFunction(() => document.querySelector('[aria-label="刷新 用户 ACP"]')?.disabled === false);
+    if (!settings) await page.waitForFunction(() => document.querySelector('[aria-label="刷新 ACP 会话"]')?.disabled === false);
     return { page, state };
   }
   await test('ACP sidebar recency follows submitted tasks instead of opening or background updates', async t => {
@@ -194,7 +194,7 @@ try {
     const { page, state } = await fixture(t, false, { sessions: [
       session('Older task', '2020-01-01T00:00:00Z'), session('Newer task', '2021-01-01T00:00:00Z'),
     ] });
-    const panel = page.getByRole('region', { name: "用户 ACP", exact: true });
+    const panel = page.getByRole('region', { name: "ACP 会话", exact: true });
     const titles = () => panel.locator('.aow-list-row-open').evaluateAll(rows => rows.map(row => row.title));
     const older = panel.locator('.acp-panel-row').filter({ has: page.getByRole('button', { name: '打开 ACP 会话 Older task', exact: true }) });
     await panel.getByRole('button', { name: '打开 ACP 会话 Older task', exact: true }).waitFor();
@@ -225,8 +225,8 @@ try {
     assert.deepEqual(await titles(), ['Older task', 'Newer task']);
   });
 
-  await test('ACP project panel groups explicit origins across worktrees and keeps scopes and creation sorting', async t => {
-    const session = (id, cwd, source, created, parent) => ({ thread_id: id.replaceAll(' ', '-'), session_id: id, agent_id: 'test', cwd, source, parent,
+  await test('ACP project panel combines origins across worktrees and keeps shared scope and creation sorting', async t => {
+    const session = (id, cwd, source, created, parent = null) => ({ thread_id: id.replaceAll(' ', '-'), session_id: id, agent_id: 'test', cwd, source, parent,
       title: id, status: 'idle', revision: 1, created_at: created, updated_at: '2026-10-01T00:00:00Z', entries: [], permissions: [], modes: {}, config_options: [], commands: [], usage: null });
     const { page, state } = await fixture(t, false, { sessions: [
       session('User main', '/repo', 'user', '2026-01-03'),
@@ -235,89 +235,83 @@ try {
       session('CLI main', '/repo', 'cli', '2026-01-04'),
       session('Other project', '/other', 'cli', '2026-01-01'),
     ] });
-    const user = page.getByRole('region', { name: "用户 ACP", exact: true });
-    const cli = page.getByRole('region', { name: "CLI ACP", exact: true });
-    await user.getByRole('button', { name: '打开 ACP 会话 User child', exact: true }).waitFor();
-    await cli.getByRole('button', { name: '打开 ACP 会话 CLI root', exact: true }).waitFor();
+    const panel = page.getByRole('region', { name: 'ACP 会话', exact: true });
+    const scope = () => panel.getByRole('button', { name: 'ACP 会话 显示范围', exact: true }).click();
+    const toggleScope = async () => { await scope(); await page.getByRole('menuitemcheckbox', { name: '显示所有Worktree' }).click(); };
+    await panel.getByRole('button', { name: '打开 ACP 会话 User child', exact: true }).waitFor();
+    await panel.getByRole('button', { name: '打开 ACP 会话 CLI root', exact: true }).waitFor();
+    assert.equal(await page.locator('.instance-panel-group').count(), 1);
     assert.equal(await page.getByRole('button', { name: '打开 ACP 会话 Other project', exact: true }).count(), 0);
     assert.deepEqual([...new Set(state.sessionListReads)].sort(), ['/repo', '/repo-feature']);
     assert.equal(state.snapshots || 0, 0, 'inventory never hydrates transcripts');
     assert.equal(state.connections, 0);
     if (process.env.ACP_PANEL_SCREENSHOT) await page.getByRole('region', { name: 'ACP 会话列表', exact: true }).screenshot({ path: process.env.ACP_PANEL_SCREENSHOT });
-    assert.deepEqual(await user.locator('.instance-worktree-heading > span').allTextContents(), ['主仓库 · main', 'feature']);
-    assert.equal(await user.locator('.instance-worktree-heading[aria-current="true"]').count(), 1);
-    assert.equal(await user.locator('.aow-panel-header .instance-panel-count').textContent(), '2');
-    await user.locator('.instance-worktree-heading').last().click();
-    assert.equal(await user.getByRole('button', { name: '打开 ACP 会话 User child', exact: true }).isVisible(), false);
-    await user.locator('.instance-worktree-heading').last().click();
-    await user.getByRole('button', { name: '用户 ACP 显示范围', exact: true }).click();
+    assert.deepEqual(await panel.locator('.instance-worktree-heading > span').allTextContents(), ['主仓库 · main', 'feature']);
+    assert.equal(await panel.locator('.instance-worktree-heading[aria-current="true"]').count(), 1);
+    assert.equal(await panel.locator('.aow-panel-header .instance-panel-count').textContent(), '4');
+    await panel.locator('.instance-worktree-heading').last().click();
+    assert.equal(await panel.getByRole('button', { name: '打开 ACP 会话 User child', exact: true }).isVisible(), false);
+    assert.equal(await panel.getByRole('button', { name: '打开 ACP 会话 CLI root', exact: true }).isVisible(), false);
+    await panel.locator('.instance-worktree-heading').last().click();
+    await scope();
     await page.getByRole('menuitemradio', { name: '按创建时间' }).click();
-    assert.deepEqual(await user.locator('.aow-list-row-title').allTextContents(), ['User child', 'User main']);
+    assert.deepEqual(await panel.locator('.aow-list-row-title').allTextContents(), ['User child', 'CLI root', 'User main', 'CLI main']);
     state.sessions[0].updated_at = '2027-01-01';
     state.sessions[1].title = 'User renamed'; state.sessions[1].status = 'working';
-    await user.getByRole('button', { name: '打开 ACP 会话 User renamed', exact: true }).waitFor();
-    await user.getByRole('status', { name: 'Agent 正在处理…' }).waitFor();
-    assert.match((await user.locator('.aow-list-row-title').allTextContents())[0], /User renamed/);
-    await user.getByRole('button', { name: '用户 ACP 显示范围', exact: true }).click();
-    await page.getByRole('menuitemcheckbox', { name: '显示所有Worktree' }).click();
-    assert.equal(await user.getByRole('button', { name: '打开 ACP 会话 User renamed', exact: true }).count(), 0);
-    await cli.getByRole('button', { name: '打开 ACP 会话 CLI root', exact: true }).waitFor();
+    await panel.getByRole('button', { name: '打开 ACP 会话 User renamed', exact: true }).waitFor();
+    await panel.getByRole('status', { name: 'Agent 正在处理…' }).waitFor();
+    assert.match((await panel.locator('.aow-list-row-title').allTextContents())[0], /User renamed/);
+    await toggleScope();
+    assert.deepEqual(await panel.locator('.aow-list-row-title').allTextContents(), ['User main', 'CLI main']);
     await page.reload();
-    await user.getByRole('button', { name: '打开 ACP 会话 User main', exact: true }).waitFor();
-    await cli.getByRole('button', { name: '打开 ACP 会话 CLI root', exact: true }).waitFor();
-    assert.equal(await user.getByRole('button', { name: '打开 ACP 会话 User renamed', exact: true }).count(), 0);
-    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('aow-project-acp-scope:acp-preview'))), { user: false, cli: true });
-    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('aow-project-acp-sort:acp-preview'))), { user: 'createdAt', cli: 'branch' });
-    await cli.getByRole('button', { name: '删除 ACP 会话 CLI root', exact: true }).click();
+    await panel.getByRole('button', { name: '打开 ACP 会话 User main', exact: true }).waitFor();
+    assert.deepEqual(await panel.locator('.aow-list-row-title').allTextContents(), ['User main', 'CLI main']);
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('aow-project-acp-scope:acp-preview'))), false);
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('aow-project-acp-sort:acp-preview'))), 'createdAt');
+    await toggleScope();
+    await panel.getByRole('button', { name: '删除 ACP 会话 CLI root', exact: true }).click();
     await page.getByRole('alertdialog').getByRole('button', { name: '删除', exact: true }).click();
-    await cli.getByRole('button', { name: '打开 ACP 会话 CLI root', exact: true }).waitFor({ state: 'detached' });
+    await panel.getByRole('button', { name: '打开 ACP 会话 CLI root', exact: true }).waitFor({ state: 'detached' });
     assert.equal(state.deletes, 1);
   });
-  for (const localSource of ['user', 'cli']) {
-    await test(`ACP project panel isolates loading and errors for local ${localSource} scope`, async t => {
-      let release;
-      const gate = new Promise(resolve => { release = resolve; });
-      t.after(() => release());
-      const session = (source, cwd) => ({ thread_id: `${source}-${cwd}`, agent_id: 'test', cwd, source,
-        title: `${source} ${cwd}`, status: 'idle', created_at: '2026-01-01', updated_at: '2026-01-02' });
-      const { page, state } = await fixture(t, false, {
-        sessions: ['user', 'cli'].flatMap(source => ['/repo', '/repo-feature'].map(cwd => session(source, cwd))),
-        panelScopes: { user: localSource !== 'user', cli: localSource !== 'cli' },
-        sessionListGates: { '/repo-feature': gate },
-        sessionListErrors: { '/repo-feature': 'Foreign inventory unavailable' },
-      });
-      const localTitle = localSource === 'user' ? "用户 ACP" : 'CLI ACP';
-      const allTitle = localSource === 'user' ? 'CLI ACP' : "用户 ACP";
-      const local = page.getByRole('region', { name: localTitle, exact: true });
-      const all = page.getByRole('region', { name: allTitle, exact: true });
-      const toggleLocal = async () => {
-        await local.getByRole('button', { name: `${localTitle} 显示范围`, exact: true }).click();
-        await page.getByRole('menuitemcheckbox', { name: '显示所有Worktree' }).click();
-      };
-      await local.getByRole('button', { name: `打开 ACP 会话 ${localSource} /repo`, exact: true }).waitFor();
-      await all.getByRole('status').waitFor();
-      assert.equal(await local.getByRole('status').count(), 0, 'foreign initial loads do not affect the local group');
-      await toggleLocal();
-      await local.getByRole('status').waitFor();
-      await toggleLocal();
-      assert.equal(await local.getByRole('status').count(), 0);
-      release();
-      await all.getByRole('alert').waitFor();
-      assert.match(await all.getByRole('alert').textContent(), /\/repo-feature: Foreign inventory unavailable/);
-      assert.equal(await local.getByRole('alert').count(), 0, 'foreign failures do not affect the local group');
-      await toggleLocal();
-      await local.getByRole('alert').waitFor();
-      await toggleLocal();
-      assert.equal(await local.getByRole('alert').count(), 0);
-      state.sessionListErrors = {};
-      await all.getByRole('button', { name: `刷新 ${allTitle}`, exact: true }).click();
-      await all.getByRole('button', { name: `打开 ACP 会话 ${localSource === 'user' ? 'cli' : 'user'} /repo-feature`, exact: true }).waitFor();
-      assert.equal(await page.getByRole('alert').count(), 0);
-      assert.equal(await local.getByRole('button', { name: `打开 ACP 会话 ${localSource} /repo-feature`, exact: true }).count(), 0);
-      assert.equal(state.snapshots || 0, 0, 'scope status uses metadata subscriptions only');
-      assert.equal(state.connections, 0);
+  await test('ACP project panel limits loading and errors to the shared display scope', async t => {
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    t.after(() => release());
+    const session = (source, cwd) => ({ thread_id: `${source}-${cwd}`, agent_id: 'test', cwd, source,
+      title: `${source} ${cwd}`, status: 'idle', created_at: '2026-01-01', updated_at: '2026-01-02' });
+    const { page, state } = await fixture(t, false, {
+      sessions: ['user', 'cli'].flatMap(source => ['/repo', '/repo-feature'].map(cwd => session(source, cwd))),
+      panelScopes: { user: false, cli: true },
+      sessionListGates: { '/repo-feature': gate },
+      sessionListErrors: { '/repo-feature': 'Foreign inventory unavailable' },
     });
-  }
+    const panel = page.getByRole('region', { name: 'ACP 会话', exact: true });
+    const toggleScope = async () => {
+      await panel.getByRole('button', { name: 'ACP 会话 显示范围', exact: true }).click();
+      await page.getByRole('menuitemcheckbox', { name: '显示所有Worktree' }).click();
+    };
+    await panel.getByRole('button', { name: '打开 ACP 会话 user /repo', exact: true }).waitFor();
+    await panel.getByRole('button', { name: '打开 ACP 会话 cli /repo', exact: true }).waitFor();
+    await panel.getByRole('status').waitFor();
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('aow-project-acp-scope:acp-preview'))), true, 'legacy scopes merge without hiding worktrees');
+    await toggleScope();
+    assert.equal(await panel.getByRole('status').count(), 0, 'foreign initial loads do not affect local scope');
+    await toggleScope();
+    await panel.getByRole('status').waitFor();
+    release();
+    await panel.getByRole('alert').waitFor();
+    assert.match(await panel.getByRole('alert').textContent(), /\/repo-feature: Foreign inventory unavailable/);
+    await toggleScope();
+    assert.equal(await panel.getByRole('alert').count(), 0, 'foreign failures do not affect local scope');
+    state.sessionListErrors = {};
+    await toggleScope();
+    await panel.getByRole('button', { name: '刷新 ACP 会话', exact: true }).click();
+    for (const source of ['user', 'cli']) await panel.getByRole('button', { name: `打开 ACP 会话 ${source} /repo-feature`, exact: true }).waitFor();
+    assert.equal(await page.getByRole('alert').count(), 0);
+    assert.equal(state.snapshots || 0, 0, 'scope status uses metadata subscriptions only');
+    assert.equal(state.connections, 0);
+  });
   const interactions = state => state.actions.filter(action => action.action !== 'resume');
   const newSession = async page => { await page.getByRole('button', { name: '新建窗体', exact: true }).click(); await page.getByRole('button', { name: '新建 ACP 会话：Test Agent', exact: true }).click(); };
   await test('session metadata whitelist formats queue messages without coupling to the Agent', async t => {
@@ -1002,7 +996,7 @@ try {
     ];
     const { page, state } = await fixture(t, false, { agents });
     assert.equal(await page.getByRole('button', { name: '新建 ACP 会话', exact: true }).count(), 0);
-    const emptyPanel = page.getByRole('region', { name: "用户 ACP", exact: true });
+    const emptyPanel = page.getByRole('region', { name: "ACP 会话", exact: true });
     await emptyPanel.locator('.aow-panel-toggle').click();
     await emptyPanel.getByText('暂无会话', { exact: true }).waitFor();
     await page.getByRole('button', { name: '新建窗体', exact: true }).click();
@@ -1041,7 +1035,7 @@ try {
   await test('only the controlling page restores and writes; takeover preserves live work and drafts', async t => {
     const { page: first, state } = await fixture(t);
     state.session.status = 'disconnected'; state.sessions.push(state.session);
-    await first.getByRole('button', { name: '刷新 用户 ACP', exact: true }).click();
+    await first.getByRole('button', { name: '刷新 ACP 会话', exact: true }).click();
     await first.getByRole('button', { name: '打开 ACP 会话 Conversation', exact: true }).click();
     const input = first.getByLabel('ACP 消息', { exact: true });
     await input.fill('Owner draft');
@@ -1952,7 +1946,7 @@ try {
     // A manual refresh must also revalidate the graph without an incoming event.
     state.instances[0].title = 'Refreshed child title';
     const loaded = page.waitForResponse(response => new URL(response.url()).pathname === '/api/instances');
-    await page.getByRole('button', { name: '刷新 用户 ACP', exact: true }).click();
+    await page.getByRole('button', { name: '刷新 ACP 会话', exact: true }).click();
     await loaded;
     await descendant.filter({ hasText: 'Refreshed child title' }).waitFor();
   });
@@ -3557,7 +3551,7 @@ try {
     await page.getByLabel('ACP 消息', { exact: true }).fill('Offline draft');
     state.connectionError = 'Offline';
     const sidebar = page.getByRole('region', { name: 'ACP 会话列表', exact: true });
-    await sidebar.getByRole('button', { name: '刷新 用户 ACP', exact: true }).click();
+    await sidebar.getByRole('button', { name: '刷新 ACP 会话', exact: true }).click();
     await sidebar.getByRole('button', { name: '打开 ACP 会话 Conversation', exact: true }).waitFor();
     await page.reload();
     await sidebar.getByRole('button', { name: '打开 ACP 会话 Conversation', exact: true }).waitFor();

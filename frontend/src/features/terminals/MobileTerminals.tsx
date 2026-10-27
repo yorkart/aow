@@ -30,14 +30,14 @@ const DEFAULT_TERMINAL_FONT_SIZE = 12;
 const terminalFontSize = (value: number) => Math.round(Math.min(28, Math.max(8, Number.isFinite(value) && value > 0 ? value : DEFAULT_TERMINAL_FONT_SIZE)) * 2) / 2;
 
 function terminalPreferences(workspace: string) {
-  const defaults = { opened: [] as string[], scopes: { user: false, cli: false }, sorts: { user: 'branch' as InstanceSort, cli: 'branch' as InstanceSort } };
+  const defaults = { opened: [] as string[], showAll: false, sortBy: 'branch' as InstanceSort };
   try {
     const saved = JSON.parse(storedMobileValue(`terminal-catalog.${workspace}`, '{}'));
     return {
       opened: Array.isArray(saved?.opened) ? saved.opened.filter((id: unknown): id is string => typeof id === 'string') : [],
-      scopes: { user: saved?.scopes?.user === true, cli: saved?.scopes?.cli === true },
-      sorts: { user: saved?.sorts?.user === 'createdAt' ? 'createdAt' as const : 'branch' as const,
-        cli: saved?.sorts?.cli === 'createdAt' ? 'createdAt' as const : 'branch' as const },
+      showAll: typeof saved?.showAll === 'boolean' ? saved.showAll : saved?.scopes?.user === true || saved?.scopes?.cli === true,
+      sortBy: (saved?.sortBy ?? (saved?.sorts?.user === 'createdAt' || saved?.sorts?.cli === 'createdAt' ? 'createdAt' : 'branch')) === 'createdAt'
+        ? 'createdAt' as const : 'branch' as const,
     };
   } catch { return defaults; }
 }
@@ -55,7 +55,7 @@ export function MobileTerminals({ project, worktree, visible, headerActions, ini
   const closeCatalog = useCallback(() => setCatalogOpen(false), []);
   const [operationError, setOperationError] = useState('');
   const canShowAll = worktree.is_main && !project.builtin;
-  const showAll = canShowAll && (preferences.scopes.user || preferences.scopes.cli);
+  const showAll = canShowAll && preferences.showAll;
   const hasHostedTabs = canShowAll && [...openedIds].some(id => !terminals.tabs.some(tab => tab.id === id));
   const projectTerminals = useProjectTerminals(project.worktrees, visible && (catalogOpen && canShowAll || hasHostedTabs));
   const detectedAgents = useMemo(() => ({ ...projectTerminals.agents, ...terminals.detectedAgents }), [projectTerminals.agents, terminals.detectedAgents]);
@@ -66,8 +66,7 @@ export function MobileTerminals({ project, worktree, visible, headerActions, ini
     ...terminals.tabs.filter(tab => !isCliTerminal(tab) || openedIds.has(tab.id) || tab.id === initialTabId),
     ...projectTerminals.tabs.filter(tab => canShowAll && tab.workspace_root !== workspace && openedIds.has(tab.id)),
   ], detectedAgents, titles, activity, processes), [terminals.tabs, projectTerminals.tabs, openedIds, initialTabId, canShowAll, workspace, detectedAgents, titles, activity, processes]);
-  const panelTabs = showAll ? [...terminals.tabs, ...projectTerminals.tabs.filter(tab => tab.workspace_root !== workspace
-    && preferences.scopes[isCliTerminal(tab) ? 'cli' : 'user'])] : terminals.tabs;
+  const panelTabs = showAll ? [...terminals.tabs, ...projectTerminals.tabs.filter(tab => tab.workspace_root !== workspace)] : terminals.tabs;
   const [selected, setSelected] = useState(() => storedMobileValue(`terminal.${workspace}`));
   const [visited, setVisited] = useState<Set<string>>(new Set());
   const initialTabApplied = useRef<string | undefined>(undefined);
@@ -158,9 +157,9 @@ export function MobileTerminals({ project, worktree, visible, headerActions, ini
           projectTerminals.reload();
           if (active?.tab.id === id && tab.panes[0]) setSelected(`${id}:${tab.panes[0].id}`);
         }}
-        worktrees={canShowAll ? project.worktrees : undefined} showAll={canShowAll ? preferences.scopes : undefined}
-        onShowAllChange={(group, value) => setPreferences(current => ({ ...current, scopes: { ...current.scopes, [group]: value } }))}
-        sortBy={preferences.sorts} onSortChange={(group, value) => setPreferences(current => ({ ...current, sorts: { ...current.sorts, [group]: value } }))}
+        worktrees={canShowAll ? project.worktrees : undefined} showAll={showAll}
+        onShowAllChange={showAll => setPreferences(current => ({ ...current, showAll }))}
+        sortBy={preferences.sortBy} onSortChange={sortBy => setPreferences(current => ({ ...current, sortBy }))}
         loading={showAll && projectTerminals.loading}
         error={showAll && projectTerminals.error !== (operationError || terminals.error) ? projectTerminals.error : undefined} />
     </>}</MobileTerminalCatalog>}

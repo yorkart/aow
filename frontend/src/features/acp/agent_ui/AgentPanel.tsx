@@ -4,13 +4,13 @@ import { useInstanceGraph } from '../../instances/useInstanceGraph';
 import { InstanceDescendants, indexTerminalChildren } from '../../terminals/TerminalDescendants';
 import { TaskCompletion } from '../../../components/TaskCompletion';
 import { useUnreadAcpThreadIds } from '../../notifications/taskNotifications';
-import { Download, Search, Trash2, UserRound, SquareTerminal } from 'lucide-react';
+import { Bot, Download, Search, Trash2 } from 'lucide-react';
 import { acpApi, settingsChanged } from '../api';
 import { useProjectSessions } from '../sync/projectSessions';
 import { compareSessionActivity, sessionDisplayTime } from '../session_activity';
 import { useProjectAcpPanel } from './projectPanel';
 import { useAowTabNavigation } from '../../../aow/tabNavigation';
-import { InstancePanelGroups } from '../../instances/InstancePanelGroups';
+import { InstancePanel } from '../../instances/InstancePanel';
 import { AowListRow } from '../../../components/AowListRow';
 import { failure, type AgentInfo, type SessionInfo } from '../types';
 import { ThreadImport } from './thread_import';
@@ -37,10 +37,10 @@ export function AgentPanel({ workspace, visible, activeThreadId, onOpen }: {
   const childrenIndex = useMemo(() => indexTerminalChildren([], graph.items), [graph.items]);
   const { confirm, confirmationDialog } = useConfirmation();
   const [agents, setAgents] = useState<AgentInfo[]>([]);
-  const { project, scopes, sorts, setScope, setSort } = useProjectAcpPanel();
+  const { project, showAll, sortBy, setShowAll, setSortBy } = useProjectAcpPanel();
   const navigate = useAowTabNavigation();
   const worktrees = project.builtin ? undefined : project.worktrees;
-  const paths = worktrees && (scopes.user || scopes.cli) ? worktrees.map(worktree => worktree.path) : [workspace];
+  const paths = worktrees && showAll ? worktrees.map(worktree => worktree.path) : [workspace];
   const synced = useProjectSessions(paths, visible);
   const local = synced.data.filter(session => session.cwd === workspace);
   const [importing, setImporting] = useState(false);
@@ -80,7 +80,7 @@ export function AgentPanel({ workspace, visible, activeThreadId, onOpen }: {
     catch (reason) { setError(failure(reason)); }
     finally { setOpening(''); }
   };
-  const matches = synced.data.filter(session => (session.cwd === workspace || scopes[session.source === 'cli' ? 'cli' : 'user'])
+  const matches = synced.data.filter(session => (session.cwd === workspace || showAll)
     && `${session.title} ${session.agent_id}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()))
     .sort(compareSessionActivity);
   const renderSession = (session: SessionInfo) => <InstanceDescendants key={session.thread_id} roots={[{ kind: 'acp', id: session.thread_id }]} title={session.title}
@@ -99,14 +99,10 @@ export function AgentPanel({ workspace, visible, activeThreadId, onOpen }: {
   return <section className="acp-history-panel" aria-label={t("acp.acp_session_list")}>
     <div className="acp-session-search"><Search size={13} /><input aria-label={t("acp.search_acp_sessions")} placeholder={t("acp.search_sessions")} value={search} onChange={event => setSearch(event.target.value)} /></div>
     {(error || graph.error) && <p className="acp-error" role="alert">{error || graph.error}</p>}
-    <InstancePanelGroups groups={[
-      { id: 'user', title: t("common.user_acp"), icon: <UserRound />, tooltip: t("acp.created_or_imported_by_user"), items: matches.filter(session => session.source !== 'cli'),
-        ...synced.statusFor(workspace, scopes.user),
-        actions: <AowIconButton title={t("acp.import_acp_sessions")} aria-label={t("acp.import_acp_sessions")} disabled={busy} onClick={() => setImporting(true)}><Download /></AowIconButton> },
-      { id: 'cli', title: t("common.cli_acp"), icon: <SquareTerminal />, tooltip: <><code>aow-cli acp</code>  {t("acp.create")}</>, items: matches.filter(session => session.source === 'cli'),
-        ...synced.statusFor(workspace, scopes.cli) },
-    ]} worktrees={worktrees} activeWorktreePath={workspace} showAll={scopes} sortBy={sorts}
-      onShowAllChange={setScope} onSortChange={setSort}
+    <InstancePanel title={t("acp.acp_sessions")} icon={<Bot />} items={matches} {...synced.statusFor(workspace, showAll)}
+      actions={<AowIconButton title={t("acp.import_acp_sessions")} aria-label={t("acp.import_acp_sessions")} disabled={busy} onClick={() => setImporting(true)}><Download /></AowIconButton>}
+      worktrees={worktrees} activeWorktreePath={workspace} showAll={showAll} sortBy={sortBy}
+      onShowAllChange={setShowAll} onSortChange={setSortBy}
       onReload={() => { synced.reload(); graph.reload(); setRefresh(value => value + 1); }}
       noun={t("acp.acp_sessions")} empty={search ? t("acp.no_matching_sessions") : t("acp.no_sessions")}
       itemKey={session => session.thread_id} itemWorkspace={session => session.cwd}

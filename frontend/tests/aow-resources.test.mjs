@@ -1358,7 +1358,7 @@ try {
     await surface(page).getByRole('button', { name: '关闭 Shell', exact: true }).click();
     await surface(page).locator('.project-aow-welcome').waitFor();
     state.defaultTerminalRoots = paths.slice(1);
-    await surface(page).getByRole('button', { name: '刷新 用户终端', exact: true }).click();
+    await surface(page).getByRole('button', { name: '刷新 终端', exact: true }).click();
     await eventually(async () => await surface(page).getByRole('region', { name: worktrees[0].path, exact: true }).locator('.terminal-panel-open').count() === 0);
     assert.equal(await isCompact(0), false, 'the empty main worktree keeps its full row');
     await row(4).locator('svg.lucide-cat').waitFor();
@@ -1454,7 +1454,7 @@ try {
     await surface(page).locator('.project-aow-welcome').waitFor();
     assert.equal((await compactPaths()).includes(paths[2]), false, 'a hidden user terminal is still a backend resource');
     state.closedTerminalIds.push('wt-2-tab');
-    await surface(page).getByRole('button', { name: '刷新 用户终端', exact: true }).click();
+    await surface(page).getByRole('button', { name: '刷新 终端', exact: true }).click();
     await eventually(async () => (await compactPaths()).includes(paths[2]));
   });
 
@@ -1830,7 +1830,7 @@ try {
     assert.equal(state.terminalMessages.some(item => item.url.includes('/terminals/cli-')), false);
     await surface(page).getByRole('button', { name: 'Terminal 面板', exact: true }).click();
     const list = surface(page).locator('.terminal-panel');
-    assert.equal(await list.getByRole('region', { name: "CLI 终端" }).locator('.terminal-panel-row').count(), 20);
+    assert.equal(await list.locator('.terminal-panel-row').filter({ hasText: /^CLI agent / }).count(), 20);
     const cliRow = list.locator('.terminal-panel-row').filter({ hasText: 'CLI agent 0' });
     assert.equal(await cliRow.locator('.terminal-panel-status-label').textContent(), '初始化中');
     await cliRow.getByRole('img', { name: '已隐藏', exact: true }).waitFor();
@@ -1848,7 +1848,7 @@ try {
     await page.setViewportSize({ width: 1000, height: 750 });
     assert.equal(state.terminalMessages.some(item => item.url.includes('/terminals/cli-') && typeof item.message === 'string' && JSON.parse(item.message).type === 'resize'), false);
     state.createdTerminalTabs[0].panes[0].agent_terminal.phase = 'ready';
-    await list.getByRole('button', { name: '刷新 CLI 终端', exact: true }).click();
+    await list.getByRole('button', { name: '刷新 终端', exact: true }).click();
     await eventually(async () => !await takeover.isDisabled());
     assert.equal(await cliRow.locator('.terminal-panel-status-label').textContent(), '运行中');
     await cliRow.getByRole('img', { name: '旁观中', exact: true }).waitFor();
@@ -1954,7 +1954,7 @@ try {
     state.terminalListTransform = tabs => tabs.map(tab => tab.id === current.id ? current : tab);
     const list = surface(page).locator('.terminal-panel');
     const row = list.getByRole('region', { name: worktrees[0].path, exact: true }).locator('.terminal-panel-row').filter({ hasText: 'Shell' });
-    const refresh = () => list.getByRole('button', { name: '刷新 用户终端', exact: true }).click();
+    const refresh = () => list.getByRole('button', { name: '刷新 终端', exact: true }).click();
     await refresh();
     await surface(page).locator('.terminal-pane-status.exited').waitFor();
     assert.equal(await row.locator('.terminal-panel-status-label').textContent(), '运行中');
@@ -2076,7 +2076,7 @@ try {
     const list = surface(page).locator('.terminal-panel');
     const row = list.locator('.terminal-panel-row').filter({ hasText: 'CLI agent 0' });
     state.createdTerminalTabs[0].panes[0].agent_terminal.phase = 'failed';
-    await list.getByRole('button', { name: '刷新 CLI 终端', exact: true }).click();
+    await list.getByRole('button', { name: '刷新 终端', exact: true }).click();
     await eventually(async () => await row.locator('.terminal-panel-status-label').textContent() === '启动失败');
     await row.getByRole('img', { name: '已隐藏', exact: true }).waitFor();
     await row.locator('.terminal-panel-open').click();
@@ -2085,7 +2085,7 @@ try {
     assert.equal(await surface(page).locator('.terminal-pane-status.failed').evaluate(el => getComputedStyle(el).backgroundColor),
       await row.locator('.terminal-panel-status-dot').evaluate(el => getComputedStyle(el).backgroundColor));
     state.createdTerminalTabs[0].panes[0].status = 'exited';
-    await list.getByRole('button', { name: '刷新 CLI 终端', exact: true }).click();
+    await list.getByRole('button', { name: '刷新 终端', exact: true }).click();
     await eventually(async () => await row.locator('.terminal-panel-status-label').textContent() === '已退出');
     await row.getByRole('img', { name: '已显示', exact: true }).waitFor();
     await row.getByRole('img', { name: '未连接', exact: true }).waitFor();
@@ -2097,7 +2097,7 @@ try {
     await row.getByRole('img', { name: '未连接', exact: true }).waitFor();
     assert.equal(await row.locator('.terminal-panel-status-label').textContent(), '已退出');
     state.createdTerminalTabs[0].panes[0].status = 'interrupted';
-    await list.getByRole('button', { name: '刷新 CLI 终端', exact: true }).click();
+    await list.getByRole('button', { name: '刷新 终端', exact: true }).click();
     await eventually(async () => await row.locator('.terminal-panel-status-label').textContent() === '已中断');
     assert.deepEqual(state.closedTerminalIds, []);
   });
@@ -2111,15 +2111,13 @@ try {
       }, worktrees[1].path);
     } });
     const list = surface(page).locator('.terminal-panel');
-    await eventually(async () => await list.locator('.instance-worktree-heading').count() === 4);
+    await eventually(async () => await list.locator('.instance-worktree-heading').count() === 2);
     const activePaths = () => list.locator('.instance-worktree-group.active').evaluateAll(groups => groups.map(group => group.getAttribute('aria-label')));
-    assert.deepEqual(await activePaths(), [worktrees[1].path, worktrees[1].path]);
-    for (const group of ['User', 'CLI']) {
-      await list.getByRole('button', { name: `${group} Terminals 显示范围`, exact: true }).click();
-      assert.equal(await page.getByRole('menuitemcheckbox').getAttribute('aria-checked'), 'true');
-      await page.keyboard.press('Escape');
-    }
-    assert.equal(await list.locator('.instance-worktree-heading[aria-current="true"]').count(), 2);
+    assert.deepEqual(await activePaths(), [worktrees[1].path]);
+    await list.getByRole('button', { name: '终端 显示范围', exact: true }).click();
+    assert.equal(await page.getByRole('menuitemcheckbox').getAttribute('aria-checked'), 'true');
+    await page.keyboard.press('Escape');
+    assert.equal(await list.locator('.instance-worktree-heading[aria-current="true"]').count(), 1);
     const backgrounds = await list.locator('.instance-worktree-group').evaluateAll(groups => groups.map(group => ({
       active: group.classList.contains('active'), color: getComputedStyle(group).backgroundColor,
     })));
@@ -2129,14 +2127,14 @@ try {
     state.allTerminalsGate = new Promise(resolve => { release = resolve; });
     t.after(() => release());
     await switchWorktree(page, 0);
-    await eventually(async () => (await activePaths()).every(path => path === worktrees[0].path) && await list.locator('.instance-worktree-heading').count() === 4);
+    await eventually(async () => (await activePaths()).every(path => path === worktrees[0].path) && await list.locator('.instance-worktree-heading').count() === 2);
     assert.equal(await list.getByRole('status').count(), 0, 'switching worktrees reuses the loaded project inventory');
     release();
     state.allTerminalsGate = null;
-    await list.getByRole('button', { name: '用户终端 显示范围', exact: true }).click();
+    await list.getByRole('button', { name: '终端 显示范围', exact: true }).click();
     await page.getByRole('menuitemradio', { name: '按创建时间', exact: true }).click();
     await switchWorktree(page, 1);
-    await list.getByRole('button', { name: '用户终端 显示范围', exact: true }).click();
+    await list.getByRole('button', { name: '终端 显示范围', exact: true }).click();
     assert.equal(await page.getByRole('menuitemradio', { name: '按创建时间', exact: true }).getAttribute('aria-checked'), 'true', 'sorting is shared across worktrees');
     await page.keyboard.press('Escape');
     assert.deepEqual(await activePaths(), [worktrees[1].path, worktrees[1].path]);
@@ -2153,77 +2151,61 @@ try {
     await surface(page).locator('.terminal-emulator-shell:not(.restore-pending):visible').waitFor();
   });
 
-  await test('repository terminal scope persists independent list choices with main first and no extra terminal connections', async t => {
+  await test('repository terminal scope persists shared list choices with main first and no extra terminal connections', async t => {
     const { page, state } = await fixture(t, { cliTerminals: 1 });
     const list = surface(page).locator('.terminal-panel');
-    const users = list.getByRole('region', { name: "用户终端", exact: true });
-    const agents = list.getByRole('region', { name: "CLI 终端", exact: true });
+    const panel = list.getByRole('region', { name: '终端', exact: true });
     state.createdTerminalTabs.push({ ...structuredClone(state.createdTerminalTabs[0]), id: 'foreign-cli', name: 'Worktree agent', workspace_root: worktrees[1].path });
     state.createdTerminalTabs.push({ ...structuredClone(state.createdTerminalTabs[0]), id: 'unrelated-cli', name: 'Unrelated agent', workspace_root: '/another-repository' });
     state.projects[0] = { ...project, worktrees: [worktrees[1], worktrees[0], { ...worktrees[1], id: 'empty', path: '/workspace/empty' }] };
     await page.getByRole('button', { name: '刷新全部', exact: true }).click();
     assert.equal(state.terminalListScopes.length, 0, 'project changes do not start terminal HTTP polling');
-    await eventually(async () => await list.locator('.instance-worktree-heading').count() === 4);
+    await eventually(async () => await panel.locator('.terminal-panel-row').count() === 4);
     const connectionCount = state.terminalMessages.filter(item => typeof item.message === 'string' && JSON.parse(item.message).type === 'claim').length;
     const option = page.getByRole('menuitemcheckbox', { name: '显示所有Worktree', exact: true });
-    for (const group of [users, agents]) {
-      assert.deepEqual(await group.locator('.instance-worktree-heading > span').allTextContents(), ['主仓库 · branch-0', 'branch-1']);
-      assert.deepEqual(await group.locator('.instance-worktree-heading .instance-panel-count').allTextContents(), ['1', '1']);
-      assert.equal(await group.locator('.aow-panel-header .instance-panel-count').textContent(), '2');
-      assert.match(await group.locator('.instance-worktree-heading').first().getAttribute('title'), /\/workspace\/wt-0/);
-    }
+    const scope = () => panel.getByRole('button', { name: '终端 显示范围', exact: true }).click();
+    assert.equal(await list.locator('.instance-panel-group').count(), 1);
+    assert.deepEqual(await panel.locator('.instance-worktree-heading > span').allTextContents(), ['主仓库 · branch-0', 'branch-1']);
+    assert.deepEqual(await panel.locator('.instance-worktree-heading .instance-panel-count').allTextContents(), ['2', '2']);
+    assert.equal(await panel.locator('.aow-panel-header .instance-panel-count').textContent(), '4');
+    assert.match(await panel.locator('.instance-worktree-heading').first().getAttribute('title'), /\/workspace\/wt-0/);
     assert.equal(await list.getByText('Unrelated agent', { exact: true }).count(), 0);
     assert.equal(await list.getByRole('region', { name: '/workspace/empty', exact: true }).count(), 0);
     assert.equal(await surface(page).getByRole('tab').count(), 1);
     assert.equal(state.terminalMessages.filter(item => typeof item.message === 'string' && JSON.parse(item.message).type === 'claim').length, connectionCount);
-    const foreignGroup = users.getByRole('region', { name: worktrees[1].path, exact: true });
+    const foreignGroup = panel.getByRole('region', { name: worktrees[1].path, exact: true });
     await foreignGroup.locator('.instance-worktree-heading').click();
-    assert.equal(await foreignGroup.locator('.terminal-panel-row').isVisible(), false);
+    assert.equal(await foreignGroup.locator('.terminal-panel-row:visible').count(), 0);
     await foreignGroup.locator('.instance-worktree-heading').press('Enter');
-    assert.equal(await foreignGroup.locator('.terminal-panel-row').isVisible(), true);
-    await agents.getByRole('button', { name: 'CLI 终端 显示范围', exact: true }).click();
+    assert.equal(await foreignGroup.locator('.terminal-panel-row:visible').count(), 2);
+    await scope();
     assert.equal(await option.getAttribute('aria-checked'), 'true');
     await page.keyboard.press('Escape');
-    assert.equal(await agents.getByRole('button', { name: 'CLI 终端 显示范围', exact: true }).evaluate(node => node === document.activeElement), true);
+    assert.equal(await panel.getByRole('button', { name: '终端 显示范围', exact: true }).evaluate(node => node === document.activeElement), true);
     if (process.env.TERMINAL_SCOPE_SCREENSHOT) await page.screenshot({ path: process.env.TERMINAL_SCOPE_SCREENSHOT });
-    await users.getByRole('button', { name: '用户终端 显示范围', exact: true }).click();
+    await scope();
     await option.click();
-    assert.equal(await users.locator('.instance-worktree-heading').count(), 0);
-    assert.equal(await users.locator('.terminal-panel-row').count(), 1);
-    assert.equal(await agents.locator('.instance-worktree-heading').count(), 2, 'disabling user terminals keeps CLI terminals global');
+    assert.equal(await panel.locator('.instance-worktree-heading').count(), 0);
+    assert.equal(await panel.locator('.terminal-panel-row').count(), 2, 'both origins follow the local scope');
     await page.reload();
-    await eventually(async () => await agents.locator('.instance-worktree-heading').count() === 2);
-    assert.equal(await users.locator('.instance-worktree-heading').count(), 0);
-    assert.equal(await users.locator('.terminal-panel-row').count(), 1);
-    await users.getByRole('button', { name: '用户终端 显示范围', exact: true }).click();
-    assert.equal(await option.getAttribute('aria-checked'), 'false', 'the user terminal choice survives reload');
+    await eventually(async () => await panel.locator('.terminal-panel-row').count() === 2);
+    assert.equal(await panel.locator('.instance-worktree-heading').count(), 0);
+    await scope();
+    assert.equal(await option.getAttribute('aria-checked'), 'false', 'the shared choice survives reload');
     await page.keyboard.press('Escape');
     await switchWorktree(page, 1);
-    assert.equal(await surface(page).getByRole('button', { name: /Terminals 显示范围/ }).count(), 2);
-    assert.equal(await users.locator('.instance-worktree-heading').count(), 0);
-    assert.equal(await agents.locator('.instance-worktree-heading').count(), 2);
-    await users.getByRole('button', { name: '用户终端 显示范围', exact: true }).click();
+    assert.equal(await surface(page).getByRole('button', { name: '终端 显示范围', exact: true }).count(), 1);
+    assert.equal(await panel.locator('.instance-worktree-heading').count(), 0);
+    await scope();
     assert.equal(await option.getAttribute('aria-checked'), 'false', 'the scope is shared with sibling worktrees');
     await option.click();
     await switchWorktree(page, 0);
-    await agents.getByRole('button', { name: 'CLI 终端 显示范围', exact: true }).click();
-    assert.equal(await option.getAttribute('aria-checked'), 'true', 'the CLI terminal choice survives reload and worktree switches');
-    await option.click();
-    assert.equal(await users.locator('.instance-worktree-heading').count(), 2, 'disabling CLI terminals keeps user terminals global');
-    assert.equal(await agents.locator('.instance-worktree-heading').count(), 0);
-    assert.equal(await agents.locator('.terminal-panel-row').count(), 1);
-    await page.reload();
-    await eventually(async () => await users.locator('.instance-worktree-heading').count() === 2);
-    assert.equal(await agents.locator('.instance-worktree-heading').count(), 0);
-    assert.equal(await agents.locator('.terminal-panel-row').count(), 1);
-    await agents.getByRole('button', { name: 'CLI 终端 显示范围', exact: true }).click();
-    assert.equal(await option.getAttribute('aria-checked'), 'false');
+    await scope();
+    assert.equal(await option.getAttribute('aria-checked'), 'true');
     await page.keyboard.press('Escape');
-    await users.getByRole('button', { name: '用户终端 显示范围', exact: true }).click();
-    await option.click();
-    assert.equal(await list.locator('.instance-worktree-heading').count(), 0);
-    assert.equal(await users.locator('.terminal-panel-row').count(), 1);
-    assert.equal(await agents.locator('.terminal-panel-row').count(), 1);
+    await page.reload();
+    await eventually(async () => await panel.locator('.instance-worktree-heading').count() === 2);
+    assert.equal(await panel.locator('.terminal-panel-row').count(), 4);
     const globalAgentRequests = state.terminalAgentScopes.filter(scope => scope === null).length;
     await delay(3200);
     assert.equal(state.terminalAgentScopes.filter(scope => scope === null).length, globalAgentRequests, 'sidebar inventory must not enable global terminal agent polling');
@@ -2246,7 +2228,7 @@ try {
     await surface(page).locator('.terminal-emulator-shell:not(.restore-pending):visible').waitFor();
     await remote().getByRole('img', { name: '已接管', exact: true }).waitFor();
     await remote().getByRole('img', { name: '已显示', exact: true }).waitFor();
-    assert.equal(await surface(page).getByRole('button', { name: /Terminals 显示范围/ }).count(), 2);
+    assert.equal(await surface(page).getByRole('button', { name: '终端 显示范围', exact: true }).count(), 1);
     await remote().click({ button: 'right' });
     await page.getByRole('menuitem', { name: '打开 · 浮动工作区', exact: true }).click();
     const floating = page.getByRole('dialog', { name: '浮动工作区', exact: true });
@@ -2307,11 +2289,11 @@ try {
     await ready();
     assert.equal(await page.evaluate(() => localStorage.getItem('aow-active')), worktrees[0].path);
     assert.match(page.url(), /\/aow\/tabs\/terminal\/wt-1-tab/);
-    await list.getByRole('button', { name: '用户终端 显示范围', exact: true }).click();
+    await list.getByRole('button', { name: '终端 显示范围', exact: true }).click();
     await page.getByRole('menuitemcheckbox').click();
     await ready();
     assert.equal(await tab(page, 'Remote shell').count(), 1, 'changing the listing scope preserves the opened terminal');
-    await list.getByRole('button', { name: '用户终端 显示范围', exact: true }).click();
+    await list.getByRole('button', { name: '终端 显示范围', exact: true }).click();
     await page.getByRole('menuitemcheckbox').click();
     await tab(page, 'Remote shell').click({ button: 'right' });
     await page.getByRole('menuitem', { name: '重命名', exact: true }).click();
@@ -2326,7 +2308,7 @@ try {
     assert.equal(await surface(page).getByRole('tab').count(), 0, 'closing also removes the source placeholder');
     assert.deepEqual(state.closedTerminalIds, []);
     await switchWorktree(page, 0);
-    await list.getByRole('button', { name: '刷新 用户终端', exact: true }).click();
+    await list.getByRole('button', { name: '刷新 终端', exact: true }).click();
     await list.locator('.terminal-panel-open').filter({ hasText: 'Hosted renamed' }).click();
     await ready();
     assert.equal(state.createdTerminals.length, 0);
@@ -2577,7 +2559,7 @@ try {
     remote.panes[0].cwd = worktrees[1].path;
     remote.layout.pane_id = 'new-cli-pane';
     state.createdTerminalTabs.push(remote);
-    await surface(page).getByRole('button', { name: '刷新 CLI 终端', exact: true }).click();
+    await surface(page).getByRole('button', { name: '刷新 终端', exact: true }).click();
     await surface(page).locator('.terminal-panel-open').filter({ hasText: remote.name }).click();
     await surface(page).getByRole('tab').filter({ hasText: remote.name }).waitFor();
     await surface(page).locator('.terminal-connection.observing').waitFor();
@@ -2602,7 +2584,7 @@ try {
     } });
     const list = surface(page).locator('.terminal-panel');
     const toggle = async () => {
-      await list.getByRole('button', { name: '用户终端 显示范围', exact: true }).click();
+      await list.getByRole('button', { name: '终端 显示范围', exact: true }).click();
       await page.getByRole('menuitemcheckbox').click();
     };
     await toggle();
@@ -2613,12 +2595,12 @@ try {
     await toggle();
     await eventually(async () => await list.locator('.instance-worktree-heading').count() === 2);
     state.terminalError = 'Terminal inventory unavailable';
-    await list.getByRole('button', { name: '刷新 用户终端', exact: true }).click();
+    await list.getByRole('button', { name: '刷新 终端', exact: true }).click();
     const error = list.getByRole('alert').filter({ hasText: 'Terminal inventory unavailable' });
     await error.waitFor();
     assert.equal(await list.locator('.terminal-panel-row').count(), 2, 'failed snapshots preserve the last successful inventory');
     state.terminalError = null;
-    await list.getByRole('button', { name: '刷新 用户终端', exact: true }).click();
+    await list.getByRole('button', { name: '刷新 终端', exact: true }).click();
     await error.waitFor({ state: 'detached' });
     assert.equal(await list.locator('.terminal-panel-row').count(), 2);
     assert.equal(state.terminalListScopes.length, 0);
@@ -2641,7 +2623,7 @@ try {
     assert.deepEqual(state.closedTerminalIds, []);
     assert.equal(await row.getByRole('img', { name: '已隐藏', exact: true }).isVisible(), true);
 
-    await list.getByRole('button', { name: '刷新 用户终端', exact: true }).click();
+    await list.getByRole('button', { name: '刷新 终端', exact: true }).click();
     await page.reload();
     await row.waitFor();
     assert.equal(await surface(page).getByRole('tab').count(), 0, 'hidden state survives polling and reload');

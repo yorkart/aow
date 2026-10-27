@@ -792,14 +792,13 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   useEffect(() => () => floating.publishHost(worktree.path), [floating.publishHost, worktree.path]);
   const [rightView, setRightView] = useState<RightView>('terminals');
   const canShowAllTerminals = !project.builtin;
-  const { inventory: projectTerminals, scopes: terminalScopes, sorts: terminalSorts, setScope, setSort } = useProjectTerminalPanel(
+  const { inventory: projectTerminals, showAll: terminalShowAll, sortBy: terminalSort, setShowAll, setSortBy } = useProjectTerminalPanel(
     active && rightSidebarVisible && rightView === 'terminals',
   );
-  const showAllTerminals = canShowAllTerminals && (terminalScopes.user || terminalScopes.cli);
+  const showAllTerminals = canShowAllTerminals && terminalShowAll;
   const localPanelTerminals = terminals.loaded ? terminals.tabs : projectTerminals.tabs.filter(tab => tab.workspace_root === worktree.path);
   const scopedPanelTerminals = showAllTerminals
-    ? [...localPanelTerminals, ...projectTerminals.tabs.filter(tab => tab.workspace_root !== worktree.path
-      && terminalScopes[isCliTerminal(tab) ? 'cli' : 'user'])]
+    ? [...localPanelTerminals, ...projectTerminals.tabs.filter(tab => tab.workspace_root !== worktree.path)]
     : terminals.tabs;
   const panelTerminals = terminalDock.tab && !scopedPanelTerminals.some(tab => tab.id === terminalDock.tab!.id)
     ? [...scopedPanelTerminals, terminalDock.tab] : scopedPanelTerminals;
@@ -2066,9 +2065,9 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
           activeId={terminalDock.visible ? terminalDock.terminalId : activeTerminalId} activeWorktreePath={worktree.path}
           detectedAgents={{ ...projectTerminals.agents, ...terminals.detectedAgents }}
           titles={{ ...projectTerminals.titles, ...terminals.terminalTitles }}
-          worktrees={canShowAllTerminals ? project.worktrees : undefined} showAll={canShowAllTerminals ? terminalScopes : undefined}
-          onShowAllChange={setScope}
-          sortBy={terminalSorts} onSortChange={setSort}
+          worktrees={canShowAllTerminals ? project.worktrees : undefined} showAll={showAllTerminals}
+          onShowAllChange={setShowAll}
+          sortBy={terminalSort} onSortChange={setSortBy}
           loading={showAllTerminals && projectTerminals.loading} error={showAllTerminals ? projectTerminals.error : undefined}
           openedIds={new Set([...openedTerminals.map(tab => tab.id), ...hostedTabs.map(tab => tab.targetId), ...(terminalDock.visible && terminalDock.terminalId ? [terminalDock.terminalId] : [])])}
           onReload={() => { void terminals.reload(); projectTerminals.reload(); }}

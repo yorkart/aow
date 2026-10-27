@@ -22,7 +22,7 @@ function Preview() {
     <div style={{ width: 'min(380px, 100vw)', height: 'calc(100vh - 30px)' }}>
       <TabNavigationContext.Provider value={async target => setOpened(target.type === 'acp' ? `acp:${target.thread_id}` : target.type === 'terminal' ? `terminal:${target.tabId}` : '')}>
       <TerminalPanel tabs={currentOnly ? tabs.filter(tab => tab.workspace_root === '/repo') : tabs} descendantTabs={tabs}
-        worktrees={worktrees} activeWorktreePath="/repo" showAll={{ user: false, cli: false }}
+        worktrees={worktrees} activeWorktreePath="/repo"
         detectedAgents={{}} titles={{}} openedIds={new Set()} onReload={reload}
         onOpen={tab => setOpened(tab.id)} onOpenPane={(tab, paneId) => setOpened(`${tab.id}:${paneId}`)}
         onTerminate={async () => {}} onRebuild={async () => {}} />
