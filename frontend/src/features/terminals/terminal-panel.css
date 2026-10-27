@@ -2,12 +2,9 @@
 .terminal-panel-error { margin: 0; padding: 8px; color: var(--aow-error); font-size: 12px; }
 /* Reuse the worktree inset for the disclosure control, including ungrouped rows. */
 .terminal-panel-row { padding-left: 12px; }
-.terminal-panel-row .aow-list-row-title { padding-right: 46px; }
-.terminal-panel-status { display: flex; align-items: center; gap: 5px; overflow: hidden; font-size: 11px; color: var(--muted); white-space: nowrap; }
-.terminal-panel-status-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.terminal-panel-status-separator { flex: none; color: var(--muted); }
-.terminal-panel-status-dot { flex: 0 0 6px; width: 6px; height: 6px; }
-.terminal-panel-status > svg { flex: 0 0 13px; width: 13px; height: 13px; }
-.terminal-panel-status > .terminal-panel-state-active { color: var(--aow-success); }
+.terminal-panel-row:is(.exited,.closed) .aow-list-row-title { color: var(--muted); }
+.terminal-panel-row:is(.starting,.interrupted) .aow-list-row-title { color: var(--aow-warning); }
+.terminal-panel-row.failed .aow-list-row-title { color: var(--aow-error); }
+.terminal-panel-row .aow-list-row-open:has(.task-completion) .aow-list-row-title { padding-right: 46px; }
 .project-aow-terminal-menu .danger { margin-top: 3px; color: var(--aow-error); border-top: 1px solid var(--aow-line); border-radius: 0 0 3px 3px; }
 .project-aow-terminal-menu .danger:hover, .project-aow-terminal-menu .danger:focus-visible { color: var(--aow-text-hover); background: var(--aow-error-background); }

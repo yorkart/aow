@@ -351,6 +351,7 @@ try {
     const catalog = page.getByRole('dialog', { name: '终端列表', exact: true });
     await catalog.waitFor();
     assert.equal(await catalog.locator('.terminal-panel-row').count(), 2);
+    assert.ok(await catalog.locator('.terminal-panel-row').evaluateAll(rows => rows.every(row => row.getBoundingClientRect().height <= 45)), 'single-line catalog entries retain a 44px touch target');
     const scope = async () => {
       await catalog.getByRole('button', { name: '终端 显示范围', exact: true }).click();
       await page.getByRole('menuitemcheckbox', { name: '显示所有Worktree' }).click();
@@ -381,7 +382,7 @@ try {
     assert.match(state.sockets.at(-1).url(), /\/remote-shell\/panes\/remote-shell-pane\/ws/);
     const socketCount = state.sockets.length;
     await header.getByRole('button', { name: '终端列表', exact: true }).click();
-    await remoteShell.getByRole('img', { name: '已显示', exact: true }).waitFor();
+    await remoteShell.waitFor();
     await remoteShell.locator('.terminal-panel-open').click();
     await catalog.waitFor({ state: 'hidden' });
     assert.equal(await page.getByRole('tab').count(), 5);
@@ -472,7 +473,7 @@ try {
     const row = catalog.locator('.terminal-panel-row').filter({ hasText: '服务' });
     await row.getByRole('button', { name: '服务 终端操作', exact: true }).click();
     await page.getByRole('menuitem', { name: '重建', exact: true }).click();
-    await row.getByText('运行中', { exact: true }).waitFor();
+    await row.and(page.locator('.running')).waitFor();
     await catalog.getByRole('button', { name: '关闭终端列表' }).click();
     assert.equal(await page.getByRole('tab', { name: '服务', exact: true }).getAttribute('aria-selected'), 'true');
     await page.locator('#mobile-terminal-panel-tab-b\\:rebuilt-server .terminal-emulator-shell:not(.restore-pending)').waitFor();
@@ -1352,18 +1353,18 @@ try {
     assert.equal(await welcome.getByRole('status').textContent(), '初始化中 · 连接中');
     const dot = page.locator('[id="mobile-terminal-cli-state-tab:cli-state"] .mobile-dot');
     await page.getByRole('button', { name: '终端列表', exact: true }).click();
-    await row.getByRole('img', { name: '已显示', exact: true }).waitFor();
+    await row.waitFor();
     assert.equal(await dot.evaluate(el => getComputedStyle(el).backgroundColor),
-      await row.locator('.terminal-panel-status-dot').evaluate(el => getComputedStyle(el).backgroundColor));
+      await row.locator('.aow-list-row-title').evaluate(el => getComputedStyle(el).color));
     await page.waitForFunction(() => document.querySelector('.mobile-terminal-panel:not([hidden]) .terminal-restore-status') !== null);
     assert.equal(state.sockets.length, 1);
     const socket = state.sockets[0];
     socket.send(JSON.stringify({ type: 'control', state: 'observing' }));
     socket.send(JSON.stringify({ type: 'stream', epoch: 'epoch-observer', offset: 0, reset: true, replay_bytes: 0,
       restore_cols: 120, restore_rows: 40, restore: '\x1b[2J\x1b[Hobserver $ ' }));
-    await row.getByRole('img', { name: '旁观中', exact: true }).waitFor();
+    await page.waitForFunction(() => document.querySelector('.mobile-terminal-panel:not([hidden]) .terminal-connection')?.classList.contains('observing'));
     socket.send(JSON.stringify({ type: 'control', state: 'invalid' }));
-    await row.getByRole('img', { name: '未连接', exact: true }).waitFor();
+    await page.waitForFunction(() => document.querySelector('.mobile-terminal-panel:not([hidden]) .terminal-connection')?.classList.contains('disconnected'));
     assert.equal(await welcome.locator('[role="status"]').textContent(), '初始化中 · 服务器返回了无效的终端控制状态');
     cliPane.agent_terminal.phase = 'failed';
     await page.getByRole('button', { name: '刷新 终端', exact: true }).click();
@@ -1372,7 +1373,7 @@ try {
     cliPane.status = 'exited';
     await page.getByRole('button', { name: '刷新 终端', exact: true }).click();
     await page.locator('[id="mobile-terminal-cli-state-tab:cli-state"] .mobile-dot.exited').waitFor();
-    assert.equal(await row.locator('.terminal-panel-status-label').textContent(), '已退出');
+    assert.match(await row.getAttribute('class'), /\bexited\b/);
     assert.deepEqual(state.errors, []);
   });
 

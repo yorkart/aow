@@ -34,15 +34,16 @@ try {
     return { page, update(next) { tabs = next; } };
   }
 
-  await test('all original items retain status; each independently expands its descendants across origins and worktrees', async t => {
+  await test('all original items stay single-line; each independently expands its descendants across origins and worktrees', async t => {
     const { page } = await fixture(t);
     assert.equal(await page.getByRole('region', { name: "终端", exact: true }).count(), 1);
     assert.equal(await page.locator('.instance-panel-group').count(), 1);
     assert.equal(await page.locator('.terminal-family').count(), 4);
-    assert.equal(await page.locator('.terminal-panel-status').count(), 4);
+    assert.equal(await page.locator('.terminal-panel-status').count(), 0);
     assert.equal(await page.locator('.terminal-descendant').count(), 0);
     assert.equal(await root(page, 'd').locator('.terminal-children-toggle').count(), 0);
     const before = await root(page, 'a').locator('.terminal-panel-row').boundingBox();
+    assert.ok(before.height <= 32, 'terminal entries occupy one line');
     await expandRoot(page, 'a');
     assert.equal(await root(page, 'a').locator('.terminal-descendant-open').innerText(), 'feat/auth · 实现认证接口');
     assert.equal(await root(page, 'a').locator('.terminal-descendant .terminal-panel-status').count(), 0);

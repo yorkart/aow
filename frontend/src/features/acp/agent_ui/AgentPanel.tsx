@@ -92,8 +92,8 @@ export function AgentPanel({ workspace, visible, activeThreadId, onOpen }: {
       titlePrefix={session.status === 'working' ? <><span role="status" aria-label={t("aow.agent_is_working")}><SpinnerLabel /></span>{' '}</> : undefined}
       actions={<AowIconButton className="aow-list-row-menu" title={t("acp.delete_session_2")} aria-label={t("acp.delete_acp_session_2", { value0: session.title })} disabled={!!opening}
         onClick={() => { void remove(session); }}><Trash2 /></AowIconButton>}>
-      <small title={`${session.agent_id} · ${sessionDisplayTime(session)}`}>{timestamp(sessionDisplayTime(session)) || session.agent_id}</small>
       {unread.has(session.thread_id) && <TaskCompletion />}
+      <small className="acp-panel-time" title={`${session.agent_id} · ${sessionDisplayTime(session)}`}>{timestamp(sessionDisplayTime(session)) || session.agent_id}</small>
     </AowListRow>
   </InstanceDescendants>;
   return <section className="acp-history-panel" aria-label={t("acp.acp_session_list")}>

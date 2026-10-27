@@ -1,14 +1,13 @@
 import { t } from '../../lib/i18n';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Eye, EyeOff, Glasses, ShieldCheck, SquareTerminal, Unplug } from 'lucide-react';
+import { SquareTerminal } from 'lucide-react';
 import type { TerminalTab } from './types';
 import type { AowWorktree } from '../../aow/types';
 import { terminalTabPresentation } from './terminalPresentation';
-import { terminalControlLabels, terminalDisplayLabels, terminalLifecycleLabels } from './terminalState';
+import { terminalLifecycleLabels } from './terminalState';
 import { requestTerminalPaneSelection, useTerminalStates } from './terminalViewState';
 import { useInstanceGraph } from '../instances/useInstanceGraph';
 import { indexTerminalChildren, TerminalDescendants } from './TerminalDescendants';
-import { TerminalLifecycleDot } from './TerminalLifecycleDot';
 import { TaskCompletion } from '../../components/TaskCompletion';
 import { useUnreadTerminalIds } from '../notifications/taskNotifications';
 import { AgentIcon } from '../agents/AgentIcon';
@@ -18,9 +17,6 @@ import { TerminalContextMenu } from './TerminalContextMenu';
 import type { InstanceSort } from '../instances/InstanceScopeMenu';
 import { InstancePanel } from '../instances/InstancePanel';
 import './terminal-panel.css';
-
-const terminalDisplayIcons = { shown: Eye, hidden: EyeOff };
-const terminalControlIcons = { observing: Glasses, controlled: ShieldCheck, disconnected: Unplug };
 
 function terminalCreatedAt(tab: TerminalTab) {
   const timestamp = typeof tab.created_at === 'number' ? tab.created_at : Date.parse(tab.created_at ?? '');
@@ -91,29 +87,15 @@ export function TerminalPanel({ tabs, descendantTabs = tabs, detectedAgents, tit
     const presentation = terminalTabPresentation(tab, detectedAgents, titles);
     const pane = tab.panes.find(pane => pane.agent_terminal) ?? tab.panes[0];
     const state = terminalState(tab, openedIds.has(tab.id));
-    const DisplayIcon = terminalDisplayIcons[state.display];
-    const ControlIcon = terminalControlIcons[state.control];
-    const displayLabel = terminalDisplayLabels[state.display];
-    const controlLabel = terminalControlLabels[state.control];
     return <TerminalDescendants key={tab.id} tab={tab} title={presentation.title} index={childrenIndex}
       worktrees={worktrees} detectedAgents={detectedAgents} titles={titles} activeId={activeId} onOpen={openChild}
       unreadTerminalIds={unreadTerminalIds}>
-      <AowListRow className={`terminal-panel-row${tab.id === activeId ? ' active' : ''}`}
+      <AowListRow className={`terminal-panel-row ${state.lifecycle}${tab.id === activeId ? ' active' : ''}`}
       openClassName="terminal-panel-open" key={tab.id}
-      title={presentation.title} tooltip={presentation.title}
+      title={presentation.title} tooltip={`${presentation.title}\n${terminalLifecycleLabels[state.lifecycle]}`}
       icon={<AgentIcon agentId={presentation.agentId ?? pane?.agent_id} />} onOpen={() => onOpen(tab)}
       menuLabel={t("terminals.terminal_actions_2")} menuExpanded={contextMenu?.tabId === tab.id}
       onMenu={(x, y) => { setContextMenu({ tabId: tab.id, x, y }); }}>
-      <small className="terminal-panel-status">
-        <TerminalLifecycleDot className="terminal-panel-status-dot" state={state.lifecycle} />
-        <span className="terminal-panel-status-label">{terminalLifecycleLabels[state.lifecycle]}</span>
-        <span className="terminal-panel-status-separator" aria-hidden="true">·</span>
-        <DisplayIcon className={state.display === 'shown' ? 'terminal-panel-state-active' : undefined}
-          role="img" aria-label={displayLabel}><title>{displayLabel}</title></DisplayIcon>
-        <span className="terminal-panel-status-separator" aria-hidden="true">·</span>
-        <ControlIcon className={state.control === 'controlled' ? 'terminal-panel-state-active' : undefined}
-          role="img" aria-label={controlLabel}><title>{controlLabel}</title></ControlIcon>
-      </small>
       {unreadTerminalIds.has(tab.id) && <TaskCompletion />}
     </AowListRow></TerminalDescendants>;
   };

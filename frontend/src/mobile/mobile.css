@@ -190,11 +190,12 @@ body { position:fixed; inset:0; }
 .mobile-terminal-catalog .instance-worktree-heading>span { font-size:12px; }
 .mobile-terminal-catalog .instance-panel-count { font-size:11px; }
 .mobile-terminal-catalog .terminal-panel-row { border-bottom:1px solid var(--aow-line-subtle); }
-.mobile-terminal-catalog .aow-list-row-open { min-height:64px; padding:12px; gap:10px; }
+.mobile-terminal-catalog .aow-list-row-open { min-height:44px; padding:12px; gap:10px; }
 .mobile-terminal-catalog .aow-list-row-title { padding-right:36px; font-size:13px; line-height:20px; }
-.mobile-terminal-catalog .aow-list-row-menu { top:7px; right:6px; width:40px; height:44px; color:var(--aow-icon-foreground, var(--aow-icon)); }
+.mobile-terminal-catalog .aow-list-row-menu { top:0; right:6px; width:40px; height:44px; color:var(--aow-icon-foreground, var(--aow-icon)); }
 .mobile-terminal-catalog .aow-list-row-menu>svg { width:18px; height:18px; }
-.mobile-terminal-catalog .terminal-panel-status { padding-right:32px; font-size:11px; line-height:18px; }
+.mobile-terminal-catalog .terminal-panel-row .task-completion { top:15px; right:52px; }
+.mobile-terminal-catalog .terminal-panel-row .aow-list-row-open:has(.task-completion) .aow-list-row-title { padding-right:60px; }
 .mobile-terminal-catalog .terminal-panel-empty,.mobile-terminal-catalog .terminal-panel-error { padding:16px; font-size:13px; }
 .mobile-terminal-catalog .project-aow-context-menu { width:230px; max-width:calc(100vw - 32px); font-size:13px; border-color:var(--m-line); border-radius:8px; background:var(--m-raised); }
 .mobile-terminal-catalog .project-aow-context-menu button { min-height:44px; height:auto; padding:10px; }

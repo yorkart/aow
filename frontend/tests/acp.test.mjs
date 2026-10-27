@@ -199,6 +199,13 @@ try {
     const older = panel.locator('.acp-panel-row').filter({ has: page.getByRole('button', { name: '打开 ACP 会话 Older task', exact: true }) });
     await panel.getByRole('button', { name: '打开 ACP 会话 Older task', exact: true }).waitFor();
     assert.deepEqual(await titles(), ['Newer task', 'Older task']);
+    const rowBounds = await older.boundingBox();
+    const titleBounds = await older.locator('.aow-list-row-title').boundingBox();
+    const timeBounds = await older.locator('.acp-panel-time').boundingBox();
+    const deleteBounds = await older.getByRole('button', { name: '删除 ACP 会话 Older task', exact: true }).boundingBox();
+    assert.ok(rowBounds.height <= 32, 'ACP entries occupy one line');
+    assert.ok(titleBounds.x + titleBounds.width <= timeBounds.x && timeBounds.x + timeBounds.width <= deleteBounds.x, 'time stays between the title and delete button');
+    assert.ok(Math.abs(titleBounds.y + titleBounds.height / 2 - timeBounds.y - timeBounds.height / 2) < 1, 'time aligns with the title');
     const displayedTime = await older.locator('small').getAttribute('title');
     await panel.getByRole('button', { name: '打开 ACP 会话 Older task', exact: true }).click();
     await page.getByRole('textbox', { name: 'ACP 消息', exact: true }).waitFor();
