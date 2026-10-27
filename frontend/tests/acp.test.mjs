@@ -3095,7 +3095,7 @@ try {
       assert.equal(await page.getByRole('navigation', { name: '用户输入导航' }).getByRole('button').getAttribute('title'), '[图片]');
     }
   });
-  await test('steering is capability-gated, preserves its turn and keeps stop available', async t => {
+  await test('steering is capability-gated, preserves its turn and shares one composer button with stop', async t => {
     const { page, state } = await fixture(t, false, { extensions: { steering: { supported: true } } });
     Object.assign(state.session, { status: 'working', turns: [{ user_entry_id: 'u', status: 'in_progress' }], entries: [
       { id: 'u', kind: 'user', content: { type: 'text', text: 'Original task' } },
@@ -3105,8 +3105,17 @@ try {
     state.session.revision++;
     const input = page.getByRole('textbox', { name: 'ACP 消息', exact: true });
     const steer = page.getByRole('button', { name: '追加指令', exact: true });
-    await steer.waitFor();
+    const stop = page.getByRole('button', { name: '停止', exact: true });
+    const send = page.getByRole('button', { name: '发送', exact: true });
+    await stop.waitFor();
+    assert.equal(await page.locator('.acp-composer .acp-send-button').count(), 1);
+    assert.equal(await steer.count(), 0);
+    await input.fill('   ');
+    assert.equal(await stop.isEnabled(), true);
+    assert.equal(await steer.count(), 0);
     await input.fill('Keep the change small');
+    await steer.waitFor();
+    assert.equal(await stop.count(), 0);
     state.steerError = 'Steering not available';
     await steer.click();
     await page.getByRole('alert').getByText('Steering not available', { exact: true }).waitFor();
@@ -3115,13 +3124,24 @@ try {
     await input.press('Enter');
     await page.getByText('追加指令 · 发送中…', { exact: true }).waitFor();
     assert.equal(await input.innerText(), '');
-    assert.equal(await steer.isDisabled(), true);
-    assert.equal(await page.getByRole('button', { name: '停止', exact: true }).isEnabled(), true);
+    assert.equal(await steer.count(), 0);
+    assert.equal(await stop.isEnabled(), true);
     assert.equal(state.actions.filter(action => action.action === 'prompt' || action.action === 'cancel').length, 0);
     assert.equal(await page.locator('.acp-entry-user').count(), 1, 'steering must not create a new rendered turn');
+    await input.fill('Next instruction');
+    assert.equal(await steer.count(), 0);
+    assert.equal(await stop.isEnabled(), true);
+    const pendingActions = state.actions.length;
+    await input.press('Enter');
+    assert.equal(state.actions.length, pendingActions, 'pending steering cannot be submitted twice');
     state.session.entries.at(-1).delivery.status = 'injected';
     state.session.steering_pending = false; state.session.revision++;
     await page.getByText('追加指令 · 已提交', { exact: true }).waitFor();
+    assert.equal(await steer.isEnabled(), true);
+    assert.equal(await stop.count(), 0);
+    await input.fill('');
+    await stop.waitFor();
+    assert.equal(await steer.count(), 0);
     await input.fill('Next instruction');
     assert.equal(await steer.isEnabled(), true);
     state.extensions = {};
@@ -3129,8 +3149,15 @@ try {
     const before = state.actions.length;
     await input.press('Enter');
     assert.equal(state.actions.length, before, 'an unsupported agent cannot receive mid-turn prompts');
-    await page.getByRole('button', { name: '停止', exact: true }).click();
+    await stop.click();
     assert.equal(state.actions.at(-1).action, 'cancel');
+    state.session.status = 'idle'; state.session.revision++;
+    await send.waitFor();
+    assert.equal(await stop.count(), 0);
+    assert.equal(await send.isEnabled(), true);
+    await send.click();
+    await page.getByText('Hello from ACP', { exact: true }).waitFor();
+    assert.equal(state.actions.at(-1).action, 'prompt');
   });
   await test('steering keeps identified fragments together and copies only the final answer', async () => {
     const { coalesceSteeringChunks } = await server.ssrLoadModule('/src/features/acp/agent_ui/conversation_view/steering_messages.ts');

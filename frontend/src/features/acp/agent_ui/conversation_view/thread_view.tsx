@@ -145,8 +145,9 @@ export function ThreadView({ session, workspace, tabId, busy: pending, supportsI
         {session.steering_untracked && <p className="acp-status" role="status">{t("acp.the_agent_started_a_follow_up_task_but_has")}</p>}
         {composeError && <p className="acp-error" role="alert">{composeError}</p>}
         <div className="acp-composer-toolbar"><span className="acp-composer-spacer" /><TokenUsage usage={session.usage} /><ConfigOptions session={session} disabled={busy || session.status === 'disconnected'} onAction={onAction} />
-          {working && <button className="acp-send-button acp-stop-button aow-icon-inherit" type="button" aria-label={t("acp.stop")} title={t("acp.stop")} disabled={busy} onClick={() => { void onAction({ action: 'cancel' }); }}><Square size={14} fill="currentColor" strokeWidth={0} /></button>}
-          {(!working || canSteer) && <button className="acp-send-button" type="submit" aria-label={canSteer ? t("acp.add_instructions") : t("acp.send")} title={canSteer ? t("acp.add_to_current_task_enter_shift_enter_for_a") : t("acp.send_enter_shift_enter_for_a_new_line")} disabled={!canSend}><Send size={16} /></button>}
+          {working && !canSend
+            ? <button className="acp-send-button acp-stop-button aow-icon-inherit" type="button" aria-label={t("acp.stop")} title={t("acp.stop")} disabled={busy} onClick={() => { void onAction({ action: 'cancel' }); }}><Square size={14} fill="currentColor" strokeWidth={0} /></button>
+            : <button className="acp-send-button" type="submit" aria-label={canSteer ? t("acp.add_instructions") : t("acp.send")} title={canSteer ? t("acp.add_to_current_task_enter_shift_enter_for_a") : t("acp.send_enter_shift_enter_for_a_new_line")} disabled={!canSend}><Send size={16} /></button>}
         </div>
       </form>
     }
