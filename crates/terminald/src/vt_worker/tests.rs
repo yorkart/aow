@@ -18,7 +18,7 @@ use super::{
     command::*, config::*, queue::*, rpc::*, session::*, snapshot::*, transport::*, worker::*,
 };
 
-fn test_client(capacity: usize) -> (VtWorkerClient, mpsc::Receiver<WorkerCommand>) {
+pub(super) fn test_client(capacity: usize) -> (VtWorkerClient, mpsc::Receiver<WorkerCommand>) {
     let (sender, receiver) = mpsc::channel(capacity);
     let (shutdown, _) = watch::channel(false);
     (
@@ -29,6 +29,7 @@ fn test_client(capacity: usize) -> (VtWorkerClient, mpsc::Receiver<WorkerCommand
             sessions: Arc::new(Mutex::new(Vec::new())),
             cached_snapshot_bytes: Arc::new(AtomicUsize::new(0)),
             pending_write_bytes: Arc::new(AtomicUsize::new(0)),
+            request_timeout: Duration::from_secs(5),
         },
         receiver,
     )
@@ -43,6 +44,7 @@ fn cache_test_snapshot(state: &SessionState) {
             cols: 80,
             rows: 24,
             ansi: "old snapshot".to_owned(),
+            gzip_decoded_bytes: None,
             lines: Vec::new(),
         },
     );
@@ -58,6 +60,15 @@ fn snapshot_dimensions_are_defensively_bounded() {
     for invalid in [0, 1_001, u16::MAX as u64] {
         assert!(result_dimension(&json!({ "cols": invalid }), "cols").is_err());
     }
+}
+
+#[test]
+fn default_history_matches_browser_capacity_and_remains_bounded() {
+    let mut config = VtWorkerConfig::new("node", "worker.mjs");
+    assert_eq!(config.scrollback, 5_000);
+    assert!(validate_config(&config).is_ok());
+    config.scrollback = 5_001;
+    assert!(validate_config(&config).is_err());
 }
 
 #[tokio::test]
@@ -440,6 +451,107 @@ async fn real_worker_tracks_offsets_and_resize_geometry() {
     })
     .await;
     assert!(resized.ansi.contains("world"));
+    session.dispose();
+    worker.shutdown().await;
+}
+
+#[tokio::test]
+async fn real_worker_caches_full_history_in_large_unicode_snapshots() {
+    let script =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../vt-worker/dist/vt-worker.mjs");
+    let worker = VtWorker::start(VtWorkerConfig::new("node", script))
+        .await
+        .unwrap();
+    let session = worker
+        .client()
+        .create_session("history".to_owned(), 300, 24);
+    let line = "\u{1b}[31m红\u{1b}[32m绿".repeat(70);
+    let output = (0..5_100)
+        .map(|index| format!("line-{index:05} {line}\u{1b}[0m\r\n"))
+        .collect::<String>();
+    for (index, chunk) in output.as_bytes().chunks(MAX_WRITE_BATCH_BYTES).enumerate() {
+        session.write((index * MAX_WRITE_BATCH_BYTES) as u64, chunk);
+    }
+    let snapshot = wait_for_snapshot(&session, |snapshot| {
+        snapshot.applied_offset == output.len() as u64
+    })
+    .await;
+    assert!(snapshot.ansi.len() > 2 * 1024 * 1024);
+    assert!(snapshot.ansi.len() <= MAX_CACHED_SNAPSHOT_BYTES);
+    // 5,100 completed lines + the empty cursor line, less 5,024 retained rows.
+    assert!(!snapshot.ansi.contains("line-00076"));
+    assert_eq!(snapshot.ansi.matches("line-").count(), 5_023);
+    assert!(snapshot.ansi.contains("line-00077"));
+    assert!(snapshot.ansi.contains("line-05099"));
+    assert!(session.state.is_active());
+    session.dispose();
+    worker.shutdown().await;
+}
+
+#[tokio::test]
+async fn oversized_snapshot_keeps_parsing_and_recovers_after_screen_clear() {
+    let directory = tempfile::tempdir().unwrap();
+    let script = directory.path().join("small-snapshot-worker.mjs");
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../vt-worker/src");
+    let source = format!(
+        r#"
+import {{ encodeFrame, readFrames }} from {framing};
+import {{ VtService }} from {service};
+import {{ failure, success }} from {protocol};
+const service = new VtService({{ maxSnapshotBytes: 32 }});
+for await (const frame of readFrames(process.stdin)) {{
+  const request = JSON.parse(frame.metadata);
+  let response, data;
+  try {{
+    const result = await service.dispatch(request.action, {{ ...request, data: frame.data }});
+    if (request.action === 'resize') continue;
+    const {{ data: payload, ...metadata }} = result;
+    data = payload;
+    response = success(request.id, request.action, metadata);
+  }} catch (error) {{
+    response = failure(request.id, request.action, error, request);
+  }}
+  await new Promise(resolve => process.stdout.write(encodeFrame(response, data), resolve));
+}}
+"#,
+        framing = serde_json::to_string(&root.join("framing.mjs")).unwrap(),
+        service = serde_json::to_string(&root.join("vt-service.mjs")).unwrap(),
+        protocol = serde_json::to_string(&root.join("protocol.mjs")).unwrap(),
+    );
+    std::fs::write(&script, source).unwrap();
+    let worker = VtWorker::start(VtWorkerConfig::new("node", script))
+        .await
+        .unwrap();
+    let session = worker
+        .client()
+        .create_session("oversized".to_owned(), 80, 24);
+    session.write(0, b"ready");
+    let previous = wait_for_snapshot(&session, |snapshot| snapshot.applied_offset == 5).await;
+    let output = "\r\nhistory".repeat(100);
+    session.write(5, output.as_bytes());
+    let offset = 5 + output.len() as u64;
+    timeout(Duration::from_secs(5), async {
+        while session.state.sent_offset.load(Ordering::Acquire) != offset
+            || session.state.dirty_bytes.load(Ordering::Acquire) != 0
+        {
+            assert!(session.state.is_active());
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(session.state.is_active());
+    assert_eq!(*session.state.applied_offset.borrow(), Some(offset));
+    assert_eq!(session.snapshot(), Some(previous));
+
+    let clear = b"\x1bcok";
+    session.write(offset, clear);
+    let recovered = wait_for_snapshot(&session, |snapshot| {
+        snapshot.applied_offset == offset + clear.len() as u64
+    })
+    .await;
+    assert!(recovered.ansi.contains("ok"));
+    assert!(!recovered.ansi.contains("history"));
     session.dispose();
     worker.shutdown().await;
 }

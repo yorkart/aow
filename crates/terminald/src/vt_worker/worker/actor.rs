@@ -49,7 +49,7 @@ pub(in crate::vt_worker) async fn run_worker_actor(
                 });
             }
             response = rpc.responses.recv() => {
-                // Mutation errors are handled immediately by the reader. No
+                // Mutation ACKs/errors are handled directly by the reader. No
                 // successful reply is expected unless an RPC is awaiting it.
                 break Some(match response {
                     Some(Err(error)) => format_rpc_error(&error),
@@ -109,7 +109,7 @@ pub(in crate::vt_worker) async fn run_worker_actor(
                 // An unresponsive Node RPC must not make daemon shutdown wait
                 // for the normal request timeout. Cancelling the in-flight RPC
                 // is safe here because the entire worker is about to be killed
-                // and every session will fall back to raw replay.
+                // and every session will stop publishing output.
                 let result = match await_actor_operation(
                     &mut child,
                     &mut shutdown,
@@ -168,7 +168,7 @@ pub(in crate::vt_worker) async fn run_worker_actor(
         state.fail();
     }
     if let Some(failure) = failure {
-        tracing::warn!(%failure, "VT worker stopped; terminal runtimes will use raw replay");
+        tracing::warn!(%failure, "VT worker stopped; terminal output stopped");
     }
     let _ = child.start_kill();
     let _ = timeout(Duration::from_secs(1), child.wait()).await;
@@ -256,12 +256,13 @@ pub(in crate::vt_worker) fn handle_command_error(
             tracing::warn!(
                 session_id = %state.session_id,
                 %message,
-                "VT worker rejected a session operation; using raw replay"
+                "VT worker rejected a session operation; terminal output stopped"
             );
             None
         }
-        RpcError::Io(_) | RpcError::Timeout | RpcError::Protocol(_) => {
-            Some(format_rpc_error(error))
-        }
+        RpcError::Io(_)
+        | RpcError::Timeout
+        | RpcError::Protocol(_)
+        | RpcError::SnapshotTooLarge => Some(format_rpc_error(error)),
     }
 }

@@ -48,10 +48,10 @@ const REPLAY_CHUNK_SIZE: usize = 64 * 1024;
 const OUTPUT_CHANNEL_CAPACITY: usize = 512;
 const SOCKET_SEND_TIMEOUT: Duration = Duration::from_secs(2);
 const SOCKET_WRITE_BUFFER_SIZE: usize = 64 * 1024;
-// A 2 MiB serialized ANSI snapshot can expand substantially when control
+// An 8 MiB serialized ANSI snapshot can expand up to 6x when control
 // bytes are escaped inside its JSON text frame. Keep the WebSocket buffer
 // bounded while leaving enough room for that single restore message.
-const SOCKET_MAX_WRITE_BUFFER_SIZE: usize = 16 * 1024 * 1024;
+const SOCKET_MAX_WRITE_BUFFER_SIZE: usize = 64 * 1024 * 1024;
 const MAX_RUNTIME_ID_BYTES: usize = 1024;
 const DELETE_REAP_TIMEOUT: Duration = Duration::from_secs(10);
 

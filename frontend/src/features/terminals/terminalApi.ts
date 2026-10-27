@@ -326,6 +326,7 @@ export const terminalApi = {
     // accompanying snapshot geometry. Unknown query parameters are ignored
     // by older servers, which keeps rolling upgrades on the raw replay path.
     url.searchParams.set('capabilities', 'vt-snapshot-v1');
+    url.searchParams.set('snapshot_compression', 'gzip');
     // Ask newer terminald instances for a read-only stream when another
     // browser attachment already owns terminal input. Older servers ignore
     // this capability and retain their existing waiting behavior.

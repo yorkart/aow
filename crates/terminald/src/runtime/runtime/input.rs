@@ -54,7 +54,7 @@ impl Runtime {
             })
             .map_err(|error| TerminaldError::Pty(error.to_string()))?;
         if let Some(vt_session) = &self.vt_session {
-            vt_session.resize(output.next_offset, cols, rows);
+            vt_session.resize(output.received_offset(), cols, rows);
         }
         drop(output);
         let mut metadata = self.metadata.lock().map_err(|_| TerminaldError::Poisoned)?;

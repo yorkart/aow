@@ -1,7 +1,7 @@
 use serde_json::Value;
 use std::{
     io,
-    sync::{Arc, Mutex, Weak},
+    sync::{Arc, Mutex, Weak, atomic::Ordering},
     time::Duration,
 };
 use tokio::{
@@ -42,8 +42,8 @@ impl RpcClient {
         request_timeout: Duration,
         sessions: Sessions,
     ) -> Self {
-        // Only one query is in flight. Mutation failures bypass this channel
-        // and invalidate their session directly; they cannot fill a reply
+        // Only one query is in flight. Mutation ACKs and errors bypass this
+        // channel and update their session directly; they cannot fill a reply
         // queue while the actor is blocked writing to a full pipe.
         let (sender, responses) = mpsc::channel(1);
         let reader = tokio::spawn(async move {
@@ -60,7 +60,7 @@ impl RpcClient {
                     response.metadata.get("action").and_then(Value::as_str),
                     Some("write" | "resize")
                 ) {
-                    if let Err(error) = mutation_error(response, &sessions) {
+                    if let Err(error) = mutation_response(response, &sessions) {
                         let _ = sender.send(Err(error)).await;
                         break;
                     }
@@ -168,6 +168,13 @@ impl RpcClient {
                 response.metadata = result;
                 Ok(response)
             }
+            Some(false)
+                if action == "snapshot"
+                    && header.pointer("/error/code").and_then(Value::as_str)
+                        == Some("snapshot_too_large") =>
+            {
+                Err(RpcError::SnapshotTooLarge)
+            }
             Some(false) => Err(RpcError::Worker(error_message(header))),
             None => Err(RpcError::Protocol(
                 "VT response omitted boolean ok".to_owned(),
@@ -188,21 +195,32 @@ fn error_message(value: &Value) -> String {
     format!("{code}: {message}")
 }
 
-fn mutation_error(response: Response, sessions: &Sessions) -> Result<(), RpcError> {
+pub(super) fn mutation_response(response: Response, sessions: &Sessions) -> Result<(), RpcError> {
     let header = response.metadata;
-    if header.get("ok").and_then(Value::as_bool) != Some(false) || !response.data.is_empty() {
+    let ok = header.get("ok").and_then(Value::as_bool);
+    if ok.is_none() || !response.data.is_empty() {
         return Err(RpcError::Protocol(
-            "one-way VT mutation returned an unexpected reply".to_owned(),
+            "invalid VT mutation response".to_owned(),
         ));
     }
-    let session_id = header
+    let result = if ok == Some(true) {
+        if header.get("action").and_then(Value::as_str) != Some("write") {
+            return Err(RpcError::Protocol("unexpected VT resize ACK".to_owned()));
+        }
+        header
+            .get("result")
+            .ok_or_else(|| RpcError::Protocol("VT write ACK omitted result".to_owned()))?
+    } else {
+        &header
+    };
+    let session_id = result
         .get("session_id")
         .and_then(Value::as_str)
-        .ok_or_else(|| RpcError::Protocol("mutation error omitted session_id".to_owned()))?;
-    let generation = header
+        .ok_or_else(|| RpcError::Protocol("mutation response omitted session_id".to_owned()))?;
+    let generation = result
         .get("generation")
         .and_then(Value::as_str)
-        .ok_or_else(|| RpcError::Protocol("mutation error omitted generation".to_owned()))?;
+        .ok_or_else(|| RpcError::Protocol("mutation response omitted generation".to_owned()))?;
     let sessions = sessions
         .lock()
         .map_err(|_| RpcError::Protocol("VT session registry poisoned".to_owned()))?;
@@ -211,8 +229,31 @@ fn mutation_error(response: Response, sessions: &Sessions) -> Result<(), RpcErro
         .filter_map(Weak::upgrade)
         .find(|session| session.session_id == session_id && session.generation == generation)
     {
-        session.fail();
-        tracing::warn!(%session_id, error = %error_message(&header), "VT worker rejected mutation; using raw replay");
+        if ok == Some(true) {
+            let applied = super::super::snapshot::result_u64(result, "applied_offset")?;
+            let bytes = super::super::snapshot::result_u64(result, "byte_length")?;
+            let mut invalid = false;
+            session.applied_offset.send_if_modified(|current| {
+                let Some(previous) = *current else {
+                    return false;
+                };
+                if applied.checked_sub(bytes) != Some(previous)
+                    || applied > session.sent_offset.load(Ordering::Acquire)
+                {
+                    invalid = true;
+                    return false;
+                }
+                *current = Some(applied);
+                applied != previous
+            });
+            if invalid {
+                session.fail();
+                return Err(RpcError::Protocol("non-contiguous VT write ACK".to_owned()));
+            }
+        } else {
+            session.fail();
+            tracing::warn!(%session_id, error = %error_message(&header), "VT worker rejected mutation; terminal output stopped");
+        }
     }
     Ok(())
 }

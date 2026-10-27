@@ -17,8 +17,9 @@ where
     run_with_shutdown_and_vt_worker(socket_path, shutdown, None).await
 }
 
-/// Run terminald with an optional headless-xterm sidecar. A missing or
-/// unstartable sidecar is an optimization failure, never a terminal outage.
+/// Run terminald with an optional headless-xterm sidecar. Without a sidecar,
+/// runtimes use raw output. Once enabled, its parse ACKs gate all publication;
+/// a failed session reports an error instead of switching to unparsed output.
 pub async fn run_with_shutdown_and_vt_worker<F>(
     socket_path: PathBuf,
     shutdown: F,

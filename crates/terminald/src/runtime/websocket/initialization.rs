@@ -12,6 +12,7 @@ struct StreamAttachment {
     owner: Option<ControllerOwner>,
     controller_changed: watch::Receiver<Option<ControllerOwner>>,
     restore: Option<String>,
+    restore_gzip: Option<aow_protocol::TerminalRestoreGzip>,
     restore_cols: Option<u16>,
     restore_rows: Option<u16>,
 }
@@ -28,6 +29,7 @@ impl From<ClaimedAttachment> for StreamAttachment {
             owner: Some(claimed.owner),
             controller_changed: claimed.controller_changed,
             restore: claimed.restore,
+            restore_gzip: claimed.restore_gzip,
             restore_cols: claimed.restore_cols,
             restore_rows: claimed.restore_rows,
         }
@@ -46,6 +48,7 @@ impl From<ObservedAttachment> for StreamAttachment {
             owner: None,
             controller_changed: observed.controller_changed,
             restore: observed.restore,
+            restore_gzip: observed.restore_gzip,
             restore_cols: observed.restore_cols,
             restore_rows: observed.restore_rows,
         }
@@ -92,6 +95,7 @@ where
         owner,
         controller_changed,
         restore,
+        restore_gzip,
         restore_cols,
         restore_rows,
     } = attachment;
@@ -101,6 +105,7 @@ where
         reset,
         replay_bytes,
         restore,
+        restore_gzip,
         restore_cols,
         restore_rows,
     };

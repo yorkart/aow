@@ -18,12 +18,14 @@ export async function runWorker({ input, output, logger = console, signal }) {
         }
         result = await service.dispatch(parsed.action, { ...parsed.request, data: frame.data });
       } catch (error) {
-        // Errors for one-way mutations carry their session/generation so the
+        // Mutation errors carry their session/generation so the
         // daemon can invalidate that session even when it is not awaiting RPC.
         await emit(failure(parsed?.id, parsed?.action, error, parsed?.request));
         continue;
       }
-      if (parsed.action === 'write' || parsed.action === 'resize') continue;
+      // A write reply acknowledges headless parsing, not merely pipe receipt.
+      // terminald pipelines bounded batches and publishes only this prefix.
+      if (parsed.action === 'resize') continue;
       const { data, ...metadata } = result;
       await emit(success(parsed.id, parsed.action, metadata), data);
     }

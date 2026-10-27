@@ -66,6 +66,11 @@ where
                 Some(current)
             }
         }
+        Ok(RuntimeEvent::OutputFailed(message)) => {
+            let _ = send_stream_error(sender, runtime, current.owner, "vt_worker_failed", &message)
+                .await;
+            None
+        }
         Ok(RuntimeEvent::Deleted) => {
             let _ = send_stream_error(
                 sender,

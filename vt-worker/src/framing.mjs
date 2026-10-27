@@ -1,7 +1,8 @@
-// Wire v1: u32be body length, u32be JSON length, JSON, then opaque bytes.
+// Wire v2 (writes acknowledge parsed offsets): u32be body length, u32be JSON length, JSON, then opaque bytes.
 // Body length includes the JSON-length field, but excludes its own field.
-export const PROTOCOL_VERSION = 1;
-export const MAX_FRAME_BYTES = 16 * 1024 * 1024 + 64 * 1024;
+export const PROTOCOL_VERSION = 2;
+// Leave room for 8 MiB of ANSI plus JSON-escaped viewport text and metadata.
+export const MAX_FRAME_BYTES = 64 * 1024 * 1024 + 64 * 1024;
 export const MAX_REQUEST_METADATA_BYTES = 64 * 1024;
 
 export function encodeFrame(metadata, data = Buffer.alloc(0)) {

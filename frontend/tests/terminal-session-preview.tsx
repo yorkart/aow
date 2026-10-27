@@ -2,7 +2,16 @@ import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { TerminalWorkspace } from '../src/features/terminals/TerminalWorkspace';
 import { Explorer } from '../src/features/files/Explorer';
+import { Terminal } from '@xterm/xterm';
 import '../src/styles.css';
+
+if (new URLSearchParams(location.search).has('history')) {
+  const open = Terminal.prototype.open;
+  Terminal.prototype.open = function (...args) {
+    (window.terminalHistoryPreview ??= []).push(this);
+    return open.apply(this, args);
+  };
+}
 
 const cwd = '/workspace/demo';
 const pane = (id: string) => ({ id, name: '我的自定义标题', name_is_custom: true, cwd, shell: '/bin/sh', kind: 'terminal', status: 'running', cols: 80, rows: 24 });

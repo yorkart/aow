@@ -66,6 +66,9 @@ pub(super) async fn process_command(
                 .checked_add(byte_length as u64)
                 .ok_or_else(|| RpcError::Session("VT write offset overflow".to_owned()))?;
             validate_js_offset(end_offset, "end_offset")?;
+            // Register the upper bound before sending: the independent stdout
+            // reader may observe the ACK before the pipe flush future returns.
+            session.sent_offset.store(end_offset, Ordering::Release);
             rpc.send(
                 "write",
                 json!({
@@ -76,7 +79,6 @@ pub(super) async fn process_command(
                 &batch.data,
             )
             .await?;
-            session.sent_offset.store(end_offset, Ordering::Release);
             let dirty = session
                 .dirty_bytes
                 .fetch_add(byte_length, Ordering::AcqRel)

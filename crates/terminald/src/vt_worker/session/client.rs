@@ -20,6 +20,7 @@ pub(crate) struct VtWorkerClient {
     pub(in crate::vt_worker) sessions: Arc<Mutex<Vec<Weak<SessionState>>>>,
     pub(in crate::vt_worker) cached_snapshot_bytes: Arc<AtomicUsize>,
     pub(in crate::vt_worker) pending_write_bytes: Arc<AtomicUsize>,
+    pub(in crate::vt_worker) request_timeout: std::time::Duration,
 }
 
 impl VtWorkerClient {
@@ -47,6 +48,7 @@ impl VtWorkerClient {
             geometry_revision: AtomicU64::new(0),
             sent_revision: AtomicU64::new(0),
             sent_offset: AtomicU64::new(0),
+            applied_offset: watch::channel(Some(0)).0,
             sent_cols: AtomicU16::new(cols),
             sent_rows: AtomicU16::new(rows),
             dirty_bytes: AtomicUsize::new(0),

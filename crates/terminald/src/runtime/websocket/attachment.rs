@@ -36,6 +36,7 @@ where
         connection.resume_after,
         force,
         connection.vt_snapshot,
+        connection.gzip_snapshot,
     ) {
         Ok(outcome) => outcome,
         Err(error) => {
@@ -62,6 +63,16 @@ where
             } else {
                 BeginClaim::Waiting
             }
+        }
+        ClaimOutcome::UnsupportedSnapshot => {
+            drop(gate);
+            let _ = send_socket_error(
+                sender,
+                "snapshot_format_unsupported",
+                "this terminal history requires a client with compressed snapshot support",
+            )
+            .await;
+            BeginClaim::End
         }
         ClaimOutcome::Claimed(claimed) => {
             // Keep the successful claim and its ACK in the same gated
@@ -105,6 +116,15 @@ where
             return None;
         }
     };
+    if observed.restore_gzip.is_some() && !connection.gzip_snapshot {
+        let _ = send_socket_error(
+            sender,
+            "snapshot_format_unsupported",
+            "this terminal history requires a client with compressed snapshot support",
+        )
+        .await;
+        return None;
+    }
     if send_control(sender, TerminalControlState::Observing)
         .await
         .is_err()

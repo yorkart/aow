@@ -7,8 +7,9 @@ use tokio::io::{AsyncRead, AsyncReadExt};
 use super::super::config::MAX_CACHED_SNAPSHOT_BYTES;
 
 // Keep aligned with vt-worker/src/framing.mjs.
-pub(super) const PROTOCOL_VERSION: u64 = 1;
-pub(super) const MAX_FRAME_BYTES: usize = 16 * 1024 * 1024 + 64 * 1024;
+pub(super) const PROTOCOL_VERSION: u64 = 2;
+// Includes the binary ANSI snapshot and JSON-escaped viewport text.
+pub(super) const MAX_FRAME_BYTES: usize = 64 * 1024 * 1024 + 64 * 1024;
 pub(super) const MAX_REQUEST_METADATA_BYTES: usize = 64 * 1024;
 
 pub(in crate::vt_worker) struct Response {

@@ -18,17 +18,18 @@ import { terminalPaneStatusMessage, type TerminalConnectionState } from './termi
 import { installMobileTerminalInput } from './terminalMobileInput';
 import { installMobileTerminalRendering } from './terminalMobileRendering';
 import { usePublishTerminalConnection } from './terminalViewState';
+import { TerminalOutputQueue } from './terminalOutputQueue';
+import { isCompressedTerminalSnapshot, writeCompressedTerminalSnapshot, type CompressedTerminalSnapshot } from './terminalSnapshot';
 import { EXPLORER_PATH_MIME, readExplorerPath } from '../files/explorerDrag';
 import '@xterm/xterm/css/xterm.css';
 import './terminal.css';
 
 // Keep reset replay bounded during rolling upgrades from the legacy daemon's
-// 64 MiB scrollback. Live output has a much tighter bound: once xterm falls
-// this far behind, a fresh attach can use terminald's VT snapshot instead of
-// parsing every stale frame.
+// 64 MiB scrollback. Live catch-up uses actual unparsed bytes, including those
+// already submitted to xterm. A large total output or many small frames alone
+// must not reset a consumer that is keeping up (Paseo's 4 MiB high-water mark).
 const MAX_REPLAY_QUEUED_BINARY_BYTES = 80 * 1024 * 1024;
-const MAX_LIVE_QUEUED_BINARY_BYTES = 1024 * 1024;
-const MAX_LIVE_PENDING_MESSAGES = 1024;
+const MAX_LIVE_QUEUED_BINARY_BYTES = 4 * 1024 * 1024;
 const MAX_SNAPSHOT_RECOVERY_REPLAY_BYTES = 1024 * 1024;
 const SNAPSHOT_RECOVERY_COOLDOWN_MS = 3000;
 // xterm time-slices parsing internally. Feeding one moderately sized chunk is
@@ -41,11 +42,13 @@ const MAX_XTERM_WRITE_BATCH_BYTES = 256 * 1024;
 // obsolete full-screen redraws. Local xterm fit remains animation-frame paced.
 const PTY_RESIZE_SETTLE_MS = 120;
 // Serialized VT state is carried in the Stream control message so it does not
-// advance the raw PTY byte offset. Match the worker's 2 MiB UTF-8 snapshot
+// advance the raw PTY byte offset. Match the worker's 8 MiB UTF-8 snapshot
 // limit. The browser validates bytes independently because a malformed server
 // response must not bypass the worker's authoritative limit with multibyte
 // Unicode.
-const MAX_VT_SNAPSHOT_BYTES = 2 * 1024 * 1024;
+const MAX_VT_SNAPSHOT_BYTES = 8 * 1024 * 1024;
+// Keep aligned with terminald's VT retention and full snapshot scrollback.
+const TERMINAL_SCROLLBACK_LINES = 5_000;
 const WAITING_RETRY_MIN_MS = 100;
 const WAITING_RETRY_MAX_MS = 1000;
 const DEFAULT_TERMINAL_LINE_HEIGHT = 1.15;
@@ -75,6 +78,7 @@ type ControlMessage = {
   // Silently dropping an invalid optional field would turn a malformed
   // snapshot into a seemingly valid legacy handshake.
   restore?: unknown;
+  restore_gzip?: unknown;
   restore_cols?: unknown;
   restore_rows?: unknown;
   state?: 'claimed' | 'observing' | 'waiting';
@@ -124,6 +128,7 @@ function controlMessage(value: string): ControlMessage | null {
         ? { replay_bytes: item.replay_bytes as number }
         : {}),
       ...(Object.prototype.hasOwnProperty.call(item, 'restore') ? { restore: item.restore } : {}),
+      ...(Object.prototype.hasOwnProperty.call(item, 'restore_gzip') ? { restore_gzip: item.restore_gzip } : {}),
       ...(Object.prototype.hasOwnProperty.call(item, 'restore_cols') ? { restore_cols: item.restore_cols } : {}),
       ...(Object.prototype.hasOwnProperty.call(item, 'restore_rows') ? { restore_rows: item.restore_rows } : {}),
       ...(item.state === 'claimed' || item.state === 'observing' || item.state === 'waiting' ? { state: item.state } : {}),
@@ -136,6 +141,7 @@ function controlMessage(value: string): ControlMessage | null {
 
 type TerminalRestore = {
   data: string;
+  gzip?: CompressedTerminalSnapshot;
   cols?: number;
   rows?: number;
 };
@@ -145,6 +151,19 @@ type TerminalRestoreValidation =
   | { ok: false; message: string; closeReason: string };
 
 function terminalRestore(control: ControlMessage & { reset: boolean }): TerminalRestoreValidation {
+  if (Object.prototype.hasOwnProperty.call(control, 'restore_gzip')) {
+    if (Object.prototype.hasOwnProperty.call(control, 'restore')
+      || !isCompressedTerminalSnapshot(control.restore_gzip)
+      || !Object.prototype.hasOwnProperty.call(control, 'restore_cols')
+      || !Object.prototype.hasOwnProperty.call(control, 'restore_rows')
+      || typeof DecompressionStream === 'undefined') {
+      return { ok: false, message: t("terminals.server_returned_invalid_terminal_recovery_data"), closeReason: 'invalid compressed terminal restore' };
+    }
+    const { restore_gzip: gzip, ...plain } = control;
+    const validation = terminalRestore({ ...plain, restore: '' });
+    if (validation.ok && validation.restore) validation.restore.gzip = gzip;
+    return validation;
+  }
   const hasRestore = Object.prototype.hasOwnProperty.call(control, 'restore');
   const hasRestoreCols = Object.prototype.hasOwnProperty.call(control, 'restore_cols');
   const hasRestoreRows = Object.prototype.hasOwnProperty.call(control, 'restore_rows');
@@ -333,26 +352,32 @@ function textByteLength(text: string) {
   return new TextEncoder().encode(text).byteLength;
 }
 
-async function writeAsyncClipboard(text: string) {
-  if (!window.isSecureContext || !navigator.clipboard?.writeText) return false;
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
+async function writeTerminalClipboard(text: string, isCurrent: () => boolean) {
+  if (!isCurrent()) return false;
+  if (window.isSecureContext && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch { /* Try the selection-based API while the user gesture is still active. */ }
   }
+  // LAN HTTP has no Async Clipboard API. OSC 52 arrives after the terminal
+  // application's mouse/keyboard response, but browsers may still allow copy
+  // using the original gesture. Only ask for another click if both APIs fail.
+  return isCurrent() && copyWithTextArea(text);
 }
 
 function copyWithTextArea(text: string) {
   const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
   const textarea = document.createElement('textarea');
   textarea.value = text;
+  textarea.readOnly = true;
+  textarea.tabIndex = -1;
   textarea.setAttribute('aria-hidden', 'true');
   textarea.style.position = 'fixed';
   textarea.style.left = '-10000px';
   textarea.style.top = '0';
   document.body.appendChild(textarea);
-  textarea.focus();
+  textarea.focus({ preventScroll: true });
   textarea.select();
   let copied = false;
   try { copied = document.execCommand('copy'); } catch { /* Browser denied the fallback. */ }
@@ -405,7 +430,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
   const lastSentResizeRef = useRef<{ socket: WebSocket; cols: number; rows: number } | undefined>(undefined);
   const mutationGenerationRef = useRef(0);
   const manualReconnectRef = useRef<(force?: boolean) => void>(() => {});
-  const terminalOperationQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const terminalOperationQueueRef = useRef(new TerminalOutputQueue());
   const callbackRef = useRef({ onFocus, onStatus });
   const paneStatusRef = useRef(pane.status);
   const renderedStatusRef = useRef<string | undefined>(undefined);
@@ -417,6 +442,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
   const pendingClipboardPathsRef = useRef<string[]>([]);
   const clipboardSuccessTimerRef = useRef<number | undefined>(undefined);
   const clipboardCopyTimerRef = useRef<number | undefined>(undefined);
+  const clipboardCopyRequestRef = useRef(0);
   const clipboardComponentAliveRef = useRef(true);
   const [connectionMessage, setConnectionMessage] = useState<string | undefined>(undefined);
   const [restorePending, setRestorePendingState] = useState(pane.status === 'running');
@@ -662,10 +688,15 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
     const text = clipboardCopyState?.text;
     if (!text || !clipboardPaneIsCurrent(/*requireTerminalFocus=*/ false)) return;
     const identity = activeIdentityRef.current;
-    const copied = await writeAsyncClipboard(text) || copyWithTextArea(text);
-    if (!clipboardComponentAliveRef.current
-      || activeIdentityRef.current !== identity
-      || !clipboardPaneIsCurrent(/*requireTerminalFocus=*/ false)) return;
+    const request = ++clipboardCopyRequestRef.current;
+    // This is an explicit user action on already received text. Copying does
+    // not mutate the PTY and remains available after exit or loss of control.
+    const isCurrent = () => clipboardComponentAliveRef.current
+      && activeIdentityRef.current === identity
+      && clipboardCopyRequestRef.current === request
+      && clipboardPaneIsCurrent(/*requireTerminalFocus=*/ false);
+    const copied = await writeTerminalClipboard(text, isCurrent);
+    if (!isCurrent()) return;
     if (copied) showClipboardCopySuccess();
     else setClipboardCopyState({ status: 'error', message: t("terminals.the_browser_denied_clipboard_access_check_site_permissions"), text });
     terminalRef.current?.focus();
@@ -717,7 +748,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
       lineHeight: DEFAULT_TERMINAL_LINE_HEIGHT,
       overviewRuler: { width: TERMINAL_SCROLLBAR_WIDTH },
       rescaleOverlappingGlyphs: true,
-      scrollback: 5000,
+      scrollback: TERMINAL_SCROLLBACK_LINES,
       rightClickSelectsWord: false,
       linkHandler: {
         activate(event, uri) {
@@ -761,13 +792,19 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
         }
         const identity = activeIdentityRef.current;
         const mutationGeneration = mutationGenerationRef.current;
-        void writeAsyncClipboard(text).then((copied) => {
-          if (disposed
-            || activeIdentityRef.current !== identity
-            || mutationGenerationRef.current !== mutationGeneration
-            || !terminalCanMutate()) return;
+        const request = ++clipboardCopyRequestRef.current;
+        const isCurrent = () => !disposed
+          && activeIdentityRef.current === identity
+          && mutationGenerationRef.current === mutationGeneration
+          && clipboardCopyRequestRef.current === request
+          && terminalCanMutate()
+          && clipboardPaneIsCurrent(/*requireTerminalFocus=*/ true);
+        clearClipboardCopyTimer();
+        setClipboardCopyState(null);
+        void writeTerminalClipboard(text, isCurrent).then((copied) => {
+          if (!isCurrent()) return;
           if (copied) showClipboardCopySuccess();
-          else if (clipboardPaneIsCurrent(/*requireTerminalFocus=*/ true)) showPendingClipboardCopy(text);
+          else showPendingClipboardCopy(text);
         });
       },
     };
@@ -1021,12 +1058,9 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
     renderedStatusRef.current = undefined;
     setConnection(pane.status === 'running' ? 'connecting' : pane.status);
     setConnectionMessage(undefined);
-    const reset = terminalOperationQueueRef.current
-      .catch(() => {})
-      .then(() => {
-        if (activeIdentityRef.current === paneIdentity) terminalRef.current?.reset();
-      });
-    terminalOperationQueueRef.current = reset.catch(() => {});
+    void terminalOperationQueueRef.current.barrier(() => {
+      if (activeIdentityRef.current === paneIdentity) terminalRef.current?.reset();
+    }).catch(() => {});
   }, [pane.status, paneIdentity]);
 
   useEffect(() => {
@@ -1050,10 +1084,12 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
       legacyMode: boolean;
       replayBytesRemaining: number | undefined;
       replayDone: boolean;
+      replayWriteStartedAt?: number;
       controlState: 'pending' | 'waiting' | 'observing' | 'claimed';
       forceClaim: boolean;
       mutationsRevoked: boolean;
       queuedBinaryBytes: number;
+      inFlightBinaryBytes: number;
       globalQueuedBinaryBytes: number;
       backpressureClosing: boolean;
       requestSnapshotRecovery: boolean;
@@ -1082,19 +1118,11 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
     const queueTerminalOperation = (
       context: SocketContext,
       operation: (terminal: Terminal) => void | Promise<void>,
-    ) => {
-      const queued = terminalOperationQueueRef.current
-        .catch(() => {})
-        .then(async () => {
-          if (!contextIsActive(context)) return false;
-          const terminal = terminalRef.current;
-          if (!terminal) return false;
-          await operation(terminal);
-          return contextIsActive(context);
-        });
-      terminalOperationQueueRef.current = queued.then(() => {}, () => {});
-      return queued;
-    };
+    ) => terminalOperationQueueRef.current.barrier(() => {
+      if (!contextIsActive(context)) return;
+      const terminal = terminalRef.current;
+      if (terminal) return operation(terminal);
+    });
 
     const visibleHost = () => {
       const host = hostRef.current;
@@ -1127,7 +1155,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
     };
 
     const markInputReady = async (context: SocketContext) => {
-      await terminalOperationQueueRef.current.catch(() => {});
+      await terminalOperationQueueRef.current.idle();
       if (!contextIsActive(context)) return;
       if (context.socket.readyState !== WebSocket.OPEN || context.backpressureClosing) return;
       if (context.mutationsRevoked || context.controlState !== 'claimed' || !context.sawStream || !context.replayDone) return;
@@ -1170,7 +1198,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
     };
 
     const markObserverReady = async (context: SocketContext) => {
-      await terminalOperationQueueRef.current.catch(() => {});
+      await terminalOperationQueueRef.current.idle();
       if (!contextIsActive(context)) return;
       if (context.socket.readyState !== WebSocket.OPEN || context.backpressureClosing) return;
       if (context.controlState !== 'observing' || !context.sawStream || !context.replayDone) return;
@@ -1238,9 +1266,11 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
       setConnectionMessage(t("terminals.another_window_took_control_switching_to_read_only_view"));
       context.socket.close(1000, 'terminal attachment superseded');
       // Do not depend on the peer's close timing: the old socket can no
-      // longer mutate the PTY, and its later onclose is a no-op because this
-      // new context becomes active synchronously.
-      connect(false);
+      // longer mutate the PTY. Commit already submitted output before choosing
+      // the resume offset, so a takeover cannot duplicate pending xterm writes.
+      void terminalOperationQueueRef.current.idle().then(() => {
+        if (contextIsActive(context)) connect(false);
+      });
     }
 
     const renderStatus = async (
@@ -1266,7 +1296,10 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
     };
 
     const processMessage = async (context: SocketContext, data: string | ArrayBuffer | Blob | Uint8Array) => {
-      if (!contextIsActive(context) || context.discardSubsequentMessages) return;
+      if (!contextIsActive(context) || context.discardSubsequentMessages) {
+        releaseQueuedBinaryBytes(context, binaryByteLength(data));
+        return;
+      }
       if (typeof data === 'string') {
         const control = controlMessage(data);
         if (control?.type === 'control') {
@@ -1409,7 +1442,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
               : 'resume';
             diagnostics.snapshotUsed = hasVtSnapshot;
             diagnostics.snapshotBytes = hasVtSnapshot && restoreValidation.restore
-              ? utf8ByteLength(restoreValidation.restore.data)
+              ? (restoreValidation.restore.gzip?.decoded_bytes ?? utf8ByteLength(restoreValidation.restore.data))
               : 0;
             diagnostics.replayBytes = control.replay_bytes;
           }
@@ -1429,7 +1462,10 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
               }
               if (restoreValidation.restore !== undefined) {
                 const snapshotWriteStartedAt = context.restoreDiagnostics ? performance.now() : 0;
-                await terminalWrite(terminal, restoreValidation.restore.data);
+                if (restoreValidation.restore.gzip) {
+                  await writeCompressedTerminalSnapshot(restoreValidation.restore.gzip,
+                    bytes => terminalWrite(terminal, bytes), () => contextIsActive(context) && !context.discardSubsequentMessages);
+                } else await terminalWrite(terminal, restoreValidation.restore.data);
                 if (context.restoreDiagnostics) {
                   context.restoreDiagnostics.snapshotWriteMs += performance.now() - snapshotWriteStartedAt;
                 }
@@ -1489,49 +1525,68 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
         return;
       }
 
-      const buffer = data instanceof Blob ? await data.arrayBuffer() : data;
-      if (!contextIsActive(context) || context.discardSubsequentMessages) return;
-      const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-      if ((context.controlState !== 'claimed' && context.controlState !== 'observing') || !context.sawStream) {
-        failProtocol(context, t("terminals.server_sent_output_before_the_terminal_stream_was_ready"), 'terminal output before stream');
-        return;
-      }
-      if (context.sawStream && !context.replayDone
-        && (context.replayBytesRemaining === undefined || bytes.byteLength > context.replayBytesRemaining)) {
-        context.discardSubsequentMessages = true;
-        context.mutationsRevoked = true;
-        revokeInput(context.socket);
-        streamStateRef.current = { identity: paneIdentity, initialized: false, epoch: '', nextOffset: 0 };
-        setRestorePending(false);
-        setConnection('disconnected');
-        setConnectionMessage(t("terminals.server_returned_invalid_terminal_replay_length_resyncing"));
-        context.socket.close(1000, 'terminal replay length mismatch');
-        return;
-      }
-      const replayChunk = !context.replayDone;
-      const written = await queueTerminalOperation(context, async (terminal) => {
-        const writeStartedAt = replayChunk && context.restoreDiagnostics ? performance.now() : 0;
-        await terminalWrite(terminal, bytes);
-        if (replayChunk && context.restoreDiagnostics) {
-          context.restoreDiagnostics.replayWriteMs += performance.now() - writeStartedAt;
+      let submitted = false;
+      try {
+        const buffer = data instanceof Blob ? await data.arrayBuffer() : data;
+        if (!contextIsActive(context) || context.discardSubsequentMessages) return;
+        const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+        if ((context.controlState !== 'claimed' && context.controlState !== 'observing') || !context.sawStream) {
+          failProtocol(context, t("terminals.server_sent_output_before_the_terminal_stream_was_ready"), 'terminal output before stream');
+          return;
         }
-      });
-      if (!written) return;
-      if (context.sawStream) {
-        const stream = streamStateRef.current;
-        if (stream.identity === paneIdentity && stream.initialized) {
-          const nextOffset = stream.nextOffset + bytes.byteLength;
-          if (Number.isSafeInteger(nextOffset)) stream.nextOffset = nextOffset;
-          else stream.initialized = false;
+        if (context.sawStream && !context.replayDone
+          && (context.replayBytesRemaining === undefined || bytes.byteLength > context.replayBytesRemaining)) {
+          context.discardSubsequentMessages = true;
+          context.mutationsRevoked = true;
+          revokeInput(context.socket);
+          streamStateRef.current = { identity: paneIdentity, initialized: false, epoch: '', nextOffset: 0 };
+          setRestorePending(false);
+          setConnection('disconnected');
+          setConnectionMessage(t("terminals.server_returned_invalid_terminal_replay_length_resyncing"));
+          context.socket.close(1000, 'terminal replay length mismatch');
+          return;
         }
-        if (!context.replayDone && context.replayBytesRemaining !== undefined) {
+        const replayChunk = !context.replayDone;
+        if (replayChunk && context.replayBytesRemaining !== undefined) {
           context.replayBytesRemaining -= bytes.byteLength;
-          if (context.replayBytesRemaining === 0) {
-            context.replayDone = true;
-            if (context.controlState === 'claimed') await markInputReady(context);
-            else await markObserverReady(context);
-          }
+          context.replayWriteStartedAt ??= performance.now();
         }
+        const committed = terminalOperationQueueRef.current.write(async () => {
+          if (!contextIsActive(context) || context.discardSubsequentMessages) return;
+          const terminal = terminalRef.current;
+          if (!terminal) return;
+          await terminalWrite(terminal, bytes);
+          if (!contextIsActive(context)) return;
+          const stream = streamStateRef.current;
+          if (stream.identity === paneIdentity && stream.initialized) {
+            const nextOffset = stream.nextOffset + bytes.byteLength;
+            if (Number.isSafeInteger(nextOffset)) stream.nextOffset = nextOffset;
+            else stream.initialized = false;
+          }
+        });
+        submitted = true;
+        context.inFlightBinaryBytes += bytes.byteLength;
+        void committed.finally(() => {
+          context.inFlightBinaryBytes -= bytes.byteLength;
+          releaseQueuedBinaryBytes(context, bytes.byteLength);
+        }).catch(() => failOutput(context));
+        // Legacy replay may contain 64 MiB. Pipeline a bounded window so it
+        // cannot overflow xterm's own write buffer while the socket queue drains.
+        if (replayChunk && context.inFlightBinaryBytes >= MAX_LIVE_QUEUED_BINARY_BYTES) await committed;
+        // Plain writes do not await their parse callback. Replay completion is
+        // a barrier: input/resize and subsequent live output wait for its commit.
+        if (replayChunk && context.replayBytesRemaining === 0) {
+          await committed;
+          if (!contextIsActive(context) || context.discardSubsequentMessages) return;
+          if (context.restoreDiagnostics && context.replayWriteStartedAt !== undefined) {
+            context.restoreDiagnostics.replayWriteMs = performance.now() - context.replayWriteStartedAt;
+          }
+          context.replayDone = true;
+          if (context.controlState === 'claimed') await markInputReady(context);
+          else await markObserverReady(context);
+        }
+      } finally {
+        if (!submitted) releaseQueuedBinaryBytes(context, binaryByteLength(data));
       }
     };
 
@@ -1558,14 +1613,13 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
     const closeForBackpressure = (context: SocketContext) => {
       if (!contextIsActive(context) || context.backpressureClosing) return true;
       const liveBacklogExceeded = context.replayDone
-        && (context.queuedBinaryBytes > MAX_LIVE_QUEUED_BINARY_BYTES
-          || context.pendingMessages.length > MAX_LIVE_PENDING_MESSAGES);
+        && context.queuedBinaryBytes > MAX_LIVE_QUEUED_BINARY_BYTES;
       const totalBacklogExceeded = context.queuedBinaryBytes > MAX_REPLAY_QUEUED_BINARY_BYTES
         || queuedTerminalBinaryBytes > MAX_REPLAY_QUEUED_BINARY_BYTES;
       if (!liveBacklogExceeded && !totalBacklogExceeded) return false;
 
-      // Stop rendering stale frames. After the one xterm write already in
-      // flight completes, reconnect without a raw resume cursor so terminald
+      // Stop accepting stale frames. After all xterm writes already in
+      // flight complete, reconnect without a raw resume cursor so terminald
       // can restore the most recent VT snapshot plus its short raw suffix.
       context.backpressureClosing = true;
       context.requestSnapshotRecovery = true;
@@ -1592,6 +1646,13 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
       const batchLimit = !context.replayDone && context.replayBytesRemaining !== undefined
         ? Math.min(MAX_XTERM_WRITE_BATCH_BYTES, context.replayBytesRemaining)
         : MAX_XTERM_WRITE_BATCH_BYTES;
+      // Preserve rejection of frames that cross the replay/live boundary.
+      if (!context.replayDone && context.replayBytesRemaining !== undefined
+        && binaryBytes > context.replayBytesRemaining) return first;
+      if (binaryBytes > batchLimit && batchLimit > 0) {
+        context.pendingMessages.unshift({ data: chunks[0].subarray(batchLimit), binaryBytes: binaryBytes - batchLimit });
+        return { data: chunks[0].subarray(0, batchLimit), binaryBytes: batchLimit };
+      }
       while (context.pendingMessages.length > 0) {
         const next = context.pendingMessages[0];
         if (next.binaryBytes === 0 || next.data instanceof Blob
@@ -1618,33 +1679,35 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
           while (contextIsActive(context) && !context.discardSubsequentMessages) {
             const message = nextPendingMessage(context);
             if (!message) break;
-            try {
-              await processMessage(context, message.data);
-            } finally {
-              releaseQueuedBinaryBytes(context, message.binaryBytes);
-            }
+            await processMessage(context, message.data);
             if (closeForBackpressure(context)) break;
           }
         } finally {
           if (context.discardSubsequentMessages) clearPendingMessages(context);
           context.drainingMessages = false;
         }
-      })().catch(() => {
-        if (contextIsActive(context) && !context.backpressureClosing) {
-          context.discardSubsequentMessages = true;
-          context.mutationsRevoked = true;
-          revokeInput(context.socket);
-          clearPendingMessages(context);
-          setConnection('disconnected');
-          setConnectionMessage(t("terminals.terminal_output_processing_failed_resuming"));
-          context.socket.close(1000, 'terminal output processing failed');
-        }
-      });
+      })().catch(() => failOutput(context));
     };
+
+    function failOutput(context: SocketContext) {
+      if (contextIsActive(context) && !context.backpressureClosing) {
+        context.discardSubsequentMessages = true;
+        context.mutationsRevoked = true;
+        revokeInput(context.socket);
+        clearPendingMessages(context);
+        // Later pipelined writes may have parsed after a failed write. The
+        // byte cursor is no longer proven contiguous; recover a full snapshot.
+        streamStateRef.current = { identity: paneIdentity, initialized: false, epoch: '', nextOffset: 0 };
+        setConnection('disconnected');
+        setConnectionMessage(t("terminals.terminal_output_processing_failed_resuming"));
+        context.socket.close(1000, 'terminal output processing failed');
+      }
+    }
 
     const reconnectAfterClose = async (context: SocketContext, epoch: number) => {
       await context.closed;
       await context.messageQueue;
+      await terminalOperationQueueRef.current.idle();
       if (!contextIsActive(context) || epoch !== restartEpoch) return;
       if (!context.allowReconnect || paneStatusRef.current !== 'running') return;
       let snapshotRecoveryFallback: { epoch: string; after: number } | undefined;
@@ -1714,6 +1777,7 @@ export function TerminalPaneView({ visible, tabId, pane, active, onFocus, onStat
         forceClaim,
         mutationsRevoked: false,
         queuedBinaryBytes: 0,
+        inFlightBinaryBytes: 0,
         globalQueuedBinaryBytes: 0,
         backpressureClosing: false,
         requestSnapshotRecovery: false,

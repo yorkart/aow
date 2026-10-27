@@ -60,6 +60,7 @@ impl VtWorker {
             sessions: Arc::new(Mutex::new(Vec::new())),
             cached_snapshot_bytes: Arc::new(AtomicUsize::new(0)),
             pending_write_bytes: Arc::new(AtomicUsize::new(0)),
+            request_timeout: config.request_timeout,
         };
         let task = tokio::spawn(actor::run_worker_actor(
             child,

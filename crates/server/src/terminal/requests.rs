@@ -9,6 +9,7 @@ pub(super) struct AttachQuery {
     pub(super) after: Option<u64>,
     pub(super) control: Option<String>,
     pub(super) capabilities: Option<String>,
+    pub(super) snapshot_compression: Option<String>,
     pub(super) observer: Option<String>,
 }
 
@@ -18,6 +19,7 @@ pub(super) struct AttachOptions<'a> {
     pub(super) after: Option<u64>,
     pub(super) controlled: bool,
     pub(super) vt_snapshot: bool,
+    pub(super) gzip_snapshot: bool,
     pub(super) observer: bool,
 }
 

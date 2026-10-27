@@ -18,6 +18,44 @@ use tokio_tungstenite::tungstenite::Message;
 
 const IO_TIMEOUT: Duration = Duration::from_secs(10);
 
+#[tokio::test]
+async fn client_accepts_json_escaped_snapshots_above_default_websocket_frame_limit() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("large-snapshot.sock");
+    let listener = tokio::net::UnixListener::bind(&path).unwrap();
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let mut socket = tokio_tungstenite::accept_async(stream).await.unwrap();
+        let text = serde_json::json!({
+            "type": "stream", "epoch": "history", "offset": 0,
+            "reset": true, "replay_bytes": 0,
+            "restore": "\u{1b}".repeat(3 * 1024 * 1024),
+            "restore_cols": 80, "restore_rows": 24,
+        })
+        .to_string();
+        assert!(text.len() > 16 * 1024 * 1024);
+        socket.send(Message::Text(text.into())).await.unwrap();
+    });
+    let mut client = TerminaldClient::new(path)
+        .attach_with_resume_capabilities("history", None, None, true)
+        .await
+        .unwrap();
+    let received = timeout(IO_TIMEOUT, client.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let Message::Text(text) = received else {
+        panic!("expected a snapshot control frame");
+    };
+    let TerminalAttachServerMessage::Stream { restore, .. } = serde_json::from_str(&text).unwrap()
+    else {
+        panic!("expected a stream handshake");
+    };
+    assert_eq!(restore.unwrap(), "\u{1b}".repeat(3 * 1024 * 1024));
+    server.await.unwrap();
+}
+
 #[cfg(target_os = "macos")]
 #[path = "support/macos_cleanup.rs"]
 mod macos_cleanup;
@@ -200,6 +238,7 @@ async fn stream_header(
                         restore,
                         restore_cols,
                         restore_rows,
+                        ..
                     } => (
                         epoch,
                         offset,
@@ -1606,4 +1645,558 @@ async fn daemon_shutdown_kills_and_reaps_runtime_processes() {
     daemon.stop().await;
     wait_until_process_gone(shell_pid).await;
     wait_until_process_gone(child_pid).await;
+}
+
+// This uses the real headless parser but withholds its ACK until the test
+// releases it. Socket assertions therefore cannot pass merely because the
+// PTY/IPC write completed before headless parsing or publication.
+fn gated_vt_worker(directory: &std::path::Path, fail: bool) -> VtWorkerConfig {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../vt-worker/src");
+    let script = directory.join("gated-worker.mjs");
+    let source = format!(
+        r#"
+import {{ existsSync, writeFileSync }} from 'node:fs';
+import {{ setTimeout as delay }} from 'node:timers/promises';
+import {{ encodeFrame, readFrames }} from {framing};
+import {{ VtService }} from {service};
+const service = new VtService();
+for await (const frame of readFrames(process.stdin)) {{
+  const request = JSON.parse(frame.metadata);
+  const result = await service.dispatch(request.action, {{ ...request, data: frame.data }});
+  if (request.action === 'write') {{
+    writeFileSync({parsed}, String(result.applied_offset));
+    while (!existsSync({release})) await delay(5);
+    if ({fail}) process.exit(1);
+  }}
+  if (request.action === 'resize') continue;
+  const {{ data, ...metadata }} = result;
+  await new Promise((resolve, reject) => process.stdout.write(encodeFrame({{
+    id: request.id, action: request.action, ok: true, result: metadata,
+  }}, data), error => error ? reject(error) : resolve()));
+}}
+"#,
+        framing = serde_json::to_string(&root.join("framing.mjs")).unwrap(),
+        service = serde_json::to_string(&root.join("vt-service.mjs")).unwrap(),
+        parsed = serde_json::to_string(&directory.join("parsed")).unwrap(),
+        release = serde_json::to_string(&directory.join("release")).unwrap(),
+    );
+    std::fs::write(&script, source).unwrap();
+    VtWorkerConfig::new("node", script)
+}
+
+async fn wait_for_parsed_output(directory: &std::path::Path) {
+    timeout(IO_TIMEOUT, async {
+        while !directory.join("parsed").exists() {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("worker parsed PTY output");
+}
+
+async fn assert_no_unacknowledged_output(socket: &mut TerminaldAttachStream) {
+    let result = timeout(Duration::from_millis(75), async {
+        loop {
+            match socket.next().await {
+                Some(Ok(Message::Text(text))) => {
+                    assert!(
+                        matches!(
+                            serde_json::from_str::<TerminalAttachServerMessage>(&text).unwrap(),
+                            TerminalAttachServerMessage::Status {
+                                status: TerminalPaneStatus::Running,
+                                ..
+                            }
+                        ),
+                        "completion/error must not overtake the held ACK: {text}"
+                    );
+                }
+                other => panic!("unacknowledged output escaped: {other:?}"),
+            }
+        }
+    })
+    .await;
+    assert!(result.is_err(), "stream stays open while awaiting ACK");
+}
+
+#[tokio::test]
+async fn vt_ack_gates_live_output_replay_and_final_exit_for_every_client() {
+    let cwd = tempfile::tempdir().unwrap();
+    let daemon = TestDaemon::start_with_vt_worker(gated_vt_worker(cwd.path(), false)).await;
+    let mut spec = shell_spec(cwd.path());
+    spec.arguments = vec!["-c".into(), "printf '__PARSED_BEFORE_PUBLISHED__'".into()];
+    daemon.client.create("ack-boundary", &spec).await.unwrap();
+    wait_for_parsed_output(cwd.path()).await;
+
+    let mut socket = daemon.client.attach("ack-boundary").await.unwrap();
+    let initial = stream_handshake(&mut socket).await;
+    assert_eq!(initial.offset, 0);
+    assert_eq!(initial.replay_bytes, 0);
+    assert_no_unacknowledged_output(&mut socket).await;
+
+    let mut observer = daemon
+        .client
+        .attach_controlled_with_resume_capabilities_and_observer(
+            "ack-boundary",
+            None,
+            None,
+            true,
+            true,
+        )
+        .await
+        .unwrap();
+    send_claim(&mut observer, false).await;
+    wait_for_control(&mut observer, TerminalControlState::Observing).await;
+    let observed = stream_handshake(&mut observer).await;
+    assert_eq!(observed.replay_bytes, 0);
+    assert!(
+        !observed
+            .restore
+            .unwrap_or_default()
+            .contains("__PARSED_BEFORE_PUBLISHED__")
+    );
+    assert_no_unacknowledged_output(&mut observer).await;
+
+    std::fs::write(cwd.path().join("release"), b"ack").unwrap();
+    let marker = b"__PARSED_BEFORE_PUBLISHED__";
+    assert_eq!(output_until(&mut socket, marker).await, marker);
+    wait_for_status(&mut socket, TerminalPaneStatus::Exited).await;
+    assert_eq!(output_until(&mut observer, marker).await, marker);
+    wait_for_status(&mut observer, TerminalPaneStatus::Exited).await;
+
+    let mut reattached = daemon.client.attach("ack-boundary").await.unwrap();
+    assert_eq!(stream_handshake(&mut reattached).await.replay, marker);
+    daemon.client.delete("ack-boundary").await.unwrap();
+    daemon.stop().await;
+}
+
+async fn expect_vt_failure(socket: &mut TerminaldAttachStream) {
+    timeout(IO_TIMEOUT, async {
+        loop {
+            match socket.next().await {
+                Some(Ok(Message::Text(text))) => {
+                    match serde_json::from_str::<TerminalAttachServerMessage>(&text).unwrap() {
+                        TerminalAttachServerMessage::Error { code, .. } => {
+                            assert_eq!(code, "vt_worker_failed");
+                            return;
+                        }
+                        TerminalAttachServerMessage::Status {
+                            status: TerminalPaneStatus::Running,
+                            ..
+                        } => {}
+                        other => {
+                            panic!("completion must not overtake unacknowledged output: {other:?}")
+                        }
+                    }
+                }
+                other => panic!("failed VT stream published unacknowledged output: {other:?}"),
+            }
+        }
+    })
+    .await
+    .expect("VT failure reaches the client");
+}
+
+#[tokio::test]
+async fn vt_failure_never_falls_back_to_unparsed_output() {
+    let cwd = tempfile::tempdir().unwrap();
+    let daemon = TestDaemon::start_with_vt_worker(gated_vt_worker(cwd.path(), true)).await;
+    let mut spec = shell_spec(cwd.path());
+    spec.arguments = vec!["-c".into(), "printf '__UNACKNOWLEDGED__'".into()];
+    daemon.client.create("failed-ack", &spec).await.unwrap();
+    wait_for_parsed_output(cwd.path()).await;
+    let mut socket = daemon.client.attach("failed-ack").await.unwrap();
+    assert_eq!(stream_handshake(&mut socket).await.replay_bytes, 0);
+    std::fs::write(cwd.path().join("release"), b"fail").unwrap();
+    expect_vt_failure(&mut socket).await;
+    let mut reattached = daemon.client.attach("failed-ack").await.unwrap();
+    let message = timeout(IO_TIMEOUT, reattached.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let Message::Text(text) = message else {
+        panic!("failed attach returned output")
+    };
+    assert!(matches!(
+        serde_json::from_str::<TerminalAttachServerMessage>(&text).unwrap(),
+        TerminalAttachServerMessage::Error { .. }
+    ));
+    daemon.client.delete("failed-ack").await.unwrap();
+    daemon.stop().await;
+}
+
+#[tokio::test]
+async fn stalled_vt_ack_times_out_and_releases_a_backpressured_pty() {
+    let cwd = tempfile::tempdir().unwrap();
+    let mut config = gated_vt_worker(cwd.path(), false);
+    config.request_timeout = Duration::from_secs(2);
+    let daemon = TestDaemon::start_with_vt_worker(config).await;
+    let mut spec = shell_spec(cwd.path());
+    spec.arguments = vec!["-c".into(), "head -c 2097152 /dev/zero".into()];
+    daemon.client.create("stalled-ack", &spec).await.unwrap();
+    wait_for_parsed_output(cwd.path()).await;
+    let mut socket = daemon.client.attach("stalled-ack").await.unwrap();
+    assert_eq!(stream_handshake(&mut socket).await.replay_bytes, 0);
+    expect_vt_failure(&mut socket).await;
+    daemon.client.delete("stalled-ack").await.unwrap();
+    daemon.stop().await;
+}
+
+#[tokio::test]
+async fn vt_ack_pipeline_preserves_every_byte_in_a_two_mebibyte_burst() {
+    let worker =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../vt-worker/dist/vt-worker.mjs");
+    let daemon = TestDaemon::start_with_vt_worker(VtWorkerConfig::new("node", worker)).await;
+    let cwd = tempfile::tempdir().unwrap();
+    let mut spec = shell_spec(cwd.path());
+    spec.arguments = vec![
+        "-c".into(),
+        "head -c 2097152 /dev/zero | tr '\\000' x; printf '__BURST_END__'".into(),
+    ];
+    daemon.client.create("burst-ack", &spec).await.unwrap();
+    let mut socket = daemon.client.attach("burst-ack").await.unwrap();
+    let mut output = stream_handshake(&mut socket).await.replay;
+    timeout(IO_TIMEOUT, async {
+        loop {
+            match socket.next().await {
+                Some(Ok(Message::Binary(bytes))) => output.extend_from_slice(&bytes),
+                Some(Ok(Message::Text(text))) => {
+                    match serde_json::from_str::<TerminalAttachServerMessage>(&text).unwrap() {
+                        TerminalAttachServerMessage::Status {
+                            status: TerminalPaneStatus::Exited,
+                            exit_code: Some(0),
+                        } => break,
+                        TerminalAttachServerMessage::Status {
+                            status: TerminalPaneStatus::Running,
+                            ..
+                        } => {}
+                        other => panic!("unexpected burst stream message: {other:?}"),
+                    }
+                }
+                other => panic!("burst stream ended early: {other:?}"),
+            }
+        }
+    })
+    .await
+    .expect("burst is fully parsed and delivered before process exit");
+    let mut expected = vec![b'x'; 2 * 1024 * 1024];
+    expected.extend_from_slice(b"__BURST_END__");
+    assert_eq!(output.len(), expected.len());
+    assert!(
+        output == expected,
+        "burst has no missing, duplicated or reordered bytes"
+    );
+    daemon.client.delete("burst-ack").await.unwrap();
+    daemon.stop().await;
+}
+
+#[tokio::test]
+async fn vt_resize_uses_received_offset_while_output_ack_is_pending() {
+    let cwd = tempfile::tempdir().unwrap();
+    let daemon = TestDaemon::start_with_vt_worker(gated_vt_worker(cwd.path(), false)).await;
+    let mut spec = shell_spec(cwd.path());
+    spec.arguments = vec![
+        "-c".into(),
+        "stty -echo; printf '__BEFORE_RESIZE__'; read line; printf '__AFTER_RESIZE__'".into(),
+    ];
+    daemon.client.create("resize-ack", &spec).await.unwrap();
+    wait_for_parsed_output(cwd.path()).await;
+    let mut socket = daemon.client.attach("resize-ack").await.unwrap();
+    assert_eq!(stream_handshake(&mut socket).await.replay_bytes, 0);
+    wait_for_status(&mut socket, TerminalPaneStatus::Running).await;
+    let resize = serde_json::to_string(&TerminalAttachClientMessage::Resize {
+        cols: 100,
+        rows: 30,
+    })
+    .unwrap();
+    socket.send(Message::Text(resize.into())).await.unwrap();
+    timeout(IO_TIMEOUT, async {
+        let Some(Ok(Message::Text(text))) = socket.next().await else {
+            panic!("resize did not respond while the write ACK was pending");
+        };
+        assert!(matches!(
+            serde_json::from_str::<TerminalAttachServerMessage>(&text).unwrap(),
+            TerminalAttachServerMessage::Resized {
+                cols: 100,
+                rows: 30
+            }
+        ));
+    })
+    .await
+    .unwrap();
+    std::fs::write(cwd.path().join("release"), b"ack").unwrap();
+    assert_eq!(
+        output_until(&mut socket, b"__BEFORE_RESIZE__").await,
+        b"__BEFORE_RESIZE__"
+    );
+    send_input(&mut socket, "continue\n").await;
+    assert_eq!(
+        output_until(&mut socket, b"__AFTER_RESIZE__").await,
+        b"__AFTER_RESIZE__"
+    );
+    wait_for_status(&mut socket, TerminalPaneStatus::Exited).await;
+    daemon.client.delete("resize-ack").await.unwrap();
+    daemon.stop().await;
+}
+
+#[tokio::test]
+async fn deleting_a_backpressured_terminal_does_not_wait_for_the_vt_ack() {
+    let cwd = tempfile::tempdir().unwrap();
+    let mut config = gated_vt_worker(cwd.path(), false);
+    config.request_timeout = Duration::from_secs(60);
+    let daemon = TestDaemon::start_with_vt_worker(config).await;
+    let mut spec = shell_spec(cwd.path());
+    spec.arguments = vec!["-c".into(), "head -c 2097152 /dev/zero".into()];
+    daemon
+        .client
+        .create("delete-pending-ack", &spec)
+        .await
+        .unwrap();
+    wait_for_parsed_output(cwd.path()).await;
+    let mut socket = daemon.client.attach("delete-pending-ack").await.unwrap();
+    assert_eq!(stream_handshake(&mut socket).await.replay_bytes, 0);
+    assert_no_unacknowledged_output(&mut socket).await;
+    timeout(
+        Duration::from_secs(3),
+        daemon.client.delete("delete-pending-ack"),
+    )
+    .await
+    .expect("delete wakes the PTY reader without waiting for ACK or timeout")
+    .unwrap();
+    daemon.stop().await;
+}
+
+// Exercise the daemon cache and socket negotiation after the raw ring has
+// rolled over, not just the worker's compression function in isolation.
+#[tokio::test]
+async fn compressed_history_survives_raw_ring_rollover_and_negotiates_client_support() {
+    let directory = tempfile::tempdir().unwrap();
+    let worker =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../vt-worker/dist/vt-worker.mjs");
+    let daemon = TestDaemon::start_with_vt_worker(VtWorkerConfig::new("node", worker)).await;
+    let colored = "\u{1b}[38;2;123;45;67ma\u{1b}[38;2;89;123;45mb".repeat(95);
+    let data = (0..5_000)
+        .map(|i| format!("line-{i:05} {colored}\u{1b}[0m\r\n"))
+        .collect::<String>();
+    assert!(data.len() > 16 * 1024 * 1024);
+    let epoch = emit_history_fixture(&daemon, directory.path(), data.as_bytes()).await;
+    timeout(IO_TIMEOUT, async {
+        loop {
+            if daemon
+                .client
+                .screen("restore-history")
+                .await
+                .unwrap()
+                .is_some_and(|snapshot| snapshot.applied_offset == data.len() as u64)
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("the complete compressed snapshot is cached");
+
+    let mut fresh = daemon
+        .client
+        .attach_with_options(
+            "restore-history",
+            aow_terminald_client::TerminalAttachOptions {
+                vt_snapshot: true,
+                gzip_snapshot: true,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    let Message::Text(text) = fresh.next().await.unwrap().unwrap() else {
+        panic!("expected stream header")
+    };
+    let TerminalAttachServerMessage::Stream {
+        restore,
+        restore_gzip,
+        restore_cols,
+        restore_rows,
+        offset,
+        replay_bytes,
+        ..
+    } = serde_json::from_str(&text).unwrap()
+    else {
+        panic!("expected compressed restore: {text}")
+    };
+    let compressed = restore_gzip.expect("large history uses compressed transport");
+    assert!(restore.is_none());
+    assert!(compressed.data.len() < 8 * 1024 * 1024);
+    assert!(compressed.decoded_bytes > 8 * 1024 * 1024);
+    assert_eq!((restore_cols, restore_rows), (Some(220), Some(24)));
+    assert_eq!(offset, data.len() as u64);
+    assert_eq!(replay_bytes, 0);
+    wait_for_status(&mut fresh, TerminalPaneStatus::Running).await;
+
+    let mut legacy = daemon
+        .client
+        .attach_with_resume_capabilities("restore-history", None, None, true)
+        .await
+        .unwrap();
+    wait_for_error(&mut legacy, "snapshot_format_unsupported").await;
+    drop(legacy);
+    // A rejected legacy takeover must leave the existing controller usable.
+    let request_id = "controller-after-rejected-restore".to_owned();
+    fresh
+        .send(Message::Text(
+            serde_json::to_string(&TerminalAttachClientMessage::Write {
+                request_id: request_id.clone(),
+                data: String::new(),
+            })
+            .unwrap()
+            .into(),
+        ))
+        .await
+        .unwrap();
+    let Message::Text(ack) = timeout(IO_TIMEOUT, fresh.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap()
+    else {
+        panic!("expected write acknowledgement from the existing controller")
+    };
+    assert_eq!(
+        serde_json::from_str::<TerminalAttachServerMessage>(&ack).unwrap(),
+        TerminalAttachServerMessage::Written { request_id }
+    );
+    drop(fresh);
+    // Resume is still raw and independent of snapshot encoding.
+    let mut resumed = daemon
+        .client
+        .attach_with_options(
+            "restore-history",
+            aow_terminald_client::TerminalAttachOptions {
+                epoch: Some(&epoch),
+                after: Some(data.len() as u64),
+                vt_snapshot: true,
+                gzip_snapshot: true,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    let restored = stream_handshake(&mut resumed).await;
+    assert!(!restored.reset);
+    assert_eq!(restored.offset, data.len() as u64);
+    assert_eq!(restored.replay_bytes, 0);
+    daemon.client.delete("restore-history").await.unwrap();
+    daemon.stop().await;
+}
+
+#[tokio::test]
+async fn unavailable_full_snapshot_never_silently_restores_truncated_history() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../vt-worker/src");
+    let script = directory.path().join("no-snapshots.mjs");
+    std::fs::write(&script, format!(r#"
+import {{ VtService }} from {service};
+import {{ ProtocolError }} from {protocol};
+import {{ runWorker }} from {worker};
+const dispatch = VtService.prototype.dispatch;
+VtService.prototype.dispatch = function(action, request) {{
+  if (action === 'snapshot') return Promise.reject(new ProtocolError('snapshot_too_large', 'test cache limit'));
+  return dispatch.call(this, action, request);
+}};
+await runWorker({{ input: process.stdin, output: process.stdout }});
+"#,
+        service = serde_json::to_string(&root.join("vt-service.mjs")).unwrap(),
+        protocol = serde_json::to_string(&root.join("protocol.mjs")).unwrap(),
+        worker = serde_json::to_string(&root.join("worker.mjs")).unwrap(),
+    )).unwrap();
+    let daemon = TestDaemon::start_with_vt_worker(VtWorkerConfig::new("node", script)).await;
+    let mut data = vec![0; 9 * 1024 * 1024];
+    data.extend_from_slice(b"history must not silently disappear");
+    let epoch = emit_history_fixture(&daemon, directory.path(), &data).await;
+    let mut fresh = daemon
+        .client
+        .attach_with_options(
+            "restore-history",
+            aow_terminald_client::TerminalAttachOptions {
+                vt_snapshot: true,
+                gzip_snapshot: true,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    let Message::Text(text) = fresh.next().await.unwrap().unwrap() else {
+        panic!("expected restore error")
+    };
+    let TerminalAttachServerMessage::Error { message, .. } = serde_json::from_str(&text).unwrap()
+    else {
+        panic!("must not advertise a truncated reset: {text}")
+    };
+    assert!(message.contains("complete terminal history"));
+    drop(fresh);
+    let mut resumed = daemon
+        .client
+        .attach_with_options(
+            "restore-history",
+            aow_terminald_client::TerminalAttachOptions {
+                epoch: Some(&epoch),
+                after: Some(data.len() as u64),
+                vt_snapshot: true,
+                gzip_snapshot: true,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert!(
+        !stream_handshake(&mut resumed).await.reset,
+        "an intact browser cursor can still resume"
+    );
+    daemon.client.delete("restore-history").await.unwrap();
+    daemon.stop().await;
+}
+
+async fn emit_history_fixture(
+    daemon: &TestDaemon,
+    directory: &std::path::Path,
+    data: &[u8],
+) -> String {
+    std::fs::write(directory.join("history"), data).unwrap();
+    let mut spec = shell_spec(directory);
+    spec.cols = 220;
+    spec.arguments = vec![
+        "-c".into(),
+        "stty -onlcr; while [ ! -f release ]; do sleep 0.02; done; cat history; sleep 60".into(),
+    ];
+    daemon
+        .client
+        .create("restore-history", &spec)
+        .await
+        .unwrap();
+    let mut stream = daemon.client.attach("restore-history").await.unwrap();
+    let initial = stream_handshake(&mut stream).await;
+    assert_eq!(initial.replay_bytes, 0);
+    std::fs::write(directory.join("release"), b"go").unwrap();
+    timeout(Duration::from_secs(30), async {
+        let mut received = 0;
+        while received < data.len() {
+            match stream.next().await {
+                Some(Ok(Message::Binary(bytes))) => {
+                    assert_eq!(&data[received..received + bytes.len()], bytes.as_ref());
+                    received += bytes.len();
+                }
+                Some(Ok(Message::Text(text))) => assert!(matches!(
+                    serde_json::from_str::<TerminalAttachServerMessage>(&text).unwrap(),
+                    TerminalAttachServerMessage::Status {
+                        status: TerminalPaneStatus::Running,
+                        ..
+                    }
+                )),
+                other => panic!("history stream stopped early: {other:?}"),
+            }
+        }
+    })
+    .await
+    .expect("all history reaches the live client");
+    initial.epoch
 }

@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import headlessPackage from '@xterm/headless';
 
-import { ProtocolError } from '../src/protocol.mjs';
+import { MAX_SNAPSHOT_BYTES, ProtocolError } from '../src/protocol.mjs';
 import {
+  DEFAULT_SCROLLBACK,
   MAX_SCREEN_CELLS,
   MAX_SESSIONS,
   MAX_TOTAL_SCREEN_CELLS,
+  MAX_TOTAL_BUFFER_CELLS,
   VtService,
 } from '../src/vt-service.mjs';
 
@@ -29,7 +31,6 @@ async function create(service, extra = {}) {
   return service.dispatch('create', request('create', {
     cols: 20,
     rows: 5,
-    scrollback: 100,
     initial_offset: 0,
     ...extra,
   }));
@@ -44,7 +45,7 @@ test('create, ordered write, resize, snapshot, and dispose preserve state', asyn
       applied_offset: 0,
       cols: 20,
       rows: 5,
-      scrollback: 100,
+      scrollback: 5_000,
     });
 
     const bytes = Buffer.from('hello\r\n\u001b[31mred\u001b[0m');
@@ -258,7 +259,7 @@ test('create requires a zero initial offset and bounds scrollback', async () => 
       errorWithCode('invalid_params'),
     );
     await assert.rejects(
-      create(service, { session_id: 'bad-scrollback', scrollback: 101 }),
+      create(service, { session_id: 'bad-scrollback', scrollback: DEFAULT_SCROLLBACK + 1 }),
       errorWithCode('invalid_params'),
     );
   } finally {
@@ -433,6 +434,94 @@ test('snapshot limit produces a structured error condition', async () => {
   } finally {
     service.disposeAll();
   }
+});
+
+test('reattach preserves browser history through retention rollover and fullscreen output', async () => {
+  const service = new VtService();
+  const browser = new Terminal({ cols: 80, rows: 24, scrollback: 5_000, allowProposedApi: true });
+  let offset = 0;
+  const write = async text => {
+    const data = Buffer.from(text);
+    await service.dispatch('write', request('write', { start_offset: offset, data }));
+    await writeTerminal(browser, data);
+    offset += data.length;
+  };
+  try {
+    await create(service, { cols: 80, rows: 24 });
+    for (const [start, end] of [[0, 600], [600, 5_400]]) {
+      await write(Array.from({ length: end - start }, (_, i) => `line-${String(start + i).padStart(5, '0')}`).join('\r\n') + '\r\n');
+      const snapshot = await service.dispatch('snapshot', request('snapshot'));
+      const restored = await restoreSnapshot(snapshot, 5_000);
+      try {
+        assert.equal(snapshot.applied_offset, offset);
+        assert.equal(restored.buffer.normal.length, Math.min(end + 1, 5_024));
+        assert.equal(bufferText(restored.buffer.normal), bufferText(browser.buffer.normal));
+      } finally { restored.dispose(); }
+    }
+    await write('\x1b[?1049h\x1b[2J\x1b[Hfullscreen\x1b[?2004h');
+    const snapshot = await service.dispatch('snapshot', request('snapshot'));
+    const restored = await restoreSnapshot(snapshot, 5_000);
+    try {
+      assert.equal(restored.buffer.active.type, 'alternate');
+      assert.equal(restored.modes.bracketedPasteMode, true);
+      assert.equal(bufferText(restored.buffer.normal), bufferText(browser.buffer.normal));
+      assert.equal(bufferText(restored.buffer.alternate), bufferText(browser.buffer.alternate));
+      const suffix = '\x1b[?1049lcontinued\r\n';
+      await write(suffix);
+      await writeTerminal(restored, suffix);
+      assert.equal(bufferText(restored.buffer.normal), bufferText(browser.buffer.normal));
+    } finally { restored.dispose(); }
+  } finally {
+    browser.dispose();
+    service.disposeAll();
+  }
+});
+
+test('full colored Unicode history can restore snapshots larger than the old 2 MiB limit', async () => {
+  const service = new VtService();
+  try {
+    await create(service, { cols: 300, rows: 24 });
+    const text = Array.from({ length: 5_000 }, (_, i) => `${String(i).padStart(4, '0')} ${'\x1b[31m红\x1b[32m绿'.repeat(70)}\x1b[0m`).join('\r\n');
+    const data = Buffer.from(text);
+    await service.dispatch('write', request('write', { start_offset: 0, data }));
+    const snapshot = await service.dispatch('snapshot', request('snapshot'));
+    assert.ok(snapshot.byte_length > 2 * 1024 * 1024);
+    assert.ok(snapshot.byte_length <= MAX_SNAPSHOT_BYTES);
+    const restored = await restoreSnapshot(snapshot, 5_000);
+    try {
+      assert.equal(restored.buffer.normal.length, 5_000);
+      for (const row of [0, 2_500, 4_999]) {
+        const line = restored.buffer.normal.getLine(row);
+        assert.equal(line.translateToString(true), `${String(row).padStart(4, '0')} ${'红绿'.repeat(70)}`);
+        assert.equal(line.getCell(5).getFgColor(), 1);
+        assert.equal(line.getCell(7).getFgColor(), 2);
+      }
+    } finally { restored.dispose(); }
+  } finally { service.disposeAll(); }
+});
+
+test('history capacity is budgeted before writes and released on resize and dispose', async () => {
+  assert.equal(MAX_TOTAL_BUFFER_CELLS, 64_000_000);
+  const service = new VtService({ maxTotalBufferCells: 2_200 });
+  try {
+    await create(service, { cols: 10, rows: 5, scrollback: 100 });
+    await create(service, { session_id: 'other', cols: 10, rows: 5, scrollback: 100 });
+    await assert.rejects(
+      create(service, { session_id: 'overflow', cols: 2, rows: 1, scrollback: 0 }),
+      errorWithCode('buffer_limit_exceeded'),
+    );
+    await assert.rejects(
+      service.dispatch('resize', request('resize', { at_offset: 0, cols: 11, rows: 5 })),
+      errorWithCode('buffer_limit_exceeded'),
+    );
+    assert.equal((await service.dispatch('snapshot', request('snapshot'))).cols, 10);
+    await service.dispatch('resize', request('resize', { at_offset: 0, cols: 5, rows: 5 }));
+    await create(service, { session_id: 'freed', cols: 5, rows: 5, scrollback: 100 });
+    await service.dispatch('dispose', request('dispose', { session_id: 'other' }));
+    await create(service, { session_id: 'replacement', cols: 10, rows: 5, scrollback: 100 });
+    service.disposeAll();
+    await create(service, { cols: 20, rows: 5, scrollback: 100 });
+  } finally { service.disposeAll(); }
 });
 
 function errorWithCode(code) {

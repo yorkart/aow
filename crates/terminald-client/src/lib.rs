@@ -11,7 +11,7 @@ pub use aow_protocol::{
     TerminalControlState, TerminalRuntime, TerminalRuntimeList, TerminalRuntimeSpec,
     TerminalRuntimeStatus, TerminaldHealth,
 };
-pub use attach::TerminaldAttachStream;
+pub use attach::{TerminalAttachOptions, TerminaldAttachStream};
 pub use client::TerminaldClient;
 pub use error::TerminaldClientError;
 pub use socket::default_socket_path;

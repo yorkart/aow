@@ -5437,8 +5437,8 @@ ${i3.join("\n")}
 });
 
 // src/framing.mjs
-var PROTOCOL_VERSION = 1;
-var MAX_FRAME_BYTES = 16 * 1024 * 1024 + 64 * 1024;
+var PROTOCOL_VERSION = 2;
+var MAX_FRAME_BYTES = 64 * 1024 * 1024 + 64 * 1024;
 var MAX_REQUEST_METADATA_BYTES = 64 * 1024;
 function encodeFrame(metadata, data = Buffer.alloc(0)) {
   const json = Buffer.from(JSON.stringify({ ...metadata, protocol_version: PROTOCOL_VERSION }));
@@ -5496,7 +5496,8 @@ async function* readFrames(input, {
 
 // src/protocol.mjs
 var MAX_DATA_BYTES = 8 * 1024 * 1024;
-var MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024;
+var MAX_SNAPSHOT_BYTES = 8 * 1024 * 1024;
+var MAX_DECODED_SNAPSHOT_BYTES = 512 * 1024 * 1024;
 var MAX_DIMENSION = 1e3;
 var MAX_SESSION_ID_BYTES = 1024;
 var MAX_GENERATION_BYTES = 1024;
@@ -5670,11 +5671,13 @@ function isRecord(value) {
 // src/vt-service.mjs
 var import_addon_serialize = __toESM(require_addon_serialize(), 1);
 var import_headless = __toESM(require_xterm_headless(), 1);
-var DEFAULT_SCROLLBACK = 100;
-var MAX_SCROLLBACK = 100;
+import { gzipSync } from "node:zlib";
+var DEFAULT_SCROLLBACK = 5e3;
+var MAX_SCROLLBACK = DEFAULT_SCROLLBACK;
 var MAX_SESSIONS = 256;
 var MAX_SCREEN_CELLS = 1e6;
 var MAX_TOTAL_SCREEN_CELLS = 8e6;
+var MAX_TOTAL_BUFFER_CELLS = 64e6;
 var { SerializeAddon } = import_addon_serialize.default;
 var { Terminal } = import_headless.default;
 var VtService = class {
@@ -5686,18 +5689,22 @@ var VtService = class {
   #maxScreenCells;
   #maxTotalScreenCells;
   #totalScreenCells = 0;
+  #maxTotalBufferCells;
+  #totalBufferCells = 0;
   constructor({
     maxDataBytes,
     maxSnapshotBytes = MAX_SNAPSHOT_BYTES,
     maxSessions = MAX_SESSIONS,
     maxScreenCells = MAX_SCREEN_CELLS,
-    maxTotalScreenCells = MAX_TOTAL_SCREEN_CELLS
+    maxTotalScreenCells = MAX_TOTAL_SCREEN_CELLS,
+    maxTotalBufferCells = MAX_TOTAL_BUFFER_CELLS
   } = {}) {
     this.#maxDataBytes = maxDataBytes;
     this.#maxSnapshotBytes = maxSnapshotBytes;
     this.#maxSessions = maxSessions;
     this.#maxScreenCells = maxScreenCells;
     this.#maxTotalScreenCells = maxTotalScreenCells;
+    this.#maxTotalBufferCells = maxTotalBufferCells;
   }
   dispatch(action, request) {
     const operation = this.#tail.then(() => this.#dispatch(action, request));
@@ -5710,6 +5717,7 @@ var VtService = class {
     }
     this.#sessions.clear();
     this.#totalScreenCells = 0;
+    this.#totalBufferCells = 0;
   }
   async #dispatch(action, request) {
     switch (action) {
@@ -5744,6 +5752,7 @@ var VtService = class {
       MAX_SCROLLBACK
     );
     const screenCells = this.#screenCells(cols, rows);
+    const bufferCells = cols * (scrollback + 2 * rows);
     if (this.#sessions.has(sessionId)) {
       throw new ProtocolError(
         "session_exists",
@@ -5757,6 +5766,7 @@ var VtService = class {
       );
     }
     this.#assertTotalScreenCells(this.#totalScreenCells + screenCells);
+    this.#assertTotalBufferCells(this.#totalBufferCells + bufferCells);
     const terminal = new Terminal({
       cols,
       rows,
@@ -5774,9 +5784,11 @@ var VtService = class {
       generation,
       appliedOffset: initialOffset,
       scrollback,
-      screenCells
+      screenCells,
+      bufferCells
     });
     this.#totalScreenCells += screenCells;
+    this.#totalBufferCells += bufferCells;
     return stateResult(sessionId, generation, initialOffset, {
       cols,
       rows,
@@ -5820,9 +5832,14 @@ var VtService = class {
     }
     const nextTotalScreenCells = this.#totalScreenCells - session.screenCells + screenCells;
     this.#assertTotalScreenCells(nextTotalScreenCells);
+    const bufferCells = cols * (session.scrollback + 2 * rows);
+    const nextTotalBufferCells = this.#totalBufferCells - session.bufferCells + bufferCells;
+    this.#assertTotalBufferCells(nextTotalBufferCells);
     session.terminal.resize(cols, rows);
     session.screenCells = screenCells;
     this.#totalScreenCells = nextTotalScreenCells;
+    session.bufferCells = bufferCells;
+    this.#totalBufferCells = nextTotalBufferCells;
     return stateResult(sessionId, generation, session.appliedOffset, { cols, rows });
   }
   #snapshot(request) {
@@ -5835,7 +5852,16 @@ var VtService = class {
       session.scrollback
     );
     const serialized = session.serializer.serialize({ scrollback });
-    const data = Buffer.from(serialized, "utf8");
+    let data = Buffer.from(serialized, "utf8");
+    const decodedBytes = data.byteLength;
+    if (decodedBytes > MAX_DECODED_SNAPSHOT_BYTES) {
+      throw new ProtocolError("snapshot_too_large", "decoded snapshot exceeds the byte limit");
+    }
+    let encoding;
+    if (data.byteLength > this.#maxSnapshotBytes) {
+      data = Buffer.from(gzipSync(data, { level: 1 }).toString("base64"));
+      encoding = "gzip-base64";
+    }
     if (data.byteLength > this.#maxSnapshotBytes) {
       throw new ProtocolError(
         "snapshot_too_large",
@@ -5847,7 +5873,8 @@ var VtService = class {
       rows: session.terminal.rows,
       lines: Array.from({ length: session.terminal.rows }, (_, row) => session.terminal.buffer.active.getLine(session.terminal.buffer.active.baseY + row)?.translateToString(true) ?? ""),
       data,
-      byte_length: data.byteLength
+      byte_length: data.byteLength,
+      ...encoding ? { encoding, decoded_byte_length: decodedBytes } : {}
     });
   }
   #dispose(request) {
@@ -5858,6 +5885,7 @@ var VtService = class {
     session.terminal.dispose();
     this.#sessions.delete(sessionId);
     this.#totalScreenCells -= session.screenCells;
+    this.#totalBufferCells -= session.bufferCells;
     return stateResult(sessionId, generation, appliedOffset, { disposed: true });
   }
   #getSession(sessionId, generation) {
@@ -5888,6 +5916,14 @@ var VtService = class {
       throw new ProtocolError(
         "screen_limit_exceeded",
         `total screen cells must not exceed ${this.#maxTotalScreenCells}`
+      );
+    }
+  }
+  #assertTotalBufferCells(totalBufferCells) {
+    if (totalBufferCells > this.#maxTotalBufferCells) {
+      throw new ProtocolError(
+        "buffer_limit_exceeded",
+        `total buffer cell capacity must not exceed ${this.#maxTotalBufferCells}`
       );
     }
   }
@@ -5934,7 +5970,7 @@ async function runWorker({ input, output, logger = console, signal }) {
         await emit(failure(parsed?.id, parsed?.action, error, parsed?.request));
         continue;
       }
-      if (parsed.action === "write" || parsed.action === "resize") continue;
+      if (parsed.action === "resize") continue;
       const { data, ...metadata } = result;
       await emit(success(parsed.id, parsed.action, metadata), data);
     }

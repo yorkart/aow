@@ -1,9 +1,21 @@
 use tokio::net::UnixStream;
-use tokio_tungstenite::{WebSocketStream, client_async};
+use tokio_tungstenite::{
+    WebSocketStream, client_async_with_config, tungstenite::protocol::WebSocketConfig,
+};
 
 use super::{TerminaldClient, TerminaldClientError, paths::attach_uri};
 
 pub type TerminaldAttachStream = WebSocketStream<UnixStream>;
+
+#[derive(Clone, Copy, Default)]
+pub struct TerminalAttachOptions<'a> {
+    pub epoch: Option<&'a str>,
+    pub after: Option<u64>,
+    pub controlled: bool,
+    pub vt_snapshot: bool,
+    pub observer: bool,
+    pub gzip_snapshot: bool,
+}
 
 impl TerminaldClient {
     pub async fn attach(&self, id: &str) -> Result<TerminaldAttachStream, TerminaldClientError> {
@@ -93,12 +105,42 @@ impl TerminaldClient {
         vt_snapshot: bool,
         observer: bool,
     ) -> Result<TerminaldAttachStream, TerminaldClientError> {
-        let stream = UnixStream::connect(&self.socket).await?;
-        let (socket, _) = client_async(
-            attach_uri(id, epoch, after, controlled, vt_snapshot, observer),
-            stream,
+        self.attach_with_options(
+            id,
+            TerminalAttachOptions {
+                epoch,
+                after,
+                controlled,
+                vt_snapshot,
+                observer,
+                gzip_snapshot: false,
+            },
         )
-        .await?;
+        .await
+    }
+
+    pub async fn attach_with_options(
+        &self,
+        id: &str,
+        options: TerminalAttachOptions<'_>,
+    ) -> Result<TerminaldAttachStream, TerminaldClientError> {
+        let stream = UnixStream::connect(&self.socket).await?;
+        // An 8 MiB ANSI snapshot can expand up to 6x inside JSON. The default
+        // 16 MiB frame limit rejects valid restores before the Web proxy sees
+        // them. Keep aligned with terminald's maximum socket write buffer.
+        let config = WebSocketConfig::default().max_frame_size(Some(64 * 1024 * 1024));
+        let mut uri = attach_uri(
+            id,
+            options.epoch,
+            options.after,
+            options.controlled,
+            options.vt_snapshot,
+            options.observer,
+        );
+        if options.vt_snapshot && options.gzip_snapshot {
+            uri.push_str("&snapshot_compression=gzip");
+        }
+        let (socket, _) = client_async_with_config(uri, stream, Some(config)).await?;
         Ok(socket)
     }
 

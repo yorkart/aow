@@ -172,6 +172,7 @@ fn terminal_attach_messages_match_the_browser_wire_format() {
             reset: true,
             replay_bytes: 1024,
             restore: Some("\u{1b}[?2004h".to_owned()),
+            restore_gzip: None,
             restore_cols: Some(120),
             restore_rows: Some(40),
         })
@@ -203,6 +204,7 @@ fn terminal_attach_messages_match_the_browser_wire_format() {
             reset: false,
             replay_bytes: 0,
             restore: None,
+            restore_gzip: None,
             restore_cols: None,
             restore_rows: None,
         }
@@ -241,6 +243,7 @@ fn terminal_stream_restore_metadata_remains_backward_compatible() {
             reset: true,
             replay_bytes: 0,
             restore: Some("\u{1b}[?2004h".to_owned()),
+            restore_gzip: None,
             restore_cols: None,
             restore_rows: None,
         }
@@ -266,6 +269,7 @@ fn terminal_stream_restore_metadata_remains_backward_compatible() {
                 reset: true,
                 replay_bytes: 0,
                 restore: Some("snapshot".to_owned()),
+                restore_gzip: None,
                 restore_cols: Some(dimension),
                 restore_rows: Some(dimension),
             }

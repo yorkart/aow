@@ -15,6 +15,14 @@ pub(super) struct OutputState {
     pub(super) closed: bool,
     pub(super) state_parser: vte::Parser,
     pub(super) terminal: TerminalState,
+    pub(super) pending: PendingOutput,
+}
+
+#[derive(Default)]
+pub(super) struct PendingOutput {
+    pub(super) bytes: VecDeque<u8>,
+    pub(super) eof: bool,
+    pub(super) error: Option<String>,
 }
 
 pub(super) struct OutputSnapshot {
@@ -24,6 +32,7 @@ pub(super) struct OutputSnapshot {
     pub(super) next_offset: u64,
     pub(super) closed: bool,
     pub(super) restore: Option<String>,
+    pub(super) restore_gzip: Option<aow_protocol::TerminalRestoreGzip>,
     pub(super) restore_cols: Option<u16>,
     pub(super) restore_rows: Option<u16>,
     pub(super) restore_diagnostics: RestoreDiagnostics,
@@ -44,6 +53,7 @@ pub(super) enum RuntimeEvent {
         bytes: Bytes,
     },
     OutputClosed,
+    OutputFailed(String),
     Status {
         status: TerminalPaneStatus,
         exit_code: Option<u32>,
@@ -52,6 +62,17 @@ pub(super) enum RuntimeEvent {
 }
 
 impl OutputState {
+    pub(super) fn received_offset(&self) -> u64 {
+        self.next_offset + self.pending.bytes.len() as u64
+    }
+
+    pub(super) fn ensure_available(&self) -> Result<(), TerminaldError> {
+        match &self.pending.error {
+            Some(error) => Err(TerminaldError::Worker(error.clone())),
+            None => Ok(()),
+        }
+    }
+
     pub(super) fn snapshot(&mut self, after: Option<u64>) -> OutputSnapshot {
         self.snapshot_with_vt(after, None, "")
     }
@@ -120,10 +141,20 @@ impl OutputState {
             // discarded the beginning of the stream.
             restore: vt_snapshot
                 .as_ref()
+                .filter(|snapshot| snapshot.gzip_decoded_bytes.is_none())
                 .map(|snapshot| snapshot.ansi.clone())
                 .or_else(|| {
-                    (!resumable && self.base_offset > 0).then(|| self.terminal.restore_sequence())
+                    (!resumable && vt_snapshot.is_none() && self.base_offset > 0)
+                        .then(|| self.terminal.restore_sequence())
                 }),
+            restore_gzip: vt_snapshot.as_ref().and_then(|snapshot| {
+                snapshot
+                    .gzip_decoded_bytes
+                    .map(|decoded_bytes| aow_protocol::TerminalRestoreGzip {
+                        data: snapshot.ansi.clone(),
+                        decoded_bytes,
+                    })
+            }),
             restore_cols: vt_snapshot.as_ref().map(|snapshot| snapshot.cols),
             restore_rows: vt_snapshot.as_ref().map(|snapshot| snapshot.rows),
             restore_diagnostics,

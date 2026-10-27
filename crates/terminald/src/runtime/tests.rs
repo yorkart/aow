@@ -303,6 +303,7 @@ fn scrollback_retains_exactly_the_last_eight_mebibytes() {
         closed: false,
         state_parser: vte::Parser::new(),
         terminal: TerminalState::default(),
+        pending: PendingOutput::default(),
     };
     assert_eq!(output.append(&bytes, SCROLLBACK_LIMIT).unwrap(), 0);
 
@@ -353,6 +354,7 @@ fn fresh_reset_uses_valid_vt_snapshot_but_resume_stays_raw() {
         closed: false,
         state_parser: vte::Parser::new(),
         terminal: TerminalState::default(),
+        pending: PendingOutput::default(),
     };
     let snapshot = VtSnapshot {
         generation: "epoch".to_owned(),
@@ -360,6 +362,7 @@ fn fresh_reset_uses_valid_vt_snapshot_but_resume_stays_raw() {
         cols: 120,
         rows: 40,
         ansi: "serialized-screen".to_owned(),
+        gzip_decoded_bytes: None,
         lines: Vec::new(),
     };
 
@@ -407,6 +410,7 @@ fn invalid_vt_snapshot_falls_back_to_raw_replay() {
         closed: false,
         state_parser: vte::Parser::new(),
         terminal: TerminalState::default(),
+        pending: PendingOutput::default(),
     };
     for (snapshot, expected_reason) in [
         (
@@ -416,6 +420,7 @@ fn invalid_vt_snapshot_falls_back_to_raw_replay() {
                 cols: 80,
                 rows: 24,
                 ansi: "wrong generation".to_owned(),
+                gzip_decoded_bytes: None,
                 lines: Vec::new(),
             },
             "generation_mismatch",
@@ -427,6 +432,7 @@ fn invalid_vt_snapshot_falls_back_to_raw_replay() {
                 cols: 80,
                 rows: 24,
                 ansi: "outside ring".to_owned(),
+                gzip_decoded_bytes: None,
                 lines: Vec::new(),
             },
             "stale_offset",
@@ -457,6 +463,7 @@ fn osc_titles_cross_utf8_chunks_and_survive_scrollback_truncation() {
         closed: false,
         state_parser: vte::Parser::new(),
         terminal: TerminalState::default(),
+        pending: PendingOutput::default(),
     };
     let raw = "\x1b]0; 修复登录;保持会话 \x07".as_bytes();
     for chunk in raw
@@ -516,6 +523,7 @@ fn state_parser_crosses_chunks_and_restore_does_not_change_stream_offsets() {
         closed: false,
         state_parser: vte::Parser::new(),
         terminal: TerminalState::default(),
+        pending: PendingOutput::default(),
     };
 
     for chunk in [
@@ -583,6 +591,7 @@ fn state_parser_crosses_chunks_and_restore_does_not_change_stream_offsets() {
         closed: false,
         state_parser: vte::Parser::new(),
         terminal: TerminalState::default(),
+        pending: PendingOutput::default(),
     };
     let raw = b"\x1b[?1006hcomplete";
     {
@@ -666,7 +675,7 @@ fn state_parser_tracks_keypad_and_distinguishes_soft_and_hard_reset() {
 async fn stalled_owned_send_bounds_force_takeover() {
     let (runtime, _spawned) = test_runtime();
     let first = runtime
-        .claim(1, None, false, false)
+        .claim(1, None, false, false, false)
         .expect("first claim succeeds");
     let ClaimOutcome::Claimed(first) = first else {
         panic!("first attachment did not claim");
@@ -741,7 +750,7 @@ async fn replay_catches_up_more_than_broadcast_capacity_without_lag() {
     let (runtime, _spawned) = test_runtime();
     const PREFIX: &[u8] = b"__CATCHUP_PREFIX__";
     runtime.append_output(PREFIX).unwrap();
-    let claimed = runtime.claim(1, None, false, false).unwrap();
+    let claimed = runtime.claim(1, None, false, false, false).unwrap();
     let ClaimOutcome::Claimed(claimed) = claimed else {
         panic!("attachment did not claim");
     };
@@ -817,7 +826,7 @@ async fn live_broadcast_lag_catches_up_without_replacing_the_attachment() {
     let (runtime, _spawned) = test_runtime();
     const PREFIX: &[u8] = b"already-rendered|";
     runtime.append_output(PREFIX).unwrap();
-    let claimed = runtime.claim(1, None, false, false).unwrap();
+    let claimed = runtime.claim(1, None, false, false, false).unwrap();
     let ClaimOutcome::Claimed(claimed) = claimed else {
         panic!("attachment did not claim");
     };
@@ -878,7 +887,7 @@ async fn live_broadcast_lag_catches_up_without_replacing_the_attachment() {
 #[tokio::test]
 async fn live_catch_up_stops_promptly_when_runtime_is_deleted() {
     let (runtime, _spawned) = test_runtime();
-    let claimed = runtime.claim(1, None, false, false).unwrap();
+    let claimed = runtime.claim(1, None, false, false, false).unwrap();
     let ClaimOutcome::Claimed(claimed) = claimed else {
         panic!("attachment did not claim");
     };

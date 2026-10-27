@@ -9,8 +9,8 @@ use serde_json::{Value, json};
 use super::{
     command::validate_sent_revision,
     config::{
-        MAX_CACHED_SNAPSHOT_BYTES, MAX_JS_SAFE_INTEGER, MAX_SNAPSHOTS_PER_TICK,
-        MAX_TOTAL_CACHED_SNAPSHOT_BYTES, SNAPSHOT_TICK_BUDGET,
+        MAX_CACHED_SNAPSHOT_BYTES, MAX_DECODED_SNAPSHOT_BYTES, MAX_JS_SAFE_INTEGER,
+        MAX_SNAPSHOTS_PER_TICK, MAX_TOTAL_CACHED_SNAPSHOT_BYTES, SNAPSHOT_TICK_BUDGET,
     },
     rpc::RpcError,
     session::{SessionState, VtSnapshot},
@@ -69,7 +69,7 @@ pub(super) async fn snapshot_dirty_sessions(
                     tracing::warn!(
                         session_id = %session.session_id,
                         %message,
-                        "VT worker rejected a snapshot operation; using raw replay"
+                        "VT worker rejected a snapshot operation; terminal output stopped"
                     );
                 }
                 other => return Err(other),
@@ -92,7 +92,7 @@ pub(super) async fn snapshot_session(
     }
     validate_sent_revision(session, revision)?;
     let expected_offset = session.sent_offset.load(Ordering::Acquire);
-    let response = rpc
+    let response = match rpc
         .call(
             "snapshot",
             json!({
@@ -101,7 +101,19 @@ pub(super) async fn snapshot_session(
                 "scrollback": session.scrollback,
             }),
         )
-        .await?;
+        .await
+    {
+        Ok(response) => response,
+        Err(RpcError::SnapshotTooLarge) => {
+            // Even compression can exceed the resource budget. Keep parsing
+            // and the previous snapshot, but attachment must reject a reset
+            // once its suffix expires instead of presenting truncated history.
+            session.dirty_bytes.store(0, Ordering::Release);
+            tracing::debug!(session_id = %session.session_id, "VT snapshot exceeds byte limit; retaining previous snapshot");
+            return Ok(());
+        }
+        Err(error) => return Err(error),
+    };
     let mut value = response.metadata;
     validate_exact_offset(&value, expected_offset)?;
     let applied_offset = expected_offset;
@@ -126,6 +138,28 @@ pub(super) async fn snapshot_session(
     }
     let ansi = String::from_utf8(response.data)
         .map_err(|_| RpcError::Protocol("snapshot data is not valid UTF-8".to_owned()))?;
+    let gzip_decoded_bytes = match value.get("encoding") {
+        None => None,
+        Some(encoding) if encoding.as_str() == Some("gzip-base64") => {
+            let bytes = result_u64(&value, "decoded_byte_length")?;
+            if !(1..=MAX_DECODED_SNAPSHOT_BYTES).contains(&bytes)
+                || ansi.len() % 4 != 0
+                || !ansi
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || b"+/=".contains(&byte))
+            {
+                return Err(RpcError::Protocol(
+                    "invalid compressed VT snapshot".to_owned(),
+                ));
+            }
+            Some(bytes)
+        }
+        Some(_) => {
+            return Err(RpcError::Protocol(
+                "unknown VT snapshot encoding".to_owned(),
+            ));
+        }
+    };
     let lines: Vec<String> = serde_json::from_value(
         value
             .get_mut("lines")
@@ -149,6 +183,7 @@ pub(super) async fn snapshot_session(
             cols,
             rows,
             ansi,
+            gzip_decoded_bytes,
             lines,
         },
     );

@@ -1,8 +1,10 @@
 import serializePackage from '@xterm/addon-serialize';
 import headlessPackage from '@xterm/headless';
+import { gzipSync } from 'node:zlib';
 
 import {
   MAX_SNAPSHOT_BYTES,
+  MAX_DECODED_SNAPSHOT_BYTES,
   ProtocolError,
   parseData,
   parseDimensions,
@@ -11,11 +13,15 @@ import {
   parseSessionId,
 } from './protocol.mjs';
 
-const DEFAULT_SCROLLBACK = 100;
-const MAX_SCROLLBACK = 100;
+// Keep retention and full snapshots aligned with terminald and browser xterm.
+export const DEFAULT_SCROLLBACK = 5_000;
+const MAX_SCROLLBACK = DEFAULT_SCROLLBACK;
 export const MAX_SESSIONS = 256;
 export const MAX_SCREEN_CELLS = 1_000_000;
 export const MAX_TOTAL_SCREEN_CELLS = 8_000_000;
+// Reserve normal history plus both viewports, including history that has not
+// filled yet. The viewport-only budget cannot bound the larger scrollback.
+export const MAX_TOTAL_BUFFER_CELLS = 64_000_000;
 const { SerializeAddon } = serializePackage;
 const { Terminal } = headlessPackage;
 
@@ -28,6 +34,8 @@ export class VtService {
   #maxScreenCells;
   #maxTotalScreenCells;
   #totalScreenCells = 0;
+  #maxTotalBufferCells;
+  #totalBufferCells = 0;
 
   constructor({
     maxDataBytes,
@@ -35,12 +43,14 @@ export class VtService {
     maxSessions = MAX_SESSIONS,
     maxScreenCells = MAX_SCREEN_CELLS,
     maxTotalScreenCells = MAX_TOTAL_SCREEN_CELLS,
+    maxTotalBufferCells = MAX_TOTAL_BUFFER_CELLS,
   } = {}) {
     this.#maxDataBytes = maxDataBytes;
     this.#maxSnapshotBytes = maxSnapshotBytes;
     this.#maxSessions = maxSessions;
     this.#maxScreenCells = maxScreenCells;
     this.#maxTotalScreenCells = maxTotalScreenCells;
+    this.#maxTotalBufferCells = maxTotalBufferCells;
   }
 
   dispatch(action, request) {
@@ -56,6 +66,7 @@ export class VtService {
     }
     this.#sessions.clear();
     this.#totalScreenCells = 0;
+    this.#totalBufferCells = 0;
   }
 
   async #dispatch(action, request) {
@@ -92,6 +103,7 @@ export class VtService {
       MAX_SCROLLBACK,
     );
     const screenCells = this.#screenCells(cols, rows);
+    const bufferCells = cols * (scrollback + 2 * rows);
 
     if (this.#sessions.has(sessionId)) {
       throw new ProtocolError(
@@ -106,6 +118,7 @@ export class VtService {
       );
     }
     this.#assertTotalScreenCells(this.#totalScreenCells + screenCells);
+    this.#assertTotalBufferCells(this.#totalBufferCells + bufferCells);
 
     const terminal = new Terminal({
       cols,
@@ -125,8 +138,10 @@ export class VtService {
       appliedOffset: initialOffset,
       scrollback,
       screenCells,
+      bufferCells,
     });
     this.#totalScreenCells += screenCells;
+    this.#totalBufferCells += bufferCells;
 
     return stateResult(sessionId, generation, initialOffset, {
       cols,
@@ -153,8 +168,8 @@ export class VtService {
       throw new ProtocolError('offset_overflow', 'applied_offset exceeds safe integer range');
     }
 
-    // Completion is local to the worker; writes have no success ACK on the
-    // wire. Later resize/snapshot operations must wait for this callback.
+    // Both the write ACK and later resize/snapshot operations must wait until
+    // headless has actually parsed these bytes.
     await writeTerminal(session.terminal, data);
     session.appliedOffset = appliedOffset;
 
@@ -180,10 +195,15 @@ export class VtService {
       - session.screenCells
       + screenCells;
     this.#assertTotalScreenCells(nextTotalScreenCells);
+    const bufferCells = cols * (session.scrollback + 2 * rows);
+    const nextTotalBufferCells = this.#totalBufferCells - session.bufferCells + bufferCells;
+    this.#assertTotalBufferCells(nextTotalBufferCells);
 
     session.terminal.resize(cols, rows);
     session.screenCells = screenCells;
     this.#totalScreenCells = nextTotalScreenCells;
+    session.bufferCells = bufferCells;
+    this.#totalBufferCells = nextTotalBufferCells;
     return stateResult(sessionId, generation, session.appliedOffset, { cols, rows });
   }
 
@@ -197,7 +217,18 @@ export class VtService {
       session.scrollback,
     );
     const serialized = session.serializer.serialize({ scrollback });
-    const data = Buffer.from(serialized, 'utf8');
+    let data = Buffer.from(serialized, 'utf8');
+    const decodedBytes = data.byteLength;
+    if (decodedBytes > MAX_DECODED_SNAPSHOT_BYTES) {
+      throw new ProtocolError('snapshot_too_large', 'decoded snapshot exceeds the byte limit');
+    }
+    let encoding;
+    if (data.byteLength > this.#maxSnapshotBytes) {
+      // Dense SGR changes can dwarf the actual retained text. Preserve every
+      // cell/style instead of keeping an old snapshot whose raw suffix expires.
+      data = Buffer.from(gzipSync(data, { level: 1 }).toString('base64'));
+      encoding = 'gzip-base64';
+    }
 
     if (data.byteLength > this.#maxSnapshotBytes) {
       throw new ProtocolError(
@@ -212,6 +243,7 @@ export class VtService {
         session.terminal.buffer.active.getLine(session.terminal.buffer.active.baseY + row)?.translateToString(true) ?? ''),
       data,
       byte_length: data.byteLength,
+      ...(encoding ? { encoding, decoded_byte_length: decodedBytes } : {}),
     });
   }
 
@@ -224,6 +256,7 @@ export class VtService {
     session.terminal.dispose();
     this.#sessions.delete(sessionId);
     this.#totalScreenCells -= session.screenCells;
+    this.#totalBufferCells -= session.bufferCells;
     return stateResult(sessionId, generation, appliedOffset, { disposed: true });
   }
 
@@ -257,6 +290,15 @@ export class VtService {
       throw new ProtocolError(
         'screen_limit_exceeded',
         `total screen cells must not exceed ${this.#maxTotalScreenCells}`,
+      );
+    }
+  }
+
+  #assertTotalBufferCells(totalBufferCells) {
+    if (totalBufferCells > this.#maxTotalBufferCells) {
+      throw new ProtocolError(
+        'buffer_limit_exceeded',
+        `total buffer cell capacity must not exceed ${this.#maxTotalBufferCells}`,
       );
     }
   }

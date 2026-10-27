@@ -1,7 +1,10 @@
 import { PROTOCOL_VERSION } from './framing.mjs';
 
 export const MAX_DATA_BYTES = 8 * 1024 * 1024;
-export const MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024;
+// Keep aligned with terminald's cache and TerminalPaneView's restore limit.
+export const MAX_SNAPSHOT_BYTES = 8 * 1024 * 1024;
+// Bound decoded work independently of the compressed cache/transport budget.
+export const MAX_DECODED_SNAPSHOT_BYTES = 512 * 1024 * 1024;
 
 // Keep this aligned with terminald's public terminal dimension contract.
 const MAX_DIMENSION = 1_000;

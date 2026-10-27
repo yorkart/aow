@@ -33,6 +33,11 @@ impl Runtime {
                 vt_session.dispose();
             }
             self.deleted_changed.send_replace(true);
+            // Pair with the producer's condition-variable predicate to avoid
+            // losing deletion between its predicate check and entering wait.
+            if let Ok(_output) = self.output.lock() {
+                self.output_capacity.notify_all();
+            }
             let _ = self.events.send(RuntimeEvent::Deleted);
         }
     }

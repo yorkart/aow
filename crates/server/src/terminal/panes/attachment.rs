@@ -28,28 +28,19 @@ impl TerminalManager {
         self.ensure_pane(tab_id, pane_id)?;
         let hosted = self.hosting(pane_id)?.is_some();
         let controlled = options.controlled || self.cli_agent(pane_id).is_ok() || hosted;
-        let attachment = if controlled {
-            self.inner
-                .terminald
-                .attach_controlled_with_resume_capabilities_and_observer(
-                    pane_id,
-                    options.epoch,
-                    options.after,
-                    options.vt_snapshot,
-                    options.observer || hosted,
-                )
-                .await
-        } else {
-            self.inner
-                .terminald
-                .attach_with_resume_capabilities(
-                    pane_id,
-                    options.epoch,
-                    options.after,
-                    options.vt_snapshot,
-                )
-                .await
+        let mut daemon_options = aow_terminald_client::TerminalAttachOptions {
+            epoch: options.epoch,
+            after: options.after,
+            controlled,
+            vt_snapshot: options.vt_snapshot,
+            observer: options.observer || hosted,
+            gzip_snapshot: options.gzip_snapshot,
         };
+        let attachment = self
+            .inner
+            .terminald
+            .attach_with_options(pane_id, daemon_options)
+            .await;
         match attachment {
             Ok(socket) => return Ok(socket),
             Err(error) if client_error_is_not_found(&error) => {
@@ -61,23 +52,14 @@ impl TerminalManager {
         // Reconcile may have recreated this pane as a new runtime. Never reuse
         // a cursor from the previous terminald instance, but preserve the
         // browser's requested control protocol across the retry.
-        let attachment = if controlled {
-            self.inner
-                .terminald
-                .attach_controlled_with_resume_capabilities_and_observer(
-                    pane_id,
-                    None,
-                    None,
-                    options.vt_snapshot,
-                    options.observer || self.hosting(pane_id)?.is_some(),
-                )
-                .await
-        } else {
-            self.inner
-                .terminald
-                .attach_with_resume_capabilities(pane_id, None, None, options.vt_snapshot)
-                .await
-        };
+        daemon_options.epoch = None;
+        daemon_options.after = None;
+        daemon_options.observer = options.observer || self.hosting(pane_id)?.is_some();
+        let attachment = self
+            .inner
+            .terminald
+            .attach_with_options(pane_id, daemon_options)
+            .await;
         attachment.map_err(|error| {
             if client_error_is_not_found(&error) {
                 TerminalError::DaemonUnavailable(

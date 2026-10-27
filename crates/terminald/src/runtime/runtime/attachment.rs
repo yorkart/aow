@@ -16,6 +16,7 @@ pub(in crate::runtime) struct RuntimeConnection {
     pub(in crate::runtime) attachment_id: u128,
     pub(in crate::runtime) resume_after: Option<u64>,
     pub(in crate::runtime) vt_snapshot: bool,
+    pub(in crate::runtime) gzip_snapshot: bool,
     pub(in crate::runtime) deleted_changed: watch::Receiver<bool>,
     pub(in crate::runtime) controller_changed: watch::Receiver<Option<ControllerOwner>>,
 }
@@ -30,6 +31,7 @@ pub(in crate::runtime) struct ClaimedAttachment {
     pub(in crate::runtime) owner: ControllerOwner,
     pub(in crate::runtime) controller_changed: watch::Receiver<Option<ControllerOwner>>,
     pub(in crate::runtime) restore: Option<String>,
+    pub(in crate::runtime) restore_gzip: Option<aow_protocol::TerminalRestoreGzip>,
     pub(in crate::runtime) restore_cols: Option<u16>,
     pub(in crate::runtime) restore_rows: Option<u16>,
 }
@@ -44,6 +46,7 @@ pub(in crate::runtime) struct ObservedAttachment {
     pub(in crate::runtime) replay_bytes: u64,
     pub(in crate::runtime) next_offset: u64,
     pub(in crate::runtime) restore: Option<String>,
+    pub(in crate::runtime) restore_gzip: Option<aow_protocol::TerminalRestoreGzip>,
     pub(in crate::runtime) restore_cols: Option<u16>,
     pub(in crate::runtime) restore_rows: Option<u16>,
     pub(in crate::runtime) controller_changed: watch::Receiver<Option<ControllerOwner>>,
@@ -53,6 +56,7 @@ pub(in crate::runtime) enum ClaimOutcome {
     Claimed(ClaimedAttachment),
     Waiting,
     Unchanged,
+    UnsupportedSnapshot,
 }
 
 impl Runtime {
@@ -94,6 +98,7 @@ impl Runtime {
             attachment_id: u128::from(aow_id::new_snowflake().as_u64()),
             resume_after: after,
             vt_snapshot,
+            gzip_snapshot: false,
             deleted_changed,
             controller_changed: self.controller_changed.subscribe(),
         })
@@ -105,6 +110,7 @@ impl Runtime {
         after: Option<u64>,
         force: bool,
         vt_snapshot: bool,
+        gzip_snapshot: bool,
     ) -> Result<ClaimOutcome, TerminaldError> {
         let mut controller = self
             .controller
@@ -129,10 +135,12 @@ impl Runtime {
         // Output producers hold this same lock while broadcasting, so the
         // snapshot has an exact byte boundary for later catch-up.
         let mut output = self.output.lock().map_err(|_| TerminaldError::Poisoned)?;
+        output.ensure_available()?;
         if self.is_deleted() {
             return Err(TerminaldError::NotFound(self.id.clone()));
         }
 
+        let require_complete = vt_snapshot && self.vt_session.is_some() && output.base_offset > 0;
         let (vt_snapshot, snapshot_unavailable_reason) = if !vt_snapshot {
             (None, "capability_not_requested")
         } else if let Some(session) = &self.vt_session {
@@ -146,6 +154,11 @@ impl Runtime {
             &self.stream_epoch,
             snapshot_unavailable_reason,
         );
+        ensure_complete_restore(&snapshot, require_complete)?;
+        // Reject incompatible clients before changing controller ownership.
+        if snapshot.restore_gzip.is_some() && !gzip_snapshot {
+            return Ok(ClaimOutcome::UnsupportedSnapshot);
+        }
         let replay_bytes =
             u64::try_from(snapshot.replay.len()).expect("scrollback length fits in u64");
         tracing::debug!(
@@ -185,6 +198,7 @@ impl Runtime {
             owner,
             controller_changed,
             restore: snapshot.restore,
+            restore_gzip: snapshot.restore_gzip,
             restore_cols: snapshot.restore_cols,
             restore_rows: snapshot.restore_rows,
         }))
@@ -202,9 +216,11 @@ impl Runtime {
             return Err(TerminaldError::NotFound(self.id.clone()));
         }
         let mut output = self.output.lock().map_err(|_| TerminaldError::Poisoned)?;
+        output.ensure_available()?;
         if self.is_deleted() {
             return Err(TerminaldError::NotFound(self.id.clone()));
         }
+        let require_complete = vt_snapshot && self.vt_session.is_some() && output.base_offset > 0;
         let (vt_snapshot, snapshot_unavailable_reason) = if !vt_snapshot {
             (None, "capability_not_requested")
         } else if let Some(session) = &self.vt_session {
@@ -218,6 +234,7 @@ impl Runtime {
             &self.stream_epoch,
             snapshot_unavailable_reason,
         );
+        ensure_complete_restore(&snapshot, require_complete)?;
         let replay_bytes =
             u64::try_from(snapshot.replay.len()).expect("scrollback length fits in u64");
         Ok(ObservedAttachment {
@@ -228,6 +245,7 @@ impl Runtime {
             replay_bytes,
             next_offset: snapshot.next_offset,
             restore: snapshot.restore,
+            restore_gzip: snapshot.restore_gzip,
             restore_cols: snapshot.restore_cols,
             restore_rows: snapshot.restore_rows,
             controller_changed: self.controller_changed.subscribe(),
@@ -254,4 +272,16 @@ impl Runtime {
             self.controller_changed.send_replace(None);
         }
     }
+}
+
+fn ensure_complete_restore(
+    snapshot: &OutputSnapshot,
+    required: bool,
+) -> Result<(), TerminaldError> {
+    if required && snapshot.reset && !snapshot.restore_diagnostics.snapshot_selected {
+        return Err(TerminaldError::Worker(
+            "complete terminal history is not available for restore; retry when a full snapshot is ready".to_owned(),
+        ));
+    }
+    Ok(())
 }

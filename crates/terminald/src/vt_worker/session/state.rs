@@ -8,6 +8,7 @@ use super::super::{
     queue::WriteBatch,
     snapshot::reserve_snapshot_bytes,
 };
+use tokio::sync::watch;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct VtSnapshot {
@@ -16,6 +17,8 @@ pub(crate) struct VtSnapshot {
     pub(crate) cols: u16,
     pub(crate) rows: u16,
     pub(crate) ansi: String,
+    /// When present, `ansi` carries base64 gzip rather than literal ANSI.
+    pub(crate) gzip_decoded_bytes: Option<u64>,
     pub(crate) lines: Vec<String>,
 }
 
@@ -30,6 +33,10 @@ pub(in crate::vt_worker) struct SessionState {
     pub(in crate::vt_worker) sent_revision: AtomicU64,
     /// End of the ordered byte stream sent to the worker, not an applied ACK.
     pub(in crate::vt_worker) sent_offset: AtomicU64,
+    /// None means parsing failed or the session was disposed. ACKs are
+    /// consumed independently of the command actor, so a full pipe cannot
+    /// prevent publication of output the worker has already parsed.
+    pub(in crate::vt_worker) applied_offset: watch::Sender<Option<u64>>,
     pub(in crate::vt_worker) sent_cols: AtomicU16,
     pub(in crate::vt_worker) sent_rows: AtomicU16,
     pub(in crate::vt_worker) dirty_bytes: AtomicUsize,
@@ -58,6 +65,7 @@ impl SessionState {
 
     pub(in crate::vt_worker) fn fail(&self) {
         self.status.store(SESSION_FAILED, Ordering::Release);
+        self.applied_offset.send_replace(None);
         self.clear_snapshot();
     }
 

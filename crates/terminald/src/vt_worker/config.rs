@@ -7,13 +7,15 @@ pub(super) const MAX_WRITE_BATCH_BYTES: usize = 64 * 1024;
 // A sent batch releases its reservation once the pipe accepts it. The worker
 // reads/executes one frame at a time, so pipe backpressure bounds the rest.
 pub(super) const MAX_PENDING_WRITE_BYTES: usize = 16 * 1024 * 1024;
-pub(super) const DEFAULT_SCROLLBACK: usize = 100;
+// Retain and serialize the same history as TerminalPaneView's browser xterm.
+pub(super) const DEFAULT_SCROLLBACK: usize = 5_000;
 pub(super) const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 pub(super) const DEFAULT_SNAPSHOT_INTERVAL: Duration = Duration::from_millis(200);
 // Keep this aligned with vt-worker/src/vt-service.mjs.
-pub(super) const MAX_SCROLLBACK: usize = 100;
+pub(super) const MAX_SCROLLBACK: usize = 5_000;
 // Keep this aligned with vt-worker/src/protocol.mjs.
-pub(super) const MAX_CACHED_SNAPSHOT_BYTES: usize = 2 * 1024 * 1024;
+pub(super) const MAX_CACHED_SNAPSHOT_BYTES: usize = 8 * 1024 * 1024;
+pub(super) const MAX_DECODED_SNAPSHOT_BYTES: u64 = 512 * 1024 * 1024;
 pub(super) const MAX_TOTAL_CACHED_SNAPSHOT_BYTES: usize = 64 * 1024 * 1024;
 pub(super) const SNAPSHOT_BYTE_INTERVAL: usize = 256 * 1024;
 // Snapshot work shares one ordered actor with write and resize RPCs. Bound

@@ -26,6 +26,8 @@ pub(super) struct Runtime {
     pub(super) child_start_time: Option<String>,
     pub(super) deleted: AtomicBool,
     pub(super) output: Mutex<OutputState>,
+    pub(super) output_capacity: Condvar,
+    pub(super) output_changed: Notify,
     pub(super) vt_session: Option<VtSession>,
     pub(super) events: broadcast::Sender<RuntimeEvent>,
     pub(super) controller: Mutex<ControllerState>,

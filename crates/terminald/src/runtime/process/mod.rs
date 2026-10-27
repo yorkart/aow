@@ -28,6 +28,10 @@ pub(super) fn compare_existing(
 }
 
 pub(super) fn start_runtime_workers(mut spawned: SpawnedRuntime) {
+    if spawned.runtime.vt_session.is_some() {
+        let runtime = spawned.runtime.clone();
+        tokio::spawn(async move { runtime.publish_vt_output().await });
+    }
     let reader_runtime = spawned.runtime.clone();
     let mut reader = spawned
         .reader
@@ -40,7 +44,12 @@ pub(super) fn start_runtime_workers(mut spawned: SpawnedRuntime) {
                 Ok(0) => break,
                 Ok(length) => {
                     if let Err(error) = reader_runtime.append_output(&buffer[..length]) {
-                        tracing::warn!(%error, runtime_id = %reader_runtime.id, "terminal output accounting failed");
+                        tracing::warn!(%error, runtime_id = %reader_runtime.id, "terminal output publication failed; draining PTY for cleanup");
+                        // In particular on macOS, a full PTY can keep a killed
+                        // child inside its write syscall until the reader drains
+                        // it. Never publish these unacknowledged bytes, but keep
+                        // draining so failure/delete can still reap the process.
+                        let _ = std::io::copy(&mut reader, &mut std::io::sink());
                         break;
                     }
                 }
@@ -217,7 +226,10 @@ pub(super) fn spawn_runtime_blocking(
                 closed: false,
                 state_parser: vte::Parser::new(),
                 terminal: TerminalState::default(),
+                pending: PendingOutput::default(),
             }),
+            output_capacity: Condvar::new(),
+            output_changed: Notify::new(),
             vt_session,
             events,
             controller: Mutex::new(ControllerState {

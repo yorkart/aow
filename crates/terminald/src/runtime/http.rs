@@ -80,12 +80,13 @@ async fn attach_runtime(
     Query(query): Query<AttachQuery>,
     websocket: WebSocketUpgrade,
 ) -> Result<Response, TerminaldError> {
-    let connection = state.attach(
+    let mut connection = state.attach(
         &id,
         query.epoch.as_deref(),
         query.after,
         query.capabilities.as_deref() == Some("vt-snapshot-v1"),
     )?;
+    connection.gzip_snapshot = query.snapshot_compression.as_deref() == Some("gzip");
     let controlled = query.control.as_deref() == Some("v2");
     let observe = query.observer.as_deref() == Some("v1");
     Ok(websocket
@@ -101,5 +102,6 @@ struct AttachQuery {
     after: Option<u64>,
     control: Option<String>,
     capabilities: Option<String>,
+    snapshot_compression: Option<String>,
     observer: Option<String>,
 }

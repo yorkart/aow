@@ -26,6 +26,7 @@ pub(super) async fn attach_terminal_pane(
                         after: query.after,
                         controlled: query.control.as_deref() == Some("v2"),
                         vt_snapshot: query.capabilities.as_deref() == Some("vt-snapshot-v1"),
+                        gzip_snapshot: query.snapshot_compression.as_deref() == Some("gzip"),
                         observer: query.observer.as_deref() == Some("v1"),
                     },
                 )

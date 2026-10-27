@@ -2,6 +2,14 @@ use serde::{Deserialize, Serialize};
 
 use super::runtime::TerminalRuntimeStatus;
 
+/// Lossless restore negotiated with `snapshot_compression=gzip`. The data is
+/// base64 gzip; decoded bytes are streamed into xterm before replay or input.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TerminalRestoreGzip {
+    pub data: String,
+    pub decoded_bytes: u64,
+}
+
 /// Text messages accepted by the runtime attach WebSocket. Binary messages are
 /// terminal input bytes and therefore are intentionally not represented here.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -50,7 +58,9 @@ pub enum TerminalAttachServerMessage {
         replay_bytes: u64,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         restore: Option<String>,
-        /// Original width of a serialized VT snapshot carried in `restore`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        restore_gzip: Option<TerminalRestoreGzip>,
+        /// Original width of the snapshot in `restore` or `restore_gzip`.
         ///
         /// These dimensions are absent for the legacy mode-only repair
         /// sequence. When present, both dimensions must be present and the

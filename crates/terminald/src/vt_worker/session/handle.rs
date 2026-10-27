@@ -15,6 +15,18 @@ pub(crate) struct VtSession {
 }
 
 impl VtSession {
+    pub(crate) fn applied_offsets(&self) -> tokio::sync::watch::Receiver<Option<u64>> {
+        self.state.applied_offset.subscribe()
+    }
+
+    pub(crate) fn request_timeout(&self) -> std::time::Duration {
+        self.client.request_timeout
+    }
+
+    pub(crate) fn fail(&self) {
+        self.state.fail();
+    }
+
     /// Queue output without waiting for Node or waiting for queue capacity.
     pub(crate) fn write(&self, start_offset: u64, data: &[u8]) {
         if data.is_empty() || !self.state.is_active() {
@@ -52,7 +64,7 @@ impl VtSession {
                     self.state.fail();
                     tracing::warn!(
                         session_id = %self.state.session_id,
-                        "VT worker pending output byte limit exceeded; falling back to raw terminal replay"
+                        "VT worker pending output byte limit exceeded; terminal output stopped"
                     );
                     return;
                 };
@@ -108,6 +120,7 @@ impl VtSession {
             return;
         }
         self.state.clear_snapshot();
+        self.state.applied_offset.send_replace(None);
         if let Err(error) = self.client.sender.try_send(WorkerCommand::Dispose {
             session: self.state.clone(),
         }) {
@@ -126,7 +139,7 @@ impl VtSession {
             tracing::warn!(
                 session_id = %self.state.session_id,
                 %error,
-                "VT worker queue unavailable; falling back to raw terminal replay"
+                "VT worker queue unavailable; terminal output stopped"
             );
         }
     }
