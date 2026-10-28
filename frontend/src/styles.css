@@ -135,7 +135,7 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .editor-file-notice span { min-width:0; flex:1; } .editor-file-notice.warning { color:var(--aow-warning); background:var(--aow-warning-background); border-color:var(--aow-warning-border); } .editor-file-notice.info { color:var(--aow-info); background:var(--aow-header); border-color:var(--aow-control-line); } .editor-file-notice.error { color:var(--aow-error); background:var(--aow-error-background); border-color:var(--aow-error-border); }
 .editor-file-notice button { padding:2px 6px; color:inherit; border:1px solid currentColor; border-radius:3px; cursor:pointer; white-space:nowrap; } .editor-file-notice button:hover { background:var(--aow-subtle-hover); }
 .editor-content { position:relative; flex:1; min-height:0; overflow:hidden; }
-.markdown-source-editor { position:absolute; inset:0; } .markdown-source-editor.preview-hidden { visibility:hidden; pointer-events:none; }
+.document-source-editor { position:absolute; inset:0; } .document-source-editor.preview-hidden { visibility:hidden; pointer-events:none; }
 .editor-loading { height:100%; display:flex; align-items:center; justify-content:center; gap:8px; color:var(--aow-text-secondary); }
 .loading-spinner { width:15px; height:15px; border:2px solid var(--aow-control-line); border-top-color:var(--aow-accent); border-radius:50%; animation:spin .8s linear infinite; }
 @keyframes spin { to { transform:rotate(360deg); } }
@@ -146,6 +146,7 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .markdown-preview:not(.docx-preview) th,.project-aow-snapshot-markdown th { background:var(--panel); font-weight:600; }
 .image-preview { width:100%; height:100%; display:grid; place-items:center; overflow:auto; background:var(--aow-input); } .image-preview img { max-width:95%; max-height:95%; object-fit:contain; }
 .pdf-preview { width:100%; height:100%; border:0; }
+.html-preview { width:100%; height:100%; border:0; background:#fff; color-scheme:light; }
 .diff-preview { height:100%; margin:0; padding:10px 14px; overflow:auto; white-space:pre; color:var(--aow-text); background:var(--aow-editor-background); font:12px/1.45 ui-monospace,monospace; }
 .unsupported-preview { margin:30px; padding:20px; border:1px solid var(--line); }
 .terminal-workspace { min-width:0; min-height:0; display:flex; flex-direction:column; background:var(--aow-terminal-background); }

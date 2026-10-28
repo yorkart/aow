@@ -3,11 +3,12 @@ import { hasDocumentOwners } from './workspaceDocuments';
 import Editor, { DiffEditor } from './MonacoEditor';
 import DOMPurify from 'dompurify';
 import { MarkdownFileContent } from '../files/MarkdownFileContent';
+import { HtmlPreview } from './HtmlPreview';
 import { Check, ChevronLeft, ChevronRight, Code2, Download, Eye, LoaderCircle, RefreshCw, Save, WrapText, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { filesApi } from '../files/api';
 import { useEditorSettings } from './editorSettings';
-import type { MarkdownViewMode, OpenDocument } from './types';
+import type { DocumentViewMode, OpenDocument } from './types';
 import { monaco } from './monaco';
 import { FileTypeIcon } from '../files/FileTypeIcon';
 
@@ -23,7 +24,8 @@ interface Props {
   onReloadExternal: (id: string) => void; onKeepLocal: (id: string) => void;
   onPreviewLoaded: (id: string, url: string) => void; onPreviewError: (id: string, url: string) => void;
   onRestorePreview: (id: string) => void;
-  onMarkdownViewChange: (id: string, mode: MarkdownViewMode) => void;
+  onMarkdownViewChange: (id: string, mode: DocumentViewMode) => void;
+  onHtmlViewChange: (id: string, mode: DocumentViewMode) => void;
 }
 
 function iconFor(document: OpenDocument) {
@@ -46,7 +48,7 @@ function downloadFile(path: string) {
 function canSaveDocument(document: OpenDocument | undefined): document is OpenDocument {
   return Boolean(
     document
-      && (document.kind === 'text' || document.kind === 'json' || document.kind === 'markdown')
+      && (document.kind === 'text' || document.kind === 'json' || document.kind === 'markdown' || document.kind === 'html')
       && !document.readOnly
       && document.dirty
       && !document.saving
@@ -138,15 +140,17 @@ function TabContextMenu({ x, y, document, hasOtherDocuments, onCloseMenu, onClos
   );
 }
 
-export function EditorArea({ workspace, documents, activeId, wordWrapOverride, onWordWrapChange, onActivate, onClose, onCloseOthers, onCloseAll, onChange, onSave, onRefresh, onReloadExternal, onKeepLocal, onPreviewLoaded, onPreviewError, onRestorePreview, onMarkdownViewChange }: Props) {
+export function EditorArea({ workspace, documents, activeId, wordWrapOverride, onWordWrapChange, onActivate, onClose, onCloseOthers, onCloseAll, onChange, onSave, onRefresh, onReloadExternal, onKeepLocal, onPreviewLoaded, onPreviewError, onRestorePreview, onMarkdownViewChange, onHtmlViewChange }: Props) {
   const active = documents.find((document) => document.id === activeId);
   const { editor } = useEditorSettings();
   const wrapEnabled = wordWrapOverride ?? editor.word_wrap;
   const wordWrap = wrapEnabled ? 'on' : 'off';
   const saveLabel = active?.saving ? t("editor.autosaving") : active?.dirty ? t("editor.save_now") : t("editor.autosaved");
+  const supportsPreview = active?.kind === 'markdown' || active?.kind === 'html';
+  const viewMode = active?.kind === 'html' ? active.htmlView : active?.markdownView;
   const showWordWrap = active?.kind === 'text' || active?.kind === 'json' || active?.kind === 'diff'
-    || (active?.kind === 'markdown' && active.markdownView === 'editor');
-  const markdownViewLabel = active?.markdownView === 'editor' ? t("editor.switch_to_preview") : t("editor.switch_to_source");
+    || (supportsPreview && viewMode === 'editor');
+  const previewViewLabel = viewMode === 'editor' ? t("editor.switch_to_preview") : t("editor.switch_to_source");
   const editorArea = useRef<HTMLElement>(null);
   const tabs = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<TabContextMenu>();
@@ -268,24 +272,24 @@ export function EditorArea({ workspace, documents, activeId, wordWrapOverride, o
         <>
           <div className="editor-toolbar">
             <code title={active.path}>{active.path}</code>
-            {showWordWrap || active.kind === 'markdown' ? (
+            {showWordWrap || supportsPreview ? (
               <>
                 <div className="editor-toolbar-group" role="group" aria-label={t("editor.view_actions")}>
                   {showWordWrap ? <button
                     className={wrapEnabled ? 'active' : undefined} aria-label={t("editor.word_wrap")} aria-pressed={wrapEnabled}
                     title={t("editor.word_wrap_2", { value0: wrapEnabled ? t("common.enabled") : t("pr.closed"), value1: wordWrapOverride === undefined ? t("common.follow_global_setting") : t("common.current_tab") })}
                     onClick={() => onWordWrapChange(active.id, !wrapEnabled)}><WrapText aria-hidden="true" /></button> : null}
-                  {active.kind === 'markdown' ? <button
-                    title={markdownViewLabel} aria-label={markdownViewLabel}
-                    onClick={() => onMarkdownViewChange(active.id, active.markdownView === 'editor' ? 'preview' : 'editor')}>
-                    {active.markdownView === 'editor' ? <Eye aria-hidden="true" /> : <Code2 aria-hidden="true" />}
+                  {supportsPreview ? <button
+                    title={previewViewLabel} aria-label={previewViewLabel}
+                    onClick={() => (active.kind === 'html' ? onHtmlViewChange : onMarkdownViewChange)(active.id, viewMode === 'editor' ? 'preview' : 'editor')}>
+                    {viewMode === 'editor' ? <Eye aria-hidden="true" /> : <Code2 aria-hidden="true" />}
                   </button> : null}
                 </div>
                 <span className="editor-toolbar-separator" aria-hidden="true" />
               </>
             ) : null}
             <div className="editor-toolbar-group" role="group" aria-label={t("editor.file_actions")}>
-              {(active.kind === 'text' || active.kind === 'json' || active.kind === 'markdown') && !active.readOnly ? <button
+              {(active.kind === 'text' || active.kind === 'json' || supportsPreview) && !active.readOnly ? <button
                 title={t("editor.autosave_enabled_macos_command_s_other_systems_ctrl_s", { value0: saveLabel })} aria-label={saveLabel} aria-busy={Boolean(active.saving)}
                 disabled={!canSaveDocument(active)} onClick={() => onSave(active.id)}>
                 {active.saving ? <LoaderCircle className="spinning" aria-hidden="true" /> : active.dirty ? <Save aria-hidden="true" /> : <Check aria-hidden="true" />}
@@ -321,20 +325,22 @@ export function EditorArea({ workspace, documents, activeId, wordWrapOverride, o
                 onChange={(value) => onChange(active.id, value ?? '')}
               />
             ) : null}
-            {!active.loading && active.kind === 'markdown' ? (
+            {!active.loading && supportsPreview ? (
               <>
-                <div className={`markdown-source-editor${active.markdownView === 'editor' ? '' : ' preview-hidden'}`} aria-hidden={active.markdownView !== 'editor'}>
+                <div className={`document-source-editor${viewMode === 'editor' ? '' : ' preview-hidden'}`} aria-hidden={viewMode !== 'editor'}>
                   <Editor
                     path={documentEditorModelPath(active)}
                     revealLocation={active.revealLocation}
-                    language={active.language ?? 'markdown'}
+                    language={active.language ?? active.kind}
                     value={active.content ?? ''}
                     keepCurrentModel
                     options={{ automaticLayout: true, minimap: { enabled: false }, readOnly: active.readOnly, fontSize: 13, scrollBeyondLastLine: false, wordWrap }}
                     onChange={(value) => onChange(active.id, value ?? '')}
                   />
                 </div>
-                {active.markdownView !== 'editor' ? <MarkdownFileContent text={active.content ?? ''} className="markdown-preview" workspace={workspace} path={active.path} /> : null}
+                {viewMode !== 'editor' ? active.kind === 'html'
+                  ? <HtmlPreview key={`${active.id}:${active.htmlPreviewRevision ?? 0}`} content={active.content ?? ''} path={active.path} name={active.name} />
+                  : <MarkdownFileContent text={active.content ?? ''} className="markdown-preview" workspace={workspace} path={active.path} /> : null}
               </>
             ) : null}
             {!active.loading && active.kind === 'docx' ? <article className="markdown-preview docx-preview" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(active.content ?? '') }} /> : null}

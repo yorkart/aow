@@ -4473,6 +4473,101 @@ try {
     await tab(page, 'edit.txt').dblclick();
   }
 
+  for (const filename of ['page.html', 'page.HTM']) {
+    await test(`HTML tab ${filename} previews, edits, autosaves and refreshes the same document`, async t => {
+      const path = `${worktrees[0].path}/${filename}`;
+      const content = '<!doctype html><style>h1 { color: rgb(12, 34, 56); }</style><h1>HTML preview</h1><button onclick="this.textContent = \'Clicked\'">Try it</button>';
+      const { page, state } = await fixture(t, { beforeOpen: ({ state }) => {
+        state.textFiles[path] = { content, version: 'v1' };
+      } });
+      await openDockFile(page, path);
+      const frame = page.frameLocator('.html-preview');
+      await frame.getByRole('heading', { name: 'HTML preview', exact: true }).waitFor();
+      assert.equal(await frame.locator('h1').evaluate(node => getComputedStyle(node).color), 'rgb(12, 34, 56)');
+      await frame.getByRole('button', { name: 'Try it', exact: true }).click();
+      await frame.getByRole('button', { name: 'Clicked', exact: true }).waitFor();
+      assert.equal(await page.getByRole('button', { name: '自动换行', exact: true }).count(), 0);
+      await page.getByRole('button', { name: '切换到源码', exact: true }).click();
+      await surface(page).locator('.document-source-editor:not(.preview-hidden) .monaco-editor').waitFor();
+      const modelId = await page.evaluate(async filename => {
+        const { monaco } = await import('/src/features/editor/monaco.ts');
+        const editor = monaco.editor.getEditors().find(editor => editor.getModel()?.uri.toString().endsWith('/' + filename));
+        editor.executeEdits('test', [{ range: editor.getModel().getFullModelRange(), text: '<h1>Edited HTML</h1>' }]);
+        return editor.getModel().id;
+      }, filename);
+      await page.getByRole('button', { name: '切换到预览', exact: true }).click();
+      await frame.getByRole('heading', { name: 'Edited HTML', exact: true }).waitFor();
+      await eventually(() => state.writes.length === 1);
+      assert.deepEqual(state.writes[0], { path, content: '<h1>Edited HTML</h1>', version: '"v1"' });
+      await openText(page);
+      await tab(page, filename).click();
+      await frame.getByRole('heading', { name: 'Edited HTML', exact: true }).waitFor();
+      state.textFiles[path] = { content: '<h1>External HTML</h1>', version: 'v2' };
+      await page.getByRole('button', { name: '刷新文件', exact: true }).click();
+      await frame.getByRole('heading', { name: 'External HTML', exact: true }).waitFor();
+      state.failText = true;
+      await page.getByRole('button', { name: '刷新文件', exact: true }).click();
+      await page.locator('.editor-file-notice.error').filter({ hasText: 'File removed' }).waitFor();
+      await frame.getByRole('heading', { name: 'External HTML', exact: true }).waitFor();
+      await page.getByRole('button', { name: '切换到源码', exact: true }).click();
+      assert.equal(await page.evaluate(async filename => {
+        const { monaco } = await import('/src/features/editor/monaco.ts');
+        return monaco.editor.getModels().find(model => model.uri.toString().endsWith('/' + filename)).id;
+      }, filename), modelId, 'view changes and refresh preserve the editor model');
+    });
+  }
+
+  await test('HTML preview isolates scripts from parent storage and authenticated API requests', async t => {
+    const path = `${worktrees[0].path}/isolated.html`;
+    const { page, state } = await fixture(t, { beforeOpen: ({ state }) => {
+      state.textFiles[path] = { version: 'v1', content: `<h1>Isolated HTML</h1><script>
+        try { parent.document.body.dataset.previewEscaped = 'true'; } catch { document.body.dataset.parentBlocked = 'true'; }
+        try { localStorage.getItem('aow.language'); } catch { document.body.dataset.storageBlocked = 'true'; }
+        fetch('${baseURL}/api/preview-probe', { method: 'POST', credentials: 'include', body: 'unsafe' })
+          .catch(() => { document.body.dataset.fetchBlocked = 'true'; });
+        </script><script src="${baseURL}/api/preview-script"></script>` };
+    } });
+    await openDockFile(page, path);
+    const frame = page.frameLocator('.html-preview');
+    await frame.locator('body[data-parent-blocked="true"][data-storage-blocked="true"][data-fetch-blocked="true"]').waitFor();
+    assert.equal(await page.locator('.html-preview').getAttribute('sandbox'), 'allow-scripts');
+    assert.equal(await page.locator('body').getAttribute('data-preview-escaped'), null);
+    assert.equal(state.requests.some(path => path === '/api/preview-probe' || path === '/api/preview-script'), false);
+  });
+
+  await test('HTML preview embeds authenticated relative images and CSS and refreshes unchanged HTML', async t => {
+    const path = `${worktrees[0].path}/预览 #%.html`;
+    let color = 'rgb(12, 34, 56)';
+    const reads = [];
+    const { page } = await fixture(t, { beforeOpen: async ({ context, state }) => {
+      state.textFiles[path] = { version: 'v1', content: '<base href="https://example.invalid/"><link rel="stylesheet" href="assets/theme.css"><h1 style="background-image:url(assets/icon.svg)">Relative image</h1><img alt="Local image" src="assets/icon.svg">' };
+      await context.addCookies([{ name: 'preview-session', value: 'fixture', url: baseURL, httpOnly: true, sameSite: 'Strict' }]);
+      await context.route('**/api/fs/raw/**/assets/*', async route => {
+        const headers = await route.request().allHeaders();
+        const name = new URL(route.request().url()).pathname.split('/').at(-1);
+        reads.push(name);
+        if (!headers.cookie?.includes('preview-session=fixture')) return route.fulfill({ status: 401, body: 'Authentication required' });
+        await route.fulfill(name === 'icon.svg'
+          ? { contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" />' }
+          : { contentType: 'text/css', body: name === 'theme.css'
+            ? `@import url("nested.css"); h1 { color:${color}; }`
+            : '@import url("theme.css"); body { margin:12px; }' });
+      });
+    } });
+    await openDockFile(page, path);
+    const frame = page.frameLocator('.html-preview');
+    const image = frame.getByRole('img', { name: 'Local image' });
+    await eventually(() => image.evaluate(node => node.naturalWidth === 32));
+    assert.ok((await image.evaluate(node => node.currentSrc)).startsWith('data:image/svg+xml;base64,'));
+    await eventually(async () => await frame.locator('h1').evaluate(node => getComputedStyle(node).color) === color);
+    assert.equal(await frame.locator('body').evaluate(node => getComputedStyle(node).margin), '12px');
+    assert.ok((await frame.locator('h1').getAttribute('style')).includes('data:image/svg+xml;base64,'));
+    assert.ok(['icon.svg', 'theme.css', 'nested.css'].every(name => reads.includes(name)));
+    color = 'rgb(65, 43, 21)';
+    await page.getByRole('button', { name: '刷新文件', exact: true }).click();
+    await eventually(async () => await frame.locator('h1').evaluate(node => getComputedStyle(node).color) === color);
+  });
+
   for (const action of ['close', 'switch']) {
     await test(`pending word highlights are cancelled cleanly when editors ${action}`, async t => {
       const otherPath = `${worktrees[0].path}/other.txt`;

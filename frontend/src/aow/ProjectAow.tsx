@@ -58,7 +58,7 @@ import { terminalApi } from '../features/terminals/terminalApi';
 import type { AgentSessionSnapshot, AowAgentSession } from '../features/sessions/types';
 import type { FileEntry } from '../features/files/types';
 import type { GitCommit, GitCommitFile, GitFileStatus, RepositorySummary } from '../features/git/types';
-import type { MarkdownViewMode, OpenDocument, PreviewKind } from '../features/editor/types';
+import type { DocumentViewMode, OpenDocument, PreviewKind } from '../features/editor/types';
 import type { PullRequestSummary } from '../features/pr/types';
 import type { TerminalTab } from '../features/terminals/types';
 import type { AowAgent } from '../features/agents/types';
@@ -170,7 +170,7 @@ async function readDocumentDiff(document: OpenDocument, signal?: AbortSignal) {
 }
 
 function canAutoSaveDocument(document: OpenDocument): document is OpenDocument & { content: string } {
-  return (document.kind === 'text' || document.kind === 'json' || document.kind === 'markdown')
+  return (document.kind === 'text' || document.kind === 'json' || document.kind === 'markdown' || document.kind === 'html')
     && document.content !== undefined
     && Boolean(document.dirty)
     && !document.readOnly
@@ -199,6 +199,7 @@ function previewKind(path: string): PreviewKind {
   const ext = extension(path);
   if (imageExtensions.has(ext)) return 'image';
   if (ext === 'md' || ext === 'markdown') return 'markdown';
+  if (ext === 'html' || ext === 'htm') return 'html';
   if (ext === 'json') return 'json';
   if (ext === 'pdf') return 'pdf';
   if (ext === 'docx' || ext === 'doc') return 'unsupported';
@@ -1166,6 +1167,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     if (match && sequence === searchRevealSequence.current) {
       setDocuments(items => items.map(document => document.id === path ? { ...document,
         markdownView: document.kind === 'markdown' ? 'editor' : document.markdownView,
+        htmlView: document.kind === 'html' ? 'editor' : document.htmlView,
         revealLocation: { line: match.line, column: match.column, length: match.match_length, revision: sequence },
       } : document));
     }
@@ -1251,6 +1253,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
               : { ...item, refreshing: false, pendingExternal: text };
           }
           return { ...item, kind, content: text.content, savedContent: text.content, version: text.version,
+            htmlPreviewRevision: kind === 'html' ? (item.htmlPreviewRevision ?? 0) + 1 : item.htmlPreviewRevision,
             language: text.language, mime: text.mime, dirty: false, pendingExternal: undefined, refreshing: false, error: undefined };
         }));
       }
@@ -1716,7 +1719,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
       const kind = previewKind(result.path);
       let text: Awaited<ReturnType<typeof filesApi.readText>> | undefined;
       let readError = '';
-      if (kind === 'text' || kind === 'json' || kind === 'markdown') {
+      if (kind === 'text' || kind === 'json' || kind === 'markdown' || kind === 'html') {
         try {
           text = await filesApi.readText(result.path);
         } catch (reason) {
@@ -2005,7 +2008,8 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
               onPreviewLoaded={() => undefined}
               onPreviewError={() => undefined}
               onRestorePreview={() => undefined}
-              onMarkdownViewChange={(id, mode: MarkdownViewMode) => setDocuments((items) => items.map((document) => document.id === id ? { ...document, markdownView: mode } : document))}
+              onMarkdownViewChange={(id, mode: DocumentViewMode) => setDocuments((items) => items.map((document) => document.id === id ? { ...document, markdownView: mode } : document))}
+              onHtmlViewChange={(id, mode: DocumentViewMode) => setDocuments((items) => items.map((document) => document.id === id ? { ...document, htmlView: mode } : document))}
             />
           </Suspense>
   );

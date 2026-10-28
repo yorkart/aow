@@ -1,7 +1,7 @@
 import type { TextFile } from '../files/types';
-export type PreviewKind = 'text' | 'markdown' | 'json' | 'image' | 'pdf' | 'docx' | 'diff' | 'unsupported';
+export type PreviewKind = 'text' | 'markdown' | 'html' | 'json' | 'image' | 'pdf' | 'docx' | 'diff' | 'unsupported';
 
-export type MarkdownViewMode = 'preview' | 'editor';
+export type DocumentViewMode = 'preview' | 'editor';
 
 export type DocumentSource = 'project' | 'notes' | 'external';
 
@@ -26,7 +26,9 @@ export interface OpenDocument {
   version?: string;
   dirty?: boolean;
   readOnly?: boolean;
-  markdownView?: MarkdownViewMode;
+  markdownView?: DocumentViewMode;
+  htmlView?: DocumentViewMode;
+  htmlPreviewRevision?: number;
   imageUrl?: string;
   previewReady?: boolean;
   previewHistory?: string[];
