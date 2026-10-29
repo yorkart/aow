@@ -104,6 +104,47 @@ export function openDatabase(stateDir: string): DatabaseSync {
       FOREIGN KEY(org_id, skill_id) REFERENCES skills(org_id, id),
       FOREIGN KEY(skill_id, version_id) REFERENCES skill_versions(skill_id, id)
     );
+    CREATE TABLE IF NOT EXISTS connectors (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL REFERENCES orgs(id),
+      name TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      executor TEXT NOT NULL,
+      auth_method TEXT NOT NULL,
+      account_note TEXT NOT NULL DEFAULT '',
+      account_summary TEXT NOT NULL DEFAULT '',
+      source_root TEXT,
+      credentials TEXT,
+      status TEXT NOT NULL DEFAULT 'auth_required',
+      status_message TEXT NOT NULL DEFAULT '',
+      enabled INTEGER NOT NULL DEFAULT 1,
+      revision INTEGER NOT NULL DEFAULT 1,
+      models_json TEXT NOT NULL DEFAULT '[]',
+      checked_at TEXT,
+      updated_at TEXT NOT NULL,
+      UNIQUE(org_id, id)
+    );
+    CREATE TABLE IF NOT EXISTS agent_connectors (
+      org_id TEXT NOT NULL,
+      agent_id TEXT NOT NULL,
+      connector_id TEXT NOT NULL,
+      PRIMARY KEY(org_id, agent_id),
+      FOREIGN KEY(org_id, connector_id) REFERENCES connectors(org_id, id)
+    );
+    CREATE TABLE IF NOT EXISTS connector_auth_sessions (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL REFERENCES orgs(id),
+      provider TEXT NOT NULL,
+      executor TEXT NOT NULL,
+      status TEXT NOT NULL,
+      verification_uri TEXT,
+      user_code TEXT,
+      message TEXT NOT NULL,
+      credentials TEXT,
+      account_summary TEXT NOT NULL DEFAULT '',
+      expires_at INTEGER NOT NULL,
+      created_at TEXT NOT NULL
+    );
   `);
   return database;
 }

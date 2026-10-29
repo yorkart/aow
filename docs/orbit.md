@@ -2,7 +2,7 @@
 
 Orbit 是同仓库内独立构建和运行的实验应用。`frontend-orbit` 使用 React / TypeScript，`server-orbit` 使用 Node.js / TypeScript 和内置 SQLite。需要 Node.js 22.16+（22.x）或 24+、npm 和 Bash。
 
-Orbit 包含独立登录、组织（org）的创建和切换、Skills 技能库，以及工作窗口。Tasks、Projects、Automation、Agents、Connectors 目前仅提供图标导航，尚未接入业务功能或 ACP / terminald。没有预置组织或演示数据。
+Orbit 包含独立登录、组织（org）的创建和切换、Skills 技能库、Connector 管理，以及工作窗口。Tasks、Projects、Automation、Agents 目前仅提供图标导航，尚未接入业务功能或 ACP / terminald。没有预置组织或演示数据。
 
 ## 启动
 
@@ -52,6 +52,42 @@ Orbit 包含独立登录、组织（org）的创建和切换、Skills 技能库�
 导入复制完整技能包，保留目录、相对引用、二进制文件及脚本的可执行属性。源项目变化不会修改导入副本；导入和保存均不执行脚本，不导入符号链接或特殊文件。
 
 `server-orbit/src/skills/references.ts` 为后续 Agent 配置和执行器提供技能多选引用及运行快照接口。运行开始时固定版本，并在 `~/.orbit/skill-runs/<org-id>/<agent-id>/<run-id>/` 下准备独立的完整副本；已开始的运行不随技能更新而变化。当前 Agent 和运行器界面尚未开放，此接口不会改写用户 home 下的全局技能目录。
+
+## Connectors
+
+进入 Connectors，左侧只有“本地 Connector”，右侧提供连接列表、名称 / Provider / 账号搜索、新增、编辑、认证检测、启停和删除。新增和编辑使用工作区整页。每个组织独立保存连接，引用信息来自真实的 Agent 关联记录。
+
+| Provider | 执行器 | 认证方式 |
+| --- | --- | --- |
+| OpenAI | Codex | 本地登录、独立设备码登录、API Key |
+| Anthropic | Claude Code | 本地登录、独立浏览器授权和授权码回填、API Key |
+| DeepSeek | Claude Code | API Key |
+| Google Gemini | Gemini CLI | 本地 OAuth 身份（安装执行器后显示） |
+
+本期 DeepSeek 仅支持 Claude Code，不提供 DeepSeek / Codex 组合或协议适配。其他尚未接入适配器的 Provider 不显示为可选项。
+
+### 本地身份
+
+“本地”是执行器所在机器的用户环境。Codex 从 `CODEX_HOME` 或 `~/.codex` 读取认证；Claude Code 从 `CLAUDE_CONFIG_DIR` 或 `~/.claude` 读取认证文件，macOS 也支持对应账号的钥匙串；Codex 的系统凭据存储通过本机 security / secret-tool 读取。Gemini 支持本地 OAuth 凭据文件及必要的模型配置。
+
+检测在临时隔离目录中检查执行器，Codex / Claude Code 使用原生登录状态命令。Gemini 检测 OAuth 凭据和执行器安装状态，不发送推理请求。
+
+本地 Connector 只保存身份来源和检测摘要，不在数据库中保存本地凭据副本。每次启动执行进程前，运行接口重新读取最新身份并复制到该次运行的隔离环境，保留原始 home 不变。全局指令、Skills、MCP 配置不会随认证文件导入。隔离环境中的身份变化不回写源目录，Orbit 不承担身份刷新或同步，执行器沿用自己的认证机制。
+
+### 独立登录和 API Key
+
+- Codex 通过原生 `codex login --device-auth` 发起设备码流程；页面展示官方地址和设备码。
+- Claude Code 通过原生 `claude setup-token` 的 PTY 流程展示官方授权地址，接收授权码，并保存执行器生成的独立 OAuth Token。需要本机安装 Claude Code 和 `script`（Linux 为 util-linux 工具，macOS 系统提供）。
+- 授权进度可轮询、取消和过期，退出编辑页会取消未保存的授权。授权码和原始终端输出不写入日志。授权成功结果有有效期，保存后由 Connector 独立持有。
+- API Key 通过对应 Provider 的模型列表接口验证，不发送推理请求。密钥输入留空可保留已保存的密钥；切换 Provider、执行器或认证方式会清除旧认证绑定。
+
+“保存配置”可以保存尚未认证的连接；提交新的 API Key 时，密钥必须先通过验证。“保存并连接”同时检查执行器和认证，成功后状态为可用。可用、待认证、异常和已停用由后端维护。重新启用后需再次检查连接。被 Agent 引用的连接需解除引用后才能删除。
+
+配置和加密后的认证存入 `~/.orbit/orbit.sqlite`。实例加密密钥为 `~/.orbit/credentials.key`（0600），备份数据库时应同时备份这个文件。检测临时目录位于 `~/.orbit/connector-work/`，独立授权临时目录位于 `~/.orbit/connector-auth/`，流程结束后清理。
+
+`Connectors.prepareExecution` 提供后续 Agent 运行接入接口，在 `~/.orbit/connector-runs/<org-id>/<connector-id>/<execution-id>/home/` 下生成独立环境，并设置原生执行器配置目录。凭据文件权限为 0600；运行环境通过后端内部接口交付，不通过浏览器 API 返回。Connector 停用后禁止创建新执行环境，已准备的环境保持独立。
+
+这些目录提供配置隔离；进程的操作系统文件访问权限由后续运行器和沙箱负责。当前尚未接入 Agent 任务执行。
 
 ## 服务配置
 

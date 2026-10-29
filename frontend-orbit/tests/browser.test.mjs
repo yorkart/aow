@@ -77,7 +77,7 @@ test('login → required onboarding → real orgs → empty icon-only workspace 
   const rail = page.getByRole('navigation', { name: '功能导航' });
   assert.deepEqual(await rail.getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))), ['Tasks', 'Projects', 'Automation', 'Agents', 'Skills', 'Connectors']);
   assert.deepEqual(await rail.getByRole('button').allTextContents(), ['', '', '', '', '', '']);
-  for (const section of ['Projects', 'Automation', 'Agents', 'Connectors', 'Tasks']) {
+  for (const section of ['Projects', 'Automation', 'Agents', 'Tasks']) {
     await rail.getByRole('button', { name: section, exact: true }).click();
     assert.equal(await rail.getByRole('button', { name: section, exact: true }).getAttribute('aria-current'), 'page');
     assert.equal(await page.getByRole('main', { name: `${section} 工作区` }).innerHTML(), '');
@@ -86,6 +86,9 @@ test('login → required onboarding → real orgs → empty icon-only workspace 
   await rail.getByRole('button', { name: 'Skills', exact: true }).click();
   await page.getByRole('heading', { name: 'Installed skills', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Installed', exact: true }).waitFor();
+  await rail.getByRole('button', { name: 'Connectors', exact: true }).click();
+  await page.getByRole('heading', { name: '本地 Connector', exact: true }).waitFor();
+  await page.getByRole('button', { name: '本地 Connector', exact: true }).waitFor();
   await rail.getByRole('button', { name: 'Tasks', exact: true }).click();
   const palette = await page.evaluate(() => ({ theme: document.documentElement.dataset.theme, surface: getComputedStyle(document.documentElement).getPropertyValue('--aow-surface').trim(), aowPreference: localStorage.getItem('aow.theme') }));
   assert.deepEqual(palette, { theme: 'aow-dark', surface: '#181a1f', aowPreference: null });

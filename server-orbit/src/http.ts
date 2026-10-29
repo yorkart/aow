@@ -10,6 +10,9 @@ import { HttpError } from './errors.js';
 import { body, json } from './requests.js';
 import { Skills } from './skills/service.js';
 import { SkillRoutes } from './skills/routes.js';
+import { Connectors } from './connectors/service.js';
+import { ConnectorRoutes } from './connectors/routes.js';
+import type { AdapterOptions } from './connectors/adapters.js';
 
 function checkOrigin(request: IncomingMessage, config: Config): void {
   const origin = request.headers.origin;
@@ -56,10 +59,12 @@ async function frontend(request: IncomingMessage, response: ServerResponse, path
   response.end(request.method === 'HEAD' ? undefined : content);
 }
 
-export function createOrbitServer(config: Config, database: DatabaseSync) {
+export function createOrbitServer(config: Config, database: DatabaseSync, connectorOptions?: AdapterOptions) {
   const auth = new Auth(database, config);
   const skillRoutes = new SkillRoutes(new Skills(database, config.stateDir));
-  return createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (request, response) => {
+  const connectors = new Connectors(database, config.stateDir, connectorOptions);
+  const connectorRoutes = new ConnectorRoutes(connectors);
+  const server = createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (request, response) => {
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Referrer-Policy', 'same-origin');
     const handle = async () => {
@@ -119,6 +124,7 @@ export function createOrbitServer(config: Config, database: DatabaseSync) {
         return json(response, 200, orgState(database));
       }
       if (await skillRoutes.handle(request, response, new URL(request.url ?? '/', 'http://orbit.local'))) return;
+      if (await connectorRoutes.handle(request, response, new URL(request.url ?? '/', 'http://orbit.local'))) return;
       throw new HttpError(404, 'not_found', '接口不存在。');
     };
     void handle().catch((error: unknown) => {
@@ -129,4 +135,6 @@ export function createOrbitServer(config: Config, database: DatabaseSync) {
       json(response, failure.status, { code: failure.code, message: failure.message });
     });
   });
+  server.on('close', () => { void connectors.close().catch(() => {}); });
+  return server;
 }
