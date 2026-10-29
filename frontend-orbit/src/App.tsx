@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Boxes, Folder, Layers3, ListTodo, Unplug, Users, X, Zap } from 'lucide-react';
 import { AuthScreen } from './features/auth/AuthScreen';
 import { OrgForm } from './OrgForm';
 import { OrgSwitcher } from './OrgSwitcher';
 import { createOrg, loadOrgs, selectOrg, type OrgState } from './orgs';
+import { SkillsPage } from './features/skills/SkillsPage';
 
 const navigation = [
   { id: 'tasks', label: 'Tasks', icon: ListTodo },
@@ -29,6 +30,10 @@ export function App() {
   const [retry, setRetry] = useState(0);
   const [section, setSection] = useState<(typeof navigation)[number]['id']>('tasks');
   const [creating, setCreating] = useState(false);
+  const [skillsHome, setSkillsHome] = useState(0);
+  const skillsDirty = useRef(false);
+  const onSkillsDirty = useCallback((dirty: boolean) => { skillsDirty.current = dirty; }, []);
+  const canLeave = () => !skillsDirty.current || window.confirm('放弃尚未保存的技能文件修改？');
   useEffect(() => {
     const controller = new AbortController();
     void loadOrgs(controller.signal).then(next => { if (!controller.signal.aborted) setState(next); }).catch((reason: unknown) => {
@@ -45,13 +50,13 @@ export function App() {
   return <div className="orbit-workspace">
     <nav className="orbit-rail" aria-label="功能导航">
       <div className="orbit-brand" title="AoW Orbit"><Layers3 size={24} aria-hidden="true" /></div>
-      {navigation.map(item => <button key={item.id} type="button" aria-label={item.label} title={item.label} aria-current={section === item.id ? 'page' : undefined} onClick={() => setSection(item.id)}><item.icon size={21} aria-hidden="true" /></button>)}
+      {navigation.map(item => <button key={item.id} type="button" aria-label={item.label} title={item.label} aria-current={section === item.id ? 'page' : undefined} onClick={() => { if (section === item.id || canLeave()) setSection(item.id); }}><item.icon size={21} aria-hidden="true" /></button>)}
     </nav>
     <aside className="orbit-sidebar" aria-label="左侧面板">
-      <header className="orbit-sidebar-header"><OrgSwitcher current={current} orgs={state.orgs} onSelect={async id => { setState(await selectOrg(id)); setSection('tasks'); }} onCreate={() => setCreating(true)} /></header>
-      <div key={`${current.id}:${section}`} className="orbit-sidebar-body" aria-label={`${active.label} 列表`} />
+      <header className="orbit-sidebar-header"><OrgSwitcher current={current} orgs={state.orgs} onSelect={async id => { if (!canLeave()) return; setState(await selectOrg(id)); setSection('tasks'); }} onCreate={() => { if (canLeave()) setCreating(true); }} /></header>
+      <div key={`${current.id}:${section}`} className="orbit-sidebar-body" aria-label={`${active.label} 列表`}>{section === 'skills' && <div className="skills-sidebar"><h2>SKILLS</h2><button type="button" aria-current="page" onClick={() => { if (canLeave()) setSkillsHome(value => value + 1); }}><Boxes size={16} />Installed</button></div>}</div>
     </aside>
-    <main key={current.id} className="orbit-content" aria-label={`${active.label} 工作区`} />
+    <main key={current.id} className="orbit-content" aria-label={`${active.label} 工作区`}>{section === 'skills' && <SkillsPage key={`${current.id}:${skillsHome}`} org={current.id} onDirtyChange={onSkillsDirty} />}</main>
     {creating && <CreateOrgDialog onClose={() => setCreating(false)} onCreate={create} />}
   </div>;
 }

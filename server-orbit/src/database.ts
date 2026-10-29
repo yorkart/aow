@@ -45,6 +45,65 @@ export function openDatabase(stateDir: string): DatabaseSync {
       created_at INTEGER NOT NULL,
       last_active INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL REFERENCES orgs(id),
+      name TEXT NOT NULL,
+      directory TEXT NOT NULL,
+      UNIQUE(org_id, directory),
+      UNIQUE(org_id, id)
+    );
+    CREATE TABLE IF NOT EXISTS skills (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL REFERENCES orgs(id),
+      name TEXT NOT NULL,
+      description TEXT NOT NULL,
+      current_version_id TEXT,
+      source_project_id TEXT,
+      source_path TEXT,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT,
+      UNIQUE(org_id, id),
+      FOREIGN KEY(org_id, source_project_id) REFERENCES projects(org_id, id)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS skills_active_name ON skills(org_id, name COLLATE NOCASE) WHERE deleted_at IS NULL;
+    CREATE TABLE IF NOT EXISTS skill_versions (
+      id TEXT PRIMARY KEY,
+      skill_id TEXT NOT NULL REFERENCES skills(id),
+      number INTEGER NOT NULL,
+      directory TEXT NOT NULL,
+      content_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(skill_id, number),
+      UNIQUE(skill_id, id)
+    );
+    CREATE TABLE IF NOT EXISTS agent_skills (
+      org_id TEXT NOT NULL,
+      agent_id TEXT NOT NULL,
+      skill_id TEXT NOT NULL,
+      PRIMARY KEY(org_id, agent_id, skill_id),
+      FOREIGN KEY(org_id, skill_id) REFERENCES skills(org_id, id)
+    );
+    CREATE TABLE IF NOT EXISTS skill_runs (
+      org_id TEXT NOT NULL REFERENCES orgs(id),
+      agent_id TEXT NOT NULL,
+      run_id TEXT NOT NULL,
+      directory TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY(org_id, agent_id, run_id)
+    );
+    CREATE TABLE IF NOT EXISTS skill_run_versions (
+      org_id TEXT NOT NULL,
+      agent_id TEXT NOT NULL,
+      run_id TEXT NOT NULL,
+      skill_id TEXT NOT NULL,
+      version_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      PRIMARY KEY(org_id, agent_id, run_id, skill_id),
+      FOREIGN KEY(org_id, agent_id, run_id) REFERENCES skill_runs(org_id, agent_id, run_id),
+      FOREIGN KEY(org_id, skill_id) REFERENCES skills(org_id, id),
+      FOREIGN KEY(skill_id, version_id) REFERENCES skill_versions(skill_id, id)
+    );
   `);
   return database;
 }

@@ -1,0 +1,158 @@
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { once } from 'node:events';
+import { access, chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { homedir, tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { test } from 'node:test';
+import { setAccount } from '../dist/auth.js';
+import { configuration } from '../dist/config.js';
+import { openDatabase } from '../dist/database.js';
+import { createOrbitServer } from '../dist/http.js';
+import { createEntry } from '../dist/skills/metadata.js';
+import { SkillProjects } from '../dist/skills/projects.js';
+import { SkillReferences } from '../dist/skills/references.js';
+import { Skills } from '../dist/skills/service.js';
+
+const text = (path, content, executable = false) => ({ path, content, executable, kind: 'file', encoding: 'utf8' });
+const entry = (name, content = '# Instructions') => text('SKILL.md', createEntry(name, 'Skill description', content));
+const conflict = code => error => error.code === code;
+async function fixture(t) {
+  const directory = await mkdtemp(join(tmpdir(), 'orbit-skills-'));
+  let database = openDatabase(directory);
+  const org = randomUUID(); const other = randomUUID();
+  for (const id of [org, other]) database.prepare('INSERT INTO orgs VALUES (?, ?, ?)').run(id, id, new Date().toISOString());
+  t.after(async () => { database.close(); await rm(directory, { recursive: true, force: true }); });
+  return {
+    org, other, directory, get database() { return database; }, get skills() { return new Skills(database, directory); },
+    restart() { database.close(); database = openDatabase(directory); },
+  };
+}
+
+test('default Orbit data, indexes, complete immutable versions and soft deletion are durable', async t => {
+  assert.equal(configuration({}).stateDir, join(homedir(), '.orbit'));
+  const app = await fixture(t);
+  const first = await app.skills.create(app.org, { name: 'review', description: 'Original description', instructions: '# Original' });
+  const original = app.skills.version(first.current_version_id);
+  const content = await readFile(join(original.directory, 'SKILL.md'), 'utf8');
+  assert.ok(original.directory.startsWith(join(app.directory, 'skills', app.org, first.id, 'versions')));
+  const nextFiles = [entry('renamed', '# Updated'), text('references/list.md', 'Checklist'), text('scripts/check.sh', '#!/bin/sh\nexit 0\n', true), { path: 'assets/data.bin', kind: 'file', encoding: 'base64', content: 'AAH/', executable: false }, { path: 'empty', kind: 'directory' }];
+  const updated = await app.skills.save(app.org, first.id, { base_version_id: first.current_version_id, files: nextFiles });
+  assert.equal(updated.id, first.id); assert.equal(updated.version, 2); assert.equal(updated.name, 'renamed');
+  assert.equal(updated.description, 'Skill description');
+  assert.notEqual(updated.content_hash, first.content_hash);
+  assert.equal(await readFile(join(original.directory, 'SKILL.md'), 'utf8'), content);
+  assert.ok(updated.files.some(file => file.path === 'empty' && file.kind === 'directory'));
+  assert.ok(updated.files.some(file => file.path === 'scripts/check.sh' && file.executable));
+  assert.equal(updated.files.find(file => file.path === 'assets/data.bin').content, 'AAH/');
+  await assert.rejects(app.skills.save(app.org, first.id, { base_version_id: first.current_version_id, files: nextFiles }), conflict('version_conflict'));
+  await assert.rejects(app.skills.create(app.org, { name: 'RENAMED', description: 'Duplicate', instructions: 'content' }), conflict('skill_name_conflict'));
+  assert.equal(app.database.prepare('SELECT count(*) AS count FROM skill_versions').get().count, 2);
+  await assert.rejects(app.skills.save(app.org, first.id, { base_version_id: updated.current_version_id, files: [text('../escape', 'bad'), entry('x')] }), conflict('invalid_package_path'));
+  await assert.rejects(app.skills.save(app.org, first.id, { base_version_id: updated.current_version_id, files: [text('renamed.md', 'bad')] }), conflict('missing_entry'));
+  await assert.rejects(app.skills.detail(app.other, first.id), conflict('skill_not_found'));
+  app.restart();
+  assert.equal((await app.skills.detail(app.org, first.id)).version, 2);
+  assert.equal(app.skills.list(app.org, 'skill description').length, 1);
+  assert.deepEqual(app.skills.list(app.other), []);
+  app.skills.remove(app.org, first.id);
+  assert.deepEqual(app.skills.list(app.org), []);
+  await access(join(original.directory, 'SKILL.md'));
+  assert.equal(app.database.prepare('SELECT count(*) AS count FROM skill_versions').get().count, 2);
+  const recreated = await app.skills.create(app.org, { name: 'renamed', description: 'New', instructions: 'New' });
+  assert.notEqual(recreated.id, first.id);
+});
+
+test('project import copies complete packages, rejects collisions atomically and never follows links or executes scripts', async t => {
+  const app = await fixture(t);
+  const source = join(app.directory, 'source');
+  const pack = join(source, '.agents/skills/review');
+  await mkdir(join(pack, 'scripts'), { recursive: true });
+  await mkdir(join(pack, 'references')); await mkdir(join(pack, 'assets'));
+  await writeFile(join(pack, 'SKILL.md'), createEntry('source-review', 'Source description', '[Reference](references/check.md)'));
+  await writeFile(join(pack, 'references/check.md'), 'Original reference');
+  const marker = join(source, 'script-was-executed');
+  await writeFile(join(pack, 'scripts/run.sh'), `#!/bin/sh\ntouch '${marker}'\n`); await chmod(join(pack, 'scripts/run.sh'), 0o700);
+  await writeFile(join(pack, 'assets/raw.bin'), Buffer.from([0, 255, 1]));
+  const projects = new SkillProjects(app.skills);
+  const project = await projects.create(app.org, { name: 'Source project', directory: source });
+  const scanned = await projects.scan(app.org, project.id);
+  assert.deepEqual(scanned.skills.map(item => item.path), ['.agents/skills/review']);
+  await mkdir(join(source, 'invalid/nested'), { recursive: true });
+  await writeFile(join(source, 'invalid/SKILL.md'), '# Missing frontmatter');
+  await writeFile(join(source, 'invalid/nested/SKILL.md'), createEntry('nested-skill', 'Nested description', 'Nested instructions'));
+  const nested = await projects.scan(app.org, project.id);
+  assert.ok(nested.skills.some(skill => skill.path === 'invalid/nested'));
+  assert.ok(nested.warnings.some(warning => warning.includes('invalid/SKILL.md')));
+  const [imported] = await projects.import(app.org, { project_id: project.id, skills: [{ path: '.agents/skills/review' }] });
+  await assert.rejects(access(marker));
+  await writeFile(join(pack, 'references/check.md'), 'Source changed');
+  const detail = await app.skills.detail(app.org, imported.id);
+  assert.equal(detail.files.find(file => file.path === 'SKILL.md').content, await readFile(join(pack, 'SKILL.md'), 'utf8'));
+  assert.equal(detail.files.find(file => file.path === 'references/check.md').content, 'Original reference');
+  assert.equal(detail.files.find(file => file.path === 'scripts/run.sh').executable, true);
+  assert.equal(detail.source_project_id, project.id);
+  await assert.rejects(projects.import(app.org, { project_id: project.id, skills: [{ path: '.agents/skills/review' }] }), conflict('skill_name_conflict'));
+  const [renamed] = await projects.import(app.org, { project_id: project.id, skills: [{ path: '.agents/skills/review', name: 'imported-review' }] });
+  assert.equal(renamed.name, 'imported-review');
+  const count = app.skills.list(app.org).length;
+  await mkdir(join(source, 'another')); await writeFile(join(source, 'another/SKILL.md'), createEntry('another', 'Other', 'Other'));
+  await assert.rejects(projects.import(app.org, { project_id: project.id, skills: [{ path: 'another', name: 'new-item' }, { path: '.agents/skills/review' }] }), conflict('skill_name_conflict'));
+  assert.equal(app.skills.list(app.org).length, count);
+  await assert.rejects(projects.import(app.org, { project_id: project.id, skills: [{ path: '../escape' }] }), conflict('invalid_package_path'));
+  await assert.rejects(projects.scan(app.other, project.id), conflict('project_not_found'));
+  await writeFile(join(app.directory, 'secret'), 'outside');
+  await symlink(join(app.directory, 'secret'), join(pack, 'outside-link'));
+  await assert.rejects(projects.import(app.org, { project_id: project.id, skills: [{ path: '.agents/skills/review', name: 'unsafe' }] }), conflict('unsafe_package'));
+  await symlink(pack, join(source, 'linked-package'));
+  await assert.rejects(projects.import(app.org, { project_id: project.id, skills: [{ path: 'linked-package' }] }), conflict('unsafe_package'));
+});
+
+test('references block deletion and run snapshots pin versions independently of updates, renames and later deletion', async t => {
+  const app = await fixture(t);
+  const skill = await app.skills.create(app.org, { name: 'run-skill', description: 'Run skill', instructions: 'Version one' });
+  const refs = new SkillReferences(app.skills);
+  refs.set(app.org, 'agent-A', [skill.id]); refs.set(app.org, 'agent-B', [skill.id]);
+  assert.equal(app.skills.get(app.org, skill.id).agent_count, 2);
+  assert.throws(() => app.skills.remove(app.org, skill.id), conflict('skill_in_use'));
+  assert.throws(() => refs.set(app.other, 'agent-A', [skill.id]), conflict('skill_not_found'));
+  const pinned = await refs.pinRun(app.org, 'agent-A', 'run-1');
+  const original = await readFile(join(pinned.skills[0].directory, 'SKILL.md'), 'utf8');
+  assert.match(original, /Version one/);
+  const updated = await app.skills.save(app.org, skill.id, { base_version_id: skill.current_version_id, files: [entry('new-name', 'Version two')] });
+  const oldRun = await refs.pinRun(app.org, 'agent-A', 'run-1');
+  assert.equal(oldRun.skills[0].version_id, skill.current_version_id);
+  const newRun = await refs.pinRun(app.org, 'agent-A', 'run-2');
+  assert.equal(newRun.skills[0].version_id, updated.current_version_id);
+  assert.equal(newRun.skills[0].name, 'new-name');
+  const otherRun = await refs.pinRun(app.org, 'agent-B', 'run-1');
+  assert.notEqual(otherRun.directory, oldRun.directory);
+  refs.set(app.org, 'agent-A', []); refs.set(app.org, 'agent-B', []); app.skills.remove(app.org, skill.id);
+  assert.equal(await readFile(join(oldRun.skills[0].directory, 'SKILL.md'), 'utf8'), original);
+  app.restart();
+  const restored = await new SkillReferences(app.skills).pinRun(app.org, 'agent-A', 'run-1');
+  assert.equal(restored.skills[0].version_id, skill.current_version_id);
+});
+
+test('Skills HTTP endpoints enforce authentication, org boundaries, optimistic saves and deletion', async t => {
+  const app = await fixture(t);
+  await setAccount(app.database, 'test-user', 'test-only-password');
+  const server = createOrbitServer(configuration({ ORBIT_STATE_DIR: app.directory }), app.database);
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }));
+  const url = `http://127.0.0.1:${server.address().port}`;
+  let cookie;
+  const request = (path, method = 'GET', payload) => fetch(url + path, { method, headers: { ...(cookie ? { Cookie: cookie } : {}), 'Content-Type': 'application/json' }, ...(payload ? { body: JSON.stringify(payload) } : {}) });
+  assert.equal((await request(`/api/orgs/${app.org}/skills`)).status, 401);
+  const login = await request('/api/auth/login', 'POST', { username: 'test-user', password: 'test-only-password' });
+  cookie = login.headers.get('set-cookie').split(';')[0];
+  const created = await request(`/api/orgs/${app.org}/skills`, 'POST', { name: 'http-skill', description: 'HTTP description', instructions: '# Instructions' });
+  assert.equal(created.status, 201); const skill = await created.json();
+  assert.equal((await request(`/api/orgs/${app.other}/skills/${skill.id}`)).status, 404);
+  assert.equal((await request(`/api/orgs/${app.org}/skills/${skill.id}`, 'PUT', { base_version_id: 'old', files: skill.files })).status, 409);
+  const saved = await request(`/api/orgs/${app.org}/skills/${skill.id}`, 'PUT', { base_version_id: skill.current_version_id, files: [...skill.files, text('notes.md', 'a'.repeat(20_000))] });
+  assert.equal(saved.status, 200);
+  assert.equal((await saved.json()).version, 2);
+  assert.equal((await request(`/api/orgs/${app.org}/skills/${skill.id}`, 'DELETE')).status, 204);
+  assert.deepEqual(await (await request(`/api/orgs/${app.org}/skills`)).json(), []);
+});

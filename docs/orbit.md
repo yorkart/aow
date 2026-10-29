@@ -2,7 +2,7 @@
 
 Orbit 是同仓库内独立构建和运行的实验应用。`frontend-orbit` 使用 React / TypeScript，`server-orbit` 使用 Node.js / TypeScript 和内置 SQLite。需要 Node.js 22.16+（22.x）或 24+、npm 和 Bash。
 
-本期包含独立登录、组织（org）的创建和切换，以及空白工作窗口。Tasks、Projects、Automation、Agents、Skills、Connectors 仅提供图标导航，尚未接入业务功能或 ACP / terminald。没有预置组织或演示数据。
+Orbit 包含独立登录、组织（org）的创建和切换、Skills 技能库，以及工作窗口。Tasks、Projects、Automation、Agents、Connectors 目前仅提供图标导航，尚未接入业务功能或 ACP / terminald。没有预置组织或演示数据。
 
 ## 启动
 
@@ -33,15 +33,33 @@ Orbit 是同仓库内独立构建和运行的实验应用。`frontend-orbit` 使
 
 ## 数据与配置
 
-默认数据文件是 `~/.aow-orbit/orbit.sqlite`。数据库包含账户、登录会话和组织，密码使用与 AoW 一致的 PBKDF2-HMAC-SHA256（600,000 次迭代）加盐哈希。会话令牌通过 Orbit 专用的 HttpOnly / SameSite=Strict Cookie 传输，数据库仅保存令牌哈希。
+默认数据文件是 `~/.orbit/orbit.sqlite`。数据库包含账户、登录会话和组织，密码使用与 AoW 一致的 PBKDF2-HMAC-SHA256（600,000 次迭代）加盐哈希。会话令牌通过 Orbit 专用的 HttpOnly / SameSite=Strict Cookie 传输，数据库仅保存令牌哈希。
 
-首次打开数据库时创建必要的表；已有数据库直接复用。本期没有数据导入或额外的版本迁移框架。
+首次打开数据库时创建必要的表；已有数据库直接复用。数据库初始化不导入旧版 AoW 数据，也未引入额外的版本迁移框架。
+
+## Skills 技能库
+
+进入 Skills，左侧面板为 Installed，工作区为 Installed skills。所有新增、导入和编辑操作都在工作区整页完成。
+
+- **Create a skill**：填写名称、说明和指令，生成带 YAML frontmatter 的 SKILL.md。
+- **Import skills from project**：选择当前组织已登记的本地项目，扫描并勾选技能。Projects 模块尚未开放时，可以直接在导入页登记项目名称和本地工作目录。路径属于运行 server-orbit 的机器。
+- **详情和编辑**：默认打开 SKILL.md，支持 Markdown 编辑、预览和包内相对引用；文本文件可直接编辑，图片可预览，二进制文件可下载。文件树支持新建文件或目录、上传、重命名和删除，SKILL.md 入口不可删除或重命名。
+- **保存**：所有文件改动统一生成一个新版本；name、description 从当前 SKILL.md 解析到索引。过期草稿会返回版本冲突，防止覆盖其他窗口的修改。组织内同名技能需要改名，不覆盖已有技能。
+- **删除**：仅隐藏技能索引，保留历史版本。存在 Agent 引用时需先在 Agent 配置中解除引用。
+
+索引、版本记录、项目目录登记及 Agent 引用关系保存在 `~/.orbit/orbit.sqlite`，完整技能包保存在 `~/.orbit/skills/<org-id>/<skill-id>/versions/<version-id>/`。文件写入成功后才切换当前版本。每个文件最多 2 MiB，每包最多 20 MiB、1000 个文件或目录；一次批量导入最多 20 MiB。扫描跳过依赖、构建和 Git 数据目录，最多扫描 10000 个目录、16 层和 100 个技能；达到限制会显示提示。
+
+导入复制完整技能包，保留目录、相对引用、二进制文件及脚本的可执行属性。源项目变化不会修改导入副本；导入和保存均不执行脚本，不导入符号链接或特殊文件。
+
+`server-orbit/src/skills/references.ts` 为后续 Agent 配置和执行器提供技能多选引用及运行快照接口。运行开始时固定版本，并在 `~/.orbit/skill-runs/<org-id>/<agent-id>/<run-id>/` 下准备独立的完整副本；已开始的运行不随技能更新而变化。当前 Agent 和运行器界面尚未开放，此接口不会改写用户 home 下的全局技能目录。
+
+## 服务配置
 
 | 环境变量 | 默认值 | 用途 |
 | --- | --- | --- |
 | `ORBIT_HOST` | `127.0.0.1` | 服务监听地址 |
 | `ORBIT_PORT` | `8382` | 服务端口 |
-| `ORBIT_STATE_DIR` | `~/.aow-orbit` | 独立数据目录 |
+| `ORBIT_STATE_DIR` | `~/.orbit` | 独立数据目录 |
 | `ORBIT_FRONTEND_DIR` | `frontend-orbit/dist` | 静态前端构建目录，默认相对于项目位置 |
 | `ORBIT_FRONTEND_ORIGIN` | 未设置 | 独立前端部署时允许的精确来源，例如 `https://orbit.example.com` |
 | `ORBIT_SECURE_COOKIES` | 未设置 | HTTPS 部署时设为 `1` |

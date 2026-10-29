@@ -30,7 +30,7 @@ export function configuration(env = process.env): Config {
   return {
     host: env.ORBIT_HOST ?? '127.0.0.1',
     port,
-    stateDir: resolve(env.ORBIT_STATE_DIR ?? resolve(homedir(), '.aow-orbit')),
+    stateDir: resolve(env.ORBIT_STATE_DIR ?? resolve(homedir(), '.orbit')),
     frontendDir: resolve(env.ORBIT_FRONTEND_DIR ?? fileURLToPath(new URL('../../frontend-orbit/dist', import.meta.url))),
     frontendOrigin,
     secureCookies: env.ORBIT_SECURE_COOKIES === '1',

@@ -7,11 +7,9 @@ import { Auth } from './auth.js';
 import type { Config } from './config.js';
 import { orgState, transaction } from './database.js';
 import { HttpError } from './errors.js';
-
-function json(response: ServerResponse, status: number, value: unknown): void {
-  response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-  response.end(JSON.stringify(value));
-}
+import { body, json } from './requests.js';
+import { Skills } from './skills/service.js';
+import { SkillRoutes } from './skills/routes.js';
 
 function checkOrigin(request: IncomingMessage, config: Config): void {
   const origin = request.headers.origin;
@@ -25,29 +23,6 @@ function checkOrigin(request: IncomingMessage, config: Config): void {
       (url.host.toLowerCase() === request.headers.host?.toLowerCase() || origin === config.frontendOrigin)) return;
   } catch { /* Invalid origins are rejected below. */ }
   throw new HttpError(403, 'invalid_origin', '请求来源无效。');
-}
-
-async function body(request: IncomingMessage): Promise<Record<string, unknown>> {
-  if (!request.headers['content-type']?.toLowerCase().startsWith('application/json')) {
-    throw new HttpError(415, 'invalid_content_type', '请使用 JSON 格式提交请求。');
-  }
-  const content = await new Promise<string>((resolveBody, reject) => {
-    const chunks: Buffer[] = [];
-    let size = 0;
-    request.on('data', (chunk: Buffer) => {
-      size += chunk.length;
-      if (size > 16_384) reject(new HttpError(413, 'body_too_large', '请求内容过大。'));
-      else chunks.push(chunk);
-    });
-    request.on('end', () => resolveBody(Buffer.concat(chunks).toString('utf8')));
-    request.on('error', reject);
-    request.on('aborted', () => reject(new HttpError(400, 'request_aborted', '请求已中断。')));
-  });
-  try {
-    const value: unknown = JSON.parse(content);
-    if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>;
-  } catch { /* Report malformed input without exposing the submitted credentials. */ }
-  throw new HttpError(400, 'invalid_json', '请求内容格式无效。');
 }
 
 const mime: Record<string, string> = {
@@ -83,6 +58,7 @@ async function frontend(request: IncomingMessage, response: ServerResponse, path
 
 export function createOrbitServer(config: Config, database: DatabaseSync) {
   const auth = new Auth(database, config);
+  const skillRoutes = new SkillRoutes(new Skills(database, config.stateDir));
   return createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (request, response) => {
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Referrer-Policy', 'same-origin');
@@ -98,7 +74,7 @@ export function createOrbitServer(config: Config, database: DatabaseSync) {
       }
       if (request.method === 'OPTIONS') {
         response.writeHead(204, {
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type',
         });
         response.end();
@@ -142,6 +118,7 @@ export function createOrbitServer(config: Config, database: DatabaseSync) {
         database.prepare('UPDATE account SET active_org_id = ? WHERE id = 1').run(id);
         return json(response, 200, orgState(database));
       }
+      if (await skillRoutes.handle(request, response, new URL(request.url ?? '/', 'http://orbit.local'))) return;
       throw new HttpError(404, 'not_found', '接口不存在。');
     };
     void handle().catch((error: unknown) => {
