@@ -25,6 +25,10 @@
 .project-form textarea { min-height:130px; resize:vertical; }
 .project-form textarea:focus,.project-form select:focus { outline:1px solid var(--aow-accent); }
 .project-form > p { margin:0; }
+.project-worktree-settings { display:flex; flex-direction:column; gap:13px; padding:20px; margin:8px 0 0; border:1px solid var(--aow-line); border-radius:5px; }
+.project-worktree-settings legend { padding:0 8px; color:var(--aow-text-strong); font-weight:600; }
+.project-worktree-settings > p { margin:0; }
+.project-worktree-settings input[aria-invalid='true'] { border-color:var(--aow-error); }
 .project-form input[aria-invalid='true'] { border-color:var(--aow-error); }
 .project-path-input { display:flex; gap:10px; margin-top:-7px; }
 .project-path-input > input { flex:1; }

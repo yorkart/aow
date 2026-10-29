@@ -78,6 +78,15 @@ export function openDatabase(stateDir: string): DatabaseSync {
       UNIQUE(org_id, directory),
       UNIQUE(org_id, id)
     );
+    CREATE TABLE IF NOT EXISTS project_worktree_settings (
+      org_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      base_ref TEXT,
+      branch_template TEXT,
+      parent_dir TEXT,
+      PRIMARY KEY(org_id, project_id),
+      FOREIGN KEY(org_id, project_id) REFERENCES projects(org_id, id)
+    );
     CREATE TABLE IF NOT EXISTS skills (
       id TEXT PRIMARY KEY,
       org_id TEXT NOT NULL REFERENCES orgs(id),

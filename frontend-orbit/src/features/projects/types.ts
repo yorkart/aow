@@ -1,5 +1,6 @@
-export interface Project { id: string; org_id: string; name: string; description: string; codebase_path: string | null; directory: string | null; revision: number; task_count: number; created_at: string; updated_at: string }
-export interface ProjectFields { name: string; description: string; codebase_path: string }
+export interface WorktreeSettings { base_ref: string | null; branch_template: string | null; parent_dir: string | null }
+export interface Project { id: string; org_id: string; name: string; description: string; codebase_path: string | null; directory: string | null; revision: number; task_count: number; created_at: string; updated_at: string; worktree_settings: WorktreeSettings }
+export interface ProjectFields { name: string; description: string; codebase_path: string; worktree_settings: WorktreeSettings }
 export type ProjectTab = 'tasks' | 'workspaces' | 'configuration';
 export type TaskStatus = 'todo' | 'in_progress' | 'blocked' | 'done' | 'cancelled';
 export const taskStatusNames: Record<TaskStatus, string> = { todo: '待办', in_progress: '进行中', blocked: '已阻塞', done: '已完成', cancelled: '已取消' };

@@ -43,11 +43,21 @@ Projects 左侧是可搜索的项目列表和新增入口，右侧固定显示 T
 
 - **Tasks**：创建项目任务、编辑任务详情和状态、选择负责 Agent，以及绑定当前项目的可用工作区。任务列表显示编号、标题、状态、Agent 和更新时间，支持搜索与状态筛选。任务编号使用组织内递增的 ORB-N；任务归属和工作区绑定使用 ID。此入口完成任务登记，不会启动 Agent 或发送推理请求。
 - **Workspaces**：读取本地 Git worktree 列表并合并 Orbit 保存的工作区和任务绑定，同一路径只显示一张卡片。当前 Codebase 固定在前，其余按最近使用时间排序；未被运行器使用过的工作区没有最近使用时间。卡片可搜索、刷新、复制分支和路径，并通过任务标签打开详情。未关联任务的 Git worktree 同样显示；目录丢失或移动时保留绑定并标记不可用。普通目录显示为项目工作区，分支留空。
-- **Configuration**：编辑 Project name、Description、Codebase path，可手动输入或浏览运行 Orbit 的机器上的目录。保存时检查目录存在、可访问并检测 Git；目录错误显示在路径字段下。配置、任务详情支持过期编辑检测，离开未保存页面时会提示确认。
+- **Configuration**：编辑 Project name、Description、Codebase path，可手动输入或浏览运行 Orbit 的机器上的目录。检测到 Git 仓库后显示 Base ref、Branch template、Worktree parent dir 三项设置。保存时检查目录、Git 引用与参数；错误显示在对应字段下。配置、任务详情支持过期编辑检测，离开未保存页面时会提示确认。
 
 修改或清空 Codebase 只改变后续工作区选择，不迁移、删除或覆盖已有本地目录；任务原有的工作区 ID 保持不变。没有 Codebase 的项目仍可管理任务，需要代码的运行须先绑定可用工作区。目录浏览只列出目录；保存配置、刷新工作区不会克隆仓库或创建 worktree。
 
 项目、任务、工作区及绑定关系统一保存在 `~/.orbit/orbit.sqlite`，代码文件继续由本地文件系统与 Git 管理。工作区分支和可用状态实时检测；任务工作区另保存任务分支与起始提交。Agent 的 Overview 现在显示实际分配给该 Agent 的最近任务，可进入项目任务详情。
+
+Git worktree 设置与项目配置一起保存，仅影响新任务首次创建隔离工作区：
+
+| 设置 | 行为 |
+| --- | --- |
+| Base ref | 使用本地可解析的分支、标签或提交；留空使用 HEAD。不自动获取远程引用，引用缺失时返回错误 |
+| Branch template | 支持 `{{issue.identifier}}`、`{{issue.id}}`、`{{slug}}`（任务标题生成的 slug）；留空使用 `orbit/<org-id 前 8 位>/{{issue.identifier}}` |
+| Worktree parent dir | 支持绝对路径或相对仓库根目录的路径，须在主仓库之外，例如 `../aow-worktrees`；配置时按生成的分支名建立子目录，可使用尚不存在的父目录 |
+
+三项留空时保留原目录布局：`<仓库父目录>/<仓库名>-orbit-<org-id 前 8 位>-<任务编号>`。保存配置只校验，不创建目录；新任务准备时固定 Base ref 对应的提交，并写入工作区记录。重复运行、重试和 Agent 交接继续使用任务已有的工作区 ID，不因参数变更移动目录或重建分支。无 Codebase 或使用普通目录时，这些设置暂不应用。本期不提供 Provision、Runtime provision 或 Teardown command 配置。
 
 `server-orbit/src/projects/task-workspaces.ts` 的 `TaskWorkspaces.prepare` 是后续运行器的内部接口。首次为 Git 任务准备隔离工作区时，可从当前提交创建与仓库同级的 worktree；续跑、重试和 Agent 交接复用任务已绑定的工作区。目录或分支冲突、绑定目录丢失时返回错误，不删除已有文件或静默换用其他工作区。`AgentRuns.prepareForTask` 将绑定的工作区作为 cwd，同时为每次运行准备独立 HOME，并在快照中固定项目、任务和工作区 ID。该接口尚未接入任务执行按钮或调度器。
 

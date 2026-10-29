@@ -5,6 +5,8 @@ import { dirname, join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { HttpError } from '../errors.js';
 import { gitInfo, localDirectory } from './git.js';
+import { transaction } from '../database.js';
+import { ProjectWorktreeSettings } from './worktree-settings.js';
 
 export interface ProjectRow { id: string; org_id: string; name: string; directory: string | null; description: string; created_at: string; updated_at: string; revision: number }
 export function shortText(value: unknown, label: string, limit: number, required = false): string {
@@ -12,7 +14,8 @@ export function shortText(value: unknown, label: string, limit: number, required
   return value.trim();
 }
 export class Projects {
-  constructor(readonly database: DatabaseSync) {}
+  readonly worktree: ProjectWorktreeSettings;
+  constructor(readonly database: DatabaseSync) { this.worktree = new ProjectWorktreeSettings(database); }
   checkOrg(org: string) { if (!this.database.prepare('SELECT id FROM orgs WHERE id = ?').get(org)) throw new HttpError(404, 'org_not_found', '组织不存在。'); }
   row(org: string, id: string): ProjectRow {
     this.checkOrg(org);
@@ -22,7 +25,7 @@ export class Projects {
   }
   public(row: ProjectRow) {
     const count = this.database.prepare('SELECT count(*) AS count FROM tasks WHERE org_id = ? AND project_id = ?').get(row.org_id, row.id) as { count: number };
-    return { ...row, codebase_path: row.directory, task_count: count.count };
+    return { ...row, codebase_path: row.directory, task_count: count.count, worktree_settings: this.worktree.get(row.org_id, row.id) };
   }
   get(org: string, id: string) { return this.public(this.row(org, id)); }
   list(org: string) { this.checkOrg(org); return (this.database.prepare('SELECT * FROM projects WHERE org_id = ? ORDER BY name COLLATE NOCASE, id').all(org) as unknown as ProjectRow[]).map(row => this.public(row)); }
@@ -39,11 +42,16 @@ export class Projects {
     const path = Object.hasOwn(input, 'codebase_path') ? input.codebase_path : input.directory;
     const inspection = path === undefined || path === null || path === '' ? null : await this.inspect(path);
     const directory = inspection?.directory ?? null; const now = new Date().toISOString(); const projectId = previous?.id ?? randomUUID();
+    const settings = this.worktree.parse(input.worktree_settings, previous ? this.worktree.get(org, projectId) : { base_ref: null, branch_template: null, parent_dir: null });
+    if (inspection?.is_git && inspection.root) await this.worktree.validate(settings, inspection.root);
     try {
-      if (previous) {
-        const result = this.database.prepare('UPDATE projects SET name = ?, description = ?, directory = ?, revision = revision + 1, updated_at = ? WHERE org_id = ? AND id = ? AND revision = ?').run(name, description, directory, now, org, projectId, previous.revision);
-        if (!result.changes) throw new HttpError(409, 'project_conflict', '项目已被其他窗口更新，请重新打开配置。');
-      } else this.database.prepare('INSERT INTO projects (id, org_id, name, directory, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(projectId, org, name, directory, description, now, now);
+      transaction(this.database, () => {
+        if (previous) {
+          const result = this.database.prepare('UPDATE projects SET name = ?, description = ?, directory = ?, revision = revision + 1, updated_at = ? WHERE org_id = ? AND id = ? AND revision = ?').run(name, description, directory, now, org, projectId, previous.revision);
+          if (!result.changes) throw new HttpError(409, 'project_conflict', '项目已被其他窗口更新，请重新打开配置。');
+        } else this.database.prepare('INSERT INTO projects (id, org_id, name, directory, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(projectId, org, name, directory, description, now, now);
+        this.worktree.save(org, projectId, settings);
+      });
     } catch (error) {
       if (error instanceof Error && error.message.includes('UNIQUE constraint failed: projects.org_id, projects.directory')) throw new HttpError(409, 'codebase_in_use', '当前组织已有项目使用此 Codebase，请选择该项目或其他目录。');
       throw error;

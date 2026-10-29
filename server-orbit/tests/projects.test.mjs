@@ -131,15 +131,59 @@ test('task runtime creates a sibling worktree once, pins base commit and reuses 
   await rm(first.cwd, { recursive: true, force: true }); await assert.rejects(runs.prepareForTask(app.org, task.id, 'missing-run'), code('workspace_unavailable'));
 });
 
+test('configured base commit, branch template and parent directory control actual worktrees and preserve existing bindings after edits', async t => {
+  const app = await fixture(t); await app.init(); const initial = await app.runGit(app.repo, ['rev-parse', 'HEAD']);
+  await app.runGit(app.repo, ['branch', 'starting-point']); await writeFile(join(app.repo, 'latest-only.txt'), 'Newer commit'); await app.runGit(app.repo, ['add', 'latest-only.txt']); await app.runGit(app.repo, ['commit', '-m', 'Newer']);
+  const settings = { base_ref: 'starting-point', branch_template: 'tasks/{{issue.identifier}}-{{slug}}', parent_dir: '../configured-worktrees' };
+  let project = await app.projects.save(app.org, { name: 'Configured', codebase_path: app.repo, worktree_settings: settings });
+  assert.deepEqual(project.worktree_settings, settings); await assert.rejects(access(join(app.directory, 'configured-worktrees')));
+  const task = await app.tasks.save(app.org, { project_id: project.id, title: 'Fix Login!' }); const preparer = new TaskWorkspaces(app.tasks); const workspace = await preparer.prepare(app.org, task.id);
+  assert.equal(workspace.directory, join(app.directory, 'configured-worktrees', `tasks/${task.identifier}-fix-login`)); assert.equal(workspace.task_branch, `tasks/${task.identifier}-fix-login`); assert.equal(workspace.base_commit, initial);
+  assert.equal(await app.runGit(workspace.directory, ['rev-parse', 'HEAD']), initial); await assert.rejects(access(join(workspace.directory, 'latest-only.txt'))); await writeFile(join(workspace.directory, 'changes.txt'), 'Keep edits');
+  project = await app.projects.save(app.org, { name: project.name, codebase_path: app.repo, revision: project.revision, worktree_settings: { base_ref: 'HEAD', branch_template: 'next/{{issue.id}}', parent_dir: join(app.directory, 'next-worktrees') } }, project.id);
+  assert.equal((await preparer.prepare(app.org, task.id)).id, workspace.id); assert.equal(await readFile(join(workspace.directory, 'changes.txt'), 'utf8'), 'Keep edits');
+  const nextTask = await app.tasks.save(app.org, { project_id: project.id, title: 'Next task' }); const next = await preparer.prepare(app.org, nextTask.id); assert.equal(next.task_branch, `next/${nextTask.id}`); assert.equal(dirname(dirname(next.directory)), join(app.directory, 'next-worktrees')); assert.notEqual(next.base_commit, initial);
+  project = await app.projects.save(app.org, { name: project.name, codebase_path: app.repo, revision: project.revision, worktree_settings: { base_ref: '', branch_template: '', parent_dir: '' } }, project.id);
+  assert.deepEqual(project.worktree_settings, { base_ref: null, branch_template: null, parent_dir: null });
+  const thirdTask = await app.tasks.save(app.org, { project_id: project.id, title: 'Default task' }); const third = await preparer.prepare(app.org, thirdTask.id); assert.equal(third.directory, join(app.directory, `${basename(app.repo)}-orbit-${app.org.slice(0, 8)}-${thirdTask.identifier}`));
+  const reopened = openDatabase(app.state); try { assert.deepEqual(new Projects(reopened).get(app.org, project.id).worktree_settings, project.worktree_settings); } finally { reopened.close(); }
+});
+
+test('invalid refs, templates and parent paths fail atomically, and a ref deleted after saving never falls back to HEAD', async t => {
+  const app = await fixture(t); await app.init(); let project = await app.projects.save(app.org, { name: 'Validation', codebase_path: app.repo });
+  const file = join(app.directory, 'file'); await writeFile(file, 'Not a directory'); const alias = join(app.directory, 'alias-into-repository'); await symlink(app.repo, alias, 'dir');
+  const invalid = [
+    [{ base_ref: 'missing-branch' }, 'invalid_base_ref'], [{ base_ref: '--all' }, 'invalid_base_ref'],
+    [{ branch_template: 'feature/{{unknown}}' }, 'invalid_branch_template'], [{ branch_template: '../{{slug}}' }, 'invalid_branch_template'], [{ branch_template: '--bad' }, 'invalid_branch_template'], [{ branch_template: 'feature/{{slug}' }, 'invalid_branch_template'], [{ branch_template: 'feature/has space' }, 'invalid_branch_template'],
+    [{ parent_dir: '.' }, 'invalid_worktree_parent'], [{ parent_dir: '.paperclip/worktrees' }, 'invalid_worktree_parent'], [{ parent_dir: alias }, 'invalid_worktree_parent'], [{ parent_dir: file }, 'invalid_worktree_parent'],
+    [{ provision_command: 'echo unsupported' }, 'invalid_worktree_settings'],
+  ];
+  for (const [settings, error] of invalid) await assert.rejects(app.projects.save(app.org, { name: 'Must not change', codebase_path: app.repo, revision: project.revision, worktree_settings: settings }, project.id), code(error));
+  assert.equal(app.projects.get(app.org, project.id).name, 'Validation'); assert.equal(app.projects.get(app.org, project.id).revision, 1);
+  await app.runGit(app.repo, ['branch', 'temporary-base']); project = await app.projects.save(app.org, { name: project.name, codebase_path: app.repo, revision: project.revision, worktree_settings: { base_ref: 'temporary-base' } }, project.id); await app.runGit(app.repo, ['branch', '-D', 'temporary-base']);
+  const task = await app.tasks.save(app.org, { project_id: project.id, title: 'Deleted base' }); await assert.rejects(new TaskWorkspaces(app.tasks).prepare(app.org, task.id), code('invalid_base_ref'));
+  assert.equal(app.tasks.row(app.org, task.id).workspace_id, null); assert.equal(parseWorktrees(await app.runGit(app.repo, ['worktree', 'list', '--porcelain', '-z'])).length, 1);
+});
+
+test('custom worktree paths cannot escape their configured parent through nested symlinks', async t => {
+  const app = await fixture(t); await app.init(); const parent = join(app.directory, 'parent'); const outside = join(app.directory, 'outside');
+  const project = await app.projects.save(app.org, { name: 'Contained', codebase_path: app.repo, worktree_settings: { branch_template: 'feature/{{issue.identifier}}', parent_dir: parent } });
+  await mkdir(parent); await mkdir(outside); await symlink(outside, join(parent, 'feature'), 'dir');
+  const task = await app.tasks.save(app.org, { project_id: project.id, title: 'Contained task' }); await assert.rejects(new TaskWorkspaces(app.tasks).prepare(app.org, task.id), code('invalid_worktree_parent'));
+  await assert.rejects(access(join(outside, task.identifier))); assert.equal(app.tasks.row(app.org, task.id).workspace_id, null);
+});
+
 test('Projects HTTP APIs enforce login, origin and org boundaries and expose directory validation and real task/workspace links', async t => {
-  const app = await fixture(t); await setAccount(app.database, 'project-user', 'test-password');
+  const app = await fixture(t); await app.init(); await setAccount(app.database, 'project-user', 'test-password');
   const server = createOrbitServer(configuration({ ORBIT_STATE_DIR: app.state }), app.database); server.listen(0, '127.0.0.1'); await once(server, 'listening');
   t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); })); const root = `http://127.0.0.1:${server.address().port}`;
   assert.equal((await fetch(`${root}/api/orgs/${app.org}/projects`)).status, 401);
   const login = await fetch(`${root}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'project-user', password: 'test-password' }) }); const cookie = login.headers.get('set-cookie').split(';')[0];
   const request = (path, method = 'GET', value, extra = {}) => fetch(`${root}/api/orgs/${app.org}${path}`, { method, headers: { Cookie: cookie, 'Content-Type': 'application/json', ...extra }, ...(value ? { body: JSON.stringify(value) } : {}) });
   assert.equal((await request('/projects', 'POST', { name: 'Blocked' }, { Origin: 'https://bad.example' })).status, 403);
-  const project = await (await request('/projects', 'POST', { name: 'HTTP', codebase_path: app.repo })).json(); assert.ok(project.id);
+  const settings = { base_ref: 'main', branch_template: 'http-{{issue.identifier}}', parent_dir: '../http-worktrees' };
+  const project = await (await request('/projects', 'POST', { name: 'HTTP', codebase_path: app.repo, worktree_settings: settings })).json(); assert.ok(project.id); assert.deepEqual(project.worktree_settings, settings);
+  assert.deepEqual((await (await request(`/projects/${project.id}`)).json()).worktree_settings, settings);
   const workspace = (await (await request(`/projects/${project.id}/workspaces`)).json()).workspaces[0];
   const created = await request(`/projects/${project.id}/tasks`, 'POST', { title: 'HTTP task', workspace_id: workspace.id }); assert.equal(created.status, 201); const task = await created.json();
   assert.equal((await (await request(`/projects/${project.id}/tasks`)).json())[0].id, task.id); assert.equal((await request(`/tasks/${task.id}`)).status, 200);
