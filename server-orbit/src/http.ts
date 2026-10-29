@@ -72,7 +72,7 @@ export function createOrbitServer(config: Config, database: DatabaseSync, connec
   const connectors = new Connectors(database, config.stateDir, connectorOptions);
   const connectorRoutes = new ConnectorRoutes(connectors);
   const agentRoutes = new AgentRoutes(new Agents(database, config.stateDir, connectors, skills));
-  const projects = new Projects(database); const workspaces = new Workspaces(projects);
+  const projects = new Projects(database, config.stateDir); const workspaces = new Workspaces(projects);
   const projectRoutes = new ProjectRoutes(projects, workspaces, new Tasks(projects, workspaces));
   const server = createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (request, response) => {
     response.setHeader('X-Content-Type-Options', 'nosniff');

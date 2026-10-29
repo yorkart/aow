@@ -39,13 +39,15 @@ Orbit 包含独立登录、组织（org）的创建和切换、Skills 技能库�
 
 ## Projects
 
-Projects 左侧是可搜索的项目列表和新增入口，右侧固定显示 Tasks、Workspaces、Configuration 三个页签。新增项目使用工作区整页，保存后进入项目的 Tasks。名称必填，描述和 Codebase 可留空；组织内不同项目可同时不配置目录。
+Projects 左侧是可搜索的项目列表和新增入口，右侧固定显示 Tasks、Workspaces、Configuration 三个页签。新增项目使用工作区整页，保存后进入项目的 Tasks。名称必填，描述和 Codebase 可留空。创建时未设置本地路径，会自动创建 `~/.orbit/projects/<org-id>/<project-id>/_default` 作为项目默认工作目录；配置 `ORBIT_STATE_DIR` 时随状态目录一起调整。不同组织、项目分别分配目录。
 
 - **Tasks**：创建项目任务、编辑任务详情和状态、选择负责 Agent，以及绑定当前项目的可用工作区。任务列表显示编号、标题、状态、Agent 和更新时间，支持搜索与状态筛选。任务编号使用组织内递增的 ORB-N；任务归属和工作区绑定使用 ID。此入口完成任务登记，不会启动 Agent 或发送推理请求。
-- **Workspaces**：读取本地 Git worktree 列表并合并 Orbit 保存的工作区和任务绑定，同一路径只显示一张卡片。当前 Codebase 固定在前，其余按最近使用时间排序；未被运行器使用过的工作区没有最近使用时间。卡片可搜索、刷新、复制分支和路径，并通过任务标签打开详情。未关联任务的 Git worktree 同样显示；目录丢失或移动时保留绑定并标记不可用。普通目录显示为项目工作区，分支留空。
-- **Configuration**：编辑 Project name、Description、Codebase path，可手动输入或浏览运行 Orbit 的机器上的目录。检测到 Git 仓库后显示 Base ref、Branch template、Worktree parent dir 三项设置。保存时检查目录、Git 引用与参数；错误显示在对应字段下。配置、任务详情支持过期编辑检测，离开未保存页面时会提示确认。
+- **Workspaces**：读取本地 Git worktree 列表并合并 Orbit 保存的工作区和任务绑定，同一路径只显示一张卡片。当前项目工作目录固定在前，其余按最近使用时间排序；未被运行器使用过的工作区没有最近使用时间。卡片可搜索、刷新、复制分支和路径，并通过任务标签打开详情。未关联任务的 Git worktree 同样显示；目录丢失或移动时保留绑定并标记不可用。普通目录显示为项目工作区，分支留空。
+- **Configuration**：编辑 Project name、Description、Codebase path，展示 Orbit 分配的默认目录，可手动输入或浏览运行 Orbit 的机器上的目录来替换；点击恢复默认并保存后重新使用原默认目录。检测到 Git 仓库后显示 Base ref、Branch template、Worktree parent dir 三项设置。保存时检查目录、Git 引用与参数；错误显示在对应字段下。配置、任务详情支持过期编辑检测，离开未保存页面时会提示确认。
 
-修改或清空 Codebase 只改变后续工作区选择，不迁移、删除或覆盖已有本地目录；任务原有的工作区 ID 保持不变。没有 Codebase 的项目仍可管理任务，需要代码的运行须先绑定可用工作区。目录浏览只列出目录；保存配置、刷新工作区不会克隆仓库或创建 worktree。
+修改 Codebase 或恢复默认只改变后续工作区选择，不迁移、删除或覆盖已有本地目录；任务原有的工作区 ID 保持不变。未绑定工作区的普通任务在首次准备时绑定项目工作目录，并作为 Agent 的 cwd；同一项目的普通任务共享此目录，每次运行的隔离 HOME 保持独立。已绑定任务在重试、换 Agent 或切换项目路径后继续使用原目录。
+
+旧项目未配置目录时，在首次准备或查看工作区时创建默认目录，无需更改数据库记录。默认目录已有工作区记录后如丢失或被替换，会显示不可用并阻止运行，不自动创建空目录掩盖已丢失的任务文件。默认目录同样支持 Skills 扫描和导入。目录浏览只列出目录；保存配置、刷新工作区不会克隆仓库或创建 worktree。
 
 项目、任务、工作区及绑定关系统一保存在 `~/.orbit/orbit.sqlite`，代码文件继续由本地文件系统与 Git 管理。工作区分支和可用状态实时检测；任务工作区另保存任务分支与起始提交。Agent 的 Overview 现在显示实际分配给该 Agent 的最近任务，可进入项目任务详情。
 
@@ -57,7 +59,7 @@ Git worktree 设置与项目配置一起保存，仅影响新任务首次创建�
 | Branch template | 支持 `{{issue.identifier}}`、`{{issue.id}}`、`{{slug}}`（任务标题生成的 slug）；留空使用 `orbit/<org-id 前 8 位>/{{issue.identifier}}` |
 | Worktree parent dir | 支持绝对路径或相对仓库根目录的路径，须在主仓库之外，例如 `../aow-worktrees`；配置时按生成的分支名建立子目录，可使用尚不存在的父目录 |
 
-三项留空时保留原目录布局：`<仓库父目录>/<仓库名>-orbit-<org-id 前 8 位>-<任务编号>`。保存配置只校验，不创建目录；新任务准备时固定 Base ref 对应的提交，并写入工作区记录。重复运行、重试和 Agent 交接继续使用任务已有的工作区 ID，不因参数变更移动目录或重建分支。无 Codebase 或使用普通目录时，这些设置暂不应用。本期不提供 Provision、Runtime provision 或 Teardown command 配置。
+三项留空时保留原目录布局：`<仓库父目录>/<仓库名>-orbit-<org-id 前 8 位>-<任务编号>`。保存 worktree 参数只校验，不创建 worktree 目录；新任务准备时固定 Base ref 对应的提交，并写入工作区记录。重复运行、重试和 Agent 交接继续使用任务已有的工作区 ID，不因参数变更移动目录或重建分支。项目使用普通目录时，这些设置暂不应用；默认目录如已初始化为 Git 仓库，也可使用这些设置。本期不提供 Provision、Runtime provision 或 Teardown command 配置。
 
 `server-orbit/src/projects/task-workspaces.ts` 的 `TaskWorkspaces.prepare` 是后续运行器的内部接口。首次为 Git 任务准备隔离工作区时，可从当前提交创建与仓库同级的 worktree；续跑、重试和 Agent 交接复用任务已绑定的工作区。目录或分支冲突、绑定目录丢失时返回错误，不删除已有文件或静默换用其他工作区。`AgentRuns.prepareForTask` 将绑定的工作区作为 cwd，同时为每次运行准备独立 HOME，并在快照中固定项目、任务和工作区 ID。该接口尚未接入任务执行按钮或调度器。
 
@@ -66,7 +68,7 @@ Git worktree 设置与项目配置一起保存，仅影响新任务首次创建�
 进入 Skills，左侧面板为 Installed，工作区为 Installed skills。所有新增、导入和编辑操作都在工作区整页完成。
 
 - **Create a skill**：填写名称、说明和指令，生成带 YAML frontmatter 的 SKILL.md。
-- **Import skills from project**：选择当前组织的项目，扫描并勾选技能。也可以直接在导入页登记项目名称和本地工作目录；此登记与 Projects 使用同一份数据。没有 Codebase 的项目须先到 Configuration 配置目录，才能扫描技能。路径属于运行 server-orbit 的机器。
+- **Import skills from project**：选择当前组织的项目，扫描并勾选技能。也可以直接在导入页登记项目名称和本地工作目录；此登记与 Projects 使用同一份数据。未设置 Codebase 时扫描项目的 Orbit 默认目录。路径属于运行 server-orbit 的机器。
 - **详情和编辑**：默认打开 SKILL.md，支持 Markdown 编辑、预览和包内相对引用；文本文件可直接编辑，图片可预览，二进制文件可下载。文件树支持新建文件或目录、上传、重命名和删除，SKILL.md 入口不可删除或重命名。
 - **保存**：所有文件改动统一生成一个新版本；name、description 从当前 SKILL.md 解析到索引。过期草稿会返回版本冲突，防止覆盖其他窗口的修改。组织内同名技能需要改名，不覆盖已有技能。
 - **删除**：仅隐藏技能索引，保留历史版本。存在 Agent 引用时需先在 Agent 配置中解除引用。

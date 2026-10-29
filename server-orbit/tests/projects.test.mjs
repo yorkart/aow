@@ -25,7 +25,7 @@ async function fixture(t) {
   const directory = await mkdtemp(join(tmpdir(), 'orbit-projects-')); const state = join(directory, 'state'); const repo = join(directory, 'repo with 空格');
   await mkdir(repo); const database = openDatabase(state); const org = randomUUID(); const other = randomUUID();
   for (const id of [org, other]) database.prepare('INSERT INTO orgs VALUES (?, ?, ?)').run(id, id, new Date().toISOString());
-  const projects = new Projects(database); const workspaces = new Workspaces(projects); const tasks = new Tasks(projects, workspaces);
+  const projects = new Projects(database, state); const workspaces = new Workspaces(projects); const tasks = new Tasks(projects, workspaces);
   const runGit = async (path, args) => { const result = await git(path, args); assert.equal(result.ok, true, `git ${args.join(' ')} failed`); return result.output.trimEnd(); };
   const init = async () => { await runGit(repo, ['init', '-b', 'main']); await runGit(repo, ['config', 'user.email', 'test@example.invalid']); await runGit(repo, ['config', 'user.name', 'Orbit tests']); await writeFile(join(repo, 'README.md'), '# Repository'); await runGit(repo, ['add', 'README.md']); await runGit(repo, ['commit', '-m', 'Initial']); };
   let closed = false;
@@ -45,7 +45,7 @@ async function agentFixture(t, app) {
 
 test('project configuration supports multiple empty Codebases, canonical paths, validation, org isolation and optimistic saves', async t => {
   const app = await fixture(t); let first = await app.projects.save(app.org, { name: 'Plan', description: 'No code needed' }); const second = await app.projects.save(app.org, { name: 'Second' });
-  assert.equal(first.codebase_path, null); assert.equal(second.directory, null); assert.ok(first.created_at); assert.equal(first.task_count, 0);
+  assert.equal(first.codebase_path, null); assert.equal(second.directory, join(app.state, 'projects', app.org, second.id, '_default')); await access(second.directory); assert.ok(first.created_at); assert.equal(first.task_count, 0);
   await assert.rejects(app.projects.save(app.org, { name: 'Relative', codebase_path: 'relative' }), code('invalid_codebase'));
   await assert.rejects(app.projects.save(app.org, { name: 'Missing', codebase_path: join(app.directory, 'missing') }), code('invalid_codebase'));
   const file = join(app.directory, 'file'); await writeFile(file, 'File'); await assert.rejects(app.projects.save(app.org, { name: 'File', codebase_path: file }), code('invalid_codebase'));
@@ -55,7 +55,7 @@ test('project configuration supports multiple empty Codebases, canonical paths, 
   await assert.rejects(app.projects.save(app.org, { name: 'Duplicate', codebase_path: app.repo }), code('codebase_in_use'));
   const legacy = await app.projects.register(app.org, { name: 'Legacy', directory: alias }); assert.equal(legacy.id, first.id);
   assert.throws(() => app.projects.get(app.other, first.id), code('project_not_found')); assert.deepEqual(app.projects.list(app.other), []);
-  first = await app.projects.save(app.org, { name: 'Updated', codebase_path: null, directory: app.repo, revision: first.revision }, first.id); assert.equal(first.directory, null); await access(app.repo);
+  first = await app.projects.save(app.org, { name: 'Updated', codebase_path: null, directory: app.repo, revision: first.revision }, first.id); assert.equal(first.directory, first.managed_directory); await access(first.directory); await access(app.repo);
   const listing = await app.projects.directories(app.directory); assert.ok(listing.directories.some(item => item.path === app.repo)); assert.equal(listing.directories.some(item => item.name === 'file' || item.name === 'alias'), false);
 });
 
@@ -65,9 +65,59 @@ test('existing project database layout upgrades without changing IDs or losing S
   const { agent, runs } = await agentFixture(t, app); await runs.prepare(app.org, agent.id, 'legacy-run', project.id);
   app.database.exec(`PRAGMA foreign_keys = OFF; BEGIN; CREATE TABLE projects_old (id TEXT PRIMARY KEY, org_id TEXT NOT NULL REFERENCES orgs(id), name TEXT NOT NULL, directory TEXT NOT NULL, UNIQUE(org_id,directory), UNIQUE(org_id,id)); INSERT INTO projects_old SELECT id,org_id,name,directory FROM projects; DROP TABLE projects; ALTER TABLE projects_old RENAME TO projects; COMMIT;`);
   app.close(); const database = openDatabase(app.state); t.after(() => database.close());
-  assert.equal(new Projects(database).get(app.org, project.id).name, 'Legacy'); assert.equal(database.prepare('SELECT source_project_id FROM skills WHERE id = ?').get(skill.id).source_project_id, project.id);
+  assert.equal(new Projects(database, app.state).get(app.org, project.id).name, 'Legacy'); assert.equal(database.prepare('SELECT source_project_id FROM skills WHERE id = ?').get(skill.id).source_project_id, project.id);
   assert.equal(database.prepare('SELECT project_id FROM agent_runs WHERE run_id = ?').get('legacy-run').project_id, project.id); assert.deepEqual(database.prepare('PRAGMA foreign_key_check').all(), []);
-  assert.equal((await new Projects(database).save(app.org, { name: 'Now optional', codebase_path: '', revision: 1 }, project.id)).directory, null);
+  assert.equal((await new Projects(database, app.state).save(app.org, { name: 'Now optional', codebase_path: '', revision: 1 }, project.id)).codebase_path, null);
+});
+
+test('managed project folders are stable, isolated across projects and orgs, and available to legacy empty projects and Skills', async t => {
+  const app = await fixture(t); const first = await app.projects.save(app.org, { name: 'First' }); const second = await app.projects.save(app.org, { name: 'Second' }); const foreign = await app.projects.save(app.other, { name: 'First' });
+  assert.equal(new Set([first.directory, second.directory, foreign.directory]).size, 3); assert.equal(first.directory, first.managed_directory);
+  const workspace = (await app.workspaces.list(app.org, first.id)).workspaces[0]; assert.equal(workspace.directory, first.directory); assert.equal(workspace.available, true); assert.equal(workspace.branch, null);
+  await writeFile(join(first.directory, 'notes.md'), 'Keep project notes');
+  const reopened = openDatabase(app.state); try { assert.equal(new Projects(reopened, app.state).get(app.org, first.id).directory, first.directory); } finally { reopened.close(); }
+  const legacy = randomUUID(); app.database.prepare('INSERT INTO projects (id, org_id, name) VALUES (?, ?, ?)').run(legacy, app.org, 'Legacy empty');
+  assert.equal((await app.workspaces.resolve(app.org, legacy)).directory, join(app.state, 'projects', app.org, legacy, '_default'));
+  const pack = join(first.directory, 'skills', 'planning'); await mkdir(pack, { recursive: true }); await writeFile(join(pack, 'SKILL.md'), '---\nname: planning\ndescription: Plan tasks\n---\nMake a plan.');
+  const imports = new SkillProjects(new Skills(app.database, app.state)); assert.equal((await imports.scan(app.org, first.id)).skills[0].name, 'planning');
+  const imported = await imports.import(app.org, { project_id: first.id, skills: [{ path: 'skills/planning' }] }); assert.equal(imported[0].source_project_id, first.id);
+});
+
+test('ordinary tasks run in the default project folder and retain bindings and files when the folder is replaced and restored', async t => {
+  const app = await fixture(t); const { agent, runs } = await agentFixture(t, app); let project = await app.projects.save(app.org, { name: 'Documents' });
+  const task = await app.tasks.save(app.org, { project_id: project.id, title: 'Write a report', agent_id: agent.id }); const first = await runs.prepareForTask(app.org, task.id, 'default-one');
+  assert.equal(first.cwd, project.managed_directory); assert.notEqual(first.cwd, first.home); await writeFile(join(first.cwd, 'report.md'), 'Task output');
+  const sharedTask = await app.tasks.save(app.org, { project_id: project.id, title: 'Review the report', agent_id: agent.id }); const shared = await runs.prepareForTask(app.org, sharedTask.id, 'default-shared');
+  assert.equal(shared.cwd, first.cwd); assert.notEqual(shared.home, first.home); assert.equal(shared.snapshot.workspace_id, first.snapshot.workspace_id);
+  project = await app.projects.save(app.org, { name: project.name, codebase_path: app.repo, revision: project.revision }, project.id);
+  const nextTask = await app.tasks.save(app.org, { project_id: project.id, title: 'Local task', agent_id: agent.id }); const local = await runs.prepareForTask(app.org, nextTask.id, 'local-run'); assert.equal(local.cwd, app.repo);
+  project = await app.projects.save(app.org, { name: project.name, codebase_path: '', revision: project.revision }, project.id);
+  assert.equal(project.directory, first.cwd); assert.equal((await runs.prepareForTask(app.org, task.id, 'default-retry')).cwd, first.cwd); assert.equal((await runs.prepareForTask(app.org, nextTask.id, 'local-retry')).cwd, app.repo);
+  assert.equal(await readFile(join(first.cwd, 'report.md'), 'utf8'), 'Task output');
+  const fresh = await app.tasks.save(app.org, { project_id: project.id, title: 'Fresh task', agent_id: agent.id }); assert.equal((await runs.prepareForTask(app.org, fresh.id, 'default-restored')).cwd, first.cwd);
+});
+
+test('managed folder preparation rejects symlinks and does not silently recreate a missing task-bound directory', async t => {
+  const app = await fixture(t); const outside = join(app.directory, 'outside'); await mkdir(outside); await symlink(outside, join(app.state, 'projects'), 'dir');
+  await assert.rejects(app.projects.save(app.org, { name: 'Blocked' }), code('workspace_unavailable')); assert.equal(app.projects.list(app.org).length, 0);
+  await rm(join(app.state, 'projects')); const project = await app.projects.save(app.org, { name: 'Bound' });
+  const task = await app.tasks.save(app.org, { project_id: project.id, title: 'Bound task' }); const workspace = await new TaskWorkspaces(app.tasks).prepare(app.org, task.id);
+  await rm(project.directory, { recursive: true });
+  await assert.rejects(new TaskWorkspaces(app.tasks).prepare(app.org, task.id), code('workspace_unavailable'));
+  const listing = await app.workspaces.list(app.org, project.id); assert.equal(listing.workspaces[0].available, false); await assert.rejects(access(project.directory));
+  await symlink(outside, project.directory, 'dir'); await assert.rejects(app.workspaces.resolve(app.org, project.id), code('workspace_unavailable'));
+  assert.equal(app.tasks.row(app.org, task.id).workspace_id, workspace.id);
+});
+
+test('a managed project folder initialized as Git honors worktree settings without a custom Codebase', async t => {
+  const app = await fixture(t); let project = await app.projects.save(app.org, { name: 'Managed repository' });
+  await app.runGit(project.directory, ['init', '-b', 'main']); await app.runGit(project.directory, ['config', 'user.email', 'test@example.invalid']); await app.runGit(project.directory, ['config', 'user.name', 'Orbit tests']);
+  await writeFile(join(project.directory, 'README.md'), '# Managed repository'); await app.runGit(project.directory, ['add', 'README.md']); await app.runGit(project.directory, ['commit', '-m', 'Initial']);
+  const settings = { base_ref: 'main', branch_template: 'task-{{issue.identifier}}', parent_dir: '../worktrees' };
+  project = await app.projects.save(app.org, { name: project.name, revision: project.revision, worktree_settings: settings }, project.id); assert.equal(project.git.is_git, true); assert.equal(project.codebase_path, null);
+  await assert.rejects(app.projects.save(app.org, { name: project.name, revision: project.revision, worktree_settings: { base_ref: 'missing' } }, project.id), code('invalid_base_ref'));
+  const task = await app.tasks.save(app.org, { project_id: project.id, title: 'Implement' }); const workspace = await new TaskWorkspaces(app.tasks).prepare(app.org, task.id);
+  assert.equal(workspace.directory, join(dirname(project.directory), 'worktrees', `task-${task.identifier}`)); assert.equal(workspace.task_branch, `task-${task.identifier}`); assert.equal(await app.runGit(workspace.directory, ['rev-parse', 'HEAD']), await app.runGit(project.directory, ['rev-parse', 'HEAD']));
 });
 
 test('workspace discovery reads real Git worktrees with spaces, deduplicates paths, tracks branch changes and leaves usage and repository untouched', async t => {
@@ -102,17 +152,17 @@ test('tasks are real org/project records with unique identifiers, filters, Agent
   await assert.rejects(app.tasks.save(app.other, { project_id: foreign.id, title: 'Wrong Agent', agent_id: agent.id }), code('invalid_task_agent'));
 });
 
-test('changing or clearing Codebase preserves task-bound workspace IDs, local modifications, and imports require an actual Codebase', async t => {
+test('changing or clearing Codebase restores the managed workspace and preserves task-bound files and imports', async t => {
   const app = await fixture(t); let project = await app.projects.save(app.org, { name: 'Original', codebase_path: app.repo });
   const workspace = (await app.workspaces.list(app.org, project.id)).workspaces[0]; const task = await app.tasks.save(app.org, { project_id: project.id, title: 'Bound task', workspace_id: workspace.id }); await writeFile(join(app.repo, 'work.txt'), 'Uncommitted work');
   const next = join(app.directory, 'next'); await mkdir(next); project = await app.projects.save(app.org, { name: 'New codebase', codebase_path: next, revision: project.revision }, project.id);
   let result = await app.workspaces.list(app.org, project.id); assert.equal(result.workspaces[0].directory, next); assert.equal(result.workspaces.find(row => row.id === workspace.id).tasks[0].id, task.id);
   project = await app.projects.save(app.org, { name: 'No codebase', codebase_path: '', revision: project.revision }, project.id); result = await app.workspaces.list(app.org, project.id);
-  assert.equal(result.workspaces.length, 1); assert.equal(result.workspaces[0].id, workspace.id); assert.equal(await readFile(join(app.repo, 'work.txt'), 'utf8'), 'Uncommitted work');
+  assert.equal(result.workspaces.length, 2); assert.equal(result.workspaces[0].directory, project.managed_directory); assert.equal(result.workspaces[1].id, workspace.id); assert.equal(await readFile(join(app.repo, 'work.txt'), 'utf8'), 'Uncommitted work');
   assert.equal((await new TaskWorkspaces(app.tasks).prepare(app.org, task.id)).id, workspace.id);
   const empty = await app.projects.save(app.org, { name: 'Empty' }); const noWorkspace = await app.tasks.save(app.org, { project_id: empty.id, title: 'Needs code' });
-  await assert.rejects(new TaskWorkspaces(app.tasks).prepare(app.org, noWorkspace.id), code('workspace_required'));
-  await assert.rejects(new SkillProjects(new Skills(app.database, app.state)).scan(app.org, project.id), code('workspace_required'));
+  assert.equal((await new TaskWorkspaces(app.tasks).prepare(app.org, noWorkspace.id)).directory, empty.managed_directory);
+  assert.deepEqual((await new SkillProjects(new Skills(app.database, app.state)).scan(app.org, project.id)).skills, []);
 });
 
 test('task runtime creates a sibling worktree once, pins base commit and reuses files through retries and Agent handoffs', async t => {
@@ -146,7 +196,7 @@ test('configured base commit, branch template and parent directory control actua
   project = await app.projects.save(app.org, { name: project.name, codebase_path: app.repo, revision: project.revision, worktree_settings: { base_ref: '', branch_template: '', parent_dir: '' } }, project.id);
   assert.deepEqual(project.worktree_settings, { base_ref: null, branch_template: null, parent_dir: null });
   const thirdTask = await app.tasks.save(app.org, { project_id: project.id, title: 'Default task' }); const third = await preparer.prepare(app.org, thirdTask.id); assert.equal(third.directory, join(app.directory, `${basename(app.repo)}-orbit-${app.org.slice(0, 8)}-${thirdTask.identifier}`));
-  const reopened = openDatabase(app.state); try { assert.deepEqual(new Projects(reopened).get(app.org, project.id).worktree_settings, project.worktree_settings); } finally { reopened.close(); }
+  const reopened = openDatabase(app.state); try { assert.deepEqual(new Projects(reopened, app.state).get(app.org, project.id).worktree_settings, project.worktree_settings); } finally { reopened.close(); }
 });
 
 test('invalid refs, templates and parent paths fail atomically, and a ref deleted after saving never falls back to HEAD', async t => {
@@ -181,6 +231,8 @@ test('Projects HTTP APIs enforce login, origin and org boundaries and expose dir
   const login = await fetch(`${root}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'project-user', password: 'test-password' }) }); const cookie = login.headers.get('set-cookie').split(';')[0];
   const request = (path, method = 'GET', value, extra = {}) => fetch(`${root}/api/orgs/${app.org}${path}`, { method, headers: { Cookie: cookie, 'Content-Type': 'application/json', ...extra }, ...(value ? { body: JSON.stringify(value) } : {}) });
   assert.equal((await request('/projects', 'POST', { name: 'Blocked' }, { Origin: 'https://bad.example' })).status, 403);
+  const managed = await (await request('/projects', 'POST', { name: 'Managed' })).json(); assert.equal(managed.directory, join(app.state, 'projects', app.org, managed.id, '_default')); assert.equal(managed.codebase_path, null); await access(managed.directory);
+  assert.equal((await (await request(`/projects/${managed.id}/workspaces`)).json()).workspaces[0].directory, managed.directory);
   const settings = { base_ref: 'main', branch_template: 'http-{{issue.identifier}}', parent_dir: '../http-worktrees' };
   const project = await (await request('/projects', 'POST', { name: 'HTTP', codebase_path: app.repo, worktree_settings: settings })).json(); assert.ok(project.id); assert.deepEqual(project.worktree_settings, settings);
   assert.deepEqual((await (await request(`/projects/${project.id}`)).json()).worktree_settings, settings);

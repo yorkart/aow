@@ -7,6 +7,7 @@ import { bytes, packagePath, readPackage, MAX_FILE_BYTES, MAX_PACKAGE_BYTES } fr
 import { metadata } from './metadata.js';
 import type { Skills } from './service.js';
 import { Projects } from '../projects/service.js';
+import { Workspaces } from '../projects/workspaces.js';
 
 interface Project { id: string; org_id: string; name: string; directory: string | null }
 export class SkillProjects {
@@ -14,12 +15,12 @@ export class SkillProjects {
 
   list(org: string): Project[] {
     this.skills.checkOrg(org);
-    return new Projects(this.database).list(org);
+    return new Projects(this.database, this.skills.stateDir).list(org);
   }
 
   async create(org: string, input: Record<string, unknown>): Promise<Project> {
     this.skills.checkOrg(org);
-    return new Projects(this.database).register(org, input);
+    return new Projects(this.database, this.skills.stateDir).register(org, input);
   }
 
   private async get(org: string, id: unknown): Promise<Project & { directory: string }> {
@@ -27,10 +28,8 @@ export class SkillProjects {
     if (typeof id !== 'string') throw new HttpError(422, 'invalid_project', '请选择当前组织的项目。');
     const project = this.database.prepare('SELECT * FROM projects WHERE id = ? AND org_id = ?').get(id, org) as unknown as Project | undefined;
     if (!project) throw new HttpError(404, 'project_not_found', '当前组织中没有这个项目。');
-    if (!project.directory) throw new HttpError(422, 'workspace_required', '项目尚未配置 Codebase，请先在 Projects 的 Configuration 中配置本地目录。');
-    const canonical = await realpath(project.directory).catch(() => undefined);
-    if (canonical !== project.directory) throw new HttpError(422, 'project_changed', '项目工作目录已移动或变更，请重新登记。');
-    return { ...project, directory: project.directory };
+    const workspace = await new Workspaces(new Projects(this.database, this.skills.stateDir)).resolve(org, id);
+    return { ...project, directory: workspace.directory };
   }
 
   async scan(org: string, projectId: unknown) {

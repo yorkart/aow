@@ -25,21 +25,21 @@ export class Workspaces {
   }
   async list(org: string, projectId: string) {
     const project = this.projects.row(org, projectId); const discovered = new Map<string, GitWorkspace>(); const warnings: string[] = [];
-    if (project.directory) {
-      this.remember(org, projectId, project.directory, 'project', project.name);
-      if (await localDirectory(project.directory).catch(() => null) === project.directory) {
-        const info = await gitInfo(project.directory); if (info.warning) warnings.push(info.warning);
-        for (const workspace of info.worktrees) {
-          const path = await localDirectory(workspace.directory).catch(() => workspace.directory);
-          discovered.set(path, workspace); this.remember(org, projectId, path, path === project.directory ? 'project' : 'execution');
-        }
-        if (!discovered.has(project.directory)) discovered.set(project.directory, { directory: project.directory, branch: info.branch, head: info.head, locked: false, prunable: false });
+    const directory = this.projects.directory(project);
+    await this.projects.prepareDirectory(project).catch((error: unknown) => { warnings.push(error instanceof Error ? error.message : '无法准备项目工作目录。'); });
+    this.remember(org, projectId, directory, 'project', project.name);
+    if (await localDirectory(directory).catch(() => null) === directory) {
+      const info = await gitInfo(directory); if (info.warning) warnings.push(info.warning);
+      for (const workspace of info.worktrees) {
+        const path = await localDirectory(workspace.directory).catch(() => workspace.directory);
+        discovered.set(path, workspace); this.remember(org, projectId, path, path === directory ? 'project' : 'execution');
       }
+      if (!discovered.has(directory)) discovered.set(directory, { directory, branch: info.branch, head: info.head, locked: false, prunable: false });
     }
     const rows = this.projects.database.prepare('SELECT * FROM project_workspaces WHERE org_id = ? AND project_id = ?').all(org, projectId) as unknown as WorkspaceRow[];
     const workspaces = await Promise.all(rows.map(async row => {
       const tasks = this.projects.database.prepare('SELECT id, identifier, title, status FROM tasks WHERE org_id = ? AND project_id = ? AND workspace_id = ? ORDER BY updated_at DESC').all(org, projectId, row.id) as { id: string; identifier: string; title: string; status: string }[];
-      const primary = row.directory === project.directory;
+      const primary = row.directory === directory;
       if (!primary && !discovered.has(row.directory) && !tasks.length && !row.last_used_at) return undefined;
       const available = await this.available(row); const known = discovered.get(row.directory);
       const info = available && !known ? await gitInfo(row.directory) : undefined;
@@ -50,8 +50,7 @@ export class Workspaces {
   used(org: string, project: string, id: string) { this.row(org, project, id); this.projects.database.prepare('UPDATE project_workspaces SET last_used_at = ? WHERE org_id = ? AND project_id = ? AND id = ?').run(new Date().toISOString(), org, project, id); }
   async resolve(org: string, projectId: string, id?: string) {
     const project = this.projects.row(org, projectId);
-    const row = id ? this.row(org, projectId, id) : project.directory ? this.remember(org, projectId, project.directory, 'project', project.name) : undefined;
-    if (!row) throw new HttpError(422, 'workspace_required', '此项目尚未配置 Codebase，请先为任务绑定可用工作区。');
+    const row = id ? this.row(org, projectId, id) : this.remember(org, projectId, await this.projects.prepareDirectory(project), 'project', project.name);
     if (!await this.available(row)) throw new HttpError(422, 'workspace_unavailable', '绑定的工作区丢失、已移动或无法访问，请先修复工作区。');
     return row;
   }

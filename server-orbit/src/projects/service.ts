@@ -7,6 +7,7 @@ import { HttpError } from '../errors.js';
 import { gitInfo, localDirectory } from './git.js';
 import { transaction } from '../database.js';
 import { ProjectWorktreeSettings } from './worktree-settings.js';
+import { ManagedProjectDirectories } from './managed-directory.js';
 
 export interface ProjectRow { id: string; org_id: string; name: string; directory: string | null; description: string; created_at: string; updated_at: string; revision: number }
 export function shortText(value: unknown, label: string, limit: number, required = false): string {
@@ -15,7 +16,15 @@ export function shortText(value: unknown, label: string, limit: number, required
 }
 export class Projects {
   readonly worktree: ProjectWorktreeSettings;
-  constructor(readonly database: DatabaseSync) { this.worktree = new ProjectWorktreeSettings(database); }
+  private managed: ManagedProjectDirectories;
+  constructor(readonly database: DatabaseSync, stateDir: string) { this.worktree = new ProjectWorktreeSettings(database); this.managed = new ManagedProjectDirectories(stateDir); }
+  directory(row: Pick<ProjectRow, 'org_id' | 'id' | 'directory'>) { return row.directory ?? this.managed.path(row.org_id, row.id); }
+  async prepareDirectory(row: Pick<ProjectRow, 'org_id' | 'id' | 'directory'>) {
+    if (row.directory) return row.directory;
+    const directory = this.directory(row);
+    const known = this.database.prepare('SELECT 1 FROM project_workspaces WHERE org_id = ? AND project_id = ? AND directory = ?').get(row.org_id, row.id, directory);
+    return this.managed.prepare(row.org_id, row.id, !known);
+  }
   checkOrg(org: string) { if (!this.database.prepare('SELECT id FROM orgs WHERE id = ?').get(org)) throw new HttpError(404, 'org_not_found', '组织不存在。'); }
   row(org: string, id: string): ProjectRow {
     this.checkOrg(org);
@@ -25,7 +34,7 @@ export class Projects {
   }
   public(row: ProjectRow) {
     const count = this.database.prepare('SELECT count(*) AS count FROM tasks WHERE org_id = ? AND project_id = ?').get(row.org_id, row.id) as { count: number };
-    return { ...row, codebase_path: row.directory, task_count: count.count, worktree_settings: this.worktree.get(row.org_id, row.id) };
+    return { ...row, directory: this.directory(row), codebase_path: row.directory, managed_directory: this.managed.path(row.org_id, row.id), task_count: count.count, worktree_settings: this.worktree.get(row.org_id, row.id) };
   }
   get(org: string, id: string) { return this.public(this.row(org, id)); }
   list(org: string) { this.checkOrg(org); return (this.database.prepare('SELECT * FROM projects WHERE org_id = ? ORDER BY name COLLATE NOCASE, id').all(org) as unknown as ProjectRow[]).map(row => this.public(row)); }
@@ -39,11 +48,12 @@ export class Projects {
     this.checkOrg(org); const previous = id ? this.row(org, id) : undefined;
     if (previous && input.revision !== previous.revision) throw new HttpError(409, 'project_conflict', '项目已被其他窗口更新，请重新打开配置。');
     const name = shortText(input.name, '项目名称', 100, true); const description = shortText(input.description ?? '', '描述', 8000);
-    const path = Object.hasOwn(input, 'codebase_path') ? input.codebase_path : input.directory;
+    const path = Object.hasOwn(input, 'codebase_path') ? input.codebase_path : Object.hasOwn(input, 'directory') ? input.directory : previous?.directory;
     const inspection = path === undefined || path === null || path === '' ? null : await this.inspect(path);
     const directory = inspection?.directory ?? null; const now = new Date().toISOString(); const projectId = previous?.id ?? randomUUID();
     const settings = this.worktree.parse(input.worktree_settings, previous ? this.worktree.get(org, projectId) : { base_ref: null, branch_template: null, parent_dir: null });
-    if (inspection?.is_git && inspection.root) await this.worktree.validate(settings, inspection.root);
+    const effective = inspection ?? await this.inspect(await this.prepareDirectory({ org_id: org, id: projectId, directory }));
+    if (effective.is_git && effective.root) await this.worktree.validate(settings, effective.root);
     try {
       transaction(this.database, () => {
         if (previous) {
@@ -56,7 +66,7 @@ export class Projects {
       if (error instanceof Error && error.message.includes('UNIQUE constraint failed: projects.org_id, projects.directory')) throw new HttpError(409, 'codebase_in_use', '当前组织已有项目使用此 Codebase，请选择该项目或其他目录。');
       throw error;
     }
-    return { ...this.get(org, projectId), git: inspection ? { is_git: inspection.is_git, branch: inspection.branch, head: inspection.head } : null };
+    return { ...this.get(org, projectId), git: { is_git: effective.is_git, branch: effective.branch, head: effective.head } };
   }
   /** Backward-compatible registration used by Skills imports; paths remain deduplicated. */
   async register(org: string, input: Record<string, unknown>) {

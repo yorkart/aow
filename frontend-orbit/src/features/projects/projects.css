@@ -32,6 +32,10 @@
 .project-form input[aria-invalid='true'] { border-color:var(--aow-error); }
 .project-path-input { display:flex; gap:10px; margin-top:-7px; }
 .project-path-input > input { flex:1; }
+.project-codebase-directory { display:flex; flex-direction:column; gap:10px; padding:16px; border:1px solid var(--aow-line); border-radius:5px; }
+.project-codebase-directory > span { color:var(--aow-text-muted); font-size:11px; }
+.project-codebase-directory code { overflow-wrap:anywhere; font:12px/1.65 ui-monospace,SFMono-Regular,monospace; }
+.project-codebase-directory p { margin:0; }
 .project-form-columns { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; }
 .project-actions,.project-task-tools,.project-workspace-tools { display:flex; align-items:center; gap:10px; }
 .project-actions { margin-top:7px; flex-wrap:wrap; }
