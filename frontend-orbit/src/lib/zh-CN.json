@@ -1,0 +1,32 @@
+{
+  "auth": {
+    "unable_to_read_login_status": "无法读取登录状态",
+    "unable_to_connect_to_aow": "无法连接 Orbit",
+    "checking_login_status": "正在检查登录状态…",
+    "no_login_method_configured": "尚未配置登录方式",
+    "complete_login_configuration_on_the_server": "请在服务器上完成登录配置。",
+    "username_and_password": "账号密码",
+    "this_login_method_is_unsupported_by_this_page": "当前页面不支持此登录方式",
+    "refresh_the_page_or_update_the_client_and_try": "请刷新页面或更新客户端后重试。",
+    "sign_in_to_aow": "登录 Orbit",
+    "login_method": "登录方式",
+    "sign_out_failed_try_again": "退出登录失败，请重试。",
+    "sign_out": "退出登录",
+    "signing_out": "正在退出…",
+    "enter_your_username_and_password": "请输入账号和密码。",
+    "sign_in_failed_try_again": "登录失败，请重试。",
+    "username": "账号",
+    "enter_username": "请输入账号",
+    "password": "密码",
+    "enter_password": "请输入密码",
+    "verifying": "正在验证…",
+    "sign_in": "登录",
+    "unable_to_read_login_status_http": "无法读取登录状态（HTTP {{value0}}）",
+    "sign_in_failed_http": "登录失败（HTTP {{value0}}）",
+    "sign_in_incomplete_try_again": "登录未完成，请重试。",
+    "sign_out_failed_http": "退出登录失败（HTTP {{value0}}）"
+  },
+  "aow": {
+    "retry": "重试"
+  }
+}

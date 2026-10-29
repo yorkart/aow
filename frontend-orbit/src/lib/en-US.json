@@ -1,0 +1,32 @@
+{
+  "auth": {
+    "unable_to_read_login_status": "Unable to read login status",
+    "unable_to_connect_to_aow": "Unable to connect to Orbit",
+    "checking_login_status": "Checking login status…",
+    "no_login_method_configured": "No login method configured",
+    "complete_login_configuration_on_the_server": "Complete login configuration on the server.",
+    "username_and_password": "Username and password",
+    "this_login_method_is_unsupported_by_this_page": "This login method is unsupported by this page",
+    "refresh_the_page_or_update_the_client_and_try": "Refresh the page or update the client and try again.",
+    "sign_in_to_aow": "Sign in to Orbit",
+    "login_method": "Login method",
+    "sign_out_failed_try_again": "Sign-out failed. Try again.",
+    "sign_out": "Sign out",
+    "signing_out": "Signing out…",
+    "enter_your_username_and_password": "Enter your username and password.",
+    "sign_in_failed_try_again": "Sign-in failed. Try again.",
+    "username": "Username",
+    "enter_username": "Enter username",
+    "password": "Password",
+    "enter_password": "Enter password",
+    "verifying": "Verifying…",
+    "sign_in": "Sign in",
+    "unable_to_read_login_status_http": "Unable to read login status (HTTP {{value0}})",
+    "sign_in_failed_http": "Sign-in failed (HTTP {{value0}})",
+    "sign_in_incomplete_try_again": "Sign-in incomplete. Try again.",
+    "sign_out_failed_http": "Sign-out failed (HTTP {{value0}})"
+  },
+  "aow": {
+    "retry": "Retry"
+  }
+}
