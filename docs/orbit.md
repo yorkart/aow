@@ -2,7 +2,7 @@
 
 Orbit 是同仓库内独立构建和运行的实验应用。`frontend-orbit` 使用 React / TypeScript，`server-orbit` 使用 Node.js / TypeScript 和内置 SQLite。需要 Node.js 22.16+（22.x）或 24+、npm 和 Bash。
 
-本期包含独立登录、组织（org）的创建和切换，以及空白工作窗口。Tasks、Projects、Automation、Agents、Connectors 仅提供图标导航，尚未接入业务功能或 ACP / terminald。没有预置组织或演示数据。
+本期包含独立登录、组织（org）的创建和切换，以及空白工作窗口。Tasks、Projects、Automation、Agents、Skills、Connectors 仅提供图标导航，尚未接入业务功能或 ACP / terminald。没有预置组织或演示数据。
 
 ## 启动
 

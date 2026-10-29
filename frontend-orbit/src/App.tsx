@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bot, Folder, Layers3, ListTodo, Plug, X, Zap } from 'lucide-react';
+import { Boxes, Folder, Layers3, ListTodo, Unplug, Users, X, Zap } from 'lucide-react';
 import { AuthScreen } from './features/auth/AuthScreen';
 import { OrgForm } from './OrgForm';
 import { OrgSwitcher } from './OrgSwitcher';
@@ -9,8 +9,9 @@ const navigation = [
   { id: 'tasks', label: 'Tasks', icon: ListTodo },
   { id: 'projects', label: 'Projects', icon: Folder },
   { id: 'automation', label: 'Automation', icon: Zap },
-  { id: 'agents', label: 'Agents', icon: Bot },
-  { id: 'connectors', label: 'Connectors', icon: Plug },
+  { id: 'agents', label: 'Agents', icon: Users },
+  { id: 'skills', label: 'Skills', icon: Boxes },
+  { id: 'connectors', label: 'Connectors', icon: Unplug },
 ] as const;
 
 function CreateOrgDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (name: string) => Promise<void> }) {
