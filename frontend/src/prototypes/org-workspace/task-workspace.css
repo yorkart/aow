@@ -1,0 +1,153 @@
+.ow-task-workspace { position:relative; display:flex; flex:1; flex-direction:column; min-width:0; min-height:0; }
+.ow-tabs-shell { display:flex; flex:0 0 45px; min-width:0; padding:5px 8px 0; background:#252626; border-bottom:1px solid #353737; }
+.ow-workspace-tabs { display:flex; flex:1; gap:5px; min-width:0; overflow:auto hidden; scroll-padding-left:112px; scrollbar-width:thin; }
+.ow-workspace-tab { display:flex; align-items:center; flex:0 0 auto; max-width:245px; height:35px; padding-right:4px; color:#969c98; border:1px solid transparent; border-radius:7px 7px 0 0; }
+.ow-workspace-tab.active { color:#e2e7e3; background:#373a37; border-color:#494e49; border-bottom-color:transparent; }
+.ow-workspace-tab:first-child { position:sticky; left:0; z-index:1; background:#252626; }
+.ow-workspace-tab:first-child.active { background:#373a37; }
+.ow-workspace-tab:hover:not(.active) { background:#2d302e; }
+.ow-workspace-tab > [role="tab"] { display:flex; align-items:center; gap:8px; min-width:0; height:100%; padding:0 10px; font-size:12px; }
+.ow-workspace-tab > [role="tab"] > span:first-of-type { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ow-tab-lock { margin-left:6px; color:#829387; }
+.ow-close-tab { display:grid; place-items:center; width:22px; height:22px; flex:0 0 22px; padding:0; color:#86938a; border-radius:4px; }
+.ow-close-tab:hover { color:#e3eae6; background:#ffffff0e; }
+.ow-unsaved { width:5px; height:5px; flex:0 0 5px; background:#d9bb82; border-radius:50%; }
+.ow-add-tab { display:grid; place-items:center; width:34px; height:34px; flex:0 0 34px; margin-left:7px; padding:0; color:#a2aba5; border-radius:5px; }
+.ow-add-tab:hover { color:#e1e7e3; background:#363c38; }
+.ow-add-menu { position:absolute; top:44px; right:10px; z-index:6; width:275px; padding:7px; color:#d3ddd5; background:#292f2b; border:1px solid #4c5b50; border-radius:9px; box-shadow:0 12px 40px #0007; }
+.ow-add-menu-heading { padding:5px 10px 10px; color:#829888; font-size:10px; }
+.ow-add-menu > button { display:flex; align-items:center; gap:12px; width:100%; padding:11px 10px; text-align:left; border-radius:5px; font-size:12px; }
+.ow-add-menu > button:hover,.ow-add-menu > button:focus-visible { background:#374a3c; }
+.ow-add-menu > button:nth-last-child(2) { margin-top:5px; border-top:1px solid #3d4e41; border-radius:0 0 5px 5px; }
+.ow-add-menu small { display:block; margin-top:3px; color:#8fa596; font-size:10px; }
+.ow-workspace-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; height:37px; flex:0 0 37px; padding:0 21px; color:#82958a; border-bottom:1px solid #2c342e; font-size:10px; }
+.ow-workspace-toolbar > span,.ow-workspace-toolbar > div,.ow-workspace-toolbar button { display:flex; align-items:center; gap:6px; }
+.ow-workspace-toolbar button { padding:4px 7px; border-radius:4px; font-size:10px; }
+.ow-workspace-toolbar button:hover,.ow-workspace-toolbar button.active { color:#c7dfcf; background:#2c3a30; }
+.ow-workspace-separator { margin:0 5px; color:#4b5b50; }
+.ow-tab-content { display:flex; flex:1; flex-direction:column; min-width:0; min-height:0; }
+.ow-task-workspace .ow-task-content { padding-top:26px; }
+.ow-primary-collaboration { margin-bottom:24px; }
+.ow-delegation-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; color:#9eb5a6; font-size:10px; }
+.ow-delegation-heading > span,.ow-delegation-heading button { display:flex; align-items:center; gap:6px; }
+.ow-delegation-heading button { padding:4px 6px; color:#b4d0be; border-radius:4px; font-size:10px; }
+.ow-delegation-heading button:hover { background:#2d4033; }
+.ow-session-tree { overflow:hidden; background:#202823; border:1px solid #34473b; border-radius:8px; }
+.ow-session-tree-heading { display:flex; justify-content:space-between; gap:10px; padding:10px 13px; color:#91aa9b; border-bottom:1px solid #324238; font-size:10px; }
+.ow-session-tree-heading > span:first-child { display:flex; align-items:center; gap:6px; }
+.ow-session-tree-heading > span:last-child { color:#6d8a78; font-size:9px; }
+.ow-session-tree-row { display:flex; align-items:center; gap:4px; min-width:0; padding:4px 7px 4px 12px; color:#6d907a; }
+.ow-session-tree-row:hover { background:#283a2e; }
+.ow-session-tree-row > button:first-of-type { display:flex; align-items:center; gap:8px; flex:1; min-width:0; padding:6px 0; text-align:left; color:#b3cbbd; font-size:11px; }
+.ow-session-tree-row > button:first-of-type > span:not(.ow-avatar,.ow-session-state) { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ow-session-tree-row small { display:block; overflow:hidden; max-width:230px; margin-top:2px; color:#728f7f; font-size:9px; text-overflow:ellipsis; white-space:nowrap; }
+.ow-session-tree-row > .ow-icon-button { width:20px; height:20px; flex:0 0 20px; }
+.ow-session-tree-note { padding:7px 13px; color:#6f8c7b; border-top:1px solid #304337; font-size:9px; }
+.ow-session-state { padding:2px 5px; font-size:9px; white-space:nowrap; }
+.ow-session-running { color:#bddbc7; }
+.ow-session-waiting { color:#d8bd88; }
+.ow-session-done { color:#799c86; }
+.ow-session-paused { color:#a8a9b3; }
+.ow-session-dot { width:5px; height:5px; background:currentcolor; border-radius:50%; }
+.ow-session-view { display:flex; flex:1; flex-direction:column; min-height:0; min-width:0; }
+.ow-session-header { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-shrink:0; padding:23px 28px; border-bottom:1px solid #303c34; }
+.ow-session-header > div { display:flex; align-items:center; gap:10px; }
+.ow-session-header strong { font-size:15px; font-weight:500; }
+.ow-session-header small { display:block; margin-top:5px; color:#7f9b8b; font-size:10px; }
+.ow-session-context { display:flex; align-items:center; gap:8px; min-width:0; flex-shrink:0; padding:10px 28px; color:#7d9b89; border-bottom:1px solid #2d4034; font-size:10px; }
+.ow-session-context button { display:flex; align-items:center; gap:5px; padding:0; color:#a7cab5; font-size:10px; }
+.ow-session-context > code { min-width:0; margin-left:auto; overflow:hidden; color:#688b77; font-size:9px; text-overflow:ellipsis; white-space:nowrap; }
+.ow-dependency-banner { display:flex; align-items:center; flex-wrap:wrap; gap:9px; padding:11px 28px; color:#b4a77e; background:#302f211f; border-bottom:1px solid #40422d; font-size:10px; }
+.ow-dependency-banner button { display:flex; align-items:center; gap:5px; padding:3px 6px; color:#c6c2a3; background:#333c2f; border-radius:4px; font-size:10px; }
+.ow-session-conversation { flex:1; min-height:0; padding:25px 38px; overflow:auto; }
+.ow-session-conversation .ow-message:first-child { margin-top:0; }
+.ow-session-composer { display:flex; align-items:center; gap:10px; flex-shrink:0; margin:16px 28px 24px; padding:12px; background:#26372b; border:1px solid #405a49; border-radius:9px; }
+.ow-session-composer input { flex:1; min-width:0; padding:3px; background:transparent; border:0; outline:0; font-size:12px; }
+.ow-session-result { display:flex; align-items:center; gap:8px; margin-top:25px; padding:14px; color:#9cc8ad; border:1px solid #3c6049; border-radius:6px; font-size:11px; }
+.ow-session-result button { display:flex; align-items:center; gap:4px; margin-left:auto; font-size:10px; }
+.ow-approval-link { margin-top:17px; }
+.ow-terminal { display:flex; flex:1; flex-direction:column; min-height:0; padding:16px 23px; overflow:auto; color:#b2c9bb; background:#151a17; font:12px/1.85 ui-monospace,SFMono-Regular,Menlo,monospace; }
+.ow-terminal-heading { display:flex; align-items:center; gap:8px; margin-bottom:25px; color:#7b9786; font-size:10px; overflow-wrap:anywhere; }
+.ow-terminal-heading > .ow-small-label { margin-left:auto; font-size:8px; }
+.ow-terminal > pre { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; font:inherit; }
+.ow-terminal > form { display:flex; align-items:center; gap:10px; margin-top:6px; }
+.ow-terminal > form > label { color:#b8dfc3; }
+.ow-terminal input { flex:1; min-width:0; color:#d2e6d9; background:transparent; border:0; outline:0; font:inherit; }
+.ow-terminal input::placeholder { color:#587060; }
+.ow-terminal-note { margin-top:auto; padding-top:45px; color:#526b5b; font-size:9px; }
+.ow-document-view { display:flex; flex:1; flex-direction:column; min-height:0; }
+.ow-document-view > header { display:flex; align-items:center; gap:12px; padding:11px 19px; border-bottom:1px solid #334b3c; font-size:11px; }
+.ow-document-view > header > span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ow-document-view > header > small { color:#8ba695; font-size:9px; }
+.ow-editor-surface { display:flex; flex:1; min-height:0; overflow:auto; background:#19221c; }
+.ow-editor-surface > pre { flex:0 0 50px; margin:0; padding:20px 13px; color:#4d6d58; text-align:right; font:12px/1.9 ui-monospace,SFMono-Regular,Menlo,monospace; }
+.ow-editor-surface > textarea { width:100%; min-width:0; padding:20px 15px 20px 0; resize:none; color:#b6d6c2; background:transparent; border:0; outline:0; font:12px/1.9 ui-monospace,SFMono-Regular,Menlo,monospace; white-space:pre; tab-size:2; }
+.ow-document-view > footer { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; padding:8px 15px; color:#6d957b; border-top:1px solid #324d3b; font-size:9px; }
+.ow-document-view > footer code { overflow-wrap:anywhere; font-size:9px; }
+.ow-properties-page,.ow-workflow-page { flex:1; min-height:0; padding:34px 35px; overflow:auto; }
+.ow-page-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:35px; }
+.ow-page-heading .ow-eyebrow { color:#7c9b88; font-size:9px; letter-spacing:.11em; }
+.ow-page-heading h1 { display:flex; align-items:center; gap:10px; margin:10px 0 8px; font-size:25px; font-weight:500; }
+.ow-page-heading p { color:#8aa796; font-size:11px; }
+.ow-properties-grid { display:grid; grid-template-columns:1fr 1fr; gap:35px; }
+.ow-property-section { margin-bottom:35px; }
+.ow-property-section h2 { margin-bottom:20px; color:#718b7a; font:10px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:.07em; }
+.ow-property-row { display:grid; align-items:center; grid-template-columns:100px minmax(0,1fr); gap:8px; min-height:43px; margin-bottom:5px; color:#ccdcd1; font-size:12px; }
+.ow-property-row > span:first-child { color:#8ba594; font-size:11px; }
+.ow-property-row > div { display:flex; align-items:center; flex-wrap:wrap; gap:7px; }
+.ow-property-row input,.ow-property-row select { width:100%; min-width:0; padding:6px 7px; color:#ceded3; background:#27362c; border:1px solid transparent; border-radius:5px; outline:0; font-size:11px; }
+.ow-property-row input:focus,.ow-property-row select:focus { border-color:#7a9e86; }
+.ow-property-row select:disabled { color:#7a9b86; background:transparent; }
+.ow-property-row input::placeholder { color:#738a7b; font-size:10px; }
+.ow-property-row > div > small { color:#75937f; font-size:9px; }
+.ow-property-row time { color:#bccfc2; font-size:10px; }
+.ow-property-action { padding:3px 5px; color:#a4c3ae; border:1px solid #3b5545; border-radius:4px; font-size:9px; }
+.ow-property-role { min-height:55px; }
+.ow-property-role > span > small { display:block; margin-top:4px; color:#5f7d69; font-size:9px; }
+.ow-property-note { margin-top:14px; color:#6c8a76; font-size:10px; line-height:1.85; }
+.ow-property-links > button { display:flex; align-items:center; gap:4px; padding:2px 5px; color:#b1d0bc; background:#2a3e31; border-radius:4px; font-size:10px; }
+.ow-properties-cwd { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:15px 0; color:#7f9d89; border-top:1px solid #334c3b; font-size:10px; }
+.ow-properties-cwd code { width:100%; color:#759580; font-size:10px; overflow-wrap:anywhere; }
+.ow-workflow-notice { margin-bottom:17px; padding:11px 13px; color:#d8c69e; background:#3d3b283d; border:1px solid #5b5135; border-radius:6px; font-size:11px; }
+.ow-flow-stages { display:flex; align-items:stretch; gap:7px; margin-bottom:27px; }
+.ow-flow-stage-wrap { display:flex; align-items:center; gap:7px; flex:1; min-width:0; }
+.ow-flow-stage-wrap:last-child { flex:.8; }
+.ow-flow-stage-wrap > svg { color:#547060; }
+.ow-flow-stage { position:relative; display:flex; flex-direction:column; gap:12px; width:100%; height:167px; padding:15px 12px; color:#7c9a87; background:#202c24; border:1px solid #324e3b; border-radius:8px; text-align:left; }
+.ow-flow-stage.active { color:#d2e9db; background:#2c4233; border-color:#7b9c85; }
+.ow-flow-stage.complete { color:#a9cbb5; border-color:#42634d; }
+.ow-stage-number { display:grid; place-items:center; width:27px; height:27px; color:inherit; background:#385542; border:1px solid #53735d; border-radius:7px; }
+.ow-flow-stage strong { font-size:12px; font-weight:500; }
+.ow-flow-stage strong > small { display:block; margin-top:3px; color:#819d8b; font-size:8px; font-weight:400; }
+.ow-flow-stage > p { color:#6e8c7a; font-size:9px; }
+.ow-stage-agent { display:flex; align-items:center; gap:5px; margin-top:auto; font-size:10px; }
+.ow-stage-agent .ow-avatar { width:15px; height:15px; flex-basis:15px; border-radius:4px; font-size:8px; }
+.ow-workflow-columns { display:grid; grid-template-columns:minmax(0,1.3fr) minmax(0,1fr); gap:22px; }
+.ow-workflow-columns h2 { display:flex; align-items:center; gap:9px; margin:5px 0 15px; color:#b3cdbd; font-size:12px; font-weight:500; }
+.ow-workflow-columns h2 > span { color:#627f6e; font-size:9px; font-weight:400; }
+.ow-workflow-columns .ow-session-tree-heading { display:none; }
+.ow-workflow-columns .ow-session-tree-row small { display:none; }
+.ow-workflow-columns .ow-session-tree-row > button:first-of-type { gap:5px; font-size:10px; }
+.ow-workflow-columns .ow-session-state { font-size:8px; }
+.ow-dependency-list > div { padding:12px 0; border-bottom:1px solid #2f4938; }
+.ow-dependency-list > div:first-child { padding-top:0; }
+.ow-dependency-list > div > button:first-child { display:flex; align-items:center; gap:5px; padding:0; color:#b2d1be; font-size:11px; }
+.ow-dependency-list small { display:block; margin:7px 0 5px; color:#627f6e; font-size:9px; }
+.ow-dependency-chip { display:inline-flex; align-items:center; gap:6px; max-width:100%; margin:3px 4px 3px 0; padding:3px 6px; overflow:hidden; color:#91b29e; background:#263f2e; border:1px solid #395e44; border-radius:4px; text-overflow:ellipsis; white-space:nowrap; font-size:9px; }
+.ow-workflow-observers { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:28px 0 20px; }
+.ow-workflow-observers > div { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:13px; color:#89a995; border:1px solid #354f3f; border-radius:6px; font-size:10px; }
+.ow-workflow-observers strong { margin-left:auto; color:#b0ccba; font-size:10px; font-weight:400; }
+.ow-workflow-observers small { width:100%; padding-left:25px; color:#648270; font-size:9px; }
+.ow-approval-banner { display:flex; align-items:center; gap:12px; margin:10px 0 25px; padding:15px; color:#c9c098; background:#353727; border:1px solid #65633e; border-radius:8px; }
+.ow-approval-banner > div { flex:1; }
+.ow-approval-banner strong { font-size:12px; font-weight:500; }
+.ow-approval-banner p { margin-top:5px; color:#9d9f7a; font-size:10px; }
+.ow-form-cwd { display:flex; align-items:center; gap:7px; color:#7c9d88; }
+.ow-form-cwd code { min-width:0; overflow-wrap:anywhere; font-size:10px; }
+.ow-file-picker { padding:17px; }
+.ow-file-picker input { width:100%; padding:10px; color:#d0e5d6; background:#1c2a21; border:1px solid #4a6c55; border-radius:6px; outline:0; font-size:12px; }
+.ow-file-picker > code { display:block; padding:13px 3px; color:#779883; font-size:10px; overflow-wrap:anywhere; }
+.ow-file-picker > button { display:flex; align-items:center; gap:9px; width:100%; padding:10px 5px; text-align:left; color:#b5d4bf; border-radius:4px; font-size:11px; overflow-wrap:anywhere; }
+.ow-file-picker > button:hover { background:#314b39; }
+@media (max-width:1280px) { .ow-properties-page,.ow-workflow-page { padding:25px; } .ow-properties-grid { gap:20px; } .ow-property-row { grid-template-columns:82px minmax(0,1fr); } .ow-workflow-columns { grid-template-columns:1fr; } .ow-workflow-columns .ow-session-tree-row small { display:block; } .ow-flow-stage { padding:12px 9px; } .ow-session-header { padding:20px; } }
+@media (max-width:760px) { .ow-workspace-toolbar { padding:0 12px; } .ow-workspace-toolbar > span { font-size:9px; } .ow-workspace-separator { margin:0; } .ow-properties-grid { grid-template-columns:1fr; gap:0; } .ow-page-heading { flex-wrap:wrap; gap:14px; } .ow-properties-page,.ow-workflow-page { padding:22px 18px; } .ow-session-header { align-items:flex-start; flex-direction:column; padding:20px; } .ow-session-context { flex-wrap:wrap; padding:10px 20px; } .ow-session-context > code { width:100%; margin:3px 0 0; } .ow-session-conversation { padding:20px; } .ow-session-composer { margin:12px; } .ow-dependency-banner { padding:11px 20px; } .ow-flow-stages { flex-direction:column; } .ow-flow-stage-wrap { flex-direction:column; } .ow-flow-stage-wrap > svg { transform:rotate(90deg); } .ow-flow-stage { display:grid; grid-template-columns:30px 1fr; height:auto; gap:9px; padding:13px; } .ow-flow-stage > p,.ow-flow-stage .ow-stage-agent { grid-column:2; } .ow-workflow-observers { grid-template-columns:1fr; } .ow-workflow-columns { grid-template-columns:1fr; } .ow-approval-banner { flex-wrap:wrap; } .ow-delegation-heading { flex-wrap:wrap; } .ow-session-tree-row > button:first-of-type { font-size:10px; } .ow-session-tree-row .ow-session-state { font-size:8px; } }

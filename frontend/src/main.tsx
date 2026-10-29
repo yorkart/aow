@@ -19,11 +19,14 @@ const Aow = mobile
   ? lazy(() => import('./mobile/MobileAow').then((module) => ({ default: module.MobileAow })))
   : lazy(() => import('./aow/desktop'));
 const SharedSessionPage = lazy(() => import('./features/sessions/SharedSessionPage').then(module => ({ default: module.SharedSessionPage })));
+const OrgWorkspacePreview = lazy(() => import('./prototypes/org-workspace/OrgWorkspace'));
 const shareRoute = /^\/share\/([^/]+)\/?$/.exec(appPath(window.location.pathname) ?? '');
 const fallback = <div role="status" style={{ padding: 24, color: 'var(--aow-text)', background: 'var(--aow-surface)', minHeight: '100dvh', fontFamily: 'system-ui' }}>{t("app.opening_aow")}</div>;
 
 const root = createRoot(document.getElementById('root')!);
-root.render(<StrictMode>{shareRoute
+root.render(<StrictMode>{mode === 'org-preview'
+  ? <Suspense fallback={fallback}><OrgWorkspacePreview /></Suspense>
+  : shareRoute
   ? <Suspense fallback={fallback}><SharedSessionPage key={shareRoute[1]} token={shareRoute[1]} /></Suspense>
   : <LoginGate><AowTabEntry>{tab => <><Suspense fallback={fallback}><Aow initialEntry={tab} /></Suspense><AgentTaskNotifications /></>}</AowTabEntry></LoginGate>
 }</StrictMode>);
