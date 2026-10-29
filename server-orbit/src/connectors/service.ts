@@ -175,13 +175,13 @@ export class Connectors {
   }
 
   /** Internal runtime API. Local credentials are freshly read for every new execution. */
-  async prepareExecution(org: string, id: string, executionId: string) {
+  async prepareExecution(org: string, id: string, executionId: string, targetDirectory?: string) {
     const row = this.row(org, id);
     if (!row.enabled || row.status !== 'available') throw new HttpError(409, 'connector_unavailable', '此连接不可用，请先检查认证。');
     if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/.test(executionId)) throw new HttpError(422, 'invalid_execution', '运行标识无效。');
     const identity = row.auth_method === 'local' ? await this.adapters.local(row.executor) : this.stored(row);
-    const root = join(this.stateDir, 'connector-runs', org, id); await mkdir(root, { recursive: true, mode: 0o700 });
-    const directory = join(root, executionId);
+    const directory = targetDirectory ?? join(this.stateDir, 'connector-runs', org, id, executionId);
+    await mkdir(join(directory, '..'), { recursive: true, mode: 0o700 });
     try { await mkdir(directory, { mode: 0o700 }); }
     catch { throw new HttpError(409, 'execution_exists', '此隔离环境已存在，请使用新的执行标识。'); }
     const home = join(directory, 'home');

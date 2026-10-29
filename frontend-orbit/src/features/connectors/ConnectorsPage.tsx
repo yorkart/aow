@@ -7,8 +7,8 @@ import './connectors.css';
 
 export function ConnectorBadge({ status }: { status: ConnectorStatus }) { return <span className={`connector-status connector-status-${status}`}><i />{statusNames[status]}</span>; }
 
-export function ConnectorsPage({ org, onDirtyChange }: { org: string; onDirtyChange: (dirty: boolean) => void }) {
-  const [editing, setEditing] = useState<string | null>();
+export function ConnectorsPage({ org, onDirtyChange, initialId }: { org: string; onDirtyChange: (dirty: boolean) => void; initialId?: string }) {
+  const [editing, setEditing] = useState<string | null | undefined>(initialId);
   if (editing !== undefined) return <ConnectorForm key={editing ?? 'new'} org={org} id={editing ?? undefined} onBack={() => setEditing(undefined)} onDirtyChange={onDirtyChange} />;
   return <ConnectorList org={org} onOpen={setEditing} />;
 }

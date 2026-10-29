@@ -1,0 +1,16 @@
+import { api } from '../../lib/api';
+import type { Agent, AgentVariable, Instructions, Runtime, RuntimeOptions } from './types';
+import type { SkillEntry } from '../skills/types';
+const root = (org: string) => `/api/orgs/${encodeURIComponent(org)}/agents`;
+export const listAgents = (org: string, signal?: AbortSignal) => api<Agent[]>(root(org), { signal });
+export const getAgent = (org: string, id: string, signal?: AbortSignal) => api<Agent>(`${root(org)}/${id}`, { signal });
+export const createAgent = (org: string, fields: { name: string; role: string; description: string; connector_id: string }) => api<Agent>(root(org), { method: 'POST', body: JSON.stringify(fields) });
+const save = (org: string, id: string, section: string, value: unknown) => api<Agent>(`${root(org)}/${id}/${section}`, { method: 'PUT', body: JSON.stringify(value) });
+export const saveIdentity = (org: string, agent: Agent, fields: { name?: string; role?: string; description?: string; enabled?: boolean }) => save(org, agent.id, 'identity', { ...fields, revision: agent.revisions.identity });
+export const saveRuntime = (org: string, agent: Agent, connector: string, runtime: Runtime) => save(org, agent.id, 'runtime', { connector_id: connector, runtime, revision: agent.revisions.runtime });
+export const saveSkills = (org: string, agent: Agent, ids: string[]) => save(org, agent.id, 'skills', { skill_ids: ids, revision: agent.revisions.skills });
+export const saveVariables = (org: string, agent: Agent, variables: AgentVariable[]) => save(org, agent.id, 'variables', { variables, revision: agent.revisions.variables });
+export const getInstructions = (org: string, agent: Agent, signal?: AbortSignal) => api<Instructions>(`${root(org)}/${agent.id}/instructions`, { signal });
+export const saveInstructions = (org: string, agent: Agent, version: string, files: SkillEntry[]) => save(org, agent.id, 'instructions', { base_version_id: version, files });
+export const getRuntimeOptions = (org: string, connector: string, signal?: AbortSignal) => api<RuntimeOptions>(`${root(org)}/runtime-options?connector_id=${encodeURIComponent(connector)}`, { signal });
+export const checkRuntime = (org: string, agent: Agent, connector: string, runtime: Runtime) => api<{ status: string; message: string }>(`${root(org)}/${agent.id}/check`, { method: 'POST', body: JSON.stringify({ connector_id: connector, runtime }) });

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { transaction } from '../database.js';
 import { HttpError } from '../errors.js';
 import { readPackage, writePackage } from './files.js';
-import type { Skills } from './service.js';
+import type { Skill, Skills } from './service.js';
 
 function component(value: string) {
   if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/.test(value)) throw new HttpError(422, 'invalid_identity', 'Agent 或运行标识无效。');
@@ -45,13 +45,13 @@ export class SkillReferences {
     return { directory: row.directory, skills: skills.map(skill => ({ ...skill, directory: join(row.directory, skill.name) })) };
   }
 
-  async pinRun(org: string, agent: string, run: string) {
+  async pinRun(org: string, agent: string, run: string, snapshot?: Skill[]) {
     this.skills.checkOrg(org);
     component(agent);
     component(run);
     const existing = this.existing(org, agent, run);
     if (existing) return existing;
-    const selected = this.selected(org, agent).map(id => this.skills.get(org, id));
+    const selected = snapshot ?? this.selected(org, agent).map(id => this.skills.get(org, id));
     const directory = join(this.skills.stateDir, 'skill-runs', org, agent, run);
     await mkdir(join(this.skills.stateDir, 'skill-runs', org, agent), { recursive: true, mode: 0o700 });
     try { await mkdir(directory, { mode: 0o700 }); }

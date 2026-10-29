@@ -16,6 +16,14 @@ const privateVariables = new Set([
   'GEMINI_API_KEY', 'GOOGLE_API_KEY', 'GOOGLE_APPLICATION_CREDENTIALS', 'GOOGLE_CLOUD_ACCESS_TOKEN', 'GEMINI_CLI_HOME',
 ]);
 
+/** Agent variables cannot replace authentication, process loading, or managed paths. */
+export function managedVariable(name: string): boolean {
+  return privateVariables.has(name) || /^(?:ORBIT_|CODEX_|CLAUDE_|ANTHROPIC_|OPENAI_|GEMINI_|XDG_|LD_|DYLD_)/i.test(name) || new Set([
+    'HOME', 'USERPROFILE', 'PATH', 'SHELL', 'ENV', 'BASH_ENV', 'ZDOTDIR', 'NODE_OPTIONS', 'NODE_PATH', 'PYTHONPATH',
+    'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY', 'NODE_EXTRA_CA_CERTS', 'SSL_CERT_FILE', 'SSL_CERT_DIR',
+  ]).has(name.toUpperCase());
+}
+
 export async function executable(command: string, env: NodeJS.ProcessEnv): Promise<string | undefined> {
   for (const directory of (env.PATH ?? '').split(delimiter)) {
     if (!isAbsolute(directory)) continue;

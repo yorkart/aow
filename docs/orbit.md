@@ -2,7 +2,7 @@
 
 Orbit 是同仓库内独立构建和运行的实验应用。`frontend-orbit` 使用 React / TypeScript，`server-orbit` 使用 Node.js / TypeScript 和内置 SQLite。需要 Node.js 22.16+（22.x）或 24+、npm 和 Bash。
 
-Orbit 包含独立登录、组织（org）的创建和切换、Skills 技能库、Connector 管理，以及工作窗口。Tasks、Projects、Automation、Agents 目前仅提供图标导航，尚未接入业务功能或 ACP / terminald。没有预置组织或演示数据。
+Orbit 包含独立登录、组织（org）的创建和切换、Skills 技能库、Connector 管理、Agent 配置，以及工作窗口。Tasks、Projects、Automation 目前仅提供图标导航，尚未接入任务调度或 ACP / terminald。没有预置组织或演示数据。
 
 ## 启动
 
@@ -51,7 +51,7 @@ Orbit 包含独立登录、组织（org）的创建和切换、Skills 技能库�
 
 导入复制完整技能包，保留目录、相对引用、二进制文件及脚本的可执行属性。源项目变化不会修改导入副本；导入和保存均不执行脚本，不导入符号链接或特殊文件。
 
-`server-orbit/src/skills/references.ts` 为后续 Agent 配置和执行器提供技能多选引用及运行快照接口。运行开始时固定版本，并在 `~/.orbit/skill-runs/<org-id>/<agent-id>/<run-id>/` 下准备独立的完整副本；已开始的运行不随技能更新而变化。当前 Agent 和运行器界面尚未开放，此接口不会改写用户 home 下的全局技能目录。
+`server-orbit/src/skills/references.ts` 为 Agent 配置和执行器提供技能多选引用及运行快照接口。运行开始时固定版本，并在 `~/.orbit/skill-runs/<org-id>/<agent-id>/<run-id>/` 下准备独立的完整副本；已开始的运行不随技能更新而变化。此接口不会改写用户 home 下的全局技能目录。
 
 ## Connectors
 
@@ -88,6 +88,28 @@ Orbit 包含独立登录、组织（org）的创建和切换、Skills 技能库�
 `Connectors.prepareExecution` 提供后续 Agent 运行接入接口，在 `~/.orbit/connector-runs/<org-id>/<connector-id>/<execution-id>/home/` 下生成独立环境，并设置原生执行器配置目录。凭据文件权限为 0600；运行环境通过后端内部接口交付，不通过浏览器 API 返回。Connector 停用后禁止创建新执行环境，已准备的环境保持独立。
 
 这些目录提供配置隔离；进程的操作系统文件访问权限由后续运行器和沙箱负责。当前尚未接入 Agent 任务执行。
+
+## Agents
+
+Agents 的左侧面板显示可搜索的 Agent 列表、头像、状态和新建入口。点击 Agent 默认打开 Overview；工作区顶部的五个页签切换时保留左侧列表。创建要求填写名称并选择当前组织的可用 Connector，同时生成独立的 AGENTS.md 模板。没有可用连接时，可直接前往 Connectors。
+
+| 配置页 | 功能 |
+| --- | --- |
+| Overview | 两列卡片展示并编辑身份信息、启停 Agent，查看运行配置、指令和技能摘要；最近任务显示真实空状态 |
+| Instructions | 编辑与预览 AGENTS.md；辅助 Markdown 文件可新建、重命名、删除并通过相对路径引用 |
+| Skills | 搜索组织内 Installed skills、筛选已启用项并独立保存选择；可打开技能库详情 |
+| Harness / Runtime | 选择可用 Connector、执行器模型、受支持的推理强度和超时；检查执行器、连接及参数兼容性 |
+| Secrets & variables | 编辑普通变量或加密 Secret；保存的 Secret 不回显，可留空保留、替换或删除 |
+
+五个页签独立保存并检测过期编辑；切换 Agent、页签、功能或组织前，未保存的草稿会提示确认。模型来自 Provider 已验证的模型列表和本机 Codex 模型缓存，Claude Code 也支持原生 sonnet / opus / haiku 别名。没有可用模型元数据时保留执行器 Default，不展示未经确认的推理选项。切换 Connector 会重置模型与推理强度，后端拒绝不兼容的组合。DeepSeek 仍仅支持 Claude Code。
+
+Agent 元数据、运行配置、引用关系和变量配置保存在 SQLite。Secret 配置只保存引用，密文位于独立的 agent_secrets 表，使用同一个实例 credentials.key 加密。Agent 变量不能覆盖 AI 认证、HOME、执行器配置目录或 Orbit 管理的进程环境字段。
+
+指令文件保存在 `~/.orbit/agents/<org-id>/<agent-id>/instructions/<version-id>/`。每次保存先完整写入新的目录，再切换数据库中的当前版本；AGENTS.md 不能删除或重命名。每个文件最多 2 MiB，指令包最多 100 个条目、总计 4 MiB。
+
+`server-orbit/src/agents/runtime.ts` 的 `AgentRuns` 是后续任务运行器的内部接入点，不通过浏览器 API 暴露。准备运行时固定 Agent 配置、指令与 Skill 版本，将认证、原生指令入口和完整 Skill 包装入 `~/.orbit/agents/<org-id>/<agent-id>/runs/<run-id>/home/`。Codex 使用隔离的 .codex/AGENTS.md 和 .agents/skills；Claude Code 使用 .claude/CLAUDE.md 和 .claude/skills；Gemini 使用 .gemini/GEMINI.md 和 .gemini/skills。项目目录作为进程工作目录，项目已有指令和原始用户 home 保持不变。
+
+每次准备运行时，由 Connector 读取最新本地身份并复制；Orbit 不刷新或回写本地身份。Secret 仅在内部进程环境中解密，不写入运行 snapshot.json。准备结果包含命令、参数和超时供运行器使用，不会执行任务或发送推理请求。内部状态接口区分已准备、运行中和完成；停用后禁止新运行，已开始的运行可继续完成。当前尚未提供任务执行页面或会话恢复功能。
 
 ## 服务配置
 

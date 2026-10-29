@@ -13,6 +13,8 @@ import { SkillRoutes } from './skills/routes.js';
 import { Connectors } from './connectors/service.js';
 import { ConnectorRoutes } from './connectors/routes.js';
 import type { AdapterOptions } from './connectors/adapters.js';
+import { Agents } from './agents/service.js';
+import { AgentRoutes } from './agents/routes.js';
 
 function checkOrigin(request: IncomingMessage, config: Config): void {
   const origin = request.headers.origin;
@@ -61,9 +63,11 @@ async function frontend(request: IncomingMessage, response: ServerResponse, path
 
 export function createOrbitServer(config: Config, database: DatabaseSync, connectorOptions?: AdapterOptions) {
   const auth = new Auth(database, config);
-  const skillRoutes = new SkillRoutes(new Skills(database, config.stateDir));
+  const skills = new Skills(database, config.stateDir);
+  const skillRoutes = new SkillRoutes(skills);
   const connectors = new Connectors(database, config.stateDir, connectorOptions);
   const connectorRoutes = new ConnectorRoutes(connectors);
+  const agentRoutes = new AgentRoutes(new Agents(database, config.stateDir, connectors, skills));
   const server = createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, (request, response) => {
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Referrer-Policy', 'same-origin');
@@ -125,6 +129,7 @@ export function createOrbitServer(config: Config, database: DatabaseSync, connec
       }
       if (await skillRoutes.handle(request, response, new URL(request.url ?? '/', 'http://orbit.local'))) return;
       if (await connectorRoutes.handle(request, response, new URL(request.url ?? '/', 'http://orbit.local'))) return;
+      if (await agentRoutes.handle(request, response, new URL(request.url ?? '/', 'http://orbit.local'))) return;
       throw new HttpError(404, 'not_found', '接口不存在。');
     };
     void handle().catch((error: unknown) => {

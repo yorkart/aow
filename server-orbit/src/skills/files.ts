@@ -28,7 +28,7 @@ export function fileEntry(path: string, content: Buffer, executable = false): Pa
   return { path, kind: 'file', encoding, content: content.toString(encoding), executable };
 }
 
-export function validatePackage(input: unknown): PackageEntry[] {
+export function validatePackage(input: unknown, entryName = 'SKILL.md'): PackageEntry[] {
   if (!Array.isArray(input) || !input.length || input.length > MAX_ENTRIES) throw new HttpError(422, 'invalid_package', `技能包须包含 1–${MAX_ENTRIES} 个文件或目录。`);
   const entries: PackageEntry[] = [];
   const paths = new Map<string, string>();
@@ -59,8 +59,8 @@ export function validatePackage(input: unknown): PackageEntry[] {
       parts.pop();
     }
   }
-  const entry = entries.find(item => item.path === 'SKILL.md');
-  if (!entry || entry.kind !== 'file' || entry.encoding !== 'utf8') throw new HttpError(422, 'missing_entry', '入口文件必须为 UTF-8 文本 SKILL.md，不能删除或重命名。');
+  const entry = entries.find(item => item.path === entryName);
+  if (!entry || entry.kind !== 'file' || entry.encoding !== 'utf8') throw new HttpError(422, 'missing_entry', `入口文件必须为 UTF-8 文本 ${entryName}，不能删除或重命名。`);
   if (entries.length > MAX_ENTRIES) throw new HttpError(413, 'package_too_large', '技能包目录层级过多。');
   return entries.sort((a, b) => a.path.localeCompare(b.path, 'en'));
 }
@@ -82,7 +82,7 @@ export async function writePackage(directory: string, entries: PackageEntry[]): 
 }
 
 /** No symlinks or special files, including links pointing elsewhere in a package. */
-export async function readPackage(directory: string, boundary = directory): Promise<PackageEntry[]> {
+export async function readPackage(directory: string, boundary = directory, entryName = 'SKILL.md'): Promise<PackageEntry[]> {
   const root = await realpath(boundary);
   const base = await realpath(directory);
   if (base !== root && !base.startsWith(root + sep)) throw new HttpError(422, 'outside_project', '技能目录超出项目工作目录。');
@@ -113,5 +113,5 @@ export async function readPackage(directory: string, boundary = directory): Prom
     } else throw new HttpError(422, 'unsafe_package', '技能包仅支持普通文件和目录。');
   };
   await visit('');
-  return validatePackage(entries);
+  return validatePackage(entries, entryName);
 }

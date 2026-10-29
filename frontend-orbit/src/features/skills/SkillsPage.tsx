@@ -8,8 +8,8 @@ import type { Skill } from './types';
 import './skills.css';
 
 type Screen = { kind: 'list' | 'create' | 'import' } | { kind: 'edit'; id: string };
-export function SkillsPage({ org, onDirtyChange }: { org: string; onDirtyChange: (dirty: boolean) => void }) {
-  const [screen, setScreen] = useState<Screen>({ kind: 'list' });
+export function SkillsPage({ org, onDirtyChange, initialId }: { org: string; onDirtyChange: (dirty: boolean) => void; initialId?: string }) {
+  const [screen, setScreen] = useState<Screen>(initialId ? { kind: 'edit', id: initialId } : { kind: 'list' });
   const back = () => setScreen({ kind: 'list' });
   if (screen.kind === 'edit') return <SkillEditor key={screen.id} org={org} id={screen.id} onBack={back} onDirtyChange={onDirtyChange} />;
   return <section className="skills-page">

@@ -145,6 +145,59 @@ export function openDatabase(stateDir: string): DatabaseSync {
       expires_at INTEGER NOT NULL,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS agents (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL REFERENCES orgs(id),
+      name TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT '',
+      description TEXT NOT NULL DEFAULT '',
+      enabled INTEGER NOT NULL DEFAULT 1,
+      runtime_json TEXT NOT NULL,
+      instructions_version_id TEXT NOT NULL,
+      instructions_updated_at TEXT NOT NULL,
+      identity_revision INTEGER NOT NULL DEFAULT 1,
+      runtime_revision INTEGER NOT NULL DEFAULT 1,
+      skills_revision INTEGER NOT NULL DEFAULT 1,
+      variables_revision INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(org_id, id)
+    );
+    CREATE TABLE IF NOT EXISTS agent_secrets (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      agent_id TEXT NOT NULL,
+      ciphertext TEXT NOT NULL,
+      UNIQUE(org_id, agent_id, id),
+      FOREIGN KEY(org_id, agent_id) REFERENCES agents(org_id, id)
+    );
+    CREATE TABLE IF NOT EXISTS agent_variables (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      agent_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK(kind IN ('variable', 'secret')),
+      value TEXT,
+      secret_id TEXT,
+      UNIQUE(org_id, agent_id, name),
+      FOREIGN KEY(org_id, agent_id) REFERENCES agents(org_id, id),
+      FOREIGN KEY(org_id, agent_id, secret_id) REFERENCES agent_secrets(org_id, agent_id, id),
+      CHECK((kind = 'variable' AND value IS NOT NULL AND secret_id IS NULL) OR (kind = 'secret' AND value IS NULL AND secret_id IS NOT NULL))
+    );
+    CREATE TABLE IF NOT EXISTS agent_runs (
+      org_id TEXT NOT NULL,
+      agent_id TEXT NOT NULL,
+      run_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('prepared', 'running', 'complete', 'error')),
+      directory TEXT NOT NULL,
+      snapshot_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      finished_at TEXT,
+      PRIMARY KEY(org_id, agent_id, run_id),
+      FOREIGN KEY(org_id, agent_id) REFERENCES agents(org_id, id),
+      FOREIGN KEY(org_id, project_id) REFERENCES projects(org_id, id)
+    );
   `);
   return database;
 }
