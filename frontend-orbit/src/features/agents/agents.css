@@ -46,6 +46,9 @@
 .agent-tags { display:flex; flex-wrap:wrap; gap:7px; margin-bottom:20px; }
 .agent-tags span { padding:4px 8px; border:1px solid var(--aow-control-line); border-radius:4px; background:var(--aow-selection); }
 .agent-recent { margin-top:30px; padding-top:22px; border-top:1px solid var(--aow-line); }
+.agent-recent-task { width:100%; display:flex; align-items:center; flex-wrap:wrap; gap:15px; padding:14px 0; border-bottom:1px solid var(--aow-line); text-align:left; }
+.agent-recent-task strong { flex:1; min-width:0; overflow-wrap:anywhere; font-weight:500; }
+.agent-recent-task > span,.agent-recent-task time { color:var(--aow-text-muted); font-size:11px; }
 .agent-empty { min-height:260px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:10px; color:var(--aow-text-muted); }
 .agent-empty h1,.agent-empty h2,.agent-empty p { margin:0 0 8px; }
 .agent-error { display:flex; align-items:center; flex-wrap:wrap; gap:12px; color:var(--aow-error); padding:12px; border:1px solid var(--aow-control-line); border-radius:4px; margin:12px 0; overflow-wrap:anywhere; }

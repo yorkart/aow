@@ -22,6 +22,27 @@ export function openDatabase(stateDir: string): DatabaseSync {
   const path = join(stateDir, 'orbit.sqlite');
   const database = new DatabaseSync(path);
   chmodSync(path, 0o600);
+  // Preserve existing project IDs/references while allowing an optional Codebase.
+  // This is a one-time compatibility adjustment, not a version migration framework.
+  const projectColumns = database.prepare('PRAGMA table_info(projects)').all() as { name: string }[];
+  if (projectColumns.length && !projectColumns.some(column => column.name === 'description')) {
+    database.exec('PRAGMA foreign_keys = OFF; BEGIN IMMEDIATE');
+    try {
+      database.exec(`
+        CREATE TABLE projects_next (
+          id TEXT PRIMARY KEY, org_id TEXT NOT NULL REFERENCES orgs(id), name TEXT NOT NULL,
+          directory TEXT, description TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1,
+          UNIQUE(org_id, directory), UNIQUE(org_id, id)
+        );
+        INSERT INTO projects_next SELECT id, org_id, name, directory, '', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'), 1 FROM projects;
+        DROP TABLE projects;
+        ALTER TABLE projects_next RENAME TO projects;
+      `);
+      if (database.prepare('PRAGMA foreign_key_check').get()) throw new Error('Existing project references are inconsistent.');
+      database.exec('COMMIT');
+    } catch (error) { database.exec('ROLLBACK'); database.close(); throw error; }
+  }
   database.exec(`
     PRAGMA foreign_keys = ON;
     PRAGMA journal_mode = WAL;
@@ -49,7 +70,11 @@ export function openDatabase(stateDir: string): DatabaseSync {
       id TEXT PRIMARY KEY,
       org_id TEXT NOT NULL REFERENCES orgs(id),
       name TEXT NOT NULL,
-      directory TEXT NOT NULL,
+      directory TEXT,
+      description TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT '',
+      revision INTEGER NOT NULL DEFAULT 1,
       UNIQUE(org_id, directory),
       UNIQUE(org_id, id)
     );
@@ -197,6 +222,42 @@ export function openDatabase(stateDir: string): DatabaseSync {
       PRIMARY KEY(org_id, agent_id, run_id),
       FOREIGN KEY(org_id, agent_id) REFERENCES agents(org_id, id),
       FOREIGN KEY(org_id, project_id) REFERENCES projects(org_id, id)
+    );
+    CREATE TABLE IF NOT EXISTS project_workspaces (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK(kind IN ('project','execution')),
+      directory TEXT NOT NULL,
+      task_branch TEXT,
+      base_commit TEXT,
+      last_used_at TEXT,
+      created_at TEXT NOT NULL,
+      UNIQUE(org_id, project_id, directory),
+      UNIQUE(org_id, project_id, id),
+      FOREIGN KEY(org_id, project_id) REFERENCES projects(org_id, id)
+    );
+    CREATE TABLE IF NOT EXISTS task_counters (
+      org_id TEXT PRIMARY KEY REFERENCES orgs(id), next_number INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS tasks (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      identifier TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL CHECK(status IN ('todo','in_progress','blocked','done','cancelled')),
+      agent_id TEXT,
+      workspace_id TEXT,
+      revision INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(org_id, id), UNIQUE(org_id, identifier),
+      FOREIGN KEY(org_id, project_id) REFERENCES projects(org_id, id),
+      FOREIGN KEY(org_id, agent_id) REFERENCES agents(org_id, id),
+      FOREIGN KEY(org_id, project_id, workspace_id) REFERENCES project_workspaces(org_id, project_id, id)
     );
   `);
   return database;

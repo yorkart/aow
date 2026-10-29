@@ -1,4 +1,4 @@
-import { mkdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { requireExecutor } from '../connectors/process.js';
 import { HttpError } from '../errors.js';
@@ -6,26 +6,31 @@ import { readPackage, writePackage } from '../skills/files.js';
 import { SkillReferences } from '../skills/references.js';
 import type { Agents } from './service.js';
 import { validateRuntime } from './capabilities.js';
+import { Projects } from '../projects/service.js';
+import { Workspaces } from '../projects/workspaces.js';
+import { Tasks } from '../projects/tasks.js';
+import { TaskWorkspaces } from '../projects/task-workspaces.js';
 
 /** Internal integration point for the future task runner; never exposed over HTTP. */
 export class AgentRuns {
   private references: SkillReferences;
   constructor(private agents: Agents) { this.references = new SkillReferences(agents.skills); }
 
-  async prepare(org: string, agentId: string, runId: string, projectId: string) {
+  async prepare(org: string, agentId: string, runId: string, projectId: string, workspaceId?: string, taskId?: string) {
     if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/.test(runId)) throw new HttpError(422, 'invalid_execution', '运行标识无效。');
     const agent = this.agents.get(org, agentId);
     if (this.agents.database.prepare('SELECT 1 FROM agent_runs WHERE org_id = ? AND agent_id = ? AND run_id = ?').get(org, agentId, runId)) throw new HttpError(409, 'execution_exists', '此运行已经存在，请使用新的运行标识。');
     if (!agent.enabled) throw new HttpError(409, 'agent_disabled', '此 Agent 已停用，不能接收新运行。');
     if (agent.connector.status !== 'available') throw new HttpError(409, 'connector_unavailable', 'Agent 的 Connector 不可用。');
-    const project = this.agents.database.prepare('SELECT directory FROM projects WHERE org_id = ? AND id = ?').get(org, projectId) as { directory: string } | undefined;
-    if (!project) throw new HttpError(404, 'project_not_found', '项目不存在。');
+    const projects = new Projects(this.agents.database); const workspaces = new Workspaces(projects); const project = projects.row(org, projectId);
+    const workspace = workspaceId ? workspaces.row(org, projectId, workspaceId) : project.directory ? workspaces.remember(org, projectId, project.directory, 'project', project.name) : undefined;
+    if (!workspace) throw new HttpError(422, 'workspace_required', '请先为任务绑定可用工作区，或为项目配置 Codebase。');
+    if (taskId) { const task = new Tasks(projects, workspaces).row(org, taskId); if (task.project_id !== projectId || task.workspace_id !== workspace.id || task.agent_id !== agentId) throw new HttpError(409, 'task_conflict', '任务的项目、工作区或负责 Agent 已改变，请重新准备运行。'); }
     // Capture all editable values before the first await. Later changes affect later runs.
     const variables = this.agents.variables.environment(org, agentId);
-    const snapshot = { agent_id: agentId, name: agent.name, role: agent.role, description: agent.description, revisions: agent.revisions, instructions_version_id: agent.instructions_version_id, connector_id: agent.connector.id, connector_revision: agent.connector.revision, provider: agent.connector.provider, executor: agent.connector.executor, runtime: agent.runtime, skills: agent.skills.map(skill => ({ skill_id: skill.id, version_id: skill.current_version_id, name: skill.name, version: skill.version })), variables: agent.variables, project_id: projectId };
+    const snapshot = { agent_id: agentId, name: agent.name, role: agent.role, description: agent.description, revisions: agent.revisions, instructions_version_id: agent.instructions_version_id, connector_id: agent.connector.id, connector_revision: agent.connector.revision, provider: agent.connector.provider, executor: agent.connector.executor, runtime: agent.runtime, skills: agent.skills.map(skill => ({ skill_id: skill.id, version_id: skill.current_version_id, name: skill.name, version: skill.version })), variables: agent.variables, project_id: projectId, workspace_id: workspace.id, task_id: taskId ?? null };
     await validateRuntime(this.agents.connectors, org, agent.connector.id, agent.runtime);
-    const cwd = await realpath(project.directory).catch(() => undefined);
-    if (!cwd || !(await stat(cwd)).isDirectory()) throw new HttpError(422, 'project_unavailable', '项目工作目录不可用。');
+    const cwd = (await workspaces.resolve(org, projectId, workspace.id)).directory;
     const command = await requireExecutor(agent.connector.executor, this.agents.connectors.adapters.env);
     const directory = join(this.agents.stateDir, 'agents', org, agentId, 'runs', runId);
     const execution = await this.agents.connectors.prepareExecution(org, agent.connector.id, runId, directory);
@@ -51,6 +56,7 @@ export class AgentRuns {
       if (Buffer.byteLength(JSON.stringify(variables)) > 256 * 1024) throw new HttpError(422, 'invalid_variables', '变量总大小不能超过 256 KiB。');
       await writeFile(join(directory, 'snapshot.json'), JSON.stringify(snapshot, null, 2), { mode: 0o600, flag: 'wx' });
       this.agents.database.prepare('INSERT INTO agent_runs (org_id, agent_id, run_id, project_id, status, directory, snapshot_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(org, agentId, runId, projectId, 'prepared', directory, JSON.stringify(snapshot), new Date().toISOString());
+      workspaces.used(org, projectId, workspace.id);
       return { ...execution, cwd, command, args, timeout_seconds: agent.runtime.timeout_seconds, run_id: runId, snapshot };
     } catch (error) {
       const pinned = this.agents.database.prepare('SELECT directory FROM skill_runs WHERE org_id = ? AND agent_id = ? AND run_id = ?').get(org, agentId, runId) as { directory: string } | undefined;
@@ -59,6 +65,15 @@ export class AgentRuns {
       if (pinned) await rm(pinned.directory, { recursive: true, force: true });
       await rm(directory, { recursive: true, force: true }); throw error;
     }
+  }
+  async prepareForTask(org: string, taskId: string, runId: string, isolated = true) {
+    const projects = new Projects(this.agents.database); const tasks = new Tasks(projects, new Workspaces(projects)); const task = tasks.get(org, taskId);
+    if (!task.agent_id) throw new HttpError(422, 'invalid_task_agent', '请先为任务选择负责 Agent。');
+    const agent = this.agents.get(org, task.agent_id);
+    if (!agent.enabled) throw new HttpError(409, 'agent_disabled', '此 Agent 已停用，不能接收新运行。');
+    await validateRuntime(this.agents.connectors, org, agent.connector.id, agent.runtime);
+    const workspace = await new TaskWorkspaces(tasks).prepare(org, taskId, isolated);
+    return this.prepare(org, task.agent_id, runId, task.project_id, workspace.id, taskId);
   }
   start(org: string, agent: string, run: string) {
     this.agents.row(org, agent);

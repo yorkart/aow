@@ -44,7 +44,7 @@ export class Agents {
       revisions: { identity: row.identity_revision, runtime: row.runtime_revision, skills: row.skills_revision, variables: row.variables_revision },
       instructions_version_id: row.instructions_version_id, instructions_updated_at: row.instructions_updated_at,
       skills: this.skills.list(org).filter(skill => ids.has(skill.id)), variables: this.variables.public(org, id),
-      last_run_at: latest?.created_at ?? null, recent_tasks: [], created_at: row.created_at, updated_at: row.updated_at,
+      last_run_at: latest?.created_at ?? null, recent_tasks: this.database.prepare('SELECT id, project_id, identifier, title, status, updated_at FROM tasks WHERE org_id = ? AND agent_id = ? ORDER BY updated_at DESC, id LIMIT 10').all(org, id) as { id: string; project_id: string; identifier: string; title: string; status: string; updated_at: string }[], created_at: row.created_at, updated_at: row.updated_at,
     };
   }
   list(org: string) {

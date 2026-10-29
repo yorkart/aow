@@ -9,15 +9,12 @@ export class SkillRoutes {
   constructor(private skills: Skills) { this.projects = new SkillProjects(skills); }
 
   async handle(request: IncomingMessage, response: ServerResponse, url: URL): Promise<boolean> {
-    const match = /^\/api\/orgs\/([a-zA-Z0-9-]+)\/(skills|projects)(?:\/([a-zA-Z0-9-]+))?$/.exec(url.pathname);
+    const match = /^\/api\/orgs\/([a-zA-Z0-9-]+)\/(skills)(?:\/([a-zA-Z0-9-]+))?$/.exec(url.pathname);
     if (!match) return false;
-    const [, org, resource, id] = match;
+    const [, org, , id] = match;
     this.skills.checkOrg(org);
     const method = request.method;
-    if (resource === 'projects') {
-      if (!id && method === 'GET') { json(response, 200, this.projects.list(org)); return true; }
-      if (!id && method === 'POST') { json(response, 201, await this.projects.create(org, await body(request))); return true; }
-    } else if (!id) {
+    if (!id) {
       if (method === 'GET') { json(response, 200, this.skills.list(org, url.searchParams.get('query') ?? '')); return true; }
       if (method === 'POST') { json(response, 201, await this.skills.create(org, await body(request, 3 * 1024 * 1024))); return true; }
     } else if (id === 'scan' && method === 'POST') {

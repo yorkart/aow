@@ -29,7 +29,7 @@ async function fixture(t) {
   await writeFile(join(home, '.codex/AGENTS.md'), 'operator-instructions-stay-here');
   const database = openDatabase(state); const org = randomUUID(); const other = randomUUID(); const projectId = randomUUID();
   for (const id of [org, other]) database.prepare('INSERT INTO orgs VALUES (?, ?, ?)').run(id, id, new Date().toISOString());
-  database.prepare('INSERT INTO projects VALUES (?, ?, ?, ?)').run(projectId, org, 'Project', project);
+  database.prepare('INSERT INTO projects (id, org_id, name, directory) VALUES (?, ?, ?, ?)').run(projectId, org, 'Project', project);
   const options = { localHome: home, env: { ...process.env, PATH: bin + delimiter + process.env.PATH, CODEX_HOME: join(home, '.codex'), CLAUDE_CONFIG_DIR: join(home, '.claude'), GEMINI_CLI_HOME: home, OPENAI_API_KEY: 'inherited-must-not-leak' }, fetch: async () => Response.json({ data: [{ id: 'gpt-5.4' }, { id: 'claude-sonnet-4-6' }, { id: 'deepseek-chat' }] }) };
   const connectors = new Connectors(database, state, options); const skills = new Skills(database, state); const agents = new Agents(database, state, connectors, skills); const runs = new AgentRuns(agents);
   const connector = await connectors.save(org, { name: 'Local Codex', provider: 'openai', executor: 'codex', auth_method: 'local', account_note: '', connect: true });

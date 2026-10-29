@@ -18,7 +18,7 @@ export function AgentsPage({ org, sidebar, onDirtyChange, onNavigate }: { org: s
   const dirty = useRef(false);
   const changed = useCallback((value: boolean) => { dirty.current = value; onDirtyChange(value); }, [onDirtyChange]);
   const guard = () => !dirty.current || window.confirm('放弃尚未保存的 Agent 配置？');
-  const navigate: Navigate = (section, id) => { if (guard()) { changed(false); onNavigate(section, id); } };
+  const navigate: Navigate = (section, id, taskId) => { if (guard()) { changed(false); onNavigate(section, id, taskId); } };
   const select = (id: string) => { if (id !== selected && guard()) { changed(false); setSelected(id); } };
   useEffect(() => {
     const abort = new AbortController();
@@ -56,5 +56,5 @@ function AgentDetail({ org, id, onUpdated, onDirtyChange, onNavigate, canLeave }
   return <><header className="agent-heading"><div><h1>{agent.name}</h1><p>{executorNames[agent.connector.executor]}{agent.role ? ` · ${agent.role}` : ''}</p></div><div className="agent-heading-actions"><span className={`agent-state agent-state-${agent.status}`}>{statusNames[agent.status]}</span><button type="button" aria-label="刷新 Agent" onClick={() => { if (canLeave()) { onDirtyChange(false); setAgent(undefined); setRetry(value => value + 1); } }}><RefreshCw size={15} /></button></div></header>
     {agent.connector.status !== 'available' && <div className="agent-error" role="alert"><span>{agent.status_message}</span><button type="button" onClick={() => onNavigate('connectors', agent.connector.id)}>前往 Connector 配置</button></div>}
     <div className="agent-tabs" role="tablist" aria-label="Agent 配置">{tabs.map(item => <button type="button" role="tab" key={item.id} id={`agent-tab-${item.id}`} aria-controls="agent-panel" aria-selected={tab === item.id} onClick={() => changeTab(item.id)}>{item.label}</button>)}</div>
-    <div className="agent-panel" role="tabpanel" id="agent-panel" aria-labelledby={`agent-tab-${tab}`} key={`${tab}:${revision}`}>{tab === 'overview' ? <AgentOverview {...props} onTab={changeTab} /> : tab === 'instructions' ? <AgentInstructions {...props} /> : tab === 'skills' ? <AgentSkills {...props} onNavigate={onNavigate} /> : tab === 'runtime' ? <AgentRuntime {...props} onNavigate={onNavigate} /> : <AgentVariables {...props} />}</div></>;
+    <div className="agent-panel" role="tabpanel" id="agent-panel" aria-labelledby={`agent-tab-${tab}`} key={`${tab}:${revision}`}>{tab === 'overview' ? <AgentOverview {...props} onTab={changeTab} onNavigate={onNavigate} /> : tab === 'instructions' ? <AgentInstructions {...props} /> : tab === 'skills' ? <AgentSkills {...props} onNavigate={onNavigate} /> : tab === 'runtime' ? <AgentRuntime {...props} onNavigate={onNavigate} /> : <AgentVariables {...props} />}</div></>;
 }

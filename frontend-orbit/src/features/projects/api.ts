@@ -1,0 +1,12 @@
+import { api } from '../../lib/api';
+import type { CodebaseInfo, DirectoryList, Project, ProjectFields, Task, TaskFields, WorkspaceList } from './types';
+const root = (org: string) => `/api/orgs/${encodeURIComponent(org)}`;
+export const listProjects = (org: string, signal?: AbortSignal) => api<Project[]>(`${root(org)}/projects`, { signal });
+export const getProject = (org: string, id: string, signal?: AbortSignal) => api<Project>(`${root(org)}/projects/${id}`, { signal });
+export const saveProject = (org: string, fields: ProjectFields, previous?: Project) => api<Project>(`${root(org)}/projects${previous ? `/${previous.id}` : ''}`, { method: previous ? 'PUT' : 'POST', body: JSON.stringify({ ...fields, revision: previous?.revision }) });
+export const inspectCodebase = (org: string, directory: string) => api<CodebaseInfo>(`${root(org)}/projects/inspect`, { method: 'POST', body: JSON.stringify({ directory }) });
+export const browseDirectories = (org: string, path?: string, signal?: AbortSignal) => api<DirectoryList>(`${root(org)}/projects/directories${path ? `?path=${encodeURIComponent(path)}` : ''}`, { signal });
+export const listWorkspaces = (org: string, project: string, signal?: AbortSignal) => api<WorkspaceList>(`${root(org)}/projects/${project}/workspaces`, { signal });
+export const listProjectTasks = (org: string, project: string, query = '', status = '', signal?: AbortSignal) => api<Task[]>(`${root(org)}/projects/${project}/tasks?${new URLSearchParams({ query, status })}`, { signal });
+export const getTask = (org: string, id: string, signal?: AbortSignal) => api<Task>(`${root(org)}/tasks/${id}`, { signal });
+export const saveTask = (org: string, fields: TaskFields, previous?: Task) => api<Task>(previous ? `${root(org)}/tasks/${previous.id}` : `${root(org)}/projects/${fields.project_id}/tasks`, { method: previous ? 'PUT' : 'POST', body: JSON.stringify({ ...fields, revision: previous?.revision }) });

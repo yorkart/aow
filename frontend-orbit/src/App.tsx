@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Boxes, Folder, Laptop, Layers3, ListTodo, Unplug, Users, X, Zap } from 'lucide-react';
 import { AuthScreen } from './features/auth/AuthScreen';
 import { OrgForm } from './OrgForm';
@@ -7,6 +7,7 @@ import { createOrg, loadOrgs, selectOrg, type OrgState } from './orgs';
 import { SkillsPage } from './features/skills/SkillsPage';
 import { ConnectorsPage } from './features/connectors/ConnectorsPage';
 import { AgentsPage } from './features/agents/AgentsPage';
+const ProjectsPage = lazy(async () => ({ default: (await import('./features/projects/ProjectsPage')).ProjectsPage }));
 
 const navigation = [
   { id: 'tasks', label: 'Tasks', icon: ListTodo },
@@ -36,6 +37,8 @@ export function App() {
   const [connectorsHome, setConnectorsHome] = useState(0);
   const [skillTarget, setSkillTarget] = useState<string>();
   const [connectorTarget, setConnectorTarget] = useState<string>();
+  const [projectTarget, setProjectTarget] = useState<string>();
+  const [taskTarget, setTaskTarget] = useState<string>();
   const [agentSidebar, setAgentSidebar] = useState<HTMLDivElement | null>(null);
   const editorDirty = useRef(false);
   const onEditorDirty = useCallback((dirty: boolean) => { editorDirty.current = dirty; }, []);
@@ -47,7 +50,7 @@ export function App() {
     });
     return () => controller.abort();
   }, [retry]);
-  const create = async (name: string) => { setState(await createOrg(name)); setSkillTarget(undefined); setConnectorTarget(undefined); setCreating(false); setSection('tasks'); };
+  const create = async (name: string) => { setState(await createOrg(name)); setSkillTarget(undefined); setConnectorTarget(undefined); setProjectTarget(undefined); setTaskTarget(undefined); setCreating(false); setSection('tasks'); };
   if (error) return <AuthScreen title="无法读取工作空间" detail={error} retry={() => { setError(''); setRetry(value => value + 1); }} />;
   if (!state) return <AuthScreen title="正在打开工作空间…" />;
   if (!state.orgs.length) return <main className="orbit-onboarding"><section className="orbit-onboarding-card" aria-labelledby="orbit-org-title"><OrgForm initial onCreate={create} /></section></main>;
@@ -59,10 +62,10 @@ export function App() {
       {navigation.map(item => <button key={item.id} type="button" aria-label={item.label} title={item.label} aria-current={section === item.id ? 'page' : undefined} onClick={() => { if (section === item.id || canLeave()) setSection(item.id); }}><item.icon size={21} aria-hidden="true" /></button>)}
     </nav>
     <aside className="orbit-sidebar" aria-label="左侧面板">
-      <header className="orbit-sidebar-header"><OrgSwitcher current={current} orgs={state.orgs} onSelect={async id => { if (!canLeave()) return; setState(await selectOrg(id)); setSkillTarget(undefined); setConnectorTarget(undefined); setSection('tasks'); }} onCreate={() => { if (canLeave()) setCreating(true); }} /></header>
+      <header className="orbit-sidebar-header"><OrgSwitcher current={current} orgs={state.orgs} onSelect={async id => { if (!canLeave()) return; setState(await selectOrg(id)); setSkillTarget(undefined); setConnectorTarget(undefined); setProjectTarget(undefined); setTaskTarget(undefined); setSection('tasks'); }} onCreate={() => { if (canLeave()) setCreating(true); }} /></header>
       <div ref={setAgentSidebar} className="orbit-sidebar-body" aria-label={`${active.label} 列表`}>{section === 'skills' && <div className="skills-sidebar"><h2>SKILLS</h2><button type="button" aria-current="page" onClick={() => { if (canLeave()) { setSkillTarget(undefined); setSkillsHome(value => value + 1); } }}><Boxes size={16} />Installed</button></div>}{section === 'connectors' && <div className="connectors-sidebar"><h2>CONNECTORS</h2><button type="button" aria-current="page" onClick={() => { if (canLeave()) { setConnectorTarget(undefined); setConnectorsHome(value => value + 1); } }}><Laptop size={16} />本地 Connector</button></div>}</div>
     </aside>
-    <main key={current.id} className="orbit-content" aria-label={`${active.label} 工作区`}>{section === 'agents' && agentSidebar && <AgentsPage key={current.id} org={current.id} sidebar={agentSidebar} onDirtyChange={onEditorDirty} onNavigate={(target, id) => { if (canLeave()) { if (target === 'skills') { setSkillTarget(id); setSkillsHome(value => value + 1); } else { setConnectorTarget(id); setConnectorsHome(value => value + 1); } setSection(target); } }} />}{section === 'skills' && <SkillsPage key={`${current.id}:${skillsHome}`} org={current.id} initialId={skillTarget} onDirtyChange={onEditorDirty} />}{section === 'connectors' && <ConnectorsPage key={`${current.id}:${connectorsHome}`} org={current.id} initialId={connectorTarget} onDirtyChange={onEditorDirty} />}</main>
+    <main key={current.id} className="orbit-content" aria-label={`${active.label} 工作区`}>{section === 'projects' && agentSidebar && <Suspense fallback={<p role="status">正在打开 Projects…</p>}><ProjectsPage key={`${current.id}:${projectTarget ?? ''}:${taskTarget ?? ''}`} org={current.id} sidebar={agentSidebar} initialId={projectTarget} initialTaskId={taskTarget} onDirtyChange={onEditorDirty} /></Suspense>}{section === 'agents' && agentSidebar && <AgentsPage key={current.id} org={current.id} sidebar={agentSidebar} onDirtyChange={onEditorDirty} onNavigate={(target, id, task) => { if (canLeave()) { if (target === 'skills') { setSkillTarget(id); setSkillsHome(value => value + 1); } else if (target === 'connectors') { setConnectorTarget(id); setConnectorsHome(value => value + 1); } else { setProjectTarget(id); setTaskTarget(task); } setSection(target); } }} />}{section === 'skills' && <SkillsPage key={`${current.id}:${skillsHome}`} org={current.id} initialId={skillTarget} onDirtyChange={onEditorDirty} />}{section === 'connectors' && <ConnectorsPage key={`${current.id}:${connectorsHome}`} org={current.id} initialId={connectorTarget} onDirtyChange={onEditorDirty} />}</main>
     {creating && <CreateOrgDialog onClose={() => setCreating(false)} onCreate={create} />}
   </div>;
 }

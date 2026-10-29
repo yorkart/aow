@@ -7,6 +7,6 @@ export interface Skill {
   source_project_id: string | null; source_path: string | null;
 }
 export interface SkillDetail extends Skill { files: SkillEntry[]; agents: { agent_id: string }[] }
-export interface Project { id: string; name: string; directory: string }
+export interface Project { id: string; name: string; directory: string | null }
 export interface Candidate { path: string; name: string; description: string }
 export interface ScanResult { project: Project; skills: Candidate[]; warnings: string[] }

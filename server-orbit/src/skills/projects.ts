@@ -1,44 +1,36 @@
-import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { lstat, open, readdir, realpath, stat } from 'node:fs/promises';
-import { isAbsolute, join, resolve, sep } from 'node:path';
+import { lstat, open, readdir, realpath } from 'node:fs/promises';
+import { join, resolve, sep } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { HttpError } from '../errors.js';
 import { bytes, packagePath, readPackage, MAX_FILE_BYTES, MAX_PACKAGE_BYTES } from './files.js';
 import { metadata } from './metadata.js';
 import type { Skills } from './service.js';
+import { Projects } from '../projects/service.js';
 
-interface Project { id: string; org_id: string; name: string; directory: string }
+interface Project { id: string; org_id: string; name: string; directory: string | null }
 export class SkillProjects {
   constructor(private skills: Skills, private database: DatabaseSync = skills.database) {}
 
   list(org: string): Project[] {
     this.skills.checkOrg(org);
-    return this.database.prepare('SELECT * FROM projects WHERE org_id = ? ORDER BY name').all(org) as unknown as Project[];
+    return new Projects(this.database).list(org);
   }
 
   async create(org: string, input: Record<string, unknown>): Promise<Project> {
     this.skills.checkOrg(org);
-    if (typeof input.name !== 'string' || !input.name.trim() || input.name.length > 100 || typeof input.directory !== 'string' || !isAbsolute(input.directory)) {
-      throw new HttpError(422, 'invalid_project', '请填写项目名称和本地工作目录的绝对路径。');
-    }
-    const directory = await realpath(input.directory).catch(() => undefined);
-    if (!directory || !(await stat(directory)).isDirectory()) throw new HttpError(422, 'invalid_project', '项目工作目录不存在或无法访问。');
-    const existing = this.database.prepare('SELECT * FROM projects WHERE org_id = ? AND directory = ?').get(org, directory) as unknown as Project | undefined;
-    if (existing) return existing;
-    const project = { id: randomUUID(), org_id: org, name: input.name.trim(), directory };
-    this.database.prepare('INSERT INTO projects VALUES (?, ?, ?, ?)').run(project.id, org, project.name, directory);
-    return project;
+    return new Projects(this.database).register(org, input);
   }
 
-  private async get(org: string, id: unknown): Promise<Project> {
+  private async get(org: string, id: unknown): Promise<Project & { directory: string }> {
     this.skills.checkOrg(org);
     if (typeof id !== 'string') throw new HttpError(422, 'invalid_project', '请选择当前组织的项目。');
     const project = this.database.prepare('SELECT * FROM projects WHERE id = ? AND org_id = ?').get(id, org) as unknown as Project | undefined;
     if (!project) throw new HttpError(404, 'project_not_found', '当前组织中没有这个项目。');
+    if (!project.directory) throw new HttpError(422, 'workspace_required', '项目尚未配置 Codebase，请先在 Projects 的 Configuration 中配置本地目录。');
     const canonical = await realpath(project.directory).catch(() => undefined);
     if (canonical !== project.directory) throw new HttpError(422, 'project_changed', '项目工作目录已移动或变更，请重新登记。');
-    return project;
+    return { ...project, directory: project.directory };
   }
 
   async scan(org: string, projectId: unknown) {

@@ -77,12 +77,14 @@ test('login → required onboarding → real orgs → empty icon-only workspace 
   const rail = page.getByRole('navigation', { name: '功能导航' });
   assert.deepEqual(await rail.getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))), ['Tasks', 'Projects', 'Automation', 'Agents', 'Skills', 'Connectors']);
   assert.deepEqual(await rail.getByRole('button').allTextContents(), ['', '', '', '', '', '']);
-  for (const section of ['Projects', 'Automation', 'Tasks']) {
+  for (const section of ['Automation', 'Tasks']) {
     await rail.getByRole('button', { name: section, exact: true }).click();
     assert.equal(await rail.getByRole('button', { name: section, exact: true }).getAttribute('aria-current'), 'page');
     assert.equal(await page.getByRole('main', { name: `${section} 工作区` }).innerHTML(), '');
     assert.equal(await page.getByLabel(`${section} 列表`, { exact: true }).innerHTML(), '');
   }
+  await rail.getByRole('button', { name: 'Projects', exact: true }).click();
+  await page.getByRole('heading', { name: '创建你的第一个项目' }).waitFor();
   await rail.getByRole('button', { name: 'Agents', exact: true }).click();
   await page.getByRole('heading', { name: '创建你的第一个 Agent' }).waitFor();
   await rail.getByRole('button', { name: 'Skills', exact: true }).click();

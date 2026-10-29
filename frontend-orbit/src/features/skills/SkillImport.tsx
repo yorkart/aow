@@ -27,8 +27,8 @@ export function SkillImport({ org, onCancel, onImported }: { org: string; onCanc
   };
   return <><header className="skills-heading"><div><h1>Import skills from project</h1><p>从本地项目扫描 SKILL.md，将选中的完整技能包复制到 Orbit。</p></div></header>
     <div className="skills-import-project"><label>当前组织的项目<select aria-label="选择项目" disabled={busy} value={projectId} onChange={event => { setProjectId(event.target.value); setResult(undefined); setSelected({}); }}><option value="">选择一个项目</option>{projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
-      <button type="button" disabled={busy || !projectId} onClick={() => { void run(async () => { setResult(undefined); setSelected({}); setResult(await scanProject(org, projectId)); }); }}>扫描技能</button><button type="button" disabled={busy} onClick={() => setAdding(!adding)}>登记本地项目</button></div>
-    {projectId && <p className="skills-note"><code>{projects.find(project => project.id === projectId)?.directory}</code></p>}
+      <button type="button" disabled={busy || !projectId || !projects.find(project => project.id === projectId)?.directory} onClick={() => { void run(async () => { setResult(undefined); setSelected({}); setResult(await scanProject(org, projectId)); }); }}>扫描技能</button><button type="button" disabled={busy} onClick={() => setAdding(!adding)}>登记本地项目</button></div>
+    {projectId && <p className="skills-note"><code>{projects.find(project => project.id === projectId)?.directory ?? '项目尚未配置 Codebase，请先到 Projects 的 Configuration 中配置。'}</code></p>}
     {(adding || !projects.length) && <form className="skills-project-form" onSubmit={event => { event.preventDefault(); void run(async () => {
       const project = await createProject(org, projectName, directory);
       setProjects(current => current.some(item => item.id === project.id) ? current : [...current, project]); setProjectId(project.id); setAdding(false); setResult(undefined); setSelected({});
