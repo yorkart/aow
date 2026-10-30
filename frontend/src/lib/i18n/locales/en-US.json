@@ -2080,6 +2080,19 @@
     "cancel": "Cancel",
     "create": "Create task",
     "prepare_workspace": "Prepare workspace",
-    "task": "Task"
+    "task": "Task",
+    "project": "Project",
+    "search_projects": "Search projects…",
+    "search_worktrees": "Search worktrees…",
+    "search_agents": "Search agents…",
+    "no_matches": "No matches",
+    "new_worktree": "New worktree",
+    "isolated_hint": "Start in an isolated checkout.",
+    "reuse_worktree": "Reuse a worktree",
+    "other_options": "Other options",
+    "project_workspace": "Project workspace",
+    "describe": "Describe a task…",
+    "submit_shortcut": "⌘ / Ctrl + Enter to start",
+    "branch_placeholder": "task/my-task"
   }
 }

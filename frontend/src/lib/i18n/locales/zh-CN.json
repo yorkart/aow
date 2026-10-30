@@ -2080,6 +2080,19 @@
     "cancel": "取消",
     "create": "创建任务",
     "prepare_workspace": "创建工作空间",
-    "task": "任务"
+    "task": "任务",
+    "project": "项目",
+    "search_projects": "搜索项目…",
+    "search_worktrees": "搜索工作树…",
+    "search_agents": "搜索 Agent…",
+    "no_matches": "没有匹配项",
+    "new_worktree": "新建工作树",
+    "isolated_hint": "在隔离的工作树中开始任务。",
+    "reuse_worktree": "复用工作树",
+    "other_options": "其他选项",
+    "project_workspace": "主仓库",
+    "describe": "描述一个任务…",
+    "submit_shortcut": "⌘ / Ctrl + Enter 开始任务",
+    "branch_placeholder": "task/my-task"
   }
 }
