@@ -11,15 +11,15 @@
 .task-browser { position: fixed; inset: 24px; z-index: 100; background: var(--aow-panel); border: 1px solid var(--aow-border); }
 
 /* Task creation shares the workspace palette while giving the prompt the most space. */
-.task-dialog { width: min(760px, calc(100vw - 40px)); max-width: none; max-height: calc(100dvh - 48px); margin: auto; padding: 0; overflow: visible; color: var(--aow-text); background: transparent; border: 0; font: inherit; }
+.task-dialog { width: min(672px, calc(100vw - 40px)); max-width: none; max-height: calc(100dvh - 48px); margin: auto; padding: 0; overflow: visible; color: var(--aow-text); background: transparent; border: 0; font: inherit; }
 .task-dialog:not([open]) { display: none; }
 .task-dialog::backdrop { background: var(--aow-overlay); backdrop-filter: blur(3px); }
 .task-dialog form { position: relative; margin: 0; }
 .task-composer-accessible-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.task-composer-context { display: flex; align-items: center; gap: 16px; min-height: 62px; margin: 0 14px -12px; padding: 9px 12px 21px; background: var(--aow-panel); border: 1px solid var(--aow-control-line); border-bottom: 0; border-radius: 17px 17px 0 0; }
+.task-composer-context { display: flex; align-items: center; gap: 16px; height: 44px; min-height: 44px; margin: 0 12px -1px; padding: 0 10px; background: var(--aow-panel); border: 1px solid var(--aow-control-line); border-bottom: 0; border-radius: 17px 17px 0 0; }
 .task-context-button, .task-context-project { display: inline-flex; align-items: center; gap: 8px; min-width: 0; min-height: 32px; padding: 5px 9px; color: var(--aow-text); border-radius: 8px; font-size: 13px; line-height: 20px; }
 .task-context-button { max-width: 100%; cursor: pointer; }
-.task-composer-context .task-context-button, .task-context-project { min-height: 36px; color: var(--aow-text-strong, var(--aow-text)); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, "Noto Sans SC", sans-serif; font-size: 15px; font-weight: 400; line-height: 22px; letter-spacing: -.02em; }
+.task-composer-context .task-context-button, .task-context-project { min-height: 28px; padding: 3px 9px; color: var(--aow-text-strong, var(--aow-text)); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, "Noto Sans SC", sans-serif; font-size: 15px; font-weight: 400; line-height: 22px; letter-spacing: -.02em; }
 .task-composer-context > .task-picker:first-child .task-context-button, .task-context-project { font-weight: 500; }
 .task-composer-context > .task-picker:last-child .task-context-button { padding-right: 12px; padding-left: 12px; background: var(--aow-subtle-hover); }
 .task-composer-context .task-context-button > svg:first-child, .task-context-project > svg { width: 18px; height: 18px; }
@@ -29,20 +29,20 @@
 .task-context-project > svg, .task-composer-context > .task-picker:first-child .task-context-button > svg:first-child { color: var(--aow-accent); }
 .task-context-workspace > span, .task-context-workspace b { color: var(--aow-text-secondary, var(--aow-muted)); font-weight: 400; }
 .task-dialog .task-picker-chevron { width: 13px; height: 13px; margin-left: 2px; color: var(--aow-muted); }
-.task-composer-card { position: relative; padding: 22px 22px 16px; background: var(--aow-header); border: 1px solid var(--aow-control-line); border-radius: 22px; box-shadow: 0 18px 60px var(--aow-shadow); }
-.task-composer-prompt { display: block; width: 100%; min-height: 155px; max-height: 35dvh; margin: 0; padding: 0; resize: vertical; outline: none; color: var(--aow-text); background: transparent; border: 0; border-radius: 0; font-family: inherit; font-size: 15px; line-height: 1.7; }
+.task-composer-card { position: relative; padding: 16px 18px 12px; background: var(--aow-header); border: 1px solid var(--aow-control-line); border-radius: 18px; box-shadow: 0 18px 60px var(--aow-shadow); }
+.task-composer-prompt { display: block; width: 100%; min-height: 66px; max-height: 35dvh; margin: 0; padding: 0; resize: vertical; outline: none; color: var(--aow-text); background: transparent; border: 0; border-radius: 0; font-family: inherit; font-size: 15px; line-height: 1.7; }
 .task-composer-prompt::placeholder { color: var(--aow-muted); opacity: .85; }
-.task-composer-parent { display: flex; align-items: center; gap: 7px; margin: 0 0 14px; color: var(--aow-muted); font-size: 12px; }
+.task-composer-parent { display: flex; align-items: center; gap: 7px; margin: 0 0 8px; color: var(--aow-muted); font-size: 12px; }
 .task-composer-parent svg { width: 14px; height: 14px; flex-shrink: 0; }
 .task-composer-parent span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.task-composer-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; }
+.task-composer-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; }
 .task-composer-shortcut { color: var(--aow-muted); font-size: 11px; opacity: .7; }
 .task-composer-actions { display: flex; align-items: center; justify-content: flex-end; gap: 14px; min-width: 0; margin-left: auto; }
 .task-composer-actions .task-context-button { font-size: 13px; }
 .task-composer-runtime { color: var(--aow-muted); font-size: 11px; }
-.task-dialog .task-composer-submit { display: grid; place-items: center; width: 39px; height: 39px; flex: 0 0 39px; padding: 0; color: var(--aow-panel); background: var(--aow-text); border: 0; border-radius: 50%; cursor: pointer; transition: opacity .15s, transform .15s; }
+.task-dialog .task-composer-submit { display: grid; place-items: center; width: 32px; height: 32px; flex: 0 0 32px; padding: 0; color: var(--aow-panel); background: var(--aow-text); border: 0; border-radius: 50%; cursor: pointer; transition: opacity .15s, transform .15s; }
 .task-composer-submit:hover:not(:disabled) { transform: translateY(-1px); }
-.task-composer-submit svg { width: 22px; height: 22px; }
+.task-composer-submit svg { width: 19px; height: 19px; }
 .task-dialog button:disabled { cursor: default; opacity: .4; }
 .task-dialog button:focus-visible, .task-dialog input:focus-visible { outline: 2px solid var(--aow-accent); outline-offset: 2px; }
 .task-composer-worktree-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 12px; margin: 12px 0 0; padding-top: 16px; border-top: 1px solid var(--aow-control-line); }
@@ -70,14 +70,14 @@
 .task-picker-empty { padding: 12px; color: var(--aow-muted); font-size: 12px; }
 @media (max-width: 600px) {
   .task-dialog { width: calc(100vw - 24px); }
-  .task-composer-context { gap: 3px; margin-right: 8px; margin-left: 8px; padding-right: 6px; padding-left: 6px; }
+  .task-composer-context { gap: 3px; padding-right: 6px; padding-left: 6px; }
   .task-context-button, .task-context-project { gap: 5px; max-width: 100%; padding-right: 5px; padding-left: 5px; font-size: 11px; }
   .task-composer-context .task-context-button, .task-context-project { font-size: 13px; }
   .task-composer-context > .task-picker:first-child, .task-context-project { max-width: 32%; }
   .task-composer-context > .task-picker:last-child { flex: 1; }
   .task-context-workspace > span, .task-context-workspace b, .task-composer-shortcut { display: none; }
-  .task-composer-card { padding: 18px 16px 14px; border-radius: 17px; }
-  .task-composer-prompt { min-height: 140px; font-size: 14px; }
+  .task-composer-card { padding: 16px 16px 12px; border-radius: 17px; }
+  .task-composer-prompt { min-height: 66px; font-size: 14px; }
   .task-composer-worktree-fields { grid-template-columns: minmax(0, 1fr); }
   .task-composer-context .task-picker-popover { position: fixed; top: 60px; right: 12px; left: 12px; width: auto; }
   .task-composer-actions { gap: 7px; }
