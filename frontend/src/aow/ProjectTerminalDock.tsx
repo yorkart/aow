@@ -169,3 +169,8 @@ export function ProjectTerminalDockHost({ active }: { active: boolean }) {
     <div ref={setElement} className="project-terminal-dock-host" />
   </section>;
 }
+
+/** Task terminals are temporary tabs and have no persistent worktree dock. */
+export function AuxiliaryTerminalProvider({ children }: { children: ReactNode }) {
+  return <Context.Provider value={{ open: false, visible: false, height: defaultHeight, publishHost: () => undefined, resize: () => undefined, show: () => undefined, owns: () => false }}>{children}</Context.Provider>;
+}

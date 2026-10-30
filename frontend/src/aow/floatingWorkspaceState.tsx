@@ -50,10 +50,12 @@ function initialTabs(): FloatingTab[] {
       terminal: Array.isArray(tab.terminal?.panes) ? tab.terminal : undefined })) : [];
 }
 const tabKey = (tab: Pick<FloatingTab, 'workspace' | 'id'>) => JSON.stringify([tab.workspace, tab.id]);
-function useFloatingController() {
-  const [tabs, setTabs] = useState(initialTabs);
+function useFloatingController(ephemeral = false) {
+  const read = <T,>(key: string, fallback: T): T => ephemeral ? fallback : readStored(key, fallback);
+  const save = (key: string, value: unknown) => { if (!ephemeral) persist(key, value); };
+  const [tabs, setTabs] = useState<FloatingTab[]>(() => ephemeral ? [] : initialTabs());
   const [hostedTabs, setHostedTabs] = useState<HostedTab[]>(() => {
-    const saved = readStored<unknown>(hostedStorageKey, []);
+    const saved = read<unknown>(hostedStorageKey, []);
     return Array.isArray(saved) ? saved.filter((tab): tab is HostedTab => tab
       && typeof tab.workspace === 'string' && typeof tab.host === 'string' && tab.host !== tab.workspace
       && typeof tab.id === 'string' && tab.id.startsWith('terminal:') && typeof tab.targetId === 'string'
@@ -89,9 +91,9 @@ function useFloatingController() {
   tabsRef.current = tabs;
   const contains = useCallback((workspace: string, id: string) => tabsRef.current.some(tab => tab.workspace === workspace && tab.id === id), []);
   const [tabRevealRequest, setTabRevealRequest] = useState<TabRevealRequest>();
-  const [activeKey, setActiveKey] = useState(() => readStored<string>('aow-floating-active', ''));
-  const [open, setOpen] = useState(() => readStored<boolean>('aow-floating-open', false));
-  const [pinned, setPinned] = useState(() => readStored<boolean>('aow-floating-pinned', true) !== false);
+  const [activeKey, setActiveKey] = useState(() => read<string>('aow-floating-active', ''));
+  const [open, setOpen] = useState(() => read<boolean>('aow-floating-open', false));
+  const [pinned, setPinned] = useState(() => read<boolean>('aow-floating-pinned', true) !== false);
   const [autoHidden, setAutoHidden] = useState(false);
   const [showRequest, setShowRequest] = useState(0);
   const visible = open && !autoHidden;
@@ -101,7 +103,7 @@ function useFloatingController() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const sources = useRef(new Map<string, WorkspaceCommands>());
   const [previewTabs, setPreviewTabs] = useState<PreviewTab[]>(() => {
-    const saved = readStored<unknown>(previewStorageKey, []);
+    const saved = read<unknown>(previewStorageKey, []);
     return Array.isArray(saved) ? saved.filter((tab): tab is PreviewTab => tab && typeof tab.workspace === 'string'
       && typeof tab.id === 'string' && tab.id.startsWith('document:') && typeof tab.floating === 'boolean') : [];
   });
@@ -122,7 +124,7 @@ function useFloatingController() {
     // The owner retains edited or saving documents as regular tabs.
     if (previous) sources.current.get(previous.workspace)?.closePreview(previous.id);
   }, [updatePreviews]);
-  useEffect(() => persist(previewStorageKey, previewTabs), [previewTabs]);
+  useEffect(() => save(previewStorageKey, previewTabs), [previewTabs]);
   const returnFocus = useRef<HTMLElement | null>(null);
   const [globalRoot, setGlobalRoot] = useState('');
   const show = useCallback(() => {
@@ -189,14 +191,14 @@ function useFloatingController() {
     setTabs(update);
     setHostedTabs(update);
   }, []);
-  useEffect(() => persist(hostedStorageKey, hostedTabs), [hostedTabs]);
+  useEffect(() => save(hostedStorageKey, hostedTabs), [hostedTabs]);
   useEffect(() => {
     if (!tabs.some(tab => tabKey(tab) === activeKey)) setActiveKey(tabs.length ? tabKey(tabs[tabs.length - 1]) : '');
-    persist(storageKey, tabs);
+    save(storageKey, tabs);
   }, [tabs, activeKey]);
-  useEffect(() => persist('aow-floating-active', activeKey), [activeKey]);
-  useEffect(() => persist('aow-floating-open', open), [open]);
-  useEffect(() => persist('aow-floating-pinned', pinned), [pinned]);
+  useEffect(() => save('aow-floating-active', activeKey), [activeKey]);
+  useEffect(() => save('aow-floating-open', open), [open]);
+  useEffect(() => save('aow-floating-pinned', pinned), [pinned]);
   const active = tabs.find(tab => tabKey(tab) === activeKey);
   const select = (tab: FloatingTab) => { setActiveKey(tabKey(tab)); show(); };
   const close = (tab: FloatingTab) => {
@@ -210,8 +212,8 @@ function useFloatingController() {
     previewTabs, openPreview, pinPreview };
 }
 const FloatingContext = createContext<ReturnType<typeof useFloatingController> | null>(null);
-export function FloatingWorkspaceProvider({ children }: { children: ReactNode }) {
-  const value = useFloatingController();
+export function FloatingWorkspaceProvider({ children, ephemeral = false }: { children: ReactNode; ephemeral?: boolean }) {
+  const value = useFloatingController(ephemeral);
   return <FloatingContext.Provider value={value}>{children}</FloatingContext.Provider>;
 }
 export function useFloatingWorkspace() {

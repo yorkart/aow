@@ -1,0 +1,125 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
+import { createServer } from 'vite';
+import { chromium } from 'playwright';
+import { installLiveEvents } from './fixtures/live-events.mjs';
+import { acpControlFixture } from './fixtures/acp-control.mjs';
+
+const server = await createServer({ root: fileURLToPath(new URL('../', import.meta.url)), logLevel: 'error', server: { host: '127.0.0.1', port: 0, proxy: {}, watch: { usePolling: true } } });
+let browser;
+try {
+  await server.listen();
+  browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
+  await test('task mode preserves legacy workspace, creates task hierarchy and pins the main session', async t => {
+    const context = await browser.newContext();
+    t.after(() => context.close());
+    await installLiveEvents(context);
+    await acpControlFixture().install(context);
+    const page = await context.newPage();
+    page.setDefaultTimeout(15000);
+    const errors = [], created = [], deletedTerminals = [], worktreeRequests = [];
+    page.on('pageerror', error => errors.push(error.message));
+    const worktree = { id: 'wt', project_id: 'project', path: '/repo', branch: 'main', head: 'abc', is_main: true, detached: false, locked: false, prunable: false, color: 'default' };
+    const project = { id: 'project', name: 'Task project', registered_path: '/repo', common_git_dir: '/repo/.git', notes_path: '/notes', worktrees: [worktree] };
+    const tasks = [];
+    let terminals = [];
+    const jobs = [];
+    await context.route('**/api/**', async route => {
+      const request = route.request(), url = new URL(request.url()), path = url.pathname;
+      let data = [];
+      if (path === '/api/aow/projects') data = [project];
+      else if (path === '/api/aow/settings') data = { notes_base: '/notes', execution_path: [], editor: {} };
+      else if (path.includes('/pinned-')) data = { paths: [], revision: 0 };
+      else if (path === '/api/aow/notifications') data = { revision: 0, items: [], unread_count: 0 };
+      else if (path === '/api/aow/projects/project/worktrees' && request.method() === 'POST') {
+        const input = request.postDataJSON(); worktreeRequests.push(input);
+        const job = { id: 'creation', project_id: 'project', path: input.path, branch: input.branch, status: 'succeeded', steps: [], error: null };
+        jobs.push(job); project.worktrees.push({ ...worktree, id: 'isolated', path: input.path, branch: input.branch, is_main: false }); data = job;
+      } else if (path === '/api/aow/worktree-creations') data = jobs;
+      else if (path.endsWith('/archive') && path.startsWith('/api/aow/tasks/')) {
+        tasks.find(task => task.id === path.split('/').at(-2)).archived = true;
+        return route.fulfill({ status: 204 });
+      }
+      else if (path === '/api/aow/tasks') {
+        if (request.method() === 'POST') {
+          const input = request.postDataJSON(); created.push(input);
+          data = { ...input, id: `task-${tasks.length}`, thread_id: `thread-${tasks.length}`, pinned: false, archived: false, parent_id: input.parent_id ?? null }; tasks.push(data);
+        } else data = tasks;
+      } else if (path.startsWith('/api/aow/tasks/') && request.method() === 'PATCH') {
+        tasks.find(task => task.id === path.split('/').at(-1)).pinned = request.postDataJSON().pinned;
+        return route.fulfill({ status: 204 });
+      } else if (path === '/api/acp/agents') data = [{ id: 'test', name: 'Test Agent', configured: true, supported: true, installed: true }];
+      else if (path === '/api/acp/settings') data = { content: '{}', revision: '1' };
+      else if (path.startsWith('/api/acp/sessions/')) {
+        const thread = path.split('/')[4];
+        if (path.endsWith('/connection')) data = null;
+        else if (path.endsWith('/requests')) data = [];
+        else data = { thread_id: thread, session_id: `remote-${thread}`, agent_id: 'test', cwd: '/repo', title: `Main ${thread}`, status: 'idle', revision: 1, entries: [], permissions: [], modes: {}, config_options: [], commands: [], usage: null, updated_at: '' };
+      } else if (path === '/api/terminals' && request.method() === 'POST') {
+        data = { id: 'aux', name: 'Auxiliary', workspace_root: '/repo', layout: { type: 'pane', pane_id: 'pane' }, panes: [{ id: 'pane', name: 'Shell', cwd: '/repo', kind: 'terminal', shell: '/bin/bash', status: 'running', rows: 24, cols: 80 }] }; terminals.push(data);
+      } else if (path === '/api/terminals/aux' && request.method() === 'DELETE') { deletedTerminals.push('aux'); terminals = []; data = {}; }
+      else if (path === '/api/terminals') data = terminals;
+      else if (path === '/api/terminals/agents') data = { agents: {}, titles: {}, processes: {} };
+      else if (path.startsWith('/api/fs/tree')) data = { path: '/repo', entries: [] };
+      else if (path === '/api/git/ignored') data = { repository: '/repo', ignored: [] };
+      else if (path === '/api/git/status') data = { repository: '/repo', branch: 'main', files: [] };
+      else if (path === '/api/git/log') data = { commits: [], repository: '/repo', upstream: null };
+      else if (path === '/api/operations') data = { boot_id: 'fixture', revision: 0, operations: [] };
+      return route.fulfill({ json: data });
+    });
+    await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/tests/task-workbench-preview.html`);
+    await page.getByRole('button', { name: 'Task workbench', exact: true }).click();
+    const workbench = page.locator('.task-workbench');
+    await workbench.getByRole('button', { name: 'New task', exact: true }).click();
+    await page.getByLabel('Prompt', { exact: true }).fill('Implement task mode');
+    await page.getByRole('button', { name: 'Create task', exact: true }).click();
+    const surface = workbench.locator('.project-aow-surface:visible');
+    await surface.getByRole('tab').waitFor();
+    assert.equal(await surface.locator('.project-aow-tab-close').count(), 0);
+    const main = await surface.getByRole('tab').first().getAttribute('data-workspace-tab-id');
+    await surface.getByRole('tab').first().click({ button: 'middle' });
+    assert.equal(await surface.getByRole('tab').count(), 1);
+    assert.equal(await surface.getByRole('button', { name: 'ACP', exact: true }).count(), 0);
+    await workbench.locator('.task-tree-row').first().getByRole('button', { name: 'Pin task', exact: true }).click();
+    await workbench.getByRole('button', { name: 'Unpin task', exact: true }).first().waitFor();
+    assert.equal(tasks[0].pinned, true);
+    await surface.locator('.project-aow-new-trigger').click();
+    assert.equal(await page.locator('.project-aow-new-menu button').count(), 1);
+    await page.getByRole('button', { name: 'New subtask', exact: true }).last().click();
+    await page.getByLabel('Prompt', { exact: true }).fill('Review task mode');
+    await page.getByRole('button', { name: 'Create task', exact: true }).click();
+    await workbench.locator('.task-tree .task-tree').getByRole('button', { name: 'Review task mode', exact: true }).waitFor();
+    assert.equal(created[1].parent_id, tasks[0].id);
+    assert.equal(created[1].workspace, '/repo');
+    await surface.getByRole('tab').waitFor();
+    assert.notEqual(await surface.getByRole('tab').first().getAttribute('data-workspace-tab-id'), main);
+    await workbench.getByRole('button', { name: 'Switch workspace mode', exact: true }).click();
+    await page.getByRole('button', { name: 'Task workbench', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Task workbench', exact: true }).click();
+    await surface.getByRole('tab').waitFor();
+    await workbench.locator('.project-aow-status-actions').getByRole('button', { name: 'Terminal', exact: true }).click();
+    const terminalTab = surface.getByRole('tab').filter({ hasText: 'Auxiliary' });
+    await terminalTab.waitFor();
+    assert.equal(await surface.getByRole('tab').first().getAttribute('data-workspace-tab-id'), 'acp:thread-1');
+    await terminalTab.locator('.project-aow-tab-close').click();
+    await terminalTab.waitFor({ state: 'hidden' });
+    assert.ok(deletedTerminals.length > 0);
+    await page.screenshot({ path: '/tmp/aow-task-workbench.png' });
+    await workbench.getByRole('button', { name: 'New task', exact: true }).click();
+    await page.getByLabel('Prompt', { exact: true }).fill('Isolated task');
+    await page.getByLabel('Workspace', { exact: true }).selectOption(':new');
+    await page.getByLabel('Branch', { exact: true }).fill('task/isolated');
+    await page.getByLabel('Worktree path', { exact: true }).fill('/isolated');
+    await page.getByRole('button', { name: 'Prepare workspace', exact: true }).click();
+    await workbench.locator('.task-tree-row').filter({ hasText: 'Isolated task' }).waitFor();
+    assert.equal(worktreeRequests.length, 1);
+    assert.equal(created.at(-1).workspace, '/isolated');
+    const isolatedRow = workbench.locator('.task-tree-row').filter({ hasText: 'Isolated task' });
+    await isolatedRow.getByRole('button', { name: 'Archive task', exact: true }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Confirm', exact: true }).click();
+    await isolatedRow.waitFor({ state: 'hidden' });
+    assert.equal(tasks.at(-1).archived, true);
+    assert.deepEqual(errors, []);
+  });
+} finally { await browser?.close(); await server.close(); }

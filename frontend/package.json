@@ -39,7 +39,8 @@
     "test:performance": "node --test tests/performance.test.mjs",
     "preview:pr": "node tests/pull-request-preview.mjs",
     "test:inbox": "node --test tests/inbox.test.mjs",
-    "test:i18n": "node --test tests/i18n.test.mjs tests/i18n-browser.test.mjs"
+    "test:i18n": "node --test tests/i18n.test.mjs tests/i18n-browser.test.mjs",
+    "test:tasks": "node --test tests/task-workbench.test.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

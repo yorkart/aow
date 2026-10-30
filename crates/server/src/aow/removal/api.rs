@@ -41,6 +41,7 @@ pub(in crate::aow) fn submit(
     }
     let mut paths = HashSet::new();
     for request in &requests {
+        state.aow.protect_task_workspace(&request.path)?;
         let path = Path::new(&request.path);
         if !path.is_absolute()
             || request.path.len() > 4096

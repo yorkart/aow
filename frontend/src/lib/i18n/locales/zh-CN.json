@@ -2053,5 +2053,33 @@
     "upload_script": "上传脚本",
     "title": "Git 平台",
     "settings_title": "Git 平台设置"
+  },
+  "tasks": {
+    "workbench": "任务工作台",
+    "exit": "切换工作区模式",
+    "new": "新建任务",
+    "subtask": "新建子任务",
+    "archive": "归档任务",
+    "archived": "查看已归档任务",
+    "delete": "删除任务",
+    "pin": "固定任务",
+    "unpin": "取消固定任务",
+    "refresh": "刷新任务",
+    "cleanup_description": "这会清理此任务及所有子任务的主会话。保留工作树和文件。",
+    "empty": "从项目创建任务以开始工作。",
+    "prompt": "任务描述",
+    "agent": "执行 Agent",
+    "select_agent": "选择 Agent",
+    "workspace": "工作空间",
+    "main": "主仓库",
+    "isolated": "新建隔离工作树",
+    "branch": "分支",
+    "path": "工作树路径",
+    "workspace_failed": "工作空间创建失败",
+    "creating_workspace": "正在创建工作空间…",
+    "cancel": "取消",
+    "create": "创建任务",
+    "prepare_workspace": "创建工作空间",
+    "task": "任务"
   }
 }

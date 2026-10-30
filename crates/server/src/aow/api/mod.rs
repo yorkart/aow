@@ -19,6 +19,7 @@ pub(crate) use sessions::resolve_session_locator;
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
+        .merge(super::tasks::routes())
         .merge(settings::routes())
         .merge(projects::routes())
         .merge(worktrees::routes())

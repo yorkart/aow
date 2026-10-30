@@ -182,7 +182,20 @@ impl AowManager {
     }
 
     pub(in crate::aow) async fn remove_project(&self, id: &str) -> Result<(), AowError> {
+        let _tasks = self.inner.task_operation.lock().await;
         let _operation = self.inner.project_operation.lock().await;
+        if self
+            .inner
+            .tasks
+            .list()
+            .map_err(AowError::Configuration)?
+            .iter()
+            .any(|task| task.project_id == id)
+        {
+            return Err(AowError::Invalid(
+                "Delete this project’s tasks before removing the project".into(),
+            ));
+        }
         let mut state = self.lock()?;
         if self.inner.creations.project_busy(id)? {
             return Err(AowError::CreationConflict(

@@ -33,6 +33,7 @@ mod registry;
 mod removal;
 mod sessions;
 mod settings;
+mod tasks;
 mod validation;
 mod worktrees;
 
@@ -78,6 +79,7 @@ pub(crate) struct AowManager {
 }
 
 struct AowInner {
+    tasks: aow_db::tasks::TaskDb,
     notifications: crate::notifications::NotificationManager,
     state_dir: Option<PathBuf>,
     config: Option<aow_config::ConfigStore>,
@@ -88,6 +90,7 @@ struct AowInner {
     settings: Mutex<AowSettings>,
     session_locators: Mutex<HashMap<String, CachedSessionLocator>>,
     project_operation: Arc<tokio::sync::Mutex<()>>,
+    task_operation: tokio::sync::Mutex<()>,
     agent_operation: tokio::sync::Mutex<()>,
     filesystem_operation: Arc<tokio::sync::RwLock<()>>,
     removals: removal::RemovalJobs,
@@ -107,6 +110,7 @@ impl AowManager {
     pub(crate) fn in_memory() -> Self {
         Self {
             inner: Arc::new(AowInner {
+                tasks: aow_db::tasks::TaskDb::open(None).expect("in-memory task database"),
                 notifications: crate::notifications::NotificationManager::in_memory(),
                 state_dir: None,
                 config: None,
@@ -117,6 +121,7 @@ impl AowManager {
                 settings: Mutex::new(AowSettings::with_notes_base(default_notes_base())),
                 session_locators: Mutex::new(HashMap::new()),
                 project_operation: Arc::new(tokio::sync::Mutex::new(())),
+                task_operation: tokio::sync::Mutex::new(()),
                 agent_operation: tokio::sync::Mutex::new(()),
                 filesystem_operation: Arc::new(tokio::sync::RwLock::new(())),
                 removals: removal::RemovalJobs::in_memory(),
@@ -144,6 +149,8 @@ impl AowManager {
         let removals = removal::RemovalJobs::in_memory();
         Ok(Self {
             inner: Arc::new(AowInner {
+                tasks: aow_db::tasks::TaskDb::open(Some(&state_dir.join("state/tasks.sqlite3")))
+                    .map_err(AowError::Configuration)?,
                 notifications,
                 state_dir: Some(state_dir),
                 config: Some(config),
@@ -158,6 +165,7 @@ impl AowManager {
                 settings: Mutex::new(settings),
                 session_locators: Mutex::new(HashMap::new()),
                 project_operation: Arc::new(tokio::sync::Mutex::new(())),
+                task_operation: tokio::sync::Mutex::new(()),
                 agent_operation: tokio::sync::Mutex::new(()),
                 filesystem_operation: Arc::new(tokio::sync::RwLock::new(())),
                 removals,

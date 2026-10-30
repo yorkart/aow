@@ -1,3 +1,5 @@
+import { TaskWorkbench } from '../features/tasks/TaskWorkbench';
+import type { WorkTask } from '../features/tasks/api';
 import { t } from '../lib/i18n';
 import { WorktreeStatusPath } from './WorktreeStatusPath';
 import { GlobalTabSlot, useGlobalWorkspaceTabs, type GlobalTabHost } from './GlobalWorkspaceTabs';
@@ -9,7 +11,7 @@ import { useActiveDiffRefresh } from '../features/editor/useActiveDiffRefresh';
 import { Fragment, lazy, memo, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { FloatingWorkspace } from './FloatingWorkspace';
-import { ProjectTerminalDockHost, ProjectTerminalDockProvider, useProjectTerminalDock } from './ProjectTerminalDock';
+import { AuxiliaryTerminalProvider, ProjectTerminalDockHost, ProjectTerminalDockProvider, useProjectTerminalDock } from './ProjectTerminalDock';
 import { useAowTabLocation, useAowTabLocationError } from './AowTabEntry';
 import { useCancelAowTabNavigation } from './tabNavigation';
 import { captureTabTarget, openTabTarget, tabCenterId, type ResolvedTab, type TabOpenActions, type AutomationLocation } from './tabRoutes';
@@ -695,6 +697,8 @@ function WorktreeUnreadBadge({ count = 0 }: { count?: number }) {
 }
 
 interface WorkspaceSurfaceProps {
+  task?: WorkTask;
+  onCreateTask?: () => void;
   globalTabs?: GlobalTabHost[];
   browserPath?: string;
   initialEntry?: ResolvedTab;
@@ -714,9 +718,11 @@ interface WorkspaceSurfaceProps {
 }
 
 const WorkspaceSurface = memo(function WorkspaceSurface({
+  task, onCreateTask,
   globalTabs: allGlobalTabs = emptyGlobalTabs, browserPath = '', worktree, project, active, agents, onShowLeftSidebar, rightSidebarVisible, onHideRightSidebar,
   onShowRightSidebar, onStartRightResize, notesRefresh, onNotesChanged: onProjectNotesChanged, onResourcesChanged, initialEntry, locationSource,
 }: WorkspaceSurfaceProps) {
+  const scope = task ? `task:${task.id}` : worktree.path;
   const floating = useFloatingWorkspace();
   const terminalDock = useProjectTerminalDock();
   const globalTabs = useMemo(() => allGlobalTabs.filter(tab => tab.workspace === worktree.path), [allGlobalTabs, worktree.path]);
@@ -729,10 +735,10 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const reportTabLocationError = useAowTabLocationError();
   const [tabRevealRequest, setTabRevealRequest] = useState<TabRevealRequest>();
   const routeToFloating = useCallback((id: string, requested = openingInFloatingWorkspace()) => {
-    if (restoring.current) return;
+    if (restoring.current || task) return;
     if (requested || project.builtin || floating.contains(worktree.path, id)) floating.add(worktree.path, id);
     else setTabRevealRequest({ tabId: id });
-  }, [floating.add, floating.contains, project.builtin, worktree.path]);
+  }, [floating.add, floating.contains, project.builtin, worktree.path, task]);
   const isFloating = (id: string) => floating.tabs.some(tab => tab.workspace === worktree.path && tab.id === id);
   const hostedLocation = (id: string) => floating.hostedTabs.find(tab => tab.workspace === worktree.path && tab.id === id);
   const hostedTabs = useMemo(() => floating.hostedTabs.filter(tab => tab.host === worktree.path), [floating.hostedTabs, worktree.path]);
@@ -760,20 +766,27 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const onNotesChanged = useCallback((directory: string) => onProjectNotesChanged(project.id, directory), [project.id, onProjectNotesChanged]);
   const terminals = useTerminals(worktree.path, true);
   const [terminalVisibility, setTerminalVisibility] = useState<Record<string, boolean>>({});
-  const openedTerminals = useMemo(() => terminals.tabs.filter(tab => !terminalDock.owns(tab) && (terminalVisibility[tab.id]
+  const auxiliaryTerminals = useRef(new Set<string>());
+  useEffect(() => () => { for (const id of auxiliaryTerminals.current) void terminalApi.close(id).catch(() => undefined); }, []);
+  const openedTerminals = useMemo(() => terminals.tabs.filter(tab => (!task || terminalVisibility[tab.id] === true) && !terminalDock.owns(tab) && (terminalVisibility[tab.id]
     ?? (floating.hostedTabs.some(item => item.workspace === worktree.path && item.targetId === tab.id)
       || floating.tabs.some(item => item.workspace === worktree.path && item.targetId === tab.id) || !isCliTerminal(tab)))),
-  [terminals.tabs, terminalVisibility, floating.hostedTabs, floating.tabs, worktree.path, terminalDock.owns]);
-  const [documents, setDocuments] = useWorkspaceDocuments(worktree.path);
+  [task, terminals.tabs, terminalVisibility, floating.hostedTabs, floating.tabs, worktree.path, terminalDock.owns]);
+  const [documents, setDocuments] = useWorkspaceDocuments(scope);
   const { wordWrapFor, setWordWrap } = useWordWrapOverrides(documents);
   const [sessionPreviews, setSessionPreviews] = useState<SessionPreview[]>([]);
-  const acp = useAcpTabs(worktree.path);
+  const acp = useAcpTabs(scope);
   const [openPullRequests, setOpenPullRequests] = useState<(PullRequestSummary & { repository?: string })[]>([]);
   const [automationTasks, setAutomationTasks] = useState<Record<string, AutomationTask>>({});
   const [openAutomationTaskIds, setOpenAutomationTaskIds] = useState<string[]>([]);
   const [automationRefreshKey, setAutomationRefreshKey] = useState(0);
   const [activeDocumentId, setActiveDocumentId] = useState<string>();
   const [activeCenterId, setActiveCenterId] = useState<string>();
+  useEffect(() => {
+    if (!task) return;
+    const id = acp.open({ thread_id: task.thread_id, agent_id: task.agent_id, title: task.prompt, status: 'disconnected' } as import('../features/acp/types').SessionInfo);
+    setActiveCenterId(`acp:${id}`);
+  }, [task?.id]);
   const globalRequests = useRef(new Set<object>());
   const restoreSelectionOverridden = useRef(false);
   useLayoutEffect(() => {
@@ -791,7 +804,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     floating.publishHost(worktree.path, { portal: hostPortal, activeId: activeCenterId, visible: active });
   }, [floating.publishHost, worktree.path, hostPortal, activeCenterId, active]);
   useEffect(() => () => floating.publishHost(worktree.path), [floating.publishHost, worktree.path]);
-  const [rightView, setRightView] = useState<RightView>('terminals');
+  const [rightView, setRightView] = useState<RightView>(task ? 'files' : 'terminals');
   const canShowAllTerminals = !project.builtin;
   const { inventory: projectTerminals, showAll: terminalShowAll, sortBy: terminalSort, setShowAll, setSortBy } = useProjectTerminalPanel(
     active && rightSidebarVisible && rightView === 'terminals',
@@ -840,9 +853,9 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     id: `automation:${id}`, kind: 'automation', label: automationTasks[id]?.name ?? t("aow.automated_tasks"), targetId: id,
     automationKind: automationTasks[id]?.kind,
   })), [automationTasks, openAutomationTaskIds]);
-  const acpTabs = useMemo<CenterTab[]>(() => acp.tabs.map(tab => ({
-    id: `acp:${tab.id}`, kind: 'acp', label: tab.title, targetId: tab.id, acpAgentId: tab.agentId, acpWorking: tab.working,
-  })), [acp.tabs]);
+  const acpTabs = useMemo<CenterTab[]>(() => acp.tabs.filter(tab => !task || tab.thread_id === task.thread_id).map(tab => ({
+    id: `acp:${tab.id}`, kind: 'acp', label: tab.title, targetId: tab.id, acpAgentId: tab.agentId, acpWorking: tab.working, closeable: task?.thread_id === tab.thread_id ? false : undefined,
+  })), [acp.tabs, task?.thread_id]);
   const pullRequestTabs = useMemo<CenterTab[]>(() => openPullRequests.map((pr) => ({
     id: prTabId(pr.repository ?? worktree.path, pr.number, pr), kind: 'pullRequest', label: `PR #${pr.number}`, targetId: prTabId(pr.repository ?? worktree.path, pr.number, pr),
   })), [openPullRequests]);
@@ -850,8 +863,10 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     ...globalTabs,
     ...terminalTabs, ...acpTabs, ...sessionTabs, ...automationTabs, ...pullRequestTabs, ...documentTabs,
   ]).flatMap(group => group.tabs), [automationTabs, acpTabs, documentTabs, pullRequestTabs, sessionTabs, terminalTabs, globalTabs]);
-  const centerTabs = useMemo(() => groupWorkspaceTabs([...ownedCenterTabs, ...hostedTabs])
-    .flatMap(group => group.tabs), [ownedCenterTabs, hostedTabs]);
+  const centerTabs = useMemo(() => {
+    const tabs = groupWorkspaceTabs([...ownedCenterTabs, ...hostedTabs]).flatMap(group => group.tabs);
+    return task ? [...tabs.filter(tab => tab.closeable === false), ...tabs.filter(tab => tab.closeable !== false)] : tabs;
+  }, [ownedCenterTabs, hostedTabs, task]);
   const hasFrontendTabs = centerTabs.length > 0 ? true : restored ? false : undefined;
   const hasTerminalInstances = terminals.tabs.length > 0 ? true : terminals.loaded && !terminals.error ? false : undefined;
   useEffect(() => {
@@ -961,7 +976,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const activateAcp = (id: string) => {
     setRightView('acp'); setActiveDocumentId(undefined); setActiveCenterId(`acp:${id}`); routeToFloating(`acp:${id}`);
   };
-  const createAcp = (agentId: string) => activateAcp(acp.create(agentId));
+  const createAcp = (agentId: string) => { if (task) { onCreateTask?.(); return; } activateAcp(acp.create(agentId)); };
   const selectTab = <T,>(action: () => T): T => { restoreSelectionOverridden.current = true; cancelTabNavigation(); return action(); };
 
   const showProjectTerminal = () => {
@@ -1090,6 +1105,17 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     setActiveCenterId(`automation:${task.id}`);
   }, []);
 
+  useEffect(() => {
+    if (!task) return;
+    const create = (event: Event) => { if ((event as CustomEvent).detail === task.id) void commandsRef.current.createTerminal(); };
+    const open = (event: Event) => {
+      const detail = (event as CustomEvent<{ taskId: string; entry: FileEntry }>).detail;
+      if (detail.taskId === task.id) void commandsRef.current.openExplorerFile(detail.entry, 'external');
+    };
+    window.addEventListener('aow:task-terminal', create);
+    window.addEventListener('aow:task-file', open);
+    return () => { window.removeEventListener('aow:task-terminal', create); window.removeEventListener('aow:task-file', open); };
+  }, [task?.id]);
   const createTerminal = async (agent?: AowAgent, session?: AowAgentSession, sessionWorkspace = worktree.path) => {
     const targetFloating = openingInFloatingWorkspace();
     setOperationError('');
@@ -1098,6 +1124,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
         ? await terminalApi.create(sessionWorkspace, { cwd: session?.cwd || sessionWorkspace, agentId: agent.id, resumeSessionId: session?.session_id })
         : await terminals.create();
       if (!tab) return;
+      if (task) auxiliaryTerminals.current.add(tab.id);
       if (tab.workspace_root !== worktree.path) { openTerminal(tab, targetFloating); return; }
       if (agent) terminals.replace(tab);
       setTerminalVisibility(items => ({ ...items, [tab.id]: true }));
@@ -1117,7 +1144,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     setActiveDocumentId(id);
     routeToFloating(`document:${id}`, targetFloating);
     setActiveCenterId(`document:${id}`);
-    if (workspaceDocument(worktree.path, id)) return;
+    if (workspaceDocument(scope, id)) return;
     const existing = sharedDocument(id);
     if (preview && !existing?.dirty && !existing?.saving) floating.openPreview(worktree.path, `document:${id}`, targetFloating || !!project.builtin);
     if (existing) { setDocuments(items => items.some(item => item.id === id) ? items : [...items, existing]); return; }
@@ -1492,7 +1519,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     setActiveDocumentId(id);
     routeToFloating(`document:${id}`);
     setActiveCenterId(`document:${id}`);
-    if (workspaceDocument(worktree.path, id)) return;
+    if (workspaceDocument(scope, id)) return;
     if (preview) floating.openPreview(worktree.path, `document:${id}`, openingInFloatingWorkspace() || !!project.builtin);
     const existing = sharedDocument(id);
     if (existing) { setDocuments(items => [...items, existing]); return; }
@@ -1527,7 +1554,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
 
   const closePreviewDocument = (tabId: string) => {
     const id = tabId.slice('document:'.length);
-    const document = workspaceDocument(worktree.path, id);
+    const document = workspaceDocument(scope, id);
     if (!document || document.dirty || document.saving || document.pendingExternal || savingDocumentIds.current.has(id)) return;
     clearAutoSave(id);
     autoSaveFailedIds.current.delete(id);
@@ -1625,6 +1652,8 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   };
 
   const closeTab = async (tab: CenterTab) => {
+    if (tab.closeable === false) return;
+    if (task && centerTabGroup(tab) === 'terminal') { await terminals.close(tab.targetId); return; }
     if (centerTabGroup(tab) === 'global') { globalTabs.find(item => item.id === tab.id)?.close(); return; }
     if (centerTabGroup(tab) === 'terminal') {
       hideTerminalTabs([tab]);
@@ -1638,9 +1667,10 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
 
   const closeTabsInGroup = async (selected: CenterTab, ids: string[]) => {
     const group = centerTabGroup(selected);
-    const targets = centerTabs.filter(tab => centerTabGroup(tab) === group && ids.includes(tab.id));
+    const targets = centerTabs.filter(tab => tab.closeable !== false && centerTabGroup(tab) === group && ids.includes(tab.id));
     if (!targets.length) return;
     if (group === 'terminal') {
+      if (task) { for (const tab of targets) await terminals.close(tab.targetId); return; }
       hideTerminalTabs(targets);
       return;
     }
@@ -1792,11 +1822,11 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   useEffect(() => {
     let cancelled = false;
     restoring.current = true;
-    const saved = readStored<{ documents?: OpenDocument[]; sessions?: SessionPreview[]; pullRequests?: (PullRequestSummary & { repository?: string })[]; tasks?: AutomationTask[]; terminalVisibility?: Record<string, boolean>; openedCliTerminals?: string[]; active?: string }>(`aow-workspace-tabs:${worktree.path}`, {});
+    const saved = readStored<{ documents?: OpenDocument[]; sessions?: SessionPreview[]; pullRequests?: (PullRequestSummary & { repository?: string })[]; tasks?: AutomationTask[]; terminalVisibility?: Record<string, boolean>; openedCliTerminals?: string[]; active?: string }>(`aow-workspace-tabs:${scope}`, {});
     setTerminalVisibility(saved.terminalVisibility ?? Object.fromEntries((saved.openedCliTerminals ?? []).filter(id => typeof id === 'string').map(id => [id, true])));
     const pending = (Array.isArray(saved.documents) ? saved.documents : []).filter(item => typeof item.path === 'string' && item.path.length < 8192).map(async item => {
       if (item.diffSource) {
-        if (workspaceDocument(worktree.path, item.id)) return;
+        if (workspaceDocument(scope, item.id)) return;
         const existing = sharedDocument(item.id);
         if (existing) { setDocuments(items => [...items, existing]); return; }
         const document = { ...item, content: undefined, savedContent: undefined, loading: true, instanceId: nextDocumentInstanceId() };
@@ -1825,20 +1855,20 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     restoring.current = false;
     void Promise.allSettled(pending).then(() => {
       if (cancelled) return;
-      if (saved.active && !restoreSelectionOverridden.current) setActiveCenterId(/^pull-request:\d+$/.test(saved.active) ? prTabId(worktree.path, Number(saved.active.slice('pull-request:'.length))) : saved.active);
+      if (!task && saved.active && !restoreSelectionOverridden.current) setActiveCenterId(/^pull-request:\d+$/.test(saved.active) ? prTabId(worktree.path, Number(saved.active.slice('pull-request:'.length))) : saved.active);
       setRestored(true);
     });
     return () => { cancelled = true; };
   }, []);
   useEffect(() => {
     if (!restored) return;
-    persist(`aow-workspace-tabs:${worktree.path}`, {
+    persist(`aow-workspace-tabs:${scope}`, {
       documents: documents.map(({ id, path, name, kind, explorerSource, diffSource, readOnly }) => ({ id, path, name, kind, explorerSource, diffSource, readOnly })),
       sessions: sessionPreviews.map(({ session, workspacePath, automationRun }) => ({ session, workspacePath, automationRun })),
-      terminalVisibility,
+      terminalVisibility: task ? {} : terminalVisibility,
       pullRequests: openPullRequests, tasks: Object.values(automationTasks), active: activeCenterId,
     });
-  }, [restored, documents, sessionPreviews, openPullRequests, automationTasks, activeCenterId, worktree.path, terminalVisibility]);
+  }, [restored, documents, sessionPreviews, openPullRequests, automationTasks, activeCenterId, worktree.path, scope, terminalVisibility, task]);
 
   const routeActions = useRef<TabOpenActions>(null!);
   routeActions.current = {
@@ -2017,11 +2047,13 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const renderSidebar = () => (
     <aside className="project-aow-right" hidden={!rightSidebarVisible}>
       <nav aria-label={t("navigation.aow_side_views")}>
+        {!task && <>
         <button className={rightView === 'terminals' ? 'active' : ''} title={t("navigation.terminal")} aria-label={t("aow.terminal_panel")} onClick={() => setRightView('terminals')}><SquareTerminal /></button>
         <button className={rightView === 'acp' ? 'active' : ''} title="ACP" aria-label={t("aow.acp_panel")} onClick={() => setRightView('acp')}><AcpIcon /></button>
         <button className={rightView === 'sessions' ? 'active' : ''} title={t("navigation.conversation")} aria-label={t("navigation.conversation")} onClick={() => setRightView('sessions')}><MessageSquare /></button>
         <button className={rightView === 'automations' ? 'active' : ''} title={t("navigation.automation")} aria-label={t("navigation.automation")} onClick={() => setRightView('automations')}><CalendarClock /></button>
         <span className="project-aow-view-separator" aria-hidden="true" />
+        </>}
         <button className={rightView === 'files' && (!project.builtin || rightSidebarVisible) ? 'active' : ''} title={t("navigation.explorer")} aria-label={t("navigation.explorer")} onClick={() => setRightView('files')}><FolderOpen /></button>
         <button className={rightView === 'git' ? 'active' : ''} title={t("navigation.source_control")} aria-label={t("navigation.source_control")} onClick={() => setRightView('git')}><GitBranch /></button>
         <button className={rightView === 'pullRequests' ? 'active' : ''} title={t("navigation.pull_requests")} aria-label={t("navigation.pull_requests")} onClick={() => setRightView('pullRequests')}><GitPullRequest /></button>
@@ -2061,6 +2093,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
       <div className="project-aow-right-content" hidden={rightView !== 'pullRequests'}>
         <PullRequestsPanel key={'pull-requests:' + worktree.path} repository={worktree.path} visible={active && rightSidebarVisible && rightView === 'pullRequests'} activeNumber={activePullRequest?.number} activeProvider={activePullRequest?.provider} activeRemote={activePullRequest?.remote} onOpen={pr => selectTab(() => openPullRequest(pr))} />
       </div>
+      {!task && <>
       <div className="project-aow-right-content" hidden={rightView !== 'sessions'}>
         <AgentSessions key={`sessions:${worktree.path}`} worktreePath={sessionRoot} agents={agents} activeSessionId={activeSessionId} visible={active && rightSidebarVisible && rightView === 'sessions'} onOpen={session => selectTab(() => openSession(session))} onResume={(session, agent) => void selectTab(() => createTerminal(agent, session, sessionRoot))} />
       </div>
@@ -2095,15 +2128,17 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
       <div className="project-aow-right-content" hidden={rightView !== 'automations'}>
         <AutomationPanel project={project} agents={agents} activeTaskId={activeCenterId?.startsWith('automation:') ? activeCenterId.slice('automation:'.length) : undefined} refreshKey={automationRefreshKey} onOpenTask={task => selectTab(() => openAutomation(task))} onTaskChanged={taskChanged} onTaskDeleted={taskDeleted} />
       </div>
+      </>}
     </aside>
   );
-  return <WorkspaceMarkdownProvider workspace={worktree.id} directory={worktree.path}><FloatingOpenMenu><section className="project-aow-surface" hidden={!active || project.builtin}>
+  const OpenMenu = task ? Fragment : FloatingOpenMenu;
+  return <WorkspaceMarkdownProvider workspace={worktree.id} directory={worktree.path}><OpenMenu><section className="project-aow-surface" hidden={!active || project.builtin}>
     <main className="project-aow-center">
-      <WorkspaceTabs workspaceKey={`project:${worktree.path}`} revealRequest={tabRevealRequest} tabs={centerTabs} activeId={activeCenterId} visible={active && !project.builtin} agents={agents}
+      <WorkspaceTabs onCreateTask={onCreateTask} workspaceKey={`project:${scope}`} revealRequest={tabRevealRequest} tabs={centerTabs} activeId={activeCenterId} visible={active && !project.builtin} agents={agents}
         onActivate={tab => selectTab(() => activateCenter(tab))} onCloseTab={tab => selectTab(() => closeTab(tab))} onCloseTabs={(targets, selected) => selectTab(() => closeTabsInGroup(selected, targets.map(tab => tab.id)))}
         onPin={tab => floating.pinPreview(worktree.path, tab.id)}
         onCanRename={canRenameTab} onRename={renameTab} onError={setOperationError}
-        destination={tab => centerTabGroup(tab) === 'global' ? undefined : hostedTab(tab.id) ? 'restore' : 'floating'} onOpenElsewhere={tab => {
+        destination={tab => task || centerTabGroup(tab) === 'global' ? undefined : hostedTab(tab.id) ? 'restore' : 'floating'} onOpenElsewhere={tab => {
           const hosted = hostedTab(tab.id);
           if (hosted) {
             floating.removeHosted(hosted.workspace, hosted.id);
@@ -2195,10 +2230,10 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     {showOpenFile ? <OpenFileDialog worktreePath={worktree.path} onClose={() => setShowOpenFile(false)} onOpen={path => openFileFloating ? withFloatingOpen(() => openExternalFile(path)) : openExternalFile(path)} /> : null}
     {(operationError || terminals.error) && floating.portal && (project.builtin || floatingId) ? createPortal(
       <div className="floating-workspace-error" role="alert">{operationError || terminals.error}<button aria-label={t("aow.dismiss_error")} onClick={() => setOperationError('')}><X /></button></div>, floating.portal) : null}
-  </section></FloatingOpenMenu></WorkspaceMarkdownProvider>;
+  </section></OpenMenu></WorkspaceMarkdownProvider>;
 });
 
-function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
+function ProjectAowContents({ initialEntry, onTaskMode }: { initialEntry?: ResolvedTab; onTaskMode: () => void }) {
   const floating = useFloatingWorkspace();
   const { confirm, confirmationDialog } = useConfirmation();
   const unreadCounts = useWorktreeUnreadCounts();
@@ -2799,6 +2834,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
           <button title={t("navigation.settings")} aria-label={t("navigation.settings")} onClick={() => openGlobalTab('settings')}><Settings /></button>
           <button title={t("navigation.inbox")} aria-label={t("navigation.inbox")} onClick={() => openGlobalTab('inbox')}><Inbox /></button>
           <button title={t("aow.open_system_file_browser")} aria-label={t("aow.open_system_file_browser")} onClick={() => openGlobalTab('browser')}><Files /></button>
+          <button title={t('tasks.workbench')} aria-label={t('tasks.workbench')} onClick={onTaskMode}><NotebookPen /></button>
         </div>
       </aside>
       <div className="project-aow-left-resizer" role="separator" aria-label={t("aow.resize_projects_sidebar")} aria-orientation="vertical" onPointerDown={(event) => startSidebarResize('left', event)} />
@@ -2887,5 +2923,14 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
 }
 
 export function ProjectAow({ initialEntry }: { initialEntry?: ResolvedTab } = {}) {
-  return <EditorSettingsProvider><FloatingWorkspaceProvider><ProjectAowContents initialEntry={initialEntry} /></FloatingWorkspaceProvider></EditorSettingsProvider>;
+  const [taskMode, setTaskMode] = useState(false);
+  const [tasksVisited, setTasksVisited] = useState(false);
+  return <EditorSettingsProvider>
+    <div hidden={taskMode} style={{ height: '100%' }}><FloatingWorkspaceProvider><ProjectAowContents initialEntry={initialEntry} onTaskMode={() => { setTasksVisited(true); setTaskMode(true); }} /></FloatingWorkspaceProvider></div>
+    {tasksVisited && <div hidden={!taskMode} style={{ height: '100%' }}><FloatingWorkspaceProvider ephemeral><div className="project-aow"><TaskWorkbench visible={taskMode} onExit={() => setTaskMode(false)} renderWorkspace={(task, project, worktree, agents, active, onCreateTask, sidebar) =>
+      <FloatingWorkspaceProvider ephemeral><ProjectTerminalPanelProvider project={project}><ProjectAcpPanelProvider project={project}><AuxiliaryTerminalProvider>
+        <WorkspaceSurface task={task} onCreateTask={onCreateTask} project={project} worktree={worktree} agents={agents} active={active} rightSidebarVisible={sidebar.visible} onHideRightSidebar={sidebar.hide} onShowRightSidebar={sidebar.show} onStartRightResize={sidebar.resize} notesRefresh={initialExplorerRefresh} onNotesChanged={() => undefined} />
+      </AuxiliaryTerminalProvider></ProjectAcpPanelProvider></ProjectTerminalPanelProvider></FloatingWorkspaceProvider>
+    } /></div></FloatingWorkspaceProvider></div>}
+  </EditorSettingsProvider>;
 }

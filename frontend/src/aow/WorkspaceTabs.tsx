@@ -24,6 +24,7 @@ export interface WorkspaceTab {
   acpAgentId?: string;
   acpWorking?: boolean;
   renameable?: boolean;
+  closeable?: boolean;
   dirty?: boolean;
   preview?: boolean;
   pending?: boolean;
@@ -134,6 +135,7 @@ interface Props {
   onCreateNote: (kind: 'md' | 'txt') => void;
   onCreateTerminal: (agent?: AowAgent) => void;
   onCreateAcp?: (agentId: string) => void;
+  onCreateTask?: () => void;
   leadingControls?: ReactNode;
   controls?: ReactNode;
   newLabel?: string;
@@ -143,8 +145,11 @@ interface Props {
 
 export function WorkspaceTabs({ workspaceKey, revealRequest, tabs, activeId, visible, agents, onActivate, onPin, onCloseTab, onCloseTabs,
   onCanRename, onRename, onError, destination, onOpenElsewhere, onOpenFile, onCreateNote,
-  onCreateTerminal, onCreateAcp, leadingControls, controls, newLabel = t("aow.new_window"), tabListLabel = t("aow.workspace_tabs"), headerProps }: Props) {
-  const groups = useMemo(() => groupWorkspaceTabs(tabs), [tabs]);
+  onCreateTerminal, onCreateAcp, onCreateTask, leadingControls, controls, newLabel = t("aow.new_window"), tabListLabel = t("aow.workspace_tabs"), headerProps }: Props) {
+  const groups = useMemo(() => {
+    const fixed = tabs.filter(tab => tab.closeable === false);
+    return [...(fixed.length ? [{ id: 'acp' as const, label: t('tasks.task'), color: '#91b8c8', tabs: fixed }] : []), ...groupWorkspaceTabs(tabs.filter(tab => tab.closeable !== false))];
+  }, [tabs]);
   const storageKey = `aow-tab-groups-v1:${workspaceKey}`;
   const [collapsed, setCollapsed] = useState<Set<WorkspaceTabGroup>>(() => {
     const saved = readStored<unknown>(storageKey, []);
@@ -283,7 +288,7 @@ export function WorkspaceTabs({ workspaceKey, revealRequest, tabs, activeId, vis
   };
   const closeGroup = (selected: WorkspaceTab, keep: boolean) => run(async () => {
     const group = workspaceTabGroup(selected);
-    const targets = tabs.filter(tab => workspaceTabGroup(tab) === group && (!keep || tab.id !== selected.id));
+    const targets = tabs.filter(tab => tab.closeable !== false && workspaceTabGroup(tab) === group && (!keep || tab.id !== selected.id));
     if (!targets.length) return;
     const dirty = targets.filter(tab => tab.dirty).length;
     if (group === 'file' && dirty && !window.confirm(t("aow.files_have_unsaved_changes_close_them", { value0: dirty }))) return;
@@ -295,19 +300,19 @@ export function WorkspaceTabs({ workspaceKey, revealRequest, tabs, activeId, vis
       {leadingControls}
       <div ref={tabBarRef} className="project-aow-center-tab-scroll" role="tablist" aria-label={tabListLabel}>
         {groups.map(group => {
-          const folded = collapsed.has(group.id);
+          const folded = group.tabs[0]?.closeable !== false && collapsed.has(group.id);
           const activeTab = group.tabs.find(tab => tab.id === activeId);
           const action = folded ? t("aow.expand") : t("aow.collapse");
-          return <div key={group.id} className={`project-aow-tab-group${folded ? ' collapsed' : ''}`}
+          return <div key={`${group.id}-${group.tabs[0]?.closeable === false ? 'fixed' : 'regular'}`} className={`project-aow-tab-group${folded ? ' collapsed' : ''}`}
             role="presentation" style={{ '--tab-group-color': group.color } as CSSProperties}>
             <button type="button" className={`project-aow-group-toggle${activeTab ? ' active' : ''}`}
               aria-label={t("aow.group_tabs", { value0: action, value1: group.label, value2: group.tabs.length })} aria-expanded={!folded}
-              aria-controls={`${groupId}-${group.id}`} title={t("aow.tabs_click_to", { value0: group.label, value1: group.tabs.length, value2: action, value3: folded && activeTab ? t("common.current", { value0: activeTab.label }) : '' })}
+              aria-controls={`${groupId}-${group.id}-${group.tabs[0]?.closeable === false ? 'fixed' : 'regular'}`} title={t("aow.tabs_click_to", { value0: group.label, value1: group.tabs.length, value2: action, value3: folded && activeTab ? t("common.current", { value0: activeTab.label }) : '' })}
               onClick={() => toggleGroup(group.id)}>
               <WorkspaceTabIcon kind={group.id} path="" />
               {folded ? <span className="project-aow-group-count" aria-hidden="true">{group.tabs.length > 9 ? '…' : group.tabs.length}</span> : null}
             </button>
-            <div id={`${groupId}-${group.id}`} className="project-aow-group-tabs" role="presentation">
+            <div id={`${groupId}-${group.id}-${group.tabs[0]?.closeable === false ? 'fixed' : 'regular'}`} className="project-aow-group-tabs" role="presentation">
               {!folded ? group.tabs.map(tab => <div key={tab.id} data-workspace-tab-id={tab.id} role="tab" tabIndex={0} aria-selected={activeId === tab.id}
                 className={`project-aow-center-tab${activeId === tab.id ? ' active' : ''}${tab.preview ? ' preview' : ''}`} title={tab.title ?? tab.label}
                 aria-describedby={preview?.tabId === tab.id ? previewId : undefined}
@@ -317,10 +322,11 @@ export function WorkspaceTabs({ workspaceKey, revealRequest, tabs, activeId, vis
                 onAuxClick={event => {
                   if (event.button !== 1) return;
                   event.preventDefault(); event.stopPropagation(); dismissPreview();
-                  run(() => onCloseTab(tab));
+                  if (tab.closeable !== false) run(() => onCloseTab(tab));
                 }}
                 onClick={() => onActivate(tab)} onDoubleClick={() => { if (tab.preview) onPin?.(tab); }} onContextMenu={event => {
                   event.preventDefault(); event.stopPropagation(); dismissPreview(); onActivate(tab); setNewMenu(false);
+                  if (tab.closeable === false) return;
                   setContextMenu({ tab, anchor: event.currentTarget, x: event.clientX, y: event.clientY });
                 }} onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onActivate(tab); } }}>
                 <WorkspaceTabIcon kind={tab.kind} path={tab.targetId} terminal={tab.terminal} automationKind={tab.automationKind} acpAgentId={tab.acpAgentId} />
@@ -335,8 +341,8 @@ export function WorkspaceTabs({ workspaceKey, revealRequest, tabs, activeId, vis
                     if (event.key === 'Escape') { cancelRename.current = true; event.currentTarget.blur(); } }} /> : <span>{tab.label}</span>}
                 {tab.terminal && tab.terminal.agentCount > 1 && tab.label !== t("terminals.agent_count", { count: tab.terminal.agentCount })
                   ? <small className="terminal-tab-agent-count" aria-label={t("terminals.agent_count", { count: tab.terminal.agentCount })}>{tab.terminal.agentCount}</small> : null}
-                {rename?.tabId !== tab.id ? <button className="project-aow-tab-close" title={t("aow.close_2", { value0: tab.label })} aria-label={t("aow.close_2", { value0: tab.label })}
-                  onClick={event => { event.stopPropagation(); run(() => onCloseTab(tab)); }}><X /></button> : null}
+                {rename?.tabId !== tab.id && tab.closeable !== false ? <button className="project-aow-tab-close" title={t("aow.close_2", { value0: tab.label })} aria-label={t("aow.close_2", { value0: tab.label })}
+                  onClick={event => { event.stopPropagation(); if (tab.closeable !== false) run(() => onCloseTab(tab)); }}><X /></button> : null}
               </div>) : null}
             </div>
           </div>;
@@ -344,7 +350,7 @@ export function WorkspaceTabs({ workspaceKey, revealRequest, tabs, activeId, vis
       </div>
       <div ref={newMenuRef} className="project-aow-new" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setNewMenu(false); }}>
         <button className="project-aow-new-trigger" title={newLabel} aria-label={newLabel} aria-expanded={newMenu} onClick={() => setNewMenu(value => !value)}><Plus /></button>
-        {newMenu ? <WorkspaceNewMenu anchor={newMenuRef} agents={agents} onOpenFile={onOpenFile}
+        {newMenu ? <WorkspaceNewMenu anchor={newMenuRef} agents={agents} onCreateTask={onCreateTask} onOpenFile={onOpenFile}
           onCreateNote={onCreateNote} onCreateTerminal={onCreateTerminal} onCreateAcp={onCreateAcp} onSelect={() => setNewMenu(false)} /> : null}
       </div>
       {controls}

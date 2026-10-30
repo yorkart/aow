@@ -100,6 +100,7 @@ pub(super) async fn run_job(state: &AppState, job: &RemovalJob, operation: &Hand
             Some(index),
         );
         let outcome = async {
+            let _tasks = state.aow.inner.task_operation.lock().await;
             state
                 .aow
                 .inner
@@ -114,6 +115,7 @@ pub(super) async fn run_job(state: &AppState, job: &RemovalJob, operation: &Hand
             if inspection.change_count > 0 && !item.force {
                 return Err(AowError::DirtyWorktree(inspection.change_count));
             }
+            state.aow.protect_task_workspace(&item.path)?;
             state
                 .terminals
                 .set_workspace_removing(&item.path, true)

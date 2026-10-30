@@ -77,7 +77,7 @@ pub(crate) fn routes() -> Router<AppState> {
             },
         ))
 }
-pub(super) fn error(error: anyhow::Error) -> HttpError {
+pub(crate) fn error(error: anyhow::Error) -> HttpError {
     let missing = error.to_string() == "ACP session not found"
         || error.to_string() == "ACP connection not found";
     HttpError::new(
@@ -378,6 +378,8 @@ async fn delete_session(
     Path(thread_id): Path<String>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, HttpError> {
+    let _tasks = state.aow.task_lifecycle_access().await;
+    state.aow.protect_task_session(&thread_id)?;
     let controller = state.acp_controls.session(&thread_id);
     let _lifecycle = controller.authorize_lifecycle(&headers, true).await?;
     state.acp.delete_session(&thread_id).await.map_err(error)?;
@@ -406,6 +408,13 @@ async fn session_action(
     Json(action): Json<SessionAction>,
 ) -> Result<Json<aow_acp::SessionSnapshot>, HttpError> {
     let controller = state.acp_controls.session(&thread_id);
+    let _tasks = if matches!(action, SessionAction::Close) {
+        let access = state.aow.task_lifecycle_access().await;
+        state.aow.protect_task_session(&thread_id)?;
+        Some(access)
+    } else {
+        None
+    };
     if matches!(action, SessionAction::Resume | SessionAction::Close) {
         let _restore = controller.authorize_restore(&headers).await?;
         if matches!(action, SessionAction::Resume) {

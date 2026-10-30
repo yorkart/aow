@@ -2053,5 +2053,33 @@
     "upload_script": "Upload script",
     "title": "Git platforms",
     "settings_title": "Git platform settings"
+  },
+  "tasks": {
+    "workbench": "Task workbench",
+    "exit": "Switch workspace mode",
+    "new": "New task",
+    "subtask": "New subtask",
+    "archive": "Archive task",
+    "archived": "Show archived tasks",
+    "delete": "Delete task",
+    "pin": "Pin task",
+    "unpin": "Unpin task",
+    "refresh": "Refresh tasks",
+    "cleanup_description": "This cleans up the main sessions of this task and all subtasks. Worktrees and files are kept.",
+    "empty": "Create a task from a project to start working.",
+    "prompt": "Prompt",
+    "agent": "Agent",
+    "select_agent": "Select an agent",
+    "workspace": "Workspace",
+    "main": "Main repository",
+    "isolated": "New isolated worktree",
+    "branch": "Branch",
+    "path": "Worktree path",
+    "workspace_failed": "Workspace creation failed",
+    "creating_workspace": "Creating workspace…",
+    "cancel": "Cancel",
+    "create": "Create task",
+    "prepare_workspace": "Prepare workspace",
+    "task": "Task"
   }
 }
