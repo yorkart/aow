@@ -15,6 +15,7 @@ pub(super) fn spawn(
         let inner_job = worker_job.clone();
         let worker_operation = operation.clone();
         let worker = aow_i18n::spawn(async move {
+            let _tasks = worker_state.aow.inner.task_operation.lock().await;
             let _project = project_lock.lock().await;
             let _permit = worker_state
                 .aow
@@ -100,7 +101,6 @@ pub(super) async fn run_job(state: &AppState, job: &RemovalJob, operation: &Hand
             Some(index),
         );
         let outcome = async {
-            let _tasks = state.aow.inner.task_operation.lock().await;
             state
                 .aow
                 .inner

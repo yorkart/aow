@@ -2093,6 +2093,7 @@
     "project_workspace": "主仓库",
     "describe": "描述一个任务…",
     "submit_shortcut": "⌘ / Ctrl + Enter 开始任务",
-    "branch_placeholder": "task/my-task"
+    "branch_placeholder": "task/my-task",
+    "starting": "正在启动任务…"
   }
 }

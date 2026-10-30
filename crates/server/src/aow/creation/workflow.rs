@@ -35,7 +35,6 @@ pub(super) fn validate_request(request: &mut CreateWorktreeRequest) -> Result<()
 }
 
 impl AowManager {
-    #[cfg(test)]
     pub(in crate::aow) async fn create_worktree(
         &self,
         id: &str,

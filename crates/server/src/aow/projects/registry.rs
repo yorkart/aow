@@ -127,6 +127,7 @@ impl AowManager {
                 result
             } else {
                 let project = StoredProject {
+                    task_worktree: Default::default(),
                     id: aow_id::new_id(),
                     name: requested_name.unwrap_or_else(|| default_name.clone()),
                     registered_path,

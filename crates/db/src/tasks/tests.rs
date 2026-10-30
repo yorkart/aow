@@ -1,6 +1,8 @@
 use super::{TaskDb, TaskRecord};
 fn task(id: &str, parent: Option<&str>) -> TaskRecord {
     TaskRecord {
+        workspace_mode: "existing".into(),
+        slug: None,
         id: id.into(),
         project_id: "project".into(),
         parent_id: parent.map(str::to_owned),
@@ -67,4 +69,28 @@ fn duplicate_thread_cannot_acquire_another_task_owner() {
     second.thread_id = "thread-first".into();
     assert!(database.insert(&second).is_err());
     assert_eq!(database.list().unwrap().len(), 1);
+}
+
+#[test]
+fn upgrades_existing_task_rows_without_losing_session_or_pin() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("legacy.sqlite3");
+    let connection = crate::sqlite::open(Some(&path)).unwrap();
+    connection
+        .execute_batch(include_str!("sql/initialize.sql"))
+        .unwrap();
+    connection
+        .execute(
+            "INSERT INTO schema_migrations(domain, version) VALUES ('AowTasks', 1)",
+            [],
+        )
+        .unwrap();
+    connection.execute("INSERT INTO tasks(id, project_id, prompt, agent_id, workspace, thread_id, pinned) VALUES ('old', 'project', 'Review', 'agent', '/repo', 'old-thread', 1)", []).unwrap();
+    drop(connection);
+    let database = TaskDb::open(Some(&path)).unwrap();
+    let row = &database.list().unwrap()[0];
+    assert_eq!(row.workspace_mode, "existing");
+    assert_eq!(row.slug, None);
+    assert_eq!(row.thread_id, "old-thread");
+    assert!(row.pinned);
 }

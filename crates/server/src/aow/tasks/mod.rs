@@ -1,3 +1,5 @@
+mod workspace;
+
 use super::*;
 use aow_db::tasks::TaskRecord;
 use axum::{
@@ -11,6 +13,8 @@ fn storage(error: anyhow::Error) -> HttpError {
 
 #[derive(Serialize)]
 struct Task {
+    workspace_mode: String,
+    slug: Option<String>,
     id: String,
     project_id: String,
     parent_id: Option<String>,
@@ -24,6 +28,8 @@ struct Task {
 impl From<TaskRecord> for Task {
     fn from(value: TaskRecord) -> Self {
         Self {
+            workspace_mode: value.workspace_mode,
+            slug: value.slug,
             id: value.id,
             project_id: value.project_id,
             parent_id: value.parent_id,
@@ -98,13 +104,32 @@ async fn list(State(state): State<AppState>) -> Result<Json<Vec<Task>>, HttpErro
             .collect(),
     ))
 }
+#[derive(Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum WorkspaceMode {
+    #[default]
+    Existing,
+    NewWorktree,
+}
+impl WorkspaceMode {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Existing => "existing",
+            Self::NewWorktree => "new_worktree",
+        }
+    }
+}
 #[derive(Deserialize)]
 struct Create {
+    #[serde(default)]
+    workspace_mode: WorkspaceMode,
+    slug: Option<String>,
     request_id: Option<String>,
     project_id: String,
     parent_id: Option<String>,
     prompt: String,
     agent_id: String,
+    #[serde(default)]
     workspace: String,
 }
 async fn create(
@@ -127,6 +152,12 @@ async fn create(
     }
     aow_i18n::spawn(async move {
         let _operation = state.aow.inner.task_operation.lock().await;
+        let slug = match request.workspace_mode {
+            WorkspaceMode::NewWorktree => {
+                workspace::task_slug(&request.prompt, request.slug.as_deref())
+            }
+            WorkspaceMode::Existing => workspace::normalize_slug(request.slug.as_deref()),
+        };
         let existing_tasks = state.aow.inner.tasks.list().map_err(storage)?;
         if let Some(existing) = existing_tasks
             .iter()
@@ -136,7 +167,10 @@ async fn create(
                 || existing.parent_id != request.parent_id
                 || existing.prompt != request.prompt
                 || existing.agent_id != request.agent_id
-                || existing.workspace != request.workspace
+                || existing.workspace_mode != request.workspace_mode.as_str()
+                || existing.slug != slug
+                || (matches!(request.workspace_mode, WorkspaceMode::Existing)
+                    && existing.workspace != request.workspace)
             {
                 return Err(crate::instances::invalid(
                     "Task request ID already belongs to a different request",
@@ -145,11 +179,6 @@ async fn create(
             return Ok(Json(Task::from(existing.clone())));
         }
         let _filesystem = state.aow.filesystem_access().await;
-        let workspace = state
-            .aow
-            .agent_worktree_path(&request.project_id, &request.workspace)
-            .await
-            .map_err(aow_http_error)?;
         let runtime_parent = request
             .parent_id
             .as_ref()
@@ -172,6 +201,22 @@ async fn create(
             .select_agent_id(Some(&request.agent_id))
             .await
             .map_err(crate::acp::task_error)?;
+        let task_id = request.request_id.unwrap_or_else(aow_id::new_id);
+        let workspace = match request.workspace_mode {
+            WorkspaceMode::Existing => state
+                .aow
+                .agent_worktree_path(&request.project_id, &request.workspace)
+                .await
+                .map_err(aow_http_error)?,
+            WorkspaceMode::NewWorktree => workspace::create_task_workspace(
+                &state,
+                &request.project_id,
+                &task_id,
+                slug.as_deref(),
+            )
+            .await
+            .map_err(aow_http_error)?,
+        };
         let session = state
             .acp
             .prepare_session_with_options(
@@ -185,7 +230,9 @@ async fn create(
             .await
             .map_err(crate::acp::task_error)?;
         let task = TaskRecord {
-            id: request.request_id.unwrap_or_else(aow_id::new_id),
+            workspace_mode: request.workspace_mode.as_str().into(),
+            slug,
+            id: task_id,
             project_id: request.project_id,
             parent_id: request.parent_id,
             prompt: request.prompt,

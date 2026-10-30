@@ -2093,6 +2093,7 @@
     "project_workspace": "Project workspace",
     "describe": "Describe a task…",
     "submit_shortcut": "⌘ / Ctrl + Enter to start",
-    "branch_placeholder": "task/my-task"
+    "branch_placeholder": "task/my-task",
+    "starting": "Starting task…"
   }
 }

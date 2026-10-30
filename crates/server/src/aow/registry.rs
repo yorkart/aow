@@ -48,6 +48,8 @@ pub(super) fn load_agents(path: &Path) -> Result<(Vec<StoredAgent>, Option<Strin
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct StoredProject {
+    #[serde(default)]
+    pub(super) task_worktree: projects::TaskWorktreePolicy,
     pub(super) id: String,
     pub(super) name: String,
     pub(super) registered_path: String,

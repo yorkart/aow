@@ -3,10 +3,11 @@ import { acpControlHeaders } from '../acp-control/sessionControl';
 
 export interface WorkTask {
   id: string; project_id: string; parent_id: string | null; prompt: string;
+  workspace_mode?: 'existing' | 'new_worktree'; slug?: string | null;
   agent_id: string; workspace: string; thread_id: string; pinned: boolean; archived: boolean;
 }
 export interface CreateTask {
-  request_id: string; project_id: string; parent_id?: string; prompt: string; agent_id: string; workspace: string;
+  request_id: string; project_id: string; parent_id?: string; prompt: string; agent_id: string; workspace?: string; workspace_mode?: 'existing' | 'new_worktree'; slug?: string;
 }
 const root = '/api/aow/tasks';
 export const tasksApi = {

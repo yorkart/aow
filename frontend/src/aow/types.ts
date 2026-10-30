@@ -42,6 +42,7 @@ export type WorktreeIconId = 'default'
   | 'leaf' | 'sprout' | 'flower' | 'flower_2' | 'clover' | 'wheat' | 'tree_pine' | 'tree_deciduous' | 'tree_palm' | 'trees';
 
 export interface AowProject {
+  task_worktree?: { base_ref: string | null; branch_template: string; worktree_parent_dir: string };
   builtin?: boolean;
   avatar_url?: string | null;
   id: string;

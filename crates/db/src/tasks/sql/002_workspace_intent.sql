@@ -1,0 +1,2 @@
+ALTER TABLE tasks ADD COLUMN workspace_mode TEXT NOT NULL DEFAULT 'existing';
+ALTER TABLE tasks ADD COLUMN slug TEXT;

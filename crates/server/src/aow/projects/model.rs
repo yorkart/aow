@@ -2,6 +2,7 @@ use super::*;
 
 pub(super) async fn project_from_stored(stored: StoredProject) -> Project {
     let fallback = Project {
+        task_worktree: stored.task_worktree.clone(),
         id: stored.id.clone(),
         name: stored.name.clone(),
         registered_path: stored.registered_path.clone(),
@@ -41,6 +42,7 @@ pub(in crate::aow) async fn project_from_stored_strict(
             .unwrap_or_default();
     }
     Ok(Project {
+        task_worktree: stored.task_worktree,
         id: stored.id,
         name: stored.name,
         registered_path: stored.registered_path,

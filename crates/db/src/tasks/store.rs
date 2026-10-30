@@ -7,6 +7,8 @@ use std::{
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TaskRecord {
+    pub workspace_mode: String,
+    pub slug: Option<String>,
     pub id: String,
     pub project_id: String,
     pub parent_id: Option<String>,
@@ -27,7 +29,10 @@ impl TaskDb {
         crate::sqlite::migrate(
             &mut connection,
             "AowTasks",
-            &[include_str!("sql/initialize.sql")],
+            &[
+                include_str!("sql/initialize.sql"),
+                include_str!("sql/002_workspace_intent.sql"),
+            ],
         )?;
         Ok(Self(Arc::new(Mutex::new(connection))))
     }
@@ -37,10 +42,12 @@ impl TaskDb {
             .0
             .lock()
             .map_err(|_| anyhow::anyhow!("Task database lock poisoned"))?;
-        let mut query = connection.prepare("SELECT id, project_id, parent_id, prompt, agent_id, workspace, thread_id, pinned, archived FROM tasks ORDER BY rowid")?;
+        let mut query = connection.prepare("SELECT id, project_id, parent_id, prompt, agent_id, workspace, thread_id, pinned, archived, workspace_mode, slug FROM tasks ORDER BY rowid")?;
         Ok(query
             .query_map([], |row| {
                 Ok(TaskRecord {
+                    workspace_mode: row.get(9)?,
+                    slug: row.get(10)?,
                     id: row.get(0)?,
                     project_id: row.get(1)?,
                     parent_id: row.get(2)?,
@@ -68,7 +75,7 @@ impl TaskDb {
                 "Parent task must be active and belong to the same project"
             );
         }
-        transaction.execute("INSERT INTO tasks (id, project_id, parent_id, prompt, agent_id, workspace, thread_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)", params![task.id, task.project_id, task.parent_id, task.prompt, task.agent_id, task.workspace, task.thread_id])?;
+        transaction.execute("INSERT INTO tasks (id, project_id, parent_id, prompt, agent_id, workspace, thread_id, workspace_mode, slug) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)", params![task.id, task.project_id, task.parent_id, task.prompt, task.agent_id, task.workspace, task.thread_id, task.workspace_mode, task.slug])?;
         transaction.commit()?;
         Ok(())
     }

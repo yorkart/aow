@@ -21,11 +21,8 @@ export function TaskDialog({ project, parent, onClose, onCreated }: { project: A
   const [agent, setAgent] = useState(parent?.agent_id ?? '');
   const [workspace, setWorkspace] = useState(parent?.workspace ?? selectedProject.worktrees.find(item => item.is_main)?.path ?? selectedProject.worktrees[0]?.path ?? '');
   const [isolated, setIsolated] = useState(false);
-  const [branch, setBranch] = useState('');
-  const [path, setPath] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [jobId, setJobId] = useState<string>();
   useEffect(() => {
     dialog.current?.showModal();
     let cancelled = false;
@@ -37,34 +34,10 @@ export function TaskDialog({ project, parent, onClose, onCreated }: { project: A
     if (busy || !prompt.trim() || !agent) return;
     setBusy(true); setError('');
     try {
-      if (isolated) {
-        const job = await aowApi.createWorktree(selectedProject.id, { branch, path, baseRef: selectedProject.worktrees.find(item => item.is_main)?.branch || 'HEAD', pullFirst: false });
-        setJobId(job.id); return;
-      }
-      onCreated(await tasksApi.create({ request_id: requestId, project_id: selectedProject.id, parent_id: parent?.id, prompt, agent_id: agent, workspace }));
+      onCreated(await tasksApi.create({ request_id: requestId, project_id: selectedProject.id, parent_id: parent?.id, prompt, agent_id: agent,
+        workspace_mode: isolated ? 'new_worktree' : 'existing', ...(isolated ? {} : { workspace }) }));
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); setBusy(false); }
   };
-  useEffect(() => {
-    if (!jobId) return;
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const poll = async () => {
-      try {
-        const job = (await aowApi.worktreeCreations()).find(item => item.id === jobId);
-        if (cancelled) return;
-        if (job?.status === 'succeeded') {
-          setWorkspace(job.path); setIsolated(false);
-          try { onCreated(await tasksApi.create({ request_id: requestId, project_id: selectedProject.id, parent_id: parent?.id, prompt, agent_id: agent, workspace: job.path })); }
-          catch (reason) { if (!cancelled) { setError(String(reason)); setJobId(undefined); setBusy(false); } }
-          return;
-        }
-        if (job && !['pending', 'running'].includes(job.status)) { setError(job.error ?? t('tasks.workspace_failed')); setJobId(undefined); setBusy(false); return; }
-      } catch (reason) { if (!cancelled) setError(String(reason)); }
-      if (!cancelled) timer = setTimeout(() => void poll(), 1000);
-    };
-    void poll();
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [jobId]);
   const selectedWorktree = selectedProject.worktrees.find(item => item.path === workspace);
   const workspaceLabel = isolated ? t('tasks.new_worktree') : selectedWorktree?.is_main ? t('tasks.project_workspace') : selectedWorktree?.branch || workspace;
   const workspaceOptions = [
@@ -91,11 +64,7 @@ export function TaskDialog({ project, parent, onClose, onCreated }: { project: A
         {parent && <div className="task-composer-parent" title={parent.prompt}><CornerDownRight /><span>{parent.prompt.trim().split('\n')[0]}</span></div>}
         <textarea className="task-composer-prompt" aria-label={t('tasks.prompt')} placeholder={t('tasks.describe')} autoFocus required maxLength={131072} value={prompt} disabled={busy}
           onChange={event => setPrompt(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
-        {isolated && <div className="task-composer-worktree-fields">
-          <label><span>{t('tasks.branch')}</span><input required placeholder={t('tasks.branch_placeholder')} value={branch} disabled={busy} onChange={event => setBranch(event.target.value)} /></label>
-          <label><span>{t('tasks.path')}</span><input required placeholder="/path/to/worktree" value={path} disabled={busy} onChange={event => setPath(event.target.value)} /></label>
-        </div>}
-        {jobId && <p className="task-composer-status" role="status"><LoaderCircle className="spinning" />{t('tasks.creating_workspace')}</p>}
+        {busy && <p className="task-composer-status" role="status"><LoaderCircle className="spinning" />{t(isolated ? 'tasks.creating_workspace' : 'tasks.starting')}</p>}
         {error && <p className="task-composer-error" role="alert">{error}</p>}
         <div className="task-composer-toolbar">
           <span className="task-composer-shortcut">{t('tasks.submit_shortcut')}</span>
@@ -103,7 +72,7 @@ export function TaskDialog({ project, parent, onClose, onCreated }: { project: A
             <TaskPicker label={t('tasks.agent')} value={agent} options={agents.map(item => ({ id: item.id, label: item.name, detail: 'ACP', icon: <AgentIcon agentId={item.id} /> }))} disabled={busy} searchPlaceholder={t('tasks.search_agents')} upwards onChange={setAgent}>
               <AgentIcon agentId={agent} /><span>{agentName}</span><span className="task-composer-runtime">ACP</span>
             </TaskPicker>
-            <button className="task-composer-submit" type="submit" title={t(isolated ? 'tasks.prepare_workspace' : 'tasks.create')} aria-label={t(isolated ? 'tasks.prepare_workspace' : 'tasks.create')} disabled={busy || !agent || !prompt.trim() || (!isolated && !workspace)}>
+            <button className="task-composer-submit" type="submit" title={t('tasks.create')} aria-label={t('tasks.create')} disabled={busy || !agent || !prompt.trim() || (!isolated && !workspace)}>
               {busy ? <LoaderCircle className="spinning" /> : <ArrowUp />}
             </button>
           </div>

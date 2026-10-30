@@ -45,9 +45,6 @@
 .task-composer-submit svg { width: 19px; height: 19px; }
 .task-dialog button:disabled { cursor: default; opacity: .4; }
 .task-dialog button:focus-visible, .task-dialog input:focus-visible { outline: 2px solid var(--aow-accent); outline-offset: 2px; }
-.task-composer-worktree-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 12px; margin: 12px 0 0; padding-top: 16px; border-top: 1px solid var(--aow-control-line); }
-.task-composer-worktree-fields label { display: flex; flex-direction: column; gap: 6px; min-width: 0; color: var(--aow-muted); font-size: 11px; }
-.task-composer-worktree-fields input { width: 100%; min-width: 0; height: 33px; padding: 5px 9px; color: var(--aow-text); background: var(--aow-input); border: 1px solid var(--aow-control-line); border-radius: 7px; font: inherit; }
 .task-composer-error, .task-composer-status { display: flex; align-items: center; gap: 7px; margin: 12px 0 0; overflow-wrap: anywhere; font-size: 12px; }
 .task-composer-error { color: var(--aow-error); }
 .task-composer-status { color: var(--aow-muted); }
@@ -78,7 +75,6 @@
   .task-context-workspace > span, .task-context-workspace b, .task-composer-shortcut { display: none; }
   .task-composer-card { padding: 16px 16px 12px; border-radius: 17px; }
   .task-composer-prompt { min-height: 66px; font-size: 14px; }
-  .task-composer-worktree-fields { grid-template-columns: minmax(0, 1fr); }
   .task-composer-context .task-picker-popover { position: fixed; top: 60px; right: 12px; left: 12px; width: auto; }
   .task-composer-actions { gap: 7px; }
 }

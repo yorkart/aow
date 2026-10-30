@@ -1,5 +1,7 @@
 mod model;
 mod registry;
+mod task_worktree;
+pub(in crate::aow) use task_worktree::TaskWorktreePolicy;
 
 use super::*;
 
@@ -25,6 +27,7 @@ impl From<&StoredProject> for ProjectSummary {
 
 #[derive(Debug, Clone, Serialize)]
 pub(super) struct Project {
+    pub(super) task_worktree: TaskWorktreePolicy,
     pub(super) id: String,
     pub(super) name: String,
     pub(super) registered_path: String,

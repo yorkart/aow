@@ -18,13 +18,12 @@ try {
     await acpControlFixture().install(context);
     const page = await context.newPage();
     page.setDefaultTimeout(15000);
-    const errors = [], created = [], deletedTerminals = [], worktreeRequests = [];
+    const errors = [], created = [], deletedTerminals = [];
     page.on('pageerror', error => errors.push(error.message));
     const worktree = { id: 'wt', project_id: 'project', path: '/repo', branch: 'main', head: 'abc', is_main: true, detached: false, locked: false, prunable: false, color: 'default' };
     const project = { id: 'project', name: 'Task project', registered_path: '/repo', common_git_dir: '/repo/.git', notes_path: '/notes', worktrees: [worktree] };
     const tasks = [];
     let terminals = [];
-    const jobs = [];
     await context.route('**/api/**', async route => {
       const request = route.request(), url = new URL(request.url()), path = url.pathname;
       let data = [];
@@ -32,11 +31,6 @@ try {
       else if (path === '/api/aow/settings') data = { notes_base: '/notes', execution_path: [], editor: {} };
       else if (path.includes('/pinned-')) data = { paths: [], revision: 0 };
       else if (path === '/api/aow/notifications') data = { revision: 0, items: [], unread_count: 0 };
-      else if (path === '/api/aow/projects/project/worktrees' && request.method() === 'POST') {
-        const input = request.postDataJSON(); worktreeRequests.push(input);
-        const job = { id: 'creation', project_id: 'project', path: input.path, branch: input.branch, status: 'succeeded', steps: [], error: null };
-        jobs.push(job); project.worktrees.push({ ...worktree, id: 'isolated', path: input.path, branch: input.branch, is_main: false }); data = job;
-      } else if (path === '/api/aow/worktree-creations') data = jobs;
       else if (path.endsWith('/archive') && path.startsWith('/api/aow/tasks/')) {
         tasks.find(task => task.id === path.split('/').at(-2)).archived = true;
         return route.fulfill({ status: 204 });
@@ -44,7 +38,9 @@ try {
       else if (path === '/api/aow/tasks') {
         if (request.method() === 'POST') {
           const input = request.postDataJSON(); created.push(input);
-          data = { ...input, id: `task-${tasks.length}`, thread_id: `thread-${tasks.length}`, pinned: false, archived: false, parent_id: input.parent_id ?? null }; tasks.push(data);
+          const workspace = input.workspace_mode === 'new_worktree' ? '/isolated' : input.workspace;
+          if (input.workspace_mode === 'new_worktree') project.worktrees.push({ ...worktree, id: 'isolated', path: workspace, branch: `task/${input.request_id}`, is_main: false });
+          data = { ...input, workspace, id: `task-${tasks.length}`, thread_id: `thread-${tasks.length}`, pinned: false, archived: false, parent_id: input.parent_id ?? null }; tasks.push(data);
         } else data = tasks;
       } else if (path.startsWith('/api/aow/tasks/') && request.method() === 'PATCH') {
         tasks.find(task => task.id === path.split('/').at(-1)).pinned = request.postDataJSON().pinned;
@@ -146,12 +142,13 @@ try {
     await page.getByRole('button', { name: 'Workspace', exact: true }).click();
     await page.getByRole('option', { name: /New worktree/ }).click();
     await page.screenshot({ path: '/tmp/aow-task-composer-isolated.png' });
-    await page.getByLabel('Branch', { exact: true }).fill('task/isolated');
-    await page.getByLabel('Worktree path', { exact: true }).fill('/isolated');
-    await page.getByRole('button', { name: 'Prepare workspace', exact: true }).click();
+    assert.equal(await page.getByLabel('Branch', { exact: true }).count(), 0);
+    assert.equal(await page.getByLabel('Worktree path', { exact: true }).count(), 0);
+    await page.getByRole('button', { name: 'Create task', exact: true }).click();
     await workbench.locator('.task-tree-row').filter({ hasText: 'Isolated task' }).waitFor();
-    assert.equal(worktreeRequests.length, 1);
-    assert.equal(created.at(-1).workspace, '/isolated');
+    assert.equal(created.at(-1).workspace_mode, 'new_worktree');
+    assert.equal(created.at(-1).workspace, undefined);
+    assert.equal(created.at(-1).slug, undefined);
     const isolatedRow = workbench.locator('.task-tree-row').filter({ hasText: 'Isolated task' });
     await isolatedRow.getByRole('button', { name: 'Archive task', exact: true }).click();
     await page.getByRole('alertdialog').getByRole('button', { name: 'Confirm', exact: true }).click();
