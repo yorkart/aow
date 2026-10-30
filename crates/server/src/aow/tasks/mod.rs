@@ -1,4 +1,6 @@
+mod cli;
 mod workspace;
+pub(crate) use cli::routes as cli_routes;
 
 use super::*;
 use aow_db::tasks::TaskRecord;
@@ -19,7 +21,9 @@ struct Task {
     project_id: String,
     parent_id: Option<String>,
     prompt: String,
-    agent_id: String,
+    agent_runtime_id: String,
+    agent_role_id: Option<String>,
+    session_id: Option<String>,
     workspace: String,
     thread_id: String,
     pinned: bool,
@@ -34,7 +38,9 @@ impl From<TaskRecord> for Task {
             project_id: value.project_id,
             parent_id: value.parent_id,
             prompt: value.prompt,
-            agent_id: value.agent_id,
+            agent_runtime_id: value.agent_runtime_id,
+            agent_role_id: value.agent_role_id,
+            session_id: value.session_id,
             workspace: value.workspace,
             thread_id: value.thread_id,
             pinned: value.pinned,
@@ -54,6 +60,15 @@ pub(super) fn routes() -> Router<AppState> {
 }
 
 impl AowManager {
+    pub(crate) fn bind_task_session(
+        &self,
+        thread: &str,
+        runtime: &str,
+        session: &str,
+    ) -> anyhow::Result<()> {
+        self.inner.tasks.bind_session(thread, runtime, session)
+    }
+
     /// Serialize ordinary cleanup with task creation so a newly prepared main session
     /// cannot be removed between session allocation and saving its task ownership.
     pub(crate) async fn task_lifecycle_access(&self) -> tokio::sync::MutexGuard<'_, ()> {
@@ -128,7 +143,7 @@ struct Create {
     project_id: String,
     parent_id: Option<String>,
     prompt: String,
-    agent_id: String,
+    agent_runtime_id: String,
     #[serde(default)]
     workspace: String,
 }
@@ -166,7 +181,7 @@ async fn create(
             if existing.project_id != request.project_id
                 || existing.parent_id != request.parent_id
                 || existing.prompt != request.prompt
-                || existing.agent_id != request.agent_id
+                || existing.agent_runtime_id != request.agent_runtime_id
                 || existing.workspace_mode != request.workspace_mode.as_str()
                 || existing.slug != slug
                 || (matches!(request.workspace_mode, WorkspaceMode::Existing)
@@ -198,7 +213,7 @@ async fn create(
             .transpose()?;
         let agent = state
             .acp
-            .select_agent_id(Some(&request.agent_id))
+            .select_agent_id(Some(&request.agent_runtime_id))
             .await
             .map_err(crate::acp::task_error)?;
         let task_id = request.request_id.unwrap_or_else(aow_id::new_id);
@@ -234,9 +249,14 @@ async fn create(
             slug,
             id: task_id,
             project_id: request.project_id,
-            parent_id: request.parent_id,
+            parent_id: request.parent_id.clone(),
             prompt: request.prompt,
-            agent_id: agent,
+            agent_runtime_id: agent,
+            agent_role_id: existing_tasks
+                .iter()
+                .find(|parent| Some(&parent.id) == request.parent_id.as_ref())
+                .and_then(|parent| parent.agent_role_id.clone()),
+            session_id: None,
             workspace,
             thread_id: session.thread_id.clone(),
             pinned: false,
@@ -285,6 +305,7 @@ async fn finish(
     id: String,
     archive: bool,
     request: Finish,
+    local: bool,
 ) -> Result<StatusCode, HttpError> {
     aow_i18n::spawn(async move {
         let _operation = state.aow.inner.task_operation.lock().await;
@@ -322,7 +343,7 @@ async fn finish(
                             .map_err(|_| crate::instances::invalid("Invalid control token"))?,
                     );
                 }
-                crate::acp::delete_task_session(&state, &task.thread_id, &headers).await?;
+                crate::acp::delete_task_session(&state, &task.thread_id, &headers, local).await?;
             }
         }
         state
@@ -341,15 +362,18 @@ async fn archive(
     AxumPath(id): AxumPath<String>,
     Json(request): Json<Finish>,
 ) -> Result<StatusCode, HttpError> {
-    finish(state, id, true, request).await
+    finish(state, id, true, request, false).await
 }
 async fn remove(
     State(state): State<AppState>,
     AxumPath(id): AxumPath<String>,
     Json(request): Json<Finish>,
 ) -> Result<StatusCode, HttpError> {
-    finish(state, id, false, request).await
+    finish(state, id, false, request, false).await
 }
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod cli_tests;

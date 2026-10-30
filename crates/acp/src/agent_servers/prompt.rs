@@ -13,6 +13,7 @@ impl AgentServerStore {
         steering_id: Option<&str>,
     ) -> Result<()> {
         ensure!(!content.is_empty(), "Prompt is empty");
+        self.sync_session_binding(id)?;
         let connection = self.session_connection(id)?;
         ensure!(connection.connected(), "ACP adapter is disconnected");
         let content = serde_json::to_value(content)?;

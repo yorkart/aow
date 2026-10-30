@@ -784,7 +784,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const [activeCenterId, setActiveCenterId] = useState<string>();
   useEffect(() => {
     if (!task) return;
-    const id = acp.open({ thread_id: task.thread_id, agent_id: task.agent_id, title: task.prompt, status: 'disconnected' } as import('../features/acp/types').SessionInfo);
+    const id = acp.open({ thread_id: task.thread_id, agent_id: task.agent_runtime_id, title: task.prompt, status: 'disconnected' } as import('../features/acp/types').SessionInfo);
     setActiveCenterId(`acp:${id}`);
   }, [task?.id]);
   const globalRequests = useRef(new Set<object>());

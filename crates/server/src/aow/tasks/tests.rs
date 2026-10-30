@@ -5,7 +5,7 @@ use axum::{
 };
 use tower::ServiceExt;
 
-async fn call(
+pub(super) async fn call(
     app: &Router,
     method: &str,
     path: &str,
@@ -27,7 +27,7 @@ async fn call(
     let bytes = to_bytes(response.into_body(), 1_048_576).await.unwrap();
     (status, serde_json::from_slice(&bytes).unwrap_or_default())
 }
-fn stored(id: &str, parent: Option<&str>) -> TaskRecord {
+pub(super) fn stored(id: &str, parent: Option<&str>) -> TaskRecord {
     TaskRecord {
         workspace_mode: "existing".into(),
         slug: None,
@@ -35,7 +35,9 @@ fn stored(id: &str, parent: Option<&str>) -> TaskRecord {
         project_id: "project".into(),
         parent_id: parent.map(str::to_owned),
         prompt: "Review".into(),
-        agent_id: "test".into(),
+        agent_runtime_id: "test".into(),
+        agent_role_id: None,
+        session_id: None,
         workspace: "/repo".into(),
         thread_id: format!("thread-{id}"),
         pinned: false,
@@ -105,7 +107,7 @@ async fn api_lists_pins_archives_and_deletes_subtrees() {
 async fn invalid_task_does_not_allocate_metadata() {
     let state = AppState::new(Default::default());
     let app = routes().with_state(state.clone());
-    let (status, _) = call(&app, "POST", "/api/aow/tasks", serde_json::json!({"project_id":"missing", "prompt":" ", "agent_id":"missing", "workspace":"/repo"})).await;
+    let (status, _) = call(&app, "POST", "/api/aow/tasks", serde_json::json!({"project_id":"missing", "prompt":" ", "agent_runtime_id":"missing", "workspace":"/repo"})).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert!(state.aow.inner.tasks.list().unwrap().is_empty());
 }
@@ -155,7 +157,7 @@ async fn creation_is_idempotent_and_binds_runtime_lineage_and_protected_session(
     let app = routes()
         .merge(crate::acp::routes())
         .with_state(state.clone());
-    let request = serde_json::json!({"request_id":"create-root", "project_id":project.id, "agent_id":"test", "workspace":repo, "prompt":"Inspect this repository"});
+    let request = serde_json::json!({"request_id":"create-root", "project_id":project.id, "agent_runtime_id":"test", "workspace":repo, "prompt":"Inspect this repository"});
     let (status, parent) = call(&app, "POST", "/api/aow/tasks", request.clone()).await;
     assert_eq!(status, StatusCode::OK, "{parent}");
     let (_, repeated) = call(&app, "POST", "/api/aow/tasks", request).await;
@@ -179,7 +181,7 @@ async fn creation_is_idempotent_and_binds_runtime_lineage_and_protected_session(
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert!(state.acp.session_info(thread).is_ok());
-    let (status, child) = call(&app, "POST", "/api/aow/tasks", serde_json::json!({"request_id":"create-child", "parent_id":parent["id"], "project_id":project.id, "agent_id":"test", "workspace":repo, "prompt":"Review the result"})).await;
+    let (status, child) = call(&app, "POST", "/api/aow/tasks", serde_json::json!({"request_id":"create-child", "parent_id":parent["id"], "project_id":project.id, "agent_runtime_id":"test", "workspace":repo, "prompt":"Review the result"})).await;
     assert_eq!(status, StatusCode::OK, "{child}");
     let info = state
         .acp
@@ -213,7 +215,7 @@ fn optional_slug_has_no_dangling_separator_and_normalizes_future_values() {
     assert!(workspace::task_branch("static-branch", "abc", None).is_err());
 }
 
-async fn workspace_fixture() -> (tempfile::TempDir, AppState, Project, Router) {
+pub(super) async fn workspace_fixture() -> (tempfile::TempDir, AppState, Project, Router) {
     let directory = tempfile::tempdir().unwrap();
     let repo = directory.path().join("repo");
     std::fs::create_dir(&repo).unwrap();
@@ -279,7 +281,7 @@ async fn new_worktree_defaults_create_and_execute_without_client_configuration()
     )
     .await
     .unwrap();
-    let request = serde_json::json!({"request_id":"auto-workspace", "project_id":project.id, "agent_id":"test", "workspace_mode":"new_worktree", "prompt":"Inspect repository"});
+    let request = serde_json::json!({"request_id":"auto-workspace", "project_id":project.id, "agent_runtime_id":"test", "workspace_mode":"new_worktree", "prompt":"Inspect repository"});
     let (status, task) = call(&app, "POST", "/api/aow/tasks", request.clone()).await;
     assert_eq!(status, StatusCode::OK, "{task}");
     let target = directory
@@ -377,7 +379,7 @@ async fn default_prefers_remote_head_and_future_slug_can_be_supplied() {
     )
     .await
     .unwrap();
-    let (status, task) = call(&app, "POST", "/api/aow/tasks", serde_json::json!({"request_id":"with-slug", "project_id":project.id, "agent_id":"test", "workspace_mode":"new_worktree", "slug":"Review UI", "prompt":"Review"})).await;
+    let (status, task) = call(&app, "POST", "/api/aow/tasks", serde_json::json!({"request_id":"with-slug", "project_id":project.id, "agent_runtime_id":"test", "workspace_mode":"new_worktree", "slug":"Review UI", "prompt":"Review"})).await;
     assert_eq!(status, StatusCode::OK, "{task}");
     let target = Path::new(task["workspace"].as_str().unwrap());
     assert_eq!(
@@ -403,7 +405,7 @@ async fn default_prefers_remote_head_and_future_slug_can_be_supplied() {
 async fn checkout_failure_does_not_create_task_or_start_acp() {
     let (_directory, state, project, app) = workspace_fixture().await;
     state.aow.lock().unwrap().projects[0].task_worktree.base_ref = Some("missing-ref".into());
-    let (status, _) = call(&app, "POST", "/api/aow/tasks", serde_json::json!({"request_id":"fail-checkout", "project_id":project.id, "agent_id":"test", "workspace_mode":"new_worktree", "slug":"", "prompt":"Review"})).await;
+    let (status, _) = call(&app, "POST", "/api/aow/tasks", serde_json::json!({"request_id":"fail-checkout", "project_id":project.id, "agent_runtime_id":"test", "workspace_mode":"new_worktree", "slug":"", "prompt":"Review"})).await;
     assert!(!status.is_success());
     assert!(state.aow.inner.tasks.list().unwrap().is_empty());
     assert!(state.acp.sessions(None).is_empty());
@@ -419,7 +421,7 @@ async fn project_policy_can_resolve_custom_defaults_without_a_ui_editor() {
         policy.branch_template = "feature/{{task_id}}-{{slug}}".into();
         policy.base_ref = Some("main".into());
     }
-    let (status, task) = call(&app, "POST", "/api/aow/tasks", serde_json::json!({"request_id":"configured", "project_id":project.id, "agent_id":"test", "workspace_mode":"new_worktree", "slug":"", "prompt":"Review"})).await;
+    let (status, task) = call(&app, "POST", "/api/aow/tasks", serde_json::json!({"request_id":"configured", "project_id":project.id, "agent_runtime_id":"test", "workspace_mode":"new_worktree", "slug":"", "prompt":"Review"})).await;
     assert_eq!(status, StatusCode::OK, "{task}");
     let target = directory
         .path()

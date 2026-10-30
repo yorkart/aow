@@ -18,7 +18,7 @@ export function TaskDialog({ project, parent, onClose, onCreated }: { project: A
   const [requestId] = useState(() => Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join(''));
   const [prompt, setPrompt] = useState('');
   const [agents, setAgents] = useState<AgentInfo[]>([]);
-  const [agent, setAgent] = useState(parent?.agent_id ?? '');
+  const [agent, setAgent] = useState(parent?.agent_runtime_id ?? '');
   const [workspace, setWorkspace] = useState(parent?.workspace ?? selectedProject.worktrees.find(item => item.is_main)?.path ?? selectedProject.worktrees[0]?.path ?? '');
   const [isolated, setIsolated] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -34,7 +34,7 @@ export function TaskDialog({ project, parent, onClose, onCreated }: { project: A
     if (busy || !prompt.trim() || !agent) return;
     setBusy(true); setError('');
     try {
-      onCreated(await tasksApi.create({ request_id: requestId, project_id: selectedProject.id, parent_id: parent?.id, prompt, agent_id: agent,
+      onCreated(await tasksApi.create({ request_id: requestId, project_id: selectedProject.id, parent_id: parent?.id, prompt, agent_runtime_id: agent,
         workspace_mode: isolated ? 'new_worktree' : 'existing', ...(isolated ? {} : { workspace }) }));
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); setBusy(false); }
   };

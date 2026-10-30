@@ -5,6 +5,7 @@ mod inbox;
 mod input;
 mod instance;
 mod project;
+mod task;
 
 use std::{
     io::{self, Write},
@@ -84,6 +85,8 @@ enum Command {
     Agent(agent::AgentArgs),
     /// Create ACP sessions, submit tasks and inspect sessions through the local server.
     Acp(acp::AcpArgs),
+    /// Create, query and manage Tasks using the calling ACP session context.
+    Task(task::TaskArgs),
     /// Trace creation ancestry across terminal panes and ACP sessions.
     Instance(instance::InstanceArgs),
 }
@@ -130,6 +133,7 @@ fn execute(cli: Cli) -> Result<()> {
     let value = match cli.command {
         Command::Agent(args) => agent::execute(args, state_dir)?,
         Command::Acp(args) => acp::execute(args, state_dir)?,
+        Command::Task(args) => task::execute(args, state_dir)?,
         Command::Instance(args) => instance::execute(args, state_dir)?,
         Command::Project(args) => project::execute(args, state_dir)?,
         Command::Inbox(args) => inbox::execute(args, state_dir)?,
@@ -158,6 +162,10 @@ fn main() -> ExitCode {
     match execute(cli) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
+            if let Some(failure) = error.downcast_ref::<task::StartupFailure>() {
+                let _ = write_json(&mut io::stderr().lock(), &failure.json(), true);
+                return ExitCode::from(6);
+            }
             if let Some(failure) = error.downcast_ref::<acp::StartupFailure>() {
                 let _ = write_json(&mut io::stderr().lock(), &failure.json(), true);
                 return ExitCode::from(6);

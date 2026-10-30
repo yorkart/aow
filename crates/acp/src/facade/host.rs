@@ -10,6 +10,11 @@ pub trait AcpHost: Send + Sync + 'static {
     /// Invalidate host metadata views after creation, replacement, deletion or a title change.
     /// Called under the thread store lock; implementations must not block or reenter the service.
     fn session_metadata_changed(&self) {}
+    /// Persist host-owned session associations before allowing a prompt. Called without
+    /// the thread-store lock; failures prevent execution with an unbound native identity.
+    fn session_bound(&self, _thread_id: &str, _agent_id: &str, _session_id: &str) -> Result<()> {
+        Ok(())
+    }
     /// Per-host environment overrides, shared by all sessions of an adapter.
     fn execution_environment(&self) -> std::collections::BTreeMap<String, String> {
         Default::default()

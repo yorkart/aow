@@ -464,7 +464,17 @@ impl AgentServerStore {
             .install_session(thread, previous.as_ref())?;
         connection.debug_log.bind_session(&session_id, &id);
         self.attach_connection(&connection, &id)?;
+        self.sync_session_binding(&id)?;
         self.snapshot(&id)
+    }
+    pub fn sync_session_binding(&self, id: &str) -> Result<()> {
+        let snapshot = self.snapshot(id)?;
+        if let Some(session_id) = &snapshot.session_id {
+            self.inner
+                .host
+                .session_bound(&snapshot.thread_id, &snapshot.agent_id, session_id)?;
+        }
+        Ok(())
     }
     async fn apply_defaults(&self, id: &str) -> Result<()> {
         let thread = self.snapshot(id)?;

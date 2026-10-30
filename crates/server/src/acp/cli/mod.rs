@@ -99,7 +99,13 @@ pub(crate) fn start(
     let lease = controller.claim_cli()?;
     Ok(aow_i18n::spawn(async move {
         let _lifecycle = controller.authorize_restore(&lease.headers).await?;
-        state.acp.resume(&id).await.map_err(super::api::error)?;
+        let ready = state.acp.resume(&id).await.map_err(super::api::error)?;
+        if let Some(session) = &ready.session_id {
+            state
+                .aow
+                .bind_task_session(&id, &ready.agent_id, session)
+                .map_err(super::api::error)?;
+        }
         // A browser takeover during initialization revokes admission of the pending prompt.
         controller.authorize(&lease.headers, false)?;
         if let Some(task) = task {

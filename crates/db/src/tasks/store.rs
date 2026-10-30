@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, ensure};
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use std::{
     path::Path,
     sync::{Arc, Mutex},
@@ -13,7 +13,9 @@ pub struct TaskRecord {
     pub project_id: String,
     pub parent_id: Option<String>,
     pub prompt: String,
-    pub agent_id: String,
+    pub agent_runtime_id: String,
+    pub agent_role_id: Option<String>,
+    pub session_id: Option<String>,
     pub workspace: String,
     pub thread_id: String,
     pub pinned: bool,
@@ -32,6 +34,7 @@ impl TaskDb {
             &[
                 include_str!("sql/initialize.sql"),
                 include_str!("sql/002_workspace_intent.sql"),
+                include_str!("sql/003_session_identity.sql"),
             ],
         )?;
         Ok(Self(Arc::new(Mutex::new(connection))))
@@ -42,7 +45,7 @@ impl TaskDb {
             .0
             .lock()
             .map_err(|_| anyhow::anyhow!("Task database lock poisoned"))?;
-        let mut query = connection.prepare("SELECT id, project_id, parent_id, prompt, agent_id, workspace, thread_id, pinned, archived, workspace_mode, slug FROM tasks ORDER BY rowid")?;
+        let mut query = connection.prepare("SELECT id, project_id, parent_id, prompt, agent_runtime_id, workspace, thread_id, pinned, archived, workspace_mode, slug, agent_role_id, session_id FROM tasks ORDER BY rowid")?;
         Ok(query
             .query_map([], |row| {
                 Ok(TaskRecord {
@@ -52,7 +55,9 @@ impl TaskDb {
                     project_id: row.get(1)?,
                     parent_id: row.get(2)?,
                     prompt: row.get(3)?,
-                    agent_id: row.get(4)?,
+                    agent_runtime_id: row.get(4)?,
+                    agent_role_id: row.get(11)?,
+                    session_id: row.get(12)?,
                     workspace: row.get(5)?,
                     thread_id: row.get(6)?,
                     pinned: row.get(7)?,
@@ -75,8 +80,30 @@ impl TaskDb {
                 "Parent task must be active and belong to the same project"
             );
         }
-        transaction.execute("INSERT INTO tasks (id, project_id, parent_id, prompt, agent_id, workspace, thread_id, workspace_mode, slug) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)", params![task.id, task.project_id, task.parent_id, task.prompt, task.agent_id, task.workspace, task.thread_id, task.workspace_mode, task.slug])?;
+        transaction.execute("INSERT INTO tasks (id, project_id, parent_id, prompt, agent_runtime_id, workspace, thread_id, workspace_mode, slug, agent_role_id, session_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)", params![task.id, task.project_id, task.parent_id, task.prompt, task.agent_runtime_id, task.workspace, task.thread_id, task.workspace_mode, task.slug, task.agent_role_id, task.session_id])?;
         transaction.commit()?;
+        Ok(())
+    }
+
+    /// Ignore ordinary ACP threads; a Task binding is owned by its stable thread and runtime.
+    pub fn bind_session(&self, thread_id: &str, runtime_id: &str, session_id: &str) -> Result<()> {
+        ensure!(!session_id.trim().is_empty(), "Native session ID is empty");
+        let connection = self
+            .0
+            .lock()
+            .map_err(|_| anyhow::anyhow!("Task database lock poisoned"))?;
+        let owner: Option<String> = connection
+            .query_row(
+                "SELECT agent_runtime_id FROM tasks WHERE thread_id = ?1 AND archived = 0",
+                [thread_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        ensure!(
+            owner.as_deref().is_none_or(|runtime| runtime == runtime_id),
+            "Task runtime does not match its ACP session"
+        );
+        connection.execute("UPDATE tasks SET session_id = ?3 WHERE thread_id = ?1 AND agent_runtime_id = ?2 AND archived = 0 AND (session_id IS NULL OR session_id != ?3)", params![thread_id, runtime_id, session_id])?;
         Ok(())
     }
 

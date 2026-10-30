@@ -15,6 +15,9 @@ struct Host {
 
 #[async_trait::async_trait]
 impl AcpHost for Host {
+    fn session_bound(&self, thread: &str, runtime: &str, session: &str) -> Result<()> {
+        self.manager.bind_task_session(thread, runtime, session)
+    }
     fn session_metadata_changed(&self) {
         self.workspace_events.instances_changed();
     }

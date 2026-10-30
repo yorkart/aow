@@ -7,7 +7,9 @@ fn task(id: &str, parent: Option<&str>) -> TaskRecord {
         project_id: "project".into(),
         parent_id: parent.map(str::to_owned),
         prompt: "Review changes".into(),
-        agent_id: "agent".into(),
+        agent_runtime_id: "agent".into(),
+        agent_role_id: None,
+        session_id: None,
         workspace: "/repo".into(),
         thread_id: format!("thread-{id}"),
         pinned: false,
@@ -93,4 +95,35 @@ fn upgrades_existing_task_rows_without_losing_session_or_pin() {
     assert_eq!(row.slug, None);
     assert_eq!(row.thread_id, "old-thread");
     assert!(row.pinned);
+}
+
+#[test]
+fn session_binding_tracks_native_identity_and_retains_runtime_and_role() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("tasks.sqlite3");
+    let database = TaskDb::open(Some(&path)).unwrap();
+    let mut record = task("owner", None);
+    record.agent_role_id = Some("reviewer".into());
+    database.insert(&record).unwrap();
+    assert!(
+        database
+            .bind_session(&record.thread_id, "wrong-runtime", "wrong")
+            .is_err()
+    );
+    assert!(database.list().unwrap()[0].session_id.is_none());
+    database
+        .bind_session(&record.thread_id, &record.agent_runtime_id, "native-one")
+        .unwrap();
+    database
+        .bind_session(
+            &record.thread_id,
+            &record.agent_runtime_id,
+            "native-restored",
+        )
+        .unwrap();
+    drop(database);
+    let stored = TaskDb::open(Some(&path)).unwrap().list().unwrap().remove(0);
+    assert_eq!(stored.session_id.as_deref(), Some("native-restored"));
+    assert_eq!(stored.agent_runtime_id, "agent");
+    assert_eq!(stored.agent_role_id.as_deref(), Some("reviewer"));
 }

@@ -126,7 +126,9 @@ impl AcpService {
         self.0.load_session(connection_id, session_id).await
     }
     pub async fn resume(&self, thread_id: &str) -> Result<SessionSnapshot> {
-        self.0.resume(thread_id).await
+        let snapshot = self.0.resume(thread_id).await?;
+        self.0.sync_session_binding(thread_id)?;
+        Ok(snapshot)
     }
     /// Finish queued SQLite writes before shutting down the host runtime.
     pub fn flush_threads_on_quit(&self) -> Result<()> {

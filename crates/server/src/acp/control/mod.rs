@@ -79,6 +79,9 @@ pub(super) struct ControlState {
 }
 
 impl Controller {
+    pub(super) async fn task_cleanup(&self) -> MutexGuard<'_, ()> {
+        self.restore.lock().await
+    }
     pub(super) fn claim_cli(self: &Arc<Self>) -> Result<CliLease, HttpError> {
         let attachment = Uuid::new_v4();
         let state = self.claim(attachment, false);

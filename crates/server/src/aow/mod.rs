@@ -34,6 +34,7 @@ mod removal;
 mod sessions;
 mod settings;
 mod tasks;
+pub(crate) use tasks::cli_routes as task_cli_routes;
 mod validation;
 mod worktrees;
 

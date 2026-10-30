@@ -6,9 +6,14 @@ pub(crate) async fn delete_task_session(
     state: &AppState,
     thread: &str,
     headers: &HeaderMap,
+    local: bool,
 ) -> Result<(), HttpError> {
     let controller = state.acp_controls.session(thread);
-    let _lifecycle = controller.authorize_lifecycle(headers, true).await?;
+    let _lifecycle = if local {
+        controller.task_cleanup().await
+    } else {
+        controller.authorize_lifecycle(headers, true).await?
+    };
     state
         .acp
         .delete_session(thread)
