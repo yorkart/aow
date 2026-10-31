@@ -1,4 +1,5 @@
 import { t } from '../../../lib/i18n';
+import { useTaskScope } from '../../tasks/TaskScope';
 import '../../../components/conversation-theme.css';
 // Conversation content is owned by a workspace tab; closing its view never closes the ACP session.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
@@ -51,6 +52,9 @@ export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenSes
   tab: AcpTab; workspace: string; visible: boolean;
   onSessionChange: (id: string, session: SessionInfo) => void; onOpenSession: (session: SessionInfo) => void; onOpenFile: OpenFile; onBack?: () => void;
 }) {
+  const taskScope = useTaskScope();
+  const taskId = taskScope?.task.id;
+  const rememberTaskResource = taskScope?.remember;
   const [connection, setConnection] = useState<ConnectionInfo>();
   const [prepared, setPrepared] = useState<SessionSnapshot>();
   const thread_id = prepared?.thread_id ?? tab.thread_id;
@@ -121,7 +125,10 @@ export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenSes
       setBusyMessage(t("acp.creating_session"));
       let prepared = drafts.get(initialTab);
       if (!prepared) {
-        prepared = acpApi.create(initialTab.agentId, workspace);
+        prepared = acpApi.create(initialTab.agentId, workspace, taskId).then(session => {
+          rememberTaskResource?.('acp', session.thread_id);
+          return session;
+        });
         drafts.set(initialTab, prepared);
       }
       pending = prepared;
@@ -130,7 +137,7 @@ export function SessionTab({ tab, workspace, visible, onSessionChange, onOpenSes
       .catch(reason => { if (!cancelled) recordFailure(reason); })
       .finally(() => { if (!cancelled) { setConnecting(false); setBusy(false); } });
     return () => { cancelled = true; };
-  }, [accept, initialTab, workspace, attempt, recordFailure]);
+  }, [accept, initialTab, workspace, taskId, rememberTaskResource, attempt, recordFailure]);
   const resumeAttempts = useRef(new Map<string, Promise<SessionSnapshot> | undefined>());
   useEffect(() => {
     if (!thread_id || !token || !session || sync.deleted) return;

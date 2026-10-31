@@ -56,7 +56,7 @@ export function useAcpTabs(workspace: string) {
   useEffect(() => {
     const removed = (owner: string, threadId?: string) => {
       if (owner === workspace && threadId === undefined) { update([]); return; }
-      if (owner === workspace && current.current.some(tab => tab.thread_id === threadId)) {
+      if (current.current.some(tab => tab.thread_id === threadId)) {
         update(current.current.filter(tab => tab.thread_id !== threadId));
       }
     };

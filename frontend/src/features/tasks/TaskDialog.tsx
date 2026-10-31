@@ -1,0 +1,94 @@
+import { useEffect, useId, useRef, useState } from 'react';
+import { ArrowUp, Folder, GitBranch, GitBranchPlus, LoaderCircle } from 'lucide-react';
+import { AgentIcon } from '../agents/AgentIcon';
+import { TaskPicker } from './TaskPicker';
+import { t } from '../../lib/i18n';
+import { aowApi } from '../../aow/aowApi';
+import type { AowProject } from '../../aow/types';
+import { acpApi } from '../acp/api';
+import type { AgentInfo } from '../acp/types';
+import { tasksApi, type WorkTask } from './api';
+import './tasks.css';
+
+export function TaskDialog({ project, task, onClose, onSaved }: {
+  project: AowProject; task?: WorkTask; onClose: () => void; onSaved: (task: WorkTask) => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const backdropPointer = useRef(false);
+  const [selectedProject, setSelectedProject] = useState(project);
+  const [projects, setProjects] = useState<AowProject[]>([project]);
+  const titleId = useId();
+  const [requestId] = useState(() => Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join(''));
+  const [prompt, setPrompt] = useState(task?.prompt ?? '');
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const [agent, setAgent] = useState(task?.agent_id ?? '');
+  const [workspace, setWorkspace] = useState(task?.workspace ?? project.worktrees.find(item => item.is_main)?.path ?? project.worktrees[0]?.path ?? '');
+  const [isolated, setIsolated] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    const modal = dialog.current;
+    modal?.showModal();
+    return () => modal?.close();
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    if (!task) void aowApi.projects().then(items => { if (!cancelled) setProjects(items.filter(item => !item.builtin)); }).catch(reason => { if (!cancelled) setError(String(reason)); });
+    void acpApi.agents().then(items => { if (!cancelled) { const available = items.filter(item => item.installed && item.supported); setAgents(available); setAgent(current => current || available[0]?.id || ''); } }).catch(reason => { if (!cancelled) setError(String(reason)); });
+    return () => { cancelled = true; };
+  }, [task]);
+  const submit = async () => {
+    if (busy || !prompt.trim() || (!task && (!agent || (!isolated && !workspace)))) return;
+    setBusy(true); setError('');
+    try {
+      if (task) {
+        await tasksApi.update(task.id, { prompt });
+        onSaved({ ...task, prompt });
+      } else {
+        onSaved(await tasksApi.create({ request_id: requestId, project_id: selectedProject.id, prompt, agent_id: agent, dependencies: [],
+          ...(isolated ? { workspace_mode: 'new_worktree' } : { workspace_mode: 'existing', workspace }) }));
+      }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setBusy(false); }
+  };
+  const selectedWorktree = selectedProject.worktrees.find(item => item.path === workspace);
+  const workspaceLabel = isolated ? t('tasks.new_worktree') : selectedWorktree?.is_main ? t('tasks.project_workspace') : selectedWorktree?.branch || workspace;
+  const workspaceOptions = [
+    { id: ':new', label: t('tasks.new_worktree'), detail: t('tasks.isolated_hint'), icon: <GitBranchPlus /> },
+    ...selectedProject.worktrees.filter(item => !item.is_main).map(item => ({ id: item.path, label: item.branch || item.path.split('/').pop() || item.path, detail: item.path, group: t('tasks.reuse_worktree'), icon: <GitBranch /> })),
+    ...selectedProject.worktrees.filter(item => item.is_main).map(item => ({ id: item.path, label: t('tasks.project_workspace'), detail: item.path, group: t('tasks.other_options'), icon: <Folder /> })),
+    ...(workspace && !selectedWorktree ? [{ id: workspace, label: workspace.split('/').pop() || workspace, detail: workspace, icon: <GitBranch /> }] : []),
+  ];
+  const agentName = agents.find(item => item.id === agent)?.name ?? (task ? agent : t('tasks.select_agent'));
+  return <dialog aria-labelledby={titleId} ref={dialog} className="task-dialog" onPointerDown={event => { backdropPointer.current = event.target === event.currentTarget; }}
+    onClick={event => { if (backdropPointer.current && event.target === event.currentTarget && !busy) onClose(); backdropPointer.current = false; }} onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}>
+    <form onSubmit={event => { event.preventDefault(); void submit(); }}>
+      <h2 id={titleId} className="task-composer-accessible-title">{t(task ? 'tasks.edit' : 'tasks.new')}</h2>
+      <div className="task-composer-context">
+        <TaskPicker label={t('tasks.project')} value={selectedProject.id} options={projects.map(item => ({ id: item.id, label: item.name, detail: item.registered_path, icon: <Folder /> }))} disabled={busy || !!task} searchPlaceholder={t('tasks.search_projects')}
+          onChange={id => { const next = projects.find(item => item.id === id); if (next) { setSelectedProject(next); setWorkspace(next.worktrees.find(item => item.is_main)?.path ?? next.worktrees[0]?.path ?? ''); setIsolated(false); } }}><Folder /><span>{selectedProject.name}</span></TaskPicker>
+        <TaskPicker label={t('tasks.workspace')} value={isolated ? ':new' : workspace} options={workspaceOptions} disabled={busy || !!task} searchPlaceholder={t('tasks.search_worktrees')}
+          onChange={value => { setIsolated(value === ':new'); if (value !== ':new') setWorkspace(value); }}>
+          {isolated ? <GitBranchPlus /> : selectedWorktree?.is_main ? <Folder /> : <GitBranch />}<span className="task-context-workspace"><span>{t('tasks.workspace')}</span><b> · </b>{workspaceLabel}</span>
+        </TaskPicker>
+      </div>
+      <div className="task-composer-card">
+        <textarea className="task-composer-prompt" aria-label={t('tasks.prompt')} placeholder={t('tasks.describe')} autoFocus required maxLength={131072} value={prompt} disabled={busy}
+          onChange={event => setPrompt(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
+        {busy && <p className="task-composer-status" role="status"><LoaderCircle className="spinning" />{t(task ? 'tasks.saving' : isolated ? 'tasks.creating_workspace' : 'tasks.starting')}</p>}
+        {error && <p className="task-composer-error" role="alert">{error}</p>}
+        <div className="task-composer-toolbar">
+          <span className="task-composer-shortcut">{t('tasks.submit_shortcut')}</span>
+          <div className="task-composer-actions">
+            <TaskPicker label={t('tasks.agent')} value={agent} options={agents.map(item => ({ id: item.id, label: item.name, detail: 'ACP', icon: <AgentIcon agentId={item.id} /> }))} disabled={busy || !!task} searchPlaceholder={t('tasks.search_agents')} upwards onChange={setAgent}>
+              <AgentIcon agentId={agent} /><span>{agentName}</span><span className="task-composer-runtime">ACP</span>
+            </TaskPicker>
+            <button className="task-composer-submit" type="submit" title={t(task ? 'tasks.save' : 'tasks.create')} aria-label={t(task ? 'tasks.save' : 'tasks.create')} disabled={busy || !prompt.trim() || (!task && (!agent || (!isolated && !workspace)))}>
+              {busy ? <LoaderCircle className="spinning" /> : <ArrowUp />}
+            </button>
+          </div>
+        </div>
+      </div>
+    </form>
+  </dialog>;
+}

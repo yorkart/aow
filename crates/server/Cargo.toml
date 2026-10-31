@@ -7,6 +7,7 @@ license.workspace = true
 [dependencies]
 aow-i18n = { path = "../i18n" }
 aow-id = { path = "../id" }
+aow-db = { path = "../db" }
 anyhow.workspace = true
 async-trait.workspace = true
 axum.workspace = true

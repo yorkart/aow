@@ -7,7 +7,7 @@ import type { AowAgentSession } from '../../features/sessions/types';
 import type { AowProject, AowWorktree } from '../types';
 import type { AcpSessionInfo, AcpTab } from '../../features/acp';
 
-export type TabTarget =
+export type TabTarget = (
   | { type: 'terminal'; tabId: string }
   | { type: 'acp'; thread_id: string }
   | { type: 'files'; workspace: string; path: string }
@@ -15,7 +15,8 @@ export type TabTarget =
   | { type: 'diff'; workspace: string; repository: string; path: string; source: 'working' | 'staged' | 'commit'; commit?: string; originalPath?: string; untracked?: boolean }
   | { type: 'pr'; workspace: string; repository: string; provider: string; remote?: string; number: number }
   | { type: 'session'; workspace: string; agent: AowAgentSession['agent']; sessionId: string; cwd: string; taskId?: string; runId?: string }
-  | { type: 'automation'; workspace: string; taskId: string; runId?: string; view?: 'runs' };
+  | { type: 'automation'; workspace: string; taskId: string; runId?: string; view?: 'runs' }
+) & { workTaskId?: string };
 export interface AutomationLocation { view: 'overview' | 'runs'; runId?: string }
 export interface TabContext {
   workspace: string; workspacePath: string; tab?: WorkspaceTab;

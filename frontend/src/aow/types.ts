@@ -50,6 +50,7 @@ export interface AowProject {
   common_git_dir: string;
   notes_path: string;
   worktrees: AowWorktree[];
+  task_worktree?: { base_ref: string | null; branch_template: string; worktree_parent_dir: string };
   error?: string;
 }
 

@@ -1,4 +1,5 @@
 import { t } from '../../../lib/i18n';
+import { useTaskScope } from '../../tasks/TaskScope';
 import { useEffect, useRef, useState } from 'react';
 import { LoaderCircle } from 'lucide-react';
 import { acpApi, sessionsChanged } from '../api';
@@ -36,6 +37,7 @@ async function discover(agent: AgentInfo, workspace: string, active: () => boole
 export function ThreadImport({ agents, existing, workspace, onClose }: {
   agents: AgentInfo[]; existing: SessionInfo[]; workspace: string; onClose: () => void;
 }) {
+  const taskScope = useTaskScope();
   const dialog = useRef<HTMLDialogElement>(null);
   const active = useRef(false);
   const [rows, setRows] = useState<AgentHistory[]>([]);
@@ -72,7 +74,8 @@ export function ThreadImport({ agents, existing, workspace, onClose }: {
     setBusy(true); setError('');
     try {
       for (const row of selected) {
-        await acpApi.importSessions(row.connection!.id, candidates(row));
+        const imported = await acpApi.importSessions(row.connection!.id, candidates(row));
+        for (const session of imported) await taskScope?.attach('acp', session.thread_id);
         replace({ ...row, sessions: [] });
       }
       if (active.current) onClose();

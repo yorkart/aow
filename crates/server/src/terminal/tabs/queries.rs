@@ -63,10 +63,7 @@ impl TerminalManager {
         Ok(detected)
     }
 
-    pub(in crate::terminal) async fn get(
-        &self,
-        tab_id: &str,
-    ) -> Result<TerminalTab, TerminalError> {
+    pub(crate) async fn get(&self, tab_id: &str) -> Result<TerminalTab, TerminalError> {
         self.reconcile().await?;
         self.get_snapshot(tab_id)
     }

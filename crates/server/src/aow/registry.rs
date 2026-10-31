@@ -66,6 +66,8 @@ pub(super) struct StoredProject {
     pub(super) worktree_colors: BTreeMap<String, WorktreeColor>,
     #[serde(default)]
     pub(super) worktree_icons: BTreeMap<String, WorktreeIcon>,
+    #[serde(default)]
+    pub(super) task_worktree: projects::TaskWorktreePolicy,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

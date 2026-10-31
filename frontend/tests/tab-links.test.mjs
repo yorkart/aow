@@ -774,7 +774,7 @@ try {
     const footer = page.locator('.project-aow-sidebar-footer');
     const surface = page.locator('.project-aow-surface:not([hidden])');
     await surface.getByRole('tab', { name: /Target Tab/ }).waitFor();
-    assert.deepEqual(await footer.getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))), ['设置', '收件箱', '打开系统文件浏览器']);
+    assert.deepEqual(await footer.getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))), ['设置', '收件箱', '打开系统文件浏览器', '按任务组织']);
     await footer.getByRole('button', { name: '设置', exact: true }).click();
     const settings = page.locator('.project-aow-settings');
     await settings.getByRole('button', { name: /^笔记/ }).click();

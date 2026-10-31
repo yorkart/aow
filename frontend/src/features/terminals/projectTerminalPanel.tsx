@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import type { AowProject } from '../../aow/types';
 import { useInstancePanelPreferences } from '../instances/useInstancePanelPreferences';
 import { useProjectTerminals } from './useProjectTerminals';
+import { useTaskScope } from '../tasks/TaskScope';
 
 type ProjectTerminalPanelState = ReturnType<typeof useInstancePanelPreferences> & {
   inventory: ReturnType<typeof useProjectTerminals>;
@@ -12,7 +13,8 @@ const ProjectTerminalPanelContext = createContext<ProjectTerminalPanelState | nu
 
 // Keep one inventory and one set of preferences while switching between a project's worktrees.
 export function ProjectTerminalPanelProvider({ project, children }: { project: AowProject; children: ReactNode }) {
-  const preferences = useInstancePanelPreferences(project.id, 'terminal');
+  const taskScope = useTaskScope();
+  const preferences = useInstancePanelPreferences(taskScope ? `task:${taskScope.task.id}` : project.id, 'terminal', !taskScope);
   const [subscribers, setSubscribers] = useState(0);
   const subscribe = useCallback(() => {
     setSubscribers(count => count + 1);

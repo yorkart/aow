@@ -230,9 +230,10 @@ export const terminalApi = {
     }
   },
 
-  async create(workspaceRoot: string, options: { cwd: string; name?: string; agentId?: string; resumeSessionId?: string }): Promise<TerminalTab> {
+  async create(workspaceRoot: string, options: { cwd: string; name?: string; agentId?: string; resumeSessionId?: string; taskId?: string }): Promise<TerminalTab> {
     const payload = await request(TERMINALS_PATH, {
       method: 'POST',
+      headers: options.taskId ? { 'X-Aow-Task': options.taskId } : undefined,
       body: JSON.stringify({
         workspace_root: workspaceRoot,
         cwd: options.cwd,

@@ -138,6 +138,7 @@ impl AowManager {
                     avatar_url: None,
                     worktree_colors: BTreeMap::new(),
                     worktree_icons: BTreeMap::new(),
+                    task_worktree: TaskWorktreePolicy::default(),
                 };
                 state.projects.push(project.clone());
                 self.persist_projects(&state.projects)?;

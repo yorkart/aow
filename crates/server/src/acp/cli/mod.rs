@@ -90,7 +90,7 @@ fn response(
     Ok(Json(result))
 }
 
-fn start(
+pub(crate) fn start(
     state: AppState,
     id: String,
     task: Option<String>,

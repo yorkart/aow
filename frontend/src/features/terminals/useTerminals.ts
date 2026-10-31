@@ -5,6 +5,7 @@ import { useTerminalAgents } from './useTerminalAgents';
 import type { TerminalLayout, TerminalPaneStatus, TerminalTab } from './types';
 import { useTerminalState } from './useTerminalState';
 import { terminalStore } from './terminalStore';
+import { useTaskScope } from '../tasks/TaskScope';
 
 function message(reason: unknown) {
   return reason instanceof Error ? reason.message : String(reason);
@@ -26,6 +27,9 @@ function sameLayout(left: TerminalLayout | null, right: TerminalLayout | null): 
 }
 
 export function useTerminals(workspaceRoot: string, enabled: boolean) {
+  const taskScope = useTaskScope();
+  const taskId = taskScope?.task.id;
+  const rememberTaskResource = taskScope?.remember;
   const snapshot = useTerminalState(enabled);
   const session = terminalStore.session();
   const [tabs, setTabs] = useState<TerminalTab[]>([]);
@@ -93,7 +97,8 @@ export function useTerminals(workspaceRoot: string, enabled: boolean) {
     setBusy(true);
     setError('');
     try {
-      const tab = await terminalApi.create(workspaceRoot, { cwd: workspaceRoot, agentId });
+      const tab = await terminalApi.create(workspaceRoot, { cwd: workspaceRoot, agentId, taskId });
+      rememberTaskResource?.('terminal', tab.id);
       if (!terminalStore.isCurrentSession(session) || workspaceGeneration.current !== rootGeneration
         || workspaceRootRef.current !== workspaceRoot) return null;
       stateRootRef.current = workspaceRoot;
@@ -110,7 +115,7 @@ export function useTerminals(workspaceRoot: string, enabled: boolean) {
         && workspaceGeneration.current === rootGeneration
         && workspaceRootRef.current === workspaceRoot) setBusy(false);
     }
-  }, [workspaceRoot, session]);
+  }, [workspaceRoot, session, taskId, rememberTaskResource]);
 
   const rename = useCallback(async (tabId: string, nextName: string) => {
     const name = nextName.trim();
@@ -240,7 +245,9 @@ export function useTerminals(workspaceRoot: string, enabled: boolean) {
     } : tab));
   }, [session]);
 
-  const currentTabs = stateRootRef.current === workspaceRoot ? tabs : [];
+  const ownsTaskResource = taskScope?.owns;
+  const currentTabs = useMemo(() => stateRootRef.current !== workspaceRoot ? []
+    : ownsTaskResource ? tabs.filter(tab => ownsTaskResource('terminal', tab.id)) : tabs, [workspaceRoot, tabs, ownsTaskResource]);
   const { agents: detectedAgents, titles: terminalTitles, processes: agentProcesses, activity: terminalActivity } = useTerminalAgents(workspaceRoot, enabled && currentTabs.length > 0);
   const currentActiveId = stateRootRef.current === workspaceRoot ? activeId : undefined;
   const activeTab = useMemo(

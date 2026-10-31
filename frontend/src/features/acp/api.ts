@@ -1,4 +1,5 @@
 import { acpRequest } from './request';
+import { taskHeaders } from '../tasks/api';
 import { acpControlHeaders } from '../acp-control/sessionControl';
 import type { AgentInfo, ConnectionInfo, ConnectionStatus, Data, DebugMessage, Permission, SessionImport, SessionInfo, SessionSnapshot, SettingsFile } from './types';
 import type { SessionUpdates } from './session_updates';
@@ -29,7 +30,7 @@ export const acpApi = {
     await acpRequest(`${root}/connections/${encodeURIComponent(id)}/authenticate`, post({ method_id }));
     window.dispatchEvent(new CustomEvent(authenticationCompleted, { detail: id }));
   },
-  create: (agent_id: string, cwd: string) => acpRequest<SessionSnapshot>(`${root}/sessions`, post({ agent_id, cwd })),
+  create: (agent_id: string, cwd: string, taskId?: string) => acpRequest<SessionSnapshot>(`${root}/sessions`, { ...post({ agent_id, cwd }), headers: taskHeaders(taskId) }),
   fork: (thread_id: string, token: string) => acpRequest<SessionSnapshot>(`${root}/sessions/${encodeURIComponent(thread_id)}/fork?view=overview`, { ...post(), headers: { 'X-Aow-Acp-Control': token } }),
   remoteSessions: (connection: string, cursor?: string) => acpRequest<{ sessions: Data[]; nextCursor?: string }>(`${root}/connections/${encodeURIComponent(connection)}/sessions${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
   importSessions: (connection: string, sessions: SessionImport[]) => acpRequest<SessionInfo[]>(`${root}/connections/${encodeURIComponent(connection)}/import`, post(sessions)),

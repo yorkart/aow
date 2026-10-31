@@ -77,7 +77,7 @@ pub(crate) fn routes() -> Router<AppState> {
             },
         ))
 }
-pub(super) fn error(error: anyhow::Error) -> HttpError {
+pub(crate) fn error(error: anyhow::Error) -> HttpError {
     let missing = error.to_string() == "ACP session not found"
         || error.to_string() == "ACP connection not found";
     HttpError::new(
@@ -238,14 +238,24 @@ async fn new_session(
 }
 async fn prepare_session(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(request): Json<Connect>,
 ) -> Result<Json<aow_acp::SessionSnapshot>, HttpError> {
-    state
+    let _operation = state.aow.task_resource_access().await;
+    let task = state.aow.task_scope(&headers, &request.cwd)?;
+    let session = state
         .acp
         .prepare_session(&request.agent_id, request.cwd)
         .await
-        .map(Json)
-        .map_err(error)
+        .map_err(error)?;
+    if let Err(error) = state
+        .aow
+        .attach_task_resource(task.as_deref(), "acp", &session.thread_id)
+    {
+        let _ = state.acp.delete_session(&session.thread_id).await;
+        return Err(error);
+    }
+    Ok(Json(session))
 }
 async fn session_info(
     State(state): State<AppState>,

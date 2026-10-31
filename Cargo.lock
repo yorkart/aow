@@ -378,6 +378,7 @@ dependencies = [
  "aow-agents",
  "aow-automations",
  "aow-config",
+ "aow-db",
  "aow-filesystem",
  "aow-git-service",
  "aow-i18n",

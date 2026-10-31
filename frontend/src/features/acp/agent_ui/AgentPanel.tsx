@@ -1,4 +1,5 @@
 import { t } from '../../../lib/i18n';
+import { useTaskScope } from '../../tasks/TaskScope';
 import { useEffect, useMemo, useState } from 'react';
 import { useInstanceGraph } from '../../instances/useInstanceGraph';
 import { InstanceDescendants, indexTerminalChildren } from '../../terminals/TerminalDescendants';
@@ -32,6 +33,7 @@ export function AgentPanel({ workspace, visible, activeThreadId, onOpen }: {
   workspace: string; visible: boolean; activeThreadId?: string;
   onOpen: (session: SessionInfo) => void;
 }) {
+  const taskScope = useTaskScope();
   const unread = useUnreadAcpThreadIds();
   const graph = useInstanceGraph(visible);
   const childrenIndex = useMemo(() => indexTerminalChildren([], graph.items), [graph.items]);
@@ -74,13 +76,18 @@ export function AgentPanel({ workspace, visible, activeThreadId, onOpen }: {
     catch (reason) { setError(failure(reason)); } finally { setOpening(''); }
   };
   const open = async (session: SessionInfo) => {
-    if (session.cwd === workspace) { onOpen(session); return; }
     setOpening(session.thread_id); setError('');
-    try { await navigate({ type: 'acp', thread_id: session.thread_id }); }
+    try {
+      const owner = taskScope?.owner('acp', session.thread_id);
+      if (owner && owner !== taskScope?.task.id) await navigate({ type: 'acp', thread_id: session.thread_id, workTaskId: owner });
+      else if (session.cwd === workspace) { await taskScope?.attach('acp', session.thread_id); onOpen(session); }
+      else await navigate({ type: 'acp', thread_id: session.thread_id });
+    }
     catch (reason) { setError(failure(reason)); }
     finally { setOpening(''); }
   };
   const matches = synced.data.filter(session => (session.cwd === workspace || showAll)
+    && (!taskScope || showAll || taskScope.owns('acp', session.thread_id))
     && `${session.title} ${session.agent_id}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()))
     .sort(compareSessionActivity);
   const renderSession = (session: SessionInfo) => <InstanceDescendants key={session.thread_id} roots={[{ kind: 'acp', id: session.thread_id }]} title={session.title}

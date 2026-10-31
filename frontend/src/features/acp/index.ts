@@ -8,3 +8,5 @@ export { SessionTab as AcpSessionTab } from './agent_ui/SessionTab';
 export { SessionPage as AcpSessionPage } from './agent_ui/SessionPage';
 export { MobileSessions as MobileAcpSessions } from './agent_ui/MobileSessions';
 export { ProjectAcpPanelProvider } from './agent_ui/projectPanel';
+export { removeAcpWorkspaceTabs, pruneAcpWorkspaceTabs, savedAcpTabs } from './agent_ui/workspace_tabs';
+export { acpApi } from './api';

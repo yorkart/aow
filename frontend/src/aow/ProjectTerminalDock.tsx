@@ -1,4 +1,6 @@
 import { t } from '../lib/i18n';
+import { useTaskScope } from '../features/tasks/TaskScope';
+import { taskScopeKey } from '../features/tasks/api';
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { LoaderCircle, SquareTerminal } from 'lucide-react';
@@ -42,7 +44,11 @@ function readLegacyState(projectId: string): DockState {
 export function ProjectTerminalDockProvider({ project, worktree, controls, onShow, children }: {
   project: AowProject; worktree: AowWorktree; controls: HTMLElement | null; onShow: () => void; children: ReactNode;
 }) {
-  const [state, setState] = useState(() => readStored<Partial<DockState> | null>(storageKey(worktree.path), null) ? readState(storageKey(worktree.path))
+  const taskScope = useTaskScope();
+  const taskId = taskScope?.task.id;
+  const rememberTaskResource = taskScope?.remember;
+  const scope = taskId ? taskScopeKey(taskId) : worktree.path;
+  const [state, setState] = useState(() => taskId ? readState(storageKey(scope)) : readStored<Partial<DockState> | null>(storageKey(worktree.path), null) ? readState(storageKey(worktree.path))
     : worktree.is_main ? readLegacyState(project.id) : readState(storageKey(worktree.path)));
   const snapshot = useTerminalState(true);
   const [host, setHost] = useState<HTMLDivElement | null>(null);
@@ -54,7 +60,7 @@ export function ProjectTerminalDockProvider({ project, worktree, controls, onSho
   const mounted = useRef(true);
   const attemptedMigration = useRef<string | undefined>(undefined);
   const root = worktree.path;
-  const serverTab = snapshot.tabs?.find(tab => tab.dock_project_id === project.id && tab.workspace_root === root);
+  const serverTab = snapshot.tabs?.find(tab => taskId ? tab.id === state.terminalId && taskScope?.owns('terminal', tab.id) : tab.dock_project_id === project.id && tab.workspace_root === root);
   const legacyTab = !serverTab ? snapshot.tabs?.find(tab => tab.id === state.terminalId
     && !tab.dock_project_id && tab.workspace_root === root) : undefined;
   const tab = serverTab ?? legacyTab;
@@ -63,7 +69,7 @@ export function ProjectTerminalDockProvider({ project, worktree, controls, onSho
     setHost(current => active ? element : current === element ? null : current);
   }, []);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  useEffect(() => { persist(storageKey(root), state); }, [root, state]);
+  useEffect(() => { persist(storageKey(scope), state); }, [scope, state]);
   useLayoutEffect(() => { if (host) host.appendChild(container); }, [container, host]);
   useEffect(() => () => container.remove(), [container]);
 
@@ -85,7 +91,8 @@ export function ProjectTerminalDockProvider({ project, worktree, controls, onSho
     setCreating(true);
     const session = terminalStore.session();
     try {
-      const created = await terminalApi.projectDock(project.id, root, legacyId);
+      const created = taskId ? await terminalApi.create(root, { cwd: root, taskId }) : await terminalApi.projectDock(project.id, root, legacyId);
+      rememberTaskResource?.('terminal', created.id);
       if (!mounted.current || !terminalStore.isCurrentSession(session)) return;
       setState(current => ({ ...current, terminalId: created.id }));
       terminalStore.replace(created);
@@ -95,15 +102,15 @@ export function ProjectTerminalDockProvider({ project, worktree, controls, onSho
       creatingRef.current = false;
       if (mounted.current) setCreating(false);
     }
-  }, [project.id, root]);
+  }, [project.id, root, taskId, rememberTaskResource]);
 
   // Upgrade only an explicitly saved, still-existing legacy instance; never infer ownership from its name.
   useEffect(() => {
-    if (!legacyTab || creating || snapshot.error || snapshot.status === 'denied'
+    if (taskId || !legacyTab || creating || snapshot.error || snapshot.status === 'denied'
       || attemptedMigration.current === legacyTab.id) return;
     attemptedMigration.current = legacyTab.id;
     void ensureDock(legacyTab.id);
-  }, [legacyTab, creating, snapshot.error, snapshot.status, ensureDock]);
+  }, [taskId, legacyTab, creating, snapshot.error, snapshot.status, ensureDock]);
 
   const show = async () => {
     if (creatingRef.current) return;
@@ -119,9 +126,9 @@ export function ProjectTerminalDockProvider({ project, worktree, controls, onSho
     await ensureDock(legacyTab?.id);
   };
   const close = () => setState(current => ({ ...current, open: false }));
-  const owns = useCallback((candidate: TerminalTab) => (candidate.dock_project_id === project.id && candidate.workspace_root === root)
+  const owns = useCallback((candidate: TerminalTab) => taskId ? candidate.id === state.terminalId : (candidate.dock_project_id === project.id && candidate.workspace_root === root)
     || !serverTab && !candidate.dock_project_id && candidate.id === state.terminalId && candidate.workspace_root === root,
-  [project.id, serverTab, state.terminalId, root]);
+  [project.id, serverTab, state.terminalId, root, taskId]);
   return <Context.Provider value={{ terminalId: tab?.id, tab, open: state.open, visible, height: state.height,
     publishHost, resize: height => setState(current => ({ ...current, height: clampHeight(height) })), show: () => { void show(); }, owns }}>
     {children}

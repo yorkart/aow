@@ -33,6 +33,7 @@ mod registry;
 mod removal;
 mod sessions;
 mod settings;
+mod tasks;
 mod validation;
 mod worktrees;
 
@@ -78,6 +79,8 @@ pub(crate) struct AowManager {
 }
 
 struct AowInner {
+    tasks: aow_db::tasks::TaskDb,
+    task_operation: tokio::sync::Mutex<()>,
     notifications: crate::notifications::NotificationManager,
     state_dir: Option<PathBuf>,
     config: Option<aow_config::ConfigStore>,
@@ -107,6 +110,8 @@ impl AowManager {
     pub(crate) fn in_memory() -> Self {
         Self {
             inner: Arc::new(AowInner {
+                tasks: aow_db::tasks::TaskDb::open(None).expect("in-memory task database"),
+                task_operation: tokio::sync::Mutex::new(()),
                 notifications: crate::notifications::NotificationManager::in_memory(),
                 state_dir: None,
                 config: None,
@@ -144,6 +149,9 @@ impl AowManager {
         let removals = removal::RemovalJobs::in_memory();
         Ok(Self {
             inner: Arc::new(AowInner {
+                tasks: aow_db::tasks::TaskDb::open(Some(&state_dir.join("state/tasks.sqlite3")))
+                    .map_err(AowError::Configuration)?,
+                task_operation: tokio::sync::Mutex::new(()),
                 notifications,
                 state_dir: Some(state_dir),
                 config: Some(config),

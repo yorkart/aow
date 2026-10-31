@@ -3,6 +3,7 @@ import { useId, useState, type ReactNode } from 'react';
 import { ChevronRight } from 'lucide-react';
 import type { AowWorktree } from '../../aow/types';
 import { useAowTabNavigation } from '../../aow/tabNavigation';
+import { useTaskScope } from '../tasks/TaskScope';
 import { AgentIcon } from '../agents/AgentIcon';
 import { AcpIcon } from '../agents/AcpIcon';
 import { instanceKey, type InstanceInfo, type InstanceRef } from '../instances/types';
@@ -50,6 +51,7 @@ function descendants(ids: string[], ancestors: Set<string>, index: TerminalChild
 function Descendant({ entry, ancestors, ...props }: Props & { entry: Entry; ancestors: Set<string> }) {
   const { tab, pane, info } = entry;
   const navigate = useAowTabNavigation();
+  const taskScope = useTaskScope();
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(false);
   const bodyId = useId();
@@ -65,10 +67,12 @@ function Descendant({ entry, ancestors, ...props }: Props & { entry: Entry; ance
     setError('');
     if (tab && pane && props.onOpen) { props.onOpen(tab, pane.id); return; }
     try {
-      if (info.kind === 'acp') await navigate({ type: 'acp', thread_id: info.id });
+      const workTaskId = taskScope?.owner(info.kind, info.kind === 'acp' ? info.id : info.tab_id ?? info.id);
+      const organization = workTaskId ? { workTaskId } : {};
+      if (info.kind === 'acp') await navigate({ type: 'acp', thread_id: info.id, ...organization });
       else if (info.tab_id) {
         requestTerminalPaneSelection(info.tab_id, info.id);
-        await navigate({ type: 'terminal', tabId: info.tab_id });
+        await navigate({ type: 'terminal', tabId: info.tab_id, ...organization });
       }
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
   };

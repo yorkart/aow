@@ -1,5 +1,8 @@
 mod model;
 mod registry;
+mod task_worktree;
+
+pub(in crate::aow) use task_worktree::TaskWorktreePolicy;
 
 use super::*;
 
@@ -33,6 +36,7 @@ pub(super) struct Project {
     pub(super) builtin: bool,
     pub(super) avatar_url: Option<String>,
     pub(super) worktrees: Vec<Worktree>,
+    pub(super) task_worktree: TaskWorktreePolicy,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) error: Option<String>,
 }

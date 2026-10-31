@@ -10,6 +10,7 @@ pub(super) async fn project_from_stored(stored: StoredProject) -> Project {
         builtin: stored.builtin,
         avatar_url: stored.avatar_url.clone(),
         worktrees: Vec::new(),
+        task_worktree: stored.task_worktree.clone(),
         error: None,
     };
     match project_from_stored_strict(stored).await {
@@ -49,6 +50,7 @@ pub(in crate::aow) async fn project_from_stored_strict(
         builtin: stored.builtin,
         avatar_url: stored.avatar_url,
         worktrees,
+        task_worktree: stored.task_worktree,
         error: None,
     })
 }

@@ -21,11 +21,19 @@ export function parseTabUrl(url: URL): TabTarget | undefined {
   if (!url.pathname.startsWith(prefix)) return;
   const parts = url.pathname.slice(prefix.length).replace(/\/$/, '').split('/').map(decodeURIComponent);
   const adapter = registry.get(parts[0] as TabTarget['type']);
-  if (adapter) return adapter.parse(parts, url.searchParams);
+  if (adapter) {
+    const target = adapter.parse(parts, url.searchParams);
+    const workTaskId = url.searchParams.get('workTask');
+    return workTaskId ? { ...target, workTaskId } : target;
+  }
   if (parts.length === 1 && parts[0]) return { type: 'terminal', tabId: parts[0] }; // Legacy notification links.
   throw new Error(t("aow.unrecognized_tab_link"));
 }
-export const tabTargetUrl = (target: TabTarget) => registry.get(target.type)!.url(target);
+export const tabTargetUrl = (target: TabTarget) => {
+  const path = registry.get(target.type)!.url(target);
+  if (!target.workTaskId) return path;
+  return `${path}${path.includes('?') ? '&' : '?'}workTask=${encodeURIComponent(target.workTaskId)}`;
+};
 export const aowTabUrl = (tabId: string) => tabTargetUrl({ type: 'terminal', tabId });
 export function captureTabTarget(context: TabContext) {
   for (const adapter of adapters) {
