@@ -1978,6 +1978,15 @@
     "settings_title": "Git platform settings"
   },
   "tasks": {
+    "open_router": "Open project Router",
+    "router_hint": "Choose an agent for the project Router. Describe work here and it will delegate tasks to the appropriate roles.",
+    "inspect_result": "Check result",
+    "runtime_status": "Session status",
+    "runtime_unavailable": "Unavailable",
+    "no_response": "No response yet.",
+    "delegated_by": "Requested by",
+    "delegated_tasks": "Delegated tasks",
+    "project_progress": "Project tasks",
     "new": "New task",
     "edit": "Edit task",
     "actions": "Task actions",
@@ -2017,6 +2026,7 @@
     "saving": "Saving…"
   },
   "roles": {
+    "no_mentions": "No matching ACP roles. Configure roles in Settings → Agent Roles.",
     "title": "Agent Roles",
     "description": "Reusable instructions, skills and identities for ACP and CLI agents.",
     "add": "Add Agent Role",

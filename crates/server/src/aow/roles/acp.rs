@@ -121,12 +121,14 @@ impl AowManager {
         id: &str,
         mut content: Vec<Content>,
     ) -> anyhow::Result<Vec<Content>> {
+        self.collaboration_content(service, id, &mut content)?;
         if !content.is_empty()
             && let Some(binding) = self.acp_role_binding(service, id)?
             && !binding.instruction.trim().is_empty()
         {
             content.insert(0, serde_json::from_value(serde_json::json!({
-                "type":"text", "text":format!("Agent role instructions:\n{}\n\n", binding.instruction)
+                "type":"text", "text":format!("Agent role instructions:\n{}\n\n", binding.instruction),
+                "_meta":{"aow/instructions":true}
             }))?);
         }
         Ok(content)

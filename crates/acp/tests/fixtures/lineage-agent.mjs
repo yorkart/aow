@@ -20,8 +20,9 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
       home: process.env.HOME, setting: process.env.CUSTOM_AGENT_SETTING,
       state_dir: process.env.AOW_STATE_DIR, instance: process.env.AOW_INSTANCE,
       caller_session: process.env.AOW_SESSION_ID, connection: process.env.AOW_ACP_CONNECTION_ID })}\n`);
-    if (params.prompt[0]?.text === 'wait') { waiting.set(params.sessionId, id); return; }
-    if (params.prompt[0]?.text === 'rename') write({ jsonrpc: '2.0', method: 'session/update', params: {
+    const input = params.prompt.find(block => !block._meta?.['aow/instructions']);
+    if (input?.text === 'wait') { waiting.set(params.sessionId, id); return; }
+    if (input?.text === 'rename') write({ jsonrpc: '2.0', method: 'session/update', params: {
       sessionId: params.sessionId, update: { sessionUpdate: 'session_info_update', title: 'Provider title' },
     } });
     for (const content of params.prompt) update(params.sessionId, 'user_message_chunk', content);

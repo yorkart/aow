@@ -7,6 +7,12 @@ fn task(id: &str, dependencies: &[&str]) -> TaskRecord {
         prompt: format!("Task {id}"),
         agent_id: "agent".into(),
         agent_role_id: None,
+        is_router: false,
+        source_task_id: None,
+        source_thread_id: None,
+        workspace_intent: None,
+        target_task_id: None,
+        target_revision: None,
         workspace: "/repo".into(),
         workspace_mode: "existing".into(),
         slug: None,
@@ -44,6 +50,31 @@ fn dependencies_are_a_dag_and_failed_edits_are_atomic() {
     );
     assert!(db.insert(&task("duplicate", &["a", "a"])).is_err());
     assert!(!db.list().unwrap().iter().any(|task| task.id == "duplicate"));
+}
+
+#[test]
+fn router_uniqueness_and_delegation_provenance_survive_restart_and_source_removal() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("tasks.sqlite3");
+    let db = TaskDb::open(Some(&path)).unwrap();
+    let mut router = task("router", &[]);
+    router.is_router = true;
+    db.insert(&router).unwrap();
+    let mut duplicate = task("other-router", &[]);
+    duplicate.is_router = true;
+    assert!(db.insert(&duplicate).is_err());
+    let mut child = task("child", &[]);
+    child.source_task_id = Some(router.id.clone());
+    child.source_thread_id = Some("thread-router".into());
+    child.workspace_intent = Some("review".into());
+    child.target_task_id = Some("implementation".into());
+    child.target_revision = Some("revision".into());
+    db.insert(&child).unwrap();
+    drop(db);
+    let db = TaskDb::open(Some(&path)).unwrap();
+    assert_eq!(db.list().unwrap(), vec![router, child.clone()]);
+    db.remove("router").unwrap();
+    assert_eq!(db.list().unwrap(), vec![child]);
 }
 
 #[test]

@@ -13,6 +13,38 @@ aow-cli project get PROJECT-ID
 
 从结果中获取项目的 `id`、`name` 和 `repo_path`。下文的 `PROJECT-ID` 替换为项目 `id`，路径替换为该项目已有的仓库或 worktree 根目录。
 
+## Router、角色 mention 与任务协作
+
+在任务视图中，点击项目旁的“打开项目 Router”，首次选择 ACP Agent 或 ACP Role；之后会复用同一任务和会话。Router 负责接收、澄清和分发需求，开发、设计、排查请求即使没有 mention 也应交给执行任务。普通 ACP task 会话同样可以委派辅助任务。
+
+在 ACP 输入框输入 `@` 可选择角色，角色以头像标签显示。消息使用 `[@名称](mention://role/ROLE_ID)` 保存稳定引用；纯文本 `@名称` 和代码块中的示例不会生成角色引用。后端校验角色 ID，并向模型提供通用协作规则、当前任务身份与本轮引用的角色 ID；角色详情按需查询。当前通过带元数据的 ACP 用户消息前缀注入规则，界面不把该前缀作为用户正文展示；它不是协议级 system message。
+
+```bash
+aow-cli role list
+aow-cli role get ROLE-ID
+aow-cli task list --source-thread THREAD-ID
+
+# 每项新工作使用一个稳定请求 ID；重试复用相同 ID 和内容
+aow-cli task create --source-thread THREAD-ID --request-id login-implementation \
+  --role DEVELOPER-ROLE-ID --intent change --task-file requirement.md
+
+# 审查指定任务的已提交版本，复用目标任务工作区并记录提交 SHA
+aow-cli task create --source-thread THREAD-ID --request-id login-review \
+  --role REVIEWER-ROLE-ID --intent review --target-task login-implementation \
+  --task '审查登录功能，列出问题和验证依据'
+
+aow-cli task get login-review --source-thread THREAD-ID
+aow-cli task send login-implementation --source-thread THREAD-ID --task-file feedback.md
+```
+
+`THREAD-ID` 是 AoW 本地会话 ID，由注入的上下文提供；不是模型供应商的原生 session ID。这些命令使用运行中的 AoW 本机 socket。上下文同时提供 CLI 可执行文件和 state directory，角色 Home 改变时仍应使用该实例的 `--state-dir`。
+
+`change` 从项目默认基线创建独立 worktree；`analyze` 在项目工作区进行无修改的分析；`review` 要求目标任务工作区干净，记录其当前提交，按该提交审查。共享工作区的无修改策略由指令约束，并非文件系统沙箱。已有任务的继续修改使用 `send`，保留原角色与工作区。省略 `--role` 使用发起任务的 ACP adapter 创建普通执行会话，不继承其角色身份。
+
+任务持久化保存来源 task、发起会话和审查目标。`task get` 返回任务、初始 ACP 会话状态、本轮回复及委派任务；`idle` 只代表会话空闲，不能据此认定工作成功。创建成功代表任务已登记并启动，需查询初始化错误或待处理授权。忙碌或被浏览器控制的任务拒绝 `send`；超时后先查询，避免重复投递。
+
+第一版仅支持 ACP 角色协作，结果可从来源会话的任务卡片或 CLI 查询。多角色 mention 由模型理解，尚未实现自动 Inbox 回推、任务依赖调度和开发—审查—返工循环。
+
 ## 启动 Agent 与提交任务
 
 ```bash

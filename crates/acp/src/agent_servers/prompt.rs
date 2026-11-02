@@ -115,8 +115,12 @@ impl AgentServerStore {
             }
             crate::acp_thread::turns::start(thread, entry_start);
             if thread.title == "New conversation" {
-                thread.title = content[0]["text"]
-                    .as_str()
+                thread.title = content
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter(|block| block["_meta"]["aow/instructions"] != true)
+                    .find_map(|block| block["text"].as_str())
                     .unwrap_or("Conversation")
                     .chars()
                     .take(80)

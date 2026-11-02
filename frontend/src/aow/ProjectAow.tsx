@@ -2239,7 +2239,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
   const [activeTaskId, setActiveTaskId] = useState<string>(() => readStored('aow-active-task', ''));
   const [visitedTasks, setVisitedTasks] = useState<Set<string>>(() => new Set());
   const [showArchivedTasks, setShowArchivedTasks] = useState(false);
-  const [taskDialog, setTaskDialog] = useState<{ project: AowProject; task?: WorkTask }>();
+  const [taskDialog, setTaskDialog] = useState<{ project: AowProject; task?: WorkTask; router?: boolean }>();
   const activeTask = taskMode ? taskState.tasks.find(task => task.id === activeTaskId && !task.archived) : undefined;
   useEffect(() => { persist('aow-task-navigation', taskMode); }, [taskMode]);
   useEffect(() => {
@@ -2433,6 +2433,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
   const selectTask = (task: WorkTask) => {
     if (task.archived) return;
     cancelTabNavigation(); setTaskMode(true); setActiveTaskId(task.id); setActiveWorktreePath(task.workspace); setFloatingFocused(false);
+    if (!projects.find(project => project.id === task.project_id)?.worktrees.some(worktree => worktree.path === task.workspace)) void loadProjects(true);
   };
   const mutateTask = async (action: () => Promise<void>) => {
     try { await action(); setError(''); taskState.reload(); } catch (reason) { setError(message(reason)); }
@@ -2858,13 +2859,13 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
                 headerBehavior="navigate" expandOnNavigate={false} togglePosition="end"
                 title={project.name} tooltip={project.registered_path} icon={<ProjectIcon project={project} />} collapsed={collapsedProjects[project.id]}
                 empty={taskMode ? !taskState.tasks.some(task => task.project_id === project.id && task.archived === showArchivedTasks) : !project.worktrees.length && !project.error} onCollapsedChange={collapsed => setCollapsedProjects(current => ({ ...current, [project.id]: collapsed }))}
-                actions={<>{taskMode && <AowIconButton title={t('tasks.new')} onClick={() => setTaskDialog({ project })}><Plus /></AowIconButton>}{!taskMode && <AowIconButton title={t("aow.refresh_worktrees")} aria-label={t("aow.refresh_worktrees_2", { value0: project.name })} onClick={() => {
+                actions={<>{taskMode && <><AowIconButton title={t('tasks.open_router')} onClick={() => { const router = taskState.tasks.find(task => task.project_id === project.id && task.is_router); if (router) selectTask(router); else setTaskDialog({ project, router: true }); }}><MessageSquare /></AowIconButton><AowIconButton title={t('tasks.new')} onClick={() => setTaskDialog({ project })}><Plus /></AowIconButton></>}{!taskMode && <AowIconButton title={t("aow.refresh_worktrees")} aria-label={t("aow.refresh_worktrees_2", { value0: project.name })} onClick={() => {
                   void aowApi.refreshProject(project.id).then(updated => setProjects(items => items.map(item => item.id === project.id ? updated : item)))
                     .catch(reason => setError(message(reason)));
                 }}><RefreshCw /></AowIconButton>}<AowIconButton title={t("aow.project_actions")} aria-label={t("aow.project_actions_2", { value0: project.name })} aria-haspopup="menu"
                   aria-expanded={projectMenu?.project.id === project.id} onClick={event => openProjectMenu(event, project)}><MoreHorizontal /></AowIconButton></>}>
                 {project.error ? <div className="project-aow-project-error">{project.error}</div> : null}
-                {taskMode ? renderTasks(taskState.tasks.filter(task => task.project_id === project.id && task.archived === showArchivedTasks)) : orderedWorktrees.length ? <div className="project-aow-worktrees">{orderedWorktrees.map((worktree) => {
+                {taskMode ? renderTasks(taskState.tasks.filter(task => task.project_id === project.id && task.archived === showArchivedTasks).sort((a, b) => Number(!!b.is_router) - Number(!!a.is_router))) : orderedWorktrees.length ? <div className="project-aow-worktrees">{orderedWorktrees.map((worktree) => {
                   const compact = compactWorktrees.has(worktree.path);
                   const branch = worktree.detached ? t("git.detached_head") : worktree.branch || basename(worktree.path);
                   return <button key={worktree.id} disabled={busyWorktrees.has(worktree.path)} className={[
@@ -2899,7 +2900,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
             const worktree = project?.worktrees.find(item => item.path === task.workspace);
             if (!project || !worktree || busyWorktrees.has(worktree.path)) return null;
             const scope = taskScopeKey(task.id);
-            return <TaskScopeProvider key={task.id} task={task} tasks={taskState.tasks} instances={taskGraph.items}>
+            return <TaskScopeProvider key={task.id} task={task} tasks={taskState.tasks} instances={taskGraph.items} onOpenTask={selectTask}>
               <ProjectTerminalDockProvider project={project} worktree={worktree} controls={terminalDockControls} onShow={() => setBottomPanel(undefined)}>
                 <WorkspaceSurface globalTabs={globalTabs.tabs} browserPath={browserPath} locationSource={locationSource(scope)}
                   initialEntry={taskMode && activeTaskId === task.id && initialEntry?.workspacePath === worktree.path ? initialEntry : undefined}
@@ -2950,7 +2951,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
     {worktreeContextMenu && contextMenuEntry ? <WorktreeContextMenu state={{ ...worktreeContextMenu, ...contextMenuEntry }} savingAppearance={savingWorktreeAppearance} pinned={pinnedWorktrees.has(worktreeContextMenu.worktree.path)} onClose={() => setWorktreeContextMenu(undefined)} onTogglePin={() => togglePinnedWorktree(worktreeContextMenu.worktree.path)} onColorChange={(color) => void changeWorktreeAppearance(contextMenuEntry, { color })} onIconChange={(icon) => void changeWorktreeAppearance(contextMenuEntry, { icon })} onRemove={() => void inspectWorktreeRemoval(worktreeContextMenu)} /> : null}
     {removeWorktreeState ? <RemoveWorktreeDialog state={removeWorktreeState} onClose={() => setRemoveWorktreeState(undefined)} onSubmitted={removalSubmitted} /> : null}
     {projectMenu ? <ProjectMenu state={projectMenu} onClose={() => setProjectMenu(undefined)} onCreateWorktree={() => { setCreationRetry(undefined); setCreateWorktreeProject(projectMenu.project); }} onCleanup={() => { setCleanupProjectId(projectMenu.project.id); void removals.refresh(); }} onBindNotes={() => setBindNotesProject(projectMenu.project)} onRemove={() => void removeProject(projectMenu.project)} /> : null}
-    {taskDialog && <TaskDialog project={taskDialog.project} task={taskDialog.task} onClose={() => setTaskDialog(undefined)} onSaved={task => { taskState.accept(task); selectTask(task); setTaskDialog(undefined); void loadProjects(true); }} />}
+    {taskDialog && <TaskDialog project={taskDialog.project} task={taskDialog.task} router={taskDialog.router} onClose={() => setTaskDialog(undefined)} onSaved={task => { taskState.accept(task); selectTask(task); setTaskDialog(undefined); void loadProjects(true); }} />}
     {confirmationDialog}
     {cleanupProjectId && projects.find(project => project.id === cleanupProjectId) ? <WorktreeCleanupDialog key={cleanupProjectId} project={projects.find(project => project.id === cleanupProjectId)!} isUnallocated={isUnallocated} jobs={removals.jobs.filter(job => job.project_id === cleanupProjectId)} progressError={removals.error} onRefresh={() => void removals.refresh()} onSubmitted={removals.submitted} onClose={() => { removals.dismiss(cleanupProjectId); setCleanupProjectId(undefined); }} /> : null}
     {showRegisterProject ? <RegisterProjectDialog onClose={() => setShowRegisterProject(false)} onRegistered={projectRegistered} /> : null}

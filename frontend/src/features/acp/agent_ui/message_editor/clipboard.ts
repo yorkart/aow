@@ -1,6 +1,7 @@
 import { t } from '../../../../lib/i18n';
 import { createImageId, emptyDraft, hasPendingImages, MAX_PROMPT_BYTES, promptContent, type ComposerDraft } from './model';
 import { MAX_IMAGE_BYTES } from './image';
+import { mentionParts, roleMentionText } from '../../../agent-roles/mentions';
 
 // Synchronous clipboard events also work on LAN HTTP. Carry bytes rather than
 // editor-local IDs so copied images outlive the source draft and browser tab.
@@ -11,7 +12,7 @@ export function writeClipboard(data: DataTransfer, draft: ComposerDraft) {
   const payload = JSON.stringify({ version: 1, content: promptContent(draft) });
   if (new Blob([payload]).size > MAX_PROMPT_BYTES) throw new Error(t("common.selection_exceeds_32_mib_copy_fewer_images_at_a"));
   data.setData(MIME_TYPE, payload);
-  data.setData('text/plain', draft.parts.map(part => part.type === 'text' ? part.text : 'Image').join(''));
+  data.setData('text/plain', draft.parts.map(part => part.type === 'text' ? part.text : part.type === 'role' ? roleMentionText(part) : 'Image').join(''));
 }
 
 export function readClipboard(data: DataTransfer): ComposerDraft | undefined {
@@ -23,7 +24,7 @@ export function readClipboard(data: DataTransfer): ComposerDraft | undefined {
     if (parsed?.version !== 1 || !Array.isArray(parsed.content)) throw new Error();
     const draft = emptyDraft();
     for (const block of parsed.content) {
-      if (block?.type === 'text' && typeof block.text === 'string') draft.parts.push({ type: 'text', text: block.text });
+      if (block?.type === 'text' && typeof block.text === 'string') draft.parts.push(...mentionParts(block.text));
       else if (block?.type === 'image' && block.mimeType === 'image/png' && typeof block.data === 'string' && block.data.length > 0 && block.data.length <= 4 * Math.ceil(MAX_IMAGE_BYTES / 3) && /^[A-Za-z0-9+/]+={0,2}$/.test(block.data)) {
         const id = createImageId();
         draft.parts.push({ type: 'image', id });

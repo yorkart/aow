@@ -18,6 +18,12 @@ pub struct TaskRecord {
     pub prompt: String,
     pub agent_id: String,
     pub agent_role_id: Option<String>,
+    pub is_router: bool,
+    pub source_task_id: Option<String>,
+    pub source_thread_id: Option<String>,
+    pub workspace_intent: Option<String>,
+    pub target_task_id: Option<String>,
+    pub target_revision: Option<String>,
     pub workspace: String,
     pub workspace_mode: String,
     pub slug: Option<String>,
@@ -40,6 +46,7 @@ impl TaskDb {
             &[
                 include_str!("sql/initialize.sql"),
                 include_str!("sql/roles.sql"),
+                include_str!("sql/routing.sql"),
             ],
         )?;
         Ok(Self(Arc::new(Mutex::new(connection))))
@@ -53,7 +60,7 @@ impl TaskDb {
 
     pub fn list(&self) -> Result<Vec<TaskRecord>> {
         let connection = self.lock()?;
-        let mut query = connection.prepare("SELECT id, project_id, prompt, agent_id, workspace, initial_thread_id, pinned, archived, workspace_mode, slug, agent_role_id FROM tasks ORDER BY rowid")?;
+        let mut query = connection.prepare("SELECT id, project_id, prompt, agent_id, workspace, initial_thread_id, pinned, archived, workspace_mode, slug, agent_role_id, is_router, source_task_id, source_thread_id, workspace_intent, target_task_id, target_revision FROM tasks ORDER BY rowid")?;
         let mut tasks = query
             .query_map([], |row| {
                 Ok(TaskRecord {
@@ -68,6 +75,12 @@ impl TaskDb {
                     workspace_mode: row.get(8)?,
                     slug: row.get(9)?,
                     agent_role_id: row.get(10)?,
+                    is_router: row.get(11)?,
+                    source_task_id: row.get(12)?,
+                    source_thread_id: row.get(13)?,
+                    workspace_intent: row.get(14)?,
+                    target_task_id: row.get(15)?,
+                    target_revision: row.get(16)?,
                     dependencies: vec![],
                     resources: vec![],
                 })
@@ -89,8 +102,8 @@ impl TaskDb {
     pub fn insert(&self, task: &TaskRecord) -> Result<()> {
         let mut connection = self.lock()?;
         let tx = connection.transaction()?;
-        tx.execute("INSERT INTO tasks (id, project_id, prompt, agent_id, workspace, initial_thread_id, pinned, archived, workspace_mode, slug, agent_role_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-            params![task.id, task.project_id, task.prompt, task.agent_id, task.workspace, task.initial_thread_id, task.pinned, task.archived, task.workspace_mode, task.slug, task.agent_role_id])?;
+        tx.execute("INSERT INTO tasks (id, project_id, prompt, agent_id, workspace, initial_thread_id, pinned, archived, workspace_mode, slug, agent_role_id, is_router, source_task_id, source_thread_id, workspace_intent, target_task_id, target_revision) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+            params![task.id, task.project_id, task.prompt, task.agent_id, task.workspace, task.initial_thread_id, task.pinned, task.archived, task.workspace_mode, task.slug, task.agent_role_id, task.is_router, task.source_task_id, task.source_thread_id, task.workspace_intent, task.target_task_id, task.target_revision])?;
         replace_dependencies(&tx, &task.id, &task.dependencies)?;
         for resource in &task.resources {
             tx.execute(

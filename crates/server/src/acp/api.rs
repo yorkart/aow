@@ -390,6 +390,16 @@ async fn delete_session(
 ) -> Result<Json<Value>, HttpError> {
     let controller = state.acp_controls.session(&thread_id);
     let _lifecycle = controller.authorize_lifecycle(&headers, true).await?;
+    if state
+        .aow
+        .task_for_thread(&state.acp, &thread_id)
+        .map_err(error)?
+        .is_some_and(|task| task.is_router && task.initial_thread_id.as_deref() == Some(&thread_id))
+    {
+        return Err(crate::instances::invalid(
+            "The project Router conversation is persistent and cannot be deleted",
+        ));
+    }
     state.acp.delete_session(&thread_id).await.map_err(error)?;
     Ok(Json(json!({})))
 }

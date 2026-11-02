@@ -110,6 +110,7 @@ pub async fn start_local_cli(state: AppState, state_dir: &Path) -> anyhow::Resul
     let router = Router::new()
         .merge(crate::automations::cli_routes())
         .merge(crate::acp::cli_routes())
+        .merge(crate::aow::task_cli_routes())
         .route("/v1/instances", get(crate::instances::list))
         .route("/v1/instances/{reference}", get(crate::instances::get))
         .route("/v1/projects", get(list_projects))

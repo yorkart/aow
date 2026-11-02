@@ -1,4 +1,5 @@
 import { t } from '../../../../lib/i18n';
+import { mentionPreview } from '../../../agent-roles/mentions';
 export interface UserTextPart { text: string; image?: string }
 
 // Some agents replay pasted images as text: [@image](data:...) or ![alt](data:...).
@@ -19,5 +20,5 @@ export function userTextParts(value: string): UserTextPart[] {
 }
 
 export function userTextPreview(value: string): string {
-  return userTextParts(value).map(part => part.image ? t("acp.image") : part.text).join('');
+  return userTextParts(value).map(part => part.image ? t("acp.image") : mentionPreview(part.text)).join('');
 }

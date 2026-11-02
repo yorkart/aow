@@ -9,6 +9,7 @@ import { UserText } from './user_text';
 
 export type OpenFile = (path: string, line?: number) => void;
 export const ContentBlock = memo(function ContentBlock({ content, onOpenFile, user = false, message = false }: { content: Data; onOpenFile: OpenFile; user?: boolean; message?: boolean }) {
+  if (object(content._meta)['aow/instructions'] === true) return null;
   if (content.type === 'text') return user ? <UserText text={text(content.text)} /> : <AgentMarkdown text={text(content.text)} onOpenFile={onOpenFile} message={message} />;
   if (content.type === 'image' && /^image\/(png|jpeg|webp|gif)$/.test(text(content.mimeType))) return <img className="acp-image" alt={user ? t("navigation.user_image") : t("common.agent_image")} src={`data:${text(content.mimeType)};base64,${text(content.data)}`} />;
   if (content.type === 'resource') return <span className="acp-resource-label">{text(object(content.resource).uri)}</span>;

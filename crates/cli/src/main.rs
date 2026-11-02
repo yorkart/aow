@@ -1,6 +1,7 @@
 mod acp;
 mod agent;
 mod automation;
+mod collaboration;
 mod input;
 mod instance;
 mod project;
@@ -69,6 +70,10 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Query agent roles for task collaboration.
+    Role(collaboration::RoleArgs),
+    /// Create, inspect and contact project tasks from any ACP task conversation.
+    Task(collaboration::TaskArgs),
     /// Query registered project IDs, names and repository paths through the local server.
     Project(project::ProjectArgs),
     /// Create paused automation tasks and inspect local configurations and execution records.
@@ -122,6 +127,8 @@ fn execute(cli: Cli) -> Result<()> {
         .state_dir
         .unwrap_or_else(aow_filesystem::default_state_dir);
     let value = match cli.command {
+        Command::Role(args) => collaboration::role(args, state_dir)?,
+        Command::Task(args) => collaboration::task(args, state_dir)?,
         Command::Agent(args) => agent::execute(args, state_dir)?,
         Command::Acp(args) => acp::execute(args, state_dir)?,
         Command::Instance(args) => instance::execute(args, state_dir)?,

@@ -1,4 +1,5 @@
 import type { EditorPart } from './model';
+import { roleInitial, type RoleReference } from '../../../agent-roles/mentions';
 
 const isBlock = (node: Node) => node instanceof HTMLElement && ['DIV', 'P'].includes(node.tagName);
 
@@ -15,6 +16,7 @@ export function readParts(root: Node): EditorPart[] {
   const walk = (parent: Node) => Array.from(parent.childNodes).forEach((node, index, siblings) => {
     if (node.nodeType === Node.TEXT_NODE) { append(node.textContent ?? ''); return; }
     if (!(node instanceof HTMLElement)) return;
+    if (node.dataset.roleId && /^[a-zA-Z0-9_-]{1,128}$/.test(node.dataset.roleId)) { parts.push({ type: 'role', id: node.dataset.roleId, name: node.dataset.roleName || node.dataset.roleId }); return; }
     if (node.dataset.imageId) { parts.push({ type: 'image', id: node.dataset.imageId }); return; }
     if (node.tagName === 'BR') { if (index < siblings.length - 1) append('\n'); return; }
     if (isBlock(node) && index > 0) append('\n');
@@ -44,7 +46,30 @@ export function imageChip(id: string): HTMLSpanElement {
 }
 
 export function writeParts(editor: HTMLElement, parts: EditorPart[]) {
-  editor.replaceChildren(...parts.map(part => part.type === 'text' ? document.createTextNode(part.text) : imageChip(part.id)));
+  editor.replaceChildren(...parts.map(part => part.type === 'text' ? document.createTextNode(part.text) : part.type === 'role' ? roleChip(part) : imageChip(part.id)));
+}
+
+export function roleChip(role: RoleReference): HTMLSpanElement {
+  const chip = document.createElement('span');
+  chip.dataset.roleId = role.id; chip.dataset.roleName = role.name;
+  chip.className = 'role-mention'; chip.contentEditable = 'false'; chip.tabIndex = 0;
+  chip.setAttribute('aria-label', `@${role.name}`);
+  const avatar = document.createElement('span'); avatar.className = 'role-avatar'; avatar.setAttribute('aria-hidden', 'true'); avatar.textContent = roleInitial(role.name);
+  chip.append(avatar, document.createTextNode(`@${role.name}`));
+  return chip;
+}
+
+export function mentionAtCaret(editor: HTMLElement): { query: string; range: Range } | undefined {
+  const selection = window.getSelection();
+  if (!selection?.isCollapsed || !editor.contains(selection.anchorNode) || selection.anchorNode?.nodeType !== Node.TEXT_NODE) return;
+  const node = selection.anchorNode;
+  if (node.parentElement?.closest('[contenteditable="false"]')) return;
+  const before = (node.textContent || '').slice(0, selection.anchorOffset);
+  const match = /(?:^|[^a-zA-Z0-9_@])@([^\s@]{0,80})$/.exec(before);
+  if (!match) return;
+  const range = document.createRange();
+  range.setStart(node, selection.anchorOffset - match[1].length - 1); range.setEnd(node, selection.anchorOffset);
+  return { query: match[1], range };
 }
 
 export function selectedParts(editor: HTMLElement): EditorPart[] {
@@ -72,7 +97,7 @@ export function insertAtSelection(editor: HTMLElement, command: 'insertText' | '
   if (!selection?.rangeCount || !editor.contains(selection.anchorNode) || !editor.contains(selection.focusNode)) selectEnd(editor);
   const moveCaretOutsideImage = () => {
     const anchor = selection?.anchorNode;
-    const chip = (anchor instanceof Element ? anchor : anchor?.parentElement)?.closest('[data-image-id]');
+    const chip = (anchor instanceof Element ? anchor : anchor?.parentElement)?.closest('[data-image-id], [data-role-id]');
     if (!selection?.isCollapsed || !chip || !editor.contains(chip)) return;
     const range = document.createRange(); range.setStartAfter(chip); range.collapse(true);
     selection.removeAllRanges(); selection.addRange(range);

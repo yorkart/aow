@@ -1,6 +1,9 @@
 //! Task organization is independent of runtime parent/child relationships.
 mod api;
+mod instructions;
+mod mentions;
 mod model;
+mod routing;
 #[cfg(test)]
 mod tests;
 mod workspace;
@@ -8,6 +11,7 @@ mod workspace;
 use super::*;
 use aow_db::tasks::TaskResource;
 pub(super) use api::routes;
+pub(crate) use routing::cli_routes;
 
 impl AowManager {
     pub(crate) async fn task_resource_access(&self) -> tokio::sync::MutexGuard<'_, ()> {

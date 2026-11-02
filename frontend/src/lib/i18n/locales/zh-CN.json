@@ -1978,6 +1978,15 @@
     "settings_title": "Git 平台设置"
   },
   "tasks": {
+    "open_router": "打开项目 Router",
+    "router_hint": "为项目 Router 选择一个 Agent。在这里描述工作，它会交给合适的角色创建任务执行。",
+    "inspect_result": "查看结果",
+    "runtime_status": "会话状态",
+    "runtime_unavailable": "不可用",
+    "no_response": "暂时没有回复。",
+    "delegated_by": "发起任务",
+    "delegated_tasks": "委派任务",
+    "project_progress": "项目任务",
     "new": "新建任务",
     "edit": "编辑任务",
     "actions": "任务操作",
@@ -2017,6 +2026,7 @@
     "saving": "正在保存…"
   },
   "roles": {
+    "no_mentions": "没有匹配的 ACP 角色，可在设置 → Agent Roles 中配置。",
     "title": "Agent Roles",
     "description": "为 ACP 和 CLI 配置可复用的角色、技能和账户身份。",
     "add": "新增 Agent Role",

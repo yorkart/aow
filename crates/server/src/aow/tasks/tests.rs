@@ -43,6 +43,12 @@ async fn task_dependencies_do_not_cascade_archive_or_delete() {
                 prompt: id.into(),
                 agent_id: "agent".into(),
                 agent_role_id: None,
+                is_router: false,
+                source_task_id: None,
+                source_thread_id: None,
+                workspace_intent: None,
+                target_task_id: None,
+                target_revision: None,
                 workspace: "/repo".into(),
                 workspace_mode: "existing".into(),
                 slug: None,
@@ -206,7 +212,11 @@ async fn creating_tasks_and_helper_sessions_keeps_dependencies_out_of_runtime_li
     .expect("each task submits its initial prompt once, including after a retry");
     let mut texts: Vec<_> = prompts
         .iter()
-        .map(|prompt| prompt["prompt"][0]["text"].as_str().unwrap())
+        .map(|prompt| {
+            prompt["prompt"].as_array().unwrap().last().unwrap()["text"]
+                .as_str()
+                .unwrap()
+        })
         .collect();
     texts.sort();
     assert_eq!(texts, ["Inspect this repository", "Review"]);
@@ -307,6 +317,269 @@ async fn workspace_fixture() -> (tempfile::TempDir, AppState, Project, Router) {
     (directory, state, project, app)
 }
 
+async fn task_idle(state: &AppState, thread: &str) {
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            let session = state.acp.snapshot(thread).unwrap();
+            if session.status == "idle"
+                && (session
+                    .entries
+                    .iter()
+                    .any(|entry| entry.kind == "assistant")
+                    || session.entries.is_empty())
+            {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenance() {
+    use serde_json::json;
+    let (directory, mut state, original, _) = workspace_fixture().await;
+    state.aow = AowManager::persistent(&directory.path().join("state")).unwrap();
+    state.acp = aow_acp::AcpService::new(
+        Arc::new(Host("codex.test")),
+        Some(directory.path().join("routing-acp")),
+    )
+    .unwrap();
+    let project = state
+        .aow
+        .register_project(RegisterProjectRequest {
+            path: original.registered_path,
+            name: None,
+            notes_path: None,
+        })
+        .await
+        .unwrap();
+    std::fs::write(
+        Path::new(&project.registered_path).join(".git/info/exclude"),
+        "lineage-prompts.jsonl\n",
+    )
+    .unwrap();
+    let settings = state.aow.acp_settings().unwrap();
+    state.aow.save_acp_settings(json!({"agent_servers":{"codex.test":{"type":"custom", "command":"node", "args":[
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../acp/tests/fixtures/lineage-agent.mjs")
+    ]}}}).to_string(), settings.revision).await.unwrap();
+    let app = routes()
+        .merge(cli_routes())
+        .merge(roles::routes())
+        .merge(crate::acp::routes())
+        .with_state(state.clone());
+    let (status, role) = call(
+        &app,
+        "POST",
+        "/api/aow/agent-roles",
+        json!({
+            "name":"Engineer", "description":"Implement and investigate",
+            "runtime":{"mode":"acp","agent_id":"codex.test"},
+            "home_layout":"codex", "identity":{"kind":"local_home","source":null},
+            "instruction":"Return concrete findings", "skills":[]
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{role}");
+    let role_id = role["id"].as_str().unwrap();
+    let route = format!("/api/aow/projects/{}/router", project.id);
+    let (first, second) = tokio::join!(
+        call(&app, "POST", &route, json!({"agent_id":"codex.test"})),
+        call(&app, "POST", &route, json!({"agent_id":"codex.test"}))
+    );
+    assert_eq!(first.0, StatusCode::OK, "{}", first.1);
+    assert_eq!(first.1, second.1);
+    let router = first.1;
+    assert_eq!(router["is_router"], true);
+    let source = router["initial_thread_id"].as_str().unwrap();
+    task_idle(&state, source).await;
+    assert_eq!(
+        call(
+            &app,
+            "DELETE",
+            &format!("/api/acp/sessions/{source}"),
+            json!({})
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert!(
+        state.acp.snapshot(source).unwrap().entries.is_empty(),
+        "opening Router must not dispatch work"
+    );
+    let content = state.aow.acp_role_content(&state.acp, source, serde_json::from_value(json!([
+        {"type":"text","text":format!("[@Engineer](mention://role/{role_id}) implement login")}
+    ])).unwrap()).unwrap();
+    assert!(
+        content[0].data["text"]
+            .as_str()
+            .unwrap()
+            .contains("persistent Router")
+    );
+    assert!(content[0].data["text"].as_str().unwrap().contains(role_id));
+    assert!(
+        !content[0].data["text"]
+            .as_str()
+            .unwrap()
+            .contains("Return concrete findings"),
+        "mentioned roles are queried on demand"
+    );
+    let request = json!({"request_id":"implementation","source_thread_id":source,"prompt":"Implement login","agent_role_id":role_id,"intent":"change"});
+    let (status, implementation) = call(&app, "POST", "/v1/tasks", request.clone()).await;
+    assert_eq!(status, StatusCode::OK, "{implementation}");
+    assert_eq!(implementation["source_task_id"], router["id"]);
+    assert_eq!(implementation["source_thread_id"], source);
+    assert_eq!(implementation["workspace_mode"], "new_worktree");
+    assert_ne!(implementation["workspace"], router["workspace"]);
+    let (_, retry) = call(&app, "POST", "/v1/tasks", request.clone()).await;
+    assert_eq!(retry, implementation);
+    let mut changed = request;
+    changed["prompt"] = json!("Different work");
+    assert_eq!(
+        call(&app, "POST", "/v1/tasks", changed).await.0,
+        StatusCode::BAD_REQUEST
+    );
+    let worker = implementation["initial_thread_id"].as_str().unwrap();
+    task_idle(&state, worker).await;
+    let worker_session = state.acp.snapshot(worker).unwrap();
+    assert!(
+        worker_session.parent.is_none(),
+        "delegation is distinct from runtime ownership"
+    );
+    assert!(
+        worker_session.execution_environment.is_some(),
+        "use the selected role's identity"
+    );
+    assert_eq!(
+        worker_session.title, "Implement login",
+        "instructions must not become the title"
+    );
+    let (status, helper) = call(&app, "POST", "/v1/tasks", json!({"request_id":"helper","source_thread_id":worker,"prompt":"Investigate the API","intent":"analyze"})).await;
+    assert_eq!(status, StatusCode::OK, "{helper}");
+    assert_eq!(helper["source_task_id"], "implementation");
+    assert_eq!(helper["workspace"], router["workspace"]);
+    assert!(
+        helper["agent_role_id"].is_null(),
+        "fallback executor must not inherit the sender's role"
+    );
+    let (status, review) = call(&app, "POST", "/v1/tasks", json!({"request_id":"review","source_thread_id":worker,"prompt":"Review login","agent_role_id":role_id,"intent":"review","target_task_id":"implementation"})).await;
+    assert_eq!(status, StatusCode::OK, "{review}");
+    assert_eq!(review["workspace"], implementation["workspace"]);
+    assert_eq!(review["target_revision"].as_str().unwrap().len(), 40);
+    task_idle(&state, review["initial_thread_id"].as_str().unwrap()).await;
+    let (status, result) = call(
+        &app,
+        "GET",
+        &format!("/v1/tasks/review?source_thread_id={worker}"),
+        json!({}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{result}");
+    assert_eq!(result["runtime"]["response"], "Done");
+    let (status, sent) = call(
+        &app,
+        "POST",
+        "/v1/tasks/review/send",
+        json!({"source_thread_id":worker,"prompt":"Check error handling too"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{sent}");
+    let review_thread = review["initial_thread_id"].as_str().unwrap();
+    task_idle(&state, review_thread).await;
+    state
+        .acp
+        .start_prompt(
+            review_thread,
+            serde_json::from_value(json!([{"type":"text","text":"wait"}])).unwrap(),
+        )
+        .unwrap();
+    let (status, _) = call(
+        &app,
+        "POST",
+        "/v1/tasks/review/send",
+        json!({"source_thread_id":worker,"prompt":"Do not duplicate this"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    state.acp.cancel(review_thread).unwrap();
+    task_idle(&state, review_thread).await;
+    let mut foreign = state
+        .aow
+        .inner
+        .tasks
+        .list()
+        .unwrap()
+        .into_iter()
+        .find(|task| task.id == "implementation")
+        .unwrap();
+    foreign.id = "foreign".into();
+    foreign.project_id = "other-project".into();
+    foreign.resources.clear();
+    foreign.initial_thread_id = None;
+    state.aow.inner.tasks.insert(&foreign).unwrap();
+    for (method, path, body) in [
+        (
+            "GET",
+            format!("/v1/tasks/foreign?source_thread_id={worker}"),
+            json!({}),
+        ),
+        (
+            "POST",
+            "/v1/tasks/foreign/send".into(),
+            json!({"source_thread_id":worker,"prompt":"Cross-project message"}),
+        ),
+        (
+            "POST",
+            "/v1/tasks".into(),
+            json!({"request_id":"foreign-review","source_thread_id":worker,"prompt":"Review","intent":"review","target_task_id":"foreign"}),
+        ),
+    ] {
+        assert_eq!(
+            call(&app, method, &path, body).await.0,
+            StatusCode::BAD_REQUEST
+        );
+    }
+    state.aow.inner.tasks.remove("foreign").unwrap();
+    std::fs::write(
+        Path::new(implementation["workspace"].as_str().unwrap()).join("uncommitted.txt"),
+        "changes",
+    )
+    .unwrap();
+    let (status, _) = call(&app, "POST", "/v1/tasks", json!({"request_id":"dirty-review","source_thread_id":worker,"prompt":"Review dirty files","intent":"review","target_task_id":"implementation"})).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(state.aow.inner.tasks.list().unwrap().len(), 4);
+    assert_eq!(
+        call(
+            &app,
+            "PATCH",
+            &format!("/api/aow/tasks/{}", router["id"].as_str().unwrap()),
+            json!({"archived":true})
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert!(
+        state
+            .aow
+            .acp_role_content(
+                &state.acp,
+                worker,
+                serde_json::from_value(
+                    json!([{"type":"text","text":"[@missing](mention://role/missing) fix"}])
+                )
+                .unwrap()
+            )
+            .is_err()
+    );
+    for workspace in state.aow.project(&project.id).await.unwrap().worktrees {
+        state.acp.delete_workspace(&workspace.path).await.unwrap();
+    }
+}
+
 #[tokio::test]
 async fn new_worktree_defaults_create_and_execute_without_client_configuration() {
     let (directory, state, project, app) = workspace_fixture().await;
@@ -399,7 +672,10 @@ async fn new_worktree_defaults_create_and_execute_without_client_configuration()
         .map(|line| serde_json::from_str(line).unwrap())
         .collect();
     assert_eq!(prompts.len(), 1, "Retry must not execute the task twice");
-    assert_eq!(prompts[0]["prompt"][0]["text"], "Inspect repository");
+    assert_eq!(
+        prompts[0]["prompt"].as_array().unwrap().last().unwrap()["text"],
+        "Inspect repository"
+    );
     state
         .acp
         .delete_workspace(&target.to_string_lossy())
@@ -549,6 +825,7 @@ async fn invalid_creation_intent_does_not_create_a_checkout() {
         serde_json::json!({"workspace":project.registered_path}),
         serde_json::json!({"request_id":"../escape"}),
         serde_json::json!({"agent_id":"missing"}),
+        serde_json::json!({"prompt":"[@Unknown](mention://role/missing) implement a feature"}),
         serde_json::json!({"dependencies":["missing"]}),
     ] {
         let mut input = request.clone();

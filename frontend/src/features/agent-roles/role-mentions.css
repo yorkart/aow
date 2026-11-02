@@ -1,0 +1,7 @@
+.role-mention { display:inline-flex; align-items:center; gap:4px; padding:0 5px 0 2px; border-radius:12px; background:color-mix(in srgb,var(--aow-accent) 12%,var(--aow-panel)); color:var(--aow-text); white-space:nowrap; vertical-align:baseline; font-family:var(--aow-font, sans-serif); font-size:.94em; }
+.role-avatar { display:inline-flex; flex-shrink:0; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; background:color-mix(in srgb,var(--aow-accent) 20%,var(--aow-panel)); color:var(--aow-accent); font-size:11px; font-weight:600; }
+.role-mention-menu { max-height:220px; overflow:auto; padding:4px; border:1px solid var(--aow-line); border-radius:8px; background:var(--aow-panel); }
+.role-mention-menu > button { display:flex; align-items:center; gap:8px; width:100%; border:0; padding:7px; border-radius:5px; text-align:left; color:var(--aow-text); background:transparent; cursor:pointer; }
+.role-mention-menu > button[aria-selected="true"] { background:var(--aow-selection); }
+.role-mention-menu small { margin-left:auto; max-width:65%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--aow-muted); }
+.role-mention-menu > p { margin:6px; color:var(--aow-muted); font-size:12px; }

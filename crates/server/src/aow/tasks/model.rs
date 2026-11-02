@@ -6,12 +6,18 @@ pub(super) fn storage(error: anyhow::Error) -> HttpError {
 }
 
 #[derive(Serialize)]
-pub(super) struct Task {
+pub(crate) struct Task {
     pub id: String,
     pub project_id: String,
     pub prompt: String,
     pub agent_id: String,
     pub agent_role_id: Option<String>,
+    pub is_router: bool,
+    pub source_task_id: Option<String>,
+    pub source_thread_id: Option<String>,
+    pub workspace_intent: Option<String>,
+    pub target_task_id: Option<String>,
+    pub target_revision: Option<String>,
     pub workspace: String,
     pub workspace_mode: String,
     pub slug: Option<String>,
@@ -23,7 +29,7 @@ pub(super) struct Task {
 }
 
 #[derive(Serialize, Deserialize)]
-pub(super) struct Resource {
+pub(crate) struct Resource {
     pub kind: String,
     pub id: String,
 }
@@ -36,6 +42,12 @@ impl From<TaskRecord> for Task {
             prompt: task.prompt,
             agent_id: task.agent_id,
             agent_role_id: task.agent_role_id,
+            is_router: task.is_router,
+            source_task_id: task.source_task_id,
+            source_thread_id: task.source_thread_id,
+            workspace_intent: task.workspace_intent,
+            target_task_id: task.target_task_id,
+            target_revision: task.target_revision,
             workspace: task.workspace,
             workspace_mode: task.workspace_mode,
             slug: task.slug,

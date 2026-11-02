@@ -169,7 +169,7 @@ async fn role_policy_is_owned_by_the_application_and_survives_edits_removal_and_
             .collect();
     assert_eq!(
         prompts[0]["prompt"],
-        json!([{"type":"text","text":"Agent role instructions:\nReview carefully\n\n"},{"type":"text","text":"hello"}])
+        json!([{"type":"text","text":"Agent role instructions:\nReview carefully\n\n","_meta":{"aow/instructions":true}},{"type":"text","text":"hello"}])
     );
     assert_eq!(
         prompts[1]["prompt"],

@@ -3343,6 +3343,59 @@ try {
     await page.getByText('Hello from ACP', { exact: true }).waitFor();
     assert.deepEqual(interactions(state)[0].content, [{ type: 'text', text: 'first\nsecond' }]);
   });
+  await test('role mentions are atomic avatars, survive clipboard round trips and keep stable IDs', async t => {
+    const { page, state } = await fixture(t);
+    await page.route('**/api/aow/agent-roles', route => route.fulfill({ json: [
+      { id: 'dev', name: 'Dev', description: 'Implements', runtime: { mode: 'acp', agent_id: 'test' } },
+      { id: 'review', name: 'Reviewer', description: 'Reviews', runtime: { mode: 'acp', agent_id: 'test' } },
+      { id: 'cli', name: 'Terminal only', runtime: { mode: 'cli', agent_id: 'test' } },
+    ] }));
+    await newSession(page);
+    const input = page.getByRole('textbox', { name: 'ACP 消息', exact: true });
+    await input.pressSequentially('@De');
+    await page.getByRole('option', { name: 'Dev Implements', exact: true }).waitFor();
+    await input.press('Enter');
+    assert.equal(interactions(state).length, 0, 'choosing a person does not submit');
+    assert.equal(await input.locator('[data-role-id="dev"][contenteditable="false"]').count(), 1);
+    await input.pressSequentially('implement login then @Rev');
+    await page.getByRole('option', { name: 'Reviewer Reviews', exact: true }).click();
+    await input.pressSequentially('review');
+    assert.equal(await input.locator('.role-avatar').count(), 2);
+    const copied = await input.evaluate(element => {
+      const range = document.createRange(); range.selectNodeContents(element);
+      const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+      const data = new DataTransfer(); element.dispatchEvent(new ClipboardEvent('copy', { clipboardData: data, bubbles: true, cancelable: true }));
+      return Object.fromEntries(data.types.map(type => [type, data.getData(type)]));
+    });
+    assert.match(copied['text/plain'], /\[@Dev\]\(mention:\/\/role\/dev\)/);
+    await input.fill('');
+    await input.evaluate((element, copied) => {
+      const data = new DataTransfer(); for (const [type, value] of Object.entries(copied)) data.setData(type, value);
+      element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    }, copied);
+    assert.equal(await input.locator('[data-role-id]').count(), 2);
+    await input.press('Enter');
+    await page.getByText('Hello from ACP', { exact: true }).waitFor();
+    assert.equal(interactions(state).at(-1).content[0].text, '[@Dev](mention://role/dev) implement login then [@Reviewer](mention://role/review) review');
+    assert.equal(await page.locator('.acp-user-text [data-role-id]').count(), 2);
+    const decoded = await page.evaluate(async () => {
+      const { mentionParts, roleMentionText } = await import('/src/features/agent-roles/mentions.ts');
+      return {
+        code: mentionParts('`[@Dev](mention://role/dev)`\n\n```md\n[@Dev](mention://role/dev)\n```').filter(part => part.type === 'role'),
+        references: mentionParts('[@Dev][r]\n\n[r]: mention://role/dev').filter(part => part.type === 'role'),
+        renamed: mentionParts(roleMentionText({ id: 'dev', name: '研发 [二组]' })),
+      };
+    });
+    assert.deepEqual(decoded.code, []);
+    assert.deepEqual(decoded.references, []);
+    assert.deepEqual(decoded.renamed, [{ type: 'role', id: 'dev', name: '研发 [二组]' }]);
+    await input.pressSequentially('@Dev');
+    await page.getByRole('option', { name: 'Dev Implements', exact: true }).waitFor();
+    await input.press('Escape');
+    assert.equal(await page.locator('.role-mention-menu').count(), 0);
+    assert.equal(interactions(state).length, 1);
+    await page.screenshot({ path: '/tmp/aow-role-mentions.png' });
+  });
   await test('slash commands use advertised suggestions and do not submit until explicitly sent', async t => {
     const { page, state } = await fixture(t);
     state.session.commands = [{ name: 'review', description: 'Review the changes' }, { name: 'help', description: 'Show help' }];

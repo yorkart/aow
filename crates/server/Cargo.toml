@@ -19,6 +19,7 @@ libc.workspace = true
 mime_guess.workspace = true
 md5.workspace = true
 percent-encoding.workspace = true
+pulldown-cmark = { version = "0.13", default-features = false }
 reqwest.workspace = true
 ring = "0.17"
 aow-agents = { path = "../agents", features = ["launch", "sessions", "automation"] }

@@ -15,7 +15,7 @@ try {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
     t.after(() => context.close());
     await context.addInitScript(() => localStorage.setItem('aow.language', 'en-US'));
-    let failDelete = false, nextTerminal = 0;
+    let failDelete = false, nextTerminal = 0, routerCreations = 0;
     const tasks = [], sessions = [], terminals = [], creations = [], deleted = [], worktreeRequests = [];
     const worktree = { id: 'wt', project_id: 'project', path: '/repo', branch: 'main', head: 'abc', is_main: true, detached: false, locked: false, prunable: false, color: 'default' };
     const project = { id: 'project', name: 'Task project', registered_path: '/repo', common_git_dir: '/repo/.git', notes_path: '/notes', worktrees: [worktree] };
@@ -45,6 +45,15 @@ try {
       else if (path.includes('/pinned-')) data = { paths: [], revision: 0 };
       else if (path === '/api/aow/notifications') data = { revision: 0, items: [], unread_count: 0 };
       else if (path === '/api/instances') data = { items: [] };
+      else if (path === '/api/aow/projects/project/router' && request.method() === 'POST') {
+        routerCreations++;
+        data = tasks.find(task => task.is_router);
+        if (!data) {
+          const first = session('router-thread');
+          data = { id: 'router-project', project_id: 'project', prompt: 'Router', agent_id: 'test', is_router: true, workspace: '/repo', workspace_mode: 'existing', dependencies: [], pinned: false, archived: false, initial_thread_id: first.thread_id, resources: [{ kind: 'acp', id: first.thread_id }] };
+          tasks.push(data);
+        }
+      }
       else if (path === '/api/aow/tasks') {
         if (request.method() === 'POST') {
           const input = request.postDataJSON(); creations.push(input);
@@ -60,6 +69,8 @@ try {
           }
           tasks.push(data);
         } else data = tasks;
+      } else if (path.startsWith('/api/aow/tasks/') && request.method() === 'GET') {
+        data = { task: tasks.find(task => task.id === path.split('/').at(-1)), runtime: { status: 'idle', response: 'Finished investigation' }, delegated: [] };
       } else if (path.startsWith('/api/aow/tasks/') && request.method() === 'PATCH') {
         Object.assign(tasks.find(task => task.id === path.split('/').at(-1)), request.postDataJSON());
         return route.fulfill({ status: 204 });
@@ -270,6 +281,35 @@ try {
     await page.getByRole('menuitem', { name: 'Close all', exact: true }).click();
     await agentTab.first().waitFor({ state: 'hidden' });
     assert.equal(terminals.filter(tab => tasks.at(-1).resources.some(resource => resource.kind === 'terminal' && resource.id === tab.id)).length, 0);
+    if (await floating.isVisible()) await floating.getByRole('button', { name: 'Minimize floating workspace', exact: true }).click();
+    await sidebar.getByRole('button', { name: 'Open project Router', exact: true }).click();
+    const routerDialog = page.getByRole('dialog');
+    await routerDialog.getByText(/Choose an agent for the project Router/).waitFor();
+    assert.equal(await routerDialog.getByRole('textbox', { name: 'Task description', exact: true }).count(), 0);
+    await routerDialog.getByRole('button', { name: 'Open project Router', exact: true }).click();
+    await row('Router').waitFor();
+    await surface.getByRole('tab').filter({ hasText: 'router-thread' }).waitFor();
+    await surface.locator('.task-collaboration summary').filter({ hasText: 'Project tasks' }).waitFor();
+    await surface.locator('.task-collaboration-card').first().getByRole('button', { name: 'Check result', exact: true }).click();
+    await surface.getByText('Finished investigation', { exact: true }).waitFor();
+    await page.reload();
+    await row('Router').waitFor();
+    await sidebar.getByRole('button', { name: 'Open project Router', exact: true }).click();
+    assert.equal(routerCreations, 1, 'opening the persistent Router reuses its task and conversation');
+    assert.equal(await page.getByRole('dialog').count(), 0);
+    tasks[2].source_task_id = tasks[1].id;
+    await row(tasks[1].prompt).getByRole('button', { name: tasks[1].prompt, exact: true }).click();
+    await page.reload();
+    await surface.locator('.task-collaboration summary').filter({ hasText: 'Delegated tasks' }).waitFor();
+    await surface.locator('.task-collaboration-title').filter({ hasText: tasks[2].prompt }).click();
+    await surface.locator('.task-collaboration').getByText('Requested by:', { exact: false }).waitFor();
+    // A delegated task may appear before the project/worktree event reaches this browser.
+    const delegated = session('delegated-thread', '/repo-delegated');
+    project.worktrees.push({ ...worktree, id: 'delegated-wt', path: delegated.cwd, branch: 'task/delegated', is_main: false });
+    tasks.push({ ...tasks[2], id: 'delegated', prompt: 'Delegated implementation', workspace: delegated.cwd, initial_thread_id: delegated.thread_id, dependencies: [], resources: [{ kind: 'acp', id: delegated.thread_id }] });
+    await page.evaluate(() => window.dispatchEvent(new Event('aow:tasks-changed')));
+    await row('Delegated implementation').getByRole('button', { name: 'Delegated implementation', exact: true }).click();
+    await surface.getByRole('tab').filter({ hasText: delegated.thread_id }).waitFor();
     assert.deepEqual(errors, []);
     await page.screenshot({ path: '/tmp/aow-task-organization.png' });
   });

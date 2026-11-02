@@ -12,7 +12,11 @@ pub(in crate::aow) fn routes() -> Router<AppState> {
         .route("/api/aow/tasks", get(list).post(create))
         .route(
             "/api/aow/tasks/{id}",
-            axum::routing::patch(update).delete(remove),
+            get(super::routing::get).patch(update).delete(remove),
+        )
+        .route(
+            "/api/aow/projects/{id}/router",
+            post(super::routing::router),
         )
         .route("/api/aow/tasks/{id}/resources", post(attach))
 }
@@ -33,7 +37,7 @@ async fn list(State(state): State<AppState>) -> Result<Json<Vec<Task>>, HttpErro
 
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
-enum WorkspaceMode {
+pub(super) enum WorkspaceMode {
     Existing,
     NewWorktree,
 }
@@ -48,21 +52,26 @@ impl WorkspaceMode {
 }
 
 #[derive(Deserialize)]
-struct Create {
-    request_id: String,
-    project_id: String,
-    prompt: String,
+pub(super) struct Create {
+    pub request_id: String,
+    pub project_id: String,
+    pub prompt: String,
     #[serde(default)]
-    agent_id: String,
-    agent_role_id: Option<String>,
-    workspace_mode: WorkspaceMode,
-    workspace: Option<String>,
-    slug: Option<String>,
+    pub agent_id: String,
+    pub agent_role_id: Option<String>,
+    pub workspace_mode: WorkspaceMode,
+    pub workspace: Option<String>,
+    pub slug: Option<String>,
     #[serde(default)]
-    dependencies: Vec<String>,
+    pub dependencies: Vec<String>,
+    #[serde(default)]
+    pub is_router: bool,
+    pub source_thread_id: Option<String>,
+    pub workspace_intent: Option<String>,
+    pub target_task_id: Option<String>,
 }
 
-async fn create(
+pub(super) async fn create(
     State(state): State<AppState>,
     Json(request): Json<Create>,
 ) -> Result<Json<Task>, HttpError> {
@@ -105,6 +114,9 @@ async fn create(
         let _operation = state.aow.task_resource_access().await;
         let tasks = state.aow.inner.tasks.list().map_err(storage)?;
         if let Some(task) = tasks.iter().find(|task| task.id == request.request_id) {
+            if task.is_router && request.is_router && task.project_id == request.project_id {
+                return Ok(Json(task.clone().into()));
+            }
             if task.project_id != request.project_id
                 || task.prompt != request.prompt
                 || task.agent_role_id != request.agent_role_id
@@ -119,12 +131,76 @@ async fn create(
                         .as_deref()
                         != Some(Path::new(&task.workspace)))
                 || task.dependencies != request.dependencies
+                || task.is_router != request.is_router
+                || task.source_thread_id != request.source_thread_id
+                || task.workspace_intent != request.workspace_intent
+                || task.target_task_id != request.target_task_id
             {
                 return Err(crate::instances::invalid(
                     "Task request ID belongs to another request",
                 ));
             }
             return Ok(Json(task.clone().into()));
+        }
+        // Reject unresolved references before provisioning a workspace or session.
+        for id in super::mentions::role_mentions(&request.prompt) {
+            state.aow.agent_role(&id).map_err(aow_http_error)?;
+        }
+        let source = request
+            .source_thread_id
+            .as_deref()
+            .map(|id| super::routing::source_task(&state, id))
+            .transpose()?;
+        if source.is_some()
+            && !matches!(
+                request.workspace_intent.as_deref(),
+                Some("change" | "analyze" | "review")
+            )
+        {
+            return Err(crate::instances::invalid(
+                "Delegation requires a workspace intent",
+            ));
+        }
+        if source.is_none()
+            && (request.workspace_intent.is_some() || request.target_task_id.is_some())
+        {
+            return Err(crate::instances::invalid(
+                "Delegation requires a source conversation",
+            ));
+        }
+        if request.target_task_id.is_some() && request.workspace_intent.as_deref() != Some("review")
+        {
+            return Err(crate::instances::invalid(
+                "Only reviews accept a target task",
+            ));
+        }
+        if matches!(
+            request.workspace_intent.as_deref(),
+            Some("analyze" | "review")
+        ) && !matches!(request.workspace_mode, WorkspaceMode::Existing)
+        {
+            return Err(crate::instances::invalid(
+                "Analysis and review use an existing workspace",
+            ));
+        }
+        if source
+            .as_ref()
+            .is_some_and(|task| task.project_id != request.project_id)
+        {
+            return Err(crate::instances::invalid(
+                "Delegation must stay within the source project",
+            ));
+        }
+        if request.is_router
+            && (source.is_some()
+                || request.workspace_intent.is_some()
+                || request.target_task_id.is_some()
+                || !request.dependencies.is_empty()
+                || !matches!(request.workspace_mode, WorkspaceMode::Existing))
+        {
+            return Err(crate::instances::invalid(
+                "Router must use the project workspace without a delegation source",
+            ));
         }
         let mut seen = std::collections::HashSet::new();
         for dependency in &request.dependencies {
@@ -145,6 +221,15 @@ async fn create(
             .map(|id| state.aow.agent_role(id))
             .transpose()
             .map_err(aow_http_error)?;
+        if (request.is_router || source.is_some())
+            && role
+                .as_ref()
+                .is_some_and(|role| matches!(role.config.runtime, roles::RoleRuntime::Cli { .. }))
+        {
+            return Err(crate::instances::invalid(
+                "Task collaboration requires an ACP role",
+            ));
+        }
         let agent = if let Some(role) = &role {
             state.aow.check_role_runtime(role, &state).await?;
             match &role.config.runtime {
@@ -154,7 +239,9 @@ async fn create(
         } else {
             let agent = state
                 .acp
-                .select_agent_id(Some(&request.agent_id))
+                .select_agent_id(
+                    (!request.agent_id.is_empty()).then_some(request.agent_id.as_str()),
+                )
                 .await
                 .map_err(crate::acp::task_error)?;
             if !state
@@ -185,6 +272,8 @@ async fn create(
             .agent_worktree_path(&request.project_id, &path)
             .await
             .map_err(aow_http_error)?;
+        let target_revision =
+            super::routing::validate_workspace(&state, &request, &workspace).await?;
         // Dependencies are organizational, never runtime parents.
         let session = if let Some(role) = &role {
             state
@@ -209,6 +298,12 @@ async fn create(
             prompt: request.prompt,
             agent_id: agent,
             agent_role_id: request.agent_role_id,
+            is_router: request.is_router,
+            source_task_id: source.map(|task| task.id),
+            source_thread_id: request.source_thread_id,
+            workspace_intent: request.workspace_intent,
+            target_task_id: request.target_task_id,
+            target_revision,
             workspace,
             workspace_mode: request.workspace_mode.as_str().into(),
             slug,
@@ -225,7 +320,7 @@ async fn create(
             session.discard(&state).await;
             return Err(crate::instances::invalid(error.to_string()));
         }
-        session.start(&state, Some(task.prompt.clone()))?;
+        session.start(&state, (!task.is_router).then(|| task.prompt.clone()))?;
         Ok(Json(task.into()))
     })
     .await
@@ -249,6 +344,20 @@ async fn update(
         validate_prompt(prompt)?;
     }
     let _operation = state.aow.task_resource_access().await;
+    if state
+        .aow
+        .inner
+        .tasks
+        .list()
+        .map_err(storage)?
+        .iter()
+        .any(|task| task.id == id && task.is_router)
+        && (request.archived == Some(true) || request.dependencies.is_some())
+    {
+        return Err(crate::instances::invalid(
+            "The project Router remains active and has no task dependencies",
+        ));
+    }
     state
         .aow
         .inner
@@ -269,6 +378,19 @@ async fn remove(
     AxumPath(id): AxumPath<String>,
 ) -> Result<StatusCode, HttpError> {
     let _operation = state.aow.task_resource_access().await;
+    if state
+        .aow
+        .inner
+        .tasks
+        .list()
+        .map_err(storage)?
+        .iter()
+        .any(|task| task.id == id && task.is_router)
+    {
+        return Err(crate::instances::invalid(
+            "The project Router cannot be deleted as a task",
+        ));
+    }
     state
         .aow
         .inner

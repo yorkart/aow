@@ -22,6 +22,7 @@ import { messageGroups, visibleMessageGroups } from './entry_view_state';
 import { ThinkingVisibility } from '../thinking_visibility';
 import { list, object, text, type Data, type SessionSnapshot, type TurnOverview } from '../../types';
 import { SpinnerLabel } from '../ui/spinner_label';
+import { TaskCollaboration } from '../../../tasks/TaskCollaboration';
 
 function TokenUsage({ usage }: { usage: Data | null }) {
   if (!usage) return null;
@@ -128,6 +129,7 @@ export function ThreadView({ session, workspace, tabId, busy: pending, supportsI
     })}
     accessory={
       <div className="acp-content acp-activity">
+        <TaskCollaboration />
         <SessionMeta metadata={session.session_meta} />
         {session.notices?.map(notice => <Notice key={notice.id} notice={notice} busy={busy} onDismiss={() => { void onAction({ action: 'dismiss_notice', notice_id: notice.id }); }} />)}
         {session.permissions.filter(permission => !tools.has(toolId(permission))).map(permission => <PermissionRequest key={permission.id} permission={permission} requester={session.agent_id} busy={busy} onAnswer={response => { void onAction({ action: 'answer', request_id: permission.id, response }); }} />)}
