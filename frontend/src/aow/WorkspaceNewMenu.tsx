@@ -4,15 +4,18 @@ import { FileText, NotebookPen, SquareTerminal } from 'lucide-react';
 import type { AowAgent } from '../features/agents/types';
 import { AgentIcon } from '../features/agents/AgentIcon';
 import { aowAgentType } from '../features/agents/agentTypes';
+import { RoleMenu } from '../features/agent-roles/RoleMenu';
+import type { AgentRole } from '../features/agent-roles/api';
 import { AcpNewSessionMenu } from '../features/acp/workspace';
 
-export function WorkspaceNewMenu({ anchor, agents, onOpenFile, onCreateNote, onCreateTerminal, onCreateAcp, onSelect }: {
+export function WorkspaceNewMenu({ anchor, agents, onOpenFile, onCreateNote, onCreateTerminal, onCreateAcp, onCreateRole, onSelect }: {
   anchor: RefObject<HTMLElement | null>;
   agents: AowAgent[];
   onOpenFile?: () => void;
   onCreateNote: (kind: 'md' | 'txt') => void;
   onCreateTerminal: (agent?: AowAgent) => void;
   onCreateAcp?: (agentId: string) => void;
+  onCreateRole?: (role: AgentRole) => void;
   onSelect?: () => void;
 }) {
   const menu = useRef<HTMLDivElement>(null);
@@ -49,6 +52,7 @@ export function WorkspaceNewMenu({ anchor, agents, onOpenFile, onCreateNote, onC
     {agents.filter(agent => agent.available).map(agent => <button data-workspace-open key={agent.id} title={agent.source === 'detected' ? t("common.auto_detected") : t("im.configured")} onClick={action(() => onCreateTerminal(agent))}><AgentIcon agentId={aowAgentType(agent)} /><span>{agent.display_name}</span></button>)}
     {!agents.some(agent => agent.available) ? <div className="project-aow-menu-empty">{t("aow.no_agents_available")}</div> : null}
     {onCreateAcp ? <AcpNewSessionMenu onCreate={agentId => { onSelect?.(); onCreateAcp(agentId); }} /> : null}
+    {onCreateRole && <RoleMenu onCreate={role => { onSelect?.(); onCreateRole(role); }} />}
     <div className="project-aow-menu-label">{t("navigation.notes")}</div>
     <button data-workspace-open title={t("aow.create_a_temporary_note_in_the_project_s_notes")} onClick={action(() => onCreateNote('md'))}><NotebookPen /><span>{t("aow.new_markdown")}</span></button>
     {onOpenFile ? <div className="project-aow-menu-label">{t("navigation.files")}</div> : null}

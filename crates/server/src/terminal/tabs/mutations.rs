@@ -118,7 +118,7 @@ impl TerminalManager {
         })
     }
 
-    pub(in crate::terminal) async fn delete_tab(&self, tab_id: &str) -> Result<(), TerminalError> {
+    pub(crate) async fn delete_tab(&self, tab_id: &str) -> Result<(), TerminalError> {
         let _operation = self.inner.operation.lock().await;
         let pane_ids = {
             let mut state = self.lock_state()?;

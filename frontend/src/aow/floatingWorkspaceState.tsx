@@ -5,6 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import type { ReactNode } from 'react';
 import type { FileEntry } from '../features/files/types';
 import type { TerminalTab } from '../features/terminals/types';
+import type { AgentRole } from '../features/agent-roles/api';
 import type { AowAgent } from '../features/agents/types';
 import { isWorkspaceTabKind, type WorkspaceTab, type TabRevealRequest } from './WorkspaceTabs';
 import { WorkspaceMenuLabel } from './WorkspaceMenuLabel';
@@ -18,6 +19,7 @@ export interface WorkspaceCommands {
   create: (kind: 'markdown' | 'text' | 'terminal', agent?: AowAgent) => void;
   openFile: (entry: FileEntry) => void;
   createAcp: (agentId: string) => void;
+  createRole?: (role: AgentRole) => void;
   close: (id: string) => void;
   closePreview: (id: string) => void;
   // Closing a group dismisses its views; terminal instances keep running.

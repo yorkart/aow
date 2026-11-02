@@ -74,12 +74,7 @@ impl AgentServerStore {
             );
             ensure!(
                 service
-                    .inner
-                    .threads
-                    .lock()
-                    .unwrap()
-                    .metadata
-                    .entry_by_session(&source.agent_id, &source.cwd, &fork_id)
+                    .native_thread_in_environment(&connection, &fork_id)?
                     .is_none(),
                 "Agent returned an existing session ID for a fork"
             );
@@ -89,6 +84,7 @@ impl AgentServerStore {
                     source.cwd.clone().into(),
                     crate::facade::SessionCreation {
                         parent: Some(aow_protocol::InstanceRef::acp(&source.thread_id)),
+                        execution_environment: source.execution_environment.clone(),
                         ..Default::default()
                     },
                 )

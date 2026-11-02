@@ -237,7 +237,13 @@ impl AgentServerStore {
             }
         }
         let environment = self.inner.host.execution_environment();
-        let configuration = format!("{launch_settings}\n{execution_path:?}\n{environment:?}");
+        let execution_environment = thread_id
+            .map(|id| self.snapshot(id).map(|thread| thread.execution_environment))
+            .transpose()?
+            .flatten();
+        let configuration = format!(
+            "{launch_settings}\n{execution_path:?}\n{environment:?}\n{execution_environment:?}"
+        );
         // Do not hold the connection registry while consulting a session operation:
         // committing a load also updates the thread-to-connection association.
         let preferred = thread_id.and_then(|id| self.session_connection(id).ok());
@@ -292,6 +298,13 @@ impl AgentServerStore {
             &command,
         )?;
         command.env.extend(environment);
+        if let Some(execution) = &execution_environment {
+            execution.validate()?;
+            command.env.extend(execution.env.clone());
+            command
+                .env
+                .insert("HOME".into(), execution.home.to_string_lossy().into_owned());
+        }
         let debug_log = self.inner.logs.create_log();
         if let Some(thread_id) = thread_id {
             debug_log.attach(thread_id);
@@ -302,6 +315,7 @@ impl AgentServerStore {
                 cwd,
                 command,
                 acp::StdioContext {
+                    execution_environment,
                     events: self.inner.events.clone(),
                     host: self.inner.host.clone(),
                     execution_path,
@@ -400,9 +414,13 @@ impl AgentServerStore {
     pub async fn new_session(&self, connection_id: &str) -> Result<SessionSnapshot> {
         let connection = self.connection(connection_id)?;
         let thread = self
-            .prepare_session(
+            .prepare_session_with_options(
                 &connection.info.agent_id,
                 connection.info.cwd.clone().into(),
+                crate::facade::SessionCreation {
+                    execution_environment: connection.execution_environment.clone(),
+                    ..Default::default()
+                },
             )
             .await?;
         self.create_on_connection(connection, &thread.thread_id)
@@ -434,6 +452,7 @@ impl AgentServerStore {
             connection.info.agent_id.clone(),
             connection.info.cwd.clone(),
         );
+        thread.execution_environment = connection.execution_environment.clone();
         let previous = self.snapshot(&id).ok();
         if let Some(previous) = &previous {
             thread.title = previous.title.clone();
@@ -511,14 +530,7 @@ impl AgentServerStore {
             .unwrap()
             .workspace_version(&connection.info.cwd)?;
         ensure!(connection.connected(), "ACP adapter is disconnected");
-        let existing = self
-            .inner
-            .threads
-            .lock()
-            .unwrap()
-            .metadata
-            .entry_by_session(&connection.info.agent_id, &connection.info.cwd, session_id)
-            .map(|thread| thread.thread_id.clone());
+        let existing = self.native_thread_in_environment(&connection, session_id)?;
         if let Some(id) = &existing {
             ensure!(
                 self.snapshot(id)?.status != "working",
@@ -529,9 +541,13 @@ impl AgentServerStore {
             Some(id) => id,
             None => {
                 let thread = self
-                    .prepare_session(
+                    .prepare_session_with_options(
                         &connection.info.agent_id,
                         connection.info.cwd.clone().into(),
+                        crate::facade::SessionCreation {
+                            execution_environment: connection.execution_environment.clone(),
+                            ..Default::default()
+                        },
                     )
                     .await?;
                 self.inner

@@ -1319,7 +1319,7 @@ async fn create_rejects_unregistered_or_mismatched_project_worktrees() {
 
 #[tokio::test]
 async fn cli_codex_skips_update_menu_without_changing_profile_or_manual_launch() {
-    let fixture = Fixture::new("update").await;
+    let fixture = Fixture::with_storage("update", true).await;
     let app = crate::build_router(fixture.state.clone());
     let id = "custom-codex";
     let args = json!([
@@ -1376,6 +1376,68 @@ async fn cli_codex_skips_update_menu_without_changing_profile_or_manual_launch()
     .await;
     // This custom Python entrypoint does not advertise Codex CLI options.
     assert_eq!(manual["panes"][0]["arguments"], args);
+    let role = post(
+        &app,
+        "/api/aow/agent-roles",
+        json!({
+            "name":"Codex role", "runtime":{"mode":"cli", "agent_id":id},
+            "identity":{"kind":"local_home", "source":null}
+        }),
+    )
+    .await;
+    let task = post(
+        &app,
+        "/api/aow/tasks",
+        json!({
+            "request_id":"role-update-task", "project_id":fixture.project_id,
+            "workspace_mode":"existing", "workspace":fixture.repo,
+            "agent_role_id":role["id"], "prompt":"role task after skipping update"
+        }),
+    )
+    .await;
+    let tab_id = task["resources"][0]["id"].as_str().unwrap();
+    tokio::time::timeout(Duration::from_secs(8), async {
+        loop {
+            let tab = fixture.state.terminals.get_snapshot(tab_id).unwrap();
+            let progress = tab.panes[0].agent_terminal.as_ref().unwrap();
+            if progress.phase == AgentTerminalPhase::Ready {
+                assert!(progress.task_submitted);
+                if std::fs::read_to_string(&fixture.log)
+                    .unwrap()
+                    .contains("role task after skipping update")
+                {
+                    break;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let manual_role = post(
+        &app,
+        &format!(
+            "/api/aow/agent-roles/{}/sessions",
+            role["id"].as_str().unwrap()
+        ),
+        json!({
+            "project_id":fixture.project_id, "cwd":fixture.repo
+        }),
+    )
+    .await;
+    assert_eq!(manual_role["terminal"]["panes"][0]["arguments"], args);
+    assert_eq!(
+        json!(
+            fixture
+                .state
+                .aow
+                .resolve_agent_profile(id)
+                .await
+                .unwrap()
+                .args
+        ),
+        args
+    );
     fixture.stop().await;
 }
 
@@ -1563,6 +1625,7 @@ async fn native_startup_probes() {
                     args: vec![],
                     env: Default::default(),
                 },
+                &[],
                 Some(AgentTerminalState {
                     phase: AgentTerminalPhase::Starting,
                     error: None,

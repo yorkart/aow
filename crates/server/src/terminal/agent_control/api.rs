@@ -1,7 +1,6 @@
 use super::super::*;
 use super::{COLS, ROWS, connection::AgentConnection, model::info};
 use crate::operations::{Handle, Spec};
-use aow_agents::launch::AgentType;
 use aow_operation_log::Outcome;
 use aow_protocol::{
     AgentTerminalCreate, AgentTerminalInfo, AgentTerminalPhase, AgentTerminalState,
@@ -112,7 +111,7 @@ async fn create_inner(
     let temporary = workspace
         .as_ref()
         .filter(|workspace| workspace.workspace_mode == aow_workspaces::WorkspaceMode::Temporary);
-    let (cwd, mut launch) = if let Some(workspace) = temporary {
+    let (cwd, launch) = if let Some(workspace) = temporary {
         let requested = std::fs::canonicalize(&request.cwd)
             .map_err(|error| terminal_http_error(TerminalError::Invalid(error.to_string())))?;
         if requested != workspace.directory {
@@ -146,19 +145,6 @@ async fn create_inner(
             agent_id
         )))
     })?;
-    if launch.agent_type == AgentType::Codex {
-        // Managed startup must reach the input prompt without an update menu.
-        // Override only this invocation, after profile flags and before any `--`.
-        let index = launch
-            .args
-            .iter()
-            .position(|arg| arg == "--")
-            .unwrap_or(launch.args.len());
-        launch.args.splice(
-            index..index,
-            ["-c".into(), "check_for_update_on_startup=false".into()],
-        );
-    }
     let parent = crate::instances::creation_parent(
         &state,
         request.parent,
@@ -183,6 +169,7 @@ async fn create_inner(
                 cols: Some(COLS),
             },
             launch,
+            &[],
             Some(AgentTerminalState {
                 phase: AgentTerminalPhase::Starting,
                 error: None,

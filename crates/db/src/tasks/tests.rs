@@ -6,6 +6,7 @@ fn task(id: &str, dependencies: &[&str]) -> TaskRecord {
         project_id: "project".into(),
         prompt: format!("Task {id}"),
         agent_id: "agent".into(),
+        agent_role_id: None,
         workspace: "/repo".into(),
         workspace_mode: "existing".into(),
         slug: None,

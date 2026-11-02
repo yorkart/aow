@@ -22,6 +22,7 @@ use std::{
 use tokio_util::sync::CancellationToken;
 
 pub(crate) struct AcpConnection {
+    pub execution_environment: Option<crate::facade::ExecutionEnvironment>,
     pub info: ConnectionInfo,
     connection: ConnectionTo<Agent>,
     pub context: Arc<ClientContext>,
@@ -33,6 +34,7 @@ pub(crate) struct AcpConnection {
 }
 
 pub(super) struct StdioContext {
+    pub execution_environment: Option<crate::facade::ExecutionEnvironment>,
     pub events: crate::facade::events::SyncEvents,
     pub host: Arc<dyn AcpHost>,
     pub execution_path: Option<std::ffi::OsString>,
@@ -163,6 +165,7 @@ impl AcpConnection {
             response.protocol_version
         );
         let result = Self {
+            execution_environment: runtime.execution_environment,
             info: ConnectionInfo {
                 id: debug_log.connection_id.clone(),
                 agent_id,

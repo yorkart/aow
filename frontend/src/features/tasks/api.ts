@@ -6,6 +6,7 @@ export interface WorkTask {
   project_id: string;
   prompt: string;
   agent_id: string;
+  agent_role_id?: string | null;
   workspace: string;
   workspace_mode: 'existing' | 'new_worktree';
   slug: string | null;
@@ -29,7 +30,7 @@ async function mutate<T>(url: string, method: string, body?: unknown): Promise<T
 }
 export const tasksApi = {
   list: (signal?: AbortSignal) => acpRequest<WorkTask[]>(root, { signal, cache: 'no-store' }),
-  create: (input: Pick<WorkTask, 'project_id' | 'prompt' | 'agent_id' | 'dependencies'> & { request_id: string; slug?: string } & ({ workspace_mode: 'existing'; workspace: string } | { workspace_mode: 'new_worktree'; workspace?: never })) => mutate<WorkTask>(root, 'POST', input),
+  create: (input: Pick<WorkTask, 'project_id' | 'prompt' | 'agent_id' | 'agent_role_id' | 'dependencies'> & { request_id: string; slug?: string } & ({ workspace_mode: 'existing'; workspace: string } | { workspace_mode: 'new_worktree'; workspace?: never })) => mutate<WorkTask>(root, 'POST', input),
   update: (id: string, input: Partial<Pick<WorkTask, 'prompt' | 'pinned' | 'archived' | 'dependencies'>>) => mutate<void>(path(id), 'PATCH', input),
   remove: (id: string) => mutate<void>(path(id), 'DELETE'),
   attach: (id: string, resource: TaskResource) => mutate<void>(`${path(id)}/resources`, 'POST', resource),

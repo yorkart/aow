@@ -49,6 +49,7 @@ mod pi_detection;
 mod project_dock;
 mod rebuild;
 mod requests;
+mod roles;
 mod runtime;
 mod session_titles;
 mod sessions;

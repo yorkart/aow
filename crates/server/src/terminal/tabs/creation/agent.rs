@@ -6,7 +6,7 @@ impl TerminalManager {
         request: CreateTerminalRequest,
         launch: AgentLaunch,
     ) -> Result<TerminalTab, TerminalError> {
-        self.create_agent_with_state(request, launch, None, None, None)
+        self.create_agent_with_state(request, launch, &[], None, None, None)
             .await
     }
 
@@ -14,6 +14,7 @@ impl TerminalManager {
         &self,
         request: CreateTerminalRequest,
         mut launch: AgentLaunch,
+        initial_arguments: &[String],
         agent_terminal: Option<aow_protocol::AgentTerminalState>,
         parent: Option<aow_protocol::InstanceRef>,
         instances: Option<&crate::instances::InstanceStore>,
@@ -54,6 +55,19 @@ impl TerminalManager {
         validate_directory(&workspace_root).await?;
         let (rows, cols) = terminal_size(request.rows, request.cols)?;
         let pane_id = aow_id::new_id();
+        if agent_terminal.is_some() && launch.agent_type == aow_agents::launch::AgentType::Codex {
+            // All managed launches must reach the input prompt without an update menu.
+            // Override the profile only for this terminal, before any literal arguments.
+            let index = launch
+                .args
+                .iter()
+                .position(|arg| arg == "--")
+                .unwrap_or(launch.args.len());
+            launch.args.splice(
+                index..index,
+                ["-c".into(), "check_for_update_on_startup=false".into()],
+            );
+        }
         launch.prepare_terminal(&pane_id, Path::new(&cwd)).await;
         if launch.agent_type == aow_agents::launch::AgentType::Pi {
             let state = launch
@@ -118,6 +132,9 @@ impl TerminalManager {
             tab
         };
         let mut spec = self.runtime_spec(&pane);
+        // Initial task input belongs only to this process launch. Rebuilds use
+        // the persisted pane arguments and must never replay that task.
+        spec.arguments.extend_from_slice(initial_arguments);
         spec.environment = launch.env;
         configure_runtime_environment(&pane_id, &mut spec);
         if let Err(error) = self

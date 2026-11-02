@@ -1,7 +1,11 @@
 use std::{ffi::OsStr, path::Path};
 
-pub(super) const REGISTRIES: [&str; 3] =
-    ["aow-projects.json", "aow-agents.json", "aow-settings.json"];
+pub(super) const REGISTRIES: [&str; 4] = [
+    "aow-projects.json",
+    "aow-agents.json",
+    "aow-settings.json",
+    "aow-agent-roles.json",
+];
 pub(super) fn is_configuration(path: &Path) -> bool {
     if REGISTRIES.iter().any(|name| path == Path::new(name))
         || path == Path::new("git-platform-providers.json")

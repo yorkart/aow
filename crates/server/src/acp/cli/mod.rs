@@ -51,7 +51,7 @@ async fn create(
         let cwd = state.aow.agent_worktree_path(&request.project_id, &request.cwd).await.map_err(crate::aow::aow_http_error)?;
         let parent = instances::creation_parent(&state, request.parent, request.caller.as_ref(), request.no_parent)?;
         let agent_id = state.acp.select_agent_id(request.agent_id.as_deref()).await.map_err(super::api::error)?;
-        let session = state.acp.prepare_session_with_options(&agent_id, cwd.into(), aow_acp::SessionCreation { source: aow_acp::SessionSource::Cli, parent }).await.map_err(super::api::error)?;
+        let session = state.aow.prepare_acp_child_session(&state.acp, &agent_id, cwd.into(), aow_acp::SessionSource::Cli, parent).await.map_err(super::api::error)?;
         let id = session.thread_id;
         let info = state.acp.session_info(&id).map_err(super::api::error)?;
         if let Err(error) = state.instances.record_all(vec![instances::acp(&info)]) {
@@ -107,6 +107,10 @@ pub(crate) fn start(
                 kind: "text".into(),
                 data: serde_json::Map::from_iter([("text".into(), task.into())]),
             }];
+            let content = state
+                .aow
+                .acp_role_content(&state.acp, &id, content)
+                .map_err(super::api::error)?;
             state.acp.start_prompt(&id, content).map_err(|error| {
                 let message = error.to_string();
                 if message == "ACP session is busy or disconnected" {

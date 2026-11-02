@@ -7,7 +7,7 @@ import { productionPreview } from './fixtures/production-preview.mjs';
 const server = await productionPreview();
 const base = `http://127.0.0.1:${server.httpServer.address().port}`;
 const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
-const categories = ['外观', '节点', '编辑器', '笔记', '环境', 'ACP', 'Agent', 'IM', '通知', 'Git 平台'];
+const categories = ['外观', '节点', '编辑器', '笔记', '环境', 'ACP', 'Agent Roles', 'Agent', 'IM', '通知', 'Git 平台'];
 
 async function fixture(t, width = 390, mobile = true, virtualViewport = false, agents) {
   const context = await browser.newContext({ viewport: { width, height: 844 }, isMobile: mobile, hasTouch: mobile });
@@ -117,7 +117,8 @@ async function fixture(t, width = 390, mobile = true, virtualViewport = false, a
   await dialog.getByRole('navigation', { name: '设置分类' }).waitFor();
   const choose = async name => {
     if (mobile && await dialog.getByRole('button', { name: '返回设置分类' }).isVisible()) await dialog.getByRole('button', { name: '返回设置分类' }).click();
-    await dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button', { name: new RegExp(`^${{"Agents": "Agent", "Environment": "环境", "Editor": "编辑器", "Notes": "笔记", "Nodes": "节点", "Appearance": "外观"}[name] ?? name}`) }).click();
+    const label = { Agents: 'Agent', Environment: '环境', Editor: '编辑器', Notes: '笔记', Nodes: '节点', Appearance: '外观' }[name] ?? name;
+    await dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button').filter({ has: page.getByText(label, { exact: true }) }).click();
   };
   const save = async text => {
     await dialog.getByRole('button', { name: '保存', exact: true }).click();
@@ -281,7 +282,7 @@ try {
       await dialog.getByRole('button', { name: '关闭', exact: true }).click();
       await page.locator('.project-aow-worktrees > button').first().click();
       await page.getByRole('button', { name: '新建窗体', exact: true }).click();
-      assert.deepEqual(await page.locator('.project-aow-new-menu button[title="Auto detected"], .project-aow-new-menu button[title="Configured"]').allTextContents(),
+      assert.deepEqual(await page.locator('.project-aow-new-menu button').filter({ has: page.locator('.agent-icon') }).allTextContents(),
         ordered.map(id => initial.find(agent => agent.id === id).display_name), 'the existing menu reflects the saved order without local sorting');
     }
   });

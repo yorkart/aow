@@ -17,6 +17,7 @@ pub struct TaskRecord {
     pub project_id: String,
     pub prompt: String,
     pub agent_id: String,
+    pub agent_role_id: Option<String>,
     pub workspace: String,
     pub workspace_mode: String,
     pub slug: Option<String>,
@@ -36,7 +37,10 @@ impl TaskDb {
         crate::sqlite::migrate(
             &mut connection,
             "AowTasks",
-            &[include_str!("sql/initialize.sql")],
+            &[
+                include_str!("sql/initialize.sql"),
+                include_str!("sql/roles.sql"),
+            ],
         )?;
         Ok(Self(Arc::new(Mutex::new(connection))))
     }
@@ -49,7 +53,7 @@ impl TaskDb {
 
     pub fn list(&self) -> Result<Vec<TaskRecord>> {
         let connection = self.lock()?;
-        let mut query = connection.prepare("SELECT id, project_id, prompt, agent_id, workspace, initial_thread_id, pinned, archived, workspace_mode, slug FROM tasks ORDER BY rowid")?;
+        let mut query = connection.prepare("SELECT id, project_id, prompt, agent_id, workspace, initial_thread_id, pinned, archived, workspace_mode, slug, agent_role_id FROM tasks ORDER BY rowid")?;
         let mut tasks = query
             .query_map([], |row| {
                 Ok(TaskRecord {
@@ -63,6 +67,7 @@ impl TaskDb {
                     archived: row.get(7)?,
                     workspace_mode: row.get(8)?,
                     slug: row.get(9)?,
+                    agent_role_id: row.get(10)?,
                     dependencies: vec![],
                     resources: vec![],
                 })
@@ -84,8 +89,8 @@ impl TaskDb {
     pub fn insert(&self, task: &TaskRecord) -> Result<()> {
         let mut connection = self.lock()?;
         let tx = connection.transaction()?;
-        tx.execute("INSERT INTO tasks (id, project_id, prompt, agent_id, workspace, initial_thread_id, pinned, archived, workspace_mode, slug) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-            params![task.id, task.project_id, task.prompt, task.agent_id, task.workspace, task.initial_thread_id, task.pinned, task.archived, task.workspace_mode, task.slug])?;
+        tx.execute("INSERT INTO tasks (id, project_id, prompt, agent_id, workspace, initial_thread_id, pinned, archived, workspace_mode, slug, agent_role_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            params![task.id, task.project_id, task.prompt, task.agent_id, task.workspace, task.initial_thread_id, task.pinned, task.archived, task.workspace_mode, task.slug, task.agent_role_id])?;
         replace_dependencies(&tx, &task.id, &task.dependencies)?;
         for resource in &task.resources {
             tx.execute(

@@ -103,6 +103,7 @@ export function FloatingWorkspace({ agents, projects, activeLocation = true }: {
         }}
         onCreateNote={kind => create(kind === 'md' ? 'markdown' : 'text')}
         onCreateTerminal={agent => create('terminal', agent)} newLabel={t("aow.new_in_floating_workspace")} tabListLabel={t("aow.floating_workspace_tabs")}
+        onCreateRole={floating.globalRoot ? role => { cancelTabNavigation(); floating.sources.current.get(floating.globalRoot)?.createRole?.(role); } : undefined}
         onCreateAcp={floating.globalRoot ? agentId => { cancelTabNavigation(); floating.sources.current.get(floating.globalRoot)?.createAcp(agentId); } : undefined}
         controls={<div className="floating-workspace-window-actions">
           <button title={t("aow.global_projects_panel")} aria-label={t("aow.global_projects_panel")} aria-pressed={floating.sidebarOpen} onClick={() => floating.setSidebarOpen(!floating.sidebarOpen)}><PanelRight /></button>

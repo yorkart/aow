@@ -25,4 +25,5 @@ pub(crate) fn routes() -> Router<AppState> {
         .merge(agents::routes())
         .merge(sessions::routes())
         .merge(tasks::routes())
+        .merge(roles::routes())
 }

@@ -31,6 +31,7 @@ mod project_avatar;
 mod projects;
 mod registry;
 mod removal;
+pub(crate) mod roles;
 mod sessions;
 mod settings;
 mod tasks;
@@ -79,6 +80,7 @@ pub(crate) struct AowManager {
 }
 
 struct AowInner {
+    roles: roles::RoleStore,
     tasks: aow_db::tasks::TaskDb,
     task_operation: tokio::sync::Mutex<()>,
     notifications: crate::notifications::NotificationManager,
@@ -110,6 +112,7 @@ impl AowManager {
     pub(crate) fn in_memory() -> Self {
         Self {
             inner: Arc::new(AowInner {
+                roles: roles::RoleStore::default(),
                 tasks: aow_db::tasks::TaskDb::open(None).expect("in-memory task database"),
                 task_operation: tokio::sync::Mutex::new(()),
                 notifications: crate::notifications::NotificationManager::in_memory(),
@@ -143,12 +146,25 @@ impl AowManager {
         let agents_path = config.directory().join(AGENTS_FILE);
         let settings_path = config.directory().join(SETTINGS_FILE);
         let projects = load_registry(&projects_path)?;
+        let role_items = load_registry(&config.directory().join("aow-agent-roles.json"))?;
+        let role_sessions: Vec<roles::AcpRoleSession> =
+            load_registry(&state_dir.join(roles::SESSIONS_FILE))?;
         let (agents, default_agent_id) = load_agents(&agents_path)?;
         let settings = load_settings(&settings_path, notes_base)?;
         let notifications = crate::notifications::NotificationManager::persistent(&state_dir)?;
         let removals = removal::RemovalJobs::in_memory();
         Ok(Self {
             inner: Arc::new(AowInner {
+                roles: roles::RoleStore {
+                    items: Mutex::new(role_items),
+                    sessions: Mutex::new(
+                        role_sessions
+                            .into_iter()
+                            .map(|item| (item.thread_id.clone(), item))
+                            .collect(),
+                    ),
+                    ..Default::default()
+                },
                 tasks: aow_db::tasks::TaskDb::open(Some(&state_dir.join("state/tasks.sqlite3")))
                     .map_err(AowError::Configuration)?,
                 task_operation: tokio::sync::Mutex::new(()),

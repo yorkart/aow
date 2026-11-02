@@ -16,6 +16,9 @@ impl AgentServerStore {
         if let Some(parent) = &creation.parent {
             parent.validate().map_err(anyhow::Error::msg)?;
         }
+        if let Some(environment) = &creation.execution_environment {
+            environment.validate()?;
+        }
         let cwd = tokio::fs::canonicalize(cwd).await?;
         ensure!(cwd.is_dir(), "ACP working directory must be a directory");
         let workspace = cwd.to_string_lossy().into_owned();
@@ -36,6 +39,7 @@ impl AgentServerStore {
             agent_id.into(),
             cwd.to_string_lossy().into_owned(),
         );
+        thread.execution_environment = creation.execution_environment;
         thread.parent = creation.parent;
         thread.source = creation.source;
         thread.status = "disconnected".into();

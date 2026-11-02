@@ -59,6 +59,7 @@ import { WorktreeIcon, worktreeColors, worktreeColorValues, worktreeIconGroups, 
 import { WorkspaceTabs, type WorkspaceTab as CenterTab, type TabRevealRequest, workspaceTabGroup as centerTabGroup, groupWorkspaceTabs } from './WorkspaceTabs';
 import { loadEditorArea } from '../features/editor/editorLoader';
 import { editorLanguage, extension } from '../features/editor/language';
+import { rolesApi, type AgentRole } from '../features/agent-roles/api';
 import { terminalApi } from '../features/terminals/terminalApi';
 import type { AgentSessionSnapshot, AowAgentSession } from '../features/sessions/types';
 import type { FileEntry } from '../features/files/types';
@@ -784,7 +785,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const [activeCenterId, setActiveCenterId] = useState<string>();
   const initialTask = useRef(taskScope?.task).current;
   useEffect(() => {
-    if (!initialTask?.initial_thread_id || readStored(taskScopeKey(initialTask.id) + ':initialized', false)) return;
+    if (!restored || !initialTask?.initial_thread_id || readStored(taskScopeKey(initialTask.id) + ':initialized', false)) return;
     let cancelled = false;
     void resolveAcpSession(initialTask.initial_thread_id).then(({ session }) => {
       if (cancelled) return;
@@ -793,7 +794,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
       persist(taskScopeKey(initialTask.id) + ':initialized', true);
     }).catch(reason => { if (!cancelled) setOperationError(message(reason)); });
     return () => { cancelled = true; };
-  }, [initialTask, acp.open]);
+  }, [restored, initialTask, acp.open]);
   const globalRequests = useRef(new Set<object>());
   const restoreSelectionOverridden = useRef(false);
   useLayoutEffect(() => {
@@ -1118,6 +1119,22 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     routeToFloating(`automation:${task.id}`);
     setActiveCenterId(`automation:${task.id}`);
   }, []);
+
+  const createRole = async (role: AgentRole) => {
+    const targetFloating = openingInFloatingWorkspace();
+    setOperationError('');
+    try {
+      const created = await rolesApi.launch(role.id, project.id, worktree.path, taskScope?.task.id);
+      if (created.kind === 'acp') {
+        taskScope?.remember('acp', created.session.thread_id);
+        const id = acp.open(created.session);
+        setRightView('acp'); setActiveDocumentId(undefined); setActiveCenterId(`acp:${id}`); routeToFloating(`acp:${id}`, targetFloating);
+      } else {
+        taskScope?.remember('terminal', created.terminal.id);
+        terminals.replace(created.terminal); openTerminal(created.terminal, targetFloating);
+      }
+    } catch (reason) { setOperationError(message(reason)); }
+  };
 
   const createTerminal = async (agent?: AowAgent, session?: AowAgentSession, sessionWorkspace = worktree.path) => {
     const targetFloating = openingInFloatingWorkspace();
@@ -1870,6 +1887,18 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     });
   }, [restored, documents, sessionPreviews, openPullRequests, automationTasks, activeCenterId, worktree.path, terminalVisibility]);
 
+  // Restore visibility and load the inventory before opening the Task's first
+  // terminal. Run after the fallback tab selection so it cannot undo this choice.
+  useEffect(() => {
+    if (!restored || !terminals.loaded || !initialTask || initialTask.initial_thread_id
+      || readStored(taskScopeKey(initialTask.id) + ':initialized', false)) return;
+    const terminal = initialTask.resources.find(resource => resource.kind === 'terminal');
+    if (!terminal || !terminals.tabs.some(tab => tab.id === terminal.id)) return;
+    setTerminalVisibility(items => ({ ...items, [terminal.id]: true }));
+    setActiveCenterId(`terminal:${terminal.id}`);
+    persist(taskScopeKey(initialTask.id) + ':initialized', true);
+  }, [restored, terminals.loaded, terminals.tabs, initialTask]);
+
   const routeActions = useRef<TabOpenActions>(null!);
   routeActions.current = {
     terminal: id => {
@@ -1952,8 +1981,8 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     syncTabLocation(target && taskScope ? { ...target, workTaskId: taskScope.task.id } : target, '', locationTabVisible);
   }, [initialEntry, locationSource, locationCenterId, locationTabVisible, restored, terminals.loaded, terminals.loading, centerTabs,
     documents, sessionPreviews, acp.tabs, openPullRequests, browserPath, automationLocations, worktree.id, worktree.path, scope, syncTabLocation]);
-  const commandsRef = useRef({ openExplorerFile, createTerminal, createAcp, createTemporaryNote, closeTab, closePreviewDocument, closeTabsInGroup, centerTabs, canRenameTab, renameTab });
-  commandsRef.current = { openExplorerFile, createTerminal, createAcp, createTemporaryNote, closeTab, closePreviewDocument, closeTabsInGroup, centerTabs, canRenameTab, renameTab };
+  const commandsRef = useRef({ openExplorerFile, createTerminal, createAcp, createRole, createTemporaryNote, closeTab, closePreviewDocument, closeTabsInGroup, centerTabs, canRenameTab, renameTab });
+  commandsRef.current = { openExplorerFile, createTerminal, createAcp, createRole, createTemporaryNote, closeTab, closePreviewDocument, closeTabsInGroup, centerTabs, canRenameTab, renameTab };
   useEffect(() => {
     floating.publish(scope, {
       tabs: ownedCenterTabs.filter(tab => centerTabGroup(tab) !== 'global'),
@@ -1961,6 +1990,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
       reveal: id => setTabRevealRequest({ tabId: id }),
       closePreview: id => commandsRef.current.closePreviewDocument(id),
       createAcp: agentId => commandsRef.current.createAcp(agentId),
+      createRole: role => { void commandsRef.current.createRole(role); },
       create: (kind, agent) => {
         if (kind === 'markdown' || kind === 'text') void commandsRef.current.createTemporaryNote(kind === 'markdown' ? 'md' : 'txt');
         else void commandsRef.current.createTerminal(agent);
@@ -2141,7 +2171,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
           } else floating.add(scope, tab.id);
         }}
         onOpenFile={() => { setOpenFileFloating(openingInFloatingWorkspace()); setShowOpenFile(true); }}
-        onCreateNote={kind => void selectTab(() => createTemporaryNote(kind))} onCreateTerminal={agent => void selectTab(() => createTerminal(agent))} onCreateAcp={agentId => selectTab(() => createAcp(agentId))}
+        onCreateNote={kind => void selectTab(() => createTemporaryNote(kind))} onCreateTerminal={agent => void selectTab(() => createTerminal(agent))} onCreateAcp={agentId => selectTab(() => createAcp(agentId))} onCreateRole={role => void selectTab(() => createRole(role))}
         leadingControls={onShowLeftSidebar ? <LeftSidebarToggle onClick={onShowLeftSidebar} /> : null}
         controls={!rightSidebarVisible ? <button className="project-aow-right-show" title={t("aow.show_right_sidebar")} aria-label={t("aow.show_right_sidebar")} onClick={onShowRightSidebar}><PanelRightOpen /></button> : null}
       />
@@ -2921,6 +2951,8 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
               onCloseTabs={tabs => { for (const tab of tabs) standaloneTabs.find(item => item.id === tab.id)?.close(); }}
               onCanRename={() => false} onRename={() => undefined} onError={setError} destination={() => undefined} onOpenElsewhere={() => undefined}
               onCreateNote={kind => floating.sources.current.get(floating.globalRoot)?.create(kind === 'md' ? 'markdown' : 'text')}
+              onCreateAcp={agentId => floating.sources.current.get(floating.globalRoot)?.createAcp(agentId)}
+              onCreateRole={role => floating.sources.current.get(floating.globalRoot)?.createRole?.(role)}
               onCreateTerminal={agent => floating.sources.current.get(floating.globalRoot)?.create('terminal', agent)} />
             <div className="project-aow-center-content">{standaloneTabs.map(tab => <GlobalTabSlot key={tab.id} tab={tab} hidden={standaloneTabId !== tab.id} />)}</div>
           </div> : null}

@@ -42,6 +42,7 @@ async fn task_dependencies_do_not_cascade_archive_or_delete() {
                 project_id: "project".into(),
                 prompt: id.into(),
                 agent_id: "agent".into(),
+                agent_role_id: None,
                 workspace: "/repo".into(),
                 workspace_mode: "existing".into(),
                 slug: None,
@@ -108,11 +109,11 @@ async fn invalid_task_creation_does_not_allocate_a_session() {
     assert!(state.acp.sessions(None).is_empty());
 }
 
-struct Host;
+struct Host(&'static str);
 #[async_trait::async_trait]
 impl aow_acp::AcpHost for Host {
     async fn settings(&self) -> anyhow::Result<String> {
-        Ok(serde_json::json!({"agent_servers":{"test":{"type":"custom","command":"node","args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../acp/tests/fixtures/lineage-agent.mjs")]}}}).to_string())
+        Ok(serde_json::json!({"agent_servers":{(self.0):{"type":"custom","command":"node","args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../acp/tests/fixtures/lineage-agent.mjs")]}}}).to_string())
     }
     async fn execution_path(&self) -> anyhow::Result<Option<std::ffi::OsString>> {
         Ok(None)
@@ -135,7 +136,8 @@ async fn creating_tasks_and_helper_sessions_keeps_dependencies_out_of_runtime_li
         .unwrap();
     let mut state = AppState::new(Default::default());
     state.acp =
-        aow_acp::AcpService::new(Arc::new(Host), Some(directory.path().join("acp"))).unwrap();
+        aow_acp::AcpService::new(Arc::new(Host("test")), Some(directory.path().join("acp")))
+            .unwrap();
     let project = state
         .aow
         .register_project(RegisterProjectRequest {
@@ -290,7 +292,8 @@ async fn workspace_fixture() -> (tempfile::TempDir, AppState, Project, Router) {
     }
     let mut state = AppState::new(Default::default());
     state.acp =
-        aow_acp::AcpService::new(Arc::new(Host), Some(directory.path().join("acp"))).unwrap();
+        aow_acp::AcpService::new(Arc::new(Host("test")), Some(directory.path().join("acp")))
+            .unwrap();
     let project = state
         .aow
         .register_project(RegisterProjectRequest {
@@ -590,4 +593,77 @@ async fn task_worktree_policy_rejects_paths_inside_checkouts_including_symlinks(
             1
         );
     }
+}
+
+#[tokio::test]
+async fn task_role_reuses_acp_configuration_and_retries_without_creating_another_home_or_session() {
+    let directory = tempfile::tempdir().unwrap();
+    let repo = directory.path().join("repo");
+    std::fs::create_dir(&repo).unwrap();
+    git::git_output(&repo, &["init", "-b", "main"])
+        .await
+        .unwrap();
+    let mut state = AppState::new(Default::default());
+    state.aow = AowManager::persistent(&directory.path().join("aow")).unwrap();
+    state.acp = aow_acp::AcpService::new(
+        Arc::new(Host("codex.test")),
+        Some(directory.path().join("acp")),
+    )
+    .unwrap();
+    let settings = state.aow.acp_settings().unwrap();
+    state
+        .aow
+        .save_acp_settings(
+            aow_acp::AcpHost::settings(&Host("codex.test"))
+                .await
+                .unwrap(),
+            settings.revision,
+        )
+        .await
+        .unwrap();
+    let project = state
+        .aow
+        .register_project(RegisterProjectRequest {
+            path: repo.to_string_lossy().into_owned(),
+            name: None,
+            notes_path: None,
+        })
+        .await
+        .unwrap();
+    let app = super::super::api::routes().with_state(state.clone());
+    let (status, role) = call(
+        &app,
+        "POST",
+        "/api/aow/agent-roles",
+        serde_json::json!({
+            "name":"Reviewer", "runtime":{"mode":"acp","agent_id":"codex.test"}, "home_layout":"codex",
+            "identity":{"kind":"local_home","source":null}, "instruction":"Review only", "skills":[]
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{role}");
+    let request = serde_json::json!({"request_id":"role-task", "project_id":project.id, "prompt":"Check this change", "agent_role_id":role["id"], "workspace_mode":"existing", "workspace":repo});
+    let (status, task) = call(&app, "POST", "/api/aow/tasks", request.clone()).await;
+    assert_eq!(status, StatusCode::OK, "{task}");
+    assert_eq!(task["agent_id"], "codex.test");
+    assert_eq!(task["agent_role_id"], role["id"]);
+    let id = task["initial_thread_id"].as_str().unwrap();
+    let session = state.acp.snapshot(id).unwrap();
+    assert!(session.parent.is_none());
+    assert_eq!(
+        session.execution_environment.as_ref().unwrap().home,
+        state.aow.role_home(role["id"].as_str().unwrap()).unwrap()
+    );
+    assert_eq!(call(&app, "POST", "/api/aow/tasks", request).await.1, task);
+    assert_eq!(state.acp.sessions(None).len(), 1);
+    assert_eq!(state.acp.agents().await.unwrap().len(), 1);
+    let home = state.aow.role_home(role["id"].as_str().unwrap()).unwrap();
+    assert!(home.is_dir());
+    let reopened =
+        aow_db::tasks::TaskDb::open(Some(&directory.path().join("aow/state/tasks.sqlite3")))
+            .unwrap();
+    assert_eq!(
+        reopened.list().unwrap()[0].agent_role_id.as_deref(),
+        role["id"].as_str()
+    );
 }

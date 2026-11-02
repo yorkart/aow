@@ -19,6 +19,7 @@ try {
     const worktree = { id: 'wt', project_id: 'project', path: '/repo', branch: 'main', head: 'abc', is_main: true, detached: false, locked: false, prunable: false, color: 'default' };
     const project = { id: 'project', name: 'Task project', registered_path: '/repo', common_git_dir: '/repo/.git', notes_path: '/notes', worktrees: [worktree] };
     const agent = { id: 'codex', agent_type: 'codex', display_name: 'Terminal Codex', available: true, source: 'configured', command: 'codex', args: [], env: {} };
+    const role = { id: 'cli-role', name: 'CLI reviewer', runtime: { mode: 'cli', agent_id: 'codex' }, home_layout: 'codex' };
     function session(id, cwd = '/repo') {
       const value = { thread_id: id, session_id: `remote-${id}`, agent_id: 'test', cwd, title: id, source: 'user', parent: null, status: 'idle', revision: 1, entries: [], permissions: [], modes: {}, config_options: [], commands: [], usage: null, created_at: '2026-10-31T00:00:00Z', updated_at: '2026-10-31T00:00:00Z' };
       sessions.push(value); return value;
@@ -38,6 +39,7 @@ try {
       let data = [];
       if (path === '/api/aow/projects') data = [project];
       else if (path === '/api/aow/agents') data = [agent];
+      else if (path === '/api/aow/agent-roles') data = [role];
       else if (path === '/api/aow/settings') data = { notes_base: '/notes', execution_path: [], editor: {} };
       else if (path.includes('/pinned-')) data = { paths: [], revision: 0 };
       else if (path === '/api/aow/notifications') data = { revision: 0, items: [], unread_count: 0 };
@@ -47,8 +49,14 @@ try {
           const input = request.postDataJSON(); creations.push(input);
           const workspace = input.workspace_mode === 'new_worktree' ? '/repo-isolated' : input.workspace;
           if (input.workspace_mode === 'new_worktree') project.worktrees.push({ ...worktree, id: 'new-wt', path: workspace, branch: `task/${input.request_id}-isolated-implementation`, is_main: false });
-          const first = session(`initial-${tasks.length}`, workspace);
-          data = { ...input, workspace, slug: null, id: input.request_id, initial_thread_id: first.thread_id, pinned: false, archived: false, resources: [{ kind: 'acp', id: first.thread_id }] };
+          if (input.agent_role_id) {
+            const id = `role-terminal-${tasks.length}`;
+            terminals.push({ id, name: role.name, workspace_root: workspace, layout: { type: 'pane', pane_id: id }, panes: [{ id, name: role.name, cwd: workspace, kind: 'agent', agent_id: 'codex', agent_profile_id: `role:${role.id}`, shell: 'codex', status: 'running', rows: 24, cols: 80, agent_terminal: { phase: 'ready', task_submitted: true } }] });
+            data = { ...input, workspace, slug: null, id: input.request_id, initial_thread_id: null, pinned: false, archived: false, resources: [{ kind: 'terminal', id }] };
+          } else {
+            const first = session(`initial-${tasks.length}`, workspace);
+            data = { ...input, workspace, slug: null, id: input.request_id, initial_thread_id: first.thread_id, pinned: false, archived: false, resources: [{ kind: 'acp', id: first.thread_id }] };
+          }
           tasks.push(data);
         } else data = tasks;
       } else if (path.startsWith('/api/aow/tasks/') && request.method() === 'PATCH') {
@@ -116,10 +124,14 @@ try {
       await row(name).getByRole('button', { name: `${name} Task actions`, exact: true }).click();
       await page.getByRole('menuitem', { name: action, exact: true }).click();
     };
-    const create = async prompt => {
+    const create = async (prompt, initialAgent) => {
       await sidebar.getByRole('button', { name: 'New task', exact: true }).click();
       await page.getByLabel('Task description', { exact: true }).fill(prompt);
       assert.equal(await page.locator('dialog.task-dialog input[type=checkbox]').count(), 0);
+      if (initialAgent) {
+        await page.getByRole('button', { name: 'Initial agent', exact: true }).click();
+        await page.getByRole('option', { name: initialAgent, exact: true }).click();
+      }
       await page.getByRole('button', { name: 'Create task', exact: true }).click();
       await row(prompt).waitFor();
       await surface.getByRole('tab').first().waitFor();
@@ -188,7 +200,7 @@ try {
     assert.equal(await page.locator('.task-context-workspace').innerText(), 'Workspace · New isolated worktree');
     assert.equal(await page.getByLabel('Branch', { exact: true }).count(), 0);
     assert.equal(await page.getByLabel('Worktree path', { exact: true }).count(), 0);
-    await page.getByRole('button', { name: 'Initial ACP agent', exact: true }).click();
+    await page.getByRole('button', { name: 'Initial agent', exact: true }).click();
     await page.getByRole('option', { name: 'Test Agent ACP', exact: true }).click();
     await page.screenshot({ path: '/tmp/aow-task-dialog.png' });
     await page.setViewportSize({ width: 390, height: 844 });
@@ -216,6 +228,20 @@ try {
     await page.getByRole('button', { name: 'Organize by worktree', exact: true }).click();
     await sidebar.locator('.project-aow-worktrees').waitFor();
     await page.getByRole('button', { name: 'Organize by task', exact: true }).click();
+    await create('Run CLI role', 'CLI reviewer CLI');
+    const cli = surface.getByRole('tab').filter({ hasText: role.name });
+    await cli.waitFor();
+    assert.equal(await cli.getAttribute('aria-selected'), 'true');
+    assert.equal(await surface.getByRole('tab').count(), 1);
+    await page.reload();
+    await cli.waitFor();
+    assert.equal(await cli.getAttribute('aria-selected'), 'true');
+    await cli.locator('.project-aow-tab-close').click();
+    await cli.waitFor({ state: 'hidden' });
+    await page.reload();
+    await row('Run CLI role').waitFor();
+    await page.waitForFunction(taskId => JSON.parse(localStorage.getItem(`aow-workspace-tabs:task:${taskId}`))?.terminalVisibility, tasks.at(-1).id);
+    assert.equal(await cli.count(), 0, 'a closed initial terminal must stay closed after reloading');
     assert.deepEqual(errors, []);
     await page.screenshot({ path: '/tmp/aow-task-organization.png' });
   });

@@ -52,7 +52,9 @@ struct Create {
     request_id: String,
     project_id: String,
     prompt: String,
+    #[serde(default)]
     agent_id: String,
+    agent_role_id: Option<String>,
     workspace_mode: WorkspaceMode,
     workspace: Option<String>,
     slug: Option<String>,
@@ -65,6 +67,11 @@ async fn create(
     Json(request): Json<Create>,
 ) -> Result<Json<Task>, HttpError> {
     validate_prompt(&request.prompt)?;
+    if request.agent_role_id.is_some() && !request.agent_id.is_empty() {
+        return Err(crate::instances::invalid(
+            "Choose either an ACP agent or an agent role",
+        ));
+    }
     if request.request_id.is_empty()
         || request.request_id.len() > 128
         || !request
@@ -100,7 +107,8 @@ async fn create(
         if let Some(task) = tasks.iter().find(|task| task.id == request.request_id) {
             if task.project_id != request.project_id
                 || task.prompt != request.prompt
-                || task.agent_id != request.agent_id
+                || task.agent_role_id != request.agent_role_id
+                || (request.agent_role_id.is_none() && task.agent_id != request.agent_id)
                 || task.workspace_mode != request.workspace_mode.as_str()
                 || task.slug != slug
                 || (matches!(request.workspace_mode, WorkspaceMode::Existing)
@@ -131,21 +139,36 @@ async fn create(
             }
         }
         let _filesystem = state.aow.filesystem_access().await;
-        let agent = state
-            .acp
-            .select_agent_id(Some(&request.agent_id))
-            .await
-            .map_err(crate::acp::task_error)?;
-        if !state
-            .acp
-            .agents()
-            .await
-            .map_err(crate::acp::task_error)?
-            .iter()
-            .any(|item| item.id == agent && item.supported && item.installed)
-        {
-            return Err(crate::instances::invalid("ACP agent is not available"));
-        }
+        let role = request
+            .agent_role_id
+            .as_deref()
+            .map(|id| state.aow.agent_role(id))
+            .transpose()
+            .map_err(aow_http_error)?;
+        let agent = if let Some(role) = &role {
+            state.aow.check_role_runtime(role, &state).await?;
+            match &role.config.runtime {
+                roles::RoleRuntime::Acp { agent_id } => agent_id.clone(),
+                roles::RoleRuntime::Cli { .. } => format!("role:{}", role.id),
+            }
+        } else {
+            let agent = state
+                .acp
+                .select_agent_id(Some(&request.agent_id))
+                .await
+                .map_err(crate::acp::task_error)?;
+            if !state
+                .acp
+                .agents()
+                .await
+                .map_err(crate::acp::task_error)?
+                .iter()
+                .any(|item| item.id == agent && item.supported && item.installed)
+            {
+                return Err(crate::instances::invalid("ACP agent is not available"));
+            }
+            agent
+        };
         let path = match request.workspace_mode {
             WorkspaceMode::Existing => request.workspace.as_deref().unwrap().to_owned(),
             WorkspaceMode::NewWorktree => workspace::create_task_workspace(
@@ -162,35 +185,47 @@ async fn create(
             .agent_worktree_path(&request.project_id, &path)
             .await
             .map_err(aow_http_error)?;
-        // Task dependencies never become an ACP runtime parent.
-        let session = state
-            .acp
-            .prepare_session(&agent, workspace.clone().into())
-            .await
-            .map_err(crate::acp::task_error)?;
+        // Dependencies are organizational, never runtime parents.
+        let session = if let Some(role) = &role {
+            state
+                .aow
+                .prepare_role_session(role, &state, &workspace, Some(&request.prompt))
+                .await?
+        } else {
+            roles::RoleSession::Acp {
+                session: Box::new(
+                    state
+                        .acp
+                        .prepare_session(&agent, workspace.clone().into())
+                        .await
+                        .map_err(crate::acp::task_error)?,
+                ),
+            }
+        };
+        let (kind, resource_id) = session.resource();
         let task = TaskRecord {
             id: request.request_id,
             project_id: request.project_id,
             prompt: request.prompt,
             agent_id: agent,
+            agent_role_id: request.agent_role_id,
             workspace,
             workspace_mode: request.workspace_mode.as_str().into(),
             slug,
-            initial_thread_id: Some(session.thread_id.clone()),
+            initial_thread_id: (kind == "acp").then(|| resource_id.to_owned()),
             pinned: false,
             archived: false,
             dependencies: request.dependencies,
             resources: vec![TaskResource {
-                kind: "acp".into(),
-                id: session.thread_id.clone(),
+                kind: kind.into(),
+                id: resource_id.into(),
             }],
         };
         if let Err(error) = state.aow.inner.tasks.insert(&task) {
-            let _ = state.acp.delete_session(&session.thread_id).await;
+            session.discard(&state).await;
             return Err(crate::instances::invalid(error.to_string()));
         }
-        let _startup =
-            crate::acp::start_task(state.clone(), session.thread_id, Some(task.prompt.clone()))?;
+        session.start(&state, Some(task.prompt.clone()))?;
         Ok(Json(task.into()))
     })
     .await

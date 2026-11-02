@@ -106,6 +106,9 @@ impl AowManager {
     }
 
     pub(crate) async fn resolve_agent_profile(&self, id: &str) -> Result<AgentLaunch, AowError> {
+        if let Some(role) = id.strip_prefix("role:") {
+            return self.role_cli_launch(&self.agent_role(role)?).await;
+        }
         let path = self.execution_path().await?;
         let agent = self
             .agents_in_path(&path)?

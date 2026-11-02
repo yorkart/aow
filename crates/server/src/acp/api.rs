@@ -431,8 +431,14 @@ async fn session_action(
     }
     controller.authorize(&headers, false)?;
     let result = match action {
-        SessionAction::Prompt { content } => state.acp.start_prompt(&thread_id, content),
-        SessionAction::Steer { content } => state.acp.start_steering(&thread_id, content),
+        SessionAction::Prompt { content } => state
+            .aow
+            .acp_role_content(&state.acp, &thread_id, content)
+            .and_then(|content| state.acp.start_prompt(&thread_id, content)),
+        SessionAction::Steer { content } => state
+            .aow
+            .acp_role_content(&state.acp, &thread_id, content)
+            .and_then(|content| state.acp.start_steering(&thread_id, content)),
         SessionAction::Cancel => state.acp.cancel(&thread_id),
         SessionAction::ClearPlan => state.acp.clear_plan(&thread_id),
         SessionAction::DismissNotice { notice_id } => {

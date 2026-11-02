@@ -9,6 +9,7 @@ import type { TaskKind } from '../features/automations/types';
 import { persist, readStored } from './floatingWorkspaceState';
 import { TerminalTabPreview } from '../features/terminals/TerminalTabPreview';
 import { WorkspaceTabIcon } from './WorkspaceTabIcon';
+import type { AgentRole } from '../features/agent-roles/api';
 import { WorkspaceNewMenu } from './WorkspaceNewMenu';
 import { WorkspaceMenuLabel, type WorkspaceMenuAction } from './WorkspaceMenuLabel';
 import { AcpSpinnerLabel } from '../features/acp/workspace';
@@ -134,6 +135,7 @@ interface Props {
   onCreateNote: (kind: 'md' | 'txt') => void;
   onCreateTerminal: (agent?: AowAgent) => void;
   onCreateAcp?: (agentId: string) => void;
+  onCreateRole?: (role: AgentRole) => void;
   leadingControls?: ReactNode;
   controls?: ReactNode;
   newLabel?: string;
@@ -143,7 +145,7 @@ interface Props {
 
 export function WorkspaceTabs({ workspaceKey, revealRequest, tabs, activeId, visible, agents, onActivate, onPin, onCloseTab, onCloseTabs,
   onCanRename, onRename, onError, destination, onOpenElsewhere, onOpenFile, onCreateNote,
-  onCreateTerminal, onCreateAcp, leadingControls, controls, newLabel = t("aow.new_window"), tabListLabel = t("aow.workspace_tabs"), headerProps }: Props) {
+  onCreateTerminal, onCreateAcp, onCreateRole, leadingControls, controls, newLabel = t("aow.new_window"), tabListLabel = t("aow.workspace_tabs"), headerProps }: Props) {
   const groups = useMemo(() => groupWorkspaceTabs(tabs), [tabs]);
   const storageKey = `aow-tab-groups-v1:${workspaceKey}`;
   const [collapsed, setCollapsed] = useState<Set<WorkspaceTabGroup>>(() => {
@@ -345,7 +347,7 @@ export function WorkspaceTabs({ workspaceKey, revealRequest, tabs, activeId, vis
       <div ref={newMenuRef} className="project-aow-new" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setNewMenu(false); }}>
         <button className="project-aow-new-trigger" title={newLabel} aria-label={newLabel} aria-expanded={newMenu} onClick={() => setNewMenu(value => !value)}><Plus /></button>
         {newMenu ? <WorkspaceNewMenu anchor={newMenuRef} agents={agents} onOpenFile={onOpenFile}
-          onCreateNote={onCreateNote} onCreateTerminal={onCreateTerminal} onCreateAcp={onCreateAcp} onSelect={() => setNewMenu(false)} /> : null}
+          onCreateNote={onCreateNote} onCreateTerminal={onCreateTerminal} onCreateAcp={onCreateAcp} onCreateRole={onCreateRole} onSelect={() => setNewMenu(false)} /> : null}
       </div>
       {controls}
     </nav>

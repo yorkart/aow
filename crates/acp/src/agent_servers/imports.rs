@@ -29,16 +29,22 @@ impl AgentServerStore {
                 "Session belongs to another workspace"
             );
         }
+        // Deduplication and insertion must share the lock, including imports
+        // arriving concurrently through another connection to the same Home.
         let mut store = self.inner.threads.lock().unwrap();
         ensure!(connection.connected(), "ACP adapter is disconnected");
-        let mut existing: HashSet<_> = store
-            .metadata
-            .entries()
-            .filter(|thread| {
-                thread.agent_id == connection.info.agent_id && thread.cwd() == connection.info.cwd
-            })
-            .filter_map(|thread| thread.session_id.clone())
-            .collect();
+        let mut existing = HashSet::new();
+        for session in &sessions {
+            if super::identity::native_thread_in_environment(
+                &mut store,
+                &connection,
+                &session.session_id,
+            )?
+            .is_some()
+            {
+                existing.insert(session.session_id.clone());
+            }
+        }
         let mut imported = Vec::new();
         let mut snapshots = Vec::new();
         for session in sessions {
@@ -52,6 +58,7 @@ impl AgentServerStore {
                 session.cwd,
             );
             thread.status = "disconnected".into();
+            thread.execution_environment = connection.execution_environment.clone();
             thread.needs_load = true;
             if let Some(title) = session.title.filter(|title| !title.trim().is_empty()) {
                 thread.title = title;

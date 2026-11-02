@@ -1724,6 +1724,149 @@ async fn pane_sessions_use_live_cwd_and_config_and_cache_readable_claude_snapsho
     stop_daemon(shutdown, daemon).await;
 }
 
+#[tokio::test]
+async fn cli_role_tasks_start_with_native_prompts_and_shared_homes() {
+    use std::os::unix::fs::PermissionsExt;
+    let directory = TempDir::new().unwrap();
+    let root = directory.path().canonicalize().unwrap();
+    let repo = root.join("repo");
+    std::fs::create_dir(&repo).unwrap();
+    assert!(
+        tokio::process::Command::new("git")
+            .args(["init", "-b", "main"])
+            .current_dir(&repo)
+            .output()
+            .await
+            .unwrap()
+            .status
+            .success()
+    );
+    let executable = root.join("fake-claude");
+    let output = root.join("launch.txt");
+    // A runtime initializes its own directory when no identity files were imported.
+    std::fs::write(&executable, "#!/bin/sh\nmkdir -p \"$CLAUDE_CONFIG_DIR\"\nprintf '%s\\n' \"$HOME\" \"$CLAUDE_CONFIG_DIR\" \"$@\" >> \"$ROLE_TEST_OUTPUT\"\nprintf updated > \"$CLAUDE_CONFIG_DIR/session-state\"\n").unwrap();
+    std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let socket = root.join("terminald/terminald.sock");
+    let (shutdown, daemon) = start_daemon(socket.clone()).await;
+    let mut state = AppState::new(Default::default());
+    state.aow = crate::aow::AowManager::persistent(&root.join("aow")).unwrap();
+    state.terminals = TerminalManager::in_memory(TerminaldClient::new(socket));
+    let app = crate::build_router(state.clone());
+    async fn post(app: &axum::Router, path: &str, value: serde_json::Value) -> serde_json::Value {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post(path)
+                    .header("content-type", "application/json")
+                    .body(Body::from(value.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = response.status();
+        let body = response_json(response).await;
+        assert!(status.is_success(), "{status}: {body}");
+        body
+    }
+    let project = post(&app, "/api/aow/projects", serde_json::json!({"path":repo})).await;
+    post(&app, "/api/aow/agents", serde_json::json!({"id":"role-runtime", "display_name":"Test Claude", "agent_type":"claude", "command":executable, "args":[], "env":{"ROLE_TEST_OUTPUT":output}})).await;
+    let role = post(&app, "/api/aow/agent-roles", serde_json::json!({
+        "name":"CLI reviewer", "home_layout":"claude", "identity":{"kind":"local_home","source":null},
+        "instruction":"Review carefully", "runtime":{"mode":"cli", "agent_id":"role-runtime"}
+    })).await;
+    let request = serde_json::json!({"request_id":"claude-role-task", "project_id":project["id"], "prompt":"--review this\nsecond line", "agent_role_id":role["id"], "workspace_mode":"existing", "workspace":repo});
+    let task = post(&app, "/api/aow/tasks", request.clone()).await;
+    assert!(task["initial_thread_id"].is_null());
+    assert_eq!(task["resources"][0]["kind"], "terminal");
+    assert_eq!(post(&app, "/api/aow/tasks", request).await, task);
+    let terminal = state
+        .terminals
+        .get_snapshot(task["resources"][0]["id"].as_str().unwrap())
+        .unwrap();
+    assert!(terminal.panes[0].parent.is_none());
+    assert!(terminal.panes[0].agent_terminal.is_none());
+    let home = state.aow.role_home(role["id"].as_str().unwrap()).unwrap();
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    while !home.join(".claude/session-state").exists() {
+        assert!(tokio::time::Instant::now() < deadline, "role did not start");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert_eq!(
+        std::fs::read_to_string(&output).unwrap(),
+        format!(
+            "{}\n{}\n--append-system-prompt\nReview carefully\n--\n--review this\nsecond line\n",
+            home.display(),
+            home.join(".claude").display()
+        )
+    );
+    assert_eq!(
+        terminal.panes[0].arguments,
+        ["--append-system-prompt", "Review carefully"]
+    );
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while state.terminals.get(&terminal.id).await.unwrap().panes[0].status
+            == TerminalPaneStatus::Running
+        {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let rebuilt = post(
+        &app,
+        &format!("/api/terminals/{}/rebuild", terminal.id),
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(
+        rebuilt["panes"][0]["arguments"],
+        serde_json::json!(terminal.panes[0].arguments)
+    );
+    let invocation = format!(
+        "{}\n{}\n--append-system-prompt\nReview carefully\n",
+        home.display(),
+        home.join(".claude").display()
+    );
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while std::fs::read_to_string(&output)
+            .unwrap()
+            .matches(&invocation)
+            .count()
+            < 2
+        {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        std::fs::read_to_string(&output).unwrap(),
+        format!("{invocation}--\n--review this\nsecond line\n{invocation}"),
+        "rebuilding the terminal must not replay the initial task"
+    );
+    // A workspace session of the same role keeps the updated home and has no
+    // Task prompt or managed-startup adapter imposed on its native terminal.
+    let second = post(
+        &app,
+        &format!(
+            "/api/aow/agent-roles/{}/sessions",
+            role["id"].as_str().unwrap()
+        ),
+        serde_json::json!({"project_id":project["id"],"cwd":repo}),
+    )
+    .await;
+    assert_eq!(second["kind"], "cli");
+    assert_eq!(
+        second["terminal"]["panes"][0]["arguments"],
+        serde_json::json!(["--append-system-prompt", "Review carefully"])
+    );
+    assert_eq!(
+        std::fs::read_to_string(home.join(".claude/session-state")).unwrap(),
+        "updated"
+    );
+    stop_daemon(shutdown, daemon).await;
+}
+
 pub(super) async fn start_daemon(
     socket: PathBuf,
 ) -> (

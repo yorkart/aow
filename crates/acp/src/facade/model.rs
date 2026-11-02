@@ -109,11 +109,24 @@ pub enum SessionSource {
 pub struct SessionCreation {
     pub source: SessionSource,
     pub parent: Option<aow_protocol::InstanceRef>,
+    /// Explicit process overrides; parentage does not select an execution environment.
+    pub execution_environment: Option<ExecutionEnvironment>,
+}
+
+/// Caller-prepared process environment, retained for reconnects and session recovery.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExecutionEnvironment {
+    /// Existing absolute directory prepared and managed by the caller.
+    pub home: std::path::PathBuf,
+    #[serde(default)]
+    pub env: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SessionSnapshot {
     pub thread_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_environment: Option<ExecutionEnvironment>,
     #[serde(default)]
     pub source: SessionSource,
     #[serde(default)]

@@ -12,11 +12,12 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
   const { id, method, params } = JSON.parse(line);
   if (method === 'initialize') {
     reply(id, { protocolVersion: 1, agentInfo: { name: 'lineage-test', version: '1' },
-      agentCapabilities: { loadSession: true, sessionCapabilities: { close: {}, delete: {} } }, authMethods: [] });
-  } else if (method === 'session/new') {
+      agentCapabilities: { loadSession: true, sessionCapabilities: { close: {}, delete: {}, fork: {}, list: {} } }, authMethods: [] });
+  } else if (method === 'session/new' || method === 'session/fork') {
     setTimeout(() => reply(id, { sessionId: randomUUID() }), Number(process.env.START_DELAY_MS || 0));
   } else if (method === 'session/prompt') {
     appendFileSync(log, `${JSON.stringify({ ...params,
+      home: process.env.HOME, setting: process.env.CUSTOM_AGENT_SETTING,
       state_dir: process.env.AOW_STATE_DIR, instance: process.env.AOW_INSTANCE,
       caller_session: process.env.AOW_SESSION_ID, connection: process.env.AOW_ACP_CONNECTION_ID })}\n`);
     if (params.prompt[0]?.text === 'wait') { waiting.set(params.sessionId, id); return; }

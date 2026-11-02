@@ -253,6 +253,7 @@ impl AcpThread {
         let now = chrono::Utc::now().to_rfc3339();
         SessionSnapshot {
             thread_id: id,
+            execution_environment: None,
             parent: None,
             source: Default::default(),
             created_at: now.clone(),

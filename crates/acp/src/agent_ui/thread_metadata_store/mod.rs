@@ -93,19 +93,6 @@ impl ThreadMetadataStore {
     pub(crate) fn entry(&self, id: &str) -> Option<&ThreadMetadata> {
         self.threads.get(id)
     }
-    pub(crate) fn entry_by_session(
-        &self,
-        agent_id: &str,
-        cwd: &str,
-        session_id: &str,
-    ) -> Option<&ThreadMetadata> {
-        // Unlike the upstream implementation's global session-ID index, adapters may reuse the same ID in AoW.
-        self.entries().find(|row| {
-            row.agent_id == agent_id
-                && row.cwd() == cwd
-                && row.session_id.as_deref() == Some(session_id)
-        })
-    }
     pub(crate) fn save(&mut self, source: &Arc<Mutex<SessionSnapshot>>) {
         let snapshot = source.lock().unwrap();
         let metadata = ThreadMetadata::from_snapshot(&snapshot, self.entry(&snapshot.thread_id));

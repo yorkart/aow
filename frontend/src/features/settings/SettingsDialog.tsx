@@ -21,6 +21,7 @@ import { LogoutButton } from '../auth/LogoutButton';
 import { ServerEnvironmentFields, useServerEnvironment } from './ServerEnvironmentFields';
 import { SettingsActionDialog } from './SettingsActionDialog';
 import { AgentList } from './AgentList';
+import { RoleSettings } from '../agent-roles/RoleSettings';
 import { AppearanceSettings } from './AppearanceSettings';
 
 const message = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
@@ -33,6 +34,7 @@ const sections = [
   { id: 'notes', label: t("navigation.notes"), description: t("settings.set_the_default_notes_root_directory"), icon: NotebookPen },
   { id: 'environment', label: t("navigation.environment"), description: t("settings.configure_execution_path_and_service_environment_variables"), icon: SquareTerminal },
   { id: 'acp', label: 'ACP', description: t("settings.configure_acp_agents"), icon: AcpIcon },
+  { id: 'roles', label: t('roles.title'), description: t('roles.description'), icon: Bot },
   { id: 'agents', label: t("navigation.agents"), description: t("settings.configure_agent_launch_methods"), icon: Bot },
   { id: 'im', label: 'IM', description: t("settings.configure_feishu_and_wechat_bots"), icon: MessageSquare },
   { id: 'notifications', label: t("notifications.notifications_2"), description: t("settings.choose_task_completion_notifications"), icon: Bell },
@@ -47,6 +49,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
 }) {
   const [section, setSection] = useState<Section>(sections[0].id);
   const [overview, setOverview] = useState(mobile);
+  const [roleDirty, setRoleDirty] = useState(false);
   const [acpDirty, setAcpDirty] = useState(false);
   const [notificationDirty, setNotificationDirty] = useState(false);
   const { updateEditorSettings } = useEditorSettings();
@@ -77,7 +80,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
   const dialog = useRef<HTMLElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const dirty = acpDirty || serverEnvironment.dirty || mobile && (notificationDirty
+  const dirty = roleDirty || acpDirty || serverEnvironment.dirty || mobile && (notificationDirty
     || !!settings && (notesBase !== settings.notes_base || nodeAddresses !== (settings.node_addresses ?? []).join('\n')
       || executionPath !== (settings.execution_path ?? []).join('\n') || editorWordWrap !== (settings.editor?.word_wrap ?? false))
     || JSON.stringify([agentId, agentType, displayName, command, args.text, env.text]) !== agentBaseline);
@@ -357,7 +360,8 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
         <div className="project-aow-settings-content" hidden={mobile && overview}>
           <div className="git-platform-provider-settings-host" hidden={section !== 'git-platforms'}><GitPlatformProviderSettings active={section === 'git-platforms'} onBusyChange={setSettingsBusy} /></div>
           <div className="acp-settings-host" hidden={section !== 'acp'}><AcpSettings active={section === 'acp'} onBusyChange={setSettingsBusy} onDirtyChange={setAcpDirty} /></div>
-          {section === 'git-platforms' || section === 'acp' ? null : section === 'appearance' ? <AppearanceSettings /> : section === 'nodes' ? (
+          <div className="role-settings-host" hidden={section !== 'roles'}><RoleSettings active={section === 'roles'} onBusyChange={setSettingsBusy} onDirtyChange={setRoleDirty} /></div>
+          {section === 'git-platforms' || section === 'acp' || section === 'roles' ? null : section === 'appearance' ? <AppearanceSettings /> : section === 'nodes' ? (
             <form className="project-aow-dialog-form" onSubmit={event => { event.preventDefault(); void saveNodes(); }}>
               <div className="project-aow-dialog-body">
                 <div className="project-aow-settings-heading"><div><h2>{t("navigation.nodes")}</h2><p>{t("settings.configure_aow_deployments_on_other_machines_click_the_logo")}</p></div></div>
