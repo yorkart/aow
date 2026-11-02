@@ -2137,5 +2137,12 @@
     "cli_empty": "暂无可用的受支持 CLI 运行时。请先在设置 → Agents 中添加，再刷新此列表。",
     "reload_runtimes": "刷新运行时列表",
     "runtime_unavailable": "不可用"
+  },
+  "conversations": {
+    "search": "搜索会话",
+    "empty": "暂无会话",
+    "terminal_agent": "终端 Agent",
+    "refresh": "刷新会话",
+    "loading": "加载中…"
   }
 }

@@ -40,7 +40,10 @@ export function FloatingWorkspace({ agents, projects, activeLocation = true }: {
     for (const [workspace, ids] of byWorkspace) {
       const source = floating.sources.current.get(workspace);
       if (source) await source.closeMany(ids);
-      else for (const id of ids) floating.remove(workspace, id);
+      else for (const id of ids) {
+        const tab = floating.tabs.find(tab => tab.workspace === workspace && tab.id === id);
+        if (tab) await floating.close(tab);
+      }
     }
   };
   const drag = useRef<{ x: number; y: number; bounds: Bounds; resize: boolean } | undefined>(undefined);
@@ -84,7 +87,7 @@ export function FloatingWorkspace({ agents, projects, activeLocation = true }: {
     <div ref={panelRef} data-floating-workspace className={`floating-workspace${maximized ? ' maximized' : ''}`} role="dialog" aria-label={t("aow.floating_workspace")} aria-hidden={!floating.visible} inert={!floating.visible}
       tabIndex={-1} style={{ ...(maximized ? { left: 8, top: 8, width: window.innerWidth - 16, height: window.innerHeight - 16 } : bounds), visibility: floating.visible ? 'visible' : 'hidden', pointerEvents: floating.visible ? undefined : 'none' }}>
       <WorkspaceTabs workspaceKey="floating" revealRequest={floating.tabRevealRequest} tabs={tabs} activeId={floating.active ? tabKey(floating.active) : undefined} visible={floating.visible} agents={agents}
-        onActivate={tab => { cancelTabNavigation(); floating.select(sourceTab(tab)); }} onCloseTab={tab => { cancelTabNavigation(); floating.close(sourceTab(tab)); }} onCloseTabs={targets => { cancelTabNavigation(); return closeTabs(targets); }}
+        onActivate={tab => { cancelTabNavigation(); floating.select(sourceTab(tab)); }} onCloseTab={tab => { cancelTabNavigation(); void floating.close(sourceTab(tab)).catch(reason => setOperationError(String(reason))); }} onCloseTabs={targets => { cancelTabNavigation(); return closeTabs(targets); }}
         onPin={tab => { const source = sourceTab(tab); floating.pinPreview(source.workspace, source.id); }}
         onCanRename={tab => {
           const source = sourceTab(tab);

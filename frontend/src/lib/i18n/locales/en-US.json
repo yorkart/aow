@@ -2137,5 +2137,12 @@
     "cli_empty": "No supported CLI runtime is ready. Add one in Settings → Agents, then refresh this list.",
     "reload_runtimes": "Refresh runtime list",
     "runtime_unavailable": "Unavailable"
+  },
+  "conversations": {
+    "search": "Search conversations",
+    "empty": "No conversations",
+    "terminal_agent": "Terminal Agent",
+    "refresh": "Refresh conversations",
+    "loading": "Loading…"
   }
 }

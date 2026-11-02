@@ -15,6 +15,7 @@ try {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
     t.after(() => context.close());
     await context.addInitScript(() => localStorage.setItem('aow.language', 'en-US'));
+    let failDelete = false, nextTerminal = 0;
     const tasks = [], sessions = [], terminals = [], creations = [], deleted = [], worktreeRequests = [];
     const worktree = { id: 'wt', project_id: 'project', path: '/repo', branch: 'main', head: 'abc', is_main: true, detached: false, locked: false, prunable: false, color: 'default' };
     const project = { id: 'project', name: 'Task project', registered_path: '/repo', common_git_dir: '/repo/.git', notes_path: '/notes', worktrees: [worktree] };
@@ -77,11 +78,11 @@ try {
         else if (path.endsWith('/requests')) data = [];
         else data = sessions.find(session => session.thread_id === path.split('/')[4]);
       } else if (path === '/api/terminals' && request.method() === 'POST') {
-        const input = request.postDataJSON(), id = `terminal-${terminals.length}`;
+        const input = request.postDataJSON(), id = `terminal-${nextTerminal++}`;
         data = { id, name: input.agent_id ? 'Terminal agent' : 'Shell', workspace_root: input.workspace_root, layout: { type: 'pane', pane_id: id }, panes: [{ id, name: 'Shell', cwd: input.cwd, kind: input.agent_id ? 'agent' : 'terminal', agent_id: input.agent_id, shell: '/bin/bash', status: 'running', rows: 24, cols: 80 }] };
         terminals.push(data);
         tasks.find(task => task.id === request.headers()['x-aow-task']).resources.push({ kind: 'terminal', id });
-      } else if (path.startsWith('/api/terminals/') && request.method() === 'DELETE') { deleted.push(path); return route.fulfill({ status: 204 }); }
+      } else if (path.startsWith('/api/terminals/') && request.method() === 'DELETE') { if (failDelete) return route.fulfill({ status: 503, json: { error: 'Cannot stop terminal' } }); deleted.push(path); const index = terminals.findIndex(tab => tab.id === path.split('/')[3]); if (index >= 0) terminals.splice(index, 1); return route.fulfill({ status: 204 }); }
       else if (path === '/api/terminals') data = terminals;
       else if (path === '/api/terminals/agents') data = { agents: {}, titles: {}, processes: {} };
       else if (path === '/api/aow/projects/project/worktrees' && request.method() === 'POST') {
@@ -137,8 +138,8 @@ try {
       await surface.getByRole('tab').first().waitFor();
     };
     await create('Implement login');
-    assert.equal(await surface.getByRole('button', { name: 'ACP panel', exact: true }).count(), 1);
-    assert.equal(await surface.getByRole('button', { name: 'Terminal panel', exact: true }).count(), 1);
+    assert.equal(await surface.getByRole('button', { name: 'ACP panel', exact: true }).count(), 0);
+    assert.equal(await surface.getByRole('button', { name: 'Terminal panel', exact: true }).count(), 0);
     assert.equal(await surface.getByRole('button', { name: 'Conversation', exact: true }).count(), 1);
     assert.equal(await surface.getByRole('button', { name: 'Automation', exact: true }).count(), 1);
     const first = surface.getByRole('tab').filter({ hasText: 'initial-0' });
@@ -168,14 +169,15 @@ try {
     assert.deepEqual(creations[1].dependencies, []);
     assert.equal(creations[1].parent_id, undefined);
     assert.equal(await surface.getByRole('tab').count(), 1);
-    await surface.getByRole('button', { name: 'ACP panel', exact: true }).click();
-    await surface.locator('.acp-panel-row').filter({ hasText: 'initial-1' }).waitFor();
-    assert.equal(await surface.locator('.acp-panel-row').count(), 1);
+    await surface.getByRole('button', { name: 'Conversation', exact: true }).click();
+    await surface.locator('.conversation-instance').filter({ hasText: 'initial-1' }).waitFor();
+    assert.equal(await surface.locator('.conversation-instance').count(), 1);
     await row('Implement login').getByRole('button', { name: 'Implement login', exact: true }).click();
     await surface.getByRole('tab').filter({ hasText: 'helper-' }).waitFor();
     assert.equal(await surface.getByRole('tab').filter({ hasText: 'initial-0' }).count(), 0);
     await surface.getByRole('tab').filter({ hasText: 'Shell' }).locator('.project-aow-tab-close').click();
-    assert.deepEqual(deleted, []);
+    await surface.getByRole('tab').filter({ hasText: 'Shell' }).waitFor({ state: 'hidden' });
+    assert.deepEqual(deleted, ['/api/terminals/terminal-0']);
     await menu('Implement login', 'Pin task');
     await sidebar.locator('.project-aow-pinned-panel').getByRole('button', { name: 'Implement login', exact: true }).waitFor();
     await page.reload();
@@ -185,7 +187,7 @@ try {
     await menu('Implement login', 'Archive task');
     await row('Implement login').waitFor({ state: 'hidden' });
     await surface.getByRole('tab').filter({ hasText: 'initial-1' }).waitFor();
-    assert.equal(tasks[1].archived, false); assert.deepEqual(deleted, []);
+    assert.equal(tasks[1].archived, false); assert.deepEqual(deleted, ['/api/terminals/terminal-0']);
     await sidebar.getByRole('button', { name: 'New task', exact: true }).click();
     await page.getByLabel('Task description', { exact: true }).fill('Isolated implementation');
     await page.getByRole('button', { name: 'Workspace', exact: true }).click();
@@ -236,12 +238,38 @@ try {
     await page.reload();
     await cli.waitFor();
     assert.equal(await cli.getAttribute('aria-selected'), 'true');
+    failDelete = true;
+    await cli.locator('.project-aow-tab-close').click();
+    await surface.getByRole('alert').filter({ hasText: /Cannot stop terminal|503/ }).waitFor();
+    assert.equal(await cli.isVisible(), true, 'failed destruction must keep the tab accessible');
+    failDelete = false;
     await cli.locator('.project-aow-tab-close').click();
     await cli.waitFor({ state: 'hidden' });
     await page.reload();
     await row('Run CLI role').waitFor();
     await page.waitForFunction(taskId => JSON.parse(localStorage.getItem(`aow-workspace-tabs:task:${taskId}`))?.terminalVisibility, tasks.at(-1).id);
     assert.equal(await cli.count(), 0, 'a closed initial terminal must stay closed after reloading');
+    const createTerminal = async () => {
+      await surface.locator('.project-aow-new-trigger').click();
+      await page.locator('.project-aow-new-menu').getByRole('button', { name: 'Terminal Codex', exact: true }).click();
+    };
+    await createTerminal();
+    const agentTab = surface.getByRole('tab').filter({ hasText: 'Terminal agent' });
+    await agentTab.waitFor();
+    const floatingId = terminals.at(-1).id;
+    await agentTab.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Open · Floating workspace', exact: true }).click();
+    await floating.getByRole('tab').filter({ hasText: 'Terminal agent' }).waitFor();
+    assert.equal(deleted.includes(`/api/terminals/${floatingId}`), false, 'moving preserves the process');
+    await floating.getByRole('tab').filter({ hasText: 'Terminal agent' }).locator('.project-aow-tab-close').click();
+    await floating.getByRole('tab').filter({ hasText: 'Terminal agent' }).waitFor({ state: 'hidden' });
+    assert.equal(deleted.includes(`/api/terminals/${floatingId}`), true, 'floating close destroys the process');
+    await createTerminal();
+    await createTerminal();
+    await agentTab.first().click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Close all', exact: true }).click();
+    await agentTab.first().waitFor({ state: 'hidden' });
+    assert.equal(terminals.filter(tab => tasks.at(-1).resources.some(resource => resource.kind === 'terminal' && resource.id === tab.id)).length, 0);
     assert.deepEqual(errors, []);
     await page.screenshot({ path: '/tmp/aow-task-organization.png' });
   });

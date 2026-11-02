@@ -70,6 +70,13 @@ const server = await createServer({
       }
       response.end(JSON.stringify(settings()));
     });
+    server.middlewares.use('/api/instances', (_request, response) => { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ items: [] })); });
+    server.middlewares.use('/api/terminals', (request, response, next) => {
+      const path = request.url.split('?')[0];
+      if (path !== '/' && path !== '/agents') return next();
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify(path === '/' ? [] : { agents: {}, titles: {}, processes: {}, activity: {} }));
+    });
     server.middlewares.use('/api/terminals/', (request, response) => {
       const id = decodeURIComponent(request.url.slice(1));
       response.setHeader('Content-Type', 'application/json');

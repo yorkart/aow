@@ -78,8 +78,15 @@ export async function acpEventsFixture(page, initial) {
     peers.add(peer);
     socket.send(JSON.stringify({ event: 'workspace', data: workspace() }));
     peer.send({ type: 'hello', protocol: 1 });
+    socket.send(JSON.stringify({ event: 'terminals', data: { type: 'hello', protocol: 1 } }));
     socket.onMessage(raw => {
       const command = JSON.parse(String(raw));
+      if (command.action === 'subscribe_terminals' || command.action === 'refresh_terminals') {
+        socket.send(JSON.stringify({ event: 'terminals', data: { type: 'snapshot', request_id: command.id,
+          state: { boot_id: 'fixture', revision: 1, tabs: [], metadata: { agents: {}, titles: {}, processes: {}, activity: {} }, error: null, agent_error: null } } }));
+        return;
+      }
+      if (command.action === 'unsubscribe_terminals') return;
       if (command.action === 'unsubscribe') { peer.subscriptions.delete(command.id); return; }
       const next = head(command.resource);
       if (!next.deleted) peer.subscriptions.set(command.id, { resource: command.resource, version: next.version });

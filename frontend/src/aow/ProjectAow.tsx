@@ -26,7 +26,7 @@ import { FloatingWorkspaceProvider, FloatingOpenMenu, useFloatingWorkspace, open
 import type { SetStateAction, CSSProperties, DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from 'react';
 import {
   ArrowUp, Bell, CalendarClock, Check, ChevronRight, CornerDownLeft, FileText, Files, FolderGit2, FolderOpen, GitBranch, GitBranchPlus, GitPullRequest, MessageSquare, MoreHorizontal,
-  Archive, ListTodo, Inbox, LoaderCircle, NotebookPen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pin, PinOff, Plus, RefreshCw, Settings, SquareTerminal, Trash2, X,
+  Archive, ListTodo, Inbox, LoaderCircle, NotebookPen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pin, PinOff, Plus, RefreshCw, Settings, Trash2, X,
 } from 'lucide-react';
 import { gitApi } from '../features/git/api';
 import { filesApi } from '../features/files/api';
@@ -35,10 +35,9 @@ import { EditorSettingsProvider, useWordWrapOverrides } from '../features/editor
 import { AutomationDetail } from '../features/automations/AutomationDetail';
 import { AutomationPanel } from '../features/automations/AutomationPanel';
 import type { AutomationRun, AutomationTask } from '../features/automations/types';
-import { AcpPanel, AcpSessionTab, ProjectAcpPanelProvider, useAcpTabs, resolveAcpSession, acpApi, removeAcpWorkspaceTabs, pruneAcpWorkspaceTabs, savedAcpTabs } from '../features/acp';
-import { TerminalPanel } from '../features/terminals/TerminalPanel';
+import { AcpSessionTab, useAcpTabs, resolveAcpSession, acpApi, removeAcpWorkspaceTabs, pruneAcpWorkspaceTabs, savedAcpTabs } from '../features/acp';
+import { ConversationPanel } from '../features/conversations/ConversationPanel';
 import { isCliTerminal, terminalTabPresentation } from '../features/terminals/terminalPresentation';
-import { AgentSessions } from '../features/sessions/AgentSessions';
 import { SessionShareButton } from '../features/sessions/SessionShareButton';
 import { Explorer } from '../features/files/Explorer';
 import { ExplorerSearch } from '../features/files/ExplorerSearch';
@@ -70,7 +69,7 @@ import type { TerminalTab } from '../features/terminals/types';
 import type { AowAgent } from '../features/agents/types';
 import type { AowProject, AowWorktree, WorktreeColor, WorktreeIconId } from './types';
 import { useTerminals } from '../features/terminals/useTerminals';
-import { ProjectTerminalPanelProvider, useProjectTerminalPanel } from '../features/terminals/projectTerminalPanel';
+import { useTerminalState } from '../features/terminals/useTerminalState';
 import { usePinnedWorktrees } from './usePinnedWorktrees';
 import { useWorktreeResources } from './useWorktreeResources';
 import { removalActive, useWorktreeRemovals } from './useWorktreeRemovals';
@@ -87,7 +86,6 @@ import type { WorktreeResourceState } from './worktreeResources';
 import { aowApi } from './aowApi';
 import { ProjectIcon } from './ProjectIcon';
 import { agentsApi } from '../features/agents/api';
-import { AcpIcon } from '../features/agents/AcpIcon';
 import { sessionsApi } from '../features/sessions/api';
 import type { WorktreeRemovalJob, WorktreeRemovalPreview } from './types';
 
@@ -108,7 +106,7 @@ const minRightSidebarWidth = 220;
 const maxRightSidebarWidth = 640;
 const minCenterWidth = 360;
 
-type RightView = 'files' | 'git' | 'pullRequests' | 'sessions' | 'automations' | 'terminals' | 'acp';
+type RightView = 'files' | 'git' | 'pullRequests' | 'conversations' | 'automations';
 type AutomationSessionReference = { taskId: string; runId: string };
 type SessionPreview = { session: AowAgentSession; workspacePath: string; snapshot?: AgentSessionSnapshot; loading: boolean; error?: string; automationRun?: AutomationSessionReference };
 type WorktreeEntry = { project: AowProject; worktree: AowWorktree };
@@ -769,9 +767,9 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const onNotesChanged = useCallback((directory: string) => onProjectNotesChanged(project.id, directory), [project.id, onProjectNotesChanged]);
   const terminals = useTerminals(worktree.path, true);
   const [terminalVisibility, setTerminalVisibility] = useState<Record<string, boolean>>({});
-  const openedTerminals = useMemo(() => terminals.tabs.filter(tab => !terminalDock.owns(tab) && (terminalVisibility[tab.id]
+  const openedTerminals = useMemo(() => terminals.tabs.filter(tab => !terminalDock.owns(tab) && (!isCliTerminal(tab) || (terminalVisibility[tab.id]
     ?? (floating.hostedTabs.some(item => item.workspace === scope && item.targetId === tab.id)
-      || floating.tabs.some(item => item.workspace === scope && item.targetId === tab.id) || !isCliTerminal(tab)))),
+      || floating.tabs.some(item => item.workspace === scope && item.targetId === tab.id))))),
   [terminals.tabs, terminalVisibility, floating.hostedTabs, floating.tabs, worktree.path, scope, terminalDock.owns]);
   const [documents, setDocuments] = useWorkspaceDocuments(scope);
   const { wordWrapFor, setWordWrap } = useWordWrapOverrides(documents);
@@ -812,18 +810,8 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     floating.publishHost(scope, { portal: hostPortal, activeId: activeCenterId, visible: active });
   }, [floating.publishHost, worktree.path, hostPortal, activeCenterId, active]);
   useEffect(() => () => floating.publishHost(scope), [floating.publishHost, worktree.path, scope]);
-  const [rightView, setRightView] = useState<RightView>('terminals');
-  const canShowAllTerminals = !project.builtin;
-  const { inventory: projectTerminals, showAll: terminalShowAll, sortBy: terminalSort, setShowAll, setSortBy } = useProjectTerminalPanel(
-    active && rightSidebarVisible && rightView === 'terminals',
-  );
-  const showAllTerminals = canShowAllTerminals && terminalShowAll;
-  const localPanelTerminals = terminals.loaded ? terminals.tabs : projectTerminals.tabs.filter(tab => tab.workspace_root === worktree.path);
-  const scopedPanelTerminals = showAllTerminals
-    ? taskScope ? projectTerminals.tabs : [...localPanelTerminals, ...projectTerminals.tabs.filter(tab => tab.workspace_root !== worktree.path)]
-    : terminals.tabs;
-  const panelTerminals = terminalDock.tab && !scopedPanelTerminals.some(tab => tab.id === terminalDock.tab!.id)
-    ? [...scopedPanelTerminals, terminalDock.tab] : scopedPanelTerminals;
+  const [rightView, setRightView] = useState<RightView>('conversations');
+  const terminalInventory = useTerminalState(active);
   const [filesExplorerCollapsed, setFilesExplorerCollapsed] = useState<boolean>();
   const [notesExplorerCollapsed, setNotesExplorerCollapsed] = useState<boolean>();
   const [showOpenFile, setShowOpenFile] = useState(false);
@@ -884,7 +872,6 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     && (project.builtin || (!isFloating(sidebarActiveId) && !hostedLocation(sidebarActiveId)))
     ? sidebarActiveId.slice('terminal:'.length) : undefined;
   const activeIsDocument = activeCenterId?.startsWith('document:') ?? false;
-  const activeSessionId = activeCenterId?.startsWith('session:') ? activeCenterId.slice('session:'.length) : undefined;
   const activePullRequest = openPullRequests.find(pr => (pr.repository ?? worktree.path) === worktree.path && prTabId(pr.repository ?? worktree.path, pr.number, pr) === activeCenterId);
 
   const linkSidebarToTab = worktree.is_main && !project.builtin;
@@ -902,8 +889,8 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     ? project.worktrees.filter(item => sidebarResourcePath === item.path || sidebarResourcePath?.startsWith(`${item.path}/`))
       .sort((a, b) => b.path.length - a.path.length)[0] ?? worktree
     : worktree;
-  const [sidebarWorkspaces, setSidebarWorkspaces] = useState({ files: worktree.path, git: worktree.path, sessions: worktree.path });
-  const linkedRightView = rightView === 'files' || rightView === 'git' || rightView === 'sessions' ? rightView : undefined;
+  const [sidebarWorkspaces, setSidebarWorkspaces] = useState({ files: worktree.path, git: worktree.path });
+  const linkedRightView = rightView === 'files' || rightView === 'git' ? rightView : undefined;
   useEffect(() => {
     if (!linkSidebarToTab || !active || !rightSidebarVisible || !linkedRightView) return;
     setSidebarWorkspaces(current => current[linkedRightView] === sidebarWorktree.path
@@ -914,7 +901,6 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     : active && rightSidebarVisible && rightView === view ? sidebarWorktree.path : sidebarWorkspaces[view];
   const explorerRoot = sidebarPath('files');
   const gitRoot = sidebarPath('git');
-  const sessionRoot = sidebarPath('sessions');
 
   const previousContentTab = useRef<string | undefined>(undefined);
   useEffect(() => {
@@ -980,7 +966,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     else setActiveDocumentId(undefined);
   };
   const activateAcp = (id: string) => {
-    setRightView('acp'); setActiveDocumentId(undefined); setActiveCenterId(`acp:${id}`); routeToFloating(`acp:${id}`);
+    setRightView('conversations'); setActiveDocumentId(undefined); setActiveCenterId(`acp:${id}`); routeToFloating(`acp:${id}`);
   };
   const createAcp = (agentId: string) => activateAcp(acp.create(agentId));
   const selectTab = <T,>(action: () => T): T => { restoreSelectionOverridden.current = true; cancelTabNavigation(); return action(); };
@@ -1005,7 +991,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     }
     if (terminalDock.owns(tab)) { showProjectTerminal(); return; }
     if (tab.workspace_root !== worktree.path) {
-      const descriptor = terminalCenterTab(tab, projectTerminals.agents, projectTerminals.titles);
+      const descriptor = terminalCenterTab(tab, terminalInventory.metadata.agents, terminalInventory.metadata.titles);
       floating.requestTerminal(tab);
       if (targetFloating) floating.add(tab.workspace_root, descriptor.id, descriptor);
       else {
@@ -1045,7 +1031,6 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   }, [worktree.path, scope]);
 
   const openSession = useCallback((session: AowAgentSession, sessionWorkspace = session.cwd || worktree.path) => {
-    setRightView('sessions');
     setActiveDocumentId(undefined);
     routeToFloating(`session:${session.id}`);
     setActiveCenterId(`session:${session.id}`);
@@ -1087,7 +1072,6 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
       updated_at: run.started_at,
     };
     const reference = { taskId, runId: run.id };
-    setRightView('sessions');
     setActiveDocumentId(undefined);
     routeToFloating(`session:${session.id}`);
     setActiveCenterId(`session:${session.id}`);
@@ -1128,7 +1112,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
       if (created.kind === 'acp') {
         taskScope?.remember('acp', created.session.thread_id);
         const id = acp.open(created.session);
-        setRightView('acp'); setActiveDocumentId(undefined); setActiveCenterId(`acp:${id}`); routeToFloating(`acp:${id}`, targetFloating);
+        setRightView('conversations'); setActiveDocumentId(undefined); setActiveCenterId(`acp:${id}`); routeToFloating(`acp:${id}`, targetFloating);
       } else {
         taskScope?.remember('terminal', created.terminal.id);
         terminals.replace(created.terminal); openTerminal(created.terminal, targetFloating);
@@ -1650,13 +1634,26 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     setOpenPullRequests(items => items.filter(pr => prTabId(pr.repository ?? worktree.path, pr.number, pr) !== closingTabId));
   };
 
-  const hideTerminalTabs = (targets: CenterTab[]) => {
+  const closingTerminals = useRef(new Set<string>());
+  const closeTerminalTabs = async (targets: CenterTab[]) => {
+    setOperationError('');
+    const closed: CenterTab[] = [];
+    for (const tab of targets) {
+      if (closingTerminals.current.has(tab.targetId)) continue;
+      closingTerminals.current.add(tab.targetId);
+      try {
+        await terminalApi.close(tab.targetId);
+        terminals.remove(tab.targetId);
+        closed.push(tab);
+      } catch (reason) { setOperationError(message(reason)); }
+      finally { closingTerminals.current.delete(tab.targetId); }
+    }
+    targets = closed;
     const closingIds = new Set(targets.map(tab => tab.id));
     const localTargets = targets.filter(tab => !hostedTab(tab.id));
     setTerminalVisibility(items => ({ ...items, ...Object.fromEntries(localTargets.map(tab => [tab.targetId, false])) }));
     for (const tab of targets) {
       const hosted = hostedTab(tab.id);
-      if (hosted) floating.sources.current.get(hosted.workspace)?.close(tab.id);
       floating.cancelTerminalRequest(tab.targetId);
       floating.remove(hosted?.workspace ?? scope, tab.id);
       floating.removeHosted(hosted?.workspace ?? scope, tab.id);
@@ -1674,7 +1671,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const closeTab = async (tab: CenterTab) => {
     if (centerTabGroup(tab) === 'global') { globalTabs.find(item => item.id === tab.id)?.close(); return; }
     if (centerTabGroup(tab) === 'terminal') {
-      hideTerminalTabs([tab]);
+      await closeTerminalTabs([tab]);
     }
     else if (tab.kind === 'session') closeSession(tab.targetId);
     else if (tab.kind === 'acp') await closeTabsInGroup(tab, [tab.id]);
@@ -1688,7 +1685,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     const targets = centerTabs.filter(tab => centerTabGroup(tab) === group && ids.includes(tab.id));
     if (!targets.length) return;
     if (group === 'terminal') {
-      hideTerminalTabs(targets);
+      await closeTerminalTabs(targets);
       return;
     }
     if (group === 'global') {
@@ -1981,8 +1978,8 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     syncTabLocation(target && taskScope ? { ...target, workTaskId: taskScope.task.id } : target, '', locationTabVisible);
   }, [initialEntry, locationSource, locationCenterId, locationTabVisible, restored, terminals.loaded, terminals.loading, centerTabs,
     documents, sessionPreviews, acp.tabs, openPullRequests, browserPath, automationLocations, worktree.id, worktree.path, scope, syncTabLocation]);
-  const commandsRef = useRef({ openExplorerFile, createTerminal, createAcp, createRole, createTemporaryNote, closeTab, closePreviewDocument, closeTabsInGroup, centerTabs, canRenameTab, renameTab });
-  commandsRef.current = { openExplorerFile, createTerminal, createAcp, createRole, createTemporaryNote, closeTab, closePreviewDocument, closeTabsInGroup, centerTabs, canRenameTab, renameTab };
+  const commandsRef = useRef({ openExplorerFile, createTerminal, createAcp, createRole, createTemporaryNote, closeTab, closePreviewDocument, closeTabsInGroup, closeTerminalTabs, centerTabs, canRenameTab, renameTab });
+  commandsRef.current = { openExplorerFile, createTerminal, createAcp, createRole, createTemporaryNote, closeTab, closePreviewDocument, closeTabsInGroup, closeTerminalTabs, centerTabs, canRenameTab, renameTab };
   useEffect(() => {
     floating.publish(scope, {
       tabs: ownedCenterTabs.filter(tab => centerTabGroup(tab) !== 'global'),
@@ -1995,14 +1992,14 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
         if (kind === 'markdown' || kind === 'text') void commandsRef.current.createTemporaryNote(kind === 'markdown' ? 'md' : 'txt');
         else void commandsRef.current.createTerminal(agent);
       },
-      close: id => {
+      close: async id => {
         const tab = commandsRef.current.centerTabs.find(tab => tab.id === id);
-        if (tab) void commandsRef.current.closeTab(tab);
+        if (tab) await commandsRef.current.closeTab(tab);
         else {
           if (id.startsWith('terminal:')) {
             const terminalId = id.slice('terminal:'.length);
-            floating.cancelTerminalRequest(terminalId);
-            setTerminalVisibility(items => ({ ...items, [terminalId]: false }));
+            await commandsRef.current.closeTerminalTabs([{ id, targetId: terminalId, kind: 'terminal', label: terminalId }]);
+            return;
           }
           floating.remove(scope, id);
           floating.removeHosted(scope, id);
@@ -2077,9 +2074,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const renderSidebar = () => (
     <aside className="project-aow-right" hidden={!rightSidebarVisible}>
       <nav aria-label={t("navigation.aow_side_views")}>
-        <button className={rightView === 'terminals' ? 'active' : ''} title={t("navigation.terminal")} aria-label={t("aow.terminal_panel")} onClick={() => setRightView('terminals')}><SquareTerminal /></button>
-        <button className={rightView === 'acp' ? 'active' : ''} title="ACP" aria-label={t("aow.acp_panel")} onClick={() => setRightView('acp')}><AcpIcon /></button>
-        <button className={rightView === 'sessions' ? 'active' : ''} title={t("navigation.conversation")} aria-label={t("navigation.conversation")} onClick={() => setRightView('sessions')}><MessageSquare /></button>
+        <button className={rightView === 'conversations' ? 'active' : ''} title={t("navigation.conversation")} aria-label={t("navigation.conversation")} onClick={() => setRightView('conversations')}><MessageSquare /></button>
         <button className={rightView === 'automations' ? 'active' : ''} title={t("navigation.automation")} aria-label={t("navigation.automation")} onClick={() => setRightView('automations')}><CalendarClock /></button>
         <span className="project-aow-view-separator" aria-hidden="true" />
         <button className={rightView === 'files' && (!project.builtin || rightSidebarVisible) ? 'active' : ''} title={t("navigation.explorer")} aria-label={t("navigation.explorer")} onClick={() => setRightView('files')}><FolderOpen /></button>
@@ -2121,36 +2116,12 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
       <div className="project-aow-right-content" hidden={rightView !== 'pullRequests'}>
         <PullRequestsPanel key={'pull-requests:' + worktree.path} repository={worktree.path} visible={active && rightSidebarVisible && rightView === 'pullRequests'} activeNumber={activePullRequest?.number} activeProvider={activePullRequest?.provider} activeRemote={activePullRequest?.remote} onOpen={pr => selectTab(() => openPullRequest(pr))} />
       </div>
-      <div className="project-aow-right-content" hidden={rightView !== 'sessions'}>
-        <AgentSessions key={`sessions:${worktree.path}`} worktreePath={sessionRoot} agents={agents} activeSessionId={activeSessionId} visible={active && rightSidebarVisible && rightView === 'sessions'} onOpen={session => selectTab(() => openSession(session))} onResume={(session, agent) => void selectTab(() => createTerminal(agent, session, sessionRoot))} />
-      </div>
-      <div className="project-aow-right-content" hidden={rightView !== 'terminals'}>
-        <TerminalPanel tabs={panelTerminals} descendantTabs={[...localPanelTerminals, ...projectTerminals.tabs.filter(tab => tab.workspace_root !== worktree.path)]}
-          activeId={terminalDock.visible ? terminalDock.terminalId : activeTerminalId} activeWorktreePath={worktree.path}
-          detectedAgents={{ ...projectTerminals.agents, ...terminals.detectedAgents }}
-          titles={{ ...projectTerminals.titles, ...terminals.terminalTitles }}
-          worktrees={canShowAllTerminals ? project.worktrees : undefined} showAll={showAllTerminals}
-          onShowAllChange={setShowAll}
-          sortBy={terminalSort} onSortChange={setSortBy}
-          loading={showAllTerminals && projectTerminals.loading} error={showAllTerminals ? projectTerminals.error : undefined}
-          openedIds={new Set([...openedTerminals.map(tab => tab.id), ...hostedTabs.map(tab => tab.targetId), ...(terminalDock.visible && terminalDock.terminalId ? [terminalDock.terminalId] : [])])}
-          onReload={() => { void terminals.reload(); projectTerminals.reload(); }}
-          onRebuild={async id => {
-            const tab = await terminalApi.rebuild(id);
-            terminals.replace(tab);
-            projectTerminals.reload();
-          }}
-          onTerminate={async id => {
-            if (terminals.tabs.some(tab => tab.id === id)) await terminals.close(id);
-            else {
-              try { await terminalApi.close(id); projectTerminals.remove(id); }
-              catch (reason) { setOperationError(message(reason)); }
-            }
-          }}
-          onOpen={tab => selectTab(() => openTerminal(tab))} onOpenFloating={tab => selectTab(() => openTerminal(tab, true))} canOpenFloating={tab => !terminalDock.owns(tab)} />
-      </div>
-      <div className="project-aow-right-content" hidden={rightView !== 'acp'}>
-        <AcpPanel key={`acp:${worktree.path}`} workspace={worktree.path} visible={active && rightSidebarVisible && rightView === 'acp'} activeThreadId={acp.tabs.find(tab => `acp:${tab.id}` === sidebarActiveId)?.thread_id} onOpen={session => selectTab(() => activateAcp(acp.open(session)))} />
+      <div className="project-aow-right-content" hidden={rightView !== 'conversations'}>
+        <ConversationPanel key={scope} workspace={worktree.path} visible={active && rightSidebarVisible && rightView === 'conversations'}
+          activeTerminalId={terminalDock.visible ? terminalDock.terminalId : activeTerminalId}
+          activeThreadId={acp.tabs.find(tab => `acp:${tab.id}` === sidebarActiveId)?.thread_id}
+          onOpenTerminal={tab => selectTab(() => openTerminal(tab))}
+          onOpenAcp={session => selectTab(() => activateAcp(acp.open(session)))} />
       </div>
       <div className="project-aow-right-content" hidden={rightView !== 'automations'}>
         <AutomationPanel project={project} agents={agents} activeTaskId={activeCenterId?.startsWith('automation:') ? activeCenterId.slice('automation:'.length) : undefined} refreshKey={automationRefreshKey} onOpenTask={task => selectTab(() => openAutomation(task))} onTaskChanged={taskChanged} onTaskDeleted={taskDeleted} />
@@ -2175,7 +2146,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
         leadingControls={onShowLeftSidebar ? <LeftSidebarToggle onClick={onShowLeftSidebar} /> : null}
         controls={!rightSidebarVisible ? <button className="project-aow-right-show" title={t("aow.show_right_sidebar")} aria-label={t("aow.show_right_sidebar")} onClick={onShowRightSidebar}><PanelRightOpen /></button> : null}
       />
-      {operationError || terminals.error ? <div className="project-aow-inline-error">{operationError || terminals.error}<button onClick={() => setOperationError('')}><X /></button></div> : null}
+      {operationError || terminals.error ? <div className="project-aow-inline-error" role="alert">{operationError || terminals.error}<button onClick={() => setOperationError('')}><X /></button></div> : null}
       <div className="project-aow-center-content">
         {globalTabs.map(tab => <GlobalTabSlot key={tab.id} tab={tab} hidden={activeCenterId !== tab.id} />)}
         <div ref={setHostPortal} />
@@ -2200,7 +2171,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
         </div>
         {floatingId?.startsWith('document:') && floating.portal ? createPortal(<div className="floating-workspace-host">{renderEditor(floatingId.slice(9))}</div>, floating.portal, scope + ':editor') : null}
         {acp.tabs.map(tab => <Fragment key={tab.id}>{projectContent(`acp:${tab.id}`, <div className="acp-tab-host" hidden={!tabVisible(`acp:${tab.id}`)}>
-          <AcpSessionTab tab={tab} workspace={worktree.path} visible={tabLive(`acp:${tab.id}`)} onSessionChange={acp.changed} onOpenSession={session => selectTab(() => activateAcp(acp.open(session)))} onOpenFile={(path, line) => { void selectTab(() => openExternalFile(path)).then(() => { setRightView('acp'); if (line && Number.isFinite(line)) setDocuments(items => items.map(document => document.path === path ? { ...document, revealLocation: { line, revision: Date.now() } } : document)); }).catch(reason => setOperationError(message(reason))); }} />
+          <AcpSessionTab tab={tab} workspace={worktree.path} visible={tabLive(`acp:${tab.id}`)} onSessionChange={acp.changed} onOpenSession={session => selectTab(() => activateAcp(acp.open(session)))} onOpenFile={(path, line) => { void selectTab(() => openExternalFile(path)).then(() => { setRightView('conversations'); if (line && Number.isFinite(line)) setDocuments(items => items.map(document => document.path === path ? { ...document, revealLocation: { line, revision: Date.now() } } : document)); }).catch(reason => setOperationError(message(reason))); }} />
         </div>)}</Fragment>)}
         {sessionPreviews.map((preview) => <Fragment key={preview.session.id}>{projectContent(`session:${preview.session.id}`, <div className="project-aow-session-host" hidden={!tabVisible(`session:${preview.session.id}`)}>
           <SessionSnapshotView
@@ -2921,17 +2892,17 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
       <div className="project-aow-left-resizer" role="separator" aria-label={t("aow.resize_projects_sidebar")} aria-orientation="vertical" onPointerDown={(event) => startSidebarResize('left', event)} />
       <div className="project-aow-workspace">
         <div className="project-aow-surfaces">
-          {projects.map(project => <ProjectTerminalPanelProvider key={project.id} project={project}><ProjectAcpPanelProvider project={project}>
+          {projects.map(project => <Fragment key={project.id}>
             {project.worktrees.filter(worktree => !busyWorktrees.has(worktree.path)).filter(worktree => visitedWorktrees.has(worktree.path) || globalTabs.tabs.some(tab => tab.workspace === worktree.path) || floating.tabs.some(tab => tab.workspace === worktree.path)
               || floating.hostedTabs.some(tab => tab.workspace === worktree.path || tab.host === worktree.path)).map(worktree => <ProjectTerminalDockProvider key={worktree.path} project={project} worktree={worktree} controls={terminalDockControls} onShow={() => setBottomPanel(undefined)}><WorkspaceSurface globalTabs={globalTabs.tabs} browserPath={browserPath} locationSource={locationSource(worktree.path)} initialEntry={!taskMode && initialEntry && initialEntry.target.type !== 'files' && (initialEntry.workspacePath === worktree.path
                 || floating.hostedTabs.some(tab => tab.host === worktree.path && tab.workspace === initialEntry.workspacePath && tab.id === tabCenterId(initialEntry))) ? initialEntry : undefined} key={worktree.path} project={project} worktree={worktree} active={!taskMode && worktree.path === activeWorktreePath} agents={agents} onShowLeftSidebar={leftSidebarVisible ? undefined : showLeftSidebar} rightSidebarVisible={rightSidebarVisible} onHideRightSidebar={hideRightSidebar} onShowRightSidebar={showRightSidebar} onStartRightResize={startRightResize} notesRefresh={notesRefreshByProject[project.id] ?? initialExplorerRefresh} onNotesChanged={notesChanged} onResourcesChanged={reportResources} /></ProjectTerminalDockProvider>)}
-          </ProjectAcpPanelProvider></ProjectTerminalPanelProvider>)}
+          </Fragment>)}
           {taskState.tasks.filter(task => !task.archived && (visitedTasks.has(task.id) || floating.tabs.some(tab => tab.workspace === taskScopeKey(task.id)) || globalTabs.tabs.some(tab => tab.workspace === taskScopeKey(task.id)) || floating.hostedTabs.some(tab => tab.workspace === taskScopeKey(task.id) || tab.host === taskScopeKey(task.id)))).map(task => {
             const project = projects.find(item => item.id === task.project_id);
             const worktree = project?.worktrees.find(item => item.path === task.workspace);
             if (!project || !worktree || busyWorktrees.has(worktree.path)) return null;
             const scope = taskScopeKey(task.id);
-            return <TaskScopeProvider key={task.id} task={task} tasks={taskState.tasks} instances={taskGraph.items}><ProjectTerminalPanelProvider project={project}><ProjectAcpPanelProvider project={project}>
+            return <TaskScopeProvider key={task.id} task={task} tasks={taskState.tasks} instances={taskGraph.items}>
               <ProjectTerminalDockProvider project={project} worktree={worktree} controls={terminalDockControls} onShow={() => setBottomPanel(undefined)}>
                 <WorkspaceSurface globalTabs={globalTabs.tabs} browserPath={browserPath} locationSource={locationSource(scope)}
                   initialEntry={taskMode && activeTaskId === task.id && initialEntry?.workspacePath === worktree.path ? initialEntry : undefined}
@@ -2940,7 +2911,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
                   onHideRightSidebar={hideRightSidebar} onShowRightSidebar={showRightSidebar} onStartRightResize={startRightResize}
                   notesRefresh={notesRefreshByProject[project.id] ?? initialExplorerRefresh} onNotesChanged={notesChanged} />
               </ProjectTerminalDockProvider>
-            </ProjectAcpPanelProvider></ProjectTerminalPanelProvider></TaskScopeProvider>;
+            </TaskScopeProvider>;
           })}
           {activeEntry && busyWorktrees.has(activeEntry.worktree.path) ? <div className="project-aow-no-context"><LoaderCircle className="spinning" /><p>{t("aow.this_worktree_is_being_cleaned_up_other_workspaces_remain")}</p><button onClick={() => setCleanupProjectId(activeEntry.project.id)}>{t("aow.view_cleanup_progress")}</button></div> : null}
           {!activeEntry && !leftSidebarVisible ? <nav className="project-aow-center-tabs project-aow-empty-toolbar"><LeftSidebarToggle onClick={showLeftSidebar} /></nav> : null}
@@ -3016,9 +2987,9 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
       open={globalTabVisible(browserTab)} onHide={() => globalTabs.close('browser')}
       onOpenFile={entry => floating.sources.current.get(browserTab?.workspace || floating.globalRoot)?.openFile(entry)} />, globalTabs.elements.browser) : null}
     <FloatingWorkspace agents={agents} projects={projects} activeLocation={locationInFloating} />
-    {globalProject && globalProject.worktrees[0] && (floating.open || floating.tabs.length > 0 || browserVisited || standaloneTabs.length > 0) ? <ProjectTerminalDockProvider key={globalProject.id} project={globalProject} worktree={globalProject.worktrees.find(worktree => worktree.is_main) ?? globalProject.worktrees[0]} controls={terminalDockControls} onShow={() => setBottomPanel(undefined)}><ProjectTerminalPanelProvider project={globalProject}><ProjectAcpPanelProvider project={globalProject}>
+    {globalProject && globalProject.worktrees[0] && (floating.open || floating.tabs.length > 0 || browserVisited || standaloneTabs.length > 0) ? <ProjectTerminalDockProvider key={globalProject.id} project={globalProject} worktree={globalProject.worktrees.find(worktree => worktree.is_main) ?? globalProject.worktrees[0]} controls={terminalDockControls} onShow={() => setBottomPanel(undefined)}>
       <WorkspaceSurface locationSource={locationSource(floating.globalRoot)} initialEntry={initialEntry?.target.type !== 'files' && globalProject.worktrees.some(worktree => worktree.path === initialEntry?.workspacePath) ? initialEntry : undefined} project={globalProject} worktree={globalProject.worktrees.find(worktree => worktree.is_main) ?? globalProject.worktrees[0]} active={floating.visible} agents={agents} rightSidebarVisible={floating.sidebarOpen} onHideRightSidebar={() => floating.setSidebarOpen(false)} onShowRightSidebar={() => floating.setSidebarOpen(true)} onStartRightResize={() => undefined} notesRefresh={notesRefreshByProject[globalProject.id] ?? initialExplorerRefresh} onNotesChanged={notesChanged} />
-    </ProjectAcpPanelProvider></ProjectTerminalPanelProvider></ProjectTerminalDockProvider> : null}
+    </ProjectTerminalDockProvider> : null}
   </div>;
 }
 

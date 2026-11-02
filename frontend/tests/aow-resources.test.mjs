@@ -3019,7 +3019,7 @@ try {
     assert.deepEqual(state.closedTerminalIds, []);
   });
 
-  await test('collapsed group badges cap at one character and group closes hide every terminal without destroying instances', async t => {
+  await test('collapsed group badges cap at one character and group closes destroy every terminal instance', async t => {
     const { page, state } = await fixture(t, { extraTerminals: 8 });
     const terminalGroup = groupButton(surface(page), '终端');
     await terminalGroup.click();
@@ -3041,10 +3041,10 @@ try {
     await page.getByRole('menuitem', { name: '关闭所有', exact: true }).click();
     await terminalGroup.waitFor({ state: 'detached' });
     assert.equal(await page.getByRole('alertdialog').count(), 0);
-    assert.deepEqual(state.closedTerminalIds, []);
+    assert.equal(state.closedTerminalIds.length, 10);
     assert.equal(await surface(page).getByRole('tab').count(), 0);
     assert.equal(await surface(page).locator('.terminal-emulator-shell').count(), 0);
-    assert.equal(await surface(page).getByRole('region', { name: worktrees[0].path, exact: true }).locator('.terminal-panel-row').count(), 10);
+    assert.equal(await surface(page).locator('.conversation-instance').count(), 0);
     await surface(page).getByRole('button', { name: '新建窗体', exact: true }).waitFor();
   });
 
@@ -3381,7 +3381,7 @@ try {
     assert.ok(state.projects.find(item => item.builtin).registered_path === '/global');
   });
 
-  await test('an existing terminal moves to floating, retains rename, and closes without destroying its instance', async t => {
+  await test('an existing terminal moves to floating, retains rename, and destroys its instance when closed', async t => {
     const { page, state } = await fixture(t, { floating: true });
     await tab(page, 'Shell').click({ button: 'right' });
     await page.getByRole('menuitem', { name: '打开 · 浮动工作区', exact: true }).click();
@@ -3394,26 +3394,16 @@ try {
     await name.fill('Floating Shell');
     await name.press('Enter');
     await panel.getByRole('tab').filter({ hasText: 'Floating Shell' }).waitFor();
+    assert.deepEqual(state.closedTerminalIds, [], 'moving and renaming preserve the process');
     await panel.getByRole('button', { name: '关闭 Floating Shell' }).click();
     await panel.getByRole('tab').waitFor({ state: 'detached' });
     assert.equal(await panel.locator('.terminal-emulator-shell').count(), 0);
+    assert.equal(state.closedTerminalIds.length, 1);
     assert.equal(await page.getByRole('alertdialog').count(), 0);
-    assert.deepEqual(state.closedTerminalIds, []);
     await panel.getByRole('button', { name: '最小化浮动工作区' }).click();
-    await surface(page).locator('.terminal-panel-open').filter({ hasText: 'Floating Shell' }).click({ button: 'right' });
-    await page.getByRole('menuitem', { name: '打开 · 浮动工作区', exact: true }).click();
-    await panel.locator('.terminal-emulator-shell:not(.restore-pending)').waitFor();
-    assert.equal(await panel.getByRole('tab').filter({ hasText: 'Floating Shell' }).count(), 1);
-    await panel.getByRole('button', { name: '最小化浮动工作区' }).click();
-    await groupButton(surface(page), '终端').click();
-    await page.getByRole('button', { name: '浮动工作区', exact: true }).click();
-    await panel.getByRole('tab').filter({ hasText: 'Floating Shell' }).click({ button: 'right' });
-    await page.getByRole('menuitem', { name: '还原', exact: true }).click();
-    assert.equal(await panel.getByRole('tab').count(), 0);
-    await panel.getByRole('button', { name: '最小化浮动工作区' }).click();
-    assert.equal(await groupButton(surface(page), '终端').getAttribute('aria-expanded'), 'true');
-    await surface(page).locator('.terminal-emulator-shell:not(.restore-pending)').waitFor();
-    assert.equal(state.createdTerminals.length, 0);
+    await page.reload();
+    await surface(page).waitFor();
+    assert.equal(await tab(page, 'Floating Shell').count(), 0);
   });
 
   await test('floating tab groups share previews and close only their own group across source worktrees', async t => {
@@ -3444,18 +3434,13 @@ try {
     await page.getByRole('menuitem', { name: '关闭其他', exact: true }).click();
     await eventually(async () => await shells.count() === 1);
     assert.equal(await page.getByRole('alertdialog').count(), 0);
-    assert.deepEqual(state.closedTerminalIds, []);
+    assert.equal(state.closedTerminalIds.length, 1);
     assert.equal(await tabs.getByRole('tab').count(), 2, 'closing terminals preserves the file group');
-    // Reopen the second source's existing instance, then hide both sources together.
-    await panel.getByRole('button', { name: '最小化浮动工作区' }).click();
-    await surface(page).getByRole('region', { name: worktrees[1].path, exact: true }).locator('.terminal-panel-open').filter({ hasText: 'Shell' }).click({ button: 'right' });
-    await page.getByRole('menuitem', { name: '打开 · 浮动工作区', exact: true }).click();
-    await eventually(async () => await shells.count() === 2);
     await shells.first().click({ button: 'right' });
     await page.getByRole('menuitem', { name: '关闭所有', exact: true }).click();
     await eventually(async () => await tabs.getByRole('tab').count() === 1);
     assert.equal(await page.getByRole('alertdialog').count(), 0);
-    assert.deepEqual(state.closedTerminalIds, []);
+    assert.equal(state.closedTerminalIds.length, 2);
     assert.equal(state.createdTerminals.length, 0);
     assert.equal(await tabs.locator('.project-aow-group-toggle').count(), 1);
     await panel.getByRole('button', { name: '最小化浮动工作区' }).click();

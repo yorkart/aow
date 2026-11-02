@@ -1,3 +1,5 @@
+import { terminalApi } from '../features/terminals/terminalApi';
+import { terminalStore } from '../features/terminals/terminalStore';
 import { t } from '../lib/i18n';
 import { ListRowMenuContext } from '../components/ListRowMenuContext';
 import { appLocalStorage } from '../lib/basePath';
@@ -20,9 +22,9 @@ export interface WorkspaceCommands {
   openFile: (entry: FileEntry) => void;
   createAcp: (agentId: string) => void;
   createRole?: (role: AgentRole) => void;
-  close: (id: string) => void;
+  close: (id: string) => void | Promise<void>;
   closePreview: (id: string) => void;
-  // Closing a group dismisses its views; terminal instances keep running.
+  // Group close uses the same lifecycle as closing each tab individually.
   closeMany: (ids: string[]) => Promise<void>;
   canRename: (id: string) => boolean;
   rename: (id: string, name: string) => Promise<void>;
@@ -201,10 +203,23 @@ function useFloatingController() {
   useEffect(() => persist('aow-floating-pinned', pinned), [pinned]);
   const active = tabs.find(tab => tabKey(tab) === activeKey);
   const select = (tab: FloatingTab) => { setActiveKey(tabKey(tab)); show(); };
-  const close = (tab: FloatingTab) => {
-    const source = sources.current.get(tab.workspace);
-    if (source) source.close(tab.id);
-    else remove(tab.workspace, tab.id);
+  const closing = useRef(new Set<string>());
+  const close = async (tab: FloatingTab) => {
+    const key = tabKey(tab);
+    if (closing.current.has(key)) return;
+    closing.current.add(key);
+    try {
+      const source = sources.current.get(tab.workspace);
+      if (source) await source.close(tab.id);
+      else {
+        if (tab.kind === 'terminal' || tab.kind === 'agent') {
+          await terminalApi.close(tab.targetId);
+          terminalStore.remove(tab.targetId);
+          cancelTerminalRequest(tab.targetId);
+        }
+        remove(tab.workspace, tab.id);
+      }
+    } finally { closing.current.delete(key); }
   };
   return { tabs, tabRevealRequest, contains, active, open, visible, pinned, togglePinned, autoHidden, setAutoHidden, showRequest, portal, setPortal, sidebar, setSidebar, sidebarOpen, setSidebarOpen,
     dockPortal, setDockPortal, globalRoot, setGlobalRoot, sources, show, minimize, add, restore, remove, replaceDocument, retainWorkspaces, publish, select, close,
