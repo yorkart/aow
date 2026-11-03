@@ -30,6 +30,7 @@ impl AowManager {
         self.agent_worktree_path(project_id, &main.path).await
     }
 
+    #[cfg(test)]
     pub(crate) async fn prepare_workspace(
         &self,
         project_id: &str,
@@ -164,7 +165,9 @@ impl AowManager {
             }
             candidates[0].id.clone()
         };
-        let launch = self.resolve_agent_launch(&profile_id, workspace_root).await?;
+        let launch = self
+            .resolve_agent_launch(&profile_id, workspace_root)
+            .await?;
         if Some(launch.agent_type.id()) != pane.agent_id.as_deref() {
             return Err(AowError::Invalid(
                 aow_i18n::text(
@@ -197,7 +200,9 @@ impl AowManager {
     }
 }
 
+#[cfg(test)]
 struct WorkspaceGit;
+#[cfg(test)]
 impl aow_workspaces::GitExecutor for WorkspaceGit {
     async fn output(&self, cwd: &Path, args: &[&str]) -> anyhow::Result<String> {
         git_output(cwd, args).await.map_err(Into::into)

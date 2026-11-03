@@ -89,14 +89,9 @@ async fn temporary_directory_survives_prepared_workspace_drop_without_git() {
         workspace_mode: WorkspaceMode::Temporary,
         ..Default::default()
     };
-    let prepared = prepare(
-        &config,
-        Path::new("/missing/repository"),
-        "task/task",
-        &Git,
-    )
-    .await
-    .unwrap();
+    let prepared = prepare(&config, Path::new("/missing/repository"), "task/task", &Git)
+        .await
+        .unwrap();
     assert!(prepared.created);
     assert!(prepared.branch.is_none());
     assert_eq!(std::fs::read_dir(&prepared.directory).unwrap().count(), 0);
