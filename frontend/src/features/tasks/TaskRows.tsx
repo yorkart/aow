@@ -26,7 +26,7 @@ export function TaskRows({ tasks, allTasks, activeId, onSelect, onEdit, onPin, o
     const detail = dependencies.length ? `${t('tasks.dependencies')}: ${dependencies.map(taskTitle).join(', ')}` : task.workspace;
     return <AowListRow key={task.id} className={`project-aow-task-row${activeId === task.id ? ' active' : ''}`} title={taskTitle(task)} tooltip={`${task.prompt}\n${detail}`} active={activeId === task.id}
       icon={task.is_router ? <MessageSquare /> : <ListTodo />} actions={task.is_router ? <></> : undefined} openLabel={taskTitle(task)} onOpen={() => onSelect(task)} menuLabel={t('tasks.actions')}
-      menuExpanded={menu?.task.id === task.id} onMenu={(x, y) => setMenu({ task, x, y })}><small title={detail}>{task.archived ? t('tasks.archived') : dependencies.length ? t('tasks.dependency_count', { count: dependencies.length }) : ''}</small></AowListRow>;
+      menuExpanded={menu?.task.id === task.id} onMenu={(x, y) => setMenu({ task, x, y })}><small title={detail}>{task.archived ? t('tasks.archived') : task.is_router ? '' : t('tasks.status_' + (task.status ?? 'todo'))}</small></AowListRow>;
   })}</div>{menu && createPortal(<div ref={menuElement} role="menu" aria-label={t('tasks.actions')} className="project-aow-context-menu"
     style={{ left: Math.max(8, Math.min(menu.x, window.innerWidth - 240)), top: Math.max(8, Math.min(menu.y, window.innerHeight - 190)) }}>
     <button role="menuitem" onClick={() => action(onEdit)}><Pencil />{t('tasks.edit')}</button>

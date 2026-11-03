@@ -19,6 +19,8 @@ pub(in crate::aow) fn routes() -> Router<AppState> {
             post(super::routing::router),
         )
         .route("/api/aow/tasks/{id}/resources", post(attach))
+        .route("/api/aow/tasks/{id}/runs", post(super::runs::start))
+        .route("/api/aow/tasks/{id}/status", post(super::runs::status))
 }
 
 async fn list(State(state): State<AppState>) -> Result<Json<Vec<Task>>, HttpError> {
@@ -305,9 +307,10 @@ pub(super) async fn create(
             }
         };
         let (kind, resource_id) = session.resource();
-        let task = TaskRecord {
+        let mut task = TaskRecord {
             id: request.request_id,
             project_id: request.project_id,
+            status: "todo".into(),
             prompt: request.prompt,
             agent_id: agent,
             agent_role_id: request.agent_role_id,
@@ -332,6 +335,9 @@ pub(super) async fn create(
         let run = (!task.is_router && task.initial_thread_id.is_some()).then(|| {
             crate::collaboration::new_run(&task, "initial".into(), task.prompt.clone(), run_source)
         });
+        if run.is_some() {
+            task.status = "in_progress".into();
+        }
         if let Err(error) = state.aow.inner.tasks.insert_with_run(&task, run.as_ref()) {
             session.discard(&state).await;
             return Err(crate::instances::invalid(error.to_string()));

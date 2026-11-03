@@ -4,8 +4,11 @@ import { useEffect, useState } from 'react';
 
 export interface TaskRun {
   id: string; task_id: string; project_id: string; thread_id: string; prompt: string;
-  state: 'queued' | 'running' | 'waiting' | 'result_available' | 'failed' | 'interrupted';
+  state: 'queued' | 'running' | 'result_available' | 'failed' | 'interrupted';
   result: string | null; error: string | null; created_at: number; finished_at: number | null;
+  trigger?: 'assignment' | 'message' | 'wakeup';
+  caused_by_run_id?: string | null;
+  execution?: { agent_id: string; agent_role_id: string | null; workspace: string; workspace_intent: string | null; target_task_id: string | null; target_revision: string | null } | null;
   source: { task_id: string; thread_id: string; turn_id: string | null; message_id: string | null; request: string } | null;
 }
 export interface InboxEvent {

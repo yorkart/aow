@@ -4,6 +4,7 @@ fn task(id: &str, dependencies: &[&str]) -> TaskRecord {
     TaskRecord {
         id: id.into(),
         project_id: "project".into(),
+        status: "todo".into(),
         prompt: format!("Task {id}"),
         agent_id: "agent".into(),
         agent_role_id: None,
@@ -43,6 +44,9 @@ fn execution(id: &str, task_id: &str, parent: Option<&str>) -> TaskRun {
             request: "Original wording".into(),
             parent_run_id: parent.map(str::to_owned),
         }),
+        execution: None,
+        trigger: "message".into(),
+        caused_by_run_id: None,
         state: "queued".into(),
         result: None,
         error: None,
@@ -113,6 +117,15 @@ fn results_and_deliveries_are_durable_independent_and_immutable() {
         db.inbox(None, false, true, 0, 30).unwrap().items[0].run.id,
         "first"
     );
+    assert!(
+        db.process_delivery("result-first", Some("Premature".into()), 5)
+            .is_err()
+    );
+    db.enqueue_wakeup(
+        "result-first",
+        &execution("wakeup-result-first", "source", None),
+    )
+    .unwrap();
     db.process_delivery("result-first", Some("Summary".into()), 5)
         .unwrap();
     db.process_delivery("result-first", Some("Duplicate".into()), 6)
@@ -136,16 +149,21 @@ fn results_and_deliveries_are_durable_independent_and_immutable() {
 }
 
 #[test]
-fn nested_delegations_return_upstream_only_after_all_child_returns_are_handled() {
+fn wakeups_have_independent_results_and_preserve_causal_and_return_addresses() {
     let db = TaskDb::open(None).unwrap();
+    db.insert(&task("worker", &[])).unwrap();
     db.enqueue_run(&execution("parent", "worker", None))
         .unwrap();
-    for id in ["one", "two"] {
-        db.enqueue_run(&execution(id, id, Some("parent"))).unwrap();
-    }
-    assert!(
-        db.enqueue_run(&execution("cycle", "worker", Some("one")))
-            .is_err()
+    let mut child = execution("child", "helper", Some("parent"));
+    child.source.as_mut().unwrap().task_id = "worker".into();
+    child.source.as_mut().unwrap().thread_id = "thread-worker".into();
+    db.enqueue_run(&child).unwrap();
+    let followup = db
+        .enqueue_run(&execution("followup", "worker", Some("child")))
+        .unwrap();
+    assert_eq!(
+        followup.state, "queued",
+        "an active ancestor receives a later run without a waiting dependency"
     );
     db.finish_run(
         "parent",
@@ -155,44 +173,118 @@ fn nested_delegations_return_upstream_only_after_all_child_returns_are_handled()
         1,
     )
     .unwrap();
-    assert_eq!(db.run("parent").unwrap().unwrap().state, "waiting");
-    assert!(
-        db.inbox(None, false, false, 0, 30)
-            .unwrap()
-            .items
-            .is_empty()
-    );
-    for id in ["one", "two"] {
-        db.finish_run(id, "result_available", Some(id.into()), None, 2)
-            .unwrap();
-    }
-    db.process_delivery("result-one", Some("Waiting for two".into()), 3)
-        .unwrap();
-    assert_eq!(db.run("parent").unwrap().unwrap().state, "waiting");
-    db.update_delivery(
-        "result-two",
-        "blocked",
-        Some("Wakeup interrupted".into()),
-        0,
+    let frozen = db.run("parent").unwrap().unwrap();
+    assert!(frozen.terminal());
+    assert_eq!(db.list().unwrap()[0].status, "in_progress");
+    db.set_status("worker", "waiting").unwrap();
+    db.finish_run(
+        "child",
+        "result_available",
+        Some("Findings".into()),
+        None,
+        2,
     )
     .unwrap();
-    assert_eq!(db.inbox(None, false, false, 0, 30).unwrap().items.len(), 2);
-    db.retry_delivery("result-two", "retried-wakeup").unwrap();
-    db.process_delivery("result-two", Some("Combined conclusion".into()), 4)
-        .unwrap();
+    let mut request = execution("wakeup-result-child", "worker", None);
+    request.thread_id = "thread-worker".into();
+    let wakeup = db.enqueue_wakeup("result-child", &request).unwrap();
+    assert_eq!(db.enqueue_wakeup("result-child", &request).unwrap(), wakeup);
+    assert_eq!(wakeup.trigger, "wakeup");
+    assert_eq!(wakeup.caused_by_run_id.as_deref(), Some("child"));
+    assert_eq!(wakeup.source, frozen.source);
     assert_eq!(
-        db.run("parent").unwrap().unwrap().result.as_deref(),
+        db.run_for_prompt(&wakeup.id).unwrap(),
+        Some(wakeup.id.clone())
+    );
+    assert!(
+        !db.active_runs()
+            .unwrap()
+            .iter()
+            .any(|run| run.id == wakeup.id)
+    );
+    db.process_delivery("result-child", Some("Combined conclusion".into()), 3)
+        .unwrap();
+    db.process_delivery("result-child", Some("Duplicate".into()), 4)
+        .unwrap();
+    assert_eq!(db.run("parent").unwrap().unwrap(), frozen);
+    assert_eq!(
+        db.run(&wakeup.id).unwrap().unwrap().result.as_deref(),
         Some("Combined conclusion")
     );
-    let events = db.inbox(None, false, false, 0, 1).unwrap();
-    assert!(events.has_more);
-    assert_eq!(events.items[0].run.id, "parent");
+    let upstream = db
+        .active_deliveries()
+        .unwrap()
+        .into_iter()
+        .find(|delivery| delivery.run_id == wakeup.id)
+        .unwrap();
+    assert_eq!(upstream.thread_id, "thread-source");
     assert_eq!(
-        db.inbox(Some("other-project"), false, false, 0, 30)
-            .unwrap()
-            .unread,
-        0
+        db.list().unwrap()[0].status,
+        "waiting",
+        "run outcomes do not change business acceptance"
     );
+    db.set_status("worker", "done").unwrap();
+    assert_eq!(db.list().unwrap()[0].status, "done");
+    assert!(db.set_status("worker", "result_available").is_err());
+}
+
+#[test]
+fn upgrading_waiting_runs_freezes_old_results_and_keeps_pending_returns() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("tasks.db");
+    {
+        let mut connection = crate::sqlite::open(Some(&path)).unwrap();
+        crate::sqlite::migrate(
+            &mut connection,
+            "AowTasks",
+            &[
+                include_str!("sql/initialize.sql"),
+                include_str!("sql/roles.sql"),
+                include_str!("sql/routing.sql"),
+                include_str!("sql/collaboration.sql"),
+            ],
+        )
+        .unwrap();
+        connection.execute("INSERT INTO tasks (id, project_id, prompt, agent_id, workspace, workspace_mode) VALUES ('worker', 'project', 'Goal', 'agent', '/repo', 'existing')", []).unwrap();
+        let mut old = execution("old", "worker", None);
+        old.state = "waiting".into();
+        old.result = Some("Delegated; awaiting findings".into());
+        let mut payload = serde_json::to_value(&old).unwrap();
+        for key in ["execution", "trigger", "caused_by_run_id"] {
+            payload.as_object_mut().unwrap().remove(key);
+        }
+        connection.execute("INSERT INTO task_runs VALUES ('old','worker','old','thread-worker',NULL,'waiting',?1)", [payload.to_string()]).unwrap();
+        let mut child = execution("legacy-child", "helper", Some("old"));
+        child.source.as_mut().unwrap().task_id = "worker".into();
+        child.source.as_mut().unwrap().thread_id = "thread-worker".into();
+        child.state = "result_available".into();
+        child.result = Some("Child result".into());
+        connection
+            .execute(
+                "INSERT INTO task_runs VALUES (?1,?2,?3,?4,?5,?6,?7)",
+                rusqlite::params![
+                    child.id,
+                    child.task_id,
+                    child.request_id,
+                    child.thread_id,
+                    "old",
+                    child.state,
+                    serde_json::to_string(&child).unwrap()
+                ],
+            )
+            .unwrap();
+        super::collaboration::finish(&connection, &mut child, 2).unwrap();
+    }
+    let db = TaskDb::open(Some(&path)).unwrap();
+    let run = db.run("old").unwrap().unwrap();
+    assert_eq!(run.state, "result_available");
+    assert_eq!(run.result.as_deref(), Some("Delegated; awaiting findings"));
+    assert_eq!(run.execution.unwrap().workspace, "/repo");
+    assert_eq!(db.list().unwrap()[0].status, "waiting");
+    assert_eq!(db.active_deliveries().unwrap().len(), 2);
+    drop(db);
+    let db = TaskDb::open(Some(&path)).unwrap();
+    assert_eq!(db.inbox(None, false, false, 0, 30).unwrap().items.len(), 2);
 }
 
 #[test]

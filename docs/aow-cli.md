@@ -33,21 +33,29 @@ aow-cli task create --source-thread THREAD-ID --request-id login-implementation 
   --role DEVELOPER-ROLE-ID --intent change --task-file requirement.md
 
 # 审查指定任务的已提交版本，复用目标任务工作区并记录提交 SHA
-aow-cli task create --source-thread THREAD-ID --request-id login-review \
-  --role REVIEWER-ROLE-ID --intent review --target-task login-implementation \
+aow-cli task run login-implementation --source-thread THREAD-ID --request-id login-review \
+  --role REVIEWER-ROLE-ID --intent review \
   --task '审查登录功能，列出问题和验证依据'
 
-aow-cli task get login-review --run RUN-ID --source-thread THREAD-ID
-aow-cli task send login-implementation --source-thread THREAD-ID --request-id login-feedback-1 --task-file feedback.md
+aow-cli task get login-implementation --run RUN-ID --source-thread THREAD-ID
+aow-cli task run login-implementation --source-thread THREAD-ID --request-id login-feedback-1 \
+  --role DEVELOPER-ROLE-ID --intent change --task-file feedback.md
+aow-cli task status login-implementation done --source-thread THREAD-ID
 ```
 
 `THREAD-ID` 是 AoW 本地会话 ID，由注入的上下文提供；不是模型供应商的原生 session ID。这些命令使用运行中的 AoW 本机 socket。上下文同时提供 CLI 可执行文件和 state directory，角色 Home 改变时仍应使用该实例的 `--state-dir`。
 
-`change` 从项目默认基线创建独立 worktree；`analyze` 在项目工作区进行无修改的分析；`review` 要求目标任务工作区干净，记录其当前提交，按该提交审查。共享工作区的无修改策略由指令约束，并非文件系统沙箱。已有任务的继续修改使用 `send`，保留原角色与工作区。省略 `--role` 使用发起任务的 ACP adapter 创建普通执行会话，不继承其角色身份。
+`change` 从项目默认基线创建独立 worktree；`analyze` 在项目工作区进行无修改的分析；`review` 要求目标任务工作区干净，记录其当前提交，按该提交审查。共享工作区的无修改策略由指令约束，并非文件系统沙箱。已有任务的继续修改使用 `send`，保留原角色与工作区。`create` 省略 `--role` 时使用发起会话的 ACP adapter 创建普通执行会话，不继承其角色身份；`run` 省略时使用目标 Task 的默认角色。
 
-每次创建或发送都保存独立的 `run_id`、来源 task、会话、轮次、消息和原始请求。`create` / `send` 接受后即可结束当前轮次，不轮询、不等待。目标忙碌时请求进入持久化队列，执行结果会进入 Inbox，并在来源会话空闲后以 `[WAKEUP]` 触发新一轮；不要求浏览器在线，也不改变浏览器控制权。重试创建或发送时保持相同的请求 ID 和内容。
+Task 表示业务目标，Run 表示一次调度执行（可以包含多次模型和工具调用），Thread 表示可复用的会话上下文。同一 Task 可以拥有开发、审查、修复等多个 Run；角色、工作区和结果记录在 Run 上，Task 的原有角色与工作区字段作为默认值。相同角色、工作区策略和审查版本会复用 Thread，切换角色或审查版本时使用另一会话。独立交付的目标才新建 Task。普通 ACP 用户输入仍走会话入口；Run 记录由任务调度产生的执行。
 
-Wakeup 携带事件、任务、执行和来源消息标识。使用 `task get TASK-ID --run RUN-ID` 读取该次执行的固定结果；无 `--run` 时返回任务、会话状态、近期执行记录和委派任务。`result_available` 表示执行轮次结束，不等于需求已验收；失败、中断、空结果需如实报告。执行任务有自己的委派时，先等待并处理子任务回传，再向其来源回传汇总。
+每次创建、执行或发送都保存独立的 `run_id`、来源 task、会话、轮次、消息和原始请求。`create` / `run` / `send` 接受后即可结束当前轮次，不轮询、不等待。目标忙碌时请求进入持久化队列，执行结果会进入 Inbox，并在来源会话空闲后以 `[WAKEUP]` 触发新一轮；不要求浏览器在线，也不改变浏览器控制权。重试创建或发送时保持相同的请求 ID 和内容。
+
+Wakeup 携带事件、任务、执行和来源消息标识。使用 `task get TASK-ID --run RUN-ID` 读取该次执行的固定结果；无 `--run` 时返回任务、会话状态、近期执行记录和委派任务。`result_available` 表示执行轮次结束，不等于需求已验收；失败、中断、空结果需如实报告。WAKEUP 自身也保存新的 Run，通过 `caused_by_run_id` 关联触发它的结果。此前 Run 的结果不会被后续汇总覆盖；嵌套委派的后续汇总形成新结果，沿该次请求的来源回传。根会话处理 WAKEUP 不会再产生一条重复 Inbox 通知。重试投递保留之前失败的唤醒执行，创建新的唤醒 Run，不重新执行子任务。
+
+Task 业务状态独立维护：`todo`、`in_progress`、`waiting`、`in_review`、`done`、`blocked`、`cancelled`。首次调度从待处理进入进行中；执行成功不会自动完成 Task。通过 `task status` 或前端状态选择器更新进度；已完成或取消的 Task 要先显式重新打开才能调度新工作。取消会阻止排队执行并中断正在运行的调度执行；不会删除会话、工作区或历史结果。归档与业务状态互不替代。
+
+`task run --intent change` 复用该 Task 的修改工作区，没有隔离工作区时创建；`analyze` 使用主仓库；`review` 默认审查同一 Task 的修改工作区，也可用 `--target-task` 指向其他 Task。审查要求提交后工作区干净，并记录 HEAD。共享修改工作区的角色执行串行调度，审查也遵守这一顺序；它不限制外部进程直接修改文件。该版本提供语义路由所需的执行原语，不自动启动开发与审查循环。
 
 Inbox 支持按项目筛选、已读、归档、打开任务和来源会话；已读、归档不会取消 Wakeup。来源已删除、归档或无法恢复时，结果保留在 Inbox，显示回传失败原因，可手动重试回传。系统按持久化请求标识去重；重启时补发未投递结果，已经接收但中断的模型轮次不会自动重跑。当前仅覆盖 ACP 协作，不包含定时器或复杂审批、开发评审流程。
 

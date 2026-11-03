@@ -80,6 +80,32 @@ enum TaskCommand {
         #[command(flatten)]
         task: TaskInput,
     },
+    /// Execute another step of the same business task with a selected role.
+    Run {
+        #[arg(value_parser = crate::parse_id)]
+        id: String,
+        #[arg(long, value_parser = crate::parse_id)]
+        source_thread: String,
+        #[arg(long, value_parser = crate::parse_id)]
+        request_id: String,
+        #[arg(long, value_parser = crate::parse_id)]
+        role: Option<String>,
+        #[arg(long, value_enum)]
+        intent: Intent,
+        #[arg(long, value_parser = crate::parse_id)]
+        target_task: Option<String>,
+        #[command(flatten)]
+        task: TaskInput,
+    },
+    /// Set business progress explicitly; a completed run does not close a task.
+    Status {
+        #[arg(value_parser = crate::parse_id)]
+        id: String,
+        #[arg(value_parser = ["todo", "in_progress", "waiting", "in_review", "done", "blocked", "cancelled"])]
+        status: String,
+        #[arg(long, value_parser = crate::parse_id)]
+        source_thread: String,
+    },
     /// Queue work in an existing task. Results wake this request's source conversation.
     Send {
         #[arg(value_parser = crate::parse_id)]
@@ -173,6 +199,33 @@ pub fn task(args: TaskArgs, state_dir: PathBuf) -> Result<Value> {
                 ),
             )
         }
+        TaskCommand::Run {
+            id,
+            source_thread,
+            request_id,
+            role,
+            intent,
+            target_task,
+            task,
+        } => {
+            if !matches!(intent, Intent::Review) && target_task.is_some() {
+                anyhow::bail!("--target-task is only used for --intent review");
+            }
+            (
+                format!("/v1/tasks/{id}/runs"),
+                Some(
+                    json!({"request_id":request_id,"source_thread_id":source_thread,"agent_role_id":role,"intent":intent.as_str(),"target_task_id":target_task,"prompt":required_task(task)?}),
+                ),
+            )
+        }
+        TaskCommand::Status {
+            id,
+            status,
+            source_thread,
+        } => (
+            format!("/v1/tasks/{id}/status"),
+            Some(json!({"status":status,"source_thread_id":source_thread})),
+        ),
         TaskCommand::Send {
             id,
             source_thread,

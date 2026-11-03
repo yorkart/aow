@@ -72,6 +72,25 @@ pub(crate) fn source(state: &AppState, task: &TaskRecord, thread: &str) -> Resul
         .map(|turn| state.aow.task_db().run_for_prompt(&turn.id))
         .transpose()?
         .flatten();
+    // When a wakeup dispatches a follow-up, retain the triggering request's
+    // wording instead of treating the machine event envelope as user intent.
+    let mut request = request;
+    if let Some(parent) = parent_run_id
+        .as_deref()
+        .map(|id| state.aow.task_db().run(id))
+        .transpose()?
+        .flatten()
+        && parent.trigger == "wakeup"
+        && let Some(cause) = parent
+            .caused_by_run_id
+            .as_deref()
+            .map(|id| state.aow.task_db().run(id))
+            .transpose()?
+            .flatten()
+        && let Some(source) = cause.source
+    {
+        request = source.request;
+    }
     Ok(RunSource {
         task_id: task.id.clone(),
         thread_id: thread.into(),
@@ -90,12 +109,20 @@ pub(crate) fn new_run(
 ) -> TaskRun {
     TaskRun {
         id: uuid::Uuid::new_v4().to_string(),
-        request_id,
+        request_id: request_id.clone(),
         task_id: task.id.clone(),
         project_id: task.project_id.clone(),
         thread_id: task.initial_thread_id.clone().expect("ACP task"),
         prompt,
         source,
+        execution: Some(task.into()),
+        trigger: if request_id == "initial" {
+            "assignment"
+        } else {
+            "message"
+        }
+        .into(),
+        caused_by_run_id: None,
         state: "queued".into(),
         result: None,
         error: None,

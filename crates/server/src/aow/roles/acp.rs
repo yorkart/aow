@@ -21,6 +21,16 @@ pub(in crate::aow) struct AcpRoleSession {
 }
 
 impl AowManager {
+    pub(in crate::aow) fn acp_role_id(
+        &self,
+        service: &AcpService,
+        id: &str,
+    ) -> anyhow::Result<Option<String>> {
+        Ok(self
+            .acp_role_binding(service, id)?
+            .map(|binding| binding.role_id))
+    }
+
     pub(super) fn role_acp_environment(
         &self,
         role: &AgentRole,

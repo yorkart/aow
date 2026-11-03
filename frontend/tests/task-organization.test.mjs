@@ -70,7 +70,14 @@ try {
           tasks.push(data);
         } else data = tasks;
       } else if (path.startsWith('/api/aow/tasks/') && request.method() === 'GET') {
-        data = { task: tasks.find(task => task.id === path.split('/').at(-1)), runtime: { status: 'idle', response: 'Finished investigation' }, delegated: [] };
+        const task = tasks.find(task => task.id === path.split('/').at(-1));
+        data = { task, runtime: { status: 'idle', response: 'Finished investigation' }, delegated: [], runs: task === tasks[0] ? [
+          { id: 'developer-run', task_id: task.id, thread_id: task.initial_thread_id, state: 'result_available', trigger: 'assignment', result: 'Developer implementation', execution: { agent_id: 'test', workspace: '/repo' } },
+          { id: 'review-run', task_id: task.id, thread_id: task.initial_thread_id, state: 'result_available', trigger: 'wakeup', caused_by_run_id: 'developer-run', result: 'Reviewer feedback', execution: { agent_id: 'test', agent_role_id: role.id, workspace: '/repo-review', target_revision: 'abc123' } },
+        ] : [] };
+      } else if (path.startsWith('/api/aow/tasks/') && path.endsWith('/status') && request.method() === 'POST') {
+        data = tasks.find(task => task.id === path.split('/').at(-2));
+        Object.assign(data, request.postDataJSON());
       } else if (path.startsWith('/api/aow/tasks/') && request.method() === 'PATCH') {
         Object.assign(tasks.find(task => task.id === path.split('/').at(-1)), request.postDataJSON());
         return route.fulfill({ status: 204 });
@@ -153,6 +160,23 @@ try {
     assert.equal(await surface.getByRole('button', { name: 'Terminal panel', exact: true }).count(), 0);
     assert.equal(await surface.getByRole('button', { name: 'Conversation', exact: true }).count(), 1);
     assert.equal(await surface.getByRole('button', { name: 'Automation', exact: true }).count(), 1);
+    await surface.getByRole('combobox', { name: 'Task status', exact: true }).selectOption('in_review');
+    await surface.getByRole('button', { name: 'Check result', exact: true }).click();
+    await surface.getByText('Execution history (2)', { exact: true }).click();
+    await surface.locator('summary').filter({ hasText: 'Assignment' }).click();
+    await surface.getByText('Developer implementation', { exact: true }).waitFor();
+    await surface.locator('summary').filter({ hasText: 'Wakeup' }).click();
+    await surface.getByText('Reviewer feedback', { exact: true }).waitFor();
+    await surface.getByText('Triggered by run: developer-run', { exact: true }).waitFor();
+    await surface.getByText('Workspace: /repo-review · abc123', { exact: true }).waitFor();
+    assert.equal(tasks[0].status, 'in_review', 'execution results do not close the business task');
+    assert.equal(tasks.length, 1, 'multiple roles and runs share one business task');
+    await surface.getByRole('combobox', { name: 'Task status', exact: true }).selectOption('done');
+    await surface.locator('.task-collaboration-card small').filter({ hasText: 'Task status: Done' }).waitFor();
+    await surface.getByRole('combobox', { name: 'Task status', exact: true }).selectOption('in_review');
+    await surface.locator('.task-collaboration-card small').filter({ hasText: 'Task status: In review' }).waitFor();
+    await page.screenshot({ path: '/tmp/aow-task-runs.png' });
+    await surface.getByText('Execution history (2)', { exact: true }).click();
     const first = surface.getByRole('tab').filter({ hasText: 'initial-0' });
     assert.equal(await first.locator('.project-aow-tab-close').count(), 1);
     await surface.locator('.project-aow-new-trigger').click();

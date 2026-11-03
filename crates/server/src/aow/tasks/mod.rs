@@ -4,6 +4,7 @@ mod instructions;
 mod mentions;
 mod model;
 mod routing;
+mod runs;
 #[cfg(test)]
 mod tests;
 mod workspace;
@@ -43,7 +44,12 @@ impl AowManager {
             .ok_or_else(|| crate::instances::invalid("Active task not found"))?;
         let workspace = std::fs::canonicalize(workspace)
             .map_err(|error| crate::instances::invalid(error.to_string()))?;
-        if workspace != Path::new(&task.workspace) {
+        let registered = self
+            .inner
+            .tasks
+            .owns_workspace(&task.id, &workspace.to_string_lossy())
+            .map_err(model::storage)?;
+        if workspace != Path::new(&task.workspace) && !registered {
             return Err(crate::instances::invalid(
                 "Resource workspace does not match the task",
             ));

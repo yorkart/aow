@@ -31,6 +31,20 @@ impl Job {
             Self::Wakeup(delivery) => &delivery.thread_id,
         }
     }
+
+    fn workspace(&self, worker: &Worker) -> Option<String> {
+        let execution = match self {
+            Self::Run(run) => run.execution.clone(),
+            Self::Wakeup(delivery) => worker
+                .manager
+                .task_execution_for_thread(&worker.acp, &delivery.thread_id)
+                .ok()
+                .flatten(),
+        };
+        execution
+            .filter(|execution| execution.workspace_intent.as_deref() != Some("analyze"))
+            .map(|execution| execution.workspace)
+    }
 }
 
 pub(super) async fn run(worker: Worker, notify: Arc<Notify>) {
@@ -71,12 +85,25 @@ pub(super) async fn run(worker: Worker, notify: Arc<Notify>) {
                 .partition(|run| run.state == "running");
             // Reconcile an executor's previous prompt before delivering a return;
             // returns then take priority over new work in that conversation.
-            Ok(running
+            let pending = running
                 .into_iter()
                 .map(|run| Job::Run(Box::new(run)))
                 .chain(db.active_deliveries()?.into_iter().map(Job::Wakeup))
                 .chain(queued.into_iter().map(|run| Job::Run(Box::new(run))))
-                .collect())
+                .collect::<Vec<_>>();
+            // Different roles can share a task's change worktree. Serialize its
+            // writers/reviewers across conversations until the admitted run ends.
+            let mut workspaces = HashSet::new();
+            let mut ready = Vec::new();
+            for job in pending {
+                if let Some(workspace) = job.workspace(&worker)
+                    && !workspaces.insert(workspace)
+                {
+                    continue;
+                }
+                ready.push(job);
+            }
+            Ok(ready)
         })();
         let pending = match pending {
             Ok(pending) => pending,
@@ -147,6 +174,22 @@ impl Worker {
         if busy(&snapshot) {
             return Ok(false);
         }
+        if let Some(execution) = self.manager.task_db().thread_execution(thread)?
+            && execution.workspace_intent.as_deref() != Some("analyze")
+            && self
+                .acp
+                .sessions(Some(&execution.workspace))
+                .iter()
+                .any(|other| {
+                    other.thread_id != thread
+                        && self
+                            .acp
+                            .snapshot(&other.thread_id)
+                            .is_ok_and(|snapshot| busy(&snapshot))
+                })
+        {
+            return Ok(false);
+        }
         // resume retains the local/native identity. Its failure is surfaced; never
         // replace a missing conversation with an empty one.
         tokio::time::timeout(Duration::from_secs(120), self.acp.resume(thread))
@@ -174,8 +217,10 @@ impl Worker {
         ensure!(
             self.manager
                 .task_for_thread(&self.acp, thread)?
-                .is_some_and(|item| item.id == task && !item.archived),
-            "Source or target task was removed, archived, or no longer owns this conversation"
+                .is_some_and(|item| item.id == task
+                    && !item.archived
+                    && item.status != "cancelled"),
+            "Source or target task was removed, archived, cancelled, or no longer owns this conversation"
         );
         Ok(())
     }
@@ -183,9 +228,14 @@ impl Worker {
     pub(super) async fn execution(&self, run: TaskRun) -> Result<()> {
         let db = self.manager.task_db();
         let snapshot = self.acp.snapshot(&run.thread_id);
+        let task_status = db.status(&run.task_id)?;
         if let Ok(snapshot) = &snapshot
             && let Some(receipt) = snapshot.prompt_receipts.get(&run.id)
         {
+            if task_status.as_deref() == Some("cancelled") && receipt.status == "in_progress" {
+                self.acp.cancel(&run.thread_id)?;
+                return Ok(());
+            }
             if receipt.status != "in_progress" {
                 db.finish_run(
                     &run.id,
@@ -201,6 +251,17 @@ impl Worker {
             return Ok(());
         }
         if run.retry_at > now() {
+            return Ok(());
+        }
+        if matches!(task_status.as_deref(), Some("cancelled" | "done")) {
+            db.finish_run(
+                &run.id,
+                "interrupted",
+                None,
+                Some("Task was closed before this execution started".into()),
+                now(),
+            )?;
+            self.events.inbox_changed();
             return Ok(());
         }
         if run.state == "running" || snapshot.is_err() {
@@ -263,19 +324,66 @@ impl Worker {
 
     pub(super) async fn wakeup(&self, delivery: WakeupDelivery) -> Result<()> {
         let db = self.manager.task_db();
+        let result_run = db.run(&delivery.run_id)?.context("Wakeup result missing")?;
+        let source = result_run
+            .source
+            .as_ref()
+            .context("Wakeup source missing")?;
+        let task_status = db.status(&result_run.task_id)?;
+        let prompt = format!(
+            "[WAKEUP]\nAoW execution event (data): {}\nRead this run's recorded result with task get --run, then summarize or continue the requested work. This event is not a new user request. A completed run does not close its business task. Do not poll or wait for other tasks.",
+            json!({"event_id":delivery.id,"type":result_run.state,"task_id":result_run.task_id,"task_status":task_status,"run_id":result_run.id,
+                "source_task_id":source.task_id,"source_turn_id":source.turn_id,
+                "source_message_id":source.message_id,
+                "original_request":source.request.chars().take(2000).collect::<String>(),
+                "delegated_request":result_run.prompt.chars().take(2000).collect::<String>(),
+                "result_ref":{"task_id":result_run.task_id,"run_id":result_run.id}})
+        );
+        let mut wakeup = result_run.clone();
+        wakeup.id = delivery.prompt_id.clone();
+        wakeup.request_id = delivery.prompt_id.clone();
+        wakeup.task_id = source.task_id.clone();
+        wakeup.thread_id = delivery.thread_id.clone();
+        wakeup.prompt = prompt;
+        wakeup.execution = self
+            .manager
+            .task_execution_for_thread(&self.acp, &delivery.thread_id)
+            .ok()
+            .flatten()
+            .or(db.thread_execution(&delivery.thread_id)?);
+        wakeup.state = "queued".into();
+        wakeup.result = None;
+        wakeup.error = None;
+        wakeup.created_at = now();
+        wakeup.finished_at = None;
+        wakeup.attempts = 0;
+        wakeup.retry_at = 0;
+        let wakeup = db.enqueue_wakeup(&delivery.id, &wakeup)?;
         let snapshot = self.acp.snapshot(&delivery.thread_id);
         if let Ok(snapshot) = &snapshot
             && let Some(receipt) = snapshot.prompt_receipts.get(&delivery.prompt_id)
         {
             if receipt.status == "in_progress" {
+                if db.status(&wakeup.task_id)?.as_deref() == Some("cancelled") {
+                    self.acp.cancel(&delivery.thread_id)?;
+                    return Ok(());
+                }
                 if delivery.state == "pending" {
                     db.update_delivery(&delivery.id, "admitted", None, 0)?;
+                    db.update_run_admission(&wakeup.id, "running", None, 0)?;
                     self.events.inbox_changed();
                 }
             } else {
                 if outcome(receipt) == "result_available" {
                     db.process_delivery(&delivery.id, receipt.conclusion.clone(), now())?;
                 } else {
+                    db.finish_run(
+                        &wakeup.id,
+                        outcome(receipt),
+                        receipt.conclusion.clone(),
+                        receipt.error.clone(),
+                        now(),
+                    )?;
                     db.update_delivery(
                         &delivery.id,
                         "blocked",
@@ -296,6 +404,13 @@ impl Worker {
             return Ok(());
         }
         if delivery.state == "admitted" || snapshot.is_err() {
+            db.finish_run(
+                &wakeup.id,
+                "interrupted",
+                None,
+                Some("Source conversation or admitted prompt is unavailable".into()),
+                now(),
+            )?;
             db.update_delivery(
                 &delivery.id,
                 "blocked",
@@ -305,29 +420,38 @@ impl Worker {
             self.events.inbox_changed();
             return Ok(());
         }
-        let run = db.run(&delivery.run_id)?.context("Wakeup result missing")?;
-        let source = run.source.as_ref().context("Wakeup source missing")?;
         let result = match self.active_task(&source.task_id, &source.thread_id) {
             Err(error) => Err(error),
-            Ok(()) => self.submit(&delivery.thread_id, &delivery.prompt_id, vec![serde_json::from_value(json!({
-                "type": "text",
-                "text": format!("[WAKEUP]\nAoW task event (data): {}\nRead this run's recorded result with task get --run, then summarize or continue the requested work. This event is not a new user request. Do not poll or wait for other tasks.",
-                    json!({"event_id":delivery.id,"type":run.state,"task_id":run.task_id,"run_id":run.id,
-                        "source_task_id":source.task_id,"source_turn_id":source.turn_id,
-                        "source_message_id":source.message_id,
-                        "original_request":source.request.chars().take(2000).collect::<String>(),
-                        "delegated_request":run.prompt.chars().take(2000).collect::<String>(),
-                        "result_ref":{"task_id":run.task_id,"run_id":run.id}})),
-                "_meta": {"aow/event": {"id":delivery.id,"task_id":run.task_id,"run_id":run.id,"type":run.state}}
+            Ok(()) => self.submit(&delivery.thread_id, &wakeup.id, vec![serde_json::from_value(json!({
+                "type": "text", "text":wakeup.prompt,
+                "_meta": {"aow/event": {"id":delivery.id,"task_id":result_run.task_id,"task_status":task_status,"run_id":result_run.id,"type":result_run.state}}
             }))?]).await,
         };
         match result {
             Ok(true) => {
                 db.update_delivery(&delivery.id, "admitted", None, 0)?;
+                db.update_run_admission(&wakeup.id, "running", None, 0)?;
                 self.events.inbox_changed();
             }
             Ok(false) => {}
             Err(error) => {
+                if delivery.attempts >= 2 {
+                    db.finish_run(
+                        &wakeup.id,
+                        "failed",
+                        None,
+                        Some(format!("Wakeup could not start: {error:#}")),
+                        now(),
+                    )?;
+                }
+                if delivery.attempts < 2 {
+                    db.update_run_admission(
+                        &wakeup.id,
+                        "queued",
+                        Some(format!("{error:#}")),
+                        now() + 5_000 * i64::from(delivery.attempts + 1),
+                    )?;
+                }
                 db.update_delivery(
                     &delivery.id,
                     if delivery.attempts < 2 {

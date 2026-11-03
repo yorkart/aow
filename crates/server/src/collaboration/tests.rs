@@ -52,6 +52,7 @@ async fn task(state: &AppState, root: &Path, id: &str) -> TaskRecord {
     let task = TaskRecord {
         id: id.into(),
         project_id: "project".into(),
+        status: "todo".into(),
         prompt: id.into(),
         agent_id: "test".into(),
         agent_role_id: None,
@@ -127,12 +128,13 @@ async fn a_busy_source_gets_one_return_after_becoming_idle_even_when_inbox_is_re
         .unwrap();
     let source = source(&state, &router, source_thread).unwrap();
     let child = task(&state, directory.path(), "child").await;
-    let run = new_run(
+    let mut run = new_run(
         &child,
         "run-child".into(),
         "Count Rust code".into(),
         Some(source.clone()),
     );
+    run.execution.as_mut().unwrap().workspace_intent = Some("analyze".into());
     let db = state.aow.task_db();
     db.enqueue_run(&run).unwrap();
     state.collaboration.start(&state);
@@ -154,6 +156,14 @@ async fn a_busy_source_gets_one_return_after_becoming_idle_even_when_inbox_is_re
     .await;
     let snapshot = state.acp.snapshot(source_thread).unwrap();
     assert_eq!(snapshot.prompt_receipts.len(), 1);
+    let wakeups = db.task_runs("router").unwrap();
+    assert_eq!(wakeups.len(), 1);
+    assert_eq!(wakeups[0].trigger, "wakeup");
+    assert_eq!(
+        wakeups[0].caused_by_run_id.as_deref(),
+        Some(run.id.as_str())
+    );
+    assert!(wakeups[0].terminal());
     let wakeup = snapshot
         .entries
         .iter()
@@ -226,6 +236,11 @@ async fn restart_reconciles_both_crash_windows_without_repeating_prompts() {
         .task_db()
         .inbox(None, false, false, 0, 30)
         .unwrap();
+    assert_eq!(
+        third.aow.task_db().task_runs("router").unwrap().len(),
+        1,
+        "restart reuses the persisted wakeup run"
+    );
     assert_eq!(page.items.len(), 1);
     assert_eq!(page.items[0].delivery.as_ref().unwrap().state, "processed");
     let log = std::fs::read_to_string(directory.path().join("lineage-prompts.jsonl")).unwrap();
@@ -351,4 +366,138 @@ async fn missing_source_blocks_only_delivery_and_manual_retry_preserves_result()
         Some("Provider could not start")
     );
     assert!(db.active_deliveries().unwrap().is_empty());
+    let attempts = db.task_runs("parent").unwrap();
+    assert_eq!(attempts.len(), 2);
+    assert!(
+        attempts
+            .iter()
+            .all(|run| run.trigger == "wakeup" && run.terminal())
+    );
+    assert_ne!(attempts[0].id, attempts[1].id);
+}
+
+#[tokio::test]
+async fn role_conversations_share_workspace_admission_without_sharing_results() {
+    let directory = tempfile::tempdir().unwrap();
+    let state = state(directory.path());
+    let developer = task(&state, directory.path(), "developer").await;
+    let reviewer = task(&state, directory.path(), "reviewer").await;
+    let mut change = new_run(&developer, "implement".into(), "wait".into(), None);
+    change.execution.as_mut().unwrap().workspace_intent = Some("change".into());
+    let mut review = new_run(&reviewer, "review".into(), "Review".into(), None);
+    review.execution.as_mut().unwrap().workspace_intent = Some("review".into());
+    let db = state.aow.task_db();
+    db.enqueue_run(&change).unwrap();
+    db.enqueue_run(&review).unwrap();
+    let worker = worker(&state);
+    worker.execution(change.clone()).await.unwrap();
+    worker.execution(review.clone()).await.unwrap();
+    assert_eq!(db.run(&review.id).unwrap().unwrap().state, "queued");
+    assert!(
+        state
+            .acp
+            .snapshot(&review.thread_id)
+            .unwrap()
+            .prompt_receipts
+            .is_empty()
+    );
+    db.set_status("developer", "cancelled").unwrap();
+    worker
+        .execution(db.run(&change.id).unwrap().unwrap())
+        .await
+        .unwrap();
+    let queued = new_run(
+        &developer,
+        "queued-before-cancellation".into(),
+        "Must not execute".into(),
+        None,
+    );
+    db.enqueue_run(&queued).unwrap();
+    worker.execution(queued.clone()).await.unwrap();
+    assert_eq!(db.run(&queued.id).unwrap().unwrap().state, "interrupted");
+    assert!(
+        !state
+            .acp
+            .snapshot(&queued.thread_id)
+            .unwrap()
+            .prompt_receipts
+            .contains_key(&queued.id)
+    );
+    until(|| {
+        state
+            .acp
+            .snapshot(&change.thread_id)
+            .unwrap()
+            .prompt_receipts[&change.id]
+            .status
+            != "in_progress"
+    })
+    .await;
+    worker.execution(change.clone()).await.unwrap();
+    worker.execution(review.clone()).await.unwrap();
+    until(|| {
+        state
+            .acp
+            .snapshot(&review.thread_id)
+            .unwrap()
+            .prompt_receipts[&review.id]
+            .status
+            != "in_progress"
+    })
+    .await;
+    worker.execution(review.clone()).await.unwrap();
+    assert_eq!(db.run(&change.id).unwrap().unwrap().state, "interrupted");
+    assert_eq!(
+        db.run(&review.id).unwrap().unwrap().result.as_deref(),
+        Some("Done")
+    );
+    state.acp.close_session(&change.thread_id).await.unwrap();
+    state.acp.close_session(&review.thread_id).await.unwrap();
+}
+
+#[tokio::test]
+async fn followups_from_wakeups_keep_user_intent_and_reference_the_new_run() {
+    let directory = tempfile::tempdir().unwrap();
+    let state = state(directory.path());
+    let router = task(&state, directory.path(), "router").await;
+    let child = task(&state, directory.path(), "child").await;
+    let thread = router.initial_thread_id.as_deref().unwrap();
+    let mut origin = source(&state, &router, thread).unwrap();
+    origin.request = "Implement login and review it".into();
+    let initial = new_run(
+        &child,
+        "first".into(),
+        "Implement login".into(),
+        Some(origin),
+    );
+    let db = state.aow.task_db();
+    db.enqueue_run(&initial).unwrap();
+    db.finish_run(
+        &initial.id,
+        "result_available",
+        Some("Implemented".into()),
+        None,
+        now(),
+    )
+    .unwrap();
+    let delivery = db.active_deliveries().unwrap().remove(0);
+    let mut wakeup = new_run(
+        &router,
+        delivery.prompt_id.clone(),
+        "WAKEUP envelope".into(),
+        None,
+    );
+    wakeup.id = delivery.prompt_id.clone();
+    db.enqueue_wakeup(&delivery.id, &wakeup).unwrap();
+    state.acp.resume(thread).await.unwrap();
+    state
+        .acp
+        .start_prompt_once(thread, &wakeup.id, content("wait"))
+        .unwrap();
+    let followup = source(&state, &router, thread).unwrap();
+    assert_eq!(followup.request, "Implement login and review it");
+    assert_eq!(followup.parent_run_id.as_deref(), Some(wakeup.id.as_str()));
+    assert_eq!(followup.turn_id.as_deref(), Some(wakeup.id.as_str()));
+    state.acp.cancel(thread).unwrap();
+    state.acp.close_session(thread).await.unwrap();
 }

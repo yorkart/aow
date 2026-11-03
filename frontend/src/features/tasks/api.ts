@@ -1,11 +1,15 @@
 import { acpRequest } from '../acp/request';
+import type { TaskRun } from '../inbox/api';
 import { mentionPreview } from '../agent-roles/mentions';
 
 export interface TaskResource { kind: 'acp' | 'terminal'; id: string }
+export const taskStatuses = ['todo', 'in_progress', 'waiting', 'in_review', 'done', 'blocked', 'cancelled'] as const;
+export type TaskStatus = typeof taskStatuses[number];
 export interface WorkTask {
   id: string;
   project_id: string;
   prompt: string;
+  status?: TaskStatus;
   agent_id: string;
   agent_role_id?: string | null;
   is_router?: boolean;
@@ -29,6 +33,7 @@ export interface TaskResult {
   task: WorkTask;
   runtime: { thread_id: string; status: string; run_state?: string | null; error?: string | null; response?: string; pending_permissions?: number } | null;
   delegated: WorkTask[];
+  runs?: TaskRun[];
 }
 export const tasksChanged = 'aow:tasks-changed';
 export const notifyTasksChanged = () => window.dispatchEvent(new Event(tasksChanged));
@@ -46,6 +51,7 @@ export const tasksApi = {
   list: (signal?: AbortSignal) => acpRequest<WorkTask[]>(root, { signal, cache: 'no-store' }),
   create: (input: Pick<WorkTask, 'project_id' | 'prompt' | 'agent_id' | 'agent_role_id' | 'dependencies'> & { request_id: string; slug?: string } & ({ workspace_mode: 'existing'; workspace: string } | { workspace_mode: 'new_worktree'; workspace?: never })) => mutate<WorkTask>(root, 'POST', input),
   update: (id: string, input: Partial<Pick<WorkTask, 'prompt' | 'pinned' | 'archived' | 'dependencies'>>) => mutate<void>(path(id), 'PATCH', input),
+  status: (id: string, status: TaskStatus) => mutate<WorkTask>(`${path(id)}/status`, 'POST', { status }),
   remove: (id: string) => mutate<void>(path(id), 'DELETE'),
   attach: (id: string, resource: TaskResource) => mutate<void>(`${path(id)}/resources`, 'POST', resource),
 };

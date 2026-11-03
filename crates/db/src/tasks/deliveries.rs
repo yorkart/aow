@@ -1,4 +1,4 @@
-use super::{TaskDb, collaboration};
+use super::{TaskDb, TaskRun, collaboration};
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -8,6 +8,8 @@ pub struct WakeupDelivery {
     pub id: String,
     pub run_id: String,
     pub thread_id: String,
+    /// Legacy field name: the run that dispatched the child. It is causal
+    /// history; a wakeup never resumes or overwrites that execution.
     pub continuation_run_id: Option<String>,
     pub prompt_id: String,
     pub state: String,
@@ -42,6 +44,36 @@ fn save(connection: &Connection, delivery: &WakeupDelivery) -> Result<()> {
 }
 
 impl TaskDb {
+    /// Persist the execution identity before ACP admission. Retries of admission
+    /// reuse it; an explicit delivery retry gets a fresh run and prompt ID.
+    pub fn enqueue_wakeup(&self, id: &str, request: &TaskRun) -> Result<TaskRun> {
+        let mut connection = self.lock()?;
+        let tx = connection.transaction()?;
+        let delivery = delivery(&tx, id)?.ok_or_else(|| anyhow::anyhow!("Delivery not found"))?;
+        ensure!(
+            request.id == delivery.prompt_id && request.thread_id == delivery.thread_id,
+            "Wakeup identity mismatch"
+        );
+        if let Some(existing) = collaboration::run(&tx, &request.id)? {
+            return Ok(existing);
+        }
+        let mut run = request.clone();
+        run.trigger = "wakeup".into();
+        run.caused_by_run_id = Some(delivery.run_id.clone());
+        // Forward a new summary to the original upstream requester, not back to
+        // the child whose result caused this wakeup (which would loop forever).
+        run.source = delivery
+            .continuation_run_id
+            .as_deref()
+            .map(|id| collaboration::run(&tx, id))
+            .transpose()?
+            .flatten()
+            .and_then(|parent| parent.source);
+        collaboration::insert_run(&tx, &run)?;
+        tx.commit()?;
+        Ok(run)
+    }
+
     pub fn active_deliveries(&self) -> Result<Vec<WakeupDelivery>> {
         let connection = self.lock()?;
         let mut query = connection.prepare("SELECT payload FROM task_wakeups WHERE state IN ('pending', 'admitted') ORDER BY rowid")?;
@@ -86,10 +118,10 @@ impl TaskDb {
             delivery.state = "processed".into();
             delivery.error = None;
             save(&tx, &delivery)?;
-            if let Some(parent) = &delivery.continuation_run_id
-                && let Some(mut run) = collaboration::run(&tx, parent)?
-                && !run.terminal()
-            {
+            let mut run = collaboration::run(&tx, &delivery.prompt_id)?
+                .ok_or_else(|| anyhow::anyhow!("Wakeup execution missing"))?;
+            ensure!(run.trigger == "wakeup", "Invalid wakeup execution");
+            if !run.terminal() {
                 run.state = "result_available".into();
                 run.result = conclusion;
                 run.error = None;

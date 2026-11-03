@@ -94,3 +94,51 @@ fn continuing_a_busy_task_returns_the_queued_run_without_waiting() {
     let response: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(response["run_id"], "run-b");
 }
+
+#[test]
+fn role_runs_and_business_status_keep_the_existing_task_identity() {
+    let (output, header, body) = run(
+        &[
+            "task",
+            "run",
+            "login",
+            "--source-thread",
+            "router",
+            "--request-id",
+            "review-1",
+            "--role",
+            "reviewer",
+            "--intent",
+            "review",
+            "--task-file",
+            "-",
+        ],
+        Some("Review login\nDo not expand scope"),
+        200,
+        json!({"task_id":"login","run_id":"review-run"}),
+    );
+    assert!(output.status.success(), "{output:?}");
+    assert!(header.starts_with("POST /v1/tasks/login/runs HTTP/1.1"));
+    assert_eq!(body["prompt"], "Review login\nDo not expand scope");
+    assert_eq!(body["agent_role_id"], "reviewer");
+    assert!(
+        body["target_task_id"].is_null(),
+        "review defaults to the same task"
+    );
+    let (output, header, body) = run(
+        &[
+            "task",
+            "status",
+            "login",
+            "done",
+            "--source-thread",
+            "router",
+        ],
+        None,
+        200,
+        json!({"status":"done"}),
+    );
+    assert!(output.status.success(), "{output:?}");
+    assert!(header.starts_with("POST /v1/tasks/login/status HTTP/1.1"));
+    assert_eq!(body, json!({"status":"done", "source_thread_id":"router"}));
+}

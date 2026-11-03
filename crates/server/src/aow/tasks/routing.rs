@@ -1,7 +1,7 @@
 //! Shared task collaboration for every ACP task conversation, including the project Router.
 use super::{
     api::{self, Create, WorkspaceMode},
-    model::{Task, storage, validate_prompt},
+    model::{Task, storage},
 };
 use crate::{
     AppState, HttpError,
@@ -23,10 +23,44 @@ pub(crate) fn cli_routes() -> Router<AppState> {
         .route("/v1/roles/{id}", route_get(role))
         .route("/v1/tasks", route_get(list).post(delegate))
         .route("/v1/tasks/{id}", route_get(self::get))
-        .route("/v1/tasks/{id}/send", post(send))
+        .route("/v1/tasks/{id}/send", post(super::runs::start))
+        .route("/v1/tasks/{id}/runs", post(super::runs::start))
+        .route("/v1/tasks/{id}/status", post(super::runs::status))
 }
 
 impl AowManager {
+    pub(crate) fn task_execution_for_thread(
+        &self,
+        service: &aow_acp::AcpService,
+        thread: &str,
+    ) -> anyhow::Result<Option<aow_db::tasks::RunExecution>> {
+        let Some(task) = self.task_for_thread(service, thread)? else {
+            return Ok(None);
+        };
+        let mut execution = (&task).into();
+        let mut current = thread.to_owned();
+        let mut seen = std::collections::HashSet::new();
+        while seen.insert(current.clone()) {
+            if let Some(recorded) = self.task_db().thread_execution(&current)? {
+                execution = recorded;
+                break;
+            }
+            let info = service.session_info(&current)?;
+            match info
+                .parent
+                .filter(|parent| parent.kind == aow_protocol::InstanceKind::Acp)
+            {
+                Some(parent) => current = parent.id,
+                None => break,
+            }
+        }
+        let info = service.session_info(thread)?;
+        execution.workspace = info.cwd;
+        execution.agent_id = info.agent_id;
+        execution.agent_role_id = self.acp_role_id(service, thread)?;
+        Ok(Some(execution))
+    }
+
     pub(crate) fn task_for_thread(
         &self,
         service: &aow_acp::AcpService,
@@ -73,7 +107,7 @@ pub(super) fn source_task(state: &AppState, thread: &str) -> Result<TaskRecord, 
         .ok_or_else(|| invalid("The source conversation must belong to an active task"))
 }
 
-fn find_task(state: &AppState, id: &str) -> Result<TaskRecord, HttpError> {
+pub(super) fn find_task(state: &AppState, id: &str) -> Result<TaskRecord, HttpError> {
     state
         .aow
         .inner
@@ -170,12 +204,13 @@ pub(super) async fn get(
             return Err(invalid("Run is outside the source project"));
         }
         // Results survive task deletion and never consult a later conversation turn.
-        return Ok(Json(json!({"run":run})));
+        let task_status = state.aow.task_db().status(&id).map_err(storage)?;
+        return Ok(Json(json!({"run":run,"task_status":task_status})));
     }
     let task = find_task(&state, &id)?;
     check_scope(&state, &scope, &task)?;
     let runs = state.aow.task_db().task_runs(&id).map_err(storage)?;
-    let runtime = task.initial_thread_id.as_deref().map(|id| match state.acp.snapshot(id) {
+    let runtime = runs.first().map(|run| run.thread_id.as_str()).or(task.initial_thread_id.as_deref()).map(|id| match state.acp.snapshot(id) {
         Ok(session) => {
             // Idle describes the adapter, not whether the assigned work succeeded.
             let start = session.entries.iter().rposition(|entry| entry.kind == "user").unwrap_or(0);
@@ -242,17 +277,22 @@ async fn delegate(
         }
         _ => return Err(invalid("intent must be change, analyze or review")),
     };
+    let agent_id = if request.agent_role_id.is_some() {
+        String::new()
+    } else {
+        state
+            .acp
+            .session_info(&request.source_thread_id)
+            .map_err(crate::acp::task_error)?
+            .agent_id
+    };
     api::create(
         State(state),
         Json(Create {
             request_id: request.request_id,
             project_id: source.project_id,
             prompt: request.prompt,
-            agent_id: if request.agent_role_id.is_some() {
-                String::new()
-            } else {
-                source.agent_id
-            },
+            agent_id,
             agent_role_id: request.agent_role_id,
             workspace_mode,
             workspace,
@@ -330,7 +370,10 @@ pub(super) async fn validate_workspace(
     Ok(None)
 }
 
-async fn main_workspace(state: &AppState, project_id: &str) -> Result<String, HttpError> {
+pub(super) async fn main_workspace(
+    state: &AppState,
+    project_id: &str,
+) -> Result<String, HttpError> {
     state
         .aow
         .project(project_id)
@@ -386,66 +429,4 @@ pub(super) async fn router(
         }),
     )
     .await
-}
-
-#[derive(Deserialize)]
-struct Send {
-    request_id: String,
-    source_thread_id: String,
-    prompt: String,
-}
-
-async fn send(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-    Json(request): Json<Send>,
-) -> Result<Json<Value>, HttpError> {
-    validate_prompt(&request.prompt)?;
-    if request.request_id.is_empty()
-        || request.request_id.len() > 128
-        || !request
-            .request_id
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
-    {
-        return Err(invalid("Invalid send request ID"));
-    }
-    let task = find_task(&state, &id)?;
-    check_scope(
-        &state,
-        &Scope {
-            source_thread_id: Some(request.source_thread_id.clone()),
-            run_id: None,
-        },
-        &task,
-    )?;
-    if task.archived {
-        return Err(invalid("Cannot send to an archived task"));
-    }
-    let thread = task
-        .initial_thread_id
-        .as_deref()
-        .ok_or_else(|| invalid("This task has no ACP conversation"))?;
-    if thread == request.source_thread_id {
-        return Err(invalid("Continue the current conversation directly"));
-    }
-    let source = source_task(&state, &request.source_thread_id)?;
-    let run_source = crate::collaboration::source(&state, &source, &request.source_thread_id)
-        .map_err(storage)?;
-    let run = crate::collaboration::new_run(
-        &task,
-        format!("send-{}", request.request_id),
-        request.prompt,
-        Some(run_source),
-    );
-    let run = state
-        .aow
-        .task_db()
-        .enqueue_run(&run)
-        .map_err(|error| invalid(error.to_string()))?;
-    state.collaboration.start(&state);
-    Ok(Json(
-        json!({"task_id":id,"thread_id":thread,"accepted":true,"run_id":run.id,
-            "return_delivery":"inbox_and_wakeup","state":run.state}),
-    ))
 }

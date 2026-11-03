@@ -40,6 +40,7 @@ async fn task_dependencies_do_not_cascade_archive_or_delete() {
             .insert(&TaskRecord {
                 id: id.into(),
                 project_id: "project".into(),
+                status: "todo".into(),
                 prompt: id.into(),
                 agent_id: "agent".into(),
                 agent_role_id: None,
@@ -555,6 +556,193 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
         );
     }
     state.aow.inner.tasks.remove("foreign").unwrap();
+    // Another role performs review inside the SAME business task, with a
+    // different conversation and its own immutable execution context.
+    let (status, reviewer) = call(&app, "POST", "/api/aow/agent-roles", json!({
+        "name":"Reviewer", "description":"Review", "runtime":{"mode":"acp","agent_id":"codex.test"},
+        "home_layout":"codex", "identity":{"kind":"local_home","source":null},
+        "instruction":"Review the recorded revision", "skills":[]
+    })).await;
+    assert_eq!(status, StatusCode::OK, "{reviewer}");
+    let request = json!({"request_id":"same-goal-review","source_thread_id":source,"prompt":"Review login","agent_role_id":reviewer["id"],"intent":"review"});
+    let (status, accepted) = call(
+        &app,
+        "POST",
+        "/v1/tasks/implementation/runs",
+        request.clone(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{accepted}");
+    let review_thread = accepted["thread_id"].as_str().unwrap();
+    assert_ne!(review_thread, worker);
+    assert_eq!(
+        call(
+            &app,
+            "POST",
+            "/v1/tasks/implementation/runs",
+            request.clone()
+        )
+        .await
+        .1["run_id"],
+        accepted["run_id"]
+    );
+    let mut conflict = request.clone();
+    conflict["intent"] = json!("change");
+    assert_eq!(
+        call(&app, "POST", "/v1/tasks/implementation/runs", conflict)
+            .await
+            .0,
+        StatusCode::BAD_REQUEST
+    );
+    task_idle(&state, review_thread).await;
+    let run = state
+        .aow
+        .task_db()
+        .run(accepted["run_id"].as_str().unwrap())
+        .unwrap()
+        .unwrap();
+    let execution = run.execution.as_ref().unwrap();
+    assert_eq!(execution.agent_role_id.as_deref(), reviewer["id"].as_str());
+    assert_eq!(
+        execution.workspace,
+        implementation["workspace"].as_str().unwrap()
+    );
+    assert_eq!(execution.target_task_id.as_deref(), Some("implementation"));
+    assert!(execution.target_revision.is_some());
+    let instructions = state
+        .aow
+        .acp_role_content(
+            &state.acp,
+            review_thread,
+            serde_json::from_value(json!([{"type":"text","text":"Continue review"}])).unwrap(),
+        )
+        .unwrap();
+    assert!(instructions.iter().any(|block| {
+        block.data["text"]
+            .as_str()
+            .is_some_and(|text| text.contains("Review the recorded revision"))
+    }));
+    assert!(instructions.iter().any(|block| {
+        block.data["text"]
+            .as_str()
+            .is_some_and(|text| text.contains(execution.target_revision.as_deref().unwrap()))
+    }));
+    let mut next = request;
+    next["request_id"] = json!("same-goal-review-2");
+    assert_eq!(
+        call(&app, "POST", "/v1/tasks/implementation/runs", next)
+            .await
+            .1["thread_id"],
+        review_thread,
+        "reuse matching role/workspace/revision context"
+    );
+    task_idle(&state, review_thread).await;
+    let fix = json!({"request_id":"same-goal-fix","source_thread_id":source,"prompt":"Fix review findings","agent_role_id":role_id,"intent":"change"});
+    let (status, fixed) = call(&app, "POST", "/v1/tasks/implementation/runs", fix).await;
+    assert_eq!(status, StatusCode::OK, "{fixed}");
+    assert_eq!(
+        fixed["thread_id"], worker,
+        "developer retains its conversation and worktree"
+    );
+    task_idle(&state, worker).await;
+    assert_eq!(
+        state.aow.task_db().run(&run.id).unwrap().unwrap(),
+        run,
+        "later fixes cannot overwrite review results"
+    );
+    let (_, business) = call(&app, "GET", "/v1/tasks/implementation", json!({})).await;
+    assert_eq!(business["task"]["status"], "in_progress");
+    assert_eq!(
+        business["task"]["agent_role_id"], role_id,
+        "execution roles do not change task defaults"
+    );
+    for status in ["in_review", "done"] {
+        assert_eq!(
+            call(
+                &app,
+                "POST",
+                "/v1/tasks/implementation/status",
+                json!({"status":status,"source_thread_id":source})
+            )
+            .await
+            .0,
+            StatusCode::OK
+        );
+    }
+    assert_eq!(
+        call(
+            &app,
+            "POST",
+            "/v1/tasks/implementation/send",
+            json!({"request_id":"closed","prompt":"More work","source_thread_id":source})
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        call(
+            &app,
+            "POST",
+            "/v1/tasks/implementation/status",
+            json!({"status":"todo","source_thread_id":source})
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        state.aow.task_db().list().unwrap().len(),
+        4,
+        "review and fix add runs, not tasks"
+    );
+    // An analysis task can proceed to implementation without becoming a new task.
+    // Its run gets an isolated workspace and review resolves that workspace.
+    let (status, change) = call(&app, "POST", "/v1/tasks/helper/runs", json!({"request_id":"implement-after-analysis","source_thread_id":source,"prompt":"Implement the API","agent_role_id":role_id,"intent":"change"})).await;
+    assert_eq!(status, StatusCode::OK, "{change}");
+    let change_run = state
+        .aow
+        .task_db()
+        .run(change["run_id"].as_str().unwrap())
+        .unwrap()
+        .unwrap();
+    let changed_workspace = &change_run.execution.as_ref().unwrap().workspace;
+    assert_ne!(changed_workspace, helper["workspace"].as_str().unwrap());
+    task_idle(&state, &change_run.thread_id).await;
+    let mut scope_headers = axum::http::HeaderMap::new();
+    scope_headers.insert("x-aow-task", "helper".parse().unwrap());
+    assert_eq!(
+        state
+            .aow
+            .task_scope(&scope_headers, Path::new(changed_workspace))
+            .unwrap()
+            .as_deref(),
+        Some("helper")
+    );
+    let (status, reviewed) = call(&app, "POST", "/v1/tasks/helper/runs", json!({"request_id":"review-implemented-api","source_thread_id":source,"prompt":"Review the API","agent_role_id":reviewer["id"],"intent":"review"})).await;
+    assert_eq!(status, StatusCode::OK, "{reviewed}");
+    let review_run = state
+        .aow
+        .task_db()
+        .run(reviewed["run_id"].as_str().unwrap())
+        .unwrap()
+        .unwrap();
+    assert_eq!(&review_run.execution.unwrap().workspace, changed_workspace);
+    task_idle(&state, &review_run.thread_id).await;
+    let (status, changed_review) = call(&app, "POST", "/v1/tasks/review/runs", json!({"request_id":"change-review-task","source_thread_id":source,"prompt":"Implement follow-up","intent":"change"})).await;
+    assert_eq!(status, StatusCode::OK, "{changed_review}");
+    let changed_review = state
+        .aow
+        .task_db()
+        .run(changed_review["run_id"].as_str().unwrap())
+        .unwrap()
+        .unwrap();
+    assert_ne!(
+        changed_review.execution.unwrap().workspace,
+        implementation["workspace"].as_str().unwrap(),
+        "a borrowed review workspace must not become this task's change workspace"
+    );
+    task_idle(&state, &changed_review.thread_id).await;
     std::fs::write(
         Path::new(implementation["workspace"].as_str().unwrap()).join("uncommitted.txt"),
         "changes",
