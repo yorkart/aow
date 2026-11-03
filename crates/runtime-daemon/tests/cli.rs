@@ -22,7 +22,7 @@ async fn binary_accepts_separate_config_and_state_root_and_stops_on_sigterm() {
             .to_string(),
     )
     .unwrap();
-    let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_aow-agent-daemon"))
+    let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_aow-runtime-daemon"))
         .args([
             "--state-dir",
             root.path().to_str().unwrap(),

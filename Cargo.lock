@@ -227,33 +227,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "aow-agent-daemon"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "aow-acp",
- "aow-acpd",
- "aow-filesystem",
- "aow-macos-log",
- "aow-protocol",
- "aow-terminald",
- "async-trait",
- "axum",
- "clap",
- "futures-util",
- "libc",
- "reqwest",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "tokio-tungstenite",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
 name = "aow-agents"
 version = "0.1.0"
 dependencies = [
@@ -442,6 +415,33 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "aow-runtime-daemon"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "aow-acp",
+ "aow-acpd",
+ "aow-filesystem",
+ "aow-macos-log",
+ "aow-protocol",
+ "aow-terminald",
+ "async-trait",
+ "axum",
+ "clap",
+ "futures-util",
+ "libc",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

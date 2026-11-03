@@ -1,5 +1,5 @@
 [package]
-name = "aow-agent-daemon"
+name = "aow-runtime-daemon"
 version.workspace = true
 edition.workspace = true
 license = "GPL-3.0-or-later"

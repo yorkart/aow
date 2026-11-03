@@ -1,6 +1,6 @@
-# Agent node daemon
+# Runtime daemon
 
-`aow-agent-daemon` is a standalone node service. One Rust process embeds the
+`aow-runtime-daemon` is a standalone node service. One Rust process embeds the
 `aow-acpd` and `aow-terminald` libraries and owns a single TCP HTTP listener,
 configuration, authentication and shutdown sequence. ACP adapters, PTY shells
 and the optional Node.js VT worker are child processes; it does not launch
@@ -16,15 +16,15 @@ clients until that integration is implemented.
 ```sh
 npm --prefix vt-worker ci --ignore-scripts --no-audit --no-fund
 npm --prefix vt-worker run build
-cargo build --release -p aow-agent-daemon
-./target/release/aow-agent-daemon --state-dir "$HOME/.aow" --listen 127.0.0.1:9760
+cargo build --release -p aow-runtime-daemon
+./target/release/aow-runtime-daemon --state-dir "$HOME/.aow" --listen 127.0.0.1:9760
 ```
 
-The release archive also includes `bin/aow-agent-daemon`. The existing installer
+The release archive also includes `bin/aow-runtime-daemon`. The existing installer
 keeps its current local services; installing an archive does not activate a node
 service automatically. For a dedicated Linux node, install this binary at
-`~/.local/bin/aow-agent-daemon` and the supplied
-`packaging/systemd/aow-agent-daemon.service` as a user unit. On macOS the same
+`~/.local/bin/aow-runtime-daemon` and the supplied
+`packaging/systemd/aow-runtime-daemon.service` as a user unit. On macOS the same
 binary can run under a process supervisor with the arguments above.
 
 `--state-dir` must be absolute. It defaults to `AOW_STATE_DIR`, then `~/.aow`.
@@ -39,11 +39,11 @@ The state root contains:
 | --- | --- |
 | `aow-acp.json` | Existing ACP agent definitions |
 | `aow-settings.json` | Existing execution environment settings |
-| `agent-daemon.json` | Optional node transport configuration |
+| `runtime-daemon.json` | Optional node transport configuration |
 | `data/acp/` | Existing AoW ACP history and exclusive ownership lock |
 | `cache/acp/` | Existing adapter and Registry cache |
-| `data/agent-daemon/node-id` | Stable UUID identifying this installation |
-| `runtime/agent-daemon/token` | Automatically generated private bearer token |
+| `data/runtime-daemon/node-id` | Stable UUID identifying this installation |
+| `runtime/runtime-daemon/token` | Automatically generated private bearer token |
 
 Passing the existing state root retains its data and configuration. The node
 service and legacy `aow-acpd` cannot own the same ACP state directory
@@ -53,7 +53,7 @@ terminal creation specification can supply explicit environment overrides.
 
 ## Transport configuration
 
-By default the daemon reads `STATE_DIR/agent-daemon.json` when present.
+By default the daemon reads `STATE_DIR/runtime-daemon.json` when present.
 `--config /path/to/node.json` chooses another configuration file; an explicitly
 selected missing or invalid file fails startup. For example:
 
@@ -76,7 +76,7 @@ instances use the existing raw replay mode.
 
 Every HTTP request and WebSocket upgrade, including health, requires
 `Authorization: Bearer TOKEN`. With no explicit token file, the daemon creates a
-random token at `runtime/agent-daemon/token` and reuses it on restart. An explicit
+random token at `runtime/runtime-daemon/token` and reuses it on restart. An explicit
 token file must already exist. Tokens must have 32–4096 non-whitespace ASCII
 characters; files must be owned by the runtime user, regular files, and mode
 `0600` or stricter. Tokens are never printed in startup logs or placed in URLs.
@@ -127,7 +127,7 @@ to the node, and the daemon does not create role homes on behalf of the server.
 Example health and ACP creation:
 
 ```sh
-NODE_TOKEN=$(cat "$HOME/.aow/runtime/agent-daemon/token")
+NODE_TOKEN=$(cat "$HOME/.aow/runtime/runtime-daemon/token")
 curl --fail --header "Authorization: Bearer $NODE_TOKEN" \
   http://127.0.0.1:9760/v1/health
 curl --fail --request PUT --header "Authorization: Bearer $NODE_TOKEN" \

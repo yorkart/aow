@@ -52,7 +52,7 @@ impl Config {
 /// Use a private existing token file, or atomically create the default node token.
 /// Tokens are never printed; administrators can read the file to configure a server.
 pub fn load_token(state_dir: &Path, explicit: Option<&Path>) -> Result<String> {
-    let default = state_dir.join("runtime/agent-daemon/token");
+    let default = state_dir.join("runtime/runtime-daemon/token");
     let path = explicit.unwrap_or(&default);
     if explicit.is_none() {
         private_directory(default.parent().context("Token directory is missing")?)?;
@@ -111,7 +111,7 @@ pub(crate) fn private_directory(path: &Path) -> Result<()> {
 }
 
 pub(crate) fn node_id(state_dir: &Path) -> Result<String> {
-    let directory = state_dir.join("data/agent-daemon");
+    let directory = state_dir.join("data/runtime-daemon");
     private_directory(&directory)?;
     let path = directory.join("node-id");
     match std::fs::OpenOptions::new()

@@ -78,6 +78,6 @@ From the repository root, run `just build` to build and `just test` to run tests
 
 For source development, start `just run-acpd` in a separate terminal before the Web server. Use the same `AOW_STATE_DIR` for both processes; the daemon reuses existing ACP history.
 
-The standalone [agent node daemon](docs/runtime/agent-daemon.md) embeds ACP and
+The standalone [runtime daemon](docs/runtime/runtime-daemon.md) embeds ACP and
 terminal runtimes in one process and exposes authenticated HTTP management and
 WebSocket transports for remote node deployments.

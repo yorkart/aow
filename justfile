@@ -50,5 +50,5 @@ run-acpd:
     cargo run -p aow-acpd
 
 # A standalone remote node; server node registration is configured separately.
-run-agent-daemon: build-vt-worker
-    cargo run -p aow-agent-daemon
+run-runtime-daemon: build-vt-worker
+    cargo run -p aow-runtime-daemon

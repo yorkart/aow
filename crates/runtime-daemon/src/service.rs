@@ -67,7 +67,7 @@ pub async fn run_with_listener(
     .await;
     let instance_id = uuid::Uuid::new_v4().to_string();
     let health = serde_json::json!({
-        "service": "aow-agent-daemon", "api_version": 1,
+        "service": "aow-runtime-daemon", "api_version": 1,
         "node_id": id, "instance_id": instance_id,
         "version": env!("CARGO_PKG_VERSION"), "pid": std::process::id(),
         "capabilities": ["acp-websocket", "terminal-websocket", "runtime-management"],
@@ -83,7 +83,7 @@ pub async fn run_with_listener(
             },
             authorize,
         ));
-    tracing::info!(listen = %listener.local_addr()?, state_dir = %options.state_dir.display(), "agent daemon listening");
+    tracing::info!(listen = %listener.local_addr()?, state_dir = %options.state_dir.display(), "runtime daemon listening");
     let (stop, mut stopping) = watch::channel(false);
     let server = axum::serve(listener, router)
         .with_graceful_shutdown(async move {

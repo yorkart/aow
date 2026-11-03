@@ -1,4 +1,4 @@
-use aow_agent_daemon::{Config, load_token};
+use aow_runtime_daemon::{Config, load_token};
 use std::os::unix::fs::PermissionsExt;
 
 #[test]
@@ -7,7 +7,7 @@ fn token_is_private_persistent_and_rejects_insecure_or_symlink_files() {
     let first = load_token(root.path(), None).unwrap();
     assert_eq!(first.len(), 64);
     assert_eq!(load_token(root.path(), None).unwrap(), first);
-    let path = root.path().join("runtime/agent-daemon/token");
+    let path = root.path().join("runtime/runtime-daemon/token");
     assert_eq!(
         std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
         0o600

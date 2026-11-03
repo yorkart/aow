@@ -17,8 +17,8 @@ const files = ['skills/aow-agent/SKILL.md', 'skills/aow-acp/SKILL.md', 'git-plat
   'scripts/launchd-mode.mjs', 'scripts/start-launchdaemon.mjs', 'scripts/register-launchdaemon.py',
   'scripts/replace-symlink.mjs', 'scripts/server-state-dir.sh', 'packaging/bin/aow',
   'packaging/bin/aow-server', 'packaging/bin/aow-acpd', 'packaging/bin/aow-terminald',
-  'packaging/systemd/aow-server.service', 'packaging/systemd/aow-acpd.service', 'packaging/systemd/aow-agent-daemon.service', 'packaging/systemd/aow-terminald.service'];
-const binaries = ['aow-server', 'aow-acpd', 'aow-agent-daemon', 'aow-terminald', 'aow-cli', 'aow-automation-runner'];
+  'packaging/systemd/aow-server.service', 'packaging/systemd/aow-acpd.service', 'packaging/systemd/aow-runtime-daemon.service', 'packaging/systemd/aow-terminald.service'];
+const binaries = ['aow-server', 'aow-acpd', 'aow-runtime-daemon', 'aow-terminald', 'aow-cli', 'aow-automation-runner'];
 function write(path, data, executable = false) {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, data, { mode: executable ? 0o755 : 0o600 });

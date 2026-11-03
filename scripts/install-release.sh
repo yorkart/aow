@@ -163,7 +163,7 @@ try {
         'bin/aow-server', 'bin/aow-terminald',
         'bin/aow-automation-runner', 'bin/aow-cli', 'frontend/dist/index.html',
         ...(manifest.components?.acpd ? ['bin/aow-acpd'] : []),
-        ...(manifest.components?.agent_daemon ? ['bin/aow-agent-daemon'] : []),
+        ...(manifest.components?.runtime_daemon ? ['bin/aow-runtime-daemon'] : []),
         ...(manifest.components?.skills ? ['skills', 'skills/aow-agent', 'skills/aow-agent/SKILL.md', 'skills/aow-acp', 'skills/aow-acp/SKILL.md'] : []),
         ...(manifest.components?.git_platform_providers ? ['git-platform-providers'] : []),
         ...(manifest.components?.ripgrep ? ['bin/rg', 'licenses/ripgrep/manifest.json'] : [])]) {
