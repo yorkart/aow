@@ -123,7 +123,7 @@ fn codex_directory_footer_is_independent_of_shortcuts_and_warnings() {
         "  ? for shortcuts                                      ⚠ 2 warnings · f2 to view",
     ] {
         let screen = format!(
-            "› Ask Codex to do anything\n\n  GPT-6-Astra xhigh · ~/workspace/.aow-inbox-task\n{shortcuts}\n\n"
+            "› Ask Codex to do anything\n\n  GPT-6-Astra xhigh · ~/workspace/.aow-task\n{shortcuts}\n\n"
         );
         assert!(agent.input_ready(&lines(&screen)), "{screen}");
     }

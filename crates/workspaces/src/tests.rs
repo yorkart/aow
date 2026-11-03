@@ -92,7 +92,7 @@ async fn temporary_directory_survives_prepared_workspace_drop_without_git() {
     let prepared = prepare(
         &config,
         Path::new("/missing/repository"),
-        "inbox/task",
+        "task/task",
         &Git,
     )
     .await

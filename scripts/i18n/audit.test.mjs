@@ -30,8 +30,7 @@ test('backend parameters survive nested message calls, brackets and escaped quot
   assert.throws(() => validateRustSource(source.replace('("exit", code.to_string())', ''), 'crates/server/src/fixture.rs', resources), /missing parameter exit/u);
 });
 
-test('guards migrated Inbox errors and production Chinese while allowing test user content', () => {
-  assert.throws(() => validateRustSource('ensure!(valid, "Inbox comments cannot be a symlink");', 'crates/server/src/inbox/persistence.rs', {}), /hardcoded persistence error/u);
+test('guards production Chinese while allowing test user content', () => {
   assert.throws(() => validateRustSource('let message = "请求失败";', 'crates/server/src/fixture.rs', {}), /hardcoded Chinese production string/u);
   assert.doesNotThrow(() => validateRustSource('#[cfg(test)] mod tests { let user = "用户内容"; }', 'crates/server/src/fixture.rs', {}));
 });

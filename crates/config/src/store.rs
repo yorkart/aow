@@ -85,7 +85,7 @@ impl ConfigStore {
         ensure!(
             matches!(
                 relative.to_str(),
-                Some("data/inbox" | "automations/tasks" | "git-platform-providers")
+                Some("automations/tasks" | "git-platform-providers")
             ),
             aow_i18n::message(
                 "config.unsupported_configuration_directory",

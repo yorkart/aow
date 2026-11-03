@@ -10,7 +10,6 @@ mod filesystem;
 mod git_api;
 mod git_platform_providers;
 mod im_api;
-mod inbox;
 mod instances;
 mod local_cli;
 mod locale;

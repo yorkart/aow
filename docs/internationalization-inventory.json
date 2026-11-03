@@ -196,12 +196,6 @@
     },
     {
       "file": "frontend/src/aow/FloatingWorkspace.tsx",
-      "line": 133,
-      "source": "正在加载 Inbox…",
-      "key": "aow.loading_inbox"
-    },
-    {
-      "file": "frontend/src/aow/FloatingWorkspace.tsx",
       "line": 142,
       "source": "正在加载全局项目…",
       "key": "aow.loading_global_projects"
@@ -7947,648 +7941,6 @@
       "key": "im.wechat_test_notification_receipt_confirmed"
     },
     {
-      "file": "frontend/src/features/inbox/EditorShortcutHint.tsx",
-      "line": 3,
-      "source": "提交",
-      "key": "inbox.submit"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxComments.tsx",
-      "line": 18,
-      "source": "需求评论",
-      "key": "inbox.requirement_comments"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxComments.tsx",
-      "line": 19,
-      "source": "正在加载评论…",
-      "key": "inbox.loading_comments"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxComments.tsx",
-      "line": 20,
-      "source": "重试加载评论",
-      "key": "inbox.retry_loading_comments"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-      "line": 72,
-      "source": "执行需求",
-      "key": "inbox.execute_requirement"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-      "line": 72,
-      "source": "关闭",
-      "key": "aow.close"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-      "line": 75,
-      "source": "没有可用的交互式 Agent",
-      "key": "inbox.no_interactive_agents_available"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-      "line": 76,
-      "source": " · 未安装",
-      "key": "automations.not_installed"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-      "line": 76,
-      "source": " · 暂不支持交互执行",
-      "key": "inbox.interactive_execution_unsupported"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-      "line": 79,
-      "source": "此工作区会保留供 Agent 使用，不会自动清理。",
-      "key": "inbox.this_workspace_is_retained_for_the_agent_and_will"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-      "line": 80,
-      "source": "追加 prompt",
-      "key": "inbox.additional_prompt"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-      "line": 80,
-      "source": "可选",
-      "key": "aow.optional"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-      "line": 80,
-      "source": "追加 prompt",
-      "key": "inbox.additional_prompt"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-      "line": 80,
-      "source": "例如：先分析需求和实现方案，列出风险，再开始修改代码。",
-      "key": "inbox.for_example_analyze_requirements_and_an_implementation_plan_list"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-      "line": 81,
-      "source": "查看最终任务输入",
-      "key": "inbox.view_final_task_input"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-      "line": 84,
-      "source": "取消",
-      "key": "aow.cancel"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-      "line": 84,
-      "source": "正在启动…",
-      "key": "inbox.starting"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-      "line": 84,
-      "source": "开始执行",
-      "key": "inbox.start_execution"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxPanel.tsx",
-      "line": 58,
-      "source": "重试加载",
-      "key": "inbox.retry_loading"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxPanel.tsx",
-      "line": 59,
-      "source": "正在加载…",
-      "key": "aow.loading"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxPanel.tsx",
-      "line": 60,
-      "source": "没有匹配的需求",
-      "key": "inbox.no_matching_requirements"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxPanel.tsx",
-      "line": 60,
-      "source": "先把想法记下来",
-      "key": "inbox.capture_an_idea_first"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxPanel.tsx",
-      "line": 60,
-      "source": "调整筛选，或添加新的需求。",
-      "key": "inbox.adjust_filters_or_add_a_requirement"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxPanel.tsx",
-      "line": 60,
-      "source": "一段 Markdown 就够了，项目和标签可以稍后补充。",
-      "key": "inbox.a_little_markdown_is_enough_add_a_project_and"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxPanel.tsx",
-      "line": 61,
-      "source": "需求列表",
-      "key": "inbox.requirements_list"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxPanel.tsx",
-      "line": 99,
-      "source": "新需求 Markdown",
-      "key": "inbox.new_requirement_markdown"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxPanel.tsx",
-      "line": 101,
-      "source": "需求内容，双击或按 Enter 编辑",
-      "key": "inbox.requirement_content_double_click_or_press_enter_to_edit"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxPanel.tsx",
-      "line": 104,
-      "source": "这条需求已有更新。",
-      "key": "inbox.this_requirement_has_been_updated"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxPanel.tsx",
-      "line": 104,
-      "source": "按最新版本移除",
-      "key": "inbox.remove_using_latest_version"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxPanel.tsx",
-      "line": 104,
-      "source": "保留草稿，以最新版本保存",
-      "key": "inbox.keep_draft_and_save_against_latest_version"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxPanel.tsx",
-      "line": 104,
-      "source": "载入最新内容",
-      "key": "inbox.load_latest_content"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxPanel.tsx",
-      "line": 105,
-      "source": "重试",
-      "key": "aow.retry"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxPanel.tsx",
-      "line": 109,
-      "source": "添加需求",
-      "key": "inbox.add_requirement"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxRow.tsx",
-      "line": 62,
-      "source": "打开 {value0} 终端",
-      "key": "inbox.open_terminal"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxRow.tsx",
-      "line": 78,
-      "source": "拖动排序：{value0}",
-      "key": "inbox.drag_to_reorder"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxRow.tsx",
-      "line": 78,
-      "source": "拖动排序，或使用上下方向键",
-      "key": "inbox.drag_to_reorder_or_use_the_up_and_down"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxRow.tsx",
-      "line": 83,
-      "source": "需求内容，双击或按 Enter 编辑",
-      "key": "inbox.requirement_content_double_click_or_press_enter_to_edit"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxRow.tsx",
-      "line": 83,
-      "source": "双击编辑",
-      "key": "inbox.double_click_to_edit"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxRow.tsx",
-      "line": 89,
-      "source": "这条需求已有更新。",
-      "key": "inbox.this_requirement_has_been_updated"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxRow.tsx",
-      "line": 89,
-      "source": "按最新版本移除",
-      "key": "inbox.remove_using_latest_version"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxRow.tsx",
-      "line": 89,
-      "source": "保留草稿，以最新版本保存",
-      "key": "inbox.keep_draft_and_save_against_latest_version"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxRow.tsx",
-      "line": 89,
-      "source": "载入最新内容",
-      "key": "inbox.load_latest_content"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxRow.tsx",
-      "line": 102,
-      "source": "打开终端",
-      "key": "inbox.open_terminal_2"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxRow.tsx",
-      "line": 106,
-      "source": "评论",
-      "key": "inbox.comments"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxRow.tsx",
-      "line": 106,
-      "source": "收起评论",
-      "key": "inbox.collapse_comments"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxRow.tsx",
-      "line": 106,
-      "source": "展开评论",
-      "key": "inbox.expand_comments"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxRow.tsx",
-      "line": 110,
-      "source": "执行需求",
-      "key": "inbox.execute_requirement"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxRow.tsx",
-      "line": 110,
-      "source": "正在启动 Agent…",
-      "key": "acp.starting_agent"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxRow.tsx",
-      "line": 110,
-      "source": "先绑定项目再执行",
-      "key": "inbox.bind_a_project_before_execution"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxRow.tsx",
-      "line": 110,
-      "source": "配置执行并选择 Agent",
-      "key": "inbox.configure_execution_and_choose_an_agent"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxRow.tsx",
-      "line": 114,
-      "source": "删除需求",
-      "key": "inbox.delete_requirement"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxRow.tsx",
-      "line": 114,
-      "source": "删除需求",
-      "key": "inbox.delete_requirement"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxRow.tsx",
-      "line": 120,
-      "source": "删除这条需求？",
-      "key": "inbox.delete_this_requirement"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxRow.tsx",
-      "line": 120,
-      "source": "取消",
-      "key": "aow.cancel"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxRow.tsx",
-      "line": 120,
-      "source": "确认删除",
-      "key": "inbox.confirm_deletion"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxRow.tsx",
-      "line": 122,
-      "source": "执行未完成",
-      "key": "inbox.execution_incomplete"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxRow.tsx",
-      "line": 125,
-      "source": "重试",
-      "key": "aow.retry"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-      "line": 46,
-      "source": "搜索需求",
-      "key": "inbox.search_requirements"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-      "line": 46,
-      "source": "搜索需求",
-      "key": "inbox.search_requirements"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-      "line": 47,
-      "source": "显示 {value0} 条需求，共 {value1} 条",
-      "key": "inbox.showing_of_requirements"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-      "line": 49,
-      "source": "按标签筛选",
-      "key": "inbox.filter_by_label"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-      "line": 49,
-      "source": "按标签筛选（匹配任一标签）",
-      "key": "inbox.filter_by_label_match_any"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-      "line": 53,
-      "source": "标签",
-      "key": "inbox.labels"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-      "line": 55,
-      "source": "配置标签",
-      "key": "inbox.configure_labels"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-      "line": 55,
-      "source": "配置标签",
-      "key": "inbox.configure_labels"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-      "line": 59,
-      "source": "按标签筛选（匹配任一标签）",
-      "key": "inbox.filter_by_label_match_any"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-      "line": 60,
-      "source": "标签过滤",
-      "key": "inbox.label_filter"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-      "line": 60,
-      "source": "匹配任一标签",
-      "key": "inbox.match_any_label"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-      "line": 61,
-      "source": "筛选标签",
-      "key": "inbox.filter_labels"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-      "line": 65,
-      "source": "暂无标签，可在标签菜单中添加。",
-      "key": "inbox.no_labels_add_some_in_the_labels_menu"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-      "line": 67,
-      "source": "清除筛选",
-      "key": "inbox.clear_filters"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-      "line": 70,
-      "source": "配置标签",
-      "key": "inbox.configure_labels"
-    },
-    {
-      "file": "frontend/src/features/inbox/InlineEditor.tsx",
-      "line": 7,
-      "source": "需求 Markdown",
-      "key": "inbox.requirement_markdown"
-    },
-    {
-      "file": "frontend/src/features/inbox/InlineEditor.tsx",
-      "line": 41,
-      "source": "正在加载编辑器…",
-      "key": "aow.loading_editor"
-    },
-    {
-      "file": "frontend/src/features/inbox/InlineEditor.tsx",
-      "line": 43,
-      "source": "正在加载编辑器…",
-      "key": "aow.loading_editor"
-    },
-    {
-      "file": "frontend/src/features/inbox/InlineEditor.tsx",
-      "line": 46,
-      "source": "写下需求，支持 Markdown…",
-      "key": "inbox.describe_your_requirement_markdown_supported"
-    },
-    {
-      "file": "frontend/src/features/inbox/LabelsEditor.tsx",
-      "line": 13,
-      "source": "配置标签",
-      "key": "inbox.configure_labels"
-    },
-    {
-      "file": "frontend/src/features/inbox/LabelsEditor.tsx",
-      "line": 17,
-      "source": "配置标签",
-      "key": "inbox.configure_labels"
-    },
-    {
-      "file": "frontend/src/features/inbox/LabelsEditor.tsx",
-      "line": 17,
-      "source": "关闭标签配置",
-      "key": "inbox.close_label_configuration"
-    },
-    {
-      "file": "frontend/src/features/inbox/LabelsEditor.tsx",
-      "line": 19,
-      "source": "标签 {value0} 颜色",
-      "key": "inbox.label_color"
-    },
-    {
-      "file": "frontend/src/features/inbox/LabelsEditor.tsx",
-      "line": 20,
-      "source": "标签 {value0} 名称",
-      "key": "inbox.label_name"
-    },
-    {
-      "file": "frontend/src/features/inbox/LabelsEditor.tsx",
-      "line": 21,
-      "source": "删除标签 {value0}",
-      "key": "inbox.delete_label"
-    },
-    {
-      "file": "frontend/src/features/inbox/LabelsEditor.tsx",
-      "line": 23,
-      "source": "保存后，已删除的标签也会从需求上移除。",
-      "key": "inbox.saving_also_removes_deleted_labels_from_requirements"
-    },
-    {
-      "file": "frontend/src/features/inbox/LabelsEditor.tsx",
-      "line": 24,
-      "source": "重新载入标签",
-      "key": "inbox.reload_labels"
-    },
-    {
-      "file": "frontend/src/features/inbox/LabelsEditor.tsx",
-      "line": 25,
-      "source": "添加标签",
-      "key": "inbox.add_label"
-    },
-    {
-      "file": "frontend/src/features/inbox/LabelsEditor.tsx",
-      "line": 25,
-      "source": "保存标签",
-      "key": "inbox.save_labels"
-    },
-    {
-      "file": "frontend/src/features/inbox/MobileInbox.tsx",
-      "line": 10,
-      "source": "重新加载 Agent",
-      "key": "inbox.reload_agents"
-    },
-    {
-      "file": "frontend/src/features/inbox/ProjectSelect.tsx",
-      "line": 12,
-      "source": "按项目筛选",
-      "key": "inbox.filter_by_project"
-    },
-    {
-      "file": "frontend/src/features/inbox/ProjectSelect.tsx",
-      "line": 12,
-      "source": "绑定项目",
-      "key": "inbox.bind_project"
-    },
-    {
-      "file": "frontend/src/features/inbox/ProjectSelect.tsx",
-      "line": 14,
-      "source": "所有项目",
-      "key": "inbox.all_projects"
-    },
-    {
-      "file": "frontend/src/features/inbox/ProjectSelect.tsx",
-      "line": 14,
-      "source": "未绑定项目",
-      "key": "inbox.no_project_bound"
-    },
-    {
-      "file": "frontend/src/features/inbox/ProjectSelect.tsx",
-      "line": 14,
-      "source": "未绑定项目",
-      "key": "inbox.no_project_bound"
-    },
-    {
-      "file": "frontend/src/features/inbox/ProjectSelect.tsx",
-      "line": 17,
-      "source": "项目已移除",
-      "key": "inbox.project_removed"
-    },
-    {
-      "file": "frontend/src/features/inbox/RowLabels.tsx",
-      "line": 14,
-      "source": "选择标签",
-      "key": "inbox.choose_labels"
-    },
-    {
-      "file": "frontend/src/features/inbox/RowLabels.tsx",
-      "line": 14,
-      "source": "选择标签",
-      "key": "inbox.choose_labels"
-    },
-    {
-      "file": "frontend/src/features/inbox/RowLabels.tsx",
-      "line": 17,
-      "source": "标签",
-      "key": "inbox.labels"
-    },
-    {
-      "file": "frontend/src/features/inbox/RowLabels.tsx",
-      "line": 19,
-      "source": "选择需求标签",
-      "key": "inbox.choose_requirement_labels"
-    },
-    {
-      "file": "frontend/src/features/inbox/RowLabels.tsx",
-      "line": 20,
-      "source": "需求标签",
-      "key": "inbox.requirement_labels"
-    },
-    {
-      "file": "frontend/src/features/inbox/RowLabels.tsx",
-      "line": 22,
-      "source": "暂无标签，可在面板顶部配置。",
-      "key": "inbox.no_labels_configure_them_at_the_top_of_the"
-    },
-    {
-      "file": "frontend/src/features/inbox/types.ts",
-      "line": 23,
-      "source": "未命名需求",
-      "key": "inbox.untitled_requirement"
-    },
-    {
-      "file": "frontend/src/features/inbox/useInboxDraft.ts",
-      "line": 141,
-      "source": "移除失败",
-      "key": "inbox.removal_failed"
-    },
-    {
-      "file": "frontend/src/features/inbox/useInboxDraft.ts",
-      "line": 141,
-      "source": "移除中…",
-      "key": "inbox.removing"
-    },
-    {
-      "file": "frontend/src/features/inbox/useInboxDraft.ts",
-      "line": 141,
-      "source": "保存中…",
-      "key": "automations.saving"
-    },
-    {
-      "file": "frontend/src/features/inbox/useInboxDraft.ts",
-      "line": 141,
-      "source": "未保存",
-      "key": "inbox.unsaved"
-    },
-    {
-      "file": "frontend/src/features/inbox/useInboxDraft.ts",
-      "line": 141,
-      "source": "编辑中",
-      "key": "inbox.editing"
-    },
-    {
-      "file": "frontend/src/features/inbox/useInboxDraft.ts",
-      "line": 141,
-      "source": "等待保存",
-      "key": "inbox.waiting_to_save"
-    },
-    {
-      "file": "frontend/src/features/inbox/useInboxDraft.ts",
-      "line": 141,
-      "source": "已保存",
-      "key": "configuration.saved"
-    },
-    {
       "file": "frontend/src/features/instances/InstancePanelGroups.tsx",
       "line": 69,
       "source": "刷新{value0}列表",
@@ -10121,12 +9473,6 @@
     {
       "file": "frontend/src/features/pr/PullRequestDetailView.tsx",
       "line": 246,
-      "source": "标签",
-      "key": "inbox.labels"
-    },
-    {
-      "file": "frontend/src/features/pr/PullRequestDetailView.tsx",
-      "line": 246,
       "source": "暂无标签",
       "key": "pr.no_labels"
     },
@@ -10159,12 +9505,6 @@
       "line": 249,
       "source": "变更概况",
       "key": "pr.change_summary"
-    },
-    {
-      "file": "frontend/src/features/pr/PullRequestDetailView.tsx",
-      "line": 249,
-      "source": "提交",
-      "key": "inbox.submit"
     },
     {
       "file": "frontend/src/features/pr/PullRequestDetailView.tsx",
@@ -11416,12 +10756,6 @@
     },
     {
       "file": "frontend/src/features/settings/AgentList.tsx",
-      "line": 51,
-      "source": "拖动排序，或使用上下方向键",
-      "key": "inbox.drag_to_reorder_or_use_the_up_and_down"
-    },
-    {
-      "file": "frontend/src/features/settings/AgentList.tsx",
       "line": 89,
       "source": "可用",
       "key": "settings.available"
@@ -12424,12 +11758,6 @@
     },
     {
       "file": "frontend/src/features/terminals/MobileTerminalNewMenu.tsx",
-      "line": 63,
-      "source": "重新加载 Agent",
-      "key": "inbox.reload_agents"
-    },
-    {
-      "file": "frontend/src/features/terminals/MobileTerminalNewMenu.tsx",
       "line": 64,
       "source": "未发现可用 Agent",
       "key": "aow.no_agents_available"
@@ -12985,12 +12313,6 @@
       "line": 149,
       "source": "Enter 换行 ·",
       "key": "terminals.enter_for_a_new_line"
-    },
-    {
-      "file": "frontend/src/features/terminals/TerminalInputPane.tsx",
-      "line": 149,
-      "source": "提交",
-      "key": "inbox.submit"
     },
     {
       "file": "frontend/src/features/terminals/TerminalPaneView.tsx",
@@ -16208,160 +15530,6 @@
       "classification": "message"
     },
     {
-      "file": "crates/server/src/inbox/execution.rs",
-      "line": 34,
-      "source": "仅手动任务支持动态指定工作区",
-      "key": "automations.only_manual_tasks_support_dynamic_workspaces",
-      "classification": "message"
-    },
-    {
-      "file": "crates/server/src/inbox/execution.rs",
-      "line": 44,
-      "source": "请先为需求绑定项目，再选择 Agent 执行。",
-      "key": "server.bind_a_project_to_the_requirement_before_choosing_an",
-      "classification": "message"
-    },
-    {
-      "file": "crates/server/src/inbox/execution.rs",
-      "line": 50,
-      "source": "追加 prompt 无效或超过 128 KiB。",
-      "key": "server.additional_prompt_is_invalid_or_exceeds_128_kib",
-      "classification": "message"
-    },
-    {
-      "file": "crates/server/src/inbox/execution.rs",
-      "line": 64,
-      "source": "该 Agent 暂不支持自动提交任务，请选择 Codex、Trae CLI、Hermes 或 Pi。",
-      "key": "server.this_agent_does_not_support_automatic_task_submission_choose",
-      "classification": "message"
-    },
-    {
-      "file": "crates/server/src/inbox/execution.rs",
-      "line": 69,
-      "source": "需求和追加 prompt 拼接后不能超过 128 KiB。",
-      "key": "server.combined_requirement_and_additional_prompt_must_not_exceed_128",
-      "classification": "message"
-    },
-    {
-      "file": "crates/server/src/inbox/persistence.rs",
-      "line": 52,
-      "source": "服务已重启，执行结果待确认；请先检查终端，再决定是否重新执行。",
-      "key": "server.service_restarted_execution_result_is_unconfirmed_check_the_terminal",
-      "classification": "message"
-    },
-    {
-      "file": "crates/server/src/inbox/store.rs",
-      "line": 142,
-      "source": "这条评论已提交，补充内容请追加新评论。",
-      "key": "server.this_comment_was_submitted_add_a_new_comment_for",
-      "classification": "message"
-    },
-    {
-      "file": "crates/server/src/inbox/store.rs",
-      "line": 177,
-      "source": "这次录入已提交，请刷新列表确认后再录入。",
-      "key": "server.this_entry_was_submitted_refresh_the_list_to_confirm",
-      "classification": "message"
-    },
-    {
-      "file": "crates/server/src/inbox/store.rs",
-      "line": 184,
-      "source": "这次录入已被删除。",
-      "key": "server.this_entry_was_deleted",
-      "classification": "message"
-    },
-    {
-      "file": "crates/server/src/inbox/store.rs",
-      "line": 299,
-      "source": "该需求正在启动 Agent，请等待执行结果。",
-      "key": "server.an_agent_is_starting_for_this_requirement_wait_for",
-      "classification": "message"
-    },
-    {
-      "file": "crates/server/src/inbox/store.rs",
-      "line": 305,
-      "source": "需求、追加 prompt 与 Inbox 上下文拼接后不能超过 128 KiB。",
-      "key": "server.combined_requirement_additional_prompt_and_inbox_context_must_not",
-      "classification": "message"
-    },
-    {
-      "file": "crates/server/src/inbox/store.rs",
-      "line": 318,
-      "source": "请先绑定项目。",
-      "key": "server.bind_a_project_first",
-      "classification": "message"
-    },
-    {
-      "file": "crates/server/src/inbox/store.rs",
-      "line": 373,
-      "source": "需求未提交，请查看终端。",
-      "key": "server.requirement_not_submitted_check_the_terminal",
-      "classification": "message"
-    },
-    {
-      "file": "crates/server/src/inbox/store.rs",
-      "line": 401,
-      "source": "执行请求已使用，请刷新后重试。",
-      "key": "server.execution_request_already_used_refresh_and_try_again",
-      "classification": "message"
-    },
-    {
-      "file": "crates/server/src/inbox/store.rs",
-      "line": 421,
-      "source": "需求 ID 或标签无效。",
-      "key": "server.invalid_requirement_id_or_labels",
-      "classification": "message"
-    },
-    {
-      "file": "crates/server/src/inbox/store.rs",
-      "line": 428,
-      "source": "最多配置 64 个标签。",
-      "key": "server.at_most_64_labels_are_allowed",
-      "classification": "message"
-    },
-    {
-      "file": "crates/server/src/inbox/store.rs",
-      "line": 445,
-      "source": "标签名称须唯一且不超过 40 字，颜色须为十六进制色值。",
-      "key": "server.label_names_must_be_unique_and_at_most_40",
-      "classification": "message"
-    },
-    {
-      "file": "crates/server/src/inbox/store.rs",
-      "line": 453,
-      "source": "ID 无效。",
-      "key": "server.invalid_id",
-      "classification": "message"
-    },
-    {
-      "file": "crates/server/src/inbox/store.rs",
-      "line": 459,
-      "source": "请输入需求，最多支持 128 KiB 文本。",
-      "key": "server.enter_a_requirement_up_to_128_kib_of_text",
-      "classification": "message"
-    },
-    {
-      "file": "crates/server/src/inbox/store.rs",
-      "line": 476,
-      "source": "评论须包含正文和作者，正文最多 128 KiB，作者名称最多 80 字。",
-      "key": "server.comments_require_content_and_an_author_content_is_limited",
-      "classification": "message"
-    },
-    {
-      "file": "crates/server/src/inbox/store.rs",
-      "line": 484,
-      "source": "内容已在其他页面更新，请检查最新内容后重试；当前输入已保留。",
-      "key": "server.content_was_updated_in_another_page_check_the_latest",
-      "classification": "message"
-    },
-    {
-      "file": "crates/server/src/inbox/store.rs",
-      "line": 499,
-      "source": "需求不存在或已被删除。",
-      "key": "server.requirement_does_not_exist_or_was_deleted",
-      "classification": "message"
-    },
-    {
       "file": "crates/server/src/notifications/api.rs",
       "line": 37,
       "source": "无法保存通知配置",
@@ -17913,14 +17081,6 @@
           "line": 82
         },
         {
-          "file": "frontend/src/features/inbox/InboxPanel.tsx",
-          "line": 106
-        },
-        {
-          "file": "frontend/src/features/inbox/InboxRow.tsx",
-          "line": 126
-        },
-        {
           "file": "frontend/src/features/pr/PullRequestDetailView.tsx",
           "line": 47
         },
@@ -18001,32 +17161,6 @@
           "line": 112
         }
       ],
-      "navigation.inbox": [
-        {
-          "file": "frontend/src/aow/FloatingWorkspace.tsx",
-          "line": 114
-        },
-        {
-          "file": "frontend/src/aow/FloatingWorkspace.tsx",
-          "line": 114
-        },
-        {
-          "file": "frontend/src/features/inbox/InboxPanel.tsx",
-          "line": 54
-        },
-        {
-          "file": "frontend/src/mobile/MobileAow.tsx",
-          "line": 62
-        },
-        {
-          "file": "frontend/src/mobile/MobileAow.tsx",
-          "line": 67
-        },
-        {
-          "file": "frontend/src/mobile/MobileAow.tsx",
-          "line": 67
-        }
-      ],
       "aow.global_projects_panel": [
         {
           "file": "frontend/src/aow/FloatingWorkspace.tsx",
@@ -18099,12 +17233,6 @@
         {
           "file": "frontend/src/features/files/SystemFileBrowser.tsx",
           "line": 354
-        }
-      ],
-      "aow.loading_inbox": [
-        {
-          "file": "frontend/src/aow/FloatingWorkspace.tsx",
-          "line": 134
         }
       ],
       "aow.loading_global_projects": [
@@ -18313,10 +17441,6 @@
           "line": 105
         },
         {
-          "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-          "line": 73
-        },
-        {
           "file": "frontend/src/features/notifications/TaskNotificationPanel.tsx",
           "line": 54
         },
@@ -18433,14 +17557,6 @@
         {
           "file": "frontend/src/features/files/Explorer.tsx",
           "line": 549
-        },
-        {
-          "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-          "line": 85
-        },
-        {
-          "file": "frontend/src/features/inbox/InboxRow.tsx",
-          "line": 121
         },
         {
           "file": "frontend/src/features/settings/SettingsDialog.tsx",
@@ -18777,10 +17893,6 @@
         {
           "file": "frontend/src/aow/ProjectAow.tsx",
           "line": 593
-        },
-        {
-          "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-          "line": 81
         }
       ],
       "aow.defaults_to_the_repository_directory_name": [
@@ -19195,14 +18307,6 @@
           "line": 125
         },
         {
-          "file": "frontend/src/features/inbox/InlineEditor.tsx",
-          "line": 42
-        },
-        {
-          "file": "frontend/src/features/inbox/InlineEditor.tsx",
-          "line": 44
-        },
-        {
           "file": "frontend/src/features/terminals/TerminalInputEditor.tsx",
           "line": 6
         },
@@ -19517,10 +18621,6 @@
         {
           "file": "frontend/src/features/files/SystemFileBrowser.tsx",
           "line": 397
-        },
-        {
-          "file": "frontend/src/features/inbox/InboxPanel.tsx",
-          "line": 60
         },
         {
           "file": "frontend/src/mobile/MobilePrimitives.tsx",
@@ -21817,10 +20917,6 @@
         {
           "file": "frontend/src/features/acp/agent_ui/connection_progress.tsx",
           "line": 11
-        },
-        {
-          "file": "frontend/src/features/inbox/InboxRow.tsx",
-          "line": 111
         }
       ],
       "acp.establishing_acp_connection": [
@@ -24183,10 +23279,6 @@
         {
           "file": "frontend/src/features/automations/AutomationEditor.tsx",
           "line": 152
-        },
-        {
-          "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-          "line": 77
         }
       ],
       "automations.trust_project_configuration": [
@@ -24549,10 +23641,6 @@
         {
           "file": "frontend/src/features/im/ImSettingsPanel.tsx",
           "line": 60
-        },
-        {
-          "file": "frontend/src/features/inbox/useInboxDraft.ts",
-          "line": 142
         },
         {
           "file": "frontend/src/features/notifications/NotificationSettingsPanel.tsx",
@@ -25039,10 +24127,6 @@
         {
           "file": "frontend/src/features/configuration/ConfigurationSettings.tsx",
           "line": 79
-        },
-        {
-          "file": "frontend/src/features/inbox/useInboxDraft.ts",
-          "line": 142
         }
       ],
       "configuration.no_configuration_version_directories_found_choose_a_repository_containing": [
@@ -26799,11 +25883,7 @@
           "line": 188
         }
       ],
-      "inbox.submit": [
-        {
-          "file": "frontend/src/features/inbox/EditorShortcutHint.tsx",
-          "line": 4
-        },
+      "common.submit": [
         {
           "file": "frontend/src/features/pr/PullRequestDetailView.tsx",
           "line": 250
@@ -26813,540 +25893,22 @@
           "line": 150
         }
       ],
-      "inbox.requirement_comments": [
-        {
-          "file": "frontend/src/features/inbox/InboxComments.tsx",
-          "line": 19
-        }
-      ],
-      "inbox.loading_comments": [
-        {
-          "file": "frontend/src/features/inbox/InboxComments.tsx",
-          "line": 20
-        }
-      ],
-      "inbox.retry_loading_comments": [
-        {
-          "file": "frontend/src/features/inbox/InboxComments.tsx",
-          "line": 21
-        }
-      ],
-      "inbox.execute_requirement": [
-        {
-          "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-          "line": 73
-        },
-        {
-          "file": "frontend/src/features/inbox/InboxRow.tsx",
-          "line": 111
-        }
-      ],
-      "inbox.no_interactive_agents_available": [
-        {
-          "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-          "line": 76
-        }
-      ],
-      "inbox.interactive_execution_unsupported": [
-        {
-          "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-          "line": 77
-        }
-      ],
-      "inbox.this_workspace_is_retained_for_the_agent_and_will": [
-        {
-          "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-          "line": 80
-        }
-      ],
-      "inbox.additional_prompt": [
-        {
-          "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-          "line": 81
-        },
-        {
-          "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-          "line": 81
-        }
-      ],
-      "inbox.for_example_analyze_requirements_and_an_implementation_plan_list": [
-        {
-          "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-          "line": 81
-        }
-      ],
-      "inbox.view_final_task_input": [
-        {
-          "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-          "line": 82
-        }
-      ],
-      "inbox.starting": [
-        {
-          "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-          "line": 85
-        }
-      ],
-      "inbox.start_execution": [
-        {
-          "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-          "line": 85
-        }
-      ],
-      "inbox.retry_loading": [
-        {
-          "file": "frontend/src/features/inbox/InboxPanel.tsx",
-          "line": 59
-        }
-      ],
-      "inbox.no_matching_requirements": [
-        {
-          "file": "frontend/src/features/inbox/InboxPanel.tsx",
-          "line": 61
-        }
-      ],
-      "inbox.capture_an_idea_first": [
-        {
-          "file": "frontend/src/features/inbox/InboxPanel.tsx",
-          "line": 61
-        }
-      ],
-      "inbox.adjust_filters_or_add_a_requirement": [
-        {
-          "file": "frontend/src/features/inbox/InboxPanel.tsx",
-          "line": 61
-        }
-      ],
-      "inbox.a_little_markdown_is_enough_add_a_project_and": [
-        {
-          "file": "frontend/src/features/inbox/InboxPanel.tsx",
-          "line": 61
-        }
-      ],
-      "inbox.requirements_list": [
-        {
-          "file": "frontend/src/features/inbox/InboxPanel.tsx",
-          "line": 62
-        }
-      ],
-      "inbox.new_requirement_markdown": [
-        {
-          "file": "frontend/src/features/inbox/InboxPanel.tsx",
-          "line": 100
-        }
-      ],
-      "inbox.requirement_content_double_click_or_press_enter_to_edit": [
-        {
-          "file": "frontend/src/features/inbox/InboxPanel.tsx",
-          "line": 102
-        },
-        {
-          "file": "frontend/src/features/inbox/InboxRow.tsx",
-          "line": 84
-        }
-      ],
-      "inbox.this_requirement_has_been_updated": [
-        {
-          "file": "frontend/src/features/inbox/InboxPanel.tsx",
-          "line": 105
-        },
-        {
-          "file": "frontend/src/features/inbox/InboxRow.tsx",
-          "line": 90
-        }
-      ],
-      "inbox.remove_using_latest_version": [
-        {
-          "file": "frontend/src/features/inbox/InboxPanel.tsx",
-          "line": 105
-        },
-        {
-          "file": "frontend/src/features/inbox/InboxRow.tsx",
-          "line": 90
-        }
-      ],
-      "inbox.keep_draft_and_save_against_latest_version": [
-        {
-          "file": "frontend/src/features/inbox/InboxPanel.tsx",
-          "line": 105
-        },
-        {
-          "file": "frontend/src/features/inbox/InboxRow.tsx",
-          "line": 90
-        }
-      ],
-      "inbox.load_latest_content": [
-        {
-          "file": "frontend/src/features/inbox/InboxPanel.tsx",
-          "line": 105
-        },
-        {
-          "file": "frontend/src/features/inbox/InboxRow.tsx",
-          "line": 90
-        }
-      ],
-      "inbox.add_requirement": [
-        {
-          "file": "frontend/src/features/inbox/InboxPanel.tsx",
-          "line": 110
-        }
-      ],
-      "inbox.open_terminal": [
-        {
-          "file": "frontend/src/features/inbox/InboxRow.tsx",
-          "line": 63
-        }
-      ],
-      "inbox.drag_to_reorder": [
-        {
-          "file": "frontend/src/features/inbox/InboxRow.tsx",
-          "line": 79
-        }
-      ],
-      "inbox.drag_to_reorder_or_use_the_up_and_down": [
-        {
-          "file": "frontend/src/features/inbox/InboxRow.tsx",
-          "line": 79
-        },
+      "common.drag_to_reorder_or_use_the_up_and_down": [
         {
           "file": "frontend/src/features/settings/AgentList.tsx",
           "line": 52
         }
       ],
-      "inbox.double_click_to_edit": [
-        {
-          "file": "frontend/src/features/inbox/InboxRow.tsx",
-          "line": 84
-        }
-      ],
-      "inbox.open_terminal_2": [
-        {
-          "file": "frontend/src/features/inbox/InboxRow.tsx",
-          "line": 103
-        }
-      ],
-      "inbox.comments": [
-        {
-          "file": "frontend/src/features/inbox/InboxRow.tsx",
-          "line": 107
-        }
-      ],
-      "inbox.collapse_comments": [
-        {
-          "file": "frontend/src/features/inbox/InboxRow.tsx",
-          "line": 107
-        }
-      ],
-      "inbox.expand_comments": [
-        {
-          "file": "frontend/src/features/inbox/InboxRow.tsx",
-          "line": 107
-        }
-      ],
-      "inbox.bind_a_project_before_execution": [
-        {
-          "file": "frontend/src/features/inbox/InboxRow.tsx",
-          "line": 111
-        }
-      ],
-      "inbox.configure_execution_and_choose_an_agent": [
-        {
-          "file": "frontend/src/features/inbox/InboxRow.tsx",
-          "line": 111
-        }
-      ],
-      "inbox.delete_requirement": [
-        {
-          "file": "frontend/src/features/inbox/InboxRow.tsx",
-          "line": 115
-        },
-        {
-          "file": "frontend/src/features/inbox/InboxRow.tsx",
-          "line": 115
-        }
-      ],
-      "inbox.delete_this_requirement": [
-        {
-          "file": "frontend/src/features/inbox/InboxRow.tsx",
-          "line": 121
-        }
-      ],
-      "inbox.confirm_deletion": [
-        {
-          "file": "frontend/src/features/inbox/InboxRow.tsx",
-          "line": 121
-        }
-      ],
-      "inbox.execution_incomplete": [
-        {
-          "file": "frontend/src/features/inbox/InboxRow.tsx",
-          "line": 123
-        }
-      ],
-      "inbox.search_requirements": [
-        {
-          "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-          "line": 47
-        },
-        {
-          "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-          "line": 47
-        }
-      ],
-      "inbox.showing_of_requirements": [
-        {
-          "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-          "line": 48
-        }
-      ],
-      "inbox.filter_by_label": [
-        {
-          "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-          "line": 50
-        }
-      ],
-      "inbox.filter_by_label_match_any": [
-        {
-          "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-          "line": 50
-        },
-        {
-          "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-          "line": 60
-        }
-      ],
-      "inbox.labels": [
-        {
-          "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-          "line": 54
-        },
-        {
-          "file": "frontend/src/features/inbox/RowLabels.tsx",
-          "line": 18
-        },
+      "common.labels": [
         {
           "file": "frontend/src/features/pr/PullRequestDetailView.tsx",
           "line": 247
         }
       ],
-      "inbox.configure_labels": [
-        {
-          "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-          "line": 56
-        },
-        {
-          "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-          "line": 56
-        },
-        {
-          "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-          "line": 71
-        },
-        {
-          "file": "frontend/src/features/inbox/LabelsEditor.tsx",
-          "line": 14
-        },
-        {
-          "file": "frontend/src/features/inbox/LabelsEditor.tsx",
-          "line": 18
-        }
-      ],
-      "inbox.label_filter": [
-        {
-          "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-          "line": 61
-        }
-      ],
-      "inbox.match_any_label": [
-        {
-          "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-          "line": 61
-        }
-      ],
-      "inbox.filter_labels": [
-        {
-          "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-          "line": 62
-        }
-      ],
-      "inbox.no_labels_add_some_in_the_labels_menu": [
-        {
-          "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-          "line": 66
-        }
-      ],
-      "inbox.clear_filters": [
-        {
-          "file": "frontend/src/features/inbox/InboxToolbar.tsx",
-          "line": 68
-        }
-      ],
-      "inbox.requirement_markdown": [
-        {
-          "file": "frontend/src/features/inbox/InlineEditor.tsx",
-          "line": 8
-        }
-      ],
-      "inbox.describe_your_requirement_markdown_supported": [
-        {
-          "file": "frontend/src/features/inbox/InlineEditor.tsx",
-          "line": 47
-        }
-      ],
-      "inbox.close_label_configuration": [
-        {
-          "file": "frontend/src/features/inbox/LabelsEditor.tsx",
-          "line": 18
-        }
-      ],
-      "inbox.label_color": [
-        {
-          "file": "frontend/src/features/inbox/LabelsEditor.tsx",
-          "line": 20
-        }
-      ],
-      "inbox.label_name": [
-        {
-          "file": "frontend/src/features/inbox/LabelsEditor.tsx",
-          "line": 21
-        }
-      ],
-      "inbox.delete_label": [
-        {
-          "file": "frontend/src/features/inbox/LabelsEditor.tsx",
-          "line": 22
-        }
-      ],
-      "inbox.saving_also_removes_deleted_labels_from_requirements": [
-        {
-          "file": "frontend/src/features/inbox/LabelsEditor.tsx",
-          "line": 24
-        }
-      ],
-      "inbox.reload_labels": [
-        {
-          "file": "frontend/src/features/inbox/LabelsEditor.tsx",
-          "line": 25
-        }
-      ],
-      "inbox.add_label": [
-        {
-          "file": "frontend/src/features/inbox/LabelsEditor.tsx",
-          "line": 26
-        }
-      ],
-      "inbox.save_labels": [
-        {
-          "file": "frontend/src/features/inbox/LabelsEditor.tsx",
-          "line": 26
-        }
-      ],
-      "inbox.reload_agents": [
-        {
-          "file": "frontend/src/features/inbox/MobileInbox.tsx",
-          "line": 11
-        },
+      "common.reload_agents": [
         {
           "file": "frontend/src/features/terminals/MobileTerminalNewMenu.tsx",
           "line": 64
-        }
-      ],
-      "inbox.filter_by_project": [
-        {
-          "file": "frontend/src/features/inbox/ProjectSelect.tsx",
-          "line": 13
-        }
-      ],
-      "inbox.bind_project": [
-        {
-          "file": "frontend/src/features/inbox/ProjectSelect.tsx",
-          "line": 13
-        }
-      ],
-      "inbox.all_projects": [
-        {
-          "file": "frontend/src/features/inbox/ProjectSelect.tsx",
-          "line": 15
-        }
-      ],
-      "inbox.no_project_bound": [
-        {
-          "file": "frontend/src/features/inbox/ProjectSelect.tsx",
-          "line": 15
-        },
-        {
-          "file": "frontend/src/features/inbox/ProjectSelect.tsx",
-          "line": 15
-        }
-      ],
-      "inbox.project_removed": [
-        {
-          "file": "frontend/src/features/inbox/ProjectSelect.tsx",
-          "line": 18
-        }
-      ],
-      "inbox.choose_labels": [
-        {
-          "file": "frontend/src/features/inbox/RowLabels.tsx",
-          "line": 15
-        },
-        {
-          "file": "frontend/src/features/inbox/RowLabels.tsx",
-          "line": 15
-        }
-      ],
-      "inbox.choose_requirement_labels": [
-        {
-          "file": "frontend/src/features/inbox/RowLabels.tsx",
-          "line": 20
-        }
-      ],
-      "inbox.requirement_labels": [
-        {
-          "file": "frontend/src/features/inbox/RowLabels.tsx",
-          "line": 21
-        }
-      ],
-      "inbox.no_labels_configure_them_at_the_top_of_the": [
-        {
-          "file": "frontend/src/features/inbox/RowLabels.tsx",
-          "line": 23
-        }
-      ],
-      "inbox.untitled_requirement": [
-        {
-          "file": "frontend/src/features/inbox/types.ts",
-          "line": 24
-        }
-      ],
-      "inbox.removal_failed": [
-        {
-          "file": "frontend/src/features/inbox/useInboxDraft.ts",
-          "line": 142
-        }
-      ],
-      "inbox.removing": [
-        {
-          "file": "frontend/src/features/inbox/useInboxDraft.ts",
-          "line": 142
-        }
-      ],
-      "inbox.unsaved": [
-        {
-          "file": "frontend/src/features/inbox/useInboxDraft.ts",
-          "line": 142
-        }
-      ],
-      "inbox.editing": [
-        {
-          "file": "frontend/src/features/inbox/useInboxDraft.ts",
-          "line": 142
-        }
-      ],
-      "inbox.waiting_to_save": [
-        {
-          "file": "frontend/src/features/inbox/useInboxDraft.ts",
-          "line": 142
         }
       ],
       "instances.refresh_list": [
@@ -32535,10 +31097,6 @@
         {
           "file": "crates/automations/src/model/task.rs",
           "line": 181
-        },
-        {
-          "file": "crates/server/src/inbox/execution.rs",
-          "line": 34
         }
       ],
       "automations.maximum_concurrency_must_be_between_1_and_10": [
@@ -35085,242 +33643,6 @@
           "line": 103
         }
       ],
-      "server.bind_a_project_to_the_requirement_before_choosing_an": [
-        {
-          "file": "crates/server/src/inbox/execution.rs",
-          "line": 44
-        }
-      ],
-      "server.additional_prompt_is_invalid_or_exceeds_128_kib": [
-        {
-          "file": "crates/server/src/inbox/execution.rs",
-          "line": 53
-        }
-      ],
-      "server.this_agent_does_not_support_automatic_task_submission_choose": [
-        {
-          "file": "crates/server/src/inbox/execution.rs",
-          "line": 68
-        }
-      ],
-      "server.combined_requirement_and_additional_prompt_must_not_exceed_128": [
-        {
-          "file": "crates/server/src/inbox/execution.rs",
-          "line": 74
-        }
-      ],
-      "server.service_restarted_execution_result_is_unconfirmed_check_the_terminal": [
-        {
-          "file": "crates/server/src/inbox/persistence.rs",
-          "line": 52
-        }
-      ],
-      "inbox.inbox_directory_cannot_be_a_symlink": [
-        {
-          "file": "crates/server/src/inbox/persistence.rs",
-          "line": 66
-        },
-        {
-          "file": "crates/server/src/inbox/persistence.rs",
-          "line": 162
-        }
-      ],
-      "inbox.unsupported_inbox_data_version": [
-        {
-          "file": "crates/server/src/inbox/persistence.rs",
-          "line": 71
-        }
-      ],
-      "inbox.inbox_directory_and_requirement_id_differ": [
-        {
-          "file": "crates/server/src/inbox/persistence.rs",
-          "line": 78
-        }
-      ],
-      "inbox.duplicate_inbox_order_id": [
-        {
-          "file": "crates/server/src/inbox/persistence.rs",
-          "line": 87
-        }
-      ],
-      "inbox.requirement_no_longer_exists": [
-        {
-          "file": "crates/server/src/inbox/persistence.rs",
-          "line": 127
-        }
-      ],
-      "inbox.invalid_requirement_directory": [
-        {
-          "file": "crates/server/src/inbox/persistence.rs",
-          "line": 169
-        }
-      ],
-      "inbox.deleted_requirement_exists": [
-        {
-          "file": "crates/server/src/inbox/persistence.rs",
-          "line": 204
-        }
-      ],
-      "inbox.requirement_is_already_deleted": [
-        {
-          "file": "crates/server/src/inbox/persistence.rs",
-          "line": 215
-        }
-      ],
-      "inbox.inbox_comments_cannot_be_a_symlink": [
-        {
-          "file": "crates/server/src/inbox/persistence.rs",
-          "line": 276
-        }
-      ],
-      "inbox.read_comments": [
-        {
-          "file": "crates/server/src/inbox/persistence.rs",
-          "line": 279
-        }
-      ],
-      "inbox.invalid_comment": [
-        {
-          "file": "crates/server/src/inbox/persistence.rs",
-          "line": 289
-        }
-      ],
-      "inbox.duplicate_inbox_comment_id": [
-        {
-          "file": "crates/server/src/inbox/persistence.rs",
-          "line": 300
-        }
-      ],
-      "inbox.duplicate_inbox_comment_request": [
-        {
-          "file": "crates/server/src/inbox/persistence.rs",
-          "line": 305
-        }
-      ],
-      "inbox.file_symlink": [
-        {
-          "file": "crates/server/src/inbox/persistence.rs",
-          "line": 315
-        }
-      ],
-      "inbox.invalid_file": [
-        {
-          "file": "crates/server/src/inbox/persistence.rs",
-          "line": 321
-        },
-        {
-          "file": "crates/server/src/inbox/persistence.rs",
-          "line": 330
-        }
-      ],
-      "inbox.missing_parent": [
-        {
-          "file": "crates/server/src/inbox/persistence.rs",
-          "line": 345
-        }
-      ],
-      "validation.inbox_lock_poisoned": [
-        {
-          "file": "crates/server/src/inbox/store.rs",
-          "line": 60
-        }
-      ],
-      "server.this_comment_was_submitted_add_a_new_comment_for": [
-        {
-          "file": "crates/server/src/inbox/store.rs",
-          "line": 142
-        }
-      ],
-      "server.this_entry_was_submitted_refresh_the_list_to_confirm": [
-        {
-          "file": "crates/server/src/inbox/store.rs",
-          "line": 179
-        }
-      ],
-      "server.this_entry_was_deleted": [
-        {
-          "file": "crates/server/src/inbox/store.rs",
-          "line": 188
-        }
-      ],
-      "server.an_agent_is_starting_for_this_requirement_wait_for": [
-        {
-          "file": "crates/server/src/inbox/store.rs",
-          "line": 303
-        }
-      ],
-      "server.combined_requirement_additional_prompt_and_inbox_context_must_not": [
-        {
-          "file": "crates/server/src/inbox/store.rs",
-          "line": 310
-        }
-      ],
-      "server.bind_a_project_first": [
-        {
-          "file": "crates/server/src/inbox/store.rs",
-          "line": 324
-        }
-      ],
-      "server.requirement_not_submitted_check_the_terminal": [
-        {
-          "file": "crates/server/src/inbox/store.rs",
-          "line": 380
-        }
-      ],
-      "server.execution_request_already_used_refresh_and_try_again": [
-        {
-          "file": "crates/server/src/inbox/store.rs",
-          "line": 409
-        }
-      ],
-      "server.invalid_requirement_id_or_labels": [
-        {
-          "file": "crates/server/src/inbox/store.rs",
-          "line": 431
-        }
-      ],
-      "server.at_most_64_labels_are_allowed": [
-        {
-          "file": "crates/server/src/inbox/store.rs",
-          "line": 440
-        }
-      ],
-      "server.label_names_must_be_unique_and_at_most_40": [
-        {
-          "file": "crates/server/src/inbox/store.rs",
-          "line": 458
-        }
-      ],
-      "server.invalid_id": [
-        {
-          "file": "crates/server/src/inbox/store.rs",
-          "line": 467
-        }
-      ],
-      "server.enter_a_requirement_up_to_128_kib_of_text": [
-        {
-          "file": "crates/server/src/inbox/store.rs",
-          "line": 473
-        }
-      ],
-      "server.comments_require_content_and_an_author_content_is_limited": [
-        {
-          "file": "crates/server/src/inbox/store.rs",
-          "line": 491
-        }
-      ],
-      "server.content_was_updated_in_another_page_check_the_latest": [
-        {
-          "file": "crates/server/src/inbox/store.rs",
-          "line": 499
-        }
-      ],
-      "server.requirement_does_not_exist_or_was_deleted": [
-        {
-          "file": "crates/server/src/inbox/store.rs",
-          "line": 515
-        }
-      ],
       "validation.instance_creation_parent_cannot_change": [
         {
           "file": "crates/server/src/instances/store.rs",
@@ -36343,16 +34665,6 @@
       "classification": "technical identifier or example"
     },
     {
-      "file": "frontend/src/aow/FloatingWorkspace.tsx",
-      "source": "Inbox",
-      "classification": "managed message"
-    },
-    {
-      "file": "frontend/src/aow/FloatingWorkspace.tsx",
-      "source": "Inbox",
-      "classification": "managed message"
-    },
-    {
       "file": "frontend/src/aow/ProjectAow.tsx",
       "source": "/absolute/path/to/project-notes",
       "classification": "technical identifier or example"
@@ -36933,21 +35245,6 @@
       "classification": "technical identifier or example"
     },
     {
-      "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-      "source": "Agent",
-      "classification": "technical identifier or example"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxExecutePanel.tsx",
-      "source": "Agent",
-      "classification": "technical identifier or example"
-    },
-    {
-      "file": "frontend/src/features/inbox/InboxPanel.tsx",
-      "source": "Inbox",
-      "classification": "managed message"
-    },
-    {
       "file": "frontend/src/features/notifications/NotificationSettingsPanel.tsx",
       "source": "https://aow.example.com",
       "classification": "technical identifier or example"
@@ -37339,21 +35636,6 @@
     },
     {
       "file": "frontend/src/mobile/MobileAow.tsx",
-      "source": "Inbox",
-      "classification": "managed message"
-    },
-    {
-      "file": "frontend/src/mobile/MobileAow.tsx",
-      "source": "Inbox",
-      "classification": "managed message"
-    },
-    {
-      "file": "frontend/src/mobile/MobileAow.tsx",
-      "source": "Inbox",
-      "classification": "managed message"
-    },
-    {
-      "file": "frontend/src/mobile/MobileAow.tsx",
       "source": "WORKSPACE",
       "classification": "managed message"
     },
@@ -37370,8 +35652,7 @@
   ],
   "reviewFixes": {
     "websocket": "Explicit lang query on all browser connections; common scoped Axum upgrade helper",
-    "inboxPersistence": "Own diagnostics extracted into English and Chinese resources; paths and IDs remain interpolation parameters",
-    "guards": "Conditional/template/fallback frontend markup and literal key branches, static interpolation arguments, production Chinese strings and Inbox English error sinks",
+    "guards": "Conditional/template/fallback frontend markup and literal key branches, static interpolation arguments, production Chinese strings",
     "guardLimitations": "Arbitrary computed display values and English Rust diagnostics outside guarded modules still require code review."
   }
 }

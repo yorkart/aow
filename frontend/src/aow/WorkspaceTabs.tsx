@@ -16,7 +16,7 @@ import { AcpSpinnerLabel } from '../features/acp/workspace';
 
 export interface WorkspaceTab {
   id: string;
-  kind: 'settings' | 'inbox' | 'terminal' | 'agent' | 'file' | 'diff' | 'session' | 'acp' | 'automation' | 'pullRequest' | 'browser';
+  kind: 'settings' | 'terminal' | 'agent' | 'file' | 'diff' | 'session' | 'acp' | 'automation' | 'pullRequest' | 'browser';
   label: string;
   targetId: string;
   title?: string;
@@ -30,7 +30,7 @@ export interface WorkspaceTab {
   pending?: boolean;
 }
 export interface TabRevealRequest { tabId: string }
-type WorkspaceTabGroup = Exclude<WorkspaceTab['kind'], 'agent' | 'settings' | 'inbox' | 'browser'> | 'global';
+type WorkspaceTabGroup = Exclude<WorkspaceTab['kind'], 'agent' | 'settings' | 'browser'> | 'global';
 const groupDefinitions: { id: WorkspaceTabGroup; label: string; color: string }[] = [
   { id: 'global', label: t("navigation.global"), color: '#8fa8bd' },
   { id: 'terminal', label: t("navigation.terminal"), color: '#6ca8f1' },
@@ -42,11 +42,11 @@ const groupDefinitions: { id: WorkspaceTabGroup; label: string; color: string }[
   { id: 'diff', label: 'Diff', color: '#c6a583' },
 ];
 export function isWorkspaceTabKind(kind: unknown): kind is WorkspaceTab['kind'] {
-  return kind === 'agent' || kind === 'settings' || kind === 'inbox' || kind === 'browser'
+  return kind === 'agent' || kind === 'settings' || kind === 'browser'
     || groupDefinitions.some(group => group.id !== 'global' && group.id === kind);
 }
 export function workspaceTabGroup(tab: WorkspaceTab): WorkspaceTabGroup {
-  if (tab.kind === 'settings' || tab.kind === 'inbox' || tab.kind === 'browser') return 'global';
+  if (tab.kind === 'settings' || tab.kind === 'browser') return 'global';
   return tab.kind === 'agent' ? 'terminal' : tab.kind;
 }
 export function groupWorkspaceTabs(tabs: WorkspaceTab[]) {

@@ -5,7 +5,7 @@ import { LogoutButton } from '../features/auth/LogoutButton';
 import type { ResolvedTab } from '../aow/tabRoutes';
 import { mobileTabTarget } from '../aow/tabRoutes/mobile';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { Inbox, ArrowLeft, ArrowUpRight, CalendarClock, ChevronRight, FolderOpen, GitBranch, GitPullRequest, Home, MessageSquare, Pin, PinOff, Search, Settings, Sparkles, TerminalSquare, X } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, CalendarClock, ChevronRight, FolderOpen, GitBranch, GitPullRequest, Home, MessageSquare, Pin, PinOff, Search, Settings, Sparkles, TerminalSquare, X } from 'lucide-react';
 import { aowApi } from '../aow/aowApi';
 import { ProjectIcon } from '../aow/ProjectIcon';
 import { usePinnedWorktrees } from '../aow/usePinnedWorktrees';
@@ -18,7 +18,6 @@ import { mobileRouteUrl, saveMobileValue, storedMobileValue, useMobileResource, 
 import type { MobileNavigate } from './mobileState';
 import './mobile.css';
 
-const MobileInbox = lazy(() => import('../features/inbox/MobileInbox').then(module => ({ default: module.MobileInbox })));
 const MobileTerminals = lazy(() => import('../features/terminals/MobileTerminals').then((module) => ({ default: module.MobileTerminals })));
 const MobileSessions = lazy(() => import('../features/sessions/MobileSessions').then((module) => ({ default: module.MobileSessions })));
 const MobileAcpSessions = lazy(() => import('../features/acp').then(module => ({ default: module.MobileAcpSessions })));
@@ -61,16 +60,15 @@ export function MobileAow({ initialEntry }: { initialEntry?: ResolvedTab } = {})
   return <div className="mobile-app">
     <div className="mobile-main" inert={showSettings}>
       <header className="mobile-app-header">
-        {route.view === 'inbox' ? <><button className="mobile-icon-button" aria-label={t("mobile.back_to_projects")} onClick={goHome}><ArrowLeft size={21} /></button><strong>{t("navigation.inbox")}</strong></> : worktree ? <>
+        {worktree ? <>
           <button className="mobile-icon-button" aria-label={t("mobile.back_to_projects")} onClick={goHome}><ArrowLeft size={21} /></button>
           <button className="mobile-brand-title" onClick={goHome}><strong>{project?.name}</strong><span>{worktree.branch || t("git.detached_head")}</span></button>
         </> : <MobileNodeSwitcher addresses={nodeAddresses} />}
         <div className="mobile-header-actions" ref={setHeaderActions} />
-        {route.view !== 'inbox' && <button className="mobile-icon-button" aria-label={t("navigation.inbox")} title={t("navigation.inbox")} onClick={() => navigate({ view: 'inbox' })}><Inbox size={20} /></button>}
         {!worktree && <button ref={settingsButton} className="mobile-icon-button" aria-label={t("settings.settings")} title={t("settings.settings")} onClick={() => setShowSettings(true)}><Settings size={20} /></button>}
         {!worktree && <LogoutButton className="mobile-icon-button" compact />}
       </header>
-      {route.view === 'inbox' ? <Suspense fallback={<MobileState loading />}><MobileInbox projects={projects.data ?? []} navigate={navigate} /></Suspense> : route.workspace ? project && worktree ? <MobileWorkspace initialTabId={route.terminal} key={worktree.path} project={project} worktree={worktree} route={route} navigate={navigate} back={() => back(fallback)} headerActions={headerActions} />
+      {route.workspace ? project && worktree ? <MobileWorkspace initialTabId={route.terminal} key={worktree.path} project={project} worktree={worktree} route={route} navigate={navigate} back={() => back(fallback)} headerActions={headerActions} />
         : <div className="mobile-home"><MobileState loading={projects.loading} error={projects.error} retry={projects.reload} empty={t("mobile.workspace_does_not_exist_or_has_been_removed")} /><button className="mobile-button" onClick={goHome}><Home size={17} />{t("mobile.back_to_project")}</button></div>
         : <MobileHome projects={projects.data?.filter(project => !project.builtin) ?? []} loading={projects.loading} error={projects.error} reload={projects.reload} navigate={navigate} />}
     </div>

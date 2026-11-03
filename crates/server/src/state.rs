@@ -13,7 +13,6 @@ pub struct AppState {
     pub(crate) acp: aow_acp::AcpService,
     pub(crate) acp_controls: crate::acp::Controls,
     pub(crate) instances: crate::instances::InstanceStore,
-    pub(crate) inbox: crate::inbox::InboxStore,
     pub(crate) base_path: BasePath,
     pub(crate) frontend_dist: PathBuf,
     pub(crate) auth: auth::AuthService,
@@ -49,7 +48,6 @@ impl AppState {
             .expect("in-memory ACP service"),
             acp_controls: crate::acp::Controls::default(),
             instances: crate::instances::InstanceStore::default(),
-            inbox: crate::inbox::InboxStore::in_memory(),
             base_path: BasePath::default(),
             frontend_dist,
             auth: auth::AuthService::disabled(),
@@ -99,8 +97,6 @@ impl AppState {
             instances: crate::instances::InstanceStore::persistent(&state_dir).map_err(|e| {
                 TerminalError::Invalid(format!("failed to initialize instance history: {e}"))
             })?,
-            inbox: crate::inbox::InboxStore::persistent(&state_dir)
-                .map_err(|e| TerminalError::Invalid(format!("failed to initialize inbox: {e}")))?,
             workspace_events,
             git_platform_providers: git_platform_providers::GitPlatformProviderManager::persistent(
                 &state_dir,

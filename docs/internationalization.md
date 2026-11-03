@@ -111,9 +111,6 @@ explicit allowlist in `scripts/i18n/technical-terms.json`.
 It is included in `npm run lint`, so the existing CI lint job runs it. It does not
 claim to understand every arbitrary English string or translate external content.
 Review new English display text for resource ownership during code review.
-The fully migrated Inbox persistence module also rejects hardcoded English error
-sinks. This is a scoped check, not a claim that arbitrary English Rust diagnostics
-or display strings computed through arbitrary functions are statically understood.
 Guard regression tests run as part of `check:i18n`.
 
 `npm --prefix frontend run test:i18n` covers the English default, Chinese aliases,
@@ -121,7 +118,7 @@ blocked storage, interpolation, and request headers. Browser coverage in
 `tests/i18n-browser.test.mjs` verifies explicit switching, persistence, document
 language, request propagation, and storage failure. Rust tests cover negotiation,
 concurrent language isolation, asynchronous/blocking propagation, interpolation,
-and real WebSocket negotiation/message delivery after upgrade. Inbox error tests
+and real WebSocket negotiation/message delivery after upgrade. Backend error tests
 verify both languages and preserve path parameters verbatim.
 
 The initial broader regression run exposed pre-existing ACP layout and architecture

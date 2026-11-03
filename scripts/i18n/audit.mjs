@@ -124,8 +124,4 @@ export function validateRustSource(source, file, resources) {
   if (!file.startsWith('crates/i18n/') && !/(?:^|\/)(?:tests?(?:\/|\.rs)|[^/]*_tests\.rs)/u.test(file)) {
     assert.ok(!/"[^"\n]*\p{Script=Han}[^"\n]*"/u.test(production), `${file}: hardcoded Chinese production string`);
   }
-  // This module is fully migrated; guard its own error and context sinks.
-  if (file === 'crates/server/src/inbox/persistence.rs') {
-    assert.ok(!/(?:ensure!|bail!|anyhow!|\.context|\.with_context)\([\s\S]{0,200}?"[A-Z][A-Za-z ]+ [A-Za-z ]+(?:: [^"\n]*)?"/u.test(production), `${file}: hardcoded persistence error`);
-  }
 }

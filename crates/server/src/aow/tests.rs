@@ -7,7 +7,7 @@ use std::{
 };
 
 #[tokio::test]
-async fn inbox_worktree_uses_selected_base_and_lists_unchecked_local_and_remote_branches() {
+async fn prepared_worktree_uses_selected_base_and_lists_unchecked_local_and_remote_branches() {
     use axum::{
         body::{Body, to_bytes},
         http::Request,
@@ -124,7 +124,7 @@ async fn inbox_worktree_uses_selected_base_and_lists_unchecked_local_and_remote_
         ..Default::default()
     };
     let prepared = manager
-        .prepare_workspace(&project.id, &config, "inbox/item-request")
+        .prepare_workspace(&project.id, &config, "task/item-request")
         .await
         .unwrap();
     assert!(prepared.created);
@@ -139,7 +139,7 @@ async fn inbox_worktree_uses_selected_base_and_lists_unchecked_local_and_remote_
         main_head
     );
     let retried = manager
-        .prepare_workspace(&project.id, &config, "inbox/item-request")
+        .prepare_workspace(&project.id, &config, "task/item-request")
         .await
         .unwrap();
     assert!(!retried.created);
@@ -152,7 +152,7 @@ async fn inbox_worktree_uses_selected_base_and_lists_unchecked_local_and_remote_
                 workspace_path: repo.clone(),
                 ..Default::default()
             },
-            "inbox/another-item-request",
+            "task/another-item-request",
         )
         .await
         .unwrap();

@@ -887,7 +887,6 @@ fn clipboard_app(manager: TerminalManager) -> Router {
             workspace_events.clone(),
         )
         .unwrap(),
-        inbox: crate::inbox::InboxStore::in_memory(),
         base_path: crate::BasePath::default(),
         frontend_dist: PathBuf::new(),
         auth: crate::auth::AuthService::disabled(),
@@ -1639,7 +1638,6 @@ async fn pane_sessions_use_live_cwd_and_config_and_cache_readable_claude_snapsho
             workspace_events.clone(),
         )
         .unwrap(),
-        inbox: crate::inbox::InboxStore::in_memory(),
         base_path: crate::BasePath::default(),
         frontend_dist: PathBuf::new(),
         auth: crate::auth::AuthService::disabled(),

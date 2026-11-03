@@ -147,7 +147,7 @@ export function TerminalInputPane(props: Props) {
           <TerminalInputEditor value={draft} onChange={setDraft} onComposing={active => { composing.current = active; }} />
         </Suspense>
       </div>
-      <div className="terminal-input-hint">{t("terminals.enter_for_a_new_line")} {isMacOS ? '⌘ + Enter' : 'Ctrl + Enter'} {t("inbox.submit")}</div>
+      <div className="terminal-input-hint">{t("terminals.enter_for_a_new_line")} {isMacOS ? '⌘ + Enter' : 'Ctrl + Enter'} {t("common.submit")}</div>
       {error ? <div className="terminal-input-error" role="alert">{error}</div> : null}
     </div> : null}
   </div>;

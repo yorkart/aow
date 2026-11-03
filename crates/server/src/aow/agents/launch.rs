@@ -131,7 +131,6 @@ impl AowManager {
         &self,
         pane: &aow_protocol::TerminalPane,
         workspace_root: &str,
-        temporary_workspace: bool,
     ) -> Result<AgentLaunch, AowError> {
         let profile_id = if let Some(id) = &pane.agent_profile_id {
             id.clone()
@@ -165,13 +164,7 @@ impl AowManager {
             }
             candidates[0].id.clone()
         };
-        let launch = if temporary_workspace {
-            paths::canonical_directory(Path::new(workspace_root)).await?;
-            self.resolve_agent_profile(&profile_id).await?
-        } else {
-            self.resolve_agent_launch(&profile_id, workspace_root)
-                .await?
-        };
+        let launch = self.resolve_agent_launch(&profile_id, workspace_root).await?;
         if Some(launch.agent_type.id()) != pane.agent_id.as_deref() {
             return Err(AowError::Invalid(
                 aow_i18n::text(

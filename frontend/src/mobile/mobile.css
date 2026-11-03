@@ -239,6 +239,3 @@ body { position:fixed; inset:0; }
 .mobile-app a:hover { color:var(--aow-link-hover); }
 .mobile-app .mobile-button:not(.primary):hover:not(:disabled),.mobile-bottom-nav button:hover:not(:disabled),.mobile-segments button:hover:not(:disabled),.mobile-terminal-tabs button:hover:not(:disabled),.mobile-accessory-keys button:hover:not(:disabled) { color:var(--aow-text-hover); }
 .mobile-row:hover:not(:disabled) .mobile-row-main > strong,.mobile-worktree-row:hover:not(:disabled) .mobile-row-main > strong,.mobile-resume-card:hover:not(:disabled) .mobile-row-main > strong { color:var(--aow-text-hover); }
-
-.mobile-inbox { flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
-.mobile-inbox > .inbox-panel { flex:1; min-height:0; }

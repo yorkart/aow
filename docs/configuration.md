@@ -137,7 +137,7 @@ AoW 默认使用 `~/.aow/` 作为应用目录。应用设置、项目登记、Ag
 - `automations/tasks/`：自动化任务定义。
 - `git-platform-providers/` 与 `git-platform-providers.json`：Provider 脚本和设置。
 - `skills/`：安装的技能。
-- `data/`：Inbox 内容、ACP 会话、Notes 和应用管理的仓库。
+- `data/`：ACP 会话、Notes 和应用管理的仓库。
 - `state/`：终端与实例状态、自动化执行记录、IM 状态和操作日志。
 - `cache/`：ACP 下载与安装缓存、剪贴板图片。
 - `runtime/`：CLI 与 terminald 的本机通信 socket。

@@ -84,7 +84,6 @@ pub fn build_router(state: AppState) -> Router {
         .route("/fs/", get(fs_root))
         .route("/fs/{*path}", get(fs_path))
         .route("/help", get(help_page))
-        .merge(crate::inbox::routes())
         .merge(terminal::routes())
         .merge(aow::routes())
         .merge(crate::acp::routes())

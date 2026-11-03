@@ -99,7 +99,6 @@ def path_fields(relative):
             'tabs.*.panes.*.hosting.process.cwd', 'tabs.*.panes.*.hosting.process.pi_binding',
         ),
         'state/instances.json': ('items.*.cwd',),
-        'state/inbox/executions.json': ('*.cwd',),
         'data/session-shares.json': ('shares.*.cwd', 'shares.*.transcript_path', 'shares.*.trusted_root'),
     }
     name = relative.as_posix()
@@ -159,7 +158,7 @@ def environment_values(path):
 
 
 class Migration:
-    def __init__(self, home, state, config, identifier, destination):
+    def __init__(self, home, state, config, destination):
         self.destination = destination
         self.entries = {}
         self.directories = set()
@@ -181,7 +180,6 @@ class Migration:
         }
         self.prefixes = sorted([
             (str(config / 'acp/settings.json'), str(destination / 'aow-acp.json')),
-            (str(config / 'inbox'), str(destination / 'data/inbox')),
             (str(config), str(destination)),
             (str(state / 'acp/agents'), str(destination / 'cache/acp/agents')),
             (str(state / 'acp/installations'), str(destination / 'cache/acp/installations')),
@@ -203,10 +201,6 @@ class Migration:
                     continue
                 parent = 'cache/acp' if child.name in ('agents', 'installations', 'registry.json') else 'data/acp'
                 self.collect(child, Path(parent) / child.name)
-        inbox = state / 'inbox'
-        if identifier:
-            inbox /= identifier
-        self.collect(inbox / 'executions.json', Path('state/inbox/executions.json'))
         self.collect(home / 'aow', Path('data/notes'))
         self.collect(home / '.config/aow/server.env', Path('server.env'))
         self.database = self.prepare_database()
@@ -227,8 +221,6 @@ class Migration:
                 continue
             if name == 'acp':
                 self.collect(child / 'settings.json', Path('aow-acp.json'))
-            elif name == 'inbox':
-                self.collect(child, Path('data/inbox'))
             elif name == 'automations':
                 self.collect(child / 'tasks', Path('automations/tasks'))
             else:
@@ -490,14 +482,14 @@ def main():
         or os.environ.get('AOW_STATE_DIR') or configured.get('AOW_STATE_DIR')
         or str(Path(os.environ.get('XDG_STATE_HOME') or configured.get('XDG_STATE_HOME') or home / '.local/state') / 'aow')
     )).expanduser().resolve()
-    config, identifier = (args.config_dir, args.config_dir.name) if args.config_dir else selection_directory(state)
+    config = args.config_dir if args.config_dir else selection_directory(state)[0]
     config = config.expanduser().resolve()
     destination = (args.destination or home / '.aow').expanduser().absolute()
     resolved_destination = destination.resolve()
     for source in (state, config, home / 'aow'):
         if resolved_destination == source or source in resolved_destination.parents or resolved_destination in source.parents:
             raise ValueError(f'Source and destination overlap: {source}, {destination}')
-    Migration(home, state, config, identifier, destination).run(args.dry_run)
+    Migration(home, state, config, destination).run(args.dry_run)
 
 
 if __name__ == '__main__':

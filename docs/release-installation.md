@@ -78,7 +78,7 @@ aow account                        # 修改登录账号和密码
 | `~/.local/lib/aow/pending-launchdaemon.json` | 等待管理员登记的 LaunchDaemon 请求；完成安装验证后清除 |
 | `~/.aow/server.env` | 服务配置 |
 | `~/.aow/` | 应用配置、登录凭据和技能 |
-| `~/.aow/data/` | Inbox、ACP 会话和应用管理的用户数据 |
+| `~/.aow/data/` | ACP 会话和应用管理的用户数据 |
 | `~/.aow/state/` | 终端状态、自动化记录和操作日志 |
 | `~/.aow/cache/` | 下载、安装缓存和剪贴板图片 |
 | `~/.aow/runtime/` | 本机通信 socket |

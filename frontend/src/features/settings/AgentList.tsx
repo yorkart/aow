@@ -49,7 +49,7 @@ export function AgentList({ agents, busy, editingAgentId, onEdit, onCopy, onRemo
       return <section className="project-aow-agent-group" aria-label={type.label} key={type.id ?? 'unknown'}>
         <h3>{type.label}</h3>
         {ordered.map(agent => <div className={`project-aow-agent-row${dragging?.id === agent.id ? ' dragging' : ''}${dragging?.over === agent.id ? dragging.after ? ' drop-after' : ' drop-before' : ''}`} data-agent-id={agent.id} key={agent.id}>
-          {agent.source === 'configured' ? <button type="button" className="project-aow-agent-drag" aria-label={t("settings.reorder", { value0: agent.display_name })} title={t("inbox.drag_to_reorder_or_use_the_up_and_down")} aria-disabled={busy || configured.length < 2}
+          {agent.source === 'configured' ? <button type="button" className="project-aow-agent-drag" aria-label={t("settings.reorder", { value0: agent.display_name })} title={t("common.drag_to_reorder_or_use_the_up_and_down")} aria-disabled={busy || configured.length < 2}
             onPointerDown={event => {
               if (busy || saving.current || configured.length < 2 || event.button !== 0 || !event.isPrimary) return;
               drag.current = { id: agent.id, x: event.clientX, y: event.clientY, moved: false, after: false };

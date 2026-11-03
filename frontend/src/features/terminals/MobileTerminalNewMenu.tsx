@@ -61,7 +61,7 @@ export function MobileTerminalNewMenu({ busy, onCreate }: { busy: boolean; onCre
       {agents.loading ? <p className="mobile-terminal-new-status" role="status">{t("terminals.loading_agents")}</p>
         : agents.error ? <>
           <p className="mobile-terminal-new-status error" role="alert">{t("terminals.failed_to_load_agents")}{agents.error}</p>
-          <button role="menuitem" onClick={agents.reload}><RefreshCw size={18} /><span>{t("inbox.reload_agents")}</span></button>
+          <button role="menuitem" onClick={agents.reload}><RefreshCw size={18} /><span>{t("common.reload_agents")}</span></button>
         </> : !available.length ? <p className="mobile-terminal-new-status">{t("aow.no_agents_available")}</p> : null}
     </div>}
   </div>;

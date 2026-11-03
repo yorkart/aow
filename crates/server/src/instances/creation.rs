@@ -31,7 +31,7 @@ pub(crate) fn creation_parent(
                 .map_err(|error| invalid(format!("cannot resolve ACP caller: {error}")))?;
             Some(InstanceRef::acp(id))
         }
-        // Host-originated creation (for example Inbox) has no calling agent session.
+        // Host-originated creation has no calling agent session.
         (None, None) => None,
     };
     preserve_parent(state, parent.as_ref())?;

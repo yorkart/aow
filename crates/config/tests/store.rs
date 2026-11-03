@@ -89,7 +89,7 @@ fn concurrent_directory_updates_are_serialized() {
             let store = store.clone();
             scope.spawn(move || {
                 store
-                    .update_directory(Path::new("data/inbox"), |directory| {
+                    .update_directory(Path::new("automations/tasks"), |directory| {
                         let path = directory.join("counter");
                         let value = if path.exists() {
                             fs::read_to_string(&path)?.parse::<u32>()?
@@ -105,7 +105,7 @@ fn concurrent_directory_updates_are_serialized() {
         }
     });
     assert_eq!(
-        fs::read_to_string(temporary.path().join("data/inbox/counter")).unwrap(),
+        fs::read_to_string(temporary.path().join("automations/tasks/counter")).unwrap(),
         "12"
     );
 }

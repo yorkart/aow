@@ -27,23 +27,6 @@ pub(crate) async fn create_from_source(
     request: AgentTerminalCreate,
     source: &'static str,
 ) -> Result<Json<AgentTerminalInfo>, HttpError> {
-    create_with_workspace(state, request, source, None).await
-}
-
-pub(crate) async fn create_in_workspace(
-    state: AppState,
-    request: AgentTerminalCreate,
-    workspace: aow_workspaces::PreparedWorkspace,
-) -> Result<Json<AgentTerminalInfo>, HttpError> {
-    create_with_workspace(state, request, "inbox", Some(workspace)).await
-}
-
-async fn create_with_workspace(
-    state: AppState,
-    request: AgentTerminalCreate,
-    source: &'static str,
-    workspace: Option<aow_workspaces::PreparedWorkspace>,
-) -> Result<Json<AgentTerminalInfo>, HttpError> {
     aow_i18n::spawn(async move {
         let agent_id = state
             .aow
@@ -59,7 +42,7 @@ async fn create_with_workspace(
             resource: Some(request.cwd.clone()),
             total: None,
         });
-        let result = create_inner(state, request, &agent_id, &log, workspace).await;
+        let result = create_inner(state, request, &agent_id, &log).await;
         match &result {
             Ok(info) if info.state.phase == AgentTerminalPhase::Ready => {
                 log.finish(
@@ -91,7 +74,6 @@ async fn create_inner(
     request: AgentTerminalCreate,
     agent_id: &str,
     log: &Handle,
-    workspace: Option<aow_workspaces::PreparedWorkspace>,
 ) -> Result<Json<AgentTerminalInfo>, HttpError> {
     log.progress(
         aow_i18n::text("server.check_agent_configuration_and_working_directory"),
@@ -108,37 +90,17 @@ async fn create_inner(
     validate_directory(&request.cwd)
         .await
         .map_err(terminal_http_error)?;
-    let temporary = workspace
-        .as_ref()
-        .filter(|workspace| workspace.workspace_mode == aow_workspaces::WorkspaceMode::Temporary);
-    let (cwd, launch) = if let Some(workspace) = temporary {
-        let requested = std::fs::canonicalize(&request.cwd)
-            .map_err(|error| terminal_http_error(TerminalError::Invalid(error.to_string())))?;
-        if requested != workspace.directory {
-            return Err(terminal_http_error(TerminalError::Invalid(
-                aow_i18n::text("server.execution_directory_does_not_match_the_prepared_workspace")
-                    .into(),
-            )));
-        }
-        let launch = state
-            .aow
-            .resolve_agent_profile(agent_id)
-            .await
-            .map_err(crate::aow::aow_http_error)?;
-        (requested.to_string_lossy().into_owned(), launch)
-    } else {
-        let cwd = state
-            .aow
-            .agent_worktree_path(&request.project_id, &request.cwd)
-            .await
-            .map_err(crate::aow::aow_http_error)?;
-        let launch = state
-            .aow
-            .resolve_agent_launch(agent_id, &cwd)
-            .await
-            .map_err(crate::aow::aow_http_error)?;
-        (cwd, launch)
-    };
+    let cwd = state
+        .aow
+        .agent_worktree_path(&request.project_id, &request.cwd)
+        .await
+        .map_err(crate::aow::aow_http_error)?;
+    let launch = state
+        .aow
+        .resolve_agent_launch(agent_id, &cwd)
+        .await
+        .map_err(crate::aow::aow_http_error)?;
+
     let adapter = launch.agent_type.agent().interactive().ok_or_else(|| {
         terminal_http_error(TerminalError::Invalid(format!(
             "interactive startup is not supported for agent {}",

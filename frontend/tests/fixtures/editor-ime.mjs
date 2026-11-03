@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 
 // Exercise the browser's actual composition path, including the soft-wrapped
 // line whose old textarea buffer used to be drawn over the preceding text.
-export const wrappedMarkdown = '### inbox\n\n1. 选择agent执行时，应该是从右侧弹出一个面板，显示 agent的选择、工作区方式选择、参考工作区、基础分支（类似automation 任务的配置），并且增加追加prompt的\n2. 添加需求宽度变小，padding变小，紧凑点';
+export const wrappedMarkdown = '### Markdown\n\n1. 选择agent执行时，应该是从右侧弹出一个面板，显示 agent的选择、工作区方式选择、参考工作区、基础分支（类似automation 任务的配置），并且增加追加prompt的\n2. 添加需求宽度变小，padding变小，紧凑点';
 
 export async function composeOnWrappedLine(input, { whileComposing = async () => {} } = {}) {
   const page = input.page();

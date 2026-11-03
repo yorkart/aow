@@ -1,59 +1,8 @@
 # AoW CLI 使用
 
-`aow-cli` 随 AoW 一起安装，用于管理 Inbox 需求和评论、查询项目、启动 Agent，以及创建自动化任务、查看执行记录。安装方式见 [README](../README.md)，请将 `~/.local/bin` 加入 `PATH`。
+`aow-cli` 随 AoW 一起安装，用于查询项目、启动 Agent，以及创建自动化任务、查看执行记录。安装方式见 [README](../README.md)，请将 `~/.local/bin` 加入 `PATH`。
 
-在运行 AoW 的机器上，以同一系统用户执行。`project` 和 `inbox` 需要 Web 服务运行；`agent` 还需要 terminald，并提前安装、登录对应 Agent CLI；`automation` 查询可在 Web 服务停止时使用。
-
-## Inbox 需求与评论
-
-```bash
-# 查询需求和评论
-aow-cli inbox list
-aow-cli inbox get REQUIREMENT-ID
-aow-cli inbox comments list REQUIREMENT-ID
-
-# 从 Markdown 文件创建需求；--file - 可以读取标准输入
-aow-cli inbox create --file requirement.md --request-key capture-one
-
-# 修正需求正文，版本从 inbox get 的 revision 字段读取
-aow-cli inbox update REQUIREMENT-ID --expected-revision 1 --file corrected.md
-
-# 只调整项目、标签，保留正文；重复 --label-id 可指定多个标签
-aow-cli inbox update REQUIREMENT-ID --expected-revision 2 \
-  --project-id PROJECT-ID --label-id todo --label-id review
-
-# 解除项目绑定并清空标签
-aow-cli inbox update REQUIREMENT-ID --expected-revision 3 --unbound --clear-labels
-
-# 追加人工或 AI 评论
-aow-cli inbox comments add REQUIREMENT-ID --author-type human --author 用户 \
-  --content '补充一个验收条件' --request-key supplement-one
-aow-cli inbox comments add REQUIREMENT-ID --author-type ai --author Codex \
-  --file conclusion.md --request-key conclusion-one
-
-# 删除时将需求及评论整体移入 deleted/，保留文件
-aow-cli inbox delete REQUIREMENT-ID --expected-revision 4
-```
-
-创建需求和追加评论可用 `--content` 传入文本，或用 `--file` 读取 UTF-8 Markdown，二者不能同时使用；正文上限为 128 KiB。创建的需求默认不绑定项目、没有标签，随后可通过 `update` 调整。更新仅改变显式指定的字段；`--label-id` 替换整个标签集合，`--clear-labels` 清空标签。
-
-更新和删除必须指定 `--expected-revision`，与最新需求版本不同会返回冲突（退出码 7），保留已有内容。评论追加不改变需求版本，只支持 `list` 和 `add`，没有编辑或删除命令。评论作者类型默认 `human`，`--author` 必填。
-
-`--request-key` 用于创建需求和评论的重试去重。每个新操作使用新标识，同一操作重试时复用原标识和原始内容；省略时每次调用生成新的标识。请求失败时错误信息会包含本次使用的标识。不要用同一标识提交修改后的内容。
-
-`inbox list` 返回网页使用的完整快照，包含 `items`、`labels`、`revision`、`executions` 和 `comment_counts`；`get` 返回单个需求；`comments list` 返回 `{"items":[...]}`，顺序与追加顺序一致。删除成功返回 `{"id":"需求 ID","deleted":true}`。
-
-Inbox 执行时会在需求正文和追加 prompt 前注入严格 XML：
-
-```xml
-<aow-inbox>
-  <requirement id="req-123" />
-  <execution id="run-456" />
-  <description>This task comes from AoW Inbox. You can use aow-cli inbox commands to retrieve requirements and comments, update requirements, and append comments.</description>
-</aow-inbox>
-```
-
-XML 固定只有三个子节点，动态内容会转义；描述使用英文说明任务来源及 CLI 支持的操作。需求 Markdown 与追加 prompt 保持原文，放在 XML 块外。整个实际提交内容（包含 XML）仍限制为 128 KiB。Agent 继承指向发起实例的 `AOW_STATE_DIR`，无需在 XML 中重复实例配置。
+在运行 AoW 的机器上，以同一系统用户执行。`project` 需要 Web 服务运行；`agent` 还需要 terminald，并提前安装、登录对应 Agent CLI；`automation` 查询可在 Web 服务停止时使用。
 
 ## 查询项目
 
@@ -85,7 +34,7 @@ aow-cli agent submit --pane-id PANE-ID --task '继续处理剩余问题'
 
 交互式启动支持 Codex、TraeCode CLI、Hermes 和 Pi 类型的配置。项目须已注册，`--cwd` 须是该项目已存在的仓库或 worktree 根目录；需要新 worktree 时请先用 Git 创建。
 
-通过 `agent create` 启动 Codex（包括自定义 Codex 配置）时，AoW 会为本次启动追加 `-c check_for_update_on_startup=false`，关闭启动更新检查，避免升级选择阻塞输入就绪和任务提交。Inbox 执行共用此流程，也会生效；Agent 注册配置和 Codex 全局配置不变，网页手动创建的普通 Agent 终端仍沿用原配置。Agent 版本更新可在任务执行之外单独进行。
+通过 `agent create` 启动 Codex（包括自定义 Codex 配置）时，AoW 会为本次启动追加 `-c check_for_update_on_startup=false`，关闭启动更新检查，避免升级选择阻塞输入就绪和任务提交。Agent 注册配置和 Codex 全局配置不变，网页手动创建的普通 Agent 终端仍沿用原配置。Agent 版本更新可在任务执行之外单独进行。
 
 任务也可以从文件或标准输入读取：
 
@@ -133,7 +82,7 @@ aow-cli instance get terminal:PANE-ID
 aow-cli instance list
 ```
 
-两种 `create` 都必须提供调用者当前的原生 session ID：显式 `--session-id` 优先，否则读取命令执行环境中的 `AOW_SESSION_ID`。这不是新建实例的 session ID，也不是 AoW 的 `thread_id` 或 Terminal pane ID。session ID 作为独立的 `caller` 请求字段传递，不会拼入任务文本。CLI 创建接口缺少该上下文时会拒绝请求；网页和 Inbox 等非 Agent 发起的创建不需要虚构调用者 session。
+两种 `create` 都必须提供调用者当前的原生 session ID：显式 `--session-id` 优先，否则读取命令执行环境中的 `AOW_SESSION_ID`。这不是新建实例的 session ID，也不是 AoW 的 `thread_id` 或 Terminal pane ID。session ID 作为独立的 `caller` 请求字段传递，不会拼入任务文本。CLI 创建接口缺少该上下文时会拒绝请求；网页等非 Agent 发起的创建不需要虚构调用者 session。
 
 父关系的来源按以下规则处理：
 

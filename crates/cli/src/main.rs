@@ -1,7 +1,6 @@
 mod acp;
 mod agent;
 mod automation;
-mod inbox;
 mod input;
 mod instance;
 mod project;
@@ -20,7 +19,7 @@ use serde::Serialize;
 const CONTEXT: &str =
     "Local access: uses the current OS user and filesystem permissions. No web login, Cookie,
 token, or running AoW server is required for automation queries. Automation creation
-and project/Inbox operations require a running server via the local Unix socket;
+and project operations require a running server via the local Unix socket;
 agent commands also require terminald.
 Queries do not initialize, migrate,
 repair, or clean state. Help and version work without a state directory.
@@ -47,9 +46,6 @@ Only the current data model is supported; no historical compatibility or migrati
 Examples (replace IDs with values returned by list commands):
   aow-cli project list
   aow-cli project get PROJECT-ID
-  aow-cli inbox list
-  aow-cli inbox get REQUIREMENT-ID
-  aow-cli inbox comments list REQUIREMENT-ID
   aow-cli agent create --project-id PROJECT-ID --cwd /worktrees/fix
   aow-cli automation list
   aow-cli automation create --file task.json --project-id PROJECT-ID
@@ -75,8 +71,6 @@ struct Cli {
 enum Command {
     /// Query registered project IDs, names and repository paths through the local server.
     Project(project::ProjectArgs),
-    /// Create, update and query Inbox requirements and append immutable comments.
-    Inbox(inbox::InboxArgs),
     /// Create paused automation tasks and inspect local configurations and execution records.
     #[command(after_help = CONTEXT)]
     Automation(automation::Automation),
@@ -132,7 +126,6 @@ fn execute(cli: Cli) -> Result<()> {
         Command::Acp(args) => acp::execute(args, state_dir)?,
         Command::Instance(args) => instance::execute(args, state_dir)?,
         Command::Project(args) => project::execute(args, state_dir)?,
-        Command::Inbox(args) => inbox::execute(args, state_dir)?,
         Command::Automation(args) => automation::execute(args, state_dir)?,
     };
     write_json(&mut io::stdout().lock(), &value, cli.compact)

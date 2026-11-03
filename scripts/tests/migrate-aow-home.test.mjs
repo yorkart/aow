@@ -42,8 +42,6 @@ function fixture(t, homeName) {
   write(join(config, 'aow-projects.json'), JSON.stringify({ version: 1, items: [{ registered_path: join(state, 'repos/global') }] }));
   const jsonc = '// keep comments\n{"agent_servers": {},}\n';
   write(join(config, 'acp/settings.json'), jsonc);
-  write(join(config, 'inbox/requirements/active/item/comments.jsonl'), '{"markdown":"keep text"}\n');
-  write(join(state, 'inbox/selected/executions.json'), '[]');
   write(join(state, 'credentials.json'), '{"password_hash":"private"}');
   write(join(state, 'terminals.json'), '{}');
   write(join(state, 'acp/threads.sqlite'), Buffer.from([0, 1, 2, 255]));
@@ -72,7 +70,7 @@ test('copies the selected configuration, data and cache without changing sources
   assert.equal(JSON.parse(readFileSync(join(f.destination, 'aow-projects.json'))).items[0].registered_path, join(f.destination, 'data/repos/global'));
   assert.deepEqual(readFileSync(join(f.config, 'aow-projects.json')), before);
   assert.equal(lstatSync(join(f.destination, 'credentials.json')).mode & 0o777, 0o600);
-  for (const path of ['state/terminals.json', 'state/inbox/executions.json', 'data/inbox/requirements/active/item/comments.jsonl', 'automations/tasks/task.json', 'state/automations/runs/task/run/result.json']) {
+  for (const path of ['state/terminals.json', 'automations/tasks/task.json', 'state/automations/runs/task/run/result.json']) {
     assert.ok(existsSync(join(f.destination, path)), path);
   }
   for (const path of ['.git', 'config-repo', 'config.toml', 'acp/settings.json', 'aow-settings.json']) assert.equal(existsSync(join(f.destination, path)), false, path);
@@ -248,7 +246,6 @@ test('preserves user JSON, task prompts and completed results while relocating k
   const task = { repository_path: repository, workspace_path: repository, prompt: repository, name: repository, launch: { executable: repository + '/run', args: [repository], environment: { AGENT_HOME: repository } } };
   f.write(join(f.config, 'automations/tasks/task.json'), JSON.stringify(task));
   f.write(join(f.state, 'acp/installations/receipt.json'), JSON.stringify({ files: [join(f.state, 'acp/agents/demo/bin/run')], configuration: repository }));
-  f.write(join(f.state, 'inbox/selected/executions.json'), JSON.stringify([{ cwd: repository, markdown: repository }]));
   const result = f.run();
   assert.equal(result.status, 0, result.stderr);
   const copied = join(f.destination, 'data/repos/global');
@@ -258,7 +255,6 @@ test('preserves user JSON, task prompts and completed results while relocating k
   const migrated = JSON.parse(readFileSync(join(f.destination, 'automations/tasks/task.json')));
   assert.deepEqual(migrated, { ...task, repository_path: copied, workspace_path: copied, launch: { executable: copied + '/run', args: [copied], environment: { AGENT_HOME: copied } } });
   assert.deepEqual(JSON.parse(readFileSync(join(f.destination, 'cache/acp/installations/receipt.json'))), { files: [join(f.destination, 'cache/acp/agents/demo/bin/run')], configuration: repository });
-  assert.deepEqual(JSON.parse(readFileSync(join(f.destination, 'state/inbox/executions.json'))), [{ cwd: copied, markdown: repository }]);
 });
 
 test('ACP JSONC relocation changes only launch paths and preserves unknown fields and formatting', t => {
