@@ -147,17 +147,18 @@ pub(super) async fn create(
         for id in super::mentions::role_mentions(&request.prompt) {
             state.aow.agent_role(&id).map_err(aow_http_error)?;
         }
-        let source = request
-            .source_thread_id
-            .as_deref()
-            .map(|id| super::routing::source_task(&state, id))
-            .transpose()?;
-        let message_source = source
-            .as_ref()
-            .zip(request.source_thread_id.as_deref())
-            .map(|(task, thread)| crate::collaboration::source(&state, task, thread))
-            .transpose()
-            .map_err(storage)?;
+        let source = match request.source_thread_id.as_deref() {
+            Some(id) => Some(super::routing::source_task(&state, id).await?),
+            None => None,
+        };
+        let message_source = match source.as_ref().zip(request.source_thread_id.as_deref()) {
+            Some((task, thread)) => Some(
+                crate::collaboration::source(&state, task, thread)
+                    .await
+                    .map_err(storage)?,
+            ),
+            None => None,
+        };
         if source.is_some()
             && !matches!(
                 request.workspace_intent.as_deref(),
@@ -457,6 +458,7 @@ async fn attach(
             state
                 .acp
                 .session_info(&resource.id)
+                .await
                 .map_err(crate::acp::task_error)?
                 .cwd
         }

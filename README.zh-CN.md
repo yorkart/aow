@@ -75,3 +75,5 @@ ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:18282:127.0.0.1:8282 user@host
 在运行依赖之外，准备 Rust stable / Cargo、npm 和 just。macOS 需要 Xcode Command Line Tools；Linux 打包需要 C 编译器、`musl-gcc`、`readelf` 和本机架构的 Rust musl target。macOS 安装脚本测试还需要 Python 3。
 
 在源码目录运行 `just build` 编译、`just test` 测试；本地部署先 `just package`，再 `just install`。本地包与 GitHub 包使用相同安装流程，会更新当前用户实际运行的服务。开发服务也默认仅监听本机。
+
+源码开发时，先在单独终端运行 `just run-acpd`，再启动 Web 服务。两个进程使用相同的 `AOW_STATE_DIR`，acpd 会沿用已有 ACP 会话历史。

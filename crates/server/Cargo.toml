@@ -28,6 +28,7 @@ aow-workspaces = { path = "../workspaces" }
 aow-im = { path = "../im" }
 aow-config = { path = "../config" }
 aow-acp = { path = "../acp" }
+aow-acpd-client = { path = "../acpd-client" }
 aow-filesystem = { path = "../filesystem" }
 aow-git-service = { path = "../git-service" }
 aow-operation-log = { path = "../operation-log" }

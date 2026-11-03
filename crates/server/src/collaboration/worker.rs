@@ -1,7 +1,8 @@
 use super::now;
 use crate::{acp::Controls, aow::AowManager, workspace_events::WorkspaceEvents};
 use anyhow::{Context, Result, ensure};
-use aow_acp::{AcpService, Content, SessionSnapshot};
+use aow_acp::{Content, SessionSnapshot};
+use aow_acpd_client::AcpClient;
 use aow_db::tasks::{DeliveryState, MessageDelivery, TaskStatus};
 use serde_json::json;
 use std::{
@@ -14,7 +15,7 @@ use tokio::{sync::Notify, task::JoinSet};
 #[derive(Clone)]
 pub(super) struct Worker {
     pub manager: AowManager,
-    pub acp: AcpService,
+    pub acp: AcpClient,
     pub controls: Controls,
     pub events: WorkspaceEvents,
 }
@@ -26,14 +27,18 @@ pub(super) async fn run(worker: Worker, notify: Arc<Notify>) {
     let mut active = HashSet::new();
     let mut workspaces = HashSet::new();
     let mut identities = HashMap::new();
-    let mut changes = worker.acp.subscribe_sync();
+    let mut changes = worker.acp.subscribe_sync().await.ok();
     let mut cursor = None;
     loop {
         tokio::select! {
             _ = interval.tick() => {},
             _ = notify.notified() => {},
-            event = changes.recv() => {
-                if event.is_ok_and(|event| !event.deleted && event.session.is_none_or(|session| session.info.status == "working")) { continue; }
+            event = async { changes.as_mut().expect("subscription checked").recv().await }, if changes.is_some() => {
+                match event {
+                    Ok(event) if !event.deleted && event.session.as_ref().is_none_or(|session| session.info.status == "working") => continue,
+                    Ok(_) => {},
+                    Err(_) => changes = None,
+                }
             },
             Some(result) = jobs.join_next_with_id(), if !jobs.is_empty() => {
                 let id = match result { Ok((id, ())) => id, Err(error) => { tracing::warn!(%error,"Message delivery stopped; retained for retry"); error.id() } };
@@ -43,6 +48,9 @@ pub(super) async fn run(worker: Worker, notify: Arc<Notify>) {
                 }
                 continue;
             }
+        }
+        if changes.is_none() {
+            changes = worker.acp.subscribe_sync().await.ok();
         }
         let mut pending = match worker.manager.task_db().pending_messages() {
             Ok(pending) => pending,
@@ -72,6 +80,7 @@ pub(super) async fn run(worker: Worker, notify: Arc<Notify>) {
             let workspace = worker
                 .manager
                 .task_policy_for_thread(&worker.acp, &message.thread_id)
+                .await
                 .ok()
                 .flatten()
                 .filter(|policy| policy.workspace_intent.as_deref() != Some("analyze"))
@@ -113,41 +122,40 @@ fn busy(snapshot: &SessionSnapshot) -> bool {
 impl Worker {
     async fn submit(&self, thread: &str, id: &str, content: Vec<Content>) -> Result<bool> {
         let _lifecycle = self.controls.background(thread).await;
-        let snapshot = self.acp.snapshot(thread)?;
+        let snapshot = self.acp.snapshot(thread).await?;
         if snapshot.prompt_receipts.contains_key(id) {
             return Ok(true);
         }
         if busy(&snapshot) {
             return Ok(false);
         }
-        if let Some(execution) = self.manager.task_policy_for_thread(&self.acp, thread)?
+        if let Some(execution) = self
+            .manager
+            .task_policy_for_thread(&self.acp, thread)
+            .await?
             && execution.workspace_intent.as_deref() != Some("analyze")
-            && self
-                .acp
-                .sessions(Some(&execution.workspace))
-                .iter()
-                .any(|other| {
-                    other.thread_id != thread
-                        && self
-                            .acp
-                            .snapshot(&other.thread_id)
-                            .is_ok_and(|snapshot| busy(&snapshot))
-                })
         {
-            return Ok(false);
+            for other in self.acp.sessions(Some(&execution.workspace)).await? {
+                if other.thread_id != thread && busy(&self.acp.snapshot(&other.thread_id).await?) {
+                    return Ok(false);
+                }
+            }
         }
         // resume retains the local/native identity. Its failure is surfaced; never
         // replace a missing conversation with an empty one.
         tokio::time::timeout(Duration::from_secs(120), self.acp.resume(thread))
             .await
             .context("Conversation recovery timed out")??;
-        if busy(&self.acp.snapshot(thread)?) {
+        if busy(&self.acp.snapshot(thread).await?) {
             return Ok(false);
         }
-        // Recovery can await the provider while the user changes task state.
+        // Recovery may await the provider. Serialize final policy validation and
+        // remote admission with task cancellation so a cancel cannot overtake the RPC.
+        let _task_policy = self.manager.task_resource_access().await;
         let target = self
             .manager
-            .task_for_thread(&self.acp, thread)?
+            .task_for_thread(&self.acp, thread)
+            .await?
             .context("Task was removed")?;
         ensure!(
             !target.archived && target.status != TaskStatus::Cancelled,
@@ -163,13 +171,17 @@ impl Worker {
             event || !target.status.is_closed(),
             "Reopen the task before sending work"
         );
-        let content = self.manager.acp_role_content(&self.acp, thread, content)?;
-        match self.acp.start_prompt_once(thread, id, content) {
+        let content = self
+            .manager
+            .acp_role_content(&self.acp, thread, content)
+            .await?;
+        match self.acp.start_prompt_once(thread, id, content).await {
             Ok(()) => Ok(true),
             Err(_)
                 if self
                     .acp
                     .snapshot(thread)
+                    .await
                     .is_ok_and(|snapshot| busy(&snapshot)) =>
             {
                 Ok(false)
@@ -178,10 +190,11 @@ impl Worker {
         }
     }
 
-    fn active_task(&self, task: &str, thread: &str) -> Result<()> {
+    async fn active_task(&self, task: &str, thread: &str) -> Result<()> {
         ensure!(
             self.manager
-                .task_for_thread(&self.acp, thread)?
+                .task_for_thread(&self.acp, thread)
+                .await?
                 .is_some_and(|item| item.id == task
                     && !item.archived
                     && item.status != TaskStatus::Cancelled),
@@ -196,6 +209,7 @@ impl Worker {
         if self
             .acp
             .snapshot(&message.thread_id)
+            .await
             .is_ok_and(|snapshot| snapshot.prompt_receipts.contains_key(&message.id))
         {
             db.update_message(&message.id, DeliveryState::Delivered, None, 0)?;
@@ -208,7 +222,7 @@ impl Worker {
             return Ok(());
         }
         let result = async {
-            self.active_task(&message.task_id, &message.thread_id)?;
+            self.active_task(&message.task_id, &message.thread_id).await?;
             if message.event_id.is_none() {
                 ensure!(!db.status(&message.task_id)?.is_some_and(TaskStatus::is_closed), "Reopen the task before sending work");
             }
@@ -231,7 +245,7 @@ impl Worker {
             }
             Ok(false) => {}
             Err(error) => {
-                let state = if message.attempts < 2 {
+                let state = if aow_acpd_client::is_unavailable(&error) || message.attempts < 2 {
                     DeliveryState::Pending
                 } else {
                     DeliveryState::Blocked

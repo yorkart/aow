@@ -146,3 +146,27 @@ impl AgentServerStore {
         result
     }
 }
+
+impl AgentServerStore {
+    pub async fn shutdown(&self) -> Result<()> {
+        self.inner
+            .shutting_down
+            .store(true, std::sync::atomic::Ordering::Release);
+        let _connect = self.inner.connect_lock.lock().await;
+        let connections: Vec<_> = self
+            .inner
+            .connections
+            .lock()
+            .unwrap()
+            .values()
+            .cloned()
+            .collect();
+        for connection in &connections {
+            connection.close();
+        }
+        for connection in &connections {
+            connection.wait_stopped().await?;
+        }
+        self.flush_threads_on_quit()
+    }
+}

@@ -506,7 +506,7 @@ async fn acp_messages_keep_native_page_and_im_delivery_without_task_reports() {
         (&child.thread_id, "message"),
         (&router.thread_id, "inbox-message"),
     ] {
-        acp.start_prompt_once(thread, id, content()).unwrap();
+        acp.start_prompt_once(thread, id, content()).await.unwrap();
         let delivered = tokio::time::timeout(Duration::from_secs(10), im_receiver.recv())
             .await
             .unwrap()

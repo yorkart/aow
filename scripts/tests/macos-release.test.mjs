@@ -12,13 +12,13 @@ import { publishTestRelease } from './github-fixture.mjs';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const quote = value => `'${value.replaceAll("'", "'\\''")}'`;
 const files = ['skills/aow-agent/SKILL.md', 'skills/aow-acp/SKILL.md', 'git-platform-providers/github.mjs', 'git-platform-providers/gitlab.mjs', 'scripts/install-release.sh', 'scripts/package-release.sh',
-  'scripts/start-server.sh', 'scripts/start-terminald.sh', 'scripts/start-launchd.sh', 'scripts/launchd-service.mjs',
+  'scripts/start-server.sh', 'scripts/start-acpd.sh', 'scripts/start-terminald.sh', 'scripts/start-launchd.sh', 'scripts/launchd-service.mjs',
   'scripts/activate-terminald.mjs', 'scripts/service-health.mjs',
   'scripts/launchd-mode.mjs', 'scripts/start-launchdaemon.mjs', 'scripts/register-launchdaemon.py',
   'scripts/replace-symlink.mjs', 'scripts/server-state-dir.sh', 'packaging/bin/aow',
-  'packaging/bin/aow-server', 'packaging/bin/aow-terminald',
-  'packaging/systemd/aow-server.service', 'packaging/systemd/aow-terminald.service'];
-const binaries = ['aow-server', 'aow-terminald', 'aow-cli', 'aow-automation-runner'];
+  'packaging/bin/aow-server', 'packaging/bin/aow-acpd', 'packaging/bin/aow-terminald',
+  'packaging/systemd/aow-server.service', 'packaging/systemd/aow-acpd.service', 'packaging/systemd/aow-terminald.service'];
+const binaries = ['aow-server', 'aow-acpd', 'aow-terminald', 'aow-cli', 'aow-automation-runner'];
 function write(path, data, executable = false) {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, data, { mode: executable ? 0o755 : 0o600 });
@@ -95,12 +95,12 @@ fi
 `, true);
   write(join(tools, 'kill'), `#!/bin/sh
 printf "signal %s\\n" "$*" >> "$SERVICE_LOG"
-for component in server terminald; do
+for component in server terminald acpd; do
   state=$SERVICE_STATE/org.aow.service.$component
   [ -f "$state" ] || continue
   pid=$(cat "$state")
   if [ -z "$pid" ]; then
-    if [ "$component" = server ]; then pid=987654; else pid=987655; fi
+    case "$component" in server) pid=987654;; terminald) pid=987655;; acpd) pid=1987654;; esac
   fi
   [ "$2" = "$pid" ] || continue
   printf 'signal-component %s %s %s\\n' "$component" "$1" "$pid" >> "$SERVICE_LOG"
@@ -136,7 +136,7 @@ case "$1" in
     if [ ! -f "$SERVICE_STATE/$name" ]; then echo 'Could not find service' >&2; exit 113; fi
     pid=$(cat "$SERVICE_STATE/$name")
     if [ -z "$pid" ]; then
-      if [ "$name" = org.aow.service.terminald ]; then pid=987655; else pid=987654; fi
+      case "$name" in org.aow.service.terminald) pid=987655;; org.aow.service.acpd) pid=1987654;; *) pid=987654;; esac
     fi
     printf 'state = running\\npid = %s\\n' "$pid";;
   enable) exit 0;;
@@ -515,7 +515,7 @@ test('local install stages LaunchDaemons when the GUI domain returns unsupported
   const settings = JSON.parse(f.log(join(f.runtime, 'update.json')));
   assert.deepEqual(settings.service, { mode: 'launchdaemon', user: userInfo().username, uid: process.getuid() });
   const request = JSON.parse(f.log(join(f.runtime, 'pending-launchdaemon.json')));
-  assert.deepEqual(Object.keys(request.components).sort(), ['server', 'terminald']);
+  assert.deepEqual(Object.keys(request.components).sort(), ['acpd', 'server', 'terminald']);
   assert.equal(existsSync(f.plist('server')), false);
   assert.equal(existsSync(f.plist('terminald')), false);
   assert.doesNotMatch(f.log(f.serviceLog), /bootstrap|bootout|signal/);
@@ -634,7 +634,7 @@ test('headless install stages registration, persists mode, updates without sudo 
   const settings = JSON.parse(f.log(join(f.runtime, 'update.json')));
   assert.equal(settings.service.mode, 'launchdaemon');
   const request = JSON.parse(f.log(join(f.runtime, 'pending-launchdaemon.json')));
-  assert.deepEqual(Object.keys(request.components).sort(), ['server', 'terminald']);
+  assert.deepEqual(Object.keys(request.components).sort(), ['acpd', 'server', 'terminald']);
   for (const config of Object.values(request.components)) {
     assert.equal(config.UserName, userInfo().username);
     assert.equal(config.KeepAlive, true);
@@ -782,7 +782,7 @@ test('pending headless installation retains its mode before registration and lea
   // A graphical login after preparation must not change the saved mode.
   assert.equal(f.install(['--skip-terminald']).status, 78);
   const request = JSON.parse(f.log(join(f.runtime, 'pending-launchdaemon.json')));
-  assert.deepEqual(Object.keys(request.components), ['server']);
+  assert.deepEqual(Object.keys(request.components).sort(), ['acpd', 'server']);
   assert.equal(existsSync(join(f.runtime, 'active/terminald')), false);
   assert.equal(existsSync(join(f.runtime, 'node')), false);
   assert.equal(existsSync(f.plist('server')), false);

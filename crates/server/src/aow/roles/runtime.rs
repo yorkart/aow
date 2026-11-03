@@ -2,7 +2,8 @@
 use super::{RoleRuntime, model::HomeLayout};
 use crate::aow::{AgentLaunch, AowError, AowManager};
 use anyhow::{Result, bail};
-use aow_acp::{AcpHost, AcpService};
+use aow_acp::AcpHost;
+use aow_acpd_client::AcpClient;
 use std::{path::Path, sync::Arc};
 
 pub(super) fn layout_for(runtime: &str) -> HomeLayout {
@@ -35,14 +36,17 @@ impl AowManager {
         agent.into_launch(&paths).map_err(Into::into)
     }
 
-    pub(super) fn role_acp_service(&self) -> Result<AcpService> {
+    pub(super) fn role_acp_service(&self) -> Result<AcpClient> {
+        if let Some(socket) = &self.inner.acpd_socket {
+            return Ok(AcpClient::remote(socket.clone()));
+        }
         let cache = self
             .inner
             .state_dir
             .as_ref()
             .map(|dir| dir.join("cache/acp"));
         // Shared settings and installation cache, with no persistent probe conversations.
-        AcpService::with_storage(Arc::new(RuntimeHost(self.clone())), None, cache)
+        AcpClient::with_storage(Arc::new(RuntimeHost(self.clone())), None, cache)
     }
 
     pub(super) async fn role_runtime_layout(

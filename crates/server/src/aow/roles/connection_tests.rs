@@ -121,7 +121,7 @@ async fn tested_creation_uses_persistent_home_and_retries_without_reseeding_or_r
         std::fs::read_to_string(directory.path().join("source/.trae/cli/auth.json")).unwrap(),
         "opaque identity bytes"
     );
-    assert!(state.acp.sessions(None).is_empty());
+    assert!(state.acp.sessions(None).await.unwrap().is_empty());
     let reopened = AowManager::persistent(&directory.path().join("aow")).unwrap();
     assert_eq!(reopened.agent_roles().unwrap().len(), 3);
 }
@@ -211,7 +211,7 @@ async fn acp_probe_uses_shared_settings_without_leaving_workspace_sessions() {
             );
         }
         assert_eq!(state.aow.acp_settings().unwrap().content, settings);
-        assert!(state.acp.sessions(None).is_empty());
+        assert!(state.acp.sessions(None).await.unwrap().is_empty());
     }
 }
 

@@ -34,17 +34,17 @@ function fixture(t) {
   for (const path of [
     'skills/aow-agent/SKILL.md', 'skills/aow-acp/SKILL.md', 'git-platform-providers/github.mjs', 'git-platform-providers/gitlab.mjs',
     'scripts/package-release.sh', 'scripts/install-release.sh', 'scripts/install-local.sh',
-    'scripts/start-server.sh', 'scripts/start-terminald.sh', 'scripts/replace-symlink.mjs', 'scripts/server-state-dir.sh',
+    'scripts/start-server.sh', 'scripts/start-acpd.sh', 'scripts/start-terminald.sh', 'scripts/replace-symlink.mjs', 'scripts/server-state-dir.sh',
     'scripts/start-launchd.sh', 'scripts/launchd-service.mjs', 'scripts/activate-terminald.mjs', 'scripts/service-health.mjs',
     'scripts/launchd-mode.mjs', 'scripts/start-launchdaemon.mjs', 'scripts/register-launchdaemon.py',
-    'packaging/bin/aow', 'packaging/bin/aow-server', 'packaging/bin/aow-terminald',
-    'packaging/systemd/aow-server.service', 'packaging/systemd/aow-terminald.service',
+    'packaging/bin/aow', 'packaging/bin/aow-server', 'packaging/bin/aow-acpd', 'packaging/bin/aow-terminald',
+    'packaging/systemd/aow-server.service', 'packaging/systemd/aow-acpd.service', 'packaging/systemd/aow-terminald.service',
   ]) {
     mkdirSync(dirname(join(repo, path)), { recursive: true });
     copyFileSync(join(root, path), join(repo, path));
     if (path.endsWith('.sh')) chmodSync(join(repo, path), 0o755);
   }
-  for (const name of ['aow-cli', 'aow-server', 'aow-terminald', 'aow-automation-runner']) {
+  for (const name of ['aow-cli', 'aow-server', 'aow-acpd', 'aow-terminald', 'aow-automation-runner']) {
     write(join(artifacts, name), '#!/bin/sh\n[ "${FAIL_BINARY:-}" != 1 ]\n', true);
   }
   vendorRipgrepFixture(repo);
@@ -98,14 +98,14 @@ printf '%s %s\\n' '${name}' "$*" >> "$BUILD_LOG"
   return { repo, temp, home, runtime, tools, artifacts, rustLibdir, buildLog, serviceLog, run, pack, log, assertClean };
 }
 
-test('full native packaging builds four binaries and both frontends without installing services', t => {
+test('full native packaging builds five binaries and both frontends without installing services', t => {
   const f = fixture(t);
   const packed = f.pack(['--version', '1.2.0']);
   assert.equal(packed.status, 0, packed.stderr);
   assert.equal(packed.stdout.trim(), join(f.repo, 'target/packages/aow-1.2.0.tar.gz'));
   const builds = f.log(f.buildLog);
   assert.equal((builds.match(/^cargo /gm) ?? []).length, 1);
-  for (const binary of ['aow-server', 'aow-terminald', 'aow-automation-runner', 'aow-cli']) {
+  for (const binary of ['aow-server', 'aow-acpd', 'aow-terminald', 'aow-automation-runner', 'aow-cli']) {
     assert.ok(builds.includes(`--bin ${binary}`), builds);
   }
   for (const line of builds.split('\n').filter(line => line.startsWith('cargo '))) {
@@ -113,7 +113,7 @@ test('full native packaging builds four binaries and both frontends without inst
     assert.ok(line.includes(`--target-dir ${join(f.repo, 'target')}`), line);
   }
   assert.equal((builds.match(/^npm run build$/gm) ?? []).length, 2);
-  assert.equal(f.log(join(f.temp, 'elf.log')).trim().split('\n').length, 5);
+  assert.equal(f.log(join(f.temp, 'elf.log')).trim().split('\n').length, 6);
   assert.equal(existsSync(f.runtime), false);
   assert.equal(f.log(f.serviceLog), '');
   f.assertClean();
@@ -140,11 +140,11 @@ test('default version and skip-build create a complete package without invoking 
   }
   assert.deepEqual(manifest.platform, { os: 'linux', arch: machine, target, libc: 'musl', linkage: 'static' });
   assert.equal(archive.endsWith(`aow-${manifest.release_id}.tar.gz`), true);
-  for (const path of ['bin/aow-server', 'bin/aow-terminald', 'bin/aow-automation-runner',
+  for (const path of ['bin/aow-server', 'bin/aow-acpd', 'bin/aow-terminald', 'bin/aow-automation-runner',
     'skills/aow-agent/SKILL.md', 'skills/aow-acp/SKILL.md', 'git-platform-providers/github.mjs', 'git-platform-providers/gitlab.mjs',
-    'bin/aow-cli', 'bin/rg', 'licenses/ripgrep/COPYING', 'frontend/dist/index.html', 'scripts/start-server.sh', 'scripts/start-terminald.sh',
-    'scripts/replace-symlink.mjs', 'scripts/server-state-dir.sh', 'packaging/bin/aow', 'packaging/bin/aow-server', 'packaging/bin/aow-terminald',
-    'packaging/systemd/aow-server.service', 'packaging/systemd/aow-terminald.service']) {
+    'bin/aow-cli', 'bin/rg', 'licenses/ripgrep/COPYING', 'frontend/dist/index.html', 'scripts/start-server.sh', 'scripts/start-acpd.sh', 'scripts/start-terminald.sh',
+    'scripts/replace-symlink.mjs', 'scripts/server-state-dir.sh', 'packaging/bin/aow', 'packaging/bin/aow-server', 'packaging/bin/aow-acpd', 'packaging/bin/aow-terminald',
+    'packaging/systemd/aow-server.service', 'packaging/systemd/aow-acpd.service', 'packaging/systemd/aow-terminald.service']) {
     assert.equal(existsSync(join(extracted, path)), true, path);
   }
   assert.equal(existsSync(f.runtime), false);
@@ -158,7 +158,7 @@ test('provider resources are packaged and installed without a fixed platform fil
   write(join(f.repo, 'git-platform-providers/tests/fixture.test.mjs'), '// test only');
   const packed = f.pack(['--version', 'custom-provider', '--skip-build']);
   assert.equal(packed.status, 0, packed.stderr);
-  const installed = f.run('bash', ['scripts/install-local.sh', packed.stdout.trim(), '--skip-terminald']);
+  const installed = f.run('bash', ['scripts/install-local.sh', packed.stdout.trim(), '--skip-terminald', '--skip-acpd']);
   assert.equal(installed.status, 0, installed.stdout + installed.stderr);
   const directory = join(f.runtime, 'releases/custom-provider/git-platform-providers');
   assert.deepEqual(readdirSync(directory), ['forge.v2.mjs']);
@@ -172,7 +172,7 @@ test('shared web assets still build and validate all native binaries without npm
   assert.equal(result.status, 0, result.stderr);
   const builds = f.log(f.buildLog);
   assert.equal((builds.match(/^cargo /gm) ?? []).length, 1);
-  assert.equal(f.log(join(f.temp, 'elf.log')).trim().split('\n').length, 5);
+  assert.equal(f.log(join(f.temp, 'elf.log')).trim().split('\n').length, 6);
   const manifest = JSON.parse(f.run('tar', ['-xOf', result.stdout.trim(), './manifest.json']).stdout);
   assert.equal(manifest.reused_build_artifacts, false);
   assert.equal(manifest.reused_web_assets, true);
@@ -205,6 +205,7 @@ test('local install deploys the latest package or an explicit path without downl
   assert.equal(readlinkSync(join(f.runtime, 'active/server')), '../releases/local-1');
   assert.match(installed.stdout, /services are active/);
   assert.equal(readlinkSync(join(f.runtime, 'active/terminald')), '../releases/local-1');
+  assert.equal(readlinkSync(join(f.runtime, 'active/acpd')), '../releases/local-1');
   assert.doesNotMatch(installed.stdout + installed.stderr, /Enter lowercase y|请输入 y/);
   for (const name of ['aow-agent', 'aow-acp']) {
     const installedSkill = join(f.home, '.aow/skills', name, 'SKILL.md');
@@ -219,11 +220,12 @@ test('local install deploys the latest package or an explicit path without downl
   const packed = f.pack(['--version', 'local-2', '--output-dir', output]);
   assert.equal(packed.status, 0, packed.stderr);
   const servicesBefore = readFileSync(f.serviceLog, 'utf8');
-  const explicit = f.run('bash', ['scripts/install-local.sh', packed.stdout.trim(), '--skip-terminald']);
+  const explicit = f.run('bash', ['scripts/install-local.sh', packed.stdout.trim(), '--skip-terminald', '--skip-acpd']);
   assert.equal(explicit.status, 0, explicit.stdout + explicit.stderr);
   assert.equal(readlinkSync(join(f.runtime, 'active/server')), '../releases/local-2');
   assert.equal(readlinkSync(join(f.runtime, 'active/terminald')), '../releases/local-1');
-  assert.doesNotMatch(readFileSync(f.serviceLog, 'utf8').slice(servicesBefore.length), /terminald/);
+  assert.equal(readlinkSync(join(f.runtime, 'active/acpd')), '../releases/local-1');
+  assert.doesNotMatch(readFileSync(f.serviceLog, 'utf8').slice(servicesBefore.length), /terminald|acpd/);
   assert.equal(readFileSync(join(f.home, '.aow/skills/aow-agent/SKILL.md'), 'utf8'), readFileSync(join(root, 'skills/aow-agent/SKILL.md'), 'utf8'));
   assert.equal(readFileSync(join(f.home, '.aow/skills/custom/SKILL.md'), 'utf8'), 'user skill');
   assert.equal(existsSync(join(f.runtime, '.install.lock')), false);
@@ -246,7 +248,7 @@ test('an existing checksum is never overwritten or selected by latest', t => {
 test('any dynamic glibc binary is rejected even in the musl directory with skip-build', { skip: process.platform !== 'linux' }, t => {
   const f = fixture(t);
   assert.equal(f.pack(['--version', '1.0.0']).status, 0);
-  for (const name of ['aow-server', 'aow-terminald', 'aow-automation-runner', 'aow-cli']) {
+  for (const name of ['aow-server', 'aow-acpd', 'aow-terminald', 'aow-automation-runner', 'aow-cli']) {
     const path = join(f.artifacts, name);
     const original = readFileSync(path);
     copyFileSync('/bin/true', path);

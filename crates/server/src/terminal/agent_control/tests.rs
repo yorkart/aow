@@ -601,7 +601,7 @@ async fn rejected_runtime_does_not_leave_a_lineage_record() {
             .len(),
         1
     );
-    let graph = crate::instances::graph(&fixture.state).unwrap();
+    let graph = crate::instances::graph(&fixture.state).await.unwrap();
     assert_eq!(graph.len(), 1);
     assert!(graph.values().all(|item| item.parent != request.parent));
     let reloaded = crate::instances::InstanceStore::persistent(&fixture.state_dir).unwrap();
@@ -766,6 +766,7 @@ async fn mixed_terminal_acp_lineage_survives_deleted_intermediate_instances_and_
                 .state
                 .acp
                 .session_connection_info(acp_id)
+                .await
                 .unwrap()
                 .unwrap()
                 .id,
@@ -805,7 +806,7 @@ async fn mixed_terminal_acp_lineage_survives_deleted_intermediate_instances_and_
         fixture.state.terminals.inner.terminald.clone(),
     )
     .unwrap();
-    let graph = crate::instances::graph(&reloaded).unwrap();
+    let graph = crate::instances::graph(&reloaded).await.unwrap();
     assert_eq!(
         graph[&aow_protocol::InstanceRef::terminal(&child.pane_id)].parent,
         Some(aow_protocol::InstanceRef::acp(acp_id))

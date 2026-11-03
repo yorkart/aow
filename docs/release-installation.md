@@ -25,7 +25,20 @@ aow update --skip-terminald
 curl -fsSL https://github.com/yorkart/aow/releases/latest/download/aow-install.sh | bash -s -- --skip-terminald
 ```
 
-该参数仅影响本次安装或升级，不保存为后续默认设置。Web 服务、CLI 和 Runner 仍正常更新；terminald 的服务、当前版本链接和托管 Node 运行时保持不变。首次安装使用该参数时不会启动 terminald，网页 Terminal 暂不可用。
+该参数仅影响本次安装或升级，不保存为后续默认设置。Web 服务、acpd、CLI 和 Runner 仍正常更新；terminald 的服务、当前版本链接和托管 Node 运行时保持不变。首次安装使用该参数时不会启动 terminald，网页 Terminal 暂不可用。
+
+acpd 独立管理 ACP adapter 和会话。新版安装包默认一并更新并重启 acpd，
+这会中断它管理的活动推理。需要保留 ACP 执行时添加 `--skip-acpd`；
+只更新 Web 服务时，可同时使用两个跳过选项：
+
+```bash
+aow update --skip-terminald --skip-acpd
+just install --skip-terminald --skip-acpd
+```
+
+首次从内嵌 ACP 版本切换时，需要先结束旧 Web 进程再启动 acpd；
+现有 `data/acp/threads.sqlite` 和 `cache/acp/` 沿用，无需复制数据。
+首次安装跳过 acpd 时，ACP 页面暂不可用；稍后安装时不带 `--skip-acpd` 即可启动。
 
 ### macOS 本地安装与目标账户
 
@@ -73,7 +86,7 @@ aow account                        # 修改登录账号和密码
 | --- | --- |
 | `~/.local/bin/` | `aow`、`aow-cli`、`aow-automation-runner` 命令入口 |
 | `~/.local/lib/aow/releases/` | 各版本的程序和网页文件 |
-| `~/.local/lib/aow/active/` | Web 服务与 terminald 当前使用的版本链接 |
+| `~/.local/lib/aow/active/` | Web 服务、acpd 与 terminald 当前使用的版本链接 |
 | `~/.local/lib/aow/update.json` | 更新来源、命令目录，以及 macOS 服务模式、账户和 UID |
 | `~/.local/lib/aow/pending-launchdaemon.json` | 等待管理员登记的 LaunchDaemon 请求；完成安装验证后清除 |
 | `~/.aow/server.env` | 服务配置 |
@@ -106,7 +119,7 @@ aow account                        # 修改登录账号和密码
 
 ## 服务管理与系统日志
 
-以安装 AoW 的同一系统用户执行以下命令。重启 Web 服务不会结束后台终端；重启 terminald 会结束其管理的所有终端会话。
+以安装 AoW 的同一系统用户执行以下命令。重启 Web 服务不会结束后台终端或 acpd 中已提交的推理；重启 terminald 会结束其管理的所有终端会话。
 
 LaunchDaemon 更新会先发送 SIGTERM，等待最多 5 秒正常退出；若旧进程仍未退出，安装器会重新核对 PID 与账户归属，再用 SIGKILL 结束该进程，并检查新进程的健康状态。这样可避免长连接让 Web 服务停在「端口已关闭但进程未退出」的状态。指定 `--skip-terminald` 时，只重启 Web 服务，terminald 及其终端会话保持运行。
 
@@ -114,7 +127,7 @@ LaunchDaemon 更新会先发送 SIGTERM，等待最多 5 秒正常退出；若�
 
 ```bash
 # 查看状态
-systemctl --user status aow-server.service aow-terminald.service
+systemctl --user status aow-server.service aow-terminald.service aow-acpd.service
 
 # 重启 Web 服务
 systemctl --user restart aow-server.service

@@ -75,3 +75,5 @@ The default listen address works with this tunnel; the server only needs to expo
 In addition to the runtime dependencies, install Rust stable / Cargo, npm, and just. macOS requires Xcode Command Line Tools. Building Linux packages requires a C compiler, `musl-gcc`, `readelf`, and the Rust musl target for the machine's architecture. Testing the macOS installation scripts also requires Python 3.
 
 From the repository root, run `just build` to build and `just test` to run tests. For local deployment, run `just package`, then `just install`. Local packages use the same installation process as GitHub release packages and update the services actually running under the current user. Development services also listen only on localhost by default.
+
+For source development, start `just run-acpd` in a separate terminal before the Web server. Use the same `AOW_STATE_DIR` for both processes; the daemon reuses existing ACP history.

@@ -80,15 +80,20 @@ pub(crate) fn routes() -> Router<AppState> {
 pub(crate) fn error(error: anyhow::Error) -> HttpError {
     let missing = error.to_string() == "ACP session not found"
         || error.to_string() == "ACP connection not found";
+    let unavailable = aow_acpd_client::is_unavailable(&error);
     HttpError::new(
-        if missing {
+        if unavailable {
+            StatusCode::SERVICE_UNAVAILABLE
+        } else if missing {
             StatusCode::NOT_FOUND
         } else {
             StatusCode::BAD_REQUEST
         },
-        if missing {
+        if unavailable {
+            "acpd_unavailable"
+        } else if missing {
             "acp_not_found"
-        } else if aow_acp::is_auth_required(&error) {
+        } else if aow_acpd_client::is_auth_required(&error) {
             "acp_auth_required"
         } else {
             "acp_error"
@@ -135,8 +140,13 @@ async fn install_agent(
 async fn installation_status(
     State(state): State<AppState>,
     Path(agent_id): Path<String>,
-) -> Json<Option<aow_acp::ConnectionStatus>> {
-    Json(state.acp.installation_status(&agent_id))
+) -> Result<Json<Option<aow_acp::ConnectionStatus>>, HttpError> {
+    state
+        .acp
+        .installation_status(&agent_id)
+        .await
+        .map(Json)
+        .map_err(error)
 }
 #[derive(Default, Deserialize)]
 struct RegistryQuery {
@@ -222,6 +232,7 @@ async fn import_sessions(
     state
         .acp
         .import_sessions(&connection_id, sessions)
+        .await
         .map(Json)
         .map_err(error)
 }
@@ -261,7 +272,12 @@ async fn session_info(
     State(state): State<AppState>,
     Path(thread_id): Path<String>,
 ) -> Result<Json<aow_acp::SessionInfo>, HttpError> {
-    state.acp.session_info(&thread_id).map(Json).map_err(error)
+    state
+        .acp
+        .session_info(&thread_id)
+        .await
+        .map(Json)
+        .map_err(error)
 }
 async fn fork_session(
     State(state): State<AppState>,
@@ -271,14 +287,15 @@ async fn fork_session(
 ) -> Result<Json<aow_acp::SessionSnapshot>, HttpError> {
     let controller = state.acp_controls.session(&thread_id);
     let _lifecycle = controller.authorize_lifecycle(&headers, false).await?;
-    crate::instances::preserve_parent(&state, Some(&aow_protocol::InstanceRef::acp(&thread_id)))?;
+    crate::instances::preserve_parent(&state, Some(&aow_protocol::InstanceRef::acp(&thread_id)))
+        .await?;
     let fork = state.acp.fork_session(&thread_id).await.map_err(error)?;
     state
         .instances
         .record_all(vec![crate::instances::acp(&aow_acp::SessionInfo::from(
             &fork,
         ))])?;
-    view_snapshot(&state, &fork.thread_id, &query)
+    view_snapshot(&state, &fork.thread_id, &query).await
 }
 async fn session_connection(
     State(state): State<AppState>,
@@ -287,21 +304,27 @@ async fn session_connection(
     state
         .acp
         .session_connection_info(&thread_id)
+        .await
         .map(Json)
         .map_err(error)
 }
 async fn sessions(
     State(state): State<AppState>,
     Query(query): Query<SessionQuery>,
-) -> Json<Vec<aow_acp::SessionInfo>> {
-    Json(state.acp.sessions(query.cwd.as_deref()))
+) -> Result<Json<Vec<aow_acp::SessionInfo>>, HttpError> {
+    state
+        .acp
+        .sessions(query.cwd.as_deref())
+        .await
+        .map(Json)
+        .map_err(error)
 }
 async fn snapshot(
     State(state): State<AppState>,
     Path(thread_id): Path<String>,
     Query(query): Query<ViewQuery>,
 ) -> Result<Json<aow_acp::SessionSnapshot>, HttpError> {
-    view_snapshot(&state, &thread_id, &query)
+    view_snapshot(&state, &thread_id, &query).await
 }
 
 #[derive(Default, Deserialize)]
@@ -309,15 +332,15 @@ struct ViewQuery {
     view: Option<String>,
 }
 
-fn view_snapshot(
+async fn view_snapshot(
     state: &AppState,
     thread_id: &str,
     query: &ViewQuery,
 ) -> Result<Json<aow_acp::SessionSnapshot>, HttpError> {
     if query.view.as_deref() == Some("overview") {
-        state.acp.overview(thread_id)
+        state.acp.overview(thread_id).await
     } else {
-        state.acp.snapshot(thread_id)
+        state.acp.snapshot(thread_id).await
     }
     .map(Json)
     .map_err(error)
@@ -339,10 +362,12 @@ async fn session_updates(
         state
             .acp
             .overview_updates(&thread_id, &query.generation, query.revision)
+            .await
     } else {
         state
             .acp
             .updates(&thread_id, &query.generation, query.revision)
+            .await
     }
     .map(Json)
     .map_err(error)
@@ -368,6 +393,7 @@ async fn session_process(
             query.generation.as_deref(),
             query.revision,
         )
+        .await
         .map(Json)
         .map_err(error)
 }
@@ -375,13 +401,23 @@ async fn connection_logs(
     State(state): State<AppState>,
     Path(connection_id): Path<String>,
 ) -> Result<Json<Vec<Value>>, HttpError> {
-    state.acp.logs(&connection_id).map(Json).map_err(error)
+    state
+        .acp
+        .logs(&connection_id)
+        .await
+        .map(Json)
+        .map_err(error)
 }
 async fn session_logs(
     State(state): State<AppState>,
     Path(thread_id): Path<String>,
 ) -> Result<Json<Vec<Value>>, HttpError> {
-    state.acp.session_logs(&thread_id).map(Json).map_err(error)
+    state
+        .acp
+        .session_logs(&thread_id)
+        .await
+        .map(Json)
+        .map_err(error)
 }
 async fn delete_session(
     State(state): State<AppState>,
@@ -393,6 +429,7 @@ async fn delete_session(
     if state
         .aow
         .task_for_thread(&state.acp, &thread_id)
+        .await
         .map_err(error)?
         .is_some_and(|task| task.is_router && task.initial_thread_id.as_deref() == Some(&thread_id))
     {
@@ -431,28 +468,36 @@ async fn session_action(
         if matches!(action, SessionAction::Resume) {
             let resumed = state.acp.resume(&thread_id).await.map_err(error)?;
             return if query.view.as_deref() == Some("overview") {
-                view_snapshot(&state, &thread_id, &query)
+                view_snapshot(&state, &thread_id, &query).await
             } else {
                 Ok(Json(resumed))
             };
         }
         state.acp.close_session(&thread_id).await.map_err(error)?;
-        return view_snapshot(&state, &thread_id, &query);
+        return view_snapshot(&state, &thread_id, &query).await;
     }
     controller.authorize(&headers, false)?;
     let result = match action {
-        SessionAction::Prompt { content } => state
-            .aow
-            .acp_role_content(&state.acp, &thread_id, content)
-            .and_then(|content| state.acp.start_prompt(&thread_id, content)),
-        SessionAction::Steer { content } => state
-            .aow
-            .acp_role_content(&state.acp, &thread_id, content)
-            .and_then(|content| state.acp.start_steering(&thread_id, content)),
-        SessionAction::Cancel => state.acp.cancel(&thread_id),
-        SessionAction::ClearPlan => state.acp.clear_plan(&thread_id),
+        SessionAction::Prompt { content } => {
+            let content = state
+                .aow
+                .acp_role_content(&state.acp, &thread_id, content)
+                .await
+                .map_err(error)?;
+            state.acp.start_prompt(&thread_id, content).await
+        }
+        SessionAction::Steer { content } => {
+            let content = state
+                .aow
+                .acp_role_content(&state.acp, &thread_id, content)
+                .await
+                .map_err(error)?;
+            state.acp.start_steering(&thread_id, content).await
+        }
+        SessionAction::Cancel => state.acp.cancel(&thread_id).await,
+        SessionAction::ClearPlan => state.acp.clear_plan(&thread_id).await,
         SessionAction::DismissNotice { notice_id } => {
-            state.acp.dismiss_notice(&thread_id, &notice_id)
+            state.acp.dismiss_notice(&thread_id, &notice_id).await
         }
         SessionAction::Resume | SessionAction::Close => {
             unreachable!("lifecycle actions are handled above")
@@ -467,10 +512,10 @@ async fn session_action(
         SessionAction::Answer {
             request_id,
             response,
-        } => state.acp.answer(&thread_id, &request_id, response),
+        } => state.acp.answer(&thread_id, &request_id, response).await,
     };
     result.map_err(error)?;
-    view_snapshot(&state, &thread_id, &query)
+    view_snapshot(&state, &thread_id, &query).await
 }
 
 async fn connection_requests(
@@ -480,6 +525,7 @@ async fn connection_requests(
     state
         .acp
         .connection_requests(&connection_id)
+        .await
         .map(Json)
         .map_err(error)
 }
@@ -498,6 +544,7 @@ async fn answer_connection(
     if state
         .acp
         .connection_requests(&connection_id)
+        .await
         .map_err(error)?
         .iter()
         .any(|pending| {
@@ -520,6 +567,7 @@ async fn answer_connection(
     state
         .acp
         .answer_connection(&connection_id, &request.request_id, request.response)
+        .await
         .map_err(error)?;
     Ok(Json(json!({})))
 }

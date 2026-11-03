@@ -66,7 +66,7 @@ async fn fixture(command: &str) -> (tempfile::TempDir, AppState, Router, String,
             .success()
     );
     let mut state = AppState::new(Default::default());
-    state.acp = aow_acp::AcpService::new(
+    state.acp = aow_acpd_client::AcpClient::new(
         Arc::new(Host {
             command: command.into(),
             delay_ms: 0,
@@ -104,7 +104,7 @@ async fn caller_context_errors_never_allocate_children() {
         invalid["caller"] = caller;
         let (status, body) = call(&app, "POST", "/v1/acp/sessions", invalid).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-        assert_eq!(state.acp.sessions(None).len(), 1);
+        assert_eq!(state.acp.sessions(None).await.unwrap().len(), 1);
     }
     let mut conflict = request.clone();
     conflict["no_parent"] = json!(true);
@@ -118,7 +118,7 @@ async fn caller_context_errors_never_allocate_children() {
         call(&app, "POST", "/v1/acp/sessions", request).await.0,
         StatusCode::BAD_REQUEST
     );
-    assert_eq!(state.acp.sessions(None).len(), 1);
+    assert_eq!(state.acp.sessions(None).await.unwrap().len(), 1);
 }
 
 #[tokio::test]
@@ -131,7 +131,7 @@ async fn cli_creates_submits_traces_and_respects_browser_ownership() {
     assert_eq!(first["agent_id"], "another");
     assert_eq!(first["task_submitted"], true);
     let id = first["thread_id"].as_str().unwrap();
-    let root_info = state.acp.session_info(id).unwrap();
+    let root_info = state.acp.session_info(id).await.unwrap();
     assert_eq!(root_info.source, aow_acp::SessionSource::Cli);
     assert!(root_info.parent.is_none());
     assert!(!root_info.created_at.is_empty());
@@ -140,14 +140,14 @@ async fn cli_creates_submits_traces_and_respects_browser_ownership() {
     create["agent_id"] = json!("test");
     create["no_parent"] = json!(false);
     create["caller"] = json!({"session_id": root_info.session_id,
-        "acp_connection_id": state.acp.session_connection_info(id).unwrap().unwrap().id});
+        "acp_connection_id": state.acp.session_connection_info(id).await.unwrap().unwrap().id});
     create["task"] = Value::Null;
     let (_, child) = call(&app, "POST", "/v1/acp/sessions", create).await;
     assert_eq!(child["phase"], "ready", "{child}");
     assert_eq!(child["parent"], json!(parent));
     let child_id = child["thread_id"].as_str().unwrap();
     assert_eq!(
-        state.acp.session_info(child_id).unwrap().source,
+        state.acp.session_info(child_id).await.unwrap().source,
         aow_acp::SessionSource::Cli
     );
     let controller = state.acp_controls.session(child_id);
@@ -181,7 +181,7 @@ async fn cli_creates_submits_traces_and_respects_browser_ownership() {
     assert_eq!(lineage["ancestors"][0]["id"], id);
     assert_eq!(lineage["ancestors"][0]["deleted"], true);
     assert_eq!(
-        state.acp.session_info(child_id).unwrap().parent,
+        state.acp.session_info(child_id).await.unwrap().parent,
         Some(parent)
     );
 }
@@ -192,14 +192,14 @@ async fn failed_startup_returns_identity_and_invalid_parent_allocates_nothing() 
     let mut request = json!({"caller":{"session_id":"fixture"},"agent_id":"test","project_id":project,"cwd":repo,"timeout_seconds":1,"parent":{"kind":"acp","id":"missing"}});
     let (status, _) = call(&app, "POST", "/v1/acp/sessions", request.clone()).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
-    assert!(state.acp.sessions(None).is_empty());
+    assert!(state.acp.sessions(None).await.unwrap().is_empty());
     request["parent"] = Value::Null;
     request["no_parent"] = json!(true);
     let (status, failed) = call(&app, "POST", "/v1/acp/sessions", request).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(failed["phase"], "failed");
     let id = failed["thread_id"].as_str().unwrap();
-    assert!(state.acp.session_info(id).is_ok());
+    assert!(state.acp.session_info(id).await.is_ok());
     assert!(
         state
             .instances
@@ -212,7 +212,7 @@ async fn failed_startup_returns_identity_and_invalid_parent_allocates_nothing() 
 #[tokio::test]
 async fn timed_out_creation_finishes_once_and_busy_submission_is_rejected() {
     let (_directory, mut state, _, project, repo) = fixture("node").await;
-    state.acp = aow_acp::AcpService::new(
+    state.acp = aow_acpd_client::AcpClient::new(
         Arc::new(Host {
             command: "node".into(),
             delay_ms: 1500,
@@ -227,7 +227,7 @@ async fn timed_out_creation_finishes_once_and_busy_submission_is_rejected() {
     assert_eq!(result["phase"], "starting", "{result}");
     let id = result["thread_id"].as_str().unwrap();
     tokio::time::timeout(Duration::from_secs(5), async {
-        while state.acp.snapshot(id).unwrap().status != "working" {
+        while state.acp.snapshot(id).await.unwrap().status != "working" {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
@@ -241,9 +241,9 @@ async fn timed_out_creation_finishes_once_and_busy_submission_is_rejected() {
     )
     .await;
     assert_eq!(status, StatusCode::CONFLICT);
-    state.acp.cancel(id).unwrap();
+    state.acp.cancel(id).await.unwrap();
     tokio::time::timeout(Duration::from_secs(5), async {
-        while state.acp.snapshot(id).unwrap().status != "idle" {
+        while state.acp.snapshot(id).await.unwrap().status != "idle" {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
@@ -256,7 +256,7 @@ async fn timed_out_creation_finishes_once_and_busy_submission_is_rejected() {
 #[tokio::test]
 async fn acp_default_and_explicit_override_select_the_expected_adapter() {
     let (_directory, mut state, _, project, repo) = fixture("node").await;
-    state.acp = aow_acp::AcpService::new(
+    state.acp = aow_acpd_client::AcpClient::new(
         Arc::new(Host {
             command: "node".into(),
             delay_ms: 0,

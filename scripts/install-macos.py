@@ -87,7 +87,7 @@ def registration_module(path):
     return module
 
 
-def install_as_administrator(account, package, administrator_uid, skip_terminald=False):
+def install_as_administrator(account, package, administrator_uid, skip_terminald=False, skip_acpd=False):
     require_local_terminal()
     trusted_path(__file__, administrator_uid)
     installer = trusted_path(SCRIPT_DIR / 'install-release.sh', administrator_uid)
@@ -110,6 +110,8 @@ def install_as_administrator(account, package, administrator_uid, skip_terminald
         arguments = ['/bin/bash', str(stage / 'install-release.sh'), '--package', str(stage / archive.name)]
         if skip_terminald:
             arguments.append('--skip-terminald')
+        if skip_acpd:
+            arguments.append('--skip-acpd')
         result = run_as_user(account, arguments, environment)
         if result != 78:
             return result
@@ -119,7 +121,8 @@ def install_as_administrator(account, package, administrator_uid, skip_terminald
         # A previous interrupted attempt may have left a terminald
         # request. This invocation authorizes only the components selected above.
         configurations = [(component, config) for component, config in configurations
-                          if component == 'server' or terminald]
+                          if component == 'server' or (component == 'terminald' and terminald)
+                          or (component == 'acpd' and not skip_acpd)]
         if not configurations:
             raise ValueError('No selected services are ready for registration')
         helper.register(configurations, account)
@@ -147,6 +150,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--user', help='Target account (default: the current account)')
     parser.add_argument('--package', required=True)
+    parser.add_argument('--skip-acpd', action='store_true',
+                        help='Keep acpd and its active conversations unchanged for this installation')
     parser.add_argument('--skip-terminald', action='store_true',
                         help='Keep terminald and its existing sessions unchanged for this installation')
     parser.add_argument('--elevated', action='store_true', help=argparse.SUPPRESS)
@@ -164,7 +169,7 @@ def main(argv=None):
         account = pwd.getpwnam(args.user)
         if account.pw_uid == 0:
             parser.error('AoW must run as a non-root account')
-        return install_as_administrator(account, args.package, administrator.pw_uid, args.skip_terminald)
+        return install_as_administrator(account, args.package, administrator.pw_uid, args.skip_terminald, args.skip_acpd)
     caller = pwd.getpwuid(os.getuid())
     if caller.pw_uid == 0:
         parser.error('Run just install as your normal macOS account, without sudo')
@@ -173,6 +178,8 @@ def main(argv=None):
         parser.error('AoW must run as a non-root account')
     print(f'Installation account: {account.pw_name} (HOME={account.pw_dir})', flush=True)
     terminald_options = ['--skip-terminald'] if args.skip_terminald else []
+    if args.skip_acpd:
+        terminald_options.append('--skip-acpd')
     if account.pw_uid == caller.pw_uid:
         checked = subprocess.run(['node', str(SCRIPT_DIR / 'launchd-mode.mjs'), 'check-install',
                                   str(Path(account.pw_dir) / '.local/lib/aow'), *terminald_options],

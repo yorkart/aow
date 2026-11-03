@@ -150,6 +150,21 @@ try {
     assert.deepEqual(state.counts, counts);
     assert.equal(await page.evaluate(() => window.readers.get('thread').store.state.data), undefined);
   });
+  await test('ACP daemon outage stays on the shared socket and resubscribes after recovery', async t => {
+    const { page, state } = await fixture(t);
+    await mount(page, 'thread', sessionResource); await ready(page, 'thread');
+    const connections = state.sockets;
+    for (const peer of state.peers) peer.send({ type: 'offline' });
+    await page.waitForFunction(() => window.readers.get('thread').store.state.status === 'offline');
+    await mount(page, 'late', { kind: 'connection', thread_id: 'thread' });
+    await page.waitForFunction(() => window.readers.get('late').store.state.status === 'offline');
+    state.session.revision = 2; state.version = 2;
+    for (const peer of state.peers) peer.send({ type: 'hello', protocol: 1 });
+    await ready(page, 'thread', 2);
+    assert.equal(state.sockets, connections);
+    assert.equal(await page.evaluate(() => window.readers.get('thread').store.state.status), 'live');
+  });
+
   await test('legacy capability fallback is shared and stops immediately when push becomes available', async t => {
     const { page, state } = await fixture(t, { supported: false });
     await page.clock.install();

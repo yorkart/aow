@@ -49,11 +49,11 @@ async fn create(
     // The operation is independent of the requesting CLI, including preparation and first prompt.
     aow_i18n::spawn(async move {
         let cwd = state.aow.agent_worktree_path(&request.project_id, &request.cwd).await.map_err(crate::aow::aow_http_error)?;
-        let parent = instances::creation_parent(&state, request.parent, request.caller.as_ref(), request.no_parent)?;
+        let parent = instances::creation_parent(&state, request.parent, request.caller.as_ref(), request.no_parent).await?;
         let agent_id = state.acp.select_agent_id(request.agent_id.as_deref()).await.map_err(super::api::error)?;
         let session = state.aow.prepare_acp_child_session(&state.acp, &agent_id, cwd.into(), aow_acp::SessionSource::Cli, parent).await.map_err(super::api::error)?;
         let id = session.thread_id;
-        let info = state.acp.session_info(&id).map_err(super::api::error)?;
+        let info = state.acp.session_info(&id).await.map_err(super::api::error)?;
         if let Err(error) = state.instances.record_all(vec![instances::acp(&info)]) {
             // No adapter has started yet, so deletion cannot affect remote work.
             let _ = state.acp.delete_session(&id).await;
@@ -61,27 +61,31 @@ async fn create(
         }
         let mut startup = match start(state.clone(), id.clone(), request.task) {
             Ok(startup) => startup,
-            Err(error) => return response(&state, &id, "failed", false, Some(error.body.message)),
+            Err(error) => return response(&state, &id, "failed", false, Some(error.body.message)).await,
         };
         match tokio::time::timeout(Duration::from_secs(request.timeout_seconds), &mut startup).await {
             Ok(result) => match result.map_err(|error| HttpError::internal(error.to_string()))? {
-                Ok(task_submitted) => response(&state, &id, "ready", task_submitted, None),
-                Err(error) => response(&state, &id, "failed", false, Some(error.body.message)),
+                Ok(task_submitted) => response(&state, &id, "ready", task_submitted, None).await,
+                Err(error) => response(&state, &id, "failed", false, Some(error.body.message)).await,
             },
             // The owned task continues; returning an identity makes a timeout inspectable.
-            Err(_) => response(&state, &id, "starting", false, Some("ACP startup timed out; initialization may still be running. Inspect this thread before retrying.".into())),
+            Err(_) => response(&state, &id, "starting", false, Some("ACP startup timed out; initialization may still be running. Inspect this thread before retrying.".into())).await,
         }
     }).await.map_err(|error| HttpError::internal(error.to_string()))?
 }
 
-fn response(
+async fn response(
     state: &AppState,
     id: &str,
     phase: &str,
     task_submitted: bool,
     error: Option<String>,
 ) -> Result<Json<Value>, HttpError> {
-    let info = state.acp.session_info(id).map_err(super::api::error)?;
+    let info = state
+        .acp
+        .session_info(id)
+        .await
+        .map_err(super::api::error)?;
     let mut result =
         serde_json::to_value(info).map_err(|error| HttpError::internal(error.to_string()))?;
     result["phase"] = json!(phase);
@@ -110,15 +114,20 @@ pub(crate) fn start(
             let content = state
                 .aow
                 .acp_role_content(&state.acp, &id, content)
+                .await
                 .map_err(super::api::error)?;
-            state.acp.start_prompt(&id, content).map_err(|error| {
-                let message = error.to_string();
-                if message == "ACP session is busy or disconnected" {
-                    HttpError::new(axum::http::StatusCode::CONFLICT, "acp_busy", message, None)
-                } else {
-                    super::api::error(error)
-                }
-            })?;
+            state
+                .acp
+                .start_prompt(&id, content)
+                .await
+                .map_err(|error| {
+                    let message = error.to_string();
+                    if message == "ACP session is busy or disconnected" {
+                        HttpError::new(axum::http::StatusCode::CONFLICT, "acp_busy", message, None)
+                    } else {
+                        super::api::error(error)
+                    }
+                })?;
             Ok(true)
         } else {
             Ok(false)
@@ -142,7 +151,11 @@ async fn submit(
     Json(request): Json<Submit>,
 ) -> Result<Json<Value>, HttpError> {
     validate(Some(&request.task), request.timeout_seconds)?;
-    state.acp.session_info(&id).map_err(super::api::error)?;
+    state
+        .acp
+        .session_info(&id)
+        .await
+        .map_err(super::api::error)?;
     let mut submission = start(state.clone(), id.clone(), Some(request.task))?;
     let task_submitted = tokio::time::timeout(
         Duration::from_secs(request.timeout_seconds),
@@ -160,7 +173,7 @@ async fn submit(
         )
     })?
     .map_err(|error| HttpError::internal(error.to_string()))??;
-    response(&state, &id, "ready", task_submitted, None)
+    response(&state, &id, "ready", task_submitted, None).await
 }
 
 async fn agents(State(state): State<AppState>) -> Result<Json<Value>, HttpError> {
@@ -169,15 +182,22 @@ async fn agents(State(state): State<AppState>) -> Result<Json<Value>, HttpError>
     ))
 }
 
-async fn list(State(state): State<AppState>) -> Json<Value> {
-    Json(json!({"items":state.acp.sessions(None)}))
+async fn list(State(state): State<AppState>) -> Result<Json<Value>, HttpError> {
+    Ok(Json(
+        json!({"items":state.acp.sessions(None).await.map_err(super::api::error)?}),
+    ))
 }
 
 async fn snapshot(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<aow_acp::SessionSnapshot>, HttpError> {
-    state.acp.snapshot(&id).map(Json).map_err(super::api::error)
+    state
+        .acp
+        .snapshot(&id)
+        .await
+        .map(Json)
+        .map_err(super::api::error)
 }
 
 #[cfg(test)]

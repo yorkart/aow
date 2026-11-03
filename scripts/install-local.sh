@@ -5,18 +5,19 @@ script_dir=$(CDPATH='' cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 package=target/packages/latest
 target_user=
 package_set=0
-skip_terminald=0
+skip_terminald=0 skip_acpd=0
 fail() { printf 'error: %s\n' "$*" >&2; exit 1; }
 while (( $# )); do
     case "$1" in
         --skip-terminald) skip_terminald=1; shift ;;
+        --skip-acpd) skip_acpd=1; shift ;;
         --user|--package)
             (( $# >= 2 )) && [[ -n "$2" ]] || fail "$1 requires a value"
             if [[ "$1" == --user ]]; then target_user=$2
             else package=$2; package_set=1; fi
             shift 2 ;;
         -h|--help)
-            printf '%s\n' 'Usage: just install [PACKAGE] [--user USER] [--skip-terminald]' \
+            printf '%s\n' 'Usage: just install [PACKAGE] [--user USER] [--skip-terminald] [--skip-acpd]' \
                 'PACKAGE defaults to target/packages/latest; --package PACKAGE is also accepted.' \
                 'Without --user, install for the current account.' \
                 'Services, including terminald, are updated and started/restarted by default.' \
@@ -31,6 +32,7 @@ while (( $# )); do
 done
 args=(--package "$package")
 if (( skip_terminald )); then args+=(--skip-terminald); fi
+if (( skip_acpd )); then args+=(--skip-acpd); fi
 if [[ $(uname -s) == Darwin ]]; then
     if [[ -n "$target_user" ]]; then args+=(--user "$target_user"); fi
     exec /usr/bin/python3 -I "$script_dir/install-macos.py" "${args[@]}"

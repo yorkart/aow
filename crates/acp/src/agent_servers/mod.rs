@@ -36,6 +36,7 @@ pub struct AgentServerStore {
     inner: Arc<ServiceInner>,
 }
 struct ServiceInner {
+    shutting_down: std::sync::atomic::AtomicBool,
     host: Arc<dyn AcpHost>,
     cache: PathBuf,
     registry: AgentRegistryStore,
@@ -69,6 +70,7 @@ impl AgentServerStore {
         let events = threads.events.clone();
         Ok(Self {
             inner: Arc::new(ServiceInner {
+                shutting_down: std::sync::atomic::AtomicBool::new(false),
                 host,
                 registry: AgentRegistryStore::new(registry),
                 cache,
@@ -214,6 +216,13 @@ impl AgentServerStore {
         thread_id: Option<&str>,
     ) -> Result<ConnectionInfo> {
         let _guard = self.inner.connect_lock.lock().await;
+        ensure!(
+            !self
+                .inner
+                .shutting_down
+                .load(std::sync::atomic::Ordering::Acquire),
+            "ACP execution host is shutting down"
+        );
         self.inner
             .threads
             .lock()

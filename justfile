@@ -44,3 +44,7 @@ run-dev:
 
 run-terminald: build-vt-worker
     vt_node=$(command -v node) || { printf '%s\n' 'error: Node.js 20 or newer is required; install Node.js 20+ first' >&2; exit 1; }; terminal_runtime_dir="${AOW_STATE_DIR:-$HOME/.aow}/runtime/terminald"; install -d -m 700 "$terminal_runtime_dir"; cargo run -p aow-terminald -- --socket "$terminal_runtime_dir/terminald.sock" --vt-node "$vt_node"
+
+# Start separately from the Web process so Web restarts preserve ACP execution.
+run-acpd:
+    cargo run -p aow-acpd

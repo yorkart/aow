@@ -97,6 +97,9 @@ impl ThreadStore {
                 interacted_at: row.interacted_at.clone(),
             }))
     }
+    pub(crate) fn recover_workspace_removals(&mut self) {
+        self.removing_workspaces.clear();
+    }
     pub(crate) fn workspace_version(&self, cwd: &str) -> Result<u64> {
         ensure!(
             !self.removing_workspaces.contains(cwd),

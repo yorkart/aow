@@ -115,3 +115,24 @@ fn invalid_or_missing_session_limits_fail_with_the_setting_name() {
     assert!(SessionTimeouts::from_seconds(0, 1).is_err());
     assert!(SessionTimeouts::from_seconds(1, 0).is_err());
 }
+
+#[test]
+fn acpd_endpoint_uses_the_selected_root_and_explicit_overrides() {
+    let selected = options(&["--state-dir", "/tmp/aow-custom"], &[]).unwrap();
+    assert_eq!(
+        selected.acpd_socket,
+        PathBuf::from("/tmp/aow-custom/runtime/acpd/acpd.sock")
+    );
+    let selected = options(
+        &["--state-dir", "/tmp/aow-custom"],
+        &[("AOW_ACPD_SOCKET", "/tmp/env.sock")],
+    )
+    .unwrap();
+    assert_eq!(selected.acpd_socket, PathBuf::from("/tmp/env.sock"));
+    let selected = options(
+        &["--acpd-socket", "/tmp/argument.sock"],
+        &[("AOW_ACPD_SOCKET", "/tmp/env.sock")],
+    )
+    .unwrap();
+    assert_eq!(selected.acpd_socket, PathBuf::from("/tmp/argument.sock"));
+}

@@ -51,10 +51,11 @@ async fn run() -> Result<()> {
     let local = listener.local_addr()?;
     tracing::info!(%local, "AoW listening");
     println!("AoW: http://{local}{}/", base_path.as_str());
-    let state = AppState::with_runtime_options(
+    let state = AppState::with_daemon_options(
         options.frontend,
         options.state_dir.clone(),
         options.terminald_socket,
+        options.acpd_socket,
     )?
     .with_base_path(base_path)
     .with_secure_cookies(options.secure_cookies)
@@ -64,6 +65,7 @@ async fn run() -> Result<()> {
         tracing::warn!(%error, "initial terminald reconciliation failed; terminal requests will retry");
     }
     state.start_agent_notifications();
+    state.start_acp_notifications();
     let cli = aow_server::start_local_cli(state.clone(), &options.state_dir).await?;
     let result = axum::serve(
         listener,

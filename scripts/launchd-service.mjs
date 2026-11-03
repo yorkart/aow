@@ -6,7 +6,7 @@ import { delimiter, join, resolve } from 'node:path';
 // Generate data, never shell source: paths/config values may contain quotes,
 // whitespace, XML characters or dollar signs.
 const [component, runtime, destination, nodePath, mode = 'launchagent'] = process.argv.slice(2);
-if (!['server', 'terminald'].includes(component) || !runtime?.startsWith('/') || !destination
+if (!['server', 'terminald', 'acpd'].includes(component) || !runtime?.startsWith('/') || !destination
   || !['launchagent', 'launchdaemon'].includes(mode)) {
   throw new Error('Usage: launchd-service.mjs server|terminald RUNTIME PLIST [NODE] [launchagent|launchdaemon]');
 }
@@ -24,7 +24,7 @@ const environment = {
 };
 const daemonKeys = new Set(['HOME', 'USER', 'LOGNAME', 'SHELL', 'PATH', 'LANG', 'LC_ALL', 'LC_CTYPE',
   'AOW_RUNTIME_ROOT', 'AOW_SERVER_HOST', 'AOW_SERVER_PORT', 'AOW_SERVER_STATE_DIR', 'AOW_STATE_DIR',
-  'AOW_TERMINALD_SOCKET', 'AOW_BASE_PATH', 'AOW_AUTH_SECURE_COOKIE',
+  'AOW_TERMINALD_SOCKET', 'AOW_ACPD_SOCKET', 'AOW_BASE_PATH', 'AOW_AUTH_SECURE_COOKIE',
   'AOW_AUTH_SESSION_MAX_AGE_SECONDS', 'AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS',
   'AOW_LOG_MODE']);
 const proxyKeys = new Set(['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY',
@@ -49,7 +49,7 @@ try {
   if (error.code !== 'ENOENT') throw error;
 }
 for (const key of ['AOW_SERVER_HOST', 'AOW_SERVER_PORT', 'AOW_SERVER_STATE_DIR',
-  'AOW_STATE_DIR', 'AOW_TERMINALD_SOCKET', 'AOW_BASE_PATH', 'AOW_AUTH_SECURE_COOKIE',
+  'AOW_STATE_DIR', 'AOW_TERMINALD_SOCKET', 'AOW_ACPD_SOCKET', 'AOW_BASE_PATH', 'AOW_AUTH_SECURE_COOKIE',
   'AOW_AUTH_SESSION_MAX_AGE_SECONDS', 'AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS']) {
   if (process.env[key]) environment[key] = process.env[key];
 }
@@ -116,5 +116,7 @@ writeFileSync(resolve(destination, '../health.json'), JSON.stringify({
   host: host === '0.0.0.0' ? '127.0.0.1' : host === '::' ? '::1' : host,
   port: Number(environment.AOW_SERVER_PORT || 8282),
   basePath: environment.AOW_BASE_PATH || '',
-  socket: environment.AOW_TERMINALD_SOCKET || join(environment.AOW_STATE_DIR || join(home, '.aow'), 'runtime/terminald/terminald.sock'),
+  socket: component === 'acpd'
+    ? environment.AOW_ACPD_SOCKET || join(environment.AOW_SERVER_STATE_DIR || environment.AOW_STATE_DIR || join(home, '.aow'), 'runtime/acpd/acpd.sock')
+    : environment.AOW_TERMINALD_SOCKET || join(environment.AOW_STATE_DIR || join(home, '.aow'), 'runtime/terminald/terminald.sock'),
 }), { mode: 0o600 });

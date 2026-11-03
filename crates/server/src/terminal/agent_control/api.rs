@@ -112,7 +112,8 @@ async fn create_inner(
         request.parent,
         request.caller.as_ref(),
         request.no_parent,
-    )?;
+    )
+    .await?;
     log.progress(
         aow_i18n::text("server.create_terminal_and_start_agent"),
         None,

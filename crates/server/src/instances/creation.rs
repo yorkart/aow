@@ -4,7 +4,7 @@ use aow_protocol::{CreationContext, InstanceRef};
 
 /// Terminal identity is already resolved by the CLI environment. ACP session IDs
 /// are connection-scoped and must never be guessed from cwd or a shared process.
-pub(crate) fn creation_parent(
+pub(crate) async fn creation_parent(
     state: &AppState,
     parent: Option<InstanceRef>,
     caller: Option<&CreationContext>,
@@ -28,12 +28,13 @@ pub(crate) fn creation_parent(
             let id = state
                 .acp
                 .thread_for_session(connection_id, &caller.session_id)
+                .await
                 .map_err(|error| invalid(format!("cannot resolve ACP caller: {error}")))?;
             Some(InstanceRef::acp(id))
         }
         // Host-originated creation has no calling agent session.
         (None, None) => None,
     };
-    preserve_parent(state, parent.as_ref())?;
+    preserve_parent(state, parent.as_ref()).await?;
     Ok(parent)
 }

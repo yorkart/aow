@@ -108,6 +108,7 @@ async fn remove_worktree(
             force: query.force,
         }],
     )
+    .await
     .map(|job| (StatusCode::ACCEPTED, Json(job)))
     .map_err(aow_response)
 }

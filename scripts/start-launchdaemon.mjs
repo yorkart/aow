@@ -112,7 +112,7 @@ function waitForHealth(previousPid) {
 }
 
 async function main() {
-  if (!['server', 'terminald'].includes(component) || !runtime?.startsWith('/')) throw new Error('Invalid LaunchDaemon activation arguments');
+  if (!['server', 'terminald', 'acpd'].includes(component) || !runtime?.startsWith('/')) throw new Error('Invalid LaunchDaemon activation arguments');
   if (resolveService(runtime).mode !== 'launchdaemon') throw new Error('Installation is not configured for LaunchDaemon');
   if (requested !== 'latest' && !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(requested)) throw new Error('Invalid release id');
   const releases = realpathSync(join(runtime, 'releases'));

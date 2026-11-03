@@ -33,6 +33,7 @@ pub(in crate::acp) async fn attach(
     state
         .acp
         .snapshot(&thread_id)
+        .await
         .map_err(super::super::api::error)?;
     let controller = state.acp_controls.session(&thread_id);
     Ok(crate::locale::upgrade(

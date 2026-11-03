@@ -5,7 +5,7 @@ umask 077
 
 component=${1:?service component is required}
 requested=${2:-latest}
-case "$component" in server|terminald) ;; *) exit 1 ;; esac
+case "$component" in server|terminald|acpd) ;; *) exit 1 ;; esac
 script_dir=$(CDPATH='' cd -P "$(dirname "$0")" && pwd)
 repo_root=$(CDPATH='' cd -P "$script_dir/.." && pwd)
 runtime_root=${AOW_RUNTIME_ROOT:-${HOME:?HOME must be set}/.local/lib/aow}

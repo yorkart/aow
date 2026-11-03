@@ -44,7 +44,7 @@ pub(super) fn spawn(
                     })
                     .unwrap_or(false);
                 if active {
-                    state.acp.set_workspace_removing(&item.path, false);
+                    let _ = state.acp.set_workspace_removing(&item.path, false).await;
                     let _ = state.terminals.set_workspace_removing(&item.path, false);
                     let _ = state.aow.inner.removals.update(
                         &worker_job.id,
@@ -118,7 +118,11 @@ pub(super) async fn run_job(state: &AppState, job: &RemovalJob, operation: &Hand
                 .terminals
                 .set_workspace_removing(&item.path, true)
                 .map_err(|error| AowError::Invalid(error.to_string()))?;
-            state.acp.set_workspace_removing(&item.path, true);
+            state
+                .acp
+                .set_workspace_removing(&item.path, true)
+                .await
+                .map_err(|error| AowError::Invalid(error.to_string()))?;
             operation.progress(
                 aow_i18n::message(
                     "server.clean_up_local_acp_resources",
@@ -176,7 +180,7 @@ pub(super) async fn run_job(state: &AppState, job: &RemovalJob, operation: &Hand
             },
             Some(index + 1),
         );
-        state.acp.set_workspace_removing(&item.path, false);
+        let _ = state.acp.set_workspace_removing(&item.path, false).await;
         let _ = state.terminals.set_workspace_removing(&item.path, false);
         if let Err(error) = state
             .aow

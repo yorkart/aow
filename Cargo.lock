@@ -181,6 +181,51 @@ dependencies = [
 ]
 
 [[package]]
+name = "aow-acpd"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "aow-acp",
+ "aow-acpd-client",
+ "aow-agents",
+ "aow-filesystem",
+ "aow-i18n",
+ "aow-macos-log",
+ "aow-server",
+ "async-trait",
+ "axum",
+ "bytes",
+ "futures-util",
+ "hyper",
+ "hyper-util",
+ "libc",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "aow-acpd-client"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "aow-acp",
+ "aow-filesystem",
+ "aow-i18n",
+ "aow-terminald-client",
+ "futures-util",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.19",
+ "tokio",
+ "tokio-tungstenite",
+]
+
+[[package]]
 name = "aow-agents"
 version = "0.1.0"
 dependencies = [
@@ -377,6 +422,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "aow-acp",
+ "aow-acpd-client",
  "aow-agents",
  "aow-automations",
  "aow-config",

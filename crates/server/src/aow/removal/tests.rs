@@ -182,6 +182,7 @@ async fn batch_isolates_failures_protects_main_locked_and_dirty_and_supports_exp
         .map(|path| RemovalRequest { path, force: false })
         .collect(),
     )
+    .await
     .unwrap();
     let completed = wait_finished(&state, &job.id).await;
     assert_eq!(
@@ -211,6 +212,7 @@ async fn batch_isolates_failures_protects_main_locked_and_dirty_and_supports_exp
             force: true,
         }],
     )
+    .await
     .unwrap();
     assert_eq!(
         wait_finished(&state, &retry.id).await.items[0].status,
@@ -287,12 +289,20 @@ async fn removal_cleans_local_acp_sessions_and_preserves_rejected_worktrees() {
             },
         ],
     )
+    .await
     .unwrap();
     let finished = wait_finished(&state, &job.id).await;
     assert_eq!(finished.items[0].status, RemovalStatus::Failed);
     assert_eq!(finished.items[1].status, RemovalStatus::Succeeded);
-    assert!(state.acp.snapshot(&retained.thread_id).is_ok());
-    assert!(state.acp.snapshot(&removed.thread_id).is_err());
-    assert!(state.acp.sessions(Some(&paths[1])).is_empty());
+    assert!(state.acp.snapshot(&retained.thread_id).await.is_ok());
+    assert!(state.acp.snapshot(&removed.thread_id).await.is_err());
+    assert!(
+        state
+            .acp
+            .sessions(Some(&paths[1]))
+            .await
+            .unwrap()
+            .is_empty()
+    );
     assert!(!Path::new(&paths[1]).exists());
 }

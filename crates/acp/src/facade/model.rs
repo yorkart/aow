@@ -119,7 +119,7 @@ pub enum SessionSource {
     Cli,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct SessionCreation {
     pub source: SessionSource,
     pub parent: Option<aow_protocol::InstanceRef>,
@@ -254,14 +254,14 @@ pub struct ProcessSegment {
     pub permission_tool_ids: Vec<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum DialoguePatch {
     Reset { entries: Vec<ThreadEntry> },
     Delta { entries: Vec<EntryPatch> },
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TurnOverviewPatch {
     pub id: String,
     pub revision: u64,
@@ -281,7 +281,7 @@ pub struct TurnOverviewPatch {
     pub permission_tool_ids: Vec<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum SessionUpdates {
     Snapshot {
@@ -305,7 +305,7 @@ pub enum SessionUpdates {
     },
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum EntryPatch {
     Replace {
@@ -319,7 +319,7 @@ pub enum EntryPatch {
     },
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum TerminalPatch {
     Replace { id: String, terminal: Value },
@@ -347,7 +347,7 @@ pub struct SessionInfo {
 }
 
 /// A newly completed prompt, never emitted by history loading or snapshot reads.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TurnCompletion {
     pub session: SessionInfo,
     pub turn_id: String,

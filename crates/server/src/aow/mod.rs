@@ -86,6 +86,7 @@ struct AowInner {
     task_operation: tokio::sync::Mutex<()>,
     notifications: crate::notifications::NotificationManager,
     state_dir: Option<PathBuf>,
+    acpd_socket: Option<PathBuf>,
     config: Option<aow_config::ConfigStore>,
     projects_path: Option<PathBuf>,
     agents_path: Option<PathBuf>,
@@ -101,6 +102,11 @@ struct AowInner {
 }
 
 impl AowManager {
+    pub(crate) fn set_acpd_socket(&mut self, socket: Option<PathBuf>) {
+        Arc::get_mut(&mut self.inner)
+            .expect("ACP endpoint configured before sharing manager")
+            .acpd_socket = socket;
+    }
     pub(crate) fn repository_roots(&self) -> Result<Vec<PathBuf>, AowError> {
         Ok(self
             .lock()?
@@ -118,6 +124,7 @@ impl AowManager {
                 task_operation: tokio::sync::Mutex::new(()),
                 notifications: crate::notifications::NotificationManager::in_memory(),
                 state_dir: None,
+                acpd_socket: None,
                 config: None,
                 projects_path: None,
                 agents_path: None,
@@ -171,6 +178,7 @@ impl AowManager {
                 task_operation: tokio::sync::Mutex::new(()),
                 notifications,
                 state_dir: Some(state_dir),
+                acpd_socket: None,
                 config: Some(config),
                 projects_path: Some(projects_path),
                 agents_path: Some(agents_path),

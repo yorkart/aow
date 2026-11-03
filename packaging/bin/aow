@@ -20,7 +20,7 @@ trap 'exit 129' HUP
 fail() { printf 'error: %s\n' "$*" >&2; exit 1; }
 usage() {
     cat <<'HELP'
-Usage: aow update [--version VERSION] [--repo OWNER/REPO] [--skip-terminald]
+Usage: aow update [--version VERSION] [--repo OWNER/REPO] [--skip-terminald] [--skip-acpd]
        aow account
 
 account           Set or change the local login account and password; no server restart needed.
@@ -28,6 +28,7 @@ account           Set or change the local login account and password; no server 
 Update from the saved GitHub repository, following its latest release.
 --version VERSION  Install a specific GitHub release tag.
 --repo OWNER/REPO Use a different GitHub repository and remember it after activation.
+--skip-acpd       Keep acpd and its active conversations unchanged for this update.
 --skip-terminald  Keep terminald and its existing sessions unchanged for this update.
 -h, --help         Show help without downloading or changing services.
 
@@ -140,10 +141,11 @@ main() {
         update) shift ;;
         *) fail "unknown command: $1 (use: aow update / aow account)" ;;
     esac
-    local repository=${AOW_RELEASE_REPOSITORY:-} version='' skip_terminald=0
+    local repository=${AOW_RELEASE_REPOSITORY:-} version='' skip_terminald=0 skip_acpd=0
     while (( $# )); do
         case "$1" in
             --skip-terminald) skip_terminald=1; shift ;;
+            --skip-acpd) skip_acpd=1; shift ;;
             --repo|--version)
                 if (( $# < 2 )) || [[ -z "$2" ]]; then fail "$1 requires a value"; fi
                 if [[ "$1" == --repo ]]; then repository=$2; else version=$2; fi
@@ -181,6 +183,7 @@ main() {
     local -a args=(--repo "$repository")
     if [[ -n "$version" ]]; then args+=(--version "$version"); fi
     if (( skip_terminald )); then args+=(--skip-terminald); fi
+    if (( skip_acpd )); then args+=(--skip-acpd); fi
     # Invoke the same public installer; it owns version resolution, installation,
     # configuration persistence and service activation. Keep EXIT cleanup here.
     bash "$stage/aow-install.sh" "${args[@]}"

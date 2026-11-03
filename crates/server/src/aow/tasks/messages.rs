@@ -42,7 +42,7 @@ pub(super) async fn send(
     request_id(&request.request_id)?;
     let _operation = state.aow.task_resource_access().await;
     let task = find_task(&state, &id)?;
-    let source = source_task(&state, &request.source_thread_id)?;
+    let source = source_task(&state, &request.source_thread_id).await?;
     if task.archived || task.project_id != source.project_id {
         return Err(invalid(
             "Target must be an active task in the source project",
@@ -52,13 +52,14 @@ pub(super) async fn send(
         .thread_id
         .or(task.initial_thread_id.clone())
         .ok_or_else(|| invalid("Task has no ACP conversation"))?;
-    if source_task(&state, &thread)?.id != id {
+    if source_task(&state, &thread).await?.id != id {
         return Err(invalid("Conversation does not belong to the target task"));
     }
     if thread == request.source_thread_id {
         return Err(invalid("Continue the current conversation directly"));
     }
     let origin = crate::collaboration::source(&state, &source, &request.source_thread_id)
+        .await
         .map_err(storage)?;
     let mut message = crate::collaboration::new_message(
         &task,
@@ -103,12 +104,12 @@ pub(super) async fn report(
     request_id(&request.request_id)?;
     validate_prompt(&request.message)?;
     let _operation = state.aow.task_resource_access().await;
-    let task = source_task(&state, &request.source_thread_id)?;
+    let task = source_task(&state, &request.source_thread_id).await?;
     if task.id != id {
         return Err(invalid("Report source must belong to this task"));
     }
     let target = if let Some(thread) = request.target_thread_id {
-        let target = source_task(&state, &thread)?;
+        let target = source_task(&state, &thread).await?;
         if target.project_id != task.project_id {
             return Err(invalid("Report target must be in this project"));
         }
@@ -123,6 +124,7 @@ pub(super) async fn report(
             .map(|(task_id, thread_id)| EventTarget { task_id, thread_id })
     };
     let source = crate::collaboration::report_source(&state, &task, &request.source_thread_id)
+        .await
         .map_err(storage)?;
     let event = TaskEvent {
         id: uuid::Uuid::new_v4().to_string(),
@@ -160,7 +162,7 @@ pub(super) async fn status(
     let _operation = state.aow.task_resource_access().await;
     let mut task = find_task(&state, &id)?;
     if let Some(thread) = &request.source_thread_id
-        && source_task(&state, thread)?.project_id != task.project_id
+        && source_task(&state, thread).await?.project_id != task.project_id
     {
         return Err(invalid("Task is outside the source project"));
     }
@@ -171,20 +173,28 @@ pub(super) async fn status(
         .map_err(|error| invalid(error.to_string()))?;
     task.status = request.status;
     if request.status == TaskStatus::Cancelled {
-        for session in state.acp.sessions(None) {
+        for session in state
+            .acp
+            .sessions(None)
+            .await
+            .map_err(crate::acp::task_error)?
+        {
             if state
                 .aow
                 .task_for_thread(&state.acp, &session.thread_id)
+                .await
                 .map_err(storage)?
                 .is_some_and(|owner| owner.id == id)
                 && state
                     .acp
                     .snapshot(&session.thread_id)
+                    .await
                     .is_ok_and(|snapshot| snapshot.status == "working")
             {
                 state
                     .acp
                     .cancel(&session.thread_id)
+                    .await
                     .map_err(crate::acp::task_error)?;
             }
         }

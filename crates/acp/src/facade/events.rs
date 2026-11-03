@@ -28,7 +28,7 @@ pub enum SyncResource {
     },
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SessionVersion {
     pub generation: String,
     pub revision: u64,
@@ -47,7 +47,7 @@ impl From<&SessionSnapshot> for SessionVersion {
 
 /// All resources use invalidations followed by HTTP reads. Session metadata is
 /// included so hidden views can track status without downloading their bodies.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SyncEvent {
     pub resource: SyncResource,
     pub boot_id: String,

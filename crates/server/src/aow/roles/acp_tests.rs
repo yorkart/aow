@@ -50,7 +50,7 @@ fn content() -> Vec<Content> {
 
 async fn idle(state: &AppState, id: &str) {
     tokio::time::timeout(Duration::from_secs(10), async {
-        while state.acp.snapshot(id).unwrap().status != "idle" {
+        while state.acp.snapshot(id).await.unwrap().status != "idle" {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
@@ -74,7 +74,7 @@ async fn role_policy_is_owned_by_the_application_and_survives_edits_removal_and_
         .unwrap()
         .unwrap();
     idle(&state, &id).await;
-    let snapshot = state.acp.snapshot(&id).unwrap();
+    let snapshot = state.acp.snapshot(&id).await.unwrap();
     let encoded = serde_json::to_value(&snapshot).unwrap();
     assert!(encoded.get("role_execution").is_none());
     assert!(encoded["execution_environment"].get("role_id").is_none());
@@ -102,10 +102,17 @@ async fn role_policy_is_owned_by_the_application_and_survives_edits_removal_and_
     let second_id = second.resource().1;
     state.acp.resume(second_id).await.unwrap();
     assert_eq!(
-        state.acp.session_connection_info(&id).unwrap().unwrap().id,
+        state
+            .acp
+            .session_connection_info(&id)
+            .await
+            .unwrap()
+            .unwrap()
+            .id,
         state
             .acp
             .session_connection_info(second_id)
+            .await
             .unwrap()
             .unwrap()
             .id,
@@ -115,6 +122,7 @@ async fn role_policy_is_owned_by_the_application_and_survives_edits_removal_and_
         state
             .aow
             .acp_role_content(&state.acp, second_id, content())
+            .await
             .unwrap()[0]
             .data["text"]
             .as_str()
@@ -135,12 +143,13 @@ async fn role_policy_is_owned_by_the_application_and_survives_edits_removal_and_
         .unwrap();
     assert_eq!(
         child.execution_environment,
-        state.acp.snapshot(&id).unwrap().execution_environment
+        state.acp.snapshot(&id).await.unwrap().execution_environment
     );
     assert!(
         state
             .aow
             .acp_role_content(&state.acp, &child.thread_id, content())
+            .await
             .unwrap()[0]
             .data["text"]
             .as_str()
@@ -152,6 +161,7 @@ async fn role_policy_is_owned_by_the_application_and_survives_edits_removal_and_
         state
             .aow
             .acp_role_content(&state.acp, &fork.thread_id, content())
+            .await
             .unwrap()[0]
             .data["text"]
             .as_str()
@@ -159,7 +169,7 @@ async fn role_policy_is_owned_by_the_application_and_survives_edits_removal_and_
             .contains("Review carefully")
     );
     // Calling the executor directly never adds the application's instructions.
-    state.acp.start_prompt(&id, content()).unwrap();
+    state.acp.start_prompt(&id, content()).await.unwrap();
     idle(&state, &id).await;
     let prompts: Vec<Value> =
         std::fs::read_to_string(directory.path().join("lineage-prompts.jsonl"))
@@ -176,10 +186,19 @@ async fn role_policy_is_owned_by_the_application_and_survives_edits_removal_and_
         json!([{"type":"text","text":"hello"}])
     );
     state.aow.remove_role(&role.id).await.unwrap();
-    state.acp.flush_threads_on_quit().unwrap();
+    state.acp.flush_threads_on_quit().await.unwrap();
     state
         .acp
-        .disconnect(&state.acp.session_connection_info(&id).unwrap().unwrap().id)
+        .disconnect(
+            &state
+                .acp
+                .session_connection_info(&id)
+                .await
+                .unwrap()
+                .unwrap()
+                .id,
+        )
+        .await
         .unwrap();
     let root = directory.path().join("aow");
     state.aow = AowManager::persistent(&root).unwrap();
@@ -219,7 +238,7 @@ async fn role_binding_write_failure_discards_the_prepared_acp_session() {
             .await
             .is_err()
     );
-    assert!(state.acp.sessions(None).is_empty());
+    assert!(state.acp.sessions(None).await.unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -281,16 +300,17 @@ async fn acp_roles_follow_shared_configuration_and_reject_removed_or_unavailable
                 .await
                 .is_err()
         );
-        assert_eq!(state.acp.sessions(None).len(), 2);
+        assert_eq!(state.acp.sessions(None).await.unwrap().len(), 2);
         assert!(home.is_dir());
     }
-    for session in state.acp.sessions(None) {
+    for session in state.acp.sessions(None).await.unwrap() {
         if let Some(connection) = state
             .acp
             .session_connection_info(&session.thread_id)
+            .await
             .unwrap()
         {
-            let _ = state.acp.disconnect(&connection.id);
+            let _ = state.acp.disconnect(&connection.id).await;
         }
     }
 }

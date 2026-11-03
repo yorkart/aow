@@ -74,7 +74,7 @@ async fn api_prepares_named_identity_and_reads_metadata_before_owned_startup() {
     let directory = tempfile::tempdir().unwrap();
     let workspace = directory.path().canonicalize().unwrap();
     let mut state = crate::AppState::new(Default::default());
-    state.acp = aow_acp::AcpService::new(
+    state.acp = aow_acpd_client::AcpClient::new(
         Arc::new(Host { fork: false }),
         Some(workspace.join("state")),
     )
@@ -145,19 +145,20 @@ async fn api_prepares_named_identity_and_reads_metadata_before_owned_startup() {
             assert_eq!(body, expected);
         }
     }
-    assert_eq!(state.acp.sessions(None).len(), 1);
-    assert!(state.acp.snapshot(thread_id).unwrap().error.is_none());
+    assert_eq!(state.acp.sessions(None).await.unwrap().len(), 1);
+    assert!(state.acp.snapshot(thread_id).await.unwrap().error.is_none());
     assert!(
         state
             .acp
             .snapshot(thread_id)
+            .await
             .unwrap()
             .recovery
             .unwrap()
             .error
             .is_some()
     );
-    let current = state.acp.snapshot(thread_id).unwrap();
+    let current = state.acp.snapshot(thread_id).await.unwrap();
     let response = app
         .clone()
         .oneshot(
@@ -225,7 +226,7 @@ async fn api_prepares_named_identity_and_reads_metadata_before_owned_startup() {
 async fn fork_requires_control_and_returns_a_distinct_session_with_ancestry() {
     let directory = tempfile::tempdir().unwrap();
     let mut state = crate::AppState::new(Default::default());
-    state.acp = aow_acp::AcpService::new(
+    state.acp = aow_acpd_client::AcpClient::new(
         Arc::new(Host { fork: true }),
         Some(directory.path().join("state")),
     )
@@ -254,7 +255,7 @@ async fn fork_requires_control_and_returns_a_distinct_session_with_ancestry() {
             .unwrap();
         if credential != Some(token.as_str()) {
             assert_eq!(response.status(), StatusCode::CONFLICT);
-            assert_eq!(state.acp.sessions(None).len(), 1);
+            assert_eq!(state.acp.sessions(None).await.unwrap().len(), 1);
             continue;
         }
         assert_eq!(response.status(), StatusCode::OK);
@@ -264,7 +265,7 @@ async fn fork_requires_control_and_returns_a_distinct_session_with_ancestry() {
         assert_ne!(fork["session_id"], source.session_id.as_deref().unwrap());
         assert_eq!(fork["parent"], json!({"kind":"acp","id":source.thread_id}));
         assert_eq!(fork["overview"], json!([]));
-        assert_eq!(state.acp.sessions(None).len(), 2);
+        assert_eq!(state.acp.sessions(None).await.unwrap().len(), 2);
         assert!(
             state
                 .instances

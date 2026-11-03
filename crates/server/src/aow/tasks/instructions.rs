@@ -1,5 +1,6 @@
 use crate::aow::AowManager;
-use aow_acp::{AcpService, Content};
+use aow_acp::Content;
+use aow_acpd_client::AcpClient;
 use serde_json::json;
 
 const COLLABORATION: &str = r#"You are working in AoW. A task is a continuing work space with a main conversation, other role conversations, and independent child tasks. Keep developing the current conversation across investigation, corrections, design and implementation. Conversation turns do not determine task completion.
@@ -16,9 +17,9 @@ Maintain task-wide business progress with task status TASK_ID todo|in_progress|w
 Shared project/review workspaces have no filesystem read-only enforcement. Honor their no-edit policy; create a change task when edits are needed. Do not build automatic review/fix loops or recursively delegate the same work."#;
 
 impl AowManager {
-    pub(in crate::aow) fn collaboration_content(
+    pub(in crate::aow) async fn collaboration_content(
         &self,
-        service: &AcpService,
+        service: &AcpClient,
         id: &str,
         content: &mut Vec<Content>,
     ) -> anyhow::Result<()> {
@@ -35,7 +36,7 @@ impl AowManager {
         for role in &mentions {
             self.agent_role(role)?;
         }
-        let Some(task) = self.task_for_thread(service, id)? else {
+        let Some(task) = self.task_for_thread(service, id).await? else {
             anyhow::ensure!(
                 mentions.is_empty(),
                 "Open a project Router or task conversation to use role mentions"
@@ -49,12 +50,13 @@ impl AowManager {
             .map(|path| path.to_string_lossy().into_owned())
             .unwrap_or_else(|| "aow-cli".into());
         let policy = self
-            .task_policy_for_thread(service, id)?
+            .task_policy_for_thread(service, id)
+            .await?
             .unwrap_or_else(|| (&task).into());
         let context = json!({"thread_id":id,"task_id":task.id,"project_id":task.project_id,
             "cli":{"executable":executable,"state_dir":self.inner.state_dir},
             "source_task_id":task.source_task_id,"source_thread_id":task.source_thread_id,"main_thread_id":task.initial_thread_id,"task_goal":task.prompt,"task_status":task.status,"workspace":policy.workspace,
-            "agent_id":service.session_info(id)?.agent_id,"agent_role_id":self.acp_role_id(service,id)?,
+            "agent_id":service.session_info(id).await?.agent_id,"agent_role_id":self.acp_role_id(service,id).await?,
             "workspace_intent":policy.workspace_intent,"target_task_id":policy.target_task_id,
             "target_revision":policy.target_revision,"mentioned_role_ids":mentions});
         let responsibility = if task.is_router {

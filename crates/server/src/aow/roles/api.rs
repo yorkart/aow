@@ -120,6 +120,7 @@ async fn launch(
                 let owner = state
                     .aow
                     .task_for_thread(&state.acp, parent)
+                    .await
                     .map_err(|error| HttpError::internal(error.to_string()))?;
                 if owner.is_none_or(|owner| &owner.id != task_id) {
                     return Err(crate::instances::invalid(

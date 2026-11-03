@@ -25,11 +25,12 @@ pub(in crate::aow) async fn submit_batch(
     Json(request): Json<BatchRequest>,
 ) -> Result<(StatusCode, Json<RemovalJob>), Response> {
     submit(state, id, request.items)
+        .await
         .map(|job| (StatusCode::ACCEPTED, Json(job)))
         .map_err(aow_response)
 }
 
-pub(in crate::aow) fn submit(
+pub(in crate::aow) async fn submit(
     state: AppState,
     project_id: String,
     requests: Vec<RemovalRequest>,
@@ -115,10 +116,15 @@ pub(in crate::aow) fn submit(
         next.push(job.clone());
         *jobs = next;
         for item in &job.items {
-            state.acp.set_workspace_removing(&item.path, true);
             if let Err(error) = state.terminals.set_workspace_removing(&item.path, true) {
                 tracing::error!(%error, path = %item.path, "failed to reserve workspace for removal");
             }
+        }
+    }
+    for item in &job.items {
+        if let Err(error) = state.acp.set_workspace_removing(&item.path, true).await {
+            // The worker retries and records failure before touching the directory.
+            tracing::warn!(%error, path = %item.path, "failed to reserve ACP workspace; cleanup worker will retry");
         }
     }
     let operation = state.operations.begin(Spec {

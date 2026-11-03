@@ -1,6 +1,7 @@
 use crate::aow::AowManager;
 use anyhow::Result;
-use aow_acp::{AcpHost, AcpService};
+use aow_acp::AcpHost;
+use aow_acpd_client::AcpClient;
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -66,8 +67,8 @@ pub(crate) fn service(
     directory: Option<PathBuf>,
     page: tokio::sync::broadcast::Sender<crate::terminal::notifications::TaskStopNotification>,
     workspace_events: crate::workspace_events::WorkspaceEvents,
-) -> Result<AcpService> {
-    AcpService::with_storage(
+) -> Result<AcpClient> {
+    AcpClient::with_storage(
         Arc::new(Host {
             manager,
             page,

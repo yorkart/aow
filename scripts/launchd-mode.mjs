@@ -57,12 +57,12 @@ export function resolveService(runtime) {
     || saved.user !== identity.username || (saved.uid != null && saved.uid !== identity.uid))) {
     throw new Error('Saved service mode/account does not match the installation account');
   }
-  const agents = ['server', 'terminald'].some(component => existsSync(join(home, 'Library/LaunchAgents', `org.aow.${component}.plist`)));
-  const daemons = ['server', 'terminald'].map(readDaemon).filter(Boolean);
+  const agents = ['server', 'terminald', 'acpd'].some(component => existsSync(join(home, 'Library/LaunchAgents', `org.aow.${component}.plist`)));
+  const daemons = ['server', 'terminald', 'acpd'].map(readDaemon).filter(Boolean);
   const ownedDaemons = daemons.filter(config => config.UserName === identity.username);
   for (const config of ownedDaemons) {
     const component = config.Label?.split('.').at(-1);
-    if (!['server', 'terminald'].includes(component) || config.Label !== daemonLabel(component)
+    if (!['server', 'terminald', 'acpd'].includes(component) || config.Label !== daemonLabel(component)
       || config.EnvironmentVariables?.HOME !== home || config.EnvironmentVariables?.AOW_RUNTIME_ROOT !== runtime
       || JSON.stringify(config.ProgramArguments) !== JSON.stringify([join(runtime, 'bin', `aow-${component}`)])) {
       throw new Error('Existing LaunchDaemon does not match this installation; migrate it explicitly');
@@ -99,9 +99,10 @@ export function registrationHint(runtime) {
   console.error('Exit code 78 means administrator registration is required and startup has not been verified; just reports this incomplete installation as failed.');
 }
 
-export function registrationRequired(service, skipTerminald = false) {
+export function registrationRequired(service, skipTerminald = false, skipAcpd = false, runtime = process.env.AOW_RUNTIME_ROOT || join(process.env.HOME, '.local/lib/aow')) {
   if (service.mode !== 'launchdaemon') return false;
-  for (const component of skipTerminald ? ['server'] : ['server', 'terminald']) {
+  for (const component of ['server', ...(!skipTerminald ? ['terminald'] : []),
+    ...(!skipAcpd && existsSync(join(runtime, 'bin/aow-acpd')) ? ['acpd'] : [])]) {
     if (!readDaemon(component)) return true;
     const result = launchctl(['print', `system/${daemonLabel(component)}`]);
     if (result.status === 0) continue;
@@ -124,16 +125,19 @@ function firstInstallHint(service) {
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const args = process.argv.slice(2);
-    const skipTerminald = args.at(-1) === '--skip-terminald';
-    if (skipTerminald) args.pop();
+    const skipTerminald = args.includes('--skip-terminald');
+    const skipAcpd = args.includes('--skip-acpd');
+    for (let index = args.length - 1; index >= 0; index--) {
+      if (['--skip-terminald', '--skip-acpd'].includes(args[index])) args.splice(index, 1);
+    }
     const [command, runtime, destination] = args;
     if (command === 'hint') registrationHint(runtime);
     else if (command === 'check-install') {
       const service = resolveService(runtime);
-      process.stdout.write(JSON.stringify({ ...service, registrationRequired: registrationRequired(service, skipTerminald) }) + '\n');
+      process.stdout.write(JSON.stringify({ ...service, registrationRequired: registrationRequired(service, skipTerminald, skipAcpd, runtime) }) + '\n');
     } else if (command === 'resolve') {
       const service = resolveService(runtime);
-      if (destination && process.env.AOW_INSTALL_MANAGED !== '1' && registrationRequired(service, skipTerminald)) {
+      if (destination && process.env.AOW_INSTALL_MANAGED !== '1' && registrationRequired(service, skipTerminald, skipAcpd, runtime)) {
         firstInstallHint(service);
         process.exitCode = 78;
       } else {

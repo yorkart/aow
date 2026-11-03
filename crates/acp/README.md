@@ -1,7 +1,9 @@
 # AoW ACP integration
 
-This module embeds Zed ACP behavior in the AoW server. AoW calls the public
-`AcpService`, host trait and data types exported by `src/lib.rs`. The browser
+This module implements Zed ACP behavior for the standalone `aow-acpd` process.
+The daemon calls the public `AcpService`, host trait and data types exported by
+`src/lib.rs`; the AoW server uses `aow-acpd-client`. Explicit in-process hosting
+remains available for embedding applications and tests. The browser
 imports only `frontend/src/features/acp/index.ts`. Backports should change the
 implementation behind these boundaries without changing AoW callers.
 
@@ -20,7 +22,10 @@ implementation behind these boundaries without changing AoW callers.
   executable resolution.
 - `src/settings`: a parsed view of the Zed `agent_servers` configuration.
 - `src/facade`: the AoW-owned public contract; no SDK types are exported.
-- `crates/server/src/acp`: HTTP and filesystem host adapters.
+- `crates/acpd`: process lifecycle, filesystem host, private Unix socket API and
+  completion outbox.
+- `crates/acpd-client`: asynchronous client and versioned daemon contract.
+- `crates/server/src/acp`: public HTTP boundary, view control and notifications.
 - `frontend/src/features/acp/agent_ui`: React counterparts of the upstream panel,
   conversation, tool, configuration and elicitation views.
 
@@ -52,8 +57,14 @@ kept in memory by workspace and tab ID, independent of portal mounts and title
 updates. Closing/deleting the tab discards its draft. A successful prompt clears
 only the submitted draft, including when its view moved while the request was
 pending; newer input is preserved.
-Conversations run in adapter child processes owned by the server. There is no
-ACP daemon, PTY or terminald dependency.
+Conversations run in adapter child processes owned by `aow-acpd`, independently
+of the Web server. ACP has no PTY or terminald dependency. Start the daemon with
+`cargo run -p aow-acpd -- --state-dir "$HOME/.aow"`, then start the Web server.
+The daemon accepts `--socket`; the Web server accepts `--acpd-socket`. Both also
+read `AOW_ACPD_SOCKET`; the default socket is `<state-dir>/runtime/acpd/acpd.sock`.
+Only one daemon may own an ACP state directory. Server disconnection does not
+cancel an admitted prompt. Restarting acpd itself stops its adapters; restored
+conversations retain their identities and require the agent's load/resume support.
 
 ## Forking sessions
 
@@ -89,8 +100,12 @@ Adapter downloads, installation receipts and the Registry cache live under
 `~/.aow/data/acp/threads.sqlite`, with `sidebar_threads` following Zed's
 metadata store and `acp_thread_snapshots` retaining AoW's display snapshots.
 Streaming updates queue session references; the background SQLite writer captures
-the latest body once per one-second checkpoint. Lifecycle boundaries and server
-shutdown flush pending writes. Listing history reads metadata only. Browser
+the latest body once per one-second checkpoint. Lifecycle boundaries and daemon
+shutdown flush pending writes. The daemon alone owns this database; the Web
+server reads sessions through the client. Completed turns awaiting server
+notification handoff are retained under `data/acp/completions/` until acknowledged.
+This handoff is at least once across a server crash; it does not guarantee IM
+delivery, which retains the existing notification queue semantics. Listing history reads metadata only. Browser
 polling uses bounded generation/revision cursors. The browser loads turn overviews
 (prompts, conclusions, outcomes and process counts), then fetches a turn's process
 only while expanded. Open processes receive text/terminal appends; collapse aborts

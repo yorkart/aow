@@ -138,15 +138,15 @@ main() {
         (
             cd "$repo_root"
             cargo build --locked --release --target "$target" --target-dir "$repo_root/target" \
-                -p aow-server -p aow-terminald -p aow-automations -p aow-cli \
-                --bin aow-server --bin aow-terminald --bin aow-automation-runner --bin aow-cli
+                -p aow-server -p aow-acpd -p aow-terminald -p aow-automations -p aow-cli \
+                --bin aow-server --bin aow-acpd --bin aow-terminald --bin aow-automation-runner --bin aow-cli
         ) >&2
     fi
     stage=$(mktemp -d "$output_dir/.package-$version.XXXXXX")
     local bundle=$stage/bundle entry elf_info
     mkdir -p "$bundle/bin" "$bundle/frontend"
     node "$repo_root/scripts/ripgrep.mjs" "$target" "$bundle"
-    for entry in aow-server aow-terminald aow-automation-runner aow-cli rg; do
+    for entry in aow-server aow-acpd aow-terminald aow-automation-runner aow-cli rg; do
         if [[ "$entry" != rg ]]; then
             [[ -f "$artifact_dir/$entry" ]] || fail "missing artifact: $artifact_dir/$entry; build the $target release first"
             install -m 0755 -- "$artifact_dir/$entry" "$bundle/bin/$entry"
@@ -196,11 +196,11 @@ JS
         [[ -f "$entry" && ! -L "$entry" ]] || fail "invalid provider resource: $entry"
         install -m 0644 -- "$entry" "$bundle/git-platform-providers/${entry##*/}"
     done
-    for entry in scripts/start-server.sh scripts/start-terminald.sh scripts/replace-symlink.mjs scripts/server-state-dir.sh \
+    for entry in scripts/start-server.sh scripts/start-acpd.sh scripts/start-terminald.sh scripts/replace-symlink.mjs scripts/server-state-dir.sh \
         scripts/start-launchd.sh scripts/launchd-service.mjs scripts/activate-terminald.mjs scripts/service-health.mjs \
         scripts/launchd-mode.mjs scripts/start-launchdaemon.mjs scripts/register-launchdaemon.py \
-        packaging/bin/aow packaging/bin/aow-server packaging/bin/aow-terminald \
-        packaging/systemd/aow-server.service packaging/systemd/aow-terminald.service; do
+        packaging/bin/aow packaging/bin/aow-server packaging/bin/aow-acpd packaging/bin/aow-terminald \
+        packaging/systemd/aow-server.service packaging/systemd/aow-acpd.service packaging/systemd/aow-terminald.service; do
         mkdir -p -- "$(dirname "$bundle/$entry")"
         install -m 0644 -- "$repo_root/$entry" "$bundle/$entry"
     done
@@ -235,7 +235,7 @@ writeFileSync(join(root, 'manifest.json'), JSON.stringify({
     reused_web_assets: skipBuild === '1' || skipWebBuild === '1',
     platform: os === 'linux' ? { os, arch, target, libc: 'musl', linkage: 'static' }
         : { os, arch, target, linkage: 'dynamic', minimum_os_version: minimumOsVersion },
-    components: { server: 'bin/aow-server', terminald: 'bin/aow-terminald',
+    components: { server: 'bin/aow-server', acpd: 'bin/aow-acpd', terminald: 'bin/aow-terminald',
         runner: 'bin/aow-automation-runner', cli: 'bin/aow-cli', skills: 'skills', git_platform_providers: 'git-platform-providers', frontend: 'frontend/dist', ripgrep: 'bin/rg' },
     third_party: { ripgrep: { version: JSON.parse(readFileSync(join(root, 'licenses/ripgrep/manifest.json'), 'utf8')).version,
         sha256: createHash('sha256').update(readFileSync(join(root, 'bin/rg'))).digest('hex') } },

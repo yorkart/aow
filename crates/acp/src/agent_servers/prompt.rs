@@ -37,6 +37,13 @@ impl AgentServerStore {
         {
             return Ok(());
         }
+        ensure!(
+            !self
+                .inner
+                .shutting_down
+                .load(std::sync::atomic::Ordering::Acquire),
+            "ACP execution host is shutting down"
+        );
         ensure!(!content.is_empty(), "Prompt is empty");
         let connection = self.session_connection(id)?;
         ensure!(connection.connected(), "ACP adapter is disconnected");

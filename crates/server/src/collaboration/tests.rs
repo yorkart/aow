@@ -1,5 +1,6 @@
 use super::*;
-use aow_acp::{AcpHost, AcpService, Content};
+use aow_acp::{AcpHost, Content};
+use aow_acpd_client::AcpClient;
 use aow_db::tasks::{EventKind, EventTarget, TaskEvent, TaskResource, TaskStatus};
 use axum::{
     Router,
@@ -35,7 +36,7 @@ impl AcpHost for Host {
 fn state(root: &Path) -> AppState {
     let mut state =
         AppState::with_state_dir(PathBuf::new(), root.into(), root.join("terminald.sock")).unwrap();
-    state.acp = AcpService::new(Arc::new(Host), Some(root.join("acp"))).unwrap();
+    state.acp = AcpClient::new(Arc::new(Host), Some(root.join("acp"))).unwrap();
     state
 }
 
@@ -78,9 +79,9 @@ async fn task(state: &AppState, root: &Path, id: &str) -> TaskRecord {
     task
 }
 
-async fn until(mut check: impl FnMut() -> bool) {
+async fn until<F: std::future::Future<Output = bool>>(mut check: impl FnMut() -> F) {
     tokio::time::timeout(Duration::from_secs(20), async {
-        while !check() {
+        while !check().await {
             tokio::time::sleep(Duration::from_millis(25)).await;
         }
     })
@@ -128,20 +129,22 @@ async fn multiple_turns_do_not_report_but_explicit_reports_wake_the_busy_parent_
     state
         .acp
         .start_prompt(parent_thread, content("wait"))
+        .await
         .unwrap();
     for id in ["first", "correction"] {
         let message = new_message(
             &child,
             id.into(),
             "Check again".into(),
-            Some(source(&state, &parent, parent_thread).unwrap()),
+            Some(source(&state, &parent, parent_thread).await.unwrap()),
         );
         db.enqueue_message(&message).unwrap();
         worker(&state).deliver(message.clone()).await.unwrap();
-        until(|| {
+        until(|| async {
             state
                 .acp
                 .snapshot(child_thread)
+                .await
                 .unwrap()
                 .prompt_receipts
                 .get(&message.id)
@@ -171,9 +174,12 @@ async fn multiple_turns_do_not_report_but_explicit_reports_wake_the_busy_parent_
     let event_id = event["id"].as_str().unwrap();
     assert_eq!(db.status("child").unwrap(), Some(TaskStatus::Waiting));
     db.update_inbox(event_id, Some(true), Some(true)).unwrap();
-    assert_eq!(state.acp.snapshot(parent_thread).unwrap().status, "working");
-    state.acp.cancel(parent_thread).unwrap();
-    until(|| {
+    assert_eq!(
+        state.acp.snapshot(parent_thread).await.unwrap().status,
+        "working"
+    );
+    state.acp.cancel(parent_thread).await.unwrap();
+    until(|| async {
         db.inbox(None, false, true, 0, 30).unwrap().items[0]
             .delivery
             .as_ref()
@@ -182,8 +188,8 @@ async fn multiple_turns_do_not_report_but_explicit_reports_wake_the_busy_parent_
             == DeliveryState::Delivered
     })
     .await;
-    until(|| state.acp.snapshot(parent_thread).unwrap().status == "idle").await;
-    let snapshot = state.acp.snapshot(parent_thread).unwrap();
+    until(|| async { state.acp.snapshot(parent_thread).await.unwrap().status == "idle" }).await;
+    let snapshot = state.acp.snapshot(parent_thread).await.unwrap();
     assert_eq!(snapshot.prompt_receipts.len(), 1);
     assert!(
         snapshot
@@ -220,11 +226,13 @@ async fn restart_after_acp_admission_does_not_repeat_a_message_or_create_an_inbo
     first
         .acp
         .start_prompt_once(&message.thread_id, &message.id, content("Inspect"))
+        .await
         .unwrap();
-    until(|| {
+    until(|| async {
         first
             .acp
             .snapshot(&message.thread_id)
+            .await
             .unwrap()
             .prompt_receipts[&message.id]
             .status
@@ -249,6 +257,7 @@ async fn restart_after_acp_admission_does_not_repeat_a_message_or_create_an_inbo
         second
             .acp
             .snapshot(&message.thread_id)
+            .await
             .unwrap()
             .prompt_receipts
             .len(),
@@ -274,7 +283,11 @@ async fn send_queues_without_waiting_and_enforces_identity_and_task_ownership() 
     let source = parent.initial_thread_id.as_deref().unwrap();
     let thread = target.initial_thread_id.as_deref().unwrap();
     state.acp.resume(thread).await.unwrap();
-    state.acp.start_prompt(thread, content("wait")).unwrap();
+    state
+        .acp
+        .start_prompt(thread, content("wait"))
+        .await
+        .unwrap();
     let app = crate::aow::task_cli_routes().with_state(state.clone());
     let request = json!({"request_id":"send-1","source_thread_id":source,"prompt":"Continue"});
     let (status, accepted) = call(&app, "POST", "/v1/tasks/target/send", request.clone()).await;
@@ -304,9 +317,9 @@ async fn send_queues_without_waiting_and_enforces_identity_and_task_ownership() 
         call(&app, "POST", "/v1/tasks/target/runs", request).await.0,
         StatusCode::NOT_FOUND
     );
-    state.acp.cancel(thread).unwrap();
+    state.acp.cancel(thread).await.unwrap();
     let db = state.aow.task_db();
-    until(|| {
+    until(|| async {
         db.message_for_request("target", "send-send-1")
             .unwrap()
             .unwrap()
@@ -314,7 +327,7 @@ async fn send_queues_without_waiting_and_enforces_identity_and_task_ownership() 
             == DeliveryState::Delivered
     })
     .await;
-    until(|| state.acp.snapshot(thread).unwrap().status == "idle").await;
+    until(|| async { state.acp.snapshot(thread).await.unwrap().status == "idle" }).await;
     assert!(
         db.inbox(None, false, false, 0, 30)
             .unwrap()
@@ -366,12 +379,14 @@ async fn blocked_delivery_can_retry_without_losing_report_or_replaying_accepted_
         .deliver(db.pending_messages().unwrap().remove(0))
         .await
         .unwrap();
-    until(|| state.acp.snapshot(&message.thread_id).unwrap().status == "idle").await;
+    until(|| async { state.acp.snapshot(&message.thread_id).await.unwrap().status == "idle" })
+        .await;
     worker(&state).deliver(message.clone()).await.unwrap();
     assert_eq!(
         state
             .acp
             .snapshot(&message.thread_id)
+            .await
             .unwrap()
             .prompt_receipts
             .len(),
@@ -391,7 +406,11 @@ async fn busy_conversations_do_not_starve_other_targets_and_messages_keep_fifo_o
         let task = task(&state, directory.path(), &format!("busy-{index}")).await;
         let thread = task.initial_thread_id.as_ref().unwrap();
         state.acp.resume(thread).await.unwrap();
-        state.acp.start_prompt(thread, content("wait")).unwrap();
+        state
+            .acp
+            .start_prompt(thread, content("wait"))
+            .await
+            .unwrap();
         db.enqueue_message(&new_message(&task, "queued".into(), "Later".into(), None))
             .unwrap();
         busy.push(thread.clone());
@@ -403,7 +422,7 @@ async fn busy_conversations_do_not_starve_other_targets_and_messages_keep_fifo_o
     db.enqueue_message(&first).unwrap();
     db.enqueue_message(&second).unwrap();
     state.collaboration.start(&state);
-    until(|| {
+    until(|| async {
         db.message_for_request(&target.id, "first")
             .unwrap()
             .unwrap()
@@ -418,12 +437,11 @@ async fn busy_conversations_do_not_starve_other_targets_and_messages_keep_fifo_o
             .state,
         DeliveryState::Pending
     );
-    assert!(
-        busy.iter()
-            .all(|thread| state.acp.snapshot(thread).unwrap().status == "working")
-    );
-    state.acp.cancel(thread).unwrap();
-    until(|| {
+    for thread in &busy {
+        assert_eq!(state.acp.snapshot(thread).await.unwrap().status, "working");
+    }
+    state.acp.cancel(thread).await.unwrap();
+    until(|| async {
         db.message_for_request(&target.id, "second")
             .unwrap()
             .unwrap()
@@ -431,8 +449,17 @@ async fn busy_conversations_do_not_starve_other_targets_and_messages_keep_fifo_o
             == DeliveryState::Delivered
     })
     .await;
-    until(|| state.acp.snapshot(thread).unwrap().status == "idle").await;
-    assert_eq!(state.acp.snapshot(thread).unwrap().prompt_receipts.len(), 2);
+    until(|| async { state.acp.snapshot(thread).await.unwrap().status == "idle" }).await;
+    assert_eq!(
+        state
+            .acp
+            .snapshot(thread)
+            .await
+            .unwrap()
+            .prompt_receipts
+            .len(),
+        2
+    );
     for thread in busy {
         state.acp.close_session(&thread).await.unwrap();
     }
@@ -477,19 +504,25 @@ async fn conversation_policy_and_task_cancellation_stop_at_task_ownership_bounda
     let helper_policy = state
         .aow
         .task_policy_for_thread(&state.acp, &threads[0])
+        .await
         .unwrap()
         .unwrap();
     assert_eq!(helper_policy.target_revision.as_deref(), Some("frozen"));
     let child_policy = state
         .aow
         .task_policy_for_thread(&state.acp, &threads[1])
+        .await
         .unwrap()
         .unwrap();
     assert_eq!(child_policy.workspace_intent.as_deref(), Some("analyze"));
     assert_eq!(child_policy.target_revision, None);
     for thread in &threads {
         state.acp.resume(thread).await.unwrap();
-        state.acp.start_prompt(thread, content("wait")).unwrap();
+        state
+            .acp
+            .start_prompt(thread, content("wait"))
+            .await
+            .unwrap();
     }
     let app = crate::aow::task_cli_routes().with_state(state.clone());
     assert_eq!(
@@ -510,8 +543,11 @@ async fn conversation_policy_and_task_cancellation_stop_at_task_ownership_bounda
         .0,
         StatusCode::OK
     );
-    until(|| state.acp.snapshot(&threads[0]).unwrap().status == "idle").await;
-    assert_eq!(state.acp.snapshot(&threads[1]).unwrap().status, "working");
+    until(|| async { state.acp.snapshot(&threads[0]).await.unwrap().status == "idle" }).await;
+    assert_eq!(
+        state.acp.snapshot(&threads[1]).await.unwrap().status,
+        "working"
+    );
     for thread in threads {
         state.acp.close_session(&thread).await.unwrap();
     }
@@ -537,6 +573,7 @@ async fn shared_workspace_review_waits_for_the_active_writer() {
     state
         .acp
         .start_prompt(writer_thread, content("wait"))
+        .await
         .unwrap();
     let message = new_message(
         &reviewer,
@@ -558,12 +595,13 @@ async fn shared_workspace_review_waits_for_the_active_writer() {
         state
             .acp
             .snapshot(reviewer_thread)
+            .await
             .unwrap()
             .prompt_receipts
             .is_empty()
     );
-    state.acp.cancel(writer_thread).unwrap();
-    until(|| state.acp.snapshot(writer_thread).unwrap().status == "idle").await;
+    state.acp.cancel(writer_thread).await.unwrap();
+    until(|| async { state.acp.snapshot(writer_thread).await.unwrap().status == "idle" }).await;
     worker(&state).deliver(message).await.unwrap();
     assert_eq!(
         db.message_for_request("reviewer", "review")
@@ -572,7 +610,41 @@ async fn shared_workspace_review_waits_for_the_active_writer() {
             .state,
         DeliveryState::Delivered
     );
-    until(|| state.acp.snapshot(reviewer_thread).unwrap().status == "idle").await;
+    until(|| async { state.acp.snapshot(reviewer_thread).await.unwrap().status == "idle" }).await;
     state.acp.close_session(writer_thread).await.unwrap();
     state.acp.close_session(reviewer_thread).await.unwrap();
+}
+
+#[tokio::test]
+async fn daemon_outages_do_not_exhaust_durable_message_retries() {
+    let directory = tempfile::tempdir().unwrap();
+    let state = state(directory.path());
+    let task = task(&state, directory.path(), "outage").await;
+    let mut message = new_message(&task, "outage-message".into(), "hello".into(), None);
+    message.attempts = 9;
+    state.aow.task_db().enqueue_message(&message).unwrap();
+    let mut disconnected = worker(&state);
+    disconnected.acp = AcpClient::remote(directory.path().join("missing-acpd.sock"));
+    disconnected.deliver(message.clone()).await.unwrap();
+    assert_eq!(
+        state
+            .aow
+            .task_db()
+            .message_for_request(&task.id, "outage-message")
+            .unwrap()
+            .unwrap()
+            .state,
+        DeliveryState::Pending
+    );
+    worker(&state).deliver(message.clone()).await.unwrap();
+    assert_eq!(
+        state
+            .aow
+            .task_db()
+            .message_for_request(&task.id, "outage-message")
+            .unwrap()
+            .unwrap()
+            .state,
+        DeliveryState::Delivered
+    );
 }

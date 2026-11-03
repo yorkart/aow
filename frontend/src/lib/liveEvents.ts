@@ -36,7 +36,7 @@ function connect() {
     const name = envelope.event!;
     const data = JSON.stringify(envelope.data);
     // State snapshots may be replayed to late subscribers; notifications never are.
-    if (name !== 'task-stopped' && (!['acp', 'terminals'].includes(name) || (envelope.data as { type?: string })?.type === 'hello')) snapshots.set(name, data);
+    if (name !== 'task-stopped' && (!['acp', 'terminals'].includes(name) || ['hello', 'offline'].includes((envelope.data as { type?: string })?.type ?? ''))) snapshots.set(name, data);
     for (const listener of subscribers) if (listener.name === name) listener.receive(data);
   };
   current.onerror = () => current.close();

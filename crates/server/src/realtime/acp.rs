@@ -1,5 +1,6 @@
 //! Per-socket subscriptions and bounded coalescing of committed ACP changes.
-use aow_acp::{AcpService, SyncEvent, SyncResource};
+use aow_acp::{SyncEvent, SyncResource};
+use aow_acpd_client::AcpClient;
 use serde::Deserialize;
 use std::{
     collections::HashMap,
@@ -20,10 +21,10 @@ pub(super) struct Subscriptions {
 }
 
 impl Subscriptions {
-    pub(super) fn command(
+    pub(super) async fn command(
         &mut self,
         command: Command,
-        service: &AcpService,
+        service: &AcpClient,
     ) -> Result<Option<serde_json::Value>, ()> {
         match command {
             Command::Subscribe { id, resource } => {
@@ -35,7 +36,7 @@ impl Subscriptions {
                 self.active.insert(id.clone(), resource.clone());
                 self.pending
                     .retain(|resource, _| self.active.values().any(|active| active == resource));
-                let head = service.sync_event(&resource);
+                let head = service.sync_event(&resource).await.map_err(|_| ())?;
                 if head.deleted {
                     self.active.remove(&id);
                 }

@@ -1,4 +1,5 @@
 //! Translate ACP prompt completion into the existing page/IM notification pipeline.
+mod daemon;
 use aow_acp::TurnCompletion;
 use aow_agents::sessions::usage::TokenUsage;
 use serde_json::Value;

@@ -113,7 +113,7 @@ async fn invalid_task_creation_does_not_allocate_a_session() {
         );
     }
     assert!(state.aow.inner.tasks.list().unwrap().is_empty());
-    assert!(state.acp.sessions(None).is_empty());
+    assert!(state.acp.sessions(None).await.unwrap().is_empty());
 }
 
 struct Host(&'static str);
@@ -143,7 +143,7 @@ async fn creating_tasks_and_helper_sessions_keeps_dependencies_out_of_runtime_li
         .unwrap();
     let mut state = AppState::new(Default::default());
     state.acp =
-        aow_acp::AcpService::new(Arc::new(Host("test")), Some(directory.path().join("acp")))
+        aow_acpd_client::AcpClient::new(Arc::new(Host("test")), Some(directory.path().join("acp")))
             .unwrap();
     let project = state
         .aow
@@ -169,6 +169,7 @@ async fn creating_tasks_and_helper_sessions_keeps_dependencies_out_of_runtime_li
         state
             .acp
             .session_info(second["initial_thread_id"].as_str().unwrap())
+            .await
             .unwrap()
             .parent
             .is_none()
@@ -243,6 +244,7 @@ async fn creating_tasks_and_helper_sessions_keeps_dependencies_out_of_runtime_li
         state
             .acp
             .session_info(first["initial_thread_id"].as_str().unwrap())
+            .await
             .is_ok()
     );
     let mut headers = axum::http::HeaderMap::new();
@@ -303,7 +305,7 @@ async fn workspace_fixture() -> (tempfile::TempDir, AppState, Project, Router) {
     }
     let mut state = AppState::new(Default::default());
     state.acp =
-        aow_acp::AcpService::new(Arc::new(Host("test")), Some(directory.path().join("acp")))
+        aow_acpd_client::AcpClient::new(Arc::new(Host("test")), Some(directory.path().join("acp")))
             .unwrap();
     let project = state
         .aow
@@ -321,7 +323,7 @@ async fn workspace_fixture() -> (tempfile::TempDir, AppState, Project, Router) {
 async fn task_idle(state: &AppState, thread: &str) {
     tokio::time::timeout(std::time::Duration::from_secs(10), async {
         loop {
-            let session = state.acp.snapshot(thread).unwrap();
+            let session = state.acp.snapshot(thread).await.unwrap();
             let pending_message = state
                 .aow
                 .task_db()
@@ -351,7 +353,7 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
     use serde_json::json;
     let (directory, mut state, original, _) = workspace_fixture().await;
     state.aow = AowManager::persistent(&directory.path().join("state")).unwrap();
-    state.acp = aow_acp::AcpService::new(
+    state.acp = aow_acpd_client::AcpClient::new(
         Arc::new(Host("codex.test")),
         Some(directory.path().join("routing-acp")),
     )
@@ -416,12 +418,12 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
         StatusCode::BAD_REQUEST
     );
     assert!(
-        state.acp.snapshot(source).unwrap().entries.is_empty(),
+        state.acp.snapshot(source).await.unwrap().entries.is_empty(),
         "opening Router must not dispatch work"
     );
     let content = state.aow.acp_role_content(&state.acp, source, serde_json::from_value(json!([
         {"type":"text","text":format!("[@Engineer](mention://role/{role_id}) implement login")}
-    ])).unwrap()).unwrap();
+    ])).unwrap()).await.unwrap();
     assert!(
         content[0].data["text"]
             .as_str()
@@ -453,7 +455,7 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
     );
     let worker = implementation["initial_thread_id"].as_str().unwrap();
     task_idle(&state, worker).await;
-    let worker_session = state.acp.snapshot(worker).unwrap();
+    let worker_session = state.acp.snapshot(worker).await.unwrap();
     assert_eq!(
         worker_session
             .parent
@@ -510,6 +512,7 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
             review_thread,
             serde_json::from_value(json!([{"type":"text","text":"wait"}])).unwrap(),
         )
+        .await
         .unwrap();
     let (status, _) = call(
         &app,
@@ -523,7 +526,7 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
         StatusCode::OK,
         "busy targets accept a durable queued execution"
     );
-    state.acp.cancel(review_thread).unwrap();
+    state.acp.cancel(review_thread).await.unwrap();
     task_idle(&state, review_thread).await;
     let mut foreign = state
         .aow
@@ -584,6 +587,7 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
         state
             .acp
             .session_info(helper_thread)
+            .await
             .unwrap()
             .parent
             .unwrap()
@@ -597,6 +601,7 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
             helper_thread,
             serde_json::from_value(json!([{"type":"text","text":"Continue design"}])).unwrap(),
         )
+        .await
         .unwrap();
     let text = injected
         .iter()
@@ -654,7 +659,7 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
         .0,
         StatusCode::BAD_REQUEST
     );
-    for session in state.acp.sessions(None) {
+    for session in state.acp.sessions(None).await.unwrap() {
         let _ = state.acp.close_session(&session.thread_id).await;
     }
 }
@@ -734,6 +739,7 @@ async fn new_worktree_defaults_create_and_execute_without_client_configuration()
     let info = state
         .acp
         .session_info(task["initial_thread_id"].as_str().unwrap())
+        .await
         .unwrap();
     assert_eq!(info.cwd, target.to_string_lossy());
     let submitted = tokio::time::timeout(std::time::Duration::from_secs(10), async {
@@ -831,7 +837,7 @@ async fn checkout_failure_does_not_create_task_or_start_acp() {
     let (status, _) = call(&app, "POST", "/api/aow/tasks", serde_json::json!({"request_id":"fail-checkout", "project_id":project.id, "agent_id":"test", "workspace_mode":"new_worktree", "slug":"", "prompt":"Review"})).await;
     assert!(!status.is_success());
     assert!(state.aow.inner.tasks.list().unwrap().is_empty());
-    assert!(state.acp.sessions(None).is_empty());
+    assert!(state.acp.sessions(None).await.unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -915,7 +921,7 @@ async fn invalid_creation_intent_does_not_create_a_checkout() {
         let (status, payload) = call(&app, "POST", "/api/aow/tasks", input).await;
         assert!(!status.is_success(), "{payload}");
         assert!(state.aow.inner.tasks.list().unwrap().is_empty());
-        assert!(state.acp.sessions(None).is_empty());
+        assert!(state.acp.sessions(None).await.unwrap().is_empty());
         assert!(!directory.path().join(".aow-worktrees").exists());
     }
 }
@@ -961,7 +967,7 @@ async fn task_role_reuses_acp_configuration_and_retries_without_creating_another
         .unwrap();
     let mut state = AppState::new(Default::default());
     state.aow = AowManager::persistent(&directory.path().join("aow")).unwrap();
-    state.acp = aow_acp::AcpService::new(
+    state.acp = aow_acpd_client::AcpClient::new(
         Arc::new(Host("codex.test")),
         Some(directory.path().join("acp")),
     )
@@ -1004,14 +1010,14 @@ async fn task_role_reuses_acp_configuration_and_retries_without_creating_another
     assert_eq!(task["agent_id"], "codex.test");
     assert_eq!(task["agent_role_id"], role["id"]);
     let id = task["initial_thread_id"].as_str().unwrap();
-    let session = state.acp.snapshot(id).unwrap();
+    let session = state.acp.snapshot(id).await.unwrap();
     assert!(session.parent.is_none());
     assert_eq!(
         session.execution_environment.as_ref().unwrap().home,
         state.aow.role_home(role["id"].as_str().unwrap()).unwrap()
     );
     assert_eq!(call(&app, "POST", "/api/aow/tasks", request).await.1, task);
-    assert_eq!(state.acp.sessions(None).len(), 1);
+    assert_eq!(state.acp.sessions(None).await.unwrap().len(), 1);
     assert_eq!(state.acp.agents().await.unwrap().len(), 1);
     let home = state.aow.role_home(role["id"].as_str().unwrap()).unwrap();
     assert!(home.is_dir());

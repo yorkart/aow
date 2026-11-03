@@ -16,9 +16,9 @@ async fn multiplexes_snapshots_changes_and_live_notifications_and_resyncs_on_rec
             let operations = fixture.operations.subscribe();
             let stops = sender.subscribe();
             let acp = fixture.acp.clone();
-            let changes = acp.subscribe_sync();
             let terminals = fixture.terminals.clone();
             async move {
+                let changes = acp.subscribe_sync().await.unwrap();
                 ws.on_upgrade(move |mut socket| async move {
                     let _ = forward(
                         &mut socket,
@@ -26,7 +26,7 @@ async fn multiplexes_snapshots_changes_and_live_notifications_and_resyncs_on_rec
                         operations,
                         stops,
                         acp,
-                        changes,
+                        Some(changes),
                         terminals,
                     )
                     .await;
@@ -206,7 +206,8 @@ async fn acp_ready_bounds_snapshot_races_reconnect_deletion_and_unsubscribe() {
     let cwd = directory.path().canonicalize().unwrap();
     let mut state = AppState::new(Default::default());
     state.acp =
-        aow_acp::AcpService::new(std::sync::Arc::new(AcpHost), Some(cwd.join("state"))).unwrap();
+        aow_acpd_client::AcpClient::new(std::sync::Arc::new(AcpHost), Some(cwd.join("state")))
+            .unwrap();
     let session = state
         .acp
         .prepare_session("test", cwd.clone())
@@ -238,9 +239,9 @@ async fn acp_ready_bounds_snapshot_races_reconnect_deletion_and_unsubscribe() {
         session.revision
     );
     // A commit after ready but before the initial HTTP snapshot cannot fall into a gap.
-    state.acp.clear_plan(&session.thread_id).unwrap();
+    state.acp.clear_plan(&session.thread_id).await.unwrap();
     let changed = next(&mut socket).await;
-    let snapshot = state.acp.overview(&session.thread_id).unwrap();
+    let snapshot = state.acp.overview(&session.thread_id).await.unwrap();
     assert_eq!(
         changed["data"]["head"]["session"]["revision"],
         snapshot.revision
@@ -255,7 +256,7 @@ async fn acp_ready_bounds_snapshot_races_reconnect_deletion_and_unsubscribe() {
         .await
         .unwrap();
     socket.close(None).await.unwrap();
-    state.acp.clear_plan(&session.thread_id).unwrap();
+    state.acp.clear_plan(&session.thread_id).await.unwrap();
     let (mut socket, _) = connect_async(&url).await.unwrap();
     next(&mut socket).await;
     next(&mut socket).await;
@@ -272,11 +273,12 @@ async fn acp_ready_bounds_snapshot_races_reconnect_deletion_and_unsubscribe() {
         state
             .acp
             .session_connection_info(&session.thread_id)
+            .await
             .unwrap()
             .is_none()
     );
     assert_eq!(
-        state.acp.overview(&session.thread_id).unwrap().status,
+        state.acp.overview(&session.thread_id).await.unwrap().status,
         "disconnected"
     );
     state.acp.delete_session(&session.thread_id).await.unwrap();
@@ -295,7 +297,7 @@ async fn acp_ready_bounds_snapshot_races_reconnect_deletion_and_unsubscribe() {
 #[tokio::test]
 async fn acp_coalesces_list_changes_and_keeps_urgent_session_boundaries() {
     let directory = tempfile::tempdir().unwrap();
-    let service = aow_acp::AcpService::new(std::sync::Arc::new(AcpHost), None).unwrap();
+    let service = aow_acpd_client::AcpClient::new(std::sync::Arc::new(AcpHost), None).unwrap();
     let session = service
         .prepare_session("test", directory.path().into())
         .await
@@ -312,8 +314,9 @@ async fn acp_coalesces_list_changes_and_keeps_urgent_session_boundaries() {
             },
             &service,
         )
+        .await
         .unwrap();
-    let mut change = service.sync_event(&resource);
+    let mut change = service.sync_event(&resource).await.unwrap();
     for version in 1..100 {
         change.version = version;
         assert!(subscriptions.change(change.clone()).is_none());
@@ -334,8 +337,9 @@ async fn acp_coalesces_list_changes_and_keeps_urgent_session_boundaries() {
             },
             &service,
         )
+        .await
         .unwrap();
-    let mut change = service.sync_event(&resource);
+    let mut change = service.sync_event(&resource).await.unwrap();
     change.urgent = false;
     assert!(subscriptions.change(change.clone()).is_none());
     change.urgent = true;
@@ -348,10 +352,41 @@ async fn acp_coalesces_list_changes_and_keeps_urgent_session_boundaries() {
             },
             &service,
         )
+        .await
         .unwrap();
     assert!(
         subscriptions
-            .change(service.sync_event(&resource))
+            .change(service.sync_event(&resource).await.unwrap())
             .is_none()
     );
+}
+
+#[tokio::test]
+async fn unavailable_acpd_does_not_disconnect_workspace_or_terminal_events() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut state = AppState::new(Default::default());
+    state.acp = aow_acpd_client::AcpClient::remote(directory.path().join("missing-acpd.sock"));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let app = routes().with_state(state.clone());
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let (mut socket, _) = connect_async(format!("ws://{address}/api/events/ws"))
+        .await
+        .unwrap();
+    assert_eq!(next(&mut socket).await["event"], "workspace");
+    assert_eq!(next(&mut socket).await["event"], "operations");
+    assert_eq!(next(&mut socket).await["data"]["type"], "offline");
+    socket
+        .send(ClientMessage::Text(
+            serde_json::json!({"action":"subscribe_terminals"})
+                .to_string()
+                .into(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(next(&mut socket).await["event"], "terminals");
+    state.workspace_events.terminals_changed();
+    assert_eq!(next(&mut socket).await["event"], "workspace");
+    socket.close(None).await.unwrap();
+    server.abort();
 }

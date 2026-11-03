@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 
 pub(crate) async fn list(State(state): State<AppState>) -> Result<Json<Value>, HttpError> {
     Ok(Json(
-        json!({"items":graph(&state)?.into_values().collect::<Vec<_>>()}),
+        json!({"items":graph(&state).await?.into_values().collect::<Vec<_>>()}),
     ))
 }
 
@@ -16,7 +16,7 @@ pub(crate) async fn get(
     Path(reference): Path<String>,
 ) -> Result<Json<Value>, HttpError> {
     let reference = reference.parse::<InstanceRef>().map_err(invalid)?;
-    let graph = graph(&state)?;
+    let graph = graph(&state).await?;
     let instance = graph.get(&reference).ok_or_else(|| missing(&reference))?;
     let mut ancestors = Vec::new();
     let mut current = instance.parent.as_ref();

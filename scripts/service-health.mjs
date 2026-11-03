@@ -17,7 +17,7 @@ export function serverHealthPath(basePath = '') {
 
 export function requestHealth(config, timeout = 1000) {
   return new Promise((resolve, reject) => {
-    const options = config.component === 'terminald'
+    const options = config.component !== 'server'
       ? { socketPath: config.socket, path: '/v1/health' }
       : { hostname: config.host, port: config.port, path: serverHealthPath(config.basePath) };
     const request = http.get({ ...options, agent: false }, response => {
@@ -32,7 +32,7 @@ export function requestHealth(config, timeout = 1000) {
         try {
           if (response.statusCode !== 200) throw new Error(`health returned HTTP ${response.statusCode}`);
           const health = JSON.parse(bytes);
-          const service = config.component === 'terminald' ? 'aow-terminald' : 'aow';
+          const service = config.component === 'server' ? 'aow' : `aow-${config.component}`;
           if (health.service !== service || (config.component === 'server' && health.ok !== true)) {
             throw new Error('unexpected health response');
           }
@@ -47,7 +47,7 @@ export function requestHealth(config, timeout = 1000) {
 }
 
 export async function waitForHealth(config, runningPid, timeout = 10000, previousPid = null) {
-  if (!['server', 'terminald'].includes(config.component)) throw new Error('invalid service component');
+  if (!['server', 'terminald', 'acpd'].includes(config.component)) throw new Error('invalid service component');
   const deadline = Date.now() + timeout;
   let last;
   do {

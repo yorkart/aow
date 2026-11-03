@@ -14,6 +14,7 @@ pub(super) struct Options {
     pub(super) base_path: OsString,
     pub(super) state_dir: PathBuf,
     pub(super) terminald_socket: PathBuf,
+    pub(super) acpd_socket: PathBuf,
     pub(super) initialize_only: bool,
     pub(super) initialize_if_missing: bool,
 }
@@ -42,6 +43,9 @@ fn parse_from(
     let mut base_path = environment("AOW_BASE_PATH").unwrap_or_default();
     let mut state_dir = default_terminal_state_dir();
     let mut terminald_socket = TerminaldClient::default_socket_path();
+    let mut acpd_socket = environment("AOW_ACPD_SOCKET")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from);
     let mut initialize_only = false;
     let mut initialize_if_missing = false;
     while let Some(argument) = arguments.next() {
@@ -89,6 +93,11 @@ fn parse_from(
                 state_dir =
                     PathBuf::from(arguments.next().context("--state-dir requires a value")?);
             }
+            "--acpd-socket" => {
+                acpd_socket = Some(PathBuf::from(
+                    arguments.next().context("--acpd-socket requires a value")?,
+                ))
+            }
             "--terminald-socket" => {
                 terminald_socket = PathBuf::from(
                     arguments
@@ -124,6 +133,8 @@ fn parse_from(
         secure_cookies,
         session_timeouts,
         base_path,
+        acpd_socket: acpd_socket
+            .unwrap_or_else(|| aow_acpd_client::default_socket_path(&state_dir)),
         state_dir,
         terminald_socket,
         initialize_only,
@@ -150,7 +161,7 @@ fn timeout_seconds(value: Option<OsString>, name: &str, default: u64) -> Result<
 
 fn print_help() {
     println!(
-        "Usage: aow-server [--host 127.0.0.1] [--port 8282] [--base-path PATH] [--secure-cookies] [--frontend frontend/dist] [--state-dir PATH] [--terminald-socket PATH] [--initialize-state | --initialize-state-if-missing]\nHost: IPv4 or IPv6 address (for example 127.0.0.1 or ::1); default 127.0.0.1\nBase path: --base-path overrides AOW_BASE_PATH; default /\nHTTPS: --secure-cookies or AOW_AUTH_SECURE_COOKIE=true marks session cookies Secure"
+        "Usage: aow-server [--host 127.0.0.1] [--port 8282] [--base-path PATH] [--secure-cookies] [--frontend frontend/dist] [--state-dir PATH] [--terminald-socket PATH] [--acpd-socket PATH] [--initialize-state | --initialize-state-if-missing]\nHost: IPv4 or IPv6 address (for example 127.0.0.1 or ::1); default 127.0.0.1\nBase path: --base-path overrides AOW_BASE_PATH; default /\nHTTPS: --secure-cookies or AOW_AUTH_SECURE_COOKIE=true marks session cookies Secure"
     );
     println!(
         "Session max age: --session-max-age-seconds overrides AOW_AUTH_SESSION_MAX_AGE_SECONDS; default 43200\nSession idle timeout: --session-idle-timeout-seconds overrides AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS; default 1800\nSession timeouts must be positive integers in seconds"

@@ -38,7 +38,9 @@ pub(crate) fn acp(session: &aow_acp::SessionInfo) -> InstanceInfo {
     }
 }
 
-pub(crate) fn graph(state: &AppState) -> Result<BTreeMap<InstanceRef, InstanceInfo>, HttpError> {
+pub(crate) async fn graph(
+    state: &AppState,
+) -> Result<BTreeMap<InstanceRef, InstanceInfo>, HttpError> {
     let mut graph = state.instances.snapshot()?;
     for item in graph.values_mut() {
         item.deleted = true;
@@ -55,7 +57,12 @@ pub(crate) fn graph(state: &AppState) -> Result<BTreeMap<InstanceRef, InstanceIn
             graph.insert(info.instance.clone(), info);
         }
     }
-    for session in state.acp.sessions(None) {
+    for session in state
+        .acp
+        .sessions(None)
+        .await
+        .map_err(crate::acp::task_error)?
+    {
         let info = acp(&session);
         graph.insert(info.instance.clone(), info);
     }
@@ -64,7 +71,7 @@ pub(crate) fn graph(state: &AppState) -> Result<BTreeMap<InstanceRef, InstanceIn
 
 /// Validate against live instances, then preserve the entire known ancestry before creation.
 /// Deletion after this point does not invalidate the historical creation relationship.
-pub(crate) fn preserve_parent(
+pub(crate) async fn preserve_parent(
     state: &AppState,
     parent: Option<&InstanceRef>,
 ) -> Result<(), HttpError> {
@@ -72,7 +79,7 @@ pub(crate) fn preserve_parent(
         return Ok(());
     };
     parent.validate().map_err(invalid)?;
-    let graph = graph(state)?;
+    let graph = graph(state).await?;
     if !graph.get(parent).is_some_and(|info| !info.deleted) {
         return Err(missing(parent));
     }

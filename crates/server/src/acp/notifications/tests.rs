@@ -34,6 +34,7 @@ async fn real_acp_prompts_reach_the_terminal_notification_subscription_without_a
                 &session.thread_id,
                 serde_json::from_value(json!([{"type":"text","text":"message-ids"}])).unwrap(),
             )
+            .await
             .unwrap();
         let event = tokio::time::timeout(std::time::Duration::from_secs(10), receiver.recv())
             .await
@@ -49,7 +50,7 @@ async fn real_acp_prompts_reach_the_terminal_notification_subscription_without_a
             Some("ACP_LIVE_FOLLOWUP_VISIBLE")
         );
         assert_eq!(
-            state.acp.snapshot(&session.thread_id).unwrap().status,
+            state.acp.snapshot(&session.thread_id).await.unwrap().status,
             "idle"
         );
         assert!(receiver.try_recv().is_err());

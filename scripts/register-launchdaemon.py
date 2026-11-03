@@ -104,11 +104,11 @@ def validate_request(document, account):
         if document.get(key) != value:
             raise ValueError(f'Request does not match the target account: {key}')
     components = document.get('components')
-    if not isinstance(components, dict) or not components or not set(components) <= {'server', 'terminald'}:
+    if not isinstance(components, dict) or not components or not set(components) <= {'server', 'terminald', 'acpd'}:
         raise ValueError('Invalid requested components')
     # Start terminald first if both components were explicitly prepared.
     return [(component, validate_config(components[component], component, account))
-            for component in ('terminald', 'server') if component in components]
+            for component in ('terminald', 'acpd', 'server') if component in components]
 
 
 def launchctl(*arguments):

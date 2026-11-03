@@ -5,7 +5,7 @@ use crate::{
     aow::{AowError, AowManager},
 };
 use anyhow::{Context, Result, bail, ensure};
-use aow_acp::AcpService;
+use aow_acpd_client::AcpClient;
 use aow_agents::automation::{AgentAutomation, PromptMode};
 use std::{path::Path, process::Stdio, time::Duration};
 use tokio::{
@@ -37,6 +37,7 @@ pub(super) async fn test_with_timeout(
             .kill_on_drop(true).status().await?;
         ensure!(status.success(), "Unable to initialize connection test workspace");
         match &role.config.runtime {
+            RoleRuntime::Acp { agent_id } if state.acp.is_remote() => state.acp.probe(agent_id, workspace.path().into(), state.aow.role_acp_environment(role)?).await,
             RoleRuntime::Acp { agent_id } => acp(&state.aow, role, agent_id, workspace.path()).await,
             RoleRuntime::Cli { .. } => cli(&state.aow, role, workspace.path()).await,
         }
@@ -44,13 +45,15 @@ pub(super) async fn test_with_timeout(
         .map_err(|error| AowError::Invalid(format!("Connection test failed: {error}")))
 }
 
-struct ProbeService(AcpService);
+struct ProbeService(AcpClient);
 impl Drop for ProbeService {
     fn drop(&mut self) {
         // Disconnect on success, failure, timeout and request cancellation.
-        for session in self.0.sessions(None) {
-            if let Ok(Some(connection)) = self.0.session_connection_info(&session.thread_id) {
-                let _ = self.0.disconnect(&connection.id);
+        if let Some(service) = self.0.embedded_service() {
+            for session in service.sessions(None) {
+                if let Ok(Some(connection)) = service.session_connection_info(&session.thread_id) {
+                    let _ = service.disconnect(&connection.id);
+                }
             }
         }
     }
@@ -82,12 +85,15 @@ async fn acp(manager: &AowManager, role: &AgentRole, agent_id: &str, cwd: &Path)
         )
         .await?;
     service.0.resume(&session.thread_id).await?;
-    service.0.start_prompt(
-        &session.thread_id,
-        serde_json::from_value(serde_json::json!([{"type":"text","text":PROMPT}]))?,
-    )?;
+    service
+        .0
+        .start_prompt(
+            &session.thread_id,
+            serde_json::from_value(serde_json::json!([{"type":"text","text":PROMPT}]))?,
+        )
+        .await?;
     loop {
-        let snapshot = service.0.snapshot(&session.thread_id)?;
+        let snapshot = service.0.snapshot(&session.thread_id).await?;
         if let Some(error) = snapshot.error {
             bail!("{error}");
         }

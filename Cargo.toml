@@ -3,6 +3,8 @@ members = [
     "crates/i18n",
   "crates/config",
   "crates/acp",
+  "crates/acpd",
+  "crates/acpd-client",
   "crates/db",
   "crates/id",
   "crates/operation-log",

@@ -71,6 +71,9 @@ function connect() {
       if (protocol) return;
       protocol = true; stopFallback(); setStatus('live');
       for (const store of stores.values()) if (store.active) store.start();
+    } else if (message.type === 'offline') {
+      protocol = false; stopFallback(); setStatus('offline');
+      for (const store of stores.values()) store.disconnected(false);
     } else if (message.type === 'resync') {
       connection.reconnect();
     } else if (protocol && (message.type === 'ready' || message.type === 'change') && message.head) {

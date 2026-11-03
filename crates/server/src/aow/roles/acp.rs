@@ -4,9 +4,8 @@ use crate::aow::{
     AowError, AowManager,
     registry::{RegistryDocument, atomic_save_document},
 };
-use aow_acp::{
-    AcpService, Content, ExecutionEnvironment, SessionCreation, SessionSnapshot, SessionSource,
-};
+use aow_acp::{Content, ExecutionEnvironment, SessionCreation, SessionSnapshot, SessionSource};
+use aow_acpd_client::AcpClient;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -21,13 +20,14 @@ pub(in crate::aow) struct AcpRoleSession {
 }
 
 impl AowManager {
-    pub(in crate::aow) fn acp_role_id(
+    pub(in crate::aow) async fn acp_role_id(
         &self,
-        service: &AcpService,
+        service: &AcpClient,
         id: &str,
     ) -> anyhow::Result<Option<String>> {
         Ok(self
-            .acp_role_binding(service, id)?
+            .acp_role_binding(service, id)
+            .await?
             .map(|binding| binding.role_id))
     }
 
@@ -75,12 +75,12 @@ impl AowManager {
         Ok(())
     }
 
-    fn acp_role_binding(
+    async fn acp_role_binding(
         &self,
-        service: &AcpService,
+        service: &AcpClient,
         id: &str,
     ) -> anyhow::Result<Option<AcpRoleSession>> {
-        let snapshot = service.snapshot(id)?;
+        let snapshot = service.snapshot(id).await?;
         let Some(environment) = &snapshot.execution_environment else {
             return Ok(None);
         };
@@ -125,15 +125,16 @@ impl AowManager {
         Ok(binding)
     }
 
-    pub(crate) fn acp_role_content(
+    pub(crate) async fn acp_role_content(
         &self,
-        service: &AcpService,
+        service: &AcpClient,
         id: &str,
         mut content: Vec<Content>,
     ) -> anyhow::Result<Vec<Content>> {
-        self.collaboration_content(service, id, &mut content)?;
+        self.collaboration_content(service, id, &mut content)
+            .await?;
         if !content.is_empty()
-            && let Some(binding) = self.acp_role_binding(service, id)?
+            && let Some(binding) = self.acp_role_binding(service, id).await?
             && !binding.instruction.trim().is_empty()
         {
             content.insert(0, serde_json::from_value(serde_json::json!({
@@ -146,7 +147,7 @@ impl AowManager {
 
     pub(crate) async fn prepare_acp_child_session(
         &self,
-        service: &AcpService,
+        service: &AcpClient,
         agent_id: &str,
         cwd: PathBuf,
         source: SessionSource,
@@ -155,13 +156,13 @@ impl AowManager {
         let inherited = if let Some(parent) = &parent
             && parent.kind == aow_protocol::InstanceKind::Acp
         {
-            self.acp_role_binding(service, &parent.id)?
-                .map(|binding| {
-                    service
-                        .snapshot(&parent.id)
-                        .map(|snapshot| (binding, snapshot.execution_environment))
-                })
-                .transpose()?
+            match self.acp_role_binding(service, &parent.id).await? {
+                Some(binding) => Some((
+                    binding,
+                    service.snapshot(&parent.id).await?.execution_environment,
+                )),
+                None => None,
+            }
         } else {
             None
         };

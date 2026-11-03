@@ -11,7 +11,7 @@ use crate::{
 pub struct AppState {
     pub(crate) collaboration: crate::collaboration::Runtime,
     pub(crate) file_search: crate::filesystem::search::SearchRequests,
-    pub(crate) acp: aow_acp::AcpService,
+    pub(crate) acp: aow_acpd_client::AcpClient,
     pub(crate) acp_controls: crate::acp::Controls,
     pub(crate) instances: crate::instances::InstanceStore,
     pub(crate) base_path: BasePath,
@@ -28,7 +28,7 @@ pub struct AppState {
 
 impl AppState {
     /// Creates an application state with in-memory terminal metadata. This is
-    /// useful for embedding and tests; the server binary uses `with_state_dir`.
+    /// useful for embedding and tests; the server binary uses `with_daemon_options`.
     pub fn new(frontend_dist: PathBuf) -> Self {
         Self::with_terminald_socket(frontend_dist, TerminaldClient::default_socket_path())
     }
@@ -71,14 +71,40 @@ impl AppState {
         Self::with_runtime_options(frontend_dist, state_dir, terminald_socket)
     }
 
+    /// Persistent in-process ACP host for embedding. The Web binary uses `with_daemon_options`.
     pub fn with_runtime_options(
         frontend_dist: PathBuf,
         state_dir: PathBuf,
         terminald_socket: PathBuf,
     ) -> Result<Self, TerminalError> {
-        let aow = aow::AowManager::persistent(&state_dir).map_err(|error| {
+        Self::with_acp_backend(frontend_dist, state_dir, terminald_socket, None)
+    }
+
+    /// Production host: all ACP execution and storage belongs to the external daemon.
+    pub fn with_daemon_options(
+        frontend_dist: PathBuf,
+        state_dir: PathBuf,
+        terminald_socket: PathBuf,
+        acpd_socket: PathBuf,
+    ) -> Result<Self, TerminalError> {
+        Self::with_acp_backend(
+            frontend_dist,
+            state_dir,
+            terminald_socket,
+            Some(acpd_socket),
+        )
+    }
+
+    fn with_acp_backend(
+        frontend_dist: PathBuf,
+        state_dir: PathBuf,
+        terminald_socket: PathBuf,
+        acpd_socket: Option<PathBuf>,
+    ) -> Result<Self, TerminalError> {
+        let mut aow = aow::AowManager::persistent(&state_dir).map_err(|error| {
             TerminalError::Invalid(format!("failed to initialize aow: {error}"))
         })?;
+        aow.set_acpd_socket(acpd_socket.clone());
         let terminals = terminal::TerminalManager::persistent(
             state_dir.clone(),
             TerminaldClient::new(terminald_socket),
@@ -88,12 +114,15 @@ impl AppState {
             collaboration: Default::default(),
             file_search: crate::filesystem::search::SearchRequests::default(),
             acp_controls: crate::acp::Controls::default(),
-            acp: crate::acp::service(
-                aow.clone(),
-                Some(state_dir.clone()),
-                terminals.task_stop_sender(),
-                workspace_events.clone(),
-            )
+            acp: match acpd_socket {
+                Some(socket) => Ok(aow_acpd_client::AcpClient::remote(socket)),
+                None => crate::acp::service(
+                    aow.clone(),
+                    Some(state_dir.clone()),
+                    terminals.task_stop_sender(),
+                    workspace_events.clone(),
+                ),
+            }
             .map_err(|error| {
                 TerminalError::Invalid(format!("failed to initialize ACP: {error:#}"))
             })?,
@@ -154,7 +183,7 @@ impl AppState {
     /// The ACP writer runs outside Tokio; explicitly drain it before the runtime exits.
     pub async fn flush_acp_history(&self) -> anyhow::Result<()> {
         let service = self.acp.clone();
-        aow_i18n::spawn_blocking(move || service.flush_threads_on_quit()).await?
+        service.flush_threads_on_quit().await
     }
 
     pub fn start_agent_notifications(&self) {

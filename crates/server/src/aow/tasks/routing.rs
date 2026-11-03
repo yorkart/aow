@@ -29,12 +29,12 @@ pub(crate) fn cli_routes() -> Router<AppState> {
 }
 
 impl AowManager {
-    pub(crate) fn task_policy_for_thread(
+    pub(crate) async fn task_policy_for_thread(
         &self,
-        service: &aow_acp::AcpService,
+        service: &aow_acpd_client::AcpClient,
         thread: &str,
     ) -> anyhow::Result<Option<aow_db::tasks::ConversationPolicy>> {
-        let Some(task) = self.task_for_thread(service, thread)? else {
+        let Some(task) = self.task_for_thread(service, thread).await? else {
             return Ok(None);
         };
         let mut execution = (&task).into();
@@ -42,7 +42,8 @@ impl AowManager {
         let mut seen = std::collections::HashSet::new();
         while seen.insert(current.clone()) {
             if self
-                .task_for_thread(service, &current)?
+                .task_for_thread(service, &current)
+                .await?
                 .is_none_or(|owner| owner.id != task.id)
             {
                 break;
@@ -51,7 +52,7 @@ impl AowManager {
                 execution = recorded;
                 break;
             }
-            let info = service.session_info(&current)?;
+            let info = service.session_info(&current).await?;
             match info
                 .parent
                 .filter(|parent| parent.kind == aow_protocol::InstanceKind::Acp)
@@ -60,14 +61,14 @@ impl AowManager {
                 None => break,
             }
         }
-        let info = service.session_info(thread)?;
+        let info = service.session_info(thread).await?;
         execution.workspace = info.cwd;
         Ok(Some(execution))
     }
 
-    pub(crate) fn task_for_thread(
+    pub(crate) async fn task_for_thread(
         &self,
-        service: &aow_acp::AcpService,
+        service: &aow_acpd_client::AcpClient,
         thread: &str,
     ) -> anyhow::Result<Option<TaskRecord>> {
         let tasks = self.inner.tasks.list()?;
@@ -81,7 +82,7 @@ impl AowManager {
             }) {
                 return Ok(Some(task.clone()));
             }
-            let info = match service.session_info(&current) {
+            let info = match service.session_info(&current).await {
                 Ok(info) => info,
                 Err(error) if current == thread => return Err(error),
                 Err(_) => break,
@@ -98,14 +99,16 @@ impl AowManager {
     }
 }
 
-pub(super) fn source_task(state: &AppState, thread: &str) -> Result<TaskRecord, HttpError> {
+pub(super) async fn source_task(state: &AppState, thread: &str) -> Result<TaskRecord, HttpError> {
     state
         .acp
         .session_info(thread)
+        .await
         .map_err(crate::acp::task_error)?;
     state
         .aow
         .task_for_thread(&state.acp, thread)
+        .await
         .map_err(storage)?
         .filter(|task| !task.archived)
         .ok_or_else(|| invalid("The source conversation must belong to an active task"))
@@ -136,9 +139,9 @@ pub(super) struct Scope {
     source_thread_id: Option<String>,
 }
 
-fn check_scope(state: &AppState, scope: &Scope, task: &TaskRecord) -> Result<(), HttpError> {
+async fn check_scope(state: &AppState, scope: &Scope, task: &TaskRecord) -> Result<(), HttpError> {
     if let Some(thread) = &scope.source_thread_id
-        && source_task(state, thread)?.project_id != task.project_id
+        && source_task(state, thread).await?.project_id != task.project_id
     {
         return Err(invalid("Task is outside the source project"));
     }
@@ -167,11 +170,10 @@ async fn list(
     State(state): State<AppState>,
     Query(scope): Query<Scope>,
 ) -> Result<Json<Value>, HttpError> {
-    let source = scope
-        .source_thread_id
-        .as_deref()
-        .map(|id| source_task(&state, id))
-        .transpose()?;
+    let source = match scope.source_thread_id.as_deref() {
+        Some(id) => Some(source_task(&state, id).await?),
+        None => None,
+    };
     let tasks = state
         .aow
         .inner
@@ -195,19 +197,24 @@ pub(super) async fn get(
     Query(scope): Query<Scope>,
 ) -> Result<Json<Value>, HttpError> {
     let task = find_task(&state, &id)?;
-    check_scope(&state, &scope, &task)?;
-    let conversations = state
+    check_scope(&state, &scope, &task).await?;
+    let mut conversations = Vec::new();
+    for session in state
         .acp
         .sessions(None)
-        .into_iter()
-        .filter_map(
-            |session| match state.aow.task_for_thread(&state.acp, &session.thread_id) {
-                Ok(Some(owner)) if owner.id == id => Some(Ok(session)),
-                Ok(_) => None,
-                Err(error) => Some(Err(storage(error))),
-            },
-        )
-        .collect::<Result<Vec<_>, HttpError>>()?;
+        .await
+        .map_err(crate::acp::task_error)?
+    {
+        if state
+            .aow
+            .task_for_thread(&state.acp, &session.thread_id)
+            .await
+            .map_err(storage)?
+            .is_some_and(|owner| owner.id == id)
+        {
+            conversations.push(session);
+        }
+    }
     let delegated = state
         .aow
         .inner
@@ -237,7 +244,7 @@ async fn delegate(
     State(state): State<AppState>,
     Json(request): Json<Delegate>,
 ) -> Result<Json<Task>, HttpError> {
-    let source = source_task(&state, &request.source_thread_id)?;
+    let source = source_task(&state, &request.source_thread_id).await?;
     let (workspace_mode, workspace) = match request.intent.as_str() {
         "change" => (WorkspaceMode::NewWorktree, None),
         "analyze" => (
@@ -267,6 +274,7 @@ async fn delegate(
         state
             .acp
             .session_info(&request.source_thread_id)
+            .await
             .map_err(crate::acp::task_error)?
             .agent_id
     };

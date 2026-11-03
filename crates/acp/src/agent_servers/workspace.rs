@@ -2,6 +2,17 @@
 use super::*;
 
 impl AgentServerStore {
+    pub async fn recover_workspace_removals(&self) -> Result<()> {
+        // In-flight daemon cleanup must settle before new admissions are allowed.
+        let _connect = self.inner.connect_lock.lock().await;
+        self.inner
+            .threads
+            .lock()
+            .unwrap()
+            .recover_workspace_removals();
+        Ok(())
+    }
+
     pub fn set_workspace_removing(&self, cwd: &str, removing: bool) {
         self.inner
             .threads

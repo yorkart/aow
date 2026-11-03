@@ -1,7 +1,7 @@
 use super::*;
 
-#[test]
-fn retained_ancestry_survives_restart_and_rejects_reparenting() {
+#[tokio::test]
+async fn retained_ancestry_survives_restart_and_rejects_reparenting() {
     let directory = tempfile::tempdir().unwrap();
     let store = InstanceStore::persistent(directory.path()).unwrap();
     let parent = InstanceRef::terminal("root");
@@ -26,10 +26,10 @@ fn retained_ancestry_survives_restart_and_rejects_reparenting() {
     let restored = InstanceStore::persistent(directory.path()).unwrap();
     let mut state = AppState::new(Default::default());
     state.instances = restored;
-    let graph = graph(&state).unwrap();
+    let graph = graph(&state).await.unwrap();
     assert_eq!(graph[&child].parent, Some(parent.clone()));
     assert!(graph[&parent].deleted && graph[&child].deleted);
-    assert!(preserve_parent(&state, Some(&parent)).is_err());
+    assert!(preserve_parent(&state, Some(&parent)).await.is_err());
 }
 
 #[test]
@@ -91,6 +91,7 @@ async fn acp_metadata_invalidates_the_graph_without_an_http_action() {
             &session.thread_id,
             serde_json::from_value(json!([{"type":"text","text":"rename"}])).unwrap(),
         )
+        .await
         .unwrap();
     let reference = InstanceRef::acp(&session.thread_id);
     tokio::time::timeout(std::time::Duration::from_secs(5), async {
@@ -98,7 +99,7 @@ async fn acp_metadata_invalidates_the_graph_without_an_http_action() {
             events.changed().await.unwrap();
             let event = serde_json::to_value(events.borrow_and_update().clone()).unwrap();
             assert!(event["instances"].as_u64().unwrap() > 0);
-            if graph(&state).unwrap()[&reference].title == "Provider title" {
+            if graph(&state).await.unwrap()[&reference].title == "Provider title" {
                 break;
             }
         }
@@ -107,5 +108,5 @@ async fn acp_metadata_invalidates_the_graph_without_an_http_action() {
     .unwrap();
     state.acp.delete_session(&session.thread_id).await.unwrap();
     assert!(events.has_changed().unwrap());
-    assert!(!graph(&state).unwrap().contains_key(&reference));
+    assert!(!graph(&state).await.unwrap().contains_key(&reference));
 }

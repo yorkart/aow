@@ -8,6 +8,10 @@ use std::{path::PathBuf, sync::Arc};
 #[derive(Clone)]
 pub struct AcpService(AgentServerStore);
 impl AcpService {
+    /// End local transports and checkpoint history when the execution host exits.
+    pub async fn shutdown(&self) -> Result<()> {
+        self.0.shutdown().await
+    }
     pub fn subscribe_sync(&self) -> tokio::sync::broadcast::Receiver<super::SyncEvent> {
         self.0.subscribe_sync()
     }
@@ -217,6 +221,10 @@ impl AcpService {
     /// Block admission while the host removes a workspace; unrelated workspaces stay available.
     pub fn set_workspace_removing(&self, cwd: &str, removing: bool) {
         self.0.set_workspace_removing(cwd, removing);
+    }
+    /// A replacement single control-plane process releases reservations abandoned by its predecessor.
+    pub async fn recover_workspace_removals(&self) -> Result<()> {
+        self.0.recover_workspace_removals().await
     }
     /// Remove only AoW-owned state. Never sends session/delete to an agent.
     pub async fn delete_workspace(&self, cwd: &str) -> Result<usize> {

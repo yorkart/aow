@@ -13,7 +13,7 @@ async function endpoint(t, component, handler, host = '127.0.0.1') {
   const socket = join(root, 'daemon.sock');
   await new Promise((resolve, reject) => {
     server.once('error', reject);
-    if (component === 'terminald') server.listen(socket, resolve);
+    if (component !== 'server') server.listen(socket, resolve);
     else server.listen(0, host, resolve);
   });
   t.after(async () => {
@@ -39,12 +39,12 @@ test('server health can reach an IPv6 loopback listener', async t => {
   await waitForHealth(config, () => 1234, 1000);
 });
 
-for (const component of ['server', 'terminald']) {
+for (const component of ['server', 'terminald', 'acpd']) {
   test(`${component} health waits for its own process and checks the expected endpoint`, async t => {
     let requests = 0;
     const config = await endpoint(t, component, (request, response) => {
       assert.equal(request.url, component === 'server' ? '/api/health' : '/v1/health');
-      response.end(JSON.stringify({ service: component === 'server' ? 'aow' : 'aow-terminald',
+      response.end(JSON.stringify({ service: component === 'server' ? 'aow' : `aow-${component}`,
         ok: true, pid: ++requests === 1 ? 999 : 1234 }));
     });
     await waitForHealth(config, () => 1234, 1000);

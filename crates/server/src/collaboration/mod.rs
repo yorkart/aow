@@ -46,8 +46,12 @@ impl Runtime {
     }
 }
 
-pub(crate) fn source(state: &AppState, task: &TaskRecord, thread: &str) -> Result<MessageSource> {
-    let snapshot = state.acp.snapshot(thread)?;
+pub(crate) async fn source(
+    state: &AppState,
+    task: &TaskRecord,
+    thread: &str,
+) -> Result<MessageSource> {
+    let snapshot = state.acp.snapshot(thread).await?;
     let turn = snapshot.turns.last();
     let entries = turn
         .and_then(|turn| {
@@ -87,12 +91,12 @@ pub(crate) fn source(state: &AppState, task: &TaskRecord, thread: &str) -> Resul
     })
 }
 
-pub(crate) fn report_source(
+pub(crate) async fn report_source(
     state: &AppState,
     task: &TaskRecord,
     thread: &str,
 ) -> Result<MessageSource> {
-    let snapshot = state.acp.snapshot(thread)?;
+    let snapshot = state.acp.snapshot(thread).await?;
     if let Some(turn) = snapshot.turns.last()
         && let Some(start) = snapshot
             .entries
@@ -109,7 +113,7 @@ pub(crate) fn report_source(
             }
         }
     }
-    source(state, task, thread)
+    source(state, task, thread).await
 }
 
 pub(crate) fn new_message(
