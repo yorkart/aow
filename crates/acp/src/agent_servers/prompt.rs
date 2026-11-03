@@ -12,6 +12,31 @@ impl AgentServerStore {
         content: Vec<Content>,
         steering_id: Option<&str>,
     ) -> Result<()> {
+        self.start_prompt_with_id(id, content, steering_id, None)
+    }
+
+    pub fn start_prompt_once(
+        &self,
+        id: &str,
+        request_id: &str,
+        content: Vec<Content>,
+    ) -> Result<()> {
+        ensure!(!request_id.is_empty(), "Prompt request ID is empty");
+        self.start_prompt_with_id(id, content, None, Some(request_id))
+    }
+
+    fn start_prompt_with_id(
+        &self,
+        id: &str,
+        content: Vec<Content>,
+        steering_id: Option<&str>,
+        request_id: Option<&str>,
+    ) -> Result<()> {
+        if let Some(request_id) = request_id
+            && self.snapshot(id)?.prompt_receipts.contains_key(request_id)
+        {
+            return Ok(());
+        }
         ensure!(!content.is_empty(), "Prompt is empty");
         let connection = self.session_connection(id)?;
         ensure!(connection.connected(), "ACP adapter is disconnected");
@@ -32,6 +57,9 @@ impl AgentServerStore {
         ensure!(!threads.forking.contains(id), "ACP session is being forked");
         let thread = threads.threads.get(id).context("ACP session not found")?;
         let thread = thread.lock().unwrap();
+        if request_id.is_some_and(|request_id| thread.prompt_receipts.contains_key(request_id)) {
+            return Ok(());
+        }
         let admitted = match steering_id {
             None => thread.status == "idle" && !thread.steering_pending,
             Some(id) => thread.steering.pending.as_ref().is_some_and(|pending| {
@@ -68,7 +96,9 @@ impl AgentServerStore {
         };
         let previous_usage = thread.last_prompt_usage.clone().unwrap_or(Value::Null);
         drop(thread);
-        let turn_id = uuid::Uuid::new_v4().to_string();
+        let turn_id = request_id
+            .map(str::to_owned)
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
         if let Err(error) = threads.update(id, |thread| {
             thread.interacted_at = Some(chrono::Utc::now().to_rfc3339());
             thread.active_prompt = Some(turn_id.clone());
@@ -114,6 +144,19 @@ impl AgentServerStore {
                 }
             }
             crate::acp_thread::turns::start(thread, entry_start);
+            if let Some(request_id) = request_id {
+                thread.prompt_receipts.insert(
+                    request_id.into(),
+                    crate::facade::PromptReceipt {
+                        user_entry_id: thread.entries[entry_start].id.clone(),
+                        status: "in_progress".into(),
+                        stop_reason: None,
+                        error: None,
+                        conclusion: None,
+                        finished_at: None,
+                    },
+                );
+            }
             if thread.title == "New conversation" {
                 thread.title = content
                     .as_array()

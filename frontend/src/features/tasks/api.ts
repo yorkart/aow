@@ -27,7 +27,7 @@ export const taskScopeKey = (id: string) => `task:${id}`;
 export const taskTitle = (task: WorkTask) => task.is_router ? 'Router' : mentionPreview(task.prompt.split('\n')[0]);
 export interface TaskResult {
   task: WorkTask;
-  runtime: { thread_id: string; status: string; error?: string | null; response?: string; pending_permissions?: number } | null;
+  runtime: { thread_id: string; status: string; run_state?: string | null; error?: string | null; response?: string; pending_permissions?: number } | null;
   delegated: WorkTask[];
 }
 export const tasksChanged = 'aow:tasks-changed';

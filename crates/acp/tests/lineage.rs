@@ -10,6 +10,64 @@ use std::{
 };
 
 struct Host;
+
+#[tokio::test]
+async fn managed_prompt_retries_do_not_repeat_work_after_completion_replay_or_restart() -> Result<()>
+{
+    let directory = tempfile::tempdir()?;
+    let history = directory.path().join("history");
+    let service = AcpService::new(Arc::new(Host), Some(history.clone()))?;
+    let session = service
+        .prepare_session("test", directory.path().into())
+        .await?;
+    let id = &session.thread_id;
+    service.resume(id).await?;
+    let content = |text: &str| {
+        serde_json::from_value::<Vec<Content>>(json!([{"type":"text","text":text}])).unwrap()
+    };
+    service.start_prompt_once(id, "one", content("wait"))?;
+    service.start_prompt_once(id, "one", content("wait"))?;
+    assert!(
+        service
+            .start_prompt_once(id, "two", content("second"))
+            .is_err()
+    );
+    service.cancel(id)?;
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while service.snapshot(id).unwrap().prompt_receipts["one"].status == "in_progress" {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await?;
+    assert_eq!(
+        service.snapshot(id)?.prompt_receipts["one"].status,
+        "interrupted"
+    );
+    service.start_prompt_once(id, "two", content("second"))?;
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while service.snapshot(id).unwrap().prompt_receipts["two"].status == "in_progress" {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await?;
+    service.close_session(id).await?;
+    service.flush_threads_on_quit()?;
+    drop(service);
+    let service = AcpService::new(Arc::new(Host), Some(history))?;
+    service.start_prompt_once(id, "two", content("second"))?;
+    service.resume(id).await?;
+    service.start_prompt_once(id, "one", content("wait"))?;
+    assert_eq!(
+        service.snapshot(id)?.prompt_receipts["two"]
+            .conclusion
+            .as_deref(),
+        Some("Done")
+    );
+    let log = std::fs::read_to_string(directory.path().join("lineage-prompts.jsonl"))?;
+    assert_eq!(log.lines().count(), 2);
+    service.close_session(id).await?;
+    Ok(())
+}
 #[async_trait::async_trait]
 impl AcpHost for Host {
     async fn settings(&self) -> Result<String> {

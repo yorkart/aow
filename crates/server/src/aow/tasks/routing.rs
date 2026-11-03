@@ -95,6 +95,7 @@ fn find_task(state: &AppState, id: &str) -> Result<TaskRecord, HttpError> {
 #[derive(Deserialize, Default)]
 pub(super) struct Scope {
     source_thread_id: Option<String>,
+    run_id: Option<String>,
 }
 
 fn check_scope(state: &AppState, scope: &Scope, task: &TaskRecord) -> Result<(), HttpError> {
@@ -155,16 +156,36 @@ pub(super) async fn get(
     Path(id): Path<String>,
     Query(scope): Query<Scope>,
 ) -> Result<Json<Value>, HttpError> {
+    if let Some(run_id) = &scope.run_id {
+        let run = state
+            .aow
+            .task_db()
+            .run(run_id)
+            .map_err(storage)?
+            .filter(|run| run.task_id == id)
+            .ok_or_else(|| invalid("Run does not belong to this task"))?;
+        if let Some(thread) = &scope.source_thread_id
+            && source_task(&state, thread)?.project_id != run.project_id
+        {
+            return Err(invalid("Run is outside the source project"));
+        }
+        // Results survive task deletion and never consult a later conversation turn.
+        return Ok(Json(json!({"run":run})));
+    }
     let task = find_task(&state, &id)?;
     check_scope(&state, &scope, &task)?;
+    let runs = state.aow.task_db().task_runs(&id).map_err(storage)?;
     let runtime = task.initial_thread_id.as_deref().map(|id| match state.acp.snapshot(id) {
         Ok(session) => {
             // Idle describes the adapter, not whether the assigned work succeeded.
             let start = session.entries.iter().rposition(|entry| entry.kind == "user").unwrap_or(0);
-            let response = session.entries.iter().skip(start).filter(|entry| entry.kind == "assistant")
-                .filter_map(|entry| entry.content["text"].as_str()).collect::<Vec<_>>().join("");
-            json!({"thread_id":id, "status":session.status, "error":session.error,
-                "pending_permissions":session.permissions.len(), "response":response, "updated_at":session.updated_at})
+            let response = runs.first().map(|run| run.result.clone().unwrap_or_default()).unwrap_or_else(||
+                session.entries.iter().skip(start).filter(|entry| entry.kind == "assistant")
+                .filter_map(|entry| entry.content["text"].as_str()).collect::<Vec<_>>().join(""));
+            let error = runs.first().map_or_else(|| session.error.clone(), |run| run.error.clone());
+            json!({"thread_id":id, "status":session.status, "error":error,
+                "pending_permissions":session.permissions.len(), "response":response, "updated_at":session.updated_at,
+                "run_id":runs.first().map(|run| &run.id), "run_state":runs.first().map(|run| &run.state)})
         },
         Err(error) => json!({"thread_id":id, "status":"unavailable", "error":error.to_string()}),
     });
@@ -179,7 +200,7 @@ pub(super) async fn get(
         .map(Task::from)
         .collect::<Vec<_>>();
     Ok(Json(
-        json!({"task":Task::from(task), "runtime":runtime, "delegated":delegated}),
+        json!({"task":Task::from(task), "runtime":runtime, "runs":runs, "delegated":delegated}),
     ))
 }
 
@@ -369,6 +390,7 @@ pub(super) async fn router(
 
 #[derive(Deserialize)]
 struct Send {
+    request_id: String,
     source_thread_id: String,
     prompt: String,
 }
@@ -379,11 +401,21 @@ async fn send(
     Json(request): Json<Send>,
 ) -> Result<Json<Value>, HttpError> {
     validate_prompt(&request.prompt)?;
+    if request.request_id.is_empty()
+        || request.request_id.len() > 128
+        || !request
+            .request_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+    {
+        return Err(invalid("Invalid send request ID"));
+    }
     let task = find_task(&state, &id)?;
     check_scope(
         &state,
         &Scope {
             source_thread_id: Some(request.source_thread_id.clone()),
+            run_id: None,
         },
         &task,
     )?;
@@ -398,23 +430,22 @@ async fn send(
         return Err(invalid("Continue the current conversation directly"));
     }
     let source = source_task(&state, &request.source_thread_id)?;
-    let prompt = format!(
-        "Collaboration message from task {} (conversation {}):\n\n{}",
-        source.id, request.source_thread_id, request.prompt
+    let run_source = crate::collaboration::source(&state, &source, &request.source_thread_id)
+        .map_err(storage)?;
+    let run = crate::collaboration::new_run(
+        &task,
+        format!("send-{}", request.request_id),
+        request.prompt,
+        Some(run_source),
     );
-    let mut submission = crate::acp::start_task(state.clone(), thread.into(), Some(prompt))?;
-    tokio::time::timeout(std::time::Duration::from_secs(120), &mut submission)
-        .await
-        .map_err(|_| {
-            HttpError::new(
-                axum::http::StatusCode::CONFLICT,
-                "submission_unknown",
-                "Submission may still be running; inspect the task before retrying",
-                None,
-            )
-        })?
-        .map_err(|error| HttpError::internal(error.to_string()))??;
+    let run = state
+        .aow
+        .task_db()
+        .enqueue_run(&run)
+        .map_err(|error| invalid(error.to_string()))?;
+    state.collaboration.start(&state);
     Ok(Json(
-        json!({"task_id":id,"thread_id":thread,"accepted":true}),
+        json!({"task_id":id,"thread_id":thread,"accepted":true,"run_id":run.id,
+            "return_delivery":"inbox_and_wakeup","state":run.state}),
     ))
 }

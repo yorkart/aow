@@ -82,10 +82,24 @@ pub struct Permission {
 /// Imported history without this record has an unknown outcome.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SessionTurn {
+    #[serde(default)]
+    pub id: String,
     pub user_entry_id: String,
     pub status: String,
     pub stop_reason: Option<String>,
     pub error: Option<String>,
+}
+
+/// Durable admission receipt for a caller-owned prompt. Kept independently of
+/// provider history so compaction/replay cannot admit the same request twice.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PromptReceipt {
+    pub user_entry_id: String,
+    pub status: String,
+    pub stop_reason: Option<String>,
+    pub error: Option<String>,
+    pub conclusion: Option<String>,
+    pub finished_at: Option<String>,
 }
 
 /// Connection recovery is independent of recorded prompt outcomes.
@@ -155,6 +169,8 @@ pub struct SessionSnapshot {
     pub entries: Vec<ThreadEntry>,
     #[serde(default)]
     pub turns: Vec<SessionTurn>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub prompt_receipts: std::collections::BTreeMap<String, PromptReceipt>,
     /// Out-of-band activity must not split streaming message content.
     #[serde(default)]
     pub plan: Value,

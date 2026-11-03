@@ -27,6 +27,174 @@ fn task(id: &str, dependencies: &[&str]) -> TaskRecord {
     }
 }
 
+fn execution(id: &str, task_id: &str, parent: Option<&str>) -> TaskRun {
+    TaskRun {
+        id: id.into(),
+        request_id: id.into(),
+        task_id: task_id.into(),
+        project_id: "project".into(),
+        thread_id: format!("thread-{task_id}"),
+        prompt: format!("Work {id}"),
+        source: Some(RunSource {
+            task_id: "source".into(),
+            thread_id: "thread-source".into(),
+            turn_id: Some("source-turn".into()),
+            message_id: Some("source-message".into()),
+            request: "Original wording".into(),
+            parent_run_id: parent.map(str::to_owned),
+        }),
+        state: "queued".into(),
+        result: None,
+        error: None,
+        created_at: 1,
+        finished_at: None,
+        attempts: 0,
+        retry_at: 0,
+    }
+}
+
+#[test]
+fn results_and_deliveries_are_durable_independent_and_immutable() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("tasks.db");
+    let db = TaskDb::open(Some(&path)).unwrap();
+    let first = execution("first", "worker", None);
+    db.insert_with_run(&task("worker", &[]), Some(&first))
+        .unwrap();
+    assert!(
+        db.insert_with_run(&task("rollback", &[]), Some(&first))
+            .is_err()
+    );
+    assert_eq!(db.list().unwrap().len(), 1, "task/run insertion is atomic");
+    db.finish_run(
+        "first",
+        "result_available",
+        Some("First result".into()),
+        None,
+        2,
+    )
+    .unwrap();
+    db.finish_run("first", "failed", None, Some("Late duplicate".into()), 3)
+        .unwrap();
+    let mut second = execution("second", "worker", None);
+    second.source.as_mut().unwrap().thread_id = "different-requester".into();
+    db.enqueue_run(&second).unwrap();
+    assert_eq!(db.enqueue_run(&second).unwrap(), second);
+    let mut retried = second.clone();
+    retried.id = "new-local-attempt".into();
+    assert_eq!(db.enqueue_run(&retried).unwrap().id, second.id);
+    second.prompt = "Different payload".into();
+    assert!(db.enqueue_run(&second).is_err());
+    db.finish_run("second", "failed", None, Some("No access".into()), 4)
+        .unwrap();
+    db.update_inbox("result-first", Some(true), Some(true))
+        .unwrap();
+    db.remove("worker").unwrap();
+    drop(db);
+    let db = TaskDb::open(Some(&path)).unwrap();
+    assert_eq!(
+        db.run("first").unwrap().unwrap().result.as_deref(),
+        Some("First result")
+    );
+    let page = db.inbox(None, false, false, 0, 30).unwrap();
+    assert_eq!(page.unread, 1);
+    assert_eq!(page.items.len(), 1);
+    assert_eq!(page.items[0].run.id, "second");
+    assert_eq!(
+        page.items[0].delivery.as_ref().unwrap().thread_id,
+        "different-requester"
+    );
+    assert_eq!(
+        db.active_deliveries().unwrap().len(),
+        2,
+        "read/archive cannot consume returns"
+    );
+    assert_eq!(
+        db.inbox(None, false, true, 0, 30).unwrap().items[0].run.id,
+        "first"
+    );
+    db.process_delivery("result-first", Some("Summary".into()), 5)
+        .unwrap();
+    db.process_delivery("result-first", Some("Duplicate".into()), 6)
+        .unwrap();
+    assert_eq!(db.active_deliveries().unwrap().len(), 1);
+    assert!(db.retry_delivery("result-first", "retry").is_err());
+    db.update_delivery(
+        "result-second",
+        "blocked",
+        Some("Source unavailable".into()),
+        0,
+    )
+    .unwrap();
+    db.retry_delivery("result-second", "retry-second").unwrap();
+    assert_eq!(db.active_deliveries().unwrap()[0].prompt_id, "retry-second");
+    assert_eq!(
+        db.run("second").unwrap().unwrap().state,
+        "failed",
+        "retrying a return never reruns work"
+    );
+}
+
+#[test]
+fn nested_delegations_return_upstream_only_after_all_child_returns_are_handled() {
+    let db = TaskDb::open(None).unwrap();
+    db.enqueue_run(&execution("parent", "worker", None))
+        .unwrap();
+    for id in ["one", "two"] {
+        db.enqueue_run(&execution(id, id, Some("parent"))).unwrap();
+    }
+    assert!(
+        db.enqueue_run(&execution("cycle", "worker", Some("one")))
+            .is_err()
+    );
+    db.finish_run(
+        "parent",
+        "result_available",
+        Some("Delegated".into()),
+        None,
+        1,
+    )
+    .unwrap();
+    assert_eq!(db.run("parent").unwrap().unwrap().state, "waiting");
+    assert!(
+        db.inbox(None, false, false, 0, 30)
+            .unwrap()
+            .items
+            .is_empty()
+    );
+    for id in ["one", "two"] {
+        db.finish_run(id, "result_available", Some(id.into()), None, 2)
+            .unwrap();
+    }
+    db.process_delivery("result-one", Some("Waiting for two".into()), 3)
+        .unwrap();
+    assert_eq!(db.run("parent").unwrap().unwrap().state, "waiting");
+    db.update_delivery(
+        "result-two",
+        "blocked",
+        Some("Wakeup interrupted".into()),
+        0,
+    )
+    .unwrap();
+    assert_eq!(db.inbox(None, false, false, 0, 30).unwrap().items.len(), 2);
+    db.retry_delivery("result-two", "retried-wakeup").unwrap();
+    db.process_delivery("result-two", Some("Combined conclusion".into()), 4)
+        .unwrap();
+    assert_eq!(
+        db.run("parent").unwrap().unwrap().result.as_deref(),
+        Some("Combined conclusion")
+    );
+    let events = db.inbox(None, false, false, 0, 1).unwrap();
+    assert!(events.has_more);
+    assert_eq!(events.items[0].run.id, "parent");
+    assert_eq!(
+        db.inbox(Some("other-project"), false, false, 0, 30)
+            .unwrap()
+            .unread,
+        0
+    );
+}
+
 #[test]
 fn dependencies_are_a_dag_and_failed_edits_are_atomic() {
     let db = TaskDb::open(None).unwrap();

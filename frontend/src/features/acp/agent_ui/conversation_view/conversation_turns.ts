@@ -26,6 +26,8 @@ export function overviewPrompt(turn: TurnOverview) {
 
 function promptText(content: Data): string {
   if (object(content._meta)['aow/instructions'] === true) return '';
+  const event = object(object(content._meta)['aow/event']);
+  if (event.id) return t('inbox.returned', { task: text(event.task_id) });
   if (content.type === 'text') return userTextPreview(text(content.text));
   if (content.type === 'image') return t("acp.image");
   if (content.type === 'resource') return text(object(content.resource).text) || text(object(content.resource).uri);

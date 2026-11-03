@@ -53,16 +53,18 @@ enum TaskCommand {
         #[arg(long, value_parser = crate::parse_id)]
         source_thread: Option<String>,
     },
-    /// Read the task, runtime status, latest response and its delegated tasks.
+    /// Read task status and recorded execution results. Select --run for a wakeup.
     Get {
         #[arg(value_parser = crate::parse_id)]
         id: String,
         #[arg(long, value_parser = crate::parse_id)]
         source_thread: Option<String>,
+        #[arg(long, value_parser = crate::parse_id)]
+        run: Option<String>,
     },
     /// Create an independent task. Reuse the request ID and payload on retries.
     #[command(
-        after_help = "change creates a worktree from project defaults. analyze uses the project checkout without edits. review requires --target-task with a clean, committed workspace and records its HEAD. Without --role, use the source task's ACP adapter. New tasks receive only the supplied task text and role instructions. An accepted task may still fail at startup; inspect it with task get. No automatic review loops or result delivery are scheduled."
+        after_help = "change creates a worktree from project defaults. analyze uses the project checkout without edits. review requires --target-task with a clean, committed workspace and records its HEAD. Without --role, use the source task's ACP adapter. New tasks receive only the supplied task text and role instructions. After acceptance end your turn; results create an Inbox event and wake the source conversation. Do not poll or wait."
     )]
     Create {
         #[arg(long, value_parser = crate::parse_id)]
@@ -78,12 +80,14 @@ enum TaskCommand {
         #[command(flatten)]
         task: TaskInput,
     },
-    /// Continue an existing task in its workspace. Busy targets return a conflict.
+    /// Queue work in an existing task. Results wake this request's source conversation.
     Send {
         #[arg(value_parser = crate::parse_id)]
         id: String,
         #[arg(long, value_parser = crate::parse_id)]
         source_thread: String,
+        #[arg(long, value_parser = crate::parse_id)]
+        request_id: String,
         #[command(flatten)]
         task: TaskInput,
     },
@@ -134,8 +138,17 @@ pub fn role(args: RoleArgs, state_dir: PathBuf) -> Result<Value> {
 pub fn task(args: TaskArgs, state_dir: PathBuf) -> Result<Value> {
     let (path, body) = match args.command {
         TaskCommand::List { source_thread } => (scope("/v1/tasks".into(), source_thread), None),
-        TaskCommand::Get { id, source_thread } => {
-            (scope(format!("/v1/tasks/{id}"), source_thread), None)
+        TaskCommand::Get {
+            id,
+            source_thread,
+            run,
+        } => {
+            let mut path = scope(format!("/v1/tasks/{id}"), source_thread);
+            if let Some(run) = run {
+                path.push(if path.contains('?') { '&' } else { '?' });
+                path.push_str(&format!("run_id={run}"));
+            }
+            (path, None)
         }
         TaskCommand::Create {
             source_thread,
@@ -163,10 +176,13 @@ pub fn task(args: TaskArgs, state_dir: PathBuf) -> Result<Value> {
         TaskCommand::Send {
             id,
             source_thread,
+            request_id,
             task,
         } => (
             format!("/v1/tasks/{id}/send"),
-            Some(json!({"source_thread_id":source_thread,"prompt":required_task(task)?})),
+            Some(
+                json!({"request_id":request_id,"source_thread_id":source_thread,"prompt":required_task(task)?}),
+            ),
         ),
     };
     request(state_dir, path, body)

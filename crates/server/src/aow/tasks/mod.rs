@@ -14,6 +14,10 @@ pub(super) use api::routes;
 pub(crate) use routing::cli_routes;
 
 impl AowManager {
+    pub(crate) fn task_db(&self) -> aow_db::tasks::TaskDb {
+        self.inner.tasks.clone()
+    }
+
     pub(crate) async fn task_resource_access(&self) -> tokio::sync::MutexGuard<'_, ()> {
         self.inner.task_operation.lock().await
     }

@@ -8,6 +8,10 @@ pub(crate) fn start(thread: &mut SessionSnapshot, entry_start: usize) {
     super::AcpThread::clear_session_meta(thread);
     thread.session_meta_suppressed = false;
     thread.turns.push(SessionTurn {
+        id: thread
+            .active_prompt
+            .clone()
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
         user_entry_id: thread.entries[entry_start].id.clone(),
         status: "in_progress".into(),
         stop_reason: None,
@@ -31,6 +35,7 @@ pub(crate) fn finish(thread: &mut SessionSnapshot) {
             thread.error.clone(),
         );
     }
+    settle_receipts(thread);
 }
 
 pub(crate) fn finish_at(thread: &mut SessionSnapshot, entry_start: usize) {
@@ -46,6 +51,53 @@ pub(crate) fn finish_at(thread: &mut SessionSnapshot, entry_start: usize) {
             thread.stop_reason.clone(),
             thread.error.clone(),
         );
+    }
+    settle_receipts(thread);
+}
+
+fn settle_receipts(thread: &mut SessionSnapshot) {
+    for receipt in thread
+        .prompt_receipts
+        .values_mut()
+        .filter(|r| r.status == "in_progress")
+    {
+        let Some(turn) = thread
+            .turns
+            .iter()
+            .find(|turn| turn.user_entry_id == receipt.user_entry_id)
+        else {
+            if thread.status != "working" {
+                receipt.status = "interrupted".into();
+                receipt.error = Some("Prompt outcome unavailable after session recovery".into());
+                receipt.finished_at = Some(chrono::Utc::now().to_rfc3339());
+            }
+            continue;
+        };
+        if turn.status == "in_progress" {
+            continue;
+        }
+        receipt.status = turn.status.clone();
+        receipt.stop_reason = turn.stop_reason.clone();
+        receipt.error = turn.error.clone();
+        receipt.finished_at = Some(chrono::Utc::now().to_rfc3339());
+        if let Some(start) = thread
+            .entries
+            .iter()
+            .position(|e| e.id == turn.user_entry_id)
+        {
+            let end = thread
+                .entries
+                .iter()
+                .enumerate()
+                .skip(start + 1)
+                .find(|(_, e)| thread.turns.iter().any(|t| t.user_entry_id == e.id))
+                .map_or(thread.entries.len(), |(index, _)| index);
+            let text = final_message(&thread.entries[start..end])
+                .iter()
+                .filter_map(|entry| entry.content["text"].as_str())
+                .collect::<String>();
+            receipt.conclusion = (!text.trim().is_empty()).then_some(text);
+        }
     }
 }
 
@@ -71,6 +123,7 @@ fn finish_record(
 // Replayed entries get new local IDs. Carry outcomes over only for a verified
 // identical transcript prefix; never guess by repeated prompt text alone.
 pub(crate) fn restore(previous: &SessionSnapshot, replay: &mut SessionSnapshot) {
+    replay.prompt_receipts = previous.prompt_receipts.clone();
     if replay::reconcile(previous, replay) {
         return;
     }

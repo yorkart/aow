@@ -2,7 +2,7 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState, type RefObject
 import { t } from '../lib/i18n';
 import type { TabRevealRequest, WorkspaceTab } from './WorkspaceTabs';
 
-type GlobalTabKind = 'settings' | 'browser';
+type GlobalTabKind = 'settings' | 'browser' | 'inbox';
 export interface GlobalTabHost extends WorkspaceTab {
   kind: GlobalTabKind;
   workspace: string;
@@ -11,6 +11,7 @@ export interface GlobalTabHost extends WorkspaceTab {
   close: () => void;
 }
 const definitions: { kind: GlobalTabKind; id: string; label: string }[] = [
+  { kind: 'inbox', id: 'inbox', label: t('inbox.title') },
   { kind: 'settings', id: 'settings', label: t('navigation.settings') },
   { kind: 'browser', id: 'system-files', label: t('aow.system_file_browser') },
 ];

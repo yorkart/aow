@@ -40,6 +40,7 @@
     "preview:pr": "node tests/pull-request-preview.mjs",
     "test:i18n": "node --test tests/i18n.test.mjs tests/i18n-browser.test.mjs",
     "test:tasks": "node --test tests/task-organization.test.mjs",
+    "test:inbox": "node --test tests/inbox.test.mjs",
     "test:conversations": "node --test tests/conversations.test.mjs"
   },
   "dependencies": {

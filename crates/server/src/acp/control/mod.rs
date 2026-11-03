@@ -24,6 +24,17 @@ pub(crate) const CONTROL_HEADER: &str = "x-aow-acp-control";
 pub(crate) struct Controls(Arc<Mutex<HashMap<String, Weak<Controller>>>>);
 
 impl Controls {
+    /// Internal scheduling shares the lifecycle gate without claiming or revoking
+    /// the browser's view ownership. Core prompt admission still arbitrates input.
+    pub(crate) async fn background(&self, id: &str) -> BackgroundLease {
+        let controller = self.session(id);
+        let guard = controller.restore.clone().lock_owned().await;
+        BackgroundLease {
+            _controller: controller,
+            _guard: guard,
+        }
+    }
+
     pub(super) fn session(&self, id: &str) -> Arc<Controller> {
         let mut sessions = self.0.lock().unwrap();
         sessions.retain(|_, controller| controller.strong_count() > 0);
@@ -34,6 +45,11 @@ impl Controls {
         sessions.insert(id.into(), Arc::downgrade(&controller));
         controller
     }
+}
+
+pub(crate) struct BackgroundLease {
+    _controller: Arc<Controller>,
+    _guard: tokio::sync::OwnedMutexGuard<()>,
 }
 
 #[derive(Clone)]
@@ -57,7 +73,7 @@ impl Drop for CliLease {
 
 pub(super) struct Controller {
     owner: Mutex<Option<Owner>>,
-    restore: AsyncMutex<()>,
+    restore: Arc<AsyncMutex<()>>,
     changed: watch::Sender<()>,
 }
 
@@ -65,7 +81,7 @@ impl Default for Controller {
     fn default() -> Self {
         Self {
             owner: Mutex::new(None),
-            restore: AsyncMutex::new(()),
+            restore: Arc::new(AsyncMutex::new(())),
             changed: watch::channel(()).0,
         }
     }

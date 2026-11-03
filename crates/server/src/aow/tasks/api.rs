@@ -140,7 +140,14 @@ pub(super) async fn create(
                     "Task request ID belongs to another request",
                 ));
             }
-            return Ok(Json(task.clone().into()));
+            let mut response = Task::from(task.clone());
+            response.run_id = state
+                .aow
+                .task_db()
+                .run_for_request(&task.id, "initial")
+                .map_err(storage)?
+                .map(|run| run.id);
+            return Ok(Json(response));
         }
         // Reject unresolved references before provisioning a workspace or session.
         for id in super::mentions::role_mentions(&request.prompt) {
@@ -151,6 +158,12 @@ pub(super) async fn create(
             .as_deref()
             .map(|id| super::routing::source_task(&state, id))
             .transpose()?;
+        let run_source = source
+            .as_ref()
+            .zip(request.source_thread_id.as_deref())
+            .map(|(task, thread)| crate::collaboration::source(&state, task, thread))
+            .transpose()
+            .map_err(storage)?;
         if source.is_some()
             && !matches!(
                 request.workspace_intent.as_deref(),
@@ -316,12 +329,21 @@ pub(super) async fn create(
                 id: resource_id.into(),
             }],
         };
-        if let Err(error) = state.aow.inner.tasks.insert(&task) {
+        let run = (!task.is_router && task.initial_thread_id.is_some()).then(|| {
+            crate::collaboration::new_run(&task, "initial".into(), task.prompt.clone(), run_source)
+        });
+        if let Err(error) = state.aow.inner.tasks.insert_with_run(&task, run.as_ref()) {
             session.discard(&state).await;
             return Err(crate::instances::invalid(error.to_string()));
         }
-        session.start(&state, (!task.is_router).then(|| task.prompt.clone()))?;
-        Ok(Json(task.into()))
+        if run.is_some() {
+            state.collaboration.start(&state);
+        } else {
+            session.start(&state, (!task.is_router).then(|| task.prompt.clone()))?;
+        }
+        let mut response = Task::from(task);
+        response.run_id = run.map(|run| run.id);
+        Ok(Json(response))
     })
     .await
     .map_err(|error| HttpError::internal(error.to_string()))?

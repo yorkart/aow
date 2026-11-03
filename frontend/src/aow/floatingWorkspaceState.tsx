@@ -49,7 +49,7 @@ function initialTabs(): FloatingTab[] {
   const value = readStored<unknown>(storageKey, []);
   return Array.isArray(value) ? value.filter((tab): tab is FloatingTab => tab && typeof tab.workspace === 'string'
     && typeof tab.id === 'string' && typeof tab.label === 'string' && isWorkspaceTabKind(tab.kind)
-    && tab.kind !== 'browser' && tab.kind !== 'settings')
+    && tab.kind !== 'browser' && tab.kind !== 'settings' && tab.kind !== 'inbox')
     .map(tab => ({ ...tab, targetId: tab.targetId ?? tab.id.slice(tab.id.indexOf(':') + 1),
       terminal: Array.isArray(tab.terminal?.panes) ? tab.terminal : undefined })) : [];
 }

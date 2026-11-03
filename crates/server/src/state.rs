@@ -9,6 +9,7 @@ use crate::{
 
 #[derive(Clone)]
 pub struct AppState {
+    pub(crate) collaboration: crate::collaboration::Runtime,
     pub(crate) file_search: crate::filesystem::search::SearchRequests,
     pub(crate) acp: aow_acp::AcpService,
     pub(crate) acp_controls: crate::acp::Controls,
@@ -38,6 +39,7 @@ impl AppState {
             terminal::TerminalManager::in_memory(TerminaldClient::new(terminald_socket));
         let workspace_events = workspace_events::WorkspaceEvents::new();
         Self {
+            collaboration: Default::default(),
             file_search: crate::filesystem::search::SearchRequests::default(),
             acp: crate::acp::service(
                 aow.clone(),
@@ -83,6 +85,7 @@ impl AppState {
         )?;
         let workspace_events = workspace_events::WorkspaceEvents::new();
         Ok(Self {
+            collaboration: Default::default(),
             file_search: crate::filesystem::search::SearchRequests::default(),
             acp_controls: crate::acp::Controls::default(),
             acp: crate::acp::service(

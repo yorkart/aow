@@ -16,6 +16,18 @@ fn role_discovery_and_task_results_preserve_scope() {
             vec!["task", "get", "task-b", "--source-thread", "thread-a"],
             "/v1/tasks/task-b?source_thread_id=thread-a",
         ),
+        (
+            vec![
+                "task",
+                "get",
+                "task-b",
+                "--source-thread",
+                "thread-a",
+                "--run",
+                "run-b",
+            ],
+            "/v1/tasks/task-b?source_thread_id=thread-a&run_id=run-b",
+        ),
     ] {
         let (output, header, body) = run(&args, None, 200, json!({"items":[]}));
         assert!(output.status.success(), "{output:?}");
@@ -58,7 +70,7 @@ fn task_creation_preserves_multiline_input_and_idempotency_identity() {
 }
 
 #[test]
-fn continuing_a_busy_task_reports_conflict_without_reissuing_the_message() {
+fn continuing_a_busy_task_returns_the_queued_run_without_waiting() {
     let (output, header, body) = run(
         &[
             "task",
@@ -66,15 +78,19 @@ fn continuing_a_busy_task_reports_conflict_without_reissuing_the_message() {
             "task-b",
             "--source-thread",
             "thread-a",
+            "--request-id",
+            "stable-send",
             "--task",
             "Continue",
         ],
         None,
-        409,
-        json!({"message":"ACP session is busy"}),
+        200,
+        json!({"accepted":true,"run_id":"run-b","state":"queued","return_delivery":"inbox_and_wakeup"}),
     );
     assert!(header.starts_with("POST /v1/tasks/task-b/send HTTP/1.1"));
     assert_eq!(body["source_thread_id"], "thread-a");
-    assert_eq!(output.status.code(), Some(7));
-    assert!(output.stdout.is_empty());
+    assert_eq!(body["request_id"], "stable-send");
+    assert!(output.status.success());
+    let response: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(response["run_id"], "run-b");
 }

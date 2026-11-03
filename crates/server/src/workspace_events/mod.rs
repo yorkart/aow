@@ -26,6 +26,7 @@ pub(crate) struct Snapshot {
     projects: u64,
     terminals: u64,
     instances: u64,
+    inbox: u64,
     repositories: BTreeMap<String, u64>,
 }
 
@@ -59,6 +60,7 @@ impl WorkspaceEvents {
                 projects: 0,
                 terminals: 0,
                 instances: 0,
+                inbox: 0,
                 repositories: BTreeMap::new(),
             })
             .0,
@@ -89,6 +91,13 @@ impl WorkspaceEvents {
         self.0.changes.send_modify(|snapshot| {
             snapshot.revision += 1;
             snapshot.instances = snapshot.revision;
+        });
+    }
+
+    pub(crate) fn inbox_changed(&self) {
+        self.0.changes.send_modify(|snapshot| {
+            snapshot.revision += 1;
+            snapshot.inbox = snapshot.revision;
         });
     }
 

@@ -37,15 +37,19 @@ aow-cli task create --source-thread THREAD-ID --request-id login-review \
   --role REVIEWER-ROLE-ID --intent review --target-task login-implementation \
   --task '审查登录功能，列出问题和验证依据'
 
-aow-cli task get login-review --source-thread THREAD-ID
-aow-cli task send login-implementation --source-thread THREAD-ID --task-file feedback.md
+aow-cli task get login-review --run RUN-ID --source-thread THREAD-ID
+aow-cli task send login-implementation --source-thread THREAD-ID --request-id login-feedback-1 --task-file feedback.md
 ```
 
 `THREAD-ID` 是 AoW 本地会话 ID，由注入的上下文提供；不是模型供应商的原生 session ID。这些命令使用运行中的 AoW 本机 socket。上下文同时提供 CLI 可执行文件和 state directory，角色 Home 改变时仍应使用该实例的 `--state-dir`。
 
 `change` 从项目默认基线创建独立 worktree；`analyze` 在项目工作区进行无修改的分析；`review` 要求目标任务工作区干净，记录其当前提交，按该提交审查。共享工作区的无修改策略由指令约束，并非文件系统沙箱。已有任务的继续修改使用 `send`，保留原角色与工作区。省略 `--role` 使用发起任务的 ACP adapter 创建普通执行会话，不继承其角色身份。
 
-任务持久化保存来源 task、发起会话和审查目标。`task get` 返回任务、初始 ACP 会话状态、本轮回复及委派任务；`idle` 只代表会话空闲，不能据此认定工作成功。创建成功代表任务已登记并启动，需查询初始化错误或待处理授权。忙碌或被浏览器控制的任务拒绝 `send`；超时后先查询，避免重复投递。
+每次创建或发送都保存独立的 `run_id`、来源 task、会话、轮次、消息和原始请求。`create` / `send` 接受后即可结束当前轮次，不轮询、不等待。目标忙碌时请求进入持久化队列，执行结果会进入 Inbox，并在来源会话空闲后以 `[WAKEUP]` 触发新一轮；不要求浏览器在线，也不改变浏览器控制权。重试创建或发送时保持相同的请求 ID 和内容。
+
+Wakeup 携带事件、任务、执行和来源消息标识。使用 `task get TASK-ID --run RUN-ID` 读取该次执行的固定结果；无 `--run` 时返回任务、会话状态、近期执行记录和委派任务。`result_available` 表示执行轮次结束，不等于需求已验收；失败、中断、空结果需如实报告。执行任务有自己的委派时，先等待并处理子任务回传，再向其来源回传汇总。
+
+Inbox 支持按项目筛选、已读、归档、打开任务和来源会话；已读、归档不会取消 Wakeup。来源已删除、归档或无法恢复时，结果保留在 Inbox，显示回传失败原因，可手动重试回传。系统按持久化请求标识去重；重启时补发未投递结果，已经接收但中断的模型轮次不会自动重跑。当前仅覆盖 ACP 协作，不包含定时器或复杂审批、开发评审流程。
 
 第一版仅支持 ACP 角色协作，结果可从来源会话的任务卡片或 CLI 查询。多角色 mention 由模型理解，尚未实现自动 Inbox 回推、任务依赖调度和开发—审查—返工循环。
 

@@ -18,6 +18,7 @@ use crate::{
 
 pub fn build_router(state: AppState) -> Router {
     state.workspace_events.start(state.aow.clone());
+    state.collaboration.start(&state);
     let base_path = state.base_path.clone();
     let app = Router::new()
         .merge(auth::routes())
@@ -91,6 +92,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/instances/{reference}", get(crate::instances::get))
         .merge(git_platform_providers::routes())
         .merge(notifications::routes())
+        .merge(crate::inbox::routes())
         .merge(im_api::routes())
         .merge(operations::routes())
         .merge(crate::realtime::routes())

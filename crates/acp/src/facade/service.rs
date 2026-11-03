@@ -175,6 +175,16 @@ impl AcpService {
     pub fn start_prompt(&self, thread_id: &str, content: Vec<Content>) -> Result<()> {
         self.0.start_prompt(thread_id, content)
     }
+
+    /// Retries of this ID observe the original admission, including after restart.
+    pub fn start_prompt_once(
+        &self,
+        thread_id: &str,
+        request_id: &str,
+        content: Vec<Content>,
+    ) -> Result<()> {
+        self.0.start_prompt_once(thread_id, request_id, content)
+    }
     pub fn cancel(&self, thread_id: &str) -> Result<()> {
         self.0.cancel(thread_id)
     }

@@ -17,7 +17,7 @@ function ResultCard({ task, onOpen }: { task: WorkTask; onOpen?: (task: WorkTask
   return <div className="task-collaboration-card">
     <div><button type="button" className="task-collaboration-title" disabled={!onOpen || task.archived} onClick={() => onOpen?.(task)}>{taskTitle(task)}</button>
       <button type="button" disabled={loading} onClick={() => { void inspect(); }}>{t(loading ? 'conversations.loading' : 'tasks.inspect_result')}</button></div>
-    {result && <div><small>{t('tasks.runtime_status')}: {result.runtime?.status ?? t('tasks.runtime_unavailable')}{result.runtime?.pending_permissions ? ` · ${t('navigation.awaiting_confirmation')}` : ''}</small>
+    {result && <div><small>{t('tasks.runtime_status')}: {result.runtime?.run_state ? t('inbox.' + result.runtime.run_state) : result.runtime?.status ?? t('tasks.runtime_unavailable')}{result.runtime?.pending_permissions ? ` · ${t('navigation.awaiting_confirmation')}` : ''}</small>
       {result.runtime?.error && <p role="alert">{result.runtime.error}</p>}
       {result.runtime?.response ? <pre>{result.runtime.response}</pre> : <p>{t('tasks.no_response')}</p>}</div>}
     {error && <p role="alert">{error}</p>}

@@ -10,8 +10,8 @@ mod settings;
 
 pub use facade::{
     AcpHost, AcpService, AgentInfo, ConnectionInfo, ConnectionStatus, Content,
-    ExecutionEnvironment, Permission, SessionCreation, SessionImport, SessionInfo, SessionSnapshot,
-    SessionSource, SessionUpdates, SessionVersion, SyncEvent, SyncResource, ThreadEntry,
-    TurnCompletion, is_auth_required,
+    ExecutionEnvironment, Permission, PromptReceipt, SessionCreation, SessionImport, SessionInfo,
+    SessionSnapshot, SessionSource, SessionUpdates, SessionVersion, SyncEvent, SyncResource,
+    ThreadEntry, TurnCompletion, is_auth_required,
 };
 pub use settings::{SETTINGS_PATH, SettingsDocument, validate_settings};

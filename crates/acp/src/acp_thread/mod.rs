@@ -270,6 +270,7 @@ impl AcpThread {
             interacted_at: Some(now),
             entries: Vec::new(),
             turns: Vec::new(),
+            prompt_receipts: Default::default(),
             plan: Value::Null,
             notices: Vec::new(),
             session_meta: Default::default(),

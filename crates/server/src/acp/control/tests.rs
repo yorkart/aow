@@ -16,6 +16,20 @@ fn headers(state: &ControlState) -> HeaderMap {
 }
 
 #[tokio::test]
+async fn background_admission_retains_browser_ownership_and_the_shared_lifecycle_gate() {
+    let controls = Controls::default();
+    let controller = controls.session("thread");
+    let owner = controller.claim(Uuid::new_v4(), false);
+    let background = controls.background("thread").await;
+    assert!(controller.authorize(&headers(&owner), false).is_ok());
+    assert!(controller.restore.try_lock().is_err());
+    assert!(Arc::ptr_eq(&controller, &controls.session("thread")));
+    drop(background);
+    assert!(controller.restore.try_lock().is_ok());
+    assert!(controller.authorize(&headers(&owner), false).is_ok());
+}
+
+#[tokio::test]
 async fn one_owner_observers_and_explicit_takeover() {
     let controller = Controller::default();
     let first = Uuid::new_v4();

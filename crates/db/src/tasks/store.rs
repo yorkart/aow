@@ -47,12 +47,13 @@ impl TaskDb {
                 include_str!("sql/initialize.sql"),
                 include_str!("sql/roles.sql"),
                 include_str!("sql/routing.sql"),
+                include_str!("sql/collaboration.sql"),
             ],
         )?;
         Ok(Self(Arc::new(Mutex::new(connection))))
     }
 
-    fn lock(&self) -> Result<MutexGuard<'_, Connection>> {
+    pub(super) fn lock(&self) -> Result<MutexGuard<'_, Connection>> {
         self.0
             .lock()
             .map_err(|_| anyhow::anyhow!("Task database lock poisoned"))
@@ -100,6 +101,10 @@ impl TaskDb {
     }
 
     pub fn insert(&self, task: &TaskRecord) -> Result<()> {
+        self.insert_with_run(task, None)
+    }
+
+    pub fn insert_with_run(&self, task: &TaskRecord, run: Option<&super::TaskRun>) -> Result<()> {
         let mut connection = self.lock()?;
         let tx = connection.transaction()?;
         tx.execute("INSERT INTO tasks (id, project_id, prompt, agent_id, workspace, initial_thread_id, pinned, archived, workspace_mode, slug, agent_role_id, is_router, source_task_id, source_thread_id, workspace_intent, target_task_id, target_revision) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
@@ -110,6 +115,9 @@ impl TaskDb {
                 "INSERT INTO task_resources VALUES (?1, ?2, ?3)",
                 params![task.id, resource.kind, resource.id],
             )?;
+        }
+        if let Some(run) = run {
+            super::collaboration::insert_run(&tx, run)?;
         }
         tx.commit()?;
         Ok(())

@@ -321,7 +321,15 @@ async fn task_idle(state: &AppState, thread: &str) {
     tokio::time::timeout(std::time::Duration::from_secs(10), async {
         loop {
             let session = state.acp.snapshot(thread).unwrap();
+            let pending_run = state
+                .aow
+                .task_db()
+                .active_runs()
+                .unwrap()
+                .iter()
+                .any(|run| run.thread_id == thread);
             if session.status == "idle"
+                && !pending_run
                 && (session
                     .entries
                     .iter()
@@ -483,7 +491,7 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
         &app,
         "POST",
         "/v1/tasks/review/send",
-        json!({"source_thread_id":worker,"prompt":"Check error handling too"}),
+        json!({"request_id":"error-handling","source_thread_id":worker,"prompt":"Check error handling too"}),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{sent}");
@@ -500,10 +508,14 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
         &app,
         "POST",
         "/v1/tasks/review/send",
-        json!({"source_thread_id":worker,"prompt":"Do not duplicate this"}),
+        json!({"request_id":"queued","source_thread_id":worker,"prompt":"Do not duplicate this"}),
     )
     .await;
-    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "busy targets accept a durable queued execution"
+    );
     state.acp.cancel(review_thread).unwrap();
     task_idle(&state, review_thread).await;
     let mut foreign = state
@@ -529,7 +541,7 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
         (
             "POST",
             "/v1/tasks/foreign/send".into(),
-            json!({"source_thread_id":worker,"prompt":"Cross-project message"}),
+            json!({"request_id":"foreign-send","source_thread_id":worker,"prompt":"Cross-project message"}),
         ),
         (
             "POST",

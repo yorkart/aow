@@ -14,6 +14,15 @@ pub(super) async fn dispatch(
     page: &broadcast::Sender<TaskStopNotification>,
     completed: TurnCompletion,
 ) {
+    // Managed work has a durable Inbox event. Do not also publish the transient
+    // legacy task-stopped popup (including the automatic summary wakeup).
+    if manager
+        .task_db()
+        .owns_prompt(&completed.turn_id)
+        .unwrap_or(false)
+    {
+        return;
+    }
     let session = completed.session;
     let project_name = manager
         .project_name_for_workspace(&session.cwd)

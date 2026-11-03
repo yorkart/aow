@@ -877,6 +877,7 @@ fn clipboard_app(manager: TerminalManager) -> Router {
     let aow = crate::aow::AowManager::in_memory();
     let workspace_events = crate::workspace_events::WorkspaceEvents::new();
     routes().with_state(AppState {
+        collaboration: Default::default(),
         instances: crate::instances::InstanceStore::default(),
         file_search: crate::filesystem::search::SearchRequests::default(),
         acp_controls: crate::acp::Controls::default(),
@@ -1628,6 +1629,7 @@ async fn pane_sessions_use_live_cwd_and_config_and_cache_readable_claude_snapsho
     let aow = crate::aow::AowManager::in_memory();
     let workspace_events = crate::workspace_events::WorkspaceEvents::new();
     let app = crate::build_router(AppState {
+        collaboration: Default::default(),
         instances: crate::instances::InstanceStore::default(),
         file_search: crate::filesystem::search::SearchRequests::default(),
         acp_controls: crate::acp::Controls::default(),

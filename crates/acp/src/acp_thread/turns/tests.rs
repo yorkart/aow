@@ -11,6 +11,53 @@ fn snapshot() -> SessionSnapshot {
     )
 }
 
+#[test]
+fn managed_receipts_freeze_each_turn_and_survive_compacted_history() {
+    let mut thread = snapshot();
+    for (id, answer) in [
+        ("first", "First conclusion"),
+        ("second", "Second conclusion"),
+    ] {
+        let start_index = thread.entries.len();
+        thread.status = "working".into();
+        thread.active_prompt = Some(id.into());
+        AcpThread::push(&mut thread, "user", json!({"type":"text","text":id}));
+        start(&mut thread, start_index);
+        thread.prompt_receipts.insert(
+            id.into(),
+            crate::facade::PromptReceipt {
+                user_entry_id: thread.entries[start_index].id.clone(),
+                status: "in_progress".into(),
+                stop_reason: None,
+                error: None,
+                conclusion: None,
+                finished_at: None,
+            },
+        );
+        message(&mut thread, Some(id), answer);
+        thread.status = "idle".into();
+        thread.stop_reason = Some("end_turn".into());
+        finish(&mut thread);
+    }
+    assert_eq!(
+        thread.prompt_receipts["first"].conclusion.as_deref(),
+        Some("First conclusion")
+    );
+    let mut replay = snapshot();
+    AcpThread::push(
+        &mut replay,
+        "user",
+        json!({"type":"text","text":"Compacted context"}),
+    );
+    restore(&thread, &mut replay);
+    assert!(replay.turns.is_empty());
+    assert_eq!(replay.prompt_receipts.len(), 2);
+    assert_eq!(
+        replay.prompt_receipts["second"].conclusion.as_deref(),
+        Some("Second conclusion")
+    );
+}
+
 fn message(thread: &mut SessionSnapshot, id: Option<&str>, value: &str) {
     AcpThread::handle_session_update(
         thread,

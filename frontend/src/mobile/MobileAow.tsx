@@ -1,4 +1,7 @@
 import { t } from '../lib/i18n';
+import { InboxPanel } from '../features/inbox/InboxPanel';
+import { useInboxUnread } from '../features/inbox/api';
+import { Inbox } from 'lucide-react';
 import { appUrl } from '../lib/basePath';
 import { WorkspaceMarkdownProvider } from '../features/files/WorkspaceMarkdown';
 import { LogoutButton } from '../features/auth/LogoutButton';
@@ -39,6 +42,7 @@ const navigation = [
 
 export function MobileAow({ initialEntry }: { initialEntry?: ResolvedTab } = {}) {
   const projects = useMobileResource('projects', () => aowApi.projects());
+  const inboxUnread = useInboxUnread();
   const { route, navigate, back } = useMobileRoute(initialEntry, projects.data);
   const syncLocation = useAowTabLocation();
   useEffect(() => {
@@ -65,10 +69,11 @@ export function MobileAow({ initialEntry }: { initialEntry?: ResolvedTab } = {})
           <button className="mobile-brand-title" onClick={goHome}><strong>{project?.name}</strong><span>{worktree.branch || t("git.detached_head")}</span></button>
         </> : <MobileNodeSwitcher addresses={nodeAddresses} />}
         <div className="mobile-header-actions" ref={setHeaderActions} />
+        <button className="mobile-icon-button inbox-trigger" aria-label={t('inbox.title')} onClick={() => navigate(route.view === 'inbox' ? {} : { view: 'inbox' })}><Inbox size={20} />{inboxUnread > 0 && <span className="inbox-badge">{inboxUnread > 99 ? '99+' : inboxUnread}</span>}</button>
         {!worktree && <button ref={settingsButton} className="mobile-icon-button" aria-label={t("settings.settings")} title={t("settings.settings")} onClick={() => setShowSettings(true)}><Settings size={20} /></button>}
         {!worktree && <LogoutButton className="mobile-icon-button" compact />}
       </header>
-      {route.workspace ? project && worktree ? <MobileWorkspace initialTabId={route.terminal} key={worktree.path} project={project} worktree={worktree} route={route} navigate={navigate} back={() => back(fallback)} headerActions={headerActions} />
+      {route.view === 'inbox' ? <InboxPanel projects={projects.data ?? []} /> : route.workspace ? project && worktree ? <MobileWorkspace initialTabId={route.terminal} key={worktree.path} project={project} worktree={worktree} route={route} navigate={navigate} back={() => back(fallback)} headerActions={headerActions} />
         : <div className="mobile-home"><MobileState loading={projects.loading} error={projects.error} retry={projects.reload} empty={t("mobile.workspace_does_not_exist_or_has_been_removed")} /><button className="mobile-button" onClick={goHome}><Home size={17} />{t("mobile.back_to_project")}</button></div>
         : <MobileHome projects={projects.data?.filter(project => !project.builtin) ?? []} loading={projects.loading} error={projects.error} reload={projects.reload} navigate={navigate} />}
     </div>

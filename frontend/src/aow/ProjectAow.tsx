@@ -1,4 +1,6 @@
 import { t } from '../lib/i18n';
+import { InboxPanel } from '../features/inbox/InboxPanel';
+import { useInboxUnread } from '../features/inbox/api';
 import { TaskScopeProvider, useTaskScope } from '../features/tasks/TaskScope';
 import { TaskRows } from '../features/tasks/TaskRows';
 import { TaskDialog } from '../features/tasks/TaskDialog';
@@ -26,7 +28,7 @@ import { FloatingWorkspaceProvider, FloatingOpenMenu, useFloatingWorkspace, open
 import type { SetStateAction, CSSProperties, DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from 'react';
 import {
   ArrowUp, Bell, CalendarClock, Check, ChevronRight, CornerDownLeft, FileText, Files, FolderGit2, FolderOpen, GitBranch, GitBranchPlus, GitPullRequest, MessageSquare, MoreHorizontal,
-  Archive, ListTodo, LoaderCircle, NotebookPen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pin, PinOff, Plus, RefreshCw, Settings, Trash2, X,
+  Archive, Inbox, ListTodo, LoaderCircle, NotebookPen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pin, PinOff, Plus, RefreshCw, Settings, Trash2, X,
 } from 'lucide-react';
 import { gitApi } from '../features/git/api';
 import { filesApi } from '../features/files/api';
@@ -908,7 +910,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   }, [activeCenterId, centerTabs]);
   useEffect(() => {
     if (activeCenterId && centerTabs.some((tab) => tab.id === activeCenterId)) return;
-    const closedGlobal = activeCenterId === 'settings' || activeCenterId === 'system-files';
+    const closedGlobal = activeCenterId === 'settings' || activeCenterId === 'system-files' || activeCenterId === 'inbox';
     const candidate = (closedGlobal ? centerTabs.find(tab => tab.id === previousContentTab.current) : undefined)
       ?? terminalTabs.find((tab) => tab.targetId === terminals.activeId) ?? centerTabs[0];
     setActiveCenterId(candidate?.id);
@@ -2307,6 +2309,8 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
   const [browserRequest, setBrowserRequest] = useState<{ path: string }>();
   const [browserVisited, setBrowserVisited] = useState(false);
   const settingsTab = globalTabs.tabs.find(tab => tab.kind === 'settings');
+  const inboxTab = globalTabs.tabs.find(tab => tab.kind === 'inbox');
+  const inboxUnread = useInboxUnread();
   const browserTab = globalTabs.tabs.find(tab => tab.kind === 'browser');
   const [nodeAddresses, setNodeAddresses] = useState<string[]>();
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(() => storedWidth(leftSidebarWidthStorageKey, defaultLeftSidebarWidth, minLeftSidebarWidth, maxLeftSidebarWidth));
@@ -2882,6 +2886,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
           </AowPanelStack>
         </div>
         <div className="project-aow-sidebar-footer">
+          <button className="inbox-trigger" title={t('inbox.title')} aria-label={t('inbox.title')} onClick={() => openGlobalTab('inbox')}><Inbox />{inboxUnread > 0 && <span className="inbox-badge">{inboxUnread > 99 ? '99+' : inboxUnread}</span>}</button>
           <button title={t("navigation.settings")} aria-label={t("navigation.settings")} onClick={() => openGlobalTab('settings')}><Settings /></button>
           <button title={t("aow.open_system_file_browser")} aria-label={t("aow.open_system_file_browser")} onClick={() => openGlobalTab('browser')}><Files /></button>
           <button title={t(taskMode ? 'tasks.show_worktrees' : 'tasks.show_tasks')} aria-label={t(taskMode ? 'tasks.show_worktrees' : 'tasks.show_tasks')} aria-pressed={taskMode} onClick={() => { cancelTabNavigation(); setTaskMode(value => !value); }}><ListTodo /></button>
@@ -2971,6 +2976,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
       }} /> }
     {bindNotesProject ? <BindNotesDialog project={bindNotesProject} onClose={() => setBindNotesProject(undefined)} onBound={notesBound} /> : null}
     {settingsTab ? createPortal(<SettingsDialog embedded closeRequest={settingsClose} agents={agents} onClose={() => globalTabs.close('settings')} onNodesChange={setNodeAddresses} onReload={async () => { await Promise.all([loadAgents(), loadProjects()]); }} />, globalTabs.elements.settings) : null}
+    {inboxTab ? createPortal(<InboxPanel projects={projects} />, globalTabs.elements.inbox) : null}
     {/* Keep a closed browser attached but hidden so uploads and scroll positions survive. */}
     <div hidden ref={node => { if (node && !browserTab) node.appendChild(globalTabs.elements.browser); }} />
     {browserVisited ? createPortal(<SystemFileBrowser navigationRequest={browserRequest} onPathChange={setBrowserPath}
