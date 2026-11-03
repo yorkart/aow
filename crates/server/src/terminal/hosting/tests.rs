@@ -29,8 +29,9 @@ fn hosting(id: &str) -> TerminalHosting {
 #[test]
 fn completion_subscription_only_delivers_future_events_for_the_waiting_instance() {
     use super::super::notifications::TaskStopNotification;
-    let manager =
-        TerminalManager::in_memory(TerminaldClient::new("/tmp/unused-hosting.sock".into()));
+    let manager = TerminalManager::in_memory(TerminalClient::for_test_config(
+        "/tmp/unused-hosting.sock".into(),
+    ));
     let event = TaskStopNotification {
         agent: "codex".into(),
         session_id: "session".into(),
@@ -77,8 +78,9 @@ fn legacy_hosting_metadata_gets_a_finite_default_limit() {
 
 #[test]
 fn takeover_invalidates_late_results_and_old_failures() {
-    let manager =
-        TerminalManager::in_memory(TerminaldClient::new("/tmp/unused-hosting.sock".into()));
+    let manager = TerminalManager::in_memory(TerminalClient::for_test_config(
+        "/tmp/unused-hosting.sock".into(),
+    ));
     let pane = super::super::tests::pane("pane", TerminalPaneStatus::Running);
     let tab = super::super::tests::tab_with(
         TerminalLayout::Pane {
@@ -105,8 +107,9 @@ fn takeover_invalidates_late_results_and_old_failures() {
 
 #[tokio::test]
 async fn takeover_waits_for_submission_boundary() {
-    let manager =
-        TerminalManager::in_memory(TerminaldClient::new("/tmp/unused-hosting.sock".into()));
+    let manager = TerminalManager::in_memory(TerminalClient::for_test_config(
+        "/tmp/unused-hosting.sock".into(),
+    ));
     let first = manager.hosting_gate("pane").unwrap();
     let second = manager.hosting_gate("pane").unwrap();
     let submission = first.lock().await;

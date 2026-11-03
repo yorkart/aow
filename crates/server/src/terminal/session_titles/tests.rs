@@ -114,7 +114,7 @@ async fn metadata_preserves_osc_titles_and_filters_other_workspaces() {
         tests::{pane, tab_with},
     };
     use aow_protocol::{TerminalLayout, TerminalPaneStatus};
-    use aow_terminald_client::TerminaldClient;
+    use aow_runtime_client::TerminalClient;
     use axum::{Json, Router, routing::get};
 
     let directory = tempfile::tempdir().unwrap();
@@ -136,16 +136,17 @@ async fn metadata_preserves_osc_titles_and_filters_other_workspaces() {
         ..Default::default()
     };
     let app = Router::new().route(
-        "/v1/agents",
+        "/v1/terminal/agents",
         get(move || {
             let detected = detected.clone();
             async move { Json(detected) }
         }),
     );
     let socket = directory.path().join("daemon.sock");
-    let listener = tokio::net::UnixListener::bind(&socket).unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    std::fs::write(&socket,serde_json::json!({"url":format!("http://{}",listener.local_addr().unwrap()),"token":"fixture-token-0123456789abcdef0123456789"}).to_string()).unwrap();
     let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-    let manager = TerminalManager::in_memory(TerminaldClient::new(socket));
+    let manager = TerminalManager::in_memory(TerminalClient::for_test_config(socket));
     manager.lock_state().unwrap().tabs.push(tab_with(
         TerminalLayout::Pane {
             pane_id: "one".into(),
@@ -178,7 +179,7 @@ async fn native_process_title_matches_the_live_session() {
         sessions::tracking::{AgentSessionTracker, SessionResolution, SessionTarget},
     };
     use aow_protocol::{TerminalLayout, TerminalPaneStatus};
-    use aow_terminald_client::TerminaldClient;
+    use aow_runtime_client::TerminalClient;
     use axum::{Json, Router, body::Body, http::Request, routing::get};
     use tower::ServiceExt;
     let pid = std::env::var("AOW_TITLE_TEST_PID")
@@ -235,22 +236,23 @@ async fn native_process_title_matches_the_live_session() {
     let directory = tempfile::tempdir().unwrap();
     let socket = directory.path().join("daemon.sock");
     let daemon = Router::new().route(
-        "/v1/agents",
+        "/v1/terminal/agents",
         get(move || {
             let detected = detected.clone();
             async move { Json(detected) }
         }),
     );
-    let listener = tokio::net::UnixListener::bind(&socket).unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    std::fs::write(&socket,serde_json::json!({"url":format!("http://{}",listener.local_addr().unwrap()),"token":"fixture-token-0123456789abcdef0123456789"}).to_string()).unwrap();
     let server = tokio::spawn(async move { axum::serve(listener, daemon).await.unwrap() });
-    let manager = TerminalManager::in_memory(TerminaldClient::new(socket.clone()));
+    let manager = TerminalManager::in_memory(TerminalClient::for_test_config(socket.clone()));
     manager.lock_state().unwrap().tabs.push(tab_with(
         TerminalLayout::Pane {
             pane_id: "live".into(),
         },
         vec![pane("live", TerminalPaneStatus::Running)],
     ));
-    let mut state = crate::AppState::with_terminald_socket(directory.path().into(), socket);
+    let mut state = crate::AppState::for_test_with_runtime_config(directory.path().into(), socket);
     state.terminals = manager;
     let response = crate::build_router(state)
         .oneshot(

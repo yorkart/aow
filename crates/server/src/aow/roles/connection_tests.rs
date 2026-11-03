@@ -20,7 +20,7 @@ async fn fixture() -> (tempfile::TempDir, AppState, RoleConfig) {
     std::fs::write(source.join(".trae/cli/auth.json"), "opaque identity bytes").unwrap();
     std::fs::write(source.join(".claude/.credentials.json"), "original").unwrap();
     std::fs::write(source.join(".codex/auth.json"), "original").unwrap();
-    let mut state = AppState::new(Default::default());
+    let mut state = AppState::for_test(Default::default());
     state.aow = AowManager::persistent(&directory.path().join("aow")).unwrap();
     let config = RoleConfig {
         name: "Reviewer".into(),

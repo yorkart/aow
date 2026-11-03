@@ -88,7 +88,7 @@ async fn changed(receiver: &mut watch::Receiver<Snapshot>, root: &Path, after: u
 async fn registered_projects_are_watched_without_clients_and_removal_releases_them() {
     let first = repository().await;
     let second = repository().await;
-    let state = AppState::new(first.path().to_owned());
+    let state = AppState::for_test(first.path().to_owned());
     let first_id = register(&state, first.path()).await;
     let mut receiver = state.workspace_events.0.changes.subscribe();
     changed(&mut receiver, first.path(), 0).await;
@@ -135,7 +135,7 @@ async fn stream_starts_with_a_snapshot_and_delivers_terminal_changes_without_git
     use futures_util::StreamExt;
 
     let directory = tempfile::tempdir().unwrap();
-    let state = AppState::new(directory.path().to_owned());
+    let state = AppState::for_test(directory.path().to_owned());
     let app = routes().with_state(state.clone());
     let response = app
         .oneshot(

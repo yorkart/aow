@@ -11,7 +11,8 @@ export const serverEnvironmentGroups: { title: string; fields: EnvironmentField[
     { key: 'AOW_SERVER_PORT', description: t("settings.listen_port_default_8282"), example: '8282' },
     { key: 'AOW_SERVER_STATE_DIR', description: t("settings.absolute_service_data_directory_takes_precedence_over_aow_state"), example: '/srv/aow' },
     { key: 'AOW_STATE_DIR', description: t("settings.aow_data_directory_defaults_to_aow_under_xdg_state"), example: '/srv/aow' },
-    { key: 'AOW_TERMINALD_SOCKET', description: t("settings.absolute_terminald_unix_socket_path_must_match_terminald_s"), example: '/home/aow/.aow/runtime/terminald/terminald.sock' },
+    { key: 'AOW_RUNTIME_URL', description: t("settings.runtime_node_url"), example: 'http://127.0.0.1:9760' },
+    { key: 'AOW_RUNTIME_TOKEN_FILE', description: t("settings.runtime_node_token_file"), example: '/home/aow/.aow/runtime/runtime-daemon/token' },
     { key: 'AOW_BASE_PATH', description: t("settings.url_base_path_for_reverse_proxy_deployments_defaults_to"), example: '/tools/aow' },
   ] },
   { title: t("settings.login_sessions"), fields: [

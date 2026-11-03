@@ -23,7 +23,7 @@ LAUNCHCTL = '/bin/launchctl'
 ENVIRONMENT_KEYS = {
     'HOME', 'USER', 'LOGNAME', 'SHELL', 'PATH', 'LANG', 'LC_ALL', 'LC_CTYPE',
     'AOW_RUNTIME_ROOT', 'AOW_SERVER_HOST', 'AOW_SERVER_PORT', 'AOW_SERVER_STATE_DIR',
-    'AOW_STATE_DIR', 'AOW_TERMINALD_SOCKET', 'AOW_BASE_PATH', 'AOW_AUTH_SECURE_COOKIE',
+    'AOW_STATE_DIR', 'AOW_RUNTIME_URL', 'AOW_RUNTIME_TOKEN_FILE', 'AOW_BASE_PATH', 'AOW_AUTH_SECURE_COOKIE',
     'AOW_AUTH_SESSION_MAX_AGE_SECONDS', 'AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS',
     'AOW_LOG_MODE',
     'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY',
@@ -104,11 +104,11 @@ def validate_request(document, account):
         if document.get(key) != value:
             raise ValueError(f'Request does not match the target account: {key}')
     components = document.get('components')
-    if not isinstance(components, dict) or not components or not set(components) <= {'server', 'terminald', 'acpd'}:
+    if not isinstance(components, dict) or not components or not set(components) <= {'server', 'runtime-daemon'}:
         raise ValueError('Invalid requested components')
-    # Start terminald first if both components were explicitly prepared.
+    # Start runtime-daemon first if both components were explicitly prepared.
     return [(component, validate_config(components[component], component, account))
-            for component in ('terminald', 'acpd', 'server') if component in components]
+            for component in ('runtime-daemon', 'server') if component in components]
 
 
 def launchctl(*arguments):

@@ -14,7 +14,6 @@ use aow_agents::{
         tracking::{AgentSessionTracker, LiveSessionContext, SessionResolution, SessionTarget},
     },
 };
-use aow_terminald_client::TerminaldClient;
 use rusqlite::{Connection, OpenFlags, params};
 use serde_json::{Value, json};
 
@@ -250,7 +249,10 @@ async fn existing_hermes_process_session_and_screen_agree() -> anyhow::Result<()
         );
     }
 
-    let client = TerminaldClient::default_socket();
+    let client = aow_runtime_client::RuntimeClient::new(
+        aow_runtime_client::RuntimeEndpoint::from_env(&aow_filesystem::default_state_dir())?,
+    )
+    .terminal();
     let runtime = client.get(&runtime_id).await?.expect("existing runtime");
     assert_eq!(
         PathBuf::from(&runtime.cwd).canonicalize()?,

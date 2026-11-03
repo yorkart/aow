@@ -25,7 +25,7 @@ pub(crate) fn terminal(tab: &TerminalTab, pane: &TerminalPane) -> InstanceInfo {
     }
 }
 
-pub(crate) fn acp(session: &aow_acp::SessionInfo) -> InstanceInfo {
+pub(crate) fn acp(session: &aow_runtime_client::acp::SessionInfo) -> InstanceInfo {
     InstanceInfo {
         instance: InstanceRef::acp(&session.thread_id),
         parent: session.parent.clone(),

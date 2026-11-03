@@ -104,7 +104,7 @@ async fn credentials_are_scoped_to_session_and_recycled_views_cannot_reuse_them(
 
 #[tokio::test]
 async fn every_http_session_action_requires_current_control() {
-    let state = crate::AppState::new(std::path::PathBuf::new());
+    let state = crate::AppState::for_test(std::path::PathBuf::new());
     let controller = state.acp_controls.session("session");
     let stale = headers(&controller.claim(Uuid::new_v4(), false));
     controller.claim(Uuid::new_v4(), true);

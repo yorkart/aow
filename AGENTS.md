@@ -10,6 +10,7 @@
 - Treat `lib.rs` as the crate root: limit it to crate-level documentation and attributes, module declarations, and re-exports. Place implementation and business logic in dedicated modules.
 - For modules with child modules, use a consistent directory-based module layout: place the module root and all child module source files within that module's directory. Do not use a mixed layout that places the module root file alongside a same-named module directory.
 - After changing Rust code, run `cargo fmt --all -- --check` and relevant tests. For changes affecting multiple crates, run `cargo test --workspace`.
+- `runtime/` is an independent Cargo workspace. Apply the Rust formatting, Clippy and workspace test commands there as well (or use `--manifest-path runtime/Cargo.toml`); root Cargo commands exclude it.
 - For frontend or VT worker changes, follow the existing npm scripts in the relevant directory and run the applicable build, typecheck, or tests.
 - For changes spanning multiple components or delivering a complete feature, use the validation targets in `justfile`: `just build` and `just test`, subject to the regression-test restriction below.
 - Do not run installation and release script regression tests (`node --test scripts/tests/*.test.mjs`) during normal development. Run them only when developing or modifying installation or release script functionality. Since `just test` includes these tests, run its remaining validation steps individually for unrelated changes.
@@ -20,7 +21,7 @@
 - Before committing, run the checks below for every language changed. Changes to shared lint configuration require the full affected language check. Include source code, tests, build scripts, and extensionless launchers; exclude generated output and third-party dependencies.
 - Treat lint warnings as failures. Inspect compiler output as well as the exit status. Fix findings before submitting a PR; use a narrowly scoped suppression with a concrete reason only when the code intentionally requires the flagged behavior. Do not disable a rule globally to bypass a new finding.
 - Run commands from the repository root. Use Node.js 22.16+ (22.x) or a newer supported LTS, install Node lint dependencies with `npm ci --ignore-scripts --no-audit --no-fund`, and install `scripts/lint/requirements.txt` into a Python virtual environment on `PATH`. Use actionlint 1.7.12 for workflow checks. Tool versions and lint rules are maintained in the repository configuration files.
-- Rust checks require the VT bundle first: `npm --prefix vt-worker ci --ignore-scripts --no-audit --no-fund` and `npm --prefix vt-worker run build`. Install the `rustfmt` and `clippy` components for the active stable Rust toolchain.
+- Rust checks require the VT bundle first: `npm --prefix runtime/vt-worker ci --ignore-scripts --no-audit --no-fund` and `npm --prefix runtime/vt-worker run build`. Install the `rustfmt` and `clippy` components for the active stable Rust toolchain.
 
 | Language or format | Required checks |
 | --- | --- |

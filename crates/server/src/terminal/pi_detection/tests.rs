@@ -10,7 +10,7 @@ async fn legacy_detection_requires_a_live_pi_binding_and_preserves_osc_titles() 
     let root = directory.path().canonicalize().unwrap();
     let socket = root.join("terminald/daemon.sock");
     let (shutdown, daemon) = start_daemon(socket.clone()).await;
-    let client = TerminaldClient::new(socket);
+    let client = TerminalClient::for_test_config(socket);
     let mut pane = pane("managed-pi", TerminalPaneStatus::Running);
     pane.cwd = root.to_string_lossy().into_owned();
     pane.kind = TerminalPaneKind::Agent;

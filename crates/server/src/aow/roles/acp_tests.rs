@@ -3,18 +3,18 @@ use super::{
     model::{HomeLayout, Identity, RoleConfig},
 };
 use crate::{AppState, aow::AowManager};
-use aow_acp::{Content, SessionSource};
+use aow_runtime_client::acp::{Content, SessionSource};
 use serde_json::{Value, json};
 use std::{path::Path, time::Duration};
 
 async fn fixture() -> (tempfile::TempDir, AppState, super::AgentRole) {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path().join("aow");
-    let mut state = AppState::new(Default::default());
+    let mut state = AppState::for_test(Default::default());
     state.aow = AowManager::persistent(&root).unwrap();
     let settings = state.aow.acp_settings().unwrap();
     state.aow.save_acp_settings(json!({"agent_servers":{"codex.test":{"type":"custom", "command":"node", "args":[
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../acp/tests/fixtures/lineage-agent.mjs")
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtime/crates/acp/tests/fixtures/lineage-agent.mjs")
     ]}}}).to_string(), settings.revision).await.unwrap();
     state.acp = crate::acp::service(
         state.aow.clone(),
@@ -187,19 +187,6 @@ async fn role_policy_is_owned_by_the_application_and_survives_edits_removal_and_
     );
     state.aow.remove_role(&role.id).await.unwrap();
     state.acp.flush_threads_on_quit().await.unwrap();
-    state
-        .acp
-        .disconnect(
-            &state
-                .acp
-                .session_connection_info(&id)
-                .await
-                .unwrap()
-                .unwrap()
-                .id,
-        )
-        .await
-        .unwrap();
     let root = directory.path().join("aow");
     state.aow = AowManager::persistent(&root).unwrap();
     state.acp = crate::acp::service(

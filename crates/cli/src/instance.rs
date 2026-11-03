@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
+use aow_local_client::LocalClient;
 use aow_protocol::InstanceRef;
-use aow_terminald_client::TerminaldClient;
 use clap::{Args, Subcommand};
 use serde_json::Value;
 use std::{path::PathBuf, time::Duration};
@@ -20,7 +20,7 @@ enum InstanceCommand {
 }
 
 pub fn execute(args: InstanceArgs, state_dir: PathBuf) -> Result<Value> {
-    let client = TerminaldClient::new(
+    let client = LocalClient::new(
         std::env::current_dir()?
             .join(state_dir)
             .join("runtime/cli/cli.sock"),

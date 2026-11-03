@@ -1,5 +1,5 @@
 use super::*;
-use crate::terminal::{TerminalError, TerminaldClient};
+use crate::terminal::{TerminalClient, TerminalError};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::Value;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
@@ -43,10 +43,10 @@ async fn sockets_share_live_state_detect_exit_and_title_changes_and_resynchroniz
         tests::{start_daemon, stop_daemon},
     };
     let directory = tempfile::tempdir().unwrap();
-    // Let terminald create its private socket directory independently of umask.
     let daemon_socket = directory.path().join("terminald/terminald.sock");
     let (shutdown, daemon) = start_daemon(daemon_socket.clone()).await;
-    let state = crate::AppState::with_terminald_socket(Default::default(), daemon_socket.clone());
+    let state =
+        crate::AppState::for_test_with_runtime_config(Default::default(), daemon_socket.clone());
     let manager = &state.terminals;
     let tab = manager
         .create(CreateTerminalRequest {
@@ -107,7 +107,7 @@ async fn sockets_share_live_state_detect_exit_and_title_changes_and_resynchroniz
         value["state"]["tabs"][0]["name"] == "renamed"
     })
     .await;
-    let client = TerminaldClient::new(daemon_socket.clone());
+    let client = TerminalClient::for_test_config(daemon_socket.clone());
     let mut attachment = client.attach(pane_id).await.unwrap();
     attachment
         .send(Message::Binary(bytes::Bytes::from_static(
@@ -197,7 +197,7 @@ async fn committed_mutations_publish_without_http_listing_and_failed_writes_do_n
     let directory = tempfile::tempdir().unwrap();
     let manager = TerminalManager::persistent(
         directory.path().join("state"),
-        TerminaldClient::new(directory.path().join("absent.sock")),
+        TerminalClient::for_test_config(directory.path().join("absent.sock")),
     )
     .unwrap();
     // No sampler is needed to observe committed state.
@@ -265,19 +265,20 @@ async fn hung_samples_timeout_independently_and_recover_without_losing_snapshots
     let daemon = Arc::new(Daemon::default());
     let app = Router::new()
         .route(
-            "/v1/health",
+            "/v1/terminal/health",
             get(|| async {
                 Json(serde_json::json!({
                     "service": "terminald", "version": "test", "instance_id": "test"
                 }))
             }),
         )
-        .route("/v1/runtimes", get(runtimes))
-        .route("/v1/agents", get(agents))
+        .route("/v1/terminal/runtimes", get(runtimes))
+        .route("/v1/terminal/agents", get(agents))
         .with_state(daemon.clone());
-    let listener = tokio::net::UnixListener::bind(&socket).unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    std::fs::write(&socket,serde_json::json!({"url":format!("http://{}",listener.local_addr().unwrap()),"token":"sampler-test-token-0123456789abcdef"}).to_string()).unwrap();
     let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-    let manager = TerminalManager::in_memory(TerminaldClient::new(socket));
+    let manager = TerminalManager::in_memory(TerminalClient::for_test_config(socket));
     let receiver = manager.subscribe_snapshots();
     until(|| receiver.borrow().tabs.is_some() && receiver.borrow().metadata.is_some()).await;
     // Opening more subscribers must not create more sampler workers.

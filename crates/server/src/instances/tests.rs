@@ -24,7 +24,7 @@ async fn retained_ancestry_survives_restart_and_rejects_reparenting() {
         .unwrap();
     assert!(store.record_all(vec![info(child.clone(), None)]).is_err());
     let restored = InstanceStore::persistent(directory.path()).unwrap();
-    let mut state = AppState::new(Default::default());
+    let mut state = AppState::for_test(Default::default());
     state.instances = restored;
     let graph = graph(&state).await.unwrap();
     assert_eq!(graph[&child].parent, Some(parent.clone()));
@@ -58,7 +58,7 @@ fn failed_persistence_does_not_publish_a_creation_record() {
 async fn acp_metadata_invalidates_the_graph_without_an_http_action() {
     use serde_json::json;
     let directory = tempfile::tempdir().unwrap();
-    let state = AppState::with_state_dir(
+    let state = AppState::for_test_with_state_dir(
         Default::default(),
         directory.path().join("state"),
         directory.path().join("missing.sock"),
@@ -66,7 +66,7 @@ async fn acp_metadata_invalidates_the_graph_without_an_http_action() {
     .unwrap();
     let settings = state.aow.acp_settings().unwrap();
     let adapter = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../acp/tests/fixtures/lineage-agent.mjs");
+        .join("../../runtime/crates/acp/tests/fixtures/lineage-agent.mjs");
     state
         .aow
         .save_acp_settings(

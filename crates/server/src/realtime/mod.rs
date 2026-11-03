@@ -81,8 +81,8 @@ async fn forward(
     mut workspace: watch::Receiver<crate::workspace_events::Snapshot>,
     mut operations: watch::Receiver<crate::operations::Snapshot>,
     mut stops: broadcast::Receiver<crate::terminal::notifications::TaskStopNotification>,
-    acp_service: aow_acpd_client::AcpClient,
-    mut acp_events: Option<broadcast::Receiver<aow_acp::SyncEvent>>,
+    acp_service: aow_runtime_client::acp::AcpClient,
+    mut acp_events: Option<broadcast::Receiver<aow_runtime_client::acp::SyncEvent>>,
     terminal_manager: crate::terminal::TerminalManager,
 ) -> Result<(), ()> {
     // Never hold a watch borrow across a send/await; publishers need its write lock.

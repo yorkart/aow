@@ -29,7 +29,7 @@ async fn fixture() -> (tempfile::TempDir, AppState, Project, Vec<String>) {
     )
     .await
     .unwrap();
-    let mut state = AppState::new(PathBuf::new());
+    let mut state = AppState::for_test(PathBuf::new());
     state.aow = AowManager::persistent(&root.join("state")).unwrap();
     let project = state
         .aow

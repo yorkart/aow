@@ -35,7 +35,7 @@ async fn call(app: &axum::Router, method: &str, path: &str, body: Value) -> (Sta
 
 #[tokio::test]
 async fn explicit_ids_are_required_unique_and_immutable() {
-    let state = AppState::new(PathBuf::new());
+    let state = AppState::for_test(PathBuf::new());
     let app = crate::build_router(state.clone());
     for id in [
         "",
@@ -120,7 +120,7 @@ async fn explicit_ids_are_required_unique_and_immutable() {
 
 #[tokio::test]
 async fn simultaneous_creates_cannot_claim_the_same_id() {
-    let app = crate::build_router(AppState::new(PathBuf::new()));
+    let app = crate::build_router(AppState::for_test(PathBuf::new()));
     let (left, right) = tokio::join!(
         call(&app, "POST", "/api/aow/agents", profile("unique-agent")),
         call(&app, "POST", "/api/aow/agents", profile("unique-agent"))
@@ -290,7 +290,7 @@ async fn agent_order_uses_types_then_detected_then_configured_items_and_survives
 
 #[tokio::test]
 async fn reorder_api_rejects_detected_cross_type_duplicate_and_stale_lists() {
-    let state = AppState::new(PathBuf::new());
+    let state = AppState::for_test(PathBuf::new());
     let app = crate::build_router(state.clone());
     for id in ["z-work", "a-work"] {
         assert_eq!(
@@ -453,7 +453,7 @@ async fn default_endpoint_preserves_concurrent_profile_edits_and_rejects_unknown
         .register_agent(serde_json::from_value(profile("work")).unwrap())
         .await
         .unwrap();
-    let mut state = AppState::new(PathBuf::new());
+    let mut state = AppState::for_test(PathBuf::new());
     state.aow = manager.clone();
     let app = crate::build_router(state);
     let (_, stale) = call(&app, "GET", "/api/aow/agents", Value::Null).await;

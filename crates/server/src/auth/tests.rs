@@ -182,7 +182,7 @@ async fn another_login_method_uses_the_same_http_cookie_and_access_policy() {
     use tower::ServiceExt;
 
     let root = tempfile::tempdir().unwrap();
-    let mut state = crate::AppState::new(root.path().to_path_buf());
+    let mut state = crate::AppState::for_test(root.path().to_path_buf());
     state.auth = AuthService::with_providers(vec![Arc::new(TestProvider::new("test-method"))]);
     let app = crate::build_router(state);
     let response = app
@@ -245,7 +245,7 @@ async fn logout_revokes_http_and_stream_access_and_clears_the_scoped_secure_cook
     use futures_util::StreamExt;
     use tower::ServiceExt;
     let root = tempfile::tempdir().unwrap();
-    let mut state = crate::AppState::new(root.path().to_owned())
+    let mut state = crate::AppState::for_test(root.path().to_owned())
         .with_base_path(crate::BasePath::parse("/tools/aow").unwrap());
     state.auth = AuthService::with_providers(vec![Arc::new(TestProvider::new("test"))]);
     state = state.with_secure_cookies(true);
@@ -333,7 +333,7 @@ async fn login_admission_rejects_excess_work_and_ignores_forged_forwarded_header
     use axum::{body::Body, http::Request};
     use tower::ServiceExt;
     let root = tempfile::tempdir().unwrap();
-    let mut state = crate::AppState::new(root.path().to_owned());
+    let mut state = crate::AppState::for_test(root.path().to_owned());
     state.auth = AuthService::with_providers(vec![Arc::new(TestProvider::new("test"))]);
     let auth = state.auth.clone();
     let app = crate::build_router(state);

@@ -9,22 +9,24 @@ install *args:
     bash ./scripts/install-local.sh "$@"
 
 build-vt-worker:
-    cd vt-worker && npm ci --ignore-scripts --no-audit --no-fund
-    cd vt-worker && npm run build
+    cd runtime/vt-worker && npm ci --ignore-scripts --no-audit --no-fund
+    cd runtime/vt-worker && npm run build
 
 build-frontend:
     cd frontend && npm ci --ignore-scripts --no-audit --no-fund
     cd frontend && npm run build
 
 test-vt-worker:
-    cd vt-worker && npm ci --ignore-scripts --no-audit --no-fund
-    cd vt-worker && npm test
+    cd runtime/vt-worker && npm ci --ignore-scripts --no-audit --no-fund
+    cd runtime/vt-worker && npm test
 
 build: build-frontend test-vt-worker
     cargo build --workspace
+    cargo build --manifest-path runtime/Cargo.toml --workspace --target-dir target
 
 test: test-vt-worker
     if [ "$(uname -s)" = Darwin ]; then TMPDIR="$(node -p 'require("node:fs").realpathSync(require("node:os").tmpdir())')" cargo test --workspace -- --test-threads=4; else cargo test --workspace; fi
+    cargo test --manifest-path runtime/Cargo.toml --workspace --target-dir target
     node --test git-platform-providers/tests/*.test.mjs
     node --test scripts/tests/*.test.mjs
     cd frontend && npm ci --ignore-scripts --no-audit --no-fund
@@ -32,8 +34,9 @@ test: test-vt-worker
 
 clean:
     cargo clean
+    cargo clean --manifest-path runtime/Cargo.toml
     rm -rf frontend/node_modules frontend/dist frontend/*.tsbuildinfo
-    rm -rf vt-worker/node_modules
+    rm -rf runtime/vt-worker/node_modules
 
 run: build-frontend
     cargo run -p aow-server
@@ -42,13 +45,11 @@ run-dev:
     cargo run -p aow-server &
     cd frontend && npm run dev
 
-run-terminald: build-vt-worker
-    vt_node=$(command -v node) || { printf '%s\n' 'error: Node.js 20 or newer is required; install Node.js 20+ first' >&2; exit 1; }; terminal_runtime_dir="${AOW_STATE_DIR:-$HOME/.aow}/runtime/terminald"; install -d -m 700 "$terminal_runtime_dir"; cargo run -p aow-terminald -- --socket "$terminal_runtime_dir/terminald.sock" --vt-node "$vt_node"
-
-# Start separately from the Web process so Web restarts preserve ACP execution.
-run-acpd:
-    cargo run -p aow-acpd
-
-# A standalone remote node; server node registration is configured separately.
 run-runtime-daemon: build-vt-worker
-    cargo run -p aow-runtime-daemon
+    cargo run --manifest-path runtime/Cargo.toml -p aow-runtime-daemon
+
+build-runtime: build-vt-worker
+    cargo build --manifest-path runtime/Cargo.toml --locked
+
+test-runtime: build-vt-worker
+    cargo test --manifest-path runtime/Cargo.toml --locked

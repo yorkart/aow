@@ -31,7 +31,7 @@ pub(super) fn validate(config: &RoleConfig) -> Result<(), AowError> {
     match &config.runtime {
         RoleRuntime::Acp { agent_id } => {
             // Reuse ACP's ID rules for configured adapters.
-            aow_acp::validate_settings(
+            aow_runtime_client::acp::validate_settings(
                 &serde_json::json!({"agent_servers":{(agent_id):{"type":"registry"}}}).to_string(),
             )
             .map_err(|error| invalid(error.to_string()))?;

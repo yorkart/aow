@@ -223,7 +223,7 @@ async fn review_environment_case(home_only: bool) {
                 .success()
         );
     }
-    let mut state = AppState::with_state_dir(
+    let mut state = AppState::for_test_with_state_dir(
         PathBuf::new(),
         directory.path().join("state"),
         directory.path().join("unused.sock"),
@@ -348,10 +348,10 @@ async fn run_hosting_case(case: HostingCase) {
     let (stop, stopped) = tokio::sync::oneshot::channel();
     let _guard = DaemonGuard(Some(stop));
     let daemon_socket = socket.clone();
-    let daemon = tokio::spawn(aow_terminald::run_with_shutdown(daemon_socket, async {
+    let daemon = tokio::spawn(aow_runtime_client::testing::run(daemon_socket, async {
         let _ = stopped.await;
     }));
-    let native = aow_terminald_client::TerminaldClient::new(socket.clone());
+    let native = aow_runtime_client::TerminalClient::for_test_config(socket.clone());
     tokio::time::timeout(Duration::from_secs(5), async {
         while native.health().await.is_err() {
             tokio::time::sleep(Duration::from_millis(20)).await;
@@ -360,7 +360,8 @@ async fn run_hosting_case(case: HostingCase) {
     .await
     .unwrap();
     let state_dir = directory.path().join("state");
-    let mut state = AppState::with_state_dir(PathBuf::new(), state_dir.clone(), socket).unwrap();
+    let mut state =
+        AppState::for_test_with_state_dir(PathBuf::new(), state_dir.clone(), socket).unwrap();
     state.auth = crate::auth::AuthService::disabled();
     state.automations.as_mut().unwrap().scheduler = Scheduler {
         platform: aow_automations::scheduler::Platform::Systemd,
@@ -493,7 +494,7 @@ async fn run_hosting_case(case: HostingCase) {
         })
         .await
         .unwrap();
-        let mut restored = AppState::with_state_dir(
+        let mut restored = AppState::for_test_with_state_dir(
             PathBuf::new(),
             state_dir.clone(),
             directory.path().join("terminald/terminal.sock"),
@@ -750,7 +751,7 @@ async fn run_hosting_case(case: HostingCase) {
     if complete_feedback {
         // Restoring a stopped host must keep its count and outcome without
         // claiming control, dispatching another run or replaying the feedback.
-        let mut restored = AppState::with_state_dir(
+        let mut restored = AppState::for_test_with_state_dir(
             PathBuf::new(),
             state_dir,
             directory.path().join("terminald/terminal.sock"),

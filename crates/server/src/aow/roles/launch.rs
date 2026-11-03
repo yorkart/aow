@@ -9,7 +9,7 @@ use serde::Serialize;
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub(crate) enum RoleSession {
     Acp {
-        session: Box<aow_acp::SessionSnapshot>,
+        session: Box<aow_runtime_client::acp::SessionSnapshot>,
     },
     Cli {
         terminal: Box<aow_protocol::TerminalTab>,
@@ -159,7 +159,7 @@ impl AowManager {
                     .prepare_session_with_options(
                         agent_id,
                         cwd.into(),
-                        aow_acp::SessionCreation {
+                        aow_runtime_client::acp::SessionCreation {
                             parent,
                             execution_environment: Some(
                                 self.role_acp_environment(role).map_err(aow_http_error)?,

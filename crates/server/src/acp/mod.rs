@@ -10,4 +10,4 @@ pub(crate) use api::routes;
 pub(crate) use cli::routes as cli_routes;
 pub(crate) use cli::start as start_task;
 pub(crate) use control::Controls;
-pub(crate) use host::service;
+pub(crate) use host::{service, service_with_runtime};

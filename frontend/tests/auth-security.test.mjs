@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright';
 import WebSocket from 'ws';
+import { runtimeNode } from './fixtures/runtime-node.mjs';
 import { credentials } from '../../scripts/tests/account-fixture.mjs';
 
 const repo = fileURLToPath(new URL('../../', import.meta.url));
@@ -57,15 +58,18 @@ async function fixture(t, { secure = false, base = '', maxAge = 43200, idleTimeo
     child.stderr.on('data', chunk => child.output += chunk);
     children.push(child); return child;
   };
-  const socket = join(root, 'term.sock');
-  start('aow-terminald', ['--socket', socket, '--vt-node', process.execPath]);
-  await until(() => exists(socket), 'terminald socket');
+  const node = await runtimeNode(start, state);
   const server = start('aow-server', ['--host', '127.0.0.1', '--port', '0', '--state-dir', state,
-    '--terminald-socket', socket, '--frontend', join(repo, 'frontend/dist'), ...serverArgs]);
+    '--runtime-url', node.url, '--runtime-token-file', node.tokenFile,
+    '--frontend', join(repo, 'frontend/dist'), ...serverArgs]);
   let origin;
   await until(() => { origin = /AoW: (http:\/\/127\.0\.0\.1:\d+)/.exec(server.output)?.[1]; return !!origin; }, 'server startup');
   const url = path => origin + base + path;
-  assert.equal((await fetch(url('/api/health'))).status, 200, server.output);
+  await until(async () => {
+    if (server.exitCode !== null) throw new Error(`Server exited ${server.exitCode}: ${server.output}`);
+    try { const response = await fetch(url('/api/health')); await response.text(); return response.status === 200; }
+    catch { return false; }
+  }, 'server health');
   const login = async (password = 'test-password', extraHeaders = {}) => fetch(url('/api/auth/login'), { method: 'POST',
     headers: { 'content-type': 'application/json', ...extraHeaders }, body: JSON.stringify({ method: 'password', username: 'admin', password }) });
   return { root, url, origin, base, setPassword, login };

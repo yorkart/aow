@@ -1,4 +1,5 @@
 use super::*;
+use aow_local_client::{LocalClient, LocalClientError};
 use axum::{
     body::{Body, to_bytes},
     http::Request,
@@ -53,8 +54,8 @@ struct Fixture {
     project_id: String,
     log: PathBuf,
     state: AppState,
-    client: TerminaldClient,
-    daemon: tokio::task::JoinHandle<Result<(), aow_terminald::TerminaldError>>,
+    client: LocalClient,
+    daemon: tokio::task::JoinHandle<Result<(), anyhow::Error>>,
     shutdown: Option<tokio::sync::oneshot::Sender<()>>,
     web: tokio::task::JoinHandle<()>,
     address: std::net::SocketAddr,
@@ -76,10 +77,10 @@ impl Fixture {
         let socket = directory.path().join("terminald/daemon.sock");
         let (shutdown, receiver) = tokio::sync::oneshot::channel();
         let daemon_socket = socket.clone();
-        let worker =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../vt-worker/dist/vt-worker.mjs");
+        let worker = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../runtime/vt-worker/dist/vt-worker.mjs");
         let daemon = tokio::spawn(async move {
-            aow_terminald::run_with_shutdown_and_vt_worker(
+            aow_runtime_client::testing::run_with_worker(
                 daemon_socket,
                 async {
                     let _ = receiver.await;
@@ -88,7 +89,7 @@ impl Fixture {
             )
             .await
         });
-        let native = TerminaldClient::new(socket.clone());
+        let native = TerminalClient::for_test_config(socket.clone());
         tokio::time::timeout(Duration::from_secs(5), async {
             while native.health().await.is_err() {
                 tokio::time::sleep(Duration::from_millis(20)).await;
@@ -125,11 +126,12 @@ impl Fixture {
         }
         let mut state = if persistent {
             let mut state =
-                AppState::with_state_dir(PathBuf::new(), state_dir.clone(), socket).unwrap();
+                AppState::for_test_with_state_dir(PathBuf::new(), state_dir.clone(), socket)
+                    .unwrap();
             state.auth = crate::auth::AuthService::disabled();
             state
         } else {
-            AppState::with_terminald_socket(PathBuf::new(), socket)
+            AppState::for_test_with_runtime_config(PathBuf::new(), socket)
         };
         state.operations = crate::operations::OperationService::persistent(
             &directory.path().join("operation-logs"),
@@ -159,7 +161,7 @@ impl Fixture {
         let cli = crate::start_local_cli(state.clone(), &state_dir)
             .await
             .unwrap();
-        let client = TerminaldClient::new(state_dir.join("runtime/cli/cli.sock"));
+        let client = LocalClient::new(state_dir.join("runtime/cli/cli.sock"));
         Self {
             directory,
             state_dir,
@@ -630,7 +632,8 @@ async fn failed_lineage_persistence_cleans_up_the_started_runtime() {
             .is_empty()
     );
     assert!(fixture.state.instances.snapshot().unwrap().is_empty());
-    let daemon = TerminaldClient::new(fixture.directory.path().join("terminald/daemon.sock"));
+    let daemon =
+        TerminalClient::for_test_config(fixture.directory.path().join("terminald/daemon.sock"));
     assert!(daemon.list().await.unwrap().is_empty());
     fixture.stop().await;
 }
@@ -658,7 +661,7 @@ async fn agent_parentage_is_validated_returned_and_survives_parent_removal() {
         .unwrap_err();
     assert!(matches!(
         error,
-        TerminaldClientError::HttpStatus {
+        LocalClientError::HttpStatus {
             status: StatusCode::NOT_FOUND,
             ..
         }
@@ -740,7 +743,7 @@ async fn mixed_terminal_acp_lineage_survives_deleted_intermediate_instances_and_
     assert!(node.status.success());
     let settings = fixture.state.aow.acp_settings().unwrap();
     fixture.state.aow.save_acp_settings(json!({"agent_servers":{"test":{"type":"custom", "command":String::from_utf8(node.stdout).unwrap().trim(),
-        "args":[Path::new(env!("CARGO_MANIFEST_DIR")).join("../acp/tests/fixtures/lineage-agent.mjs")]}}}).to_string(), settings.revision).await.unwrap();
+        "args":[Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtime/crates/acp/tests/fixtures/lineage-agent.mjs")]}}}).to_string(), settings.revision).await.unwrap();
     let root: AgentTerminalInfo = fixture
         .client
         .post_json("/v1/agents", &fixture.request())
@@ -937,7 +940,7 @@ async fn hidden_agent_readiness_observation_takeover_and_repeated_submission() {
         .await;
     assert!(matches!(
         result,
-        Err(TerminaldClientError::HttpStatus {
+        Err(LocalClientError::HttpStatus {
             status: StatusCode::CONFLICT,
             ..
         })
@@ -1208,7 +1211,7 @@ async fn missing_worktree_is_rejected_without_creating_directories_or_panes() {
         .await;
     assert!(
         matches!(result,
-            Err(aow_terminald_client::TerminaldClientError::HttpStatus { status, .. })
+            Err(aow_local_client::LocalClientError::HttpStatus { status, .. })
                 if status == StatusCode::BAD_REQUEST
         ),
         "{result:?}"
@@ -1256,7 +1259,7 @@ async fn create_rejects_unregistered_or_mismatched_project_worktrees() {
         .await;
     assert!(
         matches!(result,
-            Err(aow_terminald_client::TerminaldClientError::HttpStatus { status, .. })
+            Err(aow_local_client::LocalClientError::HttpStatus { status, .. })
                 if status == StatusCode::BAD_REQUEST
         ),
         "{result:?}"
@@ -1294,7 +1297,7 @@ async fn create_rejects_unregistered_or_mismatched_project_worktrees() {
             .await;
         assert!(
             matches!(result,
-                Err(aow_terminald_client::TerminaldClientError::HttpStatus { status, .. })
+                Err(aow_local_client::LocalClientError::HttpStatus { status, .. })
                     if status == expected
             ),
             "{project_id} {}: {result:?}",

@@ -5,7 +5,7 @@ use aow_protocol::TerminalAgentProcess;
 use std::io::Read;
 
 pub(super) async fn enrich(
-    daemon: &TerminaldClient,
+    daemon: &TerminalClient,
     tabs: &[TerminalTab],
     detected: &mut TerminalAgentList,
 ) {

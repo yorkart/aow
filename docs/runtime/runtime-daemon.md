@@ -6,26 +6,41 @@ configuration, authentication and shutdown sequence. ACP adapters, PTY shells
 and the optional Node.js VT worker are child processes; it does not launch
 separate `aow-acpd` or `aow-terminald` daemons.
 
-This phase delivers the node service. AoW server node registration, routing a
-conversation to a remote node, and the corresponding management UI remain
-separate work. Existing server installations continue using their local daemon
-clients until that integration is implemented.
+AoW Server uses the shared `crates/runtime-client` SDK for all execution-node
+operations. HTTP manages instances and configuration; WebSocket carries native
+ACP JSON-RPC and terminal streams. The execution modules and VT worker live in
+the independent [runtime subproject](../../runtime/README.md), with its own Cargo
+workspace and lockfile. The caller SDK stays in the root workspace.
 
 ## Build and start
 
 ```sh
-npm --prefix vt-worker ci --ignore-scripts --no-audit --no-fund
-npm --prefix vt-worker run build
-cargo build --release -p aow-runtime-daemon
-./target/release/aow-runtime-daemon --state-dir "$HOME/.aow" --listen 127.0.0.1:9760
+npm --prefix runtime/vt-worker ci --ignore-scripts --no-audit --no-fund
+npm --prefix runtime/vt-worker run build
+cargo build --manifest-path runtime/Cargo.toml --release -p aow-runtime-daemon
+./runtime/target/release/aow-runtime-daemon --state-dir "$HOME/.aow" --listen 127.0.0.1:9760
 ```
 
-The release archive also includes `bin/aow-runtime-daemon`. The existing installer
-keeps its current local services; installing an archive does not activate a node
-service automatically. For a dedicated Linux node, install this binary at
-`~/.local/bin/aow-runtime-daemon` and the supplied
-`packaging/systemd/aow-runtime-daemon.service` as a user unit. On macOS the same
-binary can run under a process supervisor with the arguments above.
+The release archive includes `bin/aow-runtime-daemon`. First installation activates
+runtime-daemon before Server to create its token. Updates restart runtime last
+so that activation can finish even when it closes the installer’s PTY. `--skip-runtime` updates Server while retaining the
+current execution node. The retired acpd/terminald executables, sockets and
+client crates are removed.
+
+To connect Server to another machine, configure its `AOW_RUNTIME_URL` (HTTP or
+HTTPS) and `AOW_RUNTIME_TOKEN_FILE` (a local file containing that node's token),
+or pass `--runtime-url` and `--runtime-token-file`. For example:
+
+```sh
+AOW_RUNTIME_URL=https://node.example.com \
+AOW_RUNTIME_TOKEN_FILE=/private/path/node-token \
+cargo run -p aow-server
+```
+
+Server currently selects one configured endpoint. Multi-node registration,
+per-project routing and a node management UI are separate work. Workspace paths,
+role homes and adapter executables must exist on the selected node; this change
+does not synchronize project checkouts between machines.
 
 `--state-dir` must be absolute. It defaults to `AOW_STATE_DIR`, then `~/.aow`.
 The process reads ACP agent definitions from `STATE_DIR/aow-acp.json` and the
@@ -40,14 +55,16 @@ The state root contains:
 | `aow-acp.json` | Existing ACP agent definitions |
 | `aow-settings.json` | Existing execution environment settings |
 | `runtime-daemon.json` | Optional node transport configuration |
-| `data/acp/` | Existing AoW ACP history and exclusive ownership lock |
+| `data/runtime-daemon/daemon.lock` | Exclusive node ownership lock |
 | `cache/acp/` | Existing adapter and Registry cache |
 | `data/runtime-daemon/node-id` | Stable UUID identifying this installation |
 | `runtime/runtime-daemon/token` | Automatically generated private bearer token |
 
-Passing the existing state root retains its data and configuration. The node
-service and legacy `aow-acpd` cannot own the same ACP state directory
-simultaneously; stop the old ACP service before starting a node on that root.
+The daemon reads configuration and adapter cache from the supplied state root.
+AoW conversation metadata, snapshots and history remain in Server's
+`STATE_DIR/data/acp/`; `runtime-client` maintains them while using the native ACP
+SDK across WebSocket. Thus an existing Server state root still exposes its saved
+history. The node does not serve an AoW history RPC API or write Server history.
 Terminals receive `AOW_STATE_DIR` as a default child environment value; the
 terminal creation specification can supply explicit environment overrides.
 
@@ -98,8 +115,15 @@ The token grants control over processes running as the daemon's OS user.
 | --- | --- |
 | `GET /v1/health` | Service version, stable `node_id`, boot `instance_id`, PID and capabilities |
 | `GET /v1/acp/agents` | Configured ACP adapters and preparation state |
-| `GET /v1/acp/stored-sessions` | Metadata from the existing AoW ACP history store |
-| `GET /v1/acp/stored-sessions/{id}` | Existing AoW transcript snapshot, without starting an adapter |
+| `GET /v1/acp/registry` | ACP registry catalog |
+| `POST /v1/acp/agents/{id}/install` | Prepare an adapter on the node |
+| `GET /v1/acp/agents/{id}/installation` | Preparation status |
+| `GET/PUT /v1/acp/settings` | Node ACP settings with optimistic revision checking |
+| `GET /v1/environment` | Node execution PATH |
+| `POST /v1/directories/resolve` | Resolve an existing node workspace |
+| `POST /v1/files/read`, `POST /v1/files/write` | Node filesystem callbacks |
+| `PUT /v1/workspaces/removing` | Fence workspace access and reap its ACP processes |
+| `POST /v1/workspaces/recover` | Recover stale workspace fences before reconnecting |
 | `GET /v1/acp/instances` | Managed ACP processes and their status |
 | `PUT /v1/acp/instances/{id}` | Create an adapter process using `{ "agent_id": "...", "cwd": "/repo" }` |
 | `GET /v1/acp/instances/{id}` | Process PID, specification, status and WebSocket path |
@@ -175,11 +199,10 @@ and transport frames are not persisted or replayed across disconnect or daemon
 restart. Managed creation without attachment leaves the adapter waiting until
 DELETE or shutdown.
 
-Existing AoW history remains available through `stored-sessions` and its snapshot endpoint; it is not
-converted into ACP messages or automatically supplied as adapter history.
-Native session storage and `session/list`/`session/load` remain adapter-owned.
-New raw ACP conversations do not create AoW facade transcript snapshots; the
-future server node integration must maintain its own conversation records.
+Server maintains AoW transcripts and metadata through its local ACP session
+model. Native session storage and `session/list`/`session/load` remain
+adapter-owned. Closing the controlling SDK or Server connection stops its ACP
+process; a restarted caller loads saved sessions according to adapter capabilities.
 
 ## Terminal WebSocket
 
@@ -194,4 +217,4 @@ Unlike ACP transports, closing a terminal attachment leaves the PTY running.
 Reattach using its epoch and offset to replay available output. Terminal
 instances and their replay buffers live in daemon memory, and stop on DELETE
 or daemon shutdown. SIGINT/SIGTERM stops accepting connections, closes runtime
-admission, checkpoints the existing ACP store and reaps both runtime types.
+admission and reaps both runtime types.

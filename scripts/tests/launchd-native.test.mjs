@@ -24,7 +24,7 @@ test('real launchd activates isolated native services, restarts crashes, and rol
   const socket = join(directory, 'pty/daemon.sock');
   const namespace = `org.aow.test.${process.pid}.${directory.split('-').at(-1).toLowerCase()}`;
   const domain = `gui/${process.getuid()}`;
-  const services = ['server', 'terminald'].map(component => `${domain}/${namespace}.${component}`);
+  const services = ['server', 'runtime-daemon'].map(component => `${domain}/${namespace}.${component}`);
   t.after(() => {
     for (const service of services) spawnSync('/bin/launchctl', ['bootout', service], { timeout: 15000 });
     rmSync(directory, { recursive: true, force: true });
@@ -38,7 +38,7 @@ test('real launchd activates isolated native services, restarts crashes, and rol
     writeFileSync(join(directory, 'scripts', file), readFileSync(join(root, 'scripts', file), 'utf8')
       .replaceAll('org.aow.', `${namespace}.`), { mode: 0o700 });
   }
-  for (const file of ['aow', 'aow-server', 'aow-terminald']) {
+  for (const file of ['aow', 'aow-server', 'aow-runtime-daemon']) {
     copyFileSync(join(root, 'packaging/bin', file), join(directory, 'packaging/bin', file));
     copyFileSync(join(root, 'packaging/bin', file), join(runtime, 'bin', file));
   }
@@ -49,7 +49,7 @@ test('real launchd activates isolated native services, restarts crashes, and rol
   const env = { ...process.env, HOME: home, AOW_RUNTIME_ROOT: runtime,
     AOW_SERVER_STATE_DIR: state, AOW_STATE_DIR: state,
     AOW_SERVER_HOST: '127.0.0.1', AOW_SERVER_PORT: String(port),
-    AOW_TERMINALD_SOCKET: socket, XDG_CONFIG_HOME: join(home, '.config'),
+    AOW_RUNTIME_URL: socket, XDG_CONFIG_HOME: join(home, '.config'),
     XDG_STATE_HOME: '', XDG_RUNTIME_DIR: '', AOW_LOG_MODE: '', AOW_BASE_PATH: '' };
   writeFileSync(join(home, '.aow/server.env'), 'AOW_BASE_PATH=/tools/aow/\n');
   execFileSync(join(root, 'target/debug/aow-server'), ['--initialize-state', '--state-dir', state], { env, stdio: 'pipe' });
@@ -59,7 +59,7 @@ test('real launchd activates isolated native services, restarts crashes, and rol
     mkdirSync(join(release, 'bin'), { recursive: true });
     mkdirSync(join(release, 'frontend/dist'), { recursive: true });
     writeFileSync(join(release, 'frontend/dist/index.html'), '<html>isolated test</html>');
-    for (const component of ['server', 'terminald']) {
+    for (const component of ['server', 'runtime-daemon']) {
       if (version === '1.0.0') copyFileSync(join(root, `target/debug/aow-${component}`), join(release, `bin/aow-${component}`));
       else writeFileSync(join(release, `bin/aow-${component}`), '#!/bin/sh\nexit 1\n', { mode: 0o700 });
     }
@@ -75,7 +75,7 @@ test('real launchd activates isolated native services, restarts crashes, and rol
       env, encoding: 'utf8', timeout: 25000,
     });
   }
-  for (const component of ['server', 'terminald']) {
+  for (const component of ['server', 'runtime-daemon']) {
     const config = { component, host: '127.0.0.1', port, socket, basePath: '/tools/aow/' };
     const first = activate(component, '1.0.0');
     assert.ifError(first.error);

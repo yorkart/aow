@@ -1,0 +1,1981 @@
+use std::{
+    path::PathBuf,
+    process::Stdio,
+    time::{Duration, Instant},
+};
+
+use aow_protocol::{
+    TerminalAttachClientMessage, TerminalAttachServerMessage, TerminalControlState,
+    TerminalPaneStatus, TerminalRuntimeSpec,
+};
+use aow_runtime_client::{RuntimeError, RuntimeSocket, TerminalClient};
+use aow_terminald::VtWorkerConfig;
+use futures_util::{SinkExt, StreamExt};
+use tempfile::TempDir;
+use tokio::time::timeout;
+use tokio_tungstenite::tungstenite::Message;
+
+const IO_TIMEOUT: Duration = Duration::from_secs(10);
+
+#[tokio::test]
+async fn client_accepts_json_escaped_snapshots_above_default_websocket_frame_limit() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let endpoint = aow_runtime_client::RuntimeEndpoint::new(
+        &format!("http://{}", listener.local_addr().unwrap()),
+        "runtime-test-token-0123456789abcdef".into(),
+    )
+    .unwrap();
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let mut socket = tokio_tungstenite::accept_async(stream).await.unwrap();
+        let text = serde_json::json!({
+            "type": "stream", "epoch": "history", "offset": 0,
+            "reset": true, "replay_bytes": 0,
+            "restore": "\u{1b}".repeat(3 * 1024 * 1024),
+            "restore_cols": 80, "restore_rows": 24,
+        })
+        .to_string();
+        assert!(text.len() > 16 * 1024 * 1024);
+        socket.send(Message::Text(text.into())).await.unwrap();
+    });
+    let mut client = TerminalClient::new(aow_runtime_client::RuntimeClient::new(endpoint))
+        .attach_with_resume_capabilities("history", None, None, true)
+        .await
+        .unwrap();
+    let received = timeout(IO_TIMEOUT, client.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let Message::Text(text) = received else {
+        panic!("expected a snapshot control frame");
+    };
+    let TerminalAttachServerMessage::Stream { restore, .. } = serde_json::from_str(&text).unwrap()
+    else {
+        panic!("expected a stream handshake");
+    };
+    assert_eq!(restore.unwrap(), "\u{1b}".repeat(3 * 1024 * 1024));
+    server.await.unwrap();
+}
+
+#[cfg(target_os = "macos")]
+#[path = "support/macos_cleanup.rs"]
+mod macos_cleanup;
+
+struct TestDaemon {
+    client: TerminalClient,
+    node: Option<aow_runtime_client::testing::TestRuntime>,
+    _directory: TempDir,
+}
+impl TestDaemon {
+    async fn start() -> Self {
+        Self::start_with_worker(None).await
+    }
+    async fn start_with_vt_worker(worker: VtWorkerConfig) -> Self {
+        Self::start_with_worker(Some(worker)).await
+    }
+    async fn start_with_worker(worker: Option<VtWorkerConfig>) -> Self {
+        let directory = tempfile::tempdir().unwrap();
+        let file = directory.path().join("connection.json");
+        let node = match worker {
+            Some(worker) => {
+                aow_runtime_client::testing::TestRuntime::with_vt_config(&file, worker).await
+            }
+            None => aow_runtime_client::testing::TestRuntime::start(&file).await,
+        };
+        let client = TerminalClient::new(aow_runtime_client::RuntimeClient::new(
+            node.endpoint.clone(),
+        ));
+        Self {
+            client,
+            node: Some(node),
+            _directory: directory,
+        }
+    }
+    async fn stop(mut self) {
+        self.node.take().unwrap().shutdown().await.unwrap();
+    }
+}
+
+fn shell_spec(cwd: &std::path::Path) -> TerminalRuntimeSpec {
+    TerminalRuntimeSpec {
+        cwd: cwd.to_string_lossy().into_owned(),
+        shell: "/bin/sh".to_owned(),
+        arguments: Vec::new(),
+        // Interactive /bin/sh prompts differ between macOS and Linux. They
+        // must not be mistaken for protocol replies in control-only assertions.
+        environment: [
+            ("PS1".into(), "".into()),
+            ("PS2".into(), "".into()),
+            ("ENV".into(), "/dev/null".into()),
+        ]
+        .into(),
+        environment_remove: Vec::new(),
+        rows: 24,
+        cols: 80,
+    }
+}
+
+async fn send_input(socket: &mut RuntimeSocket, input: &str) {
+    socket
+        .send(Message::Binary(input.as_bytes().to_vec().into()))
+        .await
+        .unwrap();
+}
+
+async fn prepare_shell(socket: &mut RuntimeSocket) {
+    // Split the marker so terminal input echo cannot satisfy this barrier.
+    // A fixed sleep does not prove the shell has executed stty on a busy host.
+    send_input(socket, "stty -echo; printf '\\n__%s__\\n' 'SHELL_READY'\n").await;
+    output_until(socket, b"__SHELL_READY__").await;
+}
+
+#[derive(Debug)]
+struct StreamHandshake {
+    epoch: String,
+    offset: u64,
+    reset: bool,
+    replay_bytes: u64,
+    restore: Option<String>,
+    restore_cols: Option<u16>,
+    restore_rows: Option<u16>,
+    replay: Vec<u8>,
+}
+
+async fn stream_header(
+    socket: &mut RuntimeSocket,
+) -> (
+    String,
+    u64,
+    bool,
+    u64,
+    Option<String>,
+    Option<u16>,
+    Option<u16>,
+) {
+    timeout(IO_TIMEOUT, async {
+        match socket.next().await {
+            Some(Ok(Message::Text(text))) => {
+                let message: TerminalAttachServerMessage = serde_json::from_str(&text).unwrap();
+                match message {
+                    TerminalAttachServerMessage::Stream {
+                        epoch,
+                        offset,
+                        reset,
+                        replay_bytes,
+                        restore,
+                        restore_cols,
+                        restore_rows,
+                        ..
+                    } => (
+                        epoch,
+                        offset,
+                        reset,
+                        replay_bytes,
+                        restore,
+                        restore_cols,
+                        restore_rows,
+                    ),
+                    other => panic!("first terminal server message was not stream: {other:?}"),
+                }
+            }
+            Some(Ok(other)) => {
+                panic!("first terminal server frame was not text: {other:?}")
+            }
+            Some(Err(error)) => panic!("WebSocket read failed: {error}"),
+            None => panic!("WebSocket ended before stream handshake"),
+        }
+    })
+    .await
+    .expect("timed out waiting for terminal stream handshake")
+}
+
+async fn stream_handshake(socket: &mut RuntimeSocket) -> StreamHandshake {
+    let (epoch, offset, reset, replay_bytes, restore, restore_cols, restore_rows) =
+        stream_header(socket).await;
+    assert_eq!(
+        restore_cols.is_some(),
+        restore_rows.is_some(),
+        "snapshot restore dimensions must be present as a pair"
+    );
+    if restore_cols.is_some() {
+        assert!(reset, "snapshot restore requires a reset stream");
+        assert!(
+            restore.is_some(),
+            "snapshot dimensions require restore data"
+        );
+    }
+    let replay_size = usize::try_from(replay_bytes).expect("test replay size fits in usize");
+    let replay = timeout(IO_TIMEOUT, async {
+        let mut replay = Vec::with_capacity(replay_size);
+        while replay.len() < replay_size {
+            match socket.next().await {
+                Some(Ok(Message::Binary(bytes))) => replay.extend_from_slice(&bytes),
+                Some(Ok(other)) => {
+                    panic!("received {other:?} before declared replay completed")
+                }
+                Some(Err(error)) => panic!("WebSocket read failed: {error}"),
+                None => panic!("WebSocket ended before declared replay completed"),
+            }
+        }
+        assert_eq!(replay.len(), replay_size, "replay exceeded declared size");
+        replay
+    })
+    .await
+    .expect("timed out waiting for terminal replay");
+    let handshake = StreamHandshake {
+        epoch,
+        offset,
+        reset,
+        replay_bytes,
+        restore,
+        restore_cols,
+        restore_rows,
+        replay,
+    };
+    debug_assert_eq!(
+        handshake.restore_cols.is_some(),
+        handshake.restore_rows.is_some()
+    );
+    handshake
+}
+
+async fn send_claim(socket: &mut RuntimeSocket, force: bool) {
+    let claim = serde_json::to_string(&TerminalAttachClientMessage::Claim { force }).unwrap();
+    socket.send(Message::Text(claim.into())).await.unwrap();
+}
+
+async fn wait_for_control(socket: &mut RuntimeSocket, expected: TerminalControlState) {
+    loop {
+        if next_control(socket).await == expected {
+            return;
+        }
+    }
+}
+
+async fn next_control(socket: &mut RuntimeSocket) -> TerminalControlState {
+    timeout(IO_TIMEOUT, async {
+        match socket.next().await {
+            Some(Ok(Message::Text(text))) => {
+                let message: TerminalAttachServerMessage = serde_json::from_str(&text).unwrap();
+                match message {
+                    TerminalAttachServerMessage::Control { state } => state,
+                    other => panic!("unexpected message before control state: {other:?}"),
+                }
+            }
+            Some(Ok(other)) => panic!("unexpected frame before control state: {other:?}"),
+            Some(Err(error)) => panic!("WebSocket read failed: {error}"),
+            None => panic!("WebSocket ended before control state"),
+        }
+    })
+    .await
+    .expect("timed out waiting for terminal control state")
+}
+
+async fn controlled_claim(socket: &mut RuntimeSocket, force: bool) -> StreamHandshake {
+    send_claim(socket, force).await;
+    wait_for_control(socket, TerminalControlState::Claimed).await;
+    stream_handshake(socket).await
+}
+
+async fn output_until(socket: &mut RuntimeSocket, marker: &[u8]) -> Vec<u8> {
+    let mut output = Vec::new();
+    let result = timeout(IO_TIMEOUT, async {
+        loop {
+            match socket.next().await {
+                Some(Ok(Message::Binary(bytes))) => {
+                    output.extend_from_slice(&bytes);
+                    if output.windows(marker.len()).any(|window| window == marker) {
+                        return;
+                    }
+                }
+                Some(Ok(Message::Text(_))) => {}
+                Some(Ok(Message::Ping(_) | Message::Pong(_))) => {}
+                Some(Ok(Message::Close(frame))) => {
+                    panic!("WebSocket closed before output marker: {frame:?}")
+                }
+                Some(Err(error)) => panic!("WebSocket read failed: {error}"),
+                None => panic!("WebSocket ended before output marker"),
+                Some(Ok(Message::Frame(_))) => {}
+            }
+        }
+    })
+    .await;
+    assert!(
+        result.is_ok(),
+        "timed out waiting for {:?}; received {:?}",
+        String::from_utf8_lossy(marker),
+        String::from_utf8_lossy(&output)
+    );
+    output
+}
+
+async fn output_count_until(socket: &mut RuntimeSocket, marker: &[u8]) -> usize {
+    timeout(IO_TIMEOUT, async {
+        let mut total = 0;
+        let mut tail = Vec::new();
+        loop {
+            match socket.next().await {
+                Some(Ok(Message::Binary(bytes))) => {
+                    total += bytes.len();
+                    let mut searchable = Vec::with_capacity(tail.len() + bytes.len());
+                    searchable.extend_from_slice(&tail);
+                    searchable.extend_from_slice(&bytes);
+                    if searchable
+                        .windows(marker.len())
+                        .any(|window| window == marker)
+                    {
+                        return total;
+                    }
+                    let retained = marker.len().saturating_sub(1).min(searchable.len());
+                    tail.clear();
+                    tail.extend_from_slice(&searchable[searchable.len() - retained..]);
+                }
+                Some(Ok(Message::Text(text))) => {
+                    let message: TerminalAttachServerMessage = serde_json::from_str(&text).unwrap();
+                    if let TerminalAttachServerMessage::Error { code, message } = message {
+                        panic!("terminal error before output marker: {code}: {message}");
+                    }
+                }
+                Some(Ok(Message::Ping(_) | Message::Pong(_))) => {}
+                Some(Ok(Message::Close(frame))) => {
+                    panic!("WebSocket closed before output marker: {frame:?}")
+                }
+                Some(Err(error)) => panic!("WebSocket read failed: {error}"),
+                None => panic!("WebSocket ended before output marker"),
+                Some(Ok(Message::Frame(_))) => {}
+            }
+        }
+    })
+    .await
+    .expect("timed out waiting for terminal output")
+}
+
+async fn drain_output_until_quiet(socket: &mut RuntimeSocket, quiet: Duration) -> Vec<u8> {
+    let mut output = Vec::new();
+    loop {
+        match timeout(quiet, socket.next()).await {
+            Err(_) => return output,
+            Ok(Some(Ok(Message::Binary(bytes)))) => output.extend_from_slice(&bytes),
+            Ok(Some(Ok(Message::Text(text)))) => {
+                let message: TerminalAttachServerMessage = serde_json::from_str(&text).unwrap();
+                if let TerminalAttachServerMessage::Error { code, message } = message {
+                    panic!("terminal error while draining output: {code}: {message}");
+                }
+            }
+            Ok(Some(Ok(Message::Ping(_) | Message::Pong(_) | Message::Frame(_)))) => {}
+            Ok(Some(Ok(Message::Close(frame)))) => {
+                panic!("WebSocket closed while draining output: {frame:?}")
+            }
+            Ok(Some(Err(error))) => panic!("WebSocket read failed: {error}"),
+            Ok(None) => panic!("WebSocket ended while draining output"),
+        }
+    }
+}
+
+async fn wait_for_error(socket: &mut RuntimeSocket, expected: &str) {
+    timeout(IO_TIMEOUT, async {
+        loop {
+            match socket.next().await {
+                Some(Ok(Message::Text(text))) => {
+                    let message: TerminalAttachServerMessage = serde_json::from_str(&text).unwrap();
+                    if let TerminalAttachServerMessage::Error { code, .. } = message
+                        && code == expected
+                    {
+                        return;
+                    }
+                }
+                Some(Ok(Message::Binary(_)))
+                | Some(Ok(Message::Ping(_) | Message::Pong(_)))
+                | Some(Ok(Message::Frame(_))) => {}
+                Some(Ok(Message::Close(frame))) => {
+                    panic!("WebSocket closed before {expected} error: {frame:?}")
+                }
+                Some(Err(error)) => panic!("WebSocket read failed: {error}"),
+                None => panic!("WebSocket ended before {expected} error"),
+            }
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("timed out waiting for {expected} error"));
+}
+
+async fn wait_for_status(socket: &mut RuntimeSocket, expected: TerminalPaneStatus) -> Option<u32> {
+    timeout(IO_TIMEOUT, async {
+        loop {
+            match socket.next().await {
+                Some(Ok(Message::Text(text))) => {
+                    let message: TerminalAttachServerMessage = serde_json::from_str(&text).unwrap();
+                    if let TerminalAttachServerMessage::Status { status, exit_code } = message
+                        && status == expected
+                    {
+                        return exit_code;
+                    }
+                }
+                Some(Ok(Message::Binary(_)))
+                | Some(Ok(Message::Ping(_) | Message::Pong(_)))
+                | Some(Ok(Message::Frame(_))) => {}
+                Some(Ok(Message::Close(frame))) => {
+                    panic!("WebSocket closed before status: {frame:?}")
+                }
+                Some(Err(error)) => panic!("WebSocket read failed: {error}"),
+                None => panic!("WebSocket ended before status"),
+            }
+        }
+    })
+    .await
+    .expect("timed out waiting for terminal status")
+}
+
+async fn wait_until_process_gone(pid: i32) {
+    let deadline = Instant::now() + IO_TIMEOUT;
+    loop {
+        let result = unsafe { libc::kill(pid, 0) };
+        if result == -1 && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH) {
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "process {pid} survived terminal runtime deletion"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
+fn pid_between(output: &str, prefix: &str, suffix: &str) -> i32 {
+    output
+        .rsplit_once(prefix)
+        .and_then(|(_, tail)| tail.split_once(suffix))
+        .map(|(pid, _)| pid.trim_matches(|character: char| !character.is_ascii_digit()))
+        .and_then(|pid| pid.parse::<i32>().ok())
+        .unwrap_or_else(|| {
+            panic!("could not parse PID between {prefix:?} and {suffix:?} from {output:?}")
+        })
+}
+
+#[tokio::test]
+async fn http_management_is_idempotent() {
+    let daemon = TestDaemon::start().await;
+    let health = daemon.client.health().await.unwrap();
+    assert_eq!(health.service, "aow-terminald");
+    assert!(!health.instance_id.is_empty());
+    assert_eq!(health.pid, Some(std::process::id()));
+
+    let cwd = tempfile::tempdir().unwrap();
+    let mut spec = shell_spec(cwd.path());
+    spec.environment_remove = vec!["TERMINALD_TEST_REMOVED".into()];
+    let mut invalid_cwd = spec.clone();
+    invalid_cwd.cwd = "relative/path".to_owned();
+    assert!(matches!(
+        daemon.client.create("invalid-cwd", &invalid_cwd).await,
+        Err(RuntimeError::HttpStatus {
+            status: http::StatusCode::BAD_REQUEST,
+            ..
+        })
+    ));
+    let mut missing_shell = spec.clone();
+    missing_shell.shell = "/definitely/missing/terminald-test-shell".to_owned();
+    assert!(matches!(
+        daemon.client.create("missing-shell", &missing_shell).await,
+        Err(RuntimeError::HttpStatus {
+            status: http::StatusCode::BAD_REQUEST,
+            ..
+        })
+    ));
+
+    for name in [
+        "".into(),
+        "BAD=NAME".into(),
+        "BAD\0NAME".into(),
+        "x".repeat(257),
+    ] {
+        let mut invalid = spec.clone();
+        invalid.environment_remove = vec![name];
+        assert!(matches!(
+            daemon.client.create("invalid-removal", &invalid).await,
+            Err(RuntimeError::HttpStatus {
+                status: http::StatusCode::BAD_REQUEST,
+                ..
+            })
+        ));
+    }
+    let mut invalid = spec.clone();
+    invalid.environment_remove = vec!["VARIABLE".into(); 129];
+    assert!(matches!(
+        daemon.client.create("invalid-removal", &invalid).await,
+        Err(RuntimeError::HttpStatus {
+            status: http::StatusCode::BAD_REQUEST,
+            ..
+        })
+    ));
+
+    let created = daemon.client.create("stable-id", &spec).await.unwrap();
+    assert_eq!(created.id, "stable-id");
+    assert_eq!(created.status, TerminalPaneStatus::Running);
+    let mut reported_spec = spec.clone();
+    reported_spec.environment.clear(); // Launch-only environment is never returned by HTTP.
+    reported_spec.environment_remove.clear();
+    assert_eq!(created.spec(), reported_spec);
+
+    let existing = daemon.client.create("stable-id", &spec).await.unwrap();
+    assert_eq!(existing, created);
+    assert_eq!(daemon.client.get("stable-id").await.unwrap(), Some(created));
+    assert_eq!(daemon.client.list().await.unwrap().len(), 1);
+
+    let reserved_id = "reserved:/?#[]@!$&'()*+,;=%é";
+    let reserved = daemon.client.create(reserved_id, &spec).await.unwrap();
+    assert_eq!(reserved.id, reserved_id);
+    assert_eq!(
+        daemon.client.get(reserved_id).await.unwrap(),
+        Some(reserved)
+    );
+
+    let concurrent_left = daemon.client.create("concurrent-id", &spec);
+    let concurrent_right = daemon.client.create("concurrent-id", &spec);
+    let (concurrent_left, concurrent_right) = tokio::join!(concurrent_left, concurrent_right);
+    assert_eq!(concurrent_left.unwrap(), concurrent_right.unwrap());
+    assert_eq!(daemon.client.list().await.unwrap().len(), 3);
+
+    let mut conflicting = spec.clone();
+    conflicting.cols += 1;
+    let error = daemon
+        .client
+        .create("stable-id", &conflicting)
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        RuntimeError::HttpStatus {
+            status: http::StatusCode::CONFLICT,
+            ..
+        }
+    ));
+
+    let mut conflicting = spec.clone();
+    conflicting
+        .environment_remove
+        .push("ANOTHER_VARIABLE".into());
+    assert!(matches!(
+        daemon.client.create("stable-id", &conflicting).await,
+        Err(RuntimeError::HttpStatus {
+            status: http::StatusCode::CONFLICT,
+            ..
+        })
+    ));
+
+    daemon.client.delete("stable-id").await.unwrap();
+    daemon.client.delete("concurrent-id").await.unwrap();
+    daemon.client.delete(reserved_id).await.unwrap();
+    daemon.client.delete("stable-id").await.unwrap();
+    assert!(daemon.client.get("stable-id").await.unwrap().is_none());
+    let attach_error = daemon.client.attach("stable-id").await.unwrap_err();
+    assert!(matches!(
+        attach_error,
+        RuntimeError::WebSocket(tokio_tungstenite::tungstenite::Error::Http(response))
+            if response.status() == http::StatusCode::NOT_FOUND
+    ));
+    assert!(daemon.client.list().await.unwrap().is_empty());
+    daemon.stop().await;
+}
+
+#[tokio::test]
+async fn runtime_restart_has_fresh_instance_identity() {
+    let first = TestDaemon::start().await;
+    let first_instance = first.client.health().await.unwrap().instance_id;
+    first.stop().await;
+
+    let second = TestDaemon::start().await;
+    let second_instance = second.client.health().await.unwrap().instance_id;
+    assert_ne!(first_instance, second_instance);
+    second.stop().await;
+}
+
+#[tokio::test]
+async fn controlled_attach_is_neutral_and_claim_wait_force_and_release_are_exclusive() {
+    let daemon = TestDaemon::start().await;
+    let cwd = tempfile::tempdir().unwrap();
+    daemon
+        .client
+        .create("controlled", &shell_spec(cwd.path()))
+        .await
+        .unwrap();
+
+    let mut first = daemon
+        .client
+        .attach_controlled_with_resume("controlled", None, None)
+        .await
+        .unwrap();
+    assert!(
+        timeout(Duration::from_millis(100), first.next())
+            .await
+            .is_err(),
+        "controlled attach must be neutral before claim"
+    );
+    send_input(&mut first, "echo __NEUTRAL_INPUT__\n").await;
+    wait_for_error(&mut first, "controller_required").await;
+    let resize =
+        serde_json::to_string(&TerminalAttachClientMessage::Resize { cols: 99, rows: 39 }).unwrap();
+    first.send(Message::Text(resize.into())).await.unwrap();
+    wait_for_error(&mut first, "controller_required").await;
+
+    let first_stream = controlled_claim(&mut first, false).await;
+    assert!(first_stream.reset);
+    assert!(first_stream.restore.is_none());
+    wait_for_status(&mut first, TerminalPaneStatus::Running).await;
+
+    let mut waiting = daemon
+        .client
+        .attach_controlled_with_resume("controlled", None, None)
+        .await
+        .unwrap();
+    send_claim(&mut waiting, false).await;
+    wait_for_control(&mut waiting, TerminalControlState::Waiting).await;
+    assert!(
+        timeout(Duration::from_millis(100), waiting.next())
+            .await
+            .is_err(),
+        "waiting attachment must not receive output or status"
+    );
+    send_input(&mut waiting, "echo __WAITING_INPUT__\n").await;
+    wait_for_error(&mut waiting, "controller_required").await;
+    send_input(&mut first, "printf '__AFTER_WAITING_CLAIM__\n'\n").await;
+    output_until(&mut first, b"__AFTER_WAITING_CLAIM__").await;
+
+    send_claim(&mut waiting, true).await;
+    wait_for_control(&mut waiting, TerminalControlState::Claimed).await;
+    let forced_stream = stream_handshake(&mut waiting).await;
+    assert!(forced_stream.reset);
+    assert!(
+        forced_stream
+            .replay
+            .windows(b"__AFTER_WAITING_CLAIM__".len())
+            .any(|window| window == b"__AFTER_WAITING_CLAIM__"),
+        "resume snapshot must be computed when claim succeeds"
+    );
+    assert!(
+        !forced_stream
+            .replay
+            .windows(b"__WAITING_INPUT__".len())
+            .any(|window| window == b"__WAITING_INPUT__"),
+        "waiting input must not reach the PTY"
+    );
+    wait_for_status(&mut waiting, TerminalPaneStatus::Running).await;
+    wait_for_error(&mut first, "attachment_superseded").await;
+
+    // `first` exits after supersede and performs a delayed conditional
+    // release. The new generation must remain owner after that stale cleanup.
+    drop(first);
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    send_input(&mut waiting, "stty -echo; printf '__FORCED_OWNER__\n'\n").await;
+    output_until(&mut waiting, b"__FORCED_OWNER__").await;
+    drop(waiting);
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    let mut released = daemon
+        .client
+        .attach_controlled_with_resume("controlled", None, None)
+        .await
+        .unwrap();
+    controlled_claim(&mut released, false).await;
+    wait_for_status(&mut released, TerminalPaneStatus::Running).await;
+    send_input(&mut released, "printf '__RELEASED_OWNER__\n'\n").await;
+    output_until(&mut released, b"__RELEASED_OWNER__").await;
+
+    daemon.client.delete("controlled").await.unwrap();
+    daemon.stop().await;
+}
+
+#[tokio::test]
+async fn observer_receives_output_without_mutation_until_it_forces_takeover() {
+    let daemon = TestDaemon::start().await;
+    let cwd = tempfile::tempdir().unwrap();
+    daemon
+        .client
+        .create("observer", &shell_spec(cwd.path()))
+        .await
+        .unwrap();
+
+    let mut controller = daemon
+        .client
+        .attach_controlled_with_resume("observer", None, None)
+        .await
+        .unwrap();
+    controlled_claim(&mut controller, false).await;
+    wait_for_status(&mut controller, TerminalPaneStatus::Running).await;
+    send_input(&mut controller, "printf '__OBSERVER_REPLAY__\n'\n").await;
+    output_until(&mut controller, b"__OBSERVER_REPLAY__").await;
+
+    let mut observer = daemon
+        .client
+        .attach_controlled_with_resume_capabilities_and_observer(
+            "observer", None, None, false, true,
+        )
+        .await
+        .unwrap();
+    send_claim(&mut observer, false).await;
+    wait_for_control(&mut observer, TerminalControlState::Observing).await;
+    let observer_stream = stream_handshake(&mut observer).await;
+    assert!(
+        observer_stream
+            .replay
+            .windows(b"__OBSERVER_REPLAY__".len())
+            .any(|window| window == b"__OBSERVER_REPLAY__"),
+        "observer must receive the existing terminal replay"
+    );
+    wait_for_status(&mut observer, TerminalPaneStatus::Running).await;
+
+    send_input(&mut observer, "printf '__OBSERVER_INPUT__\n'\n").await;
+    wait_for_error(&mut observer, "controller_required").await;
+    let resize = serde_json::to_string(&TerminalAttachClientMessage::Resize {
+        cols: 111,
+        rows: 43,
+    })
+    .unwrap();
+    observer.send(Message::Text(resize.into())).await.unwrap();
+    wait_for_error(&mut observer, "controller_required").await;
+
+    send_input(&mut controller, "printf '__OBSERVER_LIVE__\n'\n").await;
+    let observed_output = output_until(&mut observer, b"__OBSERVER_LIVE__").await;
+    assert!(
+        !observed_output
+            .windows(b"__OBSERVER_INPUT__".len())
+            .any(|window| window == b"__OBSERVER_INPUT__"),
+        "read-only input must never reach the PTY"
+    );
+    // The live marker can be followed by the shell prompt in a separate
+    // broadcast frame. Drain that already-in-flight observer output so the
+    // next frame observed here is the explicit takeover acknowledgement.
+    let trailing_output = drain_output_until_quiet(&mut observer, Duration::from_millis(100)).await;
+    assert!(
+        !trailing_output
+            .windows(b"__OBSERVER_INPUT__".len())
+            .any(|window| window == b"__OBSERVER_INPUT__"),
+        "read-only input must never reach the PTY"
+    );
+
+    send_claim(&mut observer, true).await;
+    wait_for_control(&mut observer, TerminalControlState::Claimed).await;
+    stream_handshake(&mut observer).await;
+    wait_for_status(&mut observer, TerminalPaneStatus::Running).await;
+    wait_for_error(&mut controller, "attachment_superseded").await;
+    send_input(&mut observer, "printf '__OBSERVER_TAKEOVER__\n'\n").await;
+    output_until(&mut observer, b"__OBSERVER_TAKEOVER__").await;
+
+    let runtime = daemon.client.get("observer").await.unwrap().unwrap();
+    assert_eq!(
+        (runtime.rows, runtime.cols),
+        (24, 80),
+        "observer resize must not alter PTY dimensions"
+    );
+    drop(observer);
+    drop(controller);
+    daemon.client.delete("observer").await.unwrap();
+    daemon.stop().await;
+}
+
+#[tokio::test]
+async fn waiting_attachment_auto_claims_vacancy_and_repeated_claim_is_idempotent() {
+    let daemon = TestDaemon::start().await;
+    let cwd = tempfile::tempdir().unwrap();
+    daemon
+        .client
+        .create("auto-claim", &shell_spec(cwd.path()))
+        .await
+        .unwrap();
+
+    let mut owner = daemon
+        .client
+        .attach_controlled_with_resume("auto-claim", None, None)
+        .await
+        .unwrap();
+    controlled_claim(&mut owner, false).await;
+    wait_for_status(&mut owner, TerminalPaneStatus::Running).await;
+
+    let mut first_waiter = daemon
+        .client
+        .attach_controlled_with_resume("auto-claim", None, None)
+        .await
+        .unwrap();
+    let mut second_waiter = daemon
+        .client
+        .attach_controlled_with_resume("auto-claim", None, None)
+        .await
+        .unwrap();
+    send_claim(&mut first_waiter, false).await;
+    send_claim(&mut second_waiter, false).await;
+    wait_for_control(&mut first_waiter, TerminalControlState::Waiting).await;
+    wait_for_control(&mut second_waiter, TerminalControlState::Waiting).await;
+    drop(owner);
+
+    let first_state = next_control(&mut first_waiter).await;
+    let second_state = next_control(&mut second_waiter).await;
+    assert!(
+        matches!(
+            (first_state, second_state),
+            (TerminalControlState::Claimed, TerminalControlState::Waiting)
+                | (TerminalControlState::Waiting, TerminalControlState::Claimed)
+        ),
+        "exactly one waiter must win the vacant controller"
+    );
+    let (waiter, still_waiting) = if first_state == TerminalControlState::Claimed {
+        (&mut first_waiter, &mut second_waiter)
+    } else {
+        (&mut second_waiter, &mut first_waiter)
+    };
+    stream_handshake(waiter).await;
+    wait_for_status(waiter, TerminalPaneStatus::Running).await;
+    assert!(
+        timeout(Duration::from_millis(100), still_waiting.next())
+            .await
+            .is_err(),
+        "losing waiter must remain connected without output/status"
+    );
+
+    for force in [false, true] {
+        send_claim(waiter, force).await;
+        // A write acknowledgement is ordered after the claim on this socket.
+        // Normal PTY output (including macOS shell initialization escapes) can
+        // still arrive, but a repeated claim must not emit another handshake.
+        let request_id = format!("idempotent-owner-{force}");
+        let write = serde_json::to_string(&TerminalAttachClientMessage::Write {
+            request_id: request_id.clone(),
+            // Split the marker so terminal input echo cannot satisfy the check.
+            data: "printf '\\n__%s__\\n' 'IDEMPOTENT_OWNER'\n".to_owned(),
+        })
+        .unwrap();
+        waiter.send(Message::Text(write.into())).await.unwrap();
+        timeout(IO_TIMEOUT, async {
+            loop {
+                match waiter.next().await {
+                    Some(Ok(Message::Text(text))) => {
+                        let message: TerminalAttachServerMessage =
+                            serde_json::from_str(&text).unwrap();
+                        match message {
+                            TerminalAttachServerMessage::Written { request_id: actual } => {
+                                assert_eq!(actual, request_id);
+                                break;
+                            }
+                            other => panic!(
+                                "repeated claim emitted an unexpected control message: {other:?}"
+                            ),
+                        }
+                    }
+                    Some(Ok(Message::Binary(_) | Message::Ping(_) | Message::Pong(_))) => {}
+                    other => panic!("WebSocket failed before write acknowledgement: {other:?}"),
+                }
+            }
+        })
+        .await
+        .expect("repeated claim must preserve the owner's ability to write");
+        output_until(waiter, b"__IDEMPOTENT_OWNER__").await;
+    }
+
+    daemon.client.delete("auto-claim").await.unwrap();
+    daemon.stop().await;
+}
+
+#[tokio::test]
+async fn stale_superseded_disconnect_does_not_release_the_new_owner() {
+    let daemon = TestDaemon::start().await;
+    let cwd = tempfile::tempdir().unwrap();
+    daemon
+        .client
+        .create("stale-release", &shell_spec(cwd.path()))
+        .await
+        .unwrap();
+
+    let mut stale = daemon
+        .client
+        .attach_controlled_with_resume("stale-release", None, None)
+        .await
+        .unwrap();
+    controlled_claim(&mut stale, false).await;
+    wait_for_status(&mut stale, TerminalPaneStatus::Running).await;
+
+    let mut owner = daemon
+        .client
+        .attach_controlled_with_resume("stale-release", None, None)
+        .await
+        .unwrap();
+    controlled_claim(&mut owner, true).await;
+    wait_for_status(&mut owner, TerminalPaneStatus::Running).await;
+    wait_for_error(&mut stale, "attachment_superseded").await;
+    drop(stale);
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    let mut contender = daemon
+        .client
+        .attach_controlled_with_resume("stale-release", None, None)
+        .await
+        .unwrap();
+    send_claim(&mut contender, false).await;
+    wait_for_control(&mut contender, TerminalControlState::Waiting).await;
+    send_input(&mut owner, "printf '__NEW_OWNER_SURVIVED__\n'\n").await;
+    output_until(&mut owner, b"__NEW_OWNER_SURVIVED__").await;
+
+    daemon.client.delete("stale-release").await.unwrap();
+    daemon.stop().await;
+}
+
+#[tokio::test]
+async fn real_pty_attach_resize_and_detach_preserve_runtime() {
+    let daemon = TestDaemon::start().await;
+    let cwd = tempfile::tempdir().unwrap();
+    daemon
+        .client
+        .create("interactive", &shell_spec(cwd.path()))
+        .await
+        .unwrap();
+    let mut first = daemon.client.attach("interactive").await.unwrap();
+    assert_eq!(
+        wait_for_status(&mut first, TerminalPaneStatus::Running).await,
+        None
+    );
+    prepare_shell(&mut first).await;
+    send_input(&mut first, "echo __FIRST_ATTACH__\n").await;
+    output_until(&mut first, b"__FIRST_ATTACH__").await;
+
+    let resize = serde_json::to_string(&TerminalAttachClientMessage::Resize {
+        cols: 101,
+        rows: 41,
+    })
+    .unwrap();
+    first.send(Message::Text(resize.into())).await.unwrap();
+    send_input(&mut first, "stty size; echo __RESIZED__\n").await;
+    let resized_output = output_until(&mut first, b"__RESIZED__").await;
+    assert!(
+        String::from_utf8_lossy(&resized_output).contains("41 101"),
+        "PTY did not report the resized dimensions: {}",
+        String::from_utf8_lossy(&resized_output)
+    );
+
+    drop(first);
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    let runtime = daemon.client.get("interactive").await.unwrap().unwrap();
+    assert_eq!(runtime.status, TerminalPaneStatus::Running);
+    assert_eq!((runtime.rows, runtime.cols), (41, 101));
+    let original_spec = shell_spec(cwd.path());
+    let existing_after_resize = daemon
+        .client
+        .create("interactive", &original_spec)
+        .await
+        .unwrap();
+    assert_eq!(
+        (existing_after_resize.rows, existing_after_resize.cols),
+        (41, 101)
+    );
+
+    let mut second = daemon.client.connect_attach("interactive").await.unwrap();
+    let scrollback = output_until(&mut second, b"__FIRST_ATTACH__").await;
+    assert!(
+        scrollback
+            .windows(11)
+            .any(|window| window == b"__RESIZED__")
+    );
+    send_input(&mut second, "echo __SECOND_ATTACH__\n").await;
+    output_until(&mut second, b"__SECOND_ATTACH__").await;
+    drop(second);
+
+    daemon.client.delete("interactive").await.unwrap();
+    daemon.stop().await;
+}
+
+#[tokio::test]
+async fn web_runtime_exposes_terminal_environment() {
+    let daemon = TestDaemon::start().await;
+    let cwd = tempfile::tempdir().unwrap();
+    let mut spec = shell_spec(cwd.path());
+    spec.environment
+        .insert("AOW_LOG_MODE".into(), "unified".into());
+    daemon.client.create("clipboard-env", &spec).await.unwrap();
+
+    let mut socket = daemon.client.attach("clipboard-env").await.unwrap();
+    stream_handshake(&mut socket).await;
+    wait_for_status(&mut socket, TerminalPaneStatus::Running).await;
+    prepare_shell(&mut socket).await;
+    drain_output_until_quiet(&mut socket, Duration::from_millis(50)).await;
+    send_input(
+        &mut socket,
+        "printf '__TERMINAL_ENV__%s|%s|%s|%s__END__\n' \"$AOW_WEB_TERMINAL\" \"$TERM_PROGRAM\" \"$SSH_CONNECTION:${SSH_TTY-}\" \"${TMUX-}:${TMUX_PANE-}\"\n",
+    )
+    .await;
+    let output = output_until(&mut socket, b"__END__").await;
+    let output = String::from_utf8_lossy(&output);
+    assert!(
+        output.contains("__TERMINAL_ENV__1|aow-web|127.0.0.1 0 127.0.0.1 0:|:__END__"),
+        "unexpected web terminal environment: {output}"
+    );
+    {
+        send_input(
+            &mut socket,
+            "printf '__LOG_MODE__%s__END__\\n' \"${AOW_LOG_MODE-unset}\"\n",
+        )
+        .await;
+        let output = output_until(&mut socket, b"__END__").await;
+        assert!(String::from_utf8_lossy(&output).contains("__LOG_MODE__unified__END__"));
+    }
+
+    daemon.client.delete("clipboard-env").await.unwrap();
+    daemon.stop().await;
+}
+
+#[tokio::test]
+async fn fresh_reattach_uses_vt_snapshot_and_contiguous_raw_delta() {
+    let worker = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../runtime/vt-worker/dist/vt-worker.mjs");
+    if !worker.exists() {
+        eprintln!("skipping VT reattach test because the worker bundle is unavailable");
+        return;
+    }
+    let daemon = TestDaemon::start_with_vt_worker(VtWorkerConfig::new("node", worker)).await;
+    let cwd = tempfile::tempdir().unwrap();
+    daemon
+        .client
+        .create("vt-reattach", &shell_spec(cwd.path()))
+        .await
+        .unwrap();
+
+    let mut first = daemon
+        .client
+        .attach_with_resume_capabilities("vt-reattach", None, None, true)
+        .await
+        .unwrap();
+    stream_handshake(&mut first).await;
+    wait_for_status(&mut first, TerminalPaneStatus::Running).await;
+    send_input(
+        &mut first,
+        "stty -echo; printf '\\033[?1049h\\033[2J\\033[H__VT_SNAPSHOT_MARKER__\\n'\n",
+    )
+    .await;
+    output_until(&mut first, b"__VT_SNAPSHOT_MARKER__").await;
+    drain_output_until_quiet(&mut first, Duration::from_millis(350)).await;
+    drop(first);
+    // This unique suffix is emitted after detach. Depending on exact actor
+    // scheduling it is either already represented by the serialized state or
+    // arrives in the raw delta, but the combined restoration must contain it
+    // exactly once.
+    let late_marker = b"__VT_LATE_DELTA_MARKER__";
+    let mut writer = daemon
+        .client
+        .attach_with_resume_capabilities("vt-reattach", None, None, true)
+        .await
+        .unwrap();
+    stream_handshake(&mut writer).await;
+    wait_for_status(&mut writer, TerminalPaneStatus::Running).await;
+    send_input(&mut writer, "printf '__VT_LATE_DELTA_MARKER__\n'\n").await;
+    output_until(&mut writer, late_marker).await;
+    drop(writer);
+
+    // An old client does not know how to parse a serialized VT stream at the
+    // snapshot's original geometry. It must keep receiving the pre-extension
+    // raw reset even while terminald has a valid cached snapshot.
+    let mut legacy = daemon.client.attach("vt-reattach").await.unwrap();
+    let legacy_restore = stream_handshake(&mut legacy).await;
+    assert_eq!(legacy_restore.restore, None);
+    assert_eq!(legacy_restore.restore_cols, None);
+    assert_eq!(legacy_restore.restore_rows, None);
+    assert!(
+        legacy_restore
+            .replay
+            .windows(late_marker.len())
+            .any(|window| window == late_marker),
+        "legacy client did not receive raw terminal history"
+    );
+    drop(legacy);
+
+    let mut fresh = daemon
+        .client
+        .attach_with_resume_capabilities("vt-reattach", None, None, true)
+        .await
+        .unwrap();
+    let restored = stream_handshake(&mut fresh).await;
+    assert!(restored.reset);
+    assert_eq!(
+        (restored.restore_cols, restored.restore_rows),
+        (Some(80), Some(24))
+    );
+    let restore = restored.restore.expect("fresh attach carries VT snapshot");
+    assert!(
+        restore.contains("__VT_SNAPSHOT_MARKER__"),
+        "serialized VT state omitted marker: {restore:?}"
+    );
+    assert!(
+        restore.contains("\u{1b}[?1049h"),
+        "serialized VT state did not restore the fullscreen alternate screen: {restore:?}"
+    );
+    assert_eq!(restored.replay_bytes, restored.replay.len() as u64);
+    let mut restored_bytes = restore.into_bytes();
+    restored_bytes.extend_from_slice(&restored.replay);
+    assert_eq!(
+        restored_bytes
+            .windows(late_marker.len())
+            .filter(|window| *window == late_marker)
+            .count(),
+        1,
+        "snapshot plus raw delta must contain detached output exactly once"
+    );
+
+    daemon.client.delete("vt-reattach").await.unwrap();
+    daemon.stop().await;
+}
+
+#[tokio::test]
+async fn stream_handshake_resumes_exactly_and_resets_stale_or_future_offsets() {
+    let daemon = TestDaemon::start().await;
+    let cwd = tempfile::tempdir().unwrap();
+    daemon
+        .client
+        .create("resume", &shell_spec(cwd.path()))
+        .await
+        .unwrap();
+
+    let mut initial = daemon.client.attach("resume").await.unwrap();
+    let initial_stream = stream_handshake(&mut initial).await;
+    assert!(initial_stream.reset);
+    assert_eq!(initial_stream.offset, 0);
+    assert_eq!(
+        initial_stream.replay_bytes as usize,
+        initial_stream.replay.len()
+    );
+    wait_for_status(&mut initial, TerminalPaneStatus::Running).await;
+    send_input(
+        &mut initial,
+        "stty -echo; printf '__PREFIX____SUFFIX__\\n'\n",
+    )
+    .await;
+    let emitted = output_count_until(&mut initial, b"__SUFFIX__").await;
+    let live_tail = drain_output_until_quiet(&mut initial, Duration::from_millis(100)).await;
+    let after = initial_stream.offset
+        + initial_stream.replay_bytes
+        + u64::try_from(emitted + live_tail.len()).unwrap();
+    drop(initial);
+
+    let mut exact = daemon
+        .client
+        .attach_from("resume", &initial_stream.epoch, after)
+        .await
+        .unwrap();
+    let exact_stream = stream_handshake(&mut exact).await;
+    assert!(!exact_stream.reset);
+    assert_eq!(exact_stream.offset, after);
+    assert_eq!(exact_stream.replay_bytes, 0);
+    assert!(exact_stream.replay.is_empty());
+    wait_for_status(&mut exact, TerminalPaneStatus::Running).await;
+    send_input(&mut exact, "printf '__EXACT_SUFFIX__\\n'\n").await;
+    output_until(&mut exact, b"__EXACT_SUFFIX__").await;
+    drop(exact);
+
+    let mut reset = daemon
+        .client
+        .attach_from("resume", &initial_stream.epoch, u64::MAX)
+        .await
+        .unwrap();
+    let reset_stream = stream_handshake(&mut reset).await;
+    assert!(reset_stream.reset);
+    assert_eq!(reset_stream.offset, 0);
+    assert_eq!(
+        reset_stream.replay_bytes as usize,
+        reset_stream.replay.len()
+    );
+    assert!(
+        reset_stream
+            .replay
+            .windows(10)
+            .any(|window| window == b"__PREFIX__")
+    );
+    let suffix_start = reset_stream
+        .replay
+        .windows(10)
+        .position(|window| window == b"__PREFIX__")
+        .unwrap();
+    let suffix_offset = reset_stream.offset + u64::try_from(suffix_start).unwrap();
+    let expected_suffix = reset_stream.replay[suffix_start..].to_vec();
+    let known_end = reset_stream.offset + reset_stream.replay_bytes;
+    drop(reset);
+
+    let mut suffix = daemon
+        .client
+        .attach_from("resume", &initial_stream.epoch, suffix_offset)
+        .await
+        .unwrap();
+    let suffix_stream = stream_handshake(&mut suffix).await;
+    assert!(!suffix_stream.reset);
+    assert_eq!(suffix_stream.offset, suffix_offset);
+    assert_eq!(suffix_stream.replay, expected_suffix);
+    assert_eq!(
+        suffix_stream.replay_bytes as usize,
+        suffix_stream.replay.len()
+    );
+    drop(suffix);
+
+    let mut future = daemon
+        .client
+        .attach_from("resume", &initial_stream.epoch, known_end + 1)
+        .await
+        .unwrap();
+    let future_stream = stream_handshake(&mut future).await;
+    assert!(future_stream.reset);
+    assert_eq!(future_stream.offset, 0);
+    assert_eq!(
+        future_stream.replay_bytes as usize,
+        future_stream.replay.len()
+    );
+
+    daemon.client.delete("resume").await.unwrap();
+    daemon.stop().await;
+}
+
+#[tokio::test]
+async fn newest_attachment_supersedes_old_controller_and_blocks_old_mutations() {
+    let daemon = TestDaemon::start().await;
+    let cwd = tempfile::tempdir().unwrap();
+    daemon
+        .client
+        .create("controller", &shell_spec(cwd.path()))
+        .await
+        .unwrap();
+
+    let mut old = daemon.client.attach("controller").await.unwrap();
+    stream_handshake(&mut old).await;
+    wait_for_status(&mut old, TerminalPaneStatus::Running).await;
+
+    let mut newest = daemon.client.attach("controller").await.unwrap();
+    stream_handshake(&mut newest).await;
+    wait_for_status(&mut newest, TerminalPaneStatus::Running).await;
+
+    // Queue both stale mutations before observing the superseded notification.
+    // The daemon validates the generation around the actual PTY operation, so
+    // neither can affect process input or runtime metadata.
+    let _ = old
+        .send(Message::Binary(
+            b"printf '__STALE_INPUT__\\n'\n".to_vec().into(),
+        ))
+        .await;
+    let stale_resize = serde_json::to_string(&TerminalAttachClientMessage::Resize {
+        cols: 133,
+        rows: 47,
+    })
+    .unwrap();
+    let _ = old.send(Message::Text(stale_resize.into())).await;
+    wait_for_error(&mut old, "attachment_superseded").await;
+
+    let runtime = daemon.client.get("controller").await.unwrap().unwrap();
+    assert_eq!((runtime.rows, runtime.cols), (24, 80));
+
+    send_input(&mut newest, "stty -echo\n").await;
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    drain_output_until_quiet(&mut newest, Duration::from_millis(50)).await;
+    send_input(&mut newest, "stty size; printf '__SIZE_CHECK__\\n'\n").await;
+    let size_output = output_until(&mut newest, b"__SIZE_CHECK__").await;
+    assert!(
+        String::from_utf8_lossy(&size_output).contains("24 80"),
+        "stale resize changed the PTY: {}",
+        String::from_utf8_lossy(&size_output)
+    );
+    assert!(
+        !String::from_utf8_lossy(&size_output).contains("__STALE_INPUT__"),
+        "stale input reached the PTY: {}",
+        String::from_utf8_lossy(&size_output)
+    );
+
+    let resize = serde_json::to_string(&TerminalAttachClientMessage::Resize {
+        cols: 111,
+        rows: 43,
+    })
+    .unwrap();
+    newest.send(Message::Text(resize.into())).await.unwrap();
+    send_input(&mut newest, "stty size; printf '__NEW_RESIZE__\\n'\n").await;
+    let resized = output_until(&mut newest, b"__NEW_RESIZE__").await;
+    assert!(
+        String::from_utf8_lossy(&resized).contains("43 111"),
+        "new controller could not resize the PTY: {}",
+        String::from_utf8_lossy(&resized)
+    );
+
+    daemon.client.delete("controller").await.unwrap();
+    daemon.stop().await;
+}
+
+#[tokio::test]
+async fn resume_epoch_rejects_offsets_from_a_recreated_runtime() {
+    let daemon = TestDaemon::start().await;
+    let cwd = tempfile::tempdir().unwrap();
+    let spec = shell_spec(cwd.path());
+    daemon.client.create("recreated", &spec).await.unwrap();
+
+    let mut original = daemon.client.attach("recreated").await.unwrap();
+    let original_stream = stream_handshake(&mut original).await;
+    wait_for_status(&mut original, TerminalPaneStatus::Running).await;
+    drop(original);
+    daemon.client.delete("recreated").await.unwrap();
+
+    daemon.client.create("recreated", &spec).await.unwrap();
+    let mut recreated = daemon
+        .client
+        .attach_from("recreated", &original_stream.epoch, 0)
+        .await
+        .unwrap();
+    let recreated_stream = stream_handshake(&mut recreated).await;
+    assert_ne!(recreated_stream.epoch, original_stream.epoch);
+    assert!(recreated_stream.reset);
+    assert_eq!(recreated_stream.offset, 0);
+
+    daemon.client.delete("recreated").await.unwrap();
+    daemon.stop().await;
+}
+
+#[tokio::test]
+async fn natural_exit_is_retained_and_delete_kills_session_descendants() {
+    let daemon = TestDaemon::start().await;
+    let cwd = tempfile::tempdir().unwrap();
+
+    daemon
+        .client
+        .create("natural-exit", &shell_spec(cwd.path()))
+        .await
+        .unwrap();
+    let mut natural = daemon.client.attach("natural-exit").await.unwrap();
+    wait_for_status(&mut natural, TerminalPaneStatus::Running).await;
+    send_input(&mut natural, "exit 7\n").await;
+    assert_eq!(
+        wait_for_status(&mut natural, TerminalPaneStatus::Exited).await,
+        Some(7)
+    );
+    let retained = daemon.client.get("natural-exit").await.unwrap().unwrap();
+    assert_eq!(retained.status, TerminalPaneStatus::Exited);
+    assert_eq!(retained.exit_code, Some(7));
+
+    daemon
+        .client
+        .create("natural-exit-child", &shell_spec(cwd.path()))
+        .await
+        .unwrap();
+    let mut natural_child = daemon.client.attach("natural-exit-child").await.unwrap();
+    wait_for_status(&mut natural_child, TerminalPaneStatus::Running).await;
+    prepare_shell(&mut natural_child).await;
+    send_input(
+        &mut natural_child,
+        "nohup sleep 300 >/dev/null 2>&1 & child_pid=$! ; echo __NATURAL_CHILD__${child_pid}__END_NATURAL_CHILD__; exit 0\n",
+    )
+    .await;
+    let child_output = output_until(&mut natural_child, b"__END_NATURAL_CHILD__").await;
+    let natural_child_pid = pid_between(
+        &String::from_utf8_lossy(&child_output),
+        "__NATURAL_CHILD__",
+        "__END_NATURAL_CHILD__",
+    );
+    assert_eq!(
+        wait_for_status(&mut natural_child, TerminalPaneStatus::Exited).await,
+        Some(0)
+    );
+    wait_until_process_gone(natural_child_pid).await;
+
+    daemon
+        .client
+        .create("force-delete", &shell_spec(cwd.path()))
+        .await
+        .unwrap();
+    let mut forced = daemon.client.attach("force-delete").await.unwrap();
+    wait_for_status(&mut forced, TerminalPaneStatus::Running).await;
+    prepare_shell(&mut forced).await;
+    send_input(
+        &mut forced,
+        "sleep 300 & child_pid=$! ; echo __SHELL_PID__$$__END_SHELL____CHILD_PID__${child_pid}__END_PID__\n",
+    )
+    .await;
+    let output = output_until(&mut forced, b"__END_PID__").await;
+    let output = String::from_utf8_lossy(&output);
+    let shell_pid = pid_between(&output, "__SHELL_PID__", "__END_SHELL__");
+    let child_pid = pid_between(&output, "__CHILD_PID__", "__END_PID__");
+    assert_eq!(unsafe { libc::kill(shell_pid, 0) }, 0);
+    assert_eq!(unsafe { libc::kill(child_pid, 0) }, 0);
+
+    daemon.client.delete("force-delete").await.unwrap();
+    wait_until_process_gone(shell_pid).await;
+    wait_until_process_gone(child_pid).await;
+    assert!(daemon.client.get("force-delete").await.unwrap().is_none());
+    daemon.client.delete("natural-exit").await.unwrap();
+    daemon.client.delete("natural-exit-child").await.unwrap();
+    daemon.stop().await;
+}
+
+#[tokio::test]
+async fn daemon_shutdown_kills_and_reaps_runtime_processes() {
+    let daemon = TestDaemon::start().await;
+    let cwd = tempfile::tempdir().unwrap();
+    daemon
+        .client
+        .create("shutdown", &shell_spec(cwd.path()))
+        .await
+        .unwrap();
+    let mut socket = daemon.client.attach("shutdown").await.unwrap();
+    wait_for_status(&mut socket, TerminalPaneStatus::Running).await;
+    prepare_shell(&mut socket).await;
+    send_input(
+        &mut socket,
+        "sleep 300 & child_pid=$! ; echo __SHELL_PID__$$__END_SHELL____CHILD_PID__${child_pid}__END_PID__\n",
+    )
+    .await;
+    let output = output_until(&mut socket, b"__END_PID__").await;
+    let output = String::from_utf8_lossy(&output);
+    let shell_pid = pid_between(&output, "__SHELL_PID__", "__END_SHELL__");
+    let child_pid = pid_between(&output, "__CHILD_PID__", "__END_PID__");
+
+    daemon.stop().await;
+    wait_until_process_gone(shell_pid).await;
+    wait_until_process_gone(child_pid).await;
+}
+
+// This uses the real headless parser but withholds its ACK until the test
+// releases it. Socket assertions therefore cannot pass merely because the
+// PTY/IPC write completed before headless parsing or publication.
+fn gated_vt_worker(directory: &std::path::Path, fail: bool) -> VtWorkerConfig {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../runtime/vt-worker/src");
+    let script = directory.join("gated-worker.mjs");
+    let source = format!(
+        r#"
+import {{ existsSync, writeFileSync }} from 'node:fs';
+import {{ setTimeout as delay }} from 'node:timers/promises';
+import {{ encodeFrame, readFrames }} from {framing};
+import {{ VtService }} from {service};
+const service = new VtService();
+for await (const frame of readFrames(process.stdin)) {{
+  const request = JSON.parse(frame.metadata);
+  const result = await service.dispatch(request.action, {{ ...request, data: frame.data }});
+  if (request.action === 'write') {{
+    writeFileSync({parsed}, String(result.applied_offset));
+    while (!existsSync({release})) await delay(5);
+    if ({fail}) process.exit(1);
+  }}
+  if (request.action === 'resize') continue;
+  const {{ data, ...metadata }} = result;
+  await new Promise((resolve, reject) => process.stdout.write(encodeFrame({{
+    id: request.id, action: request.action, ok: true, result: metadata,
+  }}, data), error => error ? reject(error) : resolve()));
+}}
+"#,
+        framing = serde_json::to_string(&root.join("framing.mjs")).unwrap(),
+        service = serde_json::to_string(&root.join("vt-service.mjs")).unwrap(),
+        parsed = serde_json::to_string(&directory.join("parsed")).unwrap(),
+        release = serde_json::to_string(&directory.join("release")).unwrap(),
+    );
+    std::fs::write(&script, source).unwrap();
+    VtWorkerConfig::new("node", script)
+}
+
+async fn wait_for_parsed_output(directory: &std::path::Path) {
+    timeout(IO_TIMEOUT, async {
+        while !directory.join("parsed").exists() {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("worker parsed PTY output");
+}
+
+async fn assert_no_unacknowledged_output(socket: &mut RuntimeSocket) {
+    let result = timeout(Duration::from_millis(75), async {
+        loop {
+            match socket.next().await {
+                Some(Ok(Message::Text(text))) => {
+                    assert!(
+                        matches!(
+                            serde_json::from_str::<TerminalAttachServerMessage>(&text).unwrap(),
+                            TerminalAttachServerMessage::Status {
+                                status: TerminalPaneStatus::Running,
+                                ..
+                            }
+                        ),
+                        "completion/error must not overtake the held ACK: {text}"
+                    );
+                }
+                other => panic!("unacknowledged output escaped: {other:?}"),
+            }
+        }
+    })
+    .await;
+    assert!(result.is_err(), "stream stays open while awaiting ACK");
+}
+
+#[tokio::test]
+async fn vt_ack_gates_live_output_replay_and_final_exit_for_every_client() {
+    let cwd = tempfile::tempdir().unwrap();
+    let daemon = TestDaemon::start_with_vt_worker(gated_vt_worker(cwd.path(), false)).await;
+    let mut spec = shell_spec(cwd.path());
+    spec.arguments = vec!["-c".into(), "printf '__PARSED_BEFORE_PUBLISHED__'".into()];
+    daemon.client.create("ack-boundary", &spec).await.unwrap();
+    wait_for_parsed_output(cwd.path()).await;
+
+    let mut socket = daemon.client.attach("ack-boundary").await.unwrap();
+    let initial = stream_handshake(&mut socket).await;
+    assert_eq!(initial.offset, 0);
+    assert_eq!(initial.replay_bytes, 0);
+    assert_no_unacknowledged_output(&mut socket).await;
+
+    let mut observer = daemon
+        .client
+        .attach_controlled_with_resume_capabilities_and_observer(
+            "ack-boundary",
+            None,
+            None,
+            true,
+            true,
+        )
+        .await
+        .unwrap();
+    send_claim(&mut observer, false).await;
+    wait_for_control(&mut observer, TerminalControlState::Observing).await;
+    let observed = stream_handshake(&mut observer).await;
+    assert_eq!(observed.replay_bytes, 0);
+    assert!(
+        !observed
+            .restore
+            .unwrap_or_default()
+            .contains("__PARSED_BEFORE_PUBLISHED__")
+    );
+    assert_no_unacknowledged_output(&mut observer).await;
+
+    std::fs::write(cwd.path().join("release"), b"ack").unwrap();
+    let marker = b"__PARSED_BEFORE_PUBLISHED__";
+    assert_eq!(output_until(&mut socket, marker).await, marker);
+    wait_for_status(&mut socket, TerminalPaneStatus::Exited).await;
+    assert_eq!(output_until(&mut observer, marker).await, marker);
+    wait_for_status(&mut observer, TerminalPaneStatus::Exited).await;
+
+    let mut reattached = daemon.client.attach("ack-boundary").await.unwrap();
+    assert_eq!(stream_handshake(&mut reattached).await.replay, marker);
+    daemon.client.delete("ack-boundary").await.unwrap();
+    daemon.stop().await;
+}
+
+async fn expect_vt_failure(socket: &mut RuntimeSocket) {
+    timeout(IO_TIMEOUT, async {
+        loop {
+            match socket.next().await {
+                Some(Ok(Message::Text(text))) => {
+                    match serde_json::from_str::<TerminalAttachServerMessage>(&text).unwrap() {
+                        TerminalAttachServerMessage::Error { code, .. } => {
+                            assert_eq!(code, "vt_worker_failed");
+                            return;
+                        }
+                        TerminalAttachServerMessage::Status {
+                            status: TerminalPaneStatus::Running,
+                            ..
+                        } => {}
+                        other => {
+                            panic!("completion must not overtake unacknowledged output: {other:?}")
+                        }
+                    }
+                }
+                other => panic!("failed VT stream published unacknowledged output: {other:?}"),
+            }
+        }
+    })
+    .await
+    .expect("VT failure reaches the client");
+}
+
+#[tokio::test]
+async fn vt_failure_never_falls_back_to_unparsed_output() {
+    let cwd = tempfile::tempdir().unwrap();
+    let daemon = TestDaemon::start_with_vt_worker(gated_vt_worker(cwd.path(), true)).await;
+    let mut spec = shell_spec(cwd.path());
+    spec.arguments = vec!["-c".into(), "printf '__UNACKNOWLEDGED__'".into()];
+    daemon.client.create("failed-ack", &spec).await.unwrap();
+    wait_for_parsed_output(cwd.path()).await;
+    let mut socket = daemon.client.attach("failed-ack").await.unwrap();
+    assert_eq!(stream_handshake(&mut socket).await.replay_bytes, 0);
+    std::fs::write(cwd.path().join("release"), b"fail").unwrap();
+    expect_vt_failure(&mut socket).await;
+    let mut reattached = daemon.client.attach("failed-ack").await.unwrap();
+    let message = timeout(IO_TIMEOUT, reattached.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let Message::Text(text) = message else {
+        panic!("failed attach returned output")
+    };
+    assert!(matches!(
+        serde_json::from_str::<TerminalAttachServerMessage>(&text).unwrap(),
+        TerminalAttachServerMessage::Error { .. }
+    ));
+    daemon.client.delete("failed-ack").await.unwrap();
+    daemon.stop().await;
+}
+
+#[tokio::test]
+async fn stalled_vt_ack_times_out_and_releases_a_backpressured_pty() {
+    let cwd = tempfile::tempdir().unwrap();
+    let mut config = gated_vt_worker(cwd.path(), false);
+    config.request_timeout = Duration::from_secs(2);
+    let daemon = TestDaemon::start_with_vt_worker(config).await;
+    let mut spec = shell_spec(cwd.path());
+    spec.arguments = vec!["-c".into(), "head -c 2097152 /dev/zero".into()];
+    daemon.client.create("stalled-ack", &spec).await.unwrap();
+    wait_for_parsed_output(cwd.path()).await;
+    let mut socket = daemon.client.attach("stalled-ack").await.unwrap();
+    assert_eq!(stream_handshake(&mut socket).await.replay_bytes, 0);
+    expect_vt_failure(&mut socket).await;
+    daemon.client.delete("stalled-ack").await.unwrap();
+    daemon.stop().await;
+}
+
+#[tokio::test]
+async fn vt_ack_pipeline_preserves_every_byte_in_a_two_mebibyte_burst() {
+    let worker = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../runtime/vt-worker/dist/vt-worker.mjs");
+    let daemon = TestDaemon::start_with_vt_worker(VtWorkerConfig::new("node", worker)).await;
+    let cwd = tempfile::tempdir().unwrap();
+    let mut spec = shell_spec(cwd.path());
+    spec.arguments = vec![
+        "-c".into(),
+        "head -c 2097152 /dev/zero | tr '\\000' x; printf '__BURST_END__'".into(),
+    ];
+    daemon.client.create("burst-ack", &spec).await.unwrap();
+    let mut socket = daemon.client.attach("burst-ack").await.unwrap();
+    let mut output = stream_handshake(&mut socket).await.replay;
+    timeout(IO_TIMEOUT, async {
+        loop {
+            match socket.next().await {
+                Some(Ok(Message::Binary(bytes))) => output.extend_from_slice(&bytes),
+                Some(Ok(Message::Text(text))) => {
+                    match serde_json::from_str::<TerminalAttachServerMessage>(&text).unwrap() {
+                        TerminalAttachServerMessage::Status {
+                            status: TerminalPaneStatus::Exited,
+                            exit_code: Some(0),
+                        } => break,
+                        TerminalAttachServerMessage::Status {
+                            status: TerminalPaneStatus::Running,
+                            ..
+                        } => {}
+                        other => panic!("unexpected burst stream message: {other:?}"),
+                    }
+                }
+                other => panic!("burst stream ended early: {other:?}"),
+            }
+        }
+    })
+    .await
+    .expect("burst is fully parsed and delivered before process exit");
+    let mut expected = vec![b'x'; 2 * 1024 * 1024];
+    expected.extend_from_slice(b"__BURST_END__");
+    assert_eq!(output.len(), expected.len());
+    assert!(
+        output == expected,
+        "burst has no missing, duplicated or reordered bytes"
+    );
+    daemon.client.delete("burst-ack").await.unwrap();
+    daemon.stop().await;
+}
+
+#[tokio::test]
+async fn vt_resize_uses_received_offset_while_output_ack_is_pending() {
+    let cwd = tempfile::tempdir().unwrap();
+    let daemon = TestDaemon::start_with_vt_worker(gated_vt_worker(cwd.path(), false)).await;
+    let mut spec = shell_spec(cwd.path());
+    spec.arguments = vec![
+        "-c".into(),
+        "stty -echo; printf '__BEFORE_RESIZE__'; read line; printf '__AFTER_RESIZE__'".into(),
+    ];
+    daemon.client.create("resize-ack", &spec).await.unwrap();
+    wait_for_parsed_output(cwd.path()).await;
+    let mut socket = daemon.client.attach("resize-ack").await.unwrap();
+    assert_eq!(stream_handshake(&mut socket).await.replay_bytes, 0);
+    wait_for_status(&mut socket, TerminalPaneStatus::Running).await;
+    let resize = serde_json::to_string(&TerminalAttachClientMessage::Resize {
+        cols: 100,
+        rows: 30,
+    })
+    .unwrap();
+    socket.send(Message::Text(resize.into())).await.unwrap();
+    timeout(IO_TIMEOUT, async {
+        let Some(Ok(Message::Text(text))) = socket.next().await else {
+            panic!("resize did not respond while the write ACK was pending");
+        };
+        assert!(matches!(
+            serde_json::from_str::<TerminalAttachServerMessage>(&text).unwrap(),
+            TerminalAttachServerMessage::Resized {
+                cols: 100,
+                rows: 30
+            }
+        ));
+    })
+    .await
+    .unwrap();
+    std::fs::write(cwd.path().join("release"), b"ack").unwrap();
+    assert_eq!(
+        output_until(&mut socket, b"__BEFORE_RESIZE__").await,
+        b"__BEFORE_RESIZE__"
+    );
+    send_input(&mut socket, "continue\n").await;
+    assert_eq!(
+        output_until(&mut socket, b"__AFTER_RESIZE__").await,
+        b"__AFTER_RESIZE__"
+    );
+    wait_for_status(&mut socket, TerminalPaneStatus::Exited).await;
+    daemon.client.delete("resize-ack").await.unwrap();
+    daemon.stop().await;
+}
+
+#[tokio::test]
+async fn deleting_a_backpressured_terminal_does_not_wait_for_the_vt_ack() {
+    let cwd = tempfile::tempdir().unwrap();
+    let mut config = gated_vt_worker(cwd.path(), false);
+    config.request_timeout = Duration::from_secs(60);
+    let daemon = TestDaemon::start_with_vt_worker(config).await;
+    let mut spec = shell_spec(cwd.path());
+    spec.arguments = vec!["-c".into(), "head -c 2097152 /dev/zero".into()];
+    daemon
+        .client
+        .create("delete-pending-ack", &spec)
+        .await
+        .unwrap();
+    wait_for_parsed_output(cwd.path()).await;
+    let mut socket = daemon.client.attach("delete-pending-ack").await.unwrap();
+    assert_eq!(stream_handshake(&mut socket).await.replay_bytes, 0);
+    assert_no_unacknowledged_output(&mut socket).await;
+    timeout(
+        Duration::from_secs(3),
+        daemon.client.delete("delete-pending-ack"),
+    )
+    .await
+    .expect("delete wakes the PTY reader without waiting for ACK or timeout")
+    .unwrap();
+    daemon.stop().await;
+}
+
+// Exercise the daemon cache and socket negotiation after the raw ring has
+// rolled over, not just the worker's compression function in isolation.
+#[tokio::test]
+async fn compressed_history_survives_raw_ring_rollover_and_negotiates_client_support() {
+    let directory = tempfile::tempdir().unwrap();
+    let worker = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../runtime/vt-worker/dist/vt-worker.mjs");
+    let daemon = TestDaemon::start_with_vt_worker(VtWorkerConfig::new("node", worker)).await;
+    let colored = "\u{1b}[38;2;123;45;67ma\u{1b}[38;2;89;123;45mb".repeat(95);
+    let data = (0..5_000)
+        .map(|i| format!("line-{i:05} {colored}\u{1b}[0m\r\n"))
+        .collect::<String>();
+    assert!(data.len() > 16 * 1024 * 1024);
+    let epoch = emit_history_fixture(&daemon, directory.path(), data.as_bytes()).await;
+    timeout(IO_TIMEOUT, async {
+        loop {
+            if daemon
+                .client
+                .screen("restore-history")
+                .await
+                .unwrap()
+                .is_some_and(|snapshot| snapshot.applied_offset == data.len() as u64)
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("the complete compressed snapshot is cached");
+
+    let mut fresh = daemon
+        .client
+        .attach_with_options(
+            "restore-history",
+            aow_runtime_client::TerminalAttachOptions {
+                vt_snapshot: true,
+                gzip_snapshot: true,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    let Message::Text(text) = fresh.next().await.unwrap().unwrap() else {
+        panic!("expected stream header")
+    };
+    let TerminalAttachServerMessage::Stream {
+        restore,
+        restore_gzip,
+        restore_cols,
+        restore_rows,
+        offset,
+        replay_bytes,
+        ..
+    } = serde_json::from_str(&text).unwrap()
+    else {
+        panic!("expected compressed restore: {text}")
+    };
+    let compressed = restore_gzip.expect("large history uses compressed transport");
+    assert!(restore.is_none());
+    assert!(compressed.data.len() < 8 * 1024 * 1024);
+    assert!(compressed.decoded_bytes > 8 * 1024 * 1024);
+    assert_eq!((restore_cols, restore_rows), (Some(220), Some(24)));
+    assert_eq!(offset, data.len() as u64);
+    assert_eq!(replay_bytes, 0);
+    wait_for_status(&mut fresh, TerminalPaneStatus::Running).await;
+
+    let mut legacy = daemon
+        .client
+        .attach_with_resume_capabilities("restore-history", None, None, true)
+        .await
+        .unwrap();
+    wait_for_error(&mut legacy, "snapshot_format_unsupported").await;
+    drop(legacy);
+    // A rejected legacy takeover must leave the existing controller usable.
+    let request_id = "controller-after-rejected-restore".to_owned();
+    fresh
+        .send(Message::Text(
+            serde_json::to_string(&TerminalAttachClientMessage::Write {
+                request_id: request_id.clone(),
+                data: String::new(),
+            })
+            .unwrap()
+            .into(),
+        ))
+        .await
+        .unwrap();
+    let Message::Text(ack) = timeout(IO_TIMEOUT, fresh.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap()
+    else {
+        panic!("expected write acknowledgement from the existing controller")
+    };
+    assert_eq!(
+        serde_json::from_str::<TerminalAttachServerMessage>(&ack).unwrap(),
+        TerminalAttachServerMessage::Written { request_id }
+    );
+    drop(fresh);
+    // Resume is still raw and independent of snapshot encoding.
+    let mut resumed = daemon
+        .client
+        .attach_with_options(
+            "restore-history",
+            aow_runtime_client::TerminalAttachOptions {
+                epoch: Some(&epoch),
+                after: Some(data.len() as u64),
+                vt_snapshot: true,
+                gzip_snapshot: true,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    let restored = stream_handshake(&mut resumed).await;
+    assert!(!restored.reset);
+    assert_eq!(restored.offset, data.len() as u64);
+    assert_eq!(restored.replay_bytes, 0);
+    daemon.client.delete("restore-history").await.unwrap();
+    daemon.stop().await;
+}
+
+#[tokio::test]
+async fn unavailable_full_snapshot_never_silently_restores_truncated_history() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../runtime/vt-worker/src");
+    let script = directory.path().join("no-snapshots.mjs");
+    std::fs::write(&script, format!(r#"
+import {{ VtService }} from {service};
+import {{ ProtocolError }} from {protocol};
+import {{ runWorker }} from {worker};
+const dispatch = VtService.prototype.dispatch;
+VtService.prototype.dispatch = function(action, request) {{
+  if (action === 'snapshot') return Promise.reject(new ProtocolError('snapshot_too_large', 'test cache limit'));
+  return dispatch.call(this, action, request);
+}};
+await runWorker({{ input: process.stdin, output: process.stdout }});
+"#,
+        service = serde_json::to_string(&root.join("vt-service.mjs")).unwrap(),
+        protocol = serde_json::to_string(&root.join("protocol.mjs")).unwrap(),
+        worker = serde_json::to_string(&root.join("worker.mjs")).unwrap(),
+    )).unwrap();
+    let daemon = TestDaemon::start_with_vt_worker(VtWorkerConfig::new("node", script)).await;
+    let mut data = vec![0; 9 * 1024 * 1024];
+    data.extend_from_slice(b"history must not silently disappear");
+    let epoch = emit_history_fixture(&daemon, directory.path(), &data).await;
+    let mut fresh = daemon
+        .client
+        .attach_with_options(
+            "restore-history",
+            aow_runtime_client::TerminalAttachOptions {
+                vt_snapshot: true,
+                gzip_snapshot: true,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    let Message::Text(text) = fresh.next().await.unwrap().unwrap() else {
+        panic!("expected restore error")
+    };
+    let TerminalAttachServerMessage::Error { message, .. } = serde_json::from_str(&text).unwrap()
+    else {
+        panic!("must not advertise a truncated reset: {text}")
+    };
+    assert!(message.contains("complete terminal history"));
+    drop(fresh);
+    let mut resumed = daemon
+        .client
+        .attach_with_options(
+            "restore-history",
+            aow_runtime_client::TerminalAttachOptions {
+                epoch: Some(&epoch),
+                after: Some(data.len() as u64),
+                vt_snapshot: true,
+                gzip_snapshot: true,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert!(
+        !stream_handshake(&mut resumed).await.reset,
+        "an intact browser cursor can still resume"
+    );
+    daemon.client.delete("restore-history").await.unwrap();
+    daemon.stop().await;
+}
+
+async fn emit_history_fixture(
+    daemon: &TestDaemon,
+    directory: &std::path::Path,
+    data: &[u8],
+) -> String {
+    std::fs::write(directory.join("history"), data).unwrap();
+    let mut spec = shell_spec(directory);
+    spec.cols = 220;
+    spec.arguments = vec![
+        "-c".into(),
+        "stty -onlcr; while [ ! -f release ]; do sleep 0.02; done; cat history; sleep 60".into(),
+    ];
+    daemon
+        .client
+        .create("restore-history", &spec)
+        .await
+        .unwrap();
+    let mut stream = daemon.client.attach("restore-history").await.unwrap();
+    let initial = stream_handshake(&mut stream).await;
+    assert_eq!(initial.replay_bytes, 0);
+    std::fs::write(directory.join("release"), b"go").unwrap();
+    timeout(Duration::from_secs(30), async {
+        let mut received = 0;
+        while received < data.len() {
+            match stream.next().await {
+                Some(Ok(Message::Binary(bytes))) => {
+                    assert_eq!(&data[received..received + bytes.len()], bytes.as_ref());
+                    received += bytes.len();
+                }
+                Some(Ok(Message::Text(text))) => assert!(matches!(
+                    serde_json::from_str::<TerminalAttachServerMessage>(&text).unwrap(),
+                    TerminalAttachServerMessage::Status {
+                        status: TerminalPaneStatus::Running,
+                        ..
+                    }
+                )),
+                other => panic!("history stream stopped early: {other:?}"),
+            }
+        }
+    })
+    .await
+    .expect("all history reaches the live client");
+    initial.epoch
+}

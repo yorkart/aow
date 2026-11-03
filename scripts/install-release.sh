@@ -28,13 +28,13 @@ fail() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
 usage() {
     cat <<EOF
-Usage: install-release.sh [--repo OWNER/REPO] [--version VERSION] [--skip-terminald] [--skip-acpd]
-       install-release.sh --package FILE [--repo OWNER/REPO] [--skip-terminald] [--skip-acpd]
+Usage: install-release.sh [--repo OWNER/REPO] [--version VERSION] [--skip-runtime]
+       install-release.sh --package FILE [--repo OWNER/REPO] [--skip-runtime]
 
 Install a GitHub Release or local package, then start/restart its services.
 Without --version, install this script's release (or resolve latest from source).
 With --version, download that release directly. All packages require SHA256 verification.
-By default, update and start/restart terminald without prompting; existing terminal sessions end.
+By default, update and start/restart runtime daemon without prompting; existing terminal sessions end.
 On first installation, set a login account and confirm its password interactively before starting the server.
 
 Options:
@@ -44,8 +44,7 @@ Options:
   --package FILE   Install a local archive with its adjacent FILE.sha256.
                     Resolves symlinks once; reads the version from the manifest.
                     Cannot be combined with --version. No downloads required.
-  --skip-acpd      Keep acpd and its active conversations unchanged for this installation.
-  --skip-terminald Keep terminald and its existing sessions unchanged for this installation.
+  --skip-runtime Keep runtime daemon and its existing sessions unchanged for this installation.
   -h, --help        Show this help.
 
 Requires Bash, tar, Node.js 20+, Git, and Linux/systemd or macOS/launchd.
@@ -160,10 +159,8 @@ try {
         }
     }
     for (const path of ['manifest.json', 'bin', 'frontend', 'frontend/dist',
-        'bin/aow-server', 'bin/aow-terminald',
+        'bin/aow-server', 'bin/aow-runtime-daemon',
         'bin/aow-automation-runner', 'bin/aow-cli', 'frontend/dist/index.html',
-        ...(manifest.components?.acpd ? ['bin/aow-acpd'] : []),
-        ...(manifest.components?.runtime_daemon ? ['bin/aow-runtime-daemon'] : []),
         ...(manifest.components?.skills ? ['skills', 'skills/aow-agent', 'skills/aow-agent/SKILL.md', 'skills/aow-acp', 'skills/aow-acp/SKILL.md'] : []),
         ...(manifest.components?.git_platform_providers ? ['git-platform-providers'] : []),
         ...(manifest.components?.ripgrep ? ['bin/rg', 'licenses/ripgrep/manifest.json'] : [])]) {
@@ -236,20 +233,16 @@ replace_link() {
     pending_file=
 }
 
-start_terminald() {
-    # Use the existing noninteractive helper contract, including in older packages.
-    # Only this child receives the managed flags; administrator setup is unchanged.
-    printf 'y\n' | AOW_INSTALL_MANAGED=1 AOW_INSTALL_TERMINALD=y \
-        sh "$support/scripts/start-terminald.sh" "$version"
+start_runtime() {
+    sh "$support/scripts/start-runtime-daemon.sh" "$version"
 }
 
 main() {
     local repository=${AOW_RELEASE_REPOSITORY:-}
-    local version='' explicit_version=0 package='' skip_terminald=0 skip_acpd=0
+    local version='' explicit_version=0 package='' skip_runtime=0
     while (( $# )); do
         case "$1" in
-            --skip-terminald) skip_terminald=1; shift ;;
-            --skip-acpd) skip_acpd=1; shift ;;
+            --skip-runtime) skip_runtime=1; shift ;;
             --repo|--version|--package)
                 if (( $# < 2 )) || [[ -z "$2" ]]; then fail "$1 requires a value"; fi
                 if [[ "$1" == --repo ]]; then repository=$2
@@ -352,19 +345,13 @@ JS
     version=$(validate_release "$support" "$version")
     printf 'Installing AoW %s\n' "$version"
     local -a helpers=(
-        scripts/start-server.sh scripts/start-terminald.sh scripts/replace-symlink.mjs scripts/server-state-dir.sh
-        packaging/bin/aow packaging/bin/aow-server packaging/bin/aow-terminald
+        scripts/start-server.sh scripts/start-runtime-daemon.sh scripts/activate-runtime.mjs scripts/replace-symlink.mjs scripts/server-state-dir.sh
+        packaging/bin/aow packaging/bin/aow-server packaging/bin/aow-runtime-daemon
     )
-    local acpd_available=0
-    if [[ -x "$support/bin/aow-acpd" ]]; then
-        acpd_available=1
-        helpers+=(scripts/start-acpd.sh packaging/bin/aow-acpd)
-        if [[ "$os" == linux ]]; then helpers+=(packaging/systemd/aow-acpd.service); fi
-    fi
     if [[ "$os" == linux ]]; then
-        helpers+=(packaging/systemd/aow-server.service packaging/systemd/aow-terminald.service)
+        helpers+=(packaging/systemd/aow-server.service packaging/systemd/aow-runtime-daemon.service)
     else
-        helpers+=(scripts/start-launchd.sh scripts/launchd-service.mjs scripts/activate-terminald.mjs
+        helpers+=(scripts/start-launchd.sh scripts/launchd-service.mjs
             scripts/launchd-mode.mjs scripts/start-launchdaemon.mjs scripts/service-health.mjs
             scripts/register-launchdaemon.py)
     fi
@@ -375,8 +362,7 @@ JS
     if [[ "$os" == macos ]]; then
         service_record=$stage/service.json
         local mode_args=(resolve "$runtime_root" "$service_record")
-        if [[ "$skip_terminald" == 1 ]]; then mode_args+=(--skip-terminald); fi
-        if [[ "$skip_acpd" == 1 || "$acpd_available" == 0 ]]; then mode_args+=(--skip-acpd); fi
+        if [[ "$skip_runtime" == 1 ]]; then mode_args+=(--skip-runtime); fi
         service_mode=$(node "$support/scripts/launchd-mode.mjs" "${mode_args[@]}")
         printf 'macOS service mode: %s\n' "$service_mode"
     fi
@@ -394,10 +380,10 @@ JS
     "$release/bin/aow-cli" --help >/dev/null
     local destination
     for destination in "$runtime_root/latest" "$user_bin_dir/aow" "$user_bin_dir/aow-cli" \
-        "$user_bin_dir/aow-automation-runner" "$runtime_root/active/server" "$runtime_root/active/terminald" "$runtime_root/active/acpd"; do
+        "$user_bin_dir/aow-automation-runner" "$runtime_root/active/server" "$runtime_root/active/runtime-daemon"; do
         [[ ! -e "$destination" || -L "$destination" ]] || fail "refusing to replace unmanaged entry: $destination"
     done
-    for destination in "$runtime_root/bin/aow-server" "$runtime_root/bin/aow-terminald" "$runtime_root/bin/aow-acpd"; do
+    for destination in "$runtime_root/bin/aow-server" "$runtime_root/bin/aow-runtime-daemon"; do
         [[ ! -d "$destination" || -L "$destination" ]] || fail "launcher destination is a directory: $destination"
     done
     [[ ! -d "$runtime_root/update.json" ]] || fail 'update.json must be a file, not a directory'
@@ -447,8 +433,7 @@ JS
         done
     fi
     replace_file "$support/packaging/bin/aow-server" "$runtime_root/bin/aow-server" 0755
-    if (( acpd_available )); then replace_file "$support/packaging/bin/aow-acpd" "$runtime_root/bin/aow-acpd" 0755; fi
-    replace_file "$support/packaging/bin/aow-terminald" "$runtime_root/bin/aow-terminald" 0755
+    replace_file "$support/packaging/bin/aow-runtime-daemon" "$runtime_root/bin/aow-runtime-daemon" 0755
     replace_link "$release/packaging/bin/aow" "$user_bin_dir/aow"
     replace_link "releases/$version" "$runtime_root/latest"
     replace_link "$release/bin/aow-automation-runner" "$user_bin_dir/aow-automation-runner"
@@ -459,56 +444,35 @@ JS
         *) printf 'Add this directory to PATH to use aow and aow-cli: %s\n' "$user_bin_dir" ;;
     esac
 
-    # Complete other activation work first: restarting terminald may terminate
-    # the terminal running this installer. Release the install lock beforehand.
+    # On first installation the runtime must create its token before Server starts.
+    # On updates restart it last: its PTYs may contain this installer process.
+    local runtime_first=1 runtime_status=0 server_status=0
+    if [[ -L "$runtime_root/active/runtime-daemon" ]]; then runtime_first=0; fi
     if [[ "$service_mode" == launchdaemon ]]; then
-        local server_status=0 terminald_status=0 acpd_status=0
-        sh "$support/scripts/start-server.sh" "$version" || server_status=$?
-        if [[ "$server_status" != 0 && "$server_status" != 78 ]]; then
-            fail 'LaunchDaemon server activation failed; previous service settings are preserved'
-        fi
-        # Persist even a pending first registration so a later GUI login cannot
-        # change its mode. The pending request is not administrator authorization.
         replace_file "$stage/update.json" "$runtime_root/update.json" 0600
-        rmdir -- "$lock_dir"
-        lock_acquired=0
-        if (( acpd_available && ! skip_acpd )); then
-            sh "$support/scripts/start-acpd.sh" "$version" || acpd_status=$?
-            if [[ "$acpd_status" != 0 && "$acpd_status" != 78 ]]; then fail 'LaunchDaemon acpd activation failed'; fi
-        fi
-        if (( ! skip_terminald )); then
-            start_terminald || terminald_status=$?
-            if [[ "$terminald_status" != 0 && "$terminald_status" != 78 ]]; then
-                fail 'LaunchDaemon terminald activation failed; inspect the saved service mode and running server'
-            fi
-        fi
-        if [[ "$server_status" == 78 || "$terminald_status" == 78 || "$acpd_status" == 78 ]]; then
-            if [[ ${AOW_INSTALL_MANAGED:-} == 1 ]]; then
-                printf '%s\n' 'LaunchDaemon registration is pending; the administrator installer will register and verify services automatically.' >&2
-            else
-                node "$support/scripts/launchd-mode.mjs" hint "$runtime_root"
-            fi
-            return 78
-        fi
-        if (( skip_terminald )); then
-            printf 'Skipped terminald; Web server, CLI and Runner are updated to %s.\n' "$version"
-        else
-            printf 'AoW %s is installed (LaunchDaemon) and its services are active.\n' "$version"
-        fi
-        return
     fi
-    sh "$support/scripts/start-server.sh" "$version"
-    if (( acpd_available && ! skip_acpd )); then sh "$support/scripts/start-acpd.sh" "$version"; fi
-    # Remember the repository only after the server activates successfully.
+    if (( ! skip_runtime && runtime_first )); then start_runtime || runtime_status=$?; fi
+    if [[ "$runtime_status" != 0 && "$runtime_status" != 78 ]]; then fail 'runtime-daemon activation failed'; fi
+    sh "$support/scripts/start-server.sh" "$version" || server_status=$?
+    if [[ "$server_status" != 0 && "$server_status" != 78 ]]; then fail 'Server activation failed'; fi
+    # Complete configuration and release the lock before a restart can close our PTY.
     replace_file "$stage/update.json" "$runtime_root/update.json" 0600
     rmdir -- "$lock_dir"
     lock_acquired=0
-    if (( skip_terminald )); then
-        printf 'Skipped terminald; Web server, CLI and Runner are updated to %s.\n' "$version"
-    elif start_terminald; then
-        printf 'AoW %s is installed and its services are active.\n' "$version"
+    if (( ! skip_runtime && ! runtime_first )); then start_runtime || runtime_status=$?; fi
+    if [[ "$runtime_status" != 0 && "$runtime_status" != 78 ]]; then fail 'runtime-daemon activation failed'; fi
+    if [[ "$runtime_status" == 78 || "$server_status" == 78 ]]; then
+        if [[ ${AOW_INSTALL_MANAGED:-} == 1 ]]; then
+            printf '%s\n' 'LaunchDaemon registration is pending; the administrator installer will register and verify services automatically.' >&2
+        else
+            node "$support/scripts/launchd-mode.mjs" hint "$runtime_root"
+        fi
+        return 78
+    fi
+    if (( skip_runtime )); then
+        printf 'Skipped runtime-daemon; Server, CLI and Runner are updated to %s.\n' "$version"
     else
-        fail 'terminald activation failed; the release is installed and Web server is already active'
+        printf 'AoW %s is installed and its services are active.\n' "$version"
     fi
 }
 

@@ -4,11 +4,13 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { setTimeout as delay } from 'node:timers/promises';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { runtimeNode } from './fixtures/runtime-node.mjs';
 import { snapshot } from './fixtures/session-snapshot.mjs';
 
 const repo = fileURLToPath(new URL('../../', import.meta.url));
@@ -18,8 +20,11 @@ const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'],
 async function startServer(t, base, { envBase = base, args = [] } = {}) {
   const state = await mkdtemp(join(tmpdir(), 'aow-base-path-'));
   let child;
+  let nodeChild;
   t.after(async () => {
-    if (child && child.exitCode === null && child.signalCode === null) {
+    for (const process of [child, nodeChild]) {
+      if (!process || process.exitCode !== null || process.signalCode !== null) continue;
+      const child = process;
       const exited = once(child, 'exit');
       child.kill('SIGTERM');
       const timer = setTimeout(() => child.kill('SIGKILL'), 3000);
@@ -35,9 +40,16 @@ async function startServer(t, base, { envBase = base, args = [] } = {}) {
   });
   // Keep all initialization writes inside this test's temporary directory.
   await writeFile(join(state, 'aow-settings.json'), JSON.stringify({ version: 1, notes_base: join(state, 'notes') }));
+  const node = await runtimeNode((name, args) => {
+    nodeChild = spawn(join(repo, 'target/debug', name), args, { cwd: repo, stdio: ['ignore', 'pipe', 'pipe'] });
+    nodeChild.output = '';
+    nodeChild.stdout.on('data', chunk => nodeChild.output += chunk);
+    nodeChild.stderr.on('data', chunk => nodeChild.output += chunk);
+    return nodeChild;
+  }, state);
   child = spawn(process.env.AOW_TEST_SERVER ?? join(repo, 'target/debug/aow-server'), [
     '--host', '127.0.0.1', '--port', '0', '--state-dir', state,
-    '--terminald-socket', join(state, 'unused.sock'), '--frontend', join(repo, 'frontend/dist'),
+    '--runtime-url', node.url, '--runtime-token-file', node.tokenFile, '--frontend', join(repo, 'frontend/dist'),
     ...args,
   ], { cwd: repo, env: { ...process.env, AOW_BASE_PATH: envBase }, stdio: ['ignore', 'pipe', 'pipe'] });
   const origin = await new Promise((resolve, reject) => {
@@ -54,10 +66,17 @@ async function startServer(t, base, { envBase = base, args = [] } = {}) {
     child.stdout.on('data', read);
     child.stderr.on('data', read);
   });
-  const response = await fetch(`${origin}${base}/api/health`, { signal: AbortSignal.timeout(15000) });
-  assert.equal(response.status, 200);
-  await response.text();
-  return origin;
+  const deadline = Date.now() + 15000;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(`${origin}${base}/api/health`, { signal: AbortSignal.timeout(1000) });
+      await response.text();
+      if (response.status === 200) return origin;
+    } catch { /* The listener is announced before asynchronous initialization finishes. */ }
+    if (child.exitCode !== null) throw new Error(`Server exited ${child.exitCode}`);
+    await delay(30);
+  }
+  throw new Error('Server health check timed out');
 }
 
 try {
@@ -67,7 +86,7 @@ try {
     await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
       t.after(() => context.close());
       const origin = await startServer(t, base);
-      const authStatus = await fetch(`${origin}${base}/api/auth/status`).then(response => response.json());
+      const authStatus = await fetch(`${origin}${base}/api/auth/status`, { headers: { 'Accept-Language': 'zh-CN' } }).then(response => response.json());
       assert.deepEqual(authStatus.methods, [{ id: 'password', label: '账号密码', configured: true }]);
       assert.equal(authStatus.authenticated, false);
       const requests = new Set();
@@ -83,7 +102,7 @@ try {
         if (!pathname.startsWith(`${base}/api/`)) return route.continue();
         const path = pathname.slice(base.length);
         // Authentication, cookies and streams go through the real backend.
-        if (path.startsWith('/api/auth/') || path.startsWith('/api/aow/settings/configuration') || ['/api/operations/active', '/api/events/ws', '/api/aow/worktree-removals'].includes(path)) return route.continue();
+        if (path.startsWith('/api/auth/') || path.startsWith('/api/aow/settings/server-environment') || ['/api/operations/active', '/api/events/ws', '/api/aow/worktree-removals'].includes(path)) return route.continue();
         let data = [];
         if (path === '/api/aow/projects') data = [project];
         else if (path === '/api/aow/settings') data = { notes_base: '/notes', execution_path: ['/usr/bin'], node_addresses: [] };
@@ -167,7 +186,7 @@ try {
       }
       for (const openPage of [page, ...extraPages]) {
         const statuses = await openPage.evaluate(async base => Promise.all([
-          '/api/operations/active', '/api/aow/worktree-removals', '/api/aow/settings/configuration',
+          '/api/operations/active', '/api/aow/worktree-removals', '/api/aow/settings/server-environment',
         ].map(async path => {
           const response = await fetch(base + path, { signal: AbortSignal.timeout(3000) });
           await response.json();
@@ -177,10 +196,11 @@ try {
       }
       await page.bringToFront();
       await page.getByRole('button', { name: "设置", exact: true }).click();
-      const settingsDialog = page.getByRole('dialog', { name: '设置', exact: true });
-      await settingsDialog.getByRole('button', { name: /^配置/ }).click();
-      await settingsDialog.getByRole('radio').first().waitFor();
-      assert.equal(await settingsDialog.getByRole('button', { name: '保存', exact: true }).isEnabled(), true);
+      const settingsDialog = page.locator('.project-aow-settings, .settings-action-dialog');
+      await settingsDialog.getByRole('navigation', { name: '设置分类' }).getByRole('button').filter({ has: page.getByText('环境', { exact: true }) }).click();
+      const runtimeUrl = settingsDialog.getByRole('textbox', { name: 'AOW_RUNTIME_URL', exact: true });
+      await runtimeUrl.waitFor();
+      assert.equal(await runtimeUrl.inputValue(), '');
       await settingsDialog.getByRole('button', { name: '关闭', exact: true }).click();
       await Promise.all(extraPages.map(page => page.close()));
       assert.ok([...requests].some(path => path.startsWith(`${base}/assets/`) && path.endsWith('.js')));

@@ -1,0 +1,59 @@
+#!/bin/sh
+
+set -eu
+
+# Proxy settings belong to this user process, not the system LaunchDaemon plist.
+# Read them on every start as literal data; never source server.env as shell code.
+load_proxy_environment() {
+    proxy_file=${HOME:?HOME must be set}/.aow/server.env
+    [ -f "$proxy_file" ] || return 0
+    while IFS= read -r proxy_line || [ -n "$proxy_line" ]; do
+        case "$proxy_line" in *=*) ;; *) continue ;; esac
+        proxy_key=${proxy_line%%=*}
+        proxy_key=${proxy_key#"${proxy_key%%[![:space:]]*}"}
+        proxy_key=${proxy_key%"${proxy_key##*[![:space:]]}"}
+        case "$proxy_key" in
+            HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|NO_PROXY|http_proxy|https_proxy|all_proxy|no_proxy) ;;
+            *) continue ;;
+        esac
+        proxy_value=${proxy_line#*=}
+        proxy_value=${proxy_value#"${proxy_value%%[![:space:]]*}"}
+        proxy_value=${proxy_value%"${proxy_value##*[![:space:]]}"}
+        case "$proxy_value" in
+            \"*\"|\'*\') proxy_value=${proxy_value#?}; proxy_value=${proxy_value%?} ;;
+        esac
+        export "$proxy_key=$proxy_value"
+    done < "$proxy_file"
+}
+load_proxy_environment
+
+
+runtime_root=${AOW_RUNTIME_ROOT:-${HOME:?HOME must be set}/.local/lib/aow}
+active_release=$runtime_root/active/runtime-daemon
+
+if [ ! -d "$active_release" ]; then
+    printf 'error: no active AoW runtime-daemon release; run the AoW installer without --skip-runtime to activate runtime-daemon\n' >&2
+    exit 1
+fi
+
+release=$(CDPATH='' cd -P "$active_release" && pwd)
+releases_dir=$(CDPATH='' cd -P "$runtime_root/releases" && pwd)
+case "$release" in
+    "$releases_dir"/*) ;;
+    *)
+        printf 'error: active runtime-daemon release is outside %s: %s\n' "$releases_dir" "$release" >&2
+        exit 1
+        ;;
+esac
+
+daemon=$release/bin/aow-runtime-daemon
+if [ ! -x "$daemon" ]; then
+    printf 'error: active runtime-daemon release is incomplete: %s\n' "$release" >&2
+    exit 1
+fi
+
+state_dir=${AOW_SERVER_STATE_DIR:-${AOW_STATE_DIR:-${HOME:?HOME must be set}/.aow}}
+if [ -x "$runtime_root/node" ]; then
+    exec "$daemon" --state-dir "$state_dir" --vt-node "$runtime_root/node"
+fi
+exec "$daemon" --state-dir "$state_dir"

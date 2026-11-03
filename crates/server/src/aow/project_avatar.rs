@@ -144,7 +144,7 @@ mod tests {
                 .unwrap();
         manager.lock_settings().unwrap().execution_path =
             Some(std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()).collect());
-        let mut state = AppState::new(PathBuf::new());
+        let mut state = AppState::for_test(PathBuf::new());
         state.aow = manager.clone();
         let app = crate::build_router(state);
         provider(

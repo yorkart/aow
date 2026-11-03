@@ -117,22 +117,31 @@ fn invalid_or_missing_session_limits_fail_with_the_setting_name() {
 }
 
 #[test]
-fn acpd_endpoint_uses_the_selected_root_and_explicit_overrides() {
+fn runtime_endpoint_uses_the_selected_root_and_explicit_overrides() {
     let selected = options(&["--state-dir", "/tmp/aow-custom"], &[]).unwrap();
+    assert_eq!(selected.runtime_url, "http://127.0.0.1:9760");
     assert_eq!(
-        selected.acpd_socket,
-        PathBuf::from("/tmp/aow-custom/runtime/acpd/acpd.sock")
+        selected.runtime_token_file,
+        PathBuf::from("/tmp/aow-custom/runtime/runtime-daemon/token")
     );
     let selected = options(
-        &["--state-dir", "/tmp/aow-custom"],
-        &[("AOW_ACPD_SOCKET", "/tmp/env.sock")],
+        &[
+            "--runtime-url",
+            "https://node.example:9760",
+            "--runtime-token-file",
+            "/tmp/argument.token",
+        ],
+        &[
+            ("AOW_RUNTIME_URL", "http://env.example:9760"),
+            ("AOW_RUNTIME_TOKEN_FILE", "/tmp/env.token"),
+        ],
     )
     .unwrap();
-    assert_eq!(selected.acpd_socket, PathBuf::from("/tmp/env.sock"));
-    let selected = options(
-        &["--acpd-socket", "/tmp/argument.sock"],
-        &[("AOW_ACPD_SOCKET", "/tmp/env.sock")],
-    )
-    .unwrap();
-    assert_eq!(selected.acpd_socket, PathBuf::from("/tmp/argument.sock"));
+    assert_eq!(selected.runtime_url, "https://node.example:9760");
+    assert_eq!(
+        selected.runtime_token_file,
+        PathBuf::from("/tmp/argument.token")
+    );
+    assert!(options(&["--acpd-socket", "/tmp/old.sock"], &[]).is_err());
+    assert!(options(&["--terminald-socket", "/tmp/old.sock"], &[]).is_err());
 }

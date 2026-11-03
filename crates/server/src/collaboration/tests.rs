@@ -1,7 +1,7 @@
 use super::*;
-use aow_acp::{AcpHost, Content};
-use aow_acpd_client::AcpClient;
 use aow_db::tasks::{EventKind, EventTarget, TaskEvent, TaskResource, TaskStatus};
+use aow_runtime_client::acp::AcpClient;
+use aow_runtime_client::acp::{AcpHost, Content};
 use axum::{
     Router,
     body::{Body, to_bytes},
@@ -19,7 +19,7 @@ struct Host;
 impl AcpHost for Host {
     async fn settings(&self) -> Result<String> {
         Ok(json!({"agent_servers":{"test":{"type":"custom","command":"node","args":[
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../acp/tests/fixtures/lineage-agent.mjs")
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../runtime/crates/acp/tests/fixtures/lineage-agent.mjs")
         ]}}}).to_string())
     }
     async fn execution_path(&self) -> Result<Option<std::ffi::OsString>> {
@@ -35,8 +35,9 @@ impl AcpHost for Host {
 
 fn state(root: &Path) -> AppState {
     let mut state =
-        AppState::with_state_dir(PathBuf::new(), root.into(), root.join("terminald.sock")).unwrap();
-    state.acp = AcpClient::new(Arc::new(Host), Some(root.join("acp"))).unwrap();
+        AppState::for_test_with_state_dir(PathBuf::new(), root.into(), root.join("terminald.sock"))
+            .unwrap();
+    state.acp = AcpClient::for_test_host(Arc::new(Host), Some(root.join("acp"))).unwrap();
     state
 }
 
@@ -482,7 +483,7 @@ async fn conversation_policy_and_task_cancellation_stop_at_task_ownership_bounda
             .prepare_session_with_options(
                 "test",
                 directory.path().into(),
-                aow_acp::SessionCreation {
+                aow_runtime_client::acp::SessionCreation {
                     parent: Some(aow_protocol::InstanceRef::acp(parent_thread)),
                     ..Default::default()
                 },
@@ -624,7 +625,7 @@ async fn daemon_outages_do_not_exhaust_durable_message_retries() {
     message.attempts = 9;
     state.aow.task_db().enqueue_message(&message).unwrap();
     let mut disconnected = worker(&state);
-    disconnected.acp = AcpClient::remote(directory.path().join("missing-acpd.sock"));
+    disconnected.acp = disconnected.acp.for_test_offline();
     disconnected.deliver(message.clone()).await.unwrap();
     assert_eq!(
         state

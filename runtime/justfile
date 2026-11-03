@@ -1,0 +1,20 @@
+set shell := ["bash", "-cu"]
+
+worker:
+    npm --prefix vt-worker ci --ignore-scripts --no-audit --no-fund
+    npm --prefix vt-worker run build
+
+build: worker
+    cargo build --workspace --locked
+
+test: worker
+    npm --prefix vt-worker test
+    cargo test --workspace --locked
+
+check: worker
+    cargo fmt --all -- --check
+    cargo clippy --workspace --all-targets --locked -- -D warnings
+
+[positional-arguments]
+run *args: worker
+    cargo run --locked -p aow-runtime-daemon -- "$@"

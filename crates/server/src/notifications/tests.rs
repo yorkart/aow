@@ -479,8 +479,8 @@ async fn acp_messages_keep_native_page_and_im_delivery_without_task_reports() {
     let mut im_receiver = notifications.inner.receiver.lock().unwrap().take().unwrap();
     let (page, mut page_receiver) = broadcast::channel(8);
     let previous = manager.acp_settings().unwrap();
-    let fixture =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../acp/tests/fixtures/lineage-agent.mjs");
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../runtime/crates/acp/tests/fixtures/lineage-agent.mjs");
     manager
         .save_acp_settings(
             json!({"agent_servers":{"test":{
@@ -536,7 +536,7 @@ async fn settings_api_redacts_secrets_and_rejects_invalid_preferences() {
         http::Request,
     };
     use tower::ServiceExt;
-    let app = crate::build_router(AppState::new(PathBuf::from("/nonexistent")));
+    let app = crate::build_router(AppState::for_test(PathBuf::from("/nonexistent")));
     for (body, status) in [
         (
             json!({"section":"im","providers":[{"provider":"feishu","app_id":"cli_test","app_secret":"private-secret"}]}),

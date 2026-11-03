@@ -13409,70 +13409,70 @@
   ],
   "backend": [
     {
-      "file": "crates/acp/src/agent_servers/mod.rs",
+      "file": "runtime/crates/acp/src/agent_servers/mod.rs",
       "line": 86,
       "source": "ACP Agent ID 不能为空",
       "key": "acp.acp_agent_id_cannot_be_empty",
       "classification": "message"
     },
     {
-      "file": "crates/acp/src/agent_servers/mod.rs",
+      "file": "runtime/crates/acp/src/agent_servers/mod.rs",
       "line": 93,
       "source": "未配置 ACP 实例",
       "key": "acp.no_acp_instance_configured",
       "classification": "message"
     },
     {
-      "file": "crates/acp/src/agent_servers/steering.rs",
+      "file": "runtime/crates/acp/src/agent_servers/steering.rs",
       "line": 183,
       "source": "Agent 未接受追加指令。",
       "key": "acp.the_agent_did_not_accept_the_additional_instructions",
       "classification": "message"
     },
     {
-      "file": "crates/acp/src/agent_servers/steering.rs",
+      "file": "runtime/crates/acp/src/agent_servers/steering.rs",
       "line": 207,
       "source": "无法确认追加指令是否送达，请勿自动重发：{other:?}",
       "key": "acp.unable_to_confirm_delivery_of_additional_instructions_do_not",
       "classification": "message"
     },
     {
-      "file": "crates/acp/src/agent_servers/fork.rs",
+      "file": "runtime/crates/acp/src/agent_servers/fork.rs",
       "line": 105,
       "source": "{} · 分叉",
       "key": "acp.fork",
       "classification": "message"
     },
     {
-      "file": "crates/acp/src/settings/mod.rs",
+      "file": "runtime/crates/acp/src/settings/mod.rs",
       "line": 21,
       "source": "ACP JSONC 配置无效",
       "key": "acp.invalid_acp_jsonc_configuration",
       "classification": "message"
     },
     {
-      "file": "crates/acp/src/settings/mod.rs",
+      "file": "runtime/crates/acp/src/settings/mod.rs",
       "line": 22,
       "source": "ACP 配置必须是 JSON 对象",
       "key": "acp.acp_configuration_must_be_a_json_object",
       "classification": "message"
     },
     {
-      "file": "crates/acp/src/settings/mod.rs",
+      "file": "runtime/crates/acp/src/settings/mod.rs",
       "line": 33,
       "source": "无效的 Agent ID: {id}",
       "key": "acp.invalid_agent_id",
       "classification": "message"
     },
     {
-      "file": "crates/acp/src/settings/mod.rs",
+      "file": "runtime/crates/acp/src/settings/mod.rs",
       "line": 36,
       "source": "Agent {id} 缺少 command",
       "key": "acp.agent_is_missing_command",
       "classification": "message"
     },
     {
-      "file": "crates/acp/src/settings/mod.rs",
+      "file": "runtime/crates/acp/src/settings/mod.rs",
       "line": 42,
       "source": "默认 ACP 实例不存在: {id}",
       "key": "acp.default_acp_instance_does_not_exist",
@@ -30851,71 +30851,71 @@
     "backendReferences": {
       "common.steeringUnknown": [
         {
-          "file": "crates/acp/src/acp_thread/steering/mod.rs",
+          "file": "runtime/crates/acp/src/acp_thread/steering/mod.rs",
           "line": 200
         },
         {
-          "file": "crates/acp/src/acp_thread/steering/mod.rs",
+          "file": "runtime/crates/acp/src/acp_thread/steering/mod.rs",
           "line": 214
         }
       ],
       "acp.fork": [
         {
-          "file": "crates/acp/src/agent_servers/fork.rs",
+          "file": "runtime/crates/acp/src/agent_servers/fork.rs",
           "line": 106
         }
       ],
       "acp.acp_agent_id_cannot_be_empty": [
         {
-          "file": "crates/acp/src/agent_servers/mod.rs",
+          "file": "runtime/crates/acp/src/agent_servers/mod.rs",
           "line": 88
         }
       ],
       "acp.no_acp_instance_configured": [
         {
-          "file": "crates/acp/src/agent_servers/mod.rs",
+          "file": "runtime/crates/acp/src/agent_servers/mod.rs",
           "line": 96
         }
       ],
       "acp.the_agent_did_not_accept_the_additional_instructions": [
         {
-          "file": "crates/acp/src/agent_servers/steering.rs",
+          "file": "runtime/crates/acp/src/agent_servers/steering.rs",
           "line": 183
         }
       ],
       "acp.unable_to_confirm_delivery_of_additional_instructions_do_not": [
         {
-          "file": "crates/acp/src/agent_servers/steering.rs",
+          "file": "runtime/crates/acp/src/agent_servers/steering.rs",
           "line": 207
         }
       ],
       "acp.invalid_acp_jsonc_configuration": [
         {
-          "file": "crates/acp/src/settings/mod.rs",
+          "file": "runtime/crates/acp/src/settings/mod.rs",
           "line": 21
         }
       ],
       "acp.acp_configuration_must_be_a_json_object": [
         {
-          "file": "crates/acp/src/settings/mod.rs",
+          "file": "runtime/crates/acp/src/settings/mod.rs",
           "line": 24
         }
       ],
       "acp.invalid_agent_id": [
         {
-          "file": "crates/acp/src/settings/mod.rs",
+          "file": "runtime/crates/acp/src/settings/mod.rs",
           "line": 36
         }
       ],
       "acp.agent_is_missing_command": [
         {
-          "file": "crates/acp/src/settings/mod.rs",
+          "file": "runtime/crates/acp/src/settings/mod.rs",
           "line": 41
         }
       ],
       "acp.default_acp_instance_does_not_exist": [
         {
-          "file": "crates/acp/src/settings/mod.rs",
+          "file": "runtime/crates/acp/src/settings/mod.rs",
           "line": 48
         }
       ],

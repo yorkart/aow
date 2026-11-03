@@ -210,7 +210,7 @@ fn persistent_load_preserves_running_desired_state() {
     .unwrap();
     let manager = TerminalManager::persistent(
         directory.path().to_path_buf(),
-        TerminaldClient::new(directory.path().join("missing.sock")),
+        TerminalClient::for_test_config(directory.path().join("missing.sock")),
     )
     .unwrap();
     assert_eq!(manager.get_snapshot("tab-1").unwrap(), original);
@@ -232,7 +232,7 @@ fn terminal_reorder_persists_within_workspace_and_preserves_other_workspaces() {
     let directory = TempDir::new().unwrap();
     let manager = TerminalManager::persistent(
         directory.path().to_path_buf(),
-        TerminaldClient::new(directory.path().join("missing.sock")),
+        TerminalClient::for_test_config(directory.path().join("missing.sock")),
     )
     .unwrap();
     manager.lock_state().unwrap().tabs = vec![
@@ -273,7 +273,7 @@ fn terminal_reorder_persists_within_workspace_and_preserves_other_workspaces() {
 
     let reloaded = TerminalManager::persistent(
         directory.path().to_path_buf(),
-        TerminaldClient::new(directory.path().join("missing.sock")),
+        TerminalClient::for_test_config(directory.path().join("missing.sock")),
     )
     .unwrap();
     assert_eq!(
@@ -310,7 +310,7 @@ async fn delete_workspace_stops_runtimes_and_removes_only_matching_metadata() {
     let target_root = target_root.to_string_lossy().into_owned();
     let other_root = other_root.to_string_lossy().into_owned();
     let (shutdown, daemon) = start_daemon(socket.clone()).await;
-    let client = TerminaldClient::new(socket.clone());
+    let client = TerminalClient::for_test_config(socket.clone());
     let manager = TerminalManager::persistent(state_dir.clone(), client.clone()).unwrap();
     let terminal = manager
         .create(CreateTerminalRequest {
@@ -406,7 +406,7 @@ async fn agent_pane_can_split_into_a_terminal_pane() {
     let directory = TempDir::new().unwrap();
     let socket = directory.path().join("terminald").join("terminald.sock");
     let (shutdown, daemon) = start_daemon(socket.clone()).await;
-    let client = TerminaldClient::new(socket);
+    let client = TerminalClient::for_test_config(socket);
     let manager = TerminalManager::in_memory(client.clone());
     let tab = manager
         .create_agent(
@@ -474,7 +474,7 @@ async fn agent_pane_can_split_into_a_terminal_pane() {
 
 #[test]
 fn terminal_reorder_rejects_duplicate_or_stale_ids_without_mutating_state() {
-    let manager = TerminalManager::in_memory(TerminaldClient::new(
+    let manager = TerminalManager::in_memory(TerminalClient::for_test_config(
         std::env::temp_dir().join("missing-terminald.sock"),
     ));
     manager.lock_state().unwrap().tabs =
@@ -508,7 +508,7 @@ fn terminal_reorder_rejects_duplicate_or_stale_ids_without_mutating_state() {
 
 #[tokio::test]
 async fn terminal_reorder_route_returns_the_persisted_workspace_order() {
-    let manager = TerminalManager::in_memory(TerminaldClient::new(
+    let manager = TerminalManager::in_memory(TerminalClient::for_test_config(
         std::env::temp_dir().join("missing-terminald.sock"),
     ));
     manager.lock_state().unwrap().tabs =
@@ -537,7 +537,7 @@ async fn terminal_reorder_route_returns_the_persisted_workspace_order() {
 #[tokio::test]
 async fn terminal_name_intent_migrates_and_survives_explicit_rename() {
     let directory = TempDir::new().unwrap();
-    let client = TerminaldClient::new(directory.path().join("missing.sock"));
+    let client = TerminalClient::for_test_config(directory.path().join("missing.sock"));
     let manager =
         TerminalManager::persistent(directory.path().to_path_buf(), client.clone()).unwrap();
     let mut generated = tab_for("auto", "/workspace");
@@ -634,7 +634,7 @@ async fn retired_pane_rename_route_does_not_change_metadata() {
     let directory = TempDir::new().unwrap();
     let manager = TerminalManager::persistent(
         directory.path().to_path_buf(),
-        TerminaldClient::new(directory.path().join("missing.sock")),
+        TerminalClient::for_test_config(directory.path().join("missing.sock")),
     )
     .unwrap();
     manager
@@ -659,7 +659,7 @@ async fn retired_pane_rename_route_does_not_change_metadata() {
 
     let reloaded = TerminalManager::persistent(
         directory.path().to_path_buf(),
-        TerminaldClient::new(directory.path().join("missing.sock")),
+        TerminalClient::for_test_config(directory.path().join("missing.sock")),
     )
     .unwrap();
     let pane = &reloaded.get_snapshot("tab-1").unwrap().panes[0];
@@ -698,7 +698,7 @@ fn persistent_load_gives_legacy_panes_a_directory_name() {
 
     let manager = TerminalManager::persistent(
         directory.path().to_path_buf(),
-        TerminaldClient::new(directory.path().join("missing.sock")),
+        TerminalClient::for_test_config(directory.path().join("missing.sock")),
     )
     .unwrap();
 
@@ -733,7 +733,7 @@ fn legacy_pane_custom_names_are_discarded_while_tab_names_survive() {
         .unwrap();
         let manager = TerminalManager::persistent(
             directory.path().to_path_buf(),
-            TerminaldClient::new(directory.path().join("missing.sock")),
+            TerminalClient::for_test_config(directory.path().join("missing.sock")),
         )
         .unwrap();
         let loaded = manager.get_snapshot("tab").unwrap();
@@ -751,7 +751,8 @@ fn legacy_pane_custom_names_are_discarded_while_tab_names_survive() {
 
 #[test]
 fn layout_revision_conflicts_are_rejected() {
-    let manager = TerminalManager::in_memory(TerminaldClient::new("/tmp/missing.sock".into()));
+    let manager =
+        TerminalManager::in_memory(TerminalClient::for_test_config("/tmp/missing.sock".into()));
     let tab = tab_with(
         TerminalLayout::Pane {
             pane_id: "a".into(),
@@ -773,7 +774,8 @@ fn layout_revision_conflicts_are_rejected() {
 
 #[test]
 fn split_rollback_preserves_concurrent_tab_and_runtime_updates() {
-    let manager = TerminalManager::in_memory(TerminaldClient::new("/tmp/missing.sock".into()));
+    let manager =
+        TerminalManager::in_memory(TerminalClient::for_test_config("/tmp/missing.sock".into()));
     let previous = tab_with(
         TerminalLayout::Pane {
             pane_id: "a".into(),
@@ -861,7 +863,7 @@ fn clipboard_magic_identifies_supported_formats() {
 }
 
 fn manager_with_pane() -> TerminalManager {
-    let manager = TerminalManager::in_memory(TerminaldClient::new(
+    let manager = TerminalManager::in_memory(TerminalClient::for_test_config(
         std::env::temp_dir().join("missing-terminald.sock"),
     ));
     manager.lock_state().unwrap().tabs.push(tab_with(
@@ -1124,7 +1126,7 @@ fn persistent_manager_uses_absolute_directory_and_cleans_on_creation() {
 
     let manager = TerminalManager::persistent(
         state_dir,
-        TerminaldClient::new(root.path().join("missing.sock")),
+        TerminalClient::for_test_config(root.path().join("missing.sock")),
     )
     .unwrap();
     assert!(manager.inner.clipboard.directory.is_absolute());
@@ -1138,8 +1140,9 @@ fn persistent_manager_uses_absolute_directory_and_cleans_on_creation() {
 #[tokio::test]
 async fn failed_create_and_split_roll_back_desired_state() {
     let directory = TempDir::new().unwrap();
-    let manager =
-        TerminalManager::in_memory(TerminaldClient::new(directory.path().join("missing.sock")));
+    let manager = TerminalManager::in_memory(TerminalClient::for_test_config(
+        directory.path().join("missing.sock"),
+    ));
     let create = manager
         .create(CreateTerminalRequest {
             name: Some("rollback".to_owned()),
@@ -1193,7 +1196,7 @@ async fn caller_environment_survives_create_split_and_daemon_reconciliation() {
     .unwrap();
     std::fs::set_permissions(&shell, std::fs::Permissions::from_mode(0o700)).unwrap();
     let socket = directory.path().join("terminald/terminald.sock");
-    let client = TerminaldClient::new(socket.clone());
+    let client = TerminalClient::for_test_config(socket.clone());
     let manager =
         TerminalManager::persistent(directory.path().join("state"), client.clone()).unwrap();
     for generation in 0..2 {
@@ -1259,7 +1262,7 @@ async fn reconcile_cleans_orphans_rebuilds_after_daemon_restart_and_syncs_exit()
     let socket = directory.path().join("terminald").join("terminald.sock");
     let state_dir = directory.path().join("state");
     let (shutdown, daemon) = start_daemon(socket.clone()).await;
-    let client = TerminaldClient::new(socket.clone());
+    let client = TerminalClient::for_test_config(socket.clone());
     let manager = TerminalManager::persistent(state_dir.clone(), client.clone()).unwrap();
     let tab = manager
         .create(CreateTerminalRequest {
@@ -1354,7 +1357,7 @@ async fn terminal_agent_route_detects_start_exit_and_filters_workspaces() {
     let directory = TempDir::new().unwrap();
     let socket = directory.path().join("terminald/terminald.sock");
     let (shutdown, daemon) = start_daemon(socket.clone()).await;
-    let client = TerminaldClient::new(socket);
+    let client = TerminalClient::for_test_config(socket);
     let manager = TerminalManager::in_memory(client.clone());
     let mut tabs = Vec::new();
     for name in ["a", "b"] {
@@ -1574,7 +1577,7 @@ async fn pane_sessions_use_live_cwd_and_config_and_cache_readable_claude_snapsho
     )).unwrap();
     let socket = root.join("terminald/terminald.sock");
     let (shutdown, daemon) = start_daemon(socket.clone()).await;
-    let client = TerminaldClient::new(socket);
+    let client = TerminalClient::for_test_config(socket);
     // This test verifies session association and delivery, not native CLI speed.
     // Keep the production deadline at three seconds; the adapter separately
     // tests deadline enforcement. Loaded macOS hosts need more startup time.
@@ -1748,9 +1751,9 @@ async fn cli_roles_keep_native_workspace_sessions_but_cannot_create_tasks() {
     std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
     let socket = root.join("terminald/terminald.sock");
     let (shutdown, daemon) = start_daemon(socket.clone()).await;
-    let mut state = AppState::new(Default::default());
+    let mut state = AppState::for_test(Default::default());
     state.aow = crate::aow::AowManager::persistent(&root.join("aow")).unwrap();
-    state.terminals = TerminalManager::in_memory(TerminaldClient::new(socket));
+    state.terminals = TerminalManager::in_memory(TerminalClient::for_test_config(socket));
     let app = crate::build_router(state.clone());
     async fn post(app: &axum::Router, path: &str, value: serde_json::Value) -> serde_json::Value {
         let response = app
@@ -1888,17 +1891,17 @@ pub(super) async fn start_daemon(
     socket: PathBuf,
 ) -> (
     oneshot::Sender<()>,
-    tokio::task::JoinHandle<Result<(), aow_terminald::TerminaldError>>,
+    tokio::task::JoinHandle<Result<(), anyhow::Error>>,
 ) {
     let (shutdown, stopped) = oneshot::channel();
     let daemon_socket = socket.clone();
     let daemon = tokio::spawn(async move {
-        aow_terminald::run_with_shutdown(daemon_socket, async move {
+        aow_runtime_client::testing::run(daemon_socket, async move {
             let _ = stopped.await;
         })
         .await
     });
-    let client = TerminaldClient::new(socket);
+    let client = TerminalClient::for_test_config(socket);
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
     loop {
         if client.health().await.is_ok() {
@@ -1915,7 +1918,7 @@ pub(super) async fn start_daemon(
 
 pub(super) async fn stop_daemon(
     shutdown: oneshot::Sender<()>,
-    daemon: tokio::task::JoinHandle<Result<(), aow_terminald::TerminaldError>>,
+    daemon: tokio::task::JoinHandle<Result<(), anyhow::Error>>,
 ) {
     let _ = shutdown.send(());
     tokio::time::timeout(std::time::Duration::from_secs(10), daemon)

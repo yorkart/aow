@@ -17,17 +17,19 @@ impl AowManager {
     pub(crate) fn acp_settings(&self) -> Result<AcpSettingsFile> {
         let Some(repository) = &self.inner.config else {
             return Ok(AcpSettingsFile {
-                path: aow_acp::SETTINGS_PATH.into(),
+                path: aow_runtime_client::acp::SETTINGS_PATH.into(),
                 content: EMPTY.into(),
                 revision: format!("{:x}", md5::compute(EMPTY)),
             });
         };
-        let path = repository.directory().join(aow_acp::SETTINGS_PATH);
+        let path = repository
+            .directory()
+            .join(aow_runtime_client::acp::SETTINGS_PATH);
         let content = match std::fs::read_to_string(&path) {
             Ok(content) => content,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 repository.save(
-                    std::path::Path::new(aow_acp::SETTINGS_PATH),
+                    std::path::Path::new(aow_runtime_client::acp::SETTINGS_PATH),
                     EMPTY.as_bytes(),
                 )?;
                 EMPTY.into()
@@ -45,7 +47,7 @@ impl AowManager {
         content: String,
         revision: String,
     ) -> Result<AcpSettingsFile> {
-        aow_acp::validate_settings(&content)?;
+        aow_runtime_client::acp::validate_settings(&content)?;
         let operation = self.inner.project_operation.clone().lock_owned().await;
         let manager = self.clone();
         aow_i18n::spawn_blocking(move || {
@@ -66,7 +68,7 @@ impl AowManager {
                     "server.no_persistent_directory_configured_for_this_service",
                 ))?
                 .save(
-                    std::path::Path::new(aow_acp::SETTINGS_PATH),
+                    std::path::Path::new(aow_runtime_client::acp::SETTINGS_PATH),
                     content.as_bytes(),
                 )?;
             manager.acp_settings()

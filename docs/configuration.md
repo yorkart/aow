@@ -2,7 +2,7 @@
 
 ## 监听地址与服务配置
 
-在 **Settings → Environment → AoW 服务环境变量** 中通过表格配置并保存 `~/.aow/server.env`。表格按服务配置、登录会话、基础运行环境和代理配置分组，列出全部 22 个支持的可配置项，每项都有说明和 Value 示例，只需填写当前值。已有配置会自动读取；未配置的项留空，示例和默认值不会自动写入。清空已有值会删除该项的所有重复定义，恢复未设置状态。代理变量的大小写形式分别配置和保存。
+在 **Settings → Environment → AoW 服务环境变量** 中通过表格配置并保存 `~/.aow/server.env`。表格按服务配置、登录会话、基础运行环境和代理配置分组，列出全部 23 个支持的可配置项，每项都有说明和 Value 示例，只需填写当前值。已有配置会自动读取；未配置的项留空，示例和默认值不会自动写入。清空已有值会删除该项的所有重复定义，恢复未设置状态。代理变量的大小写形式分别配置和保存。
 
 文件不存在时，页面保存会创建它；未修改的配置、注释、引号和空行按原文保留，表格未管理的配置也会保留。也可以在服务器上直接编辑该文件，每行写 `KEY=value`，不写 `export`；路径使用绝对路径，修改时保留其他配置。表格输入值时无需添加包裹引号。
 
@@ -15,8 +15,9 @@ AOW_SERVER_PORT=8282
 # 自定义数据目录（默认 ~/.aow）
 # AOW_SERVER_STATE_DIR=/path/to/state
 
-# terminald 的 socket 路径，须与其监听路径一致
-# AOW_TERMINALD_SOCKET=/path/to/terminald.sock
+# 执行节点地址与本机令牌文件
+# AOW_RUNTIME_URL=http://127.0.0.1:9760
+# AOW_RUNTIME_TOKEN_FILE=/path/to/node-token
 ```
 
 `AOW_SERVER_HOST` 选择一项：
@@ -34,11 +35,11 @@ IPv6 浏览器地址使用方括号，例如 `http://[::1]:8282/`。若改为 IP
 ### 使配置生效
 
 - **Linux**：执行 `systemctl --user restart aow-server.service`。
-- **macOS**：重新执行对应的安装命令（GitHub 安装命令或 `just install`），重新加载配置；只改 Web 服务配置时可跳过 terminald 重启。
+- **macOS**：重新执行对应的安装命令（GitHub 安装命令或 `just install`），重新加载配置；只改 Web 服务配置时可跳过 runtime-daemon 重启。
 
 macOS **LaunchDaemon** 模式会将监听地址等服务配置写入由 root 管理的系统 plist。这些配置变化时，安装器先准备请求并以退出码 78 提示本地管理员登记；登记后回到服务账户重跑安装验证。仅程序版本或下方代理变量变化不需要重新登记，步骤见 [安装说明](release-installation.md)。
 
-LaunchDaemon 的 `server.env` 仅接受服务配置和基本运行环境：`AOW_SERVER_HOST`、`AOW_SERVER_PORT`、`AOW_SERVER_STATE_DIR`、`AOW_STATE_DIR`、`AOW_TERMINALD_SOCKET`、`AOW_BASE_PATH`、`AOW_AUTH_SECURE_COOKIE`、`AOW_AUTH_SESSION_MAX_AGE_SECONDS`、`AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS`、`PATH`、`SHELL`、`LANG`、`LC_ALL`、`LC_CTYPE`。账户身份、HOME、运行目录和日志模式由安装器固定。系统 plist 可被其他本机账户读取，不要在其中填写 API 密钥或口令；其他环境变量会被拒绝。
+LaunchDaemon 的 `server.env` 仅接受服务配置和基本运行环境：`AOW_SERVER_HOST`、`AOW_SERVER_PORT`、`AOW_SERVER_STATE_DIR`、`AOW_STATE_DIR`、`AOW_RUNTIME_URL`、`AOW_RUNTIME_TOKEN_FILE`、`AOW_BASE_PATH`、`AOW_AUTH_SECURE_COOKIE`、`AOW_AUTH_SESSION_MAX_AGE_SECONDS`、`AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS`、`PATH`、`SHELL`、`LANG`、`LC_ALL`、`LC_CTYPE`。账户身份、HOME、运行目录和日志模式由安装器固定。系统 plist 可被其他本机账户读取，不要在其中填写 API 密钥或口令；其他环境变量会被拒绝。
 
 另外支持标准代理变量 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY` 及其小写形式，例如：
 
@@ -48,29 +49,21 @@ HTTPS_PROXY=http://127.0.0.1:7890
 NO_PROXY=localhost,127.0.0.1,::1
 ```
 
-安装后的 Web 服务启动脚本每次启动时从 `server.env` 读取代理变量，传给服务器及其子进程（包括 ACP 的 npm 安装）。代理值按文本读取，不执行 shell 表达式，也不写入系统 plist。仅修改代理时，已有 LaunchDaemon 的服务账户可直接运行 `just install --skip-terminald` 更新并重启 Web 服务，无需 sudo 或重新登记；使用本地源码更新时先执行 `just package`。保存文件不会改变正在运行的进程，terminald 的环境也不会随之改变。
+安装后的 Web 服务启动脚本每次启动时从 `server.env` 读取代理变量，传给服务器及其子进程；ACP adapter 的安装由节点执行，需在节点配置代理。代理值按文本读取，不执行 shell 表达式，也不写入系统 plist。仅修改代理时，已有 LaunchDaemon 的服务账户可直接运行 `just install --skip-runtime` 更新并重启 Web 服务，无需 sudo 或重新登记；使用本地源码更新时先执行 `just package`。保存文件不会改变正在运行的进程，runtime-daemon 的环境也不会随之改变。
 
 LaunchDaemon 默认 PATH 包含 `~/.local/bin`、AoW 管理的 Node 入口、`~/.cargo/bin` 和常用系统/Homebrew 目录，不继承安装终端的完整 PATH；开发 shell 可在服务账户自己的 `.zprofile` / `.zshrc` 中初始化 Node 和其他工具链。
 
-修改 `AOW_TERMINALD_SOCKET` 时，terminald 也需配置同一路径：
+`AOW_RUNTIME_URL` 指向执行节点，`AOW_RUNTIME_TOKEN_FILE` 是 Server 本机保存节点令牌的文件。默认连接 `http://127.0.0.1:9760`，令牌读取自 Server 状态目录下的 `runtime/runtime-daemon/token`。
 
-- **Linux**：执行 `systemctl --user edit aow-terminald.service`，添加以下配置，再执行 `systemctl --user daemon-reload` 和 `systemctl --user restart aow-terminald.service aow-server.service`。
-- **macOS**：重新执行安装，不带 `--skip-terminald`，默认会更新并重启 terminald。
+节点监听地址、令牌及 VT 配置通过节点的 `runtime-daemon.json` 配置，详见 [Runtime 服务](runtime/runtime-daemon.md)。节点使用自己的配置、缓存和本机文件系统；跨机器部署需提前准备节点工作目录。ACP 配置页面读写节点的 `aow-acp.json`，会话历史仍由 Server 保存。
 
-```ini
-[Service]
-Environment="AOW_TERMINALD_SOCKET=/path/to/terminald.sock"
-```
-
-重启 terminald 会结束现有终端会话。
-
-直接运行二进制时不会读取 `server.env`，需使用 `--host`、`--port`、`--state-dir`、`--terminald-socket`、`--base-path` 参数设置。
+直接运行二进制时不会读取 `server.env`，需使用环境变量或 `--host`、`--port`、`--state-dir`、`--runtime-url`、`--runtime-token-file`、`--base-path` 参数设置。
 
 ### 终端语言与中文显示
 
-新建终端继承 terminald 的语言环境；`LANG` 未设置或为空时，macOS 默认使用 `en_US.UTF-8`，Linux 默认使用 `C.UTF-8`。已有的非空 `LANG` 和所有 `LC_*` 设置会保留，`LC_ALL`、`LC_CTYPE` 仍按系统规则决定字符编码。
+新建终端继承 runtime-daemon 的语言环境；`LANG` 未设置或为空时，macOS 默认使用 `en_US.UTF-8`，Linux 默认使用 `C.UTF-8`。已有的非空 `LANG` 和所有 `LC_*` 设置会保留，`LC_ALL`、`LC_CTYPE` 仍按系统规则决定字符编码。
 
-旧会话中如果 Vim 将 UTF-8 中文显示成 `~X` 等字符，可退出 Vim 后用 `LC_ALL=en_US.UTF-8 vim 文件路径` 临时打开（Linux 使用 `LC_ALL=C.UTF-8`）。运行 `locale` 可检查语言环境，Vim 中执行 `:set encoding? fileencoding?` 可查看当前编码。更新 terminald 后，新建会话才会获得新的默认值；重启 terminald 会结束现有终端会话。
+旧会话中如果 Vim 将 UTF-8 中文显示成 `~X` 等字符，可退出 Vim 后用 `LC_ALL=en_US.UTF-8 vim 文件路径` 临时打开（Linux 使用 `LC_ALL=C.UTF-8`）。运行 `locale` 可检查语言环境，Vim 中执行 `:set encoding? fileencoding?` 可查看当前编码。更新 runtime-daemon 后，新建会话才会获得新的默认值；重启 runtime-daemon 会结束现有终端会话。
 
 ## 部署到域名子目录（Base Path）
 
@@ -114,7 +107,7 @@ AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS=1800
 
 保存后按上面的“使配置生效”步骤重新加载配置并重启 Web 服务；macOS LaunchDaemon 模式修改这两项也需重新登记系统 plist。直接运行二进制时，可设置上述环境变量，或使用优先级更高的 `--session-max-age-seconds`、`--session-idle-timeout-seconds` 参数。配置在启动时读取，不会热更新。
 
-桌面在 Settings 中、手机在项目首页右上角可退出登录。退出、会话过期、修改账号/密码后，旧会话的新请求和终端输入会被拒绝，已建立的终端和事件流最迟在下一次会话检查时断开（约 1 秒）；这不会结束 terminald 中的进程。
+桌面在 Settings 中、手机在项目首页右上角可退出登录。退出、会话过期、修改账号/密码后，旧会话的新请求和终端输入会被拒绝，已建立的终端和事件流最迟在下一次会话检查时断开（约 1 秒）；这不会结束 runtime-daemon 中的进程。
 
 登录校验全局最多并发 2 个，最多突发 10 次，此后每 6 秒恢复一次额度。连续 5 次凭据错误后开始退避，最长 60 秒；被限流时返回 `429` 和 `Retry-After`。这些限制不使用客户端提交的账号名或转发 IP 来创建独立额度。重启服务会清空内存会话和限流状态。
 
@@ -140,7 +133,7 @@ AoW 默认使用 `~/.aow/` 作为应用目录。应用设置、项目登记、Ag
 - `data/`：ACP 会话、Notes 和应用管理的仓库。
 - `state/`：终端与实例状态、自动化执行记录、IM 状态和操作日志。
 - `cache/`：ACP 下载与安装缓存、剪贴板图片。
-- `runtime/`：CLI 与 terminald 的本机通信 socket。
+- `runtime/`：CLI 到 Server 的本机通信 socket，以及 Runtime 节点令牌。
 
 配置保存采用文件锁和原子写入。使用自定义应用目录时，服务、CLI 和自动化执行器必须使用同一个目录。
 

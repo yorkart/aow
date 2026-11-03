@@ -165,14 +165,12 @@ dependencies = [
  "futures",
  "libc",
  "reqwest",
- "rusqlite",
  "semver",
  "serde",
  "serde_json",
  "serde_json_lenient",
  "sha2",
  "tar",
- "tempfile",
  "tokio",
  "tokio-util",
  "tracing",
@@ -186,12 +184,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "aow-acp",
- "aow-acpd-client",
  "aow-agents",
  "aow-filesystem",
  "aow-i18n",
  "aow-macos-log",
- "aow-server",
  "async-trait",
  "axum",
  "bytes",
@@ -199,31 +195,14 @@ dependencies = [
  "hyper",
  "hyper-util",
  "libc",
+ "md5",
  "serde",
  "serde_json",
- "tempfile",
  "tokio",
  "tokio-util",
  "tracing",
  "tracing-subscriber",
  "uuid",
-]
-
-[[package]]
-name = "aow-acpd-client"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "aow-acp",
- "aow-filesystem",
- "aow-i18n",
- "aow-terminald-client",
- "futures-util",
- "serde",
- "serde_json",
- "thiserror 2.0.19",
- "tokio",
- "tokio-tungstenite",
 ]
 
 [[package]]
@@ -274,8 +253,8 @@ dependencies = [
  "aow-filesystem",
  "aow-i18n",
  "aow-id",
+ "aow-local-client",
  "aow-protocol",
- "aow-terminald-client",
  "chrono",
  "clap",
  "libc",
@@ -379,6 +358,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "aow-local-client"
+version = "0.1.0"
+dependencies = [
+ "aow-protocol",
+ "bytes",
+ "http",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.19",
+ "tokio",
+ "tokio-tungstenite",
+]
+
+[[package]]
 name = "aow-macos-log"
 version = "0.1.0"
 dependencies = [
@@ -418,27 +414,50 @@ dependencies = [
 ]
 
 [[package]]
-name = "aow-runtime-daemon"
+name = "aow-runtime-client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "aow-acp",
- "aow-acpd",
  "aow-filesystem",
- "aow-macos-log",
+ "aow-i18n",
+ "aow-process",
  "aow-protocol",
+ "aow-runtime-daemon",
  "aow-terminald",
  "async-trait",
- "axum",
- "clap",
+ "bytes",
+ "futures",
  "futures-util",
+ "http",
  "libc",
+ "percent-encoding",
  "reqwest",
  "serde",
  "serde_json",
  "tempfile",
+ "thiserror 2.0.19",
  "tokio",
  "tokio-tungstenite",
+ "tokio-util",
+ "uuid",
+]
+
+[[package]]
+name = "aow-runtime-daemon"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "aow-acpd",
+ "aow-filesystem",
+ "aow-macos-log",
+ "aow-terminald",
+ "axum",
+ "clap",
+ "libc",
+ "serde",
+ "serde_json",
+ "tokio",
  "tracing",
  "tracing-subscriber",
  "uuid",
@@ -449,8 +468,6 @@ name = "aow-server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "aow-acp",
- "aow-acpd-client",
  "aow-agents",
  "aow-automations",
  "aow-config",
@@ -460,12 +477,13 @@ dependencies = [
  "aow-i18n",
  "aow-id",
  "aow-im",
+ "aow-local-client",
  "aow-macos-log",
  "aow-operation-log",
  "aow-process",
  "aow-protocol",
+ "aow-runtime-client",
  "aow-terminald",
- "aow-terminald-client",
  "aow-workspaces",
  "async-trait",
  "axum",
@@ -506,7 +524,6 @@ dependencies = [
  "aow-macos-log",
  "aow-process",
  "aow-protocol",
- "aow-terminald-client",
  "axum",
  "bytes",
  "futures-util",
@@ -519,30 +536,9 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.19",
  "tokio",
- "tokio-tungstenite",
  "tracing",
  "tracing-subscriber",
  "vte",
-]
-
-[[package]]
-name = "aow-terminald-client"
-version = "0.1.0"
-dependencies = [
- "aow-filesystem",
- "aow-protocol",
- "bytes",
- "http",
- "http-body-util",
- "hyper",
- "hyper-util",
- "libc",
- "percent-encoding",
- "serde",
- "serde_json",
- "thiserror 2.0.19",
- "tokio",
- "tokio-tungstenite",
 ]
 
 [[package]]
@@ -1475,7 +1471,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tower-service",
- "webpki-roots",
+ "webpki-roots 1.0.8",
 ]
 
 [[package]]
@@ -2325,7 +2321,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "webpki-roots",
+ "webpki-roots 1.0.8",
 ]
 
 [[package]]
@@ -2945,8 +2941,12 @@ checksum = "8f72a05e828585856dacd553fba484c242c46e391fb0e58917c942ee9202915c"
 dependencies = [
  "futures-util",
  "log",
+ "rustls",
+ "rustls-pki-types",
  "tokio",
+ "tokio-rustls",
  "tungstenite",
+ "webpki-roots 0.26.11",
 ]
 
 [[package]]
@@ -3114,6 +3114,8 @@ dependencies = [
  "httparse",
  "log",
  "rand",
+ "rustls",
+ "rustls-pki-types",
  "sha1",
  "thiserror 2.0.19",
 ]
@@ -3328,6 +3330,15 @@ checksum = "5a6580f308b1fad9207618087a65c04e7a10bc77e02c8e84e9b00dd4b12fa0bb"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "webpki-roots"
+version = "0.26.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "521bc38abb08001b01866da9f51eb7c5d647a19260e00054a8c7fd5f9e57f7a9"
+dependencies = [
+ "webpki-roots 1.0.8",
 ]
 
 [[package]]

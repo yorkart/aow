@@ -43,7 +43,7 @@ def trusted_path(path, administrator_uid):
     return path
 
 
-def target_environment(account, terminald):
+def target_environment(account, runtime_enabled):
     home = account.pw_dir
     return {
         'HOME': home, 'USER': account.pw_name, 'LOGNAME': account.pw_name,
@@ -51,7 +51,7 @@ def target_environment(account, terminald):
         'PATH': ':'.join([f'{home}/.local/bin', f'{home}/.local/lib/aow', f'{home}/.cargo/bin',
                           '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin']),
         'TMPDIR': '/private/tmp', 'AOW_INSTALL_MANAGED': '1',
-        'AOW_INSTALL_TERMINALD': 'y' if terminald else 'n',
+        'AOW_INSTALL_RUNTIME': 'y' if runtime_enabled else 'n',
     }
 
 
@@ -87,7 +87,7 @@ def registration_module(path):
     return module
 
 
-def install_as_administrator(account, package, administrator_uid, skip_terminald=False, skip_acpd=False):
+def install_as_administrator(account, package, administrator_uid, skip_runtime=False):
     require_local_terminal()
     trusted_path(__file__, administrator_uid)
     installer = trusted_path(SCRIPT_DIR / 'install-release.sh', administrator_uid)
@@ -95,8 +95,8 @@ def install_as_administrator(account, package, administrator_uid, skip_terminald
     archive = trusted_path(package, administrator_uid)
     checksum = trusted_path(str(archive) + '.sha256', administrator_uid)
     print(f'Installation account: {account.pw_name} (HOME={account.pw_dir})', flush=True)
-    terminald = not skip_terminald
-    environment = target_environment(account, terminald)
+    runtime_enabled = not skip_runtime
+    environment = target_environment(account, runtime_enabled)
     environment['PATH'] = target_login_path(account, environment)
     with tempfile.TemporaryDirectory(prefix='aow-admin-install-', dir='/private/tmp') as temporary:
         stage = Path(temporary)
@@ -108,21 +108,18 @@ def install_as_administrator(account, package, administrator_uid, skip_terminald
             shutil.copyfile(source, destination)
             destination.chmod(0o644)
         arguments = ['/bin/bash', str(stage / 'install-release.sh'), '--package', str(stage / archive.name)]
-        if skip_terminald:
-            arguments.append('--skip-terminald')
-        if skip_acpd:
-            arguments.append('--skip-acpd')
+        if skip_runtime:
+            arguments.append('--skip-runtime')
         result = run_as_user(account, arguments, environment)
         if result != 78:
             return result
         helper = registration_module(registration)
         request = helper.read_request(account)
         configurations = helper.validate_request(request, account)
-        # A previous interrupted attempt may have left a terminald
+        # A previous interrupted attempt may have left a runtime
         # request. This invocation authorizes only the components selected above.
         configurations = [(component, config) for component, config in configurations
-                          if component == 'server' or (component == 'terminald' and terminald)
-                          or (component == 'acpd' and not skip_acpd)]
+                          if component == 'server' or (component == 'runtime-daemon' and runtime_enabled)]
         if not configurations:
             raise ValueError('No selected services are ready for registration')
         helper.register(configurations, account)
@@ -150,10 +147,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--user', help='Target account (default: the current account)')
     parser.add_argument('--package', required=True)
-    parser.add_argument('--skip-acpd', action='store_true',
-                        help='Keep acpd and its active conversations unchanged for this installation')
-    parser.add_argument('--skip-terminald', action='store_true',
-                        help='Keep terminald and its existing sessions unchanged for this installation')
+    parser.add_argument('--skip-runtime', action='store_true',
+                        help='Keep runtime-daemon and its existing sessions unchanged for this installation')
     parser.add_argument('--elevated', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     if sys.platform != 'darwin':
@@ -169,7 +164,7 @@ def main(argv=None):
         account = pwd.getpwnam(args.user)
         if account.pw_uid == 0:
             parser.error('AoW must run as a non-root account')
-        return install_as_administrator(account, args.package, administrator.pw_uid, args.skip_terminald, args.skip_acpd)
+        return install_as_administrator(account, args.package, administrator.pw_uid, args.skip_runtime)
     caller = pwd.getpwuid(os.getuid())
     if caller.pw_uid == 0:
         parser.error('Run just install as your normal macOS account, without sudo')
@@ -177,12 +172,10 @@ def main(argv=None):
     if account.pw_uid == 0:
         parser.error('AoW must run as a non-root account')
     print(f'Installation account: {account.pw_name} (HOME={account.pw_dir})', flush=True)
-    terminald_options = ['--skip-terminald'] if args.skip_terminald else []
-    if args.skip_acpd:
-        terminald_options.append('--skip-acpd')
+    runtime_options = ['--skip-runtime'] if args.skip_runtime else []
     if account.pw_uid == caller.pw_uid:
         checked = subprocess.run(['node', str(SCRIPT_DIR / 'launchd-mode.mjs'), 'check-install',
-                                  str(Path(account.pw_dir) / '.local/lib/aow'), *terminald_options],
+                                  str(Path(account.pw_dir) / '.local/lib/aow'), *runtime_options],
                                  capture_output=True, text=True)
         if checked.returncode:
             print(checked.stderr, end='', file=sys.stderr)
@@ -190,7 +183,7 @@ def main(argv=None):
         status = json.loads(checked.stdout)
         if not status['registrationRequired']:
             return subprocess.run(['/bin/bash', str(SCRIPT_DIR / 'install-release.sh'),
-                                   '--package', args.package, *terminald_options]).returncode
+                                   '--package', args.package, *runtime_options]).returncode
     if not is_admin(caller):
         administrator_hint(account, account.pw_uid != caller.pw_uid)
         return 78
@@ -199,7 +192,7 @@ def main(argv=None):
     package = trusted_path(args.package, caller.pw_uid)
     return subprocess.run(['/usr/bin/sudo', '-k', '/usr/bin/python3', '-I', str(script),
                            '--elevated', '--user', account.pw_name, '--package', str(package),
-                           *terminald_options]).returncode
+                           *runtime_options]).returncode
 
 
 if __name__ == '__main__':

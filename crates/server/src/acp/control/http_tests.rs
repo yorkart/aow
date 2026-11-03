@@ -10,11 +10,11 @@ struct Host {
     fork: bool,
 }
 #[async_trait::async_trait]
-impl aow_acp::AcpHost for Host {
+impl aow_runtime_client::acp::AcpHost for Host {
     async fn settings(&self) -> anyhow::Result<String> {
         if self.fork {
             return Ok(json!({"agent_servers":{"test":{"type":"custom","command":"node","args":[
-                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../acp/tests/fixtures/fork-agent.mjs")
+                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../runtime/crates/acp/tests/fixtures/fork-agent.mjs")
             ]}}}).to_string());
         }
         Ok(
@@ -35,7 +35,7 @@ impl aow_acp::AcpHost for Host {
 
 #[tokio::test]
 async fn image_prompt_body_limit_is_bounded_and_scoped_to_actions() {
-    let app = crate::acp::routes().with_state(crate::AppState::new(Default::default()));
+    let app = crate::acp::routes().with_state(crate::AppState::for_test(Default::default()));
     for (path, bytes, expected) in [
         (
             "/api/acp/sessions/test/actions",
@@ -73,8 +73,8 @@ async fn image_prompt_body_limit_is_bounded_and_scoped_to_actions() {
 async fn api_prepares_named_identity_and_reads_metadata_before_owned_startup() {
     let directory = tempfile::tempdir().unwrap();
     let workspace = directory.path().canonicalize().unwrap();
-    let mut state = crate::AppState::new(Default::default());
-    state.acp = aow_acpd_client::AcpClient::new(
+    let mut state = crate::AppState::for_test(Default::default());
+    state.acp = aow_runtime_client::acp::AcpClient::for_test_host(
         Arc::new(Host { fork: false }),
         Some(workspace.join("state")),
     )
@@ -225,8 +225,8 @@ async fn api_prepares_named_identity_and_reads_metadata_before_owned_startup() {
 #[tokio::test]
 async fn fork_requires_control_and_returns_a_distinct_session_with_ancestry() {
     let directory = tempfile::tempdir().unwrap();
-    let mut state = crate::AppState::new(Default::default());
-    state.acp = aow_acpd_client::AcpClient::new(
+    let mut state = crate::AppState::for_test(Default::default());
+    state.acp = aow_runtime_client::acp::AcpClient::for_test_host(
         Arc::new(Host { fork: true }),
         Some(directory.path().join("state")),
     )

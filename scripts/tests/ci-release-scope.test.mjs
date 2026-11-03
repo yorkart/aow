@@ -22,8 +22,8 @@ test('release tooling, native dependencies and build configuration require every
     'scripts/package-release.sh', 'scripts/tests/macos-release.test.mjs',
     'packaging/bin/aow', '.github/workflows/release.yml', '.cargo/config.toml',
     'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'rust-toolchain',
-    'crates/server/Cargo.toml', 'crates/terminald/build.rs', 'crates/macos-log/src/os_log.c',
-    'frontend/package.json', 'frontend/package-lock.json', 'vt-worker/bin/vt-worker.mjs',
+    'crates/server/Cargo.toml', 'runtime/crates/runtime-daemon/build.rs', 'crates/macos-log/src/os_log.c',
+    'frontend/package.json', 'frontend/package-lock.json', 'runtime/vt-worker/bin/vt-worker.mjs',
     'vendor/ripgrep/manifest.json', 'vendor/ripgrep/15.2.0/ripgrep.tar.gz',
   ]) {
     assert.equal(requiresNativePackages('pull_request', [path]), true, path);

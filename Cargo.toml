@@ -2,10 +2,6 @@
 members = [
     "crates/i18n",
   "crates/config",
-  "crates/acp",
-  "crates/acpd",
-  "crates/acpd-client",
-  "crates/runtime-daemon",
   "crates/db",
   "crates/id",
   "crates/operation-log",
@@ -15,14 +11,15 @@ members = [
   "crates/protocol",
   "crates/filesystem",
   "crates/git-service",
-  "crates/terminald",
-  "crates/terminald-client",
   "crates/server",
   "crates/im",
   "crates/automations",
   "crates/workspaces",
   "crates/cli",
+  "crates/runtime-client",
+  "crates/local-client",
 ]
+exclude = ["runtime"]
 resolver = "2"
 
 [workspace.package]

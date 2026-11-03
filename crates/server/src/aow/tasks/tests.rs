@@ -31,7 +31,7 @@ async fn call(
 
 #[tokio::test]
 async fn task_dependencies_do_not_cascade_archive_or_delete() {
-    let state = AppState::new(Default::default());
+    let state = AppState::for_test(Default::default());
     for (id, dependencies) in [("a", vec![]), ("b", vec!["a".into()])] {
         state
             .aow
@@ -101,7 +101,7 @@ async fn task_dependencies_do_not_cascade_archive_or_delete() {
 
 #[tokio::test]
 async fn invalid_task_creation_does_not_allocate_a_session() {
-    let state = AppState::new(Default::default());
+    let state = AppState::for_test(Default::default());
     let app = routes().with_state(state.clone());
     for body in [
         serde_json::json!({"request_id":"task", "project_id":"missing", "prompt":"", "agent_id":"agent", "workspace_mode":"existing", "workspace":"/repo"}),
@@ -118,9 +118,9 @@ async fn invalid_task_creation_does_not_allocate_a_session() {
 
 struct Host(&'static str);
 #[async_trait::async_trait]
-impl aow_acp::AcpHost for Host {
+impl aow_runtime_client::acp::AcpHost for Host {
     async fn settings(&self) -> anyhow::Result<String> {
-        Ok(serde_json::json!({"agent_servers":{(self.0):{"type":"custom","command":"node","args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../acp/tests/fixtures/lineage-agent.mjs")]}}}).to_string())
+        Ok(serde_json::json!({"agent_servers":{(self.0):{"type":"custom","command":"node","args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../runtime/crates/acp/tests/fixtures/lineage-agent.mjs")]}}}).to_string())
     }
     async fn execution_path(&self) -> anyhow::Result<Option<std::ffi::OsString>> {
         Ok(None)
@@ -141,10 +141,12 @@ async fn creating_tasks_and_helper_sessions_keeps_dependencies_out_of_runtime_li
     git::git_output(&repo, &["init", "-b", "main"])
         .await
         .unwrap();
-    let mut state = AppState::new(Default::default());
-    state.acp =
-        aow_acpd_client::AcpClient::new(Arc::new(Host("test")), Some(directory.path().join("acp")))
-            .unwrap();
+    let mut state = AppState::for_test(Default::default());
+    state.acp = aow_runtime_client::acp::AcpClient::for_test_host(
+        Arc::new(Host("test")),
+        Some(directory.path().join("acp")),
+    )
+    .unwrap();
     let project = state
         .aow
         .register_project(RegisterProjectRequest {
@@ -303,10 +305,12 @@ async fn workspace_fixture() -> (tempfile::TempDir, AppState, Project, Router) {
                 .success()
         );
     }
-    let mut state = AppState::new(Default::default());
-    state.acp =
-        aow_acpd_client::AcpClient::new(Arc::new(Host("test")), Some(directory.path().join("acp")))
-            .unwrap();
+    let mut state = AppState::for_test(Default::default());
+    state.acp = aow_runtime_client::acp::AcpClient::for_test_host(
+        Arc::new(Host("test")),
+        Some(directory.path().join("acp")),
+    )
+    .unwrap();
     let project = state
         .aow
         .register_project(RegisterProjectRequest {
@@ -353,7 +357,7 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
     use serde_json::json;
     let (directory, mut state, original, _) = workspace_fixture().await;
     state.aow = AowManager::persistent(&directory.path().join("state")).unwrap();
-    state.acp = aow_acpd_client::AcpClient::new(
+    state.acp = aow_runtime_client::acp::AcpClient::for_test_host(
         Arc::new(Host("codex.test")),
         Some(directory.path().join("routing-acp")),
     )
@@ -374,7 +378,7 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
     .unwrap();
     let settings = state.aow.acp_settings().unwrap();
     state.aow.save_acp_settings(json!({"agent_servers":{"codex.test":{"type":"custom", "command":"node", "args":[
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../acp/tests/fixtures/lineage-agent.mjs")
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtime/crates/acp/tests/fixtures/lineage-agent.mjs")
     ]}}}).to_string(), settings.revision).await.unwrap();
     let app = routes()
         .merge(cli_routes())
@@ -965,9 +969,9 @@ async fn task_role_reuses_acp_configuration_and_retries_without_creating_another
     git::git_output(&repo, &["init", "-b", "main"])
         .await
         .unwrap();
-    let mut state = AppState::new(Default::default());
+    let mut state = AppState::for_test(Default::default());
     state.aow = AowManager::persistent(&directory.path().join("aow")).unwrap();
-    state.acp = aow_acpd_client::AcpClient::new(
+    state.acp = aow_runtime_client::acp::AcpClient::for_test_host(
         Arc::new(Host("codex.test")),
         Some(directory.path().join("acp")),
     )
@@ -976,7 +980,7 @@ async fn task_role_reuses_acp_configuration_and_retries_without_creating_another
     state
         .aow
         .save_acp_settings(
-            aow_acp::AcpHost::settings(&Host("codex.test"))
+            aow_runtime_client::acp::AcpHost::settings(&Host("codex.test"))
                 .await
                 .unwrap(),
             settings.revision,

@@ -42,7 +42,7 @@ async fn claim(socket: &mut Client, force: bool) {
 async fn sockets_broadcast_takeover_release_on_close_and_revoke_on_logout() {
     let directory = tempfile::tempdir().unwrap();
     crate::auth::write_credentials(directory.path(), "admin", "test-password");
-    let mut app = crate::AppState::new(Default::default());
+    let mut app = crate::AppState::for_test(Default::default());
     app.auth = crate::auth::AuthService::persistent(directory.path());
     let controller = app.acp_controls.session("test");
     let shared = controller.clone();

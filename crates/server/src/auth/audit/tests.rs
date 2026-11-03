@@ -46,8 +46,8 @@ impl LoginProvider for LocalProvider {
 fn fixture() -> (tempfile::TempDir, AppState) {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join("index.html"), "<head></head>login").unwrap();
-    let mut state =
-        AppState::new(dir.path().to_owned()).with_base_path(BasePath::parse("/tools/aow").unwrap());
+    let mut state = AppState::for_test(dir.path().to_owned())
+        .with_base_path(BasePath::parse("/tools/aow").unwrap());
     state.auth = AuthService::with_providers(vec![Arc::new(LocalProvider)]);
     state.operations = OperationService::persistent(&dir.path().join("logs")).unwrap();
     (dir, state)

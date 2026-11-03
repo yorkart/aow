@@ -1,7 +1,7 @@
 use crate::input::{CreationArgs, TaskInput};
 use anyhow::{Context, Result};
+use aow_local_client::LocalClient;
 use aow_protocol::AcpCreate;
-use aow_terminald_client::TerminaldClient;
 use clap::{Args, Subcommand};
 use serde_json::{Value, json};
 use std::{io, path::PathBuf, time::Duration};
@@ -96,7 +96,7 @@ pub fn execute(args: AcpArgs, state_dir: PathBuf) -> Result<Value> {
             cwd.join(path)
         }
     };
-    let client = TerminaldClient::new(absolute(state_dir).join("runtime/cli/cli.sock"));
+    let client = LocalClient::new(absolute(state_dir).join("runtime/cli/cli.sock"));
     let timeout = match &args.command {
         AcpCommand::Create { timeout, .. } | AcpCommand::Submit { timeout, .. } => timeout + 20,
         _ => 20,

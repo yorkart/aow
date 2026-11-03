@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use aow_terminald_client::{TerminaldClient, TerminaldClientError};
+use aow_local_client::{LocalClient, LocalClientError};
 use clap::Args;
 use serde_json::{Map, Value, json};
 
@@ -61,13 +61,13 @@ pub(super) fn execute(args: CreateArgs, state_dir: PathBuf) -> Result<Value> {
             format!("expected one automation JSON object: {error}"),
         )
     })?;
-    let client = TerminaldClient::new(state_dir.join("runtime/cli/cli.sock"));
+    let client = LocalClient::new(state_dir.join("runtime/cli/cli.sock"));
     let request = json!({"project_id": args.project_id, "configuration": configuration});
     tokio::runtime::Runtime::new()?.block_on(async {
         tokio::time::timeout(
             Duration::from_secs(30),
             client.post_json::<_, Value>("/v1/automations", &request),
-        ).await.map_err(|_| TerminaldClientError::Io(io::Error::new(
+        ).await.map_err(|_| LocalClientError::Io(io::Error::new(
             io::ErrorKind::TimedOut,
             "Automation creation timed out; inspect automation list before retrying because the task may have been created",
         )))?

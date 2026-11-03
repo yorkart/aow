@@ -51,21 +51,27 @@ async fn run() -> Result<()> {
     let local = listener.local_addr()?;
     tracing::info!(%local, "AoW listening");
     println!("AoW: http://{local}{}/", base_path.as_str());
-    let state = AppState::with_daemon_options(
+    let state = AppState::with_runtime(
         options.frontend,
         options.state_dir.clone(),
-        options.terminald_socket,
-        options.acpd_socket,
+        aow_runtime_client::RuntimeEndpoint::new(
+            &options.runtime_url,
+            std::fs::read_to_string(&options.runtime_token_file)?
+                .trim()
+                .into(),
+        )?,
     )?
     .with_base_path(base_path)
     .with_secure_cookies(options.secure_cookies)
     .with_session_timeouts(options.session_timeouts);
     state.initialize_global_workspace().await?;
     if let Err(error) = state.reconcile_terminals().await {
-        tracing::warn!(%error, "initial terminald reconciliation failed; terminal requests will retry");
+        tracing::warn!(%error, "initial runtime terminal reconciliation failed; terminal requests will retry");
+    }
+    if let Err(error) = state.acp_recover_runtime().await {
+        tracing::warn!(%error,"runtime recovery deferred until the next connection");
     }
     state.start_agent_notifications();
-    state.start_acp_notifications();
     let cli = aow_server::start_local_cli(state.clone(), &options.state_dir).await?;
     let result = axum::serve(
         listener,

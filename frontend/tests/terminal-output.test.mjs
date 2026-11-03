@@ -4,7 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
-import { VtService } from '../../vt-worker/src/vt-service.mjs';
+import { VtService } from '../../runtime/vt-worker/src/vt-service.mjs';
 
 const server = await createServer({ root: fileURLToPath(new URL('../', import.meta.url)),
   server: { host: '127.0.0.1', port: 0, proxy: {}, watch: { usePolling: true } } });

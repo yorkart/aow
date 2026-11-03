@@ -80,7 +80,7 @@ pub(crate) fn routes() -> Router<AppState> {
 pub(crate) fn error(error: anyhow::Error) -> HttpError {
     let missing = error.to_string() == "ACP session not found"
         || error.to_string() == "ACP connection not found";
-    let unavailable = aow_acpd_client::is_unavailable(&error);
+    let unavailable = aow_runtime_client::acp::is_unavailable(&error);
     HttpError::new(
         if unavailable {
             StatusCode::SERVICE_UNAVAILABLE
@@ -93,7 +93,7 @@ pub(crate) fn error(error: anyhow::Error) -> HttpError {
             "acpd_unavailable"
         } else if missing {
             "acp_not_found"
-        } else if aow_acpd_client::is_auth_required(&error) {
+        } else if aow_runtime_client::acp::is_auth_required(&error) {
             "acp_auth_required"
         } else {
             "acp_error"
@@ -105,6 +105,14 @@ pub(crate) fn error(error: anyhow::Error) -> HttpError {
 async fn settings(
     State(state): State<AppState>,
 ) -> Result<Json<crate::aow::AcpSettingsFile>, HttpError> {
+    if state.acp.runtime().is_some() {
+        let settings = state.acp.settings().await.map_err(error)?;
+        return Ok(Json(crate::aow::AcpSettingsFile {
+            path: settings.path,
+            content: settings.content,
+            revision: settings.revision,
+        }));
+    }
     aow_i18n::spawn_blocking(move || state.aow.acp_settings())
         .await
         .map_err(|e| HttpError::internal(e.to_string()))?
@@ -120,6 +128,18 @@ async fn save_settings(
     State(state): State<AppState>,
     Json(request): Json<SaveSettings>,
 ) -> Result<Json<crate::aow::AcpSettingsFile>, HttpError> {
+    if state.acp.runtime().is_some() {
+        let settings = state
+            .acp
+            .save_settings(request.content, request.revision)
+            .await
+            .map_err(error)?;
+        return Ok(Json(crate::aow::AcpSettingsFile {
+            path: settings.path,
+            content: settings.content,
+            revision: settings.revision,
+        }));
+    }
     state
         .aow
         .save_acp_settings(request.content, request.revision)
@@ -127,7 +147,9 @@ async fn save_settings(
         .map(Json)
         .map_err(error)
 }
-async fn agents(State(state): State<AppState>) -> Result<Json<Vec<aow_acp::AgentInfo>>, HttpError> {
+async fn agents(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<aow_runtime_client::acp::AgentInfo>>, HttpError> {
     state.acp.agents().await.map(Json).map_err(error)
 }
 async fn install_agent(
@@ -140,7 +162,7 @@ async fn install_agent(
 async fn installation_status(
     State(state): State<AppState>,
     Path(agent_id): Path<String>,
-) -> Result<Json<Option<aow_acp::ConnectionStatus>>, HttpError> {
+) -> Result<Json<Option<aow_runtime_client::acp::ConnectionStatus>>, HttpError> {
     state
         .acp
         .installation_status(&agent_id)
@@ -156,7 +178,7 @@ struct RegistryQuery {
 async fn registry(
     State(state): State<AppState>,
     Query(query): Query<RegistryQuery>,
-) -> Result<Json<Vec<aow_acp::AgentInfo>>, HttpError> {
+) -> Result<Json<Vec<aow_runtime_client::acp::AgentInfo>>, HttpError> {
     state
         .acp
         .registry(query.refresh)
@@ -172,7 +194,7 @@ struct Connect {
 async fn connection_status(
     State(state): State<AppState>,
     Query(request): Query<Connect>,
-) -> Result<Json<Option<aow_acp::ConnectionStatus>>, HttpError> {
+) -> Result<Json<Option<aow_runtime_client::acp::ConnectionStatus>>, HttpError> {
     state
         .acp
         .connection_status(&request.agent_id, request.cwd)
@@ -183,7 +205,7 @@ async fn connection_status(
 async fn connect(
     State(state): State<AppState>,
     Json(request): Json<Connect>,
-) -> Result<Json<aow_acp::ConnectionInfo>, HttpError> {
+) -> Result<Json<aow_runtime_client::acp::ConnectionInfo>, HttpError> {
     state
         .acp
         .connect(&request.agent_id, request.cwd)
@@ -227,8 +249,8 @@ async fn remote_sessions(
 async fn import_sessions(
     State(state): State<AppState>,
     Path(connection_id): Path<String>,
-    Json(sessions): Json<Vec<aow_acp::SessionImport>>,
-) -> Result<Json<Vec<aow_acp::SessionInfo>>, HttpError> {
+    Json(sessions): Json<Vec<aow_runtime_client::acp::SessionImport>>,
+) -> Result<Json<Vec<aow_runtime_client::acp::SessionInfo>>, HttpError> {
     state
         .acp
         .import_sessions(&connection_id, sessions)
@@ -239,7 +261,7 @@ async fn import_sessions(
 async fn new_session(
     State(state): State<AppState>,
     Path(connection_id): Path<String>,
-) -> Result<Json<aow_acp::SessionSnapshot>, HttpError> {
+) -> Result<Json<aow_runtime_client::acp::SessionSnapshot>, HttpError> {
     state
         .acp
         .new_session(&connection_id)
@@ -251,7 +273,7 @@ async fn prepare_session(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(request): Json<Connect>,
-) -> Result<Json<aow_acp::SessionSnapshot>, HttpError> {
+) -> Result<Json<aow_runtime_client::acp::SessionSnapshot>, HttpError> {
     let _operation = state.aow.task_resource_access().await;
     let task = state.aow.task_scope(&headers, &request.cwd)?;
     let session = state
@@ -271,7 +293,7 @@ async fn prepare_session(
 async fn session_info(
     State(state): State<AppState>,
     Path(thread_id): Path<String>,
-) -> Result<Json<aow_acp::SessionInfo>, HttpError> {
+) -> Result<Json<aow_runtime_client::acp::SessionInfo>, HttpError> {
     state
         .acp
         .session_info(&thread_id)
@@ -284,23 +306,21 @@ async fn fork_session(
     Path(thread_id): Path<String>,
     Query(query): Query<ViewQuery>,
     headers: HeaderMap,
-) -> Result<Json<aow_acp::SessionSnapshot>, HttpError> {
+) -> Result<Json<aow_runtime_client::acp::SessionSnapshot>, HttpError> {
     let controller = state.acp_controls.session(&thread_id);
     let _lifecycle = controller.authorize_lifecycle(&headers, false).await?;
     crate::instances::preserve_parent(&state, Some(&aow_protocol::InstanceRef::acp(&thread_id)))
         .await?;
     let fork = state.acp.fork_session(&thread_id).await.map_err(error)?;
-    state
-        .instances
-        .record_all(vec![crate::instances::acp(&aow_acp::SessionInfo::from(
-            &fork,
-        ))])?;
+    state.instances.record_all(vec![crate::instances::acp(
+        &aow_runtime_client::acp::SessionInfo::from(&fork),
+    )])?;
     view_snapshot(&state, &fork.thread_id, &query).await
 }
 async fn session_connection(
     State(state): State<AppState>,
     Path(thread_id): Path<String>,
-) -> Result<Json<Option<aow_acp::ConnectionInfo>>, HttpError> {
+) -> Result<Json<Option<aow_runtime_client::acp::ConnectionInfo>>, HttpError> {
     state
         .acp
         .session_connection_info(&thread_id)
@@ -311,7 +331,7 @@ async fn session_connection(
 async fn sessions(
     State(state): State<AppState>,
     Query(query): Query<SessionQuery>,
-) -> Result<Json<Vec<aow_acp::SessionInfo>>, HttpError> {
+) -> Result<Json<Vec<aow_runtime_client::acp::SessionInfo>>, HttpError> {
     state
         .acp
         .sessions(query.cwd.as_deref())
@@ -323,7 +343,7 @@ async fn snapshot(
     State(state): State<AppState>,
     Path(thread_id): Path<String>,
     Query(query): Query<ViewQuery>,
-) -> Result<Json<aow_acp::SessionSnapshot>, HttpError> {
+) -> Result<Json<aow_runtime_client::acp::SessionSnapshot>, HttpError> {
     view_snapshot(&state, &thread_id, &query).await
 }
 
@@ -336,7 +356,7 @@ async fn view_snapshot(
     state: &AppState,
     thread_id: &str,
     query: &ViewQuery,
-) -> Result<Json<aow_acp::SessionSnapshot>, HttpError> {
+) -> Result<Json<aow_runtime_client::acp::SessionSnapshot>, HttpError> {
     if query.view.as_deref() == Some("overview") {
         state.acp.overview(thread_id).await
     } else {
@@ -357,7 +377,7 @@ async fn session_updates(
     State(state): State<AppState>,
     Path(thread_id): Path<String>,
     Query(query): Query<UpdatesQuery>,
-) -> Result<Json<aow_acp::SessionUpdates>, HttpError> {
+) -> Result<Json<aow_runtime_client::acp::SessionUpdates>, HttpError> {
     if query.view.as_deref() == Some("overview") {
         state
             .acp
@@ -384,7 +404,7 @@ async fn session_process(
     State(state): State<AppState>,
     Path(thread_id): Path<String>,
     Query(query): Query<ProcessQuery>,
-) -> Result<Json<aow_acp::SessionUpdates>, HttpError> {
+) -> Result<Json<aow_runtime_client::acp::SessionUpdates>, HttpError> {
     state
         .acp
         .process(
@@ -444,16 +464,30 @@ async fn delete_session(
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 enum SessionAction {
-    Prompt { content: Vec<aow_acp::Content> },
-    Steer { content: Vec<aow_acp::Content> },
+    Prompt {
+        content: Vec<aow_runtime_client::acp::Content>,
+    },
+    Steer {
+        content: Vec<aow_runtime_client::acp::Content>,
+    },
     Cancel,
-    DismissNotice { notice_id: String },
+    DismissNotice {
+        notice_id: String,
+    },
     ClearPlan,
     Resume,
     Close,
-    SetMode { mode_id: String },
-    SetConfig { config_id: String, value: Value },
-    Answer { request_id: String, response: Value },
+    SetMode {
+        mode_id: String,
+    },
+    SetConfig {
+        config_id: String,
+        value: Value,
+    },
+    Answer {
+        request_id: String,
+        response: Value,
+    },
 }
 async fn session_action(
     State(state): State<AppState>,
@@ -461,7 +495,7 @@ async fn session_action(
     Query(query): Query<ViewQuery>,
     headers: HeaderMap,
     Json(action): Json<SessionAction>,
-) -> Result<Json<aow_acp::SessionSnapshot>, HttpError> {
+) -> Result<Json<aow_runtime_client::acp::SessionSnapshot>, HttpError> {
     let controller = state.acp_controls.session(&thread_id);
     if matches!(action, SessionAction::Resume | SessionAction::Close) {
         let _restore = controller.authorize_restore(&headers).await?;
@@ -521,7 +555,7 @@ async fn session_action(
 async fn connection_requests(
     State(state): State<AppState>,
     Path(connection_id): Path<String>,
-) -> Result<Json<Vec<aow_acp::Permission>>, HttpError> {
+) -> Result<Json<Vec<aow_runtime_client::acp::Permission>>, HttpError> {
     state
         .acp
         .connection_requests(&connection_id)

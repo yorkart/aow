@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, realpathSync } from 'node:fs';
 import http from 'node:http';
 import { fileURLToPath } from 'node:url';
+import { join, resolve as resolvePath } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
 export function serverHealthPath(basePath = '') {
@@ -17,9 +18,21 @@ export function serverHealthPath(basePath = '') {
 
 export function requestHealth(config, timeout = 1000) {
   return new Promise((resolve, reject) => {
-    const options = config.component !== 'server'
-      ? { socketPath: config.socket, path: '/v1/health' }
-      : { hostname: config.host, port: config.port, path: serverHealthPath(config.basePath) };
+    let options;
+    try {
+      if (config.component === 'runtime-daemon') {
+        const root = config.stateDir;
+        let transport = {};
+        try { transport = JSON.parse(readFileSync(join(root, 'runtime-daemon.json'), 'utf8')); }
+        catch (error) { if (error.code !== 'ENOENT') throw error; }
+        const url = new URL(`http://${transport.listen || '127.0.0.1:9760'}`);
+        const host = url.hostname.replace(/^\[|\]$/g, '');
+        const tokenFile = transport.token_file ? resolvePath(root, transport.token_file) : join(root, 'runtime/runtime-daemon/token');
+        const token = readFileSync(tokenFile, 'utf8').trim();
+        options = { hostname: host === '0.0.0.0' ? '127.0.0.1' : host === '::' ? '::1' : host,
+          port: Number(url.port), path: '/v1/health', headers: { Authorization: `Bearer ${token}` } };
+      } else options = { hostname: config.host, port: config.port, path: serverHealthPath(config.basePath) };
+    } catch (error) { reject(error); return; }
     const request = http.get({ ...options, agent: false }, response => {
       response.setEncoding('utf8');
       let bytes = '';
@@ -47,7 +60,7 @@ export function requestHealth(config, timeout = 1000) {
 }
 
 export async function waitForHealth(config, runningPid, timeout = 10000, previousPid = null) {
-  if (!['server', 'terminald', 'acpd'].includes(config.component)) throw new Error('invalid service component');
+  if (!['server', 'runtime-daemon'].includes(config.component)) throw new Error('invalid service component');
   const deadline = Date.now() + timeout;
   let last;
   do {

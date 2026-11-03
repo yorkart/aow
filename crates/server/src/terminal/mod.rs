@@ -10,7 +10,7 @@ use aow_protocol::{
     TerminalPaneStatus, TerminalRuntime, TerminalRuntimeSpec, TerminalSplitAxis, TerminalTab,
     TerminalTabList,
 };
-use aow_terminald_client::{TerminaldAttachStream, TerminaldClient, TerminaldClientError};
+use aow_runtime_client::{RuntimeError, RuntimeSocket, TerminalClient};
 #[cfg(test)]
 use axum::Router;
 use axum::{

@@ -9,7 +9,7 @@ use tower::ServiceExt;
 async fn all_im_routes_require_account_authentication() {
     let root = tempfile::tempdir().unwrap();
     crate::auth::write_credentials(root.path(), "admin", "test-password");
-    let mut state = AppState::new(root.path().join("frontend"));
+    let mut state = AppState::for_test(root.path().join("frontend"));
     state.auth = crate::auth::AuthService::persistent(root.path());
     let app = crate::build_router(state);
     for (method, path) in [
@@ -44,7 +44,7 @@ async fn all_im_routes_require_account_authentication() {
 
 #[tokio::test]
 async fn provider_api_keeps_secrets_private_and_errors_are_not_cached() {
-    let app = crate::build_router(AppState::new("/unused".into()));
+    let app = crate::build_router(AppState::for_test("/unused".into()));
     let response = app
         .clone()
         .oneshot(
@@ -79,7 +79,7 @@ async fn provider_api_keeps_secrets_private_and_errors_are_not_cached() {
 
 #[tokio::test]
 async fn test_receipt_requires_a_bound_provider() {
-    let response = crate::build_router(AppState::new("/unused".into()))
+    let response = crate::build_router(AppState::for_test("/unused".into()))
         .oneshot(
             Request::builder()
                 .method("PUT")

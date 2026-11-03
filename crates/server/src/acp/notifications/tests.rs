@@ -5,15 +5,15 @@ use serde_json::json;
 #[tokio::test]
 async fn real_acp_prompts_reach_the_terminal_notification_subscription_without_a_view() {
     let root = tempfile::tempdir().unwrap();
-    let state = crate::AppState::with_state_dir(
+    let state = crate::AppState::for_test_with_state_dir(
         root.path().into(),
         root.path().join("state"),
         root.path().join("missing.sock"),
     )
     .unwrap();
     let previous = state.aow.acp_settings().unwrap();
-    let fixture =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../acp/tests/fixtures/agent.mjs");
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../runtime/crates/acp/tests/fixtures/agent.mjs");
     state
         .aow
         .save_acp_settings(
@@ -60,7 +60,7 @@ async fn real_acp_prompts_reach_the_terminal_notification_subscription_without_a
 
 fn completion(turn_id: &str) -> TurnCompletion {
     TurnCompletion {
-        session: aow_acp::SessionInfo {
+        session: aow_runtime_client::acp::SessionInfo {
             source: Default::default(),
             created_at: "2026-01-01T00:00:00Z".into(),
             parent: None,

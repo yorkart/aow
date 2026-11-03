@@ -5,8 +5,8 @@ use crate::{
     aow::{AowError, AowManager},
 };
 use anyhow::{Context, Result, bail, ensure};
-use aow_acpd_client::AcpClient;
 use aow_agents::automation::{AgentAutomation, PromptMode};
+use aow_runtime_client::acp::AcpClient;
 use std::{path::Path, process::Stdio, time::Duration};
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
@@ -37,7 +37,7 @@ pub(super) async fn test_with_timeout(
             .kill_on_drop(true).status().await?;
         ensure!(status.success(), "Unable to initialize connection test workspace");
         match &role.config.runtime {
-            RoleRuntime::Acp { agent_id } if state.acp.is_remote() => state.acp.probe(agent_id, workspace.path().into(), state.aow.role_acp_environment(role)?).await,
+            RoleRuntime::Acp { agent_id } if state.acp.runtime().is_some() => state.acp.probe(agent_id, workspace.path().into(), state.aow.role_acp_environment(role)?).await,
             RoleRuntime::Acp { agent_id } => acp(&state.aow, role, agent_id, workspace.path()).await,
             RoleRuntime::Cli { .. } => cli(&state.aow, role, workspace.path()).await,
         }
@@ -49,13 +49,7 @@ struct ProbeService(AcpClient);
 impl Drop for ProbeService {
     fn drop(&mut self) {
         // Disconnect on success, failure, timeout and request cancellation.
-        if let Some(service) = self.0.embedded_service() {
-            for session in service.sessions(None) {
-                if let Ok(Some(connection)) = service.session_connection_info(&session.thread_id) {
-                    let _ = service.disconnect(&connection.id);
-                }
-            }
-        }
+        self.0.disconnect_all();
     }
 }
 
@@ -78,7 +72,7 @@ async fn acp(manager: &AowManager, role: &AgentRole, agent_id: &str, cwd: &Path)
         .prepare_session_with_options(
             agent_id,
             cwd.into(),
-            aow_acp::SessionCreation {
+            aow_runtime_client::acp::SessionCreation {
                 execution_environment: Some(manager.role_acp_environment(role)?),
                 ..Default::default()
             },

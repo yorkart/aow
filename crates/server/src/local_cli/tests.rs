@@ -1,5 +1,5 @@
 use super::*;
-use aow_terminald_client::{TerminaldClient, TerminaldClientError};
+use aow_local_client::{LocalClient, LocalClientError};
 use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode},
@@ -10,12 +10,14 @@ use tower::ServiceExt;
 #[tokio::test]
 async fn project_queries_return_registry_metadata_without_git_or_terminald() {
     let directory = tempfile::tempdir().unwrap();
-    let state =
-        AppState::with_terminald_socket(PathBuf::new(), directory.path().join("no-terminald.sock"));
+    let state = AppState::for_test_with_runtime_config(
+        PathBuf::new(),
+        directory.path().join("no-terminald.sock"),
+    );
     let server = start_local_cli(state.clone(), directory.path())
         .await
         .unwrap();
-    let client = TerminaldClient::new(directory.path().join("runtime/cli/cli.sock"));
+    let client = LocalClient::new(directory.path().join("runtime/cli/cli.sock"));
     assert_eq!(
         client.get_json::<Value>("/v1/projects").await.unwrap(),
         json!({"items":[]})
@@ -81,7 +83,7 @@ async fn project_queries_return_registry_metadata_without_git_or_terminald() {
 
     assert!(matches!(
         client.get_json::<Value>("/v1/projects/missing").await,
-        Err(TerminaldClientError::HttpStatus {
+        Err(LocalClientError::HttpStatus {
             status: StatusCode::NOT_FOUND,
             ..
         })
@@ -90,7 +92,7 @@ async fn project_queries_return_registry_metadata_without_git_or_terminald() {
         client
             .post_json::<_, Value>("/v1/projects", &json!({}))
             .await,
-        Err(TerminaldClientError::HttpStatus {
+        Err(LocalClientError::HttpStatus {
             status: StatusCode::METHOD_NOT_ALLOWED,
             ..
         })
@@ -115,7 +117,7 @@ async fn project_queries_return_registry_metadata_without_git_or_terminald() {
     );
     assert!(matches!(
         client.get_json::<Value>(&path).await,
-        Err(TerminaldClientError::HttpStatus {
+        Err(LocalClientError::HttpStatus {
             status: StatusCode::NOT_FOUND,
             ..
         })

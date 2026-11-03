@@ -125,7 +125,7 @@ mod tests {
     #[tokio::test]
     async fn standalone_id_allocation_is_not_exposed() {
         let directory = tempfile::tempdir().unwrap();
-        let app = build_router(AppState::new(directory.path().to_owned()));
+        let app = build_router(AppState::for_test(directory.path().to_owned()));
         let response = app
             .clone()
             .oneshot(Request::post("/api/ids").body(Body::empty()).unwrap())
@@ -137,7 +137,7 @@ mod tests {
     #[tokio::test]
     async fn untrusted_raw_documents_are_downloaded_and_sandboxed_without_breaking_images() {
         let directory = tempfile::tempdir().unwrap();
-        let app = build_router(AppState::new(directory.path().to_owned()));
+        let app = build_router(AppState::for_test(directory.path().to_owned()));
         for (name, attachment) in [
             ("preview.html", true),
             ("preview.svg", true),

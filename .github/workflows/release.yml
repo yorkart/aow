@@ -85,18 +85,21 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: vt-worker/package-lock.json
+          cache-dependency-path: runtime/vt-worker/package-lock.json
       - name: Set up Rust
         run: rustup toolchain install stable --profile minimal --component clippy --component rustfmt --no-self-update && rustup default stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
+          workspaces: |
+            . -> target
+            runtime -> ../target
           shared-key: test-${{ matrix.runner }}
           cache-bin: false
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Test VT worker
         run: |
-          npm --prefix vt-worker ci --ignore-scripts --no-audit --no-fund
-          npm --prefix vt-worker test
+          npm --prefix runtime/vt-worker ci --ignore-scripts --no-audit --no-fund
+          npm --prefix runtime/vt-worker test
       - name: Test Git platform providers
         run: node --test git-platform-providers/tests/*.test.mjs
       - name: Test Rust workspace
@@ -106,10 +109,13 @@ jobs:
             export TMPDIR
           fi
           cargo test --workspace --locked -- --test-threads=4
+          cargo test --manifest-path runtime/Cargo.toml --workspace --locked --target-dir target -- --test-threads=4
       - name: Check Rust formatting and lint
         run: |
           cargo fmt --all -- --check
+          cargo fmt --manifest-path runtime/Cargo.toml --all -- --check
           cargo clippy --workspace --all-targets --locked -- -D warnings
+          cargo clippy --manifest-path runtime/Cargo.toml --workspace --all-targets --locked --target-dir target -- -D warnings
       - name: Check macOS C bridge
         if: runner.os == 'macOS'
         run: |
@@ -147,7 +153,7 @@ jobs:
           cache: npm
           cache-dependency-path: |
             frontend/package-lock.json
-            vt-worker/package-lock.json
+            runtime/vt-worker/package-lock.json
       - name: Build and check frontend
         env:
           NODE_OPTIONS: --max-old-space-size=4096
@@ -163,8 +169,8 @@ jobs:
       - name: Build portable VT worker bundle
         if: needs.version.outputs.native-packages == 'true'
         run: |
-          npm --prefix vt-worker ci --ignore-scripts --no-audit --no-fund
-          npm --prefix vt-worker run build
+          npm --prefix runtime/vt-worker ci --ignore-scripts --no-audit --no-fund
+          npm --prefix runtime/vt-worker run build
       - name: Upload shared web assets
         if: needs.version.outputs.native-packages == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -172,7 +178,7 @@ jobs:
           name: web-assets
           path: |
             frontend/dist/
-            vt-worker/dist/
+            runtime/vt-worker/dist/
           if-no-files-found: error
           retention-days: 1
 

@@ -1,6 +1,6 @@
 use crate::aow::AowManager;
-use aow_acp::Content;
-use aow_acpd_client::AcpClient;
+use aow_runtime_client::acp::AcpClient;
+use aow_runtime_client::acp::Content;
 use serde_json::json;
 
 const COLLABORATION: &str = r#"You are working in AoW. A task is a continuing work space with a main conversation, other role conversations, and independent child tasks. Keep developing the current conversation across investigation, corrections, design and implementation. Conversation turns do not determine task completion.

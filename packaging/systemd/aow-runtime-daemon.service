@@ -4,7 +4,8 @@ After=network.target
 
 [Service]
 Type=exec
-ExecStart=%h/.local/bin/aow-runtime-daemon --state-dir %h/.aow
+EnvironmentFile=-%h/.aow/server.env
+ExecStart=%h/.local/lib/aow/bin/aow-runtime-daemon
 UMask=0077
 Restart=on-failure
 RestartSec=1s

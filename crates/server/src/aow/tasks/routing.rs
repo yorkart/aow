@@ -31,7 +31,7 @@ pub(crate) fn cli_routes() -> Router<AppState> {
 impl AowManager {
     pub(crate) async fn task_policy_for_thread(
         &self,
-        service: &aow_acpd_client::AcpClient,
+        service: &aow_runtime_client::acp::AcpClient,
         thread: &str,
     ) -> anyhow::Result<Option<aow_db::tasks::ConversationPolicy>> {
         let Some(task) = self.task_for_thread(service, thread).await? else {
@@ -68,7 +68,7 @@ impl AowManager {
 
     pub(crate) async fn task_for_thread(
         &self,
-        service: &aow_acpd_client::AcpClient,
+        service: &aow_runtime_client::acp::AcpClient,
         thread: &str,
     ) -> anyhow::Result<Option<TaskRecord>> {
         let tasks = self.inner.tasks.list()?;

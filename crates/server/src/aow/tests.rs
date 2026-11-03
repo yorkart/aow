@@ -39,7 +39,7 @@ async fn prepared_worktree_uses_selected_base_and_lists_unchecked_local_and_remo
     git_output(&repo, &["branch", "feature/unopened"])
         .await
         .unwrap();
-    let state = AppState::new(root.join("state"));
+    let state = AppState::for_test(root.join("state"));
     let manager = state.aow.clone();
     let project = manager
         .register_project(RegisterProjectRequest {
@@ -730,7 +730,7 @@ async fn pinned_directories_routes_validate_paths_and_reject_files() {
     let directory = tempfile::tempdir().unwrap();
     let regular_file = directory.path().join("file.txt");
     std::fs::write(&regular_file, "not a directory").unwrap();
-    let app = crate::build_router(AppState::new(directory.path().to_path_buf()));
+    let app = crate::build_router(AppState::for_test(directory.path().to_path_buf()));
     for invalid in [
         "relative/path",
         "/bad\0path",
@@ -1158,7 +1158,7 @@ async fn agent_registration_api_requires_a_supported_type() {
     use axum::{body::Body, http::Request};
     use tower::ServiceExt;
     let directory = tempfile::tempdir().unwrap();
-    let app = crate::build_router(AppState::new(directory.path().to_path_buf()));
+    let app = crate::build_router(AppState::for_test(directory.path().to_path_buf()));
     for agent_type in [
         None,
         Some(serde_json::Value::Null),

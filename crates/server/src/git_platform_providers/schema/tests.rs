@@ -12,7 +12,7 @@ async fn public_schema_is_anonymous_static_and_does_not_open_other_provider_rout
     let directory = tempfile::tempdir().unwrap();
     auth::write_credentials(directory.path(), "admin", "test-password");
     for prefix in ["", "/tools/aow"] {
-        let mut state = AppState::new(directory.path().to_owned())
+        let mut state = AppState::for_test(directory.path().to_owned())
             .with_base_path(BasePath::parse(prefix).unwrap());
         state.auth = auth::AuthService::persistent(directory.path());
         let app = crate::build_router(state);
@@ -136,7 +136,7 @@ fn public_contract_has_resolvable_definitions_for_every_read_operation() {
 
 #[tokio::test]
 async fn old_provider_routes_are_not_aliases() {
-    let app = crate::build_router(AppState::new(std::path::PathBuf::new()));
+    let app = crate::build_router(AppState::for_test(std::path::PathBuf::new()));
     for path in [
         "/api/public/review-provider-schema",
         "/api/aow/review-providers",

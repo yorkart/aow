@@ -60,8 +60,12 @@ fi
 if [ -n "${AOW_SERVER_STATE_DIR:-}" ]; then
     set -- "$@" --state-dir "$AOW_SERVER_STATE_DIR"
 fi
-if [ -n "${AOW_TERMINALD_SOCKET:-}" ]; then
-    set -- "$@" --terminald-socket "$AOW_TERMINALD_SOCKET"
+if [ -n "${AOW_RUNTIME_URL:-}" ]; then
+    set -- "$@" --runtime-url "$AOW_RUNTIME_URL"
+fi
+
+if [ -n "${AOW_RUNTIME_TOKEN_FILE:-}" ]; then
+    set -- "$@" --runtime-token-file "$AOW_RUNTIME_TOKEN_FILE"
 fi
 
 exec "$@"

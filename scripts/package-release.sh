@@ -28,7 +28,7 @@ Does not install, publish or touch services. Prints the package's absolute path.
   --version VERSION       Default: UTC timestamp + Git SHA.
   --output-dir DIRECTORY  Default: <repository>/target/packages.
   --skip-build            Use target/<native Rust target>/release and frontend/dist.
-  --skip-web-build        Build Rust binaries using existing frontend/dist and vt-worker/dist.
+  --skip-web-build        Build Rust binaries using existing frontend/dist and runtime/vt-worker/dist.
   -h, --help              Show help.
 
 Creates an adjacent .sha256 file for installation with just install.
@@ -121,7 +121,7 @@ main() {
         fi
         if (( skip_web_build )); then
             [[ -f "$repo_root/frontend/dist/index.html" ]] || fail 'missing frontend/dist/index.html'
-            [[ -f "$repo_root/vt-worker/dist/vt-worker.mjs" ]] || fail 'missing vt-worker/dist/vt-worker.mjs'
+            [[ -f "$repo_root/runtime/vt-worker/dist/vt-worker.mjs" ]] || fail 'missing runtime/vt-worker/dist/vt-worker.mjs'
         else
             command -v npm >/dev/null || fail 'npm is required'
             (
@@ -130,7 +130,7 @@ main() {
                 npm run build
             ) >&2
             (
-                cd "$repo_root/vt-worker"
+                cd "$repo_root/runtime/vt-worker"
                 npm ci --ignore-scripts --no-audit --no-fund
                 npm run build
             ) >&2
@@ -138,15 +138,16 @@ main() {
         (
             cd "$repo_root"
             cargo build --locked --release --target "$target" --target-dir "$repo_root/target" \
-                -p aow-server -p aow-acpd -p aow-runtime-daemon -p aow-terminald -p aow-automations -p aow-cli \
-                --bin aow-server --bin aow-acpd --bin aow-runtime-daemon --bin aow-terminald --bin aow-automation-runner --bin aow-cli
+                -p aow-server -p aow-automations -p aow-cli \
+                --bin aow-server --bin aow-automation-runner --bin aow-cli
+            cargo build --manifest-path runtime/Cargo.toml --locked --release --target "$target" --target-dir "$repo_root/target" -p aow-runtime-daemon --bin aow-runtime-daemon
         ) >&2
     fi
     stage=$(mktemp -d "$output_dir/.package-$version.XXXXXX")
     local bundle=$stage/bundle entry elf_info
     mkdir -p "$bundle/bin" "$bundle/frontend"
     node "$repo_root/scripts/ripgrep.mjs" "$target" "$bundle"
-    for entry in aow-server aow-acpd aow-runtime-daemon aow-terminald aow-automation-runner aow-cli rg; do
+    for entry in aow-server aow-runtime-daemon aow-automation-runner aow-cli rg; do
         if [[ "$entry" != rg ]]; then
             [[ -f "$artifact_dir/$entry" ]] || fail "missing artifact: $artifact_dir/$entry; build the $target release first"
             install -m 0755 -- "$artifact_dir/$entry" "$bundle/bin/$entry"
@@ -196,11 +197,11 @@ JS
         [[ -f "$entry" && ! -L "$entry" ]] || fail "invalid provider resource: $entry"
         install -m 0644 -- "$entry" "$bundle/git-platform-providers/${entry##*/}"
     done
-    for entry in scripts/start-server.sh scripts/start-acpd.sh scripts/start-terminald.sh scripts/replace-symlink.mjs scripts/server-state-dir.sh \
-        scripts/start-launchd.sh scripts/launchd-service.mjs scripts/activate-terminald.mjs scripts/service-health.mjs \
+    for entry in scripts/start-server.sh scripts/start-runtime-daemon.sh scripts/replace-symlink.mjs scripts/server-state-dir.sh \
+        scripts/start-launchd.sh scripts/launchd-service.mjs scripts/activate-runtime.mjs scripts/service-health.mjs \
         scripts/launchd-mode.mjs scripts/start-launchdaemon.mjs scripts/register-launchdaemon.py \
-        packaging/bin/aow packaging/bin/aow-server packaging/bin/aow-acpd packaging/bin/aow-terminald \
-        packaging/systemd/aow-server.service packaging/systemd/aow-acpd.service packaging/systemd/aow-runtime-daemon.service packaging/systemd/aow-terminald.service; do
+        packaging/bin/aow packaging/bin/aow-server packaging/bin/aow-runtime-daemon \
+        packaging/systemd/aow-server.service packaging/systemd/aow-runtime-daemon.service; do
         mkdir -p -- "$(dirname "$bundle/$entry")"
         install -m 0644 -- "$repo_root/$entry" "$bundle/$entry"
     done
@@ -235,7 +236,7 @@ writeFileSync(join(root, 'manifest.json'), JSON.stringify({
     reused_web_assets: skipBuild === '1' || skipWebBuild === '1',
     platform: os === 'linux' ? { os, arch, target, libc: 'musl', linkage: 'static' }
         : { os, arch, target, linkage: 'dynamic', minimum_os_version: minimumOsVersion },
-    components: { server: 'bin/aow-server', acpd: 'bin/aow-acpd', runtime_daemon: 'bin/aow-runtime-daemon', terminald: 'bin/aow-terminald',
+    components: { server: 'bin/aow-server', runtime_daemon: 'bin/aow-runtime-daemon',
         runner: 'bin/aow-automation-runner', cli: 'bin/aow-cli', skills: 'skills', git_platform_providers: 'git-platform-providers', frontend: 'frontend/dist', ripgrep: 'bin/rg' },
     third_party: { ripgrep: { version: JSON.parse(readFileSync(join(root, 'licenses/ripgrep/manifest.json'), 'utf8')).version,
         sha256: createHash('sha256').update(readFileSync(join(root, 'bin/rg'))).digest('hex') } },

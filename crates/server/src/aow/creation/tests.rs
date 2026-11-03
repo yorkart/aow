@@ -31,7 +31,7 @@ async fn fixture() -> (tempfile::TempDir, AppState, Project, CreateWorktreeReque
     )
     .await
     .unwrap();
-    let state = AppState::new(PathBuf::new());
+    let state = AppState::for_test(PathBuf::new());
     let project = state
         .aow
         .register_project(RegisterProjectRequest {

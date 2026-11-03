@@ -304,7 +304,7 @@ pub(super) async fn create(
                         .prepare_session_with_options(
                             &agent,
                             workspace.clone().into(),
-                            aow_acp::SessionCreation {
+                            aow_runtime_client::acp::SessionCreation {
                                 parent: request
                                     .source_thread_id
                                     .as_ref()

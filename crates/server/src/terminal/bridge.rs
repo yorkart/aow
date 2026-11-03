@@ -2,7 +2,7 @@ use super::*;
 
 pub(super) async fn bridge_terminal_socket(
     browser: WebSocket,
-    daemon: TerminaldAttachStream,
+    daemon: RuntimeSocket,
     manager: TerminalManager,
     pane_id: String,
     access: Option<crate::auth::SessionAccess>,

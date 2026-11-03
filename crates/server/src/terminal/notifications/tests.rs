@@ -397,7 +397,7 @@ async fn event_endpoint_requires_aow_login() {
     use tower::ServiceExt;
     let root = tempfile::tempdir().unwrap();
     crate::auth::write_credentials(root.path(), "admin", "test-password");
-    let mut state = AppState::new(root.path().join("frontend"));
+    let mut state = AppState::for_test(root.path().join("frontend"));
     state.auth = crate::auth::AuthService::persistent(root.path());
     let response = crate::build_router(state)
         .oneshot(
@@ -414,7 +414,7 @@ async fn event_endpoint_requires_aow_login() {
 async fn event_endpoint_streams_only_new_callbacks() {
     use axum::body::HttpBody;
     use tower::ServiceExt;
-    let state = AppState::new(PathBuf::from("/tmp/frontend-unused"));
+    let state = AppState::for_test(PathBuf::from("/tmp/frontend-unused"));
     let sender = state.terminals.inner.task_stops.clone();
     let notification = TaskStopNotification {
         agent: "codex".into(),
@@ -548,7 +548,8 @@ async fn codex_like_stops_use_the_expected_environment(with_process: bool) {
     };
     let metadata = Arc::new(Mutex::new(metadata_for("traecli")));
     let socket = directory.path().join("terminald.sock");
-    let listener = tokio::net::UnixListener::bind(&socket).unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    std::fs::write(&socket,serde_json::json!({"url":format!("http://{}",listener.local_addr().unwrap()),"token":"fixture-token-0123456789abcdef0123456789"}).to_string()).unwrap();
     let (scanned, mut scans) = tokio::sync::mpsc::unbounded_channel();
     let daemon_metadata = metadata.clone();
     let daemon = tokio::spawn(async move {
@@ -556,7 +557,7 @@ async fn codex_like_stops_use_the_expected_environment(with_process: bool) {
             let mut stream = BufReader::new(stream);
             let mut line = String::new();
             stream.read_line(&mut line).await.unwrap();
-            assert!(line.starts_with("GET /v1/agents "));
+            assert!(line.starts_with("GET /v1/terminal/agents "));
             loop {
                 line.clear();
                 if stream.read_line(&mut line).await.unwrap() == 0 || line == "\r\n" {
@@ -576,7 +577,7 @@ async fn codex_like_stops_use_the_expected_environment(with_process: bool) {
         }
     });
 
-    let manager = TerminalManager::in_memory(TerminaldClient::new(socket));
+    let manager = TerminalManager::in_memory(TerminalClient::for_test_config(socket));
     let pane: TerminalPane = serde_json::from_value(json!({
         "id": "pane", "name": "project", "cwd": cwd,
         "shell": "/bin/sh", "kind": "terminal", "status": "running",
@@ -597,7 +598,7 @@ async fn codex_like_stops_use_the_expected_environment(with_process: bool) {
         created_at: "now".into(),
         updated_at: "now".into(),
     });
-    let mut state = AppState::new(directory.path().join("frontend"));
+    let mut state = AppState::for_test(directory.path().join("frontend"));
     state.terminals = manager.clone();
     let response = crate::build_router(state)
         .oneshot(

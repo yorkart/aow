@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -10,17 +10,19 @@ async function endpoint(t, component, handler, host = '127.0.0.1') {
   const root = mkdtempSync(join(tmpdir(), 'aow-health-'));
   const server = http.createServer(handler);
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  const socket = join(root, 'daemon.sock');
   await new Promise((resolve, reject) => {
     server.once('error', reject);
-    if (component !== 'server') server.listen(socket, resolve);
-    else server.listen(0, host, resolve);
+    server.listen(0, host, resolve);
   });
   t.after(async () => {
     server.closeAllConnections();
     await new Promise(resolve => server.close(resolve));
   });
-  return { component, host, port: server.address()?.port, socket };
+  if (component !== 'server') {
+    writeFileSync(join(root, 'runtime-daemon.json'), JSON.stringify({ listen: `${host}:${server.address().port}`, token_file: 'token' }));
+    writeFileSync(join(root, 'token'), 'health-fixture-token');
+  }
+  return { component, host, port: server.address()?.port, stateDir: root };
 }
 
 test('server health can reach an IPv6 loopback listener', async t => {
@@ -39,10 +41,11 @@ test('server health can reach an IPv6 loopback listener', async t => {
   await waitForHealth(config, () => 1234, 1000);
 });
 
-for (const component of ['server', 'terminald', 'acpd']) {
+for (const component of ['server', 'runtime-daemon']) {
   test(`${component} health waits for its own process and checks the expected endpoint`, async t => {
     let requests = 0;
     const config = await endpoint(t, component, (request, response) => {
+      if (component !== 'server') assert.equal(request.headers.authorization, 'Bearer health-fixture-token');
       assert.equal(request.url, component === 'server' ? '/api/health' : '/v1/health');
       response.end(JSON.stringify({ service: component === 'server' ? 'aow' : `aow-${component}`,
         ok: true, pid: ++requests === 1 ? 999 : 1234 }));

@@ -1,11 +1,11 @@
 #!/bin/sh
-# Called by start-server/start-terminald; terminald's caller has already obtained y.
+# Called by the Server and runtime-daemon activation helpers.
 set -eu
 umask 077
 
 component=${1:?service component is required}
 requested=${2:-latest}
-case "$component" in server|terminald|acpd) ;; *) exit 1 ;; esac
+case "$component" in server|runtime-daemon) ;; *) exit 1 ;; esac
 script_dir=$(CDPATH='' cd -P "$(dirname "$0")" && pwd)
 repo_root=$(CDPATH='' cd -P "$script_dir/.." && pwd)
 runtime_root=${AOW_RUNTIME_ROOT:-${HOME:?HOME must be set}/.local/lib/aow}
@@ -52,7 +52,7 @@ mkdir -p "$plist_dir" "$runtime_root/active"
 stage=$(mktemp -d "$runtime_root/.launchd-$component.XXXXXX")
 node_path=$(command -v node)
 case "$node_path" in /*) ;; *) fail 'Node.js must resolve to an absolute path' ;; esac
-# PATH may select the managed Node link that terminald activation replaces.
+# PATH may select the managed Node link that runtime-daemon activation replaces.
 node_path=$("$node_path" -e 'process.stdout.write(require("node:fs").realpathSync(process.argv[1]))' "$node_path")
 [ -f "$script_dir/service-health.mjs" ] || fail 'service health helper is missing; reinstall the package'
 node "$script_dir/launchd-service.mjs" "$component" "$runtime_root" "$stage/service.plist" "$node_path"
@@ -61,9 +61,9 @@ previous_active=
 if [ -L "$active" ]; then previous_active=$(readlink "$active"); fi
 if [ -f "$plist" ]; then cp "$plist" "$stage/previous.plist"; fi
 previous_node=
-if [ "$component" = terminald ] && [ -L "$runtime_root/node" ]; then
+if [ "$component" = runtime-daemon ] && [ -L "$runtime_root/node" ]; then
     previous_node=$(readlink "$runtime_root/node")
-    cp "$runtime_root/.aow-terminald-node-target" "$stage/previous-node-marker"
+    cp "$runtime_root/.aow-runtime-daemon-node-target" "$stage/previous-node-marker"
 fi
 was_loaded=0
 if launchctl print "$service" >/dev/null 2>&1; then was_loaded=1; fi
@@ -102,9 +102,9 @@ rollback() {
         if [ -n "$previous_node" ]; then
             ln -s "$previous_node" "$stage/restore-node" || return 1
             rename "$stage/restore-node" "$runtime_root/node" || return 1
-            rename "$stage/previous-node-marker" "$runtime_root/.aow-terminald-node-target" || return 1
+            rename "$stage/previous-node-marker" "$runtime_root/.aow-runtime-daemon-node-target" || return 1
         else
-            rm -f "$runtime_root/node" "$runtime_root/.aow-terminald-node-target" || return 1
+            rm -f "$runtime_root/node" "$runtime_root/.aow-runtime-daemon-node-target" || return 1
         fi
     fi
     if [ -f "$stage/previous.plist" ]; then
@@ -125,15 +125,15 @@ activate() {
     if [ "$was_loaded" = 1 ]; then unload_job || return; fi
     ln -s "$release" "$stage/active" || return
     rename "$stage/active" "$active" || return
-    if [ "$component" = terminald ]; then
+    if [ "$component" = runtime-daemon ]; then
         node_changed=1
         rename "$stage/node" "$runtime_root/node" || return
-        rename "$stage/.aow-terminald-node-target" "$runtime_root/.aow-terminald-node-target" || return
+        rename "$stage/.aow-runtime-daemon-node-target" "$runtime_root/.aow-runtime-daemon-node-target" || return
     fi
     rename "$stage/service.plist" "$plist" || return
     launchctl enable "$service" || return
     launchctl bootstrap "$domain" "$plist" || return
-    # RunAtLoad starts the job. Do not kickstart -k here: a second terminald
+    # RunAtLoad starts the job. Do not kickstart -k here: a second runtime-daemon
     # restart could destroy shells opened during activation.
     node "$script_dir/service-health.mjs" "$stage/health.json" "$service"
 }

@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use aow_terminald_client::{TerminaldClient, TerminaldClientError};
+use aow_local_client::{LocalClient, LocalClientError};
 use clap::{Args, Subcommand};
 use serde_json::Value;
 use std::{io, path::PathBuf, time::Duration};
@@ -39,7 +39,7 @@ enum ProjectCommand {
 }
 
 pub fn execute(args: ProjectArgs, state_dir: PathBuf) -> Result<Value> {
-    let client = TerminaldClient::new(state_dir.join("runtime/cli/cli.sock"));
+    let client = LocalClient::new(state_dir.join("runtime/cli/cli.sock"));
     let path = match args.command {
         ProjectCommand::List => "/v1/projects".to_owned(),
         ProjectCommand::Get { project_id } => format!("/v1/projects/{project_id}"),
@@ -49,7 +49,7 @@ pub fn execute(args: ProjectArgs, state_dir: PathBuf) -> Result<Value> {
             tokio::time::timeout(Duration::from_secs(20), client.get_json::<Value>(&path))
                 .await
                 .map_err(|_| {
-                    TerminaldClientError::Io(io::Error::new(
+                    LocalClientError::Io(io::Error::new(
                         io::ErrorKind::TimedOut,
                         "AoW project query timed out",
                     ))

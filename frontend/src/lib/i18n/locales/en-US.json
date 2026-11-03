@@ -1421,6 +1421,8 @@
     "resume_with_agent": "Resume · {{agent}}"
   },
   "settings": {
+    "runtime_node_url": "Runtime node HTTP(S) URL used for ACP and terminal execution.",
+    "runtime_node_token_file": "Absolute path to the local file containing the runtime node token.",
     "saving_order": "Saving order…",
     "order_saved": "Order saved",
     "drag_handles_to_reorder_within_groups_changes_autosave_and": "Drag handles to reorder within groups. Changes autosave and sync to the Agent menu. Auto detected stays first.",

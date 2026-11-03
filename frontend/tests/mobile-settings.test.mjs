@@ -431,8 +431,8 @@ try {
     const tables = dialog.locator('.server-environment-table');
     assert.equal(await tables.count(), 4);
     const inputs = tables.getByRole('textbox');
-    assert.equal(await inputs.count(), 22);
-    assert.deepEqual(await inputs.evaluateAll(elements => elements.map(element => element.value)), Array(22).fill(''));
+    assert.equal(await inputs.count(), 23);
+    assert.deepEqual(await inputs.evaluateAll(elements => elements.map(element => element.value)), Array(23).fill(''));
     assert.equal(await dialog.getByRole('textbox', { name: 'HOME', exact: true }).count(), 0);
     for (const row of await tables.locator('tbody tr').all()) {
       assert.ok(await row.locator('td').nth(0).textContent(), 'each key has a description');

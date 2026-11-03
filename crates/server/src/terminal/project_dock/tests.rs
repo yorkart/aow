@@ -17,7 +17,7 @@ async fn project_dock_is_atomic_persistent_and_recreated_only_after_deletion() {
     let root = directory.path().to_str().unwrap();
     let socket = directory.path().join("terminald/socket");
     let (shutdown, daemon) = start_daemon(socket.clone()).await;
-    let client = TerminaldClient::new(socket);
+    let client = TerminalClient::for_test_config(socket);
     let state_dir = directory.path().join("state");
     let manager = TerminalManager::persistent(state_dir.clone(), client.clone()).unwrap();
     let ordinary = manager
@@ -92,7 +92,7 @@ async fn project_dock_adopts_only_an_explicit_valid_legacy_id_and_rolls_back_fai
     let root = directory.path().to_str().unwrap();
     let socket = directory.path().join("terminald/socket");
     let (shutdown, daemon) = start_daemon(socket.clone()).await;
-    let client = TerminaldClient::new(socket);
+    let client = TerminalClient::for_test_config(socket);
     let manager = TerminalManager::in_memory(client.clone());
     let old = manager.create(shell_request(root, "Legacy")).await.unwrap();
     assert!(
@@ -173,8 +173,8 @@ async fn project_dock_endpoint_uses_registered_project_defaults_and_rejects_unkn
     );
     let socket = directory.path().join("terminald/socket");
     let (shutdown, daemon) = start_daemon(socket.clone()).await;
-    let client = TerminaldClient::new(socket);
-    let mut state = AppState::new(directory.path().join("frontend"));
+    let client = TerminalClient::for_test_config(socket);
+    let mut state = AppState::for_test(directory.path().join("frontend"));
     state.terminals = TerminalManager::in_memory(client.clone());
     let app = crate::build_router(state);
     let (status, project) = post(

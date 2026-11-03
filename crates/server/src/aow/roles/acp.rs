@@ -4,8 +4,10 @@ use crate::aow::{
     AowError, AowManager,
     registry::{RegistryDocument, atomic_save_document},
 };
-use aow_acp::{Content, ExecutionEnvironment, SessionCreation, SessionSnapshot, SessionSource};
-use aow_acpd_client::AcpClient;
+use aow_runtime_client::acp::AcpClient;
+use aow_runtime_client::acp::{
+    Content, ExecutionEnvironment, SessionCreation, SessionSnapshot, SessionSource,
+};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 

@@ -5,19 +5,19 @@ use aow_protocol::{
 use tokio_tungstenite::tungstenite;
 
 pub(in crate::terminal) struct AgentConnection {
-    pub(in crate::terminal) socket: TerminaldAttachStream,
+    pub(in crate::terminal) socket: RuntimeSocket,
 }
 
 impl AgentConnection {
     pub(in crate::terminal) async fn claim(
-        client: &TerminaldClient,
+        client: &TerminalClient,
         pane_id: &str,
     ) -> Result<Self, TerminalError> {
         Self::claim_with_force(client, pane_id, false).await
     }
 
     pub(in crate::terminal) async fn claim_with_force(
-        client: &TerminaldClient,
+        client: &TerminalClient,
         pane_id: &str,
         force: bool,
     ) -> Result<Self, TerminalError> {

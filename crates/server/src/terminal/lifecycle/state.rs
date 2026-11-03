@@ -3,7 +3,7 @@ use std::sync::MutexGuard;
 use super::super::*;
 
 impl TerminalManager {
-    pub(crate) fn in_memory(terminald: TerminaldClient) -> Self {
+    pub(crate) fn in_memory(terminald: TerminalClient) -> Self {
         Self::in_memory_with_session_query_timeout(
             terminald,
             aow_agents::sessions::tracking::DEFAULT_QUERY_TIMEOUT,
@@ -11,7 +11,7 @@ impl TerminalManager {
     }
 
     pub(in crate::terminal) fn in_memory_with_session_query_timeout(
-        terminald: TerminaldClient,
+        terminald: TerminalClient,
         session_query_timeout: Duration,
     ) -> Self {
         let clipboard = clipboard::ClipboardStorage::temporary();
@@ -41,7 +41,7 @@ impl TerminalManager {
 
     pub(crate) fn persistent(
         state_dir: PathBuf,
-        terminald: TerminaldClient,
+        terminald: TerminalClient,
     ) -> Result<Self, TerminalError> {
         std::fs::create_dir_all(state_dir.join("state"))?;
         let clipboard = clipboard::ClipboardStorage::persistent(&state_dir)?;

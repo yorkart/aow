@@ -13,7 +13,7 @@ use tower::ServiceExt;
 const FIRST_TURN: &str = "{\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\",\"message\":\"first question\"}}\n{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_complete\",\"last_agent_message\":\"first answer\"}}\n";
 
 fn state(root: &Path) -> AppState {
-    let mut state = AppState::new(root.join("frontend"));
+    let mut state = AppState::for_test(root.join("frontend"));
     state.auth = crate::auth::AuthService::persistent(root);
     state.session_shares = SessionShares::persistent(root).unwrap();
     state

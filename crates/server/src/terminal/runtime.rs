@@ -1,31 +1,37 @@
 use super::*;
 
-pub(super) fn map_client_error(error: TerminaldClientError) -> TerminalError {
+pub(super) fn map_client_error(error: RuntimeError) -> TerminalError {
     match &error {
-        TerminaldClientError::Io(_)
-        | TerminaldClientError::Hyper(_)
-        | TerminaldClientError::WebSocket(_) => TerminalError::DaemonUnavailable(error.to_string()),
-        TerminaldClientError::HttpStatus { status, .. } if *status == StatusCode::CONFLICT => {
+        RuntimeError::Http(cause) if cause.is_connect() || cause.is_timeout() => {
+            TerminalError::DaemonUnavailable(error.to_string())
+        }
+        RuntimeError::HttpStatus { status, .. } if status.is_server_error() => {
+            TerminalError::DaemonUnavailable(error.to_string())
+        }
+        RuntimeError::Io(_) | RuntimeError::WebSocket(_) => {
+            TerminalError::DaemonUnavailable(error.to_string())
+        }
+        RuntimeError::HttpStatus { status, .. } if *status == StatusCode::CONFLICT => {
             TerminalError::Conflict(error.to_string())
         }
         _ => TerminalError::Daemon(error.to_string()),
     }
 }
 
-pub(super) fn map_create_error(error: TerminaldClientError) -> TerminalError {
+pub(super) fn map_create_error(error: RuntimeError) -> TerminalError {
     match map_client_error(error) {
         TerminalError::Daemon(message) => TerminalError::RuntimeCreate(message),
         error => error,
     }
 }
 
-pub(super) fn client_error_is_not_found(error: &TerminaldClientError) -> bool {
+pub(super) fn client_error_is_not_found(error: &RuntimeError) -> bool {
     matches!(
         error,
-        TerminaldClientError::HttpStatus { status, .. } if *status == StatusCode::NOT_FOUND
+        RuntimeError::HttpStatus { status, .. } if *status == StatusCode::NOT_FOUND
     ) || matches!(
         error,
-        TerminaldClientError::WebSocket(tungstenite::Error::Http(response))
+        RuntimeError::WebSocket(tungstenite::Error::Http(response))
             if response.status() == StatusCode::NOT_FOUND
     )
 }

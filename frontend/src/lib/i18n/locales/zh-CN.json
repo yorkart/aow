@@ -1421,6 +1421,8 @@
     "resume_with_agent": "恢复 · {{agent}}"
   },
   "settings": {
+    "runtime_node_url": "提供 ACP 和终端执行服务的 Runtime 节点 HTTP(S) 地址。",
+    "runtime_node_token_file": "本机保存 Runtime 节点令牌的文件绝对路径。",
     "saving_order": "正在保存顺序…",
     "order_saved": "顺序已保存",
     "drag_handles_to_reorder_within_groups_changes_autosave_and": "拖动手柄调整组内顺序，自动保存并同步到 Agent 菜单。Auto detected 固定在组首。",

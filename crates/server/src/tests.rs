@@ -22,7 +22,7 @@ async fn filesystem_root_and_home_routes_list_directories() {
     let frontend = root.path().join("frontend");
     std::fs::create_dir(&frontend).unwrap();
     std::fs::write(frontend.join("index.html"), "<div id=root></div>").unwrap();
-    let app = build_router(AppState::new(frontend));
+    let app = build_router(AppState::for_test(frontend));
 
     let root_listing = app
         .clone()
@@ -49,7 +49,7 @@ async fn pull_request_routes_are_read_only_and_require_a_repository() {
     let frontend = root.path().join("frontend");
     std::fs::create_dir(&frontend).unwrap();
     std::fs::write(frontend.join("index.html"), "<div id=root></div>").unwrap();
-    let app = build_router(AppState::new(frontend));
+    let app = build_router(AppState::for_test(frontend));
 
     for path in [
         "/api/my-pull-requests",
@@ -85,7 +85,7 @@ async fn configured_account_protects_api_routes_and_invalidates_changed_password
     std::fs::create_dir(&state_dir).unwrap();
     auth::write_credentials(&state_dir, "admin", "test-password");
 
-    let mut state = AppState::new(frontend);
+    let mut state = AppState::for_test(frontend);
     state.auth = auth::AuthService::persistent(&state_dir);
     let app = build_router(state);
 
@@ -234,7 +234,7 @@ async fn git_sync_routes_pull_and_push_the_requested_worktree() {
     git(&worktree, &["config", "push.default", "upstream"]);
     git(&worktree, &["config", "pull.ff", "only"]);
 
-    let app = build_router(AppState::new(root.path().join("frontend")));
+    let app = build_router(AppState::for_test(root.path().join("frontend")));
     let request = |command: &str, repo: &Path| {
         Request::post(format!("/api/git/{command}"))
             .header(CONTENT_TYPE, "application/json")
@@ -328,7 +328,7 @@ async fn ignored_route_returns_only_ignored_candidates() {
     std::fs::write(repo.join(".gitignore"), "generated/\n").unwrap();
     std::fs::create_dir(repo.join("generated")).unwrap();
     std::fs::create_dir(repo.join("visible")).unwrap();
-    let app = build_router(AppState::new(frontend));
+    let app = build_router(AppState::for_test(frontend));
     let body = serde_json::json!({
         "root": repo,
         "paths": [repo.join("generated"), repo.join("visible"), repo.join(".git")]
@@ -375,7 +375,7 @@ async fn commit_detail_route_returns_commit_json() {
         .unwrap();
     assert!(commit.status.success());
     let commit = String::from_utf8(commit.stdout).unwrap();
-    let app = build_router(AppState::new(frontend));
+    let app = build_router(AppState::for_test(frontend));
     let repo = repo.to_string_lossy().replace(' ', "%20");
     let response = app
         .oneshot(
@@ -404,7 +404,7 @@ async fn router_reads_writes_ranges_and_rejects_stale_versions() {
     let file = root.path().join("sample %20.txt");
     std::fs::write(&file, "abcdef").unwrap();
     let encoded = encode_absolute(&file.to_string_lossy());
-    let app = build_router(AppState::new(frontend));
+    let app = build_router(AppState::for_test(frontend));
 
     let listing = app
         .clone()
@@ -486,7 +486,7 @@ async fn upload_route_can_keep_both_files_without_changing_default_writes() {
     let root = TempDir::new().unwrap();
     let file = root.path().join("报告 #1.png");
     std::fs::write(&file, "original").unwrap();
-    let app = build_router(AppState::new(root.path().to_path_buf()));
+    let app = build_router(AppState::for_test(root.path().to_path_buf()));
     let encoded = encode_absolute(&file.to_string_lossy());
     let response = app
         .clone()
@@ -529,7 +529,7 @@ async fn rename_route_renames_without_overwriting() {
     let existing = root.path().join("existing.txt");
     std::fs::write(&source, "content").unwrap();
     std::fs::write(&existing, "keep").unwrap();
-    let app = build_router(AppState::new(frontend));
+    let app = build_router(AppState::for_test(frontend));
 
     let response = app
         .clone()
@@ -598,7 +598,7 @@ async fn filesystem_entry_routes_create_rename_and_delete_files_and_directories(
     std::fs::create_dir(&frontend).unwrap();
     std::fs::write(frontend.join("index.html"), "<div id=root></div>").unwrap();
     std::fs::create_dir(&workspace).unwrap();
-    let app = build_router(AppState::new(frontend));
+    let app = build_router(AppState::for_test(frontend));
 
     for (name, kind) in [("notes.txt", "file"), ("design", "directory")] {
         let response = app
@@ -681,7 +681,7 @@ async fn aow_notes_use_the_shared_filesystem_routes() {
     std::fs::create_dir(&repository).unwrap();
     std::fs::write(frontend.join("index.html"), "<div id=root></div>").unwrap();
     git(&repository, &["init", "-q", "-b", "main"]);
-    let app = build_router(AppState::new(frontend));
+    let app = build_router(AppState::for_test(frontend));
 
     let register = app
         .clone()
@@ -876,7 +876,7 @@ async fn mobile_entry_is_served_and_ui_selection_survives_redirects() {
     let frontend = root.path().join("frontend");
     std::fs::create_dir(&frontend).unwrap();
     std::fs::write(frontend.join("index.html"), "<div id=root>mobile</div>").unwrap();
-    let app = build_router(AppState::new(frontend));
+    let app = build_router(AppState::for_test(frontend));
     for path in ["/m", "/m/", "/m?ui=mobile"] {
         let response = app
             .clone()
@@ -921,7 +921,7 @@ async fn aow_is_served_and_workspace_route_is_not_served() {
     )
     .unwrap();
     std::fs::write(frontend.join("assets/index-abc123.js"), "console.log('ok')").unwrap();
-    let app = build_router(AppState::new(frontend));
+    let app = build_router(AppState::for_test(frontend));
     let root_redirect = app
         .clone()
         .oneshot(Request::get("/").body(Body::empty()).unwrap())

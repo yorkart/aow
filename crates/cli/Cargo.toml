@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+aow-local-client = { path = "../local-client" }
 aow-i18n = { path = "../i18n" }
 anyhow.workspace = true
 clap.workspace = true
@@ -12,7 +13,6 @@ serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 aow-protocol = { path = "../protocol" }
-aow-terminald-client = { path = "../terminald-client" }
 aow-automations = { path = "../automations" }
 aow-filesystem = { path = "../filesystem" }
 aow-id = { path = "../id" }

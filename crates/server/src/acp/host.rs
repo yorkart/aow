@@ -1,13 +1,14 @@
 use crate::aow::AowManager;
 use anyhow::Result;
-use aow_acp::AcpHost;
-use aow_acpd_client::AcpClient;
+use aow_runtime_client::acp::AcpClient;
+use aow_runtime_client::acp::AcpHost;
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
 
 struct Host {
+    runtime: Option<aow_runtime_client::RuntimeClient>,
     manager: AowManager,
     state_directory: Option<PathBuf>,
     page: tokio::sync::broadcast::Sender<crate::terminal::notifications::TaskStopNotification>,
@@ -19,7 +20,7 @@ impl AcpHost for Host {
     fn session_metadata_changed(&self) {
         self.workspace_events.instances_changed();
     }
-    async fn turn_completed(&self, completion: aow_acp::TurnCompletion) {
+    async fn turn_completed(&self, completion: aow_runtime_client::acp::TurnCompletion) {
         super::notifications::dispatch(&self.manager, &self.page, completion).await;
     }
     fn execution_environment(&self) -> std::collections::BTreeMap<String, String> {
@@ -40,8 +41,20 @@ impl AcpHost for Host {
             self.manager.execution_path().await?,
         )?))
     }
-    async fn read_text_file(&self, _cwd: &Path, path: &Path) -> Result<String> {
+    async fn read_text_file(&self, cwd: &Path, path: &Path) -> Result<String> {
         let _access = self.manager.filesystem_access().await;
+        if let Some(runtime) = &self.runtime {
+            let response: serde_json::Value = runtime
+                .post_json(
+                    "/v1/files/read",
+                    &serde_json::json!({"cwd":cwd,"path":path}),
+                )
+                .await?;
+            return Ok(response["content"]
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("Invalid node file response"))?
+                .into());
+        }
         Ok(aow_filesystem::read_text_file(
             path.to_path_buf(),
             aow_filesystem::DEFAULT_MAX_TEXT_BYTES,
@@ -49,8 +62,17 @@ impl AcpHost for Host {
         .await?
         .content)
     }
-    async fn write_text_file(&self, _cwd: &Path, path: &Path, content: &str) -> Result<()> {
+    async fn write_text_file(&self, cwd: &Path, path: &Path, content: &str) -> Result<()> {
         let _access = self.manager.filesystem_access().await;
+        if let Some(runtime) = &self.runtime {
+            let _: serde_json::Value = runtime
+                .post_json(
+                    "/v1/files/write",
+                    &serde_json::json!({"cwd":cwd,"path":path,"content":content}),
+                )
+                .await?;
+            return Ok(());
+        }
         let data = bytes::Bytes::copy_from_slice(content.as_bytes());
         aow_filesystem::write_atomic_stream(
             path.to_path_buf(),
@@ -68,16 +90,130 @@ pub(crate) fn service(
     page: tokio::sync::broadcast::Sender<crate::terminal::notifications::TaskStopNotification>,
     workspace_events: crate::workspace_events::WorkspaceEvents,
 ) -> Result<AcpClient> {
-    AcpClient::with_storage(
-        Arc::new(Host {
-            manager,
-            page,
-            workspace_events,
-            state_directory: directory.as_ref().map(std::fs::canonicalize).transpose()?,
-        }),
-        directory
-            .as_ref()
-            .map(|directory| directory.join("data/acp")),
-        directory.map(|directory| directory.join("cache/acp")),
-    )
+    service_with_runtime(manager, directory, page, workspace_events, None)
+}
+
+pub(crate) fn service_with_runtime(
+    manager: AowManager,
+    directory: Option<PathBuf>,
+    page: tokio::sync::broadcast::Sender<crate::terminal::notifications::TaskStopNotification>,
+    workspace_events: crate::workspace_events::WorkspaceEvents,
+    runtime: Option<aow_runtime_client::RuntimeClient>,
+) -> Result<AcpClient> {
+    let host = Arc::new(Host {
+        manager,
+        page,
+        workspace_events,
+        runtime: runtime.clone(),
+        state_directory: directory.as_ref().map(std::fs::canonicalize).transpose()?,
+    });
+    let state = directory
+        .as_ref()
+        .map(|directory| directory.join("data/acp"));
+    let cache = directory.map(|directory| directory.join("cache/acp-client"));
+    match runtime {
+        Some(runtime) => AcpClient::with_runtime(runtime, host, state, cache),
+        None => AcpClient::for_test_storage(host, state, cache),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aow_runtime_client::{RuntimeClient, testing::TestRuntime};
+    use serde_json::json;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn server_uses_node_configuration_and_saves_native_acp_history_locally() {
+        let caller = tempfile::tempdir().unwrap();
+        let node = TestRuntime::start(&caller.path().join("node.json")).await;
+        let runtime = RuntimeClient::new(node.endpoint.clone());
+        let script = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../runtime/crates/runtime-daemon/tests/fixtures/agent.mjs");
+        let settings: serde_json::Value = runtime.get_json("/v1/acp/settings").await.unwrap();
+        let _: serde_json::Value = runtime
+            .put_json(
+                "/v1/acp/settings",
+                &json!({
+                    "revision":settings["revision"],
+                    "content":json!({"default_agent_id":"node-agent","agent_servers":{"node-agent":{
+                        "type":"custom","command":"node","args":[script]}}}).to_string()
+                }),
+            )
+            .await
+            .unwrap();
+        // The caller has no adapter configuration. Production AppState must use
+        // the node catalog and transport rather than resolving a local command.
+        let state = crate::AppState::with_runtime(
+            PathBuf::new(),
+            caller.path().into(),
+            node.endpoint.clone(),
+        )
+        .unwrap();
+        assert_eq!(state.acp.agents().await.unwrap()[0].id, "node-agent");
+        let session = state
+            .acp
+            .prepare_session("node-agent", caller.path().into())
+            .await
+            .unwrap();
+        let session = state.acp.resume(&session.thread_id).await.unwrap();
+        state
+            .acp
+            .start_prompt_once(
+                &session.thread_id,
+                "server-turn",
+                serde_json::from_value(json!([{"type":"text","text":"hello"}])).unwrap(),
+            )
+            .await
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                let snapshot = state.acp.snapshot(&session.thread_id).await.unwrap();
+                if let Some(permission) = snapshot.permissions.first() {
+                    state
+                        .acp
+                        .answer(
+                            &session.thread_id,
+                            &permission.id,
+                            json!({"outcome":{"outcome":"selected","optionId":"allow"}}),
+                        )
+                        .await
+                        .unwrap();
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            loop {
+                let snapshot = state.acp.snapshot(&session.thread_id).await.unwrap();
+                if snapshot.status == "idle" {
+                    assert!(
+                        snapshot
+                            .entries
+                            .iter()
+                            .any(|entry| entry.kind == "assistant"
+                                && entry.content["text"] == "permission received")
+                    );
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        state.flush_acp_history().await.unwrap();
+        drop(state);
+        let reopened = crate::AppState::with_runtime(
+            PathBuf::new(),
+            caller.path().into(),
+            node.endpoint.clone(),
+        )
+        .unwrap();
+        let snapshot = reopened.acp.snapshot(&session.thread_id).await.unwrap();
+        assert!(snapshot.entries.iter().any(
+            |entry| entry.kind == "assistant" && entry.content["text"] == "permission received"
+        ));
+        reopened.flush_acp_history().await.unwrap();
+        node.shutdown().await.unwrap();
+    }
 }

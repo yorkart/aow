@@ -90,7 +90,7 @@ async fn history_api_filters_pages_validates_cursors_and_uses_authentication() {
     operation.finish(Outcome::Succeeded, "完成");
     drop(operation);
     drop(service);
-    let mut state = AppState::new(Default::default());
+    let mut state = AppState::for_test(Default::default());
     state.operations = OperationService::persistent(dir.path()).unwrap();
     let router = crate::build_router(state.clone());
     let response = router
@@ -164,7 +164,7 @@ async fn history_api_filters_pages_validates_cursors_and_uses_authentication() {
 #[tokio::test]
 async fn reconnect_stream_starts_with_current_snapshot() {
     use futures_util::StreamExt;
-    let state = AppState::new(Default::default());
+    let state = AppState::for_test(Default::default());
     let operation = state.operations.begin(spec("live"));
     operation.progress("正在执行", Some(1));
     let response = crate::build_router(state.clone())

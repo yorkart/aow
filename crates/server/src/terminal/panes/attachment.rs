@@ -24,11 +24,11 @@ impl TerminalManager {
         tab_id: &str,
         pane_id: &str,
         options: AttachOptions<'_>,
-    ) -> Result<TerminaldAttachStream, TerminalError> {
+    ) -> Result<RuntimeSocket, TerminalError> {
         self.ensure_pane(tab_id, pane_id)?;
         let hosted = self.hosting(pane_id)?.is_some();
         let controlled = options.controlled || self.cli_agent(pane_id).is_ok() || hosted;
-        let mut daemon_options = aow_terminald_client::TerminalAttachOptions {
+        let mut daemon_options = aow_runtime_client::TerminalAttachOptions {
             epoch: options.epoch,
             after: options.after,
             controlled,

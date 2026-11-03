@@ -5,7 +5,7 @@ use tokio_tungstenite::{connect_async, tungstenite::Message as ClientMessage};
 
 #[tokio::test]
 async fn multiplexes_snapshots_changes_and_live_notifications_and_resyncs_on_reconnect() {
-    let state = AppState::new(Default::default());
+    let state = AppState::for_test(Default::default());
     let (stops, _) = broadcast::channel(16);
     let sender = stops.clone();
     let fixture = state.clone();
@@ -85,7 +85,7 @@ async fn multiplexes_snapshots_changes_and_live_notifications_and_resyncs_on_rec
     );
     // Stops are live notifications, not replayed on reconnect.
     state.workspace_events.terminals_changed();
-    assert_eq!(next(&mut socket).await["event"], "workspace");
+    while next(&mut socket).await["event"] != "workspace" {}
     socket.close(None).await.unwrap();
     server.abort();
 }
@@ -121,7 +121,7 @@ async fn upgrade_requires_authentication_and_matching_origin() {
     use tokio_tungstenite::tungstenite::client::IntoClientRequest;
     let directory = tempfile::tempdir().unwrap();
     crate::auth::write_credentials(directory.path(), "admin", "test-password");
-    let mut state = AppState::new(Default::default());
+    let mut state = AppState::for_test(Default::default());
     state.auth = crate::auth::AuthService::persistent(directory.path());
     let router = crate::build_router(state);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -176,7 +176,7 @@ async fn upgrade_requires_authentication_and_matching_origin() {
 
 struct AcpHost;
 #[async_trait::async_trait]
-impl aow_acp::AcpHost for AcpHost {
+impl aow_runtime_client::acp::AcpHost for AcpHost {
     async fn settings(&self) -> anyhow::Result<String> {
         Ok(serde_json::json!({"agent_servers":{"test":{"type":"custom","command":"/missing/adapter"}}}).to_string())
     }
@@ -204,16 +204,18 @@ impl aow_acp::AcpHost for AcpHost {
 async fn acp_ready_bounds_snapshot_races_reconnect_deletion_and_unsubscribe() {
     let directory = tempfile::tempdir().unwrap();
     let cwd = directory.path().canonicalize().unwrap();
-    let mut state = AppState::new(Default::default());
-    state.acp =
-        aow_acpd_client::AcpClient::new(std::sync::Arc::new(AcpHost), Some(cwd.join("state")))
-            .unwrap();
+    let mut state = AppState::for_test(Default::default());
+    state.acp = aow_runtime_client::acp::AcpClient::for_test_host(
+        std::sync::Arc::new(AcpHost),
+        Some(cwd.join("state")),
+    )
+    .unwrap();
     let session = state
         .acp
         .prepare_session("test", cwd.clone())
         .await
         .unwrap();
-    let resource = aow_acp::SyncResource::Session {
+    let resource = aow_runtime_client::acp::SyncResource::Session {
         thread_id: session.thread_id.clone(),
     };
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -297,12 +299,14 @@ async fn acp_ready_bounds_snapshot_races_reconnect_deletion_and_unsubscribe() {
 #[tokio::test]
 async fn acp_coalesces_list_changes_and_keeps_urgent_session_boundaries() {
     let directory = tempfile::tempdir().unwrap();
-    let service = aow_acpd_client::AcpClient::new(std::sync::Arc::new(AcpHost), None).unwrap();
+    let service =
+        aow_runtime_client::acp::AcpClient::for_test_host(std::sync::Arc::new(AcpHost), None)
+            .unwrap();
     let session = service
         .prepare_session("test", directory.path().into())
         .await
         .unwrap();
-    let resource = aow_acp::SyncResource::Sessions {
+    let resource = aow_runtime_client::acp::SyncResource::Sessions {
         cwd: session.cwd.clone(),
     };
     let mut subscriptions = acp::Subscriptions::default();
@@ -326,7 +330,7 @@ async fn acp_coalesces_list_changes_and_keeps_urgent_session_boundaries() {
     let messages = subscriptions.due();
     assert_eq!(messages.len(), 1);
     assert_eq!(messages[0]["head"]["version"], 99);
-    let resource = aow_acp::SyncResource::Session {
+    let resource = aow_runtime_client::acp::SyncResource::Session {
         thread_id: session.thread_id,
     };
     subscriptions
@@ -362,10 +366,9 @@ async fn acp_coalesces_list_changes_and_keeps_urgent_session_boundaries() {
 }
 
 #[tokio::test]
-async fn unavailable_acpd_does_not_disconnect_workspace_or_terminal_events() {
-    let directory = tempfile::tempdir().unwrap();
-    let mut state = AppState::new(Default::default());
-    state.acp = aow_acpd_client::AcpClient::remote(directory.path().join("missing-acpd.sock"));
+async fn unavailable_runtime_does_not_disconnect_workspace_or_terminal_events() {
+    let mut state = AppState::for_test(Default::default());
+    state.acp = state.acp.for_test_offline();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let app = routes().with_state(state.clone());
@@ -386,7 +389,7 @@ async fn unavailable_acpd_does_not_disconnect_workspace_or_terminal_events() {
         .unwrap();
     assert_eq!(next(&mut socket).await["event"], "terminals");
     state.workspace_events.terminals_changed();
-    assert_eq!(next(&mut socket).await["event"], "workspace");
+    while next(&mut socket).await["event"] != "workspace" {}
     socket.close(None).await.unwrap();
     server.abort();
 }

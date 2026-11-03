@@ -18,7 +18,7 @@ Run the following command on the machine where you want to run AoW:
 curl -fsSL https://github.com/yorkart/aow/releases/latest/download/aow-install.sh | bash
 ```
 
-The installer downloads the package for your platform from GitHub Releases, verifies it, installs it, and starts the web service. On the first installation, you must enter a local login username and password in the terminal and confirm the password before the service starts. Installation and updates also update and start/restart terminald by default, without prompting. Restarting terminald ends any existing terminal sessions it manages. To preserve terminald for one installation or update, use `just install --skip-terminald`, `aow update --skip-terminald`, or append `-s -- --skip-terminald` to `bash` in the command above.
+The installer downloads the package for your platform from GitHub Releases, verifies it, installs it, and starts the web service. On the first installation, you must enter a local login username and password in the terminal and confirm the password before the service starts. Installation and updates also update and start/restart runtime-daemon by default, without prompting. Restarting runtime-daemon ends any existing terminal sessions it manages. To preserve runtime-daemon for one installation or update, use `just install --skip-runtime`, `aow update --skip-runtime`, or append `-s -- --skip-runtime` to `bash` in the command above.
 
 LaunchDaemon installations pause for registration by a local administrator before starting services. They run as the installing account and do not require its desktop login. Subsequent code updates need no administrator privileges; changes to the system service configuration require registration again.
 
@@ -76,7 +76,7 @@ In addition to the runtime dependencies, install Rust stable / Cargo, npm, and j
 
 From the repository root, run `just build` to build and `just test` to run tests. For local deployment, run `just package`, then `just install`. Local packages use the same installation process as GitHub release packages and update the services actually running under the current user. Development services also listen only on localhost by default.
 
-For source development, start `just run-acpd` in a separate terminal before the Web server. Use the same `AOW_STATE_DIR` for both processes; the daemon reuses existing ACP history.
+For source development, start `just run-runtime-daemon` in a separate terminal before the Web server. Use the same `AOW_STATE_DIR` for both processes; Server retains existing ACP history.
 
 The standalone [runtime daemon](docs/runtime/runtime-daemon.md) embeds ACP and
 terminal runtimes in one process and exposes authenticated HTTP management and

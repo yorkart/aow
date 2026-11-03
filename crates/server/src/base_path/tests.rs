@@ -17,7 +17,7 @@ fn fixture(base: &str) -> (tempfile::TempDir, AppState) {
     )
     .unwrap();
     crate::auth::write_credentials(root.path(), "admin", "test-password");
-    let mut state = AppState::new(root.path().to_path_buf());
+    let mut state = AppState::for_test(root.path().to_path_buf());
     state.auth = AuthService::persistent(root.path());
     (root, state.with_base_path(BasePath::parse(base).unwrap()))
 }

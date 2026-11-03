@@ -17,7 +17,7 @@ async fn login_notifies_all_providers_while_anonymous_access_only_logs() {
     let directory = tempfile::tempdir().unwrap();
     std::fs::write(directory.path().join("index.html"), "<head></head>login").unwrap();
     auth::write_credentials(directory.path(), "admin", "secret-password");
-    let mut state = AppState::new(directory.path().to_owned());
+    let mut state = AppState::for_test(directory.path().to_owned());
     state.auth = auth::AuthService::persistent(directory.path());
     state.operations = OperationService::persistent(&directory.path().join("logs")).unwrap();
     let manager = state.aow.notifications();

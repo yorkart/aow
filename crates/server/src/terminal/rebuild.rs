@@ -172,7 +172,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let socket = directory.path().join("terminald/daemon.sock");
         let (shutdown, daemon) = start_daemon(socket.clone()).await;
-        let client = TerminaldClient::new(socket);
+        let client = TerminalClient::for_test_config(socket);
         let manager =
             TerminalManager::persistent(directory.path().join("state"), client.clone()).unwrap();
         let mut exited = pane("exited", TerminalPaneStatus::Exited);
@@ -291,7 +291,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let socket = directory.path().join("terminald/daemon.sock");
         let (shutdown, daemon) = start_daemon(socket.clone()).await;
-        let client = TerminaldClient::new(socket);
+        let client = TerminalClient::for_test_config(socket);
         let manager = TerminalManager::in_memory(client.clone());
         let mut old = tab_with(
             TerminalLayout::Split {

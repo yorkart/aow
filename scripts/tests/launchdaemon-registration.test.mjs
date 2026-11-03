@@ -37,9 +37,9 @@ with tempfile.TemporaryDirectory(prefix='aow-registration-') as temporary:
         }
     request = {'version': 1, 'user': account.pw_name, 'uid': account.pw_uid,
                'home': str(home), 'runtime': str(runtime),
-               'components': {name: config(name) for name in ['server', 'terminald']}}
+               'components': {name: config(name) for name in ['server', 'runtime-daemon']}}
     valid = m.validate_request(request, account)
-    assert [name for name, _ in valid] == ['terminald', 'server']
+    assert [name for name, _ in valid] == ['runtime-daemon', 'server']
     for _, configuration in valid:
         assert configuration['EnvironmentVariables']['AOW_AUTH_SESSION_MAX_AGE_SECONDS'] == '86400'
         assert configuration['EnvironmentVariables']['AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS'] == '7200'
@@ -120,10 +120,10 @@ with tempfile.TemporaryDirectory(prefix='aow-registration-') as temporary:
     daemons = root / 'LaunchDaemons'
     daemons.mkdir()
     m.DAEMON_DIRECTORY = daemons
-    labels = {f'org.aow.service.{name}' for name in ['server', 'terminald']}
+    labels = {f'org.aow.service.{name}' for name in ['server', 'runtime-daemon']}
     running = set(labels)
     previous = {}
-    for component in ['server', 'terminald']:
+    for component in ['server', 'runtime-daemon']:
         path = daemons / f'org.aow.service.{component}.plist'
         previous[path] = plistlib.dumps(config(component))
         path.write_bytes(previous[path])
@@ -149,7 +149,7 @@ with tempfile.TemporaryDirectory(prefix='aow-registration-') as temporary:
                 raise RuntimeError('simulated bootstrap failure')
             running.add(label)
         return ''
-    desired = [(name, config(name, '8283')) for name in ['terminald', 'server']]
+    desired = [(name, config(name, '8283')) for name in ['runtime-daemon', 'server']]
     with patch.object(pathlib.Path, 'lstat', root_owned), \
          patch.object(m, 'launchctl', mocked_launchctl), \
          patch.object(m, 'loaded', lambda label: label in running), \

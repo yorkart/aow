@@ -8,7 +8,7 @@ pub(crate) struct TerminalManager {
 pub(super) struct ManagerInner {
     pub(super) metadata_path: Option<PathBuf>,
     pub(super) state: Mutex<ManagerState>,
-    pub(super) terminald: TerminaldClient,
+    pub(super) terminald: TerminalClient,
     pub(super) session_query_timeout: Duration,
     pub(super) daemon_instance_id: Mutex<Option<String>>,
     pub(super) operation: tokio::sync::Mutex<()>,

@@ -495,7 +495,7 @@ async fn validates_metadata_envelopes_process_limits_and_read_only_operations() 
 
 #[tokio::test]
 async fn uploads_activate_immediately_and_removal_stops_routing_without_enable_flags() {
-    let state = AppState::new(PathBuf::new());
+    let state = AppState::for_test(PathBuf::new());
     let manager = state.git_platform_providers.clone();
     let app = crate::build_router(state);
     let repo = repository();

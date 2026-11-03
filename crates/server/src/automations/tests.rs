@@ -62,7 +62,7 @@ async fn call_text(router: &Router, path: &str) -> (StatusCode, String) {
 
 #[tokio::test]
 async fn cli_import_rebinds_saved_tasks_and_isolates_failures() {
-    use aow_terminald_client::{TerminaldClient, TerminaldClientError};
+    use aow_local_client::{LocalClient, LocalClientError};
     use serde_json::{Value, json};
 
     let directory = tempfile::tempdir().unwrap();
@@ -99,7 +99,7 @@ async fn cli_import_rebinds_saved_tasks_and_isolates_failures() {
     fs::write(&fake, "#!/bin/sh\ntouch \"$0.called\"\n").unwrap();
     fs::set_permissions(&fake, fs::Permissions::from_mode(0o700)).unwrap();
     let state_dir = directory.path().join("state");
-    let mut state = AppState::with_state_dir(
+    let mut state = AppState::for_test_with_state_dir(
         directory.path().join("frontend"),
         state_dir.clone(),
         directory.path().join("no-terminald.sock"),
@@ -139,7 +139,7 @@ async fn cli_import_rebinds_saved_tasks_and_isolates_failures() {
     let server = crate::local_cli::start_local_cli(state, &state_dir)
         .await
         .unwrap();
-    let client = TerminaldClient::new(state_dir.join("runtime/cli/cli.sock"));
+    let client = LocalClient::new(state_dir.join("runtime/cli/cli.sock"));
     let source = json!({
         "id":"12345678", "revision":99, "created_at":"2020-01-01T00:00:00Z", "updated_at":"2020-01-01T00:00:00Z",
         "name":"迁移任务", "prompt":"检查最近变更\n保留换行", "agent":"codex", "kind":"scheduled",
@@ -242,7 +242,7 @@ async fn cli_import_rebinds_saved_tasks_and_isolates_failures() {
     ] {
         assert!(
             matches!(client.post_json::<_, Value>("/v1/automations", &json!({"project_id":project_id, "configuration":configuration})).await,
-            Err(TerminaldClientError::HttpStatus {status, ..}) if status == expected)
+            Err(LocalClientError::HttpStatus {status, ..}) if status == expected)
         );
     }
     assert_eq!(manager.store.tasks().unwrap().len(), 2);
@@ -328,7 +328,7 @@ async fn api_persists_config_sync_errors_and_history_across_server_restarts() {
     fs::write(&fake, "#!/bin/sh\nexit 0\n").unwrap();
     fs::set_permissions(&fake, fs::Permissions::from_mode(0o700)).unwrap();
     let state_dir = directory.path().join("state");
-    let mut state = AppState::with_state_dir(
+    let mut state = AppState::for_test_with_state_dir(
         directory.path().join("frontend"),
         state_dir.clone(),
         directory.path().join("terminal.sock"),
@@ -512,7 +512,7 @@ async fn api_persists_config_sync_errors_and_history_across_server_restarts() {
     )
     .unwrap();
     drop(journal);
-    let mut restarted = AppState::with_state_dir(
+    let mut restarted = AppState::for_test_with_state_dir(
         directory.path().join("frontend"),
         state_dir,
         directory.path().join("terminal.sock"),
@@ -797,7 +797,7 @@ async fn api_validates_temporary_and_dynamic_workspace_tasks() {
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o700)).unwrap();
 
-    let mut state = AppState::with_state_dir(
+    let mut state = AppState::for_test_with_state_dir(
         directory.path().join("frontend"),
         directory.path().join("state"),
         directory.path().join("terminal.sock"),

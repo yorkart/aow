@@ -1,6 +1,6 @@
 use crate::input::TaskInput;
 use anyhow::{Context, Result};
-use aow_terminald_client::TerminaldClient;
+use aow_local_client::LocalClient;
 use clap::{Args, Subcommand, ValueEnum};
 use serde_json::{Value, json};
 use std::{io, path::PathBuf, time::Duration};
@@ -135,7 +135,7 @@ fn scope(path: String, source: Option<String>) -> String {
 }
 
 fn request(state_dir: PathBuf, path: String, body: Option<Value>) -> Result<Value> {
-    let client = TerminaldClient::new(
+    let client = LocalClient::new(
         std::env::current_dir()?
             .join(state_dir)
             .join("runtime/cli/cli.sock"),

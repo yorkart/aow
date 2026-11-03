@@ -2,7 +2,7 @@
 
 `aow-cli` 随 AoW 一起安装，用于查询项目、启动 Agent，以及创建自动化任务、查看执行记录。安装方式见 [README](../README.md)，请将 `~/.local/bin` 加入 `PATH`。
 
-在运行 AoW 的机器上，以同一系统用户执行。`project` 需要 Web 服务运行；`agent` 还需要 terminald，并提前安装、登录对应 Agent CLI；`automation` 查询可在 Web 服务停止时使用。
+在运行 AoW 的机器上，以同一系统用户执行。`project` 需要 Web 服务运行；`agent` 还需要 runtime-daemon，并提前安装、登录对应 Agent CLI；`automation` 查询可在 Web 服务停止时使用。
 
 ## 查询项目
 
@@ -103,7 +103,7 @@ aow-cli agent submit --pane-id PANE-ID --task-file - < task.md
 
 ## 创建 ACP 实例与追溯父子关系
 
-`agent` 管理交互式 Terminal，`acp` 管理 ACP 会话。ACP 命令通过同一个本机 CLI socket 访问 AoW 服务，无需 terminald 或浏览器登录；`--agent-id` 使用 **Settings → ACP** 的配置 ID，与 **Settings → Agents** 的配置独立。
+`agent` 管理交互式 Terminal，`acp` 管理 ACP 会话。ACP 命令通过同一个本机 CLI socket 访问 AoW 服务，无需浏览器登录，执行需要 runtime-daemon；`--agent-id` 使用 **Settings → ACP** 的配置 ID，与 **Settings → Agents** 的配置独立。
 
 ```bash
 # 查询可用的 ACP 配置，并创建会话、提交首个任务
@@ -155,7 +155,7 @@ aow-cli agent create --session-id CURRENT-ACP-SESSION-ID \
   --project-id PROJECT-ID --cwd /repo --agent-id codex
 ```
 
-AoW 服务端在新建、分屏、重建或恢复 Terminal 时，通过 terminald 的通用 `environment` 和 `environment_remove` 启动参数设置自己的 `AOW_INSTANCE`，并清除继承的 `AOW_SESSION_ID` 和 `AOW_ACP_CONNECTION_ID`，避免子 Agent 把调用者的会话身份继续当成自身身份。macOS 下的 `AOW_LOG_MODE` 清理也由服务端指定。terminald 只执行环境变量的设置与清理，不理解这些业务身份；它继续管理 cwd、PTY、TERM、COLORTERM 等终端运行上下文。`environment_remove` 默认是空列表，清理优先于传入的同名设置；这些启动参数参与幂等创建比较，但不会在 HTTP 响应中返回。父关系仍统一保存为 `parent: {kind, id}`，创建时父实例必须存在。移除注入逻辑不会自动改写第三方后端已保存的历史消息；新的消息保持用户原文。
+AoW 服务端在新建、分屏、重建或恢复 Terminal 时，通过 runtime-daemon 的通用 `environment` 和 `environment_remove` 启动参数设置自己的 `AOW_INSTANCE`，并清除继承的 `AOW_SESSION_ID` 和 `AOW_ACP_CONNECTION_ID`，避免子 Agent 把调用者的会话身份继续当成自身身份。macOS 下的 `AOW_LOG_MODE` 清理也由服务端指定。runtime-daemon 只执行环境变量的设置与清理，不理解这些业务身份；它继续管理 cwd、PTY、TERM、COLORTERM 等终端运行上下文。`environment_remove` 默认是空列表，清理优先于传入的同名设置；这些启动参数参与幂等创建比较，但不会在 HTTP 响应中返回。父关系仍统一保存为 `parent: {kind, id}`，创建时父实例必须存在。移除注入逻辑不会自动改写第三方后端已保存的历史消息；新的消息保持用户原文。
 
 ACP 的 `--cwd` 同样必须是指定项目已有的仓库或 worktree 根目录。任务支持 `--task`、`--task-file` 或 `--task-file -`，上限 128 KiB；创建可以不提交任务。`--timeout` 默认 120 秒，范围 1–600 秒。成功表示会话就绪或任务已接受，**不表示任务完成**。`submit` 会恢复已断开的会话；正在处理任务或被其他客户端控制时返回冲突。需要登录或权限确认时，可在网页打开会话处理。
 
@@ -185,7 +185,7 @@ CLI 支持从 JSON 文件创建自动化任务；修改、启用和执行请使�
 
 ## 从文件创建或迁移自动化任务
 
-在目标机器上运行 AoW 服务，以同一系统用户执行；服务使用自定义数据目录时，传入相同的 `--state-dir`。创建通过本机私有 Unix socket 完成，无需浏览器登录或 terminald；对应 Agent 需要已在目标机器安装并配置。
+在目标机器上运行 AoW 服务，以同一系统用户执行；服务使用自定义数据目录时，传入相同的 `--state-dir`。创建通过本机私有 Unix socket 完成，无需浏览器登录，执行需要 runtime-daemon；对应 Agent 需要已在目标机器安装并配置。
 
 ```bash
 # 查询目标项目 ID

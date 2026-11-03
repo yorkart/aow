@@ -5,6 +5,8 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+aow-runtime-client = { path = "../runtime-client" }
+aow-local-client = { path = "../local-client" }
 aow-i18n = { path = "../i18n" }
 aow-id = { path = "../id" }
 aow-db = { path = "../db" }
@@ -27,14 +29,11 @@ aow-automations = { path = "../automations" }
 aow-workspaces = { path = "../workspaces" }
 aow-im = { path = "../im" }
 aow-config = { path = "../config" }
-aow-acp = { path = "../acp" }
-aow-acpd-client = { path = "../acpd-client" }
 aow-filesystem = { path = "../filesystem" }
 aow-git-service = { path = "../git-service" }
 aow-operation-log = { path = "../operation-log" }
 aow-protocol = { path = "../protocol" }
 aow-process = { path = "../process" }
-aow-terminald-client = { path = "../terminald-client" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
@@ -49,8 +48,9 @@ uuid.workspace = true
 tempfile = "3.20"
 
 [dev-dependencies]
+aow-runtime-client = { path = "../runtime-client", features = ["test-support"] }
 rusqlite.workspace = true
-aow-terminald = { path = "../terminald" }
+aow-terminald = { path = "../../runtime/crates/terminald" }
 tower = { version = "0.5", features = ["util"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]

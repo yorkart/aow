@@ -170,18 +170,16 @@ fn main() -> ExitCode {
                 );
                 return ExitCode::from(6);
             }
-            if let Some(transport) =
-                error.downcast_ref::<aow_terminald_client::TerminaldClientError>()
-            {
-                use aow_terminald_client::TerminaldClientError;
+            if let Some(transport) = error.downcast_ref::<aow_local_client::LocalClientError>() {
+                use aow_local_client::LocalClientError;
                 let (code, status) = match transport {
-                    TerminaldClientError::HttpStatus { status, .. } if status.as_u16() == 409 => {
+                    LocalClientError::HttpStatus { status, .. } if status.as_u16() == 409 => {
                         ("conflict", 7)
                     }
-                    TerminaldClientError::HttpStatus { status, .. } if status.as_u16() == 404 => {
+                    LocalClientError::HttpStatus { status, .. } if status.as_u16() == 404 => {
                         ("not_found", 3)
                     }
-                    TerminaldClientError::HttpStatus { status, .. } if status.as_u16() == 400 => {
+                    LocalClientError::HttpStatus { status, .. } if status.as_u16() == 400 => {
                         ("invalid_arguments", 2)
                     }
                     _ => ("server_unavailable", 1),
