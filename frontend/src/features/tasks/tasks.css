@@ -65,11 +65,17 @@
 }
 
 .project-aow-task-list { padding: 3px 6px; }
-.task-collaboration { margin:8px 0; color:var(--aow-muted); font-size:12px; }
-.task-collaboration button { border:0; background:transparent; color:var(--aow-accent); cursor:pointer; font:inherit; }
-.task-collaboration button:disabled { color:var(--aow-muted); cursor:default; }
-.task-collaboration summary { padding:4px 0; cursor:pointer; }
-.task-collaboration-card { overflow-wrap:anywhere; padding:7px 9px; margin-top:5px; border:1px solid var(--aow-line); border-radius:7px; }
-.task-collaboration-card > div:first-child { display:flex; align-items:center; gap:8px; }
-.task-collaboration-title { flex:1; overflow:hidden; text-align:left; text-overflow:ellipsis; white-space:nowrap; }
-.task-collaboration-card pre { max-height:260px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; color:var(--aow-text); }
+.task-properties { padding:10px; overflow:auto; height:100%; }
+.task-properties h3 { margin:0 0 12px; overflow-wrap:anywhere; }
+.task-properties label { display:flex; flex-direction:column; gap:6px; margin:12px 0; color:var(--aow-muted); }
+.task-properties textarea { width:100%; min-height:140px; resize:vertical; }
+.task-properties textarea, .task-properties select { border:1px solid var(--aow-control-line); border-radius:5px; padding:7px; color:var(--aow-text); background:var(--aow-panel); font:inherit; }
+.task-properties button { border:1px solid var(--aow-control-line); border-radius:5px; padding:5px 9px; color:var(--aow-text); background:transparent; cursor:pointer; }
+.task-properties button:disabled { opacity:.5; cursor:default; }
+.task-properties dt { color:var(--aow-muted); margin-top:12px; }
+.task-properties dd { margin:5px 0; overflow-wrap:anywhere; }
+.task-tree-row { display:flex; align-items:center; min-width:0; }
+.task-tree-row > .project-aow-task-row { flex:1; min-width:0; }
+.task-tree-children { padding-left:14px; }
+.task-tree-toggle { display:flex; padding:3px; border:0; color:var(--aow-muted); background:transparent; cursor:pointer; }
+.task-tree-toggle .expanded { transform:rotate(90deg); }

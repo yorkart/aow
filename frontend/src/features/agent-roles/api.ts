@@ -32,5 +32,5 @@ export const rolesApi = {
   save: (config: RoleConfig, id?: string) => mutate<AgentRole>(id ? rolePath(id) : root, id ? 'PUT' : 'POST', config),
   testAndCreate: (config: RoleConfig, request_id: string) => mutate<AgentRole>(`${root}/test-and-create`, 'POST', { ...config, request_id }),
   remove: (id: string) => mutate<void>(rolePath(id), 'DELETE'),
-  launch: (id: string, project_id: string, cwd: string, taskId?: string) => acpRequest<RoleSession>(`${rolePath(id)}/sessions`, { method: 'POST', headers: taskHeaders(taskId), body: JSON.stringify({ project_id, cwd }) }),
+  launch: (id: string, project_id: string, cwd: string, taskId?: string, parent_thread_id?: string) => acpRequest<RoleSession>(`${rolePath(id)}/sessions`, { method: 'POST', headers: taskHeaders(taskId), body: JSON.stringify({ project_id, cwd, parent_thread_id }) }),
 };

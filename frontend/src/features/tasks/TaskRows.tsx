@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Archive, ListTodo, MessageSquare, Pencil, Pin, PinOff, RotateCcw, Trash2 } from 'lucide-react';
+import { Archive, ChevronRight, ListTodo, MessageSquare, Pencil, Pin, PinOff, RotateCcw, Trash2 } from 'lucide-react';
 import { AowListRow } from '../../components/AowListRow';
 import { t } from '../../lib/i18n';
+import { taskTree, type TaskNode } from './tree';
 import { taskTitle, type WorkTask } from './api';
 
-export function TaskRows({ tasks, allTasks, activeId, onSelect, onEdit, onPin, onArchive, onRemove }: {
-  tasks: WorkTask[]; allTasks: WorkTask[]; activeId?: string;
+export function TaskRows({ tasks, activeId, onSelect, onEdit, onPin, onArchive, onRemove }: {
+  tasks: WorkTask[]; activeId?: string;
   onSelect: (task: WorkTask) => void; onEdit: (task: WorkTask) => void;
   onPin: (task: WorkTask) => void; onArchive: (task: WorkTask) => void; onRemove: (task: WorkTask) => void;
 }) {
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [menu, setMenu] = useState<{ task: WorkTask; x: number; y: number }>();
   const menuElement = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -21,13 +23,17 @@ export function TaskRows({ tasks, allTasks, activeId, onSelect, onEdit, onPin, o
     return () => { window.removeEventListener('pointerdown', close); window.removeEventListener('keydown', key); };
   }, [menu]);
   const action = (callback: (task: WorkTask) => void) => { if (menu) callback(menu.task); setMenu(undefined); };
-  return <><div className="project-aow-task-list">{tasks.map(task => {
-    const dependencies = task.dependencies.map(id => allTasks.find(item => item.id === id)).filter((item): item is WorkTask => !!item);
-    const detail = dependencies.length ? `${t('tasks.dependencies')}: ${dependencies.map(taskTitle).join(', ')}` : task.workspace;
-    return <AowListRow key={task.id} className={`project-aow-task-row${activeId === task.id ? ' active' : ''}`} title={taskTitle(task)} tooltip={`${task.prompt}\n${detail}`} active={activeId === task.id}
-      icon={task.is_router ? <MessageSquare /> : <ListTodo />} actions={task.is_router ? <></> : undefined} openLabel={taskTitle(task)} onOpen={() => onSelect(task)} menuLabel={t('tasks.actions')}
-      menuExpanded={menu?.task.id === task.id} onMenu={(x, y) => setMenu({ task, x, y })}><small title={detail}>{task.archived ? t('tasks.archived') : task.is_router ? '' : t('tasks.status_' + (task.status ?? 'todo'))}</small></AowListRow>;
-  })}</div>{menu && createPortal(<div ref={menuElement} role="menu" aria-label={t('tasks.actions')} className="project-aow-context-menu"
+  const render = ({ task, children }: TaskNode) => <div key={task.id} className="task-tree-node" data-task-id={task.id}>
+    <div className="task-tree-row">
+      {children.length > 0 && <button className="task-tree-toggle" type="button" aria-label={t('tasks.children', { task: taskTitle(task) })} aria-expanded={!collapsed.has(task.id)}
+        onClick={() => setCollapsed(current => { const next = new Set(current); if (next.has(task.id)) next.delete(task.id); else next.add(task.id); return next; })}><ChevronRight className={!collapsed.has(task.id) ? 'expanded' : undefined} size={13} /></button>}
+      <AowListRow className={`project-aow-task-row${activeId === task.id ? ' active' : ''}`} title={taskTitle(task)} tooltip={`${task.prompt}\n${task.workspace}`} active={activeId === task.id}
+        icon={task.is_router ? <MessageSquare /> : <ListTodo />} actions={task.is_router ? <></> : undefined} openLabel={taskTitle(task)} onOpen={() => onSelect(task)} menuLabel={t('tasks.actions')}
+        menuExpanded={menu?.task.id === task.id} onMenu={(x, y) => setMenu({ task, x, y })}><small title={task.workspace}>{task.archived ? t('tasks.archived') : task.is_router ? '' : t('tasks.status_' + (task.status ?? 'todo'))}</small></AowListRow>
+    </div>
+    {!collapsed.has(task.id) && children.length > 0 && <div className="task-tree-children">{children.map(render)}</div>}
+  </div>;
+  return <><div className="project-aow-task-list">{taskTree(tasks).map(render)}</div>{menu && createPortal(<div ref={menuElement} role="menu" aria-label={t('tasks.actions')} className="project-aow-context-menu"
     style={{ left: Math.max(8, Math.min(menu.x, window.innerWidth - 240)), top: Math.max(8, Math.min(menu.y, window.innerHeight - 190)) }}>
     <button role="menuitem" onClick={() => action(onEdit)}><Pencil />{t('tasks.edit')}</button>
     <button role="menuitem" onClick={() => action(onPin)}>{menu.task.pinned ? <PinOff /> : <Pin />}{t(menu.task.pinned ? 'tasks.unpin' : 'tasks.pin')}</button>

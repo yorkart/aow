@@ -1725,7 +1725,7 @@ async fn pane_sessions_use_live_cwd_and_config_and_cache_readable_claude_snapsho
 }
 
 #[tokio::test]
-async fn cli_role_tasks_start_with_native_prompts_and_shared_homes() {
+async fn cli_roles_keep_native_workspace_sessions_but_cannot_create_tasks() {
     use std::os::unix::fs::PermissionsExt;
     let directory = TempDir::new().unwrap();
     let root = directory.path().canonicalize().unwrap();
@@ -1774,14 +1774,31 @@ async fn cli_role_tasks_start_with_native_prompts_and_shared_homes() {
         "name":"CLI reviewer", "home_layout":"claude", "identity":{"kind":"local_home","source":null},
         "instruction":"Review carefully", "runtime":{"mode":"cli", "agent_id":"role-runtime"}
     })).await;
-    let request = serde_json::json!({"request_id":"claude-role-task", "project_id":project["id"], "prompt":"--review this\nsecond line", "agent_role_id":role["id"], "workspace_mode":"existing", "workspace":repo});
-    let task = post(&app, "/api/aow/tasks", request.clone()).await;
-    assert!(task["initial_thread_id"].is_null());
-    assert_eq!(task["resources"][0]["kind"], "terminal");
-    assert_eq!(post(&app, "/api/aow/tasks", request).await, task);
+    let request = serde_json::json!({"request_id":"claude-role-task", "project_id":project["id"], "prompt":"Review", "agent_role_id":role["id"], "workspace_mode":"existing", "workspace":repo});
+    let rejected = app
+        .clone()
+        .oneshot(
+            Request::post("/api/aow/tasks")
+                .header("content-type", "application/json")
+                .body(Body::from(request.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rejected.status(), StatusCode::BAD_REQUEST);
+    assert!(state.aow.task_db().list().unwrap().is_empty());
+    let launched = post(
+        &app,
+        &format!(
+            "/api/aow/agent-roles/{}/sessions",
+            role["id"].as_str().unwrap()
+        ),
+        serde_json::json!({"project_id":project["id"],"cwd":repo}),
+    )
+    .await;
     let terminal = state
         .terminals
-        .get_snapshot(task["resources"][0]["id"].as_str().unwrap())
+        .get_snapshot(launched["terminal"]["id"].as_str().unwrap())
         .unwrap();
     assert!(terminal.panes[0].parent.is_none());
     assert!(terminal.panes[0].agent_terminal.is_none());
@@ -1794,7 +1811,7 @@ async fn cli_role_tasks_start_with_native_prompts_and_shared_homes() {
     assert_eq!(
         std::fs::read_to_string(&output).unwrap(),
         format!(
-            "{}\n{}\n--append-system-prompt\nReview carefully\n--\n--review this\nsecond line\n",
+            "{}\n{}\n--append-system-prompt\nReview carefully\n",
             home.display(),
             home.join(".claude").display()
         )
@@ -1841,8 +1858,8 @@ async fn cli_role_tasks_start_with_native_prompts_and_shared_homes() {
     .unwrap();
     assert_eq!(
         std::fs::read_to_string(&output).unwrap(),
-        format!("{invocation}--\n--review this\nsecond line\n{invocation}"),
-        "rebuilding the terminal must not replay the initial task"
+        format!("{invocation}{invocation}"),
+        "rebuilding a workspace role preserves its native configuration"
     );
     // A workspace session of the same role keeps the updated home and has no
     // Task prompt or managed-startup adapter imposed on its native terminal.

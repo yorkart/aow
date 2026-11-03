@@ -51,10 +51,10 @@ impl TaskDb {
                 include_str!("sql/routing.sql"),
                 include_str!("sql/collaboration.sql"),
                 include_str!("sql/executions.sql"),
+                include_str!("sql/messages.sql"),
             ],
         )?;
         let db = Self(Arc::new(Mutex::new(connection)));
-        db.migrate_waiting()?;
         Ok(db)
     }
 
@@ -107,10 +107,14 @@ impl TaskDb {
     }
 
     pub fn insert(&self, task: &TaskRecord) -> Result<()> {
-        self.insert_with_run(task, None)
+        self.insert_with_message(task, None)
     }
 
-    pub fn insert_with_run(&self, task: &TaskRecord, run: Option<&super::TaskRun>) -> Result<()> {
+    pub fn insert_with_message(
+        &self,
+        task: &TaskRecord,
+        message: Option<&super::MessageDelivery>,
+    ) -> Result<()> {
         let mut connection = self.lock()?;
         let tx = connection.transaction()?;
         tx.execute("INSERT INTO tasks (id, project_id, prompt, agent_id, workspace, initial_thread_id, pinned, archived, workspace_mode, slug, agent_role_id, is_router, source_task_id, source_thread_id, workspace_intent, target_task_id, target_revision, status) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
@@ -122,8 +126,8 @@ impl TaskDb {
                 params![task.id, resource.kind, resource.id],
             )?;
         }
-        if let Some(run) = run {
-            super::collaboration::insert_run(&tx, run)?;
+        if let Some(message) = message {
+            super::messages::insert(&tx, message)?;
         }
         tx.commit()?;
         Ok(())

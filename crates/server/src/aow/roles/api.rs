@@ -88,6 +88,7 @@ async fn remove(
 struct Launch {
     project_id: String,
     cwd: String,
+    parent_thread_id: Option<String>,
 }
 
 async fn launch(
@@ -105,10 +106,40 @@ async fn launch(
             .await
             .map_err(aow_http_error)?;
         let task = state.aow.task_scope(&headers, std::path::Path::new(&cwd))?;
+        let parent = if let Some(task_id) = &task {
+            let record = state
+                .aow
+                .task_db()
+                .list()
+                .map_err(|error| HttpError::internal(error.to_string()))?
+                .into_iter()
+                .find(|item| &item.id == task_id)
+                .ok_or_else(|| crate::instances::invalid("Task not found"))?;
+            let parent = request.parent_thread_id.or(record.initial_thread_id);
+            if let Some(parent) = &parent {
+                let owner = state
+                    .aow
+                    .task_for_thread(&state.acp, parent)
+                    .map_err(|error| HttpError::internal(error.to_string()))?;
+                if owner.is_none_or(|owner| &owner.id != task_id) {
+                    return Err(crate::instances::invalid(
+                        "Parent conversation must belong to this task",
+                    ));
+                }
+            }
+            parent.map(aow_protocol::InstanceRef::acp)
+        } else {
+            None
+        };
         let role = state.aow.agent_role(&id).map_err(aow_http_error)?;
+        if task.is_some() && matches!(role.config.runtime, super::RoleRuntime::Cli { .. }) {
+            return Err(crate::instances::invalid(
+                "Task conversations require an ACP role",
+            ));
+        }
         let session = state
             .aow
-            .prepare_role_session(&role, &state, &cwd, None)
+            .prepare_role_session(&role, &state, &cwd, None, parent)
             .await?;
         let (kind, id) = session.resource();
         if let Err(error) = state.aow.attach_task_resource(task.as_deref(), kind, id) {

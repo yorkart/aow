@@ -3,6 +3,7 @@ import { InboxPanel } from '../features/inbox/InboxPanel';
 import { useInboxUnread } from '../features/inbox/api';
 import { TaskScopeProvider, useTaskScope } from '../features/tasks/TaskScope';
 import { TaskRows } from '../features/tasks/TaskRows';
+import { TaskProperties } from '../features/tasks/TaskProperties';
 import { TaskDialog } from '../features/tasks/TaskDialog';
 import { useInstanceGraph } from '../features/instances/useInstanceGraph';
 import { taskResourceOwners } from '../features/tasks/membership';
@@ -107,7 +108,7 @@ const minRightSidebarWidth = 220;
 const maxRightSidebarWidth = 640;
 const minCenterWidth = 360;
 
-type RightView = 'files' | 'git' | 'pullRequests' | 'conversations' | 'automations';
+type RightView = 'properties' | 'files' | 'git' | 'pullRequests' | 'conversations' | 'automations';
 type AutomationSessionReference = { taskId: string; runId: string };
 type SessionPreview = { session: AowAgentSession; workspacePath: string; snapshot?: AgentSessionSnapshot; loading: boolean; error?: string; automationRun?: AutomationSessionReference };
 type WorktreeEntry = { project: AowProject; worktree: AowWorktree };
@@ -1109,7 +1110,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     const targetFloating = openingInFloatingWorkspace();
     setOperationError('');
     try {
-      const created = await rolesApi.launch(role.id, project.id, worktree.path, taskScope?.task.id);
+      const created = await rolesApi.launch(role.id, project.id, worktree.path, taskScope?.task.id, acp.tabs.find(tab => `acp:${tab.id}` === activeCenterId)?.thread_id);
       if (created.kind === 'acp') {
         taskScope?.remember('acp', created.session.thread_id);
         const id = acp.open(created.session);
@@ -2075,6 +2076,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const renderSidebar = () => (
     <aside className="project-aow-right" hidden={!rightSidebarVisible}>
       <nav aria-label={t("navigation.aow_side_views")}>
+        {taskScope && <button className={rightView === 'properties' ? 'active' : ''} title={t('tasks.properties')} aria-label={t('tasks.properties')} onClick={() => setRightView('properties')}><ListTodo /></button>}
         <button className={rightView === 'conversations' ? 'active' : ''} title={t("navigation.conversation")} aria-label={t("navigation.conversation")} onClick={() => setRightView('conversations')}><MessageSquare /></button>
         <button className={rightView === 'automations' ? 'active' : ''} title={t("navigation.automation")} aria-label={t("navigation.automation")} onClick={() => setRightView('automations')}><CalendarClock /></button>
         <span className="project-aow-view-separator" aria-hidden="true" />
@@ -2117,6 +2119,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
       <div className="project-aow-right-content" hidden={rightView !== 'pullRequests'}>
         <PullRequestsPanel key={'pull-requests:' + worktree.path} repository={worktree.path} visible={active && rightSidebarVisible && rightView === 'pullRequests'} activeNumber={activePullRequest?.number} activeProvider={activePullRequest?.provider} activeRemote={activePullRequest?.remote} onOpen={pr => selectTab(() => openPullRequest(pr))} />
       </div>
+      {taskScope && <div className="project-aow-right-content" hidden={rightView !== 'properties'}><TaskProperties key={taskScope.task.id} /></div>}
       <div className="project-aow-right-content" hidden={rightView !== 'conversations'}>
         <ConversationPanel key={scope} workspace={worktree.path} visible={active && rightSidebarVisible && rightView === 'conversations'}
           activeTerminalId={terminalDock.visible ? terminalDock.terminalId : activeTerminalId}
@@ -2442,7 +2445,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
   const mutateTask = async (action: () => Promise<void>) => {
     try { await action(); setError(''); taskState.reload(); } catch (reason) { setError(message(reason)); }
   };
-  const renderTasks = (tasks: WorkTask[]) => <TaskRows tasks={tasks} allTasks={taskState.tasks} activeId={taskMode ? activeTaskId : undefined}
+  const renderTasks = (tasks: WorkTask[]) => <TaskRows tasks={tasks} activeId={taskMode ? activeTaskId : undefined}
     onSelect={selectTask} onEdit={task => { const project = projects.find(item => item.id === task.project_id); if (project) setTaskDialog({ project, task }); }}
     onPin={task => { void mutateTask(() => tasksApi.update(task.id, { pinned: !task.pinned })); }}
     onArchive={task => { void mutateTask(() => tasksApi.update(task.id, { archived: !task.archived })); }}

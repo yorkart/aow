@@ -1,6 +1,6 @@
 use super::*;
 use aow_acp::{AcpHost, AcpService, Content};
-use aow_db::tasks::{TaskResource, TaskStatus};
+use aow_db::tasks::{EventKind, EventTarget, TaskEvent, TaskResource, TaskStatus};
 use axum::{
     Router,
     body::{Body, to_bytes},
@@ -59,7 +59,7 @@ async fn task(state: &AppState, root: &Path, id: &str) -> TaskRecord {
         is_router: id == "router",
         source_task_id: None,
         source_thread_id: None,
-        workspace_intent: None,
+        workspace_intent: Some("analyze".into()),
         target_task_id: None,
         target_revision: None,
         workspace: root.to_string_lossy().into_owned(),
@@ -116,388 +116,463 @@ async fn call(app: &Router, method: &str, path: &str, body: Value) -> (StatusCod
 }
 
 #[tokio::test]
-async fn a_busy_source_gets_one_return_after_becoming_idle_even_when_inbox_is_read_and_archived() {
+async fn multiple_turns_do_not_report_but_explicit_reports_wake_the_busy_parent_once() {
     let directory = tempfile::tempdir().unwrap();
     let state = state(directory.path());
-    let router = task(&state, directory.path(), "router").await;
-    let source_thread = router.initial_thread_id.as_deref().unwrap();
-    state.acp.resume(source_thread).await.unwrap();
+    let parent = task(&state, directory.path(), "parent").await;
+    let child = task(&state, directory.path(), "child").await;
+    let parent_thread = parent.initial_thread_id.as_deref().unwrap();
+    let child_thread = child.initial_thread_id.as_deref().unwrap();
+    let db = state.aow.task_db();
+    state.acp.resume(parent_thread).await.unwrap();
     state
         .acp
-        .start_prompt(source_thread, content("wait"))
+        .start_prompt(parent_thread, content("wait"))
         .unwrap();
-    let source = source(&state, &router, source_thread).unwrap();
-    let child = task(&state, directory.path(), "child").await;
-    let mut run = new_run(
-        &child,
-        "run-child".into(),
-        "Count Rust code".into(),
-        Some(source.clone()),
+    for id in ["first", "correction"] {
+        let message = new_message(
+            &child,
+            id.into(),
+            "Check again".into(),
+            Some(source(&state, &parent, parent_thread).unwrap()),
+        );
+        db.enqueue_message(&message).unwrap();
+        worker(&state).deliver(message.clone()).await.unwrap();
+        until(|| {
+            state
+                .acp
+                .snapshot(child_thread)
+                .unwrap()
+                .prompt_receipts
+                .get(&message.id)
+                .is_some_and(|r| r.status != "in_progress")
+        })
+        .await;
+    }
+    assert!(
+        db.inbox(None, false, false, 0, 30)
+            .unwrap()
+            .items
+            .is_empty()
     );
-    run.execution.as_mut().unwrap().workspace_intent = Some("analyze".into());
-    let db = state.aow.task_db();
-    db.enqueue_run(&run).unwrap();
-    state.collaboration.start(&state);
-    until(|| db.run(&run.id).unwrap().unwrap().terminal()).await;
-    let event = db.inbox(None, false, false, 0, 30).unwrap().items.remove(0);
-    assert_eq!(event.run.result.as_deref(), Some("Done"));
-    assert_eq!(event.delivery.unwrap().state, "pending");
-    assert_eq!(state.acp.snapshot(source_thread).unwrap().status, "working");
-    db.update_inbox(&event.id, Some(true), Some(true)).unwrap();
-    state.acp.cancel(source_thread).unwrap();
+    db.set_status("child", TaskStatus::Waiting).unwrap();
+    let app = crate::aow::task_cli_routes().with_state(state.clone());
+    let request = json!({"request_id":"poc-conclusion","source_thread_id":child_thread,"kind":"progress","message":"POC confirmed","target_thread_id":parent_thread});
+    let (status, event) = call(&app, "POST", "/v1/tasks/child/report", request.clone()).await;
+    assert_eq!(status, StatusCode::OK, "{event}");
+    assert_eq!(
+        call(&app, "POST", "/v1/tasks/child/report", request.clone())
+            .await
+            .1,
+        event
+    );
+    assert_eq!(event["source"]["thread_id"], parent_thread);
+    assert_eq!(event["source"]["request"], "wait");
+    let event_id = event["id"].as_str().unwrap();
+    assert_eq!(db.status("child").unwrap(), Some(TaskStatus::Waiting));
+    db.update_inbox(event_id, Some(true), Some(true)).unwrap();
+    assert_eq!(state.acp.snapshot(parent_thread).unwrap().status, "working");
+    state.acp.cancel(parent_thread).unwrap();
     until(|| {
         db.inbox(None, false, true, 0, 30).unwrap().items[0]
             .delivery
             .as_ref()
             .unwrap()
             .state
-            == "processed"
+            == DeliveryState::Delivered
     })
     .await;
-    let snapshot = state.acp.snapshot(source_thread).unwrap();
+    until(|| state.acp.snapshot(parent_thread).unwrap().status == "idle").await;
+    let snapshot = state.acp.snapshot(parent_thread).unwrap();
     assert_eq!(snapshot.prompt_receipts.len(), 1);
-    let wakeups = db.task_runs("router").unwrap();
-    assert_eq!(wakeups.len(), 1);
-    assert_eq!(wakeups[0].trigger, "wakeup");
-    assert_eq!(
-        wakeups[0].caused_by_run_id.as_deref(),
-        Some(run.id.as_str())
+    assert!(
+        snapshot
+            .entries
+            .iter()
+            .any(|entry| entry.content["_meta"]["aow/event"]["id"] == event_id)
     );
-    assert!(wakeups[0].terminal());
-    let wakeup = snapshot
-        .entries
-        .iter()
-        .find(|entry| entry.content["_meta"]["aow/event"]["id"] == event.id)
-        .unwrap();
-    let text = wakeup.content["text"].as_str().unwrap();
-    assert!(text.contains(&run.id));
-    assert!(text.contains(source.turn_id.as_ref().unwrap()));
-    assert!(text.contains(source.message_id.as_ref().unwrap()));
-    assert!(text.contains("Count Rust code"));
-    assert_eq!(db.inbox(None, false, false, 0, 30).unwrap().unread, 0);
-    state.acp.close_session(source_thread).await.unwrap();
-    state.acp.close_session(&run.thread_id).await.unwrap();
+    assert_eq!(
+        db.inbox(None, false, true, 0, 30).unwrap().items.len(),
+        1,
+        "Consuming an event must not publish another report"
+    );
+    let mut conflicting = request;
+    conflicting["message"] = json!("Different conclusion");
+    assert_eq!(
+        call(&app, "POST", "/v1/tasks/child/report", conflicting)
+            .await
+            .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(call(&app,"POST","/v1/tasks/parent/report",json!({"request_id":"wrong-owner","source_thread_id":child_thread,"kind":"result","message":"Not mine"})).await.0,StatusCode::BAD_REQUEST);
+    state.acp.close_session(child_thread).await.unwrap();
+    state.acp.close_session(parent_thread).await.unwrap();
 }
 
 #[tokio::test]
-async fn restart_reconciles_both_crash_windows_without_repeating_prompts() {
+async fn restart_after_acp_admission_does_not_repeat_a_message_or_create_an_inbox_event() {
     let directory = tempfile::tempdir().unwrap();
     let first = state(directory.path());
-    let router = task(&first, directory.path(), "router").await;
-    let source_thread = router.initial_thread_id.as_deref().unwrap();
-    first.acp.resume(source_thread).await.unwrap();
-    let child = task(&first, directory.path(), "child").await;
-    let run = new_run(
-        &child,
-        "durable-run".into(),
-        "Inspect".into(),
-        Some(source(&first, &router, source_thread).unwrap()),
-    );
-    first.aow.task_db().enqueue_run(&run).unwrap();
-    first.acp.resume(&run.thread_id).await.unwrap();
-    // Crash window: ACP has the durable receipt/result, tasks DB still says queued.
+    let target = task(&first, directory.path(), "target").await;
+    let message = new_message(&target, "request".into(), "Inspect".into(), None);
+    first.aow.task_db().enqueue_message(&message).unwrap();
+    first.acp.resume(&message.thread_id).await.unwrap();
     first
         .acp
-        .start_prompt_once(&run.thread_id, &run.id, content(&run.prompt))
+        .start_prompt_once(&message.thread_id, &message.id, content("Inspect"))
         .unwrap();
     until(|| {
-        first.acp.snapshot(&run.thread_id).unwrap().prompt_receipts[&run.id].status != "in_progress"
-    })
-    .await;
-    first.acp.close_session(&run.thread_id).await.unwrap();
-    first.acp.close_session(source_thread).await.unwrap();
-    first.acp.flush_threads_on_quit().unwrap();
-    drop(first);
-    let second = state(directory.path());
-    worker(&second)
-        .execution(second.aow.task_db().run(&run.id).unwrap().unwrap())
-        .await
-        .unwrap();
-    let delivery = second.aow.task_db().active_deliveries().unwrap().remove(0);
-    worker(&second).wakeup(delivery.clone()).await.unwrap();
-    until(|| {
-        second.acp.snapshot(source_thread).unwrap().prompt_receipts[&delivery.prompt_id].status
+        first
+            .acp
+            .snapshot(&message.thread_id)
+            .unwrap()
+            .prompt_receipts[&message.id]
+            .status
             != "in_progress"
     })
     .await;
-    // Crash window: wakeup finished, delivery hasn't been acknowledged in tasks DB.
+    first.acp.close_session(&message.thread_id).await.unwrap();
+    drop(first);
+    let second = state(directory.path());
+    worker(&second).deliver(message.clone()).await.unwrap();
     assert_eq!(
-        second.aow.task_db().active_deliveries().unwrap()[0].state,
-        "admitted"
-    );
-    second.acp.close_session(source_thread).await.unwrap();
-    second.acp.flush_threads_on_quit().unwrap();
-    drop(second);
-    let third = state(directory.path());
-    third.collaboration.start(&third);
-    until(|| third.aow.task_db().active_deliveries().unwrap().is_empty()).await;
-    let page = third
-        .aow
-        .task_db()
-        .inbox(None, false, false, 0, 30)
-        .unwrap();
-    assert_eq!(
-        third.aow.task_db().task_runs("router").unwrap().len(),
-        1,
-        "restart reuses the persisted wakeup run"
-    );
-    assert_eq!(page.items.len(), 1);
-    assert_eq!(page.items[0].delivery.as_ref().unwrap().state, "processed");
-    let log = std::fs::read_to_string(directory.path().join("lineage-prompts.jsonl")).unwrap();
-    assert_eq!(log.lines().count(), 2, "one child prompt and one return");
-}
-
-#[tokio::test]
-async fn send_has_per_request_provenance_fixed_results_and_idempotency() {
-    let directory = tempfile::tempdir().unwrap();
-    let state = state(directory.path());
-    let first = task(&state, directory.path(), "first-source").await;
-    let second = task(&state, directory.path(), "second-source").await;
-    let target = task(&state, directory.path(), "target").await;
-    let app = crate::aow::task_cli_routes()
-        .merge(crate::inbox::routes())
-        .with_state(state.clone());
-    let first_request = json!({"request_id":"first","source_thread_id":first.initial_thread_id,"prompt":"First request"});
-    let (status, accepted) =
-        call(&app, "POST", "/v1/tasks/target/send", first_request.clone()).await;
-    assert_eq!(status, StatusCode::OK, "{accepted}");
-    assert_eq!(
-        call(&app, "POST", "/v1/tasks/target/send", first_request.clone())
-            .await
-            .1["run_id"],
-        accepted["run_id"]
-    );
-    let mut changed = first_request;
-    changed["prompt"] = json!("Different request");
-    assert_eq!(
-        call(&app, "POST", "/v1/tasks/target/send", changed).await.0,
-        StatusCode::BAD_REQUEST
-    );
-    let (status, _) = call(&app, "POST", "/v1/tasks/target/send", json!({
-        "request_id":"second","source_thread_id":second.initial_thread_id,"prompt":"Second request"
-    })).await;
-    assert_eq!(status, StatusCode::OK);
-    until(|| {
-        state
+        second
             .aow
             .task_db()
-            .task_runs("target")
+            .message_for_request("target", "request")
             .unwrap()
-            .iter()
-            .all(TaskRun::terminal)
-    })
-    .await;
-    let db = state.aow.task_db();
-    let runs = db.task_runs("target").unwrap();
-    assert_eq!(runs.len(), 2);
-    assert_ne!(
-        runs[0].source.as_ref().unwrap().thread_id,
-        runs[1].source.as_ref().unwrap().thread_id
+            .unwrap()
+            .state,
+        DeliveryState::Delivered
     );
-    db.remove("target").unwrap();
-    let (status, old) = call(
-        &app,
-        "GET",
-        &format!(
-            "/v1/tasks/target?run_id={}",
-            accepted["run_id"].as_str().unwrap()
-        ),
-        Value::Null,
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(old["run"]["prompt"], "First request");
-    assert_eq!(old["run"]["result"], "Done");
-    state
-        .acp
-        .close_session(target.initial_thread_id.as_deref().unwrap())
-        .await
-        .unwrap();
+    assert_eq!(
+        second
+            .acp
+            .snapshot(&message.thread_id)
+            .unwrap()
+            .prompt_receipts
+            .len(),
+        1
+    );
+    assert!(
+        second
+            .aow
+            .task_db()
+            .inbox(None, false, false, 0, 30)
+            .unwrap()
+            .items
+            .is_empty()
+    );
 }
 
 #[tokio::test]
-async fn missing_source_blocks_only_delivery_and_manual_retry_preserves_result() {
+async fn send_queues_without_waiting_and_enforces_identity_and_task_ownership() {
+    let directory = tempfile::tempdir().unwrap();
+    let state = state(directory.path());
+    let parent = task(&state, directory.path(), "parent").await;
+    let target = task(&state, directory.path(), "target").await;
+    let source = parent.initial_thread_id.as_deref().unwrap();
+    let thread = target.initial_thread_id.as_deref().unwrap();
+    state.acp.resume(thread).await.unwrap();
+    state.acp.start_prompt(thread, content("wait")).unwrap();
+    let app = crate::aow::task_cli_routes().with_state(state.clone());
+    let request = json!({"request_id":"send-1","source_thread_id":source,"prompt":"Continue"});
+    let (status, accepted) = call(&app, "POST", "/v1/tasks/target/send", request.clone()).await;
+    assert_eq!(status, StatusCode::OK, "{accepted}");
+    assert_eq!(accepted["delivery"], "pending");
+    assert_eq!(
+        call(&app, "POST", "/v1/tasks/target/send", request.clone())
+            .await
+            .1,
+        accepted
+    );
+    let mut conflict = request.clone();
+    conflict["prompt"] = json!("Other work");
+    assert_eq!(
+        call(&app, "POST", "/v1/tasks/target/send", conflict)
+            .await
+            .0,
+        StatusCode::BAD_REQUEST
+    );
+    let mut wrong = request.clone();
+    wrong["thread_id"] = json!(source);
+    assert_eq!(
+        call(&app, "POST", "/v1/tasks/target/send", wrong).await.0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        call(&app, "POST", "/v1/tasks/target/runs", request).await.0,
+        StatusCode::NOT_FOUND
+    );
+    state.acp.cancel(thread).unwrap();
+    let db = state.aow.task_db();
+    until(|| {
+        db.message_for_request("target", "send-send-1")
+            .unwrap()
+            .unwrap()
+            .state
+            == DeliveryState::Delivered
+    })
+    .await;
+    until(|| state.acp.snapshot(thread).unwrap().status == "idle").await;
+    assert!(
+        db.inbox(None, false, false, 0, 30)
+            .unwrap()
+            .items
+            .is_empty()
+    );
+    state.acp.close_session(thread).await.unwrap();
+}
+
+#[tokio::test]
+async fn blocked_delivery_can_retry_without_losing_report_or_replaying_accepted_messages() {
     let directory = tempfile::tempdir().unwrap();
     let state = state(directory.path());
     let parent = task(&state, directory.path(), "parent").await;
     let child = task(&state, directory.path(), "child").await;
-    let run = new_run(
-        &child,
-        "failure".into(),
-        "Inspect".into(),
-        Some(
-            source(
-                &state,
-                &parent,
-                parent.initial_thread_id.as_deref().unwrap(),
-            )
-            .unwrap(),
-        ),
-    );
     let db = state.aow.task_db();
-    db.enqueue_run(&run).unwrap();
-    db.finish_run(
-        &run.id,
-        "failed",
-        None,
-        Some("Provider could not start".into()),
-        now(),
-    )
-    .unwrap();
-    state
-        .acp
-        .delete_session(parent.initial_thread_id.as_deref().unwrap())
-        .await
-        .unwrap();
-    worker(&state)
-        .wakeup(db.active_deliveries().unwrap().remove(0))
-        .await
-        .unwrap();
-    let event = db.inbox(None, false, false, 0, 30).unwrap().items.remove(0);
-    assert_eq!(event.run.state, "failed");
-    assert_eq!(event.delivery.unwrap().state, "blocked");
-    db.retry_delivery(&event.id, "retry").unwrap();
-    worker(&state)
-        .wakeup(db.active_deliveries().unwrap().remove(0))
-        .await
-        .unwrap();
+    let event = TaskEvent {
+        id: "report".into(),
+        request_id: "report".into(),
+        project_id: "project".into(),
+        task_id: child.id.clone(),
+        thread_id: child.initial_thread_id.clone().unwrap(),
+        kind: EventKind::Result,
+        message: "Confirmed finding".into(),
+        target: Some(EventTarget {
+            task_id: parent.id.clone(),
+            thread_id: parent.initial_thread_id.clone().unwrap(),
+        }),
+        source: None,
+        created_at: now(),
+    };
+    db.publish_event(&event).unwrap();
+    db.update(&parent.id, None, None, Some(true), None).unwrap();
+    let mut message = db.pending_messages().unwrap().remove(0);
+    message.attempts = 2;
+    worker(&state).deliver(message.clone()).await.unwrap();
     assert_eq!(
-        db.run(&run.id).unwrap().unwrap().error.as_deref(),
-        Some("Provider could not start")
+        db.inbox(None, false, false, 0, 30).unwrap().items[0]
+            .delivery
+            .as_ref()
+            .unwrap()
+            .state,
+        DeliveryState::Blocked
     );
-    assert!(db.active_deliveries().unwrap().is_empty());
-    let attempts = db.task_runs("parent").unwrap();
-    assert_eq!(attempts.len(), 2);
-    assert!(
-        attempts
-            .iter()
-            .all(|run| run.trigger == "wakeup" && run.terminal())
+    db.update(&parent.id, None, None, Some(false), None)
+        .unwrap();
+    db.retry_delivery(&event.id).unwrap();
+    worker(&state)
+        .deliver(db.pending_messages().unwrap().remove(0))
+        .await
+        .unwrap();
+    until(|| state.acp.snapshot(&message.thread_id).unwrap().status == "idle").await;
+    worker(&state).deliver(message.clone()).await.unwrap();
+    assert_eq!(
+        state
+            .acp
+            .snapshot(&message.thread_id)
+            .unwrap()
+            .prompt_receipts
+            .len(),
+        1
     );
-    assert_ne!(attempts[0].id, attempts[1].id);
+    assert_eq!(db.event(&event.id).unwrap().unwrap(), event);
+    state.acp.close_session(&message.thread_id).await.unwrap();
 }
 
 #[tokio::test]
-async fn role_conversations_share_workspace_admission_without_sharing_results() {
+async fn busy_conversations_do_not_starve_other_targets_and_messages_keep_fifo_order() {
     let directory = tempfile::tempdir().unwrap();
     let state = state(directory.path());
-    let developer = task(&state, directory.path(), "developer").await;
-    let reviewer = task(&state, directory.path(), "reviewer").await;
-    let mut change = new_run(&developer, "implement".into(), "wait".into(), None);
-    change.execution.as_mut().unwrap().workspace_intent = Some("change".into());
-    let mut review = new_run(&reviewer, "review".into(), "Review".into(), None);
-    review.execution.as_mut().unwrap().workspace_intent = Some("review".into());
     let db = state.aow.task_db();
-    db.enqueue_run(&change).unwrap();
-    db.enqueue_run(&review).unwrap();
-    let worker = worker(&state);
-    worker.execution(change.clone()).await.unwrap();
-    worker.execution(review.clone()).await.unwrap();
-    assert_eq!(db.run(&review.id).unwrap().unwrap().state, "queued");
+    let mut busy = Vec::new();
+    for index in 0..9 {
+        let task = task(&state, directory.path(), &format!("busy-{index}")).await;
+        let thread = task.initial_thread_id.as_ref().unwrap();
+        state.acp.resume(thread).await.unwrap();
+        state.acp.start_prompt(thread, content("wait")).unwrap();
+        db.enqueue_message(&new_message(&task, "queued".into(), "Later".into(), None))
+            .unwrap();
+        busy.push(thread.clone());
+    }
+    let target = task(&state, directory.path(), "available").await;
+    let thread = target.initial_thread_id.as_ref().unwrap();
+    let first = new_message(&target, "first".into(), "wait".into(), None);
+    let second = new_message(&target, "second".into(), "Continue".into(), None);
+    db.enqueue_message(&first).unwrap();
+    db.enqueue_message(&second).unwrap();
+    state.collaboration.start(&state);
+    until(|| {
+        db.message_for_request(&target.id, "first")
+            .unwrap()
+            .unwrap()
+            .state
+            == DeliveryState::Delivered
+    })
+    .await;
+    assert_eq!(
+        db.message_for_request(&target.id, "second")
+            .unwrap()
+            .unwrap()
+            .state,
+        DeliveryState::Pending
+    );
+    assert!(
+        busy.iter()
+            .all(|thread| state.acp.snapshot(thread).unwrap().status == "working")
+    );
+    state.acp.cancel(thread).unwrap();
+    until(|| {
+        db.message_for_request(&target.id, "second")
+            .unwrap()
+            .unwrap()
+            .state
+            == DeliveryState::Delivered
+    })
+    .await;
+    until(|| state.acp.snapshot(thread).unwrap().status == "idle").await;
+    assert_eq!(state.acp.snapshot(thread).unwrap().prompt_receipts.len(), 2);
+    for thread in busy {
+        state.acp.close_session(&thread).await.unwrap();
+    }
+    state.acp.close_session(thread).await.unwrap();
+}
+
+#[tokio::test]
+async fn conversation_policy_and_task_cancellation_stop_at_task_ownership_boundaries() {
+    let directory = tempfile::tempdir().unwrap();
+    let state = state(directory.path());
+    let parent = task(&state, directory.path(), "parent").await;
+    let parent_thread = parent.initial_thread_id.as_ref().unwrap();
+    let connection =
+        rusqlite::Connection::open(directory.path().join("state/tasks.sqlite3")).unwrap();
+    connection.execute("INSERT INTO task_conversation_policies VALUES (?1,?2,?3)",rusqlite::params![parent_thread,parent.id,json!({"workspace":parent.workspace,"workspace_intent":"review","target_task_id":"target","target_revision":"frozen"}).to_string()]).unwrap();
+    let mut threads = Vec::new();
+    for _ in 0..2 {
+        let session = state
+            .acp
+            .prepare_session_with_options(
+                "test",
+                directory.path().into(),
+                aow_acp::SessionCreation {
+                    parent: Some(aow_protocol::InstanceRef::acp(parent_thread)),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        threads.push(session.thread_id);
+    }
+    let child = TaskRecord {
+        id: "child".into(),
+        initial_thread_id: Some(threads[1].clone()),
+        resources: vec![TaskResource {
+            kind: "acp".into(),
+            id: threads[1].clone(),
+        }],
+        ..parent.clone()
+    };
+    state.aow.task_db().insert(&child).unwrap();
+    let helper_policy = state
+        .aow
+        .task_policy_for_thread(&state.acp, &threads[0])
+        .unwrap()
+        .unwrap();
+    assert_eq!(helper_policy.target_revision.as_deref(), Some("frozen"));
+    let child_policy = state
+        .aow
+        .task_policy_for_thread(&state.acp, &threads[1])
+        .unwrap()
+        .unwrap();
+    assert_eq!(child_policy.workspace_intent.as_deref(), Some("analyze"));
+    assert_eq!(child_policy.target_revision, None);
+    for thread in &threads {
+        state.acp.resume(thread).await.unwrap();
+        state.acp.start_prompt(thread, content("wait")).unwrap();
+    }
+    let app = crate::aow::task_cli_routes().with_state(state.clone());
+    assert_eq!(
+        call(&app, "GET", "/v1/tasks/parent", json!({})).await.1["conversations"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
+        call(
+            &app,
+            "POST",
+            "/v1/tasks/parent/status",
+            json!({"status":"cancelled"})
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    until(|| state.acp.snapshot(&threads[0]).unwrap().status == "idle").await;
+    assert_eq!(state.acp.snapshot(&threads[1]).unwrap().status, "working");
+    for thread in threads {
+        state.acp.close_session(&thread).await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn shared_workspace_review_waits_for_the_active_writer() {
+    let directory = tempfile::tempdir().unwrap();
+    let state = state(directory.path());
+    let writer = task(&state, directory.path(), "writer").await;
+    let reviewer = task(&state, directory.path(), "reviewer").await;
+    let writer_thread = writer.initial_thread_id.as_ref().unwrap();
+    let reviewer_thread = reviewer.initial_thread_id.as_ref().unwrap();
+    let connection =
+        rusqlite::Connection::open(directory.path().join("state/tasks.sqlite3")).unwrap();
+    connection
+        .execute(
+            "UPDATE tasks SET workspace_intent='review' WHERE id='reviewer'",
+            [],
+        )
+        .unwrap();
+    state.acp.resume(writer_thread).await.unwrap();
+    state
+        .acp
+        .start_prompt(writer_thread, content("wait"))
+        .unwrap();
+    let message = new_message(
+        &reviewer,
+        "review".into(),
+        "Inspect committed code".into(),
+        None,
+    );
+    let db = state.aow.task_db();
+    db.enqueue_message(&message).unwrap();
+    worker(&state).deliver(message.clone()).await.unwrap();
+    assert_eq!(
+        db.message_for_request("reviewer", "review")
+            .unwrap()
+            .unwrap()
+            .state,
+        DeliveryState::Pending
+    );
     assert!(
         state
             .acp
-            .snapshot(&review.thread_id)
+            .snapshot(reviewer_thread)
             .unwrap()
             .prompt_receipts
             .is_empty()
     );
-    db.set_status("developer", TaskStatus::Cancelled).unwrap();
-    worker
-        .execution(db.run(&change.id).unwrap().unwrap())
-        .await
-        .unwrap();
-    let queued = new_run(
-        &developer,
-        "queued-before-cancellation".into(),
-        "Must not execute".into(),
-        None,
-    );
-    db.enqueue_run(&queued).unwrap();
-    worker.execution(queued.clone()).await.unwrap();
-    assert_eq!(db.run(&queued.id).unwrap().unwrap().state, "interrupted");
-    assert!(
-        !state
-            .acp
-            .snapshot(&queued.thread_id)
-            .unwrap()
-            .prompt_receipts
-            .contains_key(&queued.id)
-    );
-    until(|| {
-        state
-            .acp
-            .snapshot(&change.thread_id)
-            .unwrap()
-            .prompt_receipts[&change.id]
-            .status
-            != "in_progress"
-    })
-    .await;
-    worker.execution(change.clone()).await.unwrap();
-    worker.execution(review.clone()).await.unwrap();
-    until(|| {
-        state
-            .acp
-            .snapshot(&review.thread_id)
-            .unwrap()
-            .prompt_receipts[&review.id]
-            .status
-            != "in_progress"
-    })
-    .await;
-    worker.execution(review.clone()).await.unwrap();
-    assert_eq!(db.run(&change.id).unwrap().unwrap().state, "interrupted");
+    state.acp.cancel(writer_thread).unwrap();
+    until(|| state.acp.snapshot(writer_thread).unwrap().status == "idle").await;
+    worker(&state).deliver(message).await.unwrap();
     assert_eq!(
-        db.run(&review.id).unwrap().unwrap().result.as_deref(),
-        Some("Done")
+        db.message_for_request("reviewer", "review")
+            .unwrap()
+            .unwrap()
+            .state,
+        DeliveryState::Delivered
     );
-    state.acp.close_session(&change.thread_id).await.unwrap();
-    state.acp.close_session(&review.thread_id).await.unwrap();
-}
-
-#[tokio::test]
-async fn followups_from_wakeups_keep_user_intent_and_reference_the_new_run() {
-    let directory = tempfile::tempdir().unwrap();
-    let state = state(directory.path());
-    let router = task(&state, directory.path(), "router").await;
-    let child = task(&state, directory.path(), "child").await;
-    let thread = router.initial_thread_id.as_deref().unwrap();
-    let mut origin = source(&state, &router, thread).unwrap();
-    origin.request = "Implement login and review it".into();
-    let initial = new_run(
-        &child,
-        "first".into(),
-        "Implement login".into(),
-        Some(origin),
-    );
-    let db = state.aow.task_db();
-    db.enqueue_run(&initial).unwrap();
-    db.finish_run(
-        &initial.id,
-        "result_available",
-        Some("Implemented".into()),
-        None,
-        now(),
-    )
-    .unwrap();
-    let delivery = db.active_deliveries().unwrap().remove(0);
-    let mut wakeup = new_run(
-        &router,
-        delivery.prompt_id.clone(),
-        "WAKEUP envelope".into(),
-        None,
-    );
-    wakeup.id = delivery.prompt_id.clone();
-    db.enqueue_wakeup(&delivery.id, &wakeup).unwrap();
-    state.acp.resume(thread).await.unwrap();
-    state
-        .acp
-        .start_prompt_once(thread, &wakeup.id, content("wait"))
-        .unwrap();
-    let followup = source(&state, &router, thread).unwrap();
-    assert_eq!(followup.request, "Implement login and review it");
-    assert_eq!(followup.parent_run_id.as_deref(), Some(wakeup.id.as_str()));
-    assert_eq!(followup.turn_id.as_deref(), Some(wakeup.id.as_str()));
-    state.acp.cancel(thread).unwrap();
-    state.acp.close_session(thread).await.unwrap();
+    until(|| state.acp.snapshot(reviewer_thread).unwrap().status == "idle").await;
+    state.acp.close_session(writer_thread).await.unwrap();
+    state.acp.close_session(reviewer_thread).await.unwrap();
 }

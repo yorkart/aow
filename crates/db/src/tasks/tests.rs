@@ -28,35 +28,6 @@ fn task(id: &str, dependencies: &[&str]) -> TaskRecord {
     }
 }
 
-fn execution(id: &str, task_id: &str, parent: Option<&str>) -> TaskRun {
-    TaskRun {
-        id: id.into(),
-        request_id: id.into(),
-        task_id: task_id.into(),
-        project_id: "project".into(),
-        thread_id: format!("thread-{task_id}"),
-        prompt: format!("Work {id}"),
-        source: Some(RunSource {
-            task_id: "source".into(),
-            thread_id: "thread-source".into(),
-            turn_id: Some("source-turn".into()),
-            message_id: Some("source-message".into()),
-            request: "Original wording".into(),
-            parent_run_id: parent.map(str::to_owned),
-        }),
-        execution: None,
-        trigger: "message".into(),
-        caused_by_run_id: None,
-        state: "queued".into(),
-        result: None,
-        error: None,
-        created_at: 1,
-        finished_at: None,
-        attempts: 0,
-        retry_at: 0,
-    }
-}
-
 #[test]
 fn business_status_preserves_json_and_sqlite_values() {
     let db = TaskDb::open(None).unwrap();
@@ -101,178 +72,119 @@ fn invalid_business_status_is_rejected_at_json_and_sqlite_boundaries() {
     }
 }
 
+fn message(id: &str, task: &str) -> MessageDelivery {
+    MessageDelivery {
+        id: id.into(),
+        request_id: id.into(),
+        task_id: task.into(),
+        thread_id: format!("thread-{task}"),
+        prompt: "Investigate".into(),
+        source: None,
+        event_id: None,
+        state: DeliveryState::Pending,
+        created_at: 1,
+        attempts: 0,
+        retry_at: 0,
+        error: None,
+    }
+}
+fn event(id: &str) -> TaskEvent {
+    TaskEvent {
+        id: id.into(),
+        request_id: id.into(),
+        project_id: "project".into(),
+        task_id: "worker".into(),
+        thread_id: "thread-worker".into(),
+        kind: EventKind::Progress,
+        message: "POC confirmed; design still needs work".into(),
+        target: Some(EventTarget {
+            task_id: "parent".into(),
+            thread_id: "thread-parent".into(),
+        }),
+        source: None,
+        created_at: 2,
+    }
+}
 #[test]
-fn results_and_deliveries_are_durable_independent_and_immutable() {
+fn explicit_reports_are_durable_idempotent_and_independent_of_task_status() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("tasks.db");
     let db = TaskDb::open(Some(&path)).unwrap();
-    let first = execution("first", "worker", None);
-    db.insert_with_run(&task("worker", &[]), Some(&first))
+    db.insert(&task("parent", &[])).unwrap();
+    db.insert_with_message(&task("worker", &[]), Some(&message("initial", "worker")))
+        .unwrap();
+    db.update_message("initial", DeliveryState::Delivered, None, 0)
         .unwrap();
     assert!(
-        db.insert_with_run(&task("rollback", &[]), Some(&first))
-            .is_err()
+        db.inbox(None, false, false, 0, 30)
+            .unwrap()
+            .items
+            .is_empty(),
+        "Admission is not a report"
     );
-    assert_eq!(db.list().unwrap().len(), 1, "task/run insertion is atomic");
-    db.finish_run(
-        "first",
-        "result_available",
-        Some("First result".into()),
-        None,
-        2,
-    )
-    .unwrap();
-    db.finish_run("first", "failed", None, Some("Late duplicate".into()), 3)
-        .unwrap();
-    let mut second = execution("second", "worker", None);
-    second.source.as_mut().unwrap().thread_id = "different-requester".into();
-    db.enqueue_run(&second).unwrap();
-    assert_eq!(db.enqueue_run(&second).unwrap(), second);
-    let mut retried = second.clone();
-    retried.id = "new-local-attempt".into();
-    assert_eq!(db.enqueue_run(&retried).unwrap().id, second.id);
-    second.prompt = "Different payload".into();
-    assert!(db.enqueue_run(&second).is_err());
-    db.finish_run("second", "failed", None, Some("No access".into()), 4)
-        .unwrap();
-    db.update_inbox("result-first", Some(true), Some(true))
-        .unwrap();
-    db.remove("worker").unwrap();
-    drop(db);
-    let db = TaskDb::open(Some(&path)).unwrap();
+    db.set_status("worker", TaskStatus::Waiting).unwrap();
+    let report = db.publish_event(&event("poc")).unwrap();
+    let mut retry = report.clone();
+    retry.id = "another-id".into();
+    retry.created_at = 90;
+    assert_eq!(db.publish_event(&retry).unwrap(), report);
+    retry.message = "Different result".into();
+    assert!(db.publish_event(&retry).is_err());
+    db.update_inbox("poc", Some(true), Some(true)).unwrap();
     assert_eq!(
-        db.run("first").unwrap().unwrap().result.as_deref(),
-        Some("First result")
+        db.pending_messages().unwrap().len(),
+        1,
+        "Reading and archiving do not suppress delivery"
     );
-    let page = db.inbox(None, false, false, 0, 30).unwrap();
-    assert_eq!(page.unread, 1);
-    assert_eq!(page.items.len(), 1);
-    assert_eq!(page.items[0].run.id, "second");
-    assert_eq!(
-        page.items[0].delivery.as_ref().unwrap().thread_id,
-        "different-requester"
-    );
-    assert_eq!(
-        db.active_deliveries().unwrap().len(),
-        2,
-        "read/archive cannot consume returns"
-    );
-    assert_eq!(
-        db.inbox(None, false, true, 0, 30).unwrap().items[0].run.id,
-        "first"
-    );
-    assert!(
-        db.process_delivery("result-first", Some("Premature".into()), 5)
-            .is_err()
-    );
-    db.enqueue_wakeup(
-        "result-first",
-        &execution("wakeup-result-first", "source", None),
-    )
-    .unwrap();
-    db.process_delivery("result-first", Some("Summary".into()), 5)
-        .unwrap();
-    db.process_delivery("result-first", Some("Duplicate".into()), 6)
-        .unwrap();
-    assert_eq!(db.active_deliveries().unwrap().len(), 1);
-    assert!(db.retry_delivery("result-first", "retry").is_err());
-    db.update_delivery(
-        "result-second",
-        "blocked",
-        Some("Source unavailable".into()),
+    assert_eq!(db.status("worker").unwrap(), Some(TaskStatus::Waiting));
+    let id = db.pending_messages().unwrap()[0].id.clone();
+    db.update_message(
+        &id,
+        DeliveryState::Blocked,
+        Some("Receiver offline".into()),
         0,
     )
     .unwrap();
-    db.retry_delivery("result-second", "retry-second").unwrap();
-    assert_eq!(db.active_deliveries().unwrap()[0].prompt_id, "retry-second");
+    db.retry_delivery("poc").unwrap();
+    assert_eq!(db.pending_messages().unwrap()[0].id, id);
+    db.update_message(&id, DeliveryState::Delivered, None, 0)
+        .unwrap();
+    db.update_message(&id, DeliveryState::Pending, Some("late failure".into()), 5)
+        .unwrap();
+    assert!(db.retry_delivery("poc").is_err());
+    db.remove("worker").unwrap();
+    drop(db);
+    let db = TaskDb::open(Some(&path)).unwrap();
+    let inbox = db.inbox(None, false, true, 0, 30).unwrap();
+    assert_eq!(inbox.items[0].event, report);
+    assert!(inbox.items[0].read);
     assert_eq!(
-        db.run("second").unwrap().unwrap().state,
-        "failed",
-        "retrying a return never reruns work"
+        inbox.items[0].delivery.as_ref().unwrap().state,
+        DeliveryState::Delivered
     );
 }
 
 #[test]
-fn wakeups_have_independent_results_and_preserve_causal_and_return_addresses() {
-    let db = TaskDb::open(None).unwrap();
+fn queued_messages_survive_restart_and_reject_request_id_reuse() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("tasks.db");
+    let db = TaskDb::open(Some(&path)).unwrap();
     db.insert(&task("worker", &[])).unwrap();
-    db.enqueue_run(&execution("parent", "worker", None))
-        .unwrap();
-    let mut child = execution("child", "helper", Some("parent"));
-    child.source.as_mut().unwrap().task_id = "worker".into();
-    child.source.as_mut().unwrap().thread_id = "thread-worker".into();
-    db.enqueue_run(&child).unwrap();
-    let followup = db
-        .enqueue_run(&execution("followup", "worker", Some("child")))
-        .unwrap();
-    assert_eq!(
-        followup.state, "queued",
-        "an active ancestor receives a later run without a waiting dependency"
-    );
-    db.finish_run(
-        "parent",
-        "result_available",
-        Some("Delegated".into()),
-        None,
-        1,
-    )
-    .unwrap();
-    let frozen = db.run("parent").unwrap().unwrap();
-    assert!(frozen.terminal());
-    assert_eq!(db.list().unwrap()[0].status, TaskStatus::InProgress);
-    db.set_status("worker", TaskStatus::Waiting).unwrap();
-    db.finish_run(
-        "child",
-        "result_available",
-        Some("Findings".into()),
-        None,
-        2,
-    )
-    .unwrap();
-    let mut request = execution("wakeup-result-child", "worker", None);
-    request.thread_id = "thread-worker".into();
-    let wakeup = db.enqueue_wakeup("result-child", &request).unwrap();
-    assert_eq!(db.enqueue_wakeup("result-child", &request).unwrap(), wakeup);
-    assert_eq!(wakeup.trigger, "wakeup");
-    assert_eq!(wakeup.caused_by_run_id.as_deref(), Some("child"));
-    assert_eq!(wakeup.source, frozen.source);
-    assert_eq!(
-        db.run_for_prompt(&wakeup.id).unwrap(),
-        Some(wakeup.id.clone())
-    );
-    assert!(
-        !db.active_runs()
-            .unwrap()
-            .iter()
-            .any(|run| run.id == wakeup.id)
-    );
-    db.process_delivery("result-child", Some("Combined conclusion".into()), 3)
-        .unwrap();
-    db.process_delivery("result-child", Some("Duplicate".into()), 4)
-        .unwrap();
-    assert_eq!(db.run("parent").unwrap().unwrap(), frozen);
-    assert_eq!(
-        db.run(&wakeup.id).unwrap().unwrap().result.as_deref(),
-        Some("Combined conclusion")
-    );
-    let upstream = db
-        .active_deliveries()
-        .unwrap()
-        .into_iter()
-        .find(|delivery| delivery.run_id == wakeup.id)
-        .unwrap();
-    assert_eq!(upstream.thread_id, "thread-source");
-    assert_eq!(
-        db.list().unwrap()[0].status,
-        TaskStatus::Waiting,
-        "run outcomes do not change business acceptance"
-    );
-    db.set_status("worker", TaskStatus::Done).unwrap();
-    assert_eq!(db.list().unwrap()[0].status, TaskStatus::Done);
+    let first = message("request", "worker");
+    db.enqueue_message(&first).unwrap();
+    drop(db);
+    let db = TaskDb::open(Some(&path)).unwrap();
+    assert_eq!(db.pending_messages().unwrap(), vec![first.clone()]);
+    let mut retry = first.clone();
+    retry.id = "new-id".into();
+    assert_eq!(db.enqueue_message(&retry).unwrap(), first);
+    retry.prompt = "Different request".into();
+    assert!(db.enqueue_message(&retry).is_err());
 }
 
 #[test]
-fn upgrading_waiting_runs_freezes_old_results_and_keeps_pending_returns() {
+fn migration_preserves_notifications_pending_messages_and_conversation_policies() {
+    use serde_json::json;
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("tasks.db");
     {
@@ -285,49 +197,53 @@ fn upgrading_waiting_runs_freezes_old_results_and_keeps_pending_returns() {
                 include_str!("sql/roles.sql"),
                 include_str!("sql/routing.sql"),
                 include_str!("sql/collaboration.sql"),
+                include_str!("sql/executions.sql"),
             ],
         )
         .unwrap();
-        connection.execute("INSERT INTO tasks (id, project_id, prompt, agent_id, workspace, workspace_mode) VALUES ('worker', 'project', 'Goal', 'agent', '/repo', 'existing')", []).unwrap();
-        let mut old = execution("old", "worker", None);
-        old.state = "waiting".into();
-        old.result = Some("Delegated; awaiting findings".into());
-        let mut payload = serde_json::to_value(&old).unwrap();
-        for key in ["execution", "trigger", "caused_by_run_id"] {
-            payload.as_object_mut().unwrap().remove(key);
+        connection.execute("INSERT INTO tasks (id,project_id,prompt,agent_id,workspace,workspace_mode,status) VALUES ('worker','project','Goal','agent','/repo','existing','waiting')",[]).unwrap();
+        for (id, state) in [("complete", "result_available"), ("pending", "queued")] {
+            let payload = json!({"id":id,"request_id":id,"task_id":"worker","project_id":"project","thread_id":"thread-worker","prompt":"Original task","state":state,"result":"POC verified","created_at":1,
+                "source":{"task_id":"parent","thread_id":"thread-parent","turn_id":"user-turn","message_id":"user-message","request":"Original user request","parent_run_id":"old-parent"},
+                "execution":{"workspace":"/repo","workspace_intent":"analyze","target_task_id":null,"target_revision":null}});
+            connection.execute("INSERT INTO task_runs (id,task_id,thread_id,parent_run_id,state,payload,request_id) VALUES (?1,'worker','thread-worker','old-parent',?2,?3,?1)",rusqlite::params![id,state,payload.to_string()]).unwrap();
         }
-        connection.execute("INSERT INTO task_runs VALUES ('old','worker','old','thread-worker',NULL,'waiting',?1)", [payload.to_string()]).unwrap();
-        let mut child = execution("legacy-child", "helper", Some("old"));
-        child.source.as_mut().unwrap().task_id = "worker".into();
-        child.source.as_mut().unwrap().thread_id = "thread-worker".into();
-        child.state = "result_available".into();
-        child.result = Some("Child result".into());
         connection
             .execute(
-                "INSERT INTO task_runs VALUES (?1,?2,?3,?4,?5,?6,?7)",
-                rusqlite::params![
-                    child.id,
-                    child.task_id,
-                    child.request_id,
-                    child.thread_id,
-                    "old",
-                    child.state,
-                    serde_json::to_string(&child).unwrap()
-                ],
+                "INSERT INTO task_inbox VALUES ('legacy-event','complete','project',2,1,1)",
+                [],
             )
             .unwrap();
-        super::collaboration::finish(&connection, &mut child, 2).unwrap();
+        connection.execute("INSERT INTO task_wakeups VALUES ('legacy-event','legacy-prompt','old-parent','pending',?1)",[json!({"attempts":1,"retry_at":0,"error":null}).to_string()]).unwrap();
     }
     let db = TaskDb::open(Some(&path)).unwrap();
-    let run = db.run("old").unwrap().unwrap();
-    assert_eq!(run.state, "result_available");
-    assert_eq!(run.result.as_deref(), Some("Delegated; awaiting findings"));
-    assert_eq!(run.execution.unwrap().workspace, "/repo");
-    assert_eq!(db.list().unwrap()[0].status, TaskStatus::Waiting);
-    assert_eq!(db.active_deliveries().unwrap().len(), 2);
+    assert_eq!(db.status("worker").unwrap(), Some(TaskStatus::Waiting));
+    let inbox = db.inbox(None, false, true, 0, 30).unwrap();
+    assert_eq!(inbox.items[0].event.message, "POC verified");
+    assert!(inbox.items[0].read);
+    assert_eq!(
+        inbox.items[0].event.target.as_ref().unwrap().thread_id,
+        "thread-parent"
+    );
+    assert_eq!(
+        inbox.items[0].delivery.as_ref().unwrap().id,
+        "legacy-prompt",
+        "ACP receipt identity must survive migration"
+    );
+    assert_eq!(db.pending_messages().unwrap().len(), 2);
+    assert_eq!(
+        db.conversation_policy("thread-worker")
+            .unwrap()
+            .unwrap()
+            .workspace_intent
+            .as_deref(),
+        Some("analyze")
+    );
+    let remaining:u32=db.lock().unwrap().query_row("SELECT COUNT(*) FROM sqlite_master WHERE name IN ('task_runs','task_wakeups','task_inbox')",[],|row|row.get(0)).unwrap();
+    assert_eq!(remaining, 0);
     drop(db);
     let db = TaskDb::open(Some(&path)).unwrap();
-    assert_eq!(db.inbox(None, false, false, 0, 30).unwrap().items.len(), 2);
+    assert_eq!(db.pending_messages().unwrap().len(), 2);
 }
 
 #[test]

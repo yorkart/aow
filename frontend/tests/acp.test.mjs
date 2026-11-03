@@ -3343,6 +3343,25 @@ try {
     await page.getByText('Hello from ACP', { exact: true }).waitFor();
     assert.deepEqual(interactions(state)[0].content, [{ type: 'text', text: 'first\nsecond' }]);
   });
+  await test('Inbox wakeup renders an explicit report while keeping injected context hidden', async t => {
+    const { page, state } = await fixture(t);
+    await newSession(page);
+    await page.getByRole('textbox', { name: 'ACP 消息', exact: true }).waitFor();
+    state.session.entries.push(
+      { id: 'context', kind: 'user', content: { type: 'text', text: 'Private routing context', _meta: { 'aow/instructions': true } } },
+      { id: 'report', kind: 'user', content: { type: 'text', text: '[WAKEUP] internal envelope', _meta: { 'aow/event': {
+        id: 'report-id', task_id: 'poc-task', thread_id: 'poc-conversation', type: 'progress', message: '**POC verified**\n\nThe design is ready.',
+      } } } },
+      { id: 'reply', kind: 'assistant', content: { type: 'text', text: 'Continue the design discussion.' } },
+    );
+    state.session.revision++;
+    const report = page.locator('.acp-task-event');
+    await report.locator('strong').getByText('POC verified', { exact: true }).waitFor();
+    await report.getByText('The design is ready.', { exact: true }).waitFor();
+    assert.equal(await page.getByText('Private routing context', { exact: true }).count(), 0);
+    assert.equal(await page.getByText('[WAKEUP] internal envelope', { exact: true }).count(), 0);
+    assert.equal(await page.locator('.task-collaboration').count(), 0);
+  });
   await test('role mentions are atomic avatars, survive clipboard round trips and keep stable IDs', async t => {
     const { page, state } = await fixture(t);
     await page.route('**/api/aow/agent-roles', route => route.fulfill({ json: [

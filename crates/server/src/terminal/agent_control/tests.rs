@@ -1385,35 +1385,6 @@ async fn cli_codex_skips_update_menu_without_changing_profile_or_manual_launch()
         }),
     )
     .await;
-    let task = post(
-        &app,
-        "/api/aow/tasks",
-        json!({
-            "request_id":"role-update-task", "project_id":fixture.project_id,
-            "workspace_mode":"existing", "workspace":fixture.repo,
-            "agent_role_id":role["id"], "prompt":"role task after skipping update"
-        }),
-    )
-    .await;
-    let tab_id = task["resources"][0]["id"].as_str().unwrap();
-    tokio::time::timeout(Duration::from_secs(8), async {
-        loop {
-            let tab = fixture.state.terminals.get_snapshot(tab_id).unwrap();
-            let progress = tab.panes[0].agent_terminal.as_ref().unwrap();
-            if progress.phase == AgentTerminalPhase::Ready {
-                assert!(progress.task_submitted);
-                if std::fs::read_to_string(&fixture.log)
-                    .unwrap()
-                    .contains("role task after skipping update")
-                {
-                    break;
-                }
-            }
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
-    })
-    .await
-    .unwrap();
     let manual_role = post(
         &app,
         &format!(

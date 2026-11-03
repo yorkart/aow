@@ -14,12 +14,6 @@ pub(super) async fn dispatch(
     page: &broadcast::Sender<TaskStopNotification>,
     completed: TurnCompletion,
 ) {
-    // Inbox replaces the page popup for managed work, including summary wakeups.
-    // User-configured IM channels still receive the normal completion notification.
-    let managed = manager
-        .task_db()
-        .owns_prompt(&completed.turn_id)
-        .unwrap_or(false);
     let session = completed.session;
     let project_name = manager
         .project_name_for_workspace(&session.cwd)
@@ -51,11 +45,7 @@ pub(super) async fn dispatch(
             tab_url: None,
         }],
     };
-    if managed {
-        manager.notifications().dispatch_im(notification);
-    } else {
-        manager.notifications().dispatch(notification, page);
-    }
+    manager.notifications().dispatch(notification, page);
 }
 
 fn turn_usage(usage: &Value) -> Option<TokenUsage> {

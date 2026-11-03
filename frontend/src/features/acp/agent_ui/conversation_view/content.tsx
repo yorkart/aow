@@ -11,7 +11,12 @@ export type OpenFile = (path: string, line?: number) => void;
 export const ContentBlock = memo(function ContentBlock({ content, onOpenFile, user = false, message = false }: { content: Data; onOpenFile: OpenFile; user?: boolean; message?: boolean }) {
   if (object(content._meta)['aow/instructions'] === true) return null;
   const event = object(object(content._meta)['aow/event']);
-  if (event.id) return <div className="acp-task-event"><FileText size={14} />{t('inbox.returned', { task: text(event.task_id) })}</div>;
+  if (event.id) {
+    const kind = text(event.type);
+    return <div className="acp-task-event"><div className="acp-task-event-header"><FileText size={14} />{t('inbox.returned', { task: text(event.task_id) })}
+      {['result', 'progress', 'blocked', 'question'].includes(kind) && <> · {t('inbox.' + kind)}</>}</div>
+      {event.message ? <AgentMarkdown text={text(event.message)} onOpenFile={onOpenFile} /> : null}</div>;
+  }
   if (content.type === 'text') return user ? <UserText text={text(content.text)} /> : <AgentMarkdown text={text(content.text)} onOpenFile={onOpenFile} message={message} />;
   if (content.type === 'image' && /^image\/(png|jpeg|webp|gif)$/.test(text(content.mimeType))) return <img className="acp-image" alt={user ? t("navigation.user_image") : t("common.agent_image")} src={`data:${text(content.mimeType)};base64,${text(content.data)}`} />;
   if (content.type === 'resource') return <span className="acp-resource-label">{text(object(content.resource).uri)}</span>;

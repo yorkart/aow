@@ -19,8 +19,7 @@ pub(in crate::aow) fn routes() -> Router<AppState> {
             post(super::routing::router),
         )
         .route("/api/aow/tasks/{id}/resources", post(attach))
-        .route("/api/aow/tasks/{id}/runs", post(super::runs::start))
-        .route("/api/aow/tasks/{id}/status", post(super::runs::status))
+        .route("/api/aow/tasks/{id}/status", post(super::messages::status))
 }
 
 async fn list(State(state): State<AppState>) -> Result<Json<Vec<Task>>, HttpError> {
@@ -142,14 +141,7 @@ pub(super) async fn create(
                     "Task request ID belongs to another request",
                 ));
             }
-            let mut response = Task::from(task.clone());
-            response.run_id = state
-                .aow
-                .task_db()
-                .run_for_request(&task.id, "initial")
-                .map_err(storage)?
-                .map(|run| run.id);
-            return Ok(Json(response));
+            return Ok(Json(task.clone().into()));
         }
         // Reject unresolved references before provisioning a workspace or session.
         for id in super::mentions::role_mentions(&request.prompt) {
@@ -160,7 +152,7 @@ pub(super) async fn create(
             .as_deref()
             .map(|id| super::routing::source_task(&state, id))
             .transpose()?;
-        let run_source = source
+        let message_source = source
             .as_ref()
             .zip(request.source_thread_id.as_deref())
             .map(|(task, thread)| crate::collaboration::source(&state, task, thread))
@@ -236,10 +228,9 @@ pub(super) async fn create(
             .map(|id| state.aow.agent_role(id))
             .transpose()
             .map_err(aow_http_error)?;
-        if (request.is_router || source.is_some())
-            && role
-                .as_ref()
-                .is_some_and(|role| matches!(role.config.runtime, roles::RoleRuntime::Cli { .. }))
+        if role
+            .as_ref()
+            .is_some_and(|role| matches!(role.config.runtime, roles::RoleRuntime::Cli { .. }))
         {
             return Err(crate::instances::invalid(
                 "Task collaboration requires an ACP role",
@@ -293,14 +284,33 @@ pub(super) async fn create(
         let session = if let Some(role) = &role {
             state
                 .aow
-                .prepare_role_session(role, &state, &workspace, Some(&request.prompt))
+                .prepare_role_session(
+                    role,
+                    &state,
+                    &workspace,
+                    Some(&request.prompt),
+                    request
+                        .source_thread_id
+                        .as_ref()
+                        .map(aow_protocol::InstanceRef::acp),
+                )
                 .await?
         } else {
             roles::RoleSession::Acp {
                 session: Box::new(
                     state
                         .acp
-                        .prepare_session(&agent, workspace.clone().into())
+                        .prepare_session_with_options(
+                            &agent,
+                            workspace.clone().into(),
+                            aow_acp::SessionCreation {
+                                parent: request
+                                    .source_thread_id
+                                    .as_ref()
+                                    .map(aow_protocol::InstanceRef::acp),
+                                ..Default::default()
+                            },
+                        )
                         .await
                         .map_err(crate::acp::task_error)?,
                 ),
@@ -332,24 +342,32 @@ pub(super) async fn create(
                 id: resource_id.into(),
             }],
         };
-        let run = (!task.is_router && task.initial_thread_id.is_some()).then(|| {
-            crate::collaboration::new_run(&task, "initial".into(), task.prompt.clone(), run_source)
+        let message = (!task.is_router && task.initial_thread_id.is_some()).then(|| {
+            crate::collaboration::new_message(
+                &task,
+                "initial".into(),
+                task.prompt.clone(),
+                message_source,
+            )
         });
-        if run.is_some() {
+        if message.is_some() {
             task.status = TaskStatus::InProgress;
         }
-        if let Err(error) = state.aow.inner.tasks.insert_with_run(&task, run.as_ref()) {
+        if let Err(error) = state
+            .aow
+            .inner
+            .tasks
+            .insert_with_message(&task, message.as_ref())
+        {
             session.discard(&state).await;
             return Err(crate::instances::invalid(error.to_string()));
         }
-        if run.is_some() {
+        if message.is_some() {
             state.collaboration.start(&state);
         } else {
             session.start(&state, (!task.is_router).then(|| task.prompt.clone()))?;
         }
-        let mut response = Task::from(task);
-        response.run_id = run.map(|run| run.id);
-        Ok(Json(response))
+        Ok(Json(task.into()))
     })
     .await
     .map_err(|error| HttpError::internal(error.to_string()))?

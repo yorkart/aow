@@ -35,6 +35,7 @@ function Row({ node, sessions, activeTerminalId, activeThreadId, unreadTerminals
 }) {
   const [expanded, setExpanded] = useState(true);
   const { instance, children } = node;
+  const scope = useTaskScope();
   const session = instance.kind === 'acp' ? sessions.get(instance.id) : undefined;
   const title = (instance.kind === 'acp' ? session?.title : undefined) || instance.title;
   const active = !instance.deleted && (instance.kind === 'acp' ? activeThreadId === instance.id : !!activeTerminalId && activeTerminalId === instance.tab_id);
@@ -54,7 +55,7 @@ function Row({ node, sessions, activeTerminalId, activeThreadId, unreadTerminals
         actions={instance.kind === 'acp' && !instance.deleted ? <AowIconButton className="aow-list-row-menu"
           title={t('acp.delete_session_2')} aria-label={t('acp.delete_acp_session_2', { value0: title })} onClick={() => onRemove(instance)}><Trash2 /></AowIconButton> : <span />}>
         <small title={session ? `${session.agent_id} · ${sessionDisplayTime(session)}` : instance.cwd}>
-          {session ? `ACP · ${timestamp(sessionDisplayTime(session))}` : instance.kind === 'acp' ? 'ACP' : t('conversations.terminal_agent')}
+          {session ? `${session.thread_id === scope?.task.initial_thread_id ? t('tasks.main_conversation') + ' · ' : ''}${timestamp(sessionDisplayTime(session))}` : instance.kind === 'acp' ? 'ACP' : t('conversations.terminal_agent')}
         </small>
         {unread && !instance.deleted && <TaskCompletion />}
       </AowListRow>

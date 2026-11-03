@@ -72,7 +72,7 @@ async fn retry(
     state
         .aow
         .task_db()
-        .retry_delivery(&id, &format!("wakeup-{}", uuid::Uuid::new_v4()))
+        .retry_delivery(&id)
         .map_err(|error| crate::instances::invalid(error.to_string()))?;
     state.workspace_events.inbox_changed();
     state.collaboration.start(&state);

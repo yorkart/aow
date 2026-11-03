@@ -149,6 +149,7 @@ impl AowManager {
         state: &AppState,
         cwd: &str,
         prompt: Option<&str>,
+        parent: Option<aow_protocol::InstanceRef>,
     ) -> Result<RoleSession, HttpError> {
         self.check_role_runtime(role, state).await?;
         match &role.config.runtime {
@@ -159,6 +160,7 @@ impl AowManager {
                         agent_id,
                         cwd.into(),
                         aow_acp::SessionCreation {
+                            parent,
                             execution_environment: Some(
                                 self.role_acp_environment(role).map_err(aow_http_error)?,
                             ),

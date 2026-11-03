@@ -1,5 +1,5 @@
 import { acpRequest } from '../acp/request';
-import type { TaskRun } from '../inbox/api';
+import type { AcpSessionInfo } from '../acp';
 import { mentionPreview } from '../agent-roles/mentions';
 
 export interface TaskResource { kind: 'acp' | 'terminal'; id: string }
@@ -31,9 +31,8 @@ export const taskScopeKey = (id: string) => `task:${id}`;
 export const taskTitle = (task: WorkTask) => task.is_router ? 'Router' : mentionPreview(task.prompt.split('\n')[0]);
 export interface TaskResult {
   task: WorkTask;
-  runtime: { thread_id: string; status: string; run_state?: string | null; error?: string | null; response?: string; pending_permissions?: number } | null;
+  conversations: AcpSessionInfo[];
   delegated: WorkTask[];
-  runs?: TaskRun[];
 }
 export const tasksChanged = 'aow:tasks-changed';
 export const notifyTasksChanged = () => window.dispatchEvent(new Event(tasksChanged));

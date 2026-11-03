@@ -1,11 +1,11 @@
-//! Durable task execution and return delivery. Broadcasts are hints, never the queue.
+//! Durable conversation message delivery. Broadcasts are hints, never the queue.
 #[cfg(test)]
 mod tests;
 mod worker;
 
 use crate::AppState;
 use anyhow::Result;
-use aow_db::tasks::{RunSource, TaskRecord, TaskRun};
+use aow_db::tasks::{DeliveryState, MessageDelivery, MessageSource, TaskRecord};
 use std::sync::{Arc, Mutex};
 use tokio::sync::Notify;
 
@@ -46,16 +46,17 @@ impl Runtime {
     }
 }
 
-pub(crate) fn source(state: &AppState, task: &TaskRecord, thread: &str) -> Result<RunSource> {
+pub(crate) fn source(state: &AppState, task: &TaskRecord, thread: &str) -> Result<MessageSource> {
     let snapshot = state.acp.snapshot(thread)?;
     let turn = snapshot.turns.last();
-    let start = turn.and_then(|turn| {
-        snapshot
-            .entries
-            .iter()
-            .position(|entry| entry.id == turn.user_entry_id)
-    });
-    let entries = start.map_or(&[][..], |start| &snapshot.entries[start..]);
+    let entries = turn
+        .and_then(|turn| {
+            snapshot
+                .entries
+                .iter()
+                .position(|entry| entry.id == turn.user_entry_id)
+        })
+        .map_or(&[][..], |start| &snapshot.entries[start..]);
     let request = entries
         .iter()
         .take_while(|entry| entry.kind == "user")
@@ -67,69 +68,69 @@ pub(crate) fn source(state: &AppState, task: &TaskRecord, thread: &str) -> Resul
         .iter()
         .find(|entry| entry.kind == "user" && entry.content["_meta"]["aow/instructions"] != true)
         .map(|entry| entry.id.clone());
-    let parent_run_id = turn
-        .filter(|turn| turn.status == "in_progress")
-        .map(|turn| state.aow.task_db().run_for_prompt(&turn.id))
-        .transpose()?
-        .flatten();
-    // When a wakeup dispatches a follow-up, retain the triggering request's
-    // wording instead of treating the machine event envelope as user intent.
     let mut request = request;
-    if let Some(parent) = parent_run_id
-        .as_deref()
-        .map(|id| state.aow.task_db().run(id))
-        .transpose()?
-        .flatten()
-        && parent.trigger == "wakeup"
-        && let Some(cause) = parent
-            .caused_by_run_id
-            .as_deref()
-            .map(|id| state.aow.task_db().run(id))
-            .transpose()?
-            .flatten()
-        && let Some(source) = cause.source
-    {
-        request = source.request;
+    for entry in entries {
+        if let Some(id) = entry.content["_meta"]["aow/event"]["id"].as_str()
+            && let Some(event) = state.aow.task_db().event(id)?
+            && let Some(source) = event.source
+        {
+            request = source.request;
+            break;
+        }
     }
-    Ok(RunSource {
+    Ok(MessageSource {
         task_id: task.id.clone(),
         thread_id: thread.into(),
         turn_id: turn.map(|turn| turn.id.clone()).filter(|id| !id.is_empty()),
         message_id,
         request,
-        parent_run_id,
     })
 }
 
-pub(crate) fn new_run(
+pub(crate) fn report_source(
+    state: &AppState,
+    task: &TaskRecord,
+    thread: &str,
+) -> Result<MessageSource> {
+    let snapshot = state.acp.snapshot(thread)?;
+    if let Some(turn) = snapshot.turns.last()
+        && let Some(start) = snapshot
+            .entries
+            .iter()
+            .position(|entry| entry.id == turn.user_entry_id)
+    {
+        for entry in snapshot.entries[start..]
+            .iter()
+            .take_while(|entry| entry.kind == "user")
+        {
+            let origin = &entry.content["_meta"]["aow/message"]["source"];
+            if origin.is_object() {
+                return Ok(serde_json::from_value(origin.clone())?);
+            }
+        }
+    }
+    source(state, task, thread)
+}
+
+pub(crate) fn new_message(
     task: &TaskRecord,
     request_id: String,
     prompt: String,
-    source: Option<RunSource>,
-) -> TaskRun {
-    TaskRun {
+    source: Option<MessageSource>,
+) -> MessageDelivery {
+    MessageDelivery {
         id: uuid::Uuid::new_v4().to_string(),
-        request_id: request_id.clone(),
+        request_id,
         task_id: task.id.clone(),
-        project_id: task.project_id.clone(),
         thread_id: task.initial_thread_id.clone().expect("ACP task"),
         prompt,
         source,
-        execution: Some(task.into()),
-        trigger: if request_id == "initial" {
-            "assignment"
-        } else {
-            "message"
-        }
-        .into(),
-        caused_by_run_id: None,
-        state: "queued".into(),
-        result: None,
-        error: None,
+        event_id: None,
+        state: DeliveryState::Pending,
         created_at: now(),
-        finished_at: None,
         attempts: 0,
         retry_at: 0,
+        error: None,
     }
 }
 

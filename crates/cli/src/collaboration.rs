@@ -53,18 +53,16 @@ enum TaskCommand {
         #[arg(long, value_parser = crate::parse_id)]
         source_thread: Option<String>,
     },
-    /// Read task status and recorded execution results. Select --run for a wakeup.
+    /// Read task details and its role conversations.
     Get {
         #[arg(value_parser = crate::parse_id)]
         id: String,
         #[arg(long, value_parser = crate::parse_id)]
         source_thread: Option<String>,
-        #[arg(long, value_parser = crate::parse_id)]
-        run: Option<String>,
     },
     /// Create an independent task. Reuse the request ID and payload on retries.
     #[command(
-        after_help = "change creates a worktree from project defaults. analyze uses the project checkout without edits. review requires --target-task with a clean, committed workspace and records its HEAD. Without --role, use the source task's ACP adapter. New tasks receive only the supplied task text and role instructions. After acceptance end your turn; results create an Inbox event and wake the source conversation. Do not poll or wait."
+        after_help = "change creates a worktree from project defaults. analyze uses the project checkout without edits. review requires --target-task with a clean, committed workspace and records its HEAD. Without --role, use the source task's ACP adapter. New tasks receive only the supplied task text and role instructions. After acceptance end your turn. The task explicitly reports milestones and conclusions through Inbox; ordinary turn completion sends no report. Do not poll or wait."
     )]
     Create {
         #[arg(long, value_parser = crate::parse_id)]
@@ -80,24 +78,22 @@ enum TaskCommand {
         #[command(flatten)]
         task: TaskInput,
     },
-    /// Execute another step of the same business task with a selected role.
-    Run {
+    /// Publish an explicit report to Inbox and optionally wake a conversation.
+    Report {
         #[arg(value_parser = crate::parse_id)]
         id: String,
         #[arg(long, value_parser = crate::parse_id)]
         source_thread: String,
         #[arg(long, value_parser = crate::parse_id)]
         request_id: String,
+        #[arg(long, value_parser = ["result", "progress", "blocked", "question"])]
+        kind: String,
         #[arg(long, value_parser = crate::parse_id)]
-        role: Option<String>,
-        #[arg(long, value_enum)]
-        intent: Intent,
-        #[arg(long, value_parser = crate::parse_id)]
-        target_task: Option<String>,
+        target_thread: Option<String>,
         #[command(flatten)]
         task: TaskInput,
     },
-    /// Set business progress explicitly; a completed run does not close a task.
+    /// Set task-wide business progress explicitly.
     Status {
         #[arg(value_parser = crate::parse_id)]
         id: String,
@@ -106,7 +102,7 @@ enum TaskCommand {
         #[arg(long, value_parser = crate::parse_id)]
         source_thread: String,
     },
-    /// Queue work in an existing task. Results wake this request's source conversation.
+    /// Queue a message in a task's main conversation or a selected role conversation.
     Send {
         #[arg(value_parser = crate::parse_id)]
         id: String,
@@ -114,6 +110,8 @@ enum TaskCommand {
         source_thread: String,
         #[arg(long, value_parser = crate::parse_id)]
         request_id: String,
+        #[arg(long, value_parser = crate::parse_id)]
+        thread: Option<String>,
         #[command(flatten)]
         task: TaskInput,
     },
@@ -164,17 +162,8 @@ pub fn role(args: RoleArgs, state_dir: PathBuf) -> Result<Value> {
 pub fn task(args: TaskArgs, state_dir: PathBuf) -> Result<Value> {
     let (path, body) = match args.command {
         TaskCommand::List { source_thread } => (scope("/v1/tasks".into(), source_thread), None),
-        TaskCommand::Get {
-            id,
-            source_thread,
-            run,
-        } => {
-            let mut path = scope(format!("/v1/tasks/{id}"), source_thread);
-            if let Some(run) = run {
-                path.push(if path.contains('?') { '&' } else { '?' });
-                path.push_str(&format!("run_id={run}"));
-            }
-            (path, None)
+        TaskCommand::Get { id, source_thread } => {
+            (scope(format!("/v1/tasks/{id}"), source_thread), None)
         }
         TaskCommand::Create {
             source_thread,
@@ -199,25 +188,19 @@ pub fn task(args: TaskArgs, state_dir: PathBuf) -> Result<Value> {
                 ),
             )
         }
-        TaskCommand::Run {
+        TaskCommand::Report {
             id,
             source_thread,
             request_id,
-            role,
-            intent,
-            target_task,
+            kind,
+            target_thread,
             task,
-        } => {
-            if !matches!(intent, Intent::Review) && target_task.is_some() {
-                anyhow::bail!("--target-task is only used for --intent review");
-            }
-            (
-                format!("/v1/tasks/{id}/runs"),
-                Some(
-                    json!({"request_id":request_id,"source_thread_id":source_thread,"agent_role_id":role,"intent":intent.as_str(),"target_task_id":target_task,"prompt":required_task(task)?}),
-                ),
-            )
-        }
+        } => (
+            format!("/v1/tasks/{id}/report"),
+            Some(
+                json!({"request_id":request_id,"source_thread_id":source_thread,"kind":kind,"target_thread_id":target_thread,"message":required_task(task)?}),
+            ),
+        ),
         TaskCommand::Status {
             id,
             status,
@@ -231,10 +214,11 @@ pub fn task(args: TaskArgs, state_dir: PathBuf) -> Result<Value> {
             source_thread,
             request_id,
             task,
+            thread,
         } => (
             format!("/v1/tasks/{id}/send"),
             Some(
-                json!({"request_id":request_id,"source_thread_id":source_thread,"prompt":required_task(task)?}),
+                json!({"request_id":request_id,"source_thread_id":source_thread,"thread_id":thread,"prompt":required_task(task)?}),
             ),
         ),
     };

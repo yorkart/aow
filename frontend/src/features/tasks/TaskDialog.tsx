@@ -36,10 +36,10 @@ export function TaskDialog({ project, task, router = false, onClose, onSaved }: 
   useEffect(() => {
     let cancelled = false;
     if (!task) void aowApi.projects().then(items => { if (!cancelled) setProjects(items.filter(item => !item.builtin)); }).catch(reason => { if (!cancelled) setError(String(reason)); });
-    void rolesApi.list().then(items => { if (!cancelled) setRoles(items); }).catch(reason => { if (!cancelled) setError(String(reason)); });
-    void acpApi.agents().then(items => { if (!cancelled) { const available = items.filter(item => item.installed && item.supported); setAgents(available); setAgent(current => current || available[0]?.id || ''); } }).catch(reason => { if (!cancelled) setError(String(reason)); });
+    void rolesApi.list().then(items => { if (!cancelled) { const available = items.filter(role => role.runtime.mode === 'acp'); setRoles(available); setAgent(current => current || (available[0] ? `role:${available[0].id}` : '')); } }).catch(reason => { if (!cancelled) setError(String(reason)); });
+    void acpApi.agents().then(items => { if (!cancelled) { const available = items.filter(item => item.installed && item.supported); setAgents(available); if (router) setAgent(current => current || available[0]?.id || ''); } }).catch(reason => { if (!cancelled) setError(String(reason)); });
     return () => { cancelled = true; };
-  }, [task]);
+  }, [task, router]);
   const submit = async () => {
     if (busy || !prompt.trim() || (!task && (!agent || (!isolated && !workspace)))) return;
     setBusy(true); setError('');
@@ -83,11 +83,12 @@ export function TaskDialog({ project, task, router = false, onClose, onSaved }: 
         {router ? <p>{t('tasks.router_hint')}</p> : <textarea className="task-composer-prompt" aria-label={t('tasks.prompt')} placeholder={t('tasks.describe')} autoFocus required maxLength={131072} value={prompt} disabled={busy}
           onChange={event => setPrompt(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />}
         {busy && <p className="task-composer-status" role="status"><LoaderCircle className="spinning" />{t(task ? 'tasks.saving' : isolated ? 'tasks.creating_workspace' : 'tasks.starting')}</p>}
+        {!router && !task && !roles.length && <p>{t('roles.empty')}</p>}
         {error && <p className="task-composer-error" role="alert">{error}</p>}
         <div className="task-composer-toolbar">
           <span className="task-composer-shortcut">{t('tasks.submit_shortcut')}</span>
           <div className="task-composer-actions">
-            <TaskPicker label={t('tasks.agent')} value={agent} options={[...roles.filter(role => !router || role.runtime.mode === 'acp').map(role => ({ id: `role:${role.id}`, label: role.name, detail: role.runtime.mode.toUpperCase(), group: t('roles.title'), icon: <AgentIcon agentId={role.home_layout} /> })), ...agents.map(item => ({ id: item.id, label: item.name, detail: 'ACP', group: 'ACP', icon: <AgentIcon agentId={item.id} /> }))]} disabled={busy || !!task} searchPlaceholder={t('tasks.search_agents')} upwards onChange={setAgent}>
+            <TaskPicker label={t('tasks.agent')} value={agent} options={[...roles.filter(role => !router || role.runtime.mode === 'acp').map(role => ({ id: `role:${role.id}`, label: role.name, detail: role.runtime.mode.toUpperCase(), group: t('roles.title'), icon: <AgentIcon agentId={role.home_layout} /> })), ...(router ? agents.map(item => ({ id: item.id, label: item.name, detail: 'ACP', group: 'ACP', icon: <AgentIcon agentId={item.id} /> })) : [])]} disabled={busy || !!task} searchPlaceholder={t('tasks.search_agents')} upwards onChange={setAgent}>
               <AgentIcon agentId={agent} /><span>{agentName}</span><span className="task-composer-runtime">{runtimeLabel}</span>
             </TaskPicker>
             <button className="task-composer-submit" type="submit" title={t(router ? 'tasks.open_router' : task ? 'tasks.save' : 'tasks.create')} aria-label={t(router ? 'tasks.open_router' : task ? 'tasks.save' : 'tasks.create')} disabled={busy || !prompt.trim() || (!task && (!agent || (!isolated && !workspace)))}>

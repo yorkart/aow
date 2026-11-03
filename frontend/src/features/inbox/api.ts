@@ -2,18 +2,13 @@ import { acpRequest } from '../acp/request';
 import { subscribeWorkspaceChanges } from '../../lib/workspaceEvents';
 import { useEffect, useState } from 'react';
 
-export interface TaskRun {
-  id: string; task_id: string; project_id: string; thread_id: string; prompt: string;
-  state: 'queued' | 'running' | 'result_available' | 'failed' | 'interrupted';
-  result: string | null; error: string | null; created_at: number; finished_at: number | null;
-  trigger?: 'assignment' | 'message' | 'wakeup';
-  caused_by_run_id?: string | null;
-  execution?: { agent_id: string; agent_role_id: string | null; workspace: string; workspace_intent: string | null; target_task_id: string | null; target_revision: string | null } | null;
-  source: { task_id: string; thread_id: string; turn_id: string | null; message_id: string | null; request: string } | null;
-}
 export interface InboxEvent {
-  id: string; run: TaskRun; read: boolean; archived: boolean; created_at: number;
-  delivery: { state: 'pending' | 'admitted' | 'processed' | 'blocked'; error: string | null } | null;
+  id: string; request_id: string; task_id: string; project_id: string; thread_id: string;
+  kind: 'progress' | 'result' | 'blocked' | 'question'; message: string;
+  target: { task_id: string; thread_id: string } | null;
+  source: { task_id: string; thread_id: string; turn_id: string | null; message_id: string | null; request: string } | null;
+  read: boolean; archived: boolean; created_at: number;
+  delivery: { state: 'pending' | 'delivered' | 'blocked'; error: string | null } | null;
 }
 export interface InboxPage { items: InboxEvent[]; unread: number; has_more: boolean }
 const changed = 'aow:inbox-changed';

@@ -65,20 +65,8 @@ impl NotificationManager {
 
     pub(crate) fn dispatch(
         &self,
-        event: TaskStopNotification,
-        page: &broadcast::Sender<TaskStopNotification>,
-    ) {
-        self.dispatch_to(event, Some(page));
-    }
-
-    pub(crate) fn dispatch_im(&self, event: TaskStopNotification) {
-        self.dispatch_to(event, None);
-    }
-
-    fn dispatch_to(
-        &self,
         mut event: TaskStopNotification,
-        page: Option<&broadcast::Sender<TaskStopNotification>>,
+        page: &broadcast::Sender<TaskStopNotification>,
     ) {
         let state = self.inner.state.lock().unwrap();
         let settings = &state.document.notifications.agent_task_completed;
@@ -99,9 +87,7 @@ impl NotificationManager {
                 source.tab_url = Some(url.into());
             }
         }
-        if let Some(page) = page
-            && settings.channels.contains(&Channel::Page)
-        {
+        if settings.channels.contains(&Channel::Page) {
             let _ = page.send(event.clone());
         }
         if settings

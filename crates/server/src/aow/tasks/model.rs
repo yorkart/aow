@@ -7,8 +7,6 @@ pub(super) fn storage(error: anyhow::Error) -> HttpError {
 
 #[derive(Serialize)]
 pub(crate) struct Task {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub run_id: Option<String>,
     pub id: String,
     pub project_id: String,
     pub prompt: String,
@@ -40,7 +38,6 @@ pub(crate) struct Resource {
 impl From<TaskRecord> for Task {
     fn from(task: TaskRecord) -> Self {
         Self {
-            run_id: None,
             id: task.id,
             project_id: task.project_id,
             prompt: task.prompt,

@@ -22,9 +22,11 @@
 .inbox-row .inbox-error { margin:10px 0; }
 .inbox-empty { margin:40px auto; color:var(--aow-muted); }
 .inbox-pagination { display:flex; justify-content:center; gap:10px; padding:12px; }
-.acp-task-event { display:flex; align-items:center; gap:6px; padding:8px 10px; color:var(--aow-muted); border:1px solid var(--aow-line); border-radius:6px; font-size:13px; }
+.acp-task-event { padding:8px 10px; color:var(--aow-muted); border:1px solid var(--aow-control-line); border-radius:6px; font-size:13px; }
 @media (max-width:600px) {
   .inbox-toolbar h2 { flex:1 0 calc(100% - 55px); }
   .inbox-toolbar > button { order:1; }
   .inbox-toolbar > select { order:2; flex:1; min-width:0; }
 }
+
+.acp-task-event-header { display:flex; align-items:center; gap:6px; }

@@ -23,17 +23,17 @@ pub(crate) fn cli_routes() -> Router<AppState> {
         .route("/v1/roles/{id}", route_get(role))
         .route("/v1/tasks", route_get(list).post(delegate))
         .route("/v1/tasks/{id}", route_get(self::get))
-        .route("/v1/tasks/{id}/send", post(super::runs::start))
-        .route("/v1/tasks/{id}/runs", post(super::runs::start))
-        .route("/v1/tasks/{id}/status", post(super::runs::status))
+        .route("/v1/tasks/{id}/send", post(super::messages::send))
+        .route("/v1/tasks/{id}/status", post(super::messages::status))
+        .route("/v1/tasks/{id}/report", post(super::messages::report))
 }
 
 impl AowManager {
-    pub(crate) fn task_execution_for_thread(
+    pub(crate) fn task_policy_for_thread(
         &self,
         service: &aow_acp::AcpService,
         thread: &str,
-    ) -> anyhow::Result<Option<aow_db::tasks::RunExecution>> {
+    ) -> anyhow::Result<Option<aow_db::tasks::ConversationPolicy>> {
         let Some(task) = self.task_for_thread(service, thread)? else {
             return Ok(None);
         };
@@ -41,7 +41,13 @@ impl AowManager {
         let mut current = thread.to_owned();
         let mut seen = std::collections::HashSet::new();
         while seen.insert(current.clone()) {
-            if let Some(recorded) = self.task_db().thread_execution(&current)? {
+            if self
+                .task_for_thread(service, &current)?
+                .is_none_or(|owner| owner.id != task.id)
+            {
+                break;
+            }
+            if let Some(recorded) = self.task_db().conversation_policy(&current)? {
                 execution = recorded;
                 break;
             }
@@ -56,8 +62,6 @@ impl AowManager {
         }
         let info = service.session_info(thread)?;
         execution.workspace = info.cwd;
-        execution.agent_id = info.agent_id;
-        execution.agent_role_id = self.acp_role_id(service, thread)?;
         Ok(Some(execution))
     }
 
@@ -127,9 +131,9 @@ pub(super) fn find_task(state: &AppState, id: &str) -> Result<TaskRecord, HttpEr
 }
 
 #[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub(super) struct Scope {
     source_thread_id: Option<String>,
-    run_id: Option<String>,
 }
 
 fn check_scope(state: &AppState, scope: &Scope, task: &TaskRecord) -> Result<(), HttpError> {
@@ -190,40 +194,20 @@ pub(super) async fn get(
     Path(id): Path<String>,
     Query(scope): Query<Scope>,
 ) -> Result<Json<Value>, HttpError> {
-    if let Some(run_id) = &scope.run_id {
-        let run = state
-            .aow
-            .task_db()
-            .run(run_id)
-            .map_err(storage)?
-            .filter(|run| run.task_id == id)
-            .ok_or_else(|| invalid("Run does not belong to this task"))?;
-        if let Some(thread) = &scope.source_thread_id
-            && source_task(&state, thread)?.project_id != run.project_id
-        {
-            return Err(invalid("Run is outside the source project"));
-        }
-        // Results survive task deletion and never consult a later conversation turn.
-        let task_status = state.aow.task_db().status(&id).map_err(storage)?;
-        return Ok(Json(json!({"run":run,"task_status":task_status})));
-    }
     let task = find_task(&state, &id)?;
     check_scope(&state, &scope, &task)?;
-    let runs = state.aow.task_db().task_runs(&id).map_err(storage)?;
-    let runtime = runs.first().map(|run| run.thread_id.as_str()).or(task.initial_thread_id.as_deref()).map(|id| match state.acp.snapshot(id) {
-        Ok(session) => {
-            // Idle describes the adapter, not whether the assigned work succeeded.
-            let start = session.entries.iter().rposition(|entry| entry.kind == "user").unwrap_or(0);
-            let response = runs.first().map(|run| run.result.clone().unwrap_or_default()).unwrap_or_else(||
-                session.entries.iter().skip(start).filter(|entry| entry.kind == "assistant")
-                .filter_map(|entry| entry.content["text"].as_str()).collect::<Vec<_>>().join(""));
-            let error = runs.first().map_or_else(|| session.error.clone(), |run| run.error.clone());
-            json!({"thread_id":id, "status":session.status, "error":error,
-                "pending_permissions":session.permissions.len(), "response":response, "updated_at":session.updated_at,
-                "run_id":runs.first().map(|run| &run.id), "run_state":runs.first().map(|run| &run.state)})
-        },
-        Err(error) => json!({"thread_id":id, "status":"unavailable", "error":error.to_string()}),
-    });
+    let conversations = state
+        .acp
+        .sessions(None)
+        .into_iter()
+        .filter_map(
+            |session| match state.aow.task_for_thread(&state.acp, &session.thread_id) {
+                Ok(Some(owner)) if owner.id == id => Some(Ok(session)),
+                Ok(_) => None,
+                Err(error) => Some(Err(storage(error))),
+            },
+        )
+        .collect::<Result<Vec<_>, HttpError>>()?;
     let delegated = state
         .aow
         .inner
@@ -235,7 +219,7 @@ pub(super) async fn get(
         .map(Task::from)
         .collect::<Vec<_>>();
     Ok(Json(
-        json!({"task":Task::from(task), "runtime":runtime, "runs":runs, "delegated":delegated}),
+        json!({"task":Task::from(task), "conversations":conversations, "delegated":delegated}),
     ))
 }
 

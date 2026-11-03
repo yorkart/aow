@@ -64,7 +64,7 @@ async fn role_policy_is_owned_by_the_application_and_survives_edits_removal_and_
     let cwd = directory.path().to_str().unwrap();
     let prepared = state
         .aow
-        .prepare_role_session(&role, &state, cwd, None)
+        .prepare_role_session(&role, &state, cwd, None, None)
         .await
         .unwrap();
     let id = prepared.resource().1.to_owned();
@@ -96,7 +96,7 @@ async fn role_policy_is_owned_by_the_application_and_survives_edits_removal_and_
         .unwrap();
     let second = state
         .aow
-        .prepare_role_session(&changed, &state, cwd, None)
+        .prepare_role_session(&changed, &state, cwd, None, None)
         .await
         .unwrap();
     let second_id = second.resource().1;
@@ -209,7 +209,13 @@ async fn role_binding_write_failure_discards_the_prepared_acp_session() {
     assert!(
         state
             .aow
-            .prepare_role_session(&role, &state, directory.path().to_str().unwrap(), None)
+            .prepare_role_session(
+                &role,
+                &state,
+                directory.path().to_str().unwrap(),
+                None,
+                None
+            )
             .await
             .is_err()
     );
@@ -235,7 +241,7 @@ async fn acp_roles_follow_shared_configuration_and_reject_removed_or_unavailable
             .unwrap();
         let session = state
             .aow
-            .prepare_role_session(&role, &state, cwd, None)
+            .prepare_role_session(&role, &state, cwd, None, None)
             .await
             .unwrap();
         let id = session.resource().1;
@@ -264,7 +270,7 @@ async fn acp_roles_follow_shared_configuration_and_reject_removed_or_unavailable
         assert!(
             state
                 .aow
-                .prepare_role_session(&role, &state, cwd, None)
+                .prepare_role_session(&role, &state, cwd, None, None)
                 .await
                 .is_err()
         );
