@@ -77,3 +77,7 @@ In addition to the runtime dependencies, install Rust stable / Cargo, npm, and j
 From the repository root, run `just build` to build and `just test` to run tests. For local deployment, run `just package`, then `just install`. Local packages use the same installation process as GitHub release packages and update the services actually running under the current user. Development services also listen only on localhost by default.
 
 For source development, start `just run-acpd` in a separate terminal before the Web server. Use the same `AOW_STATE_DIR` for both processes; the daemon reuses existing ACP history.
+
+The standalone [agent node daemon](docs/runtime/agent-daemon.md) embeds ACP and
+terminal runtimes in one process and exposes authenticated HTTP management and
+WebSocket transports for remote node deployments.

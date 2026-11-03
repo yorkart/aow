@@ -5,6 +5,7 @@ members = [
   "crates/acp",
   "crates/acpd",
   "crates/acpd-client",
+  "crates/agent-daemon",
   "crates/db",
   "crates/id",
   "crates/operation-log",

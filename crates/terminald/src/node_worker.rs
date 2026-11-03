@@ -1,13 +1,13 @@
 use std::{io::Write, path::Path, path::PathBuf};
 
+use crate::VtWorkerConfig;
 use anyhow::{Context, Result};
-use aow_terminald::VtWorkerConfig;
 use tempfile::NamedTempFile;
 
 const EMBEDDED_VT_WORKER: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/vt-worker.mjs"));
 const MINIMUM_NODE_MAJOR: u64 = 20;
 
-pub(super) async fn configure(
+pub async fn configure(
     node: &Path,
     worker_override: Option<PathBuf>,
 ) -> (Option<VtWorkerConfig>, Option<NamedTempFile>) {

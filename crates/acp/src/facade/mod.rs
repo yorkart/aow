@@ -10,3 +10,5 @@ pub use events::{SessionVersion, SyncEvent, SyncResource};
 pub use host::AcpHost;
 pub use model::*;
 pub use service::AcpService;
+mod adapter;
+pub use adapter::AdapterCommand;

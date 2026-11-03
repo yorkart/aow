@@ -24,6 +24,47 @@ fn configuration(settings: &Value, id: &str, path: Option<&OsStr>) -> String {
 }
 
 impl AgentServerStore {
+    pub async fn prepare_adapter(&self, id: &str) -> Result<crate::facade::AdapterCommand> {
+        let _guard = self.inner.connect_lock.lock().await;
+        ensure!(
+            !self
+                .inner
+                .shutting_down
+                .load(std::sync::atomic::Ordering::Acquire),
+            "ACP service is shutting down"
+        );
+        let raw = self.inner.host.settings().await?;
+        let settings = validate_settings(&raw)?;
+        let agent = settings
+            .agent_servers
+            .get(id)
+            .context("ACP agent is not configured")?;
+        let path = self.inner.host.execution_path().await?;
+        let mut command = get_command(
+            id,
+            agent,
+            &self.inner.registry,
+            &self.inner.cache.join("agents"),
+            path.as_deref(),
+            &Progress::default(),
+        )
+        .await?;
+        self.record_installation(
+            id,
+            &serde_json_lenient::from_str(&raw)?,
+            path.as_deref(),
+            &command,
+        )?;
+        // Configuration-specific environment takes precedence over host defaults.
+        let mut environment = self.inner.host.execution_environment();
+        environment.append(&mut command.env);
+        Ok(crate::facade::AdapterCommand {
+            path: command.path,
+            args: command.args,
+            env: environment,
+            execution_path: path,
+        })
+    }
     fn receipt_path(&self, id: &str) -> PathBuf {
         self.inner
             .cache

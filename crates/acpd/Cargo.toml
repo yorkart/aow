@@ -13,7 +13,7 @@ serde_json.workspace = true
 tokio.workspace = true
 futures-util.workspace = true
 aow-acpd-client = { path = "../acpd-client" }
-aow-agents = { path = "../agents" }
+aow-agents = { path = "../agents", features = ["launch"] }
 aow-i18n = { path = "../i18n" }
 async-trait.workspace = true
 axum.workspace = true
@@ -24,6 +24,7 @@ libc.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
+tokio-util = { workspace = true, features = ["codec"] }
 
 [dev-dependencies]
 aow-server = { path = "../server" }

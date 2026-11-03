@@ -1,124 +1,17 @@
-use crate::host::Host;
-use anyhow::{Result, ensure};
-use aow_acp::AcpService;
-use aow_acpd_client::{
-    Event, Health, RpcError,
-    protocol::{Call, PROTOCOL_VERSION},
-};
-use axum::{
-    Json, Router,
-    extract::{
-        DefaultBodyLimit, State, WebSocketUpgrade,
-        ws::{Message, WebSocket},
-    },
-    response::Response,
-    routing::{get, post},
-};
-use hyper_util::{rt::TokioIo, service::TowerToHyperService};
-use std::{
-    future::Future,
-    os::{fd::AsRawFd, unix::fs::OpenOptionsExt},
-    path::PathBuf,
-    sync::Arc,
-};
-use tokio::{
-    sync::{broadcast, watch},
-    task::JoinSet,
-};
+//! Private AoW compatibility API, available only on the local Unix socket.
 
-pub struct Options {
-    pub state_dir: PathBuf,
-    pub socket: PathBuf,
-}
-#[derive(Clone)]
-struct Daemon {
-    service: AcpService,
-    host: Arc<Host>,
-    instance_id: String,
-    stopping: watch::Receiver<bool>,
-}
+use super::*;
 
-/// Bind before opening the store. Exactly one daemon may own a state directory.
-pub async fn run_with_shutdown(
-    options: Options,
-    shutdown: impl Future<Output = ()> + Send,
-) -> Result<()> {
-    ensure!(
-        options.state_dir.is_absolute(),
-        "acpd state directory must be absolute"
-    );
-    let (listener, _socket) = crate::socket::bind_socket(&options.socket).await?;
-    tokio::fs::create_dir_all(options.state_dir.join("data/acp")).await?;
-    let lock = std::fs::OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .read(true)
-        .write(true)
-        .mode(0o600)
-        .custom_flags(libc::O_NOFOLLOW)
-        .open(options.state_dir.join("data/acp/daemon.lock"))?;
-    ensure!(
-        unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0,
-        "ACP state directory is already owned by another daemon"
-    );
-    let host = Arc::new(Host {
-        root: std::fs::canonicalize(&options.state_dir)?,
-        probe: false,
-        filesystem: Default::default(),
-        stopping: std::sync::atomic::AtomicBool::new(false),
-        completed: broadcast::channel(512).0,
-    });
-    let service = AcpService::with_storage(
-        host.clone(),
-        Some(host.root.join("data/acp")),
-        Some(host.root.join("cache/acp")),
-    )?;
-    let (stopping, stopped) = watch::channel(false);
-    let state = Daemon {
-        service: service.clone(),
-        host: host.clone(),
-        instance_id: uuid::Uuid::new_v4().to_string(),
-        stopping: stopped,
-    };
-    let router = Router::new()
+pub(super) fn router(state: Daemon) -> Router {
+    Router::new()
         .route("/v1/health", get(health))
         .route("/v1/rpc", post(rpc))
         .route("/v1/events", get(events))
         .route("/v1/completions/ack", post(acknowledge))
         .layer(DefaultBodyLimit::max(32 * 1024 * 1024))
-        .with_state(state);
-    let mut connections = JoinSet::new();
-    tokio::pin!(shutdown);
-    loop {
-        tokio::select! {
-            _ = &mut shutdown => break,
-            Some(result) = connections.join_next(), if !connections.is_empty() => { if let Err(error) = result { tracing::debug!(%error, "acpd connection ended"); } },
-            accepted = listener.accept() => {
-                let (stream, _) = accepted?;
-                let router = router.clone();
-                let mut stopped = stopping.subscribe();
-                connections.spawn(async move {
-                    let connection = hyper::server::conn::http1::Builder::new().serve_connection(TokioIo::new(stream), TowerToHyperService::new(router)).with_upgrades();
-                    tokio::pin!(connection);
-                    tokio::select! {
-                        _ = &mut connection => {},
-                        _ = stopped.changed() => { connection.as_mut().graceful_shutdown(); let _ = connection.await; }
-                    }
-                });
-            }
-        }
-    }
-    // Stop agent transports first so permission/login waits cannot delay shutdown forever.
-    stopping.send_replace(true);
-    host.stopping
-        .store(true, std::sync::atomic::Ordering::Release);
-    service.shutdown().await?;
-    while connections.join_next().await.is_some() {}
-    let _files = host.filesystem.write().await;
-    service.flush_threads_on_quit()?;
-    drop(lock);
-    Ok(())
+        .with_state(state)
 }
+
 async fn health(State(state): State<Daemon>) -> Json<Health> {
     Json(Health {
         service: "aow-acpd".into(),

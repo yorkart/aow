@@ -61,6 +61,7 @@ use crate::{
 };
 
 mod agents;
+mod embedded;
 mod http;
 mod output;
 mod process;
@@ -81,8 +82,8 @@ use runtime::*;
 use state::*;
 use validation::*;
 
+pub use embedded::TerminalRuntimeHost;
 pub use http::build_router;
-use http::router_with_state;
 pub use server::{run, run_with_shutdown, run_with_shutdown_and_vt_worker};
 pub use socket::default_socket_path;
 

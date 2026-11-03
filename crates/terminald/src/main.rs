@@ -2,7 +2,6 @@ use anyhow::Result;
 use aow_terminald::run_with_shutdown_and_vt_worker;
 use tracing_subscriber::EnvFilter;
 
-mod node_worker;
 mod options;
 mod shutdown;
 
@@ -34,7 +33,7 @@ async fn run() -> Result<()> {
         return Ok(());
     };
     let (vt_config, embedded_worker) =
-        node_worker::configure(&options.vt_node, options.vt_worker).await;
+        aow_terminald::configure_vt_worker(&options.vt_node, options.vt_worker).await;
 
     tracing::info!(socket = %options.socket.display(), "terminald listening");
     let result =

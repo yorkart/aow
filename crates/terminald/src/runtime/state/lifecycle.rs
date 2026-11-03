@@ -4,12 +4,15 @@ impl DaemonState {
     pub(in crate::runtime) async fn create(
         &self,
         id: String,
-        spec: TerminalRuntimeSpec,
+        mut spec: TerminalRuntimeSpec,
     ) -> Result<CreateOutcome, TerminaldError> {
         if self.inner.shutting_down.load(Ordering::Acquire) {
             return Err(TerminaldError::ShuttingDown);
         }
         validate_id(&id)?;
+        let mut environment = self.inner.environment.clone();
+        environment.append(&mut spec.environment);
+        spec.environment = environment;
 
         let spawn_permit = {
             let runtimes = self.lock_runtimes()?;

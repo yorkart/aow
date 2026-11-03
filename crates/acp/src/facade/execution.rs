@@ -2,7 +2,8 @@ use super::ExecutionEnvironment;
 use anyhow::{Result, ensure};
 
 impl ExecutionEnvironment {
-    pub(crate) fn validate(&self) -> Result<()> {
+    /// Validate caller-prepared node-local directories and process overrides.
+    pub fn validate(&self) -> Result<()> {
         ensure!(
             self.home.is_absolute() && self.home.is_dir(),
             "Execution Home must be an existing absolute directory"

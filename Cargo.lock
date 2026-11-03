@@ -203,6 +203,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
  "uuid",
@@ -223,6 +224,33 @@ dependencies = [
  "thiserror 2.0.19",
  "tokio",
  "tokio-tungstenite",
+]
+
+[[package]]
+name = "aow-agent-daemon"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "aow-acp",
+ "aow-acpd",
+ "aow-filesystem",
+ "aow-macos-log",
+ "aow-protocol",
+ "aow-terminald",
+ "async-trait",
+ "axum",
+ "clap",
+ "futures-util",
+ "libc",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

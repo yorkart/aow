@@ -6,6 +6,13 @@ impl DaemonState {
     }
 
     pub(in crate::runtime) fn with_vt_worker(vt_worker: Option<VtWorkerClient>) -> Self {
+        Self::with_environment(vt_worker, Default::default())
+    }
+
+    pub(in crate::runtime) fn with_environment(
+        vt_worker: Option<VtWorkerClient>,
+        environment: std::collections::BTreeMap<String, String>,
+    ) -> Self {
         Self {
             inner: Arc::new(DaemonInner {
                 instance_id: aow_id::new_id(),
@@ -13,6 +20,7 @@ impl DaemonState {
                 in_flight_spawns: Arc::new(SpawnTracker::default()),
                 runtimes: Mutex::new(HashMap::new()),
                 vt_worker,
+                environment,
                 agent_cache: Mutex::new(agents::AgentCache::default()),
             }),
         }

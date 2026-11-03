@@ -8,6 +8,10 @@ use std::{path::PathBuf, sync::Arc};
 #[derive(Clone)]
 pub struct AcpService(AgentServerStore);
 impl AcpService {
+    /// Prepare a configured adapter for a host-owned ACP transport.
+    pub async fn prepare_adapter(&self, agent_id: &str) -> Result<super::AdapterCommand> {
+        self.0.prepare_adapter(agent_id).await
+    }
     /// End local transports and checkpoint history when the execution host exits.
     pub async fn shutdown(&self) -> Result<()> {
         self.0.shutdown().await

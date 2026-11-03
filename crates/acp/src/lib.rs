@@ -9,7 +9,7 @@ mod project;
 mod settings;
 
 pub use facade::{
-    AcpHost, AcpService, AgentInfo, ConnectionInfo, ConnectionStatus, Content,
+    AcpHost, AcpService, AdapterCommand, AgentInfo, ConnectionInfo, ConnectionStatus, Content,
     ExecutionEnvironment, Permission, PromptReceipt, SessionCreation, SessionImport, SessionInfo,
     SessionSnapshot, SessionSource, SessionUpdates, SessionVersion, SyncEvent, SyncResource,
     ThreadEntry, TurnCompletion, is_auth_required,

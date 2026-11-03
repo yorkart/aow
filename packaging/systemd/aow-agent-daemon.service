@@ -1,0 +1,14 @@
+[Unit]
+Description=AoW agent node daemon (ACP and terminal runtimes)
+After=network.target
+
+[Service]
+Type=exec
+ExecStart=%h/.local/bin/aow-agent-daemon --state-dir %h/.aow
+UMask=0077
+Restart=on-failure
+RestartSec=1s
+TimeoutStopSec=30s
+
+[Install]
+WantedBy=default.target

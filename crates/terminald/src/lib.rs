@@ -5,10 +5,13 @@
 //! runtime by an opaque ID.
 
 mod error;
+mod node_worker;
 mod runtime;
 mod vt_worker;
 
 pub use error::TerminaldError;
+pub use node_worker::configure as configure_vt_worker;
+pub use runtime::TerminalRuntimeHost;
 pub use runtime::{
     build_router, default_socket_path, run, run_with_shutdown, run_with_shutdown_and_vt_worker,
 };

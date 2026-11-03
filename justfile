@@ -48,3 +48,7 @@ run-terminald: build-vt-worker
 # Start separately from the Web process so Web restarts preserve ACP execution.
 run-acpd:
     cargo run -p aow-acpd
+
+# A standalone remote node; server node registration is configured separately.
+run-agent-daemon: build-vt-worker
+    cargo run -p aow-agent-daemon

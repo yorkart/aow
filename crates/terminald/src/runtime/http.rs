@@ -8,16 +8,20 @@ pub fn build_router() -> Router {
 }
 
 pub(super) fn router_with_state(state: DaemonState) -> Router {
+    Router::new().nest("/v1", routes_with_state(state))
+}
+
+pub(super) fn routes_with_state(state: DaemonState) -> Router {
     Router::new()
-        .route("/v1/health", get(health))
-        .route("/v1/runtimes", get(list_runtimes))
-        .route("/v1/agents", get(list_agents))
+        .route("/health", get(health))
+        .route("/runtimes", get(list_runtimes))
+        .route("/agents", get(list_agents))
         .route(
-            "/v1/runtimes/{id}",
+            "/runtimes/{id}",
             get(get_runtime).put(create_runtime).delete(delete_runtime),
         )
-        .route("/v1/runtimes/{id}/attach", get(attach_runtime))
-        .route("/v1/runtimes/{id}/screen", get(screen))
+        .route("/runtimes/{id}/attach", get(attach_runtime))
+        .route("/runtimes/{id}/screen", get(screen))
         .with_state(state)
 }
 

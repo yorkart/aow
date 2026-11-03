@@ -29,18 +29,8 @@ where
     F: Future<Output = ()> + Send + 'static,
 {
     let (listener, _socket_guard) = super::socket::bind_socket(&socket_path).await?;
-    let vt_worker = match vt_config {
-        Some(config) => match VtWorker::start(config).await {
-            Ok(worker) => Some(worker),
-            Err(error) => {
-                tracing::warn!(%error, "failed to start VT worker; using raw terminal replay");
-                None
-            }
-        },
-        None => None,
-    };
-    let state = DaemonState::with_vt_worker(vt_worker.as_ref().map(VtWorker::client));
-    let router = router_with_state(state.clone());
+    let mut runtime = TerminalRuntimeHost::start(vt_config).await;
+    let router = Router::new().nest("/v1", runtime.router());
     let (connection_shutdown, _) = watch::channel(false);
     let mut connections = JoinSet::new();
     tokio::pin!(shutdown);
@@ -94,10 +84,7 @@ where
     // Stop runtime creation before closing connections. Existing WebSockets
     // receive a deletion error, and every child is killed and reaped before
     // the daemon reports a clean shutdown.
-    let runtime_result = state.shutdown_all().await;
-    if let Some(worker) = vt_worker {
-        worker.shutdown().await;
-    }
+    let runtime_result = runtime.shutdown().await;
     let _ = connection_shutdown.send(true);
     while let Some(result) = connections.join_next().await {
         if let Err(error) = result {

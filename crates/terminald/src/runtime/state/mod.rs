@@ -19,6 +19,7 @@ pub(super) struct DaemonInner {
     pub(super) in_flight_spawns: Arc<SpawnTracker>,
     pub(super) runtimes: Mutex<HashMap<String, Arc<Runtime>>>,
     pub(super) vt_worker: Option<VtWorkerClient>,
+    pub(super) environment: std::collections::BTreeMap<String, String>,
     pub(super) agent_cache: Mutex<agents::AgentCache>,
 }
 
