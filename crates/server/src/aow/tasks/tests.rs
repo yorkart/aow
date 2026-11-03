@@ -1,5 +1,5 @@
 use super::*;
-use aow_db::tasks::TaskRecord;
+use aow_db::tasks::{TaskRecord, TaskStatus};
 use axum::{
     body::{Body, to_bytes},
     http::Request,
@@ -40,7 +40,7 @@ async fn task_dependencies_do_not_cascade_archive_or_delete() {
             .insert(&TaskRecord {
                 id: id.into(),
                 project_id: "project".into(),
-                status: "todo".into(),
+                status: TaskStatus::Todo,
                 prompt: id.into(),
                 agent_id: "agent".into(),
                 agent_role_id: None,
@@ -669,6 +669,22 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
             StatusCode::OK
         );
     }
+    assert_eq!(
+        call(
+            &app,
+            "POST",
+            "/v1/tasks/implementation/status",
+            json!({"status":"result_available","source_thread_id":source})
+        )
+        .await
+        .0,
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    assert_eq!(
+        state.aow.task_db().status("implementation").unwrap(),
+        Some(TaskStatus::Done),
+        "invalid execution outcomes cannot become business status"
+    );
     assert_eq!(
         call(
             &app,

@@ -1,6 +1,6 @@
 use super::model::{Resource, Task, storage, validate_prompt};
 use super::*;
-use aow_db::tasks::TaskRecord;
+use aow_db::tasks::{TaskRecord, TaskStatus};
 use axum::{
     Router,
     http::HeaderMap,
@@ -310,7 +310,7 @@ pub(super) async fn create(
         let mut task = TaskRecord {
             id: request.request_id,
             project_id: request.project_id,
-            status: "todo".into(),
+            status: TaskStatus::Todo,
             prompt: request.prompt,
             agent_id: agent,
             agent_role_id: request.agent_role_id,
@@ -336,7 +336,7 @@ pub(super) async fn create(
             crate::collaboration::new_run(&task, "initial".into(), task.prompt.clone(), run_source)
         });
         if run.is_some() {
-            task.status = "in_progress".into();
+            task.status = TaskStatus::InProgress;
         }
         if let Err(error) = state.aow.inner.tasks.insert_with_run(&task, run.as_ref()) {
             session.discard(&state).await;

@@ -12,7 +12,7 @@ use crate::{
     },
     instances::invalid,
 };
-use aow_db::tasks::{RunExecution, TaskRecord};
+use aow_db::tasks::{RunExecution, TaskRecord, TaskStatus};
 use axum::{
     Json,
     extract::{Path, State},
@@ -102,7 +102,7 @@ async fn start_owned(
             "Create an execution task for substantial work; Router identity is persistent",
         ));
     }
-    if matches!(task.status.as_str(), "done" | "cancelled") {
+    if task.status.is_closed() {
         return Err(invalid("Reopen this task before scheduling more work"));
     }
     let run_source = crate::collaboration::source(&state, &source, &request.source_thread_id)
@@ -264,7 +264,7 @@ fn change_workspace(state: &AppState, task: &TaskRecord) -> Result<String, HttpE
 
 #[derive(Deserialize)]
 pub(super) struct Status {
-    status: String,
+    status: TaskStatus,
     source_thread_id: Option<String>,
 }
 
@@ -283,7 +283,7 @@ pub(super) async fn status(
     state
         .aow
         .task_db()
-        .set_status(&id, &request.status)
+        .set_status(&id, request.status)
         .map_err(|error| invalid(error.to_string()))?;
     task.status = request.status;
     state.collaboration.start(&state);

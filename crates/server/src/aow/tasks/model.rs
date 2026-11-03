@@ -1,5 +1,5 @@
 use super::*;
-use aow_db::tasks::TaskRecord;
+use aow_db::tasks::{TaskRecord, TaskStatus};
 
 pub(super) fn storage(error: anyhow::Error) -> HttpError {
     HttpError::internal(error.to_string())
@@ -12,7 +12,7 @@ pub(crate) struct Task {
     pub id: String,
     pub project_id: String,
     pub prompt: String,
-    pub status: String,
+    pub status: TaskStatus,
     pub agent_id: String,
     pub agent_role_id: Option<String>,
     pub is_router: bool,

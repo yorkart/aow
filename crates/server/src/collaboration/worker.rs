@@ -2,7 +2,7 @@ use super::now;
 use crate::{acp::Controls, aow::AowManager, workspace_events::WorkspaceEvents};
 use anyhow::{Context, Result, ensure};
 use aow_acp::{AcpService, Content, PromptReceipt, SessionSnapshot};
-use aow_db::tasks::{TaskRun, WakeupDelivery};
+use aow_db::tasks::{TaskRun, TaskStatus, WakeupDelivery};
 use serde_json::json;
 use std::{
     collections::{HashMap, HashSet},
@@ -219,7 +219,7 @@ impl Worker {
                 .task_for_thread(&self.acp, thread)?
                 .is_some_and(|item| item.id == task
                     && !item.archived
-                    && item.status != "cancelled"),
+                    && item.status != TaskStatus::Cancelled),
             "Source or target task was removed, archived, cancelled, or no longer owns this conversation"
         );
         Ok(())
@@ -232,7 +232,7 @@ impl Worker {
         if let Ok(snapshot) = &snapshot
             && let Some(receipt) = snapshot.prompt_receipts.get(&run.id)
         {
-            if task_status.as_deref() == Some("cancelled") && receipt.status == "in_progress" {
+            if task_status == Some(TaskStatus::Cancelled) && receipt.status == "in_progress" {
                 self.acp.cancel(&run.thread_id)?;
                 return Ok(());
             }
@@ -253,7 +253,7 @@ impl Worker {
         if run.retry_at > now() {
             return Ok(());
         }
-        if matches!(task_status.as_deref(), Some("cancelled" | "done")) {
+        if task_status.is_some_and(TaskStatus::is_closed) {
             db.finish_run(
                 &run.id,
                 "interrupted",
@@ -364,7 +364,7 @@ impl Worker {
             && let Some(receipt) = snapshot.prompt_receipts.get(&delivery.prompt_id)
         {
             if receipt.status == "in_progress" {
-                if db.status(&wakeup.task_id)?.as_deref() == Some("cancelled") {
+                if db.status(&wakeup.task_id)? == Some(TaskStatus::Cancelled) {
                     self.acp.cancel(&delivery.thread_id)?;
                     return Ok(());
                 }

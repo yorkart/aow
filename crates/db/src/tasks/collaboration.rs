@@ -1,4 +1,4 @@
-use super::{TaskDb, WakeupDelivery};
+use super::{TaskDb, TaskStatus, WakeupDelivery};
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -89,8 +89,8 @@ pub(super) fn insert_run(connection: &Connection, run: &TaskRun) -> Result<()> {
         params![run.id, run.task_id, run.thread_id, run.source.as_ref().and_then(|s| s.parent_run_id.as_deref()), run.state, serde_json::to_string(run)?, run.request_id],
     )?;
     connection.execute(
-        "UPDATE tasks SET status = 'in_progress' WHERE id = ?1 AND status = 'todo'",
-        [&run.task_id],
+        "UPDATE tasks SET status = ?2 WHERE id = ?1 AND status = ?3",
+        params![run.task_id, TaskStatus::InProgress, TaskStatus::Todo],
     )?;
     Ok(())
 }

@@ -1,3 +1,4 @@
+use super::TaskStatus;
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 use std::{
@@ -16,7 +17,7 @@ pub struct TaskRecord {
     pub id: String,
     pub project_id: String,
     pub prompt: String,
-    pub status: String,
+    pub status: TaskStatus,
     pub agent_id: String,
     pub agent_role_id: Option<String>,
     pub is_router: bool,
@@ -146,14 +147,7 @@ impl TaskDb {
         Ok(())
     }
 
-    pub fn set_status(&self, id: &str, status: &str) -> Result<()> {
-        ensure!(
-            matches!(
-                status,
-                "todo" | "in_progress" | "waiting" | "in_review" | "done" | "blocked" | "cancelled"
-            ),
-            "Invalid task status"
-        );
+    pub fn set_status(&self, id: &str, status: TaskStatus) -> Result<()> {
         ensure!(
             self.lock()?.execute(
                 "UPDATE tasks SET status = ?2 WHERE id = ?1 AND archived = 0 AND is_router = 0",
@@ -164,7 +158,7 @@ impl TaskDb {
         Ok(())
     }
 
-    pub fn status(&self, id: &str) -> Result<Option<String>> {
+    pub fn status(&self, id: &str) -> Result<Option<TaskStatus>> {
         Ok(self
             .lock()?
             .query_row("SELECT status FROM tasks WHERE id = ?1", [id], |row| {

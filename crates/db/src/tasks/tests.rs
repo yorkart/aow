@@ -4,7 +4,7 @@ fn task(id: &str, dependencies: &[&str]) -> TaskRecord {
     TaskRecord {
         id: id.into(),
         project_id: "project".into(),
-        status: "todo".into(),
+        status: TaskStatus::Todo,
         prompt: format!("Task {id}"),
         agent_id: "agent".into(),
         agent_role_id: None,
@@ -54,6 +54,50 @@ fn execution(id: &str, task_id: &str, parent: Option<&str>) -> TaskRun {
         finished_at: None,
         attempts: 0,
         retry_at: 0,
+    }
+}
+
+#[test]
+fn business_status_preserves_json_and_sqlite_values() {
+    let db = TaskDb::open(None).unwrap();
+    db.insert(&task("status", &[])).unwrap();
+    for (status, value) in [
+        (TaskStatus::Todo, "todo"),
+        (TaskStatus::InProgress, "in_progress"),
+        (TaskStatus::Waiting, "waiting"),
+        (TaskStatus::InReview, "in_review"),
+        (TaskStatus::Done, "done"),
+        (TaskStatus::Blocked, "blocked"),
+        (TaskStatus::Cancelled, "cancelled"),
+    ] {
+        let json = serde_json::json!(value);
+        assert_eq!(serde_json::to_value(status).unwrap(), json);
+        let decoded: TaskStatus = serde_json::from_value(json).unwrap();
+        db.set_status("status", decoded).unwrap();
+        let stored: String = db
+            .lock()
+            .unwrap()
+            .query_row("SELECT status FROM tasks WHERE id = 'status'", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(stored, value);
+        assert_eq!(db.status("status").unwrap(), Some(status));
+        assert_eq!(db.list().unwrap()[0].status, status);
+    }
+}
+
+#[test]
+fn invalid_business_status_is_rejected_at_json_and_sqlite_boundaries() {
+    let db = TaskDb::open(None).unwrap();
+    for value in ["", "running", "result_available", "Done", "in_progess"] {
+        assert!(serde_json::from_value::<TaskStatus>(serde_json::json!(value)).is_err());
+        assert!(
+            db.lock()
+                .unwrap()
+                .query_row("SELECT ?1", [value], |row| row.get::<_, TaskStatus>(0))
+                .is_err()
+        );
     }
 }
 
@@ -175,8 +219,8 @@ fn wakeups_have_independent_results_and_preserve_causal_and_return_addresses() {
     .unwrap();
     let frozen = db.run("parent").unwrap().unwrap();
     assert!(frozen.terminal());
-    assert_eq!(db.list().unwrap()[0].status, "in_progress");
-    db.set_status("worker", "waiting").unwrap();
+    assert_eq!(db.list().unwrap()[0].status, TaskStatus::InProgress);
+    db.set_status("worker", TaskStatus::Waiting).unwrap();
     db.finish_run(
         "child",
         "result_available",
@@ -220,12 +264,11 @@ fn wakeups_have_independent_results_and_preserve_causal_and_return_addresses() {
     assert_eq!(upstream.thread_id, "thread-source");
     assert_eq!(
         db.list().unwrap()[0].status,
-        "waiting",
+        TaskStatus::Waiting,
         "run outcomes do not change business acceptance"
     );
-    db.set_status("worker", "done").unwrap();
-    assert_eq!(db.list().unwrap()[0].status, "done");
-    assert!(db.set_status("worker", "result_available").is_err());
+    db.set_status("worker", TaskStatus::Done).unwrap();
+    assert_eq!(db.list().unwrap()[0].status, TaskStatus::Done);
 }
 
 #[test]
@@ -280,7 +323,7 @@ fn upgrading_waiting_runs_freezes_old_results_and_keeps_pending_returns() {
     assert_eq!(run.state, "result_available");
     assert_eq!(run.result.as_deref(), Some("Delegated; awaiting findings"));
     assert_eq!(run.execution.unwrap().workspace, "/repo");
-    assert_eq!(db.list().unwrap()[0].status, "waiting");
+    assert_eq!(db.list().unwrap()[0].status, TaskStatus::Waiting);
     assert_eq!(db.active_deliveries().unwrap().len(), 2);
     drop(db);
     let db = TaskDb::open(Some(&path)).unwrap();

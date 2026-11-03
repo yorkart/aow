@@ -1,6 +1,6 @@
 use super::*;
 use aow_acp::{AcpHost, AcpService, Content};
-use aow_db::tasks::TaskResource;
+use aow_db::tasks::{TaskResource, TaskStatus};
 use axum::{
     Router,
     body::{Body, to_bytes},
@@ -52,7 +52,7 @@ async fn task(state: &AppState, root: &Path, id: &str) -> TaskRecord {
     let task = TaskRecord {
         id: id.into(),
         project_id: "project".into(),
-        status: "todo".into(),
+        status: TaskStatus::Todo,
         prompt: id.into(),
         agent_id: "test".into(),
         agent_role_id: None,
@@ -401,7 +401,7 @@ async fn role_conversations_share_workspace_admission_without_sharing_results() 
             .prompt_receipts
             .is_empty()
     );
-    db.set_status("developer", "cancelled").unwrap();
+    db.set_status("developer", TaskStatus::Cancelled).unwrap();
     worker
         .execution(db.run(&change.id).unwrap().unwrap())
         .await
