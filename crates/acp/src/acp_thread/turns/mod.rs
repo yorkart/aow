@@ -3,15 +3,16 @@ use crate::facade::{SessionSnapshot, SessionTurn, ThreadEntry};
 mod replay;
 
 pub(crate) fn start(thread: &mut SessionSnapshot, entry_start: usize) {
+    start_with_id(thread, entry_start, uuid::Uuid::new_v4().to_string());
+}
+
+pub(crate) fn start_with_id(thread: &mut SessionSnapshot, entry_start: usize, id: String) {
     // Plans belong to a turn; retain the result until another turn is admitted.
     thread.plan = serde_json::Value::Null;
     super::AcpThread::clear_session_meta(thread);
     thread.session_meta_suppressed = false;
     thread.turns.push(SessionTurn {
-        id: thread
-            .active_prompt
-            .clone()
-            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+        id,
         user_entry_id: thread.entries[entry_start].id.clone(),
         status: "in_progress".into(),
         stop_reason: None,
@@ -20,21 +21,21 @@ pub(crate) fn start(thread: &mut SessionSnapshot, entry_start: usize) {
 }
 
 pub(crate) fn finish(thread: &mut SessionSnapshot) {
-    if thread.status == "working" {
-        return;
+    if thread.status != "working" {
+        for turn in thread
+            .turns
+            .iter_mut()
+            .filter(|turn| turn.status == "in_progress")
+        {
+            finish_record(
+                turn,
+                &thread.status,
+                thread.stop_reason.clone(),
+                thread.error.clone(),
+            );
+        }
     }
-    for turn in thread
-        .turns
-        .iter_mut()
-        .filter(|turn| turn.status == "in_progress")
-    {
-        finish_record(
-            turn,
-            &thread.status,
-            thread.stop_reason.clone(),
-            thread.error.clone(),
-        );
-    }
+    // A prior prompt can finish while a detached steering turn is still running.
     settle_receipts(thread);
 }
 
@@ -56,6 +57,11 @@ pub(crate) fn finish_at(thread: &mut SessionSnapshot, entry_start: usize) {
 }
 
 fn settle_receipts(thread: &mut SessionSnapshot) {
+    // Until acknowledgement, steering input/output can still belong to either
+    // turn. The handler relocates the input and registers any new turn first.
+    if thread.steering.pending.is_some() {
+        return;
+    }
     for receipt in thread
         .prompt_receipts
         .values_mut()
@@ -92,6 +98,20 @@ fn settle_receipts(thread: &mut SessionSnapshot) {
                 .skip(start + 1)
                 .find(|(_, e)| thread.turns.iter().any(|t| t.user_entry_id == e.id))
                 .map_or(thread.entries.len(), |(index, _)| index);
+            if thread.entries[start..end].iter().any(|entry| {
+                entry.kind == "steering"
+                    && entry.delivery.as_ref().is_some_and(|delivery| {
+                        matches!(delivery.status.as_str(), "sending" | "unknown")
+                    })
+            }) {
+                // Recovery cannot reconstruct an unacknowledged steering boundary.
+                receipt.status = "interrupted".into();
+                receipt.stop_reason = None;
+                receipt.error.get_or_insert_with(|| {
+                    "Prompt result boundary unavailable after unacknowledged steering".into()
+                });
+                continue;
+            }
             let text = final_message(&thread.entries[start..end])
                 .iter()
                 .filter_map(|entry| entry.content["text"].as_str())

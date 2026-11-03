@@ -14,15 +14,12 @@ pub(super) async fn dispatch(
     page: &broadcast::Sender<TaskStopNotification>,
     completed: TurnCompletion,
 ) {
-    // Managed work has a durable Inbox event. Do not also publish the transient
-    // legacy task-stopped popup (including the automatic summary wakeup).
-    if manager
+    // Inbox replaces the page popup for managed work, including summary wakeups.
+    // User-configured IM channels still receive the normal completion notification.
+    let managed = manager
         .task_db()
         .owns_prompt(&completed.turn_id)
-        .unwrap_or(false)
-    {
-        return;
-    }
+        .unwrap_or(false);
     let session = completed.session;
     let project_name = manager
         .project_name_for_workspace(&session.cwd)
@@ -34,29 +31,31 @@ pub(super) async fn dispatch(
                 .unwrap_or(&session.cwd)
                 .to_owned()
         });
-    manager.notifications().dispatch(
-        TaskStopNotification {
-            agent: session.agent_id,
-            session_id: session
-                .session_id
-                .unwrap_or_else(|| session.thread_id.clone()),
-            title: session.title.clone(),
-            cwd: session.cwd.clone(),
-            turn_id: Some(completed.turn_id),
-            conclusion: completed.conclusion,
-            usage: completed.usage.as_ref().and_then(turn_usage),
-            instance_ids: Vec::new(),
-            sources: vec![TaskStopSource {
-                project_name,
-                workspace_root: session.cwd,
-                tab_id: String::new(),
-                thread_id: Some(session.thread_id),
-                tab_name: session.title,
-                tab_url: None,
-            }],
-        },
-        page,
-    );
+    let notification = TaskStopNotification {
+        agent: session.agent_id,
+        session_id: session
+            .session_id
+            .unwrap_or_else(|| session.thread_id.clone()),
+        title: session.title.clone(),
+        cwd: session.cwd.clone(),
+        turn_id: Some(completed.turn_id),
+        conclusion: completed.conclusion,
+        usage: completed.usage.as_ref().and_then(turn_usage),
+        instance_ids: Vec::new(),
+        sources: vec![TaskStopSource {
+            project_name,
+            workspace_root: session.cwd,
+            tab_id: String::new(),
+            thread_id: Some(session.thread_id),
+            tab_name: session.title,
+            tab_url: None,
+        }],
+    };
+    if managed {
+        manager.notifications().dispatch_im(notification);
+    } else {
+        manager.notifications().dispatch(notification, page);
+    }
 }
 
 fn turn_usage(usage: &Value) -> Option<TokenUsage> {

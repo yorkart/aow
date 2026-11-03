@@ -94,6 +94,46 @@ impl Fixture {
 }
 
 #[tokio::test]
+async fn managed_results_and_turn_ids_remain_separate_when_steering_overtakes_completion()
+-> Result<()> {
+    for text in ["receipt-late-ack", "receipt-late-reply"] {
+        let f = Fixture::new(true).await?;
+        f.service
+            .start_prompt_once(&f.id, "managed-run", prompt("Original task"))?;
+        f.wait(|s| {
+            s.entries
+                .iter()
+                .any(|entry| entry.content["text"] == "Before steering")
+        })
+        .await;
+        f.service.start_steering(&f.id, prompt(text))?;
+        let s = f
+            .wait(|s| {
+                !s.steering_pending && s.prompt_receipts["managed-run"].status != "in_progress"
+            })
+            .await;
+        assert_eq!(s.status, "working", "the new turn must still be active");
+        assert_eq!(s.turns.len(), 2);
+        assert_eq!(s.turns[0].id, "managed-run");
+        assert_ne!(s.turns[1].id, "managed-run");
+        assert_eq!(s.turns[1].status, "in_progress");
+        assert_eq!(
+            s.prompt_receipts["managed-run"].conclusion.as_deref(),
+            Some("Before steering")
+        );
+        // The frozen receipt is durable even though the session is still working.
+        let restored = AcpService::new(f.host.clone(), Some(f.directory.path().join("state")))?;
+        assert_eq!(
+            serde_json::to_value(&restored.snapshot(&f.id)?.prompt_receipts["managed-run"])?,
+            serde_json::to_value(&s.prompt_receipts["managed-run"])?
+        );
+        f.service.cancel(&f.id)?;
+        f.wait(|s| s.status == "idle").await;
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn generic_steering_preserves_the_turn_permissions_and_echoes() -> Result<()> {
     let f = Fixture::new(true).await?;
     f.start("permission").await?;

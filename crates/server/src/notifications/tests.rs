@@ -463,6 +463,145 @@ fn dispatch_obeys_channels_without_browser_or_session_deduplication() {
 }
 
 #[tokio::test]
+async fn managed_acp_prompts_and_wakeups_keep_im_delivery_without_page_popups() {
+    use aow_db::tasks::{RunSource, TaskRun};
+    use std::time::Duration;
+
+    let root = tempfile::tempdir().unwrap();
+    let manager = crate::aow::AowManager::persistent(root.path()).unwrap();
+    let notifications = manager.notifications();
+    notifications
+        .update(im("cli_test", Some("fixture-secret")))
+        .unwrap();
+    notifications
+        .update(preferences(true, vec![Channel::Page, Channel::Feishu]))
+        .unwrap();
+    // Inspect the real IM queue without starting an external provider worker.
+    let mut im_receiver = notifications.inner.receiver.lock().unwrap().take().unwrap();
+    let (page, mut page_receiver) = broadcast::channel(8);
+    let previous = manager.acp_settings().unwrap();
+    let fixture =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../acp/tests/fixtures/lineage-agent.mjs");
+    manager
+        .save_acp_settings(
+            json!({"agent_servers":{"test":{
+                "type":"custom", "command":"node", "args":[fixture]
+            }}})
+            .to_string(),
+            previous.revision,
+        )
+        .await
+        .unwrap();
+    let acp = crate::acp::service(
+        manager.clone(),
+        Some(root.path().into()),
+        page,
+        crate::workspace_events::WorkspaceEvents::new(),
+    )
+    .unwrap();
+    let connection = acp.connect("test", root.path().into()).await.unwrap();
+    let child = acp.new_session(&connection.id).await.unwrap();
+    let router = acp.new_session(&connection.id).await.unwrap();
+    let run = TaskRun {
+        id: "managed-run".into(),
+        request_id: "initial".into(),
+        task_id: "child".into(),
+        project_id: "project".into(),
+        thread_id: child.thread_id.clone(),
+        prompt: "Inspect".into(),
+        source: Some(RunSource {
+            task_id: "router".into(),
+            thread_id: router.thread_id.clone(),
+            turn_id: None,
+            message_id: None,
+            request: "Inspect".into(),
+            parent_run_id: None,
+        }),
+        state: "running".into(),
+        result: None,
+        error: None,
+        created_at: 1,
+        finished_at: None,
+        attempts: 0,
+        retry_at: 0,
+    };
+    manager.task_db().enqueue_run(&run).unwrap();
+    let content = || serde_json::from_value(json!([{"type":"text", "text":"Inspect"}])).unwrap();
+    acp.start_prompt_once(&child.thread_id, &run.id, content())
+        .unwrap();
+    let first = tokio::time::timeout(Duration::from_secs(10), im_receiver.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(first.event.turn_id.as_deref(), Some(run.id.as_str()));
+    assert_eq!(
+        first.event.sources[0].thread_id.as_deref(),
+        Some(child.thread_id.as_str())
+    );
+    assert_eq!(first.event.conclusion.as_deref(), Some("Done"));
+    assert!(page_receiver.try_recv().is_err());
+
+    manager
+        .task_db()
+        .finish_run(
+            &run.id,
+            "result_available",
+            first.event.conclusion.clone(),
+            None,
+            2,
+        )
+        .unwrap();
+    let wakeup = manager.task_db().active_deliveries().unwrap().remove(0);
+    acp.start_prompt_once(&router.thread_id, &wakeup.prompt_id, content())
+        .unwrap();
+    let returned = tokio::time::timeout(Duration::from_secs(10), im_receiver.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        returned.event.turn_id.as_deref(),
+        Some(wakeup.prompt_id.as_str())
+    );
+    assert_eq!(
+        returned.event.sources[0].thread_id.as_deref(),
+        Some(router.thread_id.as_str())
+    );
+    assert!(page_receiver.try_recv().is_err());
+
+    acp.start_prompt(&router.thread_id, content()).unwrap();
+    let normal = tokio::time::timeout(Duration::from_secs(10), im_receiver.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        page_receiver.try_recv().unwrap().turn_id,
+        normal.event.turn_id
+    );
+    assert!(im_receiver.try_recv().is_err());
+    acp.close_session(&child.thread_id).await.unwrap();
+    acp.close_session(&router.thread_id).await.unwrap();
+}
+
+#[test]
+fn im_only_dispatch_still_obeys_notification_preferences() {
+    let manager = NotificationManager::in_memory();
+    manager
+        .update(im("cli_test", Some("fixture-secret")))
+        .unwrap();
+    let mut receiver = manager.inner.receiver.lock().unwrap().take().unwrap();
+    for channels in [vec![Channel::Feishu], vec![Channel::Page, Channel::Feishu]] {
+        manager.update(preferences(true, channels)).unwrap();
+        manager.dispatch_im(event());
+        assert_eq!(receiver.try_recv().unwrap().event.session_id, "session-1");
+    }
+    for (enabled, channels) in [(false, vec![Channel::Feishu]), (true, vec![Channel::Page])] {
+        manager.update(preferences(enabled, channels)).unwrap();
+        manager.dispatch_im(event());
+        assert!(receiver.try_recv().is_err());
+    }
+}
+
+#[tokio::test]
 async fn settings_api_redacts_secrets_and_rejects_invalid_preferences() {
     use axum::{
         body::{Body, to_bytes},

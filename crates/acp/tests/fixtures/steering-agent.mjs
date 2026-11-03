@@ -50,6 +50,17 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
       reply(id, { outcome: 'promptRequired', reason: 'noRunningTurn' }); return;
     }
     if (text === 'failed' || text === 'unexpected') { reply(id, { outcome: text }); return; }
+    if (text === 'receipt-late-ack' || text === 'receipt-late-reply') {
+      const oldPrompt = session.prompt; delete session.prompt;
+      activity(params.sessionId, 'idle');
+      activity(params.sessionId, 'active');
+      message(params.sessionId, 'agent', 'Detached response', 'detached');
+      const finishOld = () => reply(oldPrompt, { stopReason: 'end_turn' });
+      const acknowledge = () => reply(id, { outcome: 'startedNewTurn' });
+      if (text === 'receipt-late-ack') { finishOld(); setTimeout(acknowledge, 40); }
+      else { acknowledge(); setTimeout(finishOld, 40); }
+      return;
+    }
     for (const content of params.prompt) {
       if (content.type === 'text') {
         message(params.sessionId, 'user', content.text.slice(0, 3));

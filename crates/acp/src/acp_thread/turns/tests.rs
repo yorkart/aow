@@ -22,7 +22,7 @@ fn managed_receipts_freeze_each_turn_and_survive_compacted_history() {
         thread.status = "working".into();
         thread.active_prompt = Some(id.into());
         AcpThread::push(&mut thread, "user", json!({"type":"text","text":id}));
-        start(&mut thread, start_index);
+        start_with_id(&mut thread, start_index, id.into());
         thread.prompt_receipts.insert(
             id.into(),
             crate::facade::PromptReceipt {
@@ -65,6 +65,109 @@ fn message(thread: &mut SessionSnapshot, id: Option<&str>, value: &str) {
             "sessionUpdate": "agent_message_chunk", "messageId": id,
             "content": {"type": "text", "text": value}
         }),
+    );
+}
+
+fn pending_managed_steering() -> SessionSnapshot {
+    let mut thread = snapshot();
+    thread.status = "working".into();
+    thread.active_prompt = Some("managed".into());
+    AcpThread::push(
+        &mut thread,
+        "user",
+        json!({"type":"text","text":"Original task"}),
+    );
+    start_with_id(&mut thread, 0, "managed".into());
+    thread.prompt_receipts.insert(
+        "managed".into(),
+        crate::facade::PromptReceipt {
+            user_entry_id: thread.entries[0].id.clone(),
+            status: "in_progress".into(),
+            stop_reason: None,
+            error: None,
+            conclusion: None,
+            finished_at: None,
+        },
+    );
+    message(&mut thread, Some("old-answer"), "Original result");
+    let input = json!({"type":"text","text":"A separate request"});
+    AcpThread::push(&mut thread, "steering", input.clone());
+    thread.entries[2].delivery = Some(crate::facade::InputDelivery {
+        status: "sending".into(),
+        error: None,
+    });
+    thread.steering_pending = true;
+    thread.steering.pending = Some(crate::acp_thread::steering::PendingSteer {
+        id: "steer".into(),
+        entry_start: 2,
+        content: vec![serde_json::from_value(input).unwrap()],
+        prompt_required: false,
+        cancelled: false,
+        saw_idle: true,
+        saw_active: true,
+        terminal: None,
+        new_turn_start: Some(3),
+    });
+    message(&mut thread, Some("new-answer"), "Unrelated new result");
+    thread
+}
+
+#[test]
+fn managed_results_wait_for_steering_boundaries_in_either_response_order() {
+    for acknowledge_first in [false, true] {
+        let mut thread = pending_managed_steering();
+        if !acknowledge_first {
+            thread.status = "idle".into();
+            thread.stop_reason = Some("end_turn".into());
+            finish_at(&mut thread, 0);
+            assert_eq!(thread.prompt_receipts["managed"].status, "in_progress");
+            assert!(thread.prompt_receipts["managed"].conclusion.is_none());
+        }
+        // The steering handler registers the new turn after acknowledgement.
+        thread.steering.pending = None;
+        thread.steering_pending = false;
+        thread.entries[2].kind = "user".into();
+        thread.entries[2].delivery.as_mut().unwrap().status = "started".into();
+        start(&mut thread, 2);
+        assert_ne!(thread.turns[0].id, thread.turns[1].id);
+        if acknowledge_first {
+            thread.status = "idle".into();
+            thread.stop_reason = Some("end_turn".into());
+            finish_at(&mut thread, 0);
+        }
+        thread.active_prompt = None;
+        thread.status = "working".into();
+        thread.stop_reason = None;
+        finish(&mut thread);
+        assert_eq!(thread.turns[1].status, "in_progress");
+        assert_eq!(thread.prompt_receipts["managed"].status, "completed");
+        assert_eq!(
+            thread.prompt_receipts["managed"].conclusion.as_deref(),
+            Some("Original result")
+        );
+    }
+}
+
+#[test]
+fn restart_does_not_freeze_an_unacknowledged_steering_answer_as_the_old_result() {
+    let mut thread = pending_managed_steering();
+    thread.status = "idle".into();
+    thread.stop_reason = Some("end_turn".into());
+    finish_at(&mut thread, 0);
+    let mut restored: SessionSnapshot =
+        serde_json::from_value(serde_json::to_value(&thread).unwrap()).unwrap();
+    restored.status = "disconnected".into();
+    crate::acp_thread::steering::disconnected(&mut restored);
+    finish(&mut restored);
+    let receipt = &restored.prompt_receipts["managed"];
+    assert_eq!(receipt.status, "interrupted");
+    assert!(receipt.conclusion.is_none());
+    assert!(
+        receipt
+            .error
+            .as_ref()
+            .unwrap()
+            .contains("boundary unavailable")
     );
 }
 

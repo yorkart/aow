@@ -143,7 +143,7 @@ impl AgentServerStore {
                     AcpThread::push(thread, "user", block.clone());
                 }
             }
-            crate::acp_thread::turns::start(thread, entry_start);
+            crate::acp_thread::turns::start_with_id(thread, entry_start, turn_id.clone());
             if let Some(request_id) = request_id {
                 thread.prompt_receipts.insert(
                     request_id.into(),

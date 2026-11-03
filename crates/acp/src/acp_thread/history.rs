@@ -200,6 +200,11 @@ impl ThreadStore {
         let source = self.threads.get(id).context("ACP session not found")?;
         let mut thread = source.lock().unwrap();
         let working = thread.status == "working";
+        let finished_receipts = thread
+            .prompt_receipts
+            .values()
+            .filter(|receipt| receipt.status != "in_progress")
+            .count();
         let title = thread.title.clone();
         let permissions: Vec<_> = thread
             .permissions
@@ -221,6 +226,12 @@ impl ThreadStore {
         }
         let flush = !working
             || thread.status != "working"
+            || finished_receipts
+                != thread
+                    .prompt_receipts
+                    .values()
+                    .filter(|receipt| receipt.status != "in_progress")
+                    .count()
             || permissions
                 != thread
                     .permissions
