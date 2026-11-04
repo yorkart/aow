@@ -182,7 +182,7 @@ async fn another_login_method_uses_the_same_http_cookie_and_access_policy() {
     use tower::ServiceExt;
 
     let root = tempfile::tempdir().unwrap();
-    let mut state = crate::AppState::for_test(root.path().to_path_buf());
+    let (mut state, _node) = crate::tests::node_state(root.path(), root.path().into()).await;
     state.auth = AuthService::with_providers(vec![Arc::new(TestProvider::new("test-method"))]);
     let app = crate::build_router(state);
     let response = app

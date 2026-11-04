@@ -7,7 +7,6 @@ members = [
   "crates/operation-log",
   "crates/macos-log",
   "crates/process",
-  "crates/filesystem",
   "crates/git-service",
   "crates/server",
   "crates/im",

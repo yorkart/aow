@@ -97,7 +97,7 @@ const BRIDGE_CLOSE_FORWARD_TIMEOUT: Duration = Duration::from_secs(1);
 const BRIDGE_MESSAGE_FORWARD_TIMEOUT: Duration = Duration::from_secs(5);
 const BRIDGE_RUNTIME_SYNC_TIMEOUT: Duration = Duration::from_secs(2);
 
-pub use aow_filesystem::default_state_dir;
+pub use aow_config::default_state_dir;
 
 #[cfg(test)]
 mod tests;

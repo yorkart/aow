@@ -1,4 +1,4 @@
-//! Single-execution ownership, cancellation and output capture. Scheduling belongs to Server.
+//! Non-interactive Agent executions, cancellation and output capture. Scheduling belongs to Server.
 mod process;
 pub use process::{ProcessResult, ProcessSpec, run_once};
 

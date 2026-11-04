@@ -1,5 +1,3 @@
-#[cfg(test)]
-use aow_filesystem::{DEFAULT_MAX_TEXT_BYTES, read_text_file};
 use axum::{
     Json,
     extract::{Path as AxumPath, State},
@@ -39,20 +37,9 @@ pub(crate) async fn read_text(
     AxumPath(path): AxumPath<String>,
 ) -> Result<impl IntoResponse, HttpError> {
     let path = decode_absolute(&path)?;
-    let text: aow_protocol::TextFile = if let Some(runtime) = state.acp.runtime() {
-        runtime
-            .workspace_operation("read", serde_json::json!({"path":path}))
-            .await?
-    } else {
-        #[cfg(test)]
-        {
-            read_text_file(path, DEFAULT_MAX_TEXT_BYTES).await?
-        }
-        #[cfg(not(test))]
-        {
-            return Err(super::node::runtime(&state).unwrap_err());
-        }
-    };
+    let text: aow_protocol::TextFile = super::node::runtime(&state)?
+        .workspace_operation("read", serde_json::json!({"path":path}))
+        .await?;
     let etag = HeaderValue::from_str(&format!("\"{}\"", text.version))
         .map_err(|error| HttpError::internal(error.to_string()))?;
     let mut headers = HeaderMap::new();

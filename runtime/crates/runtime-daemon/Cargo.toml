@@ -7,7 +7,7 @@ license = "GPL-3.0-or-later"
 [dependencies]
 aow-runtime-contract = { path = "../../../common/crates/runtime-contract" }
 aow-acp = { path = "../acp" }
-aow-runtime-executor = { path = "../executor" }
+aow-runtime-exec = { path = "../exec" }
 tempfile = "3.20"
 aow-workspaces = { package = "aow-runtime-workspace", path = "../workspace" }
 aow-runtime-environment = { path = "../environment" }

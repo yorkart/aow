@@ -57,7 +57,7 @@ impl AowManager {
 }
 
 pub(in crate::aow) fn default_notes_base() -> PathBuf {
-    aow_filesystem::default_state_dir().join("data/notes")
+    aow_config::default_state_dir().join("data/notes")
 }
 
 #[cfg(test)]

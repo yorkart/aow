@@ -58,3 +58,8 @@ formats and Agent execution traits belong exclusively to Runtime.
 
 Agent integration tests start the external Runtime fixture. They do not link Runtime
 implementation crates. Shared wire types are in `../common/crates/runtime-contract`.
+
+Workspace file reads, writes, searches and transfers always use the Runtime SDK,
+including in caller tests. Server has no filesystem execution crate or bundled
+ripgrep. Its own state-directory selection belongs to `crates/config`; workspace
+filesystem implementations and the search tool belong to Runtime.

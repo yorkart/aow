@@ -2,9 +2,6 @@ mod requests;
 #[cfg(test)]
 mod tests;
 
-use aow_filesystem::SearchError;
-#[cfg(test)]
-use aow_filesystem::search_files;
 use aow_protocol::FileSearchRequest;
 use axum::{
     Json,
@@ -29,34 +26,21 @@ pub(crate) async fn search(
 ) -> Result<Json<aow_protocol::FileSearchResult>, HttpError> {
     let guard = state.file_search.begin(request.request_id.clone())?;
     let _permit = tokio::select! {
-        _ = guard.cancel.cancelled() => return Err(search_error(SearchError::Cancelled)),
+        _ = guard.cancel.cancelled() => return Err(cancelled()),
         permit = state.file_search.capacity.acquire() => permit.map_err(|error| HttpError::internal(error.to_string()))?,
     };
-    if let Some(runtime) = state.acp.runtime() {
-        let mut remote = RemoteSearch {
-            client: runtime.clone(),
-            id: request.request_id.clone(),
-            finished: false,
-        };
-        let result = tokio::select! {
-            _=guard.cancel.cancelled()=>return Err(search_error(SearchError::Cancelled)),
-            result=runtime.post_json("/v1/workspace/search",&request)=>result,
-        };
-        remote.finished = true;
-        return result.map(Json).map_err(Into::into);
-    }
-    #[cfg(not(test))]
-    {
-        Err(super::node::runtime(&state).unwrap_err())
-    }
-    #[cfg(test)]
-    {
-        Ok(Json(
-            search_files(request.search, guard.cancel.clone())
-                .await
-                .map_err(search_error)?,
-        ))
-    }
+    let runtime = super::node::runtime(&state)?;
+    let mut remote = RemoteSearch {
+        client: runtime.clone(),
+        id: request.request_id.clone(),
+        finished: false,
+    };
+    let result = tokio::select! {
+        _=guard.cancel.cancelled()=>return Err(cancelled()),
+        result=runtime.post_json("/v1/workspace/search",&request)=>result,
+    };
+    remote.finished = true;
+    result.map(Json).map_err(Into::into)
 }
 
 pub(crate) async fn cancel(
@@ -64,24 +48,19 @@ pub(crate) async fn cancel(
     Path(request_id): Path<String>,
 ) -> Result<StatusCode, HttpError> {
     state.file_search.cancel(request_id.clone())?;
-    if let Some(runtime) = state.acp.runtime() {
-        runtime
-            .delete(&format!("/v1/workspace/search/{request_id}"))
-            .await?;
-    }
+    super::node::runtime(&state)?
+        .delete(&format!("/v1/workspace/search/{request_id}"))
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
-fn search_error(error: SearchError) -> HttpError {
-    let (status, code) = match &error {
-        SearchError::Unavailable => (StatusCode::SERVICE_UNAVAILABLE, "ripgrep_unavailable"),
-        SearchError::Cancelled => (StatusCode::CONFLICT, "search_cancelled"),
-        SearchError::Invalid(_) | SearchError::Failed(_) => {
-            (StatusCode::BAD_REQUEST, "search_failed")
-        }
-        SearchError::Io(_) => (StatusCode::BAD_REQUEST, "search_io_error"),
-    };
-    HttpError::new(status, code, error.to_string(), None)
+fn cancelled() -> HttpError {
+    HttpError::new(
+        StatusCode::CONFLICT,
+        "search_cancelled",
+        aow_i18n::text("filesystem.search_canceled"),
+        None,
+    )
 }
 
 struct RemoteSearch {

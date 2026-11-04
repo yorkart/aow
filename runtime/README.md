@@ -13,7 +13,7 @@ runtime/
   crates/terminald/   PTY lifecycle, replay and VT worker host
   crates/workspace/   Node files, Git, worktrees, search and clipboard storage
   crates/environment/  Role HOME, private identity copies and skills
-  crates/executor/    Durable single executions and process-group ownership
+  crates/exec/        Non-interactive Agent executions and process-group ownership
   crates/runtime-daemon/  Listener, authentication, configuration and shutdown
   vt-worker/         Bundled Node.js VT parser
 ```

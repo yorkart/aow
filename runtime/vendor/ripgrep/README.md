@@ -15,7 +15,7 @@ To update, download all four matching artifacts from the official
 SHA-256 checksums, replace the archives and manifest, and run the ripgrep and
 release packaging tests. Keep upstream license notices with every release.
 
-The server resolves `rg` beside its own executable first, then the development
+The runtime daemon resolves `rg` beside its own executable first, then the development
 build output in debug builds, then an absolute executable found on `PATH`.
 No search falls back to a different search engine. Missing installations report
-how to repair AoW or install ripgrep on the server host.
+how to repair AoW or install ripgrep on the runtime host.

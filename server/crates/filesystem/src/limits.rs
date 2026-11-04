@@ -1,1 +1,0 @@
-pub const DEFAULT_MAX_TEXT_BYTES: u64 = 4 * 1024 * 1024;

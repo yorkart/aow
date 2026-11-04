@@ -30,7 +30,6 @@ aow-automations = { path = "../automations" }
 aow-workspaces = { path = "../workspaces" }
 aow-im = { path = "../im" }
 aow-config = { path = "../config" }
-aow-filesystem = { path = "../filesystem" }
 aow-git-service = { path = "../git-service" }
 aow-operation-log = { path = "../operation-log" }
 aow-protocol = { path = "../../../common/crates/protocol" }

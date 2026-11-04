@@ -180,7 +180,6 @@ dependencies = [
  "anyhow",
  "aow-automations",
  "aow-config",
- "aow-filesystem",
  "aow-i18n",
  "aow-id",
  "aow-protocol",
@@ -232,25 +231,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
-]
-
-[[package]]
-name = "aow-filesystem"
-version = "0.1.0"
-dependencies = [
- "aow-i18n",
- "aow-id",
- "aow-protocol",
- "bytes",
- "futures-util",
- "libc",
- "mime_guess",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.19",
- "tokio",
- "tokio-util",
 ]
 
 [[package]]
@@ -346,7 +326,6 @@ version = "0.1.0"
 dependencies = [
  "agent-client-protocol",
  "anyhow",
- "aow-filesystem",
  "aow-i18n",
  "aow-process",
  "aow-protocol",
@@ -389,7 +368,6 @@ dependencies = [
  "aow-cli-access",
  "aow-config",
  "aow-db",
- "aow-filesystem",
  "aow-git-service",
  "aow-i18n",
  "aow-id",

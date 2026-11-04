@@ -68,49 +68,17 @@ pub(super) async fn listing(
     state: &AppState,
     path: &Path,
 ) -> Result<aow_protocol::DirectoryListing, HttpError> {
-    if let Some(runtime) = state.acp.runtime() {
-        return Ok(runtime
-            .workspace_operation("list", serde_json::json!({"path":path}))
-            .await?);
-    }
-    #[cfg(test)]
-    {
-        Ok(aow_filesystem::list_directory(path).await?)
-    }
-    #[cfg(not(test))]
-    {
-        let _ = path;
-        Err(runtime(state).unwrap_err())
-    }
+    Ok(runtime(state)?
+        .workspace_operation("list", serde_json::json!({"path":path}))
+        .await?)
 }
 pub(super) async fn home(state: &AppState) -> Result<std::path::PathBuf, HttpError> {
-    if let Some(runtime) = state.acp.runtime() {
-        return Ok(runtime.workspace_home().await?);
-    }
-    #[cfg(test)]
-    {
-        Ok(super::paths::PROCESS_HOME.clone())
-    }
-    #[cfg(not(test))]
-    {
-        Err(runtime(state).unwrap_err())
-    }
+    Ok(runtime(state)?.workspace_home().await?)
 }
 pub(super) async fn is_file(state: &AppState, path: &Path) -> Result<bool, HttpError> {
-    if let Some(runtime) = state.acp.runtime() {
-        let metadata = runtime.workspace_metadata(path, true).await?;
-        if !metadata.exists {
-            return Err(std::io::Error::from(std::io::ErrorKind::NotFound).into());
-        }
-        return Ok(metadata.file);
+    let metadata = runtime(state)?.workspace_metadata(path, true).await?;
+    if !metadata.exists {
+        return Err(std::io::Error::from(std::io::ErrorKind::NotFound).into());
     }
-    #[cfg(test)]
-    {
-        Ok(tokio::fs::metadata(path).await?.is_file())
-    }
-    #[cfg(not(test))]
-    {
-        let _ = path;
-        Err(runtime(state).unwrap_err())
-    }
+    Ok(metadata.file)
 }

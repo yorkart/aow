@@ -139,7 +139,9 @@ mod tests {
     #[tokio::test]
     async fn untrusted_raw_documents_are_downloaded_and_sandboxed_without_breaking_images() {
         let directory = tempfile::tempdir().unwrap();
-        let app = build_router(AppState::for_test(directory.path().to_owned()));
+        let (state, _node) =
+            crate::tests::node_state(directory.path(), directory.path().to_owned()).await;
+        let app = build_router(state);
         for (name, attachment) in [
             ("preview.html", true),
             ("preview.svg", true),

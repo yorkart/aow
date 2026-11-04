@@ -1,5 +1,5 @@
 //! Single-execution management; upper-level scheduling stays at the caller.
-use aow_runtime_executor::{ExecutionManager, ExecutionSpec};
+use aow_runtime_exec::{ExecutionManager, ExecutionSpec};
 use axum::{
     Json, Router,
     extract::{DefaultBodyLimit, Path, Query, State},

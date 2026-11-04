@@ -133,9 +133,7 @@ fn write_json(output: &mut impl Write, value: &impl Serialize, compact: bool) ->
 
 fn execute(cli: Cli) -> Result<()> {
     connection::initialize(cli.server, cli.server_token_file)?;
-    let state_dir = cli
-        .state_dir
-        .unwrap_or_else(aow_filesystem::default_state_dir);
+    let state_dir = cli.state_dir.unwrap_or_else(aow_config::default_state_dir);
     let value = match cli.command {
         Command::Role(args) => collaboration::role(args, state_dir)?,
         Command::Task(args) => collaboration::task(args, state_dir)?,

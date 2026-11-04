@@ -83,10 +83,9 @@ pub async fn run_with_listener_and_vt_config(
         crate::completions::Completions::open(&options.state_dir, id.clone(), stopping.clone())?;
     let (collector_stop, collector_stopping) = watch::channel(false);
     let collector = completions.start(sessions.clone(), collector_stopping);
-    let executor = aow_runtime_executor::ExecutionManager::open(&node_root, stopping.clone())?
+    let exec = aow_runtime_exec::ExecutionManager::open(&node_root, stopping.clone())?
         .with_ownership(acp.ownership());
-    let executions =
-        crate::executions::Executions::new(executor.clone(), id.clone(), sessions.clone());
+    let executions = crate::executions::Executions::new(exec.clone(), id.clone(), sessions.clone());
     let instance_id = uuid::Uuid::new_v4().to_string();
     let health = serde_json::json!({
         "service": "aow-runtime-daemon", "api_version": 1,
@@ -137,7 +136,7 @@ pub async fn run_with_listener_and_vt_config(
     stop.send_replace(true);
     // Shut both admission gates and reap both kinds of child before reporting exit.
     let (acp_result, terminal_result, execution_result) =
-        tokio::join!(acp.shutdown(), terminal.shutdown(), executor.shutdown());
+        tokio::join!(acp.shutdown(), terminal.shutdown(), exec.shutdown());
     collector_stop.send_replace(true);
     collector
         .await

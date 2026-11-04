@@ -7,7 +7,13 @@ use axum::{
 };
 use tower::ServiceExt;
 
-fn fixture(base: &str) -> (tempfile::TempDir, AppState) {
+async fn fixture(
+    base: &str,
+) -> (
+    tempfile::TempDir,
+    AppState,
+    aow_runtime_client::testing::TestRuntime,
+) {
     let root = tempfile::tempdir().unwrap();
     std::fs::create_dir(root.path().join("assets")).unwrap();
     std::fs::write(root.path().join("index.html"), "<!doctype html><html><head><script type=\"module\" src=\"./assets/app.js\"></script></head><body></body></html>").unwrap();
@@ -17,9 +23,13 @@ fn fixture(base: &str) -> (tempfile::TempDir, AppState) {
     )
     .unwrap();
     crate::auth::write_credentials(root.path(), "admin", "test-password");
-    let mut state = AppState::for_test(root.path().to_path_buf());
+    let (mut state, node) = crate::tests::node_state(root.path(), root.path().into()).await;
     state.auth = AuthService::persistent(root.path());
-    (root, state.with_base_path(BasePath::parse(base).unwrap()))
+    (
+        root,
+        state.with_base_path(BasePath::parse(base).unwrap()),
+        node,
+    )
 }
 
 async fn get(app: &Router, path: &str) -> Response {
@@ -70,7 +80,7 @@ fn validates_and_normalizes_deployment_paths() {
 #[tokio::test]
 async fn one_frontend_build_serves_root_and_subpath_including_deep_links() {
     for base in ["", "/tools/aow"] {
-        let (_root, state) = fixture(base);
+        let (_root, state, _node) = fixture(base).await;
         let app = build_router(state);
         for path in [
             "/aow/",
@@ -107,7 +117,7 @@ async fn one_frontend_build_serves_root_and_subpath_including_deep_links() {
 
 #[tokio::test]
 async fn mount_is_bounded_and_preserves_authentication_and_cookie_scope() {
-    let (_root, state) = fixture("/tools/aow");
+    let (_root, state, _node) = fixture("/tools/aow").await;
     let root_app = build_router(state.clone().with_base_path(BasePath::default()));
     let app = build_router(state);
     let redirect = get(&app, "/tools/aow?ui=desktop").await;

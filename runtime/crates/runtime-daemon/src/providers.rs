@@ -51,7 +51,7 @@ async fn invoke(
         tokio::fs::write(&script, &request.script).await?;
         let environment =
             BTreeMap::from([("PATH".into(), aow_agents::environment::path_value(&paths)?)]);
-        let result = aow_runtime_executor::run_once(aow_runtime_executor::ProcessSpec {
+        let result = aow_runtime_exec::run_once(aow_runtime_exec::ProcessSpec {
             executable: node.into(),
             arguments: vec![script.to_string_lossy().into_owned()],
             cwd: request.cwd.unwrap_or_else(|| temporary.path().into()),

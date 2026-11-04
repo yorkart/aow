@@ -25,7 +25,7 @@ test('release tooling, native dependencies and build configuration require every
     'common/Cargo.toml', 'common/Cargo.lock', 'common/crates/runtime-contract/src/acp/model.rs',
     'server/crates/server/Cargo.toml', 'runtime/crates/runtime-daemon/build.rs', 'server/crates/macos-log/src/os_log.c',
     'server/frontend/package.json', 'server/frontend/package-lock.json', 'runtime/vt-worker/bin/vt-worker.mjs',
-    'server/vendor/ripgrep/manifest.json', 'server/vendor/ripgrep/15.2.0/ripgrep.tar.gz',
+    'runtime/vendor/ripgrep/manifest.json', 'runtime/vendor/ripgrep/15.2.0/ripgrep.tar.gz',
   ]) {
     assert.equal(requiresNativePackages('pull_request', [path]), true, path);
   }

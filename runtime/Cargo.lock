@@ -252,7 +252,7 @@ dependencies = [
  "aow-runtime-agents",
  "aow-runtime-contract",
  "aow-runtime-environment",
- "aow-runtime-executor",
+ "aow-runtime-exec",
  "aow-runtime-filesystem",
  "aow-runtime-macos-log",
  "aow-runtime-process",
@@ -301,7 +301,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "aow-runtime-executor"
+name = "aow-runtime-exec"
 version = "0.1.0"
 dependencies = [
  "anyhow",

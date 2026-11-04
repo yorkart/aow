@@ -52,7 +52,7 @@ pub(crate) async fn cli(mut launch: AgentLaunch, cwd: &Path, timeout_ms: u64) ->
             Vec::new()
         }
     };
-    let result = aow_runtime_executor::run_once(aow_runtime_executor::ProcessSpec {
+    let result = aow_runtime_exec::run_once(aow_runtime_exec::ProcessSpec {
         executable: launch.executable.into(),
         arguments: launch.args,
         cwd: cwd.into(),

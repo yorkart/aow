@@ -1,4 +1,4 @@
-use crate::{AppState, build_router};
+use crate::build_router;
 use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode},
@@ -10,7 +10,8 @@ async fn search_route_returns_nested_results_and_honors_early_cancellation() {
     let root = tempfile::TempDir::new().unwrap();
     std::fs::create_dir(root.path().join("nested")).unwrap();
     std::fs::write(root.path().join("nested/file.txt"), "hello needle").unwrap();
-    let app = build_router(AppState::for_test(root.path().into()));
+    let (state, _node) = crate::tests::node_state(root.path(), root.path().into()).await;
+    let app = build_router(state);
     let id = uuid::Uuid::new_v4();
     let query = |id: uuid::Uuid| {
         Request::post("/api/fs/search")

@@ -53,3 +53,19 @@ test('Server reaches native agents only through Runtime contracts and the SDK', 
     assert.doesNotMatch(sdk, /Command::new|rusqlite|AgentInteractive|AgentAutomation|AgentSessionProvider/);
   }
 });
+
+test('workspace filesystem execution and bundled search belong only to Runtime', () => {
+  for (const path of ['server/crates/filesystem', 'server/vendor/ripgrep', 'server/scripts/ripgrep.mjs']) {
+    assert.equal(existsSync(resolve(root, path)), false, path);
+  }
+  for (const entry of readdirSync(resolve(root, 'server/crates'))) {
+    const manifest = readFileSync(resolve(root, 'server/crates', entry, 'Cargo.toml'), 'utf8');
+    assert.doesNotMatch(manifest, /aow-(?:runtime-)?filesystem\s*=/);
+  }
+  for (const path of ['node.rs', 'content.rs', 'files.rs', 'entries.rs', 'raw.rs', 'search/mod.rs']) {
+    const handler = readFileSync(resolve(root, 'server/crates/server/src/filesystem', path), 'utf8');
+    assert.doesNotMatch(handler, /aow_filesystem|(?:std|tokio)::fs|Command::new/);
+  }
+  assert.ok(existsSync(resolve(root, 'runtime/crates/filesystem/Cargo.toml')));
+  assert.ok(existsSync(resolve(root, 'runtime/vendor/ripgrep/manifest.json')));
+});
