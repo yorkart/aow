@@ -217,6 +217,46 @@ cp "$DOWNLOAD_ROOT/$path" "$output"
 }
 function succeeds(result) { assert.equal(result.status, 0, result.stdout + result.stderr); }
 
+for (const mode of ['launchagent', 'launchdaemon']) {
+  test(`${mode} adopts a terminald Node marker and preserves it through rollback and retries`, {
+    skip: mode === 'launchdaemon' && process.getuid() === 0,
+  }, t => {
+    const f = fixture(t);
+    const node = join(f.runtime, 'node');
+    const marker = join(f.runtime, '.aow-runtime-daemon-node-target');
+    const legacyMarker = join(f.runtime, '.aow-terminald-node-target');
+    write(legacyMarker, '/old/node\n');
+    symlinkSync('/old/node', node);
+    succeeds(f.pack('1.0.0')); succeeds(f.publish('1.0.0'));
+    if (mode === 'launchdaemon') {
+      const pending = f.install([], { FAIL_GUI: '1' });
+      assert.equal(pending.status, 78, pending.stdout + pending.stderr);
+      f.registerDaemons();
+    }
+    succeeds(f.install());
+    assert.equal(f.log(marker), `${readlinkSync(node)}\n`);
+    assert.equal(f.log(legacyMarker), '/old/node\n');
+
+    // Recreate the legacy-only marker state before an unhealthy upgrade.
+    rmSync(marker);
+    rmSync(node);
+    symlinkSync('/old/node', node);
+    succeeds(f.pack('2.0.0')); succeeds(f.publish('2.0.0'));
+    const failed = f.install([], { FAIL_HEALTH: 'runtime-daemon' });
+    assert.notEqual(failed.status, 0);
+    assert.match(failed.stdout + failed.stderr, /activation failed/);
+    assert.equal(readlinkSync(node), '/old/node');
+    assert.equal(existsSync(marker), false);
+    assert.equal(f.log(legacyMarker), '/old/node\n');
+    assert.equal(realpathSync(join(f.runtime, 'active/runtime-daemon')), join(f.runtime, 'releases/1.0.0'));
+    succeeds(f.install());
+    succeeds(f.install());
+    assert.equal(f.log(marker), `${readlinkSync(node)}\n`);
+    assert.equal(f.log(legacyMarker), '/old/node\n');
+    assert.equal(realpathSync(join(f.runtime, 'active/runtime-daemon')), join(f.runtime, 'releases/2.0.0'));
+  });
+}
+
 test('LaunchAgent update preserves a usable Node link when the managed Node is first on PATH', t => {
   const f = fixture(t);
   succeeds(f.pack('1.0.0')); succeeds(f.publish('1.0.0')); succeeds(f.install());

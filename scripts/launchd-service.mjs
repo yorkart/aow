@@ -66,7 +66,11 @@ environment.AOW_LOG_MODE = 'unified';
 if (component === 'runtime-daemon') {
   delete environment.AOW_RUNTIME_VT_WORKER;
   const nodeLink = join(runtime, 'node');
-  const marker = join(runtime, '.aow-runtime-daemon-node-target');
+  const currentMarker = join(runtime, '.aow-runtime-daemon-node-target');
+  // terminald managed this same link before the unified runtime was introduced.
+  // Prefer the current marker when present; never bypass a mismatched marker.
+  const marker = lstatSync(currentMarker, { throwIfNoEntry: false })
+    ? currentMarker : join(runtime, '.aow-terminald-node-target');
   let info;
   try { info = lstatSync(nodeLink); } catch (error) { if (error.code !== 'ENOENT') throw error; }
   if (info && (!info.isSymbolicLink() || !existsSync(marker))) {

@@ -153,20 +153,26 @@ install_node_link() {
         printf 'error: refusing to replace non-symlink Node path: %s\n' "$node_link" >&2
         exit 1
     fi
+    # Older terminald releases managed the same Node link under this marker.
+    # Keep it for rollback, but prefer the new marker once activation writes it.
+    installed_node_marker=$node_marker
+    if [ ! -e "$node_marker" ] && [ ! -L "$node_marker" ]; then
+        installed_node_marker=$runtime_root/.aow-terminald-node-target
+    fi
     if [ -L "$node_link" ]; then
-        if [ ! -f "$node_marker" ]; then
+        if [ ! -f "$installed_node_marker" ]; then
             printf 'error: refusing to replace unowned Node symlink: %s\n' "$node_link" >&2
             exit 1
         fi
-        installed_target=$(cat "$node_marker")
+        installed_target=$(cat "$installed_node_marker")
         current_target=$(readlink "$node_link")
         if [ "$installed_target" != "$current_target" ]; then
             printf 'error: Node symlink target does not match installer marker: %s\n' \
                 "$node_link" >&2
             exit 1
         fi
-    elif [ -e "$node_marker" ]; then
-        printf 'error: refusing to reuse orphaned Node marker: %s\n' "$node_marker" >&2
+    elif [ -e "$installed_node_marker" ]; then
+        printf 'error: refusing to reuse orphaned Node marker: %s\n' "$installed_node_marker" >&2
         exit 1
     fi
 

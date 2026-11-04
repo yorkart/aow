@@ -63,7 +63,11 @@ if [ -f "$plist" ]; then cp "$plist" "$stage/previous.plist"; fi
 previous_node=
 if [ "$component" = runtime-daemon ] && [ -L "$runtime_root/node" ]; then
     previous_node=$(readlink "$runtime_root/node")
-    cp "$runtime_root/.aow-runtime-daemon-node-target" "$stage/previous-node-marker"
+    # A legacy terminald installation has only its old marker. Leave that marker
+    # untouched and remember whether the current marker existed for rollback.
+    if [ -f "$runtime_root/.aow-runtime-daemon-node-target" ]; then
+        cp "$runtime_root/.aow-runtime-daemon-node-target" "$stage/previous-node-marker"
+    fi
 fi
 was_loaded=0
 if launchctl print "$service" >/dev/null 2>&1; then was_loaded=1; fi
@@ -102,7 +106,11 @@ rollback() {
         if [ -n "$previous_node" ]; then
             ln -s "$previous_node" "$stage/restore-node" || return 1
             rename "$stage/restore-node" "$runtime_root/node" || return 1
-            rename "$stage/previous-node-marker" "$runtime_root/.aow-runtime-daemon-node-target" || return 1
+            if [ -f "$stage/previous-node-marker" ]; then
+                rename "$stage/previous-node-marker" "$runtime_root/.aow-runtime-daemon-node-target" || return 1
+            else
+                rm -f "$runtime_root/.aow-runtime-daemon-node-target" || return 1
+            fi
         else
             rm -f "$runtime_root/node" "$runtime_root/.aow-runtime-daemon-node-target" || return 1
         fi

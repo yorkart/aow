@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { closeSync, copyFileSync, mkdirSync, mkdtempSync, openSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -91,5 +91,32 @@ for (const active of [true, false]) {
     assert.equal(readlinkSync(join(f.runtime, 'node')), realpathSync(process.execPath));
     assert.equal(readFileSync(f.unit, 'utf8'), 'new unit\n');
     assert.match(result.stdout, /aow-runtime-daemon is active on release new/);
+  });
+}
+
+for (const state of ['legacy', 'mismatched legacy', 'mismatched current', 'unmanaged', 'orphaned legacy']) {
+  test(`runtime activation validates ${state} Node ownership`, t => {
+    const f = fixture(t);
+    const marker = join(f.runtime, '.aow-runtime-daemon-node-target');
+    const legacyMarker = join(f.runtime, '.aow-terminald-node-target');
+    rmSync(marker);
+    if (state !== 'unmanaged') writeFileSync(legacyMarker, state === 'mismatched legacy' ? '/other/node\n' : '/old/node\n');
+    if (state === 'mismatched current') writeFileSync(marker, '/other/node\n');
+    if (state === 'orphaned legacy') rmSync(join(f.runtime, 'node'));
+    const result = f.run('');
+    assert.ifError(result.error);
+    if (state === 'legacy') {
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(readFileSync(marker, 'utf8'), `${realpathSync(process.execPath)}\n`);
+      assert.equal(readFileSync(legacyMarker, 'utf8'), '/old/node\n');
+      const repeated = f.run('');
+      assert.equal(repeated.status, 0, repeated.stderr);
+    } else {
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /unowned Node symlink|does not match installer marker|orphaned Node marker/);
+      assert.equal(readlinkSync(join(f.runtime, 'active/runtime-daemon')), '../releases/old');
+      assert.doesNotMatch(readFileSync(f.serviceLog, 'utf8'), /daemon-reload|enable|restart/);
+      assert.equal(existsSync(marker), state === 'mismatched current');
+    }
   });
 }
