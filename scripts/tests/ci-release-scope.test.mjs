@@ -11,7 +11,7 @@ test('main and manual runs always build packages; ordinary PR changes run the te
   assert.equal(requiresNativePackages('push'), true);
   assert.equal(requiresNativePackages('workflow_dispatch'), true);
   assert.equal(requiresNativePackages('pull_request', [
-    'server/crates/server/src/main.rs', 'server/frontend/src/App.tsx', 'docs/usage.md',
+    'server/crates/app/src/main.rs', 'server/frontend/src/App.tsx', 'docs/usage.md',
   ]), false);
 });
 
@@ -23,7 +23,7 @@ test('release tooling, native dependencies and build configuration require every
     'packaging/bin/aow', '.github/workflows/release.yml', '.cargo/config.toml',
     'server/Cargo.toml', 'server/Cargo.lock', 'rust-toolchain.toml', 'rust-toolchain',
     'common/Cargo.toml', 'common/Cargo.lock', 'common/crates/runtime-contract/src/acp/model.rs',
-    'server/crates/server/Cargo.toml', 'runtime/crates/runtime-daemon/build.rs', 'common/crates/macos-log/src/os_log.c',
+    'server/crates/app/Cargo.toml', 'runtime/crates/runtime-daemon/build.rs', 'common/crates/macos-log/src/os_log.c',
     'server/frontend/package.json', 'server/frontend/package-lock.json', 'runtime/vt-worker/bin/vt-worker.mjs',
     'runtime/vendor/ripgrep/manifest.json', 'runtime/vendor/ripgrep/15.2.0/ripgrep.tar.gz',
   ]) {

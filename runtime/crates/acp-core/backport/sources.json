@@ -1347,7 +1347,7 @@
     {
       "behavior": "independent JSONC file, unknown fields, comments, revision conflicts and Git history",
       "tests": [
-        "crates/server/src/aow/settings/acp.rs",
+        "server/crates/app/src/aow/settings/acp.rs",
         "frontend/tests/acp.test.mjs"
       ]
     },
@@ -1471,8 +1471,8 @@
         "crates/acp-core/src/agent_servers/acp/debug_log/tests.rs",
         "crates/acp-core/tests/integration.rs::thread_identity_is_durable_before_initialization_and_survives_creation_failures",
         "crates/acp-core/tests/integration.rs::reused_connection_logs_isolate_concurrent_threads_and_follow_recovery",
-        "crates/server/src/acp/control/http_tests.rs",
-        "crates/server/src/acp/control/tests.rs::deletion_waits_for_creation_and_rechecks_control_after_takeover",
+        "server/crates/app/src/acp/control/http_tests.rs",
+        "server/crates/app/src/acp/control/tests.rs::deletion_waits_for_creation_and_rechecks_control_after_takeover",
         "frontend/tests/acp.test.mjs",
         "frontend/tests/tab-links.test.mjs"
       ]
@@ -1488,14 +1488,14 @@
       "tests": [
         "frontend/tests/acp.test.mjs",
         "crates/acp-core/tests/integration.rs",
-        "crates/server/src/acp/control/tests.rs"
+        "server/crates/app/src/acp/control/tests.rs"
       ]
     },
     {
       "behavior": "ACP per-prompt completion callbacks, cumulative usage baselines and history/no-replay exclusions; server notification dispatch preferences and encoded thread links; page notifications, ACP/Terminal identity isolation, unread persistence and desktop/mobile navigation",
       "tests": [
         "crates/acp-core/tests/integration.rs",
-        "crates/server/src/acp/notifications/tests.rs",
+        "server/crates/app/src/acp/notifications/tests.rs",
         "frontend/tests/agent-notifications.test.mjs",
         "frontend/tests/tab-links.test.mjs"
       ]

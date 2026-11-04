@@ -176,7 +176,7 @@ still enlarges the editor without changing its width or discarding the draft.
   refreshing the list only read local metadata. Selecting a row opens the same
   persisted conversation; the list button and bottom navigation return to the
   list, while browser history and reload retain the session URL.
-- Exclusive input control belongs to AoW, in `crates/server/src/acp/control` and
+- Exclusive input control belongs to AoW, in `server/crates/app/src/acp/control` and
   `frontend/src/features/acp-control`; ownership tokens stay outside the `aow-acp-core` facade.
   Each mounted tab attaches over an authenticated, same-origin WebSocket and
   claims only a vacant session. The server issues a token scoped to that
@@ -353,7 +353,7 @@ permission gating, stale credentials, observer reconnects, shared imported loads
 authentication across ownership changes and drafts retained through portal moves.
 The server control tests exercise real WebSocket claims, takeover notifications,
 disconnect/logout release, origin checks and HTTP admission for every session action.
-`crates/server/src/tests.rs` and `crates/server/src/base_path/tests.rs` exercise
+`server/crates/app/src/tests.rs` and `server/crates/app/src/base_path/tests.rs` exercise
 the production Rust router: direct ACP links return the HTML entry point,
 including encoded workspace paths, mobile selection and deployment prefixes.
 These checks are necessary because Vite's SPA fallback does not validate the

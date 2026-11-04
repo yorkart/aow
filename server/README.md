@@ -6,6 +6,21 @@ is an independent Cargo workspace. Its shared data contracts and IDs come from
 ACP conversation state and history are owned by the daemon. The local
 `runtime-client` crate only transports requests, responses and events.
 
+The main application source lives in `crates/app`. Its Cargo package and binary
+are both named `aow-server`; Rust callers continue to use `aow_server`.
+
+```text
+server/
+  Cargo.toml
+  frontend/
+  crates/app/             Application startup, HTTP routes and business services
+  crates/cli/             aow-cli command-line entry point
+  crates/server-client/   Server business API client
+  crates/runtime-client/  Runtime daemon client
+  crates/cli-access/      CLI authorization
+  crates/db/              Server business storage
+```
+
 ```sh
 npm --prefix frontend ci --ignore-scripts --no-audit --no-fund
 npm --prefix frontend run build

@@ -23,16 +23,16 @@ test('validates both conditional translation keys and required interpolation arg
 });
 
 test('backend parameters survive nested message calls, brackets and escaped quotes', () => {
-  assert.throws(() => validateRustSource('aow_i18n::text("greeting")', 'crates/server/src/fixture.rs', resources), /text requires interpolation parameters/u);
+  assert.throws(() => validateRustSource('aow_i18n::text("greeting")', 'server/crates/app/src/fixture.rs', resources), /text requires interpolation parameters/u);
   const source = String.raw`aow_i18n::message("nested", &[("duration", aow_i18n::message("seconds", &[("value", format!("[\"]"))])), ("exit", code.to_string())])`;
-  assert.doesNotThrow(() => validateRustSource(source, 'crates/server/src/fixture.rs', resources));
-  assert.throws(() => validateRustSource('aow_i18n::message("greeting", &[("duration", aow_i18n::message("greeting", &[("name", name.to_string())]))])', 'crates/server/src/fixture.rs', resources), /missing parameter name/u);
-  assert.throws(() => validateRustSource(source.replace('("exit", code.to_string())', ''), 'crates/server/src/fixture.rs', resources), /missing parameter exit/u);
+  assert.doesNotThrow(() => validateRustSource(source, 'server/crates/app/src/fixture.rs', resources));
+  assert.throws(() => validateRustSource('aow_i18n::message("greeting", &[("duration", aow_i18n::message("greeting", &[("name", name.to_string())]))])', 'server/crates/app/src/fixture.rs', resources), /missing parameter name/u);
+  assert.throws(() => validateRustSource(source.replace('("exit", code.to_string())', ''), 'server/crates/app/src/fixture.rs', resources), /missing parameter exit/u);
 });
 
 test('guards production Chinese while allowing test user content', () => {
-  assert.throws(() => validateRustSource('let message = "请求失败";', 'crates/server/src/fixture.rs', {}), /hardcoded Chinese production string/u);
-  assert.doesNotThrow(() => validateRustSource('#[cfg(test)] mod tests { let user = "用户内容"; }', 'crates/server/src/fixture.rs', {}));
+  assert.throws(() => validateRustSource('let message = "请求失败";', 'server/crates/app/src/fixture.rs', {}), /hardcoded Chinese production string/u);
+  assert.doesNotThrow(() => validateRustSource('#[cfg(test)] mod tests { let user = "用户内容"; }', 'server/crates/app/src/fixture.rs', {}));
 });
 
 test('follows local display constants through aliases without treating shadowed input as product text', () => {

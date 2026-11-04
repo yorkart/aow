@@ -7,7 +7,7 @@ members = [
   "crates/operation-log",
   "crates/process",
   "crates/git-service",
-  "crates/server",
+  "crates/app",
   "crates/im",
   "crates/automations",
   "crates/workspaces",

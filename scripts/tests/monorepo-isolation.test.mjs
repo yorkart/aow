@@ -28,7 +28,7 @@ test('products share the macOS adapter while operation history stays in Server',
   for (const product of ['server', 'runtime']) {
     assert.equal(existsSync(resolve(root, product, 'crates/macos-log')), false);
   }
-  for (const path of ['server/crates/server', 'runtime/crates/runtime-daemon', 'runtime/crates/terminal-core']) {
+  for (const path of ['server/crates/app', 'runtime/crates/runtime-daemon', 'runtime/crates/terminal-core']) {
     const manifest = readFileSync(resolve(root, path, 'Cargo.toml'), 'utf8');
     assert.match(manifest, /aow-macos-log\s*=\s*\{\s*path\s*=\s*"\.\.\/\.\.\/\.\.\/common\/crates\/macos-log"\s*\}/);
   }
@@ -63,14 +63,14 @@ test('the root orchestrates products without flattening their sources', () => {
 });
 
 test('Server reaches native agents only through Runtime contracts and the SDK', () => {
-  for (const path of ['server/crates/agents', 'server/crates/db/src/codex_like', 'server/crates/db/src/hermes', 'server/crates/server/src/terminal/sessions/local.rs']) {
+  for (const path of ['server/crates/agents', 'server/crates/db/src/codex_like', 'server/crates/db/src/hermes', 'server/crates/app/src/terminal/sessions/local.rs']) {
     assert.equal(existsSync(resolve(root, path)), false, path);
   }
   for (const entry of readdirSync(resolve(root, 'server/crates'))) {
     const manifest = readFileSync(resolve(root, 'server/crates', entry, 'Cargo.toml'), 'utf8');
     assert.doesNotMatch(manifest, /aow-(?:runtime-)?(?:agents|exec)(?:-core|-service)?\s*=/);
   }
-  const controller = readFileSync(resolve(root, 'server/crates/server/src/terminal/agent_control/connection.rs'), 'utf8');
+  const controller = readFileSync(resolve(root, 'server/crates/app/src/terminal/agent_control/connection.rs'), 'utf8');
   assert.doesNotMatch(controller, /200~|201~|input_ready/);
   for (const path of ['agents.rs', 'sessions.rs']) {
     const sdk = readFileSync(resolve(root, 'server/crates/runtime-client/src', path), 'utf8');
@@ -87,7 +87,7 @@ test('workspace filesystem execution and bundled search belong only to Runtime',
     assert.doesNotMatch(manifest, /aow-(?:runtime-)?filesystem\s*=/);
   }
   for (const path of ['node.rs', 'content.rs', 'files.rs', 'entries.rs', 'raw.rs', 'search/mod.rs']) {
-    const handler = readFileSync(resolve(root, 'server/crates/server/src/filesystem', path), 'utf8');
+    const handler = readFileSync(resolve(root, 'server/crates/app/src/filesystem', path), 'utf8');
     assert.doesNotMatch(handler, /aow_filesystem|(?:std|tokio)::fs|Command::new/);
   }
   assert.ok(existsSync(resolve(root, 'runtime/crates/filesystem/Cargo.toml')));
