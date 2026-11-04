@@ -1,5 +1,6 @@
 //! AoW prepares durable thread identity before adapter initialization or session/new.
 use super::*;
+use crate::facade::execution::ValidateExecution;
 
 impl AgentServerStore {
     pub async fn prepare_session(&self, agent_id: &str, cwd: PathBuf) -> Result<SessionSnapshot> {
@@ -46,11 +47,11 @@ impl AgentServerStore {
             agent_id.into(),
             cwd.to_string_lossy().into_owned(),
         );
-        thread.execution_environment = creation.execution_environment;
-        thread.parent = creation.parent;
-        thread.source = creation.source;
-        thread.status = "disconnected".into();
-        let id = thread.thread_id.clone();
+        thread.data.execution_environment = creation.execution_environment;
+        thread.data.parent = creation.parent;
+        thread.data.source = creation.source;
+        thread.data.status = "disconnected".into();
+        let id = thread.data.thread_id.clone();
         let mut threads = self.inner.threads.lock().unwrap();
         ensure!(
             threads.workspace_version(&workspace)? == version,
@@ -84,7 +85,7 @@ impl AgentServerStore {
             && previous.info.id != connection.info.id
         {
             previous.context.bindings.lock().unwrap().remove(thread_id);
-            if let Some(session_id) = self.snapshot(thread_id)?.session_id {
+            if let Some(session_id) = self.snapshot(thread_id)?.data.session_id {
                 previous.context.unregister_session(&session_id);
                 // Keep quarantined attempts on their original connection.
                 // Their late responses must never affect the replacement route.
@@ -141,7 +142,7 @@ impl AgentServerStore {
                 .lock()
                 .unwrap()
                 .update(thread_id, |thread| {
-                    thread.session_id = Some(session_id.into());
+                    thread.data.session_id = Some(session_id.into());
                 })?;
             self.register_session(connection, result, thread_id.into())
                 .await

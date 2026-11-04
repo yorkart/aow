@@ -1,40 +1,12 @@
 //! Read synchronization is independent of the session control channel.
-use super::{SessionInfo, SessionSnapshot};
-use serde::{Deserialize, Serialize};
+use super::SessionSnapshot;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
 };
 use tokio::sync::broadcast;
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
-pub enum SyncResource {
-    Session {
-        thread_id: String,
-    },
-    Sessions {
-        cwd: String,
-    },
-    Connection {
-        thread_id: String,
-    },
-    Requests {
-        connection_id: String,
-    },
-    Operation {
-        agent_id: String,
-        cwd: Option<String>,
-    },
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct SessionVersion {
-    pub generation: String,
-    pub revision: u64,
-    pub info: SessionInfo,
-}
-
+pub use aow_runtime_contract::acp::{SessionVersion, SyncEvent, SyncResource};
 impl From<&SessionSnapshot> for SessionVersion {
     fn from(thread: &SessionSnapshot) -> Self {
         Self {
@@ -43,21 +15,6 @@ impl From<&SessionSnapshot> for SessionVersion {
             info: thread.into(),
         }
     }
-}
-
-/// All resources use invalidations followed by HTTP reads. Session metadata is
-/// included so hidden views can track status without downloading their bodies.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct SyncEvent {
-    pub resource: SyncResource,
-    pub boot_id: String,
-    pub version: u64,
-    pub deleted: bool,
-    pub urgent: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub operation_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub session: Option<SessionVersion>,
 }
 
 struct State {
@@ -70,6 +27,7 @@ pub(crate) struct SyncEvents {
     boot_id: Arc<String>,
     state: Arc<Mutex<State>>,
     sender: broadcast::Sender<SyncEvent>,
+    protocol: broadcast::Sender<serde_json::Value>,
 }
 
 impl Default for SyncEvents {
@@ -81,11 +39,19 @@ impl Default for SyncEvents {
                 latest: HashMap::new(),
             })),
             sender: broadcast::channel(512).0,
+            protocol: broadcast::channel(2048).0,
         }
     }
 }
 
 impl SyncEvents {
+    pub(crate) fn subscribe_protocol(&self) -> broadcast::Receiver<serde_json::Value> {
+        self.protocol.subscribe()
+    }
+    pub(crate) fn protocol(&self, value: serde_json::Value) {
+        let _ = self.protocol.send(value);
+    }
+
     pub(crate) fn subscribe(&self) -> broadcast::Receiver<SyncEvent> {
         self.sender.subscribe()
     }

@@ -14,7 +14,7 @@ async fn fixture() -> (tempfile::TempDir, AppState, super::AgentRole) {
     state.aow = AowManager::persistent(&root).unwrap();
     let settings = state.aow.acp_settings().unwrap();
     state.aow.save_acp_settings(json!({"agent_servers":{"codex.test":{"type":"custom", "command":"node", "args":[
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../acp-client-model/tests/fixtures/lineage-agent.mjs")
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/acp/lineage-agent.mjs")
     ]}}}).to_string(), settings.revision).await.unwrap();
     state.acp = crate::acp::service(
         state.aow.clone(),

@@ -42,8 +42,8 @@ impl AcpThread {
                 }
                 let content = normalize_content(content);
                 let message_id = update["messageId"].as_str().map(str::to_owned);
-                let index = thread.entries.len().saturating_sub(1);
-                if let Some(last) = thread.entries.last_mut()
+                let index = thread.data.entries.len().saturating_sub(1);
+                if let Some(last) = thread.data.entries.last_mut()
                     && last.kind == role
                     && can_merge_message_chunks(last.message_id.as_deref(), message_id.as_deref())
                     && content["type"] == "text"
@@ -64,7 +64,7 @@ impl AcpThread {
                     }
                     thread.changes.push(Change::Entry { index, text_start });
                 } else {
-                    thread.entries.push(ThreadEntry {
+                    thread.data.entries.push(ThreadEntry {
                         id: uuid::Uuid::new_v4().to_string(),
                         kind: role.into(),
                         message_id,
@@ -72,7 +72,7 @@ impl AcpThread {
                         content,
                     });
                     thread.changes.push(Change::Entry {
-                        index: thread.entries.len() - 1,
+                        index: thread.data.entries.len() - 1,
                         text_start: None,
                     });
                 }
@@ -86,7 +86,7 @@ impl AcpThread {
                         .filter(|part| part["type"] == "terminal")
                         .filter_map(|part| part["terminalId"].as_str())
                     {
-                        if thread.terminals.contains_key(id) {
+                        if thread.data.terminals.contains_key(id) {
                             thread.changes.push(Change::Terminal {
                                 id: id.into(),
                                 output_start: None,
@@ -96,6 +96,7 @@ impl AcpThread {
                 }
                 let id = update["toolCallId"].as_str().unwrap_or("").to_owned();
                 if let Some((index, entry)) = thread
+                    .data
                     .entries
                     .iter_mut()
                     .enumerate()
@@ -108,7 +109,7 @@ impl AcpThread {
                         text_start: None,
                     });
                 } else {
-                    thread.entries.push(ThreadEntry {
+                    thread.data.entries.push(ThreadEntry {
                         id,
                         kind: "tool".into(),
                         message_id: None,
@@ -116,72 +117,74 @@ impl AcpThread {
                         content: update,
                     });
                     thread.changes.push(Change::Entry {
-                        index: thread.entries.len() - 1,
+                        index: thread.data.entries.len() - 1,
                         text_start: None,
                     });
                 }
             }
             "plan" => {
-                thread.plan = update;
+                thread.data.plan = update;
                 thread.changes.push(Change::Field("plan"));
             }
             "current_mode_update" => {
-                thread.modes["currentModeId"] = update["currentModeId"].clone();
+                thread.data.modes["currentModeId"] = update["currentModeId"].clone();
                 thread.changes.push(Change::Field("modes"));
             }
             "config_option_update" => {
-                thread.config_options_supported = true;
-                thread.config_options = normalize_config_options(update["configOptions"].clone())
-                    .unwrap_or_else(|_| update["configOptions"].clone());
+                thread.data.config_options_supported = true;
+                thread.data.config_options =
+                    normalize_config_options(update["configOptions"].clone())
+                        .unwrap_or_else(|_| update["configOptions"].clone());
                 thread.changes.push(Change::Field("config_options"));
                 thread
                     .changes
                     .push(Change::Field("config_options_supported"));
             }
             "available_commands_update" => {
-                thread.commands = update["availableCommands"].clone();
+                thread.data.commands = update["availableCommands"].clone();
                 thread.changes.push(Change::Field("commands"));
             }
             "usage_update" => {
-                thread.usage = update;
+                thread.data.usage = update;
                 thread.changes.push(Change::Field("usage"));
             }
             "session_info_update" => {
                 if thread.session_meta_suppressed {
                     if let Some(title) = update["title"].as_str() {
-                        thread.title = title.to_owned();
+                        thread.data.title = title.to_owned();
                         thread.changes.push(Change::Field("title"));
                     }
                     return;
                 }
-                let next_revision = thread.session_meta_revision.saturating_add(1);
+                let next_revision = thread.data.session_meta_revision.saturating_add(1);
                 match update.get("_meta") {
                     Some(Value::Object(metadata)) => {
                         for key in metadata.keys() {
                             thread
+                                .data
                                 .session_meta_revisions
                                 .insert(key.clone(), next_revision);
                         }
-                        thread.session_meta.extend(
+                        thread.data.session_meta.extend(
                             metadata
                                 .iter()
                                 .map(|(key, value)| (key.clone(), value.clone())),
                         );
                     }
                     Some(Value::Null) => {
-                        thread.session_meta.clear();
-                        thread.session_meta_revisions.clear();
+                        thread.data.session_meta.clear();
+                        thread.data.session_meta_revisions.clear();
                     }
                     _ => {}
                 }
                 if matches!(update.get("_meta"), Some(Value::Object(_) | Value::Null)) {
-                    thread.session_meta_revision = next_revision;
+                    thread.data.session_meta_revision = next_revision;
                     thread.changes.push(Change::Field("session_meta"));
                     thread.changes.push(Change::Field("session_meta_revision"));
                     thread.changes.push(Change::Field("session_meta_revisions"));
                 }
                 if let Some(title) = update["title"].as_str() {
-                    thread.title = title.to_owned();
+                    thread.data.title = title.to_owned();
                     thread.changes.push(Change::Field("title"));
                 }
             }
@@ -199,12 +202,12 @@ impl AcpThread {
 
     pub(crate) fn clear_session_meta(thread: &mut SessionSnapshot) {
         thread.session_meta_suppressed = true;
-        if thread.session_meta.is_empty() && thread.session_meta_revisions.is_empty() {
+        if thread.data.session_meta.is_empty() && thread.data.session_meta_revisions.is_empty() {
             return;
         }
-        thread.session_meta.clear();
-        thread.session_meta_revisions.clear();
-        thread.session_meta_revision = thread.session_meta_revision.saturating_add(1);
+        thread.data.session_meta.clear();
+        thread.data.session_meta_revisions.clear();
+        thread.data.session_meta_revision = thread.data.session_meta_revision.saturating_add(1);
         thread.changes.push(Change::Field("session_meta"));
         thread.changes.push(Change::Field("session_meta_revisions"));
         thread.changes.push(Change::Field("session_meta_revision"));
@@ -212,9 +215,9 @@ impl AcpThread {
 
     pub(crate) fn push(thread: &mut SessionSnapshot, kind: &str, content: Value) {
         let entries = if kind == "notice" {
-            &mut thread.notices
+            &mut thread.data.notices
         } else {
-            &mut thread.entries
+            &mut thread.data.entries
         };
         entries.push(ThreadEntry {
             id: uuid::Uuid::new_v4().to_string(),
@@ -241,7 +244,7 @@ impl AcpThread {
                 Self::handle_session_update(thread, update);
             }
         }
-        thread.permissions.push(permission);
+        thread.data.permissions.push(permission);
     }
 
     pub(crate) fn new_snapshot(
@@ -252,50 +255,52 @@ impl AcpThread {
     ) -> SessionSnapshot {
         let now = chrono::Utc::now().to_rfc3339();
         SessionSnapshot {
-            thread_id: id,
-            execution_environment: None,
-            parent: None,
-            source: Default::default(),
-            created_at: now.clone(),
-            session_id: (!session_id.is_empty()).then_some(session_id),
-            agent_id,
-            cwd,
-            title: "New conversation".into(),
-            status: "idle".into(),
-            needs_load: false,
-            recovery: None,
-            revision: 0,
-            sync_generation: uuid::Uuid::new_v4().to_string(),
-            updated_at: now.clone(),
-            interacted_at: Some(now),
-            entries: Vec::new(),
-            turns: Vec::new(),
-            prompt_receipts: Default::default(),
-            plan: Value::Null,
-            notices: Vec::new(),
-            session_meta: Default::default(),
-            session_meta_revision: 0,
+            data: aow_runtime_contract::acp::SessionSnapshot {
+                thread_id: id,
+                execution_environment: None,
+                parent: None,
+                source: Default::default(),
+                created_at: now.clone(),
+                session_id: (!session_id.is_empty()).then_some(session_id),
+                agent_id,
+                cwd,
+                title: "New conversation".into(),
+                status: "idle".into(),
+                needs_load: false,
+                recovery: None,
+                revision: 0,
+                sync_generation: uuid::Uuid::new_v4().to_string(),
+                updated_at: now.clone(),
+                interacted_at: Some(now),
+                entries: Vec::new(),
+                turns: Vec::new(),
+                prompt_receipts: Default::default(),
+                plan: Value::Null,
+                notices: Vec::new(),
+                session_meta: Default::default(),
+                session_meta_revision: 0,
+                session_meta_revisions: Default::default(),
+                terminals: Default::default(),
+                permissions: Vec::new(),
+                modes: json!({}),
+                config_options: json!([]),
+                config_options_supported: false,
+                auth_required: false,
+                commands: json!([]),
+                usage: Value::Null,
+                error: None,
+                stop_reason: None,
+                steering_pending: false,
+                steering_untracked: false,
+                overview: None,
+            },
             session_meta_suppressed: false,
-            session_meta_revisions: Default::default(),
-            terminals: Default::default(),
-            permissions: Vec::new(),
-            modes: json!({}),
-            config_options: json!([]),
-            config_options_supported: false,
-            auth_required: false,
-            commands: json!([]),
-            usage: Value::Null,
             last_prompt_usage: None,
-            error: None,
-            stop_reason: None,
-            steering_pending: false,
-            steering_untracked: false,
-            steering: Default::default(),
             pending_user_echo: String::new(),
+            steering: Default::default(),
             pending_user_images: Vec::new(),
             active_prompt: None,
             changes: Default::default(),
-            overview: None,
             overview_cache: Default::default(),
         }
     }

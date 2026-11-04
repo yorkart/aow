@@ -18,6 +18,7 @@ pub(super) enum Command {
 pub(super) struct Subscriptions {
     active: HashMap<String, SyncResource>,
     pending: HashMap<SyncResource, (Instant, SyncEvent)>,
+    heads: HashMap<SyncResource, (String, u64)>,
 }
 
 impl Subscriptions {
@@ -37,6 +38,8 @@ impl Subscriptions {
                 self.pending
                     .retain(|resource, _| self.active.values().any(|active| active == resource));
                 let head = service.sync_event(&resource).await.map_err(|_| ())?;
+                self.heads
+                    .insert(resource, (head.boot_id.clone(), head.version));
                 if head.deleted {
                     self.active.remove(&id);
                 }
@@ -54,6 +57,17 @@ impl Subscriptions {
     }
 
     pub(super) fn change(&mut self, change: SyncEvent) -> Option<serde_json::Value> {
+        if self
+            .heads
+            .get(&change.resource)
+            .is_some_and(|(boot, version)| *boot == change.boot_id && *version >= change.version)
+        {
+            return None;
+        }
+        self.heads.insert(
+            change.resource.clone(),
+            (change.boot_id.clone(), change.version),
+        );
         if !self
             .active
             .values()

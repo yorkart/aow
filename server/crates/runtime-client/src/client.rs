@@ -13,14 +13,12 @@ pub struct RuntimeClient {
     endpoint: Arc<RuntimeEndpoint>,
     connection_file: Option<std::path::PathBuf>,
     http: reqwest::Client,
-    acp_ready: Arc<tokio::sync::OnceCell<()>>,
 }
 impl RuntimeClient {
     pub fn new(endpoint: RuntimeEndpoint) -> Self {
         Self {
             endpoint: Arc::new(endpoint),
             connection_file: None,
-            acp_ready: Arc::new(tokio::sync::OnceCell::new()),
             http: reqwest::Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .connect_timeout(Duration::from_secs(5))
@@ -45,17 +43,6 @@ impl RuntimeClient {
                 .map_err(|error| RuntimeError::Io(std::io::Error::other(error.to_string()))),
             None => Ok((*self.endpoint).clone()),
         }
-    }
-    pub(crate) async fn acp_ready(&self) -> Result<(), RuntimeError> {
-        self.acp_ready
-            .get_or_try_init(|| async {
-                let _: serde_json::Value = self
-                    .post_json("/v1/workspaces/recover", &serde_json::json!({}))
-                    .await?;
-                Ok::<_, RuntimeError>(())
-            })
-            .await?;
-        Ok(())
     }
     pub fn endpoint(&self) -> &RuntimeEndpoint {
         &self.endpoint

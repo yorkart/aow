@@ -86,12 +86,18 @@ pub(crate) fn delivery(
     status: &str,
     error: Option<String>,
 ) {
-    for entry in thread.entries.iter_mut().skip(start).take_while(|entry| {
-        entry
-            .delivery
-            .as_ref()
-            .is_some_and(|delivery| delivery.status == "sending")
-    }) {
+    for entry in thread
+        .data
+        .entries
+        .iter_mut()
+        .skip(start)
+        .take_while(|entry| {
+            entry
+                .delivery
+                .as_ref()
+                .is_some_and(|delivery| delivery.status == "sending")
+        })
+    {
         entry.delivery = Some(InputDelivery {
             status: status.into(),
             error: error.clone(),
@@ -115,7 +121,9 @@ pub(crate) fn observe_activity(thread: &mut SessionSnapshot, update: &Value) {
             Activity::Active if pending.saw_idle => {
                 pending.saw_active = true;
                 pending.terminal = None;
-                pending.new_turn_start.get_or_insert(thread.entries.len());
+                pending
+                    .new_turn_start
+                    .get_or_insert(thread.data.entries.len());
             }
             Activity::Failed if pending.saw_active => pending.terminal = Some(activity),
             _ => {}
@@ -125,7 +133,7 @@ pub(crate) fn observe_activity(thread: &mut SessionSnapshot, update: &Value) {
         match activity {
             Activity::Active => {
                 thread.steering.detached_active = true;
-                thread.steering_untracked = false;
+                thread.data.steering_untracked = false;
             }
             _ if thread.steering.detached_active => finish_detached(thread, activity),
             _ => {}
@@ -145,22 +153,23 @@ pub(crate) fn relocate_input(
     if boundary <= start + count {
         return start;
     }
-    let entries: Vec<_> = thread.entries.drain(start..start + count).collect();
+    let entries: Vec<_> = thread.data.entries.drain(start..start + count).collect();
     let target = boundary - count;
-    thread.entries.splice(target..target, entries);
+    thread.data.entries.splice(target..target, entries);
     target
 }
 
 pub(crate) fn finish_detached(thread: &mut SessionSnapshot, activity: Activity) {
     thread.steering.detached = false;
     thread.steering.detached_active = false;
-    thread.steering_untracked = false;
-    thread.stop_reason = thread.steering.cancelled.then(|| "cancelled".into());
-    thread.error = (activity == Activity::Failed).then(|| "Agent reported a session error".into());
+    thread.data.steering_untracked = false;
+    thread.data.stop_reason = thread.steering.cancelled.then(|| "cancelled".into());
+    thread.data.error =
+        (activity == Activity::Failed).then(|| "Agent reported a session error".into());
     // Idle is not a success signal. Preserve an unknown outcome unless the
     // adapter reported failure or the user explicitly cancelled this run.
-    if let Some(turn) = thread.turns.last_mut() {
-        turn.status = if thread.error.is_some() {
+    if let Some(turn) = thread.data.turns.last_mut() {
+        turn.status = if thread.data.error.is_some() {
             "failed"
         } else if thread.steering.cancelled {
             "interrupted"
@@ -168,16 +177,16 @@ pub(crate) fn finish_detached(thread: &mut SessionSnapshot, activity: Activity) 
             "unknown"
         }
         .into();
-        turn.stop_reason = thread.stop_reason.clone();
-        turn.error = thread.error.clone();
+        turn.stop_reason = thread.data.stop_reason.clone();
+        turn.error = thread.data.error.clone();
     }
     settle_status(thread);
 }
 
 pub(crate) fn settle_status(thread: &mut SessionSnapshot) {
-    if thread.status != "disconnected" {
-        thread.status = if thread.active_prompt.is_some()
-            || thread.steering_pending
+    if thread.data.status != "disconnected" {
+        thread.data.status = if thread.active_prompt.is_some()
+            || thread.data.steering_pending
             || thread.steering.detached
         {
             "working"
@@ -186,7 +195,7 @@ pub(crate) fn settle_status(thread: &mut SessionSnapshot) {
         }
         .into();
     }
-    if thread.status != "working" {
+    if thread.data.status != "working" {
         thread.steering.echoes.clear();
     }
 }
@@ -200,11 +209,12 @@ pub(crate) fn disconnected(thread: &mut SessionSnapshot) {
             Some(aow_i18n::text("common.steeringUnknown").into()),
         );
     }
-    thread.steering_pending = false;
-    thread.steering_untracked = false;
+    thread.data.steering_pending = false;
+    thread.data.steering_untracked = false;
     // Pending request identities are deliberately not persisted. Recover their
     // visible messages conservatively after a host restart as well.
     for delivery in thread
+        .data
         .entries
         .iter_mut()
         .filter_map(|entry| entry.delivery.as_mut())

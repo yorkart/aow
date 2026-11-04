@@ -1,8 +1,11 @@
 //! Settings owns the original JSONC text; the ACP implementation only receives a parsed view.
+#[cfg(test)]
 use super::super::AowManager;
+#[cfg(test)]
 use anyhow::{Context, Result, ensure};
 use serde::Serialize;
 
+#[cfg(test)]
 const EMPTY: &str =
     "// ACP settings. Comments and trailing commas are supported.\n{\n  \"agent_servers\": {}\n}\n";
 
@@ -13,25 +16,21 @@ pub(crate) struct AcpSettingsFile {
     pub revision: String,
 }
 
+#[cfg(test)]
 impl AowManager {
     pub(crate) fn acp_settings(&self) -> Result<AcpSettingsFile> {
         let Some(repository) = &self.inner.config else {
             return Ok(AcpSettingsFile {
-                path: aow_runtime_client::acp::SETTINGS_PATH.into(),
+                path: "aow-acp.json".into(),
                 content: EMPTY.into(),
                 revision: format!("{:x}", md5::compute(EMPTY)),
             });
         };
-        let path = repository
-            .directory()
-            .join(aow_runtime_client::acp::SETTINGS_PATH);
+        let path = repository.directory().join("aow-acp.json");
         let content = match std::fs::read_to_string(&path) {
             Ok(content) => content,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                repository.save(
-                    std::path::Path::new(aow_runtime_client::acp::SETTINGS_PATH),
-                    EMPTY.as_bytes(),
-                )?;
+                repository.save(std::path::Path::new("aow-acp.json"), EMPTY.as_bytes())?;
                 EMPTY.into()
             }
             Err(error) => return Err(error.into()),
@@ -47,7 +46,11 @@ impl AowManager {
         content: String,
         revision: String,
     ) -> Result<AcpSettingsFile> {
-        aow_runtime_client::acp::validate_settings(&content)?;
+        let client = self.test_acp_client()?;
+        let remote = client.settings().await?;
+        client
+            .save_settings(content.clone(), remote.revision)
+            .await?;
         let operation = self.inner.project_operation.clone().lock_owned().await;
         let manager = self.clone();
         aow_i18n::spawn_blocking(move || {
@@ -67,13 +70,37 @@ impl AowManager {
                 .context(aow_i18n::text(
                     "server.no_persistent_directory_configured_for_this_service",
                 ))?
-                .save(
-                    std::path::Path::new(aow_runtime_client::acp::SETTINGS_PATH),
-                    content.as_bytes(),
-                )?;
+                .save(std::path::Path::new("aow-acp.json"), content.as_bytes())?;
             manager.acp_settings()
         })
         .await?
+    }
+}
+
+#[cfg(test)]
+struct Configuration(super::super::AowManager);
+#[cfg(test)]
+#[async_trait::async_trait]
+impl aow_runtime_client::testing::AcpFixture for Configuration {
+    async fn settings(&self) -> anyhow::Result<String> {
+        Ok(self.0.acp_settings()?.content)
+    }
+    async fn execution_path(&self) -> anyhow::Result<Option<std::ffi::OsString>> {
+        Ok(Some(std::env::join_paths(self.0.execution_path().await?)?))
+    }
+}
+#[cfg(test)]
+impl super::super::AowManager {
+    pub(crate) fn test_acp_client(&self) -> anyhow::Result<aow_runtime_client::acp::AcpClient> {
+        let client = aow_runtime_client::acp::AcpClient::for_test_host(
+            std::sync::Arc::new(Configuration(self.clone())),
+            self.inner
+                .state_dir
+                .as_ref()
+                .map(|root| root.join("test-runtime")),
+        )?;
+        *self.inner.test_runtime.lock().unwrap() = Some(client.test_runtime_owner());
+        Ok(client)
     }
 }
 

@@ -2,6 +2,9 @@ use super::AgentServerStore;
 use crate::facade::{SessionVersion, SyncEvent, SyncResource};
 
 impl AgentServerStore {
+    pub fn subscribe_protocol(&self) -> tokio::sync::broadcast::Receiver<serde_json::Value> {
+        self.inner.events.subscribe_protocol()
+    }
     pub fn subscribe_sync(&self) -> tokio::sync::broadcast::Receiver<SyncEvent> {
         self.inner.events.subscribe()
     }

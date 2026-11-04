@@ -6,7 +6,7 @@ license.workspace = true
 
 [dependencies]
 aow-filesystem = { package = "aow-runtime-filesystem", path = "../filesystem" }
-aow-id = { package = "aow-runtime-id", path = "../id" }
+aow-id = { path = "../../../common/crates/id" }
 anyhow.workspace = true
 axum.workspace = true
 bytes.workspace = true
@@ -17,7 +17,7 @@ libc.workspace = true
 portable-pty.workspace = true
 aow-agents = { package = "aow-runtime-agents", path = "../agents", features = ["sessions"] }
 aow-process = { package = "aow-runtime-process", path = "../process" }
-aow-protocol = { package = "aow-runtime-protocol", path = "../protocol" }
+aow-protocol = { path = "../../../common/crates/protocol" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

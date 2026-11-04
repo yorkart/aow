@@ -27,7 +27,7 @@ impl AcpHost for Host {
         anyhow::bail!("fixture does not write files")
     }
     async fn settings(&self) -> Result<String> {
-        Ok(json!({"agent_servers":{"generic":{"type":"custom","command":"node","args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/steering-agent.mjs")],"env":{"STEERING":if self.supported {"1"} else {"0"}}}}}).to_string())
+        Ok(json!({"agent_servers":{"generic":{"type":"custom","command":"node","args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/acp/steering-agent.mjs")],"env":{"STEERING":if self.supported {"1"} else {"0"}}}}}).to_string())
     }
 }
 
@@ -56,7 +56,7 @@ impl Fixture {
             host,
             service,
             directory,
-            id: thread.thread_id,
+            id: thread.data.thread_id,
         })
     }
     async fn wait(&self, condition: impl Fn(&SessionSnapshot) -> bool) -> SessionSnapshot {
@@ -162,7 +162,7 @@ async fn generic_steering_preserves_the_turn_permissions_and_echoes() -> Result<
                 .filter_map(|entry| entry.delivery.as_ref())
                 .all(|d| d.status == "injected")
         );
-        assert_eq!(f.service.overview(&f.id)?.overview.unwrap().len(), 1);
+        assert_eq!(f.service.overview(&f.id)?.data.overview.unwrap().len(), 1);
     }
     assert_eq!(f.wire("session/prompt").len(), 1);
     assert!(f.wire("session/cancel").is_empty());
@@ -358,7 +358,7 @@ async fn session_load_preserves_steering_across_consumption_order_and_chunk_chan
     assert_eq!(steering[0].delivery.as_ref().unwrap().status, "injected");
     assert_eq!(after.turns.len(), 1);
     assert_eq!(after.turns[0].status, "completed");
-    assert_eq!(f.service.overview(&f.id)?.overview.unwrap().len(), 1);
+    assert_eq!(f.service.overview(&f.id)?.data.overview.unwrap().len(), 1);
     assert_eq!(f.wire("session/load").len(), 1);
     Ok(())
 }

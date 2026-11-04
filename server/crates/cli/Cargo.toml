@@ -13,10 +13,10 @@ clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
-aow-protocol = { path = "../protocol" }
+aow-protocol = { path = "../../../common/crates/protocol" }
 aow-automations = { path = "../automations" }
 aow-filesystem = { path = "../filesystem" }
-aow-id = { path = "../id" }
+aow-id = { path = "../../../common/crates/id" }
 
 [dev-dependencies]
 axum.workspace = true

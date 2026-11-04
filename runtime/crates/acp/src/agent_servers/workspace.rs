@@ -2,6 +2,30 @@
 use super::*;
 
 impl AgentServerStore {
+    pub async fn fence_workspace(&self, cwd: &str, removing: bool) -> Result<()> {
+        self.set_workspace_removing(cwd, removing);
+        if !removing {
+            return Ok(());
+        }
+        let _connect = self.inner.connect_lock.lock().await;
+        let connections: Vec<_> = self
+            .inner
+            .connections
+            .lock()
+            .unwrap()
+            .values()
+            .filter(|connection| connection.info.cwd == cwd)
+            .cloned()
+            .collect();
+        for connection in &connections {
+            connection.close();
+        }
+        for connection in &connections {
+            connection.wait_stopped().await?;
+        }
+        Ok(())
+    }
+
     pub async fn recover_workspace_removals(&self) -> Result<()> {
         // In-flight daemon cleanup must settle before new admissions are allowed.
         let _connect = self.inner.connect_lock.lock().await;

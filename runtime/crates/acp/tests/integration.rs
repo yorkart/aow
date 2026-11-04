@@ -31,7 +31,7 @@ impl AcpHost for Host {
     }
 }
 fn host(no_load: bool) -> Arc<Host> {
-    Arc::new(Host { completions: Default::default(), settings: RwLock::new(json!({ "agent_servers": { "test": { "type":"custom", "command":"node", "args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/agent.mjs")], "env":{"NO_LOAD":if no_load {"1"} else {"0"}}, "default_mode":"code", "default_config_options":{"enabled":true,"model":"large"} } } }).to_string()), execution_path: None })
+    Arc::new(Host { completions: Default::default(), settings: RwLock::new(json!({ "agent_servers": { "test": { "type":"custom", "command":"node", "args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/acp/agent.mjs")], "env":{"NO_LOAD":if no_load {"1"} else {"0"}}, "default_mode":"code", "default_config_options":{"enabled":true,"model":"large"} } } }).to_string()), execution_path: None })
 }
 fn prompt(value: &str) -> Vec<Content> {
     serde_json::from_value(json!([{ "type":"text", "text":value }])).unwrap()
@@ -48,7 +48,7 @@ async fn record_installed_codex_steering() -> Result<()> {
         execution_path: None,
         settings: RwLock::new(
             json!({"agent_servers":{"recorded":{"type":"custom", "command":"node", "args":[
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/record-acp.mjs"),
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/acp/record-acp.mjs"),
             output.join("wire.jsonl"), "node", std::env::var("AOW_ACP_RECORD_ADAPTER")?
         ], "default_mode":"read-only"}}})
             .to_string(),
@@ -373,20 +373,29 @@ async fn protocol_message_boundaries_survive_transport_and_reload() -> Result<()
     let session = service.new_session(&connection.id).await?;
     service.start_prompt(&session.thread_id, prompt("message-ids"))?;
     let completed = wait_for(&service, &session.thread_id, |value| value.status == "idle").await;
-    assert_eq!(completed.entries.len(), 3);
-    assert_eq!(completed.entries[1].content["text"], "ACP_LIVE_MAIN_DONE");
+    assert_eq!(completed.data.entries.len(), 3);
     assert_eq!(
-        completed.entries[2].content["text"],
+        completed.data.entries[1].content["text"],
+        "ACP_LIVE_MAIN_DONE"
+    );
+    assert_eq!(
+        completed.data.entries[2].content["text"],
         "ACP_LIVE_FOLLOWUP_VISIBLE"
     );
-    assert_eq!(completed.entries[1].message_id.as_deref(), Some("msg_119"));
-    assert_eq!(completed.entries[2].message_id.as_deref(), Some("msg_122"));
+    assert_eq!(
+        completed.data.entries[1].message_id.as_deref(),
+        Some("msg_119")
+    );
+    assert_eq!(
+        completed.data.entries[2].message_id.as_deref(),
+        Some("msg_122")
+    );
     assert_eq!(completed.stop_reason.as_deref(), Some("end_turn"));
     service.flush_threads_on_quit()?;
     let restored = AcpService::new(host(false), Some(state))?;
     assert_eq!(
-        serde_json::to_value(restored.snapshot(&session.thread_id)?.entries)?,
-        serde_json::to_value(completed.entries)?
+        serde_json::to_value(restored.snapshot(&session.thread_id)?.data.entries)?,
+        serde_json::to_value(completed.data.entries)?
     );
     Ok(())
 }
@@ -457,7 +466,13 @@ async fn images_require_the_advertised_prompt_capability() -> Result<()> {
             .to_string()
             .contains("does not support images")
     );
-    assert!(service.snapshot(&session.thread_id)?.entries.is_empty());
+    assert!(
+        service
+            .snapshot(&session.thread_id)?
+            .data
+            .entries
+            .is_empty()
+    );
     assert!(!directory.path().join("image-prompt.json").exists());
     Ok(())
 }
@@ -614,7 +629,7 @@ async fn lifecycle_defaults_events_permissions_files_cancel_and_reload() -> Resu
     assert_eq!(resumed.thread_id, session.thread_id);
     assert_eq!(resumed.title, session.title);
     assert!(resumed.revision > cancelled.revision);
-    assert_eq!(resumed.entries.len(), 2);
+    assert_eq!(resumed.data.entries.len(), 2);
     assert_eq!(
         std::fs::read_to_string(workspace.join("prompts.log"))?,
         logged
@@ -737,8 +752,8 @@ async fn failed_load_preserves_history_and_the_live_event_route() -> Result<()> 
             .is_err()
     );
     assert_eq!(
-        serde_json::to_value(service.snapshot(&session.thread_id)?.entries)?,
-        serde_json::to_value(before.entries)?
+        serde_json::to_value(service.snapshot(&session.thread_id)?.data.entries)?,
+        serde_json::to_value(before.data.entries)?
     );
     service.start_prompt(&session.thread_id, prompt("second"))?;
     let after = wait_for(&service, &session.thread_id, |value| value.status == "idle").await;
@@ -803,8 +818,8 @@ async fn changed_configuration_starts_a_fresh_adapter_and_resume_keeps_local_his
     let resumed = service.resume(&session.thread_id).await?;
     assert_eq!(resumed.title, before.title);
     assert_eq!(
-        serde_json::to_value(resumed.entries)?,
-        serde_json::to_value(before.entries)?
+        serde_json::to_value(resumed.data.entries)?,
+        serde_json::to_value(before.data.entries)?
     );
     assert_eq!(
         std::fs::read_to_string(directory.path().join("prompts.log"))?,
@@ -1096,7 +1111,7 @@ async fn import_validates_workspace_and_ids_before_saving_and_can_retry_load() -
     std::fs::write(directory.path().join("fail-load"), "")?;
     assert!(service.resume(id).await.is_err());
     assert!(service.snapshot(id)?.needs_load);
-    assert!(service.snapshot(id)?.entries.is_empty());
+    assert!(service.snapshot(id)?.data.entries.is_empty());
     std::fs::remove_file(directory.path().join("fail-load"))?;
     let loaded = service.resume(id).await?;
     assert!(!loaded.needs_load);
@@ -1186,7 +1201,7 @@ async fn failed_prompt_persistence_does_not_send_or_leave_the_session_working() 
 
 fn correlation_host() -> Arc<Host> {
     Arc::new(Host { completions: Default::default(),
-        settings: RwLock::new(json!({"agent_servers":{"test":{"type":"custom","command":"node","args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/correlation-agent.mjs")]}}}).to_string()),
+        settings: RwLock::new(json!({"agent_servers":{"test":{"type":"custom","command":"node","args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/acp/correlation-agent.mjs")]}}}).to_string()),
         execution_path: None,
     })
 }
@@ -1229,6 +1244,7 @@ async fn thread_identity_is_durable_before_initialization_and_survives_creation_
     assert!(
         service
             .snapshot(&prepared.thread_id)?
+            .data
             .recovery
             .unwrap()
             .error

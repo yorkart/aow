@@ -25,11 +25,15 @@ pub(super) fn validate(config: &RoleConfig) -> Result<(), AowError> {
     }
     match &config.runtime {
         RoleRuntime::Acp { agent_id } => {
-            // Reuse ACP's ID rules for configured adapters.
-            aow_runtime_client::acp::validate_settings(
-                &serde_json::json!({"agent_servers":{(agent_id):{"type":"registry"}}}).to_string(),
-            )
-            .map_err(|error| invalid(error.to_string()))?;
+            if agent_id.is_empty()
+                || agent_id.len() > 128
+                || matches!(agent_id.as_str(), "." | "..")
+                || !agent_id
+                    .bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || b"-_.".contains(&c))
+            {
+                return Err(invalid("Invalid runtime identifier"));
+            }
         }
         RoleRuntime::Cli { agent_id } => {
             crate::aow::validation::validate_id(agent_id)?;

@@ -141,15 +141,15 @@ fn sqlite_round_trip_keeps_metadata_and_content_without_json_rewrites() -> Resul
     assert_eq!(actual.interacted_at, expected.interacted_at);
     assert_eq!(actual.revision, expected.revision);
     assert_eq!(
-        serde_json::to_value(actual.entries)?,
-        serde_json::to_value(expected.entries)?
+        serde_json::to_value(&actual.entries)?,
+        serde_json::to_value(&expected.entries)?
     );
     assert_eq!(actual.plan, expected.plan);
     assert_eq!(actual.terminals, expected.terminals);
     assert_eq!(actual.config_options, expected.config_options);
     assert_eq!(
-        serde_json::to_value(actual.notices)?,
-        serde_json::to_value(expected.notices)?
+        serde_json::to_value(&actual.notices)?,
+        serde_json::to_value(&expected.notices)?
     );
     Ok(())
 }

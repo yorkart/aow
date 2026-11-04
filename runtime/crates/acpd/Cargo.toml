@@ -5,6 +5,9 @@ edition.workspace = true
 license = "GPL-3.0-or-later"
 
 [dependencies]
+rusqlite.workspace = true
+agent-client-protocol = { version = "=3.4.0", features = ["unstable", "unstable_protocol_v2"] }
+aow-runtime-contract = { path = "../../../common/crates/runtime-contract" }
 aow-acp = { path = "../acp" }
 aow-filesystem = { package = "aow-runtime-filesystem", path = "../filesystem" }
 anyhow.workspace = true

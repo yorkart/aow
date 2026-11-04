@@ -18,15 +18,15 @@ fn managed_receipts_freeze_each_turn_and_survive_compacted_history() {
         ("first", "First conclusion"),
         ("second", "Second conclusion"),
     ] {
-        let start_index = thread.entries.len();
+        let start_index = thread.data.entries.len();
         thread.status = "working".into();
         thread.active_prompt = Some(id.into());
         AcpThread::push(&mut thread, "user", json!({"type":"text","text":id}));
         start_with_id(&mut thread, start_index, id.into());
-        thread.prompt_receipts.insert(
+        thread.data.prompt_receipts.insert(
             id.into(),
             crate::facade::PromptReceipt {
-                user_entry_id: thread.entries[start_index].id.clone(),
+                user_entry_id: thread.data.entries[start_index].id.clone(),
                 status: "in_progress".into(),
                 stop_reason: None,
                 error: None,
@@ -40,7 +40,7 @@ fn managed_receipts_freeze_each_turn_and_survive_compacted_history() {
         finish(&mut thread);
     }
     assert_eq!(
-        thread.prompt_receipts["first"].conclusion.as_deref(),
+        thread.data.prompt_receipts["first"].conclusion.as_deref(),
         Some("First conclusion")
     );
     let mut replay = snapshot();
@@ -78,10 +78,10 @@ fn pending_managed_steering() -> SessionSnapshot {
         json!({"type":"text","text":"Original task"}),
     );
     start_with_id(&mut thread, 0, "managed".into());
-    thread.prompt_receipts.insert(
+    thread.data.prompt_receipts.insert(
         "managed".into(),
         crate::facade::PromptReceipt {
-            user_entry_id: thread.entries[0].id.clone(),
+            user_entry_id: thread.data.entries[0].id.clone(),
             status: "in_progress".into(),
             stop_reason: None,
             error: None,
@@ -92,7 +92,7 @@ fn pending_managed_steering() -> SessionSnapshot {
     message(&mut thread, Some("old-answer"), "Original result");
     let input = json!({"type":"text","text":"A separate request"});
     AcpThread::push(&mut thread, "steering", input.clone());
-    thread.entries[2].delivery = Some(crate::facade::InputDelivery {
+    thread.data.entries[2].delivery = Some(crate::facade::InputDelivery {
         status: "sending".into(),
         error: None,
     });
@@ -120,14 +120,14 @@ fn managed_results_wait_for_steering_boundaries_in_either_response_order() {
             thread.status = "idle".into();
             thread.stop_reason = Some("end_turn".into());
             finish_at(&mut thread, 0);
-            assert_eq!(thread.prompt_receipts["managed"].status, "in_progress");
-            assert!(thread.prompt_receipts["managed"].conclusion.is_none());
+            assert_eq!(thread.data.prompt_receipts["managed"].status, "in_progress");
+            assert!(thread.data.prompt_receipts["managed"].conclusion.is_none());
         }
         // The steering handler registers the new turn after acknowledgement.
         thread.steering.pending = None;
         thread.steering_pending = false;
-        thread.entries[2].kind = "user".into();
-        thread.entries[2].delivery.as_mut().unwrap().status = "started".into();
+        thread.data.entries[2].kind = "user".into();
+        thread.data.entries[2].delivery.as_mut().unwrap().status = "started".into();
         start(&mut thread, 2);
         assert_ne!(thread.turns[0].id, thread.turns[1].id);
         if acknowledge_first {
@@ -140,9 +140,9 @@ fn managed_results_wait_for_steering_boundaries_in_either_response_order() {
         thread.stop_reason = None;
         finish(&mut thread);
         assert_eq!(thread.turns[1].status, "in_progress");
-        assert_eq!(thread.prompt_receipts["managed"].status, "completed");
+        assert_eq!(thread.data.prompt_receipts["managed"].status, "completed");
         assert_eq!(
-            thread.prompt_receipts["managed"].conclusion.as_deref(),
+            thread.data.prompt_receipts["managed"].conclusion.as_deref(),
             Some("Original result")
         );
     }
@@ -177,7 +177,7 @@ fn final_selection_uses_complete_message_boundaries_and_retains_legacy_text() {
     message(&mut thread, Some("progress"), "Checking files");
     message(&mut thread, Some("final"), "**All ");
     message(&mut thread, Some("final"), "done**");
-    let final_entries = final_message(&thread.entries);
+    let final_entries = final_message(&thread.data.entries);
     assert_eq!(final_entries.len(), 1);
     assert_eq!(final_entries[0].content["text"], "**All done**");
     let mut legacy = snapshot();
@@ -213,7 +213,7 @@ fn prompt_outcomes_survive_new_turns_and_disk_reload() -> anyhow::Result<()> {
         (None, Some("Adapter failed"), "failed"),
     ] {
         store.update("local", |thread| {
-            let entry_start = thread.entries.len();
+            let entry_start = thread.data.entries.len();
             thread.status = "working".into();
             thread.stop_reason = None;
             thread.error = None;

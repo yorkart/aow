@@ -71,7 +71,7 @@ async fn managed_prompt_retries_do_not_repeat_work_after_completion_replay_or_re
 #[async_trait::async_trait]
 impl AcpHost for Host {
     async fn settings(&self) -> Result<String> {
-        Ok(json!({"agent_servers":{"test":{"type":"custom","command":"node","args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/lineage-agent.mjs")],
+        Ok(json!({"agent_servers":{"test":{"type":"custom","command":"node","args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/acp/lineage-agent.mjs")],
             "env":{"AOW_STATE_DIR":"wrong","AOW_INSTANCE":"terminal:stale","AOW_SESSION_ID":"stale","AOW_ACP_CONNECTION_ID":"stale"}}}}).to_string())
     }
     async fn execution_path(&self) -> Result<Option<std::ffi::OsString>> {
@@ -312,7 +312,7 @@ async fn execution_environments_scope_connections_and_native_sessions_and_surviv
             )
             .await?;
         service.resume(&thread.thread_id).await?;
-        sessions.push(thread.thread_id);
+        sessions.push(thread.data.thread_id);
     }
     let connection = |id: &str| service.session_connection_info(id).unwrap().unwrap().id;
     assert_eq!(connection(&sessions[0]), connection(&sessions[1]));

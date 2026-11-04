@@ -47,4 +47,5 @@ async function checkRust(directory) {
 }
 await checkRust('server/crates');
 await checkRust('runtime/crates');
+await checkRust('common/crates');
 console.log('Backend translation references passed.');

@@ -1,10 +1,8 @@
 //! Resolve role references through the existing runtime configuration owners.
 use super::{RoleRuntime, model::HomeLayout};
 use crate::aow::{AgentLaunch, AowError, AowManager};
-use anyhow::{Result, bail};
+use anyhow::Result;
 use aow_runtime_client::acp::AcpClient;
-use aow_runtime_client::acp::AcpHost;
-use std::{path::Path, sync::Arc};
 
 pub(super) fn layout_for(runtime: &str) -> HomeLayout {
     let runtime = runtime.to_ascii_lowercase();
@@ -51,16 +49,16 @@ impl AowManager {
     }
 
     pub(super) fn role_acp_service(&self) -> Result<AcpClient> {
-        let cache = self
-            .inner
-            .state_dir
-            .as_ref()
-            .map(|dir| dir.join("cache/acp"));
-        // Shared settings and installation cache, with no persistent probe conversations.
-        let host = Arc::new(RuntimeHost(self.clone()));
-        match &self.inner.runtime_client {
-            Some(endpoint) => AcpClient::with_runtime(endpoint.clone(), host, None, cache),
-            None => AcpClient::for_test_storage(host, None, cache),
+        if let Some(runtime) = &self.inner.runtime_client {
+            return Ok(AcpClient::new(runtime.clone()));
+        }
+        #[cfg(test)]
+        {
+            self.test_acp_client()
+        }
+        #[cfg(not(test))]
+        {
+            anyhow::bail!("Runtime is unavailable")
         }
     }
 
@@ -98,22 +96,5 @@ impl AowManager {
         };
         super::identity::files(layout)?;
         Ok(layout)
-    }
-}
-
-struct RuntimeHost(AowManager);
-#[async_trait::async_trait]
-impl AcpHost for RuntimeHost {
-    async fn settings(&self) -> Result<String> {
-        Ok(self.0.acp_settings()?.content)
-    }
-    async fn execution_path(&self) -> Result<Option<std::ffi::OsString>> {
-        Ok(Some(std::env::join_paths(self.0.execution_path().await?)?))
-    }
-    async fn read_text_file(&self, _: &Path, _: &Path) -> Result<String> {
-        bail!("Connection tests do not read workspace files")
-    }
-    async fn write_text_file(&self, _: &Path, _: &Path, _: &str) -> Result<()> {
-        bail!("Connection tests do not write workspace files")
     }
 }

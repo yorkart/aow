@@ -37,22 +37,25 @@ fn history() -> Result<ThreadStore> {
 #[test]
 fn recorded_codex_steering_keeps_final_replies_visible_to_dialogue_clients() -> Result<()> {
     let recording: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../tests/fixtures/codex-steering-recording.json"
+        "../../../../../../fixtures/acp/codex-steering-recording.json"
     ))?;
     let mut projections = serde_json::Map::new();
     for capture in recording["captures"].as_array().unwrap() {
         if let Some(before) = capture.get("before_steer") {
             let mut thread: SessionSnapshot = serde_json::from_value(before.clone())?;
             let view = snapshot(&mut thread);
-            let turn = &view.overview.as_ref().unwrap()[0];
+            let turn = &view.data.overview.as_ref().unwrap()[0];
             assert!(turn.running);
             assert!(turn.conclusion.is_empty());
             if let Some(expected_overview) = capture.get("before_steer_overview") {
-                assert_eq!(serde_json::to_value(&view.overview)?, *expected_overview);
+                assert_eq!(
+                    serde_json::to_value(&view.data.overview)?,
+                    *expected_overview
+                );
             }
             projections.insert(
                 format!("{}-before-steer", capture["name"].as_str().unwrap()),
-                serde_json::to_value(view.overview)?,
+                serde_json::to_value(view.data.overview)?,
             );
         }
         let mut thread: SessionSnapshot = serde_json::from_value(capture["snapshot"].clone())?;
@@ -60,7 +63,7 @@ fn recorded_codex_steering_keeps_final_replies_visible_to_dialogue_clients() -> 
         assert_eq!(thread.stop_reason.as_deref(), Some("end_turn"));
         assert_eq!(expected.kind, "assistant");
         let view = snapshot(&mut thread);
-        let turn = &view.overview.as_ref().unwrap()[0];
+        let turn = &view.data.overview.as_ref().unwrap()[0];
         assert_eq!(turn.conclusion.len(), 1);
         assert_eq!(turn.conclusion[0].content, expected.content);
         assert_eq!(turn.process_segments.len(), 2);
@@ -76,11 +79,14 @@ fn recorded_codex_steering_keeps_final_replies_visible_to_dialogue_clients() -> 
             capture["name"]
         );
         if let Some(expected_overview) = capture.get("overview") {
-            assert_eq!(serde_json::to_value(&view.overview)?, *expected_overview);
+            assert_eq!(
+                serde_json::to_value(&view.data.overview)?,
+                *expected_overview
+            );
         }
         projections.insert(
             capture["name"].as_str().unwrap().into(),
-            serde_json::to_value(view.overview)?,
+            serde_json::to_value(view.data.overview)?,
         );
     }
     if let Ok(path) = std::env::var("AOW_ACP_RECORD_PROJECTIONS") {
@@ -92,7 +98,7 @@ fn recorded_codex_steering_keeps_final_replies_visible_to_dialogue_clients() -> 
 #[test]
 fn recorded_codex_load_keeps_steering_despite_tool_transport_changes() -> Result<()> {
     let recording: Value = serde_json::from_str(include_str!(
-        "../../../tests/fixtures/codex-steering-replay.json"
+        "../../../../../../fixtures/acp/codex-steering-replay.json"
     ))?;
     let previous: SessionSnapshot = serde_json::from_value(recording["live"].clone())?;
     let mut replay = previous.clone();
@@ -125,7 +131,7 @@ fn recorded_codex_load_keeps_steering_despite_tool_transport_changes() -> Result
     );
     assert_eq!(replay.turns.len(), 1);
     let view = snapshot(&mut replay);
-    let turns = view.overview.as_ref().unwrap();
+    let turns = view.data.overview.as_ref().unwrap();
     assert_eq!(turns.len(), 1);
     assert_eq!(turns[0].process_segments.len(), 2);
     assert_eq!(
@@ -133,11 +139,14 @@ fn recorded_codex_load_keeps_steering_despite_tool_transport_changes() -> Result
         previous.entries.last().unwrap().content
     );
     if let Some(expected) = recording.get("reloaded") {
-        assert_eq!(serde_json::to_value(&view.overview)?, expected["overview"]);
+        assert_eq!(
+            serde_json::to_value(&view.data.overview)?,
+            expected["overview"]
+        );
     }
     if let Ok(path) = std::env::var("AOW_ACP_RECORD_REPLAY") {
         // Share the actual reducer/restoration result with the browser regression.
-        replay.overview = view.overview;
+        replay.overview = view.data.overview;
         std::fs::write(path, serde_json::to_vec_pretty(&replay)?)?;
     }
     Ok(())
@@ -199,7 +208,7 @@ fn collapsed_overview_excludes_bodies_and_details_are_scoped() -> Result<()> {
     assert!(overview.entries.is_empty());
     assert!(overview.terminals.is_empty());
     assert!(serde_json::to_vec(&overview)?.len() < 5000);
-    let turns = overview.overview.unwrap();
+    let turns = overview.data.overview.unwrap();
     assert_eq!(turns.len(), 2);
     assert_eq!(turns[0].tool_count, 1);
     assert_eq!(turns[0].conclusion[0].content["text"], "answer 0");
@@ -305,7 +314,7 @@ fn newly_referenced_terminal_is_sent_even_when_output_arrived_earlier() -> Resul
     store.update("local", |thread| thread.status = "working".into())?;
     let source = store.thread("local")?;
     let overview = snapshot(&mut source.lock().unwrap());
-    let turn_id = &overview.overview.as_ref().unwrap()[1].id;
+    let turn_id = &overview.data.overview.as_ref().unwrap()[1].id;
     store.session_update("local", json!({"sessionUpdate":"tool_call_update", "toolCallId":"new-tool", "_meta":{"terminal_output":{"terminal_id":"early", "data":"already here"}}}))?;
     let SessionUpdates::Snapshot { snapshot: before } =
         process(&mut source.lock().unwrap(), turn_id, None, None)?
@@ -339,7 +348,7 @@ fn failed_and_tool_only_turns_never_promote_progress_to_a_conclusion() -> Result
     })?;
     let source = store.thread("local")?;
     let view = snapshot(&mut source.lock().unwrap());
-    let last = view.overview.unwrap().pop().unwrap();
+    let last = view.data.overview.unwrap().pop().unwrap();
     assert_eq!(last.status.as_deref(), Some("interrupted"));
     assert!(last.conclusion.is_empty());
     assert_eq!(last.tool_count, 2);
@@ -421,7 +430,7 @@ fn steering_segments_preserve_progress_through_streaming_completion_and_reload()
     let source = restored.thread("local")?;
     let mut thread = source.lock().unwrap();
     let view = snapshot(&mut thread);
-    let turn = &view.overview.as_ref().unwrap()[0];
+    let turn = &view.data.overview.as_ref().unwrap()[0];
     assert_eq!(turn.status.as_deref(), Some("completed"));
     assert_eq!(turn.messages.as_ref().unwrap().len(), 2);
     assert_eq!(turn.progress_count, 1);
@@ -648,14 +657,14 @@ fn tool_visibility_changes_resynchronize_overviews_and_detail_positions() -> Res
         let fresh = snapshot(&mut thread.clone());
         assert_eq!(
             serde_json::to_value(&other_view.overview)?,
-            serde_json::to_value(fresh.overview)?
+            serde_json::to_value(fresh.data.overview)?
         );
         let SessionUpdates::Snapshot { snapshot: updated } =
             since(&mut thread, &before.sync_generation, before.revision)
         else {
             panic!("boundary changes must replace the overview")
         };
-        let turns = updated.overview.as_ref().unwrap();
+        let turns = updated.data.overview.as_ref().unwrap();
         assert_eq!(turns.len(), if shown { 2 } else { 1 });
         assert_eq!(turns[0].user.len(), if shown { 1 } else { 2 });
         let SessionUpdates::Snapshot {
@@ -710,7 +719,7 @@ fn newly_visible_leading_tools_rebuild_ranges_outside_the_old_index() -> Result<
     else {
         panic!()
     };
-    let turns = updated.overview.unwrap();
+    let turns = updated.data.overview.unwrap();
     assert_eq!(turns.len(), 2);
     assert_eq!(turns[0].id, "leading");
     assert_eq!(turns[0].tool_count, 1);

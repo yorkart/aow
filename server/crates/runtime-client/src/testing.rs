@@ -168,3 +168,5 @@ pub async fn run_with_worker(
     shutdown.await;
     runtime.shutdown().await
 }
+
+pub use crate::acp::fixture::AcpFixture;

@@ -28,10 +28,9 @@ just run --state-dir "$HOME/.aow" --listen 127.0.0.1:9760
 Without just, build the worker with `npm --prefix vt-worker ci --ignore-scripts
 --no-audit --no-fund` and `npm --prefix vt-worker run build`, then run
 `cargo build --workspace --locked` or `cargo test --workspace --locked`.
-All source dependencies, protocol types, native agent adapters and build assets
-are owned by this directory. It can be copied out of the monorepo and built
-without Server, runtime-client or parent-directory crates. Runtime support crates
-have distinct package identities from caller-side libraries.
+Runtime owns its execution implementation and build assets. Source builds require
+the sibling `../common/` workspace for IDs and wire contracts, and require no
+Server or runtime-client source. Compiled runtime binaries deploy independently.
 
 The independent caller SDK lives at `../server/crates/runtime-client`. Server uses that SDK
 for management, terminal attachment and native ACP conversations. The business CLI uses `../server/crates/server-client` over authenticated HTTP or
@@ -46,8 +45,8 @@ terminald are embedded libraries.
 
 ## Source boundary checks
 
-`node --test tests/isolation.test.mjs` rejects path dependencies outside this
-subproject. Caller integration tests use the external `runtime-test-host`
+`node --test tests/isolation.test.mjs` permits dependencies only on this
+subproject and the sibling Common contracts. Caller integration tests use the external `runtime-test-host`
 example rather than linking daemon implementation crates:
 
 ```sh

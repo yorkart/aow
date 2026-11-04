@@ -174,29 +174,14 @@ async fn upgrade_requires_authentication_and_matching_origin() {
     server.abort();
 }
 
-struct AcpHost;
+struct AcpConfiguration;
 #[async_trait::async_trait]
-impl aow_runtime_client::acp::AcpHost for AcpHost {
+impl aow_runtime_client::testing::AcpFixture for AcpConfiguration {
     async fn settings(&self) -> anyhow::Result<String> {
         Ok(serde_json::json!({"agent_servers":{"test":{"type":"custom","command":"/missing/adapter"}}}).to_string())
     }
     async fn execution_path(&self) -> anyhow::Result<Option<std::ffi::OsString>> {
         Ok(None)
-    }
-    async fn read_text_file(
-        &self,
-        _: &std::path::Path,
-        _: &std::path::Path,
-    ) -> anyhow::Result<String> {
-        unreachable!()
-    }
-    async fn write_text_file(
-        &self,
-        _: &std::path::Path,
-        _: &std::path::Path,
-        _: &str,
-    ) -> anyhow::Result<()> {
-        unreachable!()
     }
 }
 
@@ -206,7 +191,7 @@ async fn acp_ready_bounds_snapshot_races_reconnect_deletion_and_unsubscribe() {
     let cwd = directory.path().canonicalize().unwrap();
     let mut state = AppState::for_test(Default::default());
     state.acp = aow_runtime_client::acp::AcpClient::for_test_host(
-        std::sync::Arc::new(AcpHost),
+        std::sync::Arc::new(AcpConfiguration),
         Some(cwd.join("state")),
     )
     .unwrap();
@@ -299,9 +284,11 @@ async fn acp_ready_bounds_snapshot_races_reconnect_deletion_and_unsubscribe() {
 #[tokio::test]
 async fn acp_coalesces_list_changes_and_keeps_urgent_session_boundaries() {
     let directory = tempfile::tempdir().unwrap();
-    let service =
-        aow_runtime_client::acp::AcpClient::for_test_host(std::sync::Arc::new(AcpHost), None)
-            .unwrap();
+    let service = aow_runtime_client::acp::AcpClient::for_test_host(
+        std::sync::Arc::new(AcpConfiguration),
+        None,
+    )
+    .unwrap();
     let session = service
         .prepare_session("test", directory.path().into())
         .await

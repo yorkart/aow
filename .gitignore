@@ -13,3 +13,5 @@ __pycache__/
 /runtime/vt-worker/dist/
 
 /server/target/
+
+/common/target/

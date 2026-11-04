@@ -105,19 +105,12 @@ pub(crate) fn error(error: anyhow::Error) -> HttpError {
 async fn settings(
     State(state): State<AppState>,
 ) -> Result<Json<crate::aow::AcpSettingsFile>, HttpError> {
-    if state.acp.runtime().is_some() {
-        let settings = state.acp.settings().await.map_err(error)?;
-        return Ok(Json(crate::aow::AcpSettingsFile {
-            path: settings.path,
-            content: settings.content,
-            revision: settings.revision,
-        }));
-    }
-    aow_i18n::spawn_blocking(move || state.aow.acp_settings())
-        .await
-        .map_err(|e| HttpError::internal(e.to_string()))?
-        .map(Json)
-        .map_err(error)
+    let settings = state.acp.settings().await.map_err(error)?;
+    Ok(Json(crate::aow::AcpSettingsFile {
+        path: settings.path,
+        content: settings.content,
+        revision: settings.revision,
+    }))
 }
 #[derive(Deserialize)]
 struct SaveSettings {
@@ -128,24 +121,16 @@ async fn save_settings(
     State(state): State<AppState>,
     Json(request): Json<SaveSettings>,
 ) -> Result<Json<crate::aow::AcpSettingsFile>, HttpError> {
-    if state.acp.runtime().is_some() {
-        let settings = state
-            .acp
-            .save_settings(request.content, request.revision)
-            .await
-            .map_err(error)?;
-        return Ok(Json(crate::aow::AcpSettingsFile {
-            path: settings.path,
-            content: settings.content,
-            revision: settings.revision,
-        }));
-    }
-    state
-        .aow
-        .save_acp_settings(request.content, request.revision)
+    let settings = state
+        .acp
+        .save_settings(request.content, request.revision)
         .await
-        .map(Json)
-        .map_err(error)
+        .map_err(error)?;
+    Ok(Json(crate::aow::AcpSettingsFile {
+        path: settings.path,
+        content: settings.content,
+        revision: settings.revision,
+    }))
 }
 async fn agents(
     State(state): State<AppState>,

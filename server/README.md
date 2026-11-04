@@ -1,8 +1,10 @@
 # Server
 
 Server owns business APIs, CLI, automation scheduling and the web frontend. This
-is an independent Cargo workspace. No production path dependencies refer to
-`../runtime` or any parent source directory.
+is an independent Cargo workspace. Its shared data contracts and IDs come from
+`../common`; no path dependency refers to Runtime implementation crates.
+ACP conversation state and history are owned by the daemon. The local
+`runtime-client` crate only transports requests, responses and events.
 
 ```sh
 npm --prefix frontend ci --ignore-scripts --no-audit --no-fund

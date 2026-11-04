@@ -66,7 +66,7 @@ async fn acp_metadata_invalidates_the_graph_without_an_http_action() {
     .unwrap();
     let settings = state.aow.acp_settings().unwrap();
     let adapter = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../acp-client-model/tests/fixtures/lineage-agent.mjs");
+        .join("../../../fixtures/acp/lineage-agent.mjs");
     state
         .aow
         .save_acp_settings(
@@ -82,7 +82,10 @@ async fn acp_metadata_invalidates_the_graph_without_an_http_action() {
         .prepare_session("test", directory.path().into())
         .await
         .unwrap();
-    assert!(events.has_changed().unwrap());
+    tokio::time::timeout(std::time::Duration::from_secs(5), events.changed())
+        .await
+        .unwrap()
+        .unwrap();
     state.acp.resume(&session.thread_id).await.unwrap();
     events.borrow_and_update();
     state
@@ -107,6 +110,9 @@ async fn acp_metadata_invalidates_the_graph_without_an_http_action() {
     .await
     .unwrap();
     state.acp.delete_session(&session.thread_id).await.unwrap();
-    assert!(events.has_changed().unwrap());
+    tokio::time::timeout(std::time::Duration::from_secs(5), events.changed())
+        .await
+        .unwrap()
+        .unwrap();
     assert!(!graph(&state).await.unwrap().contains_key(&reference));
 }

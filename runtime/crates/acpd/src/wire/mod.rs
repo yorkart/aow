@@ -4,13 +4,13 @@ mod http;
 mod instance;
 
 use anyhow::{Context, Result, ensure};
-use aow_acp::AcpService;
+use aow_acp::{AcpService, ValidateExecution};
 use axum::{
     Json,
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 use tokio::sync::{Mutex, watch};
 
@@ -25,28 +25,7 @@ pub(crate) struct WireRuntime {
     stopping: watch::Receiver<bool>,
 }
 
-#[derive(Clone, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-struct InstanceSpec {
-    agent_id: String,
-    cwd: PathBuf,
-    #[serde(default)]
-    execution_environment: Option<aow_acp::ExecutionEnvironment>,
-    #[serde(default)]
-    environment: std::collections::BTreeMap<String, String>,
-}
-
-#[derive(Serialize)]
-struct InstanceInfo {
-    id: String,
-    agent_id: String,
-    cwd: PathBuf,
-    pid: u32,
-    attached: bool,
-    status: instance::Status,
-    websocket_path: String,
-    execution_home: Option<PathBuf>,
-}
+use aow_runtime_contract::acp::{AcpInstance as InstanceInfo, AcpInstanceSpec as InstanceSpec};
 
 impl WireRuntime {
     pub fn new(

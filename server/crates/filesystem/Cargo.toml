@@ -6,12 +6,12 @@ license.workspace = true
 
 [dependencies]
 aow-i18n = { path = "../i18n" }
-aow-id = { path = "../id" }
+aow-id = { path = "../../../common/crates/id" }
 bytes.workspace = true
 futures-util.workspace = true
 libc.workspace = true
 mime_guess.workspace = true
-aow-protocol = { path = "../protocol" }
+aow-protocol = { path = "../../../common/crates/protocol" }
 thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true

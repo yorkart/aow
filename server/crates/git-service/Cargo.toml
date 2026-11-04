@@ -6,7 +6,7 @@ license.workspace = true
 
 [dependencies]
 aow-i18n = { path = "../i18n" }
-aow-protocol = { path = "../protocol" }
+aow-protocol = { path = "../../../common/crates/protocol" }
 notify.workspace = true
 thiserror.workspace = true
 tokio.workspace = true

@@ -3,10 +3,7 @@ use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode},
 };
-use std::{
-    path::{Path as FsPath, PathBuf},
-    sync::Arc,
-};
+use std::{path::PathBuf, sync::Arc};
 use tower::ServiceExt;
 
 struct Host {
@@ -15,21 +12,15 @@ struct Host {
     default_agent_id: Option<String>,
 }
 #[async_trait::async_trait]
-impl aow_runtime_client::acp::AcpHost for Host {
+impl aow_runtime_client::testing::AcpFixture for Host {
     async fn settings(&self) -> anyhow::Result<String> {
-        let mut settings = json!({"agent_servers":{"test":{"type":"custom","command":self.command,"env":{"START_DELAY_MS":self.delay_ms.to_string()},"args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../acp-client-model/tests/fixtures/lineage-agent.mjs")]}}});
+        let mut settings = json!({"agent_servers":{"test":{"type":"custom","command":self.command,"env":{"START_DELAY_MS":self.delay_ms.to_string()},"args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/acp/lineage-agent.mjs")]}}});
         settings["agent_servers"]["another"] = settings["agent_servers"]["test"].clone();
         settings["default_agent_id"] = json!(self.default_agent_id);
         Ok(settings.to_string())
     }
     async fn execution_path(&self) -> anyhow::Result<Option<std::ffi::OsString>> {
         Ok(None)
-    }
-    async fn read_text_file(&self, _: &FsPath, _: &FsPath) -> anyhow::Result<String> {
-        unreachable!()
-    }
-    async fn write_text_file(&self, _: &FsPath, _: &FsPath, _: &str) -> anyhow::Result<()> {
-        unreachable!()
     }
 }
 

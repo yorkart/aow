@@ -8,12 +8,12 @@ pub(crate) fn start(thread: &mut SessionSnapshot, entry_start: usize) {
 
 pub(crate) fn start_with_id(thread: &mut SessionSnapshot, entry_start: usize, id: String) {
     // Plans belong to a turn; retain the result until another turn is admitted.
-    thread.plan = serde_json::Value::Null;
+    thread.data.plan = serde_json::Value::Null;
     super::AcpThread::clear_session_meta(thread);
     thread.session_meta_suppressed = false;
-    thread.turns.push(SessionTurn {
+    thread.data.turns.push(SessionTurn {
         id,
-        user_entry_id: thread.entries[entry_start].id.clone(),
+        user_entry_id: thread.data.entries[entry_start].id.clone(),
         status: "in_progress".into(),
         stop_reason: None,
         error: None,
@@ -21,17 +21,18 @@ pub(crate) fn start_with_id(thread: &mut SessionSnapshot, entry_start: usize, id
 }
 
 pub(crate) fn finish(thread: &mut SessionSnapshot) {
-    if thread.status != "working" {
+    if thread.data.status != "working" {
         for turn in thread
+            .data
             .turns
             .iter_mut()
             .filter(|turn| turn.status == "in_progress")
         {
             finish_record(
                 turn,
-                &thread.status,
-                thread.stop_reason.clone(),
-                thread.error.clone(),
+                &thread.data.status,
+                thread.data.stop_reason.clone(),
+                thread.data.error.clone(),
             );
         }
     }
@@ -40,17 +41,18 @@ pub(crate) fn finish(thread: &mut SessionSnapshot) {
 }
 
 pub(crate) fn finish_at(thread: &mut SessionSnapshot, entry_start: usize) {
-    let id = &thread.entries[entry_start].id;
+    let id = &thread.data.entries[entry_start].id;
     if let Some(turn) = thread
+        .data
         .turns
         .iter_mut()
         .find(|turn| &turn.user_entry_id == id)
     {
         finish_record(
             turn,
-            &thread.status,
-            thread.stop_reason.clone(),
-            thread.error.clone(),
+            &thread.data.status,
+            thread.data.stop_reason.clone(),
+            thread.data.error.clone(),
         );
     }
     settle_receipts(thread);
@@ -63,16 +65,18 @@ fn settle_receipts(thread: &mut SessionSnapshot) {
         return;
     }
     for receipt in thread
+        .data
         .prompt_receipts
         .values_mut()
         .filter(|r| r.status == "in_progress")
     {
         let Some(turn) = thread
+            .data
             .turns
             .iter()
             .find(|turn| turn.user_entry_id == receipt.user_entry_id)
         else {
-            if thread.status != "working" {
+            if thread.data.status != "working" {
                 receipt.status = "interrupted".into();
                 receipt.error = Some("Prompt outcome unavailable after session recovery".into());
                 receipt.finished_at = Some(chrono::Utc::now().to_rfc3339());
@@ -87,18 +91,20 @@ fn settle_receipts(thread: &mut SessionSnapshot) {
         receipt.error = turn.error.clone();
         receipt.finished_at = Some(chrono::Utc::now().to_rfc3339());
         if let Some(start) = thread
+            .data
             .entries
             .iter()
             .position(|e| e.id == turn.user_entry_id)
         {
             let end = thread
+                .data
                 .entries
                 .iter()
                 .enumerate()
                 .skip(start + 1)
-                .find(|(_, e)| thread.turns.iter().any(|t| t.user_entry_id == e.id))
-                .map_or(thread.entries.len(), |(index, _)| index);
-            if thread.entries[start..end].iter().any(|entry| {
+                .find(|(_, e)| thread.data.turns.iter().any(|t| t.user_entry_id == e.id))
+                .map_or(thread.data.entries.len(), |(index, _)| index);
+            if thread.data.entries[start..end].iter().any(|entry| {
                 entry.kind == "steering"
                     && entry.delivery.as_ref().is_some_and(|delivery| {
                         matches!(delivery.status.as_str(), "sending" | "unknown")
@@ -112,7 +118,7 @@ fn settle_receipts(thread: &mut SessionSnapshot) {
                 });
                 continue;
             }
-            let text = final_message(&thread.entries[start..end])
+            let text = final_message(&thread.data.entries[start..end])
                 .iter()
                 .filter_map(|entry| entry.content["text"].as_str())
                 .collect::<String>();

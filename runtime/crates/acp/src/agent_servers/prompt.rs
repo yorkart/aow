@@ -33,7 +33,11 @@ impl AgentServerStore {
         request_id: Option<&str>,
     ) -> Result<()> {
         if let Some(request_id) = request_id
-            && self.snapshot(id)?.prompt_receipts.contains_key(request_id)
+            && self
+                .snapshot(id)?
+                .data
+                .prompt_receipts
+                .contains_key(request_id)
         {
             return Ok(());
         }
@@ -64,28 +68,31 @@ impl AgentServerStore {
         ensure!(!threads.forking.contains(id), "ACP session is being forked");
         let thread = threads.threads.get(id).context("ACP session not found")?;
         let thread = thread.lock().unwrap();
-        if request_id.is_some_and(|request_id| thread.prompt_receipts.contains_key(request_id)) {
+        if request_id.is_some_and(|request_id| thread.data.prompt_receipts.contains_key(request_id))
+        {
             return Ok(());
         }
         let admitted = match steering_id {
-            None => thread.status == "idle" && !thread.steering_pending,
+            None => thread.data.status == "idle" && !thread.data.steering_pending,
             Some(id) => thread.steering.pending.as_ref().is_some_and(|pending| {
                 pending.id == id && pending.prompt_required && !pending.cancelled
             }),
         };
         ensure!(
             admitted
-                && thread.status != "disconnected"
+                && thread.data.status != "disconnected"
                 && thread.active_prompt.is_none()
                 && !thread.steering.detached
-                && !thread.needs_load
+                && !thread.data.needs_load
                 && !thread
+                    .data
                     .recovery
                     .as_ref()
                     .is_some_and(|recovery| recovery.phase != "failed"),
             "ACP session is busy or disconnected"
         );
         let session_id = thread
+            .data
             .session_id
             .clone()
             .context("ACP session has not been created")?;
@@ -99,7 +106,7 @@ impl AgentServerStore {
         let mut entry_start = if steering_id.is_some() {
             thread.steering.pending.as_ref().unwrap().entry_start
         } else {
-            thread.entries.len()
+            thread.data.entries.len()
         };
         let previous_usage = thread.last_prompt_usage.clone().unwrap_or(Value::Null);
         drop(thread);
@@ -107,12 +114,12 @@ impl AgentServerStore {
             .map(str::to_owned)
             .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
         if let Err(error) = threads.update(id, |thread| {
-            thread.interacted_at = Some(chrono::Utc::now().to_rfc3339());
+            thread.data.interacted_at = Some(chrono::Utc::now().to_rfc3339());
             thread.active_prompt = Some(turn_id.clone());
             thread.steering.activity = None;
-            thread.status = "working".into();
-            thread.error = None;
-            thread.stop_reason = None;
+            thread.data.status = "working".into();
+            thread.data.error = None;
+            thread.data.stop_reason = None;
             thread.pending_user_echo = content
                 .as_array()
                 .into_iter()
@@ -131,11 +138,12 @@ impl AgentServerStore {
                     thread,
                     entry_start,
                     content.as_array().unwrap().len(),
-                    thread.entries.len(),
+                    thread.data.entries.len(),
                 );
                 crate::acp_thread::steering::forget_echo(thread, steering_id);
                 crate::acp_thread::steering::delivery(thread, entry_start, "started", None);
                 for entry in thread
+                    .data
                     .entries
                     .iter_mut()
                     .skip(entry_start)
@@ -144,7 +152,7 @@ impl AgentServerStore {
                     entry.kind = "user".into();
                 }
                 thread.steering.pending = None;
-                thread.steering_pending = false;
+                thread.data.steering_pending = false;
             } else {
                 for block in content.as_array().into_iter().flatten() {
                     AcpThread::push(thread, "user", block.clone());
@@ -152,10 +160,10 @@ impl AgentServerStore {
             }
             crate::acp_thread::turns::start_with_id(thread, entry_start, turn_id.clone());
             if let Some(request_id) = request_id {
-                thread.prompt_receipts.insert(
+                thread.data.prompt_receipts.insert(
                     request_id.into(),
                     crate::facade::PromptReceipt {
-                        user_entry_id: thread.entries[entry_start].id.clone(),
+                        user_entry_id: thread.data.entries[entry_start].id.clone(),
                         status: "in_progress".into(),
                         stop_reason: None,
                         error: None,
@@ -164,8 +172,8 @@ impl AgentServerStore {
                     },
                 );
             }
-            if thread.title == "New conversation" {
-                thread.title = content
+            if thread.data.title == "New conversation" {
+                thread.data.title = content
                     .as_array()
                     .into_iter()
                     .flatten()
@@ -181,10 +189,10 @@ impl AgentServerStore {
             // an unsent user message or a permanently working session in memory/on disk.
             let message = format!("{error:#}");
             let _ = threads.update(id, |thread| {
-                let revision = thread.revision;
+                let revision = thread.data.revision;
                 *thread = previous;
-                thread.revision = revision;
-                thread.error = Some(message);
+                thread.data.revision = revision;
+                thread.data.error = Some(message);
             });
             return Err(error);
         }
@@ -219,35 +227,37 @@ impl AgentServerStore {
                     thread.last_prompt_usage = usage.clone();
                     thread.pending_user_echo.clear();
                     thread.pending_user_images.clear();
-                    thread.status = if connection.connected() && thread.status != "disconnected" {
-                        "idle"
-                    } else {
-                        "disconnected"
-                    }
-                    .into();
+                    thread.data.status =
+                        if connection.connected() && thread.data.status != "disconnected" {
+                            "idle"
+                        } else {
+                            "disconnected"
+                        }
+                        .into();
                     let later_turn = thread.steering.detached
-                        || thread.turns.last().is_some_and(|turn| {
-                            turn.user_entry_id != thread.entries[entry_start].id
+                        || thread.data.turns.last().is_some_and(|turn| {
+                            turn.user_entry_id != thread.data.entries[entry_start].id
                         });
-                    let later_stop = thread.stop_reason.clone();
-                    let later_error = thread.error.clone();
+                    let later_stop = thread.data.stop_reason.clone();
+                    let later_error = thread.data.error.clone();
                     match result {
                         Ok(result) => {
-                            thread.stop_reason = result["stopReason"].as_str().map(str::to_owned);
+                            thread.data.stop_reason =
+                                result["stopReason"].as_str().map(str::to_owned);
                             if let Some(usage) = result.get("usage") {
-                                thread.usage = usage.clone();
+                                thread.data.usage = usage.clone();
                             }
                         }
                         Err(error) => {
-                            thread.auth_required =
+                            thread.data.auth_required =
                                 error.code == agent_client_protocol::ErrorCode::AuthRequired;
-                            thread.error = Some(format!("{error:#}"));
+                            thread.data.error = Some(format!("{error:#}"));
                         }
                     }
                     crate::acp_thread::turns::finish_at(thread, entry_start);
                     if later_turn {
-                        thread.stop_reason = later_stop;
-                        thread.error = later_error;
+                        thread.data.stop_reason = later_stop;
+                        thread.data.error = later_error;
                     }
                     crate::acp_thread::steering::settle_status(thread);
                     if succeeded {
@@ -258,7 +268,7 @@ impl AgentServerStore {
                             usage.clone(),
                             &previous_usage,
                         );
-                        if thread.steering_pending {
+                        if thread.data.steering_pending {
                             thread.steering.completion = completed.take();
                         }
                     }

@@ -62,6 +62,7 @@ fn replay_preserves_verified_steering_entries_and_the_original_turn() {
     assert_eq!(replay.entries[2].kind, "steering");
     assert_eq!(
         crate::acp_thread::overview::snapshot(&mut replay)
+            .data
             .overview
             .unwrap()
             .len(),

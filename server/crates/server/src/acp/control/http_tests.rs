@@ -3,18 +3,18 @@ use axum::{
     http::{Request, StatusCode},
 };
 use serde_json::{Value, json};
-use std::{path::Path, sync::Arc};
+use std::sync::Arc;
 use tower::ServiceExt;
 
 struct Host {
     fork: bool,
 }
 #[async_trait::async_trait]
-impl aow_runtime_client::acp::AcpHost for Host {
+impl aow_runtime_client::testing::AcpFixture for Host {
     async fn settings(&self) -> anyhow::Result<String> {
         if self.fork {
             return Ok(json!({"agent_servers":{"test":{"type":"custom","command":"node","args":[
-                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../acp-client-model/tests/fixtures/fork-agent.mjs")
+                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/acp/fork-agent.mjs")
             ]}}}).to_string());
         }
         Ok(
@@ -24,12 +24,6 @@ impl aow_runtime_client::acp::AcpHost for Host {
     }
     async fn execution_path(&self) -> anyhow::Result<Option<std::ffi::OsString>> {
         Ok(None)
-    }
-    async fn read_text_file(&self, _: &Path, _: &Path) -> anyhow::Result<String> {
-        unreachable!()
-    }
-    async fn write_text_file(&self, _: &Path, _: &Path, _: &str) -> anyhow::Result<()> {
-        unreachable!()
     }
 }
 

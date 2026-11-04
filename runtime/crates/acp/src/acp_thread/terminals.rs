@@ -28,6 +28,7 @@ pub(super) fn apply_legacy_update(thread: &mut SessionSnapshot, update: &Value) 
                 (output["terminal_id"].as_str(), output["data"].as_str())
             {
                 let start = thread
+                    .data
                     .terminals
                     .get(id)
                     .and_then(|terminal| terminal["output"].as_str())
@@ -59,6 +60,7 @@ pub(super) fn apply_legacy_update(thread: &mut SessionSnapshot, update: &Value) 
 
 fn terminal<'a>(thread: &'a mut SessionSnapshot, id: &str) -> &'a mut Value {
     thread
+        .data
         .terminals
         .entry(id.into())
         .or_insert_with(|| json!({"output": ""}))
@@ -82,7 +84,7 @@ pub(super) fn remove_consumed_output(update: &mut Value) {
 /// Old caches may retain the last output notification on a tool as well as
 /// the accumulated terminal. Never append it again to the canonical output.
 pub(super) fn normalize_snapshot(thread: &mut SessionSnapshot) {
-    for entry in &mut thread.entries {
+    for entry in &mut thread.data.entries {
         if entry.kind != "tool" {
             continue;
         }
@@ -92,6 +94,7 @@ pub(super) fn normalize_snapshot(thread: &mut SessionSnapshot) {
             continue;
         };
         let terminal = thread
+            .data
             .terminals
             .entry(id.into())
             .or_insert_with(|| json!({}));
@@ -124,13 +127,14 @@ mod tests {
             );
         }
         thread
+            .data
             .terminals
             .insert("existing".into(), json!({"output":"prefix-tail"}));
         normalize_snapshot(&mut thread);
         normalize_snapshot(&mut thread);
-        assert_eq!(thread.terminals["existing"]["output"], "prefix-tail");
-        assert_eq!(thread.terminals["missing"]["output"], "recovered");
-        for entry in &thread.entries {
+        assert_eq!(thread.data.terminals["existing"]["output"], "prefix-tail");
+        assert_eq!(thread.data.terminals["missing"]["output"], "recovered");
+        for entry in &thread.data.entries {
             assert!(entry.content["_meta"].get("terminal_output").is_none());
             assert_eq!(entry.content["_meta"]["other"], true);
         }
@@ -155,18 +159,18 @@ mod tests {
         ] {
             AcpThread::handle_session_update(&mut thread, update);
         }
-        assert_eq!(thread.entries.len(), 1);
-        assert_eq!(thread.entries[0].content["status"], "completed");
+        assert_eq!(thread.data.entries.len(), 1);
+        assert_eq!(thread.data.entries[0].content["status"], "completed");
         assert_eq!(
-            thread.entries[0].content["content"][0]["terminalId"],
+            thread.data.entries[0].content["content"][0]["terminalId"],
             "term"
         );
-        assert_eq!(thread.terminals["term"]["output"], "early\n/repo\n");
-        assert_eq!(thread.terminals["term"]["cwd"], "/repo");
-        assert_eq!(thread.terminals["term"]["exit_status"]["exitCode"], 0);
+        assert_eq!(thread.data.terminals["term"]["output"], "early\n/repo\n");
+        assert_eq!(thread.data.terminals["term"]["cwd"], "/repo");
+        assert_eq!(thread.data.terminals["term"]["exit_status"]["exitCode"], 0);
         let saved = serde_json::to_value(&thread).unwrap();
         let restored: SessionSnapshot = serde_json::from_value(saved.clone()).unwrap();
-        assert_eq!(restored.terminals, thread.terminals);
+        assert_eq!(restored.terminals, thread.data.terminals);
         let mut old_history = saved;
         old_history.as_object_mut().unwrap().remove("terminals");
         let restored: SessionSnapshot = serde_json::from_value(old_history).unwrap();
@@ -193,14 +197,17 @@ mod tests {
                 &mut thread,
                 &json!({"sessionUpdate":"tool_call","title":"command","_meta":{"terminal_info":{"terminal_id":id}}}),
             );
-            assert_eq!(thread.terminals[id]["output"], data);
-            assert_eq!(thread.terminals[id]["exit_status"]["exitCode"], code);
-            assert_eq!(thread.terminals[id]["exit_status"]["signal"], "SIGTERM");
+            assert_eq!(thread.data.terminals[id]["output"], data);
+            assert_eq!(thread.data.terminals[id]["exit_status"]["exitCode"], code);
+            assert_eq!(
+                thread.data.terminals[id]["exit_status"]["signal"],
+                "SIGTERM"
+            );
         }
         apply_legacy_update(
             &mut thread,
             &json!({"sessionUpdate":"tool_call_update","_meta":{"terminal_output":{"data":"missing id"}}}),
         );
-        assert_eq!(thread.terminals.len(), 2);
+        assert_eq!(thread.data.terminals.len(), 2);
     }
 }

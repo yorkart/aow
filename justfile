@@ -29,6 +29,7 @@ build-runtime-test-host: build-vt-worker
 
 test: test-vt-worker build-runtime-test-host
     if [ "$(uname -s)" = Darwin ]; then TMPDIR="$(node -p 'require("node:fs").realpathSync(require("node:os").tmpdir())')" AOW_RUNTIME_TEST_HOST="$PWD/target/debug/examples/runtime-test-host" cargo test --manifest-path server/Cargo.toml --target-dir target --workspace -- --test-threads=4; else AOW_RUNTIME_TEST_HOST="$PWD/target/debug/examples/runtime-test-host" cargo test --manifest-path server/Cargo.toml --target-dir target --workspace; fi
+    cargo test --manifest-path common/Cargo.toml --workspace --target-dir target
     cargo test --manifest-path runtime/Cargo.toml --workspace --target-dir target
     node --test server/git-platform-providers/tests/*.test.mjs
     node --test scripts/tests/*.test.mjs

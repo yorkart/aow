@@ -8,6 +8,9 @@ use std::{path::PathBuf, sync::Arc};
 #[derive(Clone)]
 pub struct AcpService(AgentServerStore);
 impl AcpService {
+    pub fn subscribe_protocol(&self) -> tokio::sync::broadcast::Receiver<Value> {
+        self.0.subscribe_protocol()
+    }
     /// Prepare a configured adapter for a host-owned ACP transport.
     pub async fn prepare_adapter(&self, agent_id: &str) -> Result<super::AdapterCommand> {
         self.0.prepare_adapter(agent_id).await
@@ -223,6 +226,9 @@ impl AcpService {
         self.0.close_session(thread_id).await
     }
     /// Block admission while the host removes a workspace; unrelated workspaces stay available.
+    pub async fn fence_workspace(&self, cwd: &str, removing: bool) -> Result<()> {
+        self.0.fence_workspace(cwd, removing).await
+    }
     pub fn set_workspace_removing(&self, cwd: &str, removing: bool) {
         self.0.set_workspace_removing(cwd, removing);
     }

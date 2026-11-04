@@ -1,7 +1,7 @@
 use super::*;
 use aow_db::tasks::{EventKind, EventTarget, TaskEvent, TaskResource, TaskStatus};
 use aow_runtime_client::acp::AcpClient;
-use aow_runtime_client::acp::{AcpHost, Content};
+use aow_runtime_client::{acp::Content, testing::AcpFixture};
 use axum::{
     Router,
     body::{Body, to_bytes},
@@ -16,20 +16,14 @@ use tower::ServiceExt;
 
 struct Host;
 #[async_trait::async_trait]
-impl AcpHost for Host {
+impl AcpFixture for Host {
     async fn settings(&self) -> Result<String> {
         Ok(json!({"agent_servers":{"test":{"type":"custom","command":"node","args":[
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../acp-client-model/tests/fixtures/lineage-agent.mjs")
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/acp/lineage-agent.mjs")
         ]}}}).to_string())
     }
     async fn execution_path(&self) -> Result<Option<std::ffi::OsString>> {
         Ok(None)
-    }
-    async fn read_text_file(&self, _: &Path, _: &Path) -> Result<String> {
-        unreachable!()
-    }
-    async fn write_text_file(&self, _: &Path, _: &Path, _: &str) -> Result<()> {
-        unreachable!()
     }
 }
 

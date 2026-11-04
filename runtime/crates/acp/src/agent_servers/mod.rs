@@ -1,3 +1,4 @@
+use crate::facade::execution::ValidateExecution;
 pub(crate) mod acp;
 mod completion;
 mod fork;
@@ -253,7 +254,10 @@ impl AgentServerStore {
         }
         let environment = self.inner.host.execution_environment();
         let execution_environment = thread_id
-            .map(|id| self.snapshot(id).map(|thread| thread.execution_environment))
+            .map(|id| {
+                self.snapshot(id)
+                    .map(|thread| thread.data.execution_environment)
+            })
             .transpose()?
             .flatten();
         let configuration = format!(
@@ -413,9 +417,9 @@ impl AgentServerStore {
         let mut threads = self.inner.threads.lock().unwrap();
         for id in ids {
             threads.update(&id, |thread| {
-                if thread.auth_required {
-                    thread.error = None;
-                    thread.auth_required = false;
+                if thread.data.auth_required {
+                    thread.data.error = None;
+                    thread.data.auth_required = false;
                 }
             })?;
         }
@@ -450,7 +454,7 @@ impl AgentServerStore {
                 },
             )
             .await?;
-        self.create_on_connection(connection, &thread.thread_id)
+        self.create_on_connection(connection, &thread.data.thread_id)
             .await
     }
     async fn register_session(
@@ -479,20 +483,20 @@ impl AgentServerStore {
             connection.info.agent_id.clone(),
             connection.info.cwd.clone(),
         );
-        thread.execution_environment = connection.execution_environment.clone();
+        thread.data.execution_environment = connection.execution_environment.clone();
         let previous = self.snapshot(&id).ok();
         if let Some(previous) = &previous {
-            thread.title = previous.title.clone();
-            thread.session_meta = previous.session_meta.clone();
-            thread.session_meta_revision = previous.session_meta_revision;
-            thread.session_meta_revisions = previous.session_meta_revisions.clone();
-            thread.revision = previous.revision;
+            thread.data.title = previous.title.clone();
+            thread.data.session_meta = previous.session_meta.clone();
+            thread.data.session_meta_revision = previous.session_meta_revision;
+            thread.data.session_meta_revisions = previous.session_meta_revisions.clone();
+            thread.data.revision = previous.revision;
         }
-        thread.modes = result.get("modes").cloned().unwrap_or(json!({}));
-        thread.config_options_supported = result
+        thread.data.modes = result.get("modes").cloned().unwrap_or(json!({}));
+        thread.data.config_options_supported = result
             .get("configOptions")
             .is_some_and(|value| !value.is_null());
-        thread.config_options = normalize_config_options(
+        thread.data.config_options = normalize_config_options(
             result
                 .get("configOptions")
                 .filter(|value| !value.is_null())
@@ -515,13 +519,13 @@ impl AgentServerStore {
     async fn apply_defaults(&self, id: &str) -> Result<()> {
         let thread = self.snapshot(id)?;
         let settings = validate_settings(&self.inner.host.settings().await?)?;
-        let Some(agent) = settings.agent_servers.get(&thread.agent_id) else {
+        let Some(agent) = settings.agent_servers.get(&thread.data.agent_id) else {
             return Ok(());
         };
         let (mode, defaults) = agent.defaults();
         let _favorites = agent.favorites();
         if let Some(mode) = mode
-            && thread.modes["availableModes"]
+            && thread.data.modes["availableModes"]
                 .as_array()
                 .is_some_and(|modes| modes.iter().any(|entry| entry["id"] == mode))
             && let Err(error) = self.set_mode(id, &mode).await
@@ -530,7 +534,7 @@ impl AgentServerStore {
         }
         let mut attempted = Vec::new();
         while let Some((config_id, value)) = next_default(
-            &self.snapshot(id)?.config_options,
+            &self.snapshot(id)?.data.config_options,
             &defaults,
             &mut attempted,
         ) {
@@ -560,7 +564,7 @@ impl AgentServerStore {
         let existing = self.native_thread_in_environment(&connection, session_id)?;
         if let Some(id) = &existing {
             ensure!(
-                self.snapshot(id)?.status != "working",
+                self.snapshot(id)?.data.status != "working",
                 "Cancel the current prompt before loading history"
             );
         }
@@ -581,11 +585,11 @@ impl AgentServerStore {
                     .threads
                     .lock()
                     .unwrap()
-                    .update(&thread.thread_id, |thread| {
-                        thread.session_id = Some(session_id.into());
-                        thread.needs_load = true;
+                    .update(&thread.data.thread_id, |thread| {
+                        thread.data.session_id = Some(session_id.into());
+                        thread.data.needs_load = true;
                     })?;
-                thread.thread_id
+                thread.data.thread_id
             }
         };
         drop(identity);
@@ -603,7 +607,9 @@ impl AgentServerStore {
             let thread = self.snapshot(id)?;
             // A started operation publishes its own error, scoped to its attempt.
             // Connection/setup failures have no operation yet.
-            if thread.recovery.is_none() && (thread.status == "disconnected" || thread.needs_load) {
+            if thread.data.recovery.is_none()
+                && (thread.data.status == "disconnected" || thread.data.needs_load)
+            {
                 self.record_recovery_error(id, error)?;
             }
         }
@@ -613,21 +619,21 @@ impl AgentServerStore {
         let thread = self.snapshot(id)?;
         if let Ok(connection) = self.session_connection(id)
             && connection.connected()
-            && thread.status != "disconnected"
-            && !thread.needs_load
-            && thread.session_id.is_some()
+            && thread.data.status != "disconnected"
+            && !thread.data.needs_load
+            && thread.data.session_id.is_some()
             && !connection.loads.pending_thread(id)
             && !connection.loads.blocks_thread(id)
         {
             return Ok(thread);
         }
         let (info, progress) = self
-            .connect_for_thread(&thread.agent_id, thread.cwd.into(), Some(id))
+            .connect_for_thread(&thread.data.agent_id, thread.data.cwd.into(), Some(id))
             .await?;
         let result = async {
             // Prefer history replay. Resume-only agents continue from the saved local transcript.
             let connection = self.connection(&info.id)?;
-            let Some(session_id) = thread.session_id else {
+            let Some(session_id) = thread.data.session_id else {
                 return self.create_on_connection(connection, id).await;
             };
             connection.debug_log.bind_session(&session_id, id);
@@ -712,12 +718,12 @@ impl AgentServerStore {
     }
     pub fn dismiss_notice(&self, id: &str, notice_id: &str) -> Result<()> {
         self.inner.threads.lock().unwrap().update(id, |thread| {
-            thread.notices.retain(|notice| notice.id != notice_id);
+            thread.data.notices.retain(|notice| notice.id != notice_id);
         })
     }
     pub fn clear_plan(&self, id: &str) -> Result<()> {
         self.inner.threads.lock().unwrap().update(id, |thread| {
-            thread.plan = Value::Null;
+            thread.data.plan = Value::Null;
         })
     }
     pub fn session_logs(&self, id: &str) -> Result<Vec<Value>> {
@@ -749,12 +755,13 @@ impl AgentServerStore {
                     "cancelled",
                     None,
                 );
-                thread.steering_pending = false;
+                thread.data.steering_pending = false;
                 crate::acp_thread::steering::settle_status(thread);
             }
         })?;
         self.session_connection(id)?.cancel(
             self.snapshot(id)?
+                .data
                 .session_id
                 .as_deref()
                 .context("ACP session has not been created")?,
@@ -763,6 +770,7 @@ impl AgentServerStore {
     pub async fn set_mode(&self, id: &str, mode: &str) -> Result<()> {
         let thread = self.snapshot(id)?;
         let session_id = thread
+            .data
             .session_id
             .context("ACP session has not been created")?;
         self.session_connection(id)?
@@ -771,11 +779,9 @@ impl AgentServerStore {
                 json!({"sessionId":session_id,"modeId":mode}),
             )
             .await?;
-        self.inner
-            .threads
-            .lock()
-            .unwrap()
-            .update(id, |thread| thread.modes["currentModeId"] = mode.into())
+        self.inner.threads.lock().unwrap().update(id, |thread| {
+            thread.data.modes["currentModeId"] = mode.into()
+        })
     }
     pub async fn set_config_option(&self, id: &str, config_id: &str, value: Value) -> Result<()> {
         ensure!(
@@ -792,6 +798,7 @@ impl AgentServerStore {
         let value = crate::acp_thread::config_options::value_to_v1(option_value)?;
         let request = agent_client_protocol::schema::v1::SetSessionConfigOptionRequest::new(
             self.snapshot(id)?
+                .data
                 .session_id
                 .context("ACP session has not been created")?,
             config_id.to_owned(),
@@ -803,12 +810,13 @@ impl AgentServerStore {
             .await?;
         let options = normalize_config_options(result["configOptions"].clone())?;
         self.inner.threads.lock().unwrap().update(id, |thread| {
-            thread.config_options = options;
+            thread.data.config_options = options;
         })
     }
     pub fn answer(&self, id: &str, request_id: &str, response: Value) -> Result<()> {
         let thread = self.snapshot(id)?;
         let permission = thread
+            .data
             .permissions
             .iter()
             .find(|request| request.id == request_id)
@@ -842,18 +850,18 @@ impl AgentServerStore {
         let thread = self.snapshot(id)?;
         if let Ok(connection) = self.session_connection(id)
             && connection.connected()
-            && let Some(session_id) = &thread.session_id
+            && let Some(session_id) = &thread.data.session_id
         {
-            if thread.status == "working" {
+            if thread.data.status == "working" {
                 connection.cancel(session_id)?;
             }
             if connection.supports("close") {
                 connection
-                    .request("session/close", json!({"sessionId":thread.session_id}))
+                    .request("session/close", json!({"sessionId":thread.data.session_id}))
                     .await?;
             }
         }
-        self.detach_session(id, thread.session_id.as_deref())
+        self.detach_session(id, thread.data.session_id.as_deref())
     }
     fn detach_session(&self, id: &str, session_id: Option<&str>) -> Result<()> {
         if let Ok(connection) = self.session_connection(id) {
@@ -870,10 +878,10 @@ impl AgentServerStore {
                 thread_id: id.into(),
             });
         self.inner.threads.lock().unwrap().update(id, |thread| {
-            thread.status = "disconnected".into();
+            thread.data.status = "disconnected".into();
             crate::acp_thread::steering::disconnected(thread);
             thread.active_prompt = None;
-            thread.permissions.clear();
+            thread.data.permissions.clear();
         })
     }
     pub async fn delete_session(&self, id: &str) -> Result<()> {
@@ -882,13 +890,16 @@ impl AgentServerStore {
         if let Ok(connection) = self.session_connection(id)
             && connection.connected()
             && connection.supports("delete")
-            && let Some(session_id) = &thread.session_id
+            && let Some(session_id) = &thread.data.session_id
         {
-            if thread.status == "working" {
+            if thread.data.status == "working" {
                 connection.cancel(session_id)?;
             }
             connection
-                .request("session/delete", json!({"sessionId":thread.session_id}))
+                .request(
+                    "session/delete",
+                    json!({"sessionId":thread.data.session_id}),
+                )
                 .await?;
             self.detach_session(id, Some(session_id))?;
         } else {

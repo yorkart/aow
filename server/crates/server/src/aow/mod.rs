@@ -87,6 +87,8 @@ pub(crate) struct AowManager {
 }
 
 struct AowInner {
+    #[cfg(test)]
+    test_runtime: Mutex<Option<Arc<dyn Send + Sync>>>,
     cli_access: aow_cli_access::Access,
     roles: roles::RoleStore,
     tasks: aow_db::tasks::TaskDb,
@@ -129,6 +131,8 @@ impl AowManager {
     pub(crate) fn in_memory() -> Self {
         Self {
             inner: Arc::new(AowInner {
+                #[cfg(test)]
+                test_runtime: Default::default(),
                 cli_access: Default::default(),
                 roles: roles::RoleStore::default(),
                 tasks: aow_db::tasks::TaskDb::open(None).expect("in-memory task database"),
@@ -174,6 +178,8 @@ impl AowManager {
         let removals = removal::RemovalJobs::in_memory();
         Ok(Self {
             inner: Arc::new(AowInner {
+                #[cfg(test)]
+                test_runtime: Default::default(),
                 cli_access: Default::default(),
                 roles: roles::RoleStore {
                     items: Mutex::new(role_items),

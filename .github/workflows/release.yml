@@ -91,6 +91,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: |
+            common -> ../target
             server -> ../target
             runtime -> ../target
           shared-key: test-${{ matrix.runner }}
@@ -111,11 +112,14 @@ jobs:
           export AOW_RUNTIME_TEST_HOST="$GITHUB_WORKSPACE/target/debug/examples/runtime-test-host"
           cargo build --manifest-path runtime/Cargo.toml --example runtime-test-host --locked --target-dir target
           cargo test --manifest-path server/Cargo.toml --target-dir target --workspace --locked -- --test-threads=4
+          cargo test --manifest-path common/Cargo.toml --workspace --locked --target-dir target
           cargo test --manifest-path runtime/Cargo.toml --workspace --locked --target-dir target -- --test-threads=4
       - name: Check Rust formatting and lint
         run: |
+          cargo fmt --manifest-path common/Cargo.toml --all -- --check
           cargo fmt --manifest-path server/Cargo.toml --all -- --check
           cargo fmt --manifest-path runtime/Cargo.toml --all -- --check
+          cargo clippy --manifest-path common/Cargo.toml --workspace --all-targets --locked --target-dir target -- -D warnings
           cargo clippy --manifest-path server/Cargo.toml --target-dir target --workspace --all-targets --locked -- -D warnings
           cargo clippy --manifest-path runtime/Cargo.toml --workspace --all-targets --locked --target-dir target -- -D warnings
       - name: Check macOS C bridge

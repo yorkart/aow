@@ -71,6 +71,7 @@ impl ClientContext {
         let session_id = thread.session_id.clone().context("Missing session ID")?;
         if let Some(updates) = self.pending_updates.lock().unwrap().remove(&session_id) {
             for update in updates {
+                self.events.protocol(json!({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":thread.thread_id,"update":update}}));
                 AcpThread::handle_session_update(&mut thread, update);
             }
         }
@@ -95,6 +96,7 @@ impl ClientContext {
                 .context("Missing session ID")?;
             let sessions = self.sessions.lock().unwrap();
             if let Some(id) = sessions.get(session_id) {
+                self.events.protocol(json!({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":id,"update":message.params["update"]}}));
                 self.threads
                     .lock()
                     .unwrap()
@@ -113,6 +115,8 @@ impl ClientContext {
                 updates.push(message.params["update"].clone());
             }
         } else if message.method == "elicitation/complete" {
+            self.events
+                .protocol(json!({"jsonrpc":"2.0","method":message.method,"params":message.params}));
             let ids: Vec<_> = self.sessions.lock().unwrap().values().cloned().collect();
             let mut threads = self.threads.lock().unwrap();
             for id in ids {

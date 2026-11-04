@@ -15,3 +15,5 @@ pub use facade::{
     SyncEvent, SyncResource, ThreadEntry, TurnCompletion, is_auth_required,
 };
 pub use settings::{SETTINGS_PATH, SettingsDocument, validate_settings};
+
+pub use facade::execution::ValidateExecution;

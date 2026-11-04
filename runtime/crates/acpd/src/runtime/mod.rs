@@ -17,6 +17,7 @@ pub struct AcpRuntime {
     host: Arc<Host>,
     stopping: watch::Sender<bool>,
     wire: crate::wire::WireRuntime,
+    conversations: crate::conversations::Conversations,
     lock: Arc<NodeOwnership>,
 }
 /// Shared lifetime of the node lock, including admitted blocking filesystem work.
@@ -50,20 +51,33 @@ impl AcpRuntime {
         let lock = Arc::new(NodeOwnership(lock));
         let host = Arc::new(Host {
             _ownership: lock.clone(),
-            root: std::fs::canonicalize(state_dir)?,
+            root: std::fs::canonicalize(&state_dir)?,
             stopping: std::sync::atomic::AtomicBool::new(false),
             filesystem: Default::default(),
+            callback_environment: Default::default(),
+            completions: crate::conversations::journal::CompletionLog::open(
+                &state_dir.join("data/acp"),
+            )?,
         });
-        // Session transcripts are owned by the ACP client, not the adapter execution node.
-        let service =
-            AcpService::with_storage(host.clone(), None, Some(host.root.join("cache/acp")))?;
+        // The node is the sole owner of session identity, transcripts and adapter state.
+        let service = AcpService::with_storage(
+            host.clone(),
+            Some(host.root.join("data/acp")),
+            Some(host.root.join("cache/acp")),
+        )?;
         let (stopping, stopped) = watch::channel(false);
+        let conversations = crate::conversations::Conversations::new(
+            service.clone(),
+            host.clone(),
+            stopped.clone(),
+        );
         let wire = crate::wire::WireRuntime::new(service.clone(), host.clone(), stopped);
         Ok(Self {
             service,
             host,
             stopping,
             wire,
+            conversations,
             lock,
         })
     }
@@ -74,7 +88,7 @@ impl AcpRuntime {
         AcpProber::new(self.service.clone(), self.stopping.subscribe())
     }
     pub fn router(&self) -> Router {
-        self.wire.router()
+        self.wire.router().merge(self.conversations.router())
     }
     pub async fn shutdown(&self) -> Result<()> {
         self.stopping.send_replace(true);

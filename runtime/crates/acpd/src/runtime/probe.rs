@@ -17,7 +17,7 @@ impl Drop for Session {
     }
 }
 impl AcpProber {
-    pub(super) fn new(service: AcpService, stopping: tokio::sync::watch::Receiver<bool>) -> Self {
+    pub(crate) fn new(service: AcpService, stopping: tokio::sync::watch::Receiver<bool>) -> Self {
         Self { service, stopping }
     }
     pub async fn probe(
@@ -46,7 +46,7 @@ impl AcpProber {
             loop {
                 let snapshot=self.service.snapshot(&session.thread_id)?;
                 ensure!(snapshot.permissions.is_empty(),"Runtime requested permission during connection test");
-                if let Some(error)=snapshot.error {bail!("{error}");}
+                if let Some(error)=&snapshot.error {bail!("{error}");}
                 if snapshot.status=="idle" {
                     ensure!(snapshot.entries.iter().any(|entry|entry.kind=="assistant"&&entry.content["text"].as_str().is_some_and(|text|!text.trim().is_empty())),"Runtime did not return a response");return Ok(());
                 }

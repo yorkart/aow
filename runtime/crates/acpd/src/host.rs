@@ -10,10 +10,18 @@ pub(crate) struct Host {
     pub _ownership: std::sync::Arc<crate::runtime::NodeOwnership>,
     pub root: PathBuf,
     pub stopping: AtomicBool,
+    pub completions: crate::conversations::journal::CompletionLog,
+    pub callback_environment: std::sync::RwLock<BTreeMap<String, String>>,
     pub filesystem: tokio::sync::RwLock<std::collections::HashSet<PathBuf>>,
 }
 #[async_trait::async_trait]
 impl AcpHost for Host {
+    async fn turn_completed(&self, completion: aow_acp::TurnCompletion) {
+        if let Err(error) = self.completions.append(&completion) {
+            tracing::error!(%error, "Failed to persist conversation completion");
+        }
+    }
+
     async fn settings(&self) -> Result<String> {
         match tokio::fs::read_to_string(self.root.join("aow-acp.json")).await {
             Ok(content) => Ok(content),
@@ -39,10 +47,12 @@ impl AcpHost for Host {
         })?))
     }
     fn execution_environment(&self) -> BTreeMap<String, String> {
-        BTreeMap::from([(
+        let mut environment = self.callback_environment.read().unwrap().clone();
+        environment.extend(BTreeMap::from([(
             "AOW_STATE_DIR".into(),
             self.root.to_string_lossy().into_owned(),
-        )])
+        )]));
+        environment
     }
     async fn read_text_file(&self, cwd: &Path, path: &Path) -> Result<String> {
         let blocked = self.filesystem.read().await;
@@ -72,6 +82,25 @@ impl AcpHost for Host {
             ))]),
         )
         .await?;
+        Ok(())
+    }
+}
+
+impl Host {
+    pub(crate) fn set_callback_environment(
+        &self,
+        environment: BTreeMap<String, String>,
+    ) -> Result<()> {
+        anyhow::ensure!(
+            environment.len() <= 8
+                && environment.iter().all(|(key, value)| matches!(
+                    key.as_str(),
+                    "AOW_SERVER_URL" | "AOW_SERVER_TOKEN" | "AOW_SERVER_TOKEN_FILE"
+                ) && !value.contains('\0')
+                    && value.len() < 16384),
+            "Invalid business callback environment"
+        );
+        *self.callback_environment.write().unwrap() = environment;
         Ok(())
     }
 }

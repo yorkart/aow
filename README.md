@@ -76,7 +76,7 @@ In addition to the runtime dependencies, install Rust stable / Cargo, npm, and j
 
 From the repository root, run `just build` to build and `just test` to run tests. For local deployment, run `just package`, then `just install`. Local packages use the same installation process as GitHub release packages and update the services actually running under the current user. Development services also listen only on localhost by default.
 
-For source development, start `just run-runtime-daemon` in a separate terminal before the Web server. Use the same `AOW_STATE_DIR` for both processes; Server retains existing ACP history.
+For source development, start `just run-runtime-daemon` in a separate terminal before the Web server. Runtime owns ACP history under its own `AOW_STATE_DIR`; Server connects through the configured endpoint.
 
 The standalone [runtime daemon](docs/runtime/runtime-daemon.md) embeds ACP and
 terminal runtimes in one process and exposes authenticated HTTP management and

@@ -27,7 +27,7 @@ impl AcpHost for Host {
 fn host(env: Value) -> Arc<Host> {
     Arc::new(Host(
         json!({"agent_servers":{"test":{"type":"custom","command":"node",
-        "args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/fork-agent.mjs")], "env":env,
+        "args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/acp/fork-agent.mjs")], "env":env,
         "default_mode":"code", "default_config_options":{"model":"default"}}}}),
     ))
 }
@@ -156,7 +156,7 @@ async fn fork_replay_preserves_verified_turn_outcomes_through_retry_and_restart(
                 assert_eq!(turn.stop_reason, source.turns[0].stop_reason);
                 assert_eq!(turn.error, source.turns[0].error);
             }
-            let overview = service.overview(&fork.thread_id)?.overview.unwrap();
+            let overview = service.overview(&fork.thread_id)?.data.overview.unwrap();
             assert_eq!(overview[0].status.as_deref(), Some(status));
             assert_eq!(overview[0].conclusion.is_empty(), status != "completed");
         }
@@ -446,12 +446,12 @@ async fn live_codex_acp_fork_preserves_context_and_resumes() -> Result<()> {
     let unchanged = service.snapshot(&source.thread_id)?;
     assert_eq!(unchanged.session_id, source.session_id);
     assert_eq!(
-        serde_json::to_value(unchanged.entries)?,
-        serde_json::to_value(source.entries)?
+        serde_json::to_value(unchanged.data.entries)?,
+        serde_json::to_value(source.data.entries)?
     );
     assert_eq!(
-        serde_json::to_value(unchanged.turns)?,
-        serde_json::to_value(source.turns)?
+        serde_json::to_value(unchanged.data.turns)?,
+        serde_json::to_value(source.data.turns)?
     );
     service.flush_threads_on_quit()?;
     service.disconnect(&connection.id)?;

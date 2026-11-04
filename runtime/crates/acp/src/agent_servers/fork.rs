@@ -27,12 +27,12 @@ impl AgentServerStore {
             threads.ensure_session_available(id)?;
             let source = threads.thread(id)?.lock().unwrap().clone();
             ensure!(
-                source.status == "idle"
+                source.data.status == "idle"
                     && source.active_prompt.is_none()
-                    && !source.steering_pending
+                    && !source.data.steering_pending
                     && !source.steering.detached
-                    && !source.needs_load
-                    && source.permissions.is_empty()
+                    && !source.data.needs_load
+                    && source.data.permissions.is_empty()
                     && !pending_load,
                 "Resume the session and finish the current turn before forking"
             );
@@ -49,6 +49,7 @@ impl AgentServerStore {
             )
         };
         let session_id = source
+            .data
             .session_id
             .clone()
             .context("ACP session has not been created")?;
@@ -58,9 +59,9 @@ impl AgentServerStore {
             let _reservation = reservation;
             let result = connection
                 .thread_request(
-                    &source.thread_id,
+                    &source.data.thread_id,
                     "session/fork",
-                    json!({"sessionId":session_id,"cwd":source.cwd,"mcpServers":[]}),
+                    json!({"sessionId":session_id,"cwd":source.data.cwd,"mcpServers":[]}),
                 )
                 .await?;
             let fork_id = result["sessionId"]
@@ -80,16 +81,16 @@ impl AgentServerStore {
             );
             let child = service
                 .prepare_session_with_options(
-                    &source.agent_id,
-                    source.cwd.clone().into(),
+                    &source.data.agent_id,
+                    source.data.cwd.clone().into(),
                     crate::facade::SessionCreation {
-                        parent: Some(aow_protocol::InstanceRef::acp(&source.thread_id)),
-                        execution_environment: source.execution_environment.clone(),
+                        parent: Some(aow_protocol::InstanceRef::acp(&source.data.thread_id)),
+                        execution_environment: source.data.execution_environment.clone(),
                         ..Default::default()
                     },
                 )
                 .await?;
-            let id = child.thread_id;
+            let id = child.data.thread_id;
             // Persist identity before decoding configuration or starting a replay, so failures are recoverable.
             service
                 .inner
@@ -97,10 +98,10 @@ impl AgentServerStore {
                 .lock()
                 .unwrap()
                 .update(&id, |thread| {
-                    thread.session_id = Some(fork_id.clone());
-                    thread.title =
-                        aow_i18n::message("acp.fork", &[("auto0", source.title.to_string())]);
-                    thread.needs_load = true;
+                    thread.data.session_id = Some(fork_id.clone());
+                    thread.data.title =
+                        aow_i18n::message("acp.fork", &[("auto0", source.data.title.to_string())]);
+                    thread.data.needs_load = true;
                 })?;
             service.attach_connection(&connection, &id)?;
             let installed = service.install_session(connection.clone(), result, id.clone());
@@ -114,12 +115,12 @@ impl AgentServerStore {
                     // Seed the local history, including outcomes, before recovery. The normal
                     // replay verifier only carries this metadata over for matching content.
                     // Failed loads retain it for retries, including after a server restart.
-                    thread.entries = source.entries;
-                    thread.turns = source.turns;
-                    thread.terminals = source.terminals;
+                    thread.data.entries = source.data.entries;
+                    thread.data.turns = source.data.turns;
+                    thread.data.terminals = source.data.terminals;
                     if replay {
-                        thread.needs_load = true;
-                        thread.status = "disconnected".into();
+                        thread.data.needs_load = true;
+                        thread.data.status = "disconnected".into();
                     }
                 })?;
             if let Err(error) = installed {

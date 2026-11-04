@@ -13,7 +13,7 @@ struct Host {
 impl AcpHost for Host {
     async fn settings(&self) -> Result<String> {
         Ok(json!({"agent_servers":{"test":{"type":"custom","command":"node",
-            "args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/workspace-agent.mjs")],
+            "args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/acp/workspace-agent.mjs")],
             "env":{"ACP_WORKSPACE_RPC_LOG":self.log}}}}).to_string())
     }
     async fn execution_path(&self) -> Result<Option<std::ffi::OsString>> {

@@ -10,7 +10,8 @@ AoW Server uses the shared `server/crates/runtime-client` SDK for all execution-
 operations. HTTP manages instances and configuration; WebSocket carries native
 ACP JSON-RPC and terminal streams. The execution modules and VT worker live in
 the independent [runtime subproject](../../runtime/README.md), with its own Cargo
-workspace and lockfile. The caller SDK stays in the root workspace.
+workspace and lockfile. The caller SDK stays in the Server workspace. Both products reference the sibling
+Common workspace for data contracts and IDs.
 
 ## Build and start
 
@@ -60,11 +61,12 @@ The state root contains:
 | `data/runtime-daemon/node-id` | Stable UUID identifying this installation |
 | `runtime/runtime-daemon/token` | Automatically generated private bearer token |
 
-The daemon reads configuration and adapter cache from the supplied state root.
-AoW conversation metadata, snapshots and history remain in Server's
-`STATE_DIR/data/acp/`; `runtime-client` maintains them while using the native ACP
-SDK across WebSocket. Thus an existing Server state root still exposes its saved
-history. The node does not serve an AoW history RPC API or write Server history.
+The daemon owns configuration, adapter cache and conversation persistence.
+Conversation metadata and snapshots live in the node's `STATE_DIR/data/acp/`.
+Server never opens that database. Its SDK reads node-owned snapshots through
+HTTP and sends native ACP messages through WebSocket. Server stores only business
+associations and notification delivery cursors. No legacy history migration is
+provided.
 Terminals receive `AOW_STATE_DIR` as a default child environment value; the
 terminal creation specification can supply explicit environment overrides.
 
@@ -302,10 +304,31 @@ and transport frames are not persisted or replayed across disconnect or daemon
 restart. Managed creation without attachment leaves the adapter waiting until
 DELETE or shutdown.
 
-Server maintains AoW transcripts and metadata through its local ACP session
-model. Native session storage and `session/list`/`session/load` remain
-adapter-owned. Closing the controlling SDK or Server connection stops its ACP
-process; a restarted caller loads saved sessions according to adapter capabilities.
+### Durable conversation service
+
+Server uses the node-owned conversation service rather than attaching directly
+to an adapter process:
+
+- `POST /v1/acp/conversations`: typed management operations from
+  `common/crates/runtime-contract`, including identities, history, snapshots,
+  installation and workspace fences.
+- `GET /v1/acp/conversations/acp`: native ACP JSON-RPC, using the official ACP
+  schema. Prompts, cancellation, modes, configuration and permission responses
+  travel on this channel. AoW admission notifications and steering use namespaced
+  extensions; prompt replies retain ACP stop reasons.
+- `GET /v1/acp/conversations/events`: typed invalidations and durable turn
+  completion events. Journal identity and sequence cursors permit reconnect
+  replay. Server acknowledges business delivery in its own state directory.
+
+The node handles adapter filesystem callbacks, maintains session state and owns
+prompt admission. Closing a Server connection does not stop admitted work.
+Permission requests remain on the node and can be answered after reconnect.
+After a daemon restart, history and admission receipts remain available; live
+adapter transports must be resumed according to their capabilities. Retrying an
+already admitted request ID does not execute another prompt.
+
+The raw adapter endpoints above retain their connection-owned lifecycle for
+standalone ACP clients. They do not provide the durable conversation service.
 
 ## Terminal WebSocket
 
@@ -314,7 +337,7 @@ binary frames carry terminal input/output; JSON frames carry control, stream
 metadata, resize, status and acknowledgements. Existing query options such as
 `control=v2`, `observer=v1`, `epoch`, `after`, `capabilities=vt-snapshot-v1` and
 `snapshot_compression=gzip` retain their behavior. See the types in
-`runtime/crates/protocol/src/terminal/attach.rs` for the frame schema.
+`common/crates/protocol/src/terminal/attach.rs` for the frame schema.
 
 Unlike ACP transports, closing a terminal attachment leaves the PTY running.
 Reattach using its epoch and offset to replay available output. Terminal

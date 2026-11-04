@@ -118,18 +118,12 @@ async fn invalid_task_creation_does_not_allocate_a_session() {
 
 struct Host(&'static str);
 #[async_trait::async_trait]
-impl aow_runtime_client::acp::AcpHost for Host {
+impl aow_runtime_client::testing::AcpFixture for Host {
     async fn settings(&self) -> anyhow::Result<String> {
-        Ok(serde_json::json!({"agent_servers":{(self.0):{"type":"custom","command":"node","args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../acp-client-model/tests/fixtures/lineage-agent.mjs")]}}}).to_string())
+        Ok(serde_json::json!({"agent_servers":{(self.0):{"type":"custom","command":"node","args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/acp/lineage-agent.mjs")]}}}).to_string())
     }
     async fn execution_path(&self) -> anyhow::Result<Option<std::ffi::OsString>> {
         Ok(None)
-    }
-    async fn read_text_file(&self, _: &Path, _: &Path) -> anyhow::Result<String> {
-        unreachable!()
-    }
-    async fn write_text_file(&self, _: &Path, _: &Path, _: &str) -> anyhow::Result<()> {
-        unreachable!()
     }
 }
 
@@ -378,7 +372,7 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
     .unwrap();
     let settings = state.aow.acp_settings().unwrap();
     state.aow.save_acp_settings(json!({"agent_servers":{"codex.test":{"type":"custom", "command":"node", "args":[
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../acp-client-model/tests/fixtures/lineage-agent.mjs")
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/acp/lineage-agent.mjs")
     ]}}}).to_string(), settings.revision).await.unwrap();
     let app = routes()
         .merge(cli_routes())
@@ -980,7 +974,7 @@ async fn task_role_reuses_acp_configuration_and_retries_without_creating_another
     state
         .aow
         .save_acp_settings(
-            aow_runtime_client::acp::AcpHost::settings(&Host("codex.test"))
+            aow_runtime_client::testing::AcpFixture::settings(&Host("codex.test"))
                 .await
                 .unwrap(),
             settings.revision,

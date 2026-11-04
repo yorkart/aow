@@ -8,9 +8,10 @@ license = "GPL-3.0-or-later"
 test-support = ["dep:tempfile"]
 
 [dependencies]
+agent-client-protocol = { version = "=3.4.0", features = ["unstable", "unstable_protocol_v2"] }
+aow-runtime-contract = { path = "../../../common/crates/runtime-contract" }
 tempfile = { version = "3.20", optional = true }
-aow-acp = { package = "aow-acp-client-model", path = "../acp-client-model" }
-aow-protocol = { path = "../protocol" }
+aow-protocol = { path = "../../../common/crates/protocol" }
 aow-filesystem = { path = "../filesystem" }
 aow-i18n = { path = "../i18n" }
 anyhow.workspace = true
@@ -24,6 +25,7 @@ reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
 tokio.workspace = true
 tokio-util = { workspace = true, features = ["compat"] }
 tokio-tungstenite = { workspace = true, features = ["rustls-tls-webpki-roots"] }

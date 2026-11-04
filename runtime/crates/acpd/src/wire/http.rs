@@ -200,11 +200,7 @@ async fn settings(State(state): State<WireRuntime>) -> Result<Json<serde_json::V
         serde_json::json!({"path":state.host.root.join("aow-acp.json"),"revision":format!("{:x}",md5::compute(&content)),"content":content}),
     ))
 }
-#[derive(Deserialize)]
-struct SaveSettings {
-    content: String,
-    revision: String,
-}
+use aow_runtime_contract::acp::AcpSettingsUpdate as SaveSettings;
 async fn save_settings(
     State(state): State<WireRuntime>,
     Json(request): Json<SaveSettings>,

@@ -1,11 +1,17 @@
-//! Native ACP SDK client over the runtime node WebSocket transport.
+//! Remote conversation SDK. All session state, adapters and persistence live on the node.
 mod client;
-mod connector;
-mod host;
+mod events;
+#[cfg(feature = "test-support")]
+pub(crate) mod fixture;
 mod methods;
+mod native;
 pub use crate::is_unavailable;
-pub use aow_acp::*;
-pub use client::{AcpClient, AcpSettings};
+pub use aow_runtime_contract::acp::*;
+pub use client::{AcpClient, AcpObserver};
 pub fn is_auth_required(error: &anyhow::Error) -> bool {
-    aow_acp::is_auth_required(error)
+    error.chain().any(|cause| {
+        cause
+            .downcast_ref::<client::RemoteOperationError>()
+            .is_some_and(|error| error.0.code == "auth_required")
+    })
 }

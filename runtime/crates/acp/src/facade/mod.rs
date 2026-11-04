@@ -1,6 +1,6 @@
 mod error;
 pub(crate) mod events;
-mod execution;
+pub(crate) mod execution;
 mod host;
 mod model;
 mod service;

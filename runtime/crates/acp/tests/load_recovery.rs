@@ -38,7 +38,7 @@ impl Fixture {
     async fn with_storage(env: Value, persistent: bool) -> Result<Self> {
         let dir = tempfile::tempdir()?;
         let service = AcpService::new(Arc::new(Host(json!({"agent_servers":{"test":{
-            "type":"custom","command":"node","args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/load-recovery-agent.mjs")], "env":env,
+            "type":"custom","command":"node","args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/acp/load-recovery-agent.mjs")], "env":env,
         }}}).to_string())), persistent.then(|| dir.path().join("state")))?;
         let connection = service.connect("test", dir.path().into()).await?.id;
         let mut fixture = Self {
@@ -93,6 +93,7 @@ impl Fixture {
     async fn settled(&self) {
         until(|| {
             self.snapshot()
+                .data
                 .recovery
                 .as_ref()
                 .is_some_and(|state| state.phase == "failed")
@@ -231,7 +232,7 @@ async fn returning_to_an_old_connection_closes_stale_session_before_replay() -> 
     tokio::pin!(first);
     assert!(futures::poll!(&mut first).is_pending());
     fixture.event("session/close", "target", "start", 2).await;
-    assert_eq!(fixture.snapshot().recovery.unwrap().phase, "cleaning");
+    assert_eq!(fixture.snapshot().data.recovery.unwrap().phase, "cleaning");
     let retry = fixture.service.resume(&fixture.thread);
     tokio::pin!(retry);
     assert!(futures::poll!(&mut retry).is_pending());
@@ -302,7 +303,7 @@ async fn stale_loaded_session_cleanup_failure_can_retry_on_another_adapter() -> 
                 .is_err()
         );
         assert_eq!(entries(&fixture.snapshot()), entries(&before));
-        assert_eq!(fixture.snapshot().recovery.unwrap().phase, "failed");
+        assert_eq!(fixture.snapshot().data.recovery.unwrap().phase, "failed");
         assert_eq!(
             fixture.events("session/load", "target", "start").len(),
             2,
@@ -417,7 +418,7 @@ async fn stale_cache_setup_failure_keeps_the_remote_session_quarantined() -> Res
             .is_err()
     );
     assert_eq!(entries(&fixture.snapshot()), entries(&before));
-    assert_eq!(fixture.snapshot().recovery.unwrap().phase, "failed");
+    assert_eq!(fixture.snapshot().data.recovery.unwrap().phase, "failed");
     assert_eq!(fixture.events("session/load", "target", "start").len(), 2);
     assert_eq!(fixture.events("session/close", "target", "start").len(), 1);
     database.execute_batch(include_str!("sql/allow_snapshot_writes.sql"))?;
@@ -551,6 +552,7 @@ async fn abandoned_load_waits_for_response_and_close_before_reopening() -> Resul
     until(|| {
         fixture
             .snapshot()
+            .data
             .recovery
             .is_some_and(|state| state.phase == "cleaning")
     })
@@ -611,7 +613,12 @@ async fn user_cancel_keeps_old_history_and_never_installs_late_success() -> Resu
     fixture.settled().await;
     assert_eq!(entries(&fixture.snapshot()), entries(&before));
     assert!(fixture.snapshot().error.is_none());
-    let overview = fixture.service.overview(&fixture.thread)?.overview.unwrap();
+    let overview = fixture
+        .service
+        .overview(&fixture.thread)?
+        .data
+        .overview
+        .unwrap();
     assert_eq!(
         overview.last().unwrap().conclusion.last().unwrap().content["text"],
         "complete answer"
@@ -635,7 +642,7 @@ async fn remote_load_errors_preserve_history_and_have_a_working_retry() -> Resul
         assert!(fixture.service.resume(&fixture.thread).await.is_err());
         assert_eq!(entries(&fixture.snapshot()), entries(&before));
         assert!(fixture.snapshot().error.is_none());
-        assert_eq!(fixture.snapshot().recovery.unwrap().phase, "failed");
+        assert_eq!(fixture.snapshot().data.recovery.unwrap().phase, "failed");
         fixture.remove("fail-load");
         assert!(
             fixture
@@ -669,6 +676,7 @@ async fn failed_or_unsupported_close_moves_only_the_target_to_a_fresh_connection
         assert!(
             fixture
                 .snapshot()
+                .data
                 .recovery
                 .unwrap()
                 .error
@@ -717,7 +725,7 @@ async fn timed_out_close_quarantines_the_old_route_even_if_close_finishes_later(
         .event("session/close", "target", "complete", 1)
         .await;
     assert_eq!(entries(&fixture.snapshot()), entries(&restored));
-    assert!(fixture.snapshot().recovery.is_none());
+    assert!(fixture.snapshot().data.recovery.is_none());
     Ok(())
 }
 
@@ -788,7 +796,12 @@ async fn shared_load_error_preserves_authentication_classification() -> Result<(
 async fn long_replay_installs_two_complete_turns_once_with_protocol_ids_preserved() -> Result<()> {
     let fixture = Fixture::new(json!({"LONG_HISTORY":"1"})).await?;
     let snapshot = fixture.service.resume(&fixture.thread).await?;
-    let overview = fixture.service.overview(&fixture.thread)?.overview.unwrap();
+    let overview = fixture
+        .service
+        .overview(&fixture.thread)?
+        .data
+        .overview
+        .unwrap();
     assert_eq!(overview.len(), 2);
     assert_eq!(overview[0].tool_count, 40);
     assert_eq!(overview[1].tool_count, 150);

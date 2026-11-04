@@ -1,35 +1,9 @@
 //! Typed HTTP management contract; ACP conversation messages use the ACP SDK.
 use crate::{RuntimeClient, RuntimeError};
-use aow_acp::{AgentInfo, ExecutionEnvironment};
-use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use aow_runtime_contract::acp::AgentInfo;
+use serde::Deserialize;
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct AcpInstanceSpec {
-    pub agent_id: String,
-    pub cwd: PathBuf,
-    #[serde(default)]
-    pub execution_environment: Option<ExecutionEnvironment>,
-    #[serde(default)]
-    pub environment: std::collections::BTreeMap<String, String>,
-}
-#[derive(Clone, Debug, Deserialize)]
-pub struct AcpInstanceStatus {
-    pub running: bool,
-    pub exit_code: Option<i32>,
-    pub error: Option<String>,
-}
-#[derive(Clone, Debug, Deserialize)]
-pub struct AcpInstance {
-    pub id: String,
-    pub agent_id: String,
-    pub cwd: PathBuf,
-    pub pid: u32,
-    pub attached: bool,
-    pub status: AcpInstanceStatus,
-    pub websocket_path: String,
-    pub execution_home: Option<PathBuf>,
-}
+pub use aow_runtime_contract::acp::{AcpInstance, AcpInstanceSpec, AcpInstanceStatus};
 impl RuntimeClient {
     pub async fn acp_agents(&self) -> Result<Vec<AgentInfo>, RuntimeError> {
         #[derive(Deserialize)]
