@@ -34,7 +34,7 @@ impl AcpDb {
     /// Open and migrate an existing database, or create a private database.
     /// `None` creates an isolated in-memory database.
     pub fn open(path: Option<&Path>) -> Result<Self> {
-        let mut connection = crate::sqlite::open(path)?;
+        let mut connection = aow_sqlite::open(path)?;
         migrations::apply(&mut connection)?;
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),

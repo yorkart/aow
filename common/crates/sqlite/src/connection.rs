@@ -3,7 +3,7 @@ use rusqlite::Connection;
 use std::{os::unix::fs::OpenOptionsExt, path::Path, time::Duration};
 
 /// Open an AoW-owned database, preserving private permissions on SQLite sidecars.
-pub(crate) fn open(path: Option<&Path>) -> Result<Connection> {
+pub fn open(path: Option<&Path>) -> Result<Connection> {
     let connection = if let Some(path) = path {
         std::fs::create_dir_all(path.parent().context("Missing database directory")?)?;
         std::fs::OpenOptions::new()

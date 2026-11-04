@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-test('runtime dependencies stay within runtime or the common contracts', () => {
+test('runtime dependencies stay within runtime or Common libraries', () => {
   for (const entry of readdirSync(join(root, 'crates'))) {
     const manifest = join(root, 'crates', entry, 'Cargo.toml');
     const content = readFileSync(manifest, 'utf8');

@@ -41,8 +41,8 @@ pub struct TaskDb(Arc<Mutex<Connection>>);
 
 impl TaskDb {
     pub fn open(path: Option<&Path>) -> Result<Self> {
-        let mut connection = crate::sqlite::open(path)?;
-        crate::sqlite::migrate(
+        let mut connection = aow_sqlite::open(path)?;
+        aow_sqlite::migrate(
             &mut connection,
             "AowTasks",
             &[

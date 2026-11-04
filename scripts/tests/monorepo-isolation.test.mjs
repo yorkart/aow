@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 for (const product of ['common', 'server', 'runtime']) {
-  test(`${product} depends only on its own crates and public contracts`, () => {
+  test(`${product} depends only on its own crates and Common libraries`, () => {
     for (const entry of readdirSync(resolve(root, product, 'crates'))) {
       const manifest = resolve(root, product, 'crates', entry, 'Cargo.toml');
       for (const match of readFileSync(manifest, 'utf8').matchAll(/\bpath\s*=\s*"([^"]+)"/g)) {
@@ -15,10 +15,22 @@ for (const product of ['common', 'server', 'runtime']) {
     }
   });
 }
-test('Common contains data contracts and IDs, with no runtime or storage implementation', () => {
-  assert.deepEqual(readdirSync(resolve(root, 'common/crates')).sort(), ['id', 'protocol', 'runtime-contract']);
+test('Common contains contracts, IDs and generic SQLite infrastructure without product implementations', () => {
+  assert.deepEqual(readdirSync(resolve(root, 'common/crates')).sort(), ['id', 'protocol', 'runtime-contract', 'sqlite']);
   const contract = readFileSync(resolve(root, 'common/crates/runtime-contract/Cargo.toml'), 'utf8');
-  assert.doesNotMatch(contract, /rusqlite|tokio|reqwest|agent-client-protocol|aow-(?:acp|storage|filesystem|agents|process)/);
+  assert.doesNotMatch(contract, /rusqlite|tokio|reqwest|agent-client-protocol|aow-(?:acp|storage|filesystem|agents|process|sqlite)/);
+  const sqlite = readFileSync(resolve(root, 'common/crates/sqlite/Cargo.toml'), 'utf8');
+  assert.doesNotMatch(sqlite, /\baow-[\w-]+\s*=/);
+});
+test('products share SQLite infrastructure while owning business storage', () => {
+  for (const product of ['server', 'runtime']) {
+    assert.equal(existsSync(resolve(root, product, 'crates/db/src/sqlite')), false);
+    const manifest = readFileSync(resolve(root, product, 'crates/db/Cargo.toml'), 'utf8');
+    assert.match(manifest, /aow-sqlite\s*=\s*\{\s*path\s*=\s*"\.\.\/\.\.\/\.\.\/common\/crates\/sqlite"\s*\}/);
+  }
+  for (const path of ['server/crates/db/src/tasks', 'runtime/crates/db/src/acp', 'runtime/crates/db/src/codex_like', 'runtime/crates/db/src/hermes']) {
+    assert.ok(existsSync(resolve(root, path)), path);
+  }
 });
 test('Server consumes ACP through the remote SDK without linking an execution engine', () => {
   assert.equal(existsSync(resolve(root, 'server/crates/acp-client-model')), false);

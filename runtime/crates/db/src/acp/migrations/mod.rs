@@ -3,7 +3,7 @@ use rusqlite::Connection;
 
 pub(super) fn apply(connection: &mut Connection) -> Result<()> {
     // Preserve existing domain names, version counts and order for installed databases.
-    crate::sqlite::migrate(
+    aow_sqlite::migrate(
         connection,
         "ThreadMetadataDb",
         &[
@@ -12,7 +12,7 @@ pub(super) fn apply(connection: &mut Connection) -> Result<()> {
             include_str!("sidebar_threads/003_add_source.sql"),
         ],
     )?;
-    crate::sqlite::migrate(
+    aow_sqlite::migrate(
         connection,
         "AowAcpSnapshotDb",
         &[include_str!(

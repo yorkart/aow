@@ -12,7 +12,7 @@ operations. HTTP manages instances and configuration; WebSocket carries native
 ACP JSON-RPC and terminal streams. The execution modules and VT worker live in
 the independent [runtime subproject](../../runtime/README.md), with its own Cargo
 workspace and lockfile. The caller SDK stays in the Server workspace. Both products reference the sibling
-Common workspace for data contracts and IDs.
+Common workspace for data contracts, IDs and generic SQLite infrastructure.
 
 `aow-terminal-core` owns PTYs, controller leases, replay, native Agent operations
 and the VT worker. It exposes typed commands and events without an HTTP/WebSocket

@@ -188,8 +188,8 @@ fn migration_preserves_notifications_pending_messages_and_conversation_policies(
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("tasks.db");
     {
-        let mut connection = crate::sqlite::open(Some(&path)).unwrap();
-        crate::sqlite::migrate(
+        let mut connection = aow_sqlite::open(Some(&path)).unwrap();
+        aow_sqlite::migrate(
             &mut connection,
             "AowTasks",
             &[

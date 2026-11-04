@@ -23,7 +23,7 @@ pub struct HermesDb {
 impl HermesDb {
     pub fn open(path: &Path) -> Result<Self> {
         Ok(Self {
-            connection: crate::sqlite::open_read_only(path, Duration::from_millis(250))?,
+            connection: aow_sqlite::open_read_only(path, Duration::from_millis(250))?,
         })
     }
 

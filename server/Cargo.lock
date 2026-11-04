@@ -227,6 +227,7 @@ name = "aow-db"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "aow-sqlite",
  "rusqlite",
  "serde",
  "serde_json",
@@ -425,6 +426,14 @@ dependencies = [
  "thiserror 2.0.19",
  "tokio",
  "tokio-tungstenite",
+]
+
+[[package]]
+name = "aow-sqlite"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "rusqlite",
 ]
 
 [[package]]

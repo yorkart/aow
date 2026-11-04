@@ -33,7 +33,7 @@ Without just, build the worker with `npm --prefix vt-worker ci --ignore-scripts
 --no-audit --no-fund` and `npm --prefix vt-worker run build`, then run
 `cargo build --workspace --locked` or `cargo test --workspace --locked`.
 Runtime owns its execution implementation and build assets. Source builds require
-the sibling `../common/` workspace for IDs and wire contracts, and require no
+the sibling `../common/` workspace for IDs, wire contracts and SQLite infrastructure, and require no
 Server or runtime-client source. Compiled runtime binaries deploy independently.
 
 The independent caller SDK lives at `../server/crates/runtime-client`. Server uses that SDK
@@ -60,7 +60,7 @@ and managed by terminal core.
 ## Source boundary checks
 
 `node --test tests/isolation.test.mjs` permits dependencies only on this
-subproject and the sibling Common contracts. Caller integration tests use the external `runtime-test-host`
+subproject and the sibling Common libraries. Caller integration tests use the external `runtime-test-host`
 example rather than linking daemon implementation crates:
 
 ```sh
@@ -117,7 +117,8 @@ the default workspace on the configured node. Only one endpoint is configured.
 
 Native Agent traits and their implementations live only in `crates/agents-core`.
 Common defines serializable agent IDs, launch requests, capabilities, usage and
-opaque session references; it has no adapter, execution or storage implementation.
+opaque session references. Native adapters, execution and Agent storage belong
+to Runtime; Common's SQLite crate supplies generic connections and migrations.
 
 `GET /v1/agents/capabilities` describes node capabilities. Agent argument validation,
 profile matching, role layout detection, role prompt preparation and CLI probes use

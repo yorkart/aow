@@ -2,11 +2,9 @@
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
-pub(crate) fn migrate(
-    connection: &mut Connection,
-    domain: &str,
-    migrations: &[&str],
-) -> Result<()> {
+/// Apply pending caller-supplied migrations atomically to an AoW-owned database.
+/// Each domain has an independent version; newer databases cannot be downgraded.
+pub fn migrate(connection: &mut Connection, domain: &str, migrations: &[&str]) -> Result<()> {
     let transaction = connection.transaction()?;
     let version: usize = transaction
         .query_row(include_str!("sql/migration_version.sql"), [domain], |row| {
@@ -16,7 +14,7 @@ pub(crate) fn migrate(
         .unwrap_or(0);
     ensure!(
         version <= migrations.len(),
-        "ACP database domain {domain} is newer than this application"
+        "Database domain {domain} is newer than this application"
     );
     for migration in &migrations[version..] {
         transaction.execute_batch(migration)?;
