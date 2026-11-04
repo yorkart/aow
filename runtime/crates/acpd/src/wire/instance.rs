@@ -80,7 +80,7 @@ impl Instance {
             .spawn()
             .with_context(|| format!("Start ACP adapter {}", command.path.display()))?;
         let pid = child.id().context("Missing ACP adapter PID")?;
-        let group = ProcessGroup(pid);
+        let mut group = Some(ProcessGroup(pid));
         let stdin = child.stdin.take().context("Missing ACP adapter stdin")?;
         let stdout = child.stdout.take().context("Missing ACP adapter stdout")?;
         let mut stderr = child.stderr.take().context("Missing ACP adapter stderr")?;
@@ -107,11 +107,7 @@ impl Instance {
                         _ = runtime_stopped.changed() => break,
                         line = reader.next() => {
                             let Some(line) = line else { break; };
-                            let line = line?;
-                            if line.trim().is_empty() { continue; }
-                            ensure!(valid_message(&line).is_ok(), "Adapter emitted invalid ACP JSON-RPC");
-                            tokio::time::timeout(IO_TIMEOUT, outgoing.send(line)).await?
-                                .map_err(|_| anyhow::anyhow!("ACP attachment closed"))?;
+                            forward_output(&outgoing, line?).await?;
                         },
                         line = incoming.recv() => {
                             let Some(line) = line else { break; };
@@ -121,11 +117,28 @@ impl Instance {
                                 writer.flush().await
                             }).await??;
                         },
-                        result = child.wait() => { result?; break; }
+                        result = child.wait() => {
+                            result?;
+                            // Descendants may still hold stdout open. Reap their process
+                            // group, then forward buffered messages before closing ACP.
+                            drop(group.take());
+                            tokio::select! {
+                                _ = stopped.changed() => {},
+                                _ = runtime_stopped.changed() => {},
+                                result = tokio::time::timeout(IO_TIMEOUT, async {
+                                    while let Some(line) = reader.next().await {
+                                        forward_output(&outgoing, line?).await?;
+                                    }
+                                    Ok::<_, anyhow::Error>(())
+                                }) => { result??; }
+                            }
+                            break;
+                        }
                     }
                 }
                 Ok(())
-            }.await;
+            }
+            .await;
             // Kill descendants even when the launcher already exited, then reap the launcher.
             drop(group);
             let _ = child.start_kill();
@@ -206,6 +219,20 @@ impl Instance {
     }
 }
 
+async fn forward_output(outgoing: &mpsc::Sender<String>, line: String) -> Result<()> {
+    if line.trim().is_empty() {
+        return Ok(());
+    }
+    ensure!(
+        valid_message(&line).is_ok(),
+        "Adapter emitted invalid ACP JSON-RPC"
+    );
+    tokio::time::timeout(IO_TIMEOUT, outgoing.send(line))
+        .await?
+        .map_err(|_| anyhow::anyhow!("ACP attachment closed"))?;
+    Ok(())
+}
+
 struct ProcessGroup(u32);
 impl Drop for ProcessGroup {
     fn drop(&mut self) {
@@ -231,5 +258,87 @@ pub(super) fn valid_message(text: &str) -> Result<serde_json::Value, i32> {
         Ok(value)
     } else {
         Err(-32600)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn exited_adapter_output(keep_stdout_open: bool) {
+        let root = tempfile::tempdir().unwrap();
+        let (_runtime_stop, runtime_stopped) = watch::channel(false);
+        let script = format!(
+            r#"read -r start
+{}
+i=0
+while [ "$i" -lt 64 ]; do
+    printf '{{"jsonrpc":"2.0","method":"session/update","params":{{"index":%s}}}}\n' "$i"
+    i=$((i + 1))
+done
+printf '{{"jsonrpc":"2.0","id":1,"result":{{"stopReason":"end_turn"}}}}\n'
+"#,
+            if keep_stdout_open { "sleep 60 &" } else { "" },
+        );
+        let instance = Arc::new(
+            Instance::spawn(
+                "exit-output".into(),
+                InstanceSpec {
+                    agent_id: "fixture".into(),
+                    cwd: root.path().into(),
+                    execution_environment: None,
+                },
+                aow_acp::AdapterCommand {
+                    path: "/bin/sh".into(),
+                    args: vec!["-c".into(), script],
+                    env: Default::default(),
+                    execution_path: None,
+                },
+                runtime_stopped,
+            )
+            .unwrap(),
+        );
+        let mut attachment = instance.attach().unwrap();
+        instance.send("start".into()).await.unwrap();
+        // Let the adapter exit while the bounded output queue is full.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        tokio::time::timeout(Duration::from_secs(10), async {
+            for index in 0..64 {
+                let text = attachment
+                    .output
+                    .recv()
+                    .await
+                    .expect("lost final ACP notification");
+                let message: serde_json::Value = serde_json::from_str(&text).unwrap();
+                assert_eq!(message["params"]["index"], index);
+            }
+            let text = attachment
+                .output
+                .recv()
+                .await
+                .expect("lost final ACP response");
+            assert_eq!(
+                serde_json::from_str::<serde_json::Value>(&text).unwrap(),
+                serde_json::json!({"jsonrpc":"2.0","id":1,"result":{"stopReason":"end_turn"}}),
+            );
+            assert!(attachment.output.recv().await.is_none());
+        })
+        .await
+        .unwrap();
+        instance.stop().await;
+        let status = instance.status.borrow().clone();
+        assert!(!status.running);
+        assert_eq!(status.exit_code, Some(0));
+        assert!(status.error.is_none(), "{:?}", status.error);
+    }
+
+    #[tokio::test]
+    async fn forwards_all_notifications_and_final_response_before_closing() {
+        exited_adapter_output(false).await;
+    }
+
+    #[tokio::test]
+    async fn drains_final_output_when_a_descendant_inherits_stdout() {
+        exited_adapter_output(true).await;
     }
 }
