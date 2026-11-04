@@ -33,6 +33,7 @@ fn completion_subscription_only_delivers_future_events_for_the_waiting_instance(
         "/tmp/unused-hosting.sock".into(),
     ));
     let event = TaskStopNotification {
+        agent_display_name: None,
         agent: "codex".into(),
         session_id: "session".into(),
         title: "Review".into(),

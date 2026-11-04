@@ -49,3 +49,12 @@ provide `AOW_RUNTIME_TEST_HOST=/absolute/path/runtime-test-host`. The monorepo r
 `just test` handles this preparation. From this directory use `cargo test
 --workspace --locked`, `cargo fmt --all -- --check` and `cargo clippy --workspace
 --all-targets --locked -- -D warnings`.
+
+Server has no native Agent implementation crate. Agent discovery, launch adaptation,
+argument validation, interactive readiness, prompt delivery and native session reads
+use `crates/runtime-client`. Server keeps configured profiles, business roles,
+automation schedules, concurrency policy and notification delivery. Native database
+formats and Agent execution traits belong exclusively to Runtime.
+
+Agent integration tests start the external Runtime fixture. They do not link Runtime
+implementation crates. Shared wire types are in `../common/crates/runtime-contract`.

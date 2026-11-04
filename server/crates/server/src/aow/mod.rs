@@ -4,11 +4,9 @@ use std::{
     sync::{Arc, Mutex, MutexGuard},
 };
 
-use aow_agents::environment::SETTINGS_FILE;
-#[cfg(test)]
-pub(crate) use aow_agents::environment::discover_path as discovery_path;
-pub(crate) use aow_agents::launch::AgentLaunch;
-use aow_agents::launch::{AgentRegistration, AgentType};
+use aow_config::environment::SETTINGS_FILE;
+pub(crate) use aow_runtime_contract::agents::AgentLaunch;
+use aow_runtime_contract::agents::{AgentRegistration, AgentType};
 use axum::{
     Json,
     extract::{Path as AxumPath, Query, State},
@@ -60,6 +58,7 @@ use agents::{AgentsQuery, RegisterAgentRequest, ReorderAgentsRequest};
 use notes::{CreateTemporaryNoteRequest, TemporaryNoteResult};
 pub(crate) use projects::ProjectSummary;
 use projects::{BindNotesRequest, Project, RegisterProjectRequest};
+pub(crate) use sessions::public_native_sessions;
 use sessions::{AgentSessionSnapshotQuery, AgentSessionsQuery, AutomationRunSessionQuery};
 use worktrees::{
     CreateWorktreeRequest, ProjectBranches, SetWorktreeColorRequest, SetWorktreeIconRequest,
@@ -77,8 +76,6 @@ use error::aow_response;
 pub(crate) use error::{AowError, aow_http_error};
 pub(crate) use settings::AcpSettingsFile;
 
-#[cfg(test)]
-pub(crate) use agents::resolve_executable;
 pub(crate) use api::{resolve_session_locator, routes};
 
 #[derive(Clone)]
@@ -87,6 +84,8 @@ pub(crate) struct AowManager {
 }
 
 struct AowInner {
+    #[cfg(test)]
+    test_node_root: tempfile::TempDir,
     #[cfg(test)]
     test_runtime: Mutex<Option<Arc<dyn Send + Sync>>>,
     cli_access: aow_cli_access::Access,
@@ -131,6 +130,8 @@ impl AowManager {
     pub(crate) fn in_memory() -> Self {
         Self {
             inner: Arc::new(AowInner {
+                #[cfg(test)]
+                test_node_root: tempfile::tempdir().expect("test node root"),
                 #[cfg(test)]
                 test_runtime: Default::default(),
                 cli_access: Default::default(),
@@ -178,6 +179,8 @@ impl AowManager {
         let removals = removal::RemovalJobs::in_memory();
         Ok(Self {
             inner: Arc::new(AowInner {
+                #[cfg(test)]
+                test_node_root: tempfile::tempdir().expect("test node root"),
                 #[cfg(test)]
                 test_runtime: Default::default(),
                 cli_access: Default::default(),

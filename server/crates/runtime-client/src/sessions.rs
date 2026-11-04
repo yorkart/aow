@@ -1,40 +1,9 @@
 //! Native session transport types. The caller never interprets node transcript paths.
 use crate::{RuntimeClient, RuntimeError, TerminalClient};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct NativeSessionReference {
-    pub node_id: String,
-    pub handle: String,
-    pub agent: String,
-    pub session_id: String,
-    pub cwd: PathBuf,
-    pub title: String,
-}
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct NativeSession {
-    pub id: String,
-    pub agent: String,
-    pub session_id: String,
-    pub title: String,
-    pub cwd: String,
-    pub created_at: String,
-    pub updated_at: String,
-    #[serde(skip_serializing)]
-    pub reference: NativeSessionReference,
-}
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct NativePaneSessions {
-    pub agent: String,
-    pub cwd: String,
-    pub title: String,
-    pub process: Option<aow_protocol::TerminalAgentProcess>,
-    pub live_session_id: Option<String>,
-    pub sessions: Vec<NativeSession>,
-    #[serde(skip_serializing)]
-    pub current: Option<NativeSessionReference>,
-}
+pub use aow_runtime_contract::agents::{NativePaneSessions, NativeSession, NativeSessionReference};
 impl RuntimeClient {
     pub async fn native_sessions(
         &self,

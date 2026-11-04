@@ -1,6 +1,6 @@
 use std::{path::Path, path::PathBuf, sync::MutexGuard};
 
-use aow_agents::environment;
+use aow_config::environment;
 
 use super::super::{AowError, AowManager};
 use super::configuration::{UpdateSettingsRequest, normalize_node_addresses};
@@ -15,36 +15,20 @@ impl AowManager {
         Ok(self.lock_settings()?.clone())
     }
     pub(crate) async fn execution_path(&self) -> Result<Vec<PathBuf>, AowError> {
-        if let Some(runtime) = &self.inner.runtime_client {
-            let value: serde_json::Value = runtime
-                .get_json("/v1/environment")
-                .await
-                .map_err(|error| AowError::Invalid(error.to_string()))?;
-            return serde_json::from_value(value["execution_path"].clone()).map_err(Into::into);
-        }
+        let runtime = self.agent_node().await?;
+        let path = runtime
+            .execution_path()
+            .await
+            .map_err(|e| AowError::Invalid(e.to_string()))?;
         #[cfg(test)]
-        {
-            if let Some(path) = self.settings()?.execution_path {
-                return Ok(path);
-            }
-            let path = environment::normalize_path(super::super::discovery_path().await)
-                .map_err(|error| AowError::Invalid(error.to_string()))?;
+        if self.inner.runtime_client.is_none() {
             let mut settings = self.lock_settings()?;
-            // A concurrent Settings update wins over default discovery.
-            if let Some(path) = &settings.execution_path {
-                return Ok(path.clone());
+            if settings.execution_path.is_none() {
+                settings.execution_path = Some(path.clone());
+                self.persist_settings(&settings)?;
             }
-            settings.execution_path = Some(path.clone());
-            if let Err(error) = self.persist_settings(&settings) {
-                settings.execution_path = None;
-                return Err(error);
-            }
-            Ok(path)
         }
-        #[cfg(not(test))]
-        {
-            Err(AowError::Invalid("Runtime is unavailable".into()))
-        }
+        Ok(path)
     }
 
     pub(in crate::aow) async fn update_settings(
@@ -71,14 +55,12 @@ impl AowManager {
         if execution_path.is_none() {
             self.execution_path().await?;
         }
-        if let (Some(runtime), Some(paths)) = (&self.inner.runtime_client, &execution_path) {
-            let _: serde_json::Value = runtime
-                .put_json(
-                    "/v1/environment",
-                    &serde_json::json!({"execution_path":paths}),
-                )
+        if let Some(paths) = &execution_path {
+            self.agent_node()
+                .await?
+                .set_execution_path(paths)
                 .await
-                .map_err(|error| AowError::Invalid(error.to_string()))?;
+                .map_err(|e| AowError::Invalid(e.to_string()))?;
         }
         let operation = self.inner.project_operation.clone().lock_owned().await;
         let manager = self.clone();

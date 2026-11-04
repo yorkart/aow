@@ -1,6 +1,6 @@
 //! Translate ACP prompt completion into the existing page/IM notification pipeline.
-use aow_agents::sessions::usage::TokenUsage;
 use aow_runtime_client::acp::TurnCompletion;
+use aow_runtime_contract::agents::TokenUsage;
 use serde_json::Value;
 use tokio::sync::broadcast;
 
@@ -25,7 +25,17 @@ pub(super) async fn dispatch(
                 .unwrap_or(&session.cwd)
                 .to_owned()
         });
+    let display_name = match manager.agent_node().await {
+        Ok(node) => node.agent_capabilities().await.ok().and_then(|items| {
+            items
+                .into_iter()
+                .find(|item| item.id == session.agent_id)
+                .map(|item| item.display_name)
+        }),
+        Err(_) => None,
+    };
     let notification = TaskStopNotification {
+        agent_display_name: display_name,
         agent: session.agent_id,
         session_id: session
             .session_id

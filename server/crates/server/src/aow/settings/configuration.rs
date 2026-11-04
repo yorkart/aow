@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use aow_agents::environment;
+use aow_config::environment;
 use serde::{Deserialize, Serialize};
 
 use super::super::{AowError, AowManager, REGISTRY_VERSION};

@@ -15,6 +15,7 @@ use tokio::sync::watch;
 #[derive(Clone, Debug, Serialize)]
 struct Completion {
     agent: String,
+    agent_display_name: String,
     session_id: String,
     title: String,
     cwd: String,

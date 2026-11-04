@@ -13,8 +13,6 @@ const ROWS: u16 = 48;
 const COLS: u16 = 160;
 
 #[cfg(test)]
-use aow_agents::Agent;
-#[cfg(test)]
 use aow_operation_log::Outcome;
 #[cfg(test)]
 use aow_protocol::{

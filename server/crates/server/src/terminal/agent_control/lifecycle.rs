@@ -1,8 +1,7 @@
 use super::super::*;
-use super::{connection::AgentConnection, model::info};
+use super::model::info;
 use crate::operations::Handle;
-use aow_agents::interactive::AgentInteractive;
-use aow_protocol::{AgentTerminalInfo, AgentTerminalPhase, AgentTerminalState, TerminalScreen};
+use aow_protocol::{AgentTerminalInfo, AgentTerminalPhase, AgentTerminalState};
 
 impl TerminalManager {
     pub(in crate::terminal) fn cli_agent(
@@ -37,7 +36,7 @@ impl TerminalManager {
         Ok(operation)
     }
 
-    pub(super) fn set_agent_state(
+    pub(in crate::terminal) fn set_agent_state(
         &self,
         pane_id: &str,
         agent: AgentTerminalState,
@@ -58,7 +57,7 @@ impl TerminalManager {
     pub(in crate::terminal) async fn initialize_agent_lifecycle(
         &self,
         pane_id: &str,
-        adapter: impl AgentInteractive,
+        agent: &str,
         task: Option<&str>,
         timeout: Duration,
         log: Option<&Handle>,
@@ -68,74 +67,67 @@ impl TerminalManager {
         if let Some(log) = log {
             log.progress(aow_i18n::text("server.wait_for_agent_readiness"), None);
         }
-        let result =
-            tokio::time::timeout(timeout, self.initialize_agent(pane_id, adapter, task, log)).await;
+        let result = self
+            .run_agent_operation(
+                pane_id,
+                aow_runtime_client::agents::TerminalAgentRequest {
+                    request_id: format!("initialize-{pane_id}"),
+                    operation: aow_runtime_client::agents::TerminalAgentOperation::Initialize {
+                        agent: agent.into(),
+                        task: task.map(str::to_owned),
+                        timeout_seconds: timeout.as_secs(),
+                    },
+                },
+            )
+            .await;
         let progress = match result {
-            Ok(Ok(())) => AgentTerminalState {
-                phase: AgentTerminalPhase::Ready,
-                error: None,
-                task_submitted: task.is_some(),
-            },
-            outcome => {
-                let error = match outcome {
-                    Ok(Err(error)) => error.to_string(),
-                    _ => "agent startup timed out; inspect the pane read-only (startup may require login or trust confirmation)".into(),
-                };
+            Ok(()) => {
+                if task.is_some()
+                    && let Some(log) = log
+                {
+                    log.progress(aow_i18n::text("server.submit_initial_task"), None);
+                }
+                AgentTerminalState {
+                    phase: AgentTerminalPhase::Ready,
+                    error: None,
+                    task_submitted: task.is_some(),
+                }
+            }
+            Err(error) => {
                 let mut progress = self.cli_agent(pane_id)?.state;
-                progress.phase = AgentTerminalPhase::Failed;
-                progress.error = Some(error);
+                if matches!(error, TerminalError::DaemonUnavailable(_)) {
+                    // A transport failure does not determine the node-owned operation's outcome.
+                    // Reconciliation queries its receipt after reconnect, without submitting again.
+                    progress.phase = AgentTerminalPhase::Starting;
+                    self.inner
+                        .restored_initializations
+                        .lock()
+                        .map_err(|_| TerminalError::Poisoned)?
+                        .insert(pane_id.into());
+                } else {
+                    progress.phase = AgentTerminalPhase::Failed;
+                }
+                progress.error = Some(error.to_string());
                 progress
             }
         };
         self.set_agent_state(pane_id, progress)
     }
 
-    pub(super) async fn initialize_agent(
+    pub(in crate::terminal) async fn run_agent_operation(
         &self,
         pane_id: &str,
-        adapter: impl AgentInteractive,
-        task: Option<&str>,
-        log: Option<&Handle>,
+        request: aow_runtime_client::agents::TerminalAgentRequest,
     ) -> Result<(), TerminalError> {
-        let mut connection = AgentConnection::claim(&self.inner.terminald, pane_id).await?;
-        self.wait_screen(pane_id, &mut connection, |screen| {
-            adapter.input_ready(&screen.lines)
-        })
-        .await?;
-        if let Some(log) = log {
-            log.progress(aow_i18n::text("server.agent_terminal_ready"), None);
-        }
-        if let Some(task) = task {
-            if let Some(log) = log {
-                log.progress(aow_i18n::text("server.submit_initial_task"), None);
-            }
-            connection.submit(task).await?;
-            let mut progress = self.cli_agent(pane_id)?.state;
-            progress.task_submitted = true;
-            self.set_agent_state(pane_id, progress)?;
-        }
-        connection.finish().await
-    }
-
-    async fn wait_screen(
-        &self,
-        pane_id: &str,
-        connection: &mut AgentConnection,
-        predicate: impl Fn(&TerminalScreen) -> bool,
-    ) -> Result<TerminalScreen, TerminalError> {
-        let mut interval = tokio::time::interval(Duration::from_millis(150));
-        loop {
-            tokio::select! {
-                message = connection.socket.next() => { AgentConnection::check(message)?; }
-                _ = interval.tick() => {
-                    if let Some(screen) = self.inner.terminald.screen(pane_id).await.map_err(map_client_error)?
-                        && predicate(&screen) { return Ok(screen); }
-                    let runtime = self.inner.terminald.get(pane_id).await.map_err(map_client_error)?;
-                    if runtime.is_none_or(|runtime| runtime.status != TerminalPaneStatus::Running) {
-                        return Err(TerminalError::Conflict("agent exited before becoming ready".into()));
-                    }
-                }
-            }
+        let progress = self
+            .inner
+            .terminald
+            .run_agent_operation(pane_id, &request)
+            .await
+            .map_err(map_client_error)?;
+        match progress.error {
+            Some(error) => Err(TerminalError::Conflict(error)),
+            None => Ok(()),
         }
     }
 }

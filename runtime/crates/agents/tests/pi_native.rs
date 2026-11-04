@@ -1,5 +1,6 @@
 #![cfg(all(feature = "sessions", feature = "automation", feature = "launch"))]
 
+use aow_agents::launch::AgentLaunchExt;
 use aow_agents::{
     Agent,
     automation::AgentAutomation,
@@ -38,7 +39,7 @@ fn installed_pi_round_trips_through_aow_history_and_results() {
                 "aow-test/fixture",
                 "--extension",
             ])
-            .arg(source.join("tests/fixtures/pi-provider.mjs"))
+            .arg(source.join("../../../fixtures/agents/pi-provider.mjs"))
             .args(args)
             .envs(&environment)
             .env("PI_OFFLINE", "1")

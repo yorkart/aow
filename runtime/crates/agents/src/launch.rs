@@ -1,10 +1,6 @@
 //! Resolved launch configuration shared by terminal callers.
 use crate::Agent;
-use serde::{Deserialize, Serialize};
-use std::{
-    collections::BTreeMap,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 pub use crate::codex_terminal::prepare as prepare_codex_terminal;
@@ -17,74 +13,30 @@ pub enum LaunchError {
     Invalid(String),
 }
 
-/// Supported registration types, independent of a configuration's unique ID.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum AgentType {
-    Claude,
-    Codex,
-    TraeCli,
-    Hermes,
-    Pi,
+pub use aow_runtime_contract::agents::{AgentLaunch, AgentRegistration, AgentType};
+pub trait AgentTypeExt {
+    fn agent(self) -> Agent;
 }
-
-impl AgentType {
-    pub const ALL: [Self; 5] = [
-        Self::Claude,
-        Self::Codex,
-        Self::TraeCli,
-        Self::Hermes,
-        Self::Pi,
-    ];
-
-    pub fn agent(self) -> Agent {
-        match self {
-            Self::Claude => Agent::Claude,
-            Self::Codex => Agent::Codex,
-            Self::TraeCli => Agent::TraeCli,
-            Self::Hermes => Agent::Hermes,
-            Self::Pi => Agent::Pi,
-        }
-    }
-
-    pub fn id(self) -> &'static str {
-        self.agent().id()
-    }
-
-    pub fn from_id(id: &str) -> Option<Self> {
-        Self::ALL
-            .into_iter()
-            .find(|agent_type| agent_type.id() == id)
+impl AgentTypeExt for AgentType {
+    fn agent(self) -> Agent {
+        Agent::from_id(self.id()).unwrap()
     }
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AgentRegistration {
-    pub is_default: bool,
-    pub id: String,
-    /// None only for legacy registrations that still need a type selected.
-    pub agent_type: Option<AgentType>,
-    pub display_name: String,
-    pub source: String,
-    pub available: bool,
-    pub command: String,
-    pub executable: Option<String>,
-    pub args: Vec<String>,
-    pub env: BTreeMap<String, String>,
+pub trait AgentLaunchExt {
+    fn prepare_terminal(
+        &mut self,
+        pane_id: &str,
+        cwd: &Path,
+    ) -> impl std::future::Future<Output = ()> + Send;
+    fn resume_session(&mut self, session_id: &str) -> Result<(), LaunchError>;
 }
-
-#[derive(Serialize, Deserialize)]
-pub struct AgentLaunch {
-    pub agent_type: AgentType,
-    pub display_name: String,
-    pub executable: String,
-    pub args: Vec<String>,
-    pub env: BTreeMap<String, String>,
+pub trait AgentRegistrationExt {
+    fn matches_terminal_arguments(&self, arguments: &[String]) -> bool;
+    fn into_launch(self, paths: &[PathBuf]) -> Result<AgentLaunch, LaunchError>;
 }
-
-impl AgentLaunch {
+impl AgentLaunchExt for AgentLaunch {
     /// Keep managed Codex TUI writers in the pane process, without changing its title.
-    pub async fn prepare_terminal(&mut self, pane_id: &str, cwd: &Path) {
+    async fn prepare_terminal(&mut self, pane_id: &str, cwd: &Path) {
         if self.agent_type == AgentType::Codex {
             prepare_codex_terminal(
                 &self.executable,
@@ -98,7 +50,7 @@ impl AgentLaunch {
     }
 
     /// Resume a native session with this instance's configured command and environment.
-    pub fn resume_session(&mut self, session_id: &str) -> Result<(), LaunchError> {
+    fn resume_session(&mut self, session_id: &str) -> Result<(), LaunchError> {
         if session_id.trim().is_empty()
             || session_id.starts_with('-')
             || session_id.chars().any(char::is_control)
@@ -116,9 +68,9 @@ impl AgentLaunch {
     }
 }
 
-impl AgentRegistration {
+impl AgentRegistrationExt for AgentRegistration {
     /// Identify legacy terminal profiles after AoW adds isolation/resume arguments.
-    pub fn matches_terminal_arguments(&self, arguments: &[String]) -> bool {
+    fn matches_terminal_arguments(&self, arguments: &[String]) -> bool {
         let Some(kind) = self.agent_type else {
             return false;
         };
@@ -148,7 +100,7 @@ impl AgentRegistration {
         matches!(suffix, Some([flag, session]) if flag == resume && !session.is_empty())
     }
 
-    pub fn into_launch(self, paths: &[PathBuf]) -> Result<AgentLaunch, LaunchError> {
+    fn into_launch(self, paths: &[PathBuf]) -> Result<AgentLaunch, LaunchError> {
         let agent_type = self.agent_type.ok_or_else(|| {
             LaunchError::Invalid(aow_i18n::message(
                 "agents.set_the_agent_type_for_first",

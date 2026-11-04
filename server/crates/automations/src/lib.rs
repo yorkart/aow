@@ -1,4 +1,3 @@
-pub mod agent;
 pub mod hosting;
 pub mod model;
 pub mod query;

@@ -240,7 +240,7 @@ pub(super) async fn run(
             if hosted {prompt=crate::hosting::prompt(&prompt);}
             let health=client.health().await?;
             let node_id=health["node_id"].as_str().context("Runtime node ID is unavailable")?.to_owned();
-            let mut environment=aow_agents::environment::load_agent_environment_from(&store.config_dir,task.input.agent_id()).await?;
+            let mut environment=aow_config::environment::load_agent_environment_from(&store.config_dir,task.input.agent_id()).await?;
             environment.remove("PATH");
             let callback=aow_cli_access::Access::from_state(&store.state_dir)?.environment()?;
             environment.extend(callback);

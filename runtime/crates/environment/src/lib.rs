@@ -6,6 +6,7 @@ mod manager;
 mod model;
 pub use error::EnvironmentError;
 pub use home::PreparedHome;
+pub use identity::role_layout;
 pub use manager::EnvironmentManager;
 pub use model::{HomeLayout, Identity, IdentityPreset, PreparedEnvironment, RoleEnvironmentSpec};
 

@@ -1,5 +1,5 @@
 use super::super::*;
-use super::{COLS, ROWS, connection::AgentConnection, model::info};
+use super::{COLS, ROWS, model::info};
 use crate::operations::{Handle, Spec};
 use aow_operation_log::Outcome;
 use aow_protocol::{
@@ -103,12 +103,23 @@ async fn create_inner(
         .await
         .map_err(crate::aow::aow_http_error)?;
 
-    let adapter = launch.agent_type.agent().interactive().ok_or_else(|| {
-        terminal_http_error(TerminalError::Invalid(format!(
-            "interactive startup is not supported for agent {}",
-            agent_id
-        )))
-    })?;
+    let agent_type = launch.agent_type.id().to_owned();
+    let capabilities = state
+        .aow
+        .agent_node()
+        .await
+        .map_err(crate::aow::aow_http_error)?
+        .agent_capabilities()
+        .await
+        .map_err(|e| HttpError::internal(e.to_string()))?;
+    if !capabilities
+        .iter()
+        .any(|agent| agent.id == agent_type && agent.interactive)
+    {
+        return Err(terminal_http_error(TerminalError::Invalid(format!(
+            "interactive startup is not supported for agent {agent_id}"
+        ))));
+    }
     let parent = crate::instances::creation_parent(
         &state,
         request.parent,
@@ -157,7 +168,7 @@ async fn create_inner(
         manager
             .initialize_agent_lifecycle(
                 &pane_id,
-                adapter,
+                &agent_type,
                 request.task.as_deref(),
                 Duration::from_secs(request.timeout_seconds),
                 Some(&log),
@@ -235,17 +246,17 @@ pub(crate) async fn submit(
         {
             return Err(TerminalError::Conflict("agent is not ready".into()));
         }
-        tokio::time::timeout(Duration::from_secs(15), async {
-            let mut connection = AgentConnection::claim(&manager.inner.terminald, &pane_id).await?;
-            connection.submit(&request.task).await?;
-            connection.finish().await
-        })
-        .await
-        .map_err(|_| {
-            TerminalError::Conflict(
-                "submission timed out; delivery is unknown, do not retry blindly".into(),
+        manager
+            .run_agent_operation(
+                &pane_id,
+                aow_runtime_client::agents::TerminalAgentRequest {
+                    request_id: aow_id::new_id(),
+                    operation: aow_runtime_client::agents::TerminalAgentOperation::Submit {
+                        task: request.task,
+                    },
+                },
             )
-        })??;
+            .await?;
         current.state.task_submitted = true;
         manager.set_agent_state(&pane_id, current.state)?;
         manager.cli_agent(&pane_id)

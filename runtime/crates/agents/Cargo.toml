@@ -11,6 +11,7 @@ sessions = ["dep:anyhow", "dep:chrono", "dep:serde", "dep:serde_json", "dep:this
 automation = ["dep:anyhow", "dep:serde", "dep:serde_json", "dep:tokio"]
 
 [dependencies]
+aow-runtime-contract = { path = "../../../common/crates/runtime-contract" }
 aow-protocol = { path = "../../../common/crates/protocol" }
 aow-i18n = { package = "aow-runtime-i18n", path = "../i18n" }
 aow-db = { package = "aow-runtime-db", path = "../db", optional = true }

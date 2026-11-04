@@ -41,43 +41,27 @@ pub(super) fn removed_directory_path(path: &Path) -> Result<PathBuf, AowError> {
 #[derive(Debug, Clone)]
 pub(crate) enum SessionReference {
     Node(aow_runtime_client::NativeSessionReference),
-    #[cfg(test)]
-    Local(aow_agents::sessions::AgentSessionLocator),
 }
 impl SessionReference {
     pub(crate) fn agent(&self) -> &str {
         match self {
             Self::Node(value) => &value.agent,
-            #[cfg(test)]
-            Self::Local(value) => value.agent,
         }
     }
     pub(crate) fn session_id(&self) -> &str {
         match self {
             Self::Node(value) => &value.session_id,
-            #[cfg(test)]
-            Self::Local(value) => &value.session_id,
         }
     }
     pub(crate) fn cwd(&self) -> &Path {
         match self {
             Self::Node(value) => &value.cwd,
-            #[cfg(test)]
-            Self::Local(value) => &value.cwd,
         }
     }
     pub(crate) fn title(&self) -> &str {
         match self {
             Self::Node(value) => &value.title,
-            #[cfg(test)]
-            Self::Local(value) => &value.title,
         }
-    }
-}
-#[cfg(test)]
-impl From<aow_agents::sessions::AgentSessionLocator> for SessionReference {
-    fn from(value: aow_agents::sessions::AgentSessionLocator) -> Self {
-        Self::Local(value)
     }
 }
 
@@ -114,57 +98,6 @@ impl AowManager {
             )));
         }
         Ok(requested)
-    }
-
-    #[cfg(test)]
-    pub(super) fn replace_session_locators_for_agent(
-        &self,
-        worktree: &Path,
-        agent: Option<&str>,
-        sessions: &[aow_agents::sessions::AgentSession],
-    ) -> Result<(), AowError> {
-        let mut locators = self
-            .inner
-            .session_locators
-            .lock()
-            .map_err(|_| AowError::Poisoned)?;
-        locators.retain(|_, locator| {
-            locator.worktree != worktree
-                || agent.is_some_and(|agent| locator.locator.agent() != agent)
-        });
-        for session in sessions {
-            let locator = session.locator();
-            locators.insert(
-                session_locator_key(worktree, locator.agent, &locator.session_id),
-                CachedSessionLocator {
-                    worktree: worktree.to_path_buf(),
-                    locator: SessionReference::Local(locator),
-                },
-            );
-        }
-        Ok(())
-    }
-
-    #[cfg(test)]
-    pub(crate) fn cache_session_locator(
-        &self,
-        worktree: &Path,
-        session: &aow_agents::sessions::AgentSession,
-    ) -> Result<(), AowError> {
-        let mut locator = session.locator();
-        locator.cwd = std::fs::canonicalize(&locator.cwd).unwrap_or(locator.cwd);
-        self.inner
-            .session_locators
-            .lock()
-            .map_err(|_| AowError::Poisoned)?
-            .insert(
-                session_locator_key(worktree, locator.agent, &locator.session_id),
-                CachedSessionLocator {
-                    worktree: worktree.to_path_buf(),
-                    locator: SessionReference::Local(locator),
-                },
-            );
-        Ok(())
     }
 
     pub(crate) fn cache_native_sessions(
@@ -228,4 +161,25 @@ impl AowManager {
 
 fn session_locator_key(worktree: &Path, agent: &str, session_id: &str) -> String {
     format!("{}\0{agent}\0{session_id}", worktree.display())
+}
+
+pub(crate) fn public_native_sessions<T: serde::Serialize>(
+    sessions: T,
+) -> serde_json::Result<serde_json::Value> {
+    fn strip(value: &mut serde_json::Value) {
+        match value {
+            serde_json::Value::Array(items) => items.iter_mut().for_each(strip),
+            serde_json::Value::Object(object) => {
+                object.remove("reference");
+                object.remove("current");
+                if let Some(items) = object.get_mut("sessions") {
+                    strip(items);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut value = serde_json::to_value(sessions)?;
+    strip(&mut value);
+    Ok(value)
 }

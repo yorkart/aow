@@ -1,188 +1,43 @@
-//! Probe the selected runtime in the candidate role's real home before publishing it.
+//! Test role environments are fixture data; probes still execute in the external Runtime.
 use super::{AgentRole, RoleRuntime};
-use crate::{
-    AppState,
-    aow::{AowError, AowManager},
-};
-use anyhow::{Context, Result, bail, ensure};
-use aow_agents::automation::{AgentAutomation, PromptMode};
-use aow_runtime_client::acp::AcpClient;
-use std::{path::Path, process::Stdio, time::Duration};
-use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
-    process::Command,
-};
-
-const PROMPT: &str = "ping";
-
+use crate::{AppState, aow::AowError};
+use std::time::Duration;
 pub(super) async fn test_with_timeout(
     state: &AppState,
     role: &AgentRole,
     deadline: Duration,
 ) -> Result<(), AowError> {
-    let home = state.aow.role_home(&role.id)?;
-    let workspace = tempfile::Builder::new()
-        .prefix("connection-")
-        .tempdir_in(home.parent().unwrap())?;
-    tokio::time::timeout(deadline, async {
-        // Native CLIs can require a repository. This scratch checkout is never
-        // registered as a project or exposed as a workspace resource.
-        let status = Command::new("git").args(["init", "--quiet"])
-            .current_dir(workspace.path()).envs(state.aow.role_environment(role)?)
-            .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null())
-            .kill_on_drop(true).status().await?;
-        ensure!(status.success(), "Unable to initialize connection test workspace");
+    let result = tokio::time::timeout(deadline, async {
         match &role.config.runtime {
-            RoleRuntime::Acp { agent_id } if state.acp.runtime().is_some() => state.acp.probe(agent_id, workspace.path().into(), state.aow.role_acp_environment(role)?).await,
-            RoleRuntime::Acp { agent_id } => acp(&state.aow, role, agent_id, workspace.path()).await,
-            RoleRuntime::Cli { .. } => cli(&state.aow, role, workspace.path()).await,
-        }
-    }).await.map_err(|_| AowError::Invalid("Connection test timed out. Check the local login and runtime configuration, then retry.".into()))?
-        .map_err(|error| AowError::Invalid(format!("Connection test failed: {error}")))
-}
-
-struct ProbeService(AcpClient);
-impl Drop for ProbeService {
-    fn drop(&mut self) {
-        // Disconnect on success, failure, timeout and request cancellation.
-        self.0.disconnect_all();
-    }
-}
-
-async fn acp(manager: &AowManager, role: &AgentRole, agent_id: &str, cwd: &Path) -> Result<()> {
-    let service = ProbeService(manager.role_acp_service()?);
-    ensure!(
-        service
-            .0
-            .agents()
-            .await?
-            .iter()
-            .any(|agent| agent.id == agent_id
-                && agent.configured
-                && agent.supported
-                && agent.installed),
-        "Install or configure the selected ACP runtime first"
-    );
-    let session = service
-        .0
-        .prepare_session_with_options(
-            agent_id,
-            cwd.into(),
-            aow_runtime_client::acp::SessionCreation {
-                execution_environment: Some(manager.role_acp_environment(role)?),
-                ..Default::default()
-            },
-        )
-        .await?;
-    service.0.resume(&session.thread_id).await?;
-    service
-        .0
-        .start_prompt(
-            &session.thread_id,
-            serde_json::from_value(serde_json::json!([{"type":"text","text":PROMPT}]))?,
-        )
-        .await?;
-    loop {
-        let snapshot = service.0.snapshot(&session.thread_id).await?;
-        if let Some(error) = snapshot.error {
-            bail!("{error}");
-        }
-        ensure!(
-            snapshot.permissions.is_empty(),
-            "The runtime requested permission during the connection test. Complete local setup first."
-        );
-        match snapshot.status.as_str() {
-            "working" => tokio::time::sleep(Duration::from_millis(40)).await,
-            "idle" => {
-                let reply = snapshot
-                    .entries
-                    .iter()
-                    .filter(|entry| entry.kind == "assistant")
-                    .filter_map(|entry| entry.content["text"].as_str())
-                    .collect::<String>();
-                ensure!(
-                    !reply.trim().is_empty(),
-                    "The runtime did not return a connection-test response"
-                );
-                return Ok(());
+            RoleRuntime::Cli { .. } => {
+                let mut probe = role.clone();
+                probe.config.instruction.clear();
+                let launch = state.aow.role_cli_launch(&probe).await?;
+                state
+                    .aow
+                    .agent_node()
+                    .await?
+                    .probe_agent(&aow_runtime_client::agents::ProbeAgent {
+                        launch,
+                        timeout_ms: deadline.as_millis().min(120_000) as u64,
+                    })
+                    .await
+                    .map_err(|e| AowError::Invalid(e.to_string()))
             }
-            status => bail!("Runtime disconnected during connection test ({status})"),
+            RoleRuntime::Acp { agent_id } => state
+                .aow
+                .role_acp_service()
+                .map_err(|e| AowError::Invalid(e.to_string()))?
+                .probe(
+                    agent_id,
+                    state.aow.role_home(&role.id)?,
+                    state.aow.role_acp_environment(role)?,
+                )
+                .await
+                .map_err(|e| AowError::Invalid(e.to_string())),
         }
-    }
-}
-
-struct ProcessGroup(Option<u32>);
-impl Drop for ProcessGroup {
-    fn drop(&mut self) {
-        if let Some(pid) = self.0 {
-            // CLI wrappers may leave descendants holding the output pipes.
-            unsafe {
-                libc::kill(-(pid as i32), libc::SIGKILL);
-            }
-        }
-    }
-}
-
-async fn limited(reader: impl AsyncRead + Unpin) -> Result<Vec<u8>> {
-    let mut output = Vec::new();
-    reader.take(262_145).read_to_end(&mut output).await?;
-    ensure!(
-        output.len() <= 262_144,
-        "Connection test output exceeded its limit"
-    );
-    Ok(output)
-}
-
-async fn cli(manager: &AowManager, role: &AgentRole, cwd: &Path) -> Result<()> {
-    let mut probe = role.clone();
-    probe.config.instruction.clear();
-    let mut launch = manager.role_cli_launch(&probe).await?;
-    let mut input = Vec::new();
-    let adapter = launch
-        .agent_type
-        .agent()
-        .automation()
-        .context("Runtime does not support a connection test")?;
-    adapter.validate_arguments(&launch.args)?;
-    let id = uuid::Uuid::new_v4().to_string();
-    launch
-        .args
-        .extend(adapter.automation_arguments(false, Some(&id))?);
-    match adapter.prompt_mode() {
-        PromptMode::Stdin => input = PROMPT.as_bytes().to_vec(),
-        PromptMode::Argument(flag) => launch.args.extend([flag.into(), PROMPT.into()]),
-    }
-    let mut child = Command::new(&launch.executable)
-        .args(&launch.args)
-        .envs(&launch.env)
-        .current_dir(cwd)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .process_group(0)
-        .kill_on_drop(true)
-        .spawn()?;
-    let _group = ProcessGroup(child.id());
-    let mut stdin = child.stdin.take().unwrap();
-    let stdout = child.stdout.take().unwrap();
-    let stderr = child.stderr.take().unwrap();
-    let (_, output, _, status) = tokio::try_join!(
-        async {
-            stdin.write_all(&input).await?;
-            drop(stdin);
-            Ok::<_, anyhow::Error>(())
-        },
-        limited(stdout),
-        limited(stderr),
-        async { Ok::<_, anyhow::Error>(child.wait().await?) }
-    )?;
-    ensure!(
-        status.success(),
-        "Runtime exited with {status}. Check its local login and launch arguments."
-    );
-    ensure!(
-        !String::from_utf8_lossy(&output).trim().is_empty(),
-        "The runtime did not return a connection-test response"
-    );
-    Ok(())
+    })
+    .await
+    .map_err(|_| AowError::Invalid("Connection test timed out".into()))?;
+    result.map_err(|e| AowError::Invalid(format!("Connection test failed: {e}")))
 }

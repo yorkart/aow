@@ -64,6 +64,55 @@ where
                 }
                 begin_observation(sender, connection).await
             }
+            Ok(TerminalAttachClientMessage::Submit { request_id, task }) => {
+                if request_id.is_empty() || request_id.len() > 128 {
+                    let _ = send_socket_error(sender, "invalid_input", "Invalid request ID").await;
+                    return None;
+                }
+                if let Some(owner) = current.owner {
+                    let result = tokio::time::timeout(
+                        Duration::from_secs(15),
+                        super::super::agent_operations::submit_owned(runtime, owner, &task),
+                    )
+                    .await;
+                    match result {
+                        Ok(Ok(())) => {
+                            let message = TerminalAttachServerMessage::Written { request_id };
+                            if bounded_send(
+                                sender,
+                                Message::Text(
+                                    serde_json::to_string(&message)
+                                        .expect("submit acknowledgement")
+                                        .into(),
+                                ),
+                            )
+                            .await
+                            .is_err()
+                            {
+                                return None;
+                            }
+                        }
+                        Ok(Err(error)) => {
+                            let _ =
+                                send_socket_error(sender, "submission_failed", &error.to_string())
+                                    .await;
+                            return None;
+                        }
+                        Err(_) => {
+                            let _ = send_socket_error(
+                                sender,
+                                "submission_timeout",
+                                "Submission timed out; delivery status is unknown",
+                            )
+                            .await;
+                            return None;
+                        }
+                    }
+                } else if send_controller_required(sender).await.is_err() {
+                    return None;
+                }
+                Some(current)
+            }
             Ok(TerminalAttachClientMessage::Write { request_id, data }) => {
                 if request_id.len() > 128 || data.len() > 256 * 1024 {
                     if send_socket_error(sender, "invalid_input", "input exceeds size limit")

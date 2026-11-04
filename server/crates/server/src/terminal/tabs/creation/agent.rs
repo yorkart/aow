@@ -55,11 +55,14 @@ impl TerminalManager {
         launch = self
             .inner
             .terminald
-            .post_json(
-                "/v1/agents/prepare-terminal",
-                &serde_json::json!({"launch":launch,"pane_id":pane_id,"cwd":cwd,
-                    "resume_session_id":request.resume_session_id,"managed":agent_terminal.is_some()}),
-            )
+            .runtime()
+            .prepare_agent_terminal(&aow_runtime_client::agents::PrepareTerminal {
+                launch,
+                pane_id: pane_id.clone(),
+                cwd: cwd.clone().into(),
+                resume_session_id: request.resume_session_id,
+                managed: agent_terminal.is_some(),
+            })
             .await
             .map_err(map_prepare_error)?;
         let tab_id = aow_id::new_id();

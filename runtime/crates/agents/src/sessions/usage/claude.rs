@@ -1,3 +1,4 @@
+use crate::sessions::usage::TokenUsageExt;
 use std::collections::HashMap;
 
 use serde_json::Value;

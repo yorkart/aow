@@ -23,6 +23,11 @@ pub enum TerminalAttachClientMessage {
         cols: u16,
         rows: u16,
     },
+    /// Node-owned prompt delivery under this attachment's controller lease.
+    Submit {
+        request_id: String,
+        task: String,
+    },
     /// Acknowledged PTY input for programmatic clients.
     Write {
         request_id: String,

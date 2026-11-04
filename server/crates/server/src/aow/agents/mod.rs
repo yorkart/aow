@@ -5,6 +5,10 @@ mod registry;
 mod tests;
 
 pub(super) use order::ReorderAgentsRequest;
-#[cfg(test)]
-pub(crate) use registry::resolve_executable;
+
 pub(super) use registry::{AgentsQuery, RegisterAgentRequest};
+
+mod node;
+
+#[cfg(test)]
+pub(crate) use node::resolve_on_node;

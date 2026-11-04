@@ -36,6 +36,7 @@ async fn source_labels_identify_each_owning_tab_once_and_follow_renames() {
     }))
     .unwrap();
     let mut events = vec![TaskStopNotification {
+        agent_display_name: None,
         agent: "codex".into(),
         session_id: "shared".into(),
         title: "Node title".into(),
@@ -90,6 +91,7 @@ async fn event_endpoint_streams_only_new_callbacks() {
     let state = AppState::for_test(PathBuf::from("/tmp/frontend-unused"));
     let sender = state.terminals.inner.task_stops.clone();
     let notification = TaskStopNotification {
+        agent_display_name: None,
         agent: "codex".into(),
         session_id: "session".into(),
         title: "Title".into(),

@@ -37,3 +37,19 @@ test('the root orchestrates products without flattening their sources', () => {
   assert.equal(existsSync(resolve(root, 'crates')), false);
   assert.equal(existsSync(resolve(root, 'frontend')), false);
 });
+
+test('Server reaches native agents only through Runtime contracts and the SDK', () => {
+  for (const path of ['server/crates/agents', 'server/crates/db/src/codex_like', 'server/crates/db/src/hermes', 'server/crates/server/src/terminal/sessions/local.rs']) {
+    assert.equal(existsSync(resolve(root, path)), false, path);
+  }
+  for (const entry of readdirSync(resolve(root, 'server/crates'))) {
+    const manifest = readFileSync(resolve(root, 'server/crates', entry, 'Cargo.toml'), 'utf8');
+    assert.doesNotMatch(manifest, /aow-(?:runtime-)?agents\s*=/);
+  }
+  const controller = readFileSync(resolve(root, 'server/crates/server/src/terminal/agent_control/connection.rs'), 'utf8');
+  assert.doesNotMatch(controller, /200~|201~|input_ready/);
+  for (const path of ['agents.rs', 'sessions.rs']) {
+    const sdk = readFileSync(resolve(root, 'server/crates/runtime-client/src', path), 'utf8');
+    assert.doesNotMatch(sdk, /Command::new|rusqlite|AgentInteractive|AgentAutomation|AgentSessionProvider/);
+  }
+});

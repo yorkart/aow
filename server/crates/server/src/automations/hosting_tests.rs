@@ -259,7 +259,7 @@ async fn review_environment_case(home_only: bool) {
     let registry_path = manager
         .store
         .config_dir
-        .join(aow_agents::environment::AGENTS_FILE);
+        .join(aow_config::environment::AGENTS_FILE);
     std::fs::write(root.join("test-config.json"), json!({
         "finish_on_review":null, "registry_path":registry_path,
         "next_environment":{"HOME":directory.path().join("changed-home"),"CODEX_HOME":directory.path().join("changed-codex")},

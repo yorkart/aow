@@ -9,7 +9,6 @@ mod traecli;
 
 use crate::Agent;
 use anyhow::{Result, ensure};
-use serde::{Deserialize, Serialize};
 
 /// Native execution without a terminal, always starting a new persistent session.
 pub trait AgentAutomation {
@@ -36,33 +35,7 @@ pub enum PromptMode {
     Argument(&'static str),
 }
 
-/// Only adapters with automation support can be stored in an automation task.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum AutomationAgent {
-    Codex,
-    #[serde(rename = "traecli")]
-    TraeCli,
-    Claude,
-    Hermes,
-    Pi,
-}
-
-impl AutomationAgent {
-    pub fn agent(self) -> Agent {
-        match self {
-            Self::Codex => Agent::Codex,
-            Self::TraeCli => Agent::TraeCli,
-            Self::Claude => Agent::Claude,
-            Self::Hermes => Agent::Hermes,
-            Self::Pi => Agent::Pi,
-        }
-    }
-    pub fn id(self) -> &'static str {
-        self.agent().id()
-    }
-}
-
+pub use aow_runtime_contract::agents::AgentType as AutomationAgent;
 impl Agent {
     pub fn automation(self) -> Option<AutomationAgent> {
         match self {

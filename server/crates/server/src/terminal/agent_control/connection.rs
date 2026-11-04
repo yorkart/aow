@@ -9,6 +9,7 @@ pub(in crate::terminal) struct AgentConnection {
 }
 
 impl AgentConnection {
+    #[cfg(test)]
     pub(in crate::terminal) async fn claim(
         client: &TerminalClient,
         pane_id: &str,
@@ -82,6 +83,7 @@ impl AgentConnection {
             .map_err(|error| TerminalError::Daemon(error.to_string()))
     }
 
+    #[cfg(test)]
     pub(in crate::terminal) async fn write(&mut self, data: String) -> Result<(), TerminalError> {
         let request_id = aow_id::new_id();
         self.send(TerminalAttachClientMessage::Write {
@@ -98,26 +100,8 @@ impl AgentConnection {
     }
 
     pub(in crate::terminal) async fn submit(&mut self, task: &str) -> Result<(), TerminalError> {
-        self.write(format!("\x1b[200~{task}\x1b[201~")).await?;
-        // Give the TUI's paste/input event a separate iteration before Enter.
-        tokio::time::sleep(Duration::from_millis(150)).await;
-        self.write("\r".into()).await
-    }
-
-    pub(in crate::terminal) async fn finish(&mut self) -> Result<(), TerminalError> {
-        self.socket
-            .close(None)
+        TerminalClient::submit_agent_on_socket(&mut self.socket, task)
             .await
-            .map_err(|error| TerminalError::Daemon(error.to_string()))?;
-        // terminald releases the controller before completing the close handshake.
-        while let Some(message) = self.socket.next().await {
-            match message {
-                Ok(tungstenite::Message::Close(_)) => break,
-                other => {
-                    Self::check(Some(other))?;
-                }
-            }
-        }
-        Ok(())
+            .map_err(map_client_error)
     }
 }

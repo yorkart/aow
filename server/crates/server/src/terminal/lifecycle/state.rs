@@ -4,16 +4,6 @@ use super::super::*;
 
 impl TerminalManager {
     pub(crate) fn in_memory(terminald: TerminalClient) -> Self {
-        Self::in_memory_with_session_query_timeout(
-            terminald,
-            aow_agents::sessions::tracking::DEFAULT_QUERY_TIMEOUT,
-        )
-    }
-
-    pub(in crate::terminal) fn in_memory_with_session_query_timeout(
-        terminald: TerminalClient,
-        _session_query_timeout: Duration,
-    ) -> Self {
         #[cfg(test)]
         let clipboard = clipboard::ClipboardStorage::temporary();
         let manager = Self {
@@ -23,11 +13,10 @@ impl TerminalManager {
                 metadata_path: None,
                 state: Mutex::new(ManagerState::default()),
                 terminald,
-                #[cfg(test)]
-                session_query_timeout: _session_query_timeout,
                 daemon_instance_id: Mutex::new(None),
                 operation: tokio::sync::Mutex::new(()),
                 runtime_sync: tokio::sync::Mutex::new(()),
+                restored_initializations: Mutex::new(HashSet::new()),
                 agent_operations: Mutex::new(HashMap::new()),
                 hosting_gates: Mutex::new(HashMap::new()),
                 hosting_workers: Mutex::new(HashSet::new()),
@@ -72,16 +61,20 @@ impl TerminalManager {
             for pane in &mut tab.panes {
                 // Pane names are generated. Legacy custom labels are discarded.
                 pane.name = default_pane_name(&pane.cwd, &pane.shell);
-                if let Some(agent) = &mut pane.agent_terminal
-                    && agent.phase == aow_protocol::AgentTerminalPhase::Starting
-                {
-                    agent.phase = aow_protocol::AgentTerminalPhase::Failed;
-                    agent.error = Some("AoW restarted during agent initialization".into());
-                }
             }
             migrate_terminal_names(tab);
         }
         validate_persisted_tabs(&tabs)?;
+        let restored_initializations = tabs
+            .iter()
+            .flat_map(|tab| &tab.panes)
+            .filter(|pane| {
+                pane.agent_terminal
+                    .as_ref()
+                    .is_some_and(|state| state.phase == aow_protocol::AgentTerminalPhase::Starting)
+            })
+            .map(|pane| pane.id.clone())
+            .collect();
         let manager = Self {
             inner: Arc::new(ManagerInner {
                 #[cfg(test)]
@@ -92,11 +85,10 @@ impl TerminalManager {
                     ..ManagerState::default()
                 }),
                 terminald,
-                #[cfg(test)]
-                session_query_timeout: aow_agents::sessions::tracking::DEFAULT_QUERY_TIMEOUT,
                 daemon_instance_id: Mutex::new(None),
                 operation: tokio::sync::Mutex::new(()),
                 runtime_sync: tokio::sync::Mutex::new(()),
+                restored_initializations: Mutex::new(restored_initializations),
                 agent_operations: Mutex::new(HashMap::new()),
                 hosting_gates: Mutex::new(HashMap::new()),
                 hosting_workers: Mutex::new(HashSet::new()),

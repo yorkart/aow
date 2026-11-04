@@ -1,18 +1,15 @@
-use serde::Serialize;
+pub use aow_runtime_contract::agents::TokenUsage;
 use serde_json::Value;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
-pub struct TokenUsage {
-    pub input_tokens: u64,
-    pub output_tokens: u64,
-    pub cached_input_tokens: u64,
-    pub cache_write_input_tokens: u64,
-    pub reasoning_output_tokens: u64,
-    pub total_tokens: u64,
+pub(crate) trait TokenUsageExt {
+    fn accumulate(target: &mut Option<Self>, usage: Self)
+    where
+        Self: Sized;
+    fn since(self, previous: Self) -> Self;
 }
 
-impl TokenUsage {
-    pub(crate) fn accumulate(target: &mut Option<Self>, usage: Self) {
+impl TokenUsageExt for TokenUsage {
+    fn accumulate(target: &mut Option<Self>, usage: Self) {
         let total = target.get_or_insert_with(Self::default);
         total.input_tokens = total.input_tokens.saturating_add(usage.input_tokens);
         total.output_tokens = total.output_tokens.saturating_add(usage.output_tokens);
@@ -28,7 +25,7 @@ impl TokenUsage {
         total.total_tokens = total.input_tokens.saturating_add(total.output_tokens);
     }
 
-    pub(super) fn since(self, previous: Self) -> Self {
+    fn since(self, previous: Self) -> Self {
         let input_tokens = self.input_tokens.saturating_sub(previous.input_tokens);
         let output_tokens = self.output_tokens.saturating_sub(previous.output_tokens);
         Self {

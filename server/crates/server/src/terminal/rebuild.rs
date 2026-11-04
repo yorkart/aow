@@ -86,7 +86,7 @@ impl TerminalManager {
                 let agent_type = pane
                     .agent_id
                     .as_deref()
-                    .and_then(aow_agents::launch::AgentType::from_id)
+                    .and_then(aow_runtime_contract::agents::AgentType::from_id)
                     .ok_or_else(|| TerminalError::Invalid("Unknown agent type".into()))?;
                 let launch = AgentLaunch {
                     agent_type,
@@ -98,10 +98,14 @@ impl TerminalManager {
                 let launch: AgentLaunch = self
                     .inner
                     .terminald
-                    .post_json(
-                        "/v1/agents/prepare-terminal",
-                        &serde_json::json!({"launch":launch,"pane_id":pane.id,"cwd":spec.cwd}),
-                    )
+                    .runtime()
+                    .prepare_agent_terminal(&aow_runtime_client::agents::PrepareTerminal {
+                        launch,
+                        pane_id: pane.id.clone(),
+                        cwd: spec.cwd.clone().into(),
+                        resume_session_id: None,
+                        managed: pane.agent_terminal.is_some(),
+                    })
                     .await
                     .map_err(map_prepare_error)?;
                 spec.arguments = launch.args;

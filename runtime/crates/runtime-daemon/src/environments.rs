@@ -356,41 +356,8 @@ async fn probe(State(service): State<Environments>, Json(request): Json<Probe>) 
             );
             let mut env = service.0.manager.role_environment(&request.spec)?;
             if let Some(mut launch) = request.launch {
-                use aow_agents::automation::{AgentAutomation, PromptMode};
-                let adapter = launch
-                    .agent_type
-                    .agent()
-                    .automation()
-                    .context("Unsupported connection test")?;
-                adapter.validate_arguments(&launch.args)?;
-                launch.args.extend(
-                    adapter.automation_arguments(false, Some(&uuid::Uuid::new_v4().to_string()))?,
-                );
-                let input = match adapter.prompt_mode() {
-                    PromptMode::Stdin => b"ping".to_vec(),
-                    PromptMode::Argument(flag) => {
-                        launch.args.extend([flag.into(), "ping".into()]);
-                        Vec::new()
-                    }
-                };
-                // The caller supplies configured values, while HOME and node-owned paths remain authoritative.
                 launch.env.extend(env);
-                env = launch.env;
-                let result = aow_runtime_executor::run_once(aow_runtime_executor::ProcessSpec {
-                    executable: launch.executable.into(),
-                    arguments: launch.args,
-                    cwd: workspace.path().into(),
-                    environment: env,
-                    stdin: input,
-                    timeout_ms: request.timeout_ms,
-                    max_output_bytes: 262144,
-                })
-                .await?;
-                ensure!(result.success, "Runtime exited with {:?}", result.exit_code);
-                ensure!(
-                    !String::from_utf8_lossy(&result.stdout).trim().is_empty(),
-                    "Runtime did not return a connection-test response"
-                );
+                crate::agents::probe::cli(launch, workspace.path(), request.timeout_ms).await?;
             } else {
                 let agent = request.acp_agent_id.context("Missing probe runtime")?;
                 env.remove("HOME");

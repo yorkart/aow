@@ -1,6 +1,5 @@
 use super::super::rebuild::ensure_rebuildable;
 use super::*;
-use aow_agents::Agent;
 
 pub(super) async fn rebuild_terminal(
     State(state): State<AppState>,
@@ -25,15 +24,19 @@ pub(super) async fn rebuild_terminal(
                     ))
                 })?;
                 if pane.agent_terminal.is_some()
-                    && Agent::from_id(agent_id)
-                        .and_then(Agent::interactive)
-                        .is_none()
+                    && !state
+                        .aow
+                        .agent_node()
+                        .await
+                        .map_err(crate::aow::aow_http_error)?
+                        .agent_capabilities()
+                        .await
+                        .map_err(|e| HttpError::internal(e.to_string()))?
+                        .iter()
+                        .any(|cap| cap.id == agent_id && cap.interactive)
                 {
                     return Err(terminal_http_error(TerminalError::Invalid(
-                        aow_i18n::text(
-                            "server.this_agent_does_not_support_interactive_initialization",
-                        )
-                        .into(),
+                        "Agent does not support interactive initialization".into(),
                     )));
                 }
                 // Credentials and PATH come from the current workspace profile;
@@ -54,19 +57,14 @@ pub(super) async fn rebuild_terminal(
             .map_err(terminal_http_error)?;
         for pane in &tab.panes {
             if pane.agent_terminal.is_some() {
-                let adapter = pane
-                    .agent_id
-                    .as_deref()
-                    .and_then(Agent::from_id)
-                    .and_then(Agent::interactive)
-                    .expect("validated interactive adapter");
+                let agent = pane.agent_id.clone().expect("validated agent identity");
                 let manager = state.terminals.clone();
                 let pane_id = pane.id.clone();
                 aow_i18n::spawn(async move {
                     if let Err(error) = manager
                         .initialize_agent_lifecycle(
                             &pane_id,
-                            adapter,
+                            &agent,
                             None,
                             Duration::from_secs(120),
                             None,

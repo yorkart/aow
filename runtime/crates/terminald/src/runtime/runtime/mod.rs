@@ -36,6 +36,7 @@ pub(super) struct Runtime {
     pub(super) deleted_changed: watch::Sender<bool>,
     pub(super) reap_state: Mutex<bool>,
     pub(super) reaped: Condvar,
+    pub(super) agent_operations: Mutex<HashMap<String, super::agent_operations::Record>>,
 }
 
 #[derive(Clone)]

@@ -14,9 +14,9 @@ pub(crate) enum RoleSession {
     Cli {
         terminal: Box<aow_protocol::TerminalTab>,
         #[serde(skip)]
-        instruction: Option<String>,
+        task: Option<String>,
         #[serde(skip)]
-        prompt_in_arguments: bool,
+        managed: bool,
     },
 }
 
@@ -35,18 +35,14 @@ impl RoleSession {
             }
             Self::Cli {
                 terminal,
-                instruction,
-                prompt_in_arguments,
+                task,
+                managed,
             } => {
                 state.workspace_events.terminals_changed();
-                if *prompt_in_arguments {
+                if !*managed {
                     return Ok(());
                 }
-                let prompt = match (instruction, prompt) {
-                    (Some(instruction), Some(prompt)) => Some(format!("{instruction}\n\n{prompt}")),
-                    (Some(instruction), None) => Some(instruction.clone()),
-                    (None, prompt) => prompt,
-                };
+                let prompt = task.clone();
                 state.terminals.start_role_agent(
                     terminal,
                     prompt,
@@ -75,57 +71,21 @@ impl AowManager {
             return Err(AowError::Invalid("This role uses ACP".into()));
         };
         let mut launch = self.role_runtime_cli_launch(agent_id).await?;
-        if super::runtime::layout_for(launch.agent_type.id()) != role.config.home_layout {
+        if self.role_layout(launch.agent_type.id()).await? != role.config.home_layout {
             return Err(AowError::Invalid("The referenced runtime's agent type changed; select a runtime matching this role's identity".into()));
         }
         launch.display_name = role.config.name.clone();
         self.resolve_node_role(role).await?;
         launch.env.extend(self.role_environment(role)?);
         launch.env.extend(self.callback_environment()?);
-        if self.inner.runtime_client.is_none()
-            && let Some(state) = &self.inner.state_dir
-        {
-            launch
-                .env
-                .insert("AOW_STATE_DIR".into(), state.to_string_lossy().into_owned());
-        }
-        if let Some(runtime) = self.node() {
-            return runtime
-                .post_json(
-                    "/v1/agents/prepare-role",
-                    &serde_json::json!({"launch":launch,"instruction":role.config.instruction}),
-                )
-                .await
-                .map_err(|error| AowError::Invalid(error.to_string()));
-        }
-        #[cfg(test)]
-        {
-            if !role.config.instruction.trim().is_empty() {
-                let extra = match launch.agent_type {
-                    aow_agents::launch::AgentType::Codex => vec![
-                        "-c".into(),
-                        format!(
-                            "developer_instructions={}",
-                            serde_json::to_string(&role.config.instruction)?
-                        ),
-                    ],
-                    aow_agents::launch::AgentType::Claude | aow_agents::launch::AgentType::Pi => {
-                        vec![
-                            "--append-system-prompt".into(),
-                            role.config.instruction.clone(),
-                        ]
-                    }
-                    _ => vec![],
-                };
-                let index = launch
-                    .args
-                    .iter()
-                    .position(|arg| arg == "--")
-                    .unwrap_or(launch.args.len());
-                launch.args.splice(index..index, extra);
-            }
-        }
-        Ok(launch)
+        self.agent_node()
+            .await?
+            .prepare_agent_role(&aow_runtime_client::agents::PrepareRole {
+                launch,
+                instruction: role.config.instruction.clone(),
+            })
+            .await
+            .map_err(|e| AowError::Invalid(e.to_string()))
     }
 
     pub(crate) async fn check_role_runtime(
@@ -198,39 +158,32 @@ impl AowManager {
             }
             RoleRuntime::Cli { .. } => {
                 let launch = self.role_cli_launch(role).await.map_err(aow_http_error)?;
-                // Claude accepts the initial prompt as a positional argument and
-                // has no interactive startup adapter. Keep its terminal usable
-                // for native onboarding and account selection as usual.
-                let prompt_in_arguments =
-                    launch.agent_type == aow_agents::launch::AgentType::Claude;
-                let mut initial_arguments = Vec::new();
-                if prompt_in_arguments && let Some(prompt) = prompt {
-                    if !launch.args.iter().any(|arg| arg == "--") {
-                        initial_arguments.push("--".into());
-                    }
-                    initial_arguments.push(prompt.into());
-                }
-                let instruction = matches!(
-                    launch.agent_type,
-                    aow_agents::launch::AgentType::Hermes | aow_agents::launch::AgentType::TraeCli
-                )
-                .then(|| role.config.instruction.clone())
-                .filter(|text| !text.trim().is_empty());
+                let plan = self
+                    .agent_node()
+                    .await
+                    .map_err(aow_http_error)?
+                    .prepare_role_session(&aow_runtime_client::agents::PrepareRoleSession {
+                        launch,
+                        instruction: role.config.instruction.clone(),
+                        prompt: prompt.map(str::to_owned),
+                    })
+                    .await
+                    .map_err(|e| aow_http_error(AowError::Invalid(e.to_string())))?;
                 let terminal = state
                     .terminals
                     .create_role_agent(
                         &role.id,
                         cwd,
-                        launch,
-                        &initial_arguments,
-                        !prompt_in_arguments && (prompt.is_some() || instruction.is_some()),
+                        plan.launch,
+                        &plan.initial_arguments,
+                        plan.managed,
                     )
                     .await
                     .map_err(crate::terminal::terminal_http_error)?;
                 Ok(RoleSession::Cli {
                     terminal: Box::new(terminal),
-                    instruction,
-                    prompt_in_arguments,
+                    task: plan.task,
+                    managed: plan.managed,
                 })
             }
         }

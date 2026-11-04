@@ -1,1 +1,0 @@
-AND active = 1

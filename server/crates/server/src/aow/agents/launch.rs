@@ -112,43 +112,22 @@ impl AowManager {
         if let Some(role) = id.strip_prefix("role:") {
             return self.role_cli_launch(&self.agent_role(role)?).await;
         }
-        if let Some(runtime) = &self.inner.runtime_client {
-            let agent = self
-                .agents()
-                .await?
-                .into_iter()
-                .find(|agent| agent.id == id && agent.available)
-                .ok_or_else(|| AowError::AgentNotFound(id.to_owned()))?;
-            let mut launch: AgentLaunch = runtime
-                .post_json("/v1/agents/resolve", &serde_json::json!({"profile":agent}))
-                .await
-                .map_err(|error| AowError::Invalid(error.to_string()))?;
-            launch.env.extend(self.callback_environment()?);
-            return Ok(launch);
-        }
-        #[cfg(test)]
-        {
-            let path = self.execution_path().await?;
-            let agent = self
-                .agents_in_path(&path)?
-                .into_iter()
-                .find(|agent| agent.id == id && agent.available)
-                .ok_or_else(|| AowError::AgentNotFound(id.to_owned()))?;
-            let mut launch = agent.into_launch(&path)?;
-            if let Some(state_dir) = &self.inner.state_dir {
-                // Child tools must reach this AoW instance even when terminald or
-                // the agent profile has a different default state directory.
-                launch.env.insert(
-                    "AOW_STATE_DIR".into(),
-                    state_dir.to_string_lossy().into_owned(),
-                );
-            }
-            Ok(launch)
-        }
-        #[cfg(not(test))]
-        {
-            Err(AowError::Invalid("Runtime is unavailable".into()))
-        }
+        let runtime = self.agent_node().await?;
+        let agent = self
+            .agents()
+            .await?
+            .into_iter()
+            .find(|agent| agent.id == id && agent.available)
+            .ok_or_else(|| AowError::AgentNotFound(id.into()))?;
+        let request = aow_runtime_client::agents::ResolveAgent {
+            profile: serde_json::from_value(serde_json::to_value(agent)?)?,
+        };
+        let mut launch = runtime
+            .resolve_agent(&request)
+            .await
+            .map_err(|e| AowError::Invalid(e.to_string()))?;
+        launch.env.extend(self.callback_environment()?);
+        Ok(launch)
     }
 
     pub(crate) async fn resolve_terminal_rebuild_launch(
@@ -161,23 +140,17 @@ impl AowManager {
         } else {
             // Older metadata only saved the product type. Recover the profile
             // only when its executable and full launch arguments identify it.
-            let candidates: Vec<_> = self
-                .agents()
+            let candidates = self
+                .agent_node()
                 .await?
-                .into_iter()
-                .filter(|agent| {
-                    let Some(kind) = agent.agent_type else {
-                        return false;
-                    };
-                    if !agent.available
-                        || Some(kind.id()) != pane.agent_id.as_deref()
-                        || agent.executable.as_deref() != Some(pane.shell.as_str())
-                    {
-                        return false;
-                    }
-                    agent.matches_terminal_arguments(&pane.arguments)
+                .match_terminal_profiles(&aow_runtime_client::agents::MatchTerminalProfile {
+                    profiles: self.agents().await?,
+                    agent: pane.agent_id.clone().unwrap_or_default(),
+                    executable: pane.shell.clone(),
+                    arguments: pane.arguments.clone(),
                 })
-                .collect();
+                .await
+                .map_err(|e| AowError::Invalid(e.to_string()))?;
             if candidates.len() != 1 {
                 return Err(AowError::Invalid(
                     aow_i18n::text(
@@ -186,7 +159,7 @@ impl AowManager {
                     .into(),
                 ));
             }
-            candidates[0].id.clone()
+            candidates[0].clone()
         };
         let launch = self
             .resolve_agent_launch(&profile_id, workspace_root)

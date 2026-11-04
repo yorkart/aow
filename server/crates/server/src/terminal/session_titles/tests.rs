@@ -10,13 +10,10 @@ async fn metadata_preserves_osc_titles_and_filters_other_workspaces() {
     use axum::{Json, Router, routing::get};
 
     let directory = tempfile::tempdir().unwrap();
-    let agent = aow_agents::KNOWN_AGENTS
-        .iter()
-        .find(|agent| agent.session_titles().is_none())
-        .unwrap();
+    let agent = "claude";
     let detected = TerminalAgentList {
         agents: [
-            ("one".into(), Some(agent.id().into())),
+            ("one".into(), Some(agent.into())),
             ("unrelated".into(), None),
         ]
         .into(),

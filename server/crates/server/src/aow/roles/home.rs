@@ -11,7 +11,6 @@ fn invalid(message: impl Into<String>) -> AowError {
 pub(super) fn validate(config: &RoleConfig) -> Result<(), AowError> {
     crate::aow::validation::validate_display_name(&config.name)?;
     super::identity::validate(&config.identity)?;
-    super::identity::files(config.home_layout)?;
     if config.description.len() > 4096 || config.description.contains('\0') {
         return Err(invalid("Role description exceeds the supported size"));
     }

@@ -78,11 +78,67 @@ impl TerminalManager {
             }
 
             self.record_daemon_instance(after.instance_id)?;
-            return self.apply_runtime_statuses(&actual);
+            self.apply_runtime_statuses(&actual)?;
+            self.reconcile_agent_initializations(&desired).await?;
+            return Ok(());
         }
         Err(TerminalError::DaemonUnavailable(
             "terminald restarted repeatedly during reconciliation".to_owned(),
         ))
+    }
+
+    async fn reconcile_agent_initializations(
+        &self,
+        desired: &HashMap<String, TerminalPane>,
+    ) -> Result<(), TerminalError> {
+        use aow_protocol::{AgentTerminalPhase, AgentTerminalState};
+        for pane in desired.values().filter(|pane| {
+            pane.agent_terminal
+                .as_ref()
+                .is_some_and(|state| state.phase == AgentTerminalPhase::Starting)
+        }) {
+            let result = self
+                .inner
+                .terminald
+                .agent_operation_status(&pane.id, &format!("initialize-{}", pane.id))
+                .await;
+            let restored = self
+                .inner
+                .restored_initializations
+                .lock()
+                .map_err(|_| TerminalError::Poisoned)?
+                .contains(&pane.id);
+            let state = match result {
+                Ok(progress) if progress.finished => Some(AgentTerminalState {
+                    phase: if progress.error.is_some() {
+                        AgentTerminalPhase::Failed
+                    } else {
+                        AgentTerminalPhase::Ready
+                    },
+                    error: progress.error,
+                    task_submitted: progress.task_submitted,
+                }),
+                Err(aow_runtime_client::RuntimeError::HttpStatus { status, .. })
+                    if restored && status == StatusCode::NOT_FOUND =>
+                {
+                    Some(AgentTerminalState {
+                        phase: AgentTerminalPhase::Failed,
+                        error: Some("Runtime initialization receipt is unavailable".into()),
+                        task_submitted: false,
+                    })
+                }
+                _ => None,
+            };
+            if let Some(state) = state {
+                self.set_agent_state(&pane.id, state)?;
+                self.inner
+                    .restored_initializations
+                    .lock()
+                    .map_err(|_| TerminalError::Poisoned)?
+                    .remove(&pane.id);
+            }
+        }
+        Ok(())
     }
 
     fn record_daemon_instance(&self, instance_id: String) -> Result<(), TerminalError> {

@@ -1,4 +1,5 @@
 use super::*;
+use crate::sessions::usage::TokenUsageExt;
 use crate::sessions::{
     pi::Transcript,
     usage::{PiUsage, TokenUsage, TokenUsageParser},

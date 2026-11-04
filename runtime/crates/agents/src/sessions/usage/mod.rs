@@ -22,3 +22,5 @@ pub(crate) trait TokenUsageParser {
 
 #[cfg(test)]
 pub(crate) mod tests;
+
+pub(crate) use model::TokenUsageExt;

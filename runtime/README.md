@@ -9,6 +9,7 @@ runtime/
   Cargo.lock
   crates/acp/         Native ACP SDK, adapter resolution and session model
   crates/acpd/        Adapter process ownership and native ACP WebSocket service
+  crates/agents/      Native process matching, interaction and session adapters
   crates/terminald/   PTY lifecycle, replay and VT worker host
   crates/workspace/   Node files, Git, worktrees, search and clipboard storage
   crates/environment/  Role HOME, private identity copies and skills
@@ -100,3 +101,27 @@ journals/results. It reconciles unfinished runs after reconnect or Server restar
 The node only enforces the capacity reservation supplied with a single execution.
 Installation initialization writes Server configuration; normal startup creates
 the default workspace on the configured node. Only one endpoint is configured.
+
+Native Agent traits and their implementations live only in `crates/agents`.
+Common defines serializable agent IDs, launch requests, capabilities, usage and
+opaque session references; it has no adapter, execution or storage implementation.
+
+`GET /v1/agents/capabilities` describes node capabilities. Agent argument validation,
+profile matching, role layout detection, role prompt preparation and CLI probes use
+`/v1/agents/{validate-automation,match-terminal,role-layout,prepare-role-session,probe}`.
+`GET /v1/agents/configuration-environment` reads the node's native configuration roots.
+All agent launch preparation uses the node's own `AOW_STATE_DIR`.
+
+`POST /v1/terminal/runtimes/{id}/agent-operation` accepts an immutable request ID
+and an `initialize` or `submit` operation. Runtime owns readiness checks, controller
+leases and bracketed paste/Enter delivery. Client disconnects do not cancel admitted
+operations. Repeated requests with the same ID return the same receipt; conflicting
+requests are rejected. `GET .../agent-operation/{request_id}` recovers progress.
+Receipts live with the PTY and disappear when it is deleted or the node restarts;
+callers must never infer safe resubmission from a missing receipt. A terminal retains
+up to 65,536 compact receipts (request fingerprints, without prompt bodies) and rejects new operations once that bound is reached.
+
+Autopilot feedback uses the attach WebSocket `submit` command under its existing
+controller lease. Runtime performs paste and Enter and acknowledges completion.
+A forced takeover invalidates that lease before further input; Server retains
+only the review workflow and feedback policy.

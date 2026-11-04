@@ -1,6 +1,4 @@
 use std::collections::BTreeMap;
-#[cfg(test)]
-use std::{collections::HashSet, os::unix::fs::PermissionsExt};
 
 use super::super::*;
 use super::order::{group_agents, type_order};
@@ -21,25 +19,6 @@ pub(in crate::aow) struct RegisterAgentRequest {
 pub(in crate::aow) struct AgentsQuery {
     #[allow(dead_code)]
     pub(in crate::aow) refresh: Option<bool>,
-}
-
-#[cfg(test)]
-pub(crate) fn resolve_executable(command: &str, paths: &[PathBuf]) -> Option<PathBuf> {
-    let command_path = Path::new(command);
-    if command_path.components().count() > 1 {
-        return executable_file(command_path).then(|| command_path.to_path_buf());
-    }
-    paths
-        .iter()
-        .map(|directory| directory.join(command))
-        .find(|candidate| executable_file(candidate))
-}
-
-#[cfg(test)]
-fn executable_file(path: &Path) -> bool {
-    std::fs::metadata(path)
-        .map(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
-        .unwrap_or(false)
 }
 
 impl AowManager {
@@ -76,95 +55,22 @@ impl AowManager {
     }
 
     pub(in crate::aow) async fn agents(&self) -> Result<Vec<AgentRegistration>, AowError> {
-        if let Some(runtime) = &self.inner.runtime_client {
-            let (profiles, default_agent_id) = {
-                let state = self.lock()?;
-                (state.agents.clone(), state.default_agent_id.clone())
-            };
-            let mut agents: Vec<AgentRegistration> = runtime
-                .post_json(
-                    "/v1/agents/discover",
-                    &serde_json::json!({"profiles":profiles,"default_agent_id":default_agent_id}),
-                )
-                .await
-                .map_err(|error| AowError::Invalid(error.to_string()))?;
-            agents.sort_by_key(|agent| (type_order(agent.agent_type), agent.source != "detected"));
-            return Ok(agents);
-        }
-        #[cfg(test)]
-        {
-            let path = self.execution_path().await?;
-            self.agents_in_path(&path)
-        }
-        #[cfg(not(test))]
-        {
-            Err(AowError::Invalid("Runtime is unavailable".into()))
-        }
-    }
-
-    #[cfg(test)]
-    pub(in crate::aow) fn agents_in_path(
-        &self,
-        path: &[PathBuf],
-    ) -> Result<Vec<AgentRegistration>, AowError> {
-        let (custom, default_agent_id) = {
+        let runtime = self.agent_node().await?;
+        let (profiles, default_agent_id) = {
             let state = self.lock()?;
             (state.agents.clone(), state.default_agent_id.clone())
         };
-        let custom_ids = custom
-            .iter()
-            .map(|agent| agent.id.clone())
-            .collect::<HashSet<_>>();
-        let mut agents = Vec::new();
-        for agent in custom {
-            let agent_type = agent.agent_type.or_else(|| AgentType::from_id(&agent.id));
-            let executable = resolve_executable(&agent.command, path);
-            agents.push(AgentRegistration {
-                is_default: default_agent_id.as_deref() == Some(agent.id.as_str()),
-                id: agent.id,
-                agent_type,
-                display_name: agent.display_name,
-                source: "configured".into(),
-                available: agent_type.is_some() && executable.is_some(),
-                command: agent.command,
-                executable: executable.map(|path| path.to_string_lossy().into_owned()),
-                args: agent.args,
-                env: agent.env,
-            });
-        }
-        for agent_type in AgentType::ALL {
-            let known = agent_type.agent().definition();
-            if custom_ids.contains(known.id) {
-                continue;
-            }
-            let executable = known
-                .commands
-                .iter()
-                .find_map(|command| resolve_executable(command, path).map(|path| (*command, path)));
-            let is_default = default_agent_id.as_deref() == Some(known.id);
-            // Keep a missing default visible and unavailable until it is cleared or restored.
-            if executable.is_some() || is_default {
-                let (command, executable) = executable
-                    .map(|(command, path)| (command, Some(path)))
-                    .unwrap_or((known.commands[0], None));
-                agents.push(AgentRegistration {
-                    is_default,
-                    id: known.id.to_owned(),
-                    agent_type: Some(agent_type),
-                    display_name: known.display_name.to_owned(),
-                    source: "detected".into(),
-                    available: executable.is_some(),
-                    command: command.to_owned(),
-                    executable: executable.map(|path| path.to_string_lossy().into_owned()),
-                    args: known.args.iter().map(|value| (*value).to_owned()).collect(),
-                    env: BTreeMap::new(),
-                });
-            }
-        }
+        let request = aow_runtime_client::agents::DiscoverAgents {
+            profiles: serde_json::from_value(serde_json::to_value(profiles)?)?,
+            default_agent_id,
+        };
+        let mut agents = runtime
+            .discover_agents(&request)
+            .await
+            .map_err(|e| AowError::Invalid(e.to_string()))?;
         agents.sort_by_key(|agent| (type_order(agent.agent_type), agent.source != "detected"));
         Ok(agents)
     }
-
     pub(in crate::aow) async fn register_agent(
         &self,
         request: RegisterAgentRequest,

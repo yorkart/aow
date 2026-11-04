@@ -52,7 +52,7 @@ where
                                 BeginClaim::End => return false,
                             }
                         }
-                        Ok(TerminalAttachClientMessage::Resize { .. } | TerminalAttachClientMessage::Write { .. }) => {
+                        Ok(TerminalAttachClientMessage::Resize { .. } | TerminalAttachClientMessage::Write { .. } | TerminalAttachClientMessage::Submit{..}) => {
                             if send_controller_required(sender).await.is_err() { return false; }
                         }
                         Err(error) => {

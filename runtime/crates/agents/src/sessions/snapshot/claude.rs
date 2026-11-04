@@ -1,4 +1,5 @@
 use super::*;
+use crate::sessions::usage::TokenUsageExt;
 use crate::sessions::usage::{ClaudeUsage, TokenUsage, TokenUsageParser};
 
 const MAX_CLAUDE_ANCESTRY: usize = 100_000;

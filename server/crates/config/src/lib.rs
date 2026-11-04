@@ -5,3 +5,5 @@ mod storage;
 mod store;
 
 pub use store::ConfigStore;
+
+pub mod environment;

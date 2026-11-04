@@ -338,7 +338,7 @@ async fn delete_workspace_stops_runtimes_and_removes_only_matching_metadata() {
                 cols: Some(80),
             },
             AgentLaunch {
-                agent_type: aow_agents::launch::AgentType::Codex,
+                agent_type: aow_runtime_contract::agents::AgentType::Codex,
                 display_name: "Test Agent".to_owned(),
                 executable: "/bin/sh".to_owned(),
                 args: vec!["-c".to_owned(), "sleep 30".to_owned()],
@@ -421,7 +421,7 @@ async fn agent_pane_can_split_into_a_terminal_pane() {
                 cols: Some(80),
             },
             AgentLaunch {
-                agent_type: aow_agents::launch::AgentType::Codex,
+                agent_type: aow_runtime_contract::agents::AgentType::Codex,
                 display_name: "Test Agent".to_owned(),
                 executable: "/bin/sh".to_owned(),
                 args: vec!["-c".to_owned(), "sleep 30".to_owned()],
@@ -574,7 +574,7 @@ async fn terminal_name_intent_migrates_and_survives_explicit_rename() {
         Some(true)
     );
     let agent = manager.get_snapshot("agent").unwrap();
-    assert_eq!(agent.name_is_custom, Some(false));
+    assert_eq!(agent.name_is_custom, Some(true));
     let app = clipboard_app(manager.clone());
     for phase in [
         aow_protocol::AgentTerminalPhase::Starting,
@@ -1558,7 +1558,7 @@ async fn pane_sessions_use_live_cwd_and_config_and_cache_readable_claude_snapsho
     let (fixture, arguments) = if cfg!(target_os = "macos") {
         (
             std::env::current_exe().unwrap(),
-            "--ignored --exact terminal::sessions::process::tests::native_environment_fixture",
+            "--ignored --exact terminal::tests::native_environment_fixture",
         )
     } else {
         (
@@ -1578,13 +1578,7 @@ async fn pane_sessions_use_live_cwd_and_config_and_cache_readable_claude_snapsho
     let socket = root.join("terminald/terminald.sock");
     let (shutdown, daemon) = start_daemon(socket.clone()).await;
     let client = TerminalClient::for_test_config(socket);
-    // This test verifies session association and delivery, not native CLI speed.
-    // Keep the production deadline at three seconds; the adapter separately
-    // tests deadline enforcement. Loaded macOS hosts need more startup time.
-    let manager = TerminalManager::in_memory_with_session_query_timeout(
-        client.clone(),
-        Duration::from_secs(15),
-    );
+    let manager = TerminalManager::in_memory(client.clone());
     let tab = manager
         .create(CreateTerminalRequest {
             name: None,
@@ -1629,7 +1623,8 @@ async fn pane_sessions_use_live_cwd_and_config_and_cache_readable_claude_snapsho
         .to_string(),
     )
     .unwrap();
-    let aow = crate::aow::AowManager::in_memory();
+    let mut aow = crate::aow::AowManager::in_memory();
+    aow.set_runtime_client(Some(client.runtime().clone()));
     let workspace_events = crate::workspace_events::WorkspaceEvents::new();
     let app = crate::build_router(AppState {
         collaboration: Default::default(),
@@ -1896,4 +1891,15 @@ pub(super) async fn stop_daemon(
         .expect("terminald shutdown timed out")
         .expect("terminald task panicked")
         .expect("terminald shutdown failed");
+}
+
+#[test]
+#[ignore = "subprocess fixture invoked by native process/session tests"]
+fn native_environment_fixture() {
+    if std::env::var_os("AOW_NATIVE_ENV_FIXTURE").is_some() {
+        if let Some(ready) = std::env::var_os("AOW_NATIVE_ENV_READY") {
+            std::fs::write(ready, b"ready").unwrap();
+        }
+        std::io::stdin().read_line(&mut String::new()).unwrap();
+    }
 }

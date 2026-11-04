@@ -151,35 +151,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
-name = "aow-agents"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "aow-db",
- "aow-i18n",
- "aow-id",
- "aow-process",
- "chrono",
- "rusqlite",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.19",
- "tokio",
- "walkdir",
-]
-
-[[package]]
 name = "aow-automations"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "aow-agents",
  "aow-cli-access",
  "aow-config",
  "aow-i18n",
  "aow-id",
  "aow-runtime-client",
+ "aow-runtime-contract",
  "aow-workspaces",
  "chrono",
  "http",
@@ -239,6 +220,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]
@@ -370,6 +352,7 @@ dependencies = [
  "aow-protocol",
  "aow-runtime-contract",
  "async-trait",
+ "axum",
  "bytes",
  "futures",
  "futures-util",
@@ -402,7 +385,6 @@ name = "aow-server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "aow-agents",
  "aow-automations",
  "aow-cli-access",
  "aow-config",
@@ -417,6 +399,7 @@ dependencies = [
  "aow-process",
  "aow-protocol",
  "aow-runtime-client",
+ "aow-runtime-contract",
  "aow-server-client",
  "aow-workspaces",
  "async-trait",

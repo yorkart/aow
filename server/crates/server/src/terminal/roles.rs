@@ -43,21 +43,17 @@ impl TerminalManager {
         if pane.agent_terminal.is_none() && prompt.is_none() {
             return Ok(());
         }
-        let adapter = pane
+        let agent = pane
             .agent_id
-            .as_deref()
-            .and_then(aow_agents::Agent::from_id)
-            .and_then(|agent| agent.interactive())
-            .ok_or_else(|| {
-                crate::instances::invalid("Role runtime does not support interactive startup")
-            })?;
+            .clone()
+            .ok_or_else(|| crate::instances::invalid("Role runtime has no agent identity"))?;
         let manager = self.clone();
         let id = pane.id.clone();
         aow_i18n::spawn(async move {
             if let Err(error) = manager
                 .initialize_agent_lifecycle(
                     &id,
-                    adapter,
+                    &agent,
                     prompt.as_deref(),
                     Duration::from_secs(120),
                     None,

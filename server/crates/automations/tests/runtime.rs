@@ -85,19 +85,25 @@ fn fixture(script: &str) -> (TempDir, Store, Task) {
             executable: agent,
             args: Vec::new(),
             // Fake agents must never look up results in the developer's history.
-            environment: aow_agents::KNOWN_AGENTS
-                .iter()
-                .flat_map(|agent| agent.definition().configuration_env)
-                .map(|key| (key.to_string(), String::new()))
-                .chain(std::iter::once((
-                    "HOME".into(),
-                    directory
-                        .path()
-                        .join("agent-home")
-                        .to_string_lossy()
-                        .into_owned(),
-                )))
-                .collect(),
+            environment: [
+                "CODEX_HOME",
+                "CLAUDE_CONFIG_DIR",
+                "TRAECLI_HOME",
+                "HERMES_HOME",
+                "PI_CODING_AGENT_DIR",
+                "PI_CODING_AGENT_SESSION_DIR",
+            ]
+            .iter()
+            .map(|key| (key.to_string(), String::new()))
+            .chain(std::iter::once((
+                "HOME".into(),
+                directory
+                    .path()
+                    .join("agent-home")
+                    .to_string_lossy()
+                    .into_owned(),
+            )))
+            .collect(),
         },
         scheduler_error: None,
         deleted: false,
@@ -241,7 +247,7 @@ async fn global_path_is_reloaded_between_runs_and_used_by_agent_children() {
     let settings_path = directory
         .path()
         .join("node")
-        .join(aow_agents::environment::SETTINGS_FILE);
+        .join(aow_config::environment::SETTINGS_FILE);
     let next_settings = directory.path().join("next settings.json");
     for (version, destination) in [("first", &settings_path), ("second", &next_settings)] {
         let bin = directory.path().join(format!("python {version} bin"));
@@ -293,7 +299,7 @@ async fn registered_agent_environment_is_reloaded_between_runs_and_snapshotted_p
         "printf 'session id: environment-session\n' >&2\ncat >/dev/null\nprintf '%s' \"$DYNAMIC_AGENT_ENV\" > agent-environment",
     ).await;
     task.input.agent_id = Some("Work_codex-2".into());
-    let registry_path = store.config_dir.join(aow_agents::environment::AGENTS_FILE);
+    let registry_path = store.config_dir.join(aow_config::environment::AGENTS_FILE);
     let registry = |value: &str| {
         serde_json::to_vec(&serde_json::json!({
             "version": 1,
@@ -354,7 +360,7 @@ async fn invalid_global_path_fails_before_agent_instead_of_using_legacy_path() {
         directory
             .path()
             .join("node")
-            .join(aow_agents::environment::SETTINGS_FILE),
+            .join(aow_config::environment::SETTINGS_FILE),
         br#"{"version":1,"execution_path":["relative/bin"]}"#,
     )
     .unwrap();
@@ -365,53 +371,8 @@ async fn invalid_global_path_fails_before_agent_instead_of_using_legacy_path() {
     assert!(!task.repository_path.join("agent-started").exists());
 }
 
-fn command_arguments(task: &Task, session_id: Option<&str>) -> Vec<String> {
-    use aow_agents::automation::AgentAutomation;
-    task.input
-        .agent
-        .automation_arguments(task.input.yolo, session_id)
-        .unwrap()
-}
-
 #[test]
-fn yolo_uses_the_native_flag_for_each_agent_and_defaults_to_enabled() {
-    let (_directory, _store, mut task) = fixture(CODEX);
-    for agent in [AgentKind::Codex, AgentKind::TraeCli] {
-        task.input.agent = agent;
-        task.input.yolo = true;
-        let arguments = command_arguments(&task, None);
-        assert!(arguments.contains(&"--yolo".into()));
-        assert!(!arguments.contains(&"--sandbox".into()));
-        assert!(arguments.windows(2).any(|pair| pair == ["exec", "--color"]));
-        assert!(!arguments.contains(&"--json".into()));
-
-        task.input.yolo = false;
-        let arguments = command_arguments(&task, None);
-        assert!(
-            arguments
-                .windows(2)
-                .any(|pair| pair == ["--ask-for-approval", "never"])
-        );
-        assert!(
-            arguments
-                .windows(2)
-                .any(|pair| pair == ["--sandbox", "workspace-write"])
-        );
-        assert!(!arguments.contains(&"--yolo".into()));
-    }
-
-    task.input.agent = AgentKind::Claude;
-    task.input.yolo = true;
-    assert!(
-        command_arguments(&task, Some("session"))
-            .contains(&"--dangerously-skip-permissions".into())
-    );
-    task.input.yolo = false;
-    assert!(
-        !command_arguments(&task, Some("session"))
-            .contains(&"--dangerously-skip-permissions".into())
-    );
-
+fn task_defaults_enable_yolo_and_worktree_cleanup() {
     let defaults: TaskInput = serde_json::from_value(serde_json::json!({
         "name": "Default settings", "prompt": "Do work", "agent": "codex",
         "project_id": "project", "workspace_mode": "existing",

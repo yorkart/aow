@@ -241,6 +241,7 @@ pub(super) fn spawn_runtime_blocking(
             deleted_changed: watch::channel(false).0,
             reap_state: Mutex::new(false),
             reaped: Condvar::new(),
+            agent_operations: Mutex::new(HashMap::new()),
         }),
         reader: Some(reader),
         child: Some(child),

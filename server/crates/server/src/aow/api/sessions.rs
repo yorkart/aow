@@ -21,7 +21,8 @@ async fn list_agent_sessions(
         .registered_worktree_path(&query.worktree_path)
         .await
         .map_err(aow_response)?;
-    if let Some(runtime) = state.acp.runtime() {
+    {
+        let runtime = state.aow.agent_node().await.map_err(aow_response)?;
         let sessions = runtime
             .native_sessions(&worktree, query.agent.as_deref())
             .await
@@ -30,41 +31,7 @@ async fn list_agent_sessions(
             .aow
             .cache_native_sessions(&worktree, query.agent.as_deref(), &sessions, true)
             .map_err(aow_response)?;
-        return serde_json::to_value(sessions)
-            .map(Json)
-            .map_err(|error| HttpError::internal(error.to_string()).into_response());
-    }
-    #[cfg(not(test))]
-    {
-        Err(native_unavailable())
-    }
-    #[cfg(test)]
-    {
-        let roots = aow_agents::sessions::SessionRoots::from_environment(&crate::PROCESS_HOME);
-        let agent = query.agent;
-        if agent.as_deref().is_some_and(|agent| {
-            aow_agents::Agent::from_id(agent)
-                .and_then(aow_agents::Agent::sessions)
-                .is_none()
-        }) {
-            return Err(aow_response(AowError::Invalid(
-                aow_i18n::text("validation.unsupported_agent_session_source").to_owned(),
-            )));
-        }
-        let list_worktree = worktree.clone();
-        let list_agent = agent.clone();
-        let sessions = aow_i18n::spawn_blocking(move || {
-            aow_agents::sessions::list_sessions(&list_worktree, list_agent.as_deref(), roots)
-        })
-        .await
-        .map_err(|error| {
-            HttpError::internal(format!("agent session scan failed: {error}")).into_response()
-        })?;
-        state
-            .aow
-            .replace_session_locators_for_agent(&worktree, agent.as_deref(), &sessions)
-            .map_err(aow_response)?;
-        serde_json::to_value(sessions)
+        crate::aow::public_native_sessions(sessions)
             .map(Json)
             .map_err(|error| HttpError::internal(error.to_string()).into_response())
     }
@@ -92,7 +59,8 @@ async fn automation_run_session(
         ))
     })?;
     let agent = run.agent.id();
-    if let Some(runtime) = state.acp.runtime() {
+    {
+        let runtime = state.aow.agent_node().await.map_err(aow_response)?;
         let reference = aow_automations::runner::execution_reference(
             automations.store(),
             &query.task_id,
@@ -110,42 +78,7 @@ async fn automation_run_session(
             .aow
             .cache_native_sessions(&cwd, Some(agent), std::slice::from_ref(&session), false)
             .map_err(aow_response)?;
-        return serde_json::to_value(session)
-            .map(Json)
-            .map_err(|error| HttpError::internal(error.to_string()).into_response());
-    }
-
-    #[cfg(not(test))]
-    {
-        Err(native_unavailable())
-    }
-    #[cfg(test)]
-    {
-        let roots = aow_agents::sessions::SessionRoots::from_environment(&crate::PROCESS_HOME);
-        let found_agent = agent.to_owned();
-        let found_session_id = session_id.clone();
-        let session = aow_i18n::spawn_blocking(move || {
-            aow_agents::sessions::find_session(&found_agent, &found_session_id, roots)
-        })
-        .await
-        .map_err(|error| {
-            HttpError::internal(format!("automation agent session lookup failed: {error}"))
-                .into_response()
-        })?
-        .ok_or_else(|| {
-            HttpError::new(
-                StatusCode::NOT_FOUND,
-                "agent_session_not_found",
-                aow_i18n::text("http.session_unavailable"),
-                None,
-            )
-            .into_response()
-        })?;
-        state
-            .aow
-            .cache_session_locator(&session.cwd_path(), &session)
-            .map_err(aow_response)?;
-        serde_json::to_value(session)
+        crate::aow::public_native_sessions(session)
             .map(Json)
             .map_err(|error| HttpError::internal(error.to_string()).into_response())
     }
@@ -158,10 +91,13 @@ async fn agent_session_snapshot(
 ) -> Result<Json<serde_json::Value>, Response> {
     let locator =
         resolve_session_locator(&state, &session_id, &query.agent, &query.worktree_path).await?;
-    crate::session_shares::read_snapshot(state.acp.runtime(), locator)
-        .await
-        .map(Json)
-        .map_err(IntoResponse::into_response)
+    crate::session_shares::read_snapshot(
+        Some(&state.aow.agent_node().await.map_err(aow_response)?),
+        locator,
+    )
+    .await
+    .map(Json)
+    .map_err(IntoResponse::into_response)
 }
 
 pub(crate) async fn resolve_session_locator(
@@ -170,12 +106,7 @@ pub(crate) async fn resolve_session_locator(
     agent: &str,
     worktree_path: &str,
 ) -> Result<crate::aow::SessionReference, Response> {
-    if aow_agents::Agent::from_id(agent)
-        .and_then(aow_agents::Agent::sessions)
-        .is_none()
-        || session_id.is_empty()
-        || session_id.len() > 256
-    {
+    if agent.is_empty() || session_id.is_empty() || session_id.len() > 256 {
         return Err(aow_response(AowError::Invalid(
             aow_i18n::text("validation.invalid_agent_session_identity").to_owned(),
         )));
@@ -185,7 +116,8 @@ pub(crate) async fn resolve_session_locator(
     // enough to read its snapshot, including an automation-created worktree
     // that is intentionally not registered as a project worktree.
     let requested = Path::new(worktree_path);
-    if let Some(runtime) = state.acp.runtime() {
+    {
+        let runtime = state.aow.agent_node().await.map_err(aow_response)?;
         if let Ok(reference) = state.aow.session_locator(requested, agent, session_id) {
             return Ok(reference);
         }
@@ -199,38 +131,9 @@ pub(crate) async fn resolve_session_locator(
         let cwd = Path::new(value["path"].as_str().ok_or_else(|| {
             HttpError::internal("Invalid node directory response").into_response()
         })?);
-        return state
-            .aow
-            .session_locator(cwd, agent, session_id)
-            .map_err(aow_response);
-    }
-    #[cfg(not(test))]
-    {
-        Err(native_unavailable())
-    }
-    #[cfg(test)]
-    {
-        let worktree = match paths::canonical_directory(requested).await {
-            Ok(worktree) => worktree,
-            Err(AowError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {
-                super::super::sessions::removed_directory_path(requested).map_err(aow_response)?
-            }
-            Err(error) => return Err(aow_response(error)),
-        };
         state
             .aow
-            .session_locator(&worktree, agent, session_id)
+            .session_locator(cwd, agent, session_id)
             .map_err(aow_response)
     }
-}
-
-#[cfg(not(test))]
-fn native_unavailable() -> Response {
-    HttpError::new(
-        StatusCode::SERVICE_UNAVAILABLE,
-        "runtime_unavailable",
-        "Native session service is unavailable",
-        None,
-    )
-    .into_response()
 }

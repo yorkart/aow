@@ -1,4 +1,5 @@
 use super::*;
+use crate::sessions::usage::TokenUsageExt;
 use crate::sessions::usage::{CodexUsage, TokenUsage, TokenUsageParser};
 
 pub(super) fn parse_codex_like(path: &Path) -> Result<Vec<SnapshotTurn>, SnapshotError> {

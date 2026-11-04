@@ -11,11 +11,10 @@ pub(super) struct ManagerInner {
     pub(super) metadata_path: Option<PathBuf>,
     pub(super) state: Mutex<ManagerState>,
     pub(super) terminald: TerminalClient,
-    #[cfg(test)]
-    pub(super) session_query_timeout: Duration,
     pub(super) daemon_instance_id: Mutex<Option<String>>,
     pub(super) operation: tokio::sync::Mutex<()>,
     pub(super) runtime_sync: tokio::sync::Mutex<()>,
+    pub(super) restored_initializations: Mutex<HashSet<String>>,
     pub(super) agent_operations: Mutex<HashMap<String, std::sync::Weak<tokio::sync::RwLock<()>>>>,
     pub(super) hosting_gates: Mutex<HashMap<String, std::sync::Weak<tokio::sync::Mutex<()>>>>,
     pub(super) hosting_workers: Mutex<HashSet<String>>,

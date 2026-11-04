@@ -181,22 +181,22 @@ async fn agent_order_uses_types_then_detected_then_configured_items_and_survives
     std::fs::write(registry, serde_json::to_vec(&original).unwrap()).unwrap();
     let manager = AowManager::persistent(directory.path()).unwrap();
     for agent_type in AgentType::ALL {
-        let executable = directory
-            .path()
-            .join(agent_type.agent().definition().commands[0]);
+        let executable = directory.path().join(agent_type.id());
         std::fs::write(&executable, "#!/bin/sh\n").unwrap();
         std::fs::set_permissions(executable, std::fs::Permissions::from_mode(0o700)).unwrap();
     }
-    let ids = |manager: &AowManager| {
+    async fn ids(manager: &AowManager, directory: &Path) -> Vec<String> {
         manager
-            .agents_in_path(&[directory.path().to_path_buf()])
+            .agents_in_path(&[directory.to_path_buf()])
+            .await
             .unwrap()
             .into_iter()
-            .map(|agent| agent.id)
-            .collect::<Vec<_>>()
-    };
+            .map(|a| a.id)
+            .collect()
+    }
+
     assert_eq!(
-        ids(&manager),
+        ids(&manager, directory.path()).await,
         [
             "claude",
             "work-claude",
@@ -244,9 +244,12 @@ async fn agent_order_uses_types_then_detected_then_configured_items_and_survives
         }
     }
     let reloaded = AowManager::persistent(directory.path()).unwrap();
-    assert_eq!(ids(&manager), ids(&reloaded));
     assert_eq!(
-        ids(&reloaded),
+        ids(&manager, directory.path()).await,
+        ids(&reloaded, directory.path()).await
+    );
+    assert_eq!(
+        ids(&reloaded, directory.path()).await,
         [
             "claude",
             "work-claude",
@@ -272,7 +275,7 @@ async fn agent_order_uses_types_then_detected_then_configured_items_and_survives
         .await
         .unwrap();
     assert_eq!(
-        ids(&manager),
+        ids(&manager, directory.path()).await,
         [
             "claude",
             "work-claude",

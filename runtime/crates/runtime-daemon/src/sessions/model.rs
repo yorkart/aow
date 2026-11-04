@@ -2,16 +2,7 @@ use aow_agents::sessions::AgentSessionLocator;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-/// Stable node-owned identity. No transcript paths cross the transport boundary.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct SessionReference {
-    pub node_id: String,
-    pub handle: String,
-    pub agent: String,
-    pub session_id: String,
-    pub cwd: PathBuf,
-    pub title: String,
-}
+pub(crate) use aow_runtime_contract::agents::NativeSessionReference as SessionReference;
 #[derive(Serialize, Deserialize)]
 pub(super) struct SavedLocator {
     pub agent: String,

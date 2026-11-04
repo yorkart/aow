@@ -1,5 +1,5 @@
-use crate::aow::resolve_executable;
 use serde_json::Value;
+use std::os::unix::fs::PermissionsExt;
 use std::{
     path::{Path, PathBuf},
     process::Stdio,
@@ -174,4 +174,11 @@ pub(super) async fn run_command(
     })
     .await
     .map_err(|_| GitPlatformError::Timeout)?
+}
+
+fn resolve_executable(command: &str, paths: &[PathBuf]) -> Option<PathBuf> {
+    paths.iter().map(|p| p.join(command)).find(|p| {
+        p.metadata()
+            .is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+    })
 }

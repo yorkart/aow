@@ -121,23 +121,12 @@ pub(super) fn migrate_terminal_names(tab: &mut TerminalTab) {
     // Old metadata did not distinguish generated names from explicit renames.
     // Recognize only the old defaults; preserve all other labels. New renames
     // carry an explicit flag, even when the user chooses a default-looking name.
-    let is_agent_default = |name: &str, pane: &TerminalPane| {
-        pane.agent_id
-            .as_deref()
-            .and_then(aow_agents::Agent::from_id)
-            .is_some_and(|agent| agent.definition().display_name == name)
-    };
     if tab.name_is_custom.is_none() {
         let numbered = tab
             .name
             .strip_prefix("Terminal ")
             .is_some_and(|suffix| suffix.parse::<usize>().is_ok());
-        let generated = numbered
-            || tab
-                .panes
-                .iter()
-                .any(|pane| is_agent_default(&tab.name, pane));
-        tab.name_is_custom = Some(!generated);
+        tab.name_is_custom = Some(!numbered);
     }
 }
 

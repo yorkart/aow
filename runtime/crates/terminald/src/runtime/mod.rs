@@ -55,6 +55,7 @@ use crate::{
     vt_worker::{VtSession, VtSnapshot, VtWorker, VtWorkerClient},
 };
 
+mod agent_operations;
 mod agents;
 mod embedded;
 mod http;

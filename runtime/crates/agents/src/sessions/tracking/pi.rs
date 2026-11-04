@@ -1,4 +1,5 @@
 use super::*;
+use crate::sessions::usage::TokenUsageExt;
 use crate::sessions::{
     AgentSessionProvider, pi as store,
     usage::{PiUsage, TokenUsage, TokenUsageParser},

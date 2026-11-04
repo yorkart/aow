@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use aow_agents::launch::AgentTypeExt;
 use aow_agents::sessions::{find_session, tracking::AgentSessionTracker};
 use chrono::{DateTime, Utc};
 

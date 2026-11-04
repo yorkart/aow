@@ -36,15 +36,6 @@ pub(crate) enum AowError {
     Json(#[from] serde_json::Error),
 }
 
-impl From<aow_agents::launch::LaunchError> for AowError {
-    fn from(error: aow_agents::launch::LaunchError) -> Self {
-        match error {
-            aow_agents::launch::LaunchError::Unavailable(id) => Self::AgentNotFound(id),
-            aow_agents::launch::LaunchError::Invalid(message) => Self::Invalid(message),
-        }
-    }
-}
-
 pub(crate) fn aow_http_error(error: AowError) -> HttpError {
     match error {
         AowError::AgentIdConflict(_) => HttpError::new(

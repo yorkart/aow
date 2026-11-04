@@ -332,6 +332,7 @@ fn new_registration_for_same_title_refreshes_all_owners() {
 
 fn event() -> super::Completion {
     super::Completion {
+        agent_display_name: "Codex".into(),
         agent: "codex".into(),
         session_id: "native".into(),
         title: "Node title".into(),

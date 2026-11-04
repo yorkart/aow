@@ -72,6 +72,9 @@ impl AcpClient {
         });
         Ok(client)
     }
+    pub async fn test_runtime(&self) -> Result<RuntimeClient> {
+        self.remote().await
+    }
     pub fn test_runtime_owner(&self) -> Arc<dyn Send + Sync> {
         let fixture = self.0.fixture.as_ref().expect("external fixture");
         Arc::new((fixture.node.clone(), fixture._temporary.clone()))

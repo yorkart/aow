@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+tokio.workspace = true
 aow-i18n = { path = "../i18n" }
 aow-id = { path = "../../../common/crates/id" }
 anyhow.workspace = true

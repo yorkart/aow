@@ -22,6 +22,14 @@ pub(super) fn routes_with_state(state: DaemonState) -> Router {
         )
         .route("/runtimes/{id}/attach", get(attach_runtime))
         .route("/runtimes/{id}/screen", get(screen))
+        .route(
+            "/runtimes/{id}/agent-operation",
+            axum::routing::post(super::agent_operations::admit),
+        )
+        .route(
+            "/runtimes/{id}/agent-operation/{request_id}",
+            get(super::agent_operations::status),
+        )
         .with_state(state)
 }
 

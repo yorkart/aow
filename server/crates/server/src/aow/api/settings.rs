@@ -27,23 +27,15 @@ async fn get_settings(State(state): State<AppState>) -> Result<Json<AowSettings>
 async fn get_discovered_path(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<PathBuf>>, Response> {
-    if let Some(runtime) = state.aow.node() {
-        return runtime
-            .get_json("/v1/environment/discovered-path")
-            .await
-            .map(Json)
-            .map_err(|error| aow_response(AowError::Invalid(error.to_string())));
-    }
-    #[cfg(test)]
-    {
-        Ok(Json(discovery_path().await))
-    }
-    #[cfg(not(test))]
-    {
-        Err(aow_response(AowError::Invalid(
-            "Runtime is unavailable".into(),
-        )))
-    }
+    state
+        .aow
+        .agent_node()
+        .await
+        .map_err(aow_response)?
+        .discovered_execution_path()
+        .await
+        .map(Json)
+        .map_err(|error| aow_response(AowError::Invalid(error.to_string())))
 }
 
 async fn get_pinned_worktrees(

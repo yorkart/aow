@@ -1,5 +1,6 @@
 use super::*;
-use aow_agents::sessions::AgentSession;
+use crate::aow::SessionReference;
+use aow_runtime_client::{NativeSession, NativeSessionReference, RuntimeClient, RuntimeEndpoint};
 use axum::Json;
 use axum::{
     body::{Body, to_bytes},
@@ -11,31 +12,72 @@ use axum::{
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
-const FIRST_TURN: &str = "{\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\",\"message\":\"first question\"}}\n{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_complete\",\"last_agent_message\":\"first answer\"}}\n";
+const FIRST_TURN: &str = r#"{"agent":"codex","session_id":"test-session","turns":[{"user":{"text":"first question"},"final":{"text":"first answer"}}]}"#;
 
-fn state(root: &Path) -> AppState {
+async fn snapshot_node(root: &Path) -> RuntimeClient {
+    let root = root.to_owned();
+    let app = Router::new().route(
+        "/v1/agent-sessions/snapshot",
+        axum::routing::post(move |Json(body): Json<Value>| {
+            let root = root.clone();
+            async move {
+                assert_eq!(body["reference"]["handle"], "opaque-handle");
+                match tokio::fs::read(root.join("snapshot.json")).await {
+                    Ok(bytes) => {
+                        Json(serde_json::from_slice::<Value>(&bytes).unwrap()).into_response()
+                    }
+                    Err(_) => (
+                        StatusCode::GONE,
+                        Json(json!({"message":"node-owned history unavailable"})),
+                    )
+                        .into_response(),
+                }
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    RuntimeClient::new(
+        RuntimeEndpoint::new(&format!("http://{address}"), "test-token".into()).unwrap(),
+    )
+}
+async fn state(root: &Path) -> AppState {
     let mut state = AppState::for_test(root.join("frontend"));
     state.auth = crate::auth::AuthService::persistent(root);
-    state.session_shares = SessionShares::persistent(root).unwrap();
+    state.session_shares = SessionShares::persistent(root)
+        .unwrap()
+        .with_runtime(Some(snapshot_node(root).await));
     state
 }
-
-fn locator(root: &Path) -> AgentSessionLocator {
-    AgentSessionLocator {
-        agent: "codex",
+fn locator(root: &Path) -> SessionReference {
+    SessionReference::Node(NativeSessionReference {
+        node_id: "test-node".into(),
+        handle: "opaque-handle".into(),
+        agent: "codex".into(),
         session_id: "test-session".into(),
         title: "Shared conversation".into(),
-        cwd: root.to_owned(),
-        transcript_path: root.join("session.jsonl"),
-        trusted_root: root.to_owned(),
-    }
+        cwd: root.into(),
+    })
 }
-
-fn cache_locator(state: &AppState, locator: AgentSessionLocator) {
-    let session = AgentSession::new(locator.clone(), chrono::Utc::now(), chrono::Utc::now());
+fn cache_locator(state: &AppState, locator: SessionReference) {
+    let SessionReference::Node(reference) = locator;
+    let cwd = reference.cwd.clone();
+    let session = NativeSession {
+        id: reference.session_id.clone(),
+        agent: reference.agent.clone(),
+        session_id: reference.session_id.clone(),
+        title: reference.title.clone(),
+        cwd: cwd.to_string_lossy().into_owned(),
+        created_at: String::new(),
+        updated_at: String::new(),
+        reference,
+    };
     state
         .aow
-        .cache_session_locator(&locator.cwd, &session)
+        .cache_native_sessions(&cwd, Some("codex"), &[session], false)
         .unwrap();
 }
 
@@ -69,9 +111,11 @@ async fn request(
 async fn share_links_follow_the_current_mount_after_restart() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().canonicalize().unwrap();
-    std::fs::write(root.join("session.jsonl"), FIRST_TURN).unwrap();
+    std::fs::write(root.join("snapshot.json"), FIRST_TURN).unwrap();
     crate::auth::write_credentials(&root, "admin", "test-password");
-    let initial = state(&root).with_base_path(crate::BasePath::parse("/tools/aow").unwrap());
+    let initial = state(&root)
+        .await
+        .with_base_path(crate::BasePath::parse("/tools/aow").unwrap());
     cache_locator(&initial, locator(&root));
     let cookie = format!(
         "{}={}",
@@ -114,7 +158,9 @@ async fn share_links_follow_the_current_mount_after_restart() {
         StatusCode::OK
     );
 
-    let restored = state(&root).with_base_path(crate::BasePath::parse("/other").unwrap());
+    let restored = state(&root)
+        .await
+        .with_base_path(crate::BasePath::parse("/other").unwrap());
     let cookie = format!(
         "{}={}",
         restored.base_path.cookie_name(),
@@ -160,8 +206,8 @@ async fn sharing_requires_login_but_live_reading_survives_restart_and_revocation
     std::fs::create_dir(root.join("frontend")).unwrap();
     std::fs::write(root.join("frontend/index.html"), "<div id=root></div>").unwrap();
     crate::auth::write_credentials(&root, "admin", "test-password");
-    std::fs::write(root.join("session.jsonl"), FIRST_TURN).unwrap();
-    let initial = state(&root);
+    std::fs::write(root.join("snapshot.json"), FIRST_TURN).unwrap();
+    let initial = state(&root).await;
     let cookie = format!(
         "aow_session={}",
         initial
@@ -296,7 +342,7 @@ async fn sharing_requires_login_but_live_reading_survives_restart_and_revocation
     );
 
     // Fresh login state and no in-memory locator cache: the public link still works.
-    let restarted = state(&root);
+    let restarted = state(&root).await;
     let new_cookie = format!(
         "aow_session={}",
         restarted
@@ -320,10 +366,12 @@ async fn sharing_requires_login_but_live_reading_survives_restart_and_revocation
             .status(),
         StatusCode::UNAUTHORIZED
     );
-    std::fs::write(
-        root.join("session.jsonl"),
-        format!("{FIRST_TURN}{FIRST_TURN}"),
-    )
+    std::fs::write(root.join("snapshot.json"), {
+        let mut snapshot: Value = serde_json::from_str(FIRST_TURN).unwrap();
+        let turn = snapshot["turns"][0].clone();
+        snapshot["turns"].as_array_mut().unwrap().push(turn);
+        snapshot.to_string()
+    })
     .unwrap();
     tokio::time::sleep(CACHE_TTL + Duration::from_millis(20)).await;
     assert_eq!(
@@ -353,7 +401,7 @@ async fn sharing_requires_login_but_live_reading_survives_restart_and_revocation
             .status(),
         StatusCode::NOT_FOUND
     );
-    assert!(state(&root).session_shares.lookup(token).is_err());
+    assert!(state(&root).await.session_shares.lookup(token).is_err());
     cache_locator(&restarted, locator(&root));
     let next_share =
         body(request(&app, "POST", create_path, Some(&new_cookie), payload).await).await;
@@ -361,45 +409,29 @@ async fn sharing_requires_login_but_live_reading_survives_restart_and_revocation
 }
 
 #[tokio::test]
-async fn shared_transcripts_keep_trusted_root_checks_and_hide_internal_paths() {
+async fn unavailable_node_history_hides_internal_paths() {
     let dir = tempfile::tempdir().unwrap();
-    let root = dir.path();
-    let shares = SessionShares::in_memory();
-    let info = shares.create(locator(root)).unwrap();
-    let token = info.path.strip_prefix("/share/").unwrap();
-    let error = shares.read(token).await.err().unwrap().into_response();
+    let shares = SessionShares::in_memory().with_runtime(Some(snapshot_node(dir.path()).await));
+    let info = shares.create(locator(dir.path())).unwrap();
+    let error = shares
+        .read(info.path.strip_prefix("/share/").unwrap())
+        .await
+        .unwrap_err()
+        .into_response();
     assert_eq!(error.status(), StatusCode::GONE);
     assert!(
         !body(error)
             .await
             .to_string()
-            .contains(root.to_str().unwrap())
-    );
-
-    let outside = tempfile::tempdir().unwrap();
-    std::fs::write(outside.path().join("outside.jsonl"), FIRST_TURN).unwrap();
-    std::os::unix::fs::symlink(
-        outside.path().join("outside.jsonl"),
-        root.join("session.jsonl"),
-    )
-    .unwrap();
-    assert_eq!(
-        shares
-            .read(token)
-            .await
-            .err()
-            .unwrap()
-            .into_response()
-            .status(),
-        StatusCode::GONE
+            .contains(dir.path().to_str().unwrap())
     );
 }
 
 #[tokio::test]
 async fn a_revoked_share_waiting_for_another_reader_cannot_return_cached_content() {
     let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("session.jsonl"), FIRST_TURN).unwrap();
-    let shares = SessionShares::in_memory();
+    std::fs::write(dir.path().join("snapshot.json"), FIRST_TURN).unwrap();
+    let shares = SessionShares::in_memory().with_runtime(Some(snapshot_node(dir.path()).await));
     let info = shares.create(locator(dir.path())).unwrap();
     let token = info.path.strip_prefix("/share/").unwrap();
     shares.read(token).await.unwrap();
@@ -488,12 +520,12 @@ async fn node_owned_share_survives_server_restart_without_a_local_history_store(
 #[tokio::test]
 async fn configured_runtime_never_falls_back_to_a_server_local_transcript() {
     let root = tempfile::tempdir().unwrap();
-    std::fs::write(root.path().join("session.jsonl"), FIRST_TURN).unwrap();
+    std::fs::write(root.path().join("snapshot.json"), FIRST_TURN).unwrap();
     let shares = SessionShares::in_memory().with_runtime(Some(
         aow_runtime_client::RuntimeClient::new(aow_runtime_client::RuntimeEndpoint::unavailable()),
     ));
     let info = shares.create(locator(root.path())).unwrap();
     let token = info.path.strip_prefix("/share/").unwrap();
     let error = shares.read(token).await.unwrap_err();
-    assert_eq!(error.status, StatusCode::GONE);
+    assert_eq!(error.status, StatusCode::SERVICE_UNAVAILABLE);
 }

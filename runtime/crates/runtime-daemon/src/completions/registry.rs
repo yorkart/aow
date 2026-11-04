@@ -208,6 +208,10 @@ impl Registry {
                     instance_ids.sort();
                     for event in events {
                         notifications.push(Completion {
+                            agent_display_name: aow_agents::Agent::from_id(key.agent)
+                                .map(|a| a.definition().display_name)
+                                .unwrap_or("Agent")
+                                .into(),
                             agent: key.agent.to_owned(),
                             session_id: key.id.clone(),
                             title: reader.locator.title.clone(),

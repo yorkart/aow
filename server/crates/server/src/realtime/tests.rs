@@ -61,6 +61,7 @@ async fn multiplexes_snapshots_changes_and_live_notifications_and_resyncs_on_rec
     );
     stops
         .send(crate::terminal::notifications::TaskStopNotification {
+            agent_display_name: None,
             agent: "codex".into(),
             session_id: "session".into(),
             title: "Done".into(),

@@ -86,7 +86,10 @@ impl aow_runtime_client::testing::AcpFixture for Configuration {
         Ok(self.0.acp_settings()?.content)
     }
     async fn execution_path(&self) -> anyhow::Result<Option<std::ffi::OsString>> {
-        Ok(Some(std::env::join_paths(self.0.execution_path().await?)?))
+        Ok(Some(match self.0.settings()?.execution_path {
+            Some(paths) => std::env::join_paths(paths)?,
+            None => std::env::var_os("PATH").unwrap_or_default(),
+        }))
     }
 }
 #[cfg(test)]
@@ -97,7 +100,8 @@ impl super::super::AowManager {
             self.inner
                 .state_dir
                 .as_ref()
-                .map(|root| root.join("test-runtime")),
+                .map(|root| root.join("test-runtime"))
+                .or_else(|| Some(self.inner.test_node_root.path().into())),
         )?;
         *self.inner.test_runtime.lock().unwrap() = Some(client.test_runtime_owner());
         Ok(client)

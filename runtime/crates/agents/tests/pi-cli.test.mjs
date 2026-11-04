@@ -42,7 +42,7 @@ test('Pi bridge binds exact native sessions, follows switches, and records only 
 
 test('installed Pi persists, resumes and propagates failures with an offline provider', { skip: !process.env.AOW_PI_TEST_CLI }, () => {
   const directory = mkdtempSync(join(tmpdir(), 'aow-pi-native-'));
-  const provider = fileURLToPath(new URL('./fixtures/pi-provider.mjs', import.meta.url));
+  const provider = fileURLToPath(new URL('../../../../fixtures/agents/pi-provider.mjs', import.meta.url));
   const extension = fileURLToPath(new URL('../src/pi_bridge/extension.mjs', import.meta.url));
   const env = { ...process.env, PI_CODING_AGENT_DIR: directory, PI_CODING_AGENT_SESSION_DIR: join(directory, 'sessions'),
     PI_OFFLINE: '1', PI_SKIP_VERSION_CHECK: '1', AOW_PI_BINDING: join(directory, 'binding.json') };

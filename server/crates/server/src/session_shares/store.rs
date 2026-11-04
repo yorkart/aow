@@ -5,11 +5,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-#[cfg(test)]
-use aow_agents::sessions::{
-    AgentSessionLocator,
-    snapshot::{self},
-};
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -48,10 +43,6 @@ struct StoredShare {
     session_id: String,
     title: String,
     cwd: PathBuf,
-    #[cfg(test)]
-    transcript_path: PathBuf,
-    #[cfg(test)]
-    trusted_root: PathBuf,
     created_at: String,
     #[serde(default)]
     reference: Option<aow_runtime_client::NativeSessionReference>,
@@ -76,24 +67,7 @@ impl StoredShare {
         if let Some(reference) = &self.reference {
             return Ok(SessionReference::Node(reference.clone()));
         }
-        #[cfg(not(test))]
-        {
-            Err(unavailable())
-        }
-        #[cfg(test)]
-        {
-            let agent = aow_agents::Agent::from_id(&self.agent)
-                .filter(|agent| agent.sessions().is_some())
-                .ok_or_else(unavailable)?;
-            Ok(SessionReference::Local(AgentSessionLocator {
-                agent: agent.id(),
-                session_id: self.session_id.clone(),
-                title: self.title.clone(),
-                cwd: self.cwd.clone(),
-                transcript_path: self.transcript_path.clone(),
-                trusted_root: self.trusted_root.clone(),
-            }))
-        }
+        Err(unavailable())
     }
 }
 
@@ -197,21 +171,9 @@ impl SessionShares {
             session_id: locator.session_id().to_owned(),
             title: locator.title().to_owned(),
             cwd: locator.cwd().to_path_buf(),
-            #[cfg(test)]
-            transcript_path: match &locator {
-                SessionReference::Local(value) => value.transcript_path.clone(),
-                _ => PathBuf::new(),
-            },
-            #[cfg(test)]
-            trusted_root: match &locator {
-                SessionReference::Local(value) => value.trusted_root.clone(),
-                _ => PathBuf::new(),
-            },
-            reference: match &locator {
-                SessionReference::Node(value) => Some(value.clone()),
-                #[cfg(test)]
-                SessionReference::Local(_) => None,
-            },
+            reference: Some(match &locator {
+                SessionReference::Node(reference) => reference.clone(),
+            }),
             created_at: chrono::Utc::now().to_rfc3339(),
         };
         let info = record.info();
@@ -305,30 +267,6 @@ pub(crate) async fn read_snapshot(
                 HttpError::new(StatusCode::SERVICE_UNAVAILABLE,"runtime_unavailable","Native session service is unavailable",None)
             }
         }),
-        #[cfg(test)]
-        (None, SessionReference::Local(locator)) => read_local_snapshot(locator).await,
         _ => Err(unavailable()),
     }
-}
-#[cfg(test)]
-async fn read_local_snapshot(locator: AgentSessionLocator) -> Result<serde_json::Value, HttpError> {
-    let snapshot = aow_i18n::spawn_blocking(move || snapshot::read(locator))
-        .await
-        .map_err(|_| {
-            HttpError::internal(aow_i18n::text(
-                "server.failed_to_read_session_try_again_later",
-            ))
-        })?
-        .map_err(|error| match error {
-            snapshot::SnapshotError::NotFound | snapshot::SnapshotError::Invalid(_) => {
-                unavailable()
-            }
-            snapshot::SnapshotError::Io(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                unavailable()
-            }
-            _ => HttpError::internal(aow_i18n::text(
-                "server.failed_to_read_session_try_again_later",
-            )),
-        })?;
-    serde_json::to_value(snapshot).map_err(|error| HttpError::internal(error.to_string()))
 }

@@ -31,3 +31,5 @@ pub mod testing;
 pub use management::{AcpInstance, AcpInstanceSpec, AcpInstanceStatus};
 
 pub use sessions::{NativePaneSessions, NativeSession, NativeSessionReference};
+
+pub mod agents;

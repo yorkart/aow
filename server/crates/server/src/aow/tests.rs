@@ -1,5 +1,4 @@
 use super::*;
-use aow_agents::environment;
 use std::{
     collections::{BTreeMap, HashSet},
     os::unix::fs::PermissionsExt,
@@ -442,10 +441,7 @@ async fn execution_path_defaults_persist_and_settings_updates_preserve_other_fie
     .unwrap();
     let initial = manager.execution_path().await.unwrap();
     assert!(!initial.is_empty());
-    assert_eq!(
-        environment::load_path(directory.path()).await.unwrap(),
-        initial
-    );
+    assert_eq!(manager.execution_path().await.unwrap(), initial);
     let bin = directory.path().join("custom bin");
     std::fs::create_dir(&bin).unwrap();
     std::fs::write(bin.join("codex"), "#!/bin/sh\nexit 0\n").unwrap();
@@ -496,10 +492,7 @@ async fn execution_path_defaults_persist_and_settings_updates_preserve_other_fie
         .unwrap();
     let reloaded = AowManager::persistent(directory.path()).unwrap();
     assert_eq!(reloaded.execution_path().await.unwrap(), paths);
-    assert_eq!(
-        environment::load_path(directory.path()).await.unwrap(),
-        paths
-    );
+    assert_eq!(manager.execution_path().await.unwrap(), paths);
     assert_eq!(reloaded.pinned_worktrees().unwrap().paths, ["/repo/main"]);
     for invalid in [
         vec![],
@@ -516,10 +509,7 @@ async fn execution_path_defaults_persist_and_settings_updates_preserve_other_fie
                 .await
                 .is_err()
         );
-        assert_eq!(
-            environment::load_path(directory.path()).await.unwrap(),
-            paths
-        );
+        assert_eq!(manager.execution_path().await.unwrap(), paths);
     }
 }
 
@@ -1096,20 +1086,38 @@ async fn allows_notes_directories_nested_in_another_repository() {
     assert!(!nested.join(".git").exists());
 }
 
-#[test]
-fn executable_resolution_does_not_invoke_the_command() {
+#[tokio::test]
+async fn executable_resolution_does_not_invoke_the_command() {
     let directory = tempfile::tempdir().unwrap();
     let executable = directory.path().join("agent");
     std::fs::write(&executable, b"#!/bin/sh\nexit 99\n").unwrap();
     std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
-    assert_eq!(
-        resolve_executable("agent", &[directory.path().to_path_buf()]),
-        Some(executable)
-    );
+    let manager = AowManager::in_memory();
+    manager
+        .agents_in_path(&[directory.path().into()])
+        .await
+        .unwrap();
+    let launch = manager
+        .agent_node()
+        .await
+        .unwrap()
+        .resolve_agent(&aow_runtime_client::agents::ResolveAgent {
+            profile: aow_runtime_client::agents::AgentProfile {
+                id: "test".into(),
+                agent_type: Some(AgentType::Codex),
+                display_name: "Test".into(),
+                command: "agent".into(),
+                args: vec![],
+                env: Default::default(),
+            },
+        })
+        .await
+        .unwrap();
+    assert_eq!(Path::new(&launch.executable), executable);
 }
 
-#[test]
-fn agent_discovery_only_registers_the_traecli_command() {
+#[tokio::test]
+async fn agent_discovery_only_registers_the_traecli_command() {
     let directory = tempfile::tempdir().unwrap();
     let paths = [directory.path().to_path_buf()];
     let manager = AowManager::in_memory();
@@ -1117,7 +1125,7 @@ fn agent_discovery_only_registers_the_traecli_command() {
         let executable = directory.path().join(command);
         std::fs::write(&executable, b"#!/bin/sh\nexit 99\n").unwrap();
         std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
-        let agents = manager.agents_in_path(&paths).unwrap();
+        let agents = manager.agents_in_path(&paths).await.unwrap();
         if command == "traex" {
             assert!(agents.is_empty());
         } else {
@@ -1130,11 +1138,18 @@ fn agent_discovery_only_registers_the_traecli_command() {
     }
 }
 
-#[test]
-fn agent_discovery_is_limited_to_supported_registration_types() {
+#[tokio::test]
+async fn agent_discovery_is_limited_to_supported_registration_types() {
     let directory = tempfile::tempdir().unwrap();
-    for agent in aow_agents::KNOWN_AGENTS {
-        for command in agent.definition().commands {
+    for agent in AowManager::in_memory()
+        .agent_node()
+        .await
+        .unwrap()
+        .agent_capabilities()
+        .await
+        .unwrap()
+    {
+        for command in agent.commands {
             let executable = directory.path().join(command);
             std::fs::write(&executable, b"#!/bin/sh\nexit 99\n").unwrap();
             std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
@@ -1142,6 +1157,7 @@ fn agent_discovery_is_limited_to_supported_registration_types() {
     }
     let agents = AowManager::in_memory()
         .agents_in_path(&[directory.path().to_path_buf()])
+        .await
         .unwrap();
     assert_eq!(agents.len(), AgentType::ALL.len());
     for agent_type in AgentType::ALL {
@@ -1234,12 +1250,14 @@ async fn agent_types_persist_for_multiple_custom_launch_configurations() {
             .find(|agent| agent.id == registration.id)
             .unwrap();
         assert_eq!(saved.agent_type, registration.agent_type);
-        let launch = saved
-            .clone()
-            .into_launch(&[directory.path().to_path_buf()])
+        let launch = agents::resolve_on_node(saved.clone(), &[directory.path().to_path_buf()])
+            .await
             .unwrap();
         assert_eq!(Some(launch.agent_type), registration.agent_type);
-        assert_eq!(launch.executable, "/bin/sh");
+        assert_eq!(
+            Path::new(&launch.executable),
+            Path::new("/bin/sh").canonicalize().unwrap()
+        );
         assert_eq!(launch.args, ["-c", "printf configured"]);
         assert_eq!(launch.env["CUSTOM_ENDPOINT"], "value with spaces");
         assert_eq!(launch.env["EMPTY"], "");
@@ -1260,7 +1278,7 @@ async fn legacy_agent_configuration_requires_type_only_when_identity_is_unknown(
             "id": id, "display_name": id, "command": "/bin/sh", "args": ["--keep"], "env": {"KEEP": "value"}
         })).unwrap());
     }
-    let agents = manager.agents_in_path(&[]).unwrap();
+    let agents = manager.agents_in_path(&[]).await.unwrap();
     let builtin = agents.iter().find(|agent| agent.id == "codex").unwrap();
     assert_eq!(builtin.agent_type, Some(AgentType::Codex));
     assert!(builtin.available);
@@ -1274,8 +1292,8 @@ async fn legacy_agent_configuration_requires_type_only_when_identity_is_unknown(
     assert_eq!(legacy.args, ["--keep"]);
     assert_eq!(legacy.env["KEEP"], "value");
     assert!(matches!(
-        legacy.clone().into_launch(&[]),
-        Err(aow_agents::launch::LaunchError::Invalid(_))
+        agents::resolve_on_node(legacy.clone(), &[]).await,
+        Err(AowError::Invalid(_))
     ));
     let mut update = serde_json::to_value(legacy).unwrap();
     update["agent_type"] = serde_json::json!("claude");
@@ -1298,6 +1316,7 @@ async fn legacy_agent_configuration_requires_type_only_when_identity_is_unknown(
     assert_eq!(
         manager
             .agents_in_path(&[])
+            .await
             .unwrap()
             .iter()
             .find(|agent| agent.id == "codex")
@@ -1369,12 +1388,12 @@ async fn detected_agent_configuration_persists_launches_and_resets() {
         0o600
     );
 
-    let launch = agents
-        .into_iter()
-        .next()
-        .unwrap()
-        .into_launch(std::slice::from_ref(&bin))
-        .unwrap();
+    let launch = agents::resolve_on_node(
+        agents.into_iter().next().unwrap(),
+        std::slice::from_ref(&bin),
+    )
+    .await
+    .unwrap();
     let output = StdCommand::new(&launch.executable)
         .args(&launch.args)
         .env_clear()
@@ -1472,8 +1491,8 @@ async fn agent_configuration_rejects_invalid_environment_and_failed_writes() {
     assert_eq!(manager.lock().unwrap().agents.len(), 1);
 }
 
-#[test]
-fn agent_launch_resolves_env_shebang_with_discovered_path() {
+#[tokio::test]
+async fn agent_launch_resolves_env_shebang_with_discovered_path() {
     let directory = tempfile::tempdir().unwrap();
     let cli_bin = directory.path().join("cli bin");
     let node_bin = directory.path().join("node bin");
@@ -1511,6 +1530,7 @@ fn agent_launch_resolves_env_shebang_with_discovered_path() {
         }
         let agent = manager
             .agents_in_path(&paths)
+            .await
             .unwrap()
             .into_iter()
             .find(|agent| agent.id == "codex" && agent.available)
@@ -1519,7 +1539,7 @@ fn agent_launch_resolves_env_shebang_with_discovered_path() {
             agent.source,
             if configured { "configured" } else { "detected" }
         );
-        let launch = agent.into_launch(&paths).unwrap();
+        let launch = agents::resolve_on_node(agent, &paths).await.unwrap();
         let output = StdCommand::new(&launch.executable)
             .args(&launch.args)
             .env_clear()
@@ -1543,8 +1563,8 @@ fn agent_launch_resolves_env_shebang_with_discovered_path() {
     }
 }
 
-#[test]
-fn agent_launch_adds_configured_environment_with_global_path() {
+#[tokio::test]
+async fn agent_launch_adds_configured_environment_with_global_path() {
     let agent = AgentRegistration {
         is_default: false,
         id: "custom".to_owned(),
@@ -1562,32 +1582,38 @@ fn agent_launch_adds_configured_environment_with_global_path() {
         ]),
     };
     let paths = vec![PathBuf::from("/discovered/bin")];
-    let launch = agent.into_launch(&paths).unwrap();
+    let launch = agents::resolve_on_node(agent, &paths).await.unwrap();
     assert_eq!(launch.env["PATH"], "/discovered/bin");
     assert_eq!(launch.env["AOW_AGENT_TEST"], "value");
     assert_eq!(launch.env["EMPTY"], "");
-    assert_eq!(launch.env.len(), 3);
+    assert_eq!(launch.env.len(), 4);
+    assert!(launch.env.contains_key("AOW_STATE_DIR"));
 }
 
 fn test_agent_session(
-    agent: &'static str,
+    agent: &str,
     session_id: &str,
     cwd: &Path,
-    transcript_path: &Path,
-    trusted_root: &Path,
-) -> aow_agents::sessions::AgentSession {
-    aow_agents::sessions::AgentSession::new(
-        aow_agents::sessions::AgentSessionLocator {
-            agent,
+    _transcript_path: &Path,
+    _trusted_root: &Path,
+) -> aow_runtime_client::NativeSession {
+    aow_runtime_client::NativeSession {
+        id: session_id.into(),
+        agent: agent.into(),
+        session_id: session_id.into(),
+        title: "Test session".into(),
+        cwd: cwd.to_string_lossy().into_owned(),
+        created_at: String::new(),
+        updated_at: String::new(),
+        reference: aow_runtime_client::NativeSessionReference {
+            node_id: "node".into(),
+            handle: session_id.into(),
+            agent: agent.into(),
             session_id: session_id.into(),
-            title: "Test session".into(),
             cwd: cwd.into(),
-            transcript_path: transcript_path.into(),
-            trusted_root: trusted_root.into(),
+            title: "Test session".into(),
         },
-        chrono::Utc::now(),
-        chrono::Utc::now(),
-    )
+    }
 }
 
 #[test]
@@ -1618,7 +1644,7 @@ fn session_locator_is_scoped_to_the_exact_registered_worktree() {
     ];
 
     manager
-        .replace_session_locators_for_agent(&parent, None, &sessions)
+        .cache_native_sessions(&parent, None, &sessions, true)
         .unwrap();
     assert!(
         manager
@@ -1637,7 +1663,7 @@ fn session_locator_is_scoped_to_the_exact_registered_worktree() {
     );
 
     manager
-        .replace_session_locators_for_agent(&parent, Some("traecli"), &[])
+        .cache_native_sessions(&parent, Some("traecli"), &[], true)
         .unwrap();
     assert!(
         manager

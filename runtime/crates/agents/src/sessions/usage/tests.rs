@@ -1,4 +1,5 @@
 use super::*;
+use crate::sessions::usage::TokenUsageExt;
 use serde_json::json;
 
 pub(crate) fn codex_event(input: u64, output: u64, total_input: u64, total_output: u64) -> Value {

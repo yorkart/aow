@@ -1,3 +1,4 @@
+use aow_agents::launch::AgentTypeExt;
 use std::{collections::BTreeMap, path::Path, process::Stdio};
 
 use anyhow::Result;

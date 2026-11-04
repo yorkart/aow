@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+aow-runtime-contract = { path = "../../../common/crates/runtime-contract" }
 aow-filesystem = { package = "aow-runtime-filesystem", path = "../filesystem" }
 aow-id = { path = "../../../common/crates/id" }
 anyhow.workspace = true
@@ -14,6 +15,7 @@ futures-util.workspace = true
 hyper.workspace = true
 hyper-util.workspace = true
 libc.workspace = true
+md5.workspace = true
 portable-pty.workspace = true
 aow-agents = { package = "aow-runtime-agents", path = "../agents", features = ["sessions"] }
 aow-process = { package = "aow-runtime-process", path = "../process" }

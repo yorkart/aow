@@ -71,13 +71,19 @@ async fn resolve(state: &AppState, input: &TaskInput) -> Result<(String, PathBuf
             &[]
         )
     );
-    let environment = aow_agents::automation::configuration_environment();
+    let runtime = state.aow.agent_node().await?;
+    let environment = runtime.agent_configuration_environment().await?;
     let launch = AgentLaunch {
         executable: launch.executable.into(),
         args: launch.args,
         environment,
     };
-    aow_automations::agent::validate_arguments(input.agent, &launch.args)?;
+    runtime
+        .validate_agent_automation(&aow_runtime_client::agents::ValidateAutomation {
+            agent: input.agent,
+            arguments: launch.args.clone(),
+        })
+        .await?;
     Ok((name, repository, launch))
 }
 

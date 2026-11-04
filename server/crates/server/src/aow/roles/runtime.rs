@@ -4,21 +4,18 @@ use crate::aow::{AgentLaunch, AowError, AowManager};
 use anyhow::Result;
 use aow_runtime_client::acp::AcpClient;
 
-pub(super) fn layout_for(runtime: &str) -> HomeLayout {
-    let runtime = runtime.to_ascii_lowercase();
-    super::identity::SUPPORTED_LAYOUTS
-        .iter()
-        .copied()
-        .find(|layout| {
-            let id = serde_json::to_value(layout).unwrap();
-            runtime
-                .split(|c: char| !c.is_ascii_alphanumeric())
-                .any(|part| Some(part) == id.as_str())
-        })
-        .unwrap_or_default()
-}
-
 impl AowManager {
+    pub(super) async fn role_layout(&self, id: &str) -> Result<HomeLayout, AowError> {
+        let layout = self
+            .agent_node()
+            .await?
+            .agent_role_layout(&aow_runtime_client::agents::ResolveRoleLayout {
+                agent_id: id.into(),
+            })
+            .await
+            .map_err(|e| AowError::Invalid(e.to_string()))?;
+        serde_json::from_value(serde_json::Value::String(layout)).map_err(Into::into)
+    }
     pub(super) async fn role_runtime_cli_launch(&self, id: &str) -> Result<AgentLaunch, AowError> {
         crate::aow::validation::validate_id(id)?;
         let agent = self
@@ -31,21 +28,13 @@ impl AowManager {
                     "Select an available runtime configured in Settings → Agents".into(),
                 )
             })?;
-        if let Some(runtime) = &self.inner.runtime_client {
-            return runtime
-                .post_json("/v1/agents/resolve", &serde_json::json!({"profile":agent}))
-                .await
-                .map_err(|error| AowError::Invalid(error.to_string()));
-        }
-        #[cfg(test)]
-        {
-            let paths = self.execution_path().await?;
-            agent.into_launch(&paths).map_err(Into::into)
-        }
-        #[cfg(not(test))]
-        {
-            Err(AowError::Invalid("Runtime is unavailable".into()))
-        }
+        self.agent_node()
+            .await?
+            .resolve_agent(&aow_runtime_client::agents::ResolveAgent {
+                profile: serde_json::from_value(serde_json::to_value(agent)?)?,
+            })
+            .await
+            .map_err(|e| AowError::Invalid(e.to_string()))
     }
 
     pub(super) fn role_acp_service(&self) -> Result<AcpClient> {
@@ -67,12 +56,15 @@ impl AowManager {
         runtime: &RoleRuntime,
     ) -> Result<HomeLayout, AowError> {
         let layout = match runtime {
-            RoleRuntime::Cli { agent_id } => layout_for(
-                self.role_runtime_cli_launch(agent_id)
-                    .await?
-                    .agent_type
-                    .id(),
-            ),
+            RoleRuntime::Cli { agent_id } => {
+                self.role_layout(
+                    self.role_runtime_cli_launch(agent_id)
+                        .await?
+                        .agent_type
+                        .id(),
+                )
+                .await?
+            }
             RoleRuntime::Acp { agent_id } => {
                 let service = self.role_acp_service().map_err(AowError::Configuration)?;
                 if !service
@@ -91,10 +83,9 @@ impl AowManager {
                         "Select an installed runtime configured in Settings → ACP".into(),
                     ));
                 }
-                layout_for(agent_id)
+                self.role_layout(agent_id).await?
             }
         };
-        super::identity::files(layout)?;
         Ok(layout)
     }
 }

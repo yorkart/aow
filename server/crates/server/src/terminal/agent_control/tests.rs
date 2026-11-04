@@ -422,7 +422,7 @@ time.sleep(30)
             invocation,
             json!({"args": invocation_args,
             "cwd": session_cwd.canonicalize().unwrap(), "profile": id,
-            "state_dir": fixture.state_dir.canonicalize().unwrap()})
+            "state_dir": fixture.state.terminals.inner.terminald.get_json::<Value>("/v1/environment").await.unwrap()["state_dir"]})
         );
         let launch = fixture
             .state
@@ -1597,7 +1597,7 @@ async fn native_startup_probes() {
                     cols: Some(COLS),
                 },
                 AgentLaunch {
-                    agent_type: aow_agents::launch::AgentType::from_id(name).unwrap(),
+                    agent_type: aow_runtime_contract::agents::AgentType::from_id(name).unwrap(),
                     display_name: name.into(),
                     executable: executable.to_string_lossy().into_owned(),
                     args: vec![],
@@ -1617,10 +1617,11 @@ async fn native_startup_probes() {
         let pane_id = &tab.panes[0].id;
         let result = tokio::time::timeout(
             Duration::from_secs(60),
-            fixture.state.terminals.initialize_agent(
+            fixture.state.terminals.initialize_agent_lifecycle(
                 pane_id,
-                Agent::from_id(name).unwrap().interactive().unwrap(),
+                name,
                 None,
+                Duration::from_secs(60),
                 None,
             ),
         )
@@ -1649,16 +1650,12 @@ async fn native_startup_probes() {
 #[tokio::test]
 #[ignore = "requires AOW_PI_TEST_CLI and PTY/process access; uses an isolated offline provider"]
 async fn native_pi_submits_through_terminald_and_resolves_its_session() {
-    use aow_agents::sessions::{
-        SessionRoots,
-        tracking::{AgentSessionTracker, LiveSessionContext, SessionResolution, SessionTarget},
-    };
     let fixture = Fixture::with_storage("ready", true).await;
     let app = crate::build_router(fixture.state.clone());
     let cli = std::env::var("AOW_PI_TEST_CLI").expect("AOW_PI_TEST_CLI");
     let profile = fixture.directory.path().join("pi profile");
     let provider = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../agents/tests/fixtures/pi-provider.mjs")
+        .join("../../../fixtures/agents/pi-provider.mjs")
         .canonicalize()
         .unwrap();
     post(&app, "/api/aow/agents", json!({
@@ -1680,37 +1677,16 @@ async fn native_pi_submits_through_terminald_and_resolves_its_session() {
         "{created:?}"
     );
     assert!(created.state.task_submitted);
-    let tracker = Agent::Pi.session_tracking().unwrap();
     let (snapshot, session_id) = tokio::time::timeout(Duration::from_secs(10), async {
         loop {
-            let detected = fixture
-                .state
-                .terminals
-                .agents(Some(fixture.repo.to_str().unwrap()))
-                .await
-                .unwrap();
-            if let Some(process) = detected.processes.get(&created.pane_id)
-                && let Some(environment) = crate::terminal::sessions::process_environment(process)
-                && let SessionResolution::Resolved(SessionTarget::Id(id)) = tracker
-                    .resolve_live_session(LiveSessionContext {
-                        pid: Some(process.pid),
-                        cwd: &process.cwd,
-                        title: "",
-                        environment: &environment,
-                    })
-                    .await
-                && let Some(session) = aow_agents::sessions::find_session(
-                    "pi",
-                    &id,
-                    SessionRoots::from_configuration(&profile, &environment),
-                )
-                && let Ok(snapshot) = aow_agents::sessions::snapshot::read(session.locator())
+            let terminal = &fixture.state.terminals.inner.terminald;
+            if let Ok(sessions) = terminal.native_sessions(&created.pane_id).await
+                && let Some(reference) = sessions.current
+                && let Ok(snapshot) = terminal.runtime().native_snapshot(&reference).await
+                && snapshot["status"] == "completed"
             {
-                let value = serde_json::to_value(snapshot).unwrap();
-                if value["status"] == "completed" {
-                    assert!(process.pi_binding.is_some());
-                    break (value, id);
-                }
+                assert!(sessions.process.unwrap().pi_binding.is_some());
+                break (snapshot, reference.session_id);
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
@@ -1772,14 +1748,18 @@ async fn native_pi_submits_through_terminald_and_resolves_its_session() {
             .count(),
         2
     );
-    let binding = aow_agents::pi_bridge::binding_path(&pane.arguments, &pane.id).unwrap();
     tokio::time::timeout(Duration::from_secs(10), async {
         loop {
-            if let Ok(bytes) = std::fs::read(&binding)
-                && let Ok(value) = serde_json::from_slice::<Value>(&bytes)
-                && value["session_id"]
-                    .as_str()
-                    .is_some_and(|id| id != session_id)
+            if let Ok(sessions) = fixture
+                .state
+                .terminals
+                .inner
+                .terminald
+                .native_sessions(&pane.id)
+                .await
+                && sessions
+                    .current
+                    .is_some_and(|reference| reference.session_id != session_id)
             {
                 break;
             }
@@ -1949,5 +1929,54 @@ async fn recreated_profile_is_used_by_cli_without_rebinding_existing_terminals()
         tab.panes[0].agent_profile_id.as_deref(),
         Some("Work_codex-2")
     );
+    fixture.stop().await;
+}
+
+#[tokio::test]
+async fn server_restart_recovers_node_initialization_receipt_without_replaying_task() {
+    let fixture = Fixture::with_storage("ready", true).await;
+    let mut request = fixture.request();
+    request.task = Some("task before server restart".into());
+    let info: AgentTerminalInfo = fixture
+        .client
+        .post_json("/v1/agents", &request)
+        .await
+        .unwrap();
+    assert!(info.state.task_submitted);
+    let manager = &fixture.state.terminals;
+    // Simulate a Server crash after the node finished, before its business mirror was saved.
+    manager
+        .set_agent_state(
+            &info.pane_id,
+            AgentTerminalState {
+                phase: AgentTerminalPhase::Starting,
+                error: None,
+                task_submitted: false,
+            },
+        )
+        .unwrap();
+    let restored =
+        TerminalManager::persistent(fixture.state_dir.clone(), manager.inner.terminald.clone())
+            .unwrap();
+    assert_eq!(
+        restored.cli_agent(&info.pane_id).unwrap().state.phase,
+        AgentTerminalPhase::Starting
+    );
+    restored.reconcile().await.unwrap();
+    let recovered = restored.cli_agent(&info.pane_id).unwrap();
+    assert_eq!(recovered.state.phase, AgentTerminalPhase::Ready);
+    assert!(recovered.state.task_submitted);
+    restored.reconcile().await.unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if let Ok(input) = std::fs::read_to_string(&fixture.log) {
+                assert_eq!(input.lines().count(), 1);
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
     fixture.stop().await;
 }

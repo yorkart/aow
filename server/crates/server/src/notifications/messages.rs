@@ -5,9 +5,7 @@ use super::AutomationFailureNotification;
 use crate::terminal::notifications::TaskStopNotification;
 
 pub(super) fn task_completed(event: &TaskStopNotification) -> Message {
-    let agent = aow_agents::Agent::from_id(&event.agent)
-        .map(|agent| agent.definition().display_name)
-        .unwrap_or(&event.agent);
+    let agent = event.agent_display_name.as_deref().unwrap_or(&event.agent);
     let mut projects = Vec::new();
     let mut fields = Vec::new();
     for source in &event.sources {

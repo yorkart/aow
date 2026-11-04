@@ -40,6 +40,22 @@ pub fn validate(identity: &Identity) -> Result<(), AowError> {
 pub const SUPPORTED_LAYOUTS: &[HomeLayout] =
     &[HomeLayout::Codex, HomeLayout::Claude, HomeLayout::Traecli];
 
+pub fn role_layout(runtime: &str) -> Result<HomeLayout, AowError> {
+    let runtime = runtime.to_ascii_lowercase();
+    let layout = SUPPORTED_LAYOUTS
+        .iter()
+        .copied()
+        .find(|layout| {
+            let id = serde_json::to_value(layout).unwrap();
+            runtime
+                .split(|c: char| !c.is_ascii_alphanumeric())
+                .any(|part| Some(part) == id.as_str())
+        })
+        .unwrap_or_default();
+    files(layout)?;
+    Ok(layout)
+}
+
 pub fn files(layout: HomeLayout) -> Result<&'static [&'static str], AowError> {
     match layout {
         HomeLayout::Codex => Ok(&[".codex/auth.json"]),

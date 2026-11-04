@@ -188,7 +188,7 @@ async fn skill_edits_reconcile_only_injected_skills_and_roll_back_failed_updates
 
 pub(super) async fn configure_cli(
     manager: &AowManager,
-    agent_type: aow_agents::launch::AgentType,
+    agent_type: aow_runtime_contract::agents::AgentType,
     command: &str,
     args: Vec<String>,
     env: BTreeMap<String, String>,
@@ -219,7 +219,7 @@ pub(super) async fn configure_cli(
 pub(super) async fn configure_default_cli(manager: &AowManager) {
     configure_cli(
         manager,
-        aow_agents::launch::AgentType::Codex,
+        aow_runtime_contract::agents::AgentType::Codex,
         "/bin/echo",
         vec![],
         BTreeMap::from([("CODEX_HOME".into(), "/wrong".into())]),
@@ -245,7 +245,7 @@ async fn cli_roles_resolve_current_configuration_without_duplicating_or_mutating
     ]);
     configure_cli(
         &manager,
-        aow_agents::launch::AgentType::Codex,
+        aow_runtime_contract::agents::AgentType::Codex,
         "/bin/cat",
         vec!["--updated".into()],
         env.clone(),
@@ -298,7 +298,7 @@ async fn cli_roles_reject_missing_unconfigured_unavailable_and_changed_runtime_t
     let role = manager.save_role(None, config(None)).await.unwrap();
     configure_cli(
         &manager,
-        aow_agents::launch::AgentType::Codex,
+        aow_runtime_contract::agents::AgentType::Codex,
         "/missing/role-runtime",
         vec![],
         BTreeMap::new(),
@@ -308,7 +308,7 @@ async fn cli_roles_reject_missing_unconfigured_unavailable_and_changed_runtime_t
     assert!(manager.save_role(None, config(None)).await.is_err());
     configure_cli(
         &manager,
-        aow_agents::launch::AgentType::Claude,
+        aow_runtime_contract::agents::AgentType::Claude,
         "/bin/echo",
         vec![],
         BTreeMap::new(),
@@ -325,7 +325,7 @@ async fn cli_roles_reject_missing_unconfigured_unavailable_and_changed_runtime_t
     );
     configure_cli(
         &manager,
-        aow_agents::launch::AgentType::Pi,
+        aow_runtime_contract::agents::AgentType::Pi,
         "/bin/echo",
         vec![],
         BTreeMap::new(),

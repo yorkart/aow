@@ -9,11 +9,11 @@ name = "aow-automation-runner"
 path = "src/main.rs"
 
 [dependencies]
+aow-runtime-contract = { path = "../../../common/crates/runtime-contract" }
 aow-cli-access = { path = "../cli-access" }
 aow-runtime-client = { path = "../runtime-client" }
 aow-i18n = { path = "../i18n" }
 aow-id = { path = "../../../common/crates/id" }
-aow-agents = { path = "../agents", features = ["automation", "sessions"] }
 aow-config = { path = "../config" }
 aow-workspaces = { path = "../workspaces" }
 anyhow.workspace = true
