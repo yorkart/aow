@@ -85,7 +85,10 @@ WebSocket transports for remote node deployments.
 ## Source projects
 
 `server/` owns Server, CLI, automation scheduling and the frontend. `runtime/` owns
-node execution and has its own Cargo workspace and lockfile. Neither product has
-production source dependencies on the other. Root `just` targets orchestrate both
-projects and the combined installation package. See [Server](server/README.md) for
-independent builds and authenticated remote CLI configuration.
+node execution. [Common](common/README.md) owns shared protocols, IDs and foundation
+libraries. Each has its own Cargo workspace and lockfile. Both products depend on
+Common; neither depends on the other, and Common depends on neither product.
+Source builds require the product and Common directories side by side. Root
+`just` targets orchestrate the workspaces and combined installation package;
+Server and runtime remain independently deployable. See [Server](server/README.md)
+for builds and authenticated remote CLI configuration.

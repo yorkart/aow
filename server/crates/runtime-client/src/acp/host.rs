@@ -1,7 +1,7 @@
 use super::connector::Connector;
 use crate::RuntimeClient;
 use anyhow::Result;
-use aow_acp::{AcpConnector, AcpHost, TurnCompletion};
+use aow_acp_client::{AcpConnector, AcpHost, TurnCompletion};
 use std::{collections::BTreeMap, ffi::OsString, path::Path, sync::Arc};
 
 pub(super) struct RemoteHost {

@@ -17,12 +17,7 @@ use tokio_util::codec::{FramedRead, LinesCodec};
 pub(super) const MAX_MESSAGE_BYTES: usize = 16 * 1024 * 1024;
 const IO_TIMEOUT: Duration = Duration::from_secs(5);
 
-#[derive(Clone, Serialize)]
-pub(super) struct Status {
-    running: bool,
-    exit_code: Option<i32>,
-    error: Option<String>,
-}
+use aow_runtime_contract::AcpInstanceStatus as Status;
 
 pub(super) struct Instance {
     pub spec: InstanceSpec,

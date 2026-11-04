@@ -1,1 +1,0 @@
-SELECT COALESCE(MAX(id), 0) FROM messages

@@ -11,7 +11,7 @@
 - For modules with child modules, use a consistent directory-based module layout: place the module root and all child module source files within that module's directory. Do not use a mixed layout that places the module root file alongside a same-named module directory.
 - After changing Rust code, run `cargo fmt --manifest-path server/Cargo.toml --all -- --check` and relevant tests. For changes affecting multiple crates, run `cargo test --manifest-path server/Cargo.toml --workspace --target-dir target`.
 - Before caller integration tests, build the external fixture with `cargo build --manifest-path runtime/Cargo.toml --example runtime-test-host --target-dir target`, or provide its executable via `AOW_RUNTIME_TEST_HOST`. Tests must not link execution-node implementation crates.
-- `runtime/` is an independent Cargo workspace. Apply the Rust formatting, Clippy and workspace test commands there as well (or use `--manifest-path runtime/Cargo.toml`); Server Cargo commands exclude it.
+- `common/`, `runtime/` and `server/` are independent Cargo workspaces. Apply formatting, Clippy and workspace tests to all three when shared libraries change. Product workspaces may depend on `common/`; common must never depend on either product, and products must never depend on each other.
 - For frontend or VT worker changes, follow the existing npm scripts in the relevant directory and run the applicable build, typecheck, or tests.
 - For changes spanning multiple components or delivering a complete feature, use the validation targets in `justfile`: `just build` and `just test`, subject to the regression-test restriction below.
 - Do not run installation and release script regression tests (`node --test scripts/tests/*.test.mjs`) during normal development. Run them only when developing or modifying installation or release script functionality. Since `just test` includes these tests, run its remaining validation steps individually for unrelated changes.
@@ -33,7 +33,7 @@
 | HTML | `npm run lint:html`, including browser preview fixtures. |
 | Python | `npm run lint:python` (Ruff), including installers, adapters, and test helpers. |
 | Shell | `npm run lint:shell`; this checks syntax with the declared shell and runs ShellCheck on scripts and `packaging/bin` launchers. |
-| C | On macOS, run `clang -Wall -Wextra -Werror -fsyntax-only server/crates/macos-log/src/os_log.c` and `clang --analyze -Xanalyzer -analyzer-output=text -Xanalyzer -analyzer-werror -Wall -Wextra -Werror server/crates/macos-log/src/os_log.c`. Other hosts must disclose that the macOS SDK check was not run. |
+| C | On macOS, run `clang -Wall -Wextra -Werror -fsyntax-only common/crates/macos-log/src/os_log.c` and `clang --analyze -Xanalyzer -analyzer-output=text -Xanalyzer -analyzer-werror -Wall -Wextra -Werror common/crates/macos-log/src/os_log.c`. Other hosts must disclose that the macOS SDK check was not run. |
 | JSON / TOML / YAML | `npm run lint:config` validates repository configuration, including duplicate YAML keys; also run `npm run lint:yaml` for YAML style and structure. |
 | GitHub Actions | `npm run lint:workflows` (actionlint with ShellCheck available on `PATH`). |
 | Markdown | `npm run lint:markdown` for the configured markup checks. |
@@ -48,4 +48,4 @@
 - Keep the title concise and descriptive. The description should explain the context, key changes, and validation performed. Clearly disclose any validation that was not run or failed.
 - Review the diff before submitting a pull request and ensure it contains only changes relevant to the task.
 
-`server/` and `runtime/` are independent Cargo workspaces. There is no root Cargo workspace. Set `AOW_RUNTIME_TEST_HOST` to the external fixture executable for Server tests. Do not add implementation path dependencies between products.
+`common/`, `server/` and `runtime/` are independent Cargo workspaces. There is no root Cargo workspace. Set `AOW_RUNTIME_TEST_HOST` to the external fixture executable for Server tests. Do not add implementation path dependencies between products.

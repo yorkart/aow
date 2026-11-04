@@ -8,11 +8,12 @@ license = "GPL-3.0-or-later"
 test-support = ["dep:tempfile"]
 
 [dependencies]
+aow-runtime-contract = { path = "../../../common/crates/runtime-contract" }
 tempfile = { version = "3.20", optional = true }
-aow-acp = { package = "aow-acp-client-model", path = "../acp-client-model" }
-aow-protocol = { path = "../protocol" }
-aow-filesystem = { path = "../filesystem" }
-aow-i18n = { path = "../i18n" }
+aow-acp-client = { path = "../../../common/crates/acp-client" }
+aow-protocol = { path = "../../../common/crates/protocol" }
+aow-filesystem = { path = "../../../common/crates/filesystem" }
+aow-i18n = { path = "../../../common/crates/i18n" }
 anyhow.workspace = true
 async-trait.workspace = true
 bytes.workspace = true
@@ -30,7 +31,7 @@ tokio-tungstenite = { workspace = true, features = ["rustls-tls-webpki-roots"] }
 uuid.workspace = true
 
 [dev-dependencies]
-aow-process = { path = "../process" }
+aow-process = { path = "../../../common/crates/process" }
 libc.workspace = true
 tempfile = "3.20"
 

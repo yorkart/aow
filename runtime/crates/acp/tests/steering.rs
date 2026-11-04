@@ -27,7 +27,7 @@ impl AcpHost for Host {
         anyhow::bail!("fixture does not write files")
     }
     async fn settings(&self) -> Result<String> {
-        Ok(json!({"agent_servers":{"generic":{"type":"custom","command":"node","args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/steering-agent.mjs")],"env":{"STEERING":if self.supported {"1"} else {"0"}}}}}).to_string())
+        Ok(json!({"agent_servers":{"generic":{"type":"custom","command":"node","args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../common/fixtures/acp/steering-agent.mjs")],"env":{"STEERING":if self.supported {"1"} else {"0"}}}}}).to_string())
     }
 }
 

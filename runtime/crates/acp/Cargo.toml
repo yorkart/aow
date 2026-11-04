@@ -5,13 +5,12 @@ edition.workspace = true
 license = "GPL-3.0-or-later"
 
 [dependencies]
-aow-i18n = { package = "aow-runtime-i18n", path = "../i18n" }
-aow-db = { package = "aow-runtime-db", path = "../db" }
-aow-protocol = { package = "aow-runtime-protocol", path = "../protocol" }
-agent-client-protocol = { version = "=3.4.0", features = ["unstable", "unstable_protocol_v2"] }
+acp-client = { package = "aow-acp-client", path = "../../../common/crates/acp-client" }
+aow-i18n = { path = "../../../common/crates/i18n" }
+aow-db = { package = "aow-storage", path = "../../../common/crates/storage" }
+aow-protocol = { path = "../../../common/crates/protocol" }
 anyhow.workspace = true
 async-trait.workspace = true
-chrono.workspace = true
 futures = "0.3"
 flate2 = "1"
 libc.workspace = true

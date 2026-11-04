@@ -746,7 +746,7 @@ async fn mixed_terminal_acp_lineage_survives_deleted_intermediate_instances_and_
     assert!(node.status.success());
     let settings = fixture.state.aow.acp_settings().unwrap();
     fixture.state.aow.save_acp_settings(json!({"agent_servers":{"test":{"type":"custom", "command":String::from_utf8(node.stdout).unwrap().trim(),
-        "args":[Path::new(env!("CARGO_MANIFEST_DIR")).join("../acp-client-model/tests/fixtures/lineage-agent.mjs")]}}}).to_string(), settings.revision).await.unwrap();
+        "args":[Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../common/fixtures/acp/lineage-agent.mjs")]}}}).to_string(), settings.revision).await.unwrap();
     let root: AgentTerminalInfo = fixture
         .client
         .post_json("/v1/agents", &fixture.request())

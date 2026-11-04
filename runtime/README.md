@@ -7,7 +7,7 @@ and terminal instances behind an authenticated HTTP/WebSocket endpoint.
 runtime/
   Cargo.toml          Independent Rust workspace
   Cargo.lock
-  crates/acp/         Native ACP SDK, adapter resolution and session model
+  crates/acp/         Adapter resolution, installation and local stdio connector
   crates/acpd/        Adapter process ownership and native ACP WebSocket service
   crates/terminald/   PTY lifecycle, replay and VT worker host
   crates/workspace/   Node files, Git, worktrees, search and clipboard storage
@@ -28,10 +28,10 @@ just run --state-dir "$HOME/.aow" --listen 127.0.0.1:9760
 Without just, build the worker with `npm --prefix vt-worker ci --ignore-scripts
 --no-audit --no-fund` and `npm --prefix vt-worker run build`, then run
 `cargo build --workspace --locked` or `cargo test --workspace --locked`.
-All source dependencies, protocol types, native agent adapters and build assets
-are owned by this directory. It can be copied out of the monorepo and built
-without Server, runtime-client or parent-directory crates. Runtime support crates
-have distinct package identities from caller-side libraries.
+Source builds require the sibling `../common/` workspace, which owns shared IDs,
+protocols, ACP client state and infrastructure libraries. Build with `runtime/`
+and `common/` side by side; Server sources are not required. The deployed daemon
+has no dependency on the common source tree or a running Server process.
 
 The independent caller SDK lives at `../server/crates/runtime-client`. Server uses that SDK
 for management, terminal attachment and native ACP conversations. The business CLI uses `../server/crates/server-client` over authenticated HTTP or
@@ -46,8 +46,8 @@ terminald are embedded libraries.
 
 ## Source boundary checks
 
-`node --test tests/isolation.test.mjs` rejects path dependencies outside this
-subproject. Caller integration tests use the external `runtime-test-host`
+`node --test tests/isolation.test.mjs` permits only runtime and common path
+dependencies. The root monorepo checks enforce the complete dependency direction. Caller integration tests use the external `runtime-test-host`
 example rather than linking daemon implementation crates:
 
 ```sh

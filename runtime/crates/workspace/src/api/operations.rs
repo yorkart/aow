@@ -130,10 +130,16 @@ pub(super) async fn operation(Json(request): Json<Request>) -> Result<Json<Value
             };
             match metadata {
                 Ok(metadata) => {
-                    json!({"exists":true,"file":metadata.is_file(),"directory":metadata.is_dir(),"symlink":metadata.is_symlink(),"size":metadata.len()})
+                    json!(aow_runtime_contract::NodeMetadata {
+                        exists: true,
+                        file: metadata.is_file(),
+                        directory: metadata.is_dir(),
+                        symlink: metadata.is_symlink(),
+                        size: metadata.len()
+                    })
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                    json!({"exists":false})
+                    json!(aow_runtime_contract::NodeMetadata::default())
                 }
                 Err(error) => return Err(error.into()),
             }

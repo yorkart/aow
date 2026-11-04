@@ -5,8 +5,9 @@ edition.workspace = true
 license = "GPL-3.0-or-later"
 
 [dependencies]
+aow-runtime-contract = { path = "../../../common/crates/runtime-contract" }
 aow-acp = { path = "../acp" }
-aow-filesystem = { package = "aow-runtime-filesystem", path = "../filesystem" }
+aow-filesystem = { path = "../../../common/crates/filesystem" }
 anyhow.workspace = true
 md5.workspace = true
 serde.workspace = true
@@ -14,7 +15,7 @@ serde_json.workspace = true
 tokio.workspace = true
 futures-util.workspace = true
 aow-agents = { package = "aow-runtime-agents", path = "../agents", features = ["launch"] }
-aow-i18n = { package = "aow-runtime-i18n", path = "../i18n" }
+aow-i18n = { path = "../../../common/crates/i18n" }
 async-trait.workspace = true
 axum.workspace = true
 bytes.workspace = true
@@ -30,4 +31,4 @@ tokio-util = { workspace = true, features = ["codec"] }
 tempfile = "3.20"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-aow-macos-log = { package = "aow-runtime-macos-log", path = "../macos-log" }
+aow-macos-log = { path = "../../../common/crates/macos-log" }

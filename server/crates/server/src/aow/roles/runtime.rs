@@ -51,16 +51,11 @@ impl AowManager {
     }
 
     pub(super) fn role_acp_service(&self) -> Result<AcpClient> {
-        let cache = self
-            .inner
-            .state_dir
-            .as_ref()
-            .map(|dir| dir.join("cache/acp"));
-        // Shared settings and installation cache, with no persistent probe conversations.
+        // Probe conversations use the configured node and do not persist history.
         let host = Arc::new(RuntimeHost(self.clone()));
         match &self.inner.runtime_client {
-            Some(endpoint) => AcpClient::with_runtime(endpoint.clone(), host, None, cache),
-            None => AcpClient::for_test_storage(host, None, cache),
+            Some(endpoint) => AcpClient::with_runtime(endpoint.clone(), host, None),
+            None => AcpClient::for_test_host(host, None),
         }
     }
 

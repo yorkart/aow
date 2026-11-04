@@ -1,1 +1,0 @@
-DROP TRIGGER reject_snapshot;

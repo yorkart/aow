@@ -1,1 +1,0 @@
-COALESCE(NULLIF(name, ''), title)

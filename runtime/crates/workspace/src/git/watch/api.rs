@@ -1,19 +1,9 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    path::PathBuf,
-};
+use std::{collections::BTreeSet, path::PathBuf};
 use tokio::sync::watch;
 
 use crate::git::{GitError, command::absolute};
 
-/// Monotonic versions for worktree inventory and history in each checkout.
-/// New subscribers receive the latest snapshot, including changes while idle.
-#[derive(Clone, Debug, Default)]
-pub struct GitChanges {
-    pub revision: u64,
-    pub worktrees: u64,
-    pub repositories: BTreeMap<PathBuf, u64>,
-}
+pub use aow_runtime_contract::WorkspaceChanges as GitChanges;
 
 /// Watches supplied repositories until dropped, independently of subscribers.
 /// Requires a running Tokio runtime. Each root includes its linked worktrees.

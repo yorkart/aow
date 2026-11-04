@@ -31,7 +31,7 @@ impl AcpHost for Host {
     }
 }
 fn host(no_load: bool) -> Arc<Host> {
-    Arc::new(Host { completions: Default::default(), settings: RwLock::new(json!({ "agent_servers": { "test": { "type":"custom", "command":"node", "args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/agent.mjs")], "env":{"NO_LOAD":if no_load {"1"} else {"0"}}, "default_mode":"code", "default_config_options":{"enabled":true,"model":"large"} } } }).to_string()), execution_path: None })
+    Arc::new(Host { completions: Default::default(), settings: RwLock::new(json!({ "agent_servers": { "test": { "type":"custom", "command":"node", "args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../common/fixtures/acp/agent.mjs")], "env":{"NO_LOAD":if no_load {"1"} else {"0"}}, "default_mode":"code", "default_config_options":{"enabled":true,"model":"large"} } } }).to_string()), execution_path: None })
 }
 fn prompt(value: &str) -> Vec<Content> {
     serde_json::from_value(json!([{ "type":"text", "text":value }])).unwrap()
@@ -48,7 +48,7 @@ async fn record_installed_codex_steering() -> Result<()> {
         execution_path: None,
         settings: RwLock::new(
             json!({"agent_servers":{"recorded":{"type":"custom", "command":"node", "args":[
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/record-acp.mjs"),
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../common/fixtures/acp/record-acp.mjs"),
             output.join("wire.jsonl"), "node", std::env::var("AOW_ACP_RECORD_ADAPTER")?
         ], "default_mode":"read-only"}}})
             .to_string(),
@@ -1186,7 +1186,7 @@ async fn failed_prompt_persistence_does_not_send_or_leave_the_session_working() 
 
 fn correlation_host() -> Arc<Host> {
     Arc::new(Host { completions: Default::default(),
-        settings: RwLock::new(json!({"agent_servers":{"test":{"type":"custom","command":"node","args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/correlation-agent.mjs")]}}}).to_string()),
+        settings: RwLock::new(json!({"agent_servers":{"test":{"type":"custom","command":"node","args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../common/fixtures/acp/correlation-agent.mjs")]}}}).to_string()),
         execution_path: None,
     })
 }

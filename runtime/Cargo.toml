@@ -1,5 +1,14 @@
 [workspace]
-members = ["crates/executor", "crates/workspace", "crates/environment", "crates/acp", "crates/acpd", "crates/terminald", "crates/runtime-daemon", "crates/agents", "crates/db", "crates/filesystem", "crates/i18n", "crates/id", "crates/macos-log", "crates/process", "crates/protocol"]
+members = [
+    "crates/executor",
+    "crates/workspace",
+    "crates/environment",
+    "crates/acp",
+    "crates/acpd",
+    "crates/terminald",
+    "crates/runtime-daemon",
+    "crates/agents",
+]
 resolver = "2"
 
 [workspace.package]

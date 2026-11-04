@@ -13,7 +13,7 @@ async fn real_acp_prompts_reach_the_terminal_notification_subscription_without_a
     .unwrap();
     let previous = state.aow.acp_settings().unwrap();
     let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../acp-client-model/tests/fixtures/agent.mjs");
+        .join("../../../common/fixtures/acp/agent.mjs");
     state
         .aow
         .save_acp_settings(

@@ -158,10 +158,25 @@ impl Environments {
     fn save_spec(&self, spec: &RoleEnvironmentSpec) -> Result<()> {
         write_json(&self.spec_path(spec)?, spec)
     }
+    fn environment_record(
+        &self,
+        spec: &RoleEnvironmentSpec,
+    ) -> Result<aow_runtime_contract::NodeEnvironment> {
+        Ok(aow_runtime_contract::NodeEnvironment {
+            home: self.0.manager.role_home(&spec.id)?,
+            env: self.0.manager.role_environment(spec)?,
+        })
+    }
     fn environment(&self, spec: &RoleEnvironmentSpec) -> Result<serde_json::Value> {
-        Ok(
-            serde_json::json!({"home":self.0.manager.role_home(&spec.id)?,"env":self.0.manager.role_environment(spec)?}),
-        )
+        Ok(serde_json::to_value(self.environment_record(spec)?)?)
+    }
+    fn preparation(&self, spec: &RoleEnvironmentSpec, token: String) -> Result<serde_json::Value> {
+        Ok(serde_json::to_value(
+            aow_runtime_contract::EnvironmentPreparation {
+                token,
+                environment: self.environment_record(spec)?,
+            },
+        )?)
     }
     fn ensure(&self, spec: &RoleEnvironmentSpec) -> Result<serde_json::Value> {
         let pending = self.0.pending.lock().unwrap();
@@ -245,18 +260,14 @@ async fn prepare(State(service): State<Environments>, Json(request): Json<Prepar
                 decision.spec == request.spec && decision.commit,
                 "Environment preparation was cancelled or changed"
             );
-            let mut value = service.environment(&request.spec)?;
-            value["token"] = serde_json::json!(token);
-            return Ok(Json(value));
+            return Ok(Json(service.preparation(&request.spec, token)?));
         }
         if let Some(operation) = pending.get(&token) {
             ensure!(
                 operation.spec == request.spec,
                 "Environment transaction identity changed"
             );
-            let mut value = service.environment(&request.spec)?;
-            value["token"] = serde_json::json!(token);
-            return Ok(Json(value));
+            return Ok(Json(service.preparation(&request.spec, token)?));
         }
         ensure!(pending.len() < 64, "Too many pending environment updates");
         ensure!(
@@ -277,9 +288,7 @@ async fn prepare(State(service): State<Environments>, Json(request): Json<Prepar
         write_json(&service.transaction_path(&token)?, &operation)?;
         home.suspend();
         pending.insert(token.clone(), operation);
-        let mut value = service.environment(&request.spec)?;
-        value["token"] = serde_json::json!(token);
-        Ok(Json(value))
+        Ok(Json(service.preparation(&request.spec, token)?))
     })
     .await
     .map_err(|e| error(e.into()))?

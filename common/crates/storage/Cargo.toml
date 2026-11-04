@@ -1,0 +1,18 @@
+[package]
+name = "aow-storage"
+version.workspace = true
+edition.workspace = true
+license = "GPL-3.0-or-later"
+
+[dependencies]
+anyhow.workspace = true
+uuid.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile = "3.20"
+
+[lib]
+name = "aow_storage"

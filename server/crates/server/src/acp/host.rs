@@ -114,10 +114,9 @@ pub(crate) fn service_with_runtime(
     let state = directory
         .as_ref()
         .map(|directory| directory.join("data/acp"));
-    let cache = directory.map(|directory| directory.join("cache/acp-client"));
     match runtime {
-        Some(runtime) => AcpClient::with_runtime(runtime, host, state, cache),
-        None => AcpClient::for_test_storage(host, state, cache),
+        Some(runtime) => AcpClient::with_runtime(runtime, host, state),
+        None => AcpClient::for_test_host(host, state),
     }
 }
 

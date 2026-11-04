@@ -480,7 +480,7 @@ async fn acp_messages_keep_native_page_and_im_delivery_without_task_reports() {
     let (page, mut page_receiver) = broadcast::channel(8);
     let previous = manager.acp_settings().unwrap();
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../acp-client-model/tests/fixtures/lineage-agent.mjs");
+        .join("../../../common/fixtures/acp/lineage-agent.mjs");
     manager
         .save_acp_settings(
             json!({"agent_servers":{"test":{

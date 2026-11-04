@@ -154,11 +154,23 @@ pub(super) async fn read(
             .map(|session| service.remember(session))
             .collect();
         ensure_current(&binding.process)?;
-        Ok(Json(serde_json::json!({
-            "agent":binding.agent,"cwd":binding.cwd,"title":binding.title,"process":binding.process,
-            "live_session_id":live_session_id,"current":current,
-            "sessions":values.map_err(|e|error(StatusCode::INTERNAL_SERVER_ERROR,e))?
-        })))
+        let sessions = values
+            .map_err(|e| error(StatusCode::INTERNAL_SERVER_ERROR, e))?
+            .into_iter()
+            .map(serde_json::from_value)
+            .collect::<Result<Vec<aow_runtime_contract::NativeSessionRecord>, _>>()
+            .map_err(|e| error(StatusCode::INTERNAL_SERVER_ERROR, e))?;
+        Ok(Json(serde_json::json!(
+            aow_runtime_contract::NativePaneSessionRecord {
+                agent: binding.agent.into(),
+                cwd: binding.cwd,
+                title: binding.title,
+                process: Some(binding.process),
+                live_session_id,
+                current,
+                sessions,
+            }
+        )))
     })
     .await
     .map_err(|e| error(StatusCode::INTERNAL_SERVER_ERROR, e))?

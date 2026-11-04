@@ -11,10 +11,10 @@ sessions = ["dep:anyhow", "dep:chrono", "dep:serde", "dep:serde_json", "dep:this
 automation = ["dep:anyhow", "dep:serde", "dep:serde_json", "dep:tokio"]
 
 [dependencies]
-aow-i18n = { path = "../i18n" }
+aow-i18n = { path = "../../../common/crates/i18n" }
 aow-db = { path = "../db", optional = true }
-aow-id = { path = "../id", optional = true }
-aow-process = { path = "../process", optional = true }
+aow-id = { path = "../../../common/crates/id", optional = true }
+aow-process = { path = "../../../common/crates/process", optional = true }
 anyhow = { workspace = true, optional = true }
 chrono = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }

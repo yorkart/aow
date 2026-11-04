@@ -1,6 +1,6 @@
 use super::AcpClient;
 use anyhow::Result;
-use aow_acp::*;
+use aow_acp_client::*;
 use serde_json::Value;
 use std::path::PathBuf;
 impl AcpClient {
@@ -52,7 +52,7 @@ impl AcpClient {
                 .map_err(Into::into);
         }
 
-        Ok(self.service.installation_status(agent_id))
+        self.service.installation_status(agent_id).await
     }
     pub async fn connect(&self, agent_id: &str, cwd: PathBuf) -> Result<ConnectionInfo> {
         self.service.connect(agent_id, cwd).await

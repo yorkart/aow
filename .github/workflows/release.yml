@@ -93,6 +93,7 @@ jobs:
           workspaces: |
             server -> ../target
             runtime -> ../target
+            common -> ../target
           shared-key: test-${{ matrix.runner }}
           cache-bin: false
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -110,21 +111,22 @@ jobs:
           fi
           export AOW_RUNTIME_TEST_HOST="$GITHUB_WORKSPACE/target/debug/examples/runtime-test-host"
           cargo build --manifest-path runtime/Cargo.toml --example runtime-test-host --locked --target-dir target
+          cargo test --manifest-path common/Cargo.toml --workspace --locked --target-dir target -- --test-threads=4
           cargo test --manifest-path server/Cargo.toml --target-dir target --workspace --locked -- --test-threads=4
           cargo test --manifest-path runtime/Cargo.toml --workspace --locked --target-dir target -- --test-threads=4
       - name: Check Rust formatting and lint
         run: |
+          cargo fmt --manifest-path common/Cargo.toml --all -- --check
           cargo fmt --manifest-path server/Cargo.toml --all -- --check
           cargo fmt --manifest-path runtime/Cargo.toml --all -- --check
+          cargo clippy --manifest-path common/Cargo.toml --workspace --all-targets --locked --target-dir target -- -D warnings
           cargo clippy --manifest-path server/Cargo.toml --target-dir target --workspace --all-targets --locked -- -D warnings
           cargo clippy --manifest-path runtime/Cargo.toml --workspace --all-targets --locked --target-dir target -- -D warnings
       - name: Check macOS C bridge
         if: runner.os == 'macOS'
         run: |
-          clang -Wall -Wextra -Werror -fsyntax-only server/crates/macos-log/src/os_log.c
-          clang -Wall -Wextra -Werror -fsyntax-only runtime/crates/macos-log/src/os_log.c
-          clang --analyze -Xanalyzer -analyzer-output=text -Xanalyzer -analyzer-werror -Wall -Wextra -Werror server/crates/macos-log/src/os_log.c
-          clang --analyze -Xanalyzer -analyzer-output=text -Xanalyzer -analyzer-werror -Wall -Wextra -Werror runtime/crates/macos-log/src/os_log.c
+          clang -Wall -Wextra -Werror -fsyntax-only common/crates/macos-log/src/os_log.c
+          clang --analyze -Xanalyzer -analyzer-output=text -Xanalyzer -analyzer-werror -Wall -Wextra -Werror common/crates/macos-log/src/os_log.c
 
   test-scripts:
     strategy:

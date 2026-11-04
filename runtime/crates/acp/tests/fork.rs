@@ -27,7 +27,7 @@ impl AcpHost for Host {
 fn host(env: Value) -> Arc<Host> {
     Arc::new(Host(
         json!({"agent_servers":{"test":{"type":"custom","command":"node",
-        "args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/fork-agent.mjs")], "env":env,
+        "args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../common/fixtures/acp/fork-agent.mjs")], "env":env,
         "default_mode":"code", "default_config_options":{"model":"default"}}}}),
     ))
 }

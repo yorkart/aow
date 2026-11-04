@@ -34,10 +34,10 @@ pub(super) async fn events(
     }
     ws.on_upgrade(move |socket| stream(service, cursor, socket))
 }
-async fn send(socket: &mut WebSocket, value: serde_json::Value) -> Result<()> {
+async fn send(socket: &mut WebSocket, value: aow_runtime_contract::CompletionFrame) -> Result<()> {
     tokio::time::timeout(
         Duration::from_secs(5),
-        socket.send(Message::Text(value.to_string().into())),
+        socket.send(Message::Text(serde_json::to_string(&value)?.into())),
     )
     .await??;
     Ok(())
@@ -48,7 +48,20 @@ async fn stream(service: Completions, cursor: Cursor, mut socket: WebSocket) {
     let bounds = { storage::bounds(&service.inner.log.lock().unwrap()) };
     let Ok((oldest, head)) = bounds else { return };
     let mut after = cursor.after.unwrap_or(head);
-    if send(&mut socket,serde_json::json!({"type":"ready","node_id":service.inner.node_id,"head":head,"oldest":oldest,"after":after})).await.is_err(){return;}
+    if send(
+        &mut socket,
+        aow_runtime_contract::CompletionFrame::Ready {
+            node_id: service.inner.node_id.clone(),
+            head,
+            oldest,
+            after,
+        },
+    )
+    .await
+    .is_err()
+    {
+        return;
+    }
     let mut received = std::time::Instant::now();
     let mut heartbeat = tokio::time::interval(Duration::from_secs(15));
     loop {
@@ -63,9 +76,13 @@ async fn stream(service: Completions, cursor: Cursor, mut socket: WebSocket) {
         match batch {
             Ok(Ok(events)) if !events.is_empty() => {
                 for mut event in events {
-                    event["node_id"] = serde_json::json!(service.inner.node_id);
                     let sequence = event["sequence"].as_u64().unwrap();
-                    if send(&mut socket, event).await.is_err() {
+                    let frame = aow_runtime_contract::CompletionFrame::Completion {
+                        node_id: service.inner.node_id.clone(),
+                        sequence,
+                        event: event["event"].take(),
+                    };
+                    if send(&mut socket, frame).await.is_err() {
                         return;
                     }
                     after = sequence;
@@ -76,7 +93,10 @@ async fn stream(service: Completions, cursor: Cursor, mut socket: WebSocket) {
             _ => {
                 let _ = send(
                     &mut socket,
-                    serde_json::json!({"type":"gap","node_id":service.inner.node_id,"after":after}),
+                    aow_runtime_contract::CompletionFrame::Gap {
+                        node_id: service.inner.node_id.clone(),
+                        after,
+                    },
                 )
                 .await;
                 return;

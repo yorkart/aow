@@ -7,7 +7,7 @@ license.workspace = true
 [dependencies]
 reqwest.workspace = true
 anyhow.workspace = true
-aow-protocol = { path = "../protocol" }
+aow-protocol = { path = "../../../common/crates/protocol" }
 bytes.workspace = true
 http.workspace = true
 http-body-util.workspace = true

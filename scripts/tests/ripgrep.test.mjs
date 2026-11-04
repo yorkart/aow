@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stageRipgrep } from '../ripgrep.mjs';
 
-const vendor = fileURLToPath(new URL('../../server/vendor/ripgrep/', import.meta.url));
+const vendor = fileURLToPath(new URL('../../common/vendor/ripgrep/', import.meta.url));
 const manifest = JSON.parse(readFileSync(join(vendor, 'manifest.json'), 'utf8'));
 test('all vendored release archives verify and contain an executable and upstream licenses', t => {
   const temp = mkdtempSync(join(tmpdir(), 'aow-rg-')); t.after(() => rmSync(temp, { recursive: true, force: true }));

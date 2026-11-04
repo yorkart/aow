@@ -1,8 +1,7 @@
 use super::host::RemoteHost;
 use crate::RuntimeClient;
 use anyhow::{Result, bail, ensure};
-use aow_acp::{AcpHost, AcpService, ExecutionEnvironment, SessionCreation, SyncEvent};
-use serde::{Deserialize, Serialize};
+use aow_acp_client::{AcpHost, AcpService, ExecutionEnvironment, SessionCreation, SyncEvent};
 use std::{path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::broadcast;
 
@@ -11,27 +10,20 @@ pub struct AcpClient {
     pub(super) service: AcpService,
     pub(super) runtime: Option<RuntimeClient>,
 }
-#[derive(Serialize, Deserialize)]
-pub struct AcpSettings {
-    pub path: String,
-    pub content: String,
-    pub revision: String,
-}
+pub use aow_runtime_contract::AcpSettings;
 impl AcpClient {
     /// Production clients always use the authenticated runtime connector. Errors never fall back to stdio.
     pub fn with_runtime(
         runtime: RuntimeClient,
         host: Arc<dyn AcpHost>,
         state: Option<PathBuf>,
-        cache: Option<PathBuf>,
     ) -> Result<Self> {
-        let service = AcpService::with_storage(
+        let service = AcpService::new(
             Arc::new(RemoteHost {
                 runtime: runtime.clone(),
                 host,
             }),
             state,
-            cache,
         )?;
         Ok(Self {
             service,
@@ -40,20 +32,14 @@ impl AcpClient {
     }
     /// Explicit protocol/session fixture; not used by the server executable.
     pub fn for_test_host(host: Arc<dyn AcpHost>, state: Option<PathBuf>) -> Result<Self> {
-        Self::for_test_storage(host, state.clone(), state)
-    }
-    pub fn for_test_storage(
-        host: Arc<dyn AcpHost>,
-        state: Option<PathBuf>,
-        cache: Option<PathBuf>,
-    ) -> Result<Self> {
+        #[cfg(feature = "test-support")]
+        let host: Arc<dyn AcpHost> = Arc::new(super::fixture::FixtureHost::new(host));
+        #[cfg(not(feature = "test-support"))]
+        anyhow::ensure!(false, "ACP fixtures require the test-support feature");
         Ok(Self {
-            service: AcpService::with_storage(host, state, cache)?,
+            service: AcpService::new(host, state)?,
             runtime: None,
         })
-    }
-    pub fn test_service(&self) -> Option<&AcpService> {
-        self.runtime.is_none().then_some(&self.service)
     }
     pub fn disconnect_all(&self) {
         for session in self.service.sessions(None) {
@@ -85,7 +71,7 @@ impl AcpClient {
             .ok_or_else(|| anyhow::anyhow!("Settings are owned by the explicit test host"))?
             .put_json(
                 "/v1/acp/settings",
-                &serde_json::json!({"content":content,"revision":revision}),
+                &aow_runtime_contract::AcpSettingsUpdate { content, revision },
             )
             .await
             .map_err(Into::into)
@@ -150,13 +136,5 @@ impl AcpClient {
         .await;
         let _ = self.service.delete_session(&session.thread_id).await;
         result?
-    }
-}
-impl From<AcpService> for AcpClient {
-    fn from(service: AcpService) -> Self {
-        Self {
-            service,
-            runtime: None,
-        }
     }
 }

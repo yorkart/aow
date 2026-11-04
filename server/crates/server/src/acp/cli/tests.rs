@@ -17,7 +17,7 @@ struct Host {
 #[async_trait::async_trait]
 impl aow_runtime_client::acp::AcpHost for Host {
     async fn settings(&self) -> anyhow::Result<String> {
-        let mut settings = json!({"agent_servers":{"test":{"type":"custom","command":self.command,"env":{"START_DELAY_MS":self.delay_ms.to_string()},"args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../acp-client-model/tests/fixtures/lineage-agent.mjs")]}}});
+        let mut settings = json!({"agent_servers":{"test":{"type":"custom","command":self.command,"env":{"START_DELAY_MS":self.delay_ms.to_string()},"args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../common/fixtures/acp/lineage-agent.mjs")]}}});
         settings["agent_servers"]["another"] = settings["agent_servers"]["test"].clone();
         settings["default_agent_id"] = json!(self.default_agent_id);
         Ok(settings.to_string())

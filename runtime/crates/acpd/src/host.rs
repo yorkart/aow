@@ -38,11 +38,11 @@ impl AcpHost for Host {
             None => aow_agents::environment::discover_path().await,
         })?))
     }
-    fn execution_environment(&self) -> BTreeMap<String, String> {
-        BTreeMap::from([(
+    fn execution_environment(&self) -> Result<BTreeMap<String, String>> {
+        Ok(BTreeMap::from([(
             "AOW_STATE_DIR".into(),
             self.root.to_string_lossy().into_owned(),
-        )])
+        )]))
     }
     async fn read_text_file(&self, cwd: &Path, path: &Path) -> Result<String> {
         let blocked = self.filesystem.read().await;

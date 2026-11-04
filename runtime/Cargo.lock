@@ -139,13 +139,12 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 name = "aow-acp"
 version = "0.1.0"
 dependencies = [
- "agent-client-protocol",
  "anyhow",
- "aow-runtime-db",
- "aow-runtime-i18n",
- "aow-runtime-protocol",
+ "aow-acp-client",
+ "aow-i18n",
+ "aow-protocol",
+ "aow-storage",
  "async-trait",
- "chrono",
  "flate2",
  "futures",
  "libc",
@@ -166,15 +165,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "aow-acp-client"
+version = "0.1.0"
+dependencies = [
+ "agent-client-protocol",
+ "anyhow",
+ "aow-i18n",
+ "aow-protocol",
+ "aow-runtime-contract",
+ "aow-storage",
+ "async-trait",
+ "chrono",
+ "futures",
+ "serde",
+ "serde_json",
+ "serde_json_lenient",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "aow-acpd"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "aow-acp",
+ "aow-filesystem",
+ "aow-i18n",
+ "aow-macos-log",
  "aow-runtime-agents",
- "aow-runtime-filesystem",
- "aow-runtime-i18n",
- "aow-runtime-macos-log",
+ "aow-runtime-contract",
  "async-trait",
  "axum",
  "bytes",
@@ -194,15 +216,72 @@ dependencies = [
 ]
 
 [[package]]
+name = "aow-filesystem"
+version = "0.1.0"
+dependencies = [
+ "aow-i18n",
+ "aow-id",
+ "aow-protocol",
+ "bytes",
+ "futures-util",
+ "libc",
+ "mime_guess",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "aow-i18n"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "aow-id"
+version = "0.1.0"
+dependencies = [
+ "libc",
+]
+
+[[package]]
+name = "aow-macos-log"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "aow-process"
+version = "0.1.0"
+dependencies = [
+ "libc",
+]
+
+[[package]]
+name = "aow-protocol"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "aow-runtime-agents"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "aow-runtime-db",
- "aow-runtime-i18n",
- "aow-runtime-id",
- "aow-runtime-process",
- "aow-runtime-protocol",
+ "aow-i18n",
+ "aow-id",
+ "aow-process",
+ "aow-protocol",
+ "aow-storage",
  "chrono",
  "rusqlite",
  "serde",
@@ -214,18 +293,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "aow-runtime-contract"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "aow-protocol",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "aow-runtime-daemon"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "aow-acp",
  "aow-acpd",
+ "aow-filesystem",
+ "aow-macos-log",
+ "aow-protocol",
  "aow-runtime-agents",
+ "aow-runtime-contract",
  "aow-runtime-environment",
  "aow-runtime-executor",
- "aow-runtime-filesystem",
- "aow-runtime-macos-log",
- "aow-runtime-protocol",
  "aow-runtime-workspace",
  "aow-terminald",
  "async-trait",
@@ -247,21 +337,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "aow-runtime-db"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "rusqlite",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
 name = "aow-runtime-environment"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "aow-runtime-contract",
  "libc",
  "serde",
  "serde_json",
@@ -275,9 +355,9 @@ name = "aow-runtime-executor"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "aow-i18n",
+ "aow-process",
  "aow-runtime-agents",
- "aow-runtime-i18n",
- "aow-runtime-process",
  "aow-runtime-workspace",
  "chrono",
  "libc",
@@ -291,75 +371,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "aow-runtime-filesystem"
-version = "0.1.0"
-dependencies = [
- "aow-runtime-i18n",
- "aow-runtime-id",
- "aow-runtime-protocol",
- "bytes",
- "futures-util",
- "libc",
- "mime_guess",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.21",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "aow-runtime-i18n"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "aow-runtime-id"
-version = "0.1.0"
-dependencies = [
- "libc",
- "tempfile",
-]
-
-[[package]]
-name = "aow-runtime-macos-log"
-version = "0.1.0"
-dependencies = [
- "cc",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "aow-runtime-process"
-version = "0.1.0"
-dependencies = [
- "libc",
- "portable-pty",
- "tempfile",
-]
-
-[[package]]
-name = "aow-runtime-protocol"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "aow-runtime-workspace"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "aow-runtime-filesystem",
- "aow-runtime-i18n",
- "aow-runtime-protocol",
+ "aow-filesystem",
+ "aow-i18n",
+ "aow-protocol",
+ "aow-runtime-contract",
  "axum",
  "bytes",
  "chrono",
@@ -381,16 +400,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "aow-storage"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "uuid",
+]
+
+[[package]]
 name = "aow-terminald"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "aow-filesystem",
+ "aow-id",
+ "aow-macos-log",
+ "aow-process",
+ "aow-protocol",
  "aow-runtime-agents",
- "aow-runtime-filesystem",
- "aow-runtime-id",
- "aow-runtime-macos-log",
- "aow-runtime-process",
- "aow-runtime-protocol",
  "axum",
  "bytes",
  "futures-util",
