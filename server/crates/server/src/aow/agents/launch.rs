@@ -1,0 +1,233 @@
+use std::path::{Path, PathBuf};
+
+use super::super::*;
+
+impl AowManager {
+    pub(crate) async fn execution_reference_path(
+        &self,
+        project_id: &str,
+        config: &aow_workspaces::WorkspaceConfig,
+    ) -> Result<String, AowError> {
+        config
+            .validate()
+            .map_err(|error| AowError::Invalid(error.to_string()))?;
+        if config.workspace_mode == aow_workspaces::WorkspaceMode::Existing {
+            return self
+                .agent_worktree_path(project_id, &config.workspace_path.to_string_lossy())
+                .await;
+        }
+        let project = self.project(project_id).await?;
+        let main = project
+            .worktrees
+            .iter()
+            .find(|tree| tree.is_main)
+            .or_else(|| project.worktrees.first())
+            .ok_or_else(|| {
+                AowError::Invalid(
+                    aow_i18n::text("server.project_has_no_available_worktrees").into(),
+                )
+            })?;
+        self.agent_worktree_path(project_id, &main.path).await
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn prepare_workspace(
+        &self,
+        project_id: &str,
+        config: &aow_workspaces::WorkspaceConfig,
+        name: &str,
+    ) -> Result<aow_workspaces::PreparedWorkspace, AowError> {
+        let project_lock = self.inner.removals.project_lock(project_id)?;
+        let _project = project_lock.lock().await;
+        let project = self.project(project_id).await?;
+        aow_workspaces::prepare(
+            config,
+            Path::new(&project.registered_path),
+            name,
+            &WorkspaceGit,
+        )
+        .await
+        .map_err(|error| AowError::Invalid(format!("{error:#}")))
+    }
+
+    pub(crate) async fn automation_project_for_cwd(
+        &self,
+        id: &str,
+        cwd: &Path,
+    ) -> Result<(String, PathBuf), AowError> {
+        let cwd = self.canonical_directory(cwd).await?;
+        // Resolve Git ownership rather than accepting any path beneath a registered
+        // root: a subdirectory may itself be a different repository or submodule.
+        let root = self
+            .git_output(&cwd, &["rev-parse", "--show-toplevel"])
+            .await?;
+        self.automation_project(id, Path::new(root.trim_end()))
+            .await
+    }
+
+    pub(crate) async fn automation_project(
+        &self,
+        id: &str,
+        worktree_path: &std::path::Path,
+    ) -> Result<(String, PathBuf), AowError> {
+        let project = self.project(id).await?;
+        let requested = self.canonical_directory(worktree_path).await?;
+        if project.error.is_some()
+            || !project
+                .worktrees
+                .iter()
+                .any(|worktree| Path::new(&worktree.path) == requested)
+        {
+            return Err(AowError::Invalid(
+                aow_i18n::text("server.workspace_does_not_belong_to_the_selected_project").into(),
+            ));
+        }
+        Ok((project.name, PathBuf::from(project.registered_path)))
+    }
+
+    pub(crate) async fn resolve_agent_launch(
+        &self,
+        id: &str,
+        worktree_path: &str,
+    ) -> Result<AgentLaunch, AowError> {
+        let requested = self.canonical_directory(Path::new(worktree_path)).await?;
+        let projects = self.projects().await?;
+        let registered = projects.iter().any(|project| {
+            project.error.is_none()
+                && project
+                    .worktrees
+                    .iter()
+                    .any(|worktree| Path::new(&worktree.path) == requested)
+        });
+        if !registered {
+            return Err(AowError::Invalid(format!(
+                "agent cwd is not a registered worktree: {}",
+                requested.display()
+            )));
+        }
+        self.resolve_agent_profile(id).await
+    }
+
+    pub(crate) async fn resolve_agent_profile(&self, id: &str) -> Result<AgentLaunch, AowError> {
+        if let Some(role) = id.strip_prefix("role:") {
+            return self.role_cli_launch(&self.agent_role(role)?).await;
+        }
+        if let Some(runtime) = &self.inner.runtime_client {
+            let agent = self
+                .agents()
+                .await?
+                .into_iter()
+                .find(|agent| agent.id == id && agent.available)
+                .ok_or_else(|| AowError::AgentNotFound(id.to_owned()))?;
+            let mut launch: AgentLaunch = runtime
+                .post_json("/v1/agents/resolve", &serde_json::json!({"profile":agent}))
+                .await
+                .map_err(|error| AowError::Invalid(error.to_string()))?;
+            launch.env.extend(self.callback_environment()?);
+            return Ok(launch);
+        }
+        #[cfg(test)]
+        {
+            let path = self.execution_path().await?;
+            let agent = self
+                .agents_in_path(&path)?
+                .into_iter()
+                .find(|agent| agent.id == id && agent.available)
+                .ok_or_else(|| AowError::AgentNotFound(id.to_owned()))?;
+            let mut launch = agent.into_launch(&path)?;
+            if let Some(state_dir) = &self.inner.state_dir {
+                // Child tools must reach this AoW instance even when terminald or
+                // the agent profile has a different default state directory.
+                launch.env.insert(
+                    "AOW_STATE_DIR".into(),
+                    state_dir.to_string_lossy().into_owned(),
+                );
+            }
+            Ok(launch)
+        }
+        #[cfg(not(test))]
+        {
+            Err(AowError::Invalid("Runtime is unavailable".into()))
+        }
+    }
+
+    pub(crate) async fn resolve_terminal_rebuild_launch(
+        &self,
+        pane: &aow_protocol::TerminalPane,
+        workspace_root: &str,
+    ) -> Result<AgentLaunch, AowError> {
+        let profile_id = if let Some(id) = &pane.agent_profile_id {
+            id.clone()
+        } else {
+            // Older metadata only saved the product type. Recover the profile
+            // only when its executable and full launch arguments identify it.
+            let candidates: Vec<_> = self
+                .agents()
+                .await?
+                .into_iter()
+                .filter(|agent| {
+                    let Some(kind) = agent.agent_type else {
+                        return false;
+                    };
+                    if !agent.available
+                        || Some(kind.id()) != pane.agent_id.as_deref()
+                        || agent.executable.as_deref() != Some(pane.shell.as_str())
+                    {
+                        return false;
+                    }
+                    agent.matches_terminal_arguments(&pane.arguments)
+                })
+                .collect();
+            if candidates.len() != 1 {
+                return Err(AowError::Invalid(
+                    aow_i18n::text(
+                        "server.unable_to_identify_the_terminal_s_original_agent_configuration",
+                    )
+                    .into(),
+                ));
+            }
+            candidates[0].id.clone()
+        };
+        let launch = self
+            .resolve_agent_launch(&profile_id, workspace_root)
+            .await?;
+        if Some(launch.agent_type.id()) != pane.agent_id.as_deref() {
+            return Err(AowError::Invalid(
+                aow_i18n::text(
+                    "server.the_original_agent_configuration_s_type_changed_cannot_rebuild",
+                )
+                .into(),
+            ));
+        }
+        Ok(launch)
+    }
+
+    pub(crate) async fn agent_worktree_path(
+        &self,
+        project_id: &str,
+        worktree_path: &str,
+    ) -> Result<String, AowError> {
+        let project = self.project(project_id).await?;
+        let requested = self.canonical_directory(Path::new(worktree_path)).await?;
+        if !project
+            .worktrees
+            .iter()
+            .any(|worktree| Path::new(&worktree.path) == requested)
+        {
+            return Err(AowError::Invalid(format!(
+                "agent cwd is not a worktree of project {project_id}: {}",
+                requested.display()
+            )));
+        }
+        Ok(requested.to_string_lossy().into_owned())
+    }
+}
+
+#[cfg(test)]
+struct WorkspaceGit;
+#[cfg(test)]
+impl aow_workspaces::GitExecutor for WorkspaceGit {
+    async fn output(&self, cwd: &Path, args: &[&str]) -> anyhow::Result<String> {
+        git_output(cwd, args).await.map_err(Into::into)
+    }
+}

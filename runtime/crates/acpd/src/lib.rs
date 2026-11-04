@@ -2,4 +2,4 @@
 mod host;
 mod runtime;
 mod wire;
-pub use runtime::AcpRuntime;
+pub use runtime::{AcpProber, AcpRuntime, NodeOwnership};

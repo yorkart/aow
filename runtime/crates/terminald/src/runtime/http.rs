@@ -45,10 +45,11 @@ async fn list_runtimes(
 async fn list_agents(
     State(state): State<DaemonState>,
 ) -> Result<Json<TerminalAgentList>, TerminaldError> {
-    tokio::task::spawn_blocking(move || state.agents())
+    let mut detected = tokio::task::spawn_blocking(move || state.agents())
         .await
-        .map_err(|error| TerminaldError::Worker(error.to_string()))?
-        .map(Json)
+        .map_err(|error| TerminaldError::Worker(error.to_string()))??;
+    super::session_titles::enrich(&mut detected).await;
+    Ok(Json(detected))
 }
 
 async fn get_runtime(

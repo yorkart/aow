@@ -91,7 +91,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: |
-            . -> target
+            server -> ../target
             runtime -> ../target
           shared-key: test-${{ matrix.runner }}
           cache-bin: false
@@ -101,26 +101,30 @@ jobs:
           npm --prefix runtime/vt-worker ci --ignore-scripts --no-audit --no-fund
           npm --prefix runtime/vt-worker test
       - name: Test Git platform providers
-        run: node --test git-platform-providers/tests/*.test.mjs
+        run: node --test server/git-platform-providers/tests/*.test.mjs
       - name: Test Rust workspace
         run: |
           if [[ "$RUNNER_OS" == macOS ]]; then
             TMPDIR="$(node -p 'require("node:fs").realpathSync(require("node:os").tmpdir())')"
             export TMPDIR
           fi
-          cargo test --workspace --locked -- --test-threads=4
+          export AOW_RUNTIME_TEST_HOST="$GITHUB_WORKSPACE/target/debug/examples/runtime-test-host"
+          cargo build --manifest-path runtime/Cargo.toml --example runtime-test-host --locked --target-dir target
+          cargo test --manifest-path server/Cargo.toml --target-dir target --workspace --locked -- --test-threads=4
           cargo test --manifest-path runtime/Cargo.toml --workspace --locked --target-dir target -- --test-threads=4
       - name: Check Rust formatting and lint
         run: |
-          cargo fmt --all -- --check
+          cargo fmt --manifest-path server/Cargo.toml --all -- --check
           cargo fmt --manifest-path runtime/Cargo.toml --all -- --check
-          cargo clippy --workspace --all-targets --locked -- -D warnings
+          cargo clippy --manifest-path server/Cargo.toml --target-dir target --workspace --all-targets --locked -- -D warnings
           cargo clippy --manifest-path runtime/Cargo.toml --workspace --all-targets --locked --target-dir target -- -D warnings
       - name: Check macOS C bridge
         if: runner.os == 'macOS'
         run: |
-          clang -Wall -Wextra -Werror -fsyntax-only crates/macos-log/src/os_log.c
-          clang --analyze -Xanalyzer -analyzer-output=text -Xanalyzer -analyzer-werror -Wall -Wextra -Werror crates/macos-log/src/os_log.c
+          clang -Wall -Wextra -Werror -fsyntax-only server/crates/macos-log/src/os_log.c
+          clang -Wall -Wextra -Werror -fsyntax-only runtime/crates/macos-log/src/os_log.c
+          clang --analyze -Xanalyzer -analyzer-output=text -Xanalyzer -analyzer-werror -Wall -Wextra -Werror server/crates/macos-log/src/os_log.c
+          clang --analyze -Xanalyzer -analyzer-output=text -Xanalyzer -analyzer-werror -Wall -Wextra -Werror runtime/crates/macos-log/src/os_log.c
 
   test-scripts:
     strategy:
@@ -152,17 +156,17 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: |
-            frontend/package-lock.json
+            server/frontend/package-lock.json
             runtime/vt-worker/package-lock.json
       - name: Build and check frontend
         env:
           NODE_OPTIONS: --max-old-space-size=4096
         run: |
-          npm --prefix frontend ci --ignore-scripts --no-audit --no-fund
-          npm --prefix frontend run build
-          npm --prefix frontend run test:architecture
+          npm --prefix server/frontend ci --ignore-scripts --no-audit --no-fund
+          npm --prefix server/frontend run build
+          npm --prefix server/frontend run test:architecture
       - name: Test Explorer search and file operations
-        working-directory: frontend
+        working-directory: server/frontend
         run: |
           npx playwright install --with-deps chromium
           npm run test:explorer
@@ -177,7 +181,7 @@ jobs:
         with:
           name: web-assets
           path: |
-            frontend/dist/
+            server/frontend/dist/
             runtime/vt-worker/dist/
           if-no-files-found: error
           retention-days: 1

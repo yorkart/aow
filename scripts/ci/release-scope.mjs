@@ -8,14 +8,15 @@ import { fileURLToPath } from 'node:url';
 // release platform before merge. Main and manual runs always build packages.
 export function requiresNativePackages(event, paths = []) {
   if (event !== 'pull_request') return true;
-  return paths.some(path =>
-    /^(scripts|packaging|skills|git-platform-providers|vendor|\.cargo|runtime)\//.test(path)
-    || path === '.github/workflows/release.yml'
-    || /^(Cargo\.(toml|lock)|rust-toolchain(\.toml)?)$/.test(path)
-    || /^crates\/[^/]+\/(Cargo\.toml|build\.rs)$/.test(path)
-    || /\.(c|h|m|mm)$/.test(path)
-    || /^frontend\/package(-lock)?\.json$/.test(path),
-  );
+  return paths.some(original => {
+    const path = original.replace(/^server\//, '');
+    return /^(scripts|packaging|skills|git-platform-providers|vendor|\.cargo|runtime)\//.test(path)
+      || path === '.github/workflows/release.yml'
+      || /^(Cargo\.(toml|lock)|rust-toolchain(\.toml)?)$/.test(path)
+      || /^crates\/[^/]+\/(Cargo\.toml|build\.rs)$/.test(path)
+      || /\.(c|h|m|mm)$/.test(path)
+      || /^frontend\/package(-lock)?\.json$/.test(path);
+  });
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

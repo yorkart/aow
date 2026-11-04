@@ -1,0 +1,71 @@
+#[cfg(test)]
+use tokio::fs::OpenOptions;
+
+use super::*;
+
+#[derive(Debug, Deserialize)]
+pub(in crate::aow) struct CreateTemporaryNoteRequest {
+    pub(in crate::aow) extension: TemporaryNoteExtension,
+}
+
+#[derive(Debug, Serialize)]
+pub(in crate::aow) struct TemporaryNoteResult {
+    pub(in crate::aow) path: String,
+    pub(in crate::aow) name: String,
+    pub(in crate::aow) kind: &'static str,
+}
+
+#[cfg(test)]
+pub(in crate::aow) async fn prepare_notes_directory(path: &Path) -> Result<String, AowError> {
+    if !path.is_absolute() {
+        return Err(AowError::Invalid(
+            aow_i18n::text("validation.notes_directory_must_be_an_absolute_path").to_owned(),
+        ));
+    }
+    tokio::fs::create_dir_all(path).await?;
+    Ok(paths::canonical_directory(path)
+        .await?
+        .to_string_lossy()
+        .into_owned())
+}
+
+pub(in crate::aow) async fn notes_root_canonical(
+    manager: &AowManager,
+    id: &str,
+) -> Result<PathBuf, AowError> {
+    let path = manager
+        .lock()?
+        .projects
+        .iter()
+        .find(|project| project.id == id)
+        .ok_or_else(|| AowError::ProjectNotFound(id.to_owned()))?
+        .notes_path
+        .clone();
+    manager.canonical_directory(Path::new(&path)).await
+}
+
+#[cfg(test)]
+pub(in crate::aow) async fn create_temporary_note_file(
+    root: &Path,
+    extension: &str,
+    mut next_id: impl FnMut() -> String,
+) -> Result<(PathBuf, String), AowError> {
+    for _ in 0..5 {
+        let name = format!(".tmp-{}.{}", next_id(), extension);
+        let path = root.join(&name);
+        match OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&path)
+            .await
+        {
+            Ok(_) => return Ok((path, name)),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Err(AowError::Invalid(
+        aow_i18n::text("validation.could_not_allocate_a_unique_temporary_note_name_after_5")
+            .to_owned(),
+    ))
+}

@@ -10,7 +10,7 @@ function flatten(value, prefix = '', result = {}) {
   }
   return result;
 }
-for (const directory of ['frontend/src/lib/i18n/locales', 'crates/i18n/locales']) {
+for (const directory of ['server/frontend/src/lib/i18n/locales', 'server/crates/i18n/locales']) {
   const english = flatten(JSON.parse(await readFile(`${directory}/en-US.json`, 'utf8')));
   const files = await readdir(directory);
   for (const file of files.filter(name => name.endsWith('.json'))) {
@@ -23,7 +23,7 @@ for (const directory of ['frontend/src/lib/i18n/locales', 'crates/i18n/locales']
   console.log(`${directory}: ${Object.keys(english).length} keys, ${files.length} languages`);
 }
 const technicalTerms = new Set(Object.values(JSON.parse(await readFile('scripts/i18n/technical-terms.json', 'utf8'))).flat());
-const resources = flatten(JSON.parse(await readFile('frontend/src/lib/i18n/locales/en-US.json', 'utf8')));
+const resources = flatten(JSON.parse(await readFile('server/frontend/src/lib/i18n/locales/en-US.json', 'utf8')));
 async function scan(directory) {
   for (const item of await readdir(directory, { withFileTypes: true })) {
     const file = `${directory}/${item.name}`;
@@ -32,10 +32,10 @@ async function scan(directory) {
     validateFrontendSource(await readFile(file, 'utf8'), file, resources, technicalTerms);
   }
 }
-await scan('frontend/src');
+await scan('server/frontend/src');
 console.log('Frontend keys and hardcoded text checks passed.');
 
-const backend = JSON.parse(await readFile('crates/i18n/locales/en-US.json', 'utf8'));
+const backend = JSON.parse(await readFile('server/crates/i18n/locales/en-US.json', 'utf8'));
 async function checkRust(directory) {
   for (const item of await readdir(directory, { withFileTypes: true })) {
     const file = `${directory}/${item.name}`;
@@ -45,6 +45,6 @@ async function checkRust(directory) {
     validateRustSource(source, file, backend);
   }
 }
-await checkRust('crates');
+await checkRust('server/crates');
 await checkRust('runtime/crates');
 console.log('Backend translation references passed.');

@@ -32,6 +32,8 @@ struct InstanceSpec {
     cwd: PathBuf,
     #[serde(default)]
     execution_environment: Option<aow_acp::ExecutionEnvironment>,
+    #[serde(default)]
+    environment: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Serialize)]
@@ -95,6 +97,22 @@ impl WireRuntime {
             return Err(ApiError(
                 StatusCode::SERVICE_UNAVAILABLE,
                 "ACP instance limit reached; delete unused instances".into(),
+            ));
+        }
+        if spec.environment.len() > 128
+            || spec.environment.iter().any(|(key, value)| {
+                key.is_empty() || key.contains(['=', '\0']) || value.contains('\0')
+            })
+            || spec
+                .environment
+                .iter()
+                .map(|(key, value)| key.len() + value.len())
+                .sum::<usize>()
+                > 128 * 1024
+        {
+            return Err(ApiError(
+                StatusCode::BAD_REQUEST,
+                "Invalid instance environment".into(),
             ));
         }
         if let Some(environment) = &spec.execution_environment {
@@ -175,6 +193,7 @@ fn ensure_id(id: &str) -> Result<(), ApiError> {
     Ok(())
 }
 
+#[derive(Debug)]
 struct ApiError(StatusCode, String);
 impl ApiError {
     fn invalid(error: impl std::fmt::Display) -> Self {

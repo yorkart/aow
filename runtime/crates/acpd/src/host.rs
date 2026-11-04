@@ -7,6 +7,7 @@ use std::{
 };
 
 pub(crate) struct Host {
+    pub _ownership: std::sync::Arc<crate::runtime::NodeOwnership>,
     pub root: PathBuf,
     pub stopping: AtomicBool,
     pub filesystem: tokio::sync::RwLock<std::collections::HashSet<PathBuf>>,

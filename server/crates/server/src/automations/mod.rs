@@ -1,0 +1,161 @@
+use std::{
+    collections::BTreeMap,
+    path::PathBuf,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
+use anyhow::{Context, Result, ensure};
+use aow_automations::{
+    AgentLaunch, Run, RunOutput, RunSource, Scheduler, Store, Task, TaskInput, TaskKind, TaskView,
+    WorkspaceMode, scheduler::SchedulerStatus,
+};
+use axum::{
+    Json, Router,
+    extract::{Path, Query, State},
+    http::{StatusCode, header},
+    response::{IntoResponse, Response},
+    routing::{get, post, put},
+};
+use chrono::Utc;
+use serde::Deserialize;
+
+use crate::{AppState, PROCESS_HOME};
+
+mod api;
+mod hosting;
+mod notifications;
+pub(crate) use api::{cli_routes, routes};
+
+const RUN_HISTORY_RETENTION: usize = 200;
+const RUN_HISTORY_CLEANUP_INTERVAL: Duration = Duration::from_secs(5 * 60);
+const FAILURE_NOTIFICATION_INTERVAL: Duration = Duration::from_secs(5);
+
+#[derive(Clone)]
+pub(crate) struct AutomationManager {
+    store: Arc<Store>,
+    scheduler: Scheduler,
+    operation: Arc<tokio::sync::Mutex<()>>,
+}
+
+impl AutomationManager {
+    pub(crate) fn new(
+        state_dir: PathBuf,
+        notifications: crate::notifications::NotificationManager,
+    ) -> Result<Self> {
+        let manager = Self {
+            store: Arc::new(Store::new(state_dir)?),
+            scheduler: Scheduler::new(&PROCESS_HOME),
+            operation: Arc::new(tokio::sync::Mutex::new(())),
+        };
+        manager.start_background_tasks(notifications);
+        Ok(manager)
+    }
+
+    pub(crate) fn store(&self) -> &Store {
+        &self.store
+    }
+    pub(crate) fn with_runtime(
+        self,
+        runtime: Option<&aow_runtime_client::RuntimeClient>,
+    ) -> Result<Self> {
+        if let Some(runtime) = runtime {
+            runtime
+                .write_connection_file(&self.store.state_dir.join("runtime/runtime-client.json"))?;
+        }
+        Ok(self)
+    }
+    fn start_background_tasks(&self, notifications: crate::notifications::NotificationManager) {
+        let Ok(handle) = tokio::runtime::Handle::try_current() else {
+            return;
+        };
+        let store = Arc::downgrade(&self.store);
+        handle.spawn(async move {
+            let mut last_cleanup = None;
+            let warnings = notifications::Warnings::default();
+            let mut interval = tokio::time::interval(FAILURE_NOTIFICATION_INTERVAL);
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                interval.tick().await;
+                warnings.flush();
+                let Some(store) = store.upgrade() else { break };
+                if store
+                    .state_dir
+                    .join("runtime/runtime-client.json")
+                    .is_file()
+                    && let Err(error) = aow_automations::runner::reconcile(&store).await
+                {
+                    warnings.report("reconcile node executions", "", "", &error);
+                }
+                let prune = last_cleanup
+                    .is_none_or(|last: Instant| last.elapsed() >= RUN_HISTORY_CLEANUP_INTERVAL);
+                let result = notifications::poll(
+                    store,
+                    |run, channel, delivery_id| {
+                        let notifications = notifications.clone();
+                        async move {
+                            notifications
+                                .send_automation_failure(run, channel, &delivery_id)
+                                .await
+                        }
+                    },
+                    prune,
+                    warnings.clone(),
+                )
+                .await;
+                // Failed cleanup attempts observe the same interval as successful ones.
+                if prune {
+                    last_cleanup = Some(Instant::now());
+                }
+                if let Err(error) = result {
+                    warnings.report("poll failure notifications", "", "", &error);
+                }
+            }
+        });
+    }
+
+    async fn save(&self, mut task: Task) -> Result<TaskView> {
+        // Persist the desired configuration first. Even an old installed trigger
+        // reads the new enabled flag, and a dropped HTTP request leaves a visible error.
+        task.scheduler_error =
+            Some(aow_i18n::text("server.timer_configuration_awaiting_sync").into());
+        self.store.save_task(&task)?;
+        task.scheduler_error = self
+            .scheduler
+            .sync(&self.store, &task)
+            .await
+            .err()
+            .map(|e| format!("{e:#}"));
+        self.store.save_task(&task)?;
+        self.view(task)
+    }
+
+    fn view(&self, task: Task) -> Result<TaskView> {
+        self.store.task_view(task)
+    }
+
+    fn task(&self, id: &str) -> Result<Task> {
+        let task = self.store.get_task(id)?;
+        ensure!(
+            !task.deleted,
+            aow_i18n::message("server.automation_deleted", &[])
+        );
+        Ok(task)
+    }
+
+    pub(crate) fn run(&self, task_id: &str, run_id: &str) -> Result<Run> {
+        self.store.get_task(task_id)?;
+        self.store
+            .read_run(task_id, run_id)?
+            .context(aow_i18n::text("server.run_record_not_yet_created"))
+    }
+
+    pub(crate) fn run_result(&self, run: &Run) -> Result<String> {
+        self.store.read_run_result(run)
+    }
+}
+
+#[cfg(test)]
+mod hosting_tests;
+#[cfg(test)]
+mod tests;

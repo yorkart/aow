@@ -77,3 +77,10 @@ ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:18282:127.0.0.1:8282 user@host
 在源码目录运行 `just build` 编译、`just test` 测试；本地部署先 `just package`，再 `just install`。本地包与 GitHub 包使用相同安装流程，会更新当前用户实际运行的服务。开发服务也默认仅监听本机。
 
 源码开发时，先在单独终端运行 `just run-runtime-daemon`，再启动 Web 服务。两个进程使用相同的 `AOW_STATE_DIR`，Server 会沿用已有 ACP 会话历史。
+
+## 源码子项目
+
+`server/` 包含 Server、CLI、自动化调度和前端；`runtime/` 包含节点执行能力。
+两边分别拥有 Cargo workspace 和锁文件，生产代码没有跨子项目源码依赖。
+根目录的 `just` 命令负责组合构建和安装包。独立构建、远程 CLI 地址与认证配置见
+[Server 子项目说明](server/README.md)。

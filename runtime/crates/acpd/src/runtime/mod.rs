@@ -1,8 +1,10 @@
 //! Embeddable ACP adapter host. Network serving belongs to runtime-daemon.
+mod probe;
 use crate::host::Host;
 use anyhow::{Result, ensure};
 use aow_acp::AcpService;
 use axum::Router;
+pub use probe::AcpProber;
 use std::{
     os::{fd::AsRawFd, unix::fs::OpenOptionsExt},
     path::PathBuf,
@@ -15,7 +17,16 @@ pub struct AcpRuntime {
     host: Arc<Host>,
     stopping: watch::Sender<bool>,
     wire: crate::wire::WireRuntime,
-    lock: std::fs::File,
+    lock: Arc<NodeOwnership>,
+}
+/// Shared lifetime of the node lock, including admitted blocking filesystem work.
+pub struct NodeOwnership(std::fs::File);
+impl Drop for NodeOwnership {
+    fn drop(&mut self) {
+        unsafe {
+            libc::flock(self.0.as_raw_fd(), libc::LOCK_UN);
+        }
+    }
 }
 impl AcpRuntime {
     pub async fn open(state_dir: PathBuf) -> Result<Self> {
@@ -36,7 +47,9 @@ impl AcpRuntime {
             unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0,
             "Runtime state directory is already owned by another daemon"
         );
+        let lock = Arc::new(NodeOwnership(lock));
         let host = Arc::new(Host {
+            _ownership: lock.clone(),
             root: std::fs::canonicalize(state_dir)?,
             stopping: std::sync::atomic::AtomicBool::new(false),
             filesystem: Default::default(),
@@ -53,6 +66,12 @@ impl AcpRuntime {
             wire,
             lock,
         })
+    }
+    pub fn ownership(&self) -> Arc<NodeOwnership> {
+        self.lock.clone()
+    }
+    pub fn prober(&self) -> AcpProber {
+        AcpProber::new(self.service.clone(), self.stopping.subscribe())
     }
     pub fn router(&self) -> Router {
         self.wire.router()
@@ -74,10 +93,6 @@ impl Drop for AcpRuntime {
         self.host
             .stopping
             .store(true, std::sync::atomic::Ordering::Release);
-        // Release ownership even while a fork temporarily retains the file description.
-        unsafe {
-            libc::flock(self.lock.as_raw_fd(), libc::LOCK_UN);
-        }
     }
 }
 #[cfg(test)]

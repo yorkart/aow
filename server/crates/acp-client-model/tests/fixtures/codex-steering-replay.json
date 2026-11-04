@@ -1,0 +1,3280 @@
+{
+  "provenance": {
+    "adapter": "@agentclientprotocol/codex-acp@2.2.2",
+    "source": "Anonymized live steering recording followed by session/load from the installed adapter.",
+    "redactions": "All prompts, replies, reasoning, commands, paths, identifiers and timestamps are synthetic. Consistent identifier/text mappings preserve equality, event order, whitespace boundaries, delivery states, tool transport differences, parallel-call reordering and turn outcomes."
+  },
+  "live": {
+    "thread_id": "replay-id-001",
+    "session_id": "replay-id-002",
+    "agent_id": "recorded",
+    "cwd": "/repo",
+    "title": "Fixture conversation",
+    "status": "idle",
+    "revision": 2092,
+    "sync_generation": "replay-id-003",
+    "updated_at": "2000-01-01T00:00:13+00:00",
+    "entries": [
+      {
+        "id": "replay-id-004",
+        "kind": "user",
+        "content": {
+          "type": "text",
+          "text": "Explain example project 1."
+        }
+      },
+      {
+        "id": "replay-id-005",
+        "kind": "assistant",
+        "message_id": "replay-id-006",
+        "content": {
+          "type": "text",
+          "text": "Progress update 1: I will inspect the example files."
+        }
+      },
+      {
+        "id": "replay-id-007",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-007",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-002",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-007"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-001",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-007"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-008",
+        "kind": "steering",
+        "content": {
+          "type": "text",
+          "text": "Also summarize README.md."
+        },
+        "delivery": {
+          "status": "injected",
+          "error": null
+        }
+      },
+      {
+        "id": "replay-id-009",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-009",
+          "name": "exec_command",
+          "kind": "read",
+          "title": "Fixture tool-003",
+          "status": "completed",
+          "rawOutput": {
+            "exit_code": 0
+          },
+          "content": [
+            {
+              "type": "content",
+              "content": {
+                "type": "text",
+                "text": "Fixture content 1.\n"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "replay-id-010",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-010",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-004",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-010"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-002",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-010"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-011",
+        "kind": "thought",
+        "message_id": "replay-id-012",
+        "content": {
+          "type": "text",
+          "text": "\n\n**Inspecting example step 1**"
+        }
+      },
+      {
+        "id": "replay-id-013",
+        "kind": "assistant",
+        "message_id": "replay-id-014",
+        "content": {
+          "type": "text",
+          "text": "Progress update 2: I will inspect the example files."
+        }
+      },
+      {
+        "id": "replay-id-015",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-015",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-005",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-015"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-003",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-015"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-016",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-016",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-006",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-016"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-004",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-016"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-017",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-017",
+          "name": "exec_command",
+          "kind": "read",
+          "title": "Fixture tool-007",
+          "status": "completed",
+          "rawOutput": {
+            "exit_code": 0
+          },
+          "content": [
+            {
+              "type": "content",
+              "content": {
+                "type": "text",
+                "text": "Fixture content 1.\n"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "replay-id-018",
+        "kind": "thought",
+        "message_id": "replay-id-019",
+        "content": {
+          "type": "text",
+          "text": "\n\n**Inspecting example step 2**"
+        }
+      },
+      {
+        "id": "replay-id-020",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-020",
+          "name": "exec_command",
+          "kind": "read",
+          "title": "Fixture tool-008",
+          "status": "completed",
+          "rawOutput": {
+            "exit_code": 0
+          },
+          "content": [
+            {
+              "type": "content",
+              "content": {
+                "type": "text",
+                "text": "Fixture content 1.\n"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "replay-id-021",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-021",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-009",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-021"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-005",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-021"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-022",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-022",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-010",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-022"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-006",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-022"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-023",
+        "kind": "thought",
+        "message_id": "replay-id-024",
+        "content": {
+          "type": "text",
+          "text": "\n\n**Inspecting example step 3**"
+        }
+      },
+      {
+        "id": "replay-id-025",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-025",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-011",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-025"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-007",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-025"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-026",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-026",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-012",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-026"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-008",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-026"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-027",
+        "kind": "thought",
+        "message_id": "replay-id-028",
+        "content": {
+          "type": "text",
+          "text": "\n\n**Inspecting example step 4**"
+        }
+      },
+      {
+        "id": "replay-id-029",
+        "kind": "assistant",
+        "message_id": "replay-id-030",
+        "content": {
+          "type": "text",
+          "text": "Progress update 3: I will inspect the example files."
+        }
+      },
+      {
+        "id": "replay-id-031",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-031",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-013",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-031"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-009",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-031"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-032",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-032",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-014",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-032"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-010",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-032"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-033",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-033",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-015",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-033"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-011",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-033"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-034",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-034",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-016",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-034"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-012",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-034"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-035",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-035",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-017",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-035"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-013",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-035"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-036",
+        "kind": "thought",
+        "message_id": "replay-id-037",
+        "content": {
+          "type": "text",
+          "text": "\n\n**Inspecting example step 5**"
+        }
+      },
+      {
+        "id": "replay-id-038",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-038",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-018",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-038"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-014",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-038"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-039",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-039",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-019",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-039"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-015",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-039"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-040",
+        "kind": "thought",
+        "message_id": "replay-id-041",
+        "content": {
+          "type": "text",
+          "text": "\n\n**Inspecting example step 6**"
+        }
+      },
+      {
+        "id": "replay-id-042",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-042",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-020",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-042"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-016",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-042"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-043",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-043",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-021",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-043"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-017",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-043"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-044",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-044",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-022",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-044"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-018",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-044"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-045",
+        "kind": "thought",
+        "message_id": "replay-id-046",
+        "content": {
+          "type": "text",
+          "text": "\n\n**Inspecting example step 7**"
+        }
+      },
+      {
+        "id": "replay-id-047",
+        "kind": "assistant",
+        "message_id": "replay-id-048",
+        "content": {
+          "type": "text",
+          "text": "Progress update 4: I will inspect the example files."
+        }
+      },
+      {
+        "id": "replay-id-049",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-049",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-023",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-049"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-019",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-049"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-050",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-050",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-024",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-050"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-020",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-050"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-051",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-051",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-025",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-051"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-021",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-051"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-052",
+        "kind": "thought",
+        "message_id": "replay-id-053",
+        "content": {
+          "type": "text",
+          "text": "\n\n**Inspecting example step 8**"
+        }
+      },
+      {
+        "id": "replay-id-054",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-054",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-026",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-054"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-022",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-054"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-055",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-055",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-027",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-055"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-023",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-055"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-056",
+        "kind": "assistant",
+        "message_id": "replay-id-057",
+        "content": {
+          "type": "text",
+          "text": "Example project 1 summary.\n\n- Module A handles requests.\n- Module B presents results.\n\nREADME describes setup, usage, and testing.\n\n| Component | Purpose |\n| --- | --- |\n| Module A | Request handling |\n| Module B | Result display |\n\nSee [README.md](/repo/README.md)."
+        }
+      }
+    ],
+    "turns": [
+      {
+        "user_entry_id": "replay-id-004",
+        "status": "completed",
+        "stop_reason": "end_turn",
+        "error": null
+      }
+    ],
+    "stop_reason": "end_turn",
+    "permissions": [],
+    "auth_required": false,
+    "modes": null,
+    "config_options": [],
+    "commands": [],
+    "usage": null,
+    "error": null
+  },
+  "updates": [
+    {
+      "sessionUpdate": "user_message_chunk",
+      "messageId": "replay-id-058",
+      "content": {
+        "type": "text",
+        "text": "Explain example project 1."
+      }
+    },
+    {
+      "sessionUpdate": "agent_message_chunk",
+      "messageId": "replay-id-006",
+      "content": {
+        "type": "text",
+        "text": "Progress update 1: I will inspect the example files."
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "replay-id-007",
+      "name": "exec_command",
+      "kind": "execute",
+      "title": "Fixture tool-002",
+      "status": "completed",
+      "content": [
+        {
+          "type": "terminal",
+          "terminalId": "replay-id-007"
+        }
+      ],
+      "rawInput": {
+        "command": "echo fixture-command-001",
+        "cwd": "/repo"
+      },
+      "_meta": {
+        "terminal_info": {
+          "cwd": "/repo",
+          "terminal_id": "replay-id-007"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "replay-id-007",
+      "_meta": {
+        "terminal_output_delta": {
+          "data": "Fixture output\n",
+          "terminal_id": "replay-id-007"
+        },
+        "terminal_exit": {
+          "exit_code": 0,
+          "signal": null,
+          "terminal_id": "replay-id-007"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "replay-id-009",
+      "name": "exec_command",
+      "kind": "read",
+      "title": "Fixture tool-003",
+      "status": "completed"
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "replay-id-009",
+      "rawOutput": {
+        "exit_code": 0
+      },
+      "_meta": {
+        "terminal_output_delta": {
+          "data": "Fixture output\n",
+          "terminal_id": "replay-id-009"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "replay-id-010",
+      "name": "exec_command",
+      "kind": "execute",
+      "title": "Fixture tool-004",
+      "status": "completed",
+      "content": [
+        {
+          "type": "terminal",
+          "terminalId": "replay-id-010"
+        }
+      ],
+      "rawInput": {
+        "command": "echo fixture-command-002",
+        "cwd": "/repo"
+      },
+      "_meta": {
+        "terminal_info": {
+          "cwd": "/repo",
+          "terminal_id": "replay-id-010"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "replay-id-010",
+      "_meta": {
+        "terminal_output_delta": {
+          "data": "Fixture output\n",
+          "terminal_id": "replay-id-010"
+        },
+        "terminal_exit": {
+          "exit_code": 0,
+          "signal": null,
+          "terminal_id": "replay-id-010"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "user_message_chunk",
+      "messageId": "replay-id-059",
+      "content": {
+        "type": "text",
+        "text": "Also summarize README.md."
+      }
+    },
+    {
+      "sessionUpdate": "agent_thought_chunk",
+      "messageId": "replay-id-012",
+      "content": {
+        "type": "text",
+        "text": "**Inspecting example step 1**"
+      }
+    },
+    {
+      "sessionUpdate": "agent_message_chunk",
+      "messageId": "replay-id-014",
+      "content": {
+        "type": "text",
+        "text": "Progress update 2: I will inspect the example files."
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "replay-id-015",
+      "name": "exec_command",
+      "kind": "execute",
+      "title": "Fixture tool-005",
+      "status": "completed",
+      "content": [
+        {
+          "type": "terminal",
+          "terminalId": "replay-id-015"
+        }
+      ],
+      "rawInput": {
+        "command": "echo fixture-command-003",
+        "cwd": "/repo"
+      },
+      "_meta": {
+        "terminal_info": {
+          "cwd": "/repo",
+          "terminal_id": "replay-id-015"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "replay-id-015",
+      "_meta": {
+        "terminal_output_delta": {
+          "data": "Fixture output\n",
+          "terminal_id": "replay-id-015"
+        },
+        "terminal_exit": {
+          "exit_code": 0,
+          "signal": null,
+          "terminal_id": "replay-id-015"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "replay-id-016",
+      "name": "exec_command",
+      "kind": "execute",
+      "title": "Fixture tool-006",
+      "status": "completed",
+      "content": [
+        {
+          "type": "terminal",
+          "terminalId": "replay-id-016"
+        }
+      ],
+      "rawInput": {
+        "command": "echo fixture-command-004",
+        "cwd": "/repo"
+      },
+      "_meta": {
+        "terminal_info": {
+          "cwd": "/repo",
+          "terminal_id": "replay-id-016"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "replay-id-016",
+      "_meta": {
+        "terminal_output_delta": {
+          "data": "Fixture output\n",
+          "terminal_id": "replay-id-016"
+        },
+        "terminal_exit": {
+          "exit_code": 0,
+          "signal": null,
+          "terminal_id": "replay-id-016"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "replay-id-017",
+      "name": "exec_command",
+      "kind": "read",
+      "title": "Fixture tool-007",
+      "status": "completed"
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "replay-id-017",
+      "rawOutput": {
+        "exit_code": 0
+      },
+      "_meta": {
+        "terminal_output_delta": {
+          "data": "Fixture output\n",
+          "terminal_id": "replay-id-017"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "agent_thought_chunk",
+      "messageId": "replay-id-019",
+      "content": {
+        "type": "text",
+        "text": "**Inspecting example step 2**"
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "replay-id-020",
+      "name": "exec_command",
+      "kind": "read",
+      "title": "Fixture tool-008",
+      "status": "completed"
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "replay-id-020",
+      "rawOutput": {
+        "exit_code": 0
+      },
+      "_meta": {
+        "terminal_output_delta": {
+          "data": "Fixture output\n",
+          "terminal_id": "replay-id-020"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "replay-id-021",
+      "name": "exec_command",
+      "kind": "execute",
+      "title": "Fixture tool-009",
+      "status": "completed",
+      "content": [
+        {
+          "type": "terminal",
+          "terminalId": "replay-id-021"
+        }
+      ],
+      "rawInput": {
+        "command": "echo fixture-command-005",
+        "cwd": "/repo"
+      },
+      "_meta": {
+        "terminal_info": {
+          "cwd": "/repo",
+          "terminal_id": "replay-id-021"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "replay-id-021",
+      "_meta": {
+        "terminal_output_delta": {
+          "data": "Fixture output\n",
+          "terminal_id": "replay-id-021"
+        },
+        "terminal_exit": {
+          "exit_code": 0,
+          "signal": null,
+          "terminal_id": "replay-id-021"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "replay-id-022",
+      "name": "exec_command",
+      "kind": "execute",
+      "title": "Fixture tool-010",
+      "status": "completed",
+      "content": [
+        {
+          "type": "terminal",
+          "terminalId": "replay-id-022"
+        }
+      ],
+      "rawInput": {
+        "command": "echo fixture-command-006",
+        "cwd": "/repo"
+      },
+      "_meta": {
+        "terminal_info": {
+          "cwd": "/repo",
+          "terminal_id": "replay-id-022"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "replay-id-022",
+      "_meta": {
+        "terminal_output_delta": {
+          "data": "Fixture output\n",
+          "terminal_id": "replay-id-022"
+        },
+        "terminal_exit": {
+          "exit_code": 0,
+          "signal": null,
+          "terminal_id": "replay-id-022"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "agent_thought_chunk",
+      "messageId": "replay-id-024",
+      "content": {
+        "type": "text",
+        "text": "**Inspecting example step 3**"
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "replay-id-026",
+      "name": "exec_command",
+      "kind": "execute",
+      "title": "Fixture tool-012",
+      "status": "completed",
+      "content": [
+        {
+          "type": "terminal",
+          "terminalId": "replay-id-026"
+        }
+      ],
+      "rawInput": {
+        "command": "echo fixture-command-008",
+        "cwd": "/repo"
+      },
+      "_meta": {
+        "terminal_info": {
+          "cwd": "/repo",
+          "terminal_id": "replay-id-026"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "replay-id-026",
+      "_meta": {
+        "terminal_output_delta": {
+          "data": "Fixture output\n",
+          "terminal_id": "replay-id-026"
+        },
+        "terminal_exit": {
+          "exit_code": 0,
+          "signal": null,
+          "terminal_id": "replay-id-026"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "replay-id-025",
+      "name": "exec_command",
+      "kind": "execute",
+      "title": "Fixture tool-011",
+      "status": "completed",
+      "content": [
+        {
+          "type": "terminal",
+          "terminalId": "replay-id-025"
+        }
+      ],
+      "rawInput": {
+        "command": "echo fixture-command-007",
+        "cwd": "/repo"
+      },
+      "_meta": {
+        "terminal_info": {
+          "cwd": "/repo",
+          "terminal_id": "replay-id-025"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "replay-id-025",
+      "_meta": {
+        "terminal_output_delta": {
+          "data": "Fixture output\n",
+          "terminal_id": "replay-id-025"
+        },
+        "terminal_exit": {
+          "exit_code": 0,
+          "signal": null,
+          "terminal_id": "replay-id-025"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "agent_thought_chunk",
+      "messageId": "replay-id-028",
+      "content": {
+        "type": "text",
+        "text": "**Inspecting example step 4**"
+      }
+    },
+    {
+      "sessionUpdate": "agent_message_chunk",
+      "messageId": "replay-id-030",
+      "content": {
+        "type": "text",
+        "text": "Progress update 3: I will inspect the example files."
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "replay-id-031",
+      "name": "exec_command",
+      "kind": "execute",
+      "title": "Fixture tool-013",
+      "status": "completed",
+      "content": [
+        {
+          "type": "terminal",
+          "terminalId": "replay-id-031"
+        }
+      ],
+      "rawInput": {
+        "command": "echo fixture-command-009",
+        "cwd": "/repo"
+      },
+      "_meta": {
+        "terminal_info": {
+          "cwd": "/repo",
+          "terminal_id": "replay-id-031"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "replay-id-031",
+      "_meta": {
+        "terminal_output_delta": {
+          "data": "Fixture output\n",
+          "terminal_id": "replay-id-031"
+        },
+        "terminal_exit": {
+          "exit_code": 0,
+          "signal": null,
+          "terminal_id": "replay-id-031"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "replay-id-032",
+      "name": "exec_command",
+      "kind": "execute",
+      "title": "Fixture tool-014",
+      "status": "completed",
+      "content": [
+        {
+          "type": "terminal",
+          "terminalId": "replay-id-032"
+        }
+      ],
+      "rawInput": {
+        "command": "echo fixture-command-010",
+        "cwd": "/repo"
+      },
+      "_meta": {
+        "terminal_info": {
+          "cwd": "/repo",
+          "terminal_id": "replay-id-032"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "replay-id-032",
+      "_meta": {
+        "terminal_output_delta": {
+          "data": "Fixture output\n",
+          "terminal_id": "replay-id-032"
+        },
+        "terminal_exit": {
+          "exit_code": 0,
+          "signal": null,
+          "terminal_id": "replay-id-032"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "replay-id-033",
+      "name": "exec_command",
+      "kind": "execute",
+      "title": "Fixture tool-015",
+      "status": "completed",
+      "content": [
+        {
+          "type": "terminal",
+          "terminalId": "replay-id-033"
+        }
+      ],
+      "rawInput": {
+        "command": "echo fixture-command-011",
+        "cwd": "/repo"
+      },
+      "_meta": {
+        "terminal_info": {
+          "cwd": "/repo",
+          "terminal_id": "replay-id-033"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "replay-id-033",
+      "_meta": {
+        "terminal_output_delta": {
+          "data": "Fixture output\n",
+          "terminal_id": "replay-id-033"
+        },
+        "terminal_exit": {
+          "exit_code": 0,
+          "signal": null,
+          "terminal_id": "replay-id-033"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "replay-id-034",
+      "name": "exec_command",
+      "kind": "execute",
+      "title": "Fixture tool-016",
+      "status": "completed",
+      "content": [
+        {
+          "type": "terminal",
+          "terminalId": "replay-id-034"
+        }
+      ],
+      "rawInput": {
+        "command": "echo fixture-command-012",
+        "cwd": "/repo"
+      },
+      "_meta": {
+        "terminal_info": {
+          "cwd": "/repo",
+          "terminal_id": "replay-id-034"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "replay-id-034",
+      "_meta": {
+        "terminal_output_delta": {
+          "data": "Fixture output\n",
+          "terminal_id": "replay-id-034"
+        },
+        "terminal_exit": {
+          "exit_code": 0,
+          "signal": null,
+          "terminal_id": "replay-id-034"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "replay-id-035",
+      "name": "exec_command",
+      "kind": "execute",
+      "title": "Fixture tool-017",
+      "status": "completed",
+      "content": [
+        {
+          "type": "terminal",
+          "terminalId": "replay-id-035"
+        }
+      ],
+      "rawInput": {
+        "command": "echo fixture-command-013",
+        "cwd": "/repo"
+      },
+      "_meta": {
+        "terminal_info": {
+          "cwd": "/repo",
+          "terminal_id": "replay-id-035"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "replay-id-035",
+      "_meta": {
+        "terminal_output_delta": {
+          "data": "Fixture output\n",
+          "terminal_id": "replay-id-035"
+        },
+        "terminal_exit": {
+          "exit_code": 0,
+          "signal": null,
+          "terminal_id": "replay-id-035"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "agent_thought_chunk",
+      "messageId": "replay-id-037",
+      "content": {
+        "type": "text",
+        "text": "**Inspecting example step 5**"
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "replay-id-038",
+      "name": "exec_command",
+      "kind": "execute",
+      "title": "Fixture tool-018",
+      "status": "completed",
+      "content": [
+        {
+          "type": "terminal",
+          "terminalId": "replay-id-038"
+        }
+      ],
+      "rawInput": {
+        "command": "echo fixture-command-014",
+        "cwd": "/repo"
+      },
+      "_meta": {
+        "terminal_info": {
+          "cwd": "/repo",
+          "terminal_id": "replay-id-038"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "replay-id-038",
+      "_meta": {
+        "terminal_output_delta": {
+          "data": "Fixture output\n",
+          "terminal_id": "replay-id-038"
+        },
+        "terminal_exit": {
+          "exit_code": 0,
+          "signal": null,
+          "terminal_id": "replay-id-038"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "replay-id-039",
+      "name": "exec_command",
+      "kind": "execute",
+      "title": "Fixture tool-019",
+      "status": "completed",
+      "content": [
+        {
+          "type": "terminal",
+          "terminalId": "replay-id-039"
+        }
+      ],
+      "rawInput": {
+        "command": "echo fixture-command-015",
+        "cwd": "/repo"
+      },
+      "_meta": {
+        "terminal_info": {
+          "cwd": "/repo",
+          "terminal_id": "replay-id-039"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "replay-id-039",
+      "_meta": {
+        "terminal_output_delta": {
+          "data": "Fixture output\n",
+          "terminal_id": "replay-id-039"
+        },
+        "terminal_exit": {
+          "exit_code": 0,
+          "signal": null,
+          "terminal_id": "replay-id-039"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "agent_thought_chunk",
+      "messageId": "replay-id-041",
+      "content": {
+        "type": "text",
+        "text": "**Inspecting example step 6**"
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "replay-id-042",
+      "name": "exec_command",
+      "kind": "execute",
+      "title": "Fixture tool-020",
+      "status": "completed",
+      "content": [
+        {
+          "type": "terminal",
+          "terminalId": "replay-id-042"
+        }
+      ],
+      "rawInput": {
+        "command": "echo fixture-command-016",
+        "cwd": "/repo"
+      },
+      "_meta": {
+        "terminal_info": {
+          "cwd": "/repo",
+          "terminal_id": "replay-id-042"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "replay-id-042",
+      "_meta": {
+        "terminal_output_delta": {
+          "data": "Fixture output\n",
+          "terminal_id": "replay-id-042"
+        },
+        "terminal_exit": {
+          "exit_code": 0,
+          "signal": null,
+          "terminal_id": "replay-id-042"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "replay-id-043",
+      "name": "exec_command",
+      "kind": "execute",
+      "title": "Fixture tool-021",
+      "status": "completed",
+      "content": [
+        {
+          "type": "terminal",
+          "terminalId": "replay-id-043"
+        }
+      ],
+      "rawInput": {
+        "command": "echo fixture-command-017",
+        "cwd": "/repo"
+      },
+      "_meta": {
+        "terminal_info": {
+          "cwd": "/repo",
+          "terminal_id": "replay-id-043"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "replay-id-043",
+      "_meta": {
+        "terminal_output_delta": {
+          "data": "Fixture output\n",
+          "terminal_id": "replay-id-043"
+        },
+        "terminal_exit": {
+          "exit_code": 0,
+          "signal": null,
+          "terminal_id": "replay-id-043"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "replay-id-044",
+      "name": "exec_command",
+      "kind": "execute",
+      "title": "Fixture tool-022",
+      "status": "completed",
+      "content": [
+        {
+          "type": "terminal",
+          "terminalId": "replay-id-044"
+        }
+      ],
+      "rawInput": {
+        "command": "echo fixture-command-018",
+        "cwd": "/repo"
+      },
+      "_meta": {
+        "terminal_info": {
+          "cwd": "/repo",
+          "terminal_id": "replay-id-044"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "replay-id-044",
+      "_meta": {
+        "terminal_output_delta": {
+          "data": "Fixture output\n",
+          "terminal_id": "replay-id-044"
+        },
+        "terminal_exit": {
+          "exit_code": 0,
+          "signal": null,
+          "terminal_id": "replay-id-044"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "agent_thought_chunk",
+      "messageId": "replay-id-046",
+      "content": {
+        "type": "text",
+        "text": "**Inspecting example step 7**"
+      }
+    },
+    {
+      "sessionUpdate": "agent_message_chunk",
+      "messageId": "replay-id-048",
+      "content": {
+        "type": "text",
+        "text": "Progress update 4: I will inspect the example files."
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "replay-id-049",
+      "name": "exec_command",
+      "kind": "execute",
+      "title": "Fixture tool-023",
+      "status": "completed",
+      "content": [
+        {
+          "type": "terminal",
+          "terminalId": "replay-id-049"
+        }
+      ],
+      "rawInput": {
+        "command": "echo fixture-command-019",
+        "cwd": "/repo"
+      },
+      "_meta": {
+        "terminal_info": {
+          "cwd": "/repo",
+          "terminal_id": "replay-id-049"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "replay-id-049",
+      "_meta": {
+        "terminal_output_delta": {
+          "data": "Fixture output\n",
+          "terminal_id": "replay-id-049"
+        },
+        "terminal_exit": {
+          "exit_code": 0,
+          "signal": null,
+          "terminal_id": "replay-id-049"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "replay-id-050",
+      "name": "exec_command",
+      "kind": "execute",
+      "title": "Fixture tool-024",
+      "status": "completed",
+      "content": [
+        {
+          "type": "terminal",
+          "terminalId": "replay-id-050"
+        }
+      ],
+      "rawInput": {
+        "command": "echo fixture-command-020",
+        "cwd": "/repo"
+      },
+      "_meta": {
+        "terminal_info": {
+          "cwd": "/repo",
+          "terminal_id": "replay-id-050"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "replay-id-050",
+      "_meta": {
+        "terminal_output_delta": {
+          "data": "Fixture output\n",
+          "terminal_id": "replay-id-050"
+        },
+        "terminal_exit": {
+          "exit_code": 0,
+          "signal": null,
+          "terminal_id": "replay-id-050"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "replay-id-051",
+      "name": "exec_command",
+      "kind": "execute",
+      "title": "Fixture tool-025",
+      "status": "completed",
+      "content": [
+        {
+          "type": "terminal",
+          "terminalId": "replay-id-051"
+        }
+      ],
+      "rawInput": {
+        "command": "echo fixture-command-021",
+        "cwd": "/repo"
+      },
+      "_meta": {
+        "terminal_info": {
+          "cwd": "/repo",
+          "terminal_id": "replay-id-051"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "replay-id-051",
+      "_meta": {
+        "terminal_output_delta": {
+          "data": "Fixture output\n",
+          "terminal_id": "replay-id-051"
+        },
+        "terminal_exit": {
+          "exit_code": 0,
+          "signal": null,
+          "terminal_id": "replay-id-051"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "agent_thought_chunk",
+      "messageId": "replay-id-053",
+      "content": {
+        "type": "text",
+        "text": "**Inspecting example step 8**"
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "replay-id-054",
+      "name": "exec_command",
+      "kind": "execute",
+      "title": "Fixture tool-026",
+      "status": "completed",
+      "content": [
+        {
+          "type": "terminal",
+          "terminalId": "replay-id-054"
+        }
+      ],
+      "rawInput": {
+        "command": "echo fixture-command-022",
+        "cwd": "/repo"
+      },
+      "_meta": {
+        "terminal_info": {
+          "cwd": "/repo",
+          "terminal_id": "replay-id-054"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "replay-id-054",
+      "_meta": {
+        "terminal_output_delta": {
+          "data": "Fixture output\n",
+          "terminal_id": "replay-id-054"
+        },
+        "terminal_exit": {
+          "exit_code": 0,
+          "signal": null,
+          "terminal_id": "replay-id-054"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "replay-id-055",
+      "name": "exec_command",
+      "kind": "execute",
+      "title": "Fixture tool-027",
+      "status": "completed",
+      "content": [
+        {
+          "type": "terminal",
+          "terminalId": "replay-id-055"
+        }
+      ],
+      "rawInput": {
+        "command": "echo fixture-command-023",
+        "cwd": "/repo"
+      },
+      "_meta": {
+        "terminal_info": {
+          "cwd": "/repo",
+          "terminal_id": "replay-id-055"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "tool_call_update",
+      "toolCallId": "replay-id-055",
+      "_meta": {
+        "terminal_output_delta": {
+          "data": "Fixture output\n",
+          "terminal_id": "replay-id-055"
+        },
+        "terminal_exit": {
+          "exit_code": 0,
+          "signal": null,
+          "terminal_id": "replay-id-055"
+        }
+      }
+    },
+    {
+      "sessionUpdate": "agent_message_chunk",
+      "messageId": "replay-id-057",
+      "content": {
+        "type": "text",
+        "text": "Example project 1 summary.\n\n- Module A handles requests.\n- Module B presents results.\n\nREADME describes setup, usage, and testing.\n\n| Component | Purpose |\n| --- | --- |\n| Module A | Request handling |\n| Module B | Result display |\n\nSee [README.md](/repo/README.md)."
+      }
+    }
+  ],
+  "reloaded": {
+    "thread_id": "replay-id-001",
+    "source": "user",
+    "created_at": "",
+    "session_id": "replay-id-002",
+    "agent_id": "recorded",
+    "cwd": "/repo",
+    "title": "Fixture conversation",
+    "status": "idle",
+    "needs_load": false,
+    "recovery": null,
+    "revision": 2092,
+    "sync_generation": "replay-id-003",
+    "updated_at": "2000-01-01T00:00:13+00:00",
+    "interacted_at": null,
+    "entries": [
+      {
+        "id": "reloaded-0",
+        "kind": "user",
+        "message_id": "replay-id-058",
+        "content": {
+          "type": "text",
+          "text": "Explain example project 1."
+        }
+      },
+      {
+        "id": "reloaded-1",
+        "kind": "assistant",
+        "message_id": "replay-id-006",
+        "content": {
+          "type": "text",
+          "text": "Progress update 1: I will inspect the example files."
+        }
+      },
+      {
+        "id": "replay-id-007",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-007",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-002",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-007"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-001",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_output_delta": {
+              "data": "Fixture output\n",
+              "terminal_id": "replay-id-007"
+            },
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-007"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-009",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-009",
+          "name": "exec_command",
+          "kind": "read",
+          "title": "Fixture tool-003",
+          "status": "completed",
+          "rawOutput": {
+            "exit_code": 0
+          },
+          "_meta": {
+            "terminal_output_delta": {
+              "data": "Fixture output\n",
+              "terminal_id": "replay-id-009"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-010",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-010",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-004",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-010"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-002",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_output_delta": {
+              "data": "Fixture output\n",
+              "terminal_id": "replay-id-010"
+            },
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-010"
+            }
+          }
+        }
+      },
+      {
+        "id": "reloaded-5",
+        "kind": "steering",
+        "message_id": "replay-id-059",
+        "content": {
+          "type": "text",
+          "text": "Also summarize README.md."
+        },
+        "delivery": {
+          "status": "injected",
+          "error": null
+        }
+      },
+      {
+        "id": "reloaded-6",
+        "kind": "thought",
+        "message_id": "replay-id-012",
+        "content": {
+          "type": "text",
+          "text": "**Inspecting example step 1**"
+        }
+      },
+      {
+        "id": "reloaded-7",
+        "kind": "assistant",
+        "message_id": "replay-id-014",
+        "content": {
+          "type": "text",
+          "text": "Progress update 2: I will inspect the example files."
+        }
+      },
+      {
+        "id": "replay-id-015",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-015",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-005",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-015"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-003",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_output_delta": {
+              "data": "Fixture output\n",
+              "terminal_id": "replay-id-015"
+            },
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-015"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-016",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-016",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-006",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-016"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-004",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_output_delta": {
+              "data": "Fixture output\n",
+              "terminal_id": "replay-id-016"
+            },
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-016"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-017",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-017",
+          "name": "exec_command",
+          "kind": "read",
+          "title": "Fixture tool-007",
+          "status": "completed",
+          "rawOutput": {
+            "exit_code": 0
+          },
+          "_meta": {
+            "terminal_output_delta": {
+              "data": "Fixture output\n",
+              "terminal_id": "replay-id-017"
+            }
+          }
+        }
+      },
+      {
+        "id": "reloaded-11",
+        "kind": "thought",
+        "message_id": "replay-id-019",
+        "content": {
+          "type": "text",
+          "text": "**Inspecting example step 2**"
+        }
+      },
+      {
+        "id": "replay-id-020",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-020",
+          "name": "exec_command",
+          "kind": "read",
+          "title": "Fixture tool-008",
+          "status": "completed",
+          "rawOutput": {
+            "exit_code": 0
+          },
+          "_meta": {
+            "terminal_output_delta": {
+              "data": "Fixture output\n",
+              "terminal_id": "replay-id-020"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-021",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-021",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-009",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-021"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-005",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_output_delta": {
+              "data": "Fixture output\n",
+              "terminal_id": "replay-id-021"
+            },
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-021"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-022",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-022",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-010",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-022"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-006",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_output_delta": {
+              "data": "Fixture output\n",
+              "terminal_id": "replay-id-022"
+            },
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-022"
+            }
+          }
+        }
+      },
+      {
+        "id": "reloaded-15",
+        "kind": "thought",
+        "message_id": "replay-id-024",
+        "content": {
+          "type": "text",
+          "text": "**Inspecting example step 3**"
+        }
+      },
+      {
+        "id": "replay-id-026",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-026",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-012",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-026"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-008",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_output_delta": {
+              "data": "Fixture output\n",
+              "terminal_id": "replay-id-026"
+            },
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-026"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-025",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-025",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-011",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-025"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-007",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_output_delta": {
+              "data": "Fixture output\n",
+              "terminal_id": "replay-id-025"
+            },
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-025"
+            }
+          }
+        }
+      },
+      {
+        "id": "reloaded-18",
+        "kind": "thought",
+        "message_id": "replay-id-028",
+        "content": {
+          "type": "text",
+          "text": "**Inspecting example step 4**"
+        }
+      },
+      {
+        "id": "reloaded-19",
+        "kind": "assistant",
+        "message_id": "replay-id-030",
+        "content": {
+          "type": "text",
+          "text": "Progress update 3: I will inspect the example files."
+        }
+      },
+      {
+        "id": "replay-id-031",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-031",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-013",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-031"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-009",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_output_delta": {
+              "data": "Fixture output\n",
+              "terminal_id": "replay-id-031"
+            },
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-031"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-032",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-032",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-014",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-032"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-010",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_output_delta": {
+              "data": "Fixture output\n",
+              "terminal_id": "replay-id-032"
+            },
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-032"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-033",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-033",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-015",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-033"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-011",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_output_delta": {
+              "data": "Fixture output\n",
+              "terminal_id": "replay-id-033"
+            },
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-033"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-034",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-034",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-016",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-034"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-012",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_output_delta": {
+              "data": "Fixture output\n",
+              "terminal_id": "replay-id-034"
+            },
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-034"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-035",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-035",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-017",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-035"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-013",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_output_delta": {
+              "data": "Fixture output\n",
+              "terminal_id": "replay-id-035"
+            },
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-035"
+            }
+          }
+        }
+      },
+      {
+        "id": "reloaded-25",
+        "kind": "thought",
+        "message_id": "replay-id-037",
+        "content": {
+          "type": "text",
+          "text": "**Inspecting example step 5**"
+        }
+      },
+      {
+        "id": "replay-id-038",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-038",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-018",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-038"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-014",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_output_delta": {
+              "data": "Fixture output\n",
+              "terminal_id": "replay-id-038"
+            },
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-038"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-039",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-039",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-019",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-039"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-015",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_output_delta": {
+              "data": "Fixture output\n",
+              "terminal_id": "replay-id-039"
+            },
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-039"
+            }
+          }
+        }
+      },
+      {
+        "id": "reloaded-28",
+        "kind": "thought",
+        "message_id": "replay-id-041",
+        "content": {
+          "type": "text",
+          "text": "**Inspecting example step 6**"
+        }
+      },
+      {
+        "id": "replay-id-042",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-042",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-020",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-042"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-016",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_output_delta": {
+              "data": "Fixture output\n",
+              "terminal_id": "replay-id-042"
+            },
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-042"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-043",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-043",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-021",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-043"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-017",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_output_delta": {
+              "data": "Fixture output\n",
+              "terminal_id": "replay-id-043"
+            },
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-043"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-044",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-044",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-022",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-044"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-018",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_output_delta": {
+              "data": "Fixture output\n",
+              "terminal_id": "replay-id-044"
+            },
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-044"
+            }
+          }
+        }
+      },
+      {
+        "id": "reloaded-32",
+        "kind": "thought",
+        "message_id": "replay-id-046",
+        "content": {
+          "type": "text",
+          "text": "**Inspecting example step 7**"
+        }
+      },
+      {
+        "id": "reloaded-33",
+        "kind": "assistant",
+        "message_id": "replay-id-048",
+        "content": {
+          "type": "text",
+          "text": "Progress update 4: I will inspect the example files."
+        }
+      },
+      {
+        "id": "replay-id-049",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-049",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-023",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-049"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-019",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_output_delta": {
+              "data": "Fixture output\n",
+              "terminal_id": "replay-id-049"
+            },
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-049"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-050",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-050",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-024",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-050"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-020",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_output_delta": {
+              "data": "Fixture output\n",
+              "terminal_id": "replay-id-050"
+            },
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-050"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-051",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-051",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-025",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-051"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-021",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_output_delta": {
+              "data": "Fixture output\n",
+              "terminal_id": "replay-id-051"
+            },
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-051"
+            }
+          }
+        }
+      },
+      {
+        "id": "reloaded-37",
+        "kind": "thought",
+        "message_id": "replay-id-053",
+        "content": {
+          "type": "text",
+          "text": "**Inspecting example step 8**"
+        }
+      },
+      {
+        "id": "replay-id-054",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-054",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-026",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-054"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-022",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_output_delta": {
+              "data": "Fixture output\n",
+              "terminal_id": "replay-id-054"
+            },
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-054"
+            }
+          }
+        }
+      },
+      {
+        "id": "replay-id-055",
+        "kind": "tool",
+        "content": {
+          "sessionUpdate": "tool_call_update",
+          "toolCallId": "replay-id-055",
+          "name": "exec_command",
+          "kind": "execute",
+          "title": "Fixture tool-027",
+          "status": "completed",
+          "content": [
+            {
+              "type": "terminal",
+              "terminalId": "replay-id-055"
+            }
+          ],
+          "rawInput": {
+            "command": "echo fixture-command-023",
+            "cwd": "/repo"
+          },
+          "_meta": {
+            "terminal_output_delta": {
+              "data": "Fixture output\n",
+              "terminal_id": "replay-id-055"
+            },
+            "terminal_exit": {
+              "exit_code": 0,
+              "signal": null,
+              "terminal_id": "replay-id-055"
+            }
+          }
+        }
+      },
+      {
+        "id": "reloaded-40",
+        "kind": "assistant",
+        "message_id": "replay-id-057",
+        "content": {
+          "type": "text",
+          "text": "Example project 1 summary.\n\n- Module A handles requests.\n- Module B presents results.\n\nREADME describes setup, usage, and testing.\n\n| Component | Purpose |\n| --- | --- |\n| Module A | Request handling |\n| Module B | Result display |\n\nSee [README.md](/repo/README.md)."
+        }
+      }
+    ],
+    "turns": [
+      {
+        "user_entry_id": "reloaded-0",
+        "status": "completed",
+        "stop_reason": "end_turn",
+        "error": null
+      }
+    ],
+    "plan": null,
+    "notices": [],
+    "session_meta": {},
+    "session_meta_revision": 0,
+    "session_meta_revisions": {},
+    "terminals": {
+      "replay-id-042": {
+        "output": "",
+        "command": "echo fixture-command-024",
+        "cwd": "/repo",
+        "exit_status": {
+          "exitCode": 0,
+          "signal": null
+        }
+      },
+      "replay-id-051": {
+        "output": "",
+        "command": "echo fixture-command-025",
+        "cwd": "/repo",
+        "exit_status": {
+          "exitCode": 0,
+          "signal": null
+        }
+      },
+      "replay-id-015": {
+        "output": "",
+        "command": "echo fixture-command-003",
+        "cwd": "/repo",
+        "exit_status": {
+          "exitCode": 0,
+          "signal": null
+        }
+      },
+      "replay-id-039": {
+        "output": "",
+        "command": "echo fixture-command-026",
+        "cwd": "/repo",
+        "exit_status": {
+          "exitCode": 0,
+          "signal": null
+        }
+      },
+      "replay-id-016": {
+        "output": "",
+        "command": "echo fixture-command-004",
+        "cwd": "/repo",
+        "exit_status": {
+          "exitCode": 0,
+          "signal": null
+        }
+      },
+      "replay-id-033": {
+        "output": "",
+        "command": "echo fixture-command-027",
+        "cwd": "/repo",
+        "exit_status": {
+          "exitCode": 0,
+          "signal": null
+        }
+      },
+      "replay-id-031": {
+        "output": "",
+        "command": "echo fixture-command-028",
+        "cwd": "/repo",
+        "exit_status": {
+          "exitCode": 0,
+          "signal": null
+        }
+      },
+      "replay-id-055": {
+        "output": "",
+        "command": "echo fixture-command-029",
+        "cwd": "/repo",
+        "exit_status": {
+          "exitCode": 0,
+          "signal": null
+        }
+      },
+      "replay-id-026": {
+        "output": "",
+        "command": "echo fixture-command-030",
+        "cwd": "/repo",
+        "exit_status": {
+          "exitCode": 0,
+          "signal": null
+        }
+      },
+      "replay-id-044": {
+        "output": "",
+        "command": "echo fixture-command-031",
+        "cwd": "/repo",
+        "exit_status": {
+          "exitCode": 0,
+          "signal": null
+        }
+      },
+      "replay-id-054": {
+        "output": "",
+        "command": "echo fixture-command-032",
+        "cwd": "/repo",
+        "exit_status": {
+          "exitCode": 0,
+          "signal": null
+        }
+      },
+      "replay-id-035": {
+        "output": "",
+        "command": "echo fixture-command-033",
+        "cwd": "/repo",
+        "exit_status": {
+          "exitCode": 0,
+          "signal": null
+        }
+      },
+      "replay-id-038": {
+        "output": "",
+        "command": "echo fixture-command-034",
+        "cwd": "/repo",
+        "exit_status": {
+          "exitCode": 0,
+          "signal": null
+        }
+      },
+      "replay-id-032": {
+        "output": "",
+        "command": "echo fixture-command-035",
+        "cwd": "/repo",
+        "exit_status": {
+          "exitCode": 0,
+          "signal": null
+        }
+      },
+      "replay-id-034": {
+        "output": "",
+        "command": "echo fixture-command-036",
+        "cwd": "/repo",
+        "exit_status": {
+          "exitCode": 0,
+          "signal": null
+        }
+      },
+      "replay-id-043": {
+        "output": "",
+        "command": "echo fixture-command-037",
+        "cwd": "/repo",
+        "exit_status": {
+          "exitCode": 0,
+          "signal": null
+        }
+      },
+      "replay-id-049": {
+        "output": "",
+        "command": "echo fixture-command-038",
+        "cwd": "/repo",
+        "exit_status": {
+          "exitCode": 0,
+          "signal": null
+        }
+      },
+      "replay-id-007": {
+        "output": "",
+        "command": "echo fixture-command-001",
+        "cwd": "/repo",
+        "exit_status": {
+          "exitCode": 0,
+          "signal": null
+        }
+      },
+      "replay-id-050": {
+        "output": "",
+        "command": "echo fixture-command-039",
+        "cwd": "/repo",
+        "exit_status": {
+          "exitCode": 0,
+          "signal": null
+        }
+      },
+      "replay-id-022": {
+        "output": "",
+        "command": "echo fixture-command-040",
+        "cwd": "/repo",
+        "exit_status": {
+          "exitCode": 0,
+          "signal": null
+        }
+      },
+      "replay-id-021": {
+        "output": "",
+        "command": "echo fixture-command-005",
+        "cwd": "/repo",
+        "exit_status": {
+          "exitCode": 0,
+          "signal": null
+        }
+      },
+      "replay-id-025": {
+        "output": "",
+        "command": "echo fixture-command-041",
+        "cwd": "/repo",
+        "exit_status": {
+          "exitCode": 0,
+          "signal": null
+        }
+      },
+      "replay-id-010": {
+        "output": "",
+        "command": "echo fixture-command-002",
+        "cwd": "/repo",
+        "exit_status": {
+          "exitCode": 0,
+          "signal": null
+        }
+      }
+    },
+    "permissions": [],
+    "modes": null,
+    "config_options": [],
+    "config_options_supported": false,
+    "auth_required": false,
+    "commands": [],
+    "usage": null,
+    "error": null,
+    "stop_reason": "end_turn",
+    "steering_pending": false,
+    "steering_untracked": false,
+    "overview": [
+      {
+        "id": "reloaded-0",
+        "revision": 2092,
+        "user": [
+          {
+            "id": "reloaded-0",
+            "kind": "user",
+            "message_id": "replay-id-058",
+            "content": {
+              "type": "text",
+              "text": "Explain example project 1."
+            }
+          }
+        ],
+        "conclusion": [
+          {
+            "id": "reloaded-40",
+            "kind": "assistant",
+            "message_id": "replay-id-057",
+            "content": {
+              "type": "text",
+              "text": "Example project 1 summary.\n\n- Module A handles requests.\n- Module B presents results.\n\nREADME describes setup, usage, and testing.\n\n| Component | Purpose |\n| --- | --- |\n| Module A | Request handling |\n| Module B | Result display |\n\nSee [README.md](/repo/README.md)."
+            }
+          }
+        ],
+        "messages": [
+          {
+            "id": "reloaded-5",
+            "kind": "steering",
+            "message_id": "replay-id-059",
+            "content": {
+              "type": "text",
+              "text": "Also summarize README.md."
+            },
+            "delivery": {
+              "status": "injected",
+              "error": null
+            }
+          },
+          {
+            "id": "reloaded-40",
+            "kind": "assistant",
+            "message_id": "replay-id-057",
+            "content": {
+              "type": "text",
+              "text": "Example project 1 summary.\n\n- Module A handles requests.\n- Module B presents results.\n\nREADME describes setup, usage, and testing.\n\n| Component | Purpose |\n| --- | --- |\n| Module A | Request handling |\n| Module B | Result display |\n\nSee [README.md](/repo/README.md)."
+            }
+          }
+        ],
+        "process_segments": [
+          {
+            "id": "reloaded-0",
+            "tool_count": 3,
+            "progress_count": 1,
+            "permission_tool_ids": []
+          },
+          {
+            "id": "reloaded-5",
+            "tool_count": 23,
+            "progress_count": 8,
+            "permission_tool_ids": []
+          }
+        ],
+        "tool_count": 26,
+        "progress_count": 9,
+        "running": false,
+        "waiting": false,
+        "compacting": false,
+        "status": "completed",
+        "error": null,
+        "permission_tool_ids": []
+      }
+    ]
+  }
+}

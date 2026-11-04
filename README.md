@@ -81,3 +81,11 @@ For source development, start `just run-runtime-daemon` in a separate terminal b
 The standalone [runtime daemon](docs/runtime/runtime-daemon.md) embeds ACP and
 terminal runtimes in one process and exposes authenticated HTTP management and
 WebSocket transports for remote node deployments.
+
+## Source projects
+
+`server/` owns Server, CLI, automation scheduling and the frontend. `runtime/` owns
+node execution and has its own Cargo workspace and lockfile. Neither product has
+production source dependencies on the other. Root `just` targets orchestrate both
+projects and the combined installation package. See [Server](server/README.md) for
+independent builds and authenticated remote CLI configuration.

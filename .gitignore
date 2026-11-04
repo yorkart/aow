@@ -1,9 +1,9 @@
 /target/
 /node_modules/
 .ruff_cache/
-/frontend/node_modules/
-/frontend/dist/
-/frontend/*.tsbuildinfo
+/server/frontend/node_modules/
+/server/frontend/dist/
+/server/frontend/*.tsbuildinfo
 __pycache__/
 *.pyc
 .DS_Store
@@ -11,3 +11,5 @@ __pycache__/
 /runtime/target/
 /runtime/vt-worker/node_modules/
 /runtime/vt-worker/dist/
+
+/server/target/

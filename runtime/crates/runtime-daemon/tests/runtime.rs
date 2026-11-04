@@ -78,6 +78,18 @@ impl Running {
             .request(method, format!("{}{path}", self.url))
             .bearer_auth(TOKEN)
     }
+    async fn post(&self, path: &str, value: Value) -> Value {
+        self.request(reqwest::Method::POST, path)
+            .json(&value)
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap()
+    }
     async fn get(&self, path: &str) -> Value {
         self.request(reqwest::Method::GET, path)
             .send()
@@ -418,4 +430,553 @@ async fn node_identity_settings_and_exclusive_ownership_survive_restart() {
     assert_ne!(after["instance_id"], before["instance_id"]);
     assert_eq!(second.get("/v1/acp/settings").await["content"], content);
     second.stop().await;
+}
+
+#[tokio::test]
+async fn agent_discovery_and_launch_preparation_use_the_node_environment() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().unwrap();
+    let tools = root.path().join("node-tools");
+    std::fs::create_dir(&tools).unwrap();
+    let executable = tools.join("node-only-agent");
+    std::fs::write(&executable, "#!/bin/sh\nexit 0\n").unwrap();
+    std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+    std::fs::write(
+        root.path().join("aow-settings.json"),
+        json!({"execution_path":[tools]}).to_string(),
+    )
+    .unwrap();
+    let node = Running::start(root.path()).await;
+    let discovered = node.get("/v1/environment/discovered-path").await;
+    assert!(!discovered.as_array().unwrap().is_empty());
+    assert_ne!(discovered, json!([tools]));
+    let profile = json!({"id":"node-profile","agent_type":"pi","display_name":"Node Pi","command":"node-only-agent","args":[],"env":{}});
+    let agents: Value = node
+        .request(reqwest::Method::POST, "/v1/agents/discover")
+        .json(&json!({"profiles":[profile],"default_agent_id":"node-profile"}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(agents[0]["executable"], executable.to_str().unwrap());
+    assert_eq!(agents[0]["available"], true);
+    assert_eq!(agents[0]["is_default"], true);
+    let launch: Value = node
+        .request(reqwest::Method::POST, "/v1/agents/resolve")
+        .json(&json!({"profile":profile}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(launch["env"]["PATH"], tools.to_str().unwrap());
+    let prepared: Value = node
+        .request(reqwest::Method::POST, "/v1/agents/prepare-terminal")
+        .json(&json!({"launch":launch,"pane_id":"node-pane","cwd":root.path()}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        prepared["env"]["AOW_STATE_DIR"],
+        root.path().to_str().unwrap()
+    );
+    let binding = PathBuf::from(prepared["env"]["AOW_PI_BINDING"].as_str().unwrap());
+    assert!(binding.starts_with(root.path().join("data/agents/pi")));
+    assert!(
+        prepared["args"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|arg| arg.as_str().is_some_and(|arg| arg.contains("pi")))
+    );
+    node.stop().await;
+}
+
+#[tokio::test]
+async fn native_sessions_are_scoped_to_node_owned_homes() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("node-home");
+    std::fs::create_dir(&home).unwrap();
+    let node = Running::start(root.path()).await;
+    let scope = json!({"cwd":root.path(),"agent":"claude","home":home});
+    let response = node
+        .request(reqwest::Method::POST, "/v1/agent-sessions/list")
+        .json(&scope)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(response.json::<Value>().await.unwrap(), json!([]));
+    let mut missing = scope.clone();
+    missing["session_id"] = json!("unknown-session");
+    assert_eq!(
+        node.request(reqwest::Method::POST, "/v1/agent-sessions/snapshot")
+            .json(&missing)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+    let mut invalid = scope;
+    invalid["home"] = json!("relative-home");
+    assert_eq!(
+        node.request(reqwest::Method::POST, "/v1/agent-sessions/list")
+            .json(&invalid)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+    node.stop().await;
+}
+
+#[tokio::test]
+async fn native_session_reference_reads_after_node_restart_and_worktree_removal() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("node-home");
+    let workspace = root.path().join("worktree");
+    let history = home.join(".claude/projects/project");
+    std::fs::create_dir_all(&history).unwrap();
+    std::fs::create_dir(&workspace).unwrap();
+    let transcript = history.join("session.jsonl");
+    std::fs::write(&transcript,format!("{}\n{}\n",json!({"type":"user","uuid":"user-1","sessionId":"native","cwd":workspace,"message":{"role":"user","content":"Read on execution node"}}),json!({"type":"assistant","uuid":"assistant-1","parentUuid":"user-1","sessionId":"native","cwd":workspace,"message":{"role":"assistant","content":[{"type":"text","text":"Node response"}]}}))).unwrap();
+    let node = Running::start(root.path()).await;
+    let sessions: Value = node
+        .request(reqwest::Method::POST, "/v1/agent-sessions/list")
+        .json(&json!({"cwd":workspace,"agent":"claude","home":home}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(sessions.as_array().unwrap().len(), 1, "{sessions}");
+    let reference = sessions[0]["reference"].clone();
+    assert!(reference["handle"].is_string());
+    assert!(!sessions.to_string().contains(transcript.to_str().unwrap()));
+    let node_id = node.get("/v1/health").await["node_id"].clone();
+    node.stop().await;
+    std::fs::remove_dir(&workspace).unwrap();
+    let node = Running::start(root.path()).await;
+    assert_eq!(node.get("/v1/health").await["node_id"], node_id);
+    let snapshot: Value = node
+        .request(reqwest::Method::POST, "/v1/agent-sessions/snapshot")
+        .json(&json!({"reference":reference}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(snapshot.to_string().contains("Node response"));
+    let mut wrong = reference;
+    wrong["node_id"] = json!("another-node");
+    assert_eq!(
+        node.request(reqwest::Method::POST, "/v1/agent-sessions/snapshot")
+            .json(&json!({"reference":wrong}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::GONE
+    );
+    assert_eq!(
+        node.client
+            .get(format!("{}/v1/agent-events", node.url))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+    node.stop().await;
+}
+
+#[tokio::test]
+async fn role_environment_tickets_survive_node_restart_and_replayed_decisions() {
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("source-home");
+    std::fs::create_dir_all(source.join(".codex")).unwrap();
+    std::fs::write(source.join(".codex/auth.json"), "isolated identity").unwrap();
+    let node = Running::start(root.path()).await;
+    let spec = json!({"id":"remote-role","home_layout":"codex","identity":{"kind":"local_home","source":source},"skills":[]});
+    let token = uuid::Uuid::new_v4().to_string();
+    let preparation: Value = node
+        .request(reqwest::Method::POST, "/v1/environments/roles/prepare")
+        .json(&json!({"token":token,"spec":spec}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let home = PathBuf::from(preparation["home"].as_str().unwrap());
+    assert!(home.starts_with(root.path().canonicalize().unwrap()));
+    assert_eq!(
+        std::fs::read_to_string(home.join(".codex/auth.json")).unwrap(),
+        "isolated identity"
+    );
+    node.stop().await;
+    std::fs::remove_dir_all(source).unwrap();
+    let node = Running::start(root.path()).await;
+    node.request(reqwest::Method::POST, "/v1/environments/roles/finish")
+        .json(&json!({"token":token,"spec":spec,"commit":true}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let skill = root.path().join("skills/review");
+    std::fs::create_dir_all(&skill).unwrap();
+    std::fs::write(skill.join("SKILL.md"), "new skill").unwrap();
+    let mut next = spec.clone();
+    next["skills"] = json!([skill]);
+    let next_token = uuid::Uuid::new_v4().to_string();
+    node.request(reqwest::Method::POST, "/v1/environments/roles/prepare")
+        .json(&json!({"token":next_token,"spec":next}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    node.request(reqwest::Method::POST, "/v1/environments/roles/finish")
+        .json(&json!({"token":next_token,"spec":next,"commit":true}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    // Replaying an old acknowledged commit must not revert a newer environment.
+    node.request(reqwest::Method::POST, "/v1/environments/roles/finish")
+        .json(&json!({"token":token,"spec":spec,"commit":true}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(
+        std::fs::read_to_string(home.join(".codex/skills/review/SKILL.md")).unwrap(),
+        "new skill"
+    );
+    let early = uuid::Uuid::new_v4().to_string();
+    let mut rejected = spec.clone();
+    rejected["id"] = json!("cancelled-role");
+    node.request(reqwest::Method::POST, "/v1/environments/roles/finish")
+        .json(&json!({"token":early,"spec":rejected,"commit":false}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(
+        node.request(reqwest::Method::POST, "/v1/environments/roles/prepare")
+            .json(&json!({"token":early,"spec":rejected}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
+    );
+    node.stop().await;
+}
+
+fn execution_spec(root: &Path, id: &str, wait: bool) -> Value {
+    let cwd = root.join("repository");
+    std::fs::create_dir_all(&cwd).unwrap();
+    assert!(
+        std::process::Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(&cwd)
+            .status()
+            .unwrap()
+            .success()
+    );
+    let script = root.join("execution-agent.sh");
+    std::fs::write(&script, include_str!("fixtures/execution-agent.sh")).unwrap();
+    let mut environment = json!({"CLAUDE_CONFIG_DIR":root.join("native-claude"),"EXECUTION_COUNT_FILE":root.join(format!("{id}.count")),"EXECUTION_PROMPT_FILE":root.join(format!("{id}.prompt"))});
+    if wait {
+        environment["EXECUTION_WAIT_FILE"] = json!(root.join(format!("{id}.release")));
+    }
+    json!({"id":id,"repository_path":cwd,"launch":{"executable":"/bin/sh","args":[script],"environment":environment},"input":{"agent":"claude","prompt":"node input","workspace_mode":"existing","workspace_path":cwd,"base_branch":"HEAD","yolo":false},"capacity":{"key":"execution-group","limit":1}})
+}
+async fn completed_execution(node: &Running, id: &str) -> Value {
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            let snapshot = node.get(&format!("/v1/executions/{id}")).await;
+            if snapshot["terminal"] == true {
+                return snapshot;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap()
+}
+#[tokio::test]
+async fn node_execution_is_idempotent_and_keeps_results_after_server_disconnect() {
+    let root = tempfile::tempdir().unwrap();
+    let node = Running::start(root.path()).await;
+    let node_id = node.get("/v1/health").await["node_id"].clone();
+    let spec = execution_spec(root.path(), "job-one", false);
+    for _ in 0..2 {
+        node.request(reqwest::Method::PUT, "/v1/executions/job-one")
+            .json(&json!({"node_id":node_id,"spec":spec}))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+    }
+    let snapshot = completed_execution(&node, "job-one").await;
+    assert_eq!(
+        std::fs::read_to_string(root.path().join("job-one.count")).unwrap(),
+        "started\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(root.path().join("job-one.prompt")).unwrap(),
+        "node input"
+    );
+    assert_eq!(
+        snapshot["events"].as_array().unwrap().last().unwrap()["event"]["status"],
+        "completed",
+        "{snapshot}"
+    );
+    assert_eq!(
+        snapshot["result"]["conclusion"], "completed on execution node",
+        "{snapshot}"
+    );
+    let reference = snapshot["native_session"]["reference"].clone();
+    assert!(reference["handle"].is_string(), "{snapshot}");
+    // The caller can disappear and replay the same journal after node restart.
+    node.stop().await;
+    let node = Running::start(root.path()).await;
+    let recovered = node.get("/v1/executions/job-one?after=1").await;
+    assert_eq!(recovered["events"][0]["sequence"], 2);
+    assert_eq!(recovered["result"], snapshot["result"]);
+    node.request(
+        reqwest::Method::DELETE,
+        &format!(
+            "/v1/executions/job-one?node_id={}",
+            node_id.as_str().unwrap()
+        ),
+    )
+    .send()
+    .await
+    .unwrap()
+    .error_for_status()
+    .unwrap();
+    assert_eq!(
+        node.request(reqwest::Method::PUT, "/v1/executions/job-one")
+            .json(&json!({"node_id":node_id,"spec":spec}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::GONE
+    );
+    let shared: Value = node
+        .request(reqwest::Method::POST, "/v1/agent-sessions/snapshot")
+        .json(&json!({"reference":reference}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(shared.to_string().contains("completed on execution node"));
+    node.stop().await;
+}
+
+#[tokio::test]
+async fn cancellation_before_admission_never_starts_an_execution() {
+    let root = tempfile::tempdir().unwrap();
+    let node = Running::start(root.path()).await;
+    let node_id = node.get("/v1/health").await["node_id"].clone();
+    let spec = execution_spec(root.path(), "cancelled-before-submit", false);
+    node.request(
+        reqwest::Method::POST,
+        "/v1/executions/cancelled-before-submit/cancel",
+    )
+    .json(&json!({"node_id":node_id}))
+    .send()
+    .await
+    .unwrap()
+    .error_for_status()
+    .unwrap();
+    assert_eq!(
+        node.request(
+            reqwest::Method::PUT,
+            "/v1/executions/cancelled-before-submit"
+        )
+        .json(&json!({"node_id":node_id,"spec":spec}))
+        .send()
+        .await
+        .unwrap()
+        .status(),
+        StatusCode::GONE
+    );
+    let result = node.get("/v1/executions/cancelled-before-submit").await;
+    assert_eq!(result["events"][0]["event"]["status"], "interrupted");
+    assert!(!root.path().join("cancelled-before-submit.count").exists());
+    node.stop().await;
+}
+
+#[tokio::test]
+async fn workspace_transfers_preserve_ranges_versions_and_node_paths() {
+    let root = tempfile::tempdir().unwrap();
+    let node = Running::start(root.path()).await;
+    let file = root.path().join("remote file.txt");
+    let url = reqwest::Url::parse_with_params(
+        &format!("{}/v1/workspace/raw", node.url),
+        &[("path", file.to_str().unwrap())],
+    )
+    .unwrap();
+    let uploaded = node
+        .client
+        .put(url.clone())
+        .bearer_auth(TOKEN)
+        .body("hello node")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(uploaded.status(), StatusCode::CREATED);
+    let version = uploaded.headers()["etag"].clone();
+    let read = node
+        .client
+        .get(url.clone())
+        .bearer_auth(TOKEN)
+        .header("Range", "bytes=6-9")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(read.status(), StatusCode::PARTIAL_CONTENT);
+    assert_eq!(read.headers()["content-range"], "bytes 6-9/10");
+    assert_eq!(read.text().await.unwrap(), "node");
+    let conflict = node
+        .client
+        .put(url.clone())
+        .bearer_auth(TOKEN)
+        .header("If-Match", "\"outdated\"")
+        .body("lost")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(conflict.status(), StatusCode::PRECONDITION_FAILED);
+    node.client
+        .put(url)
+        .bearer_auth(TOKEN)
+        .header("If-Match", version)
+        .body("updated")
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let metadata: Value = node
+        .post(
+            "/v1/workspace/operations",
+            json!({"operation":"metadata","arguments":{"path":file}}),
+        )
+        .await;
+    assert_eq!(metadata["size"], 7);
+    assert_eq!(std::fs::read_to_string(file).unwrap(), "updated");
+    let invalid = node
+        .request(reqwest::Method::POST, "/v1/workspace/operations")
+        .json(&json!({"operation":"read","arguments":{"path":"relative/file"}}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    let image = node
+        .request(reqwest::Method::POST, "/v1/workspace/clipboard")
+        .body("invalid image")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(image.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    assert_eq!(
+        std::fs::read_dir(root.path().join("cache/clipboard-images"))
+            .unwrap()
+            .count(),
+        0
+    );
+    node.stop().await;
+}
+
+#[tokio::test]
+async fn active_execution_reservations_cancel_and_shutdown_on_the_node() {
+    let root = tempfile::tempdir().unwrap();
+    let node = Running::start(root.path()).await;
+    let node_id = node.get("/v1/health").await["node_id"].clone();
+    let first = execution_spec(root.path(), "active-one", true);
+    node.request(reqwest::Method::PUT, "/v1/executions/active-one")
+        .json(&json!({"node_id":node_id,"spec":first}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while !root.path().join("active-one.count").exists() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let second = execution_spec(root.path(), "active-two", true);
+    let busy = node
+        .request(reqwest::Method::PUT, "/v1/executions/active-two")
+        .json(&json!({"node_id":node_id,"spec":second}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(busy.status(), StatusCode::CONFLICT);
+    node.post(
+        "/v1/executions/active-one/cancel",
+        json!({"node_id":node_id}),
+    )
+    .await;
+    let interrupted = completed_execution(&node, "active-one").await;
+    assert_eq!(
+        interrupted["events"].as_array().unwrap().last().unwrap()["event"]["status"],
+        "interrupted"
+    );
+    node.request(reqwest::Method::PUT, "/v1/executions/active-two")
+        .json(&json!({"node_id":node_id,"spec":second}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    node.stop().await;
+    let node = Running::start(root.path()).await;
+    let interrupted = completed_execution(&node, "active-two").await;
+    assert_eq!(
+        interrupted["events"].as_array().unwrap().last().unwrap()["event"]["status"],
+        "interrupted"
+    );
+    node.stop().await;
 }

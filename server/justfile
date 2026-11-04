@@ -1,0 +1,17 @@
+set shell := ["bash", "-cu"]
+
+build-frontend:
+    npm --prefix frontend ci --ignore-scripts --no-audit --no-fund
+    npm --prefix frontend run build
+
+build: build-frontend
+    cargo build --workspace --locked
+
+test:
+    cargo test --workspace --locked
+    node --test git-platform-providers/tests/*.test.mjs
+    npm --prefix frontend run typecheck
+
+[positional-arguments]
+run *args:
+    cargo run -p aow-server -- "$@"

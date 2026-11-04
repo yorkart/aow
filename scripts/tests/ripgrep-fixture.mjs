@@ -9,7 +9,9 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 export function vendorRipgrepFixture(repo, binary) {
   mkdirSync(join(repo, 'scripts'), { recursive: true });
   copyFileSync(join(root, 'scripts/ripgrep.mjs'), join(repo, 'scripts/ripgrep.mjs'));
-  const vendor = join(repo, 'vendor/ripgrep');
+  mkdirSync(join(repo,'server/scripts'),{recursive:true});
+  copyFileSync(join(root,'server/scripts/ripgrep.mjs'),join(repo,'server/scripts/ripgrep.mjs'));
+  const vendor = join(repo, 'server/vendor/ripgrep');
   mkdirSync(vendor, { recursive: true });
   const temp = mkdtempSync(join(vendor, '.fixture-'));
   try {

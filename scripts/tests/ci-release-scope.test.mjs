@@ -11,20 +11,20 @@ test('main and manual runs always build packages; ordinary PR changes run the te
   assert.equal(requiresNativePackages('push'), true);
   assert.equal(requiresNativePackages('workflow_dispatch'), true);
   assert.equal(requiresNativePackages('pull_request', [
-    'crates/server/src/main.rs', 'frontend/src/App.tsx', 'docs/usage.md',
+    'server/crates/server/src/main.rs', 'server/frontend/src/App.tsx', 'docs/usage.md',
   ]), false);
 });
 
 test('release tooling, native dependencies and build configuration require every platform', () => {
   for (const path of [
-    'git-platform-providers/github.mjs', 'git-platform-providers/gitlab.mjs',
-    'skills/aow-agent/SKILL.md', 'skills/aow-acp/SKILL.md',
+    'server/git-platform-providers/github.mjs', 'server/git-platform-providers/gitlab.mjs',
+    'server/skills/aow-agent/SKILL.md', 'server/skills/aow-acp/SKILL.md',
     'scripts/package-release.sh', 'scripts/tests/macos-release.test.mjs',
     'packaging/bin/aow', '.github/workflows/release.yml', '.cargo/config.toml',
-    'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'rust-toolchain',
-    'crates/server/Cargo.toml', 'runtime/crates/runtime-daemon/build.rs', 'crates/macos-log/src/os_log.c',
-    'frontend/package.json', 'frontend/package-lock.json', 'runtime/vt-worker/bin/vt-worker.mjs',
-    'vendor/ripgrep/manifest.json', 'vendor/ripgrep/15.2.0/ripgrep.tar.gz',
+    'server/Cargo.toml', 'server/Cargo.lock', 'rust-toolchain.toml', 'rust-toolchain',
+    'server/crates/server/Cargo.toml', 'runtime/crates/runtime-daemon/build.rs', 'server/crates/macos-log/src/os_log.c',
+    'server/frontend/package.json', 'server/frontend/package-lock.json', 'runtime/vt-worker/bin/vt-worker.mjs',
+    'server/vendor/ripgrep/manifest.json', 'server/vendor/ripgrep/15.2.0/ripgrep.tar.gz',
   ]) {
     assert.equal(requiresNativePackages('pull_request', [path]), true, path);
   }

@@ -121,7 +121,7 @@ export function validateRustSource(source, file, resources) {
   // Unit fixtures may deliberately contain Chinese user content. Production Rust
   // must keep it in catalogues, just like the frontend.
   const production = source.split(/#\[cfg\(test\)\]/u)[0];
-  if (!file.startsWith('crates/i18n/') && !/(?:^|\/)(?:tests?(?:\/|\.rs)|[^/]*_tests\.rs)/u.test(file)) {
+  if (!file.replace(/^server\//u, '').startsWith('crates/i18n/') && !/(?:^|\/)(?:tests?(?:\/|\.rs)|[^/]*_tests\.rs)/u.test(file)) {
     assert.ok(!/"[^"\n]*\p{Script=Han}[^"\n]*"/u.test(production), `${file}: hardcoded Chinese production string`);
   }
 }

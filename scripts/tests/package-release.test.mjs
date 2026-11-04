@@ -32,7 +32,7 @@ function fixture(t) {
   write(join(tools, 'uname'), `#!/bin/sh\ncase "$1" in -s) echo Linux;; -m) echo ${machine};; esac\n`, true);
   mkdirSync(join(repo, 'runtime/vt-worker'), { recursive: true });
   for (const path of [
-    'skills/aow-agent/SKILL.md', 'skills/aow-acp/SKILL.md', 'git-platform-providers/github.mjs', 'git-platform-providers/gitlab.mjs',
+    'server/skills/aow-agent/SKILL.md', 'server/skills/aow-acp/SKILL.md', 'server/git-platform-providers/github.mjs', 'server/git-platform-providers/gitlab.mjs',
     'scripts/package-release.sh', 'scripts/install-release.sh', 'scripts/install-local.sh',
     'scripts/start-server.sh', 'scripts/start-runtime-daemon.sh', 'scripts/replace-symlink.mjs', 'scripts/server-state-dir.sh',
     'scripts/start-launchd.sh', 'scripts/launchd-service.mjs', 'scripts/activate-runtime.mjs', 'scripts/service-health.mjs',
@@ -48,8 +48,8 @@ function fixture(t) {
     write(join(artifacts, name), '#!/bin/sh\n[ "${FAIL_BINARY:-}" != 1 ]\n', true);
   }
   vendorRipgrepFixture(repo);
-  write(join(repo, 'frontend/dist/index.html'), '<html>release frontend</html>');
-  write(join(repo, 'frontend/dist/assets/app.js'), 'console.log("release")');
+  write(join(repo, 'server/frontend/dist/index.html'), '<html>release frontend</html>');
+  write(join(repo, 'server/frontend/dist/assets/app.js'), 'console.log("release")');
   write(join(repo, 'runtime/vt-worker/dist/vt-worker.mjs'), '// bundled worker');
   for (const name of ['cargo', 'npm']) {
     write(join(tools, name), `#!/bin/sh
@@ -136,7 +136,7 @@ test('default version and skip-build create a complete package without invoking 
   assert.equal(manifest.components.git_platform_providers, 'git-platform-providers');
   assert.deepEqual(readdirSync(join(extracted, 'git-platform-providers')).sort(), ['github.mjs', 'gitlab.mjs']);
   for (const id of ['github.mjs', 'gitlab.mjs']) {
-    assert.equal(readFileSync(join(extracted, 'git-platform-providers', id), 'utf8'), readFileSync(join(root, 'git-platform-providers', id), 'utf8'));
+    assert.equal(readFileSync(join(extracted, 'git-platform-providers', id), 'utf8'), readFileSync(join(root, 'server/git-platform-providers', id), 'utf8'));
   }
   assert.deepEqual(manifest.platform, { os: 'linux', arch: machine, target, libc: 'musl', linkage: 'static' });
   assert.equal(archive.endsWith(`aow-${manifest.release_id}.tar.gz`), true);
@@ -152,10 +152,10 @@ test('default version and skip-build create a complete package without invoking 
 
 test('provider resources are packaged and installed without a fixed platform filename list', t => {
   const f = fixture(t);
-  for (const name of ['github.mjs', 'gitlab.mjs']) rmSync(join(f.repo, 'git-platform-providers', name));
-  const source = readFileSync(join(root, 'git-platform-providers/github.mjs'), 'utf8');
-  write(join(f.repo, 'git-platform-providers/forge.v2.mjs'), source);
-  write(join(f.repo, 'git-platform-providers/tests/fixture.test.mjs'), '// test only');
+  for (const name of ['github.mjs', 'gitlab.mjs']) rmSync(join(f.repo, 'server/git-platform-providers', name));
+  const source = readFileSync(join(root, 'server/git-platform-providers/github.mjs'), 'utf8');
+  write(join(f.repo, 'server/git-platform-providers/forge.v2.mjs'), source);
+  write(join(f.repo, 'server/git-platform-providers/tests/fixture.test.mjs'), '// test only');
   const packed = f.pack(['--version', 'custom-provider', '--skip-build']);
   assert.equal(packed.status, 0, packed.stderr);
   const installed = f.run('bash', ['scripts/install-local.sh', packed.stdout.trim(), '--skip-runtime']);
@@ -179,7 +179,7 @@ test('shared web assets still build and validate all native binaries without npm
   f.assertClean();
 });
 
-for (const asset of ['frontend/dist/index.html', 'runtime/vt-worker/dist/vt-worker.mjs']) {
+for (const asset of ['server/frontend/dist/index.html', 'runtime/vt-worker/dist/vt-worker.mjs']) {
   test(`missing shared asset ${asset} fails before compiling`, t => {
     const f = fixture(t);
     rmSync(join(f.repo, asset));
@@ -209,7 +209,7 @@ test('local install deploys the latest package or an explicit path without downl
   for (const name of ['aow-agent', 'aow-acp']) {
     const installedSkill = join(f.home, '.aow/skills', name, 'SKILL.md');
     assert.equal(lstatSync(installedSkill).isFile(), true);
-    assert.equal(readFileSync(installedSkill, 'utf8'), readFileSync(join(root, 'skills', name, 'SKILL.md'), 'utf8'));
+    assert.equal(readFileSync(installedSkill, 'utf8'), readFileSync(join(root, 'server/skills', name, 'SKILL.md'), 'utf8'));
   }
   assert.equal(existsSync(join(f.home, '.agents/skills')), false);
   // Updating replaces bundled content, preserving unrelated skills.
@@ -224,7 +224,7 @@ test('local install deploys the latest package or an explicit path without downl
   assert.equal(readlinkSync(join(f.runtime, 'active/server')), '../releases/local-2');
   assert.equal(readlinkSync(join(f.runtime, 'active/runtime-daemon')), '../releases/local-1');
   assert.doesNotMatch(readFileSync(f.serviceLog, 'utf8').slice(servicesBefore.length), /runtime-daemon/);
-  assert.equal(readFileSync(join(f.home, '.aow/skills/aow-agent/SKILL.md'), 'utf8'), readFileSync(join(root, 'skills/aow-agent/SKILL.md'), 'utf8'));
+  assert.equal(readFileSync(join(f.home, '.aow/skills/aow-agent/SKILL.md'), 'utf8'), readFileSync(join(root, 'server/skills/aow-agent/SKILL.md'), 'utf8'));
   assert.equal(readFileSync(join(f.home, '.aow/skills/custom/SKILL.md'), 'utf8'), 'user skill');
   assert.equal(existsSync(join(f.runtime, '.install.lock')), false);
 });
@@ -286,7 +286,7 @@ for (const failure of ['missing binary', 'asset symlink', 'archive failure', 'bu
     const f = fixture(t);
     assert.equal(f.pack(['--version', '1.0.0']).status, 0);
     if (failure === 'missing binary') rmSync(join(f.artifacts, 'aow-cli'));
-    if (failure === 'asset symlink') symlinkSync('/tmp', join(f.repo, 'frontend/dist/outside'));
+    if (failure === 'asset symlink') symlinkSync('/tmp', join(f.repo, 'server/frontend/dist/outside'));
     if (failure === 'archive failure') write(join(f.tools, 'tar'), '#!/bin/sh\nexit 1\n', true);
     const extra = failure === 'build failure' ? { FAIL_BUILD: '1' } : failure === 'bad binary' ? { FAIL_BINARY: '1' } : {};
     const result = f.pack(['--version', '1.2.0'], extra);

@@ -11,6 +11,6 @@ mod vt_worker;
 
 pub use error::TerminaldError;
 pub use node_worker::configure as configure_vt_worker;
-pub use runtime::TerminalRuntimeHost;
 pub use runtime::build_router;
+pub use runtime::{TerminalObserver, TerminalRuntimeHost};
 pub use vt_worker::VtWorkerConfig;

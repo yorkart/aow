@@ -6,7 +6,7 @@ configuration, authentication and shutdown sequence. ACP adapters, PTY shells
 and the optional Node.js VT worker are child processes; it does not launch
 separate `aow-acpd` or `aow-terminald` daemons.
 
-AoW Server uses the shared `crates/runtime-client` SDK for all execution-node
+AoW Server uses the shared `server/crates/runtime-client` SDK for all execution-node
 operations. HTTP manages instances and configuration; WebSocket carries native
 ACP JSON-RPC and terminal streams. The execution modules and VT worker live in
 the independent [runtime subproject](../../runtime/README.md), with its own Cargo
@@ -119,7 +119,15 @@ The token grants control over processes running as the daemon's OS user.
 | `POST /v1/acp/agents/{id}/install` | Prepare an adapter on the node |
 | `GET /v1/acp/agents/{id}/installation` | Preparation status |
 | `GET/PUT /v1/acp/settings` | Node ACP settings with optimistic revision checking |
-| `GET /v1/environment` | Node execution PATH |
+| `GET/PUT /v1/environment` | Read/update node execution PATH |
+| `GET /v1/environment/discovered-path` | Rediscover PATH using the node login shell |
+| `POST /v1/agents/discover`, `POST /v1/agents/resolve` | Discover/resolve executables on the node |
+| `POST /v1/agents/prepare-terminal` | Prepare node-owned resume flags and Codex/Pi launch assets |
+| `POST /v1/agent-sessions/list`, `POST /v1/agent-sessions/find` | Native history metadata and opaque node references |
+| `POST /v1/agent-sessions/snapshot` | Read a transcript by node-owned reference |
+| `POST /v1/agent-sessions/pane` | Native sessions associated with a managed pane |
+| `POST /v1/agent-sessions/process-check` | Validate pane ownership against process birth identity |
+| `POST /v1/agent-sessions/resolve-worktree` | Validate a worktree against registered repository roots on the node |
 | `POST /v1/directories/resolve` | Resolve an existing node workspace |
 | `POST /v1/files/read`, `POST /v1/files/write` | Node filesystem callbacks |
 | `PUT /v1/workspaces/removing` | Fence workspace access and reap its ACP processes |
@@ -159,6 +167,101 @@ curl --fail --request PUT --header "Authorization: Bearer $NODE_TOKEN" \
   --data '{"agent_id":"my-agent","cwd":"/absolute/node/workspace"}' \
   http://127.0.0.1:9760/v1/acp/instances/example
 ```
+
+## Native history and completion events
+
+Native session metadata contains a `reference` with `node_id`, an opaque `handle`
+and session identity. Server persists this reference for shares and business
+associations; transcript paths and trusted history roots remain in the node's
+SQLite catalog. `POST /v1/agent-sessions/snapshot` accepts `{ "reference": ... }`.
+The node verifies the handle and identity, then rechecks the trusted transcript
+root. A deleted worktree does not prevent reading its retained history. Unknown,
+mismatched or unavailable references return `410`; a reference cannot be moved
+to a different node. An unavailable runtime never causes Server to read local
+history. Server builds exclude the in-process history fixtures used by tests.
+
+`GET /v1/agent-events` upgrades to an authenticated WebSocket. The first frame is
+`{ "type": "ready", "node_id": "...", "head": 42, "oldest": 1, "after": 42 }`.
+Without a cursor, a subscription starts at the current head and receives future
+events. Reconnect with `?node_id=...&after=42` to replay later records. Completion
+frames contain `type: "completion"`, `node_id`, `sequence`, and an `event` with
+agent/session identity, current title, conclusion, token usage and owning pane
+IDs. Business labels and notification delivery policy belong to Server.
+
+The node runs bounded native transcript readers independently of Server
+connections. Existing history starts at EOF; exited CLI readers receive a final
+poll. Completions are committed to a node-local SQLite log before transmission,
+and the latest 4096 records survive node restarts. WebSockets exchange heartbeats
+and reconnect after a lost connection. Server persists its cursor in
+`state/completion-cursor.json` after dispatch and ignores replayed sequence IDs.
+Transport replay is at least once: a Server crash between dispatch and cursor
+persistence can repeat that delivery; notification providers are not part of the
+cursor transaction.
+
+A different node ID returns `409`. An expired or future cursor produces an
+explicit `gap` frame; Server logs the error and stops that listener rather than
+silently skipping records. After inspecting such a gap or intentionally replacing
+a node, an operator can remove Server's cursor file and restart Server to start
+from the new head. This deliberately abandons unconsumed history.
+
+## Workspace, role environments and executions
+
+All filesystem paths in these APIs belong to the configured runtime node. Server
+keeps project, role and task business metadata, and uses runtime-client for node
+operations. There are no path dependencies between the two source workspaces.
+
+| API | Purpose |
+| --- | --- |
+| `POST /v1/workspace/operations` | Filesystem metadata/mutations and Git/worktree operations |
+| `GET/PUT /v1/workspace/raw` | Streaming transfer, Range and conditional writes |
+| `POST /v1/workspace/search` | Bounded search with a caller request ID |
+| `DELETE /v1/workspace/search/{id}` | Cancel a pending or active search |
+| `GET /v1/workspace/watch` | WebSocket Git/worktree changes; send the root list first |
+| `POST /v1/workspace/clipboard` | Validate and store temporary images on the node |
+| `POST /v1/workspace/provider` | Execute a protocol-v4 Git provider on the node |
+| `POST /v1/environments/identity-sources` | Discover node-local identity presets |
+| `POST /v1/environments/roles/prepare` | Prepare HOME/identity/skills under a durable ticket |
+| `POST /v1/environments/roles/finish` | Commit or roll back a prepared ticket |
+| `POST /v1/environments/roles/resolve` | Reconcile published configuration and resolve environment |
+| `POST /v1/environments/roles/probe` | Check the CLI or native ACP adapter in that environment |
+| `PUT /v1/executions/{id}` | Admit one immutable execution request |
+| `GET /v1/executions/{id}` | Replay events after a sequence cursor and read its result |
+| `GET /v1/executions/{id}/output` | Read a bounded stdout/stderr chunk by offset |
+| `POST /v1/executions/{id}/cancel` | Cancel the entire execution process group |
+| `DELETE /v1/executions/{id}` | Acknowledge collection and remove execution files |
+
+Role environment preparation imports credentials as private independent files.
+Server commits after publishing its business configuration; durable tickets and
+decisions reconcile interrupted publication without depending on the source Home
+still existing. Skill imports reject escaping/cyclic symlinks. Temporary clipboard
+images have a 10 MiB per-image limit, a 256 MiB node quota and a 24-hour lifetime.
+
+An execution contains a workspace configuration, resolved launch description,
+rendered prompt, environment overrides and an optional opaque capacity reservation.
+Scheduling, prompt variables, task revision/history, notification preferences and
+concurrency policy stay on Server. The node owns worktree preparation/cleanup,
+agent flags/processes, native session discovery and final result capture. It does
+not schedule tasks or read Server's task database.
+
+Execution IDs are idempotent and permanently retired after acknowledgement. An
+early cancellation also retires its ID, preventing delayed submission from starting
+it. The caller supplies the expected stable node ID. A disconnected or killed
+Server runner leaves the node job running; Server reconciles journals, output and
+results after reconnect. Node shutdown cancels active jobs, while startup marks
+unfinished durable jobs interrupted after reaping their recorded process groups.
+
+The detached Server automation runner reads a private connection descriptor at
+`<server-state>/runtime/runtime-client.json`. It persists submission intent before
+sending it and retries with the same ID. Server mirrors completion before
+acknowledging node cleanup. Installation `--initialize-state` creates business
+configuration only; normal startup initializes default workspaces on the node.
+This stage supports one endpoint and does not retain the old local execution path.
+
+Managed ACP creation also accepts a bounded `environment` map (128 keys and
+128 KiB total) for caller-supplied process variables. The node applies an explicit
+role `execution_environment` afterward and assigns managed identity variables
+itself. Server uses this generic mechanism for business callback credentials;
+no Server business types or signing keys are needed by runtime.
 
 ## ACP WebSocket
 
@@ -211,7 +314,7 @@ binary frames carry terminal input/output; JSON frames carry control, stream
 metadata, resize, status and acknowledgements. Existing query options such as
 `control=v2`, `observer=v1`, `epoch`, `after`, `capabilities=vt-snapshot-v1` and
 `snapshot_compression=gzip` retain their behavior. See the types in
-`crates/protocol/src/terminal/attach.rs` for the frame schema.
+`runtime/crates/protocol/src/terminal/attach.rs` for the frame schema.
 
 Unlike ACP transports, closing a terminal attachment leaves the PTY running.
 Reattach using its epoch and offset to replay available output. Terminal

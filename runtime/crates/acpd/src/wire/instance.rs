@@ -59,7 +59,7 @@ impl Instance {
         if let Some(path) = command.execution_path {
             builder.env("PATH", path);
         }
-        builder.envs(command.env);
+        builder.envs(command.env).envs(&spec.environment);
         if let Some(environment) = &spec.execution_environment {
             builder
                 .env("HOME", &environment.home)
@@ -287,6 +287,7 @@ printf '{{"jsonrpc":"2.0","id":1,"result":{{"stopReason":"end_turn"}}}}\n'
                     agent_id: "fixture".into(),
                     cwd: root.path().into(),
                     execution_environment: None,
+                    environment: Default::default(),
                 },
                 aow_acp::AdapterCommand {
                     path: "/bin/sh".into(),

@@ -1,0 +1,140 @@
+//! thread_metadata_store.rs::DbOperation and its background drain/dedup loop.
+//! A dedicated thread replaces GPUI's background executor; snapshots join the same transaction.
+use super::{ThreadMetadata, ThreadMetadataStore};
+use crate::{acp_thread::snapshot_store, facade::SessionSnapshot};
+use anyhow::{Result, anyhow};
+use aow_db::acp::{AcpDb, ThreadWrite};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Condvar, Mutex, mpsc},
+    thread::JoinHandle,
+    time::{Duration, Instant},
+};
+
+// Only saves are retried. Deletion is an explicit synchronous transaction.
+pub(super) struct DbOperation {
+    pub metadata: Box<ThreadMetadata>,
+    pub snapshot: Arc<Mutex<SessionSnapshot>>,
+}
+impl DbOperation {
+    pub(super) fn id(&self) -> &str {
+        &self.metadata.thread_id
+    }
+}
+#[derive(Default)]
+struct Pending {
+    // Coalesce at enqueue too: an unavailable disk cannot grow an unbounded stream queue.
+    operations: HashMap<String, DbOperation>,
+    waiters: Vec<mpsc::Sender<Result<(), String>>>,
+    shutdown: bool,
+}
+pub(super) struct DbOperations {
+    pending: Arc<(Mutex<Pending>, Condvar)>,
+    worker: Option<JoinHandle<()>>,
+}
+impl DbOperations {
+    pub(super) fn new(db: AcpDb) -> Result<Self> {
+        let pending = Arc::new((Mutex::new(Pending::default()), Condvar::new()));
+        let state = pending.clone();
+        let worker = std::thread::Builder::new()
+            .name("acp-thread-db".into())
+            .spawn(move || Self::run(db, state))?;
+        Ok(Self {
+            pending,
+            worker: Some(worker),
+        })
+    }
+    pub(super) fn enqueue(&self, operation: DbOperation) {
+        let (lock, wake) = &*self.pending;
+        lock.lock()
+            .unwrap()
+            .operations
+            .insert(operation.id().to_owned(), operation);
+        wake.notify_one();
+    }
+    pub(super) fn flush(&self) -> Result<()> {
+        let (sender, receiver) = mpsc::channel();
+        let (lock, wake) = &*self.pending;
+        lock.lock().unwrap().waiters.push(sender);
+        wake.notify_one();
+        receiver
+            .recv()
+            .map_err(|_| anyhow!("ACP database writer stopped"))?
+            .map_err(anyhow::Error::msg)
+    }
+    fn run(db: AcpDb, pending: Arc<(Mutex<Pending>, Condvar)>) {
+        let (lock, wake) = &*pending;
+        loop {
+            let mut state = lock.lock().unwrap();
+            while state.operations.is_empty() && state.waiters.is_empty() && !state.shutdown {
+                state = wake.wait(state).unwrap();
+            }
+            // A fixed deadline avoids both per-chunk fsync and starvation under continuous output.
+            let deadline = Instant::now() + Duration::from_secs(1);
+            while state.waiters.is_empty() && !state.shutdown {
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                if remaining.is_zero() {
+                    break;
+                }
+                state = wake.wait_timeout(state, remaining).unwrap().0;
+            }
+            let operations = ThreadMetadataStore::dedup_db_operations(
+                std::mem::take(&mut state.operations)
+                    .into_values()
+                    .collect(),
+            );
+            let waiters = std::mem::take(&mut state.waiters);
+            let shutdown = state.shutdown;
+            drop(state);
+            let result = Self::write(&db, &operations)
+                .map_err(|error| format!("Cannot persist ACP history: {error:#}"));
+            if let Err(error) = &result {
+                tracing::error!(%error, "ACP database write failed; pending state retained for retry");
+                let mut state = lock.lock().unwrap();
+                for operation in operations {
+                    // A newer save queued during I/O always wins over this failed write.
+                    state
+                        .operations
+                        .entry(operation.id().to_owned())
+                        .or_insert(operation);
+                }
+            }
+            for waiter in waiters {
+                let _ = waiter.send(result.clone());
+            }
+            if shutdown {
+                break;
+            }
+        }
+    }
+    fn write(db: &AcpDb, operations: &[DbOperation]) -> Result<()> {
+        if operations.is_empty() {
+            return Ok(());
+        }
+        // Capture under each session's lock, outside both the global thread
+        // store and SQLite locks. Never keep a live-session lock during I/O.
+        let snapshots: Vec<_> = operations
+            .iter()
+            .map(|operation| {
+                let snapshot = operation.snapshot.lock().unwrap().clone();
+                let metadata = ThreadMetadata::from_snapshot(&snapshot, Some(&operation.metadata));
+                Ok((metadata.into_record()?, snapshot_store::encode(&snapshot)?))
+            })
+            .collect::<Result<_>>()?;
+        let writes: Vec<_> = snapshots
+            .iter()
+            .map(|(metadata, snapshot)| ThreadWrite::Upsert { metadata, snapshot })
+            .collect();
+        db.write(&writes)
+    }
+}
+impl Drop for DbOperations {
+    fn drop(&mut self) {
+        let (lock, wake) = &*self.pending;
+        lock.lock().unwrap().shutdown = true;
+        wake.notify_one();
+        if let Some(worker) = self.worker.take() {
+            let _ = worker.join();
+        }
+    }
+}

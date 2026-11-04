@@ -25,7 +25,7 @@ pub(super) fn router(state: WireRuntime) -> Router {
         .route("/v1/acp/registry", get(registry))
         .route("/v1/acp/agents/{id}/install", axum::routing::post(install))
         .route("/v1/acp/agents/{id}/installation", get(installation))
-        .route("/v1/environment", get(environment))
+        .route("/v1/environment", get(environment).put(save_environment))
         .route(
             "/v1/directories/resolve",
             axum::routing::post(resolve_directory),
@@ -274,7 +274,9 @@ async fn environment(
         .await
         .map_err(ApiError::invalid)?;
     let path = path.map(|path| std::env::split_paths(&path).collect::<Vec<_>>());
-    Ok(Json(serde_json::json!({"execution_path":path})))
+    Ok(Json(
+        serde_json::json!({"execution_path":path,"state_dir":state.host.root}),
+    ))
 }
 #[derive(Deserialize)]
 struct FileRequest {
@@ -393,4 +395,38 @@ async fn resolve_directory(
         return Err(ApiError::invalid("Node working directory must exist"));
     }
     Ok(Json(serde_json::json!({"path":path})))
+}
+
+#[derive(Deserialize)]
+struct EnvironmentUpdate {
+    execution_path: Vec<PathBuf>,
+}
+async fn save_environment(
+    State(state): State<WireRuntime>,
+    Json(request): Json<EnvironmentUpdate>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    use aow_acp::AcpHost;
+    let paths = aow_agents::environment::normalize_path(request.execution_path)
+        .map_err(ApiError::invalid)?;
+    let _guard = state.settings_lock.lock().await;
+    let path = state.host.root.join("aow-settings.json");
+    let mut settings = match tokio::fs::read(&path).await {
+        Ok(bytes) => {
+            serde_json::from_slice::<serde_json::Value>(&bytes).map_err(ApiError::invalid)?
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            serde_json::json!({"version":1})
+        }
+        Err(error) => return Err(ApiError::invalid(error)),
+    };
+    if !settings.is_object() {
+        return Err(ApiError::invalid("Node settings must be an object"));
+    }
+    settings["execution_path"] = serde_json::to_value(&paths).map_err(ApiError::invalid)?;
+    state
+        .host
+        .write_text_file(&state.host.root, &path, &settings.to_string())
+        .await
+        .map_err(ApiError::invalid)?;
+    Ok(Json(serde_json::json!({"execution_path":paths})))
 }

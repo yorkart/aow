@@ -120,12 +120,12 @@ main() {
             export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-11.0}
         fi
         if (( skip_web_build )); then
-            [[ -f "$repo_root/frontend/dist/index.html" ]] || fail 'missing frontend/dist/index.html'
+            [[ -f "$repo_root/server/frontend/dist/index.html" ]] || fail 'missing server/frontend/dist/index.html'
             [[ -f "$repo_root/runtime/vt-worker/dist/vt-worker.mjs" ]] || fail 'missing runtime/vt-worker/dist/vt-worker.mjs'
         else
             command -v npm >/dev/null || fail 'npm is required'
             (
-                cd "$repo_root/frontend"
+                cd "$repo_root/server/frontend"
                 npm ci --ignore-scripts --no-audit --no-fund
                 npm run build
             ) >&2
@@ -137,7 +137,7 @@ main() {
         fi
         (
             cd "$repo_root"
-            cargo build --locked --release --target "$target" --target-dir "$repo_root/target" \
+            cargo build --manifest-path server/Cargo.toml --locked --release --target "$target" --target-dir "$repo_root/target" \
                 -p aow-server -p aow-automations -p aow-cli \
                 --bin aow-server --bin aow-automation-runner --bin aow-cli
             cargo build --manifest-path runtime/Cargo.toml --locked --release --target "$target" --target-dir "$repo_root/target" -p aow-runtime-daemon --bin aow-runtime-daemon
@@ -189,11 +189,11 @@ JS
         fi
         "$bundle/bin/$entry" --help >/dev/null
     done
-    [[ -f "$repo_root/frontend/dist/index.html" ]] || fail 'missing frontend/dist/index.html'
-    cp -R -- "$repo_root/frontend/dist" "$bundle/frontend/dist"
-    cp -R -- "$repo_root/skills" "$bundle/skills"
+    [[ -f "$repo_root/server/frontend/dist/index.html" ]] || fail 'missing server/frontend/dist/index.html'
+    cp -R -- "$repo_root/server/frontend/dist" "$bundle/frontend/dist"
+    cp -R -- "$repo_root/server/skills" "$bundle/skills"
     mkdir -p "$bundle/git-platform-providers"
-    for entry in "$repo_root/git-platform-providers/"*.mjs; do
+    for entry in "$repo_root/server/git-platform-providers/"*.mjs; do
         [[ -f "$entry" && ! -L "$entry" ]] || fail "invalid provider resource: $entry"
         install -m 0644 -- "$entry" "$bundle/git-platform-providers/${entry##*/}"
     done

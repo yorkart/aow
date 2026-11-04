@@ -49,3 +49,29 @@ impl TerminalRuntimeHost {
         result
     }
 }
+
+/// Read-only node-local view used by native-session services.
+#[derive(Clone)]
+pub struct TerminalObserver {
+    state: DaemonState,
+}
+impl TerminalRuntimeHost {
+    pub fn observer(&self) -> TerminalObserver {
+        TerminalObserver {
+            state: self.state.clone(),
+        }
+    }
+}
+impl TerminalObserver {
+    pub async fn agents(&self) -> Result<TerminalAgentList, TerminaldError> {
+        let state = self.state.clone();
+        let mut detected = tokio::task::spawn_blocking(move || state.agents())
+            .await
+            .map_err(|error| TerminaldError::Worker(error.to_string()))??;
+        super::session_titles::enrich(&mut detected).await;
+        Ok(detected)
+    }
+    pub fn runtimes(&self) -> Result<TerminalRuntimeList, TerminaldError> {
+        self.state.list()
+    }
+}

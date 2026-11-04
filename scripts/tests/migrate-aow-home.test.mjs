@@ -140,7 +140,7 @@ import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 const [source, cwd, thread, mode] = process.argv.slice(1);
 const db = new DatabaseSync(source);
-for (const schema of ['crates/db/src/sqlite/sql/initialize.sql', 'crates/db/src/acp/migrations/sidebar_threads/001_create_sidebar_threads.sql', 'crates/db/src/acp/migrations/acp_thread_snapshots/001_create_snapshots.sql']) {
+for (const schema of ['server/crates/db/src/sqlite/sql/initialize.sql', 'server/crates/db/src/acp/migrations/sidebar_threads/001_create_sidebar_threads.sql', 'server/crates/db/src/acp/migrations/acp_thread_snapshots/001_create_snapshots.sql']) {
   const sql = readFileSync(schema, 'utf8');
   db.exec(mode === 'ordinary tables' ? sql.replaceAll(' STRICT;', ';') : sql);
 }

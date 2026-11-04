@@ -65,6 +65,7 @@ mod process;
     reason = "Keep the runtime implementation beside its focused sibling modules"
 )]
 mod runtime;
+mod session_titles;
 mod state;
 mod validation;
 mod websocket;
@@ -75,7 +76,7 @@ use runtime::*;
 use state::*;
 use validation::*;
 
-pub use embedded::TerminalRuntimeHost;
+pub use embedded::{TerminalObserver, TerminalRuntimeHost};
 pub use http::build_router;
 
 #[cfg(test)]

@@ -38,7 +38,7 @@ pub(super) const SESSION_FAILED: u8 = 3;
 ///
 /// `program` is normally a Node executable. `script` is either terminald's
 /// extracted embedded bundle or an explicit development override.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct VtWorkerConfig {
     pub program: PathBuf,
     pub script: PathBuf,

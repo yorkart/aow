@@ -5,7 +5,7 @@ async fn closing_owner_releases_lock_even_when_an_inherited_descriptor_remains_o
     let root = tempfile::tempdir().unwrap();
     let first = AcpRuntime::open(root.path().into()).await.unwrap();
     // dup has the same lock lifetime as a descriptor temporarily inherited by fork.
-    let inherited = first.lock.try_clone().unwrap();
+    let inherited = first.lock.0.try_clone().unwrap();
     assert!(AcpRuntime::open(root.path().into()).await.is_err());
     first.shutdown().await.unwrap();
     drop(first);

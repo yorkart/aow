@@ -1,0 +1,32 @@
+[package]
+name = "aow-runtime-agents"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = []
+launch = ["dep:serde", "dep:thiserror", "dep:anyhow", "dep:serde_json", "dep:tokio"]
+sessions = ["dep:anyhow", "dep:chrono", "dep:serde", "dep:serde_json", "dep:thiserror", "dep:walkdir", "dep:tokio", "dep:aow-db", "dep:aow-id", "dep:aow-process"]
+automation = ["dep:anyhow", "dep:serde", "dep:serde_json", "dep:tokio"]
+
+[dependencies]
+aow-protocol = { package = "aow-runtime-protocol", path = "../protocol" }
+aow-i18n = { package = "aow-runtime-i18n", path = "../i18n" }
+aow-db = { package = "aow-runtime-db", path = "../db", optional = true }
+aow-id = { package = "aow-runtime-id", path = "../id", optional = true }
+aow-process = { package = "aow-runtime-process", path = "../process", optional = true }
+anyhow = { workspace = true, optional = true }
+chrono = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+thiserror = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+walkdir = { workspace = true, optional = true }
+
+[dev-dependencies]
+rusqlite.workspace = true
+tempfile = "3.20"
+
+[lib]
+name = "aow_agents"

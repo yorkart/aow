@@ -11,7 +11,7 @@ import { publishTestRelease } from './github-fixture.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const quote = value => `'${value.replaceAll("'", "'\\''")}'`;
-const files = ['skills/aow-agent/SKILL.md', 'skills/aow-acp/SKILL.md', 'git-platform-providers/github.mjs', 'git-platform-providers/gitlab.mjs', 'scripts/install-release.sh', 'scripts/package-release.sh',
+const files = ['server/skills/aow-agent/SKILL.md', 'server/skills/aow-acp/SKILL.md', 'server/git-platform-providers/github.mjs', 'server/git-platform-providers/gitlab.mjs', 'scripts/install-release.sh', 'scripts/package-release.sh',
   'scripts/start-server.sh', 'scripts/start-runtime-daemon.sh', 'scripts/start-launchd.sh', 'scripts/launchd-service.mjs',
   'scripts/activate-runtime.mjs', 'scripts/service-health.mjs',
   'scripts/launchd-mode.mjs', 'scripts/start-launchdaemon.mjs', 'scripts/register-launchdaemon.py',
@@ -49,7 +49,7 @@ function fixture(t, arch = 'aarch64') {
   }
   for (const binary of binaries) write(join(artifacts, binary), '#!/bin/sh\nexit 0\n', true);
   vendorRipgrepFixture(repo);
-  write(join(repo, 'frontend/dist/index.html'), '<html>macOS release</html>');
+  write(join(repo, 'server/frontend/dist/index.html'), '<html>macOS release</html>');
   write(join(home, '.aow/credentials.json'), credentials());
   // Lifecycle tests mock the health transport; service-health.test.mjs exercises
   // real HTTP and Unix sockets, including mismatched PIDs and startup delays.

@@ -5,10 +5,20 @@ edition.workspace = true
 license = "GPL-3.0-or-later"
 
 [dependencies]
+aow-acp = { path = "../acp" }
+aow-runtime-executor = { path = "../executor" }
+tempfile = "3.20"
+aow-workspaces = { package = "aow-runtime-workspace", path = "../workspace" }
+aow-runtime-environment = { path = "../environment" }
+aow-protocol = { package = "aow-runtime-protocol", path = "../protocol" }
+rusqlite.workspace = true
+chrono.workspace = true
+futures-util.workspace = true
+aow-agents = { package = "aow-runtime-agents", path = "../agents", features = ["launch", "sessions", "automation"] }
 anyhow.workspace = true
 aow-acpd = { path = "../acpd" }
 aow-terminald = { path = "../terminald" }
-aow-filesystem = { path = "../../../crates/filesystem" }
+aow-filesystem = { package = "aow-runtime-filesystem", path = "../filesystem" }
 axum.workspace = true
 clap.workspace = true
 libc.workspace = true
@@ -20,13 +30,9 @@ tracing-subscriber.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-aow-protocol = { path = "../../../crates/protocol" }
-aow-acp = { path = "../acp" }
 async-trait.workspace = true
-futures-util.workspace = true
 reqwest.workspace = true
-tempfile = "3.20"
 tokio-tungstenite.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
-aow-macos-log = { path = "../../../crates/macos-log" }
+aow-macos-log = { package = "aow-runtime-macos-log", path = "../macos-log" }
