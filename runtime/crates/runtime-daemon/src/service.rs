@@ -4,7 +4,7 @@ use crate::{
 };
 use anyhow::{Context, Result, ensure};
 use aow_acp_service::AcpRuntime;
-use aow_terminald::{TerminalRuntimeHost, configure_vt_worker};
+use aow_terminal_core::{TerminalRuntimeHost, configure_vt_worker};
 use axum::{Json, Router, middleware, routing::get};
 use std::{
     future::{Future, IntoFuture},
@@ -46,7 +46,7 @@ pub async fn run_with_listener_and_vt_config(
     options: Options,
     listener: TcpListener,
     shutdown: impl Future<Output = ()> + Send,
-    vt_override: Option<aow_terminald::VtWorkerConfig>,
+    vt_override: Option<aow_terminal_core::VtWorkerConfig>,
 ) -> Result<()> {
     ensure!(
         options.state_dir.is_absolute(),
@@ -109,7 +109,10 @@ pub async fn run_with_listener_and_vt_config(
         .merge(executions.router())
         .merge(crate::providers::router(node_root.clone()))
         .merge(aow_workspaces::router(&node_root, stopping.clone())?)
-        .nest("/v1/terminal", terminal.router())
+        .nest(
+            "/v1/terminal",
+            aow_terminal_service::router(terminal.manager()),
+        )
         .layer(middleware::from_fn_with_state(
             Auth {
                 token: Arc::from(options.token),

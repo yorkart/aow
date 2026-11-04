@@ -11,7 +11,7 @@ struct Configuration {
     token: String,
     vt_node: Option<PathBuf>,
     vt_worker: Option<PathBuf>,
-    vt_override: Option<aow_terminald::VtWorkerConfig>,
+    vt_override: Option<aow_terminal_core::VtWorkerConfig>,
 }
 #[tokio::main]
 async fn main() -> Result<()> {

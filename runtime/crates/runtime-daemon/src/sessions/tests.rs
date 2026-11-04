@@ -1,6 +1,6 @@
 use super::*;
 use aow_agents::sessions::{AgentSession, AgentSessionLocator};
-use aow_terminald::TerminalRuntimeHost;
+use aow_terminal_core::TerminalRuntimeHost;
 use chrono::Utc;
 
 #[tokio::test]

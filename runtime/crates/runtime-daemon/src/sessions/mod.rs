@@ -7,7 +7,7 @@ mod tests;
 
 use anyhow::{Context, Result, ensure};
 use aow_agents::sessions::{SessionEnvironment, SessionRoots};
-use aow_terminald::TerminalObserver;
+use aow_terminal_core::TerminalObserver;
 use axum::{Json, Router, extract::State, http::StatusCode, routing::post};
 pub(crate) use model::SessionReference;
 use serde::Deserialize;

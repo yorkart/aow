@@ -257,7 +257,8 @@ dependencies = [
  "aow-runtime-macos-log",
  "aow-runtime-process",
  "aow-runtime-workspace",
- "aow-terminald",
+ "aow-terminal-core",
+ "aow-terminal-service",
  "async-trait",
  "axum",
  "chrono",
@@ -395,7 +396,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "aow-terminald"
+name = "aow-terminal-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -406,11 +407,8 @@ dependencies = [
  "aow-runtime-filesystem",
  "aow-runtime-macos-log",
  "aow-runtime-process",
- "axum",
  "bytes",
  "futures-util",
- "hyper",
- "hyper-util",
  "libc",
  "md5",
  "portable-pty",
@@ -419,10 +417,22 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
- "tokio-tungstenite",
  "tracing",
- "tracing-subscriber",
  "vte",
+]
+
+[[package]]
+name = "aow-terminal-service"
+version = "0.1.0"
+dependencies = [
+ "aow-protocol",
+ "aow-runtime-contract",
+ "aow-terminal-core",
+ "axum",
+ "futures-util",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

@@ -421,7 +421,7 @@ async fn websocket_replays_persisted_events_and_rejects_another_node() {
 #[tokio::test]
 async fn collector_reads_the_managed_process_store_and_keeps_its_final_completion() {
     use crate::sessions::SessionService;
-    use aow_terminald::TerminalRuntimeHost;
+    use aow_terminal_core::TerminalRuntimeHost;
     use serde_json::json;
     let root = tempfile::tempdir().unwrap();
     let cwd = root.path().join("project");
@@ -449,7 +449,8 @@ async fn collector_reads_the_managed_process_store_and_keeps_its_final_completio
     let collector = service.start(sessions.clone(), stopping);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
-    let router = axum::Router::new().nest("/v1/terminal", host.router());
+    let router =
+        axum::Router::new().nest("/v1/terminal", aow_terminal_service::router(host.manager()));
     let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
     let client = reqwest::Client::new();
     let url = format!("http://{address}/v1/terminal/runtimes/pane");

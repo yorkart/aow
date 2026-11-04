@@ -33,7 +33,7 @@ fn main() -> Result<()> {
     #[cfg(target_os = "macos")]
     let unified = aow_macos_log::init_from_env(
         c"runtime-daemon",
-        "aow_runtime_daemon=info,aow_acp_service=info,aow_terminald=info",
+        "aow_runtime_daemon=info,aow_acp_service=info,aow_terminal_core=info,aow_terminal_service=info",
     );
     #[cfg(not(target_os = "macos"))]
     let unified = false;
@@ -41,7 +41,7 @@ fn main() -> Result<()> {
         tracing_subscriber::fmt()
             .with_env_filter(
                 tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                    "aow_runtime_daemon=info,aow_acp_service=info,aow_terminald=info".into()
+                    "aow_runtime_daemon=info,aow_acp_service=info,aow_terminal_core=info,aow_terminal_service=info".into()
                 }),
             )
             .init();

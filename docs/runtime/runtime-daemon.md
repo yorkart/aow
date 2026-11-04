@@ -1,7 +1,7 @@
 # Runtime daemon
 
 `aow-runtime-daemon` is a standalone node service. One Rust process embeds the
-`aow-acp-service` and `aow-terminald` libraries and owns a single TCP HTTP listener,
+`aow-acp-service` and `aow-terminal-service` libraries and owns a single TCP HTTP listener,
 configuration, authentication and shutdown sequence. ACP adapters, PTY shells
 and the optional Node.js VT worker are child processes; it does not launch
 separate `aow-acpd` or `aow-terminald` daemons.
@@ -12,6 +12,13 @@ ACP JSON-RPC and terminal streams. The execution modules and VT worker live in
 the independent [runtime subproject](../../runtime/README.md), with its own Cargo
 workspace and lockfile. The caller SDK stays in the Server workspace. Both products reference the sibling
 Common workspace for data contracts and IDs.
+
+`aow-terminal-core` owns PTYs, controller leases, replay, native Agent operations
+and the VT worker. It exposes typed commands and events without an HTTP/WebSocket
+dependency. `aow-terminal-service` provides routes, JSON conversion, HTTP errors
+and WebSocket transport; daemon startup and shutdown own the underlying core host.
+Terminal routes and wire messages are unchanged, including the `aow-terminald`
+health service identifier.
 
 ## Build and start
 

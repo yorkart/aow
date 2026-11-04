@@ -594,6 +594,85 @@ async fn runtime_restart_has_fresh_instance_identity() {
 }
 
 #[tokio::test]
+async fn malformed_control_and_ping_preserve_neutral_and_active_attachments() {
+    let daemon = TestDaemon::start().await;
+    let cwd = tempfile::tempdir().unwrap();
+    daemon
+        .client
+        .create("transport", &shell_spec(cwd.path()))
+        .await
+        .unwrap();
+    let mut socket = daemon
+        .client
+        .attach_controlled_with_resume("transport", None, None)
+        .await
+        .unwrap();
+
+    // Transport control frames must not turn into terminal commands or end input.
+    socket
+        .send(Message::Ping(b"neutral".as_slice().into()))
+        .await
+        .unwrap();
+    let pong = timeout(IO_TIMEOUT, socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(pong, Message::Pong(b"neutral".as_slice().into()));
+    socket.send(Message::Text("{invalid".into())).await.unwrap();
+    wait_for_error(&mut socket, "invalid_control").await;
+    controlled_claim(&mut socket, false).await;
+    wait_for_status(&mut socket, TerminalPaneStatus::Running).await;
+
+    // Decode errors in the active phase must preserve the controller and allow
+    // subsequent valid commands through the new service/core boundary.
+    socket
+        .send(Message::Text(r#"{"type":"unknown-command"}"#.into()))
+        .await
+        .unwrap();
+    wait_for_error(&mut socket, "invalid_control").await;
+    let resize =
+        serde_json::to_string(&TerminalAttachClientMessage::Resize { cols: 91, rows: 31 }).unwrap();
+    socket.send(Message::Text(resize.into())).await.unwrap();
+    timeout(IO_TIMEOUT, async {
+        loop {
+            let message = socket
+                .next()
+                .await
+                .expect("attachment remains open")
+                .unwrap();
+            assert!(
+                !matches!(message, Message::Close(_)),
+                "attachment closed before resize acknowledgement"
+            );
+            if let Message::Text(text) = message
+                && matches!(
+                    serde_json::from_str::<TerminalAttachServerMessage>(&text).unwrap(),
+                    TerminalAttachServerMessage::Resized { cols: 91, rows: 31 }
+                )
+            {
+                break;
+            }
+        }
+    })
+    .await
+    .unwrap();
+    let runtime = daemon.client.get("transport").await.unwrap().unwrap();
+    assert_eq!((runtime.cols, runtime.rows), (91, 31));
+
+    socket.close(None).await.unwrap();
+    let mut next = daemon
+        .client
+        .attach_controlled_with_resume("transport", None, None)
+        .await
+        .unwrap();
+    controlled_claim(&mut next, false).await;
+    wait_for_status(&mut next, TerminalPaneStatus::Running).await;
+    daemon.client.delete("transport").await.unwrap();
+    daemon.stop().await;
+}
+
+#[tokio::test]
 async fn controlled_attach_is_neutral_and_claim_wait_force_and_release_are_exclusive() {
     let daemon = TestDaemon::start().await;
     let cwd = tempfile::tempdir().unwrap();

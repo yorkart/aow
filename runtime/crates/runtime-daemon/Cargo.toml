@@ -18,7 +18,8 @@ futures-util.workspace = true
 aow-agents = { package = "aow-runtime-agents", path = "../agents", features = ["launch", "sessions", "automation"] }
 anyhow.workspace = true
 aow-acp-service = { path = "../acp-service" }
-aow-terminald = { path = "../terminald" }
+aow-terminal-core = { path = "../terminal-core" }
+aow-terminal-service = { path = "../terminal-service" }
 aow-filesystem = { package = "aow-runtime-filesystem", path = "../filesystem" }
 axum.workspace = true
 clap.workspace = true

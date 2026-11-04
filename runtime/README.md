@@ -10,7 +10,8 @@ runtime/
   crates/acp-core/    Native ACP SDK, adapter resolution and session model
   crates/acp-service/ Adapter process ownership and native ACP WebSocket service
   crates/agents/      Native process matching, interaction and session adapters
-  crates/terminald/   PTY lifecycle, replay and VT worker host
+  crates/terminal-core/  PTY lifecycle, typed attachments, replay and VT worker host
+  crates/terminal-service/  Terminal HTTP routes and WebSocket transport
   crates/workspace/   Node files, Git, worktrees, search and clipboard storage
   crates/environment/  Role HOME, private identity copies and skills
   crates/exec/        Non-interactive Agent executions and process-group ownership
@@ -42,7 +43,17 @@ injects the callback URL and a business grant; the node never receives its signi
 See the [service and deployment reference](../docs/runtime/runtime-daemon.md)
 for node configuration, authentication, remote Server connection, lifecycle and
 API details. The only execution binary is `aow-runtime-daemon`; acp-service and
-terminald are embedded libraries.
+terminal-service are embedded libraries.
+
+Terminal service depends on terminal core. Core exposes a cloneable manager and
+typed input/output streams; it owns controller leases, replay boundaries, Agent
+operations and final-output draining without depending on HTTP or WebSocket
+types. Service maps HTTP requests and WebSocket frames to those APIs. The daemon
+owns the core host's lifecycle and mounts service routes at `/v1/terminal` behind
+its shared authentication. WebSocket delivery is adapted directly to the core
+event sink so a controller takeover stays ordered against flushed output and
+acknowledgements. The VT worker bundle remains in `vt-worker/` and is embedded
+and managed by terminal core.
 
 ## Source boundary checks
 
