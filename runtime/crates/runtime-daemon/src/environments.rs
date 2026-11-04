@@ -327,7 +327,7 @@ async fn sources(State(service): State<Environments>) -> Response {
 #[derive(Deserialize)]
 struct Probe {
     spec: RoleEnvironmentSpec,
-    launch: Option<aow_agents::launch::AgentLaunch>,
+    launch: Option<aow_agents_core::launch::AgentLaunch>,
     acp_agent_id: Option<String>,
     #[serde(default = "probe_timeout")]
     timeout_ms: u64,
@@ -357,7 +357,12 @@ async fn probe(State(service): State<Environments>, Json(request): Json<Probe>) 
             let mut env = service.0.manager.role_environment(&request.spec)?;
             if let Some(mut launch) = request.launch {
                 launch.env.extend(env);
-                crate::agents::probe::cli(launch, workspace.path(), request.timeout_ms).await?;
+                aow_agents_core::management::probe::cli(
+                    launch,
+                    workspace.path(),
+                    request.timeout_ms,
+                )
+                .await?;
             } else {
                 let agent = request.acp_agent_id.context("Missing probe runtime")?;
                 env.remove("HOME");

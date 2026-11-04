@@ -1,5 +1,8 @@
 //! Native session transport types. The caller never interprets node transcript paths.
 use crate::{RuntimeClient, RuntimeError, TerminalClient};
+use aow_runtime_contract::agents::{
+    NativePaneRequest, NativeProcessCheck, NativeSessionQuery, ResolveSessionWorktree,
+};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
@@ -12,7 +15,11 @@ impl RuntimeClient {
     ) -> Result<Vec<NativeSession>, RuntimeError> {
         self.post_json(
             "/v1/agent-sessions/list",
-            &serde_json::json!({"cwd":cwd,"agent":agent}),
+            &NativeSessionQuery {
+                cwd: cwd.into(),
+                agent: agent.map(str::to_owned),
+                ..Default::default()
+            },
         )
         .await
     }
@@ -23,7 +30,12 @@ impl RuntimeClient {
     ) -> Result<NativeSession, RuntimeError> {
         self.post_json(
             "/v1/agent-sessions/find",
-            &serde_json::json!({"cwd":"/","agent":agent,"session_id":session_id}),
+            &NativeSessionQuery {
+                cwd: "/".into(),
+                agent: Some(agent.into()),
+                session_id: Some(session_id.into()),
+                ..Default::default()
+            },
         )
         .await
     }
@@ -33,7 +45,10 @@ impl RuntimeClient {
     ) -> Result<NativeSession, RuntimeError> {
         self.post_json(
             "/v1/agent-sessions/find",
-            &serde_json::json!({"reference":reference}),
+            &NativeSessionQuery {
+                reference: Some(reference.clone()),
+                ..Default::default()
+            },
         )
         .await
     }
@@ -43,7 +58,10 @@ impl RuntimeClient {
     ) -> Result<serde_json::Value, RuntimeError> {
         self.post_json(
             "/v1/agent-sessions/snapshot",
-            &serde_json::json!({"reference":reference}),
+            &NativeSessionQuery {
+                reference: Some(reference.clone()),
+                ..Default::default()
+            },
         )
         .await
     }
@@ -59,7 +77,10 @@ impl RuntimeClient {
         let value: Resolved = self
             .post_json(
                 "/v1/agent-sessions/resolve-worktree",
-                &serde_json::json!({"cwd":cwd,"registered_roots":roots}),
+                &ResolveSessionWorktree {
+                    cwd: cwd.into(),
+                    registered_roots: roots.into(),
+                },
             )
             .await?;
         Ok(value.path)
@@ -70,7 +91,9 @@ impl TerminalClient {
         self.runtime()
             .post_json(
                 "/v1/agent-sessions/pane",
-                &serde_json::json!({"pane_id":pane_id}),
+                &NativePaneRequest {
+                    pane_id: pane_id.into(),
+                },
             )
             .await
     }
@@ -87,7 +110,10 @@ impl TerminalClient {
             std::time::Duration::from_secs(3),
             self.runtime().post_json(
                 "/v1/agent-sessions/process-check",
-                &serde_json::json!({"pane_id":pane_id,"process":process}),
+                &NativeProcessCheck {
+                    pane_id: pane_id.into(),
+                    process: process.clone(),
+                },
             ),
         )
         .await

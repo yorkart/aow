@@ -4,7 +4,14 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+default = []
+execution = ["dep:anyhow", "dep:serde", "dep:tokio"]
+
 [dependencies]
+anyhow = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
 libc.workspace = true
 
 [dev-dependencies]

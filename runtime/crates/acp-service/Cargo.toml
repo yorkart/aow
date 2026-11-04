@@ -16,7 +16,7 @@ serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 futures-util.workspace = true
-aow-agents = { package = "aow-runtime-agents", path = "../agents", features = ["launch"] }
+aow-agents-core = { path = "../agents-core", features = ["launch"] }
 aow-i18n = { package = "aow-runtime-i18n", path = "../i18n" }
 async-trait.workspace = true
 axum.workspace = true

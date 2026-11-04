@@ -44,7 +44,7 @@ test('Server reaches native agents only through Runtime contracts and the SDK', 
   }
   for (const entry of readdirSync(resolve(root, 'server/crates'))) {
     const manifest = readFileSync(resolve(root, 'server/crates', entry, 'Cargo.toml'), 'utf8');
-    assert.doesNotMatch(manifest, /aow-(?:runtime-)?agents\s*=/);
+    assert.doesNotMatch(manifest, /aow-(?:runtime-)?(?:agents|exec)(?:-core|-service)?\s*=/);
   }
   const controller = readFileSync(resolve(root, 'server/crates/server/src/terminal/agent_control/connection.rs'), 'utf8');
   assert.doesNotMatch(controller, /200~|201~|input_ready/);

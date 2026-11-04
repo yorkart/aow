@@ -9,12 +9,13 @@ aow-runtime-contract = { path = "../../../common/crates/runtime-contract" }
 aow-filesystem = { package = "aow-runtime-filesystem", path = "../filesystem" }
 aow-id = { path = "../../../common/crates/id" }
 anyhow.workspace = true
+async-trait.workspace = true
 bytes.workspace = true
 futures-util = { workspace = true, features = ["sink"] }
 libc.workspace = true
 md5.workspace = true
 portable-pty.workspace = true
-aow-agents = { package = "aow-runtime-agents", path = "../agents", features = ["sessions"] }
+aow-agents-core = { path = "../agents-core", features = ["sessions"] }
 aow-process = { package = "aow-runtime-process", path = "../process" }
 aow-protocol = { path = "../../../common/crates/protocol" }
 serde.workspace = true

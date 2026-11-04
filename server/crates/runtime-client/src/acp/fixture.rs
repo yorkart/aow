@@ -10,17 +10,29 @@ pub trait AcpFixture: Send + Sync + 'static {
         Ok(None)
     }
 }
+
+#[derive(Default)]
+struct FixtureNode {
+    runtime: tokio::sync::OnceCell<TestRuntime>,
+    synchronized_settings: tokio::sync::Mutex<Option<String>>,
+}
+
 pub(super) struct Fixture {
     host: Arc<dyn AcpFixture>,
     root: PathBuf,
     _temporary: Option<Arc<tempfile::TempDir>>,
-    node: Arc<tokio::sync::OnceCell<TestRuntime>>,
+    node: Arc<FixtureNode>,
 }
 impl Fixture {
     pub async fn runtime(&self) -> Result<RuntimeClient> {
-        let node = self.node.get_or_try_init(|| async {
+        // Clients sharing a node must synchronize host snapshots in order. A
+        // host publishes remotely before committing its local settings, so an
+        // unchanged local snapshot must not restore the old remote settings.
+        let mut synchronized = self.node.synchronized_settings.lock().await;
+        let content = self.host.settings().await?;
+        let node = self.node.runtime.get_or_try_init(|| async {
             tokio::fs::create_dir_all(&self.root).await?;
-            tokio::fs::write(self.root.join("aow-acp.json"), self.host.settings().await?).await?;
+            tokio::fs::write(self.root.join("aow-acp.json"), &content).await?;
             let path = self.host.execution_path().await?.or_else(|| std::env::var_os("PATH"));
             if let Some(path) = path {
                 tokio::fs::write(self.root.join("aow-settings.json"),serde_json::to_vec(&serde_json::json!({"execution_path":std::env::split_paths(&path).collect::<Vec<_>>()}))?).await?;
@@ -28,15 +40,17 @@ impl Fixture {
             Ok::<_,anyhow::Error>(TestRuntime::with_state_dir(&self.root.join("runtime.json"),self.root.clone()).await)
         }).await?;
         let runtime = RuntimeClient::new(node.endpoint.clone());
-        let content = self.host.settings().await?;
-        let previous: super::AcpSettings = runtime.get_json("/v1/acp/settings").await?;
-        if previous.content != content {
-            let _: super::AcpSettings = runtime
-                .put_json(
-                    "/v1/acp/settings",
-                    &serde_json::json!({"content":content,"revision":previous.revision}),
-                )
-                .await?;
+        if synchronized.as_ref() != Some(&content) {
+            let previous: super::AcpSettings = runtime.get_json("/v1/acp/settings").await?;
+            if previous.content != content {
+                let _: super::AcpSettings = runtime
+                    .put_json(
+                        "/v1/acp/settings",
+                        &serde_json::json!({"content":content,"revision":previous.revision}),
+                    )
+                    .await?;
+            }
+            *synchronized = Some(content);
         }
         Ok(runtime)
     }
@@ -49,8 +63,7 @@ impl AcpClient {
             None
         };
         let root = state.unwrap_or_else(|| temporary.as_ref().unwrap().path().into());
-        type Nodes =
-            std::collections::HashMap<PathBuf, std::sync::Weak<tokio::sync::OnceCell<TestRuntime>>>;
+        type Nodes = std::collections::HashMap<PathBuf, std::sync::Weak<FixtureNode>>;
         static NODES: std::sync::LazyLock<std::sync::Mutex<Nodes>> =
             std::sync::LazyLock::new(Default::default);
         let node = {

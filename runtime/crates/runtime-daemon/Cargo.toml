@@ -5,17 +5,17 @@ edition.workspace = true
 license = "GPL-3.0-or-later"
 
 [dependencies]
+aow-process = { package = "aow-runtime-process", path = "../process", features = ["execution"] }
 aow-runtime-contract = { path = "../../../common/crates/runtime-contract" }
 aow-acp-core = { path = "../acp-core" }
-aow-runtime-exec = { path = "../exec" }
+aow-exec-core = { path = "../exec-core" }
+aow-exec-service = { path = "../exec-service" }
+aow-agents-service = { path = "../agents-service" }
 tempfile = "3.20"
 aow-workspaces = { package = "aow-runtime-workspace", path = "../workspace" }
 aow-runtime-environment = { path = "../environment" }
 aow-protocol = { path = "../../../common/crates/protocol" }
-rusqlite.workspace = true
-chrono.workspace = true
-futures-util.workspace = true
-aow-agents = { package = "aow-runtime-agents", path = "../agents", features = ["launch", "sessions", "automation"] }
+aow-agents-core = { path = "../agents-core", features = ["management"] }
 anyhow.workspace = true
 aow-acp-service = { path = "../acp-service" }
 aow-terminal-core = { path = "../terminal-core" }
@@ -32,7 +32,8 @@ tracing-subscriber.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-aow-process = { package = "aow-runtime-process", path = "../process" }
+futures-util = { workspace = true, features = ["sink"] }
+rusqlite.workspace = true
 async-trait.workspace = true
 reqwest.workspace = true
 tokio-tungstenite.workspace = true

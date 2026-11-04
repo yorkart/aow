@@ -7,6 +7,39 @@ use serde_json::json;
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::mpsc;
 
+#[tokio::test]
+async fn shared_fixture_does_not_restore_stale_host_settings_during_publication() {
+    struct Settings(std::sync::RwLock<String>);
+    #[async_trait::async_trait]
+    impl aow_runtime_client::testing::AcpFixture for Settings {
+        async fn settings(&self) -> Result<String> {
+            Ok(self.0.read().unwrap().clone())
+        }
+    }
+    let directory = tempfile::tempdir().unwrap();
+    let old = json!({"agent_servers":{"test":{"type":"custom","command":"node"}}}).to_string();
+    let host = Arc::new(Settings(std::sync::RwLock::new(old)));
+    let first = AcpClient::for_test_host(host.clone(), Some(directory.path().into())).unwrap();
+    let second = AcpClient::for_test_host(host.clone(), Some(directory.path().into())).unwrap();
+    let before = first.settings().await.unwrap();
+    let published = json!({"agent_servers":{"test":{"type":"registry"}}}).to_string();
+    first
+        .save_settings(published.clone(), before.revision)
+        .await
+        .unwrap();
+
+    // Server's test helper validates/publishes remotely before committing its
+    // local source. Another client may issue an event refresh in that window.
+    assert_eq!(second.settings().await.unwrap().content, published);
+    *host.0.write().unwrap() = published.clone();
+    assert_eq!(first.settings().await.unwrap().content, published);
+
+    let removed = json!({"agent_servers":{}}).to_string();
+    *host.0.write().unwrap() = removed.clone();
+    assert_eq!(second.settings().await.unwrap().content, removed);
+    assert_eq!(first.settings().await.unwrap().content, removed);
+}
+
 struct Host {
     completed: mpsc::UnboundedSender<TurnCompletion>,
 }

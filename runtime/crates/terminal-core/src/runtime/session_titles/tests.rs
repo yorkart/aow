@@ -121,7 +121,7 @@ fn native_environment_fixture() {
 #[tokio::test]
 #[ignore = "requires AOW_TITLE_TEST_PID and AOW_TITLE_TEST_EXPECTED; reads a live node process"]
 async fn native_process_title_matches_the_live_session() {
-    use aow_agents::process::{ProcessInfo, recognize_process};
+    use aow_agents_core::process::{ProcessInfo, recognize_process};
     let pid = std::env::var("AOW_TITLE_TEST_PID")
         .unwrap()
         .parse()

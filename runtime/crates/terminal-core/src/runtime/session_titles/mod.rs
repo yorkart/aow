@@ -1,12 +1,12 @@
 //! Display titles for agents whose CLI does not publish session titles via OSC.
 
-use aow_agents::{
+use aow_agents_core::{
     Agent,
     sessions::{titles::AgentSessionTitleProvider, tracking::LiveSessionContext},
 };
 use aow_protocol::{TerminalAgentList, TerminalAgentProcess};
 
-use aow_agents::sessions::process as sessions;
+use aow_agents_core::sessions::process as sessions;
 
 pub(super) async fn enrich(detected: &mut TerminalAgentList) {
     for (pane, agent) in &detected.agents {

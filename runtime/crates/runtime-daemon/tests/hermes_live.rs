@@ -4,7 +4,7 @@
 //! snapshot to a private temporary directory for frontend verification.
 use std::{collections::BTreeMap, path::PathBuf};
 
-use aow_agents::{
+use aow_agents_core::{
     Agent,
     interactive::AgentInteractive,
     process::{ProcessInfo, recognize_process},

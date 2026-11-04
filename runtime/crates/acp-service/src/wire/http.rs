@@ -402,7 +402,7 @@ async fn save_environment(
     Json(request): Json<EnvironmentUpdate>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     use aow_acp_core::AcpHost;
-    let paths = aow_agents::environment::normalize_path(request.execution_path)
+    let paths = aow_agents_core::environment::normalize_path(request.execution_path)
         .map_err(ApiError::invalid)?;
     let _guard = state.settings_lock.lock().await;
     let path = state.host.root.join("aow-settings.json");

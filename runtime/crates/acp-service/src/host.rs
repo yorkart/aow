@@ -43,7 +43,7 @@ impl AcpHost for Host {
         };
         Ok(Some(std::env::join_paths(match paths {
             Some(paths) => paths,
-            None => aow_agents::environment::discover_path().await,
+            None => aow_agents_core::environment::discover_path().await,
         })?))
     }
     fn execution_environment(&self) -> BTreeMap<String, String> {

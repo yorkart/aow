@@ -1,5 +1,34 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct NativeSessionQuery {
+    #[serde(default)]
+    pub cwd: PathBuf,
+    pub agent: Option<String>,
+    pub session_id: Option<String>,
+    pub home: Option<PathBuf>,
+    #[serde(default)]
+    pub environment: std::collections::BTreeMap<String, PathBuf>,
+    pub reference: Option<NativeSessionReference>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct NativePaneRequest {
+    pub pane_id: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct NativeProcessCheck {
+    pub pane_id: String,
+    pub process: aow_protocol::TerminalAgentProcess,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ResolveSessionWorktree {
+    pub cwd: PathBuf,
+    pub registered_roots: Vec<PathBuf>,
+}
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct NativeSessionReference {
     pub node_id: String,

@@ -76,16 +76,22 @@ pub async fn run_with_listener_and_vt_config(
         )]),
     )
     .await;
-    let sessions =
-        crate::sessions::SessionService::open(&options.state_dir, id.clone(), terminal.observer())?;
+    let sessions = aow_agents_core::catalog::SessionCatalog::open(
+        &options.state_dir,
+        id.clone(),
+        Arc::new(terminal.observer()),
+    )?;
     let (stop, mut stopping) = watch::channel(false);
-    let completions =
-        crate::completions::Completions::open(&options.state_dir, id.clone(), stopping.clone())?;
+    let completions = aow_agents_core::completions::Completions::open(
+        &options.state_dir,
+        id.clone(),
+        stopping.clone(),
+    )?;
     let (collector_stop, collector_stopping) = watch::channel(false);
     let collector = completions.start(sessions.clone(), collector_stopping);
-    let exec = aow_runtime_exec::ExecutionManager::open(&node_root, stopping.clone())?
+    let exec = aow_exec_core::ExecutionManager::open(&node_root, stopping.clone())?
         .with_ownership(acp.ownership());
-    let executions = crate::executions::Executions::new(exec.clone(), id.clone(), sessions.clone());
+    let executions = aow_exec_service::Executions::new(exec.clone(), id.clone(), sessions.clone());
     let instance_id = uuid::Uuid::new_v4().to_string();
     let health = serde_json::json!({
         "service": "aow-runtime-daemon", "api_version": 1,
@@ -100,11 +106,11 @@ pub async fn run_with_listener_and_vt_config(
     let router = Router::new()
         .route("/v1/health", get(move || async move { Json(health) }))
         .merge(acp.router())
-        .merge(crate::agents::router(std::fs::canonicalize(
-            &options.state_dir,
-        )?))
-        .merge(sessions.router())
-        .merge(completions.router())
+        .merge(aow_agents_service::management_router(
+            std::fs::canonicalize(&options.state_dir)?,
+        ))
+        .merge(aow_agents_service::sessions_router(sessions.clone()))
+        .merge(aow_agents_service::events_router(completions.clone()))
         .merge(environments.router())
         .merge(executions.router())
         .merge(crate::providers::router(node_root.clone()))

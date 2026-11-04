@@ -1,7 +1,8 @@
 # Runtime daemon
 
 `aow-runtime-daemon` is a standalone node service. One Rust process embeds the
-`aow-acp-service` and `aow-terminal-service` libraries and owns a single TCP HTTP listener,
+`aow-acp-service`, `aow-terminal-service`, `aow-agents-service` and
+`aow-exec-service` libraries and owns a single TCP HTTP listener,
 configuration, authentication and shutdown sequence. ACP adapters, PTY shells
 and the optional Node.js VT worker are child processes; it does not launch
 separate `aow-acpd` or `aow-terminald` daemons.
@@ -19,6 +20,15 @@ dependency. `aow-terminal-service` provides routes, JSON conversion, HTTP errors
 and WebSocket transport; daemon startup and shutdown own the underlying core host.
 Terminal routes and wire messages are unchanged, including the `aow-terminald`
 health service identifier.
+
+`aow-agents-core` owns discovery, native adapters, the session catalog and durable
+completion collection. `aow-agents-service` exposes Agent and session management
+routes and `/v1/agent-events`. A read-only `ManagedTerminals` trait connects Agent
+collection to terminal core without an implementation dependency in the reverse
+direction. `aow-exec-core` owns individual executions; `aow-exec-service` exposes
+`/v1/executions`. The daemon supplies node identity, lifecycle and authentication.
+Generic bounded subprocess execution belongs to `aow-runtime-process`, allowing
+Agent probes to run without depending on the execution engine.
 
 ## Build and start
 

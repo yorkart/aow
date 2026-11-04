@@ -75,3 +75,14 @@ impl TerminalObserver {
         self.state.list()
     }
 }
+
+#[async_trait::async_trait]
+impl aow_agents_core::sessions::observer::ManagedTerminals for TerminalObserver {
+    async fn agents(&self) -> anyhow::Result<TerminalAgentList> {
+        Ok(TerminalObserver::agents(self).await?)
+    }
+
+    fn runtimes(&self) -> anyhow::Result<TerminalRuntimeList> {
+        Ok(TerminalObserver::runtimes(self)?)
+    }
+}
