@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useEffect, useRef, type KeyboardEvent } from 'react';
 import { FileText, GitFork, LockKeyhole, MessageSquare, Plus, SlidersHorizontal, SquareTerminal, Workflow, X } from 'lucide-react';
 import type { TaskWorkspaceState, WorkspaceTab } from './workspaceModel';
@@ -30,19 +31,19 @@ export function WorkspaceTabs({ workspace, onSelect, onClose, onAdd }: {
     }
   };
   return <div className="ow-tabs-shell">
-    <div ref={list} role="tablist" aria-label="任务工作区标签" className="ow-workspace-tabs">{workspace.tabs.map((tab, index) => {
+    <div ref={list} role="tablist" aria-label={t('org_preview.workspace_tabs')} className="ow-workspace-tabs">{workspace.tabs.map((tab, index) => {
       const document = tab.kind === 'file' ? workspace.documents.find(item => item.path === tab.target) : undefined;
       const dirty = document && document.content !== document.saved;
       const session = workspace.sessions.find(item => item.id === tab.target);
       return <div role="presentation" key={tab.id} className={`ow-workspace-tab ${workspace.activeTab === tab.id ? 'active' : ''}`}>
         <button role="tab" id={`ow-tab-${index}`} aria-controls="ow-tab-content" aria-selected={workspace.activeTab === tab.id} tabIndex={workspace.activeTab === tab.id ? 0 : -1}
-          onClick={() => onSelect(tab.id)} onKeyDown={event => keyboard(event, index)} title={tab.kind === 'main' ? '主会话 · 固定，不能关闭' : tab.title}>
-          {icon(tab)}<span>{tab.title}</span>{dirty && <span className="ow-unsaved" aria-label="未保存" />}
+          onClick={() => onSelect(tab.id)} onKeyDown={event => keyboard(event, index)} title={tab.kind === 'main' ? t('org_preview.main_session_pinned') : tab.title}>
+          {icon(tab)}<span>{tab.title}</span>{dirty && <span className="ow-unsaved" aria-label={t('org_preview.unsaved')} />}
           {tab.kind === 'main' ? <LockKeyhole className="ow-tab-lock" size={11} /> : session?.status === 'running' && <span className="ow-live-dot" />}
         </button>
-        {tab.kind !== 'main' && <button className="ow-close-tab" aria-label={`关闭 ${tab.title} 标签`} title="关闭标签，保留会话和编辑内容" onClick={() => onClose(tab.id)}><X size={13} /></button>}
+        {tab.kind !== 'main' && <button className="ow-close-tab" aria-label={t('org_preview.close_tab', { value0: tab.title })} title={t('org_preview.close_tab_help')} onClick={() => onClose(tab.id)}><X size={13} /></button>}
       </div>;
     })}</div>
-    <button className="ow-add-tab" aria-label="添加工作区标签" title="添加会话、Terminal 或文件" onClick={onAdd}><Plus size={18} /></button>
+    <button className="ow-add-tab" aria-label={t('org_preview.add_workspace_tab')} title={t('org_preview.add_workspace_tab_help')} onClick={onAdd}><Plus size={18} /></button>
   </div>;
 }

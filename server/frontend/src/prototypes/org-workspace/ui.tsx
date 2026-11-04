@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { Check, Circle, LoaderCircle, Pause, X } from 'lucide-react';
 import { statusLabels, type Agent, type TaskStatus } from './model';
@@ -20,7 +21,7 @@ export function Modal({ title, children, onClose }: { title: string; children: R
     return () => dialog.close();
   }, []);
   return <dialog ref={ref} className="ow-dialog" aria-labelledby={heading} onCancel={onClose}>
-    <header><h2 id={heading}>{title}</h2><button type="button" className="ow-icon-button" aria-label="关闭对话框" onClick={onClose}><X /></button></header>
+    <header><h2 id={heading}>{title}</h2><button type="button" className="ow-icon-button" aria-label={t('org_preview.close_dialog')} onClick={onClose}><X /></button></header>
     {children}
   </dialog>;
 }

@@ -77,3 +77,22 @@ test('terminal agent counts localize while physical key names and custom tab nam
     assert.equal(module.terminalTabPresentation({ ...tab, name_is_custom: true }, {}, {}).title, tab.name);
   }
 });
+
+test('preview task origin is independent of prompt language and generated documents preserve user text', async () => {
+  const url = new URL('../src/prototypes/org-workspace/workspaceModel.ts', import.meta.url);
+  for (const [language, manual, automated, heading] of [
+    ['en-US', 'Manually created', 'Automation', 'Work context'],
+    ['zh-CN', '手动创建', '自动化', '工作上下文'],
+  ]) {
+    const { prepareTask, openDocument } = await loadModule(url, language);
+    const task = { id: 'custom-1', orgId: 'custom', title: '用户 <title> {{name}}',
+      prompt: '自动化任务：user-supplied text', projectId: '', agentId: 'engineer',
+      worktree: false, cwd: '/workspace/custom-1', status: 'running', progress: 0, time: '', messages: [] };
+    const prepared = prepareTask(task);
+    assert.equal(prepared.workspace.properties.origin, manual, 'a user prompt must not determine task origin');
+    assert.equal(prepareTask({ ...task, origin: 'automation', prompt: 'Any custom prompt' }).workspace.properties.origin, automated);
+    const document = openDocument(prepared, 'task.md').workspace.documents[0];
+    assert.ok(document.content.startsWith(`# ${task.title}\n\n${task.prompt}\n\n## ${heading}\n`));
+    assert.equal(document.saved, document.content);
+  }
+});

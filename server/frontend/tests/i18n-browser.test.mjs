@@ -93,4 +93,62 @@ try {
       assert.match(await page.locator('button[aria-haspopup="listbox"]').innerText(), /简体中文/);
     } finally { await context.close(); }
   });
+  for (const [language, labels] of [
+    ['en-US', { task: 'Build a workspace around tasks', context: 'Task context', sessions: '4 sessions',
+      properties: 'Properties', workflow: 'Workflow', viewWorkflow: 'View workflow', navigation: 'Navigation',
+      spawn: 'Create child session', sessionName: 'Session name', startSession: 'Create and start session',
+      agents: 'Agents', configureAgent: 'Configure Alex', name: 'Name', close: 'Close dialog',
+      automation: 'Automation', run: 'Run now', automatedTask: 'Review AoW changes awaiting review',
+      origin: 'Origin', singular: '1 session', workContext: 'Work context' }],
+    ['zh-CN', { task: '让工作围绕 task 展开', context: '任务上下文', sessions: '4 个会话',
+      properties: '属性', workflow: '工作流', viewWorkflow: '查看 Workflow', navigation: '功能导航',
+      spawn: '派生子会话', sessionName: '会话名称', startSession: '创建并启动会话',
+      agents: '代理', configureAgent: '配置 Alex', name: '名称', close: '关闭对话框',
+      automation: '自动化', run: '立即运行', automatedTask: '检查 AoW 的待审查改动',
+      origin: '来源', singular: '1 个会话', workContext: '工作上下文' }],
+  ]) await test(`organization preview localizes sessions, properties and automation in ${language}`, async () => {
+    const context = await browser.newContext({ locale: language === 'en-US' ? 'zh-CN' : 'en-US',
+      timezoneId: 'UTC', viewport: { width: 1440, height: 1000 } });
+    try {
+      await context.addInitScript(value => localStorage.setItem('aow.language', value), language);
+      const page = await context.newPage();
+      const errors = [];
+      page.on('pageerror', error => errors.push(error.message));
+      await page.goto(new URL('/?ui=org-preview', base).href);
+      await page.getByRole('heading', { name: labels.task, exact: true }).waitFor();
+      await page.getByRole('complementary', { name: labels.context, exact: true }).waitFor();
+      assert.equal(await page.locator('html').getAttribute('lang'), language);
+      assert.ok((await page.locator('.ow-workspace-toolbar').innerText()).includes(labels.sessions));
+      if (language === 'en-US') assert.doesNotMatch(await page.locator('body').innerText(), /\p{Script=Han}/u);
+      await page.getByRole('button', { name: labels.properties, exact: true }).click();
+      await page.getByRole('heading', { name: labels.properties, exact: true }).waitFor();
+      const dateMatches = await page.locator('time').evaluateAll((nodes, locale) => nodes.length === 2 && nodes.every(node =>
+        node.textContent === new Date(node.dateTime).toLocaleString(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })), language);
+      assert.equal(dateMatches, true, 'dates follow the selected language, not the browser locale');
+      await page.getByRole('button', { name: labels.viewWorkflow, exact: true }).click();
+      await page.getByRole('heading', { name: labels.workflow, exact: true }).waitFor();
+      await page.getByTitle(labels.spawn, { exact: true }).first().click();
+      const dialog = page.getByRole('dialog', { name: labels.spawn, exact: true });
+      const customTitle = '用户 <session> {{name}}';
+      await dialog.getByLabel(labels.sessionName, { exact: true }).fill(customTitle);
+      await dialog.getByRole('button', { name: labels.startSession, exact: true }).click();
+      await page.getByRole('tab', { name: customTitle, exact: true }).waitFor();
+      assert.equal(await page.locator('.ow-session-header strong').innerText(), customTitle);
+      await page.getByRole('complementary', { name: labels.context }).getByRole('button', { name: 'README.md', exact: true }).click();
+      assert.ok((await page.locator('.ow-editor-surface textarea').inputValue()).includes(`## ${labels.workContext}`));
+      const navigation = page.getByRole('navigation', { name: labels.navigation });
+      await navigation.getByRole('button', { name: labels.agents, exact: true }).click();
+      await page.getByRole('button', { name: labels.configureAgent, exact: true }).click();
+      assert.equal(await page.getByRole('dialog').getByLabel(labels.name, { exact: true }).inputValue(), 'Alex');
+      await page.getByRole('button', { name: labels.close, exact: true }).click();
+      await navigation.getByRole('button', { name: labels.automation, exact: true }).click();
+      await page.getByRole('button', { name: labels.run, exact: true }).first().click();
+      await page.getByRole('heading', { name: labels.automatedTask, exact: true }).waitFor();
+      assert.ok((await page.locator('.ow-workspace-toolbar').innerText()).includes(labels.singular));
+      await page.getByRole('button', { name: labels.properties, exact: true }).click();
+      const origin = page.locator('.ow-property-row').filter({ has: page.getByText(labels.origin, { exact: true }) });
+      assert.ok((await origin.innerText()).includes(labels.automation));
+      assert.deepEqual(errors, []);
+    } finally { await context.close(); }
+  });
 } finally { await browser?.close(); await server.close(); }

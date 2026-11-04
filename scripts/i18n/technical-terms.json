@@ -55,7 +55,17 @@
     "aow-acp.json",
     "git -C",
     "pull",
-    "worktree add -b"
+    "worktree add -b",
+    "worktree",
+    "src",
+    "task.md",
+    "result.md",
+    "task/",
+    "main",
+    "/workspace/my-project",
+    "zsh",
+    "$ cd",
+    "notes/plan.md"
   ],
   "decorativeCodeExamples": [
     "&lt;",
