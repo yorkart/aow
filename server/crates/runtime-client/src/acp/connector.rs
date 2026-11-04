@@ -1,6 +1,6 @@
 use crate::RuntimeClient;
 use anyhow::Result;
-use aow_acp_client::{AcpConnector, AdapterTransport, ExecutionEnvironment};
+use aow_acp::{AcpConnector, AdapterTransport, ExecutionEnvironment};
 use futures::{FutureExt, SinkExt, StreamExt, channel::mpsc};
 use std::{io, path::Path, time::Duration};
 use tokio_tungstenite::tungstenite::Message;
@@ -90,7 +90,6 @@ impl AcpConnector for Connector {
         }.boxed();
         Ok(AdapterTransport {
             incoming: incoming.boxed(),
-            stderr: futures::stream::empty().boxed(),
             outgoing: Box::pin(outgoing.sink_map_err(|error| io::Error::other(error.to_string()))),
             stop,
             lifetime,

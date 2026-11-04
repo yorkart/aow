@@ -19,7 +19,7 @@ struct Host;
 impl AcpHost for Host {
     async fn settings(&self) -> Result<String> {
         Ok(json!({"agent_servers":{"test":{"type":"custom","command":"node","args":[
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../common/fixtures/acp/lineage-agent.mjs")
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../acp-client-model/tests/fixtures/lineage-agent.mjs")
         ]}}}).to_string())
     }
     async fn execution_path(&self) -> Result<Option<std::ffi::OsString>> {

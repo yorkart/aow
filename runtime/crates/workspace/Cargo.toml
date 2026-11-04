@@ -8,10 +8,9 @@ license.workspace = true
 name = "aow_workspaces"
 
 [dependencies]
-aow-runtime-contract = { path = "../../../common/crates/runtime-contract" }
-aow-i18n = { path = "../../../common/crates/i18n" }
-aow-protocol = { path = "../../../common/crates/protocol" }
-aow-filesystem = { path = "../../../common/crates/filesystem" }
+aow-i18n = { package = "aow-runtime-i18n", path = "../i18n" }
+aow-protocol = { package = "aow-runtime-protocol", path = "../protocol" }
+aow-filesystem = { package = "aow-runtime-filesystem", path = "../filesystem" }
 anyhow.workspace = true
 chrono.workspace = true
 axum.workspace = true

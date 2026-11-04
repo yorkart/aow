@@ -7,8 +7,8 @@ license.workspace = true
 [dependencies]
 aow-agents = { package = "aow-runtime-agents", path = "../agents", features = ["automation", "sessions", "launch"] }
 aow-workspaces = { package = "aow-runtime-workspace", path = "../workspace" }
-aow-process = { path = "../../../common/crates/process" }
-aow-i18n = { path = "../../../common/crates/i18n" }
+aow-process = { package = "aow-runtime-process", path = "../process" }
+aow-i18n = { package = "aow-runtime-i18n", path = "../i18n" }
 anyhow.workspace = true
 rusqlite.workspace = true
 chrono.workspace = true

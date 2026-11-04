@@ -1,10 +1,8 @@
 # Server
 
 Server owns business APIs, CLI, automation scheduling and the web frontend. This
-is an independent Cargo workspace. Source builds require the sibling `../common/`
-workspace, which supplies shared protocol and foundation libraries. No production
-path dependencies refer to `../runtime`. Deployments contain compiled artifacts;
-they do not require the common source tree or local execution-node sources.
+is an independent Cargo workspace. No production path dependencies refer to
+`../runtime` or any parent source directory.
 
 ```sh
 npm --prefix frontend ci --ignore-scripts --no-audit --no-fund

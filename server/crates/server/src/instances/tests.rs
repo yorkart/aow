@@ -66,7 +66,7 @@ async fn acp_metadata_invalidates_the_graph_without_an_http_action() {
     .unwrap();
     let settings = state.aow.acp_settings().unwrap();
     let adapter = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../common/fixtures/acp/lineage-agent.mjs");
+        .join("../acp-client-model/tests/fixtures/lineage-agent.mjs");
     state
         .aow
         .save_acp_settings(

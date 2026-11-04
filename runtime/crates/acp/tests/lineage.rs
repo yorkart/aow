@@ -71,17 +71,14 @@ async fn managed_prompt_retries_do_not_repeat_work_after_completion_replay_or_re
 #[async_trait::async_trait]
 impl AcpHost for Host {
     async fn settings(&self) -> Result<String> {
-        Ok(json!({"agent_servers":{"test":{"type":"custom","command":"node","args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../common/fixtures/acp/lineage-agent.mjs")],
+        Ok(json!({"agent_servers":{"test":{"type":"custom","command":"node","args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/lineage-agent.mjs")],
             "env":{"AOW_STATE_DIR":"wrong","AOW_INSTANCE":"terminal:stale","AOW_SESSION_ID":"stale","AOW_ACP_CONNECTION_ID":"stale"}}}}).to_string())
     }
     async fn execution_path(&self) -> Result<Option<std::ffi::OsString>> {
         Ok(None)
     }
-    fn execution_environment(&self) -> Result<BTreeMap<String, String>> {
-        Ok(BTreeMap::from([(
-            "AOW_STATE_DIR".into(),
-            "/correct".into(),
-        )]))
+    fn execution_environment(&self) -> BTreeMap<String, String> {
+        BTreeMap::from([("AOW_STATE_DIR".into(), "/correct".into())])
     }
 
     async fn read_text_file(&self, _: &Path, _: &Path) -> Result<String> {

@@ -1,8 +1,29 @@
 //! Single-execution transport. No scheduling or native agent implementation.
 use crate::{RuntimeClient, RuntimeError};
-pub use aow_runtime_contract::{ExecutionEvent, ExecutionReference, ExecutionSnapshot};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ExecutionReference {
+    pub node_id: String,
+    pub id: String,
+    #[serde(default)]
+    pub native_session: Option<crate::NativeSessionReference>,
+}
+#[derive(Debug, Deserialize)]
+pub struct ExecutionEvent {
+    pub sequence: u64,
+    pub event: Value,
+}
+#[derive(Debug, Deserialize)]
+pub struct ExecutionSnapshot {
+    pub id: String,
+    pub node_id: String,
+    pub head: u64,
+    pub terminal: bool,
+    pub events: Vec<ExecutionEvent>,
+    pub result: Option<Value>,
+    pub native_session: Option<crate::NativeSession>,
+}
 fn path(id: &str) -> Result<String, RuntimeError> {
     if id.is_empty()
         || id.len() > 128

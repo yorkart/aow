@@ -193,27 +193,22 @@ async fn send(socket: &mut WebSocket, message: Message) -> Result<()> {
     Ok(())
 }
 
-async fn settings(
-    State(state): State<WireRuntime>,
-) -> Result<Json<aow_runtime_contract::AcpSettings>, ApiError> {
+async fn settings(State(state): State<WireRuntime>) -> Result<Json<serde_json::Value>, ApiError> {
     use aow_acp::AcpHost;
     let content = state.host.settings().await.map_err(ApiError::invalid)?;
-    Ok(Json(aow_runtime_contract::AcpSettings {
-        path: state
-            .host
-            .root
-            .join("aow-acp.json")
-            .to_string_lossy()
-            .into_owned(),
-        revision: format!("{:x}", md5::compute(&content)),
-        content,
-    }))
+    Ok(Json(
+        serde_json::json!({"path":state.host.root.join("aow-acp.json"),"revision":format!("{:x}",md5::compute(&content)),"content":content}),
+    ))
 }
-use aow_runtime_contract::AcpSettingsUpdate as SaveSettings;
+#[derive(Deserialize)]
+struct SaveSettings {
+    content: String,
+    revision: String,
+}
 async fn save_settings(
     State(state): State<WireRuntime>,
     Json(request): Json<SaveSettings>,
-) -> Result<Json<aow_runtime_contract::AcpSettings>, ApiError> {
+) -> Result<Json<serde_json::Value>, ApiError> {
     use aow_acp::AcpHost;
     aow_acp::validate_settings(&request.content).map_err(ApiError::invalid)?;
     let guard = state.settings_lock.lock().await;

@@ -10,7 +10,7 @@ function flatten(value, prefix = '', result = {}) {
   }
   return result;
 }
-for (const directory of ['server/frontend/src/lib/i18n/locales', 'common/crates/i18n/locales']) {
+for (const directory of ['server/frontend/src/lib/i18n/locales', 'server/crates/i18n/locales']) {
   const english = flatten(JSON.parse(await readFile(`${directory}/en-US.json`, 'utf8')));
   const files = await readdir(directory);
   for (const file of files.filter(name => name.endsWith('.json'))) {
@@ -35,7 +35,7 @@ async function scan(directory) {
 await scan('server/frontend/src');
 console.log('Frontend keys and hardcoded text checks passed.');
 
-const backend = JSON.parse(await readFile('common/crates/i18n/locales/en-US.json', 'utf8'));
+const backend = JSON.parse(await readFile('server/crates/i18n/locales/en-US.json', 'utf8'));
 async function checkRust(directory) {
   for (const item of await readdir(directory, { withFileTypes: true })) {
     const file = `${directory}/${item.name}`;
@@ -47,5 +47,4 @@ async function checkRust(directory) {
 }
 await checkRust('server/crates');
 await checkRust('runtime/crates');
-await checkRust('common/crates');
 console.log('Backend translation references passed.');

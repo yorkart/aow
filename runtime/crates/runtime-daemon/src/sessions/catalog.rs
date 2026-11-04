@@ -52,8 +52,7 @@ impl SessionService {
         };
         let mut value = serde_json::to_value(session)?;
         value["reference"] = serde_json::to_value(reference)?;
-        let record: aow_runtime_contract::NativeSessionRecord = serde_json::from_value(value)?;
-        Ok(serde_json::to_value(record)?)
+        Ok(value)
     }
     pub(super) fn locate(&self, reference: &SessionReference) -> Result<AgentSessionLocator> {
         ensure!(
@@ -97,7 +96,6 @@ impl SessionService {
         let mut value = record["summary"].clone();
         ensure!(value.is_object(), "Session metadata is unavailable");
         value["reference"] = serde_json::to_value(reference)?;
-        let record: aow_runtime_contract::NativeSessionRecord = serde_json::from_value(value)?;
-        Ok(serde_json::to_value(record)?)
+        Ok(value)
     }
 }

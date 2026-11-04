@@ -1,18 +1,17 @@
-//! Runtime-owned adapter installation and local ACP execution.
-mod adapter;
-mod host;
-mod installation;
-mod manager;
+//! AoW ACP integration. Only the facade is a supported AoW dependency.
+
+mod acp_thread;
+mod agent_servers;
+mod agent_ui;
+mod facade;
 mod node_runtime;
 mod project;
-mod service;
-mod transport;
+mod settings;
 
-pub use acp_client::{
-    AcpHost, AgentInfo, ConnectionInfo, ConnectionStatus, Content, ExecutionEnvironment,
-    Permission, PromptReceipt, SETTINGS_PATH, SessionCreation, SessionImport, SessionInfo,
-    SessionSnapshot, SessionSource, SessionUpdates, SessionVersion, SettingsDocument, SyncEvent,
-    SyncResource, ThreadEntry, TurnCompletion, is_auth_required, validate_settings,
+pub use facade::{
+    AcpConnector, AcpHost, AcpService, AdapterCommand, AdapterTransport, AgentInfo, ConnectionInfo,
+    ConnectionStatus, Content, ExecutionEnvironment, Permission, PromptReceipt, SessionCreation,
+    SessionImport, SessionInfo, SessionSnapshot, SessionSource, SessionUpdates, SessionVersion,
+    SyncEvent, SyncResource, ThreadEntry, TurnCompletion, is_auth_required,
 };
-pub use adapter::AdapterCommand;
-pub use service::AcpService;
+pub use settings::{SETTINGS_PATH, SettingsDocument, validate_settings};

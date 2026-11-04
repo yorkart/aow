@@ -1,6 +1,6 @@
 //! Source: Upstream project/src/agent_registry_store.rs. Runtime and storage are host adaptations.
+use crate::acp_thread::history::atomic_write;
 use anyhow::{Context, Result};
-use aow_db::atomic_write;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::PathBuf, time::Duration};
 

@@ -1,4 +1,7 @@
-//! Server business task storage over the shared SQLite foundation.
+//! SQLite data sources and table access for AoW.
+
+pub mod acp;
+pub mod codex_like;
+pub mod hermes;
+mod sqlite;
 pub mod tasks;
-pub(crate) use aow_storage::sqlite;
-pub use aow_storage::{acp, codex_like, hermes};

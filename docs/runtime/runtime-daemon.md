@@ -10,9 +10,7 @@ AoW Server uses the shared `server/crates/runtime-client` SDK for all execution-
 operations. HTTP manages instances and configuration; WebSocket carries native
 ACP JSON-RPC and terminal streams. The execution modules and VT worker live in
 the independent [runtime subproject](../../runtime/README.md), with its own Cargo
-workspace and lockfile. The caller SDK stays in the Server workspace. Both
-workspaces depend on sibling `common/` libraries for shared contracts, ACP client
-behavior and infrastructure; Common has no product dependencies.
+workspace and lockfile. The caller SDK stays in the root workspace.
 
 ## Build and start
 
@@ -316,7 +314,7 @@ binary frames carry terminal input/output; JSON frames carry control, stream
 metadata, resize, status and acknowledgements. Existing query options such as
 `control=v2`, `observer=v1`, `epoch`, `after`, `capabilities=vt-snapshot-v1` and
 `snapshot_compression=gzip` retain their behavior. See the types in
-`common/crates/protocol/src/terminal/attach.rs` for the frame schema.
+`runtime/crates/protocol/src/terminal/attach.rs` for the frame schema.
 
 Unlike ACP transports, closing a terminal attachment leaves the PTY running.
 Reattach using its epoch and offset to replay available output. Terminal

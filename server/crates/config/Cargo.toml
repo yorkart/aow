@@ -5,8 +5,8 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-aow-i18n = { path = "../../../common/crates/i18n" }
-aow-id = { path = "../../../common/crates/id" }
+aow-i18n = { path = "../i18n" }
+aow-id = { path = "../id" }
 anyhow.workspace = true
 libc.workspace = true
 serde.workspace = true

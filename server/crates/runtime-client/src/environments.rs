@@ -1,6 +1,18 @@
 //! Node-owned execution environment transport. Caller business models remain independent.
 use crate::{RuntimeClient, RuntimeError};
-pub use aow_runtime_contract::{EnvironmentPreparation, NodeEnvironment};
+use serde::{Deserialize, Serialize};
+use std::{collections::BTreeMap, path::PathBuf};
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct NodeEnvironment {
+    pub home: PathBuf,
+    pub env: BTreeMap<String, String>,
+}
+#[derive(Debug, Deserialize)]
+pub struct EnvironmentPreparation {
+    pub token: String,
+    #[serde(flatten)]
+    pub environment: NodeEnvironment,
+}
 impl RuntimeClient {
     pub async fn prepare_role_environment(
         &self,

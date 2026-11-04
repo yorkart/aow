@@ -1,7 +1,14 @@
 //! Git process ownership on the execution node.
 use anyhow::{Context, Result};
-pub use aow_runtime_contract::GitCommandResult;
+use serde::{Deserialize, Serialize};
 use std::{path::Path, process::Stdio, time::Duration};
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GitCommandResult {
+    pub success: bool,
+    pub code: Option<i32>,
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
+}
 struct Group(Option<u32>);
 impl Drop for Group {
     fn drop(&mut self) {

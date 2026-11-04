@@ -38,7 +38,7 @@ impl Fixture {
     async fn with_storage(env: Value, persistent: bool) -> Result<Self> {
         let dir = tempfile::tempdir()?;
         let service = AcpService::new(Arc::new(Host(json!({"agent_servers":{"test":{
-            "type":"custom","command":"node","args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../common/fixtures/acp/load-recovery-agent.mjs")], "env":env,
+            "type":"custom","command":"node","args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/load-recovery-agent.mjs")], "env":env,
         }}}).to_string())), persistent.then(|| dir.path().join("state")))?;
         let connection = service.connect("test", dir.path().into()).await?.id;
         let mut fixture = Self {

@@ -59,4 +59,8 @@ pub struct RoleEnvironmentSpec {
     #[serde(default)]
     pub skills: Vec<String>,
 }
-pub use aow_runtime_contract::NodeEnvironment as PreparedEnvironment;
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PreparedEnvironment {
+    pub home: std::path::PathBuf,
+    pub env: std::collections::BTreeMap<String, String>,
+}

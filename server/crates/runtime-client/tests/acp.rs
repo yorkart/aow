@@ -105,6 +105,7 @@ async fn native_acp_sdk_uses_node_configuration_permissions_and_client_history()
         node.runtime.clone(),
         host.clone(),
         Some(history.path().join("history")),
+        None,
     )
     .unwrap();
     assert_eq!(client.agents().await.unwrap()[0].id, "fixture");
@@ -177,6 +178,7 @@ async fn native_acp_sdk_uses_node_configuration_permissions_and_client_history()
         node.runtime.clone(),
         host,
         Some(history.path().join("history")),
+        None,
     )
     .unwrap();
     assert_eq!(
@@ -207,6 +209,7 @@ async fn workspace_fence_reaps_adapter_and_blocks_node_file_callbacks() {
             runtime: node.runtime.clone(),
             completed,
         }),
+        None,
         None,
     )
     .unwrap();

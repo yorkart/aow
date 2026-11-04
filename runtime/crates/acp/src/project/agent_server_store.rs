@@ -1,8 +1,8 @@
 //! Source: Upstream project/src/agent_server_store.rs. Registry command resolution and installation.
 use super::agent_registry_store::{AgentRegistryStore, RegistryTargetConfig, current_platform_key};
+use crate::agent_servers::progress::Progress;
 use crate::node_runtime::{NodeRuntime, bounded_npm_package_spec};
-use acp_client::CustomAgentServerSettings;
-use acp_client::OperationProgress as Progress;
+use crate::settings::CustomAgentServerSettings;
 use anyhow::{Context, Result, ensure};
 use sha2::{Digest, Sha256};
 use std::{

@@ -14,7 +14,7 @@ impl aow_runtime_client::acp::AcpHost for Host {
     async fn settings(&self) -> anyhow::Result<String> {
         if self.fork {
             return Ok(json!({"agent_servers":{"test":{"type":"custom","command":"node","args":[
-                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../common/fixtures/acp/fork-agent.mjs")
+                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../acp-client-model/tests/fixtures/fork-agent.mjs")
             ]}}}).to_string());
         }
         Ok(

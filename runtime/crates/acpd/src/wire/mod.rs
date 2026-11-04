@@ -10,7 +10,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 use tokio::sync::{Mutex, watch};
 
@@ -25,7 +25,28 @@ pub(crate) struct WireRuntime {
     stopping: watch::Receiver<bool>,
 }
 
-use aow_runtime_contract::{AcpInstance as InstanceInfo, AcpInstanceSpec as InstanceSpec};
+#[derive(Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct InstanceSpec {
+    agent_id: String,
+    cwd: PathBuf,
+    #[serde(default)]
+    execution_environment: Option<aow_acp::ExecutionEnvironment>,
+    #[serde(default)]
+    environment: std::collections::BTreeMap<String, String>,
+}
+
+#[derive(Serialize)]
+struct InstanceInfo {
+    id: String,
+    agent_id: String,
+    cwd: PathBuf,
+    pid: u32,
+    attached: bool,
+    status: instance::Status,
+    websocket_path: String,
+    execution_home: Option<PathBuf>,
+}
 
 impl WireRuntime {
     pub fn new(

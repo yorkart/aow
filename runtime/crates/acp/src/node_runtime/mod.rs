@@ -1,7 +1,7 @@
 //! Upstream node_runtime system-runtime discovery and npm package entrypoint resolution.
 //! AoW supplies PATH; runtime discovery, installation and cache stay inside this module.
 
-use acp_client::OperationProgress as Progress;
+use crate::agent_servers::progress::Progress;
 use anyhow::{Context, Result, ensure};
 use semver::Version;
 use serde::Deserialize;

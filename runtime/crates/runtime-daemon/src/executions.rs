@@ -121,8 +121,7 @@ async fn snapshot(
         {
             value["native_session"] = service.sessions.remember(&session)?;
         }
-        let snapshot: aow_runtime_contract::ExecutionSnapshot = serde_json::from_value(value)?;
-        Ok(Json(serde_json::to_value(snapshot)?))
+        Ok(Json(value))
     })
     .await
     .map_err(|error| self::error(error.into()))?

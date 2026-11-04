@@ -120,7 +120,7 @@ struct Host(&'static str);
 #[async_trait::async_trait]
 impl aow_runtime_client::acp::AcpHost for Host {
     async fn settings(&self) -> anyhow::Result<String> {
-        Ok(serde_json::json!({"agent_servers":{(self.0):{"type":"custom","command":"node","args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../common/fixtures/acp/lineage-agent.mjs")]}}}).to_string())
+        Ok(serde_json::json!({"agent_servers":{(self.0):{"type":"custom","command":"node","args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../acp-client-model/tests/fixtures/lineage-agent.mjs")]}}}).to_string())
     }
     async fn execution_path(&self) -> anyhow::Result<Option<std::ffi::OsString>> {
         Ok(None)
@@ -378,7 +378,7 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
     .unwrap();
     let settings = state.aow.acp_settings().unwrap();
     state.aow.save_acp_settings(json!({"agent_servers":{"codex.test":{"type":"custom", "command":"node", "args":[
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../common/fixtures/acp/lineage-agent.mjs")
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../acp-client-model/tests/fixtures/lineage-agent.mjs")
     ]}}}).to_string(), settings.revision).await.unwrap();
     let app = routes()
         .merge(cli_routes())

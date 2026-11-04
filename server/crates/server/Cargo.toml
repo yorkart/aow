@@ -8,8 +8,8 @@ license.workspace = true
 aow-cli-access = { path = "../cli-access" }
 aow-runtime-client = { path = "../runtime-client" }
 aow-server-client = { path = "../server-client" }
-aow-i18n = { path = "../../../common/crates/i18n" }
-aow-id = { path = "../../../common/crates/id" }
+aow-i18n = { path = "../i18n" }
+aow-id = { path = "../id" }
 aow-db = { path = "../db" }
 anyhow.workspace = true
 async-trait.workspace = true
@@ -30,11 +30,11 @@ aow-automations = { path = "../automations" }
 aow-workspaces = { path = "../workspaces" }
 aow-im = { path = "../im" }
 aow-config = { path = "../config" }
-aow-filesystem = { path = "../../../common/crates/filesystem" }
+aow-filesystem = { path = "../filesystem" }
 aow-git-service = { path = "../git-service" }
 aow-operation-log = { path = "../operation-log" }
-aow-protocol = { path = "../../../common/crates/protocol" }
-aow-process = { path = "../../../common/crates/process" }
+aow-protocol = { path = "../protocol" }
+aow-process = { path = "../process" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
@@ -54,4 +54,4 @@ rusqlite.workspace = true
 tower = { version = "0.5", features = ["util"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-aow-macos-log = { path = "../../../common/crates/macos-log" }
+aow-macos-log = { path = "../macos-log" }
