@@ -3217,8 +3217,8 @@ try {
       await verify();
     });
   }
-  const recordedSteering = JSON.parse(await readFile(new URL('../../../runtime/crates/acp/tests/fixtures/codex-steering-recording.json', import.meta.url), 'utf8'));
-  const recordedReplay = JSON.parse(await readFile(new URL('../../../runtime/crates/acp/tests/fixtures/codex-steering-replay.json', import.meta.url), 'utf8'));
+  const recordedSteering = JSON.parse(await readFile(new URL('../../../fixtures/acp/codex-steering-recording.json', import.meta.url), 'utf8'));
+  const recordedReplay = JSON.parse(await readFile(new URL('../../../fixtures/acp/codex-steering-replay.json', import.meta.url), 'utf8'));
   recordedSteering.captures.push({ name: 'native-reload', snapshot: { ...recordedReplay.reloaded, overview: undefined }, overview: recordedReplay.reloaded.overview });
   for (const capture of recordedSteering.captures) {
     for (const overview of [false, true]) {

@@ -136,7 +136,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
-name = "aow-acp"
+name = "aow-acp-core"
 version = "0.1.0"
 dependencies = [
  "agent-client-protocol",
@@ -167,12 +167,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "aow-acpd"
+name = "aow-acp-service"
 version = "0.1.0"
 dependencies = [
  "agent-client-protocol",
  "anyhow",
- "aow-acp",
+ "aow-acp-core",
  "aow-runtime-agents",
  "aow-runtime-contract",
  "aow-runtime-filesystem",
@@ -246,8 +246,8 @@ name = "aow-runtime-daemon"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "aow-acp",
- "aow-acpd",
+ "aow-acp-core",
+ "aow-acp-service",
  "aow-protocol",
  "aow-runtime-agents",
  "aow-runtime-contract",

@@ -7,8 +7,8 @@ and terminal instances behind an authenticated HTTP/WebSocket endpoint.
 runtime/
   Cargo.toml          Independent Rust workspace
   Cargo.lock
-  crates/acp/         Native ACP SDK, adapter resolution and session model
-  crates/acpd/        Adapter process ownership and native ACP WebSocket service
+  crates/acp-core/    Native ACP SDK, adapter resolution and session model
+  crates/acp-service/ Adapter process ownership and native ACP WebSocket service
   crates/agents/      Native process matching, interaction and session adapters
   crates/terminald/   PTY lifecycle, replay and VT worker host
   crates/workspace/   Node files, Git, worktrees, search and clipboard storage
@@ -41,7 +41,7 @@ injects the callback URL and a business grant; the node never receives its signi
 
 See the [service and deployment reference](../docs/runtime/runtime-daemon.md)
 for node configuration, authentication, remote Server connection, lifecycle and
-API details. The only execution binary is `aow-runtime-daemon`; acpd and
+API details. The only execution binary is `aow-runtime-daemon`; acp-service and
 terminald are embedded libraries.
 
 ## Source boundary checks

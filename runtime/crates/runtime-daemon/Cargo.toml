@@ -6,7 +6,7 @@ license = "GPL-3.0-or-later"
 
 [dependencies]
 aow-runtime-contract = { path = "../../../common/crates/runtime-contract" }
-aow-acp = { path = "../acp" }
+aow-acp-core = { path = "../acp-core" }
 aow-runtime-exec = { path = "../exec" }
 tempfile = "3.20"
 aow-workspaces = { package = "aow-runtime-workspace", path = "../workspace" }
@@ -17,7 +17,7 @@ chrono.workspace = true
 futures-util.workspace = true
 aow-agents = { package = "aow-runtime-agents", path = "../agents", features = ["launch", "sessions", "automation"] }
 anyhow.workspace = true
-aow-acpd = { path = "../acpd" }
+aow-acp-service = { path = "../acp-service" }
 aow-terminald = { path = "../terminald" }
 aow-filesystem = { package = "aow-runtime-filesystem", path = "../filesystem" }
 axum.workspace = true

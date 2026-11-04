@@ -3,7 +3,7 @@ use crate::{
     config::node_id,
 };
 use anyhow::{Context, Result, ensure};
-use aow_acpd::AcpRuntime;
+use aow_acp_service::AcpRuntime;
 use aow_terminald::{TerminalRuntimeHost, configure_vt_worker};
 use axum::{Json, Router, middleware, routing::get};
 use std::{

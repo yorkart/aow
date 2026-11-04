@@ -1,7 +1,7 @@
 # Runtime daemon
 
 `aow-runtime-daemon` is a standalone node service. One Rust process embeds the
-`aow-acpd` and `aow-terminald` libraries and owns a single TCP HTTP listener,
+`aow-acp-service` and `aow-terminald` libraries and owns a single TCP HTTP listener,
 configuration, authentication and shutdown sequence. ACP adapters, PTY shells
 and the optional Node.js VT worker are child processes; it does not launch
 separate `aow-acpd` or `aow-terminald` daemons.
