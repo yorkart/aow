@@ -29,7 +29,7 @@ async function records(pid, check) {
 test('native Unified Logging preserves severity, fields, Unicode, long errors and panics', {
   skip: !enabled, timeout: 60000,
 }, async () => {
-  const build = execFileSync('cargo', ['test', '--offline', '--no-run', '-p', 'aow-macos-log', '--message-format=json'], {
+  const build = execFileSync('cargo', ['test', '--manifest-path', 'common/Cargo.toml', '--locked', '--offline', '--target-dir', 'target', '--no-run', '-p', 'aow-macos-log', '--message-format=json'], {
     cwd: root, encoding: 'utf8', timeout: 45000,
   });
   const artifact = build.trim().split('\n').map(line => JSON.parse(line))

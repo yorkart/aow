@@ -15,12 +15,24 @@ for (const product of ['common', 'server', 'runtime']) {
     }
   });
 }
-test('Common contains contracts, IDs and generic SQLite infrastructure without product implementations', () => {
-  assert.deepEqual(readdirSync(resolve(root, 'common/crates')).sort(), ['id', 'protocol', 'runtime-contract', 'sqlite']);
+test('Common contains contracts, IDs and generic infrastructure without product implementations', () => {
+  assert.deepEqual(readdirSync(resolve(root, 'common/crates')).sort(), ['id', 'macos-log', 'protocol', 'runtime-contract', 'sqlite']);
   const contract = readFileSync(resolve(root, 'common/crates/runtime-contract/Cargo.toml'), 'utf8');
-  assert.doesNotMatch(contract, /rusqlite|tokio|reqwest|agent-client-protocol|aow-(?:acp|storage|filesystem|agents|process|sqlite)/);
-  const sqlite = readFileSync(resolve(root, 'common/crates/sqlite/Cargo.toml'), 'utf8');
-  assert.doesNotMatch(sqlite, /\baow-[\w-]+\s*=/);
+  assert.doesNotMatch(contract, /rusqlite|tokio|reqwest|agent-client-protocol|aow-(?:acp|storage|filesystem|agents|process|sqlite|macos-log)/);
+  for (const name of ['sqlite', 'macos-log']) {
+    const manifest = readFileSync(resolve(root, 'common/crates', name, 'Cargo.toml'), 'utf8');
+    assert.doesNotMatch(manifest, /\baow-[\w-]+\s*=/);
+  }
+});
+test('products share the macOS adapter while operation history stays in Server', () => {
+  for (const product of ['server', 'runtime']) {
+    assert.equal(existsSync(resolve(root, product, 'crates/macos-log')), false);
+  }
+  for (const path of ['server/crates/server', 'runtime/crates/runtime-daemon', 'runtime/crates/terminal-core']) {
+    const manifest = readFileSync(resolve(root, path, 'Cargo.toml'), 'utf8');
+    assert.match(manifest, /aow-macos-log\s*=\s*\{\s*path\s*=\s*"\.\.\/\.\.\/\.\.\/common\/crates\/macos-log"\s*\}/);
+  }
+  assert.ok(existsSync(resolve(root, 'server/crates/operation-log')));
 });
 test('products share SQLite infrastructure while owning business storage', () => {
   for (const product of ['server', 'runtime']) {

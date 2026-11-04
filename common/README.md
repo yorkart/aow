@@ -5,6 +5,7 @@ generic infrastructure.
 Server and Runtime may depend on it; Common depends on neither product.
 
 - `id`: public identifier generation and encoding.
+- `macos-log`: the macOS Unified Logging adapter shared by Server and Runtime.
 - `protocol`: terminal, filesystem and instance wire types.
 - `runtime-contract`: conversation management requests, responses and events.
 - `sqlite`: private owned-database connections, external read-only connections and
@@ -22,6 +23,11 @@ The shared crate owns only connection configuration and the generic
 Both products continue to own separate databases. Read-only connections never
 create or migrate external databases. The extracted SQLite crate retains the
 original code's GPL-3.0-or-later license.
+
+The shared macOS adapter connects tracing, panic reports and startup errors to
+Unified Logging. Each process supplies its category and default filter. Native
+code is compiled only for macOS; the crate has no platform API on other hosts.
+Operation history and business audit rules remain in Server.
 
 Runtime owns conversation execution and durable state. Server owns business
 policy and uses `server/crates/runtime-client` to reach the selected node. The

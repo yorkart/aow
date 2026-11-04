@@ -63,6 +63,9 @@ Both products use `../common/crates/sqlite` for generic SQLite connections and
 migration bookkeeping. Server's `crates/db` owns task schemas, migration SQL and
 business transactions; Runtime owns ACP and native Agent storage.
 
+`../common/crates/macos-log` provides the macOS Unified Logging adapter for both
+products. Operation history and business audit policy remain in Server.
+
 Workspace file reads, writes, searches and transfers always use the Runtime SDK,
 including in caller tests. Server has no filesystem execution crate or bundled
 ripgrep. Its own state-directory selection belongs to `crates/config`; workspace

@@ -125,10 +125,8 @@ jobs:
       - name: Check macOS C bridge
         if: runner.os == 'macOS'
         run: |
-          clang -Wall -Wextra -Werror -fsyntax-only server/crates/macos-log/src/os_log.c
-          clang -Wall -Wextra -Werror -fsyntax-only runtime/crates/macos-log/src/os_log.c
-          clang --analyze -Xanalyzer -analyzer-output=text -Xanalyzer -analyzer-werror -Wall -Wextra -Werror server/crates/macos-log/src/os_log.c
-          clang --analyze -Xanalyzer -analyzer-output=text -Xanalyzer -analyzer-werror -Wall -Wextra -Werror runtime/crates/macos-log/src/os_log.c
+          clang -Wall -Wextra -Werror -fsyntax-only common/crates/macos-log/src/os_log.c
+          clang --analyze -Xanalyzer -analyzer-output=text -Xanalyzer -analyzer-werror -Wall -Wextra -Werror common/crates/macos-log/src/os_log.c
 
   test-scripts:
     strategy:

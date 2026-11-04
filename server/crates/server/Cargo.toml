@@ -53,4 +53,4 @@ rusqlite.workspace = true
 tower = { version = "0.5", features = ["util"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-aow-macos-log = { path = "../macos-log" }
+aow-macos-log = { path = "../../../common/crates/macos-log" }

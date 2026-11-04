@@ -177,7 +177,6 @@ dependencies = [
  "aow-runtime-contract",
  "aow-runtime-filesystem",
  "aow-runtime-i18n",
- "aow-runtime-macos-log",
  "async-trait",
  "axum",
  "bytes",
@@ -281,6 +280,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "aow-macos-log"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "aow-protocol"
 version = "0.1.0"
 dependencies = [
@@ -307,11 +315,11 @@ dependencies = [
  "aow-agents-service",
  "aow-exec-core",
  "aow-exec-service",
+ "aow-macos-log",
  "aow-protocol",
  "aow-runtime-contract",
  "aow-runtime-environment",
  "aow-runtime-filesystem",
- "aow-runtime-macos-log",
  "aow-runtime-process",
  "aow-runtime-workspace",
  "aow-terminal-core",
@@ -387,15 +395,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "aow-runtime-macos-log"
-version = "0.1.0"
-dependencies = [
- "cc",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "aow-runtime-process"
 version = "0.1.0"
 dependencies = [
@@ -450,10 +449,10 @@ dependencies = [
  "anyhow",
  "aow-agents-core",
  "aow-id",
+ "aow-macos-log",
  "aow-protocol",
  "aow-runtime-contract",
  "aow-runtime-filesystem",
- "aow-runtime-macos-log",
  "aow-runtime-process",
  "async-trait",
  "bytes",

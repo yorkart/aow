@@ -23,7 +23,7 @@ test('release tooling, native dependencies and build configuration require every
     'packaging/bin/aow', '.github/workflows/release.yml', '.cargo/config.toml',
     'server/Cargo.toml', 'server/Cargo.lock', 'rust-toolchain.toml', 'rust-toolchain',
     'common/Cargo.toml', 'common/Cargo.lock', 'common/crates/runtime-contract/src/acp/model.rs',
-    'server/crates/server/Cargo.toml', 'runtime/crates/runtime-daemon/build.rs', 'server/crates/macos-log/src/os_log.c',
+    'server/crates/server/Cargo.toml', 'runtime/crates/runtime-daemon/build.rs', 'common/crates/macos-log/src/os_log.c',
     'server/frontend/package.json', 'server/frontend/package-lock.json', 'runtime/vt-worker/bin/vt-worker.mjs',
     'runtime/vendor/ripgrep/manifest.json', 'runtime/vendor/ripgrep/15.2.0/ripgrep.tar.gz',
   ]) {
