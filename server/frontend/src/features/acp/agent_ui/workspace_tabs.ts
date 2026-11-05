@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SessionInfo } from '../types';
 import { discardComposerDraft, discardWorkspaceComposerDrafts } from './composer_drafts';
 
-export interface AcpTab { id: string; agentId: string; thread_id?: string; title: string; working?: boolean }
+export interface AcpTab { id: string; agentId: string; thread_id?: string; title: string; working?: boolean; cwd?: string }
 
 const removalListeners = new Set<(workspace: string, threadId?: string) => void>();
 
@@ -11,13 +11,13 @@ export function savedAcpTabs(workspace: string): AcpTab[] {
   try {
     const saved: unknown = JSON.parse(localStorage.getItem(`aow-acp-tabs:${workspace}`) || '[]');
     if (!Array.isArray(saved)) return [];
-    return saved.map(tab => tab && ({ id: tab.id, thread_id: tab.thread_id, agentId: tab.agentId, title: tab.title }))
+    return saved.map(tab => tab && ({ id: tab.id, thread_id: tab.thread_id, agentId: tab.agentId, title: tab.title, cwd: typeof tab.cwd === 'string' ? tab.cwd : undefined }))
       .filter((tab): tab is AcpTab => tab && typeof tab.id === 'string' && typeof tab.thread_id === 'string' && typeof tab.agentId === 'string' && typeof tab.title === 'string');
   } catch { return []; }
 }
 
 function saveAcpTabs(workspace: string, tabs: AcpTab[]) {
-  try { localStorage.setItem(`aow-acp-tabs:${workspace}`, JSON.stringify(tabs.filter(tab => tab.thread_id).map(({ id, thread_id, agentId, title }) => ({ id, thread_id, agentId, title })))); } catch { /* View persistence can be unavailable. */ }
+  try { localStorage.setItem(`aow-acp-tabs:${workspace}`, JSON.stringify(tabs.filter(tab => tab.thread_id).map(({ id, thread_id, agentId, title, cwd }) => ({ id, thread_id, agentId, title, cwd })))); } catch { /* View persistence can be unavailable. */ }
 }
 
 // Deletion can originate in another worktree's panel while the owner is unmounted.
@@ -71,16 +71,19 @@ export function useAcpTabs(workspace: string) {
   }, [update]);
   const open = useCallback((session: SessionInfo) => {
     const existing = current.current.find(tab => tab.thread_id === session.thread_id);
-    if (existing) return existing.id;
-    const tab = { id: session.thread_id, thread_id: session.thread_id, agentId: session.agent_id, title: session.title, working: session.status === 'working' };
+    if (existing) {
+      update(current.current.map(tab => tab.id === existing.id ? { ...tab, cwd: session.cwd, title: session.title, working: session.status === 'working' } : tab));
+      return existing.id;
+    }
+    const tab = { id: session.thread_id, thread_id: session.thread_id, agentId: session.agent_id, title: session.title, cwd: session.cwd, working: session.status === 'working' };
     update([...current.current, tab]); return tab.id;
   }, [update]);
   const close = useCallback((ids: string[]) => update(current.current.filter(tab => !ids.includes(tab.id))), [update]);
   const changed = useCallback((id: string, session: SessionInfo) => {
     const tab = current.current.find(item => item.id === id);
     const working = session.status === 'working';
-    if (!tab || tab.thread_id === session.thread_id && tab.title === session.title && tab.working === working) return;
-    update(current.current.map(item => item.id === id ? { ...item, thread_id: session.thread_id, title: session.title, working } : item));
+    if (!tab || tab.thread_id === session.thread_id && tab.title === session.title && tab.working === working && tab.cwd === session.cwd) return;
+    update(current.current.map(item => item.id === id ? { ...item, thread_id: session.thread_id, title: session.title, cwd: session.cwd, working } : item));
   }, [update]);
   return { tabs, create, open, close, changed };
 }

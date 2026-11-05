@@ -1,4 +1,4 @@
-import { Globe, Inbox, Settings, CalendarClock, Files, GitBranch, GitPullRequest, MessageSquare, MousePointerClick } from 'lucide-react';
+import { ListTodo, Globe, Inbox, Settings, CalendarClock, Files, GitBranch, GitPullRequest, MessageSquare, MousePointerClick } from 'lucide-react';
 import { AcpIcon } from '../features/agents/AcpIcon';
 import { AgentIcon } from '../features/agents/AgentIcon';
 import type { TaskKind } from '../features/automations/types';
@@ -13,6 +13,7 @@ export function WorkspaceTabIcon({ kind, path, terminal, automationKind, acpAgen
   automationKind?: TaskKind;
   acpAgentId?: string;
 }) {
+  if (kind === 'tool') return path === 'properties' ? <ListTodo /> : path === 'git' ? <GitBranch /> : path === 'pullRequests' ? <GitPullRequest /> : path === 'automations' ? <CalendarClock /> : path === 'conversations' ? <MessageSquare /> : <Files />;
   if (kind === 'terminal' || kind === 'agent') return <TerminalTabIcon summary={terminal} />;
   if (kind === 'global') return <Globe />;
   if (kind === 'settings') return <Settings />;

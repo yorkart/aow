@@ -16,7 +16,7 @@ import { AcpSpinnerLabel } from '../features/acp/workspace';
 
 export interface WorkspaceTab {
   id: string;
-  kind: 'settings' | 'terminal' | 'agent' | 'file' | 'diff' | 'session' | 'acp' | 'automation' | 'pullRequest' | 'browser' | 'inbox';
+  kind: 'settings' | 'terminal' | 'agent' | 'file' | 'diff' | 'session' | 'acp' | 'automation' | 'pullRequest' | 'browser' | 'inbox' | 'tool';
   label: string;
   targetId: string;
   title?: string;
@@ -32,6 +32,7 @@ export interface WorkspaceTab {
 export interface TabRevealRequest { tabId: string }
 type WorkspaceTabGroup = Exclude<WorkspaceTab['kind'], 'agent' | 'settings' | 'browser' | 'inbox'> | 'global';
 const groupDefinitions: { id: WorkspaceTabGroup; label: string; color: string }[] = [
+  { id: 'tool', label: t('navigation.workspace'), color: '#8fa8bd' },
   { id: 'global', label: t("navigation.global"), color: '#8fa8bd' },
   { id: 'terminal', label: t("navigation.terminal"), color: '#6ca8f1' },
   { id: 'acp', label: 'ACP', color: '#91b8c8' },
@@ -141,12 +142,14 @@ interface Props {
   newLabel?: string;
   tabListLabel?: string;
   headerProps?: HTMLAttributes<HTMLElement>;
+  newMenuContent?: (close: () => void) => ReactNode;
+  ungrouped?: boolean;
 }
 
 export function WorkspaceTabs({ workspaceKey, revealRequest, tabs, activeId, visible, agents, onActivate, onPin, onCloseTab, onCloseTabs,
   onCanRename, onRename, onError, destination, onOpenElsewhere, onOpenFile, onCreateNote,
-  onCreateTerminal, onCreateAcp, onCreateRole, leadingControls, controls, newLabel = t("aow.new_window"), tabListLabel = t("aow.workspace_tabs"), headerProps }: Props) {
-  const groups = useMemo(() => groupWorkspaceTabs(tabs), [tabs]);
+  onCreateTerminal, onCreateAcp, onCreateRole, leadingControls, controls, newLabel = t("aow.new_window"), tabListLabel = t("aow.workspace_tabs"), headerProps, newMenuContent, ungrouped = false }: Props) {
+  const groups = useMemo(() => ungrouped ? [{ id: 'tool' as const, label: '', color: 'transparent', tabs }] : groupWorkspaceTabs(tabs), [tabs, ungrouped]);
   const storageKey = `aow-tab-groups-v1:${workspaceKey}`;
   const [collapsed, setCollapsed] = useState<Set<WorkspaceTabGroup>>(() => {
     const saved = readStored<unknown>(storageKey, []);
@@ -285,10 +288,10 @@ export function WorkspaceTabs({ workspaceKey, revealRequest, tabs, activeId, vis
   };
   const closeGroup = (selected: WorkspaceTab, keep: boolean) => run(async () => {
     const group = workspaceTabGroup(selected);
-    const targets = tabs.filter(tab => workspaceTabGroup(tab) === group && (!keep || tab.id !== selected.id));
+    const targets = tabs.filter(tab => (ungrouped || workspaceTabGroup(tab) === group) && (!keep || tab.id !== selected.id));
     if (!targets.length) return;
     const dirty = targets.filter(tab => tab.dirty).length;
-    if (group === 'file' && dirty && !window.confirm(t("aow.files_have_unsaved_changes_close_them", { value0: dirty }))) return;
+    if (!ungrouped && group === 'file' && dirty && !window.confirm(t("aow.files_have_unsaved_changes_close_them", { value0: dirty }))) return;
     await onCloseTabs(targets, selected);
   });
 
@@ -297,18 +300,18 @@ export function WorkspaceTabs({ workspaceKey, revealRequest, tabs, activeId, vis
       {leadingControls}
       <div ref={tabBarRef} className="project-aow-center-tab-scroll" role="tablist" aria-label={tabListLabel}>
         {groups.map(group => {
-          const folded = collapsed.has(group.id);
+          const folded = !ungrouped && collapsed.has(group.id);
           const activeTab = group.tabs.find(tab => tab.id === activeId);
           const action = folded ? t("aow.expand") : t("aow.collapse");
           return <div key={group.id} className={`project-aow-tab-group${folded ? ' collapsed' : ''}`}
             role="presentation" style={{ '--tab-group-color': group.color } as CSSProperties}>
-            <button type="button" className={`project-aow-group-toggle${activeTab ? ' active' : ''}`}
+            {!ungrouped && <button type="button" className={`project-aow-group-toggle${activeTab ? ' active' : ''}`}
               aria-label={t("aow.group_tabs", { value0: action, value1: group.label, value2: group.tabs.length })} aria-expanded={!folded}
               aria-controls={`${groupId}-${group.id}`} title={t("aow.tabs_click_to", { value0: group.label, value1: group.tabs.length, value2: action, value3: folded && activeTab ? t("common.current", { value0: activeTab.label }) : '' })}
               onClick={() => toggleGroup(group.id)}>
               <WorkspaceTabIcon kind={group.id} path="" />
               {folded ? <span className="project-aow-group-count" aria-hidden="true">{group.tabs.length > 9 ? '…' : group.tabs.length}</span> : null}
-            </button>
+            </button>}
             <div id={`${groupId}-${group.id}`} className="project-aow-group-tabs" role="presentation">
               {!folded ? group.tabs.map(tab => <div key={tab.id} data-workspace-tab-id={tab.id} role="tab" tabIndex={0} aria-selected={activeId === tab.id}
                 className={`project-aow-center-tab${activeId === tab.id ? ' active' : ''}${tab.preview ? ' preview' : ''}`} title={tab.title ?? tab.label}
@@ -347,7 +350,7 @@ export function WorkspaceTabs({ workspaceKey, revealRequest, tabs, activeId, vis
       <div ref={newMenuRef} className="project-aow-new" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setNewMenu(false); }}>
         <button className="project-aow-new-trigger" title={newLabel} aria-label={newLabel} aria-expanded={newMenu} onClick={() => setNewMenu(value => !value)}><Plus /></button>
         {newMenu ? <WorkspaceNewMenu anchor={newMenuRef} agents={agents} onOpenFile={onOpenFile}
-          onCreateNote={onCreateNote} onCreateTerminal={onCreateTerminal} onCreateAcp={onCreateAcp} onCreateRole={onCreateRole} onSelect={() => setNewMenu(false)} /> : null}
+          onCreateNote={onCreateNote} onCreateTerminal={onCreateTerminal} onCreateAcp={onCreateAcp} onCreateRole={onCreateRole} onSelect={() => setNewMenu(false)}>{newMenuContent?.(() => setNewMenu(false))}</WorkspaceNewMenu> : null}
       </div>
       {controls}
     </nav>
@@ -355,7 +358,7 @@ export function WorkspaceTabs({ workspaceKey, revealRequest, tabs, activeId, vis
       left={preview.left} top={preview.top} onDismiss={dismissPreview} /> : null}
     {contextMenu && tabs.some(tab => tab.id === contextMenu.tab.id) ? createPortal(<CenterTabContextMenu state={contextMenu} destination={destination(contextMenu.tab)}
       onOpenElsewhere={() => onOpenElsewhere(contextMenu.tab)} onClose={dismissMenu} onRename={() => beginRename(contextMenu.tab)}
-      hasOtherTabs={tabs.some(tab => tab.id !== contextMenu.tab.id && workspaceTabGroup(tab) === workspaceTabGroup(contextMenu.tab))}
+      hasOtherTabs={tabs.some(tab => tab.id !== contextMenu.tab.id && (ungrouped || workspaceTabGroup(tab) === workspaceTabGroup(contextMenu.tab)))}
       onCloseTab={() => run(() => onCloseTab(contextMenu.tab))} onCloseOthers={() => closeGroup(contextMenu.tab, true)}
       onCloseAll={() => closeGroup(contextMenu.tab, false)} />, document.body) : null}
   </>;

@@ -60,6 +60,10 @@ try {
       window.taskStopReady = () => window.liveEventSockets.some(socket => socket.readyState === 1);
       if (!acp || !localStorage.getItem('aow-active')) localStorage.setItem('aow-active', '/workspace/main');
       if (!acp || !localStorage.getItem(`aow-workspace-tabs:${root}`)) localStorage.setItem(`aow-workspace-tabs:${root}`, JSON.stringify({ active: 'terminal:other' }));
+      // Previously opened shell tabs belong to the auxiliary workspace.
+      if (!localStorage.getItem(`aow-agent-tools:${root}`)) localStorage.setItem(`aow-agent-tools:${root}`, JSON.stringify({
+        [`workspace:${root}`]: { tabs: [{ id: 'view:conversations', view: 'conversations' }, { id: 'terminal:other', view: 'terminal' }], active: 'terminal:other' },
+      }));
       if (acpSavedTabs.length && !localStorage.getItem(`aow-acp-tabs:${root}`)) localStorage.setItem(`aow-acp-tabs:${root}`, JSON.stringify(acpSavedTabs));
       for (const workspace of new Set(restoredSessions.map(session => session.cwd))) {
         if (localStorage.getItem(`aow-acp-tabs:${workspace}`)) continue;
