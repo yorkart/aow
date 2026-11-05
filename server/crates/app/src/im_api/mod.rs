@@ -41,7 +41,7 @@ fn error(error: impl std::fmt::Display) -> Response {
 }
 
 async fn update(state: &AppState, input: SettingsUpdate) -> Response {
-    let manager = state.aow.notifications().clone();
+    let manager = state.notifications.clone();
     match aow_i18n::spawn_blocking(move || manager.update(input)).await {
         Ok(Ok(view)) => ([(CACHE_CONTROL, "no-store")], Json(view)).into_response(),
         Ok(Err(reason)) => error(reason),

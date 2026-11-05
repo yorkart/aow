@@ -32,8 +32,7 @@ async fn list(
     Query(filter): Query<Filter>,
 ) -> Result<Json<InboxPage>, HttpError> {
     state
-        .aow
-        .task_db()
+        .tasks
         .inbox(
             filter.project_id.as_deref(),
             filter.unread,
@@ -57,8 +56,7 @@ async fn update(
     Json(update): Json<Update>,
 ) -> Result<axum::http::StatusCode, HttpError> {
     state
-        .aow
-        .task_db()
+        .tasks
         .update_inbox(&id, update.read, update.archived)
         .map_err(storage)?;
     state.workspace_events.inbox_changed();
@@ -70,8 +68,7 @@ async fn retry(
     Path(id): Path<String>,
 ) -> Result<axum::http::StatusCode, HttpError> {
     state
-        .aow
-        .task_db()
+        .tasks
         .retry_delivery(&id)
         .map_err(|error| crate::instances::invalid(error.to_string()))?;
     state.workspace_events.inbox_changed();

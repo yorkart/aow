@@ -36,12 +36,12 @@ async fn save_settings(
         return Err(invalid_json("at most 32 providers are allowed").into());
     }
     let paths = state
-        .aow
+        .settings
         .execution_path()
         .await
         .map_err(|e| GitPlatformError::Command(e.to_string()))?;
     for provider in &mut settings.providers {
-        let metadata = super::description::describe(state.aow.node(), provider, &paths).await?;
+        let metadata = super::description::describe(state.node.node(), provider, &paths).await?;
         provider.name = metadata.name;
         provider.hosts = metadata.hosts;
     }
@@ -68,11 +68,11 @@ async fn test_provider(
         hosts: vec![],
     };
     let paths = state
-        .aow
+        .settings
         .execution_path()
         .await
         .map_err(|e| GitPlatformError::Command(e.to_string()))?;
-    let result = super::description::describe(state.aow.node(), &provider, &paths).await?;
+    let result = super::description::describe(state.node.node(), &provider, &paths).await?;
     Ok(Json(serde_json::to_value(result).map_err(invalid_json)?))
 }
 #[derive(Deserialize)]
@@ -96,7 +96,7 @@ async fn targets(
                     .filter(|op| !op.is_empty())
                     .collect::<Vec<_>>(),
                 &state
-                    .aow
+                    .settings
                     .execution_path()
                     .await
                     .map_err(|e| GitPlatformError::Command(e.to_string()))?,

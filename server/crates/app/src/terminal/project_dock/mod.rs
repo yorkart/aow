@@ -13,10 +13,10 @@ pub(super) async fn open(
     Json(request): Json<OpenProjectDockRequest>,
 ) -> Result<Json<TerminalTab>, HttpError> {
     let (root, name) = state
-        .aow
+        .projects
         .project_terminal_defaults(&project_id, request.workspace_root.as_deref())
         .await
-        .map_err(crate::aow::aow_http_error)?;
+        .map_err(crate::error::service_http_error)?;
     state
         .terminals
         .project_dock(

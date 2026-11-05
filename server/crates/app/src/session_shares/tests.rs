@@ -1,5 +1,5 @@
 use super::*;
-use crate::aow::SessionReference;
+use crate::agents::sessions::SessionReference;
 use aow_runtime_client::{NativeSession, NativeSessionReference, RuntimeClient, RuntimeEndpoint};
 use axum::Json;
 use axum::{
@@ -76,7 +76,7 @@ fn cache_locator(state: &AppState, locator: SessionReference) {
         reference,
     };
     state
-        .aow
+        .agents
         .cache_native_sessions(&cwd, Some("codex"), &[session], false)
         .unwrap();
 }
@@ -487,7 +487,7 @@ async fn node_owned_share_survives_server_restart_without_a_local_history_store(
         .unwrap()
         .with_runtime(Some(client.clone()));
     let info = shares
-        .create(crate::aow::SessionReference::Node(reference))
+        .create(crate::agents::sessions::SessionReference::Node(reference))
         .unwrap();
     let token = info.path.strip_prefix("/share/").unwrap();
     let stored = std::fs::read_to_string(root.path().join("data/session-shares.json")).unwrap();

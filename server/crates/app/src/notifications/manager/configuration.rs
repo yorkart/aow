@@ -1,11 +1,12 @@
 use super::*;
 use std::{path::Path, sync::atomic::Ordering};
 
-use crate::aow::{AowError, atomic_save_document};
+use crate::error::ServiceError;
 use crate::notifications::{
     SettingsUpdate, SettingsView,
     settings::{FILE_NAME, normalize_public_base_url},
 };
+use crate::settings::persistence::atomic_save_document;
 use aow_im::{ImConfig, ImKind, Provider};
 
 impl NotificationManager {
@@ -13,7 +14,7 @@ impl NotificationManager {
         Self::new(None, Document::default()).expect("empty configuration is valid")
     }
 
-    pub(crate) fn persistent(state_dir: &Path) -> Result<Self, AowError> {
+    pub(crate) fn persistent(state_dir: &Path) -> Result<Self, ServiceError> {
         let path = state_dir.join(FILE_NAME);
         let document = match std::fs::read(&path) {
             Ok(bytes) => serde_json::from_slice(&bytes)?,
@@ -23,8 +24,8 @@ impl NotificationManager {
         Self::new(Some(path), document)
     }
 
-    fn new(path: Option<PathBuf>, document: Document) -> Result<Self, AowError> {
-        document.validate().map_err(AowError::Invalid)?;
+    fn new(path: Option<PathBuf>, document: Document) -> Result<Self, ServiceError> {
+        document.validate().map_err(ServiceError::Invalid)?;
         let providers = build_providers(
             &document.im.providers,
             &[],
@@ -37,7 +38,7 @@ impl NotificationManager {
                 path,
                 started: AtomicBool::new(false),
                 wechat_login: aow_im::wechat::LoginManager::new()
-                    .map_err(AowError::Configuration)?,
+                    .map_err(ServiceError::Configuration)?,
                 state: Mutex::new(RuntimeState {
                     document,
                     providers,
@@ -63,7 +64,7 @@ impl NotificationManager {
         self.inner.state.lock().unwrap().document.view()
     }
 
-    pub(crate) fn update(&self, update: SettingsUpdate) -> Result<SettingsView, AowError> {
+    pub(crate) fn update(&self, update: SettingsUpdate) -> Result<SettingsView, ServiceError> {
         let mut state = self.inner.state.lock().unwrap();
         let mut next = state.document.clone();
         match update {
@@ -76,7 +77,7 @@ impl NotificationManager {
             SettingsUpdate::ImProvider { config } => {
                 let config = config
                     .resolve(&state.document.im.providers)
-                    .map_err(AowError::Invalid)?;
+                    .map_err(ServiceError::Invalid)?;
                 next.im.providers.retain(|old| old.kind() != config.kind());
                 next.im.providers.push(config);
             }
@@ -88,7 +89,7 @@ impl NotificationManager {
                     .into_iter()
                     .map(|update| update.resolve(&state.document.im.providers))
                     .collect::<Result<_, _>>()
-                    .map_err(AowError::Invalid)?;
+                    .map_err(ServiceError::Invalid)?;
                 // Legacy clients replace the Feishu list. They cannot disconnect
                 // a QR binding that was added after they loaded their settings.
                 if !next
@@ -119,11 +120,11 @@ impl NotificationManager {
                 }
                 if let Some(url) = public_base_url {
                     next.notifications.public_base_url =
-                        normalize_public_base_url(&url).map_err(AowError::Invalid)?;
+                        normalize_public_base_url(&url).map_err(ServiceError::Invalid)?;
                 }
             }
         }
-        next.validate().map_err(AowError::Invalid)?;
+        next.validate().map_err(ServiceError::Invalid)?;
         let providers = build_providers(
             &next.im.providers,
             &state.providers,
@@ -185,13 +186,15 @@ fn build_providers(
     configs: &[ImConfig],
     previous: &[ConfiguredProvider],
     state_dir: Option<&Path>,
-) -> Result<Vec<ConfiguredProvider>, AowError> {
+) -> Result<Vec<ConfiguredProvider>, ServiceError> {
     configs
         .iter()
         .map(|config| {
             let provider = match previous.iter().find(|old| old.config == *config) {
                 Some(old) => old.provider.clone(),
-                None => config.build(state_dir).map_err(AowError::Configuration)?,
+                None => config
+                    .build(state_dir)
+                    .map_err(ServiceError::Configuration)?,
             };
             Ok(ConfiguredProvider {
                 config: config.clone(),

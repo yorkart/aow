@@ -43,14 +43,14 @@ pub(super) async fn create_terminal(
     headers: axum::http::HeaderMap,
     Json(request): Json<CreateTerminalRequest>,
 ) -> Result<impl IntoResponse, HttpError> {
-    let _operation = state.aow.task_resource_access().await;
+    let _operation = state.tasks.task_resource_access().await;
     let workspace = state
         .terminals
         .node_cwd(request.workspace_root.as_deref(), request.cwd.as_deref())
         .await
         .map_err(terminal_http_error)?;
     let task = state
-        .aow
+        .tasks
         .task_scope(&headers, std::path::Path::new(&workspace))
         .await?;
     let tab = if let Some(agent_id) = request.agent_id.clone() {
@@ -67,17 +67,17 @@ pub(super) async fn create_terminal(
             &cwd
         };
         let launch = state
-            .aow
+            .roles
             .resolve_agent_launch(&agent_id, launch_workspace)
             .await
-            .map_err(crate::aow::aow_http_error)?;
+            .map_err(crate::error::service_http_error)?;
         state.terminals.create_agent(request, launch).await
     } else {
         state.terminals.create(request).await
     }
     .map_err(terminal_http_error)?;
     if let Err(error) = state
-        .aow
+        .tasks
         .attach_task_resource(task.as_deref(), "terminal", &tab.id)
     {
         let _ = state.terminals.delete_tab(&tab.id).await;

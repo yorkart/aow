@@ -64,11 +64,11 @@ async fn acp_metadata_invalidates_the_graph_without_an_http_action() {
         directory.path().join("missing.sock"),
     )
     .unwrap();
-    let settings = state.aow.acp_settings().unwrap();
+    let settings = state.node.acp_settings().unwrap();
     let adapter = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../fixtures/acp/lineage-agent.mjs");
     state
-        .aow
+        .node
         .save_acp_settings(
             json!({"agent_servers":{"test":{"type":"custom","command":"node","args":[adapter]}}})
                 .to_string(),

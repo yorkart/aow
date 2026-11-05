@@ -20,7 +20,7 @@ async fn login_notifies_all_providers_while_anonymous_access_only_logs() {
     let mut state = AppState::for_test(directory.path().to_owned());
     state.auth = auth::AuthService::persistent(directory.path());
     state.operations = OperationService::persistent(&directory.path().join("logs")).unwrap();
-    let manager = state.aow.notifications();
+    let manager = state.notifications.clone();
     manager
         .update(SettingsUpdate::Im {
             providers: vec![aow_im::ImConfigUpdate::Feishu {

@@ -9,7 +9,7 @@ pub(super) async fn add_sources(
     events: &mut [TaskStopNotification],
     tabs: &[TerminalTab],
     detected: Option<&TerminalAgentList>,
-    aow: &crate::aow::AowManager,
+    projects: &crate::projects::ProjectService,
 ) {
     let mut project_names = HashMap::new();
     for event in events {
@@ -24,7 +24,7 @@ pub(super) async fn add_sources(
             let project_name = match project_names.get(&tab.workspace_root) {
                 Some(name) => name,
                 None => {
-                    let name = aow
+                    let name = projects
                         .project_name_for_workspace(&tab.workspace_root)
                         .await
                         .unwrap_or_else(|| {

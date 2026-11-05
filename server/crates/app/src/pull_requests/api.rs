@@ -22,7 +22,7 @@ pub(crate) async fn my_pull_requests(
             "pull_requests.list",
             params,
             &state
-                .aow
+                .settings
                 .execution_path()
                 .await
                 .map_err(|e| GitPlatformError::Command(e.to_string()))?,
@@ -44,7 +44,7 @@ pub(crate) async fn my_pull_request_detail(
             "pull_requests.detail",
             serde_json::json!({"number":number}),
             &state
-                .aow
+                .settings
                 .execution_path()
                 .await
                 .map_err(|e| GitPlatformError::Command(e.to_string()))?,
@@ -67,7 +67,7 @@ pub(crate) async fn my_pull_request_diff(
             "pull_requests.diff",
             serde_json::json!({"number":number,"path":query.path,"patch_only":query.patch_only}),
             &state
-                .aow
+                .settings
                 .execution_path()
                 .await
                 .map_err(|e| GitPlatformError::Command(e.to_string()))?,

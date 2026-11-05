@@ -9,8 +9,8 @@ use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::aow::SessionReference;
-use crate::{HttpError, aow};
+use crate::HttpError;
+use crate::agents::sessions::SessionReference;
 
 pub(super) const SHARES_FILE: &str = "session-shares.json";
 pub(super) const CACHE_TTL: Duration = Duration::from_secs(2);
@@ -125,7 +125,7 @@ impl SessionShares {
     }
     fn persist(&self, entries: &BTreeMap<String, Arc<LiveShare>>) -> Result<(), HttpError> {
         if let Some(path) = &self.path {
-            aow::atomic_save_document(
+            crate::settings::persistence::atomic_save_document(
                 path,
                 &SharesDocument {
                     version: 1,

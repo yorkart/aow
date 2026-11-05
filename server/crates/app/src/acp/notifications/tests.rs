@@ -1,5 +1,6 @@
 use super::*;
 use crate::notifications::{Channel, SettingsUpdate};
+use crate::test_support::TestServices;
 use serde_json::json;
 
 #[tokio::test]
@@ -11,11 +12,11 @@ async fn real_acp_prompts_reach_the_terminal_notification_subscription_without_a
         root.path().join("missing.sock"),
     )
     .unwrap();
-    let previous = state.aow.acp_settings().unwrap();
+    let previous = state.node.acp_settings().unwrap();
     let fixture =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/acp/agent.mjs");
     state
-        .aow
+        .node
         .save_acp_settings(
             json!({"agent_servers":{"test":{"type":"custom","command":"node","args":[fixture]}}})
                 .to_string(),
@@ -83,7 +84,7 @@ fn completion(turn_id: &str) -> TurnCompletion {
 
 #[tokio::test]
 async fn acp_uses_shared_preferences_and_stable_thread_links_for_every_turn() {
-    let manager = AowManager::in_memory();
+    let manager = TestServices::in_memory();
     let (page, mut receiver) = broadcast::channel(8);
     let preferences = |enabled: bool, channels: Vec<Channel>| {
         serde_json::from_value::<SettingsUpdate>(json!({
@@ -92,11 +93,17 @@ async fn acp_uses_shared_preferences_and_stable_thread_links_for_every_turn() {
     })).unwrap()
     };
     manager
-        .notifications()
+        .notifications
         .update(preferences(true, vec![Channel::Page]))
         .unwrap();
     for turn in ["first", "second"] {
-        dispatch(&manager, &page, completion(turn)).await;
+        dispatch(
+            &manager.projects,
+            &manager.notifications,
+            &page,
+            completion(turn),
+        )
+        .await;
         let event = receiver.try_recv().unwrap();
         assert_eq!(event.turn_id.as_deref(), Some(turn));
         assert_eq!(event.session_id, "remote-session");
@@ -117,19 +124,31 @@ async fn acp_uses_shared_preferences_and_stable_thread_links_for_every_turn() {
         "new subscribers never replay completions"
     );
     manager
-        .notifications()
+        .notifications
         .update(preferences(false, vec![Channel::Page]))
         .unwrap();
-    dispatch(&manager, &page, completion("disabled")).await;
-    manager.notifications().update(serde_json::from_value(json!({
+    dispatch(
+        &manager.projects,
+        &manager.notifications,
+        &page,
+        completion("disabled"),
+    )
+    .await;
+    manager.notifications.update(serde_json::from_value(json!({
         "section":"im", "providers":[{"provider":"feishu","app_id":"cli_test","app_secret":"test-secret"}],
     })).unwrap()).unwrap();
     // Do not start the delivery worker: this only exercises channel routing.
     manager
-        .notifications()
+        .notifications
         .update(preferences(true, vec![Channel::Feishu]))
         .unwrap();
-    dispatch(&manager, &page, completion("no-page")).await;
+    dispatch(
+        &manager.projects,
+        &manager.notifications,
+        &page,
+        completion("no-page"),
+    )
+    .await;
     assert!(receiver.try_recv().is_err());
     assert!(turn_usage(&json!({"used":100,"size":200})).is_none());
 }

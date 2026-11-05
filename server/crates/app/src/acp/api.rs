@@ -104,9 +104,9 @@ pub(crate) fn error(error: anyhow::Error) -> HttpError {
 }
 async fn settings(
     State(state): State<AppState>,
-) -> Result<Json<crate::aow::AcpSettingsFile>, HttpError> {
+) -> Result<Json<crate::settings::AcpSettingsFile>, HttpError> {
     let settings = state.acp.settings().await.map_err(error)?;
-    Ok(Json(crate::aow::AcpSettingsFile {
+    Ok(Json(crate::settings::AcpSettingsFile {
         path: settings.path,
         content: settings.content,
         revision: settings.revision,
@@ -120,13 +120,13 @@ struct SaveSettings {
 async fn save_settings(
     State(state): State<AppState>,
     Json(request): Json<SaveSettings>,
-) -> Result<Json<crate::aow::AcpSettingsFile>, HttpError> {
+) -> Result<Json<crate::settings::AcpSettingsFile>, HttpError> {
     let settings = state
         .acp
         .save_settings(request.content, request.revision)
         .await
         .map_err(error)?;
-    Ok(Json(crate::aow::AcpSettingsFile {
+    Ok(Json(crate::settings::AcpSettingsFile {
         path: settings.path,
         content: settings.content,
         revision: settings.revision,
@@ -259,15 +259,15 @@ async fn prepare_session(
     headers: HeaderMap,
     Json(request): Json<Connect>,
 ) -> Result<Json<aow_runtime_client::acp::SessionSnapshot>, HttpError> {
-    let _operation = state.aow.task_resource_access().await;
-    let task = state.aow.task_scope(&headers, &request.cwd).await?;
+    let _operation = state.tasks.task_resource_access().await;
+    let task = state.tasks.task_scope(&headers, &request.cwd).await?;
     let session = state
         .acp
         .prepare_session(&request.agent_id, request.cwd)
         .await
         .map_err(error)?;
     if let Err(error) = state
-        .aow
+        .tasks
         .attach_task_resource(task.as_deref(), "acp", &session.thread_id)
     {
         let _ = state.acp.delete_session(&session.thread_id).await;
@@ -437,7 +437,7 @@ async fn delete_session(
     let controller = state.acp_controls.session(&thread_id);
     let _lifecycle = controller.authorize_lifecycle(&headers, true).await?;
     if state
-        .aow
+        .tasks
         .task_for_thread(&state.acp, &thread_id)
         .await
         .map_err(error)?
@@ -504,7 +504,7 @@ async fn session_action(
     let result = match action {
         SessionAction::Prompt { content } => {
             let content = state
-                .aow
+                .tasks
                 .acp_role_content(&state.acp, &thread_id, content)
                 .await
                 .map_err(error)?;
@@ -512,7 +512,7 @@ async fn session_action(
         }
         SessionAction::Steer { content } => {
             let content = state
-                .aow
+                .tasks
                 .acp_role_content(&state.acp, &thread_id, content)
                 .await
                 .map_err(error)?;

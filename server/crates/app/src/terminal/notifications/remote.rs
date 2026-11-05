@@ -5,7 +5,11 @@ use aow_runtime_client::{CompletionCursor, CompletionFrame};
 use std::sync::atomic::Ordering;
 
 impl TerminalManager {
-    pub(crate) fn start_agent_notifications(&self, aow: crate::aow::AowManager) {
+    pub(crate) fn start_agent_notifications(
+        &self,
+        projects: crate::projects::ProjectService,
+        notifications: crate::notifications::NotificationManager,
+    ) {
         if self
             .inner
             .notifications_started
@@ -20,7 +24,7 @@ impl TerminalManager {
             .metadata_path
             .as_ref()
             .map(|p| p.with_file_name("completion-cursor.json"));
-        aow.notifications().start();
+        notifications.start();
         aow_i18n::spawn(async move {
             let mut cursor = match load_cursor(path.as_deref()) {
                 Ok(cursor) => cursor,
@@ -161,11 +165,10 @@ impl TerminalManager {
                                             std::slice::from_mut(&mut event),
                                             &tabs.tabs,
                                             detected.as_ref().ok(),
-                                            &aow,
+                                            &projects,
                                         )
                                         .await;
-                                        aow.notifications()
-                                            .dispatch(event, &manager.inner.task_stops);
+                                        notifications.dispatch(event, &manager.inner.task_stops);
                                     }
                                     cursor = Some(CompletionCursor { node_id, sequence });
                                 }

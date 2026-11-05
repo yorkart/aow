@@ -25,10 +25,10 @@ pub(super) async fn rebuild_terminal(
                 })?;
                 if pane.agent_terminal.is_some()
                     && !state
-                        .aow
+                        .node
                         .agent_node()
                         .await
-                        .map_err(crate::aow::aow_http_error)?
+                        .map_err(crate::error::service_http_error)?
                         .agent_capabilities()
                         .await
                         .map_err(|e| HttpError::internal(e.to_string()))?
@@ -42,10 +42,10 @@ pub(super) async fn rebuild_terminal(
                 // Credentials and PATH come from the current workspace profile;
                 // keep the saved command/arguments (including explicit resume).
                 spec.environment = state
-                    .aow
+                    .roles
                     .resolve_terminal_rebuild_launch(pane, &previous.workspace_root)
                     .await
-                    .map_err(crate::aow::aow_http_error)?
+                    .map_err(crate::error::service_http_error)?
                     .env;
             }
             specs.push(spec);

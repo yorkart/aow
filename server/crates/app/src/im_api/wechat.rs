@@ -12,11 +12,7 @@ use super::{error, update};
 use crate::{AppState, notifications::SettingsUpdate};
 
 pub(super) async fn status(State(state): State<AppState>) -> Response {
-    let connection = state
-        .aow
-        .notifications()
-        .wechat()
-        .map(|client| client.status());
+    let connection = state.notifications.wechat().map(|client| client.status());
     (
         [(CACHE_CONTROL, "no-store")],
         Json(json!({"connection":connection})),
@@ -25,7 +21,7 @@ pub(super) async fn status(State(state): State<AppState>) -> Response {
 }
 
 pub(super) async fn start_login(State(state): State<AppState>) -> Response {
-    let manager = state.aow.notifications();
+    let manager = state.notifications;
     match manager
         .wechat_login()
         .start(manager.wechat_credentials())
@@ -47,7 +43,7 @@ pub(super) async fn poll_login(
     Path(id): Path<String>,
     Json(input): Json<PollInput>,
 ) -> Response {
-    let manager = state.aow.notifications();
+    let manager = state.notifications;
     match manager
         .wechat_login()
         .poll(&id, input.verify_code.as_deref(), |credentials| {
@@ -67,12 +63,12 @@ pub(super) async fn cancel_login(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Response {
-    state.aow.notifications().wechat_login().cancel(&id);
+    state.notifications.wechat_login().cancel(&id);
     ([(CACHE_CONTROL, "no-store")], StatusCode::NO_CONTENT).into_response()
 }
 
 pub(super) async fn disconnect(State(state): State<AppState>) -> Response {
-    state.aow.notifications().wechat_login().cancel_all();
+    state.notifications.wechat_login().cancel_all();
     update(
         &state,
         SettingsUpdate::ImRemove {
@@ -83,7 +79,7 @@ pub(super) async fn disconnect(State(state): State<AppState>) -> Response {
 }
 
 pub(super) async fn test_send(State(state): State<AppState>) -> Response {
-    let Some(client) = state.aow.notifications().wechat() else {
+    let Some(client) = state.notifications.wechat() else {
         return error(aow_i18n::text("im.scan_to_link_a_wechat_bot_first"));
     };
     let message = Message {
@@ -118,7 +114,7 @@ pub(super) async fn test_receipt(
     State(state): State<AppState>,
     Json(input): Json<ReceiptInput>,
 ) -> Response {
-    let Some(client) = state.aow.notifications().wechat() else {
+    let Some(client) = state.notifications.wechat() else {
         return error(aow_i18n::text("im.scan_to_link_a_wechat_bot_first"));
     };
     match client

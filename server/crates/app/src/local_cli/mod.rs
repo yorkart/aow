@@ -1,6 +1,7 @@
 //! Business routes shared by private local and authenticated remote CLI transports.
 
-use crate::{AppState, HttpError, aow, terminal::agent_control};
+use crate::terminal::agent_control;
+use crate::{AppState, HttpError};
 use axum::{
     Json, Router,
     extract::{Path as AxumPath, State},
@@ -126,7 +127,7 @@ pub(crate) fn routes() -> Router<AppState> {
     Router::new()
         .merge(crate::automations::cli_routes())
         .merge(crate::acp::cli_routes())
-        .merge(crate::aow::task_cli_routes())
+        .merge(crate::tasks::cli_routes())
         .route("/v1/instances", get(crate::instances::list))
         .route("/v1/instances/{reference}", get(crate::instances::get))
         .route("/v1/projects", get(list_projects))
@@ -143,21 +144,21 @@ async fn list_projects(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, HttpError> {
     let items = state
-        .aow
+        .projects
         .registered_projects()
-        .map_err(aow::aow_http_error)?;
+        .map_err(crate::error::service_http_error)?;
     Ok(Json(serde_json::json!({"items": items})))
 }
 
 async fn get_project(
     State(state): State<AppState>,
     AxumPath(project_id): AxumPath<String>,
-) -> Result<Json<aow::ProjectSummary>, HttpError> {
+) -> Result<Json<crate::projects::ProjectSummary>, HttpError> {
     state
-        .aow
+        .projects
         .registered_project(&project_id)
         .map(Json)
-        .map_err(aow::aow_http_error)
+        .map_err(crate::error::service_http_error)
 }
 
 #[cfg(test)]

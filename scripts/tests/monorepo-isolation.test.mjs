@@ -117,12 +117,45 @@ test('workspace filesystem execution and bundled search belong only to Runtime',
 });
 
 test('Server has no workspace, process, role HOME or clipboard execution copies', () => {
-  for (const path of ['server/crates/git-service', 'server/crates/workspaces', 'server/crates/process', 'server/crates/app/src/aow/roles/home_fixture.rs', 'server/crates/app/src/aow/roles/identity_fixture.rs', 'server/crates/app/src/terminal/clipboard/storage.rs', 'server/crates/app/src/git_platform_providers/adapter_fixture.rs']) {
+  for (const path of ['server/crates/git-service', 'server/crates/workspaces', 'server/crates/process', 'server/crates/app/src/roles/home_fixture.rs', 'server/crates/app/src/roles/identity_fixture.rs', 'server/crates/app/src/terminal/clipboard/storage.rs', 'server/crates/app/src/git_platform_providers/adapter_fixture.rs']) {
     assert.equal(existsSync(resolve(root, path)), false, path);
   }
   const client = readFileSync(resolve(root, 'server/crates/runtime-client/src/client.rs'), 'utf8');
   assert.doesNotMatch(client, /pub async fn (?:get_json|post_json|put_json|delete|websocket)\b/);
   assert.doesNotMatch(readFileSync(resolve(root, 'server/crates/runtime-client/src/workspace.rs'), 'utf8'), /pub async fn workspace_operation/);
+});
+
+test('Server business services own their state without a product-wide manager', () => {
+  const app = resolve(root, 'server/crates/app/src');
+  assert.equal(existsSync(resolve(app, 'aow')), false);
+  const state = readFileSync(resolve(app, 'state.rs'), 'utf8');
+  const routes = readFileSync(resolve(app, 'routes.rs'), 'utf8');
+  for (const domain of ['projects', 'agents', 'roles', 'tasks', 'settings']) {
+    assert.ok(existsSync(resolve(app, domain, 'service.rs')), domain);
+    assert.ok(existsSync(resolve(app, domain, 'api.rs')), domain);
+    assert.match(state, new RegExp(`pub\\(crate\\) ${domain}: crate::${domain}::`));
+    assert.match(routes, new RegExp(`\\.merge\\(crate::${domain}::routes\\(\\)\\)`));
+    const service = readFileSync(resolve(app, domain, 'service.rs'), 'utf8');
+    assert.doesNotMatch(service, /pub\(crate\) inner:/);
+  }
+  const inspect = directory => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = resolve(directory, entry.name);
+      if (entry.isDirectory()) inspect(path);
+      else if (entry.name.endsWith('.rs')) {
+        const source = readFileSync(path, 'utf8');
+        assert.doesNotMatch(source, /\bAowManager\b|\bAowInner\b|crate::aow::/, path);
+        if (!path.startsWith(resolve(app, 'tasks') + '/') && !entry.name.endsWith('tests.rs')) {
+          assert.doesNotMatch(source, /\bTaskDb\b|\.tasks\s*\.inner\b/, path);
+        }
+      }
+    }
+  };
+  inspect(app);
+  assert.ok(existsSync(resolve(app, 'tasks/workflow.rs')));
+  for (const operation of ['creation', 'removal']) {
+    assert.ok(existsSync(resolve(app, 'projects/worktrees', operation, 'mod.rs')));
+  }
 });
 test('products share only the locale engine and own independent catalogs', () => {
   for (const product of ['server', 'runtime']) {

@@ -1,0 +1,258 @@
+use std::collections::BTreeMap;
+
+use super::*;
+
+impl ProjectService {
+    /// Registry metadata only; callers discover worktrees directly through Git.
+    pub(crate) fn registered_projects(&self) -> Result<Vec<ProjectSummary>, ServiceError> {
+        Ok(self
+            .lock()?
+            .projects
+            .iter()
+            .map(ProjectSummary::from)
+            .collect())
+    }
+
+    pub(crate) fn registered_project(&self, id: &str) -> Result<ProjectSummary, ServiceError> {
+        self.lock()?
+            .projects
+            .iter()
+            .find(|project| project.id == id)
+            .map(ProjectSummary::from)
+            .ok_or_else(|| ServiceError::ProjectNotFound(id.to_owned()))
+    }
+
+    pub(crate) async fn projects(&self) -> Result<Vec<Project>, ServiceError> {
+        let stored = self.lock()?.projects.clone();
+        let mut projects = Vec::with_capacity(stored.len());
+        for item in stored {
+            projects.push(self.project_from_stored(item).await);
+        }
+        Ok(projects)
+    }
+
+    /// Resolve notification labels from the registered project, including
+    /// linked worktrees whose directory name differs from the project name.
+    pub(crate) async fn project_name_for_workspace(&self, root: &str) -> Option<String> {
+        let projects = self.lock().ok()?.projects.clone();
+        if let Some(project) = projects
+            .iter()
+            .find(|project| project.registered_path == root)
+        {
+            return Some(project.name.clone());
+        }
+        if projects.is_empty() {
+            return None;
+        }
+        let common = self.resolve_common_git_dir(Path::new(root)).await.ok()?;
+        projects
+            .into_iter()
+            .find(|project| project.common_git_dir == common)
+            .map(|project| project.name)
+    }
+
+    pub(crate) async fn register_project(
+        &self,
+        request: RegisterProjectRequest,
+    ) -> Result<Project, ServiceError> {
+        let _operation = self.inner.project_operation.lock().await;
+        self.register_project_inner(request).await
+    }
+
+    pub(crate) async fn register_project_inner(
+        &self,
+        request: RegisterProjectRequest,
+    ) -> Result<Project, ServiceError> {
+        let input = self.node.validate_absolute_directory(&request.path).await?;
+        let root = self
+            .node
+            .git_output(&input, &["rev-parse", "--show-toplevel"])
+            .await?;
+        let root = self
+            .node
+            .canonical_directory(Path::new(root.trim()))
+            .await?;
+        let registered_path = root.to_string_lossy().into_owned();
+        let common_git_dir = self.resolve_common_git_dir(&root).await?;
+        let default_name = root
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("Project")
+            .to_owned();
+        let requested_name = request
+            .name
+            .as_deref()
+            .map(validation::validate_display_name)
+            .transpose()?;
+        let existing_notes_path = self
+            .lock()?
+            .projects
+            .iter()
+            .find(|project| {
+                project.registered_path == registered_path
+                    || (!project.common_git_dir.is_empty()
+                        && project.common_git_dir == common_git_dir)
+            })
+            .map(|project| project.notes_path.clone());
+        let notes_identity = if request.notes_path.is_none() && existing_notes_path.is_none() {
+            Some(notes::default_notes_identity(self, &root).await?)
+        } else {
+            None
+        };
+        let notes_path = if let Some(path) = request.notes_path.as_deref() {
+            self.node.prepare_notes_directory(Path::new(path)).await?
+        } else if let Some(existing_notes_path) = existing_notes_path {
+            existing_notes_path
+        } else {
+            let base = PathBuf::from(self.settings.settings()?.notes_base);
+            let identity = notes::default_notes_identity(self, &root).await?;
+            self.node
+                .prepare_notes_directory(&base.join(identity))
+                .await?
+        };
+
+        let item = {
+            let mut state = self.lock()?;
+            if let Some(existing) = state.projects.iter_mut().find(|project| {
+                project.registered_path == registered_path
+                    || (!project.common_git_dir.is_empty()
+                        && project.common_git_dir == common_git_dir)
+            }) {
+                if let Some(name) = requested_name
+                    && !existing.builtin
+                {
+                    existing.name = name;
+                }
+                if request.notes_path.is_some() {
+                    existing.notes_identity = None;
+                    existing.notes_custom = true;
+                }
+                existing.registered_path = registered_path;
+                existing.common_git_dir = common_git_dir;
+                existing.notes_path = notes_path;
+                let result = existing.clone();
+                self.persist_projects(&state.projects)?;
+                result
+            } else {
+                let project = StoredProject {
+                    id: aow_id::new_id(),
+                    name: requested_name.unwrap_or_else(|| default_name.clone()),
+                    registered_path,
+                    common_git_dir,
+                    notes_path,
+                    notes_identity,
+                    notes_custom: request.notes_path.is_some(),
+                    builtin: false,
+                    avatar_url: None,
+                    worktree_colors: BTreeMap::new(),
+                    worktree_icons: BTreeMap::new(),
+                    task_worktree: TaskWorktreePolicy::default(),
+                };
+                state.projects.push(project.clone());
+                self.persist_projects(&state.projects)?;
+                project
+            }
+        };
+        self.project_from_stored_strict(item).await
+    }
+
+    pub(crate) async fn bind_notes(&self, id: &str, path: &str) -> Result<Project, ServiceError> {
+        let _operation = self.inner.project_operation.lock().await;
+        self.lock()?
+            .projects
+            .iter()
+            .any(|project| project.id == id)
+            .then_some(())
+            .ok_or_else(|| ServiceError::ProjectNotFound(id.to_owned()))?;
+        let notes_path = self.node.prepare_notes_directory(Path::new(path)).await?;
+        let item = {
+            let mut state = self.lock()?;
+            let index = state
+                .projects
+                .iter()
+                .position(|project| project.id == id)
+                .ok_or_else(|| ServiceError::ProjectNotFound(id.to_owned()))?;
+            let previous = state.projects[index].clone();
+            state.projects[index].notes_path = notes_path;
+            state.projects[index].notes_identity = None;
+            state.projects[index].notes_custom = true;
+            let item = state.projects[index].clone();
+            if let Err(error) = self.persist_projects(&state.projects) {
+                state.projects[index] = previous;
+                return Err(error);
+            }
+            item
+        };
+        self.project_from_stored_strict(item).await
+    }
+
+    pub(crate) async fn remove_project(&self, id: &str) -> Result<(), ServiceError> {
+        let _operation = self.inner.project_operation.lock().await;
+        let mut state = self.lock()?;
+        if self.inner.creations.project_busy(id)? {
+            return Err(ServiceError::CreationConflict(
+                aow_i18n::text("server.project_is_creating_a_worktree_wait_for_completion").into(),
+            ));
+        }
+        if self.inner.removals.project_busy(id)? {
+            return Err(ServiceError::RemovalConflict(
+                aow_i18n::text("server.project_is_cleaning_up_a_worktree_wait_for_completion")
+                    .into(),
+            ));
+        }
+        let index = state
+            .projects
+            .iter()
+            .position(|project| project.id == id)
+            .ok_or_else(|| ServiceError::ProjectNotFound(id.to_owned()))?;
+        if state.projects[index].builtin {
+            return Err(ServiceError::Invalid(
+                aow_i18n::text("server.the_built_in_floating_workspace_cannot_be_removed").into(),
+            ));
+        }
+        let removed = state.projects.remove(index);
+        if let Err(error) = self.persist_projects(&state.projects) {
+            state.projects.insert(index, removed);
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    pub(crate) async fn project_terminal_defaults(
+        &self,
+        id: &str,
+        workspace_root: Option<&str>,
+    ) -> Result<(String, String), ServiceError> {
+        let project = self.project(id).await?;
+        if let Some(root) = workspace_root
+            && !project
+                .worktrees
+                .iter()
+                .any(|worktree| worktree.path == root)
+        {
+            return Err(ServiceError::ProjectNotFound(root.to_owned()));
+        }
+        let root = project
+            .worktrees
+            .into_iter()
+            .find(|worktree| workspace_root.map_or(worktree.is_main, |root| worktree.path == root))
+            .map(|worktree| worktree.path)
+            .unwrap_or(project.registered_path);
+        let name = format!(
+            "{} · Terminal",
+            project.name.chars().take(117).collect::<String>()
+        );
+        Ok((root, name))
+    }
+
+    pub(crate) async fn project(&self, id: &str) -> Result<Project, ServiceError> {
+        let stored = self
+            .lock()?
+            .projects
+            .iter()
+            .find(|project| project.id == id)
+            .cloned()
+            .ok_or_else(|| ServiceError::ProjectNotFound(id.to_owned()))?;
+        self.project_from_stored_strict(stored).await
+    }
+}

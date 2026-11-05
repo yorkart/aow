@@ -835,32 +835,9 @@ fn manager_with_pane() -> TerminalManager {
 }
 
 fn clipboard_app(manager: TerminalManager) -> Router {
-    let aow = crate::aow::AowManager::in_memory();
-    let workspace_events = crate::workspace_events::WorkspaceEvents::new();
-    routes().with_state(AppState {
-        collaboration: Default::default(),
-        instances: crate::instances::InstanceStore::default(),
-        file_search: crate::filesystem::search::SearchRequests::default(),
-        acp_controls: crate::acp::Controls::default(),
-        acp: crate::acp::service(
-            aow.clone(),
-            None,
-            manager.task_stop_sender(),
-            workspace_events.clone(),
-        )
-        .unwrap(),
-        base_path: crate::BasePath::default(),
-        frontend_dist: PathBuf::new(),
-        auth: crate::auth::AuthService::disabled(),
-        session_shares: crate::session_shares::SessionShares::in_memory(),
-        terminals: manager,
-        aow,
-        automations: None,
-        operations: crate::operations::OperationService::in_memory(),
-        workspace_events,
-        git_platform_providers: crate::git_platform_providers::GitPlatformProviderManager::default(
-        ),
-    })
+    let mut state = AppState::for_test(Default::default());
+    state.terminals = manager;
+    routes().with_state(state)
 }
 
 fn clipboard_request(pane_id: &str, body: Body) -> Request<Body> {
@@ -1508,33 +1485,11 @@ async fn pane_sessions_use_live_cwd_and_config_and_cache_readable_claude_snapsho
         .to_string(),
     )
     .unwrap();
-    let mut aow = crate::aow::AowManager::in_memory();
-    aow.set_runtime_client(Some(client.runtime().clone()));
-    let workspace_events = crate::workspace_events::WorkspaceEvents::new();
-    let app = crate::build_router(AppState {
-        collaboration: Default::default(),
-        instances: crate::instances::InstanceStore::default(),
-        file_search: crate::filesystem::search::SearchRequests::default(),
-        acp_controls: crate::acp::Controls::default(),
-        acp: crate::acp::service(
-            aow.clone(),
-            None,
-            manager.task_stop_sender(),
-            workspace_events.clone(),
-        )
-        .unwrap(),
-        base_path: crate::BasePath::default(),
-        frontend_dist: PathBuf::new(),
-        auth: crate::auth::AuthService::disabled(),
-        session_shares: crate::session_shares::SessionShares::in_memory(),
-        terminals: manager.clone(),
-        aow,
-        automations: None,
-        operations: crate::operations::OperationService::in_memory(),
-        workspace_events,
-        git_platform_providers: crate::git_platform_providers::GitPlatformProviderManager::default(
-        ),
-    });
+    let mut state =
+        AppState::with_test_runtime_client(root.join("server"), client.runtime().clone()).unwrap();
+    state.auth = crate::auth::AuthService::disabled();
+    state.terminals = manager.clone();
+    let app = crate::build_router(state);
     let response = app
         .clone()
         .oneshot(
@@ -1602,7 +1557,9 @@ async fn cli_roles_keep_native_workspace_sessions_but_cannot_create_tasks() {
     let socket = root.join("terminald/terminald.sock");
     let (shutdown, daemon) = start_daemon(socket.clone()).await;
     let mut state = AppState::for_test(Default::default());
-    state.aow = crate::aow::AowManager::persistent(&root.join("aow")).unwrap();
+    state.replace_services(
+        crate::test_support::TestServices::persistent(&root.join("aow")).unwrap(),
+    );
     state.terminals = TerminalManager::in_memory(TerminalClient::for_test_config(socket));
     let app = crate::build_router(state.clone());
     async fn post(app: &axum::Router, path: &str, value: serde_json::Value) -> serde_json::Value {
@@ -1639,7 +1596,7 @@ async fn cli_roles_keep_native_workspace_sessions_but_cannot_create_tasks() {
         .await
         .unwrap();
     assert_eq!(rejected.status(), StatusCode::BAD_REQUEST);
-    assert!(state.aow.task_db().list().unwrap().is_empty());
+    assert!(state.tasks.test_db().list().unwrap().is_empty());
     let launched = post(
         &app,
         &format!(
@@ -1655,7 +1612,7 @@ async fn cli_roles_keep_native_workspace_sessions_but_cannot_create_tasks() {
         .unwrap();
     assert!(terminal.panes[0].parent.is_none());
     assert!(terminal.panes[0].agent_terminal.is_none());
-    let home = state.aow.role_home(role["id"].as_str().unwrap()).unwrap();
+    let home = state.roles.role_home(role["id"].as_str().unwrap()).unwrap();
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
     while !home.join(".claude/session-state").exists() {
         assert!(tokio::time::Instant::now() < deadline, "role did not start");

@@ -24,16 +24,16 @@ pub(super) async fn list(
             .map_err(|error| terminal_http_error(map_client_error(error)))?;
         for session in &result.sessions {
             state
-                .aow
+                .agents
                 .cache_native_sessions(
                     &session.reference.cwd,
                     Some(&result.agent),
                     std::slice::from_ref(session),
                     false,
                 )
-                .map_err(crate::aow::aow_http_error)?;
+                .map_err(crate::error::service_http_error)?;
         }
-        crate::aow::public_native_sessions(result)
+        crate::agents::sessions::public_native_sessions(result)
             .map(Json)
             .map_err(|error| HttpError::internal(error.to_string()))
     }

@@ -9,5 +9,5 @@ pub(crate) use api::error as task_error;
 pub(crate) use api::routes;
 pub(crate) use cli::routes as cli_routes;
 pub(crate) use cli::start as start_task;
-pub(crate) use client::{service, service_with_runtime};
+pub(crate) use client::service;
 pub(crate) use control::Controls;

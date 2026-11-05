@@ -7,7 +7,7 @@ use axum::{
 use tower_http::{compression::CompressionLayer, trace::TraceLayer};
 
 use crate::{
-    AppState, aow, aow_root, aow_root_redirect, auth, automations, base_path, create_fs_entry,
+    AppState, aow_root, aow_root_redirect, auth, automations, base_path, create_fs_entry,
     delete_fs_entry, fs_path, fs_root, fs_root_redirect, git_commit_detail, git_commit_diff,
     git_commit_files, git_diff, git_ignored, git_log, git_platform_providers, git_pull, git_push,
     git_repositories, git_status, health, help_page, im_api, list_home, list_path, list_root,
@@ -17,7 +17,7 @@ use crate::{
 };
 
 pub fn build_router(state: AppState) -> Router {
-    state.workspace_events.start(state.aow.clone());
+    state.workspace_events.start(state.projects.clone());
     state.collaboration.start(&state);
     let base_path = state.base_path.clone();
     let app = Router::new()
@@ -88,7 +88,13 @@ pub fn build_router(state: AppState) -> Router {
         .route("/fs/{*path}", get(fs_path))
         .route("/help", get(help_page))
         .merge(terminal::routes())
-        .merge(aow::routes())
+        .merge(crate::projects::routes())
+        .merge(crate::projects::worktrees::routes())
+        .merge(crate::agents::routes())
+        .merge(crate::agents::sessions::routes())
+        .merge(crate::roles::routes())
+        .merge(crate::tasks::routes())
+        .merge(crate::settings::routes())
         .merge(crate::acp::routes())
         .route("/api/instances", get(crate::instances::list))
         .route("/api/instances/{reference}", get(crate::instances::get))

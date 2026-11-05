@@ -107,7 +107,8 @@ async fn node_completion_reconnect_deduplicates_and_recovers_cursor_after_restar
         manager.persist_locked(&state).unwrap();
     }
     let mut events = manager.subscribe_task_completions();
-    manager.start_agent_notifications(crate::aow::AowManager::in_memory());
+    let services = crate::test_support::TestServices::in_memory();
+    manager.start_agent_notifications(services.projects, services.notifications);
     assert_eq!(
         tokio::time::timeout(Duration::from_secs(5), events.recv())
             .await
@@ -147,7 +148,8 @@ async fn node_completion_reconnect_deduplicates_and_recovers_cursor_after_restar
     drop(manager);
     let manager = TerminalManager::persistent(root.path().into(), client.terminal()).unwrap();
     let mut events = manager.subscribe_task_completions();
-    manager.start_agent_notifications(crate::aow::AowManager::in_memory());
+    let services = crate::test_support::TestServices::in_memory();
+    manager.start_agent_notifications(services.projects, services.notifications);
     assert_eq!(
         tokio::time::timeout(Duration::from_secs(5), received.recv())
             .await

@@ -20,7 +20,7 @@ pub(crate) async fn authorize(
         .and_then(|h| h.to_str().ok())
         .and_then(|h| h.strip_prefix("Bearer "));
     if request.headers().contains_key("origin")
-        || token.is_none_or(|token| state.aow.cli_access().authorize(token).is_err())
+        || token.is_none_or(|token| state.cli_access.authorize(token).is_err())
     {
         return HttpError::new(
             StatusCode::UNAUTHORIZED,
@@ -50,8 +50,7 @@ async fn issue(
     Json(input): Json<Issue>,
 ) -> Result<Json<aow_cli_access::Grant>, HttpError> {
     state
-        .aow
-        .cli_access()
+        .cli_access
         .issue(input.ttl_seconds)
         .map(Json)
         .map_err(|e| {
@@ -68,8 +67,7 @@ async fn revoke(
     Path(id): Path<String>,
 ) -> Result<StatusCode, HttpError> {
     state
-        .aow
-        .cli_access()
+        .cli_access
         .revoke(&id)
         .map_err(|e| HttpError::internal(e.to_string()))?;
     Ok(StatusCode::NO_CONTENT)

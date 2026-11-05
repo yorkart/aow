@@ -11,7 +11,7 @@ use super::{
     PUBLIC_API_PATH,
     store::{ShareInfo, lock_error},
 };
-use crate::{AppState, HttpError, aow};
+use crate::{AppState, HttpError};
 
 #[derive(Deserialize)]
 struct ShareQuery {
@@ -79,9 +79,13 @@ async fn create(
     AxumPath(session_id): AxumPath<String>,
     Json(input): Json<CreateShare>,
 ) -> Result<Json<ShareInfo>, Response> {
-    let locator =
-        aow::resolve_session_locator(&state, &session_id, &input.agent, &input.worktree_path)
-            .await?;
+    let locator = crate::agents::sessions::resolve_session_locator(
+        &state,
+        &session_id,
+        &input.agent,
+        &input.worktree_path,
+    )
+    .await?;
     // Check availability before publishing; never accept a client-supplied transcript path.
     state
         .session_shares

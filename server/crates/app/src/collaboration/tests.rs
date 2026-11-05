@@ -70,7 +70,7 @@ async fn task(state: &AppState, root: &Path, id: &str) -> TaskRecord {
             id: session.thread_id,
         }],
     };
-    state.aow.task_db().insert(&task).unwrap();
+    state.tasks.test_db().insert(&task).unwrap();
     task
 }
 
@@ -86,7 +86,7 @@ async fn until<F: std::future::Future<Output = bool>>(mut check: impl FnMut() ->
 
 fn worker(state: &AppState) -> worker::Worker {
     worker::Worker {
-        manager: state.aow.clone(),
+        tasks: state.tasks.clone(),
         acp: state.acp.clone(),
         controls: state.acp_controls.clone(),
         events: state.workspace_events.clone(),
@@ -119,7 +119,7 @@ async fn multiple_turns_do_not_report_but_explicit_reports_wake_the_busy_parent_
     let child = task(&state, directory.path(), "child").await;
     let parent_thread = parent.initial_thread_id.as_deref().unwrap();
     let child_thread = child.initial_thread_id.as_deref().unwrap();
-    let db = state.aow.task_db();
+    let db = state.tasks.test_db();
     state.acp.resume(parent_thread).await.unwrap();
     state
         .acp
@@ -154,7 +154,7 @@ async fn multiple_turns_do_not_report_but_explicit_reports_wake_the_busy_parent_
             .is_empty()
     );
     db.set_status("child", TaskStatus::Waiting).unwrap();
-    let app = crate::aow::task_cli_routes().with_state(state.clone());
+    let app = crate::tasks::cli_routes().with_state(state.clone());
     let request = json!({"request_id":"poc-conclusion","source_thread_id":child_thread,"kind":"progress","message":"POC confirmed","target_thread_id":parent_thread});
     let (status, event) = call(&app, "POST", "/v1/tasks/child/report", request.clone()).await;
     assert_eq!(status, StatusCode::OK, "{event}");
@@ -216,7 +216,7 @@ async fn restart_after_acp_admission_does_not_repeat_a_message_or_create_an_inbo
     let first = state(directory.path());
     let target = task(&first, directory.path(), "target").await;
     let message = new_message(&target, "request".into(), "Inspect".into(), None);
-    first.aow.task_db().enqueue_message(&message).unwrap();
+    first.tasks.test_db().enqueue_message(&message).unwrap();
     first.acp.resume(&message.thread_id).await.unwrap();
     first
         .acp
@@ -240,8 +240,8 @@ async fn restart_after_acp_admission_does_not_repeat_a_message_or_create_an_inbo
     worker(&second).deliver(message.clone()).await.unwrap();
     assert_eq!(
         second
-            .aow
-            .task_db()
+            .tasks
+            .test_db()
             .message_for_request("target", "request")
             .unwrap()
             .unwrap()
@@ -260,8 +260,8 @@ async fn restart_after_acp_admission_does_not_repeat_a_message_or_create_an_inbo
     );
     assert!(
         second
-            .aow
-            .task_db()
+            .tasks
+            .test_db()
             .inbox(None, false, false, 0, 30)
             .unwrap()
             .items
@@ -283,7 +283,7 @@ async fn send_queues_without_waiting_and_enforces_identity_and_task_ownership() 
         .start_prompt(thread, content("wait"))
         .await
         .unwrap();
-    let app = crate::aow::task_cli_routes().with_state(state.clone());
+    let app = crate::tasks::cli_routes().with_state(state.clone());
     let request = json!({"request_id":"send-1","source_thread_id":source,"prompt":"Continue"});
     let (status, accepted) = call(&app, "POST", "/v1/tasks/target/send", request.clone()).await;
     assert_eq!(status, StatusCode::OK, "{accepted}");
@@ -313,7 +313,7 @@ async fn send_queues_without_waiting_and_enforces_identity_and_task_ownership() 
         StatusCode::NOT_FOUND
     );
     state.acp.cancel(thread).await.unwrap();
-    let db = state.aow.task_db();
+    let db = state.tasks.test_db();
     until(|| async {
         db.message_for_request("target", "send-send-1")
             .unwrap()
@@ -338,7 +338,7 @@ async fn blocked_delivery_can_retry_without_losing_report_or_replaying_accepted_
     let state = state(directory.path());
     let parent = task(&state, directory.path(), "parent").await;
     let child = task(&state, directory.path(), "child").await;
-    let db = state.aow.task_db();
+    let db = state.tasks.test_db();
     let event = TaskEvent {
         id: "report".into(),
         request_id: "report".into(),
@@ -395,7 +395,7 @@ async fn blocked_delivery_can_retry_without_losing_report_or_replaying_accepted_
 async fn busy_conversations_do_not_starve_other_targets_and_messages_keep_fifo_order() {
     let directory = tempfile::tempdir().unwrap();
     let state = state(directory.path());
-    let db = state.aow.task_db();
+    let db = state.tasks.test_db();
     let mut busy = Vec::new();
     for index in 0..9 {
         let task = task(&state, directory.path(), &format!("busy-{index}")).await;
@@ -497,16 +497,16 @@ async fn conversation_policy_and_task_cancellation_stop_at_task_ownership_bounda
         }],
         ..parent.clone()
     };
-    state.aow.task_db().insert(&child).unwrap();
+    state.tasks.test_db().insert(&child).unwrap();
     let helper_policy = state
-        .aow
+        .tasks
         .task_policy_for_thread(&state.acp, &threads[0])
         .await
         .unwrap()
         .unwrap();
     assert_eq!(helper_policy.target_revision.as_deref(), Some("frozen"));
     let child_policy = state
-        .aow
+        .tasks
         .task_policy_for_thread(&state.acp, &threads[1])
         .await
         .unwrap()
@@ -521,7 +521,7 @@ async fn conversation_policy_and_task_cancellation_stop_at_task_ownership_bounda
             .await
             .unwrap();
     }
-    let app = crate::aow::task_cli_routes().with_state(state.clone());
+    let app = crate::tasks::cli_routes().with_state(state.clone());
     assert_eq!(
         call(&app, "GET", "/v1/tasks/parent", json!({})).await.1["conversations"]
             .as_array()
@@ -578,7 +578,7 @@ async fn shared_workspace_review_waits_for_the_active_writer() {
         "Inspect committed code".into(),
         None,
     );
-    let db = state.aow.task_db();
+    let db = state.tasks.test_db();
     db.enqueue_message(&message).unwrap();
     worker(&state).deliver(message.clone()).await.unwrap();
     assert_eq!(
@@ -619,14 +619,14 @@ async fn daemon_outages_do_not_exhaust_durable_message_retries() {
     let task = task(&state, directory.path(), "outage").await;
     let mut message = new_message(&task, "outage-message".into(), "hello".into(), None);
     message.attempts = 9;
-    state.aow.task_db().enqueue_message(&message).unwrap();
+    state.tasks.test_db().enqueue_message(&message).unwrap();
     let mut disconnected = worker(&state);
     disconnected.acp = disconnected.acp.for_test_offline();
     disconnected.deliver(message.clone()).await.unwrap();
     assert_eq!(
         state
-            .aow
-            .task_db()
+            .tasks
+            .test_db()
             .message_for_request(&task.id, "outage-message")
             .unwrap()
             .unwrap()
@@ -636,8 +636,8 @@ async fn daemon_outages_do_not_exhaust_durable_message_retries() {
     worker(&state).deliver(message.clone()).await.unwrap();
     assert_eq!(
         state
-            .aow
-            .task_db()
+            .tasks
+            .test_db()
             .message_for_request(&task.id, "outage-message")
             .unwrap()
             .unwrap()

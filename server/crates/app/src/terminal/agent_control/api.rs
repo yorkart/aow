@@ -29,10 +29,10 @@ pub(crate) async fn create_from_source(
 ) -> Result<Json<AgentTerminalInfo>, HttpError> {
     aow_i18n::spawn(async move {
         let agent_id = state
-            .aow
+            .agents
             .select_agent_id(request.agent.as_deref())
             .await
-            .map_err(crate::aow::aow_http_error)?;
+            .map_err(crate::error::service_http_error)?;
         let log = state.operations.begin(Spec {
             id: aow_id::new_id(),
             kind: "agent.create",
@@ -93,22 +93,22 @@ async fn create_inner(
         .await
         .map_err(terminal_http_error)?;
     let cwd = state
-        .aow
+        .projects
         .agent_worktree_path(&request.project_id, &request.cwd)
         .await
-        .map_err(crate::aow::aow_http_error)?;
+        .map_err(crate::error::service_http_error)?;
     let launch = state
-        .aow
+        .roles
         .resolve_agent_launch(agent_id, &cwd)
         .await
-        .map_err(crate::aow::aow_http_error)?;
+        .map_err(crate::error::service_http_error)?;
 
     let agent_type = launch.agent_type.id().to_owned();
     let capabilities = state
-        .aow
+        .node
         .agent_node()
         .await
-        .map_err(crate::aow::aow_http_error)?
+        .map_err(crate::error::service_http_error)?
         .agent_capabilities()
         .await
         .map_err(|e| HttpError::internal(e.to_string()))?;

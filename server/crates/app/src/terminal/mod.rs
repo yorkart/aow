@@ -34,7 +34,8 @@ use tokio_tungstenite::tungstenite;
 #[cfg(test)]
 use uuid::Uuid;
 
-use crate::{AppState, HttpError, aow::AgentLaunch};
+use crate::agents::AgentLaunch;
+use crate::{AppState, HttpError};
 
 pub(crate) mod agent_control;
 mod api;

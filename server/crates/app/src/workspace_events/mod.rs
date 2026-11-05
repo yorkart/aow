@@ -16,7 +16,7 @@ use axum::{
 use serde::Serialize;
 use tokio::sync::{Notify, watch};
 
-use crate::{AppState, aow::AowManager};
+use crate::{AppState, projects::ProjectService};
 
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct Snapshot {
@@ -104,11 +104,11 @@ impl WorkspaceEvents {
         self.0.reconcile.notify_one();
     }
 
-    pub(crate) fn start(&self, aow: AowManager) {
+    pub(crate) fn start(&self, projects: ProjectService) {
         let mut task = self.0.task.lock().unwrap();
         if task.is_none() {
             *task = Some(aow_i18n::spawn(run(
-                aow,
+                projects,
                 self.0.changes.clone(),
                 self.0.reconcile.clone(),
             )));
@@ -116,8 +116,8 @@ impl WorkspaceEvents {
     }
 }
 
-async fn run(aow: AowManager, changes: watch::Sender<Snapshot>, reconcile: Arc<Notify>) {
-    remote::run(aow, changes, reconcile).await;
+async fn run(projects: ProjectService, changes: watch::Sender<Snapshot>, reconcile: Arc<Notify>) {
+    remote::run(projects, changes, reconcile).await;
 }
 
 pub(crate) fn routes() -> Router<AppState> {

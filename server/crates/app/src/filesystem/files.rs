@@ -23,7 +23,7 @@ pub(crate) async fn write_file(
     headers: HeaderMap,
     body: Body,
 ) -> Result<axum::response::Response, HttpError> {
-    let _filesystem = state.aow.filesystem_access().await;
+    let _filesystem = state.projects.filesystem_access().await;
     let path = decode_absolute(&path)?;
     super::node::upload(&state, &path, &headers, body, query.keep_both).await
 }
@@ -38,7 +38,7 @@ pub(crate) async fn rename_file_path(
     AxumPath(path): AxumPath<String>,
     Json(request): Json<RenameFileRequest>,
 ) -> Result<Json<RenameResult>, HttpError> {
-    let _filesystem = state.aow.filesystem_access().await;
+    let _filesystem = state.projects.filesystem_access().await;
     super::node::runtime(&state)?
         .workspace_rename(&decode_absolute(&path)?, &request.name, true)
         .await

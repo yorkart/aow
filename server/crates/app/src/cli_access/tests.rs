@@ -17,7 +17,7 @@ async fn remote_cli_requires_its_own_revocable_token_and_cannot_use_browser_apis
     .unwrap()
     .with_cli_callback("http://server:9800/aow", None)
     .unwrap();
-    let grant = state.aow.cli_access().issue(60).unwrap();
+    let grant = state.cli_access.issue(60).unwrap();
     let app = build_router(state.clone());
     for path in ["/api/cli/v1/projects", "/api/cli/v1/automations"] {
         let denied = app
@@ -65,7 +65,7 @@ async fn remote_cli_requires_its_own_revocable_token_and_cannot_use_browser_apis
         .await
         .unwrap();
     assert_eq!(browser.status(), StatusCode::UNAUTHORIZED);
-    state.aow.cli_access().revoke(&grant.id).unwrap();
+    state.cli_access.revoke(&grant.id).unwrap();
     let revoked = app
         .oneshot(
             Request::get("/api/cli/v1/projects")

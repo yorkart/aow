@@ -17,6 +17,29 @@ the Runtime SDK has no dependency on Server business contracts.
 The main application source lives in `crates/app`. Its Cargo package and binary
 are both named `aow-server`; Rust callers continue to use `aow_server`.
 
+Inside `crates/app/src`, business services are peers of `acp` and `terminal`:
+
+| Module | Owned state and responsibilities |
+| --- | --- |
+| `projects` | Project registry, project/filesystem operation locks, notes and project resources |
+| `projects/worktrees` | Branches, worktree creation/removal and their background jobs |
+| `agents` | Registered launch profiles, default/order settings and native-session reference cache |
+| `roles` | Role definitions, environment references, role instructions and session bindings |
+| `tasks` | Task database access, resource-operation lock, workspace policy and task orchestration |
+| `settings` | Application settings and atomic configuration persistence |
+
+`state.rs` constructs these services and `routes.rs` merges their APIs. Each
+service keeps its state private to its module; consumers call explicit methods.
+Task creation coordinates project worktrees, role/session preparation and
+resource binding in `tasks/workflow.rs`. Project job reservation keeps the
+registry-before-job lock order, and task/session admission retains the task
+operation lock. The existing `/api/aow/...` URLs and stored document formats
+are unchanged.
+
+`runtime_connection` supplies the configured SDK client and node-operation
+helpers. Its local fixture configuration exists only under `cfg(test)` and
+still launches the external Runtime fixture; it has no execution implementation.
+
 ```text
 server/
   Cargo.toml

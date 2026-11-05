@@ -427,7 +427,7 @@ time.sleep(30)
         );
         let launch = fixture
             .state
-            .aow
+            .roles
             .resolve_agent_launch(&id, fixture.repo.to_str().unwrap())
             .await
             .unwrap();
@@ -759,8 +759,8 @@ async fn mixed_terminal_acp_lineage_survives_deleted_intermediate_instances_and_
         .output()
         .unwrap();
     assert!(node.status.success());
-    let settings = fixture.state.aow.acp_settings().unwrap();
-    fixture.state.aow.save_acp_settings(json!({"agent_servers":{"test":{"type":"custom", "command":String::from_utf8(node.stdout).unwrap().trim(),
+    let settings = fixture.state.node.acp_settings().unwrap();
+    fixture.state.node.save_acp_settings(json!({"agent_servers":{"test":{"type":"custom", "command":String::from_utf8(node.stdout).unwrap().trim(),
         "args":[Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/acp/lineage-agent.mjs")]}}}).to_string(), settings.revision).await.unwrap();
     let root: AgentTerminalInfo = fixture
         .client
@@ -1393,7 +1393,7 @@ async fn cli_codex_skips_update_menu_without_changing_profile_or_manual_launch()
     })
     .await
     .unwrap();
-    let profile = fixture.state.aow.resolve_agent_profile(id).await.unwrap();
+    let profile = fixture.state.roles.resolve_agent_profile(id).await.unwrap();
     assert_eq!(json!(profile.args), args);
     let manual = post(
         &app,
@@ -1428,7 +1428,7 @@ async fn cli_codex_skips_update_menu_without_changing_profile_or_manual_launch()
         json!(
             fixture
                 .state
-                .aow
+                .roles
                 .resolve_agent_profile(id)
                 .await
                 .unwrap()

@@ -1347,7 +1347,7 @@
     {
       "behavior": "independent JSONC file, unknown fields, comments, revision conflicts and Git history",
       "tests": [
-        "server/crates/app/src/aow/settings/acp.rs",
+        "server/crates/app/src/runtime_connection/testing.rs",
         "frontend/tests/acp.test.mjs"
       ]
     },

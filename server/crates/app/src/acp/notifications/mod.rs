@@ -5,17 +5,19 @@ use serde_json::Value;
 use tokio::sync::broadcast;
 
 use crate::{
-    aow::AowManager,
+    notifications::NotificationManager,
+    projects::ProjectService,
     terminal::notifications::{TaskStopNotification, TaskStopSource},
 };
 
 pub(super) async fn dispatch(
-    manager: &AowManager,
+    projects: &ProjectService,
+    notifications: &NotificationManager,
     page: &broadcast::Sender<TaskStopNotification>,
     completed: TurnCompletion,
 ) {
     let session = completed.session;
-    let project_name = manager
+    let project_name = projects
         .project_name_for_workspace(&session.cwd)
         .await
         .unwrap_or_else(|| {
@@ -25,7 +27,7 @@ pub(super) async fn dispatch(
                 .unwrap_or(&session.cwd)
                 .to_owned()
         });
-    let display_name = match manager.agent_node().await {
+    let display_name = match projects.runtime().agent_node().await {
         Ok(node) => node.agent_capabilities().await.ok().and_then(|items| {
             items
                 .into_iter()
@@ -55,7 +57,7 @@ pub(super) async fn dispatch(
             tab_url: None,
         }],
     };
-    manager.notifications().dispatch(notification, page);
+    notifications.dispatch(notification, page);
 }
 
 fn turn_usage(usage: &Value) -> Option<TokenUsage> {

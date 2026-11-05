@@ -48,10 +48,10 @@ async fn create(
     validate(request.task.as_deref(), request.timeout_seconds)?;
     // The operation is independent of the requesting CLI, including preparation and first prompt.
     aow_i18n::spawn(async move {
-        let cwd = state.aow.agent_worktree_path(&request.project_id, &request.cwd).await.map_err(crate::aow::aow_http_error)?;
+        let cwd = state.projects.agent_worktree_path(&request.project_id, &request.cwd).await.map_err(crate::error::service_http_error)?;
         let parent = instances::creation_parent(&state, request.parent, request.caller.as_ref(), request.no_parent).await?;
         let agent_id = state.acp.select_agent_id(request.agent_id.as_deref()).await.map_err(super::api::error)?;
-        let session = state.aow.prepare_acp_child_session(&state.acp, &agent_id, cwd.into(), aow_runtime_client::acp::SessionSource::Cli, parent).await.map_err(super::api::error)?;
+        let session = state.roles.prepare_acp_child_session(&state.acp, &agent_id, cwd.into(), aow_runtime_client::acp::SessionSource::Cli, parent).await.map_err(super::api::error)?;
         let id = session.thread_id;
         let info = state.acp.session_info(&id).await.map_err(super::api::error)?;
         if let Err(error) = state.instances.record_all(vec![instances::acp(&info)]) {
@@ -112,7 +112,7 @@ pub(crate) fn start(
                 data: serde_json::Map::from_iter([("text".into(), task.into())]),
             }];
             let content = state
-                .aow
+                .tasks
                 .acp_role_content(&state.acp, &id, content)
                 .await
                 .map_err(super::api::error)?;

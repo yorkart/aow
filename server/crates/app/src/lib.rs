@@ -1,10 +1,12 @@
 //! AoW HTTP server library and public entry points.
 
 mod acp;
-mod aow;
+mod agents;
 mod auth;
 mod automations;
 mod base_path;
+#[cfg(test)]
+mod business_tests;
 mod cli_access;
 mod collaboration;
 mod error;
@@ -18,12 +20,20 @@ mod local_cli;
 mod locale;
 mod notifications;
 mod operations;
+mod projects;
 mod pull_requests;
 mod realtime;
+mod roles;
 mod routes;
+mod runtime_connection;
 mod session_shares;
+mod settings;
 mod state;
+mod tasks;
 mod terminal;
+#[cfg(test)]
+mod test_support;
+mod validation;
 mod web;
 mod workspace_events;
 

@@ -1,9 +1,14 @@
-use crate::aow::AowManager;
+use crate::{
+    notifications::NotificationManager, projects::ProjectService,
+    runtime_connection::RuntimeConnection,
+};
 use anyhow::Result;
 use aow_runtime_client::acp::{AcpClient, AcpObserver};
 use std::{path::PathBuf, sync::Arc};
 struct Observer {
-    manager: AowManager,
+    projects: ProjectService,
+    notifications: NotificationManager,
+    cli_access: aow_cli_access::Access,
     cursor_path: Option<PathBuf>,
     page: tokio::sync::broadcast::Sender<crate::terminal::notifications::TaskStopNotification>,
     workspace_events: crate::workspace_events::WorkspaceEvents,
@@ -14,7 +19,8 @@ impl AcpObserver for Observer {
         self.workspace_events.instances_changed();
     }
     async fn turn_completed(&self, completion: aow_runtime_client::acp::TurnCompletion) {
-        super::notifications::dispatch(&self.manager, &self.page, completion).await;
+        super::notifications::dispatch(&self.projects, &self.notifications, &self.page, completion)
+            .await;
     }
     fn completion_cursor(&self) -> Result<Option<aow_runtime_client::acp::ConversationCursor>> {
         let Some(path) = &self.cursor_path else {
@@ -47,36 +53,32 @@ impl AcpObserver for Observer {
         Ok(())
     }
     fn callback_environment(&self) -> Result<std::collections::BTreeMap<String, String>> {
-        self.manager.cli_access().cached_environment()
+        self.cli_access.cached_environment()
     }
 }
 pub(crate) fn service(
-    manager: AowManager,
+    projects: &ProjectService,
+    notifications: &NotificationManager,
+    cli_access: &aow_cli_access::Access,
+    node: &RuntimeConnection,
     directory: Option<PathBuf>,
     page: tokio::sync::broadcast::Sender<crate::terminal::notifications::TaskStopNotification>,
     workspace_events: crate::workspace_events::WorkspaceEvents,
-) -> Result<AcpClient> {
-    service_with_runtime(manager, directory, page, workspace_events, None)
-}
-pub(crate) fn service_with_runtime(
-    manager: AowManager,
-    directory: Option<PathBuf>,
-    page: tokio::sync::broadcast::Sender<crate::terminal::notifications::TaskStopNotification>,
-    workspace_events: crate::workspace_events::WorkspaceEvents,
-    runtime: Option<aow_runtime_client::RuntimeClient>,
 ) -> Result<AcpClient> {
     let observer = Arc::new(Observer {
-        manager: manager.clone(),
+        projects: projects.clone(),
+        notifications: notifications.clone(),
+        cli_access: cli_access.clone(),
         cursor_path: directory.map(|root| root.join("state/acp-completion-cursor.json")),
         page,
         workspace_events,
     });
-    match runtime {
-        Some(runtime) => Ok(AcpClient::with_observer(runtime, Some(observer))),
+    match node.node() {
+        Some(runtime) => Ok(AcpClient::with_observer(runtime.clone(), Some(observer))),
         None => {
             #[cfg(test)]
             {
-                let client = manager.test_acp_client()?;
+                let client = node.test_acp_client()?;
                 Ok(client.with_test_observer(observer))
             }
             #[cfg(not(test))]

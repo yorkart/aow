@@ -62,7 +62,7 @@ impl Event {
             value,
             url: None,
         };
-        let message = aow_i18n::with_language(state.aow.notifications().language(), || Message {
+        let message = aow_i18n::with_language(state.notifications.language(), || Message {
             title: format!(
                 "AoW · {}",
                 aow_i18n::text(if success {
@@ -120,8 +120,7 @@ impl Event {
             error: !success,
         });
         state
-            .aow
-            .notifications()
+            .notifications
             .notify_security(message, record, state.operations.clone())
             .await;
     }

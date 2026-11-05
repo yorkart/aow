@@ -160,7 +160,7 @@ pub(crate) async fn git_commit_detail(
         // prevent local commit metadata from being displayed.
         let links = tokio::time::timeout(std::time::Duration::from_secs(3), async {
             let paths =
-                state.aow.execution_path().await.map_err(|e| {
+                state.settings.execution_path().await.map_err(|e| {
                     git_platform_providers::GitPlatformError::Command(e.to_string())
                 })?;
             state
@@ -221,8 +221,8 @@ pub(crate) async fn git_commit_diff(
 
 async fn runtime(state: &AppState) -> Result<aow_runtime_client::RuntimeClient, HttpError> {
     state
-        .aow
+        .node
         .agent_node()
         .await
-        .map_err(crate::aow::aow_http_error)
+        .map_err(crate::error::service_http_error)
 }

@@ -14,9 +14,9 @@ pub(super) async fn create(
     Json(mut request): Json<CreateInput>,
 ) -> Result<(StatusCode, Json<TaskView>), Response> {
     let project = state
-        .aow
+        .projects
         .registered_project(&request.project_id)
-        .map_err(|reason| crate::aow::aow_http_error(reason).into_response())?;
+        .map_err(|reason| crate::error::service_http_error(reason).into_response())?;
     request
         .configuration
         .insert("project_id".into(), Value::String(request.project_id));

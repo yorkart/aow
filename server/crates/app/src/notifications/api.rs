@@ -19,7 +19,7 @@ pub(crate) fn routes() -> Router<AppState> {
 async fn get_settings(State(state): State<AppState>) -> impl axum::response::IntoResponse {
     (
         [(CACHE_CONTROL, "no-store")],
-        Json(state.aow.notifications().view()),
+        Json(state.notifications.view()),
     )
 }
 
@@ -27,7 +27,7 @@ async fn update_settings(
     State(state): State<AppState>,
     Json(update): Json<SettingsUpdate>,
 ) -> Result<impl axum::response::IntoResponse, HttpError> {
-    let manager = state.aow.notifications().clone();
+    let manager = state.notifications.clone();
     let settings = aow_i18n::spawn_blocking(move || manager.update(update))
         .await
         .map_err(|_| {
@@ -38,6 +38,6 @@ async fn update_settings(
                 None,
             )
         })?
-        .map_err(crate::aow::aow_http_error)?;
+        .map_err(crate::error::service_http_error)?;
     Ok(([(CACHE_CONTROL, "no-store")], Json(settings)))
 }

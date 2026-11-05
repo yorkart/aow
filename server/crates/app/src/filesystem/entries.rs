@@ -33,7 +33,7 @@ pub(crate) async fn create_fs_entry(
     State(state): State<AppState>,
     Json(request): Json<CreateFsEntryRequest>,
 ) -> Result<impl IntoResponse, HttpError> {
-    let _filesystem = state.aow.filesystem_access().await;
+    let _filesystem = state.projects.filesystem_access().await;
     let value = super::node::runtime(&state)?
         .workspace_create(
             std::path::Path::new(&request.parent),
@@ -48,7 +48,7 @@ pub(crate) async fn rename_fs_entry(
     State(state): State<AppState>,
     Json(request): Json<RenameFsEntryRequest>,
 ) -> Result<Json<RenameResult>, HttpError> {
-    let _filesystem = state.aow.filesystem_access().await;
+    let _filesystem = state.projects.filesystem_access().await;
     super::node::runtime(&state)?
         .workspace_rename(std::path::Path::new(&request.path), &request.name, false)
         .await
@@ -60,7 +60,7 @@ pub(crate) async fn delete_fs_entry(
     State(state): State<AppState>,
     Query(query): Query<FsEntryPathQuery>,
 ) -> Result<StatusCode, HttpError> {
-    let _filesystem = state.aow.filesystem_access().await;
+    let _filesystem = state.projects.filesystem_access().await;
     let () = super::node::runtime(&state)?
         .workspace_delete(std::path::Path::new(&query.path))
         .await?;

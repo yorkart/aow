@@ -51,7 +51,7 @@ async fn enable_inner(
     let task = automation.hosting_task(&request.task_id, request.revision)?;
     let source = source::read(manager, &pane_id).await?;
     state
-        .aow
+        .projects
         .automation_project_for_cwd(&task.input.project_id, Path::new(&source.process.cwd))
         .await?;
     let gate = manager.hosting_gate(&pane_id)?;

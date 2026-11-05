@@ -34,7 +34,7 @@ impl Runtime {
             // after the server and its last consumer have gone away.
             *task = Some(aow_i18n::spawn(worker::run(
                 worker::Worker {
-                    manager: state.aow.clone(),
+                    tasks: state.tasks.clone(),
                     acp: state.acp.clone(),
                     controls: state.acp_controls.clone(),
                     events: state.workspace_events.clone(),
@@ -75,7 +75,7 @@ pub(crate) async fn source(
     let mut request = request;
     for entry in entries {
         if let Some(id) = entry.content["_meta"]["aow/event"]["id"].as_str()
-            && let Some(event) = state.aow.task_db().event(id)?
+            && let Some(event) = state.tasks.event(id)?
             && let Some(source) = event.source
         {
             request = source.request;

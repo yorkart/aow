@@ -1,5 +1,7 @@
 use super::now;
-use crate::{acp::Controls, aow::AowManager, workspace_events::WorkspaceEvents};
+use crate::acp::Controls;
+use crate::tasks::TaskService;
+use crate::workspace_events::WorkspaceEvents;
 use anyhow::{Context, Result, ensure};
 use aow_db::tasks::{DeliveryState, MessageDelivery, TaskStatus};
 use aow_runtime_client::acp::AcpClient;
@@ -14,7 +16,7 @@ use tokio::{sync::Notify, task::JoinSet};
 
 #[derive(Clone)]
 pub(super) struct Worker {
-    pub manager: AowManager,
+    pub tasks: TaskService,
     pub acp: AcpClient,
     pub controls: Controls,
     pub events: WorkspaceEvents,
@@ -52,7 +54,7 @@ pub(super) async fn run(worker: Worker, notify: Arc<Notify>) {
         if changes.is_none() {
             changes = worker.acp.subscribe_sync().await.ok();
         }
-        let mut pending = match worker.manager.task_db().pending_messages() {
+        let mut pending = match worker.tasks.pending_messages() {
             Ok(pending) => pending,
             Err(error) => {
                 tracing::error!(%error,"Cannot read message queue");
@@ -78,7 +80,7 @@ pub(super) async fn run(worker: Worker, notify: Arc<Notify>) {
                 break;
             }
             let workspace = worker
-                .manager
+                .tasks
                 .task_policy_for_thread(&worker.acp, &message.thread_id)
                 .await
                 .ok()
@@ -129,10 +131,7 @@ impl Worker {
         if busy(&snapshot) {
             return Ok(false);
         }
-        if let Some(execution) = self
-            .manager
-            .task_policy_for_thread(&self.acp, thread)
-            .await?
+        if let Some(execution) = self.tasks.task_policy_for_thread(&self.acp, thread).await?
             && execution.workspace_intent.as_deref() != Some("analyze")
         {
             for other in self.acp.sessions(Some(&execution.workspace)).await? {
@@ -151,9 +150,9 @@ impl Worker {
         }
         // Recovery may await the provider. Serialize final policy validation and
         // remote admission with task cancellation so a cancel cannot overtake the RPC.
-        let _task_policy = self.manager.task_resource_access().await;
+        let _task_policy = self.tasks.task_resource_access().await;
         let target = self
-            .manager
+            .tasks
             .task_for_thread(&self.acp, thread)
             .await?
             .context("Task was removed")?;
@@ -172,7 +171,7 @@ impl Worker {
             "Reopen the task before sending work"
         );
         let content = self
-            .manager
+            .tasks
             .acp_role_content(&self.acp, thread, content)
             .await?;
         match self.acp.start_prompt_once(thread, id, content).await {
@@ -192,7 +191,7 @@ impl Worker {
 
     async fn active_task(&self, task: &str, thread: &str) -> Result<()> {
         ensure!(
-            self.manager
+            self.tasks
                 .task_for_thread(&self.acp, thread)
                 .await?
                 .is_some_and(|item| item.id == task
@@ -204,7 +203,7 @@ impl Worker {
     }
 
     pub(super) async fn deliver(&self, message: MessageDelivery) -> Result<()> {
-        let db = self.manager.task_db();
+        let db = &self.tasks;
         // A receipt acknowledges admission. Never mirror or interpret its outcome.
         if self
             .acp

@@ -36,7 +36,7 @@ pub(super) async fn run(
         .map_err(error)?;
     if dynamic {
         state
-            .aow
+            .projects
             .automation_project_for_cwd(
                 &task.input.project_id,
                 &task.input.workspace.workspace_path,

@@ -55,15 +55,18 @@ pub(super) async fn detail(
 async fn resolve(state: &AppState, input: &TaskInput) -> Result<(String, PathBuf, AgentLaunch)> {
     input.validate()?;
     let reference = state
-        .aow
+        .projects
         .execution_reference_path(&input.project_id, &input.workspace)
         .await?;
     let (name, repository) = state
-        .aow
+        .projects
         .automation_project(&input.project_id, std::path::Path::new(&reference))
         .await?;
     let agent_id = input.agent_id();
-    let launch = state.aow.resolve_agent_launch(agent_id, &reference).await?;
+    let launch = state
+        .roles
+        .resolve_agent_launch(agent_id, &reference)
+        .await?;
     ensure!(
         launch.agent_type.id() == input.agent.id(),
         aow_i18n::message(
@@ -71,7 +74,7 @@ async fn resolve(state: &AppState, input: &TaskInput) -> Result<(String, PathBuf
             &[]
         )
     );
-    let runtime = state.aow.agent_node().await?;
+    let runtime = state.node.agent_node().await?;
     let environment = runtime.agent_configuration_environment().await?;
     let launch = AgentLaunch {
         executable: launch.executable.into(),

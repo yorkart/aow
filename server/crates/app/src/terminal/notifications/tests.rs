@@ -51,7 +51,7 @@ async fn source_labels_identify_each_owning_tab_once_and_follow_renames() {
         &mut events,
         &tabs,
         Some(&detected),
-        &crate::aow::AowManager::in_memory(),
+        &crate::test_support::TestServices::in_memory().projects,
     )
     .await;
     assert_eq!(events.len(), 1);

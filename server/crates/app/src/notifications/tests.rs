@@ -468,8 +468,8 @@ async fn acp_messages_keep_native_page_and_im_delivery_without_task_reports() {
     use std::time::Duration;
 
     let root = tempfile::tempdir().unwrap();
-    let manager = crate::aow::AowManager::persistent(root.path()).unwrap();
-    let notifications = manager.notifications();
+    let manager = crate::test_support::TestServices::persistent(root.path()).unwrap();
+    let notifications = manager.notifications.clone();
     notifications
         .update(im("cli_test", Some("fixture-secret")))
         .unwrap();
@@ -479,10 +479,11 @@ async fn acp_messages_keep_native_page_and_im_delivery_without_task_reports() {
     // Inspect the real IM queue without starting an external provider worker.
     let mut im_receiver = notifications.inner.receiver.lock().unwrap().take().unwrap();
     let (page, mut page_receiver) = broadcast::channel(8);
-    let previous = manager.acp_settings().unwrap();
+    let previous = manager.node.acp_settings().unwrap();
     let fixture =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/acp/lineage-agent.mjs");
     manager
+        .node
         .save_acp_settings(
             json!({"agent_servers":{"test":{
                 "type":"custom", "command":"node", "args":[fixture]
@@ -493,7 +494,10 @@ async fn acp_messages_keep_native_page_and_im_delivery_without_task_reports() {
         .await
         .unwrap();
     let acp = crate::acp::service(
-        manager.clone(),
+        &manager.projects,
+        &manager.notifications,
+        &manager.cli_access,
+        &manager.node,
         Some(root.path().into()),
         page,
         crate::workspace_events::WorkspaceEvents::new(),
@@ -520,7 +524,8 @@ async fn acp_messages_keep_native_page_and_im_delivery_without_task_reports() {
     }
     assert!(
         manager
-            .task_db()
+            .tasks
+            .test_db()
             .inbox(None, false, false, 0, 30)
             .unwrap()
             .items

@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use aow_runtime_client::{RuntimeClient, RuntimeEndpoint, TerminalClient};
 
 use crate::{
-    BasePath, TerminalError, aow, auth, automations, git_platform_providers, operations,
-    session_shares, terminal, workspace_events,
+    BasePath, TerminalError, auth, automations, git_platform_providers, operations, session_shares,
+    terminal, workspace_events,
 };
 
 #[derive(Clone)]
@@ -19,7 +19,14 @@ pub struct AppState {
     pub(crate) auth: auth::AuthService,
     pub(crate) session_shares: session_shares::SessionShares,
     pub(crate) terminals: terminal::TerminalManager,
-    pub(crate) aow: aow::AowManager,
+    pub(crate) projects: crate::projects::ProjectService,
+    pub(crate) agents: crate::agents::AgentService,
+    pub(crate) roles: crate::roles::RoleService,
+    pub(crate) tasks: crate::tasks::TaskService,
+    pub(crate) settings: crate::settings::SettingsService,
+    pub(crate) node: crate::runtime_connection::RuntimeConnection,
+    pub(crate) notifications: crate::notifications::NotificationManager,
+    pub(crate) cli_access: aow_cli_access::Access,
     pub(crate) automations: Option<automations::AutomationManager>,
     pub(crate) operations: operations::OperationService,
     pub(crate) workspace_events: workspace_events::WorkspaceEvents,
@@ -34,7 +41,46 @@ impl AppState {
     }
 
     pub fn for_test_with_runtime_config(frontend_dist: PathBuf, runtime_config: PathBuf) -> Self {
-        let aow = aow::AowManager::in_memory();
+        let (projects, agents, roles, tasks, settings, node, cli_access) =
+            (|| -> Result<_, crate::error::ServiceError> {
+                let runtime = None;
+                let directory = None;
+                let config = None;
+                let notes_base = crate::settings::default_notes_base();
+                let cli_access = aow_cli_access::Access::default();
+                let node = crate::runtime_connection::RuntimeConnection::new(
+                    runtime.clone(),
+                    directory.as_deref(),
+                    config.clone(),
+                );
+                let settings = crate::settings::SettingsService::new(
+                    config.clone(),
+                    notes_base,
+                    node.clone(),
+                )?;
+                let projects = crate::projects::ProjectService::new(
+                    directory.clone(),
+                    config.clone(),
+                    settings.clone(),
+                    node.clone(),
+                )?;
+                let agents = crate::agents::AgentService::new(
+                    config.clone(),
+                    node.clone(),
+                    cli_access.clone(),
+                )?;
+                let roles = crate::roles::RoleService::new(
+                    directory.clone(),
+                    config,
+                    node.clone(),
+                    agents.clone(),
+                    projects.clone(),
+                )?;
+                let tasks = crate::tasks::TaskService::new(directory, roles.clone(), node.clone())?;
+                Ok((projects, agents, roles, tasks, settings, node, cli_access))
+            })()
+            .expect("in-memory business services");
+        let notifications = crate::notifications::NotificationManager::in_memory();
         let terminals =
             terminal::TerminalManager::in_memory(TerminalClient::for_test_config(runtime_config));
         let workspace_events = workspace_events::WorkspaceEvents::new();
@@ -42,7 +88,10 @@ impl AppState {
             collaboration: Default::default(),
             file_search: crate::filesystem::search::SearchRequests::default(),
             acp: crate::acp::service(
-                aow.clone(),
+                &projects,
+                &notifications,
+                &cli_access,
+                &node,
                 None,
                 terminals.task_stop_sender(),
                 workspace_events.clone(),
@@ -55,7 +104,14 @@ impl AppState {
             auth: auth::AuthService::disabled(),
             session_shares: session_shares::SessionShares::in_memory(),
             terminals,
-            aow,
+            projects,
+            agents,
+            roles,
+            tasks,
+            settings,
+            node,
+            notifications,
+            cli_access,
             automations: None,
             git_platform_providers: git_platform_providers::GitPlatformProviderManager::default(),
             operations: operations::OperationService::in_memory(),
@@ -83,16 +139,65 @@ impl AppState {
         let runtime = RuntimeClient::new(endpoint);
         Self::build(frontend_dist, state_dir, runtime.terminal(), Some(runtime))
     }
+    #[cfg(test)]
+    pub(crate) fn with_test_runtime_client(
+        state_dir: PathBuf,
+        runtime: RuntimeClient,
+    ) -> Result<Self, TerminalError> {
+        Self::build(PathBuf::new(), state_dir, runtime.terminal(), Some(runtime))
+    }
+
     fn build(
         frontend_dist: PathBuf,
         state_dir: PathBuf,
         terminal: TerminalClient,
         runtime: Option<RuntimeClient>,
     ) -> Result<Self, TerminalError> {
-        let mut aow = aow::AowManager::persistent(&state_dir).map_err(|error| {
-            TerminalError::Invalid(format!("failed to initialize aow: {error}"))
-        })?;
-        aow.set_runtime_client(runtime.clone());
+        let config = Some(
+            aow_config::ConfigStore::initialize(&state_dir)
+                .map_err(|error| TerminalError::Invalid(error.to_string()))?,
+        );
+        let directory = Some(std::fs::canonicalize(&state_dir)?);
+        let notes_base = directory.as_ref().unwrap().join("data/notes");
+        let (projects, agents, roles, tasks, settings, node, cli_access) =
+            (|| -> Result<_, crate::error::ServiceError> {
+                let cli_access = aow_cli_access::Access::default();
+                let node = crate::runtime_connection::RuntimeConnection::new(
+                    runtime.clone(),
+                    directory.as_deref(),
+                    config.clone(),
+                );
+                let settings = crate::settings::SettingsService::new(
+                    config.clone(),
+                    notes_base,
+                    node.clone(),
+                )?;
+                let projects = crate::projects::ProjectService::new(
+                    directory.clone(),
+                    config.clone(),
+                    settings.clone(),
+                    node.clone(),
+                )?;
+                let agents = crate::agents::AgentService::new(
+                    config.clone(),
+                    node.clone(),
+                    cli_access.clone(),
+                )?;
+                let roles = crate::roles::RoleService::new(
+                    directory.clone(),
+                    config,
+                    node.clone(),
+                    agents.clone(),
+                    projects.clone(),
+                )?;
+                let tasks = crate::tasks::TaskService::new(directory, roles.clone(), node.clone())?;
+                Ok((projects, agents, roles, tasks, settings, node, cli_access))
+            })()
+            .map_err(|error| {
+                TerminalError::Invalid(format!("failed to initialize business services: {error}"))
+            })?;
+        let notifications = crate::notifications::NotificationManager::persistent(&state_dir)
+            .map_err(|error| TerminalError::Invalid(error.to_string()))?;
         #[cfg(test)]
         let execution_runtime = runtime.clone().or_else(|| {
             terminal
@@ -108,12 +213,14 @@ impl AppState {
             collaboration: Default::default(),
             file_search: crate::filesystem::search::SearchRequests::default(),
             acp_controls: crate::acp::Controls::default(),
-            acp: crate::acp::service_with_runtime(
-                aow.clone(),
+            acp: crate::acp::service(
+                &projects,
+                &notifications,
+                &cli_access,
+                &node,
                 Some(state_dir.clone()),
                 terminals.task_stop_sender(),
                 workspace_events.clone(),
-                runtime.clone(),
             )
             .map_err(|error| {
                 TerminalError::Invalid(format!("failed to initialize ACP: {error:#}"))
@@ -141,14 +248,21 @@ impl AppState {
                     TerminalError::Invalid(format!("failed to initialize session shares: {error}"))
                 })?,
             automations: Some(
-                automations::AutomationManager::new(state_dir.clone(), aow.notifications().clone())
+                automations::AutomationManager::new(state_dir.clone(), notifications.clone())
                     .and_then(|manager| manager.with_runtime(execution_runtime.as_ref()))
                     .map_err(|error| {
                         TerminalError::Invalid(format!("failed to initialize automations: {error}"))
                     })?,
             ),
             terminals,
-            aow,
+            projects,
+            agents,
+            roles,
+            tasks,
+            settings,
+            node,
+            notifications,
+            cli_access,
         })
     }
 
@@ -161,9 +275,7 @@ impl AppState {
             .store()
             .state_dir
             .clone();
-        self.aow
-            .cli_access()
-            .configure(&state_dir, url, token_file)?;
+        self.cli_access.configure(&state_dir, url, token_file)?;
         Ok(self)
     }
 
@@ -201,18 +313,47 @@ impl AppState {
     }
 
     pub fn start_agent_notifications(&self) {
-        self.terminals.start_agent_notifications(self.aow.clone());
+        self.terminals
+            .start_agent_notifications(self.projects.clone(), self.notifications.clone());
         terminal::hosting::recover(self.clone());
     }
 
     pub async fn initialize_global_workspace(&self) -> anyhow::Result<()> {
-        self.aow.initialize_global().await?;
+        self.projects.initialize_global().await?;
         Ok(())
     }
 }
 
 pub async fn initialize_aow_state(path: &Path) -> anyhow::Result<()> {
-    let _ = aow::AowManager::persistent(path)?;
+    let config = aow_config::ConfigStore::initialize(path)?;
+    let directory = std::fs::canonicalize(path)?;
+    let node = crate::runtime_connection::RuntimeConnection::new(
+        None,
+        Some(&directory),
+        Some(config.clone()),
+    );
+    let settings = crate::settings::SettingsService::new(
+        Some(config.clone()),
+        directory.join("data/notes"),
+        node.clone(),
+    )?;
+    let projects = crate::projects::ProjectService::new(
+        Some(directory.clone()),
+        Some(config.clone()),
+        settings,
+        node.clone(),
+    )?;
+    let agents =
+        crate::agents::AgentService::new(Some(config.clone()), node.clone(), Default::default())?;
+    let roles = crate::roles::RoleService::new(
+        Some(directory.clone()),
+        Some(config),
+        node.clone(),
+        agents,
+        projects,
+    )?;
+    let _tasks = crate::tasks::TaskService::new(Some(directory.clone()), roles, node)?;
+    let _notifications = crate::notifications::NotificationManager::persistent(&directory)?;
     git_platform_providers::seed_configuration(path)?;
     // Node workspaces are initialized after Server connects to its runtime endpoint.
     Ok(())
