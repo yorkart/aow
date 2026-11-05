@@ -297,7 +297,7 @@ pub(super) async fn create(
                     request
                         .source_thread_id
                         .as_ref()
-                        .map(aow_protocol::InstanceRef::acp),
+                        .map(aow_runtime_contract::instance::InstanceRef::acp),
                 )
                 .await?
         } else {
@@ -312,7 +312,7 @@ pub(super) async fn create(
                                 parent: request
                                     .source_thread_id
                                     .as_ref()
-                                    .map(aow_protocol::InstanceRef::acp),
+                                    .map(aow_runtime_contract::instance::InstanceRef::acp),
                                 ..Default::default()
                             },
                         )

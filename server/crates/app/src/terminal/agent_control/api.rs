@@ -1,11 +1,11 @@
 use super::super::*;
 use super::{COLS, ROWS, model::info};
 use crate::operations::{Handle, Spec};
-use aow_operation_log::Outcome;
-use aow_protocol::{
+use aow_api_contract::terminal::{
     AgentTerminalCreate, AgentTerminalInfo, AgentTerminalPhase, AgentTerminalState,
     AgentTerminalSubmit,
 };
+use aow_operation_log::Outcome;
 
 const MAX_TASK_BYTES: usize = 128 * 1024;
 

@@ -13,12 +13,14 @@ const ROWS: u16 = 48;
 const COLS: u16 = 160;
 
 #[cfg(test)]
+use aow_api_contract::terminal::{
+    AgentTerminalCreate, AgentTerminalInfo, AgentTerminalPhase, AgentTerminalState,
+    AgentTerminalSubmit,
+};
+#[cfg(test)]
 use aow_operation_log::Outcome;
 #[cfg(test)]
-use aow_protocol::{
-    AgentTerminalCreate, AgentTerminalInfo, AgentTerminalPhase, AgentTerminalState,
-    AgentTerminalSubmit, TerminalAttachServerMessage, TerminalControlState,
-};
+use aow_runtime_contract::terminal::{TerminalAttachServerMessage, TerminalControlState};
 pub(crate) use api::{create, get, list, submit};
 #[cfg(test)]
 use connection::AgentConnection;

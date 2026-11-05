@@ -1,4 +1,4 @@
-use aow_protocol::ApiError;
+use aow_api_contract::ApiError;
 use axum::{
     Json,
     http::{HeaderMap, StatusCode},

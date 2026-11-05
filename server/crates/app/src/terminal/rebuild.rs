@@ -1,5 +1,5 @@
 use super::*;
-use aow_protocol::{AgentTerminalPhase, AgentTerminalState};
+use aow_api_contract::terminal::{AgentTerminalPhase, AgentTerminalState};
 
 pub(super) fn ensure_rebuildable(tab: &TerminalTab) -> Result<(), TerminalError> {
     if tab.panes.is_empty()

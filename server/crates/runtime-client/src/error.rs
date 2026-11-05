@@ -1,4 +1,4 @@
-use aow_protocol::ApiError;
+use aow_runtime_contract::error::ApiError;
 #[derive(Debug, thiserror::Error)]
 pub enum RuntimeError {
     #[error("Runtime response exceeds the 64 MiB transport limit")]

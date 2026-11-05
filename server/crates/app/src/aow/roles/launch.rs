@@ -12,7 +12,7 @@ pub(crate) enum RoleSession {
         session: Box<aow_runtime_client::acp::SessionSnapshot>,
     },
     Cli {
-        terminal: Box<aow_protocol::TerminalTab>,
+        terminal: Box<aow_api_contract::terminal::TerminalTab>,
         #[serde(skip)]
         task: Option<String>,
         #[serde(skip)]
@@ -128,7 +128,7 @@ impl AowManager {
         state: &AppState,
         cwd: &str,
         prompt: Option<&str>,
-        parent: Option<aow_protocol::InstanceRef>,
+        parent: Option<aow_runtime_contract::instance::InstanceRef>,
     ) -> Result<RoleSession, HttpError> {
         self.check_role_runtime(role, state).await?;
         match &role.config.runtime {

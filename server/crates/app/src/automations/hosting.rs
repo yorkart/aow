@@ -38,7 +38,7 @@ impl AutomationManager {
     pub(crate) async fn dispatch_hosted(
         &self,
         mut task: Task,
-        hosting: &aow_protocol::TerminalHosting,
+        hosting: &aow_api_contract::terminal::TerminalHosting,
         event: Option<&TaskStopNotification>,
     ) -> Result<()> {
         let run_id = hosting

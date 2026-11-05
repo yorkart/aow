@@ -294,8 +294,13 @@ async fn fork_session(
 ) -> Result<Json<aow_runtime_client::acp::SessionSnapshot>, HttpError> {
     let controller = state.acp_controls.session(&thread_id);
     let _lifecycle = controller.authorize_lifecycle(&headers, false).await?;
-    crate::instances::preserve_parent(&state, Some(&aow_protocol::InstanceRef::acp(&thread_id)))
-        .await?;
+    crate::instances::preserve_parent(
+        &state,
+        Some(&aow_runtime_contract::instance::InstanceRef::acp(
+            &thread_id,
+        )),
+    )
+    .await?;
     let fork = state.acp.fork_session(&thread_id).await.map_err(error)?;
     state.instances.record_all(vec![crate::instances::acp(
         &aow_runtime_client::acp::SessionInfo::from(&fork),

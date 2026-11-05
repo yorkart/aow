@@ -21,7 +21,7 @@ pub struct NativePaneRequest {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NativeProcessCheck {
     pub pane_id: String,
-    pub process: aow_protocol::TerminalAgentProcess,
+    pub process: crate::terminal::TerminalAgentProcess,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -54,7 +54,7 @@ pub struct NativePaneSessions {
     pub agent: String,
     pub cwd: String,
     pub title: String,
-    pub process: Option<aow_protocol::TerminalAgentProcess>,
+    pub process: Option<crate::terminal::TerminalAgentProcess>,
     pub live_session_id: Option<String>,
     pub sessions: Vec<NativeSession>,
     pub current: Option<NativeSessionReference>,

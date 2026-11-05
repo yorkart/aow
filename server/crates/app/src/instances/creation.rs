@@ -1,6 +1,7 @@
 use super::{invalid, preserve_parent};
 use crate::{AppState, HttpError};
-use aow_protocol::{CreationContext, InstanceRef};
+use aow_api_contract::instance::CreationContext;
+use aow_runtime_contract::instance::InstanceRef;
 
 /// Terminal identity is already resolved by the CLI environment. ACP session IDs
 /// are connection-scoped and must never be guessed from cwd or a shared process.

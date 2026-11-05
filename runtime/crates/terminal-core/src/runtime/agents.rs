@@ -7,7 +7,7 @@ use aow_agents_core::process::{ProcessInfo, recognize_process};
 
 use super::*;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-use aow_protocol::{TerminalAgentProcess, TerminalPaneActivity};
+use aow_runtime_contract::terminal::{TerminalAgentProcess, TerminalPaneActivity};
 
 const CACHE_TTL: Duration = Duration::from_secs(1);
 
@@ -32,7 +32,7 @@ impl DaemonState {
                 .lock()
                 .map_err(|_| TerminalError::Poisoned)?
                 .status
-                == TerminalPaneStatus::Running;
+                == TerminalRuntimeStatus::Running;
             sessions.insert(
                 runtime.id.clone(),
                 running.then_some(runtime.child_session_id).flatten(),

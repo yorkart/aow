@@ -173,7 +173,9 @@ fn persistent_load_preserves_running_desired_state() {
     );
     // Current metadata includes naming intent; legacy migration has its own test.
     original.name_is_custom = Some(true);
-    original.panes[0].parent = Some(aow_protocol::InstanceRef::terminal("previous-parent"));
+    original.panes[0].parent = Some(aow_runtime_contract::instance::InstanceRef::terminal(
+        "previous-parent",
+    ));
     atomic_save(
         &state_path,
         &PersistedState {
@@ -537,8 +539,8 @@ async fn terminal_name_intent_migrates_and_survives_explicit_rename() {
     cli.layout = TerminalLayout::Pane {
         pane_id: "cli-pane".to_owned(),
     };
-    cli.panes[0].agent_terminal = Some(aow_protocol::AgentTerminalState {
-        phase: aow_protocol::AgentTerminalPhase::Ready,
+    cli.panes[0].agent_terminal = Some(aow_api_contract::terminal::AgentTerminalState {
+        phase: aow_api_contract::terminal::AgentTerminalPhase::Ready,
         error: None,
         task_submitted: false,
     });
@@ -560,9 +562,9 @@ async fn terminal_name_intent_migrates_and_survives_explicit_rename() {
     assert_eq!(agent.name_is_custom, Some(true));
     let app = clipboard_app(manager.clone());
     for phase in [
-        aow_protocol::AgentTerminalPhase::Starting,
-        aow_protocol::AgentTerminalPhase::Ready,
-        aow_protocol::AgentTerminalPhase::Failed,
+        aow_api_contract::terminal::AgentTerminalPhase::Starting,
+        aow_api_contract::terminal::AgentTerminalPhase::Ready,
+        aow_api_contract::terminal::AgentTerminalPhase::Failed,
     ] {
         manager
             .lock_state()

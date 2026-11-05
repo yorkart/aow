@@ -3,7 +3,7 @@ use std::{
     time::Duration,
 };
 
-use aow_protocol::{GitFileStatus, GitIgnoredPaths, GitStatus};
+use aow_runtime_contract::workspace::{GitFileStatus, GitIgnoredPaths, GitStatus};
 
 use super::{
     GitError,

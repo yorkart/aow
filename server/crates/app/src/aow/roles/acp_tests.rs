@@ -129,7 +129,7 @@ async fn role_policy_is_owned_by_the_application_and_survives_edits_removal_and_
             .unwrap()
             .contains("New instructions")
     );
-    let parent = aow_protocol::InstanceRef::acp(&id);
+    let parent = aow_runtime_contract::instance::InstanceRef::acp(&id);
     let child = state
         .aow
         .prepare_acp_child_session(

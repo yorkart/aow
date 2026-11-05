@@ -23,7 +23,7 @@ fn default_depth() -> usize {
 pub(crate) async fn git_repositories(
     State(state): State<AppState>,
     Query(query): Query<RepositoryQuery>,
-) -> Result<Json<Vec<aow_protocol::RepositorySummary>>, HttpError> {
+) -> Result<Json<Vec<aow_runtime_contract::workspace::RepositorySummary>>, HttpError> {
     Ok(Json(
         runtime(&state)
             .await?
@@ -41,7 +41,7 @@ pub(crate) struct IgnoredPathsRequest {
 pub(crate) async fn git_ignored(
     State(state): State<AppState>,
     Json(request): Json<IgnoredPathsRequest>,
-) -> Result<Json<aow_protocol::GitIgnoredPaths>, HttpError> {
+) -> Result<Json<aow_runtime_contract::workspace::GitIgnoredPaths>, HttpError> {
     Ok(Json(
         runtime(&state)
             .await?
@@ -58,7 +58,7 @@ pub(crate) struct RepoOnlyQuery {
 pub(crate) async fn git_status(
     State(state): State<AppState>,
     Query(query): Query<RepoOnlyQuery>,
-) -> Result<Json<aow_protocol::GitStatus>, HttpError> {
+) -> Result<Json<aow_runtime_contract::workspace::GitStatus>, HttpError> {
     Ok(Json(
         runtime(&state)
             .await?
@@ -103,7 +103,7 @@ fn default_log_limit() -> usize {
 pub(crate) async fn git_log(
     State(state): State<AppState>,
     Query(query): Query<LogQuery>,
-) -> Result<Json<aow_protocol::GitLog>, HttpError> {
+) -> Result<Json<aow_runtime_contract::workspace::GitLog>, HttpError> {
     Ok(Json(
         runtime(&state)
             .await?
@@ -123,7 +123,7 @@ pub(crate) struct DiffQuery {
 pub(crate) async fn git_diff(
     State(state): State<AppState>,
     Query(query): Query<DiffQuery>,
-) -> Result<Json<aow_protocol::GitDiff>, HttpError> {
+) -> Result<Json<aow_runtime_contract::workspace::GitDiff>, HttpError> {
     Ok(Json(
         runtime(&state)
             .await?
@@ -145,12 +145,17 @@ pub(crate) struct CommitQuery {
 pub(crate) async fn git_commit_detail(
     State(state): State<AppState>,
     Query(query): Query<CommitQuery>,
-) -> Result<Json<aow_protocol::GitCommitDetail>, HttpError> {
-    let mut detail: aow_protocol::GitCommitDetail = runtime(&state)
+) -> Result<Json<aow_api_contract::git::GitCommitDetail>, HttpError> {
+    let commit = runtime(&state)
         .await?
         .workspace_git_commit_detail(std::path::Path::new(&query.repo), &query.commit)
         .await?;
-    if let Some(remote) = &detail.remote_name {
+    let mut detail = aow_api_contract::git::GitCommitDetail {
+        commit,
+        remote_url: None,
+        commit_url: None,
+    };
+    if let Some(remote) = &detail.commit.remote_name {
         // Links are optional enrichment. A slow or broken Provider must not
         // prevent local commit metadata from being displayed.
         let links = tokio::time::timeout(std::time::Duration::from_secs(3), async {
@@ -160,7 +165,7 @@ pub(crate) async fn git_commit_detail(
                 })?;
             state
                 .git_platform_providers
-                .commit_links(&query.repo, remote, &detail.id, &paths)
+                .commit_links(&query.repo, remote, &detail.commit.id, &paths)
                 .await
         })
         .await;
@@ -180,7 +185,7 @@ pub(crate) async fn git_commit_detail(
 pub(crate) async fn git_commit_files(
     State(state): State<AppState>,
     Query(query): Query<CommitQuery>,
-) -> Result<Json<aow_protocol::GitCommitFiles>, HttpError> {
+) -> Result<Json<aow_runtime_contract::workspace::GitCommitFiles>, HttpError> {
     Ok(Json(
         runtime(&state)
             .await?
@@ -200,7 +205,7 @@ pub(crate) struct CommitDiffQuery {
 pub(crate) async fn git_commit_diff(
     State(state): State<AppState>,
     Query(query): Query<CommitDiffQuery>,
-) -> Result<Json<aow_protocol::GitDiff>, HttpError> {
+) -> Result<Json<aow_runtime_contract::workspace::GitDiff>, HttpError> {
     Ok(Json(
         runtime(&state)
             .await?

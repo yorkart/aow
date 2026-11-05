@@ -4,7 +4,7 @@ use crate::sessions::SessionEnvironment;
 use std::collections::HashSet;
 
 use crate::sessions::AgentSessionLocator;
-use aow_protocol::TerminalAgentProcess;
+use aow_runtime_contract::terminal::TerminalAgentProcess;
 use std::{
     fs::{File, OpenOptions},
     io::Write,

@@ -9,6 +9,11 @@ Business modules do not construct Runtime HTTP paths or JSON envelopes.
 Workspace files, Git processes, role HOME preparation and clipboard storage execute
 only in Runtime, including Server integration tests.
 
+`crates/api-contract` defines Server business API data for the application and
+its clients: instance creation, terminal tabs/layouts/hosting, pull requests and
+Git provider links. Runtime wire types come from Common's `runtime-contract`;
+the Runtime SDK has no dependency on Server business contracts.
+
 The main application source lives in `crates/app`. Its Cargo package and binary
 are both named `aow-server`; Rust callers continue to use `aow_server`.
 
@@ -17,6 +22,7 @@ server/
   Cargo.toml
   frontend/
   crates/app/             Application startup, HTTP routes and business services
+  crates/api-contract/    Server business API data
   crates/cli/             aow-cli command-line entry point
   crates/server-client/   Server business API client
   crates/runtime-client/  Runtime daemon client

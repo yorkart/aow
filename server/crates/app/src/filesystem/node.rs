@@ -67,7 +67,7 @@ pub(super) async fn upload(
 pub(super) async fn listing(
     state: &AppState,
     path: &Path,
-) -> Result<aow_protocol::DirectoryListing, HttpError> {
+) -> Result<aow_runtime_contract::workspace::DirectoryListing, HttpError> {
     Ok(runtime(state)?.workspace_list(path).await?)
 }
 pub(super) async fn home(state: &AppState) -> Result<std::path::PathBuf, HttpError> {

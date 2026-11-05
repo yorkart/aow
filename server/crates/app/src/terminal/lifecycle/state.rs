@@ -57,9 +57,9 @@ impl TerminalManager {
             .iter()
             .flat_map(|tab| &tab.panes)
             .filter(|pane| {
-                pane.agent_terminal
-                    .as_ref()
-                    .is_some_and(|state| state.phase == aow_protocol::AgentTerminalPhase::Starting)
+                pane.agent_terminal.as_ref().is_some_and(|state| {
+                    state.phase == aow_api_contract::terminal::AgentTerminalPhase::Starting
+                })
             })
             .map(|pane| pane.id.clone())
             .collect();

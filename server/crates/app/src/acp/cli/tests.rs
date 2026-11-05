@@ -129,7 +129,7 @@ async fn cli_creates_submits_traces_and_respects_browser_ownership() {
     );
     assert!(root_info.parent.is_none());
     assert!(!root_info.created_at.is_empty());
-    let parent = aow_protocol::InstanceRef::acp(id);
+    let parent = aow_runtime_contract::instance::InstanceRef::acp(id);
     let mut create = create;
     create["agent_id"] = json!("test");
     create["no_parent"] = json!(false);
@@ -199,7 +199,7 @@ async fn failed_startup_returns_identity_and_invalid_parent_allocates_nothing() 
             .instances
             .snapshot()
             .unwrap()
-            .contains_key(&aow_protocol::InstanceRef::acp(id))
+            .contains_key(&aow_runtime_contract::instance::InstanceRef::acp(id))
     );
 }
 

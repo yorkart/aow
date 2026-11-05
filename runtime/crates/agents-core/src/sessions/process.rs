@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::sessions::SessionEnvironment;
-use aow_protocol::TerminalAgentProcess;
+use aow_runtime_contract::terminal::TerminalAgentProcess;
 
 pub fn same_process(process: &TerminalAgentProcess) -> bool {
     aow_process::same_process(process.pid, &process.start_time)

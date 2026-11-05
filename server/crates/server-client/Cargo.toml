@@ -5,9 +5,9 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+aow-api-contract = { path = "../api-contract" }
 reqwest.workspace = true
 anyhow.workspace = true
-aow-protocol = { path = "../../../common/crates/protocol" }
 bytes.workspace = true
 http.workspace = true
 http-body-util.workspace = true

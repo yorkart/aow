@@ -3,7 +3,7 @@ use super::*;
 impl Runtime {
     pub(in crate::runtime) fn mark_reaped(
         &self,
-        status: TerminalPaneStatus,
+        status: TerminalRuntimeStatus,
         exit_code: Option<u32>,
         kill_remaining_session: bool,
     ) {

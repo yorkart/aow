@@ -2,8 +2,6 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use super::model::TerminalPaneStatus;
-
 /// Text from the current VT viewport, never an accumulation of raw redraws.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TerminalScreen {
@@ -43,8 +41,13 @@ pub struct TerminalRuntimeSpec {
     pub cols: u16,
 }
 
-/// Runtime status uses the same wire values as the browser terminal protocol.
-pub type TerminalRuntimeStatus = TerminalPaneStatus;
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TerminalRuntimeStatus {
+    Running,
+    Exited,
+    Interrupted,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TerminalRuntime {

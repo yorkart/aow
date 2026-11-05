@@ -1,7 +1,7 @@
 use http::StatusCode;
 use thiserror::Error;
 
-use aow_protocol::ApiError;
+use aow_api_contract::ApiError;
 use tokio_tungstenite::tungstenite;
 
 #[derive(Debug, Error)]

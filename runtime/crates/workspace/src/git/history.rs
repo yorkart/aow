@@ -1,6 +1,6 @@
 use std::{collections::HashSet, path::Path};
 
-use aow_protocol::{GitCommit, GitLog};
+use aow_runtime_contract::workspace::{GitCommit, GitLog};
 
 use super::{
     GitError,

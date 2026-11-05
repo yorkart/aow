@@ -3,7 +3,7 @@ use std::{
     path::{Component, Path},
 };
 
-use aow_protocol::{
+use aow_runtime_contract::workspace::{
     FileSearchFile, FileSearchMatch, FileSearchMode, FileSearchRequest, FileSearchResult,
 };
 use serde::Deserialize;

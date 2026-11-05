@@ -1,5 +1,5 @@
-use aow_protocol::TerminalRuntimeSpec;
 use aow_runtime_client::{RuntimeClient, agents::*, testing::TestRuntime};
+use aow_runtime_contract::terminal::TerminalRuntimeSpec;
 use std::{collections::BTreeMap, time::Duration};
 
 async fn fixture() -> (tempfile::TempDir, TestRuntime, RuntimeClient) {
@@ -152,7 +152,7 @@ async fn initialization_survives_a_disconnected_waiter_and_retries_do_not_repeat
 
 #[tokio::test]
 async fn native_initialization_keeps_the_controller_lease_and_reports_process_exit() {
-    use aow_protocol::{
+    use aow_runtime_contract::terminal::{
         TerminalAttachClientMessage, TerminalAttachServerMessage, TerminalControlState,
     };
     use futures_util::{SinkExt, StreamExt};
@@ -343,7 +343,7 @@ async fn transport_retries_keep_the_same_operation_identity() {
 
 #[tokio::test]
 async fn forced_takeover_during_native_paste_prevents_the_enter_key() {
-    use aow_protocol::{
+    use aow_runtime_contract::terminal::{
         TerminalAttachClientMessage, TerminalAttachServerMessage, TerminalControlState,
     };
     use futures_util::{SinkExt, StreamExt};

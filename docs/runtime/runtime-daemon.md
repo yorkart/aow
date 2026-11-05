@@ -355,7 +355,7 @@ binary frames carry terminal input/output; JSON frames carry control, stream
 metadata, resize, status and acknowledgements. Existing query options such as
 `control=v2`, `observer=v1`, `epoch`, `after`, `capabilities=vt-snapshot-v1` and
 `snapshot_compression=gzip` retain their behavior. See the types in
-`common/crates/protocol/src/terminal/attach.rs` for the frame schema.
+`common/crates/runtime-contract/src/terminal/attach.rs` for the frame schema.
 
 Unlike ACP transports, closing a terminal attachment leaves the PTY running.
 Reattach using its epoch and offset to replay available output. Terminal

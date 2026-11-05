@@ -107,7 +107,7 @@ where
                 return None;
             }
             match runtime.description() {
-                Ok(description) if description.status != TerminalPaneStatus::Running => {
+                Ok(description) if description.status != TerminalRuntimeStatus::Running => {
                     current.pending_status = Some((description.status, description.exit_code));
                 }
                 Ok(_) => {}

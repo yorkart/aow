@@ -143,7 +143,7 @@ pub struct CreatedEntry {
 pub struct SearchRequest {
     pub request_id: String,
     #[serde(flatten)]
-    pub search: aow_protocol::FileSearchRequest,
+    pub search: crate::workspace::FileSearchRequest,
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProviderRequest {

@@ -19,7 +19,7 @@ use std::{
 pub(crate) struct ThreadMetadata {
     pub thread_id: String,
     pub source: crate::facade::SessionSource,
-    pub parent: Option<aow_protocol::InstanceRef>,
+    pub parent: Option<aow_runtime_contract::instance::InstanceRef>,
     pub session_id: Option<String>,
     pub agent_id: String,
     pub title: String,

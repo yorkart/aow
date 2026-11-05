@@ -43,6 +43,6 @@ pub(super) struct Runtime {
 pub(super) struct RuntimeMetadata {
     pub(super) rows: u16,
     pub(super) cols: u16,
-    pub(super) status: TerminalPaneStatus,
+    pub(super) status: TerminalRuntimeStatus,
     pub(super) exit_code: Option<u32>,
 }

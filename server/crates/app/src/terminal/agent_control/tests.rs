@@ -182,7 +182,7 @@ impl Fixture {
 
     fn request(&self) -> AgentTerminalCreate {
         AgentTerminalCreate {
-            caller: Some(aow_protocol::CreationContext {
+            caller: Some(aow_api_contract::instance::CreationContext {
                 session_id: "fixture".into(),
                 acp_connection_id: None,
             }),
@@ -587,7 +587,9 @@ async fn rejected_runtime_does_not_leave_a_lineage_record() {
     let mut request = fixture.request();
     request.agent = Some("broken-agent".into());
     request.no_parent = false;
-    request.parent = Some(aow_protocol::InstanceRef::terminal(&parent.panes[0].id));
+    request.parent = Some(aow_runtime_contract::instance::InstanceRef::terminal(
+        &parent.panes[0].id,
+    ));
     let error = fixture
         .client
         .post_json::<_, AgentTerminalInfo>("/v1/agents", &request)
@@ -613,7 +615,11 @@ async fn rejected_runtime_does_not_leave_a_lineage_record() {
     let reloaded = crate::instances::InstanceStore::persistent(&fixture.state_dir).unwrap();
     let saved = reloaded.snapshot().unwrap();
     assert_eq!(saved.len(), 1);
-    assert!(saved.contains_key(&aow_protocol::InstanceRef::terminal(&parent.panes[0].id)));
+    assert!(
+        saved.contains_key(&aow_runtime_contract::instance::InstanceRef::terminal(
+            &parent.panes[0].id
+        ))
+    );
     fixture.stop().await;
 }
 
@@ -657,7 +663,9 @@ async fn agent_parentage_is_validated_returned_and_survives_parent_removal() {
         .unwrap();
     let mut request = fixture.request();
     request.no_parent = false;
-    request.parent = Some(aow_protocol::InstanceRef::terminal("missing-pane"));
+    request.parent = Some(aow_runtime_contract::instance::InstanceRef::terminal(
+        "missing-pane",
+    ));
     let error = fixture
         .client
         .post_json::<_, AgentTerminalInfo>("/v1/agents", &request)
@@ -673,7 +681,9 @@ async fn agent_parentage_is_validated_returned_and_survives_parent_removal() {
     assert_eq!(manager.list_snapshot(None).unwrap().tabs.len(), 1);
 
     request.no_parent = false;
-    request.parent = Some(aow_protocol::InstanceRef::terminal(&parent.panes[0].id));
+    request.parent = Some(aow_runtime_contract::instance::InstanceRef::terminal(
+        &parent.panes[0].id,
+    ));
     let child: AgentTerminalInfo = fixture
         .client
         .post_json("/v1/agents", &request)
@@ -681,7 +691,9 @@ async fn agent_parentage_is_validated_returned_and_survives_parent_removal() {
         .unwrap();
     assert_eq!(child.parent, request.parent);
     request.no_parent = false;
-    request.parent = Some(aow_protocol::InstanceRef::terminal(&child.pane_id));
+    request.parent = Some(aow_runtime_contract::instance::InstanceRef::terminal(
+        &child.pane_id,
+    ));
     let grandchild: AgentTerminalInfo = fixture
         .client
         .post_json("/v1/agents", &request)
@@ -689,7 +701,9 @@ async fn agent_parentage_is_validated_returned_and_survives_parent_removal() {
         .unwrap();
     assert_eq!(
         grandchild.parent,
-        Some(aow_protocol::InstanceRef::terminal(&child.pane_id))
+        Some(aow_runtime_contract::instance::InstanceRef::terminal(
+            &child.pane_id
+        ))
     );
     assert_eq!(
         manager.get_snapshot(&child.tab_id).unwrap().panes[0].parent,
@@ -766,7 +780,7 @@ async fn mixed_terminal_acp_lineage_survives_deleted_intermediate_instances_and_
     let acp_id = acp["thread_id"].as_str().unwrap();
     let mut request = fixture.request();
     request.no_parent = false;
-    request.caller = Some(aow_protocol::CreationContext {
+    request.caller = Some(aow_api_contract::instance::CreationContext {
         session_id: acp["session_id"].as_str().unwrap().into(),
         acp_connection_id: Some(
             fixture
@@ -784,7 +798,10 @@ async fn mixed_terminal_acp_lineage_survives_deleted_intermediate_instances_and_
         .post_json("/v1/agents", &request)
         .await
         .unwrap();
-    assert_eq!(child.parent, Some(aow_protocol::InstanceRef::acp(acp_id)));
+    assert_eq!(
+        child.parent,
+        Some(aow_runtime_contract::instance::InstanceRef::acp(acp_id))
+    );
     fixture.state.acp.delete_session(acp_id).await.unwrap();
     fixture
         .state
@@ -815,12 +832,14 @@ async fn mixed_terminal_acp_lineage_survives_deleted_intermediate_instances_and_
     .unwrap();
     let graph = crate::instances::graph(&reloaded).await.unwrap();
     assert_eq!(
-        graph[&aow_protocol::InstanceRef::terminal(&child.pane_id)].parent,
-        Some(aow_protocol::InstanceRef::acp(acp_id))
+        graph[&aow_runtime_contract::instance::InstanceRef::terminal(&child.pane_id)].parent,
+        Some(aow_runtime_contract::instance::InstanceRef::acp(acp_id))
     );
     assert_eq!(
-        graph[&aow_protocol::InstanceRef::acp(acp_id)].parent,
-        Some(aow_protocol::InstanceRef::terminal(&root.pane_id))
+        graph[&aow_runtime_contract::instance::InstanceRef::acp(acp_id)].parent,
+        Some(aow_runtime_contract::instance::InstanceRef::terminal(
+            &root.pane_id
+        ))
     );
     fixture.stop().await;
 }
@@ -1774,7 +1793,8 @@ async fn native_pi_submits_through_terminald_and_resolves_its_session() {
 
 #[tokio::test]
 async fn hosting_owns_input_and_explicit_takeover_cancels_feedback() {
-    use aow_protocol::{TerminalAgentProcess, TerminalHosting, TerminalHostingPhase};
+    use aow_api_contract::terminal::{TerminalHosting, TerminalHostingPhase};
+    use aow_runtime_contract::terminal::TerminalAgentProcess;
     let fixture = Fixture::new("ready").await;
     let info: AgentTerminalInfo = fixture
         .client

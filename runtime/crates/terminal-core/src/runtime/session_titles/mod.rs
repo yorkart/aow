@@ -4,7 +4,7 @@ use aow_agents_core::{
     Agent,
     sessions::{titles::AgentSessionTitleProvider, tracking::LiveSessionContext},
 };
-use aow_protocol::{TerminalAgentList, TerminalAgentProcess};
+use aow_runtime_contract::terminal::{TerminalAgentList, TerminalAgentProcess};
 
 use aow_agents_core::sessions::process as sessions;
 

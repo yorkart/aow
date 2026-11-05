@@ -3,10 +3,10 @@ use crate::sessions::{AgentSession, AgentSessionLocator};
 struct EmptyTerminals;
 #[async_trait::async_trait]
 impl ManagedTerminals for EmptyTerminals {
-    async fn agents(&self) -> Result<aow_protocol::TerminalAgentList> {
+    async fn agents(&self) -> Result<aow_runtime_contract::terminal::TerminalAgentList> {
         unreachable!("catalog-only tests do not inspect terminals")
     }
-    fn runtimes(&self) -> Result<aow_protocol::TerminalRuntimeList> {
+    fn runtimes(&self) -> Result<aow_runtime_contract::terminal::TerminalRuntimeList> {
         unreachable!("catalog-only tests do not inspect terminals")
     }
 }

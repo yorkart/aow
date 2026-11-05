@@ -31,7 +31,8 @@ pub(in crate::runtime) struct ClaimedAttachment {
     pub(in crate::runtime) owner: ControllerOwner,
     pub(in crate::runtime) controller_changed: watch::Receiver<Option<ControllerOwner>>,
     pub(in crate::runtime) restore: Option<String>,
-    pub(in crate::runtime) restore_gzip: Option<aow_protocol::TerminalRestoreGzip>,
+    pub(in crate::runtime) restore_gzip:
+        Option<aow_runtime_contract::terminal::TerminalRestoreGzip>,
     pub(in crate::runtime) restore_cols: Option<u16>,
     pub(in crate::runtime) restore_rows: Option<u16>,
 }
@@ -46,7 +47,8 @@ pub(in crate::runtime) struct ObservedAttachment {
     pub(in crate::runtime) replay_bytes: u64,
     pub(in crate::runtime) next_offset: u64,
     pub(in crate::runtime) restore: Option<String>,
-    pub(in crate::runtime) restore_gzip: Option<aow_protocol::TerminalRestoreGzip>,
+    pub(in crate::runtime) restore_gzip:
+        Option<aow_runtime_contract::terminal::TerminalRestoreGzip>,
     pub(in crate::runtime) restore_cols: Option<u16>,
     pub(in crate::runtime) restore_rows: Option<u16>,
     pub(in crate::runtime) controller_changed: watch::Receiver<Option<ControllerOwner>>,

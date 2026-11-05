@@ -55,11 +55,3 @@ pub struct RenameResult {
     pub path: String,
     pub name: String,
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ApiError {
-    pub code: String,
-    pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub path: Option<String>,
-}

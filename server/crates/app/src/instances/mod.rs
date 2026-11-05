@@ -5,7 +5,9 @@ mod store;
 mod tests;
 
 use crate::{AppState, HttpError};
-use aow_protocol::{InstanceInfo, InstanceRef, TerminalPane, TerminalTab};
+use aow_api_contract::instance::InstanceInfo;
+use aow_api_contract::terminal::{TerminalPane, TerminalTab};
+use aow_runtime_contract::instance::InstanceRef;
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) use api::{get, list};

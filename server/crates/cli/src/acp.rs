@@ -1,6 +1,6 @@
 use crate::input::{CreationArgs, TaskInput};
 use anyhow::{Context, Result};
-use aow_protocol::AcpCreate;
+use aow_api_contract::instance::AcpCreate;
 use clap::{Args, Subcommand};
 use serde_json::{Value, json};
 use std::{io, path::PathBuf, time::Duration};

@@ -91,7 +91,7 @@ impl TerminalManager {
         &self,
         desired: &HashMap<String, TerminalPane>,
     ) -> Result<(), TerminalError> {
-        use aow_protocol::{AgentTerminalPhase, AgentTerminalState};
+        use aow_api_contract::terminal::{AgentTerminalPhase, AgentTerminalState};
         for pane in desired.values().filter(|pane| {
             pane.agent_terminal
                 .as_ref()

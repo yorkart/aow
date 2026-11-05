@@ -3,12 +3,12 @@ use std::{
     time::{Duration, Instant},
 };
 
-use aow_protocol::{
-    TerminalAttachClientMessage, TerminalAttachServerMessage, TerminalControlState,
-    TerminalPaneStatus, TerminalRuntimeSpec,
-};
 use aow_runtime_client::testing::VtWorkerConfig;
 use aow_runtime_client::{RuntimeError, RuntimeSocket, TerminalClient};
+use aow_runtime_contract::terminal::{
+    TerminalAttachClientMessage, TerminalAttachServerMessage, TerminalControlState,
+    TerminalRuntimeSpec, TerminalRuntimeStatus,
+};
 use futures_util::{SinkExt, StreamExt};
 use tempfile::TempDir;
 use tokio::time::timeout;
@@ -399,7 +399,10 @@ async fn wait_for_error(socket: &mut RuntimeSocket, expected: &str) {
     .unwrap_or_else(|_| panic!("timed out waiting for {expected} error"));
 }
 
-async fn wait_for_status(socket: &mut RuntimeSocket, expected: TerminalPaneStatus) -> Option<u32> {
+async fn wait_for_status(
+    socket: &mut RuntimeSocket,
+    expected: TerminalRuntimeStatus,
+) -> Option<u32> {
     timeout(IO_TIMEOUT, async {
         loop {
             match socket.next().await {
@@ -514,7 +517,7 @@ async fn http_management_is_idempotent() {
 
     let created = daemon.client.create("stable-id", &spec).await.unwrap();
     assert_eq!(created.id, "stable-id");
-    assert_eq!(created.status, TerminalPaneStatus::Running);
+    assert_eq!(created.status, TerminalRuntimeStatus::Running);
     let mut reported_spec = spec.clone();
     reported_spec.environment.clear(); // Launch-only environment is never returned by HTTP.
     reported_spec.environment_remove.clear();
@@ -622,7 +625,7 @@ async fn malformed_control_and_ping_preserve_neutral_and_active_attachments() {
     socket.send(Message::Text("{invalid".into())).await.unwrap();
     wait_for_error(&mut socket, "invalid_control").await;
     controlled_claim(&mut socket, false).await;
-    wait_for_status(&mut socket, TerminalPaneStatus::Running).await;
+    wait_for_status(&mut socket, TerminalRuntimeStatus::Running).await;
 
     // Decode errors in the active phase must preserve the controller and allow
     // subsequent valid commands through the new service/core boundary.
@@ -667,7 +670,7 @@ async fn malformed_control_and_ping_preserve_neutral_and_active_attachments() {
         .await
         .unwrap();
     controlled_claim(&mut next, false).await;
-    wait_for_status(&mut next, TerminalPaneStatus::Running).await;
+    wait_for_status(&mut next, TerminalRuntimeStatus::Running).await;
     daemon.client.delete("transport").await.unwrap();
     daemon.stop().await;
 }
@@ -703,7 +706,7 @@ async fn controlled_attach_is_neutral_and_claim_wait_force_and_release_are_exclu
     let first_stream = controlled_claim(&mut first, false).await;
     assert!(first_stream.reset);
     assert!(first_stream.restore.is_none());
-    wait_for_status(&mut first, TerminalPaneStatus::Running).await;
+    wait_for_status(&mut first, TerminalRuntimeStatus::Running).await;
 
     let mut waiting = daemon
         .client
@@ -741,7 +744,7 @@ async fn controlled_attach_is_neutral_and_claim_wait_force_and_release_are_exclu
             .any(|window| window == b"__WAITING_INPUT__"),
         "waiting input must not reach the PTY"
     );
-    wait_for_status(&mut waiting, TerminalPaneStatus::Running).await;
+    wait_for_status(&mut waiting, TerminalRuntimeStatus::Running).await;
     wait_for_error(&mut first, "attachment_superseded").await;
 
     // `first` exits after supersede and performs a delayed conditional
@@ -759,7 +762,7 @@ async fn controlled_attach_is_neutral_and_claim_wait_force_and_release_are_exclu
         .await
         .unwrap();
     controlled_claim(&mut released, false).await;
-    wait_for_status(&mut released, TerminalPaneStatus::Running).await;
+    wait_for_status(&mut released, TerminalRuntimeStatus::Running).await;
     send_input(&mut released, "printf '__RELEASED_OWNER__\n'\n").await;
     output_until(&mut released, b"__RELEASED_OWNER__").await;
 
@@ -783,7 +786,7 @@ async fn observer_receives_output_without_mutation_until_it_forces_takeover() {
         .await
         .unwrap();
     controlled_claim(&mut controller, false).await;
-    wait_for_status(&mut controller, TerminalPaneStatus::Running).await;
+    wait_for_status(&mut controller, TerminalRuntimeStatus::Running).await;
     send_input(&mut controller, "printf '__OBSERVER_REPLAY__\n'\n").await;
     output_until(&mut controller, b"__OBSERVER_REPLAY__").await;
 
@@ -804,7 +807,7 @@ async fn observer_receives_output_without_mutation_until_it_forces_takeover() {
             .any(|window| window == b"__OBSERVER_REPLAY__"),
         "observer must receive the existing terminal replay"
     );
-    wait_for_status(&mut observer, TerminalPaneStatus::Running).await;
+    wait_for_status(&mut observer, TerminalRuntimeStatus::Running).await;
 
     send_input(&mut observer, "printf '__OBSERVER_INPUT__\n'\n").await;
     wait_for_error(&mut observer, "controller_required").await;
@@ -838,7 +841,7 @@ async fn observer_receives_output_without_mutation_until_it_forces_takeover() {
     send_claim(&mut observer, true).await;
     wait_for_control(&mut observer, TerminalControlState::Claimed).await;
     stream_handshake(&mut observer).await;
-    wait_for_status(&mut observer, TerminalPaneStatus::Running).await;
+    wait_for_status(&mut observer, TerminalRuntimeStatus::Running).await;
     wait_for_error(&mut controller, "attachment_superseded").await;
     send_input(&mut observer, "printf '__OBSERVER_TAKEOVER__\n'\n").await;
     output_until(&mut observer, b"__OBSERVER_TAKEOVER__").await;
@@ -871,7 +874,7 @@ async fn waiting_attachment_auto_claims_vacancy_and_repeated_claim_is_idempotent
         .await
         .unwrap();
     controlled_claim(&mut owner, false).await;
-    wait_for_status(&mut owner, TerminalPaneStatus::Running).await;
+    wait_for_status(&mut owner, TerminalRuntimeStatus::Running).await;
 
     let mut first_waiter = daemon
         .client
@@ -905,7 +908,7 @@ async fn waiting_attachment_auto_claims_vacancy_and_repeated_claim_is_idempotent
         (&mut second_waiter, &mut first_waiter)
     };
     stream_handshake(waiter).await;
-    wait_for_status(waiter, TerminalPaneStatus::Running).await;
+    wait_for_status(waiter, TerminalRuntimeStatus::Running).await;
     assert!(
         timeout(Duration::from_millis(100), async {
             loop {
@@ -988,7 +991,7 @@ async fn stale_superseded_disconnect_does_not_release_the_new_owner() {
         .await
         .unwrap();
     controlled_claim(&mut stale, false).await;
-    wait_for_status(&mut stale, TerminalPaneStatus::Running).await;
+    wait_for_status(&mut stale, TerminalRuntimeStatus::Running).await;
 
     let mut owner = daemon
         .client
@@ -996,7 +999,7 @@ async fn stale_superseded_disconnect_does_not_release_the_new_owner() {
         .await
         .unwrap();
     controlled_claim(&mut owner, true).await;
-    wait_for_status(&mut owner, TerminalPaneStatus::Running).await;
+    wait_for_status(&mut owner, TerminalRuntimeStatus::Running).await;
     wait_for_error(&mut stale, "attachment_superseded").await;
     drop(stale);
     tokio::time::sleep(Duration::from_millis(50)).await;
@@ -1026,7 +1029,7 @@ async fn real_pty_attach_resize_and_detach_preserve_runtime() {
         .unwrap();
     let mut first = daemon.client.attach("interactive").await.unwrap();
     assert_eq!(
-        wait_for_status(&mut first, TerminalPaneStatus::Running).await,
+        wait_for_status(&mut first, TerminalRuntimeStatus::Running).await,
         None
     );
     prepare_shell(&mut first).await;
@@ -1050,7 +1053,7 @@ async fn real_pty_attach_resize_and_detach_preserve_runtime() {
     drop(first);
     tokio::time::sleep(Duration::from_millis(50)).await;
     let runtime = daemon.client.get("interactive").await.unwrap().unwrap();
-    assert_eq!(runtime.status, TerminalPaneStatus::Running);
+    assert_eq!(runtime.status, TerminalRuntimeStatus::Running);
     assert_eq!((runtime.rows, runtime.cols), (41, 101));
     let original_spec = shell_spec(cwd.path());
     let existing_after_resize = daemon
@@ -1089,7 +1092,7 @@ async fn web_runtime_exposes_terminal_environment() {
 
     let mut socket = daemon.client.attach("clipboard-env").await.unwrap();
     stream_handshake(&mut socket).await;
-    wait_for_status(&mut socket, TerminalPaneStatus::Running).await;
+    wait_for_status(&mut socket, TerminalRuntimeStatus::Running).await;
     prepare_shell(&mut socket).await;
     drain_output_until_quiet(&mut socket, Duration::from_millis(50)).await;
     send_input(
@@ -1139,7 +1142,7 @@ async fn fresh_reattach_uses_vt_snapshot_and_contiguous_raw_delta() {
         .await
         .unwrap();
     stream_handshake(&mut first).await;
-    wait_for_status(&mut first, TerminalPaneStatus::Running).await;
+    wait_for_status(&mut first, TerminalRuntimeStatus::Running).await;
     send_input(
         &mut first,
         "stty -echo; printf '\\033[?1049h\\033[2J\\033[H__VT_SNAPSHOT_MARKER__\\n'\n",
@@ -1159,7 +1162,7 @@ async fn fresh_reattach_uses_vt_snapshot_and_contiguous_raw_delta() {
         .await
         .unwrap();
     stream_handshake(&mut writer).await;
-    wait_for_status(&mut writer, TerminalPaneStatus::Running).await;
+    wait_for_status(&mut writer, TerminalRuntimeStatus::Running).await;
     send_input(&mut writer, "printf '__VT_LATE_DELTA_MARKER__\n'\n").await;
     output_until(&mut writer, late_marker).await;
     drop(writer);
@@ -1235,7 +1238,7 @@ async fn stream_handshake_resumes_exactly_and_resets_stale_or_future_offsets() {
         initial_stream.replay_bytes as usize,
         initial_stream.replay.len()
     );
-    wait_for_status(&mut initial, TerminalPaneStatus::Running).await;
+    wait_for_status(&mut initial, TerminalRuntimeStatus::Running).await;
     send_input(
         &mut initial,
         "stty -echo; printf '__PREFIX____SUFFIX__\\n'\n",
@@ -1258,7 +1261,7 @@ async fn stream_handshake_resumes_exactly_and_resets_stale_or_future_offsets() {
     assert_eq!(exact_stream.offset, after);
     assert_eq!(exact_stream.replay_bytes, 0);
     assert!(exact_stream.replay.is_empty());
-    wait_for_status(&mut exact, TerminalPaneStatus::Running).await;
+    wait_for_status(&mut exact, TerminalRuntimeStatus::Running).await;
     send_input(&mut exact, "printf '__EXACT_SUFFIX__\\n'\n").await;
     output_until(&mut exact, b"__EXACT_SUFFIX__").await;
     drop(exact);
@@ -1335,11 +1338,11 @@ async fn newest_attachment_supersedes_old_controller_and_blocks_old_mutations() 
 
     let mut old = daemon.client.attach("controller").await.unwrap();
     stream_handshake(&mut old).await;
-    wait_for_status(&mut old, TerminalPaneStatus::Running).await;
+    wait_for_status(&mut old, TerminalRuntimeStatus::Running).await;
 
     let mut newest = daemon.client.attach("controller").await.unwrap();
     stream_handshake(&mut newest).await;
-    wait_for_status(&mut newest, TerminalPaneStatus::Running).await;
+    wait_for_status(&mut newest, TerminalRuntimeStatus::Running).await;
 
     // Queue both stale mutations before observing the superseded notification.
     // The daemon validates the generation around the actual PTY operation, so
@@ -1403,7 +1406,7 @@ async fn resume_epoch_rejects_offsets_from_a_recreated_runtime() {
 
     let mut original = daemon.client.attach("recreated").await.unwrap();
     let original_stream = stream_handshake(&mut original).await;
-    wait_for_status(&mut original, TerminalPaneStatus::Running).await;
+    wait_for_status(&mut original, TerminalRuntimeStatus::Running).await;
     drop(original);
     daemon.client.delete("recreated").await.unwrap();
 
@@ -1433,14 +1436,14 @@ async fn natural_exit_is_retained_and_delete_kills_session_descendants() {
         .await
         .unwrap();
     let mut natural = daemon.client.attach("natural-exit").await.unwrap();
-    wait_for_status(&mut natural, TerminalPaneStatus::Running).await;
+    wait_for_status(&mut natural, TerminalRuntimeStatus::Running).await;
     send_input(&mut natural, "exit 7\n").await;
     assert_eq!(
-        wait_for_status(&mut natural, TerminalPaneStatus::Exited).await,
+        wait_for_status(&mut natural, TerminalRuntimeStatus::Exited).await,
         Some(7)
     );
     let retained = daemon.client.get("natural-exit").await.unwrap().unwrap();
-    assert_eq!(retained.status, TerminalPaneStatus::Exited);
+    assert_eq!(retained.status, TerminalRuntimeStatus::Exited);
     assert_eq!(retained.exit_code, Some(7));
 
     daemon
@@ -1449,7 +1452,7 @@ async fn natural_exit_is_retained_and_delete_kills_session_descendants() {
         .await
         .unwrap();
     let mut natural_child = daemon.client.attach("natural-exit-child").await.unwrap();
-    wait_for_status(&mut natural_child, TerminalPaneStatus::Running).await;
+    wait_for_status(&mut natural_child, TerminalRuntimeStatus::Running).await;
     prepare_shell(&mut natural_child).await;
     send_input(
         &mut natural_child,
@@ -1463,7 +1466,7 @@ async fn natural_exit_is_retained_and_delete_kills_session_descendants() {
         "__END_NATURAL_CHILD__",
     );
     assert_eq!(
-        wait_for_status(&mut natural_child, TerminalPaneStatus::Exited).await,
+        wait_for_status(&mut natural_child, TerminalRuntimeStatus::Exited).await,
         Some(0)
     );
     wait_until_process_gone(natural_child_pid).await;
@@ -1474,7 +1477,7 @@ async fn natural_exit_is_retained_and_delete_kills_session_descendants() {
         .await
         .unwrap();
     let mut forced = daemon.client.attach("force-delete").await.unwrap();
-    wait_for_status(&mut forced, TerminalPaneStatus::Running).await;
+    wait_for_status(&mut forced, TerminalRuntimeStatus::Running).await;
     prepare_shell(&mut forced).await;
     send_input(
         &mut forced,
@@ -1507,7 +1510,7 @@ async fn daemon_shutdown_kills_and_reaps_runtime_processes() {
         .await
         .unwrap();
     let mut socket = daemon.client.attach("shutdown").await.unwrap();
-    wait_for_status(&mut socket, TerminalPaneStatus::Running).await;
+    wait_for_status(&mut socket, TerminalRuntimeStatus::Running).await;
     prepare_shell(&mut socket).await;
     send_input(
         &mut socket,
@@ -1580,7 +1583,7 @@ async fn assert_no_unacknowledged_output(socket: &mut RuntimeSocket) {
                         matches!(
                             serde_json::from_str::<TerminalAttachServerMessage>(&text).unwrap(),
                             TerminalAttachServerMessage::Status {
-                                status: TerminalPaneStatus::Running,
+                                status: TerminalRuntimeStatus::Running,
                                 ..
                             }
                         ),
@@ -1636,9 +1639,9 @@ async fn vt_ack_gates_live_output_replay_and_final_exit_for_every_client() {
     std::fs::write(cwd.path().join("release"), b"ack").unwrap();
     let marker = b"__PARSED_BEFORE_PUBLISHED__";
     assert_eq!(output_until(&mut socket, marker).await, marker);
-    wait_for_status(&mut socket, TerminalPaneStatus::Exited).await;
+    wait_for_status(&mut socket, TerminalRuntimeStatus::Exited).await;
     assert_eq!(output_until(&mut observer, marker).await, marker);
-    wait_for_status(&mut observer, TerminalPaneStatus::Exited).await;
+    wait_for_status(&mut observer, TerminalRuntimeStatus::Exited).await;
 
     let mut reattached = daemon.client.attach("ack-boundary").await.unwrap();
     assert_eq!(stream_handshake(&mut reattached).await.replay, marker);
@@ -1657,7 +1660,7 @@ async fn expect_vt_failure(socket: &mut RuntimeSocket) {
                             return;
                         }
                         TerminalAttachServerMessage::Status {
-                            status: TerminalPaneStatus::Running,
+                            status: TerminalRuntimeStatus::Running,
                             ..
                         } => {}
                         other => {
@@ -1740,11 +1743,11 @@ async fn vt_ack_pipeline_preserves_every_byte_in_a_two_mebibyte_burst() {
                 Some(Ok(Message::Text(text))) => {
                     match serde_json::from_str::<TerminalAttachServerMessage>(&text).unwrap() {
                         TerminalAttachServerMessage::Status {
-                            status: TerminalPaneStatus::Exited,
+                            status: TerminalRuntimeStatus::Exited,
                             exit_code: Some(0),
                         } => break,
                         TerminalAttachServerMessage::Status {
-                            status: TerminalPaneStatus::Running,
+                            status: TerminalRuntimeStatus::Running,
                             ..
                         } => {}
                         other => panic!("unexpected burst stream message: {other:?}"),
@@ -1780,7 +1783,7 @@ async fn vt_resize_uses_received_offset_while_output_ack_is_pending() {
     wait_for_parsed_output(cwd.path()).await;
     let mut socket = daemon.client.attach("resize-ack").await.unwrap();
     assert_eq!(stream_handshake(&mut socket).await.replay_bytes, 0);
-    wait_for_status(&mut socket, TerminalPaneStatus::Running).await;
+    wait_for_status(&mut socket, TerminalRuntimeStatus::Running).await;
     let resize = serde_json::to_string(&TerminalAttachClientMessage::Resize {
         cols: 100,
         rows: 30,
@@ -1811,7 +1814,7 @@ async fn vt_resize_uses_received_offset_while_output_ack_is_pending() {
         output_until(&mut socket, b"__AFTER_RESIZE__").await,
         b"__AFTER_RESIZE__"
     );
-    wait_for_status(&mut socket, TerminalPaneStatus::Exited).await;
+    wait_for_status(&mut socket, TerminalRuntimeStatus::Exited).await;
     daemon.client.delete("resize-ack").await.unwrap();
     daemon.stop().await;
 }
@@ -1908,7 +1911,7 @@ async fn compressed_history_survives_raw_ring_rollover_and_negotiates_client_sup
     assert_eq!((restore_cols, restore_rows), (Some(220), Some(24)));
     assert_eq!(offset, data.len() as u64);
     assert_eq!(replay_bytes, 0);
-    wait_for_status(&mut fresh, TerminalPaneStatus::Running).await;
+    wait_for_status(&mut fresh, TerminalRuntimeStatus::Running).await;
 
     let mut legacy = daemon
         .client
@@ -2065,7 +2068,7 @@ async fn emit_history_fixture(
                 Some(Ok(Message::Text(text))) => assert!(matches!(
                     serde_json::from_str::<TerminalAttachServerMessage>(&text).unwrap(),
                     TerminalAttachServerMessage::Status {
-                        status: TerminalPaneStatus::Running,
+                        status: TerminalRuntimeStatus::Running,
                         ..
                     }
                 )),

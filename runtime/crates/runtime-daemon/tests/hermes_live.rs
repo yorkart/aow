@@ -258,17 +258,18 @@ async fn existing_hermes_process_session_and_screen_agree() -> anyhow::Result<()
             Err(_) => request,
         }
     };
-    let runtime: aow_protocol::TerminalRuntime = get(format!("/v1/terminal/runtimes/{runtime_id}"))
-        .send()
-        .await?
-        .error_for_status()?
-        .json()
-        .await?;
+    let runtime: aow_runtime_contract::terminal::TerminalRuntime =
+        get(format!("/v1/terminal/runtimes/{runtime_id}"))
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
     assert_eq!(
         PathBuf::from(&runtime.cwd).canonicalize()?,
         cwd.canonicalize()?
     );
-    let screen: aow_protocol::TerminalScreen =
+    let screen: aow_runtime_contract::terminal::TerminalScreen =
         get(format!("/v1/terminal/runtimes/{runtime_id}/screen"))
             .send()
             .await?

@@ -6,7 +6,7 @@ use tokio::{
     io::AsyncWriteExt,
 };
 
-use aow_protocol::WriteResult;
+use aow_runtime_contract::workspace::WriteResult;
 
 use super::{
     FsError,

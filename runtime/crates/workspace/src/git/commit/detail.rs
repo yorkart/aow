@@ -1,6 +1,6 @@
 use std::{collections::BTreeSet, path::Path};
 
-use aow_protocol::{GitCommitDetail, GitCommitStats, GitIdentity};
+use aow_runtime_contract::workspace::{GitCommitDetail, GitCommitStats, GitIdentity};
 
 use crate::git::{
     GitError,
@@ -94,9 +94,6 @@ pub async fn commit_detail(
         stats,
         upstream,
         remote_name,
-        // Web URLs belong to the configured Provider, not to local Git.
-        remote_url: None,
-        commit_url: None,
     })
 }
 

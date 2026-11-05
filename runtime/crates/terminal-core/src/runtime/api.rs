@@ -39,7 +39,10 @@ impl TerminalManager {
         self.state.delete(id).await
     }
 
-    pub fn screen(&self, id: &str) -> Result<Option<aow_protocol::TerminalScreen>, TerminalError> {
+    pub fn screen(
+        &self,
+        id: &str,
+    ) -> Result<Option<aow_runtime_contract::terminal::TerminalScreen>, TerminalError> {
         self.state.screen(id)
     }
 

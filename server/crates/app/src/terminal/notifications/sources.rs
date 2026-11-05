@@ -1,6 +1,7 @@
 use std::{collections::HashMap, path::Path};
 
-use aow_protocol::{TerminalAgentList, TerminalPaneStatus, TerminalTab};
+use aow_api_contract::terminal::{TerminalPaneStatus, TerminalTab};
+use aow_runtime_contract::terminal::TerminalAgentList;
 
 use super::{TaskStopNotification, TaskStopSource};
 

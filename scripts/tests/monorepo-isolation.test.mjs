@@ -16,12 +16,34 @@ for (const product of ['common', 'server', 'runtime']) {
   });
 }
 test('Common contains contracts, IDs and generic infrastructure without product implementations', () => {
-  assert.deepEqual(readdirSync(resolve(root, 'common/crates')).sort(), ['i18n', 'id', 'macos-log', 'protocol', 'runtime-contract', 'sqlite']);
+  assert.deepEqual(readdirSync(resolve(root, 'common/crates')).sort(), ['i18n', 'id', 'macos-log', 'runtime-contract', 'sqlite']);
   const contract = readFileSync(resolve(root, 'common/crates/runtime-contract/Cargo.toml'), 'utf8');
   assert.doesNotMatch(contract, /rusqlite|tokio|reqwest|agent-client-protocol|aow-(?:acp|storage|filesystem|agents|process|sqlite|macos-log)/);
   for (const name of ['sqlite', 'macos-log']) {
     const manifest = readFileSync(resolve(root, 'common/crates', name, 'Cargo.toml'), 'utf8');
     assert.doesNotMatch(manifest, /\baow-[\w-]+\s*=/);
+  }
+});
+
+test('Runtime wire contracts and Server business API data have separate owners', () => {
+  assert.equal(existsSync(resolve(root, 'common/crates/protocol')), false);
+  const source = directory => readdirSync(directory, { withFileTypes: true }).map(entry => {
+    const path = resolve(directory, entry.name);
+    return entry.isDirectory() ? source(path) : entry.name.endsWith('.rs') ? readFileSync(path, 'utf8') : '';
+  }).join('\n');
+  const contract = source(resolve(root, 'common/crates/runtime-contract/src'));
+  assert.doesNotMatch(contract, /pub (?:struct|enum) (?:TerminalTab|TerminalPane\b|TerminalLayout|TerminalHosting|AgentTerminalCreate|AcpCreate|CreationContext|InstanceInfo|PullRequest\w*|MyPullRequests)\b/);
+  assert.doesNotMatch(contract, /pub (?:remote_url|commit_url):/);
+  const business = source(resolve(root, 'server/crates/api-contract/src'));
+  for (const name of ['TerminalTab', 'TerminalLayout', 'TerminalHosting', 'AgentTerminalCreate', 'AcpCreate', 'InstanceInfo', 'PullRequestDetail']) {
+    assert.match(business, new RegExp(`pub (?:struct|enum) ${name}\\b`));
+  }
+  const sdk = readFileSync(resolve(root, 'server/crates/runtime-client/Cargo.toml'), 'utf8');
+  assert.doesNotMatch(sdk, /aow-api-contract|aow-protocol/);
+  for (const product of ['common', 'runtime', 'server']) {
+    const lock = readFileSync(resolve(root, product, 'Cargo.lock'), 'utf8');
+    assert.doesNotMatch(lock, /name = "aow-protocol"/);
+    if (product !== 'server') assert.doesNotMatch(lock, /name = "aow-api-contract"/);
   }
 });
 test('products share the macOS adapter while operation history stays in Server', () => {

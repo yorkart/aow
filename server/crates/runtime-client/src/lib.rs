@@ -15,8 +15,9 @@ pub use aow_runtime_contract::workspace::{GitCommandResult, NodeMetadata, Worksp
 mod sessions;
 mod terminal;
 
-pub use aow_protocol::{
-    ApiError, TerminalAgentList, TerminalAttachClientMessage, TerminalAttachServerMessage,
+pub use aow_runtime_contract::error::ApiError;
+pub use aow_runtime_contract::terminal::{
+    TerminalAgentList, TerminalAttachClientMessage, TerminalAttachServerMessage,
     TerminalControlState, TerminalRuntime, TerminalRuntimeList, TerminalRuntimeSpec,
     TerminalRuntimeStatus, TerminaldHealth,
 };

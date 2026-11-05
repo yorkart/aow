@@ -356,7 +356,7 @@ fn origin_and_creation_time_survive_updates_restart_and_missing_snapshot() -> Re
     cli.created_at = "2020-01-01T00:00:00Z".into();
     store.insert(cli)?;
     let mut user = thread("user-child");
-    user.parent = Some(aow_protocol::InstanceRef::acp("cli-root"));
+    user.parent = Some(aow_runtime_contract::instance::InstanceRef::acp("cli-root"));
     store.insert(user)?;
     store.update("cli-root", |snapshot| snapshot.title = "changed".into())?;
     drop(store);

@@ -1,6 +1,6 @@
 use std::{path::PathBuf, process::Stdio, time::Duration};
 
-use aow_protocol::{FileSearchMode, FileSearchRequest, FileSearchResult};
+use aow_runtime_contract::workspace::{FileSearchMode, FileSearchRequest, FileSearchResult};
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, BufReader},
     process::Command,

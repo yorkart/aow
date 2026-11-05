@@ -1,6 +1,6 @@
 use anyhow::Result;
 use aow_acp_core::{AcpHost, AcpService, Content, SessionCreation, SessionSource};
-use aow_protocol::InstanceRef;
+use aow_runtime_contract::instance::InstanceRef;
 use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,

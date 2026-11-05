@@ -100,7 +100,7 @@ impl TerminalClient {
     pub async fn process_current(
         &self,
         pane_id: &str,
-        process: &aow_protocol::TerminalAgentProcess,
+        process: &aow_runtime_contract::terminal::TerminalAgentProcess,
     ) -> Result<bool, RuntimeError> {
         #[derive(Deserialize)]
         struct Current {

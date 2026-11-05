@@ -141,7 +141,6 @@ version = "0.1.0"
 dependencies = [
  "agent-client-protocol",
  "anyhow",
- "aow-protocol",
  "aow-runtime-contract",
  "aow-runtime-db",
  "aow-runtime-i18n",
@@ -202,7 +201,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "aow-id",
- "aow-protocol",
  "aow-runtime-contract",
  "aow-runtime-db",
  "aow-runtime-environment",
@@ -303,17 +301,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "aow-protocol"
-version = "0.1.0"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "aow-runtime-contract"
 version = "0.1.0"
 dependencies = [
- "aow-protocol",
  "chrono",
  "serde",
  "serde_json",
@@ -331,7 +321,6 @@ dependencies = [
  "aow-exec-core",
  "aow-exec-service",
  "aow-macos-log",
- "aow-protocol",
  "aow-runtime-contract",
  "aow-runtime-environment",
  "aow-runtime-filesystem",
@@ -388,7 +377,7 @@ name = "aow-runtime-filesystem"
 version = "0.1.0"
 dependencies = [
  "aow-id",
- "aow-protocol",
+ "aow-runtime-contract",
  "aow-runtime-i18n",
  "bytes",
  "futures-util",
@@ -426,7 +415,6 @@ name = "aow-runtime-workspace"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "aow-protocol",
  "aow-runtime-contract",
  "aow-runtime-filesystem",
  "aow-runtime-i18n",
@@ -467,7 +455,6 @@ dependencies = [
  "aow-agents-core",
  "aow-id",
  "aow-macos-log",
- "aow-protocol",
  "aow-runtime-contract",
  "aow-runtime-filesystem",
  "aow-runtime-i18n",
@@ -491,7 +478,6 @@ dependencies = [
 name = "aow-terminal-service"
 version = "0.1.0"
 dependencies = [
- "aow-protocol",
  "aow-runtime-contract",
  "aow-runtime-i18n",
  "aow-terminal-core",

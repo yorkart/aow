@@ -1,6 +1,6 @@
 use crate::git;
 use aow_filesystem::FsError;
-use aow_protocol::ApiError;
+use aow_runtime_contract::error::ApiError;
 use axum::{
     Json,
     http::{HeaderMap, HeaderValue, StatusCode, header::CONTENT_RANGE},

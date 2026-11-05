@@ -5,12 +5,14 @@ use std::{
     time::Duration,
 };
 
-use aow_protocol::{
-    TerminalAgentList, TerminalAttachServerMessage, TerminalLayout, TerminalPane, TerminalPaneKind,
-    TerminalPaneStatus, TerminalRuntime, TerminalRuntimeSpec, TerminalSplitAxis, TerminalTab,
-    TerminalTabList,
+use aow_api_contract::terminal::{
+    TerminalLayout, TerminalPane, TerminalPaneKind, TerminalPaneStatus, TerminalSplitAxis,
+    TerminalTab, TerminalTabList,
 };
 use aow_runtime_client::{RuntimeError, RuntimeSocket, TerminalClient};
+use aow_runtime_contract::terminal::{
+    TerminalAgentList, TerminalAttachServerMessage, TerminalRuntime, TerminalRuntimeSpec,
+};
 #[cfg(test)]
 use axum::Router;
 use axum::{

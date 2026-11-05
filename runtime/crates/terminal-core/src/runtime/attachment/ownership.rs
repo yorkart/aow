@@ -6,7 +6,7 @@ pub(in crate::runtime) struct ActiveStream {
     pub(super) owner: Option<ControllerOwner>,
     pub(in crate::runtime) expected_offset: u64,
     pub(super) output_closed: bool,
-    pub(super) pending_status: Option<(TerminalPaneStatus, Option<u32>)>,
+    pub(super) pending_status: Option<(TerminalRuntimeStatus, Option<u32>)>,
     pub(in crate::runtime) events: broadcast::Receiver<RuntimeEvent>,
     pub(super) controller_changed: watch::Receiver<Option<ControllerOwner>>,
 }

@@ -57,18 +57,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "aow-protocol"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "aow-runtime-contract"
 version = "0.1.0"
 dependencies = [
- "aow-protocol",
  "chrono",
  "serde",
  "serde_json",

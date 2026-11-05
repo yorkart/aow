@@ -32,7 +32,7 @@ pub(super) struct OutputSnapshot {
     pub(super) next_offset: u64,
     pub(super) closed: bool,
     pub(super) restore: Option<String>,
-    pub(super) restore_gzip: Option<aow_protocol::TerminalRestoreGzip>,
+    pub(super) restore_gzip: Option<aow_runtime_contract::terminal::TerminalRestoreGzip>,
     pub(super) restore_cols: Option<u16>,
     pub(super) restore_rows: Option<u16>,
     pub(super) restore_diagnostics: RestoreDiagnostics,
@@ -55,7 +55,7 @@ pub(super) enum RuntimeEvent {
     OutputClosed,
     OutputFailed(String),
     Status {
-        status: TerminalPaneStatus,
+        status: TerminalRuntimeStatus,
         exit_code: Option<u32>,
     },
     Deleted,
@@ -148,12 +148,12 @@ impl OutputState {
                         .then(|| self.terminal.restore_sequence())
                 }),
             restore_gzip: vt_snapshot.as_ref().and_then(|snapshot| {
-                snapshot
-                    .gzip_decoded_bytes
-                    .map(|decoded_bytes| aow_protocol::TerminalRestoreGzip {
+                snapshot.gzip_decoded_bytes.map(|decoded_bytes| {
+                    aow_runtime_contract::terminal::TerminalRestoreGzip {
                         data: snapshot.ansi.clone(),
                         decoded_bytes,
-                    })
+                    }
+                })
             }),
             restore_cols: vt_snapshot.as_ref().map(|snapshot| snapshot.cols),
             restore_rows: vt_snapshot.as_ref().map(|snapshot| snapshot.rows),

@@ -18,7 +18,6 @@ md5.workspace = true
 portable-pty.workspace = true
 aow-agents-core = { path = "../agents-core", features = ["sessions"] }
 aow-process = { package = "aow-runtime-process", path = "../process" }
-aow-protocol = { path = "../../../common/crates/protocol" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

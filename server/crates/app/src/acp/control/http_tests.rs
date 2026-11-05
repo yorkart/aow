@@ -260,14 +260,8 @@ async fn fork_requires_control_and_returns_a_distinct_session_with_ancestry() {
         assert_eq!(fork["parent"], json!({"kind":"acp","id":source.thread_id}));
         assert_eq!(fork["overview"], json!([]));
         assert_eq!(state.acp.sessions(None).await.unwrap().len(), 2);
-        assert!(
-            state
-                .instances
-                .snapshot()
-                .unwrap()
-                .contains_key(&aow_protocol::InstanceRef::acp(
-                    fork["thread_id"].as_str().unwrap()
-                ))
-        );
+        assert!(state.instances.snapshot().unwrap().contains_key(
+            &aow_runtime_contract::instance::InstanceRef::acp(fork["thread_id"].as_str().unwrap())
+        ));
     }
 }

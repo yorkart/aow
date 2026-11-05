@@ -155,7 +155,9 @@ fn recorded_codex_load_keeps_steering_despite_tool_transport_changes() -> Result
 #[test]
 fn browser_projections_preserve_creation_metadata() -> Result<()> {
     let mut store = history()?;
-    let parent = Some(aow_protocol::InstanceRef::terminal("parent"));
+    let parent = Some(aow_runtime_contract::instance::InstanceRef::terminal(
+        "parent",
+    ));
     let created_at = "2026-01-01T00:00:00Z";
     store.update("local", |thread| {
         thread.parent = parent.clone();

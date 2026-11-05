@@ -478,7 +478,9 @@ async fn conversation_policy_and_task_cancellation_stop_at_task_ownership_bounda
                 "test",
                 directory.path().into(),
                 aow_runtime_client::acp::SessionCreation {
-                    parent: Some(aow_protocol::InstanceRef::acp(parent_thread)),
+                    parent: Some(aow_runtime_contract::instance::InstanceRef::acp(
+                        parent_thread,
+                    )),
                     ..Default::default()
                 },
             )

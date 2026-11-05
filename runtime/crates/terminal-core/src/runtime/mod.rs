@@ -13,10 +13,10 @@ use std::{
     time::Duration,
 };
 
-use aow_protocol::{
+use aow_runtime_contract::terminal::{
     TerminalAgentList, TerminalAttachClientMessage, TerminalAttachServerMessage,
-    TerminalControlState, TerminalPaneStatus, TerminalRuntime, TerminalRuntimeList,
-    TerminalRuntimeSpec, TerminaldHealth,
+    TerminalControlState, TerminalRuntime, TerminalRuntimeList, TerminalRuntimeSpec,
+    TerminalRuntimeStatus, TerminaldHealth,
 };
 use bytes::Bytes;
 use futures_util::{Sink, SinkExt, StreamExt};

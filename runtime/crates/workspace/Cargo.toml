@@ -10,7 +10,6 @@ name = "aow_workspaces"
 [dependencies]
 aow-runtime-contract = { path = "../../../common/crates/runtime-contract" }
 aow-i18n = { package = "aow-runtime-i18n", path = "../i18n" }
-aow-protocol = { path = "../../../common/crates/protocol" }
 aow-filesystem = { package = "aow-runtime-filesystem", path = "../filesystem" }
 anyhow.workspace = true
 chrono.workspace = true

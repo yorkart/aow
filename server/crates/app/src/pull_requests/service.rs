@@ -2,7 +2,7 @@ use super::{decode, positive, safe_path};
 use crate::git_platform_providers::{
     GitPlatformError, GitPlatformProviderManager, GitPlatformQuery,
 };
-use aow_protocol::{MyPullRequests, PullRequestDetail, PullRequestDiff};
+use aow_api_contract::pull_request::{MyPullRequests, PullRequestDetail, PullRequestDiff};
 use serde_json::{Value, json};
 use std::path::PathBuf;
 

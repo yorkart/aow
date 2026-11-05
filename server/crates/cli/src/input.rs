@@ -15,22 +15,22 @@ pub(crate) struct CreationArgs {
     acp_connection_id: Option<String>,
     /// Creating instance: terminal:PANE-ID or acp:THREAD-ID. Overrides inherited identity.
     #[arg(long, conflicts_with = "no_parent")]
-    parent: Option<aow_protocol::InstanceRef>,
+    parent: Option<aow_runtime_contract::instance::InstanceRef>,
     /// Create a root instance even inside another AoW instance.
     #[arg(long)]
     no_parent: bool,
 }
 
 pub(crate) struct ResolvedCreation {
-    pub parent: Option<aow_protocol::InstanceRef>,
-    pub caller: aow_protocol::CreationContext,
+    pub parent: Option<aow_runtime_contract::instance::InstanceRef>,
+    pub caller: aow_api_contract::instance::CreationContext,
     pub no_parent: bool,
 }
 
 impl CreationArgs {
     pub(crate) fn resolve(self) -> Result<ResolvedCreation> {
-        use aow_protocol::InstanceRef;
-        let caller = aow_protocol::CreationContext {
+        use aow_runtime_contract::instance::InstanceRef;
+        let caller = aow_api_contract::instance::CreationContext {
             session_id: input_or_environment(self.session_id, "AOW_SESSION_ID")?.ok_or_else(
                 || {
                     io::Error::new(

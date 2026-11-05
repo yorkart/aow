@@ -1,7 +1,7 @@
 use super::Completion;
 pub(super) use crate::sessions::tracking::SessionTarget as Target;
 use crate::sessions::{AgentSessionLocator, AgentSessionProvider, SessionRoots, tail::SessionTail};
-use aow_protocol::TerminalAgentProcess;
+use aow_runtime_contract::terminal::TerminalAgentProcess;
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},

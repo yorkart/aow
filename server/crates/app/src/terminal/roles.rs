@@ -22,8 +22,8 @@ impl TerminalManager {
             },
             launch,
             initial_arguments,
-            managed.then_some(aow_protocol::AgentTerminalState {
-                phase: aow_protocol::AgentTerminalPhase::Starting,
+            managed.then_some(aow_api_contract::terminal::AgentTerminalState {
+                phase: aow_api_contract::terminal::AgentTerminalPhase::Starting,
                 error: None,
                 task_submitted: false,
             }),

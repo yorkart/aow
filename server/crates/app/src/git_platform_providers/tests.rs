@@ -1,7 +1,7 @@
 use super::*;
 use crate::AppState;
 use crate::pull_requests::{decode, positive, safe_path};
-use aow_protocol::MyPullRequests;
+use aow_api_contract::pull_request::MyPullRequests;
 use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode},

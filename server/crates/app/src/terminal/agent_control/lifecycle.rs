@@ -1,7 +1,7 @@
 use super::super::*;
 use super::model::info;
 use crate::operations::Handle;
-use aow_protocol::{AgentTerminalInfo, AgentTerminalPhase, AgentTerminalState};
+use aow_api_contract::terminal::{AgentTerminalInfo, AgentTerminalPhase, AgentTerminalState};
 
 impl TerminalManager {
     pub(in crate::terminal) fn cli_agent(

@@ -35,7 +35,7 @@ impl Runtime {
         }
         {
             let metadata = self.metadata.lock().map_err(|_| TerminalError::Poisoned)?;
-            if metadata.status != TerminalPaneStatus::Running {
+            if metadata.status != TerminalRuntimeStatus::Running {
                 return Err(TerminalError::Conflict(self.id.clone()));
             }
         }

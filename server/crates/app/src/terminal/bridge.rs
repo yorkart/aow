@@ -46,7 +46,7 @@ pub(super) async fn bridge_terminal_socket(
                     // cannot write after another client enables hosting.
                     let _hosting_gate = hosting_gate.lock().await;
                     if !close {
-                        use aow_protocol::TerminalAttachClientMessage as ClientMessage;
+                        use aow_runtime_contract::terminal::TerminalAttachClientMessage as ClientMessage;
                         let command = if let tungstenite::Message::Text(text) = &message {
                             serde_json::from_str::<ClientMessage>(text).ok()
                         } else { None };
@@ -70,7 +70,7 @@ pub(super) async fn bridge_terminal_socket(
                         }
                     }
                     if cli_pane && !close {
-                        use aow_protocol::TerminalAttachClientMessage as ClientMessage;
+                        use aow_runtime_contract::terminal::TerminalAttachClientMessage as ClientMessage;
                         let command = if let tungstenite::Message::Text(text) = &message {
                             serde_json::from_str::<ClientMessage>(text).ok()
                         } else { None };
@@ -80,7 +80,7 @@ pub(super) async fn bridge_terminal_socket(
                             }
                             Some(ClientMessage::Claim { force: true }) => {
                                 let lease = manager.agent_operation(&pane_id).and_then(|operation| operation.try_read_owned().map_err(|_| TerminalError::Conflict(aow_i18n::text("server.agent_is_initializing_or_submitting_a_task_observation_only").into())));
-                                if manager.cli_agent(&pane_id).is_ok_and(|info| info.state.phase == aow_protocol::AgentTerminalPhase::Ready) && lease.is_ok() {
+                                if manager.cli_agent(&pane_id).is_ok_and(|info| info.state.phase == aow_api_contract::terminal::AgentTerminalPhase::Ready) && lease.is_ok() {
                                     browser_control_guard = lease.ok();
                                 } else {
                                     // Reconnect as an observer; never let force bypass initialization.

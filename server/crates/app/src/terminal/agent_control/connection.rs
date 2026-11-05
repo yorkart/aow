@@ -1,5 +1,5 @@
 use super::super::*;
-use aow_protocol::{
+use aow_runtime_contract::terminal::{
     TerminalAttachClientMessage, TerminalAttachServerMessage, TerminalControlState,
 };
 use tokio_tungstenite::tungstenite;

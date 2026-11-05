@@ -89,9 +89,9 @@ impl TerminalClient {
         socket: &mut crate::RuntimeSocket,
         task: &str,
     ) -> Result<(), RuntimeError> {
-        use aow_protocol::{
+        use aow_runtime_contract::terminal::{
             TerminalAttachClientMessage, TerminalAttachServerMessage, TerminalControlState,
-            TerminalPaneStatus,
+            TerminalRuntimeStatus,
         };
         use futures_util::{SinkExt, StreamExt};
         use tokio_tungstenite::tungstenite::Message;
@@ -123,7 +123,7 @@ impl TerminalClient {
                             )));
                         }
                         TerminalAttachServerMessage::Status { status, .. }
-                            if status != TerminalPaneStatus::Running =>
+                            if status != TerminalRuntimeStatus::Running =>
                         {
                             return Err(RuntimeError::Io(std::io::Error::other("Agent exited")));
                         }

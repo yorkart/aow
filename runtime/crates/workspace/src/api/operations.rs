@@ -186,7 +186,7 @@ pub(super) async fn operation(
             } else {
                 aow_filesystem::rename_entry(file, &name).await?
             };
-            json!(aow_protocol::RenameResult {
+            json!(aow_runtime_contract::workspace::RenameResult {
                 path: result.to_string_lossy().into_owned(),
                 name
             })

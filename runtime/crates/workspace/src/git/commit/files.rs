@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use aow_protocol::{GitCommitFile, GitCommitFiles};
+use aow_runtime_contract::workspace::{GitCommitFile, GitCommitFiles};
 
 use crate::git::{
     GitError,

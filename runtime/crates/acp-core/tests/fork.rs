@@ -201,7 +201,9 @@ async fn fork_inherits_remote_history_and_keeps_identity_configuration_and_paren
         assert_ne!(fork.session_id, source.session_id);
         assert_eq!(
             fork.parent,
-            Some(aow_protocol::InstanceRef::acp(&source.thread_id))
+            Some(aow_runtime_contract::instance::InstanceRef::acp(
+                &source.thread_id
+            ))
         );
         assert_eq!(
             fork.modes["currentModeId"], "ask",

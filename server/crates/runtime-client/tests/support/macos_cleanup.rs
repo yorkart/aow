@@ -107,7 +107,7 @@ async fn cleanup_reaches_other_process_groups_without_touching_other_sessions() 
                 std::fs::write(directory.path().join("exit"), b"exit").unwrap();
                 timeout(IO_TIMEOUT, async {
                     while daemon.client.get(action).await.unwrap().unwrap().status
-                        != TerminalPaneStatus::Exited
+                        != TerminalRuntimeStatus::Exited
                     {
                         tokio::time::sleep(Duration::from_millis(10)).await;
                     }

@@ -15,15 +15,15 @@ impl TerminalManager {
         request: CreateTerminalRequest,
         mut launch: AgentLaunch,
         initial_arguments: &[String],
-        agent_terminal: Option<aow_protocol::AgentTerminalState>,
-        parent: Option<aow_protocol::InstanceRef>,
+        agent_terminal: Option<aow_api_contract::terminal::AgentTerminalState>,
+        parent: Option<aow_runtime_contract::instance::InstanceRef>,
         instances: Option<&crate::instances::InstanceStore>,
     ) -> Result<TerminalTab, TerminalError> {
         self.ensure_creation_available(&request)?;
         self.reconcile().await?;
         let _operation = self.inner.operation.lock().await;
         if let Some(parent) = &parent
-            && parent.kind == aow_protocol::InstanceKind::Terminal
+            && parent.kind == aow_runtime_contract::instance::InstanceKind::Terminal
         {
             let state = self.lock_state()?;
             if !state

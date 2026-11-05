@@ -1,5 +1,5 @@
 use super::{SearchError, search_files};
-use aow_protocol::{FileSearchMode, FileSearchRequest};
+use aow_runtime_contract::workspace::{FileSearchMode, FileSearchRequest};
 use std::{fs, time::Duration};
 use tempfile::TempDir;
 use tokio_util::sync::CancellationToken;

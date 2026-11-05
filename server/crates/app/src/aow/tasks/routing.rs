@@ -55,7 +55,7 @@ impl AowManager {
             let info = service.session_info(&current).await?;
             match info
                 .parent
-                .filter(|parent| parent.kind == aow_protocol::InstanceKind::Acp)
+                .filter(|parent| parent.kind == aow_runtime_contract::instance::InstanceKind::Acp)
             {
                 Some(parent) => current = parent.id,
                 None => break,
@@ -89,7 +89,7 @@ impl AowManager {
             };
             match info
                 .parent
-                .filter(|parent| parent.kind == aow_protocol::InstanceKind::Acp)
+                .filter(|parent| parent.kind == aow_runtime_contract::instance::InstanceKind::Acp)
             {
                 Some(parent) => current = parent.id,
                 None => break,

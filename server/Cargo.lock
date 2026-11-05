@@ -151,6 +151,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
+name = "aow-api-contract"
+version = "0.1.0"
+dependencies = [
+ "aow-runtime-contract",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "aow-automations"
 version = "0.1.0"
 dependencies = [
@@ -177,11 +186,12 @@ name = "aow-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "aow-api-contract",
  "aow-automations",
  "aow-config",
  "aow-i18n",
  "aow-id",
- "aow-protocol",
+ "aow-runtime-contract",
  "aow-server-client",
  "axum",
  "chrono",
@@ -299,20 +309,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "aow-protocol"
-version = "0.1.0"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "aow-runtime-client"
 version = "0.1.0"
 dependencies = [
  "agent-client-protocol",
  "anyhow",
  "aow-i18n",
- "aow-protocol",
  "aow-runtime-contract",
  "async-trait",
  "axum",
@@ -338,7 +340,6 @@ dependencies = [
 name = "aow-runtime-contract"
 version = "0.1.0"
 dependencies = [
- "aow-protocol",
  "chrono",
  "serde",
  "serde_json",
@@ -349,6 +350,7 @@ name = "aow-server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "aow-api-contract",
  "aow-automations",
  "aow-cli-access",
  "aow-config",
@@ -358,7 +360,6 @@ dependencies = [
  "aow-im",
  "aow-macos-log",
  "aow-operation-log",
- "aow-protocol",
  "aow-runtime-client",
  "aow-runtime-contract",
  "aow-server-client",
@@ -395,7 +396,7 @@ name = "aow-server-client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "aow-protocol",
+ "aow-api-contract",
  "bytes",
  "http",
  "http-body-util",

@@ -8,7 +8,6 @@ license = "GPL-3.0-or-later"
 aow-runtime-contract = { path = "../../../common/crates/runtime-contract" }
 aow-i18n = { package = "aow-runtime-i18n", path = "../i18n" }
 aow-db = { package = "aow-runtime-db", path = "../db" }
-aow-protocol = { path = "../../../common/crates/protocol" }
 agent-client-protocol = { version = "=3.4.0", features = ["unstable", "unstable_protocol_v2"] }
 anyhow.workspace = true
 async-trait.workspace = true

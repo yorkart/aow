@@ -1,4 +1,4 @@
-use aow_protocol::{FileSearchMode, FileSearchRequest};
+use aow_runtime_contract::workspace::{FileSearchMode, FileSearchRequest};
 
 use super::SearchError;
 

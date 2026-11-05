@@ -104,7 +104,7 @@ impl AowManager {
             snapshot
                 .parent
                 .as_ref()
-                .filter(|parent| parent.kind == aow_protocol::InstanceKind::Acp)
+                .filter(|parent| parent.kind == aow_runtime_contract::instance::InstanceKind::Acp)
                 .and_then(|parent| sessions.get(&parent.id))
                 .filter(|binding| binding.home == environment.home)
                 .cloned()
@@ -160,10 +160,10 @@ impl AowManager {
         agent_id: &str,
         cwd: PathBuf,
         source: SessionSource,
-        parent: Option<aow_protocol::InstanceRef>,
+        parent: Option<aow_runtime_contract::instance::InstanceRef>,
     ) -> anyhow::Result<SessionSnapshot> {
         let inherited = if let Some(parent) = &parent
-            && parent.kind == aow_protocol::InstanceKind::Acp
+            && parent.kind == aow_runtime_contract::instance::InstanceKind::Acp
         {
             match self.acp_role_binding(service, &parent.id).await? {
                 Some(binding) => Some((

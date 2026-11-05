@@ -7,8 +7,7 @@ Server and Runtime may depend on it; Common depends on neither product.
 - `i18n`: locale context, HTTP language negotiation and interpolation; product catalogs remain in each product.
 - `id`: public identifier generation and encoding.
 - `macos-log`: the macOS Unified Logging adapter shared by Server and Runtime.
-- `protocol`: terminal, filesystem and instance wire types.
-- `runtime-contract`: ACP management, agents, workspace operations, role environments and single-execution requests, responses and events.
+- `runtime-contract`: Runtime wire contracts for ACP management, agents, terminal attachment, filesystem/Git/search, role environments, single executions and shared instance references.
 - `sqlite`: private owned-database connections, external read-only connections and
   transactional migration infrastructure (`aow-sqlite`).
 
@@ -16,6 +15,10 @@ Common contains no ACP client engine, adapter discovery, process management,
 workspace filesystem operations, session history or business database schemas.
 Native ACP messages use the official `agent-client-protocol` library in the
 Runtime implementation and Server's transport SDK.
+
+Server business API types live in `server/crates/api-contract`: instance creation,
+terminal tabs/layouts/hosting, pull requests and Git provider link enrichment.
+Runtime and its SDK depend only on `runtime-contract` for these wire contracts.
 
 SQLite callers provide database paths, migration domain names and migration SQL.
 The shared crate owns only connection configuration and the generic

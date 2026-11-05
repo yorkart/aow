@@ -74,9 +74,9 @@ async fn enable_inner(
         aow_i18n::message("server.terminal_ended", &[])
     );
     ensure!(
-        pane.agent_terminal
-            .as_ref()
-            .is_none_or(|agent| agent.phase == aow_protocol::AgentTerminalPhase::Ready),
+        pane.agent_terminal.as_ref().is_none_or(
+            |agent| agent.phase == aow_api_contract::terminal::AgentTerminalPhase::Ready
+        ),
         aow_i18n::message("server.agent_not_ready_yet", &[])
     );
     let hosting = TerminalHosting {

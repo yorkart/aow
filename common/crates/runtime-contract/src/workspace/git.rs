@@ -92,9 +92,6 @@ pub struct GitCommitDetail {
     pub stats: GitCommitStats,
     pub upstream: Option<String>,
     pub remote_name: Option<String>,
-    /// Optional web links supplied by the configured repository Provider.
-    pub remote_url: Option<String>,
-    pub commit_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

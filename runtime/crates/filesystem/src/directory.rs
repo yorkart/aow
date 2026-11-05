@@ -3,7 +3,7 @@ use std::os::unix::fs::MetadataExt;
 use std::{path::Path, time::UNIX_EPOCH};
 use tokio::fs;
 
-use aow_protocol::{DirectoryListing, FileEntry, FileKind};
+use aow_runtime_contract::workspace::{DirectoryListing, FileEntry, FileKind};
 
 use super::{
     FsError,

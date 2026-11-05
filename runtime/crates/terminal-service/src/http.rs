@@ -1,10 +1,10 @@
 //! HTTP routes for terminal runtime management.
 
 use crate::{error::ServiceError, websocket::runtime_socket};
-use aow_protocol::{
+use aow_runtime_contract::agents::{TerminalAgentProgress, TerminalAgentRequest};
+use aow_runtime_contract::terminal::{
     TerminalAgentList, TerminalRuntime, TerminalRuntimeList, TerminalRuntimeSpec, TerminaldHealth,
 };
-use aow_runtime_contract::agents::{TerminalAgentProgress, TerminalAgentRequest};
 use aow_terminal_core::{AttachOptions, CreateOutcome, TerminalManager};
 use axum::{
     Json, Router,
@@ -45,7 +45,7 @@ pub fn router(state: TerminalManager) -> Router {
 async fn screen(
     State(state): State<TerminalManager>,
     AxumPath(id): AxumPath<String>,
-) -> Result<Json<Option<aow_protocol::TerminalScreen>>, ServiceError> {
+) -> Result<Json<Option<aow_runtime_contract::terminal::TerminalScreen>>, ServiceError> {
     Ok(Json(state.screen(&id)?))
 }
 

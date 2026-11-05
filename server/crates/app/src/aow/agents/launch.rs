@@ -112,7 +112,7 @@ impl AowManager {
 
     pub(crate) async fn resolve_terminal_rebuild_launch(
         &self,
-        pane: &aow_protocol::TerminalPane,
+        pane: &aow_api_contract::terminal::TerminalPane,
         workspace_root: &str,
     ) -> Result<AgentLaunch, AowError> {
         let profile_id = if let Some(id) = &pane.agent_profile_id {

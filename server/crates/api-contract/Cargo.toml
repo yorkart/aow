@@ -1,10 +1,11 @@
 [package]
-name = "aow-protocol"
+name = "aow-api-contract"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
+aow-runtime-contract = { path = "../../../common/crates/runtime-contract" }
 serde.workspace = true
 
 [dev-dependencies]

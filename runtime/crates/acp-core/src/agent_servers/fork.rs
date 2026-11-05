@@ -84,7 +84,9 @@ impl AgentServerStore {
                     &source.data.agent_id,
                     source.data.cwd.clone().into(),
                     crate::facade::SessionCreation {
-                        parent: Some(aow_protocol::InstanceRef::acp(&source.data.thread_id)),
+                        parent: Some(aow_runtime_contract::instance::InstanceRef::acp(
+                            &source.data.thread_id,
+                        )),
                         execution_environment: source.data.execution_environment.clone(),
                         ..Default::default()
                     },

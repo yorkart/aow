@@ -38,14 +38,14 @@ impl RuntimeClient {
     pub async fn workspace_list(
         &self,
         path: &Path,
-    ) -> Result<aow_protocol::DirectoryListing, RuntimeError> {
+    ) -> Result<aow_runtime_contract::workspace::DirectoryListing, RuntimeError> {
         self.workspace_request(WorkspaceRequest::List { path: path.into() })
             .await
     }
     pub async fn workspace_read(
         &self,
         path: &Path,
-    ) -> Result<aow_protocol::TextFile, RuntimeError> {
+    ) -> Result<aow_runtime_contract::workspace::TextFile, RuntimeError> {
         self.workspace_request(WorkspaceRequest::Read { path: path.into() })
             .await
     }
@@ -93,7 +93,7 @@ impl RuntimeClient {
         path: &Path,
         name: &str,
         file_only: bool,
-    ) -> Result<aow_protocol::RenameResult, RuntimeError> {
+    ) -> Result<aow_runtime_contract::workspace::RenameResult, RuntimeError> {
         self.workspace_request(WorkspaceRequest::Rename {
             path: path.into(),
             name: name.into(),
@@ -121,7 +121,7 @@ impl RuntimeClient {
     pub async fn workspace_git_status(
         &self,
         repo: &Path,
-    ) -> Result<aow_protocol::GitStatus, RuntimeError> {
+    ) -> Result<aow_runtime_contract::workspace::GitStatus, RuntimeError> {
         self.workspace_request(WorkspaceRequest::GitStatus { repo: repo.into() })
             .await
     }
@@ -129,7 +129,7 @@ impl RuntimeClient {
         &self,
         root: &Path,
         depth: usize,
-    ) -> Result<Vec<aow_protocol::RepositorySummary>, RuntimeError> {
+    ) -> Result<Vec<aow_runtime_contract::workspace::RepositorySummary>, RuntimeError> {
         self.workspace_request(WorkspaceRequest::GitRepositories {
             root: root.into(),
             depth,
@@ -140,7 +140,7 @@ impl RuntimeClient {
         &self,
         root: &Path,
         paths: &[PathBuf],
-    ) -> Result<aow_protocol::GitIgnoredPaths, RuntimeError> {
+    ) -> Result<aow_runtime_contract::workspace::GitIgnoredPaths, RuntimeError> {
         self.workspace_request(WorkspaceRequest::GitIgnored {
             root: root.into(),
             paths: paths.to_vec(),
@@ -163,7 +163,7 @@ impl RuntimeClient {
         &self,
         repo: &Path,
         limit: usize,
-    ) -> Result<aow_protocol::GitLog, RuntimeError> {
+    ) -> Result<aow_runtime_contract::workspace::GitLog, RuntimeError> {
         self.workspace_request(WorkspaceRequest::GitLog {
             repo: repo.into(),
             limit,
@@ -175,7 +175,7 @@ impl RuntimeClient {
         repo: &Path,
         path: Option<&str>,
         staged: bool,
-    ) -> Result<aow_protocol::GitDiff, RuntimeError> {
+    ) -> Result<aow_runtime_contract::workspace::GitDiff, RuntimeError> {
         self.workspace_request(WorkspaceRequest::GitDiff {
             repo: repo.into(),
             path: path.map(str::to_owned),
@@ -187,7 +187,7 @@ impl RuntimeClient {
         &self,
         repo: &Path,
         commit: &str,
-    ) -> Result<aow_protocol::GitCommitDetail, RuntimeError> {
+    ) -> Result<aow_runtime_contract::workspace::GitCommitDetail, RuntimeError> {
         self.workspace_request(WorkspaceRequest::GitCommitDetail {
             repo: repo.into(),
             commit: commit.into(),
@@ -198,7 +198,7 @@ impl RuntimeClient {
         &self,
         repo: &Path,
         commit: &str,
-    ) -> Result<aow_protocol::GitCommitFiles, RuntimeError> {
+    ) -> Result<aow_runtime_contract::workspace::GitCommitFiles, RuntimeError> {
         self.workspace_request(WorkspaceRequest::GitCommitFiles {
             repo: repo.into(),
             commit: commit.into(),
@@ -211,7 +211,7 @@ impl RuntimeClient {
         commit: &str,
         path: &str,
         original_path: Option<&str>,
-    ) -> Result<aow_protocol::GitDiff, RuntimeError> {
+    ) -> Result<aow_runtime_contract::workspace::GitDiff, RuntimeError> {
         self.workspace_request(WorkspaceRequest::GitCommitDiff {
             repo: repo.into(),
             commit: commit.into(),
@@ -237,7 +237,7 @@ impl RuntimeClient {
     pub async fn search_workspace(
         &self,
         request: &SearchRequest,
-    ) -> Result<aow_protocol::FileSearchResult, RuntimeError> {
+    ) -> Result<aow_runtime_contract::workspace::FileSearchResult, RuntimeError> {
         self.post_json("/v1/workspace/search", request).await
     }
     pub async fn cancel_workspace_search(&self, id: &str) -> Result<(), RuntimeError> {

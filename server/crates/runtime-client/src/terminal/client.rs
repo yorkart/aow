@@ -31,7 +31,7 @@ impl TerminalClient {
     pub async fn screen(
         &self,
         id: &str,
-    ) -> Result<Option<aow_protocol::TerminalScreen>, RuntimeError> {
+    ) -> Result<Option<aow_runtime_contract::terminal::TerminalScreen>, RuntimeError> {
         self.runtime
             .get_json(&format!("{}/screen", runtime_path(id)))
             .await

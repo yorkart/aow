@@ -1,4 +1,4 @@
-use aow_protocol::RenameResult;
+use aow_runtime_contract::workspace::RenameResult;
 use axum::{
     Json,
     body::Body,

@@ -5,6 +5,8 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+aow-api-contract = { path = "../api-contract" }
+aow-runtime-contract = { path = "../../../common/crates/runtime-contract" }
 aow-config = { path = "../config" }
 reqwest.workspace = true
 aow-server-client = { path = "../server-client" }
@@ -14,7 +16,6 @@ clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
-aow-protocol = { path = "../../../common/crates/protocol" }
 aow-automations = { path = "../automations" }
 aow-id = { path = "../../../common/crates/id" }
 

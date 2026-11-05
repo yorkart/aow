@@ -10,7 +10,7 @@ use crate::{AppState, HttpError};
 
 pub(crate) async fn list_root(
     State(state): State<AppState>,
-) -> Result<Json<aow_protocol::DirectoryListing>, HttpError> {
+) -> Result<Json<aow_runtime_contract::workspace::DirectoryListing>, HttpError> {
     Ok(Json(
         super::node::listing(&state, std::path::Path::new("/")).await?,
     ))
@@ -18,7 +18,7 @@ pub(crate) async fn list_root(
 
 pub(crate) async fn list_home(
     State(state): State<AppState>,
-) -> Result<Json<aow_protocol::DirectoryListing>, HttpError> {
+) -> Result<Json<aow_runtime_contract::workspace::DirectoryListing>, HttpError> {
     let home = super::node::home(&state).await?;
     Ok(Json(super::node::listing(&state, &home).await?))
 }
@@ -26,7 +26,7 @@ pub(crate) async fn list_home(
 pub(crate) async fn list_path(
     State(state): State<AppState>,
     AxumPath(path): AxumPath<String>,
-) -> Result<Json<aow_protocol::DirectoryListing>, HttpError> {
+) -> Result<Json<aow_runtime_contract::workspace::DirectoryListing>, HttpError> {
     Ok(Json(
         super::node::listing(&state, &decode_absolute(&path)?).await?,
     ))
@@ -37,7 +37,8 @@ pub(crate) async fn read_text(
     AxumPath(path): AxumPath<String>,
 ) -> Result<impl IntoResponse, HttpError> {
     let path = decode_absolute(&path)?;
-    let text: aow_protocol::TextFile = super::node::runtime(&state)?.workspace_read(&path).await?;
+    let text: aow_runtime_contract::workspace::TextFile =
+        super::node::runtime(&state)?.workspace_read(&path).await?;
     let etag = HeaderValue::from_str(&format!("\"{}\"", text.version))
         .map_err(|error| HttpError::internal(error.to_string()))?;
     let mut headers = HeaderMap::new();

@@ -1,6 +1,6 @@
 use std::{path::Path, process::Command as StdCommand};
 
-use aow_protocol::GitIgnoredPaths;
+use aow_runtime_contract::workspace::GitIgnoredPaths;
 use tempfile::TempDir;
 
 use super::*;
@@ -120,8 +120,6 @@ async fn falls_back_to_a_non_origin_remote() {
     let id = git_output(&repo, &["rev-parse", "HEAD"]);
     let detail = commit_detail(&repo, &id).await.unwrap();
     assert_eq!(detail.remote_name.as_deref(), Some("mirror"));
-    assert!(detail.remote_url.is_none());
-    assert!(detail.commit_url.is_none());
 }
 
 #[tokio::test]
@@ -431,8 +429,6 @@ async fn returns_real_commit_detail_metadata_stats_parents_refs_and_remote() {
     );
     assert_eq!(root.upstream, None);
     assert_eq!(root.remote_name.as_deref(), Some("review"));
-    assert!(root.remote_url.is_none());
-    assert!(root.commit_url.is_none());
 
     git(&repo, &["switch", "-q", "-c", "feature"]);
     std::fs::write(repo.join("feature.txt"), "feature\n").unwrap();

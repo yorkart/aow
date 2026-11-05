@@ -12,7 +12,7 @@ use aow_runtime_contract::workspace::SearchRequest as Request;
 pub(crate) async fn search(
     State(state): State<AppState>,
     Json(request): Json<Request>,
-) -> Result<Json<aow_protocol::FileSearchResult>, HttpError> {
+) -> Result<Json<aow_runtime_contract::workspace::FileSearchResult>, HttpError> {
     let guard = state.search.begin(request.request_id)?;
     let _permit = tokio::select! {
         _ = guard.cancel.cancelled() => return Err(search_error(SearchError::Cancelled)),

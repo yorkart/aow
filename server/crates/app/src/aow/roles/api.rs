@@ -136,7 +136,7 @@ async fn launch(
                     ));
                 }
             }
-            parent.map(aow_protocol::InstanceRef::acp)
+            parent.map(aow_runtime_contract::instance::InstanceRef::acp)
         } else {
             None
         };

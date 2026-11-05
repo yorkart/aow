@@ -74,7 +74,7 @@ impl DaemonState {
     pub(in crate::runtime) fn screen(
         &self,
         id: &str,
-    ) -> Result<Option<aow_protocol::TerminalScreen>, TerminalError> {
+    ) -> Result<Option<aow_runtime_contract::terminal::TerminalScreen>, TerminalError> {
         let runtime = self
             .lock_runtimes()?
             .get(id)
@@ -87,7 +87,7 @@ impl DaemonState {
             .vt_session
             .as_ref()
             .and_then(VtSession::snapshot)
-            .map(|snapshot| aow_protocol::TerminalScreen {
+            .map(|snapshot| aow_runtime_contract::terminal::TerminalScreen {
                 generation: snapshot.generation,
                 applied_offset: snapshot.applied_offset,
                 cols: snapshot.cols,

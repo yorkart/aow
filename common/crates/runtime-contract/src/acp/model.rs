@@ -122,7 +122,7 @@ pub enum SessionSource {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct SessionCreation {
     pub source: SessionSource,
-    pub parent: Option<aow_protocol::InstanceRef>,
+    pub parent: Option<crate::instance::InstanceRef>,
     /// Explicit process overrides; parentage does not select an execution environment.
     pub execution_environment: Option<ExecutionEnvironment>,
 }
@@ -146,7 +146,7 @@ pub struct SessionSnapshot {
     #[serde(default)]
     pub created_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub parent: Option<aow_protocol::InstanceRef>,
+    pub parent: Option<crate::instance::InstanceRef>,
     #[serde(default)]
     pub session_id: Option<String>,
     pub agent_id: String,
@@ -316,7 +316,7 @@ pub struct SessionInfo {
     #[serde(default)]
     pub created_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub parent: Option<aow_protocol::InstanceRef>,
+    pub parent: Option<crate::instance::InstanceRef>,
     #[serde(default)]
     pub session_id: Option<String>,
     pub agent_id: String,

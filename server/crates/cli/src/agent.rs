@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use aow_protocol::{
+use aow_api_contract::terminal::{
     AgentTerminalCreate, AgentTerminalInfo, AgentTerminalPhase, AgentTerminalSubmit,
 };
 use clap::{Args, Subcommand};

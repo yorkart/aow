@@ -4,7 +4,7 @@ use std::{
 };
 use walkdir::{DirEntry, WalkDir};
 
-use aow_protocol::RepositorySummary;
+use aow_runtime_contract::workspace::RepositorySummary;
 
 use super::{
     GitError,

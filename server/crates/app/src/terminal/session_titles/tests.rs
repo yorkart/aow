@@ -5,7 +5,7 @@ async fn metadata_preserves_osc_titles_and_filters_other_workspaces() {
         TerminalManager,
         tests::{pane, tab_with},
     };
-    use aow_protocol::{TerminalLayout, TerminalPaneStatus};
+    use aow_api_contract::terminal::{TerminalLayout, TerminalPaneStatus};
     use aow_runtime_client::TerminalClient;
     use axum::{Json, Router, routing::get};
 

@@ -68,13 +68,15 @@ pub(super) fn start_runtime_workers(mut spawned: SpawnedRuntime) {
         .take()
         .expect("spawned runtime child is present before commit");
     thread::spawn(move || match child.wait() {
-        Ok(status) => {
-            wait_runtime.mark_reaped(TerminalPaneStatus::Exited, Some(status.exit_code()), true)
-        }
+        Ok(status) => wait_runtime.mark_reaped(
+            TerminalRuntimeStatus::Exited,
+            Some(status.exit_code()),
+            true,
+        ),
         Err(error) => {
             tracing::warn!(%error, runtime_id = %wait_runtime.id, "failed waiting for terminal runtime");
             wait_runtime.kill_best_effort();
-            wait_runtime.mark_reaped(TerminalPaneStatus::Interrupted, None, false);
+            wait_runtime.mark_reaped(TerminalRuntimeStatus::Interrupted, None, false);
         }
     });
     // Both long-lived workers now own the runtime and child. It is visible in
@@ -115,13 +117,13 @@ impl Drop for SpawnedRuntime {
             let result = child.wait();
             match result {
                 Ok(status) => runtime.mark_reaped(
-                    TerminalPaneStatus::Interrupted,
+                    TerminalRuntimeStatus::Interrupted,
                     Some(status.exit_code()),
                     true,
                 ),
                 Err(error) => {
                     tracing::debug!(%error, runtime_id = %runtime.id, "failed to reap uncommitted terminal runtime");
-                    runtime.mark_reaped(TerminalPaneStatus::Interrupted, None, false);
+                    runtime.mark_reaped(TerminalRuntimeStatus::Interrupted, None, false);
                 }
             }
         });
@@ -206,7 +208,7 @@ pub(super) fn spawn_runtime_blocking(
             metadata: Mutex::new(RuntimeMetadata {
                 rows: spec.rows,
                 cols: spec.cols,
-                status: TerminalPaneStatus::Running,
+                status: TerminalRuntimeStatus::Running,
                 exit_code: None,
             }),
             master: Mutex::new(pair.master),

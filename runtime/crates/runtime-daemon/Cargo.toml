@@ -15,7 +15,6 @@ aow-agents-service = { path = "../agents-service" }
 tempfile = "3.20"
 aow-workspaces = { package = "aow-runtime-workspace", path = "../workspace" }
 aow-runtime-environment = { path = "../environment" }
-aow-protocol = { path = "../../../common/crates/protocol" }
 aow-agents-core = { path = "../agents-core", features = ["management"] }
 anyhow.workspace = true
 aow-acp-service = { path = "../acp-service" }

@@ -1,7 +1,7 @@
 use std::path::Path;
 use tokio::fs::{self, File};
 
-use aow_protocol::TextFile;
+use aow_runtime_contract::workspace::TextFile;
 
 use super::{
     FsError,

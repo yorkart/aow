@@ -12,7 +12,7 @@ struct StreamAttachment {
     owner: Option<ControllerOwner>,
     controller_changed: watch::Receiver<Option<ControllerOwner>>,
     restore: Option<String>,
-    restore_gzip: Option<aow_protocol::TerminalRestoreGzip>,
+    restore_gzip: Option<aow_runtime_contract::terminal::TerminalRestoreGzip>,
     restore_cols: Option<u16>,
     restore_rows: Option<u16>,
 }
@@ -142,9 +142,9 @@ where
         }
     };
     let initial_status = description.status;
-    let mut pending_status = (initial_status != TerminalPaneStatus::Running)
+    let mut pending_status = (initial_status != TerminalRuntimeStatus::Running)
         .then_some((initial_status, description.exit_code));
-    if initial_status == TerminalPaneStatus::Running
+    if initial_status == TerminalRuntimeStatus::Running
         && !send_stream_status(sender, runtime, owner, initial_status, None).await
     {
         return None;

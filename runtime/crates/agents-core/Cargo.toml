@@ -14,7 +14,6 @@ management = ["launch", "sessions", "automation", "dep:rusqlite", "dep:uuid", "d
 
 [dependencies]
 aow-runtime-contract = { path = "../../../common/crates/runtime-contract" }
-aow-protocol = { path = "../../../common/crates/protocol" }
 aow-i18n = { package = "aow-runtime-i18n", path = "../i18n" }
 aow-db = { package = "aow-runtime-db", path = "../db", optional = true }
 aow-id = { path = "../../../common/crates/id", optional = true }

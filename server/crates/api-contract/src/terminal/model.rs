@@ -2,13 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use super::agent::AgentTerminalState;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum TerminalPaneStatus {
-    Running,
-    Exited,
-    Interrupted,
-}
+/// A pane displays the lifecycle state reported by its Runtime.
+pub use aow_runtime_contract::terminal::TerminalRuntimeStatus as TerminalPaneStatus;
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -57,7 +52,7 @@ pub struct TerminalPane {
     pub id: String,
     /// Creating instance. Retained even after the parent is removed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub parent: Option<crate::InstanceRef>,
+    pub parent: Option<aow_runtime_contract::instance::InstanceRef>,
     #[serde(default)]
     pub name: String,
     pub cwd: String,

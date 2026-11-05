@@ -1,5 +1,5 @@
 use super::super::*;
-use aow_protocol::AgentTerminalInfo;
+use aow_api_contract::terminal::AgentTerminalInfo;
 
 pub(super) fn info(tab: &TerminalTab, pane: &TerminalPane) -> Option<AgentTerminalInfo> {
     Some(AgentTerminalInfo {

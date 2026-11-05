@@ -1,4 +1,4 @@
-use aow_protocol::ApiError;
+use aow_runtime_contract::error::ApiError;
 use aow_terminal_core::TerminalError;
 use axum::{
     Json,

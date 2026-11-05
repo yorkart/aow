@@ -178,7 +178,7 @@ async fn execute(
             loop {
                 if state.inner.shutting_down.load(Ordering::Acquire)
                     || lease.runtime.is_deleted()
-                    || lease.runtime.description()?.status != TerminalPaneStatus::Running
+                    || lease.runtime.description()?.status != TerminalRuntimeStatus::Running
                 {
                     return Err(TerminalError::Conflict(
                         "Agent exited before becoming ready".into(),
@@ -222,7 +222,7 @@ pub(in crate::runtime) async fn submit_owned(
     task: &str,
 ) -> Result<(), TerminalError> {
     validate_task(task)?;
-    if runtime.is_deleted() || runtime.description()?.status != TerminalPaneStatus::Running {
+    if runtime.is_deleted() || runtime.description()?.status != TerminalRuntimeStatus::Running {
         return Err(TerminalError::Conflict("Agent exited".into()));
     }
     write(runtime, owner, format!("\x1b[200~{task}\x1b[201~")).await?;

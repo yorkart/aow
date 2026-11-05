@@ -107,7 +107,7 @@ impl RuntimeClient {
         Ok(serde_json::from_slice(&body)?)
     }
     pub(crate) fn status_error(status: http::StatusCode, body: &[u8]) -> RuntimeError {
-        let error = serde_json::from_slice::<aow_protocol::ApiError>(body).ok();
+        let error = serde_json::from_slice::<aow_runtime_contract::error::ApiError>(body).ok();
         let message = error
             .as_ref()
             .map(|e| e.message.clone())

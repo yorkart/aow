@@ -36,7 +36,7 @@ pub(super) async fn send_stream_status<S>(
     sender: &mut S,
     runtime: &Runtime,
     owner: Option<ControllerOwner>,
-    status: TerminalPaneStatus,
+    status: TerminalRuntimeStatus,
     exit_code: Option<u32>,
 ) -> bool
 where

@@ -1,4 +1,4 @@
-use aow_protocol::{TerminalAttachClientMessage, TerminalAttachServerMessage};
+use aow_runtime_contract::terminal::{TerminalAttachClientMessage, TerminalAttachServerMessage};
 use bytes::Bytes;
 
 /// Typed terminal input, independent of network framing or serialization.

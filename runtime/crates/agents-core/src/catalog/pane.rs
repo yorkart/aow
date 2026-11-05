@@ -6,11 +6,11 @@ use crate::{
         tracking::{AgentSessionTracker, LiveSessionContext, SessionResolution, SessionTarget},
     },
 };
-use aow_protocol::TerminalAgentProcess;
 use aow_runtime_contract::agents::{
     NativePaneRequest as PaneRequest, NativeProcessCheck as ProcessCheck,
     ResolveSessionWorktree as Worktree,
 };
+use aow_runtime_contract::terminal::TerminalAgentProcess;
 
 pub(crate) struct Binding {
     pub agent: &'static str,

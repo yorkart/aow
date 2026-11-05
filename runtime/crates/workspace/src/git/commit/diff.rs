@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use aow_protocol::GitDiff;
+use aow_runtime_contract::workspace::GitDiff;
 
 use crate::git::{
     GitError,
