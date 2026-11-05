@@ -23,7 +23,7 @@ export function TaskProperties({ project, worktree, conversations }: { project: 
   const scope = useTaskScope();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  if (!scope || scope.task.is_router) return null;
+  if (!scope) return null;
   const { task } = scope;
   const related = scope.tasks.filter(item => item.project_id === task.project_id);
   const parent = related.find(item => item.id === task.source_task_id);
@@ -41,6 +41,7 @@ export function TaskProperties({ project, worktree, conversations }: { project: 
   const none = <span className="task-property-empty">{t('tasks.none')}</span>;
   const branch = worktree.detached ? `${t('tasks.detached_head')} · ${worktree.head.slice(0, 7)}` : worktree.branch;
   return <section className="task-properties" aria-label={t('tasks.properties')} aria-busy={saving}>
+    {!task.is_router && <>
     <section className="task-property-group"><h3>{t('tasks.work')}</h3><dl>
       <Property label={t('tasks.status')}><TaskStatusPicker status={task.status} disabled={saving || task.archived} onChange={status => void changeStatus(status)} /></Property>
       <Property label={t('tasks.project')}><button type="button" className="task-property-link" title={project.name} disabled={!scope.openProject} onClick={scope.openProject}>
@@ -60,6 +61,7 @@ export function TaskProperties({ project, worktree, conversations }: { project: 
       <Property label={t('tasks.updated')}><Timestamp value={task.updated_at} /></Property>
       <Property label={t('tasks.completed')}><Timestamp value={task.completed_at} /></Property>
     </dl></section>
+    </>}
     <section className="task-property-group"><h3>{t('navigation.conversation')}</h3>{conversations}</section>
   </section>;
 }

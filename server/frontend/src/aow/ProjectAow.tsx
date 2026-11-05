@@ -814,7 +814,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     floating.publishHost(scope, { portal: hostPortal, activeId: activeCenterId, visible: active });
   }, [floating.publishHost, worktree.path, hostPortal, activeCenterId, active]);
   useEffect(() => () => floating.publishHost(scope), [floating.publishHost, worktree.path, scope]);
-  const conversationView = taskScope && !taskScope.task.is_router ? 'properties' : 'conversations';
+  const conversationView = taskScope ? 'properties' : 'conversations';
   const [rightView, setRightView] = useState<RightView>(conversationView);
   const terminalInventory = useTerminalState(active);
   const [filesExplorerCollapsed, setFilesExplorerCollapsed] = useState<boolean>();
@@ -2085,7 +2085,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const renderSidebar = () => (
     <aside className="project-aow-right" hidden={!rightSidebarVisible}>
       <nav aria-label={t("navigation.aow_side_views")}>
-        {taskScope && !taskScope.task.is_router && <button className={rightView === 'properties' ? 'active' : ''} title={t('tasks.properties')} aria-label={t('tasks.properties')} onClick={() => setRightView('properties')}><ListTodo /></button>}
+        {taskScope && <button className={rightView === 'properties' ? 'active' : ''} title={t('tasks.properties')} aria-label={t('tasks.properties')} onClick={() => setRightView('properties')}><ListTodo /></button>}
         {conversationView === 'conversations' && <button className={rightView === 'conversations' ? 'active' : ''} title={t("navigation.conversation")} aria-label={t("navigation.conversation")} onClick={() => setRightView(conversationView)}><MessageSquare /></button>}
         <button className={rightView === 'automations' ? 'active' : ''} title={t("navigation.automation")} aria-label={t("navigation.automation")} onClick={() => setRightView('automations')}><CalendarClock /></button>
         <span className="project-aow-view-separator" aria-hidden="true" />
@@ -2129,7 +2129,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
         <PullRequestsPanel key={'pull-requests:' + worktree.path} repository={worktree.path} visible={active && rightSidebarVisible && rightView === 'pullRequests'} activeNumber={activePullRequest?.number} activeProvider={activePullRequest?.provider} activeRemote={activePullRequest?.remote} onOpen={pr => selectTab(() => openPullRequest(pr))} />
       </div>
       <div className="project-aow-right-content" hidden={rightView !== conversationView}>
-        {taskScope && conversationView === 'properties'
+        {taskScope
           ? <TaskProperties key={taskScope.task.id} project={project} worktree={worktree} conversations={conversationList} />
           : conversationList}
       </div>
