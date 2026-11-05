@@ -66,8 +66,8 @@ function Row({ node, sessions, activeTerminalId, activeThreadId, unreadTerminals
   </li>;
 }
 
-export function ConversationPanel({ workspace, visible, activeTerminalId, activeThreadId, onOpenTerminal, onOpenAcp }: {
-  workspace: string; visible: boolean; activeTerminalId?: string; activeThreadId?: string;
+export function ConversationPanel({ workspace, visible, embedded = false, activeTerminalId, activeThreadId, onOpenTerminal, onOpenAcp }: {
+  workspace: string; visible: boolean; embedded?: boolean; activeTerminalId?: string; activeThreadId?: string;
   onOpenTerminal: (tab: TerminalTab) => void; onOpenAcp: (session: AcpSessionInfo) => void;
 }) {
   const taskScope = useTaskScope();
@@ -127,19 +127,22 @@ export function ConversationPanel({ workspace, visible, activeTerminalId, active
     removeAcpSessionTabs(instance.cwd, instance.id);
     synced.reload(); graph.reload();
   });
-  return <section className="conversation-panel" aria-label={t('navigation.conversation')}>
-    <div className="conversation-search"><Search size={13} /><input aria-label={t('conversations.search')} placeholder={t('conversations.search')}
-      value={search} onChange={event => setSearch(event.target.value)} /></div>
-    <AowPanelStack><AowPanel title={t('navigation.conversation')} icon={<MessageSquare />} collapsible={false}
-      actions={<><AowIconButton title={t('acp.import_acp_sessions')} aria-label={t('acp.import_acp_sessions')}
-        onClick={() => run(async () => setImportAgents(await acpApi.agents()))}><Download /></AowIconButton>
-        <AowIconButton title={t('conversations.refresh')} aria-label={t('conversations.refresh')} onClick={() => { graph.reload(); synced.reload(); void terminalStore.refresh(); }}><RefreshCw /></AowIconButton></>}>
-      {(error || graph.error || status.error || terminals.error) && <p role="alert">{error || graph.error || status.error || terminals.error}</p>}
-      {!nodes.length && <p className="conversation-empty">{status.loading ? t('conversations.loading') : t('conversations.empty')}</p>}
-      <ul className="conversation-tree">{nodes.map(node => <Row key={instanceKey(node.instance)} node={node} sessions={sessions}
-        activeTerminalId={activeTerminalId} activeThreadId={activeThreadId} unreadTerminals={unreadTerminals} unreadAcp={unreadAcp}
-        onOpen={open} onRemove={remove} searching={!!search.trim()} />)}</ul>
-    </AowPanel></AowPanelStack>
+  const searchInput = <div className="conversation-search"><Search size={13} /><input aria-label={t('conversations.search')} placeholder={t('conversations.search')}
+    value={search} onChange={event => setSearch(event.target.value)} /></div>;
+  const actions = <><AowIconButton title={t('acp.import_acp_sessions')} aria-label={t('acp.import_acp_sessions')}
+    onClick={() => run(async () => setImportAgents(await acpApi.agents()))}><Download /></AowIconButton>
+    <AowIconButton title={t('conversations.refresh')} aria-label={t('conversations.refresh')} onClick={() => { graph.reload(); synced.reload(); void terminalStore.refresh(); }}><RefreshCw /></AowIconButton></>;
+  const content = <>
+    {(error || graph.error || status.error || terminals.error) && <p role="alert">{error || graph.error || status.error || terminals.error}</p>}
+    {!nodes.length && <p className="conversation-empty">{status.loading ? t('conversations.loading') : t('conversations.empty')}</p>}
+    <ul className="conversation-tree">{nodes.map(node => <Row key={instanceKey(node.instance)} node={node} sessions={sessions}
+      activeTerminalId={activeTerminalId} activeThreadId={activeThreadId} unreadTerminals={unreadTerminals} unreadAcp={unreadAcp}
+      onOpen={open} onRemove={remove} searching={!!search.trim()} />)}</ul>
+  </>;
+  return <section className={`conversation-panel${embedded ? ' conversation-panel-embedded' : ''}`} aria-label={t('navigation.conversation')}>
+    {embedded ? <><div className="conversation-toolbar">{searchInput}{actions}</div>{content}</> : <>
+      {searchInput}<AowPanelStack><AowPanel title={t('navigation.conversation')} icon={<MessageSquare />} collapsible={false} actions={actions}>{content}</AowPanel></AowPanelStack>
+    </>}
     {importAgents && <AcpThreadImport workspace={workspace} agents={importAgents} existing={synced.data.filter(session => session.cwd === workspace)} onClose={() => setImportAgents(null)} />}
     {confirmationDialog}
   </section>;

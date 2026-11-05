@@ -162,16 +162,19 @@ try {
     assert.equal(await row('Implement login').locator('small').count(), 0, 'task rows show only their status icon and title');
     assert.equal(await surface.getByRole('button', { name: 'ACP panel', exact: true }).count(), 0);
     assert.equal(await surface.getByRole('button', { name: 'Terminal panel', exact: true }).count(), 0);
-    assert.equal(await surface.getByRole('button', { name: 'Conversation', exact: true }).count(), 1);
+    assert.equal(await surface.getByRole('button', { name: 'Conversation', exact: true }).count(), 0);
     assert.equal(await surface.getByRole('button', { name: 'Automation', exact: true }).count(), 1);
     assert.equal(await surface.locator('.task-collaboration').count(), 0);
-    assert.equal(await surface.getByRole('button', { name: 'Task status', exact: true }).isVisible(), false);
+    assert.equal(await surface.getByRole('button', { name: 'Task status', exact: true }).isVisible(), true);
     await surface.getByRole('button', { name: 'Properties', exact: true }).click();
     const properties = surface.getByRole('region', { name: 'Properties', exact: true });
     const picker = properties.getByRole('button', { name: 'Task status', exact: true });
     const property = label => properties.locator('.task-property-row').filter({ has: page.locator('dt', { hasText: new RegExp(`^${label}$`) }) }).locator('dd');
-    assert.deepEqual(await properties.getByRole('heading').allTextContents(), ['Work', 'Relationships', 'Workspace', 'About']);
-    assert.equal(await properties.getByRole('textbox').count(), 0);
+    assert.deepEqual(await properties.getByRole('heading').allTextContents(), ['Work', 'Relationships', 'Workspace', 'About', 'Conversation']);
+    assert.equal(await properties.getByRole('textbox', { name: 'Task description', exact: true }).count(), 0);
+    const conversations = properties.getByRole('region', { name: 'Conversation', exact: true });
+    await conversations.locator('.conversation-instance').filter({ hasText: 'initial-0' }).waitFor();
+    assert.equal(await surface.locator('.conversation-panel').count(), 1, 'the task has one conversation list embedded in Properties');
     assert.equal(await properties.getByText('Labels', { exact: true }).count(), 0);
     assert.equal(await property('Branch').innerText(), 'main');
     assert.equal(await property('Folder').innerText(), '/repo');
@@ -230,11 +233,26 @@ try {
     await page.locator('.project-aow-new-menu').getByRole('button', { name: 'Terminal', exact: true }).click();
     await surface.getByRole('tab').filter({ hasText: 'Shell' }).waitFor();
     assert.equal(tasks[0].resources.length, 3);
-    await surface.getByRole('button', { name: 'Conversation', exact: true }).click();
+    await surface.getByRole('button', { name: 'Properties', exact: true }).click();
+    // This HTTP fixture does not emit ACP metadata changes for newly created sessions.
+    await conversations.getByRole('button', { name: 'Refresh conversations', exact: true }).click();
     await surface.locator('.conversation-instance').filter({ hasText: 'helper-' }).waitFor();
     await surface.getByText('Main conversation', { exact: false }).waitFor();
     assert.equal(sessions[1].parent.id, sessions[0].thread_id);
-    assert.equal(await surface.getByRole('button', { name: 'Task status', exact: true }).isVisible(), false);
+    const conversationSearch = conversations.getByRole('textbox', { name: 'Search conversations', exact: true });
+    await conversationSearch.fill('helper-');
+    assert.equal(await conversations.locator('.conversation-instance').count(), 2, 'search retains the matching conversation and its parent');
+    await conversationSearch.fill('no-matching-conversation');
+    await conversations.getByText('No conversations', { exact: true }).waitFor();
+    await conversationSearch.fill('');
+    await conversations.getByRole('button', { name: 'Refresh conversations', exact: true }).click();
+    for (const title of ['initial-0', 'helper-']) {
+      await conversations.locator('.conversation-instance').filter({ hasText: title }).locator('.aow-list-row-open').click();
+      await conversations.locator('.conversation-instance.active').filter({ hasText: title }).waitFor();
+      assert.equal(await properties.isVisible(), true, 'opening a conversation keeps task Properties visible');
+    }
+    await properties.screenshot({ path: '/tmp/aow-properties-conversations.png' });
+    assert.equal(await surface.getByRole('button', { name: 'Task status', exact: true }).isVisible(), true);
     const helper = surface.getByRole('tab').filter({ hasText: 'helper-' });
     await helper.click({ button: 'right' });
     await page.getByRole('menuitem', { name: 'Open · Floating workspace', exact: true }).click();
@@ -249,7 +267,7 @@ try {
     assert.deepEqual(creations[1].dependencies, []);
     assert.equal(creations[1].parent_id, undefined);
     assert.equal(await surface.getByRole('tab').count(), 1);
-    await surface.getByRole('button', { name: 'Conversation', exact: true }).click();
+    await surface.getByRole('button', { name: 'Properties', exact: true }).click();
     await surface.locator('.conversation-instance').filter({ hasText: 'initial-1' }).waitFor();
     assert.equal(await surface.locator('.conversation-instance').count(), 1);
     await row('Implement login').getByRole('button', { name: 'Implement login', exact: true }).click();
@@ -357,6 +375,7 @@ try {
     assert.equal(await surface.locator('.task-collaboration').count(), 0);
     assert.equal(await surface.getByRole('button', { name: 'Properties', exact: true }).count(), 0, 'Router is a persistent conversation entry without task properties');
     assert.equal(await surface.locator('.task-properties').count(), 0);
+    assert.equal(await surface.getByRole('button', { name: 'Conversation', exact: true }).count(), 1, 'Router retains its standalone conversation panel');
     await surface.locator('.conversation-instance').filter({ hasText: 'router-thread' }).waitFor();
     await page.reload();
     await row('Router').waitFor();

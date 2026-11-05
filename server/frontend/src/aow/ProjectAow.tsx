@@ -814,7 +814,8 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     floating.publishHost(scope, { portal: hostPortal, activeId: activeCenterId, visible: active });
   }, [floating.publishHost, worktree.path, hostPortal, activeCenterId, active]);
   useEffect(() => () => floating.publishHost(scope), [floating.publishHost, worktree.path, scope]);
-  const [rightView, setRightView] = useState<RightView>('conversations');
+  const conversationView = taskScope && !taskScope.task.is_router ? 'properties' : 'conversations';
+  const [rightView, setRightView] = useState<RightView>(conversationView);
   const terminalInventory = useTerminalState(active);
   const [filesExplorerCollapsed, setFilesExplorerCollapsed] = useState<boolean>();
   const [notesExplorerCollapsed, setNotesExplorerCollapsed] = useState<boolean>();
@@ -970,7 +971,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     else setActiveDocumentId(undefined);
   };
   const activateAcp = (id: string) => {
-    setRightView('conversations'); setActiveDocumentId(undefined); setActiveCenterId(`acp:${id}`); routeToFloating(`acp:${id}`);
+    setRightView(conversationView); setActiveDocumentId(undefined); setActiveCenterId(`acp:${id}`); routeToFloating(`acp:${id}`);
   };
   const createAcp = (agentId: string) => activateAcp(acp.create(agentId));
   const selectTab = <T,>(action: () => T): T => { restoreSelectionOverridden.current = true; cancelTabNavigation(); return action(); };
@@ -1116,7 +1117,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
       if (created.kind === 'acp') {
         taskScope?.remember('acp', created.session.thread_id);
         const id = acp.open(created.session);
-        setRightView('conversations'); setActiveDocumentId(undefined); setActiveCenterId(`acp:${id}`); routeToFloating(`acp:${id}`, targetFloating);
+        setRightView(conversationView); setActiveDocumentId(undefined); setActiveCenterId(`acp:${id}`); routeToFloating(`acp:${id}`, targetFloating);
       } else {
         taskScope?.remember('terminal', created.terminal.id);
         terminals.replace(created.terminal); openTerminal(created.terminal, targetFloating);
@@ -2075,11 +2076,17 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
           </Suspense>
   );
 
+  const conversationList = <ConversationPanel key={scope} workspace={worktree.path} visible={active && rightSidebarVisible && rightView === conversationView}
+    embedded={conversationView === 'properties'} activeTerminalId={terminalDock.visible ? terminalDock.terminalId : activeTerminalId}
+    activeThreadId={acp.tabs.find(tab => `acp:${tab.id}` === sidebarActiveId)?.thread_id}
+    onOpenTerminal={tab => selectTab(() => openTerminal(tab))}
+    onOpenAcp={session => selectTab(() => activateAcp(acp.open(session)))} />;
+
   const renderSidebar = () => (
     <aside className="project-aow-right" hidden={!rightSidebarVisible}>
       <nav aria-label={t("navigation.aow_side_views")}>
         {taskScope && !taskScope.task.is_router && <button className={rightView === 'properties' ? 'active' : ''} title={t('tasks.properties')} aria-label={t('tasks.properties')} onClick={() => setRightView('properties')}><ListTodo /></button>}
-        <button className={rightView === 'conversations' ? 'active' : ''} title={t("navigation.conversation")} aria-label={t("navigation.conversation")} onClick={() => setRightView('conversations')}><MessageSquare /></button>
+        {conversationView === 'conversations' && <button className={rightView === 'conversations' ? 'active' : ''} title={t("navigation.conversation")} aria-label={t("navigation.conversation")} onClick={() => setRightView(conversationView)}><MessageSquare /></button>}
         <button className={rightView === 'automations' ? 'active' : ''} title={t("navigation.automation")} aria-label={t("navigation.automation")} onClick={() => setRightView('automations')}><CalendarClock /></button>
         <span className="project-aow-view-separator" aria-hidden="true" />
         <button className={rightView === 'files' && (!project.builtin || rightSidebarVisible) ? 'active' : ''} title={t("navigation.explorer")} aria-label={t("navigation.explorer")} onClick={() => setRightView('files')}><FolderOpen /></button>
@@ -2121,13 +2128,10 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
       <div className="project-aow-right-content" hidden={rightView !== 'pullRequests'}>
         <PullRequestsPanel key={'pull-requests:' + worktree.path} repository={worktree.path} visible={active && rightSidebarVisible && rightView === 'pullRequests'} activeNumber={activePullRequest?.number} activeProvider={activePullRequest?.provider} activeRemote={activePullRequest?.remote} onOpen={pr => selectTab(() => openPullRequest(pr))} />
       </div>
-      {taskScope && !taskScope.task.is_router && <div className="project-aow-right-content" hidden={rightView !== 'properties'}><TaskProperties key={taskScope.task.id} project={project} worktree={worktree} /></div>}
-      <div className="project-aow-right-content" hidden={rightView !== 'conversations'}>
-        <ConversationPanel key={scope} workspace={worktree.path} visible={active && rightSidebarVisible && rightView === 'conversations'}
-          activeTerminalId={terminalDock.visible ? terminalDock.terminalId : activeTerminalId}
-          activeThreadId={acp.tabs.find(tab => `acp:${tab.id}` === sidebarActiveId)?.thread_id}
-          onOpenTerminal={tab => selectTab(() => openTerminal(tab))}
-          onOpenAcp={session => selectTab(() => activateAcp(acp.open(session)))} />
+      <div className="project-aow-right-content" hidden={rightView !== conversationView}>
+        {taskScope && conversationView === 'properties'
+          ? <TaskProperties key={taskScope.task.id} project={project} worktree={worktree} conversations={conversationList} />
+          : conversationList}
       </div>
       <div className="project-aow-right-content" hidden={rightView !== 'automations'}>
         <AutomationPanel project={project} agents={agents} activeTaskId={activeCenterId?.startsWith('automation:') ? activeCenterId.slice('automation:'.length) : undefined} refreshKey={automationRefreshKey} onOpenTask={task => selectTab(() => openAutomation(task))} onTaskChanged={taskChanged} onTaskDeleted={taskDeleted} />
@@ -2177,7 +2181,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
         </div>
         {floatingId?.startsWith('document:') && floating.portal ? createPortal(<div className="floating-workspace-host">{renderEditor(floatingId.slice(9))}</div>, floating.portal, scope + ':editor') : null}
         {acp.tabs.map(tab => <Fragment key={tab.id}>{projectContent(`acp:${tab.id}`, <div className="acp-tab-host" hidden={!tabVisible(`acp:${tab.id}`)}>
-          <AcpSessionTab tab={tab} workspace={worktree.path} visible={tabLive(`acp:${tab.id}`)} onSessionChange={acp.changed} onOpenSession={session => selectTab(() => activateAcp(acp.open(session)))} onOpenFile={(path, line) => { void selectTab(() => openExternalFile(path)).then(() => { setRightView('conversations'); if (line && Number.isFinite(line)) setDocuments(items => items.map(document => document.path === path ? { ...document, revealLocation: { line, revision: Date.now() } } : document)); }).catch(reason => setOperationError(message(reason))); }} />
+          <AcpSessionTab tab={tab} workspace={worktree.path} visible={tabLive(`acp:${tab.id}`)} onSessionChange={acp.changed} onOpenSession={session => selectTab(() => activateAcp(acp.open(session)))} onOpenFile={(path, line) => { void selectTab(() => openExternalFile(path)).then(() => { setRightView(conversationView); if (line && Number.isFinite(line)) setDocuments(items => items.map(document => document.path === path ? { ...document, revealLocation: { line, revision: Date.now() } } : document)); }).catch(reason => setOperationError(message(reason))); }} />
         </div>)}</Fragment>)}
         {sessionPreviews.map((preview) => <Fragment key={preview.session.id}>{projectContent(`session:${preview.session.id}`, <div className="project-aow-session-host" hidden={!tabVisible(`session:${preview.session.id}`)}>
           <SessionSnapshotView

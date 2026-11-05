@@ -19,3 +19,8 @@
 .conversation-toggle > svg.expanded { transform:rotate(90deg); }
 .conversation-empty { padding:8px; color:var(--muted); font-size:12px; }
 .conversation-panel [role=alert] { padding:8px; color:var(--error); white-space:pre-wrap; }
+.conversation-panel-embedded { height:auto; min-width:0; }
+.conversation-toolbar { display:flex; align-items:center; gap:2px; margin-bottom:6px; }
+.conversation-toolbar .conversation-search { flex:1; min-width:0; padding:4px 0; }
+.conversation-toolbar > .aow-icon-button { flex:none; }
+.conversation-panel-embedded .conversation-instance small { max-width:30%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

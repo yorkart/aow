@@ -19,7 +19,7 @@ function Timestamp({ value }: { value: number | null }) {
   })}</time>;
 }
 
-export function TaskProperties({ project, worktree }: { project: AowProject; worktree: AowWorktree }) {
+export function TaskProperties({ project, worktree, conversations }: { project: AowProject; worktree: AowWorktree; conversations: ReactNode }) {
   const scope = useTaskScope();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -60,5 +60,6 @@ export function TaskProperties({ project, worktree }: { project: AowProject; wor
       <Property label={t('tasks.updated')}><Timestamp value={task.updated_at} /></Property>
       <Property label={t('tasks.completed')}><Timestamp value={task.completed_at} /></Property>
     </dl></section>
+    <section className="task-property-group"><h3>{t('navigation.conversation')}</h3>{conversations}</section>
   </section>;
 }
