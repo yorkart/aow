@@ -11,7 +11,7 @@ use super::SettingsUpdate;
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new().route(
-        "/api/aow/notification-settings",
+        "/api/notification-settings",
         get(get_settings).put(update_settings),
     )
 }

@@ -2,7 +2,7 @@ import { t } from '../../lib/i18n';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Bot, LoaderCircle, Search } from 'lucide-react';
-import { aowApi } from '../../aow/aowApi';
+import { projectsApi } from '../projects/api';
 import type { AowProject } from '../../aow/types';
 import { agentsApi } from '../agents/api';
 import type { AowAgent } from '../agents/types';
@@ -35,7 +35,7 @@ export function TerminalHostingButton({ tab, pane, onChange }: {
     if (!position) return;
     let active = true;
     setLoading(true); setError(''); setSearch(''); setTasks([]); setProject(undefined); setCreating(false);
-    void aowApi.projects().then(projects => {
+    void projectsApi.projects().then(projects => {
       const project = projects.find(project => project.worktrees.some(worktree => worktree.path === tab.workspace_root));
       if (!project) throw new Error(t("terminals.current_workspace_is_not_linked_to_a_project"));
       if (active) setProject(project);

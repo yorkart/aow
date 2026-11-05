@@ -131,6 +131,69 @@ mod tests {
     use tower::ServiceExt;
 
     #[tokio::test]
+    async fn business_api_paths_support_mounts_without_legacy_aliases() {
+        for base in ["", "/tools/aow"] {
+            let directory = tempfile::tempdir().unwrap();
+            let mut state = AppState::for_test(directory.path().to_owned());
+            state.base_path = crate::BasePath::parse(base).unwrap();
+            let app = build_router(state);
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::get(format!("{base}/api/pinned-worktrees"))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), axum::http::StatusCode::OK);
+            let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            let pins: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(pins["paths"], serde_json::json!([]));
+
+            for resource in [
+                "projects",
+                "agents",
+                "agent-sessions",
+                "agent-roles",
+                "tasks",
+                "settings",
+                "pinned-worktrees",
+                "pinned-directories",
+                "worktree-creations",
+                "worktree-removals",
+                "automations",
+                "git-platform-providers",
+                "notification-settings",
+                "im/wechat",
+                "session-shares/missing",
+            ] {
+                for method in ["GET", "POST", "PATCH"] {
+                    let path = format!("{base}/api/aow/{resource}");
+                    let response = app
+                        .clone()
+                        .oneshot(
+                            Request::builder()
+                                .method(method)
+                                .uri(&path)
+                                .body(Body::empty())
+                                .unwrap(),
+                        )
+                        .await
+                        .unwrap();
+                    assert_eq!(
+                        response.status(),
+                        axum::http::StatusCode::NOT_FOUND,
+                        "{method} {path} must not remain an alias"
+                    );
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
     async fn standalone_id_allocation_is_not_exposed() {
         let directory = tempfile::tempdir().unwrap();
         let app = build_router(AppState::for_test(directory.path().to_owned()));

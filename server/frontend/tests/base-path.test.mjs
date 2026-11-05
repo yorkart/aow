@@ -1,5 +1,5 @@
 // Uses the real Rust server and the same production frontend build for both
-// mounts. Build first: cargo build -p aow-server && cd frontend && npm run build
+// mounts. Build Server and Runtime in target/debug, then build server/frontend.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { execFileSync, spawn } from 'node:child_process';
@@ -13,7 +13,7 @@ import { chromium } from 'playwright';
 import { runtimeNode } from './fixtures/runtime-node.mjs';
 import { snapshot } from './fixtures/session-snapshot.mjs';
 
-const repo = fileURLToPath(new URL('../../', import.meta.url));
+const repo = fileURLToPath(new URL('../../../', import.meta.url));
 const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'],
   ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
 
@@ -49,7 +49,7 @@ async function startServer(t, base, { envBase = base, args = [] } = {}) {
   }, state);
   child = spawn(process.env.AOW_TEST_SERVER ?? join(repo, 'target/debug/aow-server'), [
     '--host', '127.0.0.1', '--port', '0', '--state-dir', state,
-    '--runtime-url', node.url, '--runtime-token-file', node.tokenFile, '--frontend', join(repo, 'frontend/dist'),
+    '--runtime-url', node.url, '--runtime-token-file', node.tokenFile, '--frontend', join(repo, 'server/frontend/dist'),
     ...args,
   ], { cwd: repo, env: { ...process.env, AOW_BASE_PATH: envBase }, stdio: ['ignore', 'pipe', 'pipe'] });
   const origin = await new Promise((resolve, reject) => {
@@ -102,10 +102,10 @@ try {
         if (!pathname.startsWith(`${base}/api/`)) return route.continue();
         const path = pathname.slice(base.length);
         // Authentication, cookies and streams go through the real backend.
-        if (path.startsWith('/api/auth/') || path.startsWith('/api/aow/settings/server-environment') || ['/api/operations/active', '/api/events/ws', '/api/aow/worktree-removals'].includes(path)) return route.continue();
+        if (path.startsWith('/api/auth/') || path.startsWith('/api/settings/server-environment') || ['/api/operations/active', '/api/events/ws', '/api/worktree-removals'].includes(path)) return route.continue();
         let data = [];
-        if (path === '/api/aow/projects') data = [project];
-        else if (path === '/api/aow/settings') data = { notes_base: '/notes', execution_path: ['/usr/bin'], node_addresses: [] };
+        if (path === '/api/projects') data = [project];
+        else if (path === '/api/settings') data = { notes_base: '/notes', execution_path: ['/usr/bin'], node_addresses: [] };
         else if (path.includes('/pinned-')) data = { paths: [], revision: 0 };
         else if (path === '/api/terminals') data = [terminal];
         else if (path === '/api/terminals/target') data = terminal;
@@ -186,7 +186,7 @@ try {
       }
       for (const openPage of [page, ...extraPages]) {
         const statuses = await openPage.evaluate(async base => Promise.all([
-          '/api/operations/active', '/api/aow/worktree-removals', '/api/aow/settings/server-environment',
+          '/api/operations/active', '/api/worktree-removals', '/api/settings/server-environment',
         ].map(async path => {
           const response = await fetch(base + path, { signal: AbortSignal.timeout(3000) });
           await response.json();

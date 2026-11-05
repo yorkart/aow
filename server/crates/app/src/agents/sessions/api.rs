@@ -7,13 +7,13 @@ use super::*;
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
-        .route("/api/aow/agent-sessions", get(list_agent_sessions))
+        .route("/api/agent-sessions", get(list_agent_sessions))
         .route(
-            "/api/aow/agent-sessions/automation-run",
+            "/api/agent-sessions/automation-run",
             get(automation_run_session),
         )
         .route(
-            "/api/aow/agent-sessions/{session_id}/snapshot",
+            "/api/agent-sessions/{session_id}/snapshot",
             get(agent_session_snapshot),
         )
 }

@@ -37,22 +37,19 @@ pub(crate) fn cli_routes() -> Router<AppState> {
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
-        .route("/api/aow/automations/status", get(tasks::status))
-        .route("/api/aow/automations", get(tasks::list).post(tasks::create))
+        .route("/api/automations/status", get(tasks::status))
+        .route("/api/automations", get(tasks::list).post(tasks::create))
         .route(
-            "/api/aow/automations/{id}",
+            "/api/automations/{id}",
             get(tasks::detail).put(tasks::update).delete(tasks::remove),
         )
-        .route("/api/aow/automations/{id}/enabled", put(tasks::set_enabled))
-        .route("/api/aow/automations/{id}/sync", post(tasks::sync))
-        .route("/api/aow/automations/{id}/run", post(runs::run))
-        .route("/api/aow/automations/{id}/runs", get(runs::runs))
+        .route("/api/automations/{id}/enabled", put(tasks::set_enabled))
+        .route("/api/automations/{id}/sync", post(tasks::sync))
+        .route("/api/automations/{id}/run", post(runs::run))
+        .route("/api/automations/{id}/runs", get(runs::runs))
         .route(
-            "/api/aow/automations/{id}/runs/{run_id}/output/{output}",
+            "/api/automations/{id}/runs/{run_id}/output/{output}",
             get(runs::run_output),
         )
-        .route(
-            "/api/aow/automations/{id}/runs/{run_id}",
-            get(runs::run_detail),
-        )
+        .route("/api/automations/{id}/runs/{run_id}", get(runs::run_detail))
 }

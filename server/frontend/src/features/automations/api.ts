@@ -4,7 +4,7 @@ import type { TaskInput, RunOutput, AutomationRun, AutomationTask, SchedulerStat
 import { appUrl } from '../../lib/basePath';
 import { runCursor } from './runOrder';
 
-const base = appUrl('/api/aow/automations');
+const base = appUrl('/api/automations');
 async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   const response = await localizedFetch(`${base}${path}`, {
     method, headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },

@@ -501,7 +501,7 @@ async fn uploads_activate_immediately_and_removal_stops_routing_without_enable_f
     let response = app
         .clone()
         .oneshot(
-            Request::post("/api/aow/git-platform-providers/test")
+            Request::post("/api/git-platform-providers/test")
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({"id":"custom.mjs","script":FIXTURE}).to_string(),
@@ -527,7 +527,7 @@ async fn uploads_activate_immediately_and_removal_stops_routing_without_enable_f
         let response = app
             .clone()
             .oneshot(
-                Request::put("/api/aow/git-platform-providers")
+                Request::put("/api/git-platform-providers")
                     .header("content-type", "application/json")
                     .body(Body::from(body.clone()))
                     .unwrap(),
@@ -564,7 +564,7 @@ async fn uploads_activate_immediately_and_removal_stops_routing_without_enable_f
         let response = app
             .clone()
             .oneshot(
-                Request::put("/api/aow/git-platform-providers")
+                Request::put("/api/git-platform-providers")
                     .header("content-type", "application/json")
                     .body(Body::from(invalid.to_string()))
                     .unwrap(),
@@ -578,7 +578,7 @@ async fn uploads_activate_immediately_and_removal_stops_routing_without_enable_f
     let response = app
         .clone()
         .oneshot(
-            Request::put("/api/aow/git-platform-providers")
+            Request::put("/api/git-platform-providers")
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({"revision":saved.revision,"providers":[]}).to_string(),
@@ -604,7 +604,7 @@ async fn uploads_activate_immediately_and_removal_stops_routing_without_enable_f
     );
     let response = app
         .oneshot(
-            Request::post("/api/aow/git-platform-providers/test")
+            Request::post("/api/git-platform-providers/test")
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({"id":"custom.py","script":FIXTURE}).to_string(),

@@ -25,7 +25,7 @@ try {
     await context.route('**/api/**', async route => {
       const url = new URL(route.request().url());
       let data;
-      if (url.pathname === '/api/aow/pinned-worktrees') {
+      if (url.pathname === '/api/pinned-worktrees') {
         state.pinRequests += 1;
         await state.pinGate;
         if (state.failPins) { await route.fulfill({ status: 503, json: { message: 'Fixture unavailable' } }); return; }

@@ -133,7 +133,7 @@ async fn share_links_follow_the_current_mount_after_restart() {
         request(
             &app,
             "POST",
-            "/tools/aow/api/aow/agent-sessions/test-session/share",
+            "/tools/aow/api/agent-sessions/test-session/share",
             Some(&cookie),
             json!({"agent":"codex", "worktree_path":root}),
         )
@@ -177,7 +177,7 @@ async fn share_links_follow_the_current_mount_after_restart() {
         request(
             &app,
             "GET",
-            "/other/api/aow/agent-sessions/test-session/share?agent=codex",
+            "/other/api/agent-sessions/test-session/share?agent=codex",
             Some(&cookie),
             Value::Null,
         )
@@ -220,7 +220,7 @@ async fn sharing_requires_login_but_live_reading_survives_restart_and_revocation
     );
     cache_locator(&initial, locator(&root));
     let app = crate::build_router(initial);
-    let create_path = "/api/aow/agent-sessions/test-session/share";
+    let create_path = "/api/agent-sessions/test-session/share";
     let payload = json!({"agent":"codex", "worktree_path":root});
     assert_eq!(
         request(&app, "POST", create_path, None, payload.clone())
@@ -277,7 +277,7 @@ async fn sharing_requires_login_but_live_reading_survives_restart_and_revocation
 
     for path in [
         "/api/fs/tree",
-        "/api/aow/agent-sessions",
+        "/api/agent-sessions",
         "/api/terminal/tabs",
         create_path,
     ] {
@@ -332,7 +332,7 @@ async fn sharing_requires_login_but_live_reading_survives_restart_and_revocation
         request(
             &app,
             "POST",
-            "/api/aow/agent-sessions/unscanned/share",
+            "/api/agent-sessions/unscanned/share",
             Some(&cookie),
             payload.clone()
         )
@@ -381,7 +381,7 @@ async fn sharing_requires_login_but_live_reading_survives_restart_and_revocation
             .len(),
         2
     );
-    let revoke_path = format!("/api/aow/session-shares/{}", share["id"].as_str().unwrap());
+    let revoke_path = format!("/api/session-shares/{}", share["id"].as_str().unwrap());
     assert_eq!(
         request(&app, "DELETE", &revoke_path, None, Value::Null)
             .await

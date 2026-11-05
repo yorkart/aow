@@ -244,11 +244,11 @@ async fn review_environment_case(home_only: bool) {
     request(
         &app,
         "PUT",
-        "/api/aow/settings",
+        "/api/settings",
         json!({"execution_path":["/usr/bin", "/bin"]}),
     )
     .await;
-    let project = request(&app, "POST", "/api/aow/projects", json!({"path":repo})).await;
+    let project = request(&app, "POST", "/api/projects", json!({"path":repo})).await;
     let home = directory.path().join("reviewer-home");
     let root = if home_only {
         home.join(".codex")
@@ -266,8 +266,8 @@ async fn review_environment_case(home_only: bool) {
     }).to_string()).unwrap();
     let script = directory.path().join("codex");
     std::fs::write(&script, AGENT).unwrap();
-    request(&app, "POST", "/api/aow/agents", json!({"id":"codex","agent_type":"codex","display_name":"Review fixture","command":"/usr/bin/python3","args":[script],"env":{"HOME":home,"CODEX_HOME":if home_only { String::new() } else { root.to_string_lossy().into_owned() }}})).await;
-    let task = request(&app, "POST", "/api/aow/automations", json!({
+    request(&app, "POST", "/api/agents", json!({"id":"codex","agent_type":"codex","display_name":"Review fixture","command":"/usr/bin/python3","args":[script],"env":{"HOME":home,"CODEX_HOME":if home_only { String::new() } else { root.to_string_lossy().into_owned() }}})).await;
+    let task = request(&app, "POST", "/api/automations", json!({
         "project_id":project["id"],"name":"Review","kind":"manual","prompt":"Review",
         "agent":"codex","workspace_mode":"existing","workspace_path":repo,"base_branch":"","cron":"",
         "max_concurrent_runs":1,"enabled":true
@@ -376,11 +376,11 @@ async fn run_hosting_case(case: HostingCase) {
     request(
         &app,
         "PUT",
-        "/api/aow/settings",
+        "/api/settings",
         json!({"execution_path":["/usr/bin", "/bin"]}),
     )
     .await;
-    let project = request(&app, "POST", "/api/aow/projects", json!({"path":repo})).await;
+    let project = request(&app, "POST", "/api/projects", json!({"path":repo})).await;
     let home = directory.path().join("codex-home");
     std::fs::create_dir_all(&home).unwrap();
     std::fs::write(
@@ -391,8 +391,8 @@ async fn run_hosting_case(case: HostingCase) {
     .unwrap();
     let script = directory.path().join("codex");
     std::fs::write(&script, AGENT).unwrap();
-    request(&app, "POST", "/api/aow/agents", json!({"id":"codex","agent_type":"codex","display_name":"Codex fixture","command":"/usr/bin/python3","args":[script],"env":{"CODEX_HOME":home}})).await;
-    let task = request(&app, "POST", "/api/aow/automations", json!({
+    request(&app, "POST", "/api/agents", json!({"id":"codex","agent_type":"codex","display_name":"Codex fixture","command":"/usr/bin/python3","args":[script],"env":{"CODEX_HOME":home}})).await;
+    let task = request(&app, "POST", "/api/automations", json!({
         "project_id":project["id"],"name":"Review","kind":"manual","prompt":"Review {{conclusion}} in {{workspace}} session {{session_id}} turn {{turn_id}}",
         "prompt_bindings":[{"name":"conclusion","placeholder":"{{conclusion}}","start":7,"end":21},{"name":"workspace","placeholder":"{{workspace}}","start":25,"end":38},{"name":"session_id","placeholder":"{{session_id}}","start":47,"end":61},{"name":"turn_id","placeholder":"{{turn_id}}","start":67,"end":78}],
         "agent":"codex","workspace_mode":"dynamic","workspace_path":"","base_branch":"","cron":"",
@@ -433,7 +433,7 @@ async fn run_hosting_case(case: HostingCase) {
     request(
         &app,
         "PUT",
-        "/api/aow/notification-settings",
+        "/api/notification-settings",
         json!({
             "section":"notifications", "agent_task_completed":{"enabled":notify_page,"channels":if notify_page { vec!["page"] } else { vec![] }}
         }),

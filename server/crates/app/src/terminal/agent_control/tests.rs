@@ -146,14 +146,14 @@ impl Fixture {
         request(
             &app,
             "PUT",
-            "/api/aow/settings",
+            "/api/settings",
             json!({"execution_path":["/usr/bin", "/bin"]}),
         )
         .await;
-        let project = post(&app, "/api/aow/projects", json!({"path":repo})).await;
+        let project = post(&app, "/api/projects", json!({"path":repo})).await;
         let project_id = project["id"].as_str().unwrap().to_owned();
         for agent in ["codex", "traecli"] {
-            post(&app, "/api/aow/agents", json!({"id":agent,"agent_type":agent,"display_name":agent,"command":"/usr/bin/python3","args":[script,log,mode]})).await;
+            post(&app, "/api/agents", json!({"id":agent,"agent_type":agent,"display_name":agent,"command":"/usr/bin/python3","args":[script,log,mode]})).await;
         }
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
@@ -332,7 +332,7 @@ time.sleep(30)
             "CODEX_HELP": if supports_isolation {"  --no-daemon"} else {"  --no-alt-screen"}});
         post(
             &app,
-            "/api/aow/agents",
+            "/api/agents",
             json!({"id": id, "agent_type": agent_type, "display_name": id,
                 "command": command, "args": args, "env": env}),
         )
@@ -577,7 +577,7 @@ async fn rejected_runtime_does_not_leave_a_lineage_record() {
     // The profile is valid, but managed startup adds flags beyond terminald's limit.
     post(
         &app,
-        "/api/aow/agents",
+        "/api/agents",
         json!({
             "id": "broken-agent", "agent_type": "codex", "display_name": "Broken agent",
             "command": "/usr/bin/python3", "args": vec!["--verbose"; 128]
@@ -1291,7 +1291,7 @@ async fn create_rejects_unregistered_or_mismatched_project_worktrees() {
     let app = crate::build_router(fixture.state.clone());
     let nested_project = post(
         &app,
-        "/api/aow/projects",
+        "/api/projects",
         json!({"path":nested, "notes_path":fixture.directory.path().join("nested-notes")}),
     )
     .await;
@@ -1359,7 +1359,7 @@ async fn cli_codex_skips_update_menu_without_changing_profile_or_manual_launch()
     ]);
     post(
         &app,
-        "/api/aow/agents",
+        "/api/agents",
         json!({"id": id, "agent_type": "codex", "display_name": id,
             "command": "/usr/bin/python3", "args": args}),
     )
@@ -1405,7 +1405,7 @@ async fn cli_codex_skips_update_menu_without_changing_profile_or_manual_launch()
     assert_eq!(manual["panes"][0]["arguments"], args);
     let role = post(
         &app,
-        "/api/aow/agent-roles",
+        "/api/agent-roles",
         json!({
             "name":"Codex role", "runtime":{"mode":"cli", "agent_id":id},
             "identity":{"kind":"local_home", "source":null}
@@ -1414,10 +1414,7 @@ async fn cli_codex_skips_update_menu_without_changing_profile_or_manual_launch()
     .await;
     let manual_role = post(
         &app,
-        &format!(
-            "/api/aow/agent-roles/{}/sessions",
-            role["id"].as_str().unwrap()
-        ),
+        &format!("/api/agent-roles/{}/sessions", role["id"].as_str().unwrap()),
         json!({
             "project_id":fixture.project_id, "cwd":fixture.repo
         }),
@@ -1678,7 +1675,7 @@ async fn native_pi_submits_through_terminald_and_resolves_its_session() {
         .join("../../../fixtures/agents/pi-provider.mjs")
         .canonicalize()
         .unwrap();
-    post(&app, "/api/aow/agents", json!({
+    post(&app, "/api/agents", json!({
         "id":"pi", "agent_type":"pi", "display_name":"Pi", "command":cli,
         "args":["--offline", "--no-extensions", "--no-skills", "--no-prompt-templates", "--no-context-files", "--no-approve", "--model", "aow-test/fixture", "--extension", provider],
         "env":{"PI_CODING_AGENT_DIR":profile,"PI_CODING_AGENT_SESSION_DIR":profile.join("sessions"),"PI_OFFLINE":"1"}
@@ -1919,7 +1916,7 @@ async fn recreated_profile_is_used_by_cli_without_rebinding_existing_terminals()
         .post_json("/v1/agents", &fixture.request())
         .await
         .unwrap();
-    let agents = request(&app, "GET", "/api/aow/agents", Value::Null).await;
+    let agents = request(&app, "GET", "/api/agents", Value::Null).await;
     let mut profile = agents
         .as_array()
         .unwrap()
@@ -1927,14 +1924,14 @@ async fn recreated_profile_is_used_by_cli_without_rebinding_existing_terminals()
         .find(|agent| agent["id"] == "codex")
         .unwrap()
         .clone();
-    request(&app, "DELETE", "/api/aow/agents/codex", Value::Null).await;
+    request(&app, "DELETE", "/api/agents/codex", Value::Null).await;
     profile["id"] = json!("Work_codex-2");
-    let saved = request(&app, "POST", "/api/aow/agents", profile).await;
+    let saved = request(&app, "POST", "/api/agents", profile).await;
     assert_eq!(saved["id"], "Work_codex-2");
     request(
         &app,
         "PUT",
-        "/api/aow/agents/settings/default",
+        "/api/agents/settings/default",
         json!({"agent_id":"Work_codex-2"}),
     )
     .await;

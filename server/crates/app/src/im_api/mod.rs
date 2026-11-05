@@ -14,21 +14,21 @@ mod wechat;
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
         .route(
-            "/api/aow/im/feishu",
+            "/api/im/feishu",
             put(feishu::save_feishu).delete(feishu::remove_feishu),
         )
         .route(
-            "/api/aow/im/wechat",
+            "/api/im/wechat",
             get(wechat::status).delete(wechat::disconnect),
         )
-        .route("/api/aow/im/wechat/login", post(wechat::start_login))
+        .route("/api/im/wechat/login", post(wechat::start_login))
         // POST because confirmation persists credentials; verification codes stay out of URLs.
         .route(
-            "/api/aow/im/wechat/login/{id}",
+            "/api/im/wechat/login/{id}",
             post(wechat::poll_login).delete(wechat::cancel_login),
         )
-        .route("/api/aow/im/wechat/test", post(wechat::test_send))
-        .route("/api/aow/im/wechat/test/receipt", put(wechat::test_receipt))
+        .route("/api/im/wechat/test", post(wechat::test_send))
+        .route("/api/im/wechat/test/receipt", put(wechat::test_receipt))
 }
 
 fn error(error: impl std::fmt::Display) -> Response {

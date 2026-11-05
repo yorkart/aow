@@ -49,7 +49,7 @@ async function fixture(browser, options = {}) {
   await context.route('**/api/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
-    if (url.pathname === '/api/aow/pinned-directories') {
+    if (url.pathname === '/api/pinned-directories') {
       if (request.method() === 'GET' && state.failPinReads) { await route.fulfill({ status: 500, json: { message: 'Pins unavailable' } }); return; }
       let payload;
       if (request.method() === 'PATCH') {
@@ -89,11 +89,11 @@ async function fixture(browser, options = {}) {
     }
     const data = {
       '/api/auth/status': { configured: true, authenticated: true },
-      '/api/aow/projects': [{ id: '__aow_floating', name: '浮动工作区', builtin: true, registered_path: '/global', notes_path: '/notes/global', common_git_dir: '/global/.git', worktrees: [{ id: 'global-main', project_id: '__aow_floating', path: '/global', branch: 'main', head: '', is_main: true, detached: false, locked: false, prunable: false, color: 'default' }] }],
+      '/api/projects': [{ id: '__aow_floating', name: '浮动工作区', builtin: true, registered_path: '/global', notes_path: '/notes/global', common_git_dir: '/global/.git', worktrees: [{ id: 'global-main', project_id: '__aow_floating', path: '/global', branch: 'main', head: '', is_main: true, detached: false, locked: false, prunable: false, color: 'default' }] }],
       '/api/terminals': [],
-      '/api/aow/agents': [],
-      '/api/aow/pinned-worktrees': { paths: [], revision: 0 },
-      '/api/aow/settings': { notes_base: '/notes' },
+      '/api/agents': [],
+      '/api/pinned-worktrees': { paths: [], revision: 0 },
+      '/api/settings': { notes_base: '/notes' },
     }[url.pathname];
     await route.fulfill(data ? { json: data } : { status: 404, json: { message: `Unexpected API: ${url.pathname}` } });
   });
@@ -624,7 +624,7 @@ try {
       await atPath(page, home);
       state.delayedPin = home;
       state.pinGate = deferred();
-      const firstSave = page.waitForRequest((request) => request.method() === 'PATCH' && request.url().endsWith('/api/aow/pinned-directories') && request.postDataJSON().add?.includes(home));
+      const firstSave = page.waitForRequest((request) => request.method() === 'PATCH' && request.url().endsWith('/api/pinned-directories') && request.postDataJSON().add?.includes(home));
       await menuAction(page, treeDirectory(page, home), 'Pin');
       await firstSave;
       await menuAction(page, listEntry(page, 'Documents'), 'Pin');

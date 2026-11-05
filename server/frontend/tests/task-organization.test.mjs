@@ -39,14 +39,14 @@ try {
     await context.route('**/api/**', async route => {
       const request = route.request(), url = new URL(request.url()), path = url.pathname;
       let data = [];
-      if (path === '/api/aow/projects') data = [project];
-      else if (path === '/api/aow/agents') data = [agent];
-      else if (path === '/api/aow/agent-roles') data = [role, cliRole];
-      else if (path === '/api/aow/settings') data = { notes_base: '/notes', execution_path: [], editor: {} };
+      if (path === '/api/projects') data = [project];
+      else if (path === '/api/agents') data = [agent];
+      else if (path === '/api/agent-roles') data = [role, cliRole];
+      else if (path === '/api/settings') data = { notes_base: '/notes', execution_path: [], editor: {} };
       else if (path.includes('/pinned-')) data = { paths: [], revision: 0 };
-      else if (path === '/api/aow/notifications') data = { revision: 0, items: [], unread_count: 0 };
+      else if (path === '/api/notifications') data = { revision: 0, items: [], unread_count: 0 };
       else if (path === '/api/instances') data = { items: [] };
-      else if (path === '/api/aow/projects/project/router' && request.method() === 'POST') {
+      else if (path === '/api/projects/project/router' && request.method() === 'POST') {
         routerCreations++;
         data = tasks.find(task => task.is_router);
         if (!data) {
@@ -55,7 +55,7 @@ try {
           tasks.push(data);
         }
       }
-      else if (path === '/api/aow/tasks') {
+      else if (path === '/api/tasks') {
         if (request.method() === 'POST') {
           const input = request.postDataJSON(); creations.push(input);
           const workspace = input.workspace_mode === 'new_worktree' ? '/repo-isolated' : input.workspace;
@@ -64,20 +64,20 @@ try {
           data = { ...input, status: 'in_progress', workspace, slug: null, id: input.request_id, initial_thread_id: first.thread_id, pinned: false, archived: false, resources: [{ kind: 'acp', id: first.thread_id }] };
           tasks.push(data);
         } else data = tasks;
-      } else if (path.startsWith('/api/aow/tasks/') && request.method() === 'GET') {
+      } else if (path.startsWith('/api/tasks/') && request.method() === 'GET') {
         const task = tasks.find(task => task.id === path.split('/').at(-1));
         data = { task, conversations: sessions.filter(session => task.resources.some(resource => resource.kind === 'acp' && resource.id === session.thread_id)), delegated: [] };
-      } else if (path.startsWith('/api/aow/tasks/') && path.endsWith('/status') && request.method() === 'POST') {
+      } else if (path.startsWith('/api/tasks/') && path.endsWith('/status') && request.method() === 'POST') {
         data = tasks.find(task => task.id === path.split('/').at(-2));
         Object.assign(data, request.postDataJSON());
-      } else if (path.startsWith('/api/aow/tasks/') && request.method() === 'PATCH') {
+      } else if (path.startsWith('/api/tasks/') && request.method() === 'PATCH') {
         Object.assign(tasks.find(task => task.id === path.split('/').at(-1)), request.postDataJSON());
         return route.fulfill({ status: 204 });
       } else if (path.endsWith('/resources')) {
         const task = tasks.find(task => task.id === path.split('/').at(-2));
         task.resources.push(request.postDataJSON()); return route.fulfill({ status: 204 });
       } else if (path === '/api/acp/agents') data = [{ id: 'test', name: 'Test Agent', configured: true, supported: true, installed: true }];
-      else if (path === '/api/aow/agent-roles/reviewer/sessions' && request.method() === 'POST') {
+      else if (path === '/api/agent-roles/reviewer/sessions' && request.method() === 'POST') {
         const input = request.postDataJSON(), task = tasks.find(task => task.id === request.headers()['x-aow-task']);
         const created = session(`helper-${sessions.length}`, input.cwd);
         created.parent = { kind: 'acp', id: input.parent_thread_id ?? task.initial_thread_id };
@@ -102,9 +102,9 @@ try {
       } else if (path.startsWith('/api/terminals/') && request.method() === 'DELETE') { if (failDelete) return route.fulfill({ status: 503, json: { error: 'Cannot stop terminal' } }); deleted.push(path); const index = terminals.findIndex(tab => tab.id === path.split('/')[3]); if (index >= 0) terminals.splice(index, 1); return route.fulfill({ status: 204 }); }
       else if (path === '/api/terminals') data = terminals;
       else if (path === '/api/terminals/agents') data = { agents: {}, titles: {}, processes: {} };
-      else if (path === '/api/aow/projects/project/worktrees' && request.method() === 'POST') {
+      else if (path === '/api/projects/project/worktrees' && request.method() === 'POST') {
         worktreeRequests.push(request.postDataJSON());
-      } else if (path === '/api/aow/worktree-creations') data = [];
+      } else if (path === '/api/worktree-creations') data = [];
       else if (path.startsWith('/api/fs/tree')) data = { path: '/repo', entries: [] };
       else if (path === '/api/git/ignored') data = { repository: '/repo', ignored: [] };
       else if (path === '/api/git/status') data = { repository: '/repo', branch: 'main', files: [] };

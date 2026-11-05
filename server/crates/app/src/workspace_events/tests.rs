@@ -11,7 +11,7 @@ async fn register(state: &AppState, root: &Path) -> String {
     let notes = tempfile::tempdir().unwrap();
     let response = crate::build_router(state.clone())
         .oneshot(
-            Request::post("/api/aow/projects")
+            Request::post("/api/projects")
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::json!({"path": root, "notes_path": notes.path()}).to_string(),
@@ -108,7 +108,7 @@ async fn registered_projects_are_watched_without_clients_and_removal_releases_th
     );
     let response = crate::build_router(state.clone())
         .oneshot(
-            Request::delete(format!("/api/aow/projects/{first_id}"))
+            Request::delete(format!("/api/projects/{first_id}"))
                 .body(Body::empty())
                 .unwrap(),
         )

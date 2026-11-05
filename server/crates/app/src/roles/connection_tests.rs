@@ -61,7 +61,7 @@ async fn create(app: &Router, config: &RoleConfig, id: &str) -> (StatusCode, ser
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/aow/agent-roles/test-and-create")
+                .uri("/api/agent-roles/test-and-create")
                 .header("content-type", "application/json")
                 .body(Body::from(body.to_string()))
                 .unwrap(),

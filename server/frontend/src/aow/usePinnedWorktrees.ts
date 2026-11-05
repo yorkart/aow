@@ -1,7 +1,7 @@
 import { t } from '../lib/i18n';
 import { appLocalStorage } from '../lib/basePath';
 import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react';
-import { aowApi } from './aowApi';
+import { settingsApi } from '../features/settings/api';
 import type { PinnedWorktrees } from './types';
 
 const legacyStorageKey = 'aow-pinned-worktrees';
@@ -53,10 +53,10 @@ export function usePinnedWorktrees() {
   const load = useCallback((background = false) => {
     if (pending.current > 0) return;
     run(async () => {
-      accept(await aowApi.pinnedWorktrees());
+      accept(await settingsApi.pinnedWorktrees());
       const legacy = legacyPins();
       if (legacy.length) {
-        accept(await aowApi.updatePinnedWorktrees({ add: legacy }));
+        accept(await settingsApi.updatePinnedWorktrees({ add: legacy }));
         try {
           appLocalStorage.setItem(migratedStorageKey, '1');
           appLocalStorage.removeItem(legacyStorageKey);
@@ -84,7 +84,7 @@ export function usePinnedWorktrees() {
       const add = [...next].filter((path) => !before.has(path));
       const remove = [...before].filter((path) => !next.has(path));
       const order = !add.length && !remove.length ? [...next] : undefined;
-      accept(await aowApi.updatePinnedWorktrees({ add, remove, order }));
+      accept(await settingsApi.updatePinnedWorktrees({ add, remove, order }));
     });
   }, [accept, run]);
   return [pinned, update, { loading, error, reload }] as const;

@@ -4,7 +4,7 @@ import { AgentIcon } from '../agents/AgentIcon';
 import { rolesApi, type AgentRole } from '../agent-roles/api';
 import { TaskPicker } from './TaskPicker';
 import { t } from '../../lib/i18n';
-import { aowApi } from '../../aow/aowApi';
+import { projectsApi } from '../projects/api';
 import type { AowProject } from '../../aow/types';
 import { acpApi } from '../acp/api';
 import type { AgentInfo } from '../acp/types';
@@ -35,7 +35,7 @@ export function TaskDialog({ project, task, router = false, onClose, onSaved }: 
   }, []);
   useEffect(() => {
     let cancelled = false;
-    if (!task) void aowApi.projects().then(items => { if (!cancelled) setProjects(items.filter(item => !item.builtin)); }).catch(reason => { if (!cancelled) setError(String(reason)); });
+    if (!task) void projectsApi.projects().then(items => { if (!cancelled) setProjects(items.filter(item => !item.builtin)); }).catch(reason => { if (!cancelled) setError(String(reason)); });
     void rolesApi.list().then(items => { if (!cancelled) { const available = items.filter(role => role.runtime.mode === 'acp'); setRoles(available); setAgent(current => current || (available[0] ? `role:${available[0].id}` : '')); } }).catch(reason => { if (!cancelled) setError(String(reason)); });
     void acpApi.agents().then(items => { if (!cancelled) { const available = items.filter(item => item.installed && item.supported); setAgents(available); if (router) setAgent(current => current || available[0]?.id || ''); } }).catch(reason => { if (!cancelled) setError(String(reason)); });
     return () => { cancelled = true; };

@@ -124,7 +124,7 @@ async fn prepared_worktree_uses_selected_base_and_lists_unchecked_local_and_remo
     let app = crate::build_router(state);
     let response = app
         .oneshot(
-            Request::get(format!("/api/aow/projects/{}/branches", project.id))
+            Request::get(format!("/api/projects/{}/branches", project.id))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -775,7 +775,7 @@ async fn pinned_directories_routes_validate_paths_and_reject_files() {
         let response = app
             .clone()
             .oneshot(
-                Request::patch("/api/aow/pinned-directories")
+                Request::patch("/api/pinned-directories")
                     .header("content-type", "application/json")
                     .body(Body::from(
                         serde_json::json!({ "add": [invalid] }).to_string(),
@@ -799,7 +799,7 @@ async fn pinned_directories_routes_validate_paths_and_reject_files() {
         let response = app
             .clone()
             .oneshot(
-                Request::patch("/api/aow/pinned-directories")
+                Request::patch("/api/pinned-directories")
                     .header("content-type", "application/json")
                     .body(Body::from(request.to_string()))
                     .unwrap(),
@@ -810,7 +810,7 @@ async fn pinned_directories_routes_validate_paths_and_reject_files() {
         let response = app
             .clone()
             .oneshot(
-                Request::get("/api/aow/pinned-directories")
+                Request::get("/api/pinned-directories")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -1268,7 +1268,7 @@ async fn agent_registration_api_requires_a_supported_type() {
         let response = app
             .clone()
             .oneshot(
-                Request::post("/api/aow/agents")
+                Request::post("/api/agents")
                     .header("content-type", "application/json")
                     .body(Body::from(request.to_string()))
                     .unwrap(),

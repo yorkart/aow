@@ -38,8 +38,8 @@ try {
           if (path.endsWith('/retry')) { retries++; item.delivery = { state: 'pending', error: null }; }
           else Object.assign(item, request.postDataJSON());
           return route.fulfill({ status: 204 });
-        } else if (path === '/api/aow/projects') data = [project];
-        else if (path === '/api/aow/settings') data = { notes_base: '/notes', execution_path: [], editor: {} };
+        } else if (path === '/api/projects') data = [project];
+        else if (path === '/api/settings') data = { notes_base: '/notes', execution_path: [], editor: {} };
         else if (path.includes('/pinned-')) data = { paths: [], revision: 0 };
         else if (path === '/api/instances') data = { items: [] };
         else if (path === '/api/terminals/agents') data = { agents: {}, titles: {}, processes: {} };

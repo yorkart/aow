@@ -39,7 +39,7 @@ try {
       const { pathname } = new URL(request.url());
       let data = [];
       if (pathname === '/api/auth/status') data = { configured: true, authenticated: true };
-      else if (pathname === '/api/aow/settings') {
+      else if (pathname === '/api/settings') {
         if (request.method() === 'PUT') {
           state.updates.push(request.postDataJSON());
           if (state.failSave) { await route.fulfill({ status: 500, json: { message: 'Settings write failed' } }); return; }

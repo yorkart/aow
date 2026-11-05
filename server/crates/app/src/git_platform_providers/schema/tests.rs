@@ -56,8 +56,8 @@ async fn public_schema_is_anonymous_static_and_does_not_open_other_provider_rout
                 Method::GET,
                 "/api/public/git-platform-provider-schema/private",
             ),
-            (Method::GET, "/api/aow/git-platform-providers"),
-            (Method::POST, "/api/aow/git-platform-providers/test"),
+            (Method::GET, "/api/git-platform-providers"),
+            (Method::POST, "/api/git-platform-providers/test"),
             (Method::GET, "/api/my-pull-requests?repo=/private"),
         ] {
             let response = app
@@ -139,7 +139,7 @@ async fn old_provider_routes_are_not_aliases() {
     let app = crate::build_router(AppState::for_test(std::path::PathBuf::new()));
     for path in [
         "/api/public/review-provider-schema",
-        "/api/aow/review-providers",
+        "/api/review-providers",
         "/api/review-targets",
     ] {
         let response = app

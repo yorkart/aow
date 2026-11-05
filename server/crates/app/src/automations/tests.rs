@@ -118,18 +118,18 @@ async fn cli_import_rebinds_saved_tasks_and_isolates_failures() {
     call(
         &router,
         "PUT",
-        "/api/aow/settings",
+        "/api/settings",
         serde_json::json!({"execution_path":["/usr/bin", "/bin"]}),
     )
     .await;
-    let (code, project) = call(&router, "POST", "/api/aow/projects", json!({
+    let (code, project) = call(&router, "POST", "/api/projects", json!({
         "path": repository, "name":"Target project", "notes_path":directory.path().join("notes"),
     })).await;
     assert_eq!(code, StatusCode::CREATED, "{project}");
     let (code, agent) = call(
         &router,
         "POST",
-        "/api/aow/agents",
+        "/api/agents",
         json!({
             "id":"codex", "agent_type":"codex", "display_name":"Local Codex", "command":fake,
         }),
@@ -194,7 +194,7 @@ async fn cli_import_rebinds_saved_tasks_and_isolates_failures() {
         call(
             &router,
             "GET",
-            &format!("/api/aow/automations/{id}"),
+            &format!("/api/automations/{id}"),
             Value::Null
         )
         .await
@@ -346,14 +346,14 @@ async fn api_persists_config_sync_errors_and_history_across_server_restarts() {
     };
     let manager = state.automations.clone().unwrap();
     let router = crate::build_router(state);
-    let (code, settings) = call(&router, "GET", "/api/aow/settings", serde_json::Value::Null).await;
+    let (code, settings) = call(&router, "GET", "/api/settings", serde_json::Value::Null).await;
     assert_eq!(code, StatusCode::OK);
     assert!(!settings["execution_path"].as_array().unwrap().is_empty());
     let paths = serde_json::json!([directory.path(), "/usr/bin", "/bin"]);
     let (code, updated) = call(
         &router,
         "PUT",
-        "/api/aow/settings",
+        "/api/settings",
         serde_json::json!({"execution_path": paths}),
     )
     .await;
@@ -363,14 +363,14 @@ async fn api_persists_config_sync_errors_and_history_across_server_restarts() {
     let (code, discovered) = call(
         &router,
         "GET",
-        "/api/aow/settings/discovered-path",
+        "/api/settings/discovered-path",
         serde_json::Value::Null,
     )
     .await;
     assert_eq!(code, StatusCode::OK);
     assert!(!discovered.as_array().unwrap().is_empty());
     assert_eq!(
-        call(&router, "GET", "/api/aow/settings", serde_json::Value::Null)
+        call(&router, "GET", "/api/settings", serde_json::Value::Null)
             .await
             .1["execution_path"],
         paths
@@ -378,7 +378,7 @@ async fn api_persists_config_sync_errors_and_history_across_server_restarts() {
     let (code, _) = call(
         &router,
         "PUT",
-        "/api/aow/settings",
+        "/api/settings",
         serde_json::json!({"execution_path": ["relative/bin"]}),
     )
     .await;
@@ -386,7 +386,7 @@ async fn api_persists_config_sync_errors_and_history_across_server_restarts() {
     let (code, project) = call(
         &router,
         "POST",
-        "/api/aow/projects",
+        "/api/projects",
         serde_json::json!({"path":repository,"notes_path":directory.path().join("notes")}),
     )
     .await;
@@ -394,13 +394,13 @@ async fn api_persists_config_sync_errors_and_history_across_server_restarts() {
     let (code, agent) = call(
         &router,
         "POST",
-        "/api/aow/agents",
+        "/api/agents",
         serde_json::json!({"id":"codex","agent_type":"codex","display_name":"Codex test","command":fake}),
     )
     .await;
     assert_eq!(code, StatusCode::CREATED, "{agent}");
     let input = serde_json::json!({"name":"Daily review","prompt":"Review recent changes","agent":"codex","project_id":project["id"],"workspace_mode":"new_worktree","workspace_path":repository,"base_branch":"main","cron":"0 9 * * 1-5","max_concurrent_runs":1,"enabled":true,"failure_notification":"feishu"});
-    let (code, task) = call(&router, "POST", "/api/aow/automations", input.clone()).await;
+    let (code, task) = call(&router, "POST", "/api/automations", input.clone()).await;
     assert_eq!(code, StatusCode::CREATED, "{task}");
     let id = task["id"].as_str().unwrap();
     assert!(aow_id::is_valid_id(id));
@@ -423,13 +423,13 @@ async fn api_persists_config_sync_errors_and_history_across_server_restarts() {
     );
     assert!(task.get("prevent_overlap").is_none());
     assert!(task["interval_seconds"].is_null());
-    let path = format!("/api/aow/automations/{id}");
+    let path = format!("/api/automations/{id}");
     assert_eq!(
         call(
             &router,
             "GET",
             &format!(
-                "/api/aow/automations?project_id={}",
+                "/api/automations?project_id={}",
                 project["id"].as_str().unwrap()
             ),
             serde_json::Value::Null,
@@ -442,7 +442,7 @@ async fn api_persists_config_sync_errors_and_history_across_server_restarts() {
         call(
             &router,
             "GET",
-            "/api/aow/automations?project_id=another-project",
+            "/api/automations?project_id=another-project",
             serde_json::Value::Null,
         )
         .await
@@ -610,14 +610,9 @@ async fn api_persists_config_sync_errors_and_history_across_server_restarts() {
     assert!(manager.store.run_path(id, &run_id).unwrap().exists());
     assert!(!manager.store.root.join("locks").exists());
     assert_eq!(
-        call(
-            &router,
-            "GET",
-            "/api/aow/automations",
-            serde_json::Value::Null
-        )
-        .await
-        .1,
+        call(&router, "GET", "/api/automations", serde_json::Value::Null)
+            .await
+            .1,
         serde_json::json!([])
     );
     assert_eq!(
@@ -634,16 +629,14 @@ async fn api_persists_config_sync_errors_and_history_across_server_restarts() {
     let mut invalid = input.clone();
     invalid["cron"] = "* * invalid".into();
     assert_eq!(
-        call(&router, "POST", "/api/aow/automations", invalid)
-            .await
-            .0,
+        call(&router, "POST", "/api/automations", invalid).await.0,
         StatusCode::BAD_REQUEST
     );
     let mut interval = input.clone();
     interval["cron"] = "".into();
     interval["interval_seconds"] = 90.into();
     interval["max_concurrent_runs"] = 3.into();
-    let (code, interval_task) = call(&router, "POST", "/api/aow/automations", interval).await;
+    let (code, interval_task) = call(&router, "POST", "/api/automations", interval).await;
     assert_eq!(code, StatusCode::CREATED);
     assert_eq!(interval_task["interval_seconds"], 90);
     assert_eq!(interval_task["max_concurrent_runs"], 3);
@@ -657,7 +650,7 @@ async fn api_persists_config_sync_errors_and_history_across_server_restarts() {
     let mut invalid_concurrency = input.clone();
     invalid_concurrency["max_concurrent_runs"] = 0.into();
     assert_eq!(
-        call(&router, "POST", "/api/aow/automations", invalid_concurrency)
+        call(&router, "POST", "/api/automations", invalid_concurrency)
             .await
             .0,
         StatusCode::BAD_REQUEST
@@ -668,13 +661,13 @@ async fn api_persists_config_sync_errors_and_history_across_server_restarts() {
     manual["prompt"] = "检查 {{分支}} {{不替换}}".into();
     manual["prompt_bindings"] =
         serde_json::json!([{"name":"分支", "placeholder":"{{分支}}", "start":7, "end":17}]);
-    let (code, saved_manual) = call(&router, "POST", "/api/aow/automations", manual.clone()).await;
+    let (code, saved_manual) = call(&router, "POST", "/api/automations", manual.clone()).await;
     assert_eq!(code, StatusCode::CREATED, "{saved_manual}");
     assert!(saved_manual["scheduler_error"].is_null());
     assert!(saved_manual["next_run_at"].is_null());
     assert_eq!(saved_manual["prompt_bindings"], manual["prompt_bindings"]);
     let manual_id = saved_manual["id"].as_str().unwrap();
-    let manual_path = format!("/api/aow/automations/{manual_id}");
+    let manual_path = format!("/api/automations/{manual_id}");
     assert!(
         !directory
             .path()
@@ -748,18 +741,14 @@ async fn api_persists_config_sync_errors_and_history_across_server_restarts() {
     );
     manual["prompt_bindings"][0]["start"] = 1.into();
     assert_eq!(
-        call(&router, "POST", "/api/aow/automations", manual)
-            .await
-            .0,
+        call(&router, "POST", "/api/automations", manual).await.0,
         StatusCode::BAD_REQUEST
     );
     let mut invalid = input;
     invalid["workspace_mode"] = "existing".into();
     invalid["workspace_path"] = directory.path().to_str().unwrap().into();
     assert_eq!(
-        call(&router, "POST", "/api/aow/automations", invalid)
-            .await
-            .0,
+        call(&router, "POST", "/api/automations", invalid).await.0,
         StatusCode::BAD_REQUEST
     );
 }
@@ -816,14 +805,14 @@ async fn api_validates_temporary_and_dynamic_workspace_tasks() {
     call(
         &router,
         "PUT",
-        "/api/aow/settings",
+        "/api/settings",
         serde_json::json!({"execution_path":["/usr/bin", "/bin"]}),
     )
     .await;
     let (code, project) = call(
         &router,
         "POST",
-        "/api/aow/projects",
+        "/api/projects",
         serde_json::json!({"path":repository,"notes_path":directory.path().join("notes")}),
     )
     .await;
@@ -831,7 +820,7 @@ async fn api_validates_temporary_and_dynamic_workspace_tasks() {
     let (code, _) = call(
         &router,
         "POST",
-        "/api/aow/agents",
+        "/api/agents",
         serde_json::json!({"id":"codex","agent_type":"codex","display_name":"Codex test","command":fake}),
     )
     .await;
@@ -840,7 +829,7 @@ async fn api_validates_temporary_and_dynamic_workspace_tasks() {
     let (code, task) = call(
         &router,
         "POST",
-        "/api/aow/automations",
+        "/api/automations",
         serde_json::json!({
             "name":"Temporary task", "prompt":"Inspect public status", "agent":"codex",
             "project_id":project["id"], "workspace_mode":"temporary", "workspace_path":"",
@@ -857,7 +846,7 @@ async fn api_validates_temporary_and_dynamic_workspace_tasks() {
         "project_id":project["id"], "workspace_mode":"dynamic", "workspace_path":"",
         "base_branch":"", "cron":"0 9 * * *", "max_concurrent_runs":1, "enabled":true
     });
-    let (code, result) = call(&router, "POST", "/api/aow/automations", input.clone()).await;
+    let (code, result) = call(&router, "POST", "/api/automations", input.clone()).await;
     assert_eq!(code, StatusCode::BAD_REQUEST, "{result}");
     assert!(
         result["message"]
@@ -867,10 +856,10 @@ async fn api_validates_temporary_and_dynamic_workspace_tasks() {
     );
     input["kind"] = "manual".into();
     input["cron"] = "".into();
-    let (code, dynamic) = call(&router, "POST", "/api/aow/automations", input).await;
+    let (code, dynamic) = call(&router, "POST", "/api/automations", input).await;
     assert_eq!(code, StatusCode::CREATED, "{dynamic}");
     let id = dynamic["id"].as_str().unwrap();
-    let endpoint = format!("/api/aow/automations/{id}/run");
+    let endpoint = format!("/api/automations/{id}/run");
     for path in [
         serde_json::Value::Null,
         "".into(),

@@ -64,9 +64,9 @@ const base='http://server:9800/aow';
 const login=await fetch(base+'/api/auth/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({method:'password',username:'acceptance',password:'acceptance-password'})});
 if(!login.ok)throw new Error('Login failed '+login.status);const cookie=login.headers.get('set-cookie').split(';')[0];
 async function api(path,method='GET',body){const r=await fetch(base+path,{method,headers:{cookie,'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const text=await r.text();if(!r.ok)throw new Error(path+' '+r.status+' '+text);return JSON.parse(text);}
-const project=await api('/api/aow/projects','POST',{path:'/node/repository',notes_path:'/node/notes'});
-await api('/api/aow/agents','POST',{id:'callback-codex',agent_type:'codex',display_name:'Callback acceptance',command:'/bin/sh',args:['/opt/aow/callback-agent.sh']});
-const task=await api('/api/aow/automations','POST',{project_id:project.id,name:'Remote callback',kind:'manual',prompt:'Verify callback',agent:'codex',agent_id:'callback-codex',workspace_mode:'existing',workspace_path:'/node/repository',base_branch:'',cron:'',max_concurrent_runs:1,enabled:true});
+const project=await api('/api/projects','POST',{path:'/node/repository',notes_path:'/node/notes'});
+await api('/api/agents','POST',{id:'callback-codex',agent_type:'codex',display_name:'Callback acceptance',command:'/bin/sh',args:['/opt/aow/callback-agent.sh']});
+const task=await api('/api/automations','POST',{project_id:project.id,name:'Remote callback',kind:'manual',prompt:'Verify callback',agent:'codex',agent_id:'callback-codex',workspace_mode:'existing',workspace_path:'/node/repository',base_branch:'',cron:'',max_concurrent_runs:1,enabled:true});
 console.log(JSON.stringify({id:task.id,project_id:project.id}));`));
   const runId = randomUUID();
   docker(['exec', server, 'aow-automation-runner', 'run', '--state-dir', '/server/state', '--task-id', task.id, '--run-id', runId, '--source', 'manual']);

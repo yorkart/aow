@@ -37,7 +37,7 @@ export interface TaskResult {
 export const tasksChanged = 'aow:tasks-changed';
 export const notifyTasksChanged = () => window.dispatchEvent(new Event(tasksChanged));
 export const taskHeaders = (taskId?: string) => taskId ? { 'X-Aow-Task': taskId } : undefined;
-const root = '/api/aow/tasks';
+const root = '/api/tasks';
 const path = (id: string) => `${root}/${encodeURIComponent(id)}`;
 async function mutate<T>(url: string, method: string, body?: unknown): Promise<T> {
   const result = await acpRequest<T>(url, { method, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -45,7 +45,7 @@ async function mutate<T>(url: string, method: string, body?: unknown): Promise<T
   return result;
 }
 export const tasksApi = {
-  router: (projectId: string, input: { agent_id?: string; agent_role_id?: string }) => mutate<WorkTask>(`/api/aow/projects/${encodeURIComponent(projectId)}/router`, 'POST', input),
+  router: (projectId: string, input: { agent_id?: string; agent_role_id?: string }) => mutate<WorkTask>(`/api/projects/${encodeURIComponent(projectId)}/router`, 'POST', input),
   get: (id: string) => acpRequest<TaskResult>(path(id), { cache: 'no-store' }),
   list: (signal?: AbortSignal) => acpRequest<WorkTask[]>(root, { signal, cache: 'no-store' }),
   create: (input: Pick<WorkTask, 'project_id' | 'prompt' | 'agent_id' | 'agent_role_id' | 'dependencies'> & { request_id: string; slug?: string } & ({ workspace_mode: 'existing'; workspace: string } | { workspace_mode: 'new_worktree'; workspace?: never })) => mutate<WorkTask>(root, 'POST', input),

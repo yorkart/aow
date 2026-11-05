@@ -38,7 +38,7 @@ pub(crate) fn routes() -> Router<AppState> {
 
 fn router<S: Clone + Send + Sync + 'static>(path: PathBuf) -> Router<S> {
     Router::new()
-        .route("/api/aow/settings/server-environment", get(read).put(save))
+        .route("/api/settings/server-environment", get(read).put(save))
         .with_state(Store {
             path,
             operation: Arc::default(),

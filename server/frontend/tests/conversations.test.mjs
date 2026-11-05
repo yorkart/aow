@@ -56,7 +56,7 @@ try {
           ...info, thread_id: info.id, created_at: '2026-01-01', updated_at: '2026-01-01', status: 'idle', source: 'user', session_id: info.id,
         })) });
       }
-      if (url.pathname === '/api/aow/notifications') return route.fulfill({ json: { items: [], revision: 0, unread_count: 0 } });
+      if (url.pathname === '/api/notifications') return route.fulfill({ json: { items: [], revision: 0, unread_count: 0 } });
       return route.fulfill({ json: [] });
     });
     const page = await context.newPage();

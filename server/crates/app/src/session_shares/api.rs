@@ -28,10 +28,10 @@ struct CreateShare {
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
         .route(
-            "/api/aow/agent-sessions/{session_id}/share",
+            "/api/agent-sessions/{session_id}/share",
             get(info).post(create),
         )
-        .route("/api/aow/session-shares/{id}", delete(revoke))
+        .route("/api/session-shares/{id}", delete(revoke))
         .route(PUBLIC_API_PATH, get(read))
         .route("/share/{token}", get(page))
         .route("/share/{token}/", get(page))

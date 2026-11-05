@@ -13,15 +13,15 @@ async fn all_im_routes_require_account_authentication() {
     state.auth = crate::auth::AuthService::persistent(root.path());
     let app = crate::build_router(state);
     for (method, path) in [
-        ("PUT", "/api/aow/im/feishu"),
-        ("DELETE", "/api/aow/im/feishu"),
-        ("GET", "/api/aow/im/wechat"),
-        ("DELETE", "/api/aow/im/wechat"),
-        ("POST", "/api/aow/im/wechat/login"),
-        ("POST", "/api/aow/im/wechat/login/id"),
-        ("DELETE", "/api/aow/im/wechat/login/id"),
-        ("POST", "/api/aow/im/wechat/test"),
-        ("PUT", "/api/aow/im/wechat/test/receipt"),
+        ("PUT", "/api/im/feishu"),
+        ("DELETE", "/api/im/feishu"),
+        ("GET", "/api/im/wechat"),
+        ("DELETE", "/api/im/wechat"),
+        ("POST", "/api/im/wechat/login"),
+        ("POST", "/api/im/wechat/login/id"),
+        ("DELETE", "/api/im/wechat/login/id"),
+        ("POST", "/api/im/wechat/test"),
+        ("PUT", "/api/im/wechat/test/receipt"),
     ] {
         let response = app
             .clone()
@@ -50,7 +50,7 @@ async fn provider_api_keeps_secrets_private_and_errors_are_not_cached() {
         .oneshot(
             Request::builder()
                 .method("PUT")
-                .uri("/api/aow/im/feishu")
+                .uri("/api/im/feishu")
                 .header("content-type", "application/json")
                 .body(Body::from(
                     r#"{"app_id":"cli_test","app_secret":"private-secret"}"#,
@@ -67,7 +67,7 @@ async fn provider_api_keeps_secrets_private_and_errors_are_not_cached() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/aow/im/wechat/test")
+                .uri("/api/im/wechat/test")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -83,7 +83,7 @@ async fn test_receipt_requires_a_bound_provider() {
         .oneshot(
             Request::builder()
                 .method("PUT")
-                .uri("/api/aow/im/wechat/test/receipt")
+                .uri("/api/im/wechat/test/receipt")
                 .header("content-type", "application/json")
                 .body(Body::from(r#"{"test_id":"old-test","received":true}"#))
                 .unwrap(),

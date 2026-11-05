@@ -754,7 +754,7 @@ async fn aow_notes_use_the_shared_filesystem_routes() {
     let register = app
         .clone()
         .oneshot(
-            Request::post("/api/aow/projects")
+            Request::post("/api/projects")
                 .header(CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     serde_json::json!({
@@ -777,7 +777,7 @@ async fn aow_notes_use_the_shared_filesystem_routes() {
     let temporary = app
         .clone()
         .oneshot(
-            Request::post(format!("/api/aow/projects/{project_id}/notes/temporary"))
+            Request::post(format!("/api/projects/{project_id}/notes/temporary"))
                 .header(CONTENT_TYPE, "application/json")
                 .body(Body::from(r#"{"extension":"md"}"#))
                 .unwrap(),

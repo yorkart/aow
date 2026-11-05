@@ -1512,7 +1512,7 @@ async fn pane_sessions_use_live_cwd_and_config_and_cache_readable_claude_snapsho
     let response = app
         .oneshot(
             Request::get(format!(
-                "/api/aow/agent-sessions/{id}/snapshot?agent=claude&worktree_path={}",
+                "/api/agent-sessions/{id}/snapshot?agent=claude&worktree_path={}",
                 cwd.display()
             ))
             .body(Body::empty())
@@ -1578,9 +1578,9 @@ async fn cli_roles_keep_native_workspace_sessions_but_cannot_create_tasks() {
         assert!(status.is_success(), "{status}: {body}");
         body
     }
-    let project = post(&app, "/api/aow/projects", serde_json::json!({"path":repo})).await;
-    post(&app, "/api/aow/agents", serde_json::json!({"id":"role-runtime", "display_name":"Test Claude", "agent_type":"claude", "command":executable, "args":[], "env":{"ROLE_TEST_OUTPUT":output}})).await;
-    let role = post(&app, "/api/aow/agent-roles", serde_json::json!({
+    let project = post(&app, "/api/projects", serde_json::json!({"path":repo})).await;
+    post(&app, "/api/agents", serde_json::json!({"id":"role-runtime", "display_name":"Test Claude", "agent_type":"claude", "command":executable, "args":[], "env":{"ROLE_TEST_OUTPUT":output}})).await;
+    let role = post(&app, "/api/agent-roles", serde_json::json!({
         "name":"CLI reviewer", "home_layout":"claude", "identity":{"kind":"local_home","source":null},
         "instruction":"Review carefully", "runtime":{"mode":"cli", "agent_id":"role-runtime"}
     })).await;
@@ -1588,7 +1588,7 @@ async fn cli_roles_keep_native_workspace_sessions_but_cannot_create_tasks() {
     let rejected = app
         .clone()
         .oneshot(
-            Request::post("/api/aow/tasks")
+            Request::post("/api/tasks")
                 .header("content-type", "application/json")
                 .body(Body::from(request.to_string()))
                 .unwrap(),
@@ -1599,10 +1599,7 @@ async fn cli_roles_keep_native_workspace_sessions_but_cannot_create_tasks() {
     assert!(state.tasks.test_db().list().unwrap().is_empty());
     let launched = post(
         &app,
-        &format!(
-            "/api/aow/agent-roles/{}/sessions",
-            role["id"].as_str().unwrap()
-        ),
+        &format!("/api/agent-roles/{}/sessions", role["id"].as_str().unwrap()),
         serde_json::json!({"project_id":project["id"],"cwd":repo}),
     )
     .await;
@@ -1675,10 +1672,7 @@ async fn cli_roles_keep_native_workspace_sessions_but_cannot_create_tasks() {
     // Task prompt or managed-startup adapter imposed on its native terminal.
     let second = post(
         &app,
-        &format!(
-            "/api/aow/agent-roles/{}/sessions",
-            role["id"].as_str().unwrap()
-        ),
+        &format!("/api/agent-roles/{}/sessions", role["id"].as_str().unwrap()),
         serde_json::json!({"project_id":project["id"],"cwd":repo}),
     )
     .await;

@@ -7,19 +7,13 @@ use super::*;
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
+        .route("/api/projects", get(list_projects).post(register_project))
+        .route("/api/projects/{id}", delete(remove_project))
+        .route("/api/projects/{id}/refresh", post(refresh_project))
+        .route("/api/projects/{id}/avatar", get(avatar::get_avatar))
+        .route("/api/projects/{id}/notes/bind", post(bind_project_notes))
         .route(
-            "/api/aow/projects",
-            get(list_projects).post(register_project),
-        )
-        .route("/api/aow/projects/{id}", delete(remove_project))
-        .route("/api/aow/projects/{id}/refresh", post(refresh_project))
-        .route("/api/aow/projects/{id}/avatar", get(avatar::get_avatar))
-        .route(
-            "/api/aow/projects/{id}/notes/bind",
-            post(bind_project_notes),
-        )
-        .route(
-            "/api/aow/projects/{id}/notes/temporary",
+            "/api/projects/{id}/notes/temporary",
             post(create_temporary_project_note),
         )
 }

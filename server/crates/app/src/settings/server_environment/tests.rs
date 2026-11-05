@@ -15,7 +15,7 @@ async fn call(app: &Router, content: Option<Value>) -> (StatusCode, Value) {
         .oneshot(
             Request::builder()
                 .method(if content.is_some() { "PUT" } else { "GET" })
-                .uri("/api/aow/settings/server-environment")
+                .uri("/api/settings/server-environment")
                 .header("content-type", "application/json")
                 .body(Body::from(
                     content.map(|value| value.to_string()).unwrap_or_default(),

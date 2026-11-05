@@ -105,10 +105,7 @@ async fn request_returns_accepted_while_worker_waits_and_rejects_duplicate_delet
     let request = || {
         Request::builder()
             .method("POST")
-            .uri(format!(
-                "/api/aow/projects/{}/worktrees/removals",
-                project.id
-            ))
+            .uri(format!("/api/projects/{}/worktrees/removals", project.id))
             .header("content-type", "application/json")
             .body(Body::from(
                 serde_json::json!({"items": [{"path": paths[1]}]}).to_string(),

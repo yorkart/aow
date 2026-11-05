@@ -86,7 +86,9 @@ import { OperationLogPanel } from '../features/operations/OperationLogPanel';
 import { useWorktreeUnreadCounts } from '../features/notifications/taskNotifications';
 import { TaskNotificationPanel } from '../features/notifications/TaskNotificationPanel';
 import type { WorktreeResourceState } from './worktreeResources';
-import { aowApi } from './aowApi';
+import { projectsApi } from '../features/projects/api';
+import { worktreesApi } from '../features/projects/worktrees/api';
+import { settingsApi } from '../features/settings/api';
 import { ProjectIcon } from './ProjectIcon';
 import { agentsApi } from '../features/agents/api';
 import { sessionsApi } from '../features/sessions/api';
@@ -313,12 +315,12 @@ function RemoveWorktreeDialog({ state, onClose, onSubmitted }: {
     setBusy(true);
     setError('');
     try {
-      const result = await aowApi.removeWorktree(state.project.id, state.worktree.path, preview.dirty);
+      const result = await worktreesApi.removeWorktree(state.project.id, state.worktree.path, preview.dirty);
       onSubmitted(result);
     } catch (reason) {
       setError(message(reason));
       try {
-        setPreview(await aowApi.inspectWorktreeRemoval(state.project.id, state.worktree.path));
+        setPreview(await worktreesApi.inspectWorktreeRemoval(state.project.id, state.worktree.path));
       } catch {
         // Keep the original preview when a refresh is no longer possible.
       }
@@ -408,7 +410,7 @@ function BindNotesDialog({ project, onClose, onBound }: {
     setBusy(true);
     setError('');
     try {
-      onBound(await aowApi.bindNotes(project.id, target));
+      onBound(await projectsApi.bindNotes(project.id, target));
     } catch (reason) {
       setError(message(reason));
       setBusy(false);
@@ -495,7 +497,7 @@ function RegisterProjectDialog({ onClose, onRegistered }: {
 
   useEffect(() => {
     let active = true;
-    void aowApi.settings()
+    void settingsApi.settings()
       .then((settings) => { if (active) setNotesBase(settings.notes_base); })
       .catch(() => undefined);
     return () => { active = false; };
@@ -556,7 +558,7 @@ function RegisterProjectDialog({ onClose, onRegistered }: {
     setBusy(true);
     setError('');
     try {
-      const project = await aowApi.registerProject(normalizedPath, name, notesPath);
+      const project = await projectsApi.registerProject(normalizedPath, name, notesPath);
       await onRegistered(project);
     } catch (reason) {
       setError(message(reason));
@@ -653,7 +655,7 @@ function CreateWorktreeDialog({ project, initial, onClose, onSubmitted }: {
     setBusy(true);
     setError('');
     try {
-      const result = await aowApi.createWorktree(project.id, { branch, baseRef, path, pullFirst });
+      const result = await worktreesApi.createWorktree(project.id, { branch, baseRef, path, pullFirst });
       onSubmitted(result, mounted.current);
     } catch (reason) {
       if (mounted.current) { setError(t("aow.failed_to_submit_creation_task", { value0: message(reason) })); setBusy(false); }
@@ -1418,7 +1420,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     const targetFloating = openingInFloatingWorkspace();
     setOperationError('');
     try {
-      const created = await aowApi.createTemporaryNote(project.id, kind);
+      const created = await projectsApi.createTemporaryNote(project.id, kind);
       onNotesChanged(project.notes_path);
       await openExplorerFile({
         name: created.name,
@@ -2350,7 +2352,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
         projectReload.current.requested = false;
         const version = projectVersion.current;
         try {
-          const fetched = await aowApi.projects();
+          const fetched = await projectsApi.projects();
           if (!projectsMounted.current) return;
           // A local mutation or newer event wins over an in-flight snapshot.
           if (version !== projectVersion.current || projectReload.current.requested) {
@@ -2409,7 +2411,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
   useEffect(() => { void Promise.all([loadProjects(), loadAgents()]); }, [loadAgents, loadProjects]);
   useEffect(() => {
     let active = true;
-    void aowApi.settings().then(settings => {
+    void settingsApi.settings().then(settings => {
       // A later Settings load/save takes precedence over the initial request.
       if (active) setNodeAddresses(current => current ?? settings.node_addresses ?? []);
     }).catch(reason => {
@@ -2686,14 +2688,14 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
       confirmLabel: t("aow.remove_project"),
       danger: true,
     })) return;
-    try { await aowApi.removeProject(project.id); await loadProjects(); } catch (reason) { setError(message(reason)); }
+    try { await projectsApi.removeProject(project.id); await loadProjects(); } catch (reason) { setError(message(reason)); }
   };
 
   const inspectWorktreeRemoval = async (entry: WorktreeEntry) => {
     if (busyWorktrees.has(entry.worktree.path)) { setCleanupProjectId(entry.project.id); return; }
     setError('');
     try {
-      const preview = await aowApi.inspectWorktreeRemoval(entry.project.id, entry.worktree.path);
+      const preview = await worktreesApi.inspectWorktreeRemoval(entry.project.id, entry.worktree.path);
       setRemoveWorktreeState({ ...entry, preview });
     } catch (reason) {
       setError(message(reason));
@@ -2710,8 +2712,8 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
     setSavingWorktreeAppearance(true);
     setProjects((items) => updateWorktreeAppearance(items, entry.worktree.path, appearance));
     try {
-      if ('color' in appearance) await aowApi.setWorktreeColor(entry.project.id, entry.worktree.path, appearance.color);
-      else await aowApi.setWorktreeIcon(entry.project.id, entry.worktree.path, appearance.icon);
+      if ('color' in appearance) await worktreesApi.setWorktreeColor(entry.project.id, entry.worktree.path, appearance.color);
+      else await worktreesApi.setWorktreeIcon(entry.project.id, entry.worktree.path, appearance.icon);
     } catch (reason) {
       setProjects((items) => updateWorktreeAppearance(items, entry.worktree.path, previous));
       setError(message(reason));
@@ -2752,7 +2754,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
       .filter(item => !handledRemovals.current.has(item.key));
     if (!completed.length || applyingRemovals.current) return;
     applyingRemovals.current = true;
-    void aowApi.projects().then(async all => {
+    void projectsApi.projects().then(async all => {
       for (const item of completed) {
         const project = all.find(project => project.id === item.projectId);
         // History must never remove a newly created worktree at an old path.
@@ -2867,7 +2869,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
                 title={project.name} tooltip={project.registered_path} icon={<ProjectIcon project={project} />} collapsed={collapsedProjects[project.id]}
                 empty={taskMode ? !taskState.tasks.some(task => task.project_id === project.id && task.archived === showArchivedTasks) : !project.worktrees.length && !project.error} onCollapsedChange={collapsed => setCollapsedProjects(current => ({ ...current, [project.id]: collapsed }))}
                 actions={<>{taskMode && <><AowIconButton title={t('tasks.open_router')} onClick={() => { const router = taskState.tasks.find(task => task.project_id === project.id && task.is_router); if (router) selectTask(router); else setTaskDialog({ project, router: true }); }}><MessageSquare /></AowIconButton><AowIconButton title={t('tasks.new')} onClick={() => setTaskDialog({ project })}><Plus /></AowIconButton></>}{!taskMode && <AowIconButton title={t("aow.refresh_worktrees")} aria-label={t("aow.refresh_worktrees_2", { value0: project.name })} onClick={() => {
-                  void aowApi.refreshProject(project.id).then(updated => setProjects(items => items.map(item => item.id === project.id ? updated : item)))
+                  void projectsApi.refreshProject(project.id).then(updated => setProjects(items => items.map(item => item.id === project.id ? updated : item)))
                     .catch(reason => setError(message(reason)));
                 }}><RefreshCw /></AowIconButton>}<AowIconButton title={t("aow.project_actions")} aria-label={t("aow.project_actions_2", { value0: project.name })} aria-haspopup="menu"
                   aria-expanded={projectMenu?.project.id === project.id} onClick={event => openProjectMenu(event, project)}><MoreHorizontal /></AowIconButton></>}>

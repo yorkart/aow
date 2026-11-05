@@ -1,6 +1,6 @@
 import { t } from '../lib/i18n';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { aowApi } from './aowApi';
+import { worktreesApi } from '../features/projects/worktrees/api';
 import type { WorktreeRemovalItem, WorktreeRemovalJob } from './types';
 import { operationsChangedEvent } from '../features/operations/operations';
 
@@ -21,7 +21,7 @@ export function useWorktreeRemovals() {
     pending.current = true;
     const version = generation.current;
     try {
-      const result = await aowApi.worktreeRemovals();
+      const result = await worktreesApi.worktreeRemovals();
       if (mounted.current && generation.current === version) {
         const current = result.filter(job => tracked.current.has(job.id) || job.items.some(removalActive));
         tracked.current = new Set(current.map(job => job.id));

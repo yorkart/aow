@@ -89,8 +89,8 @@ export const filesApi = {
       request.send(file);
     });
   },
-  pinnedDirectories: () => aowRequest<PinnedDirectories>('/api/aow/pinned-directories', { cache: 'no-store' }),
-  updatePinnedDirectories: (input: { add?: string[]; remove?: string[] }) => aowRequest<PinnedDirectories>('/api/aow/pinned-directories', {
+  pinnedDirectories: () => aowRequest<PinnedDirectories>('/api/pinned-directories', { cache: 'no-store' }),
+  updatePinnedDirectories: (input: { add?: string[]; remove?: string[] }) => aowRequest<PinnedDirectories>('/api/pinned-directories', {
     method: 'PATCH', body: JSON.stringify(input),
   }),
 };

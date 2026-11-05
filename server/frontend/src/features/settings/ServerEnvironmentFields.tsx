@@ -13,7 +13,7 @@ interface ServerEnvironment {
   platform: string;
 }
 
-const endpoint = '/api/aow/settings/server-environment';
+const endpoint = '/api/settings/server-environment';
 const message = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
 
 export function useServerEnvironment(active: boolean, onBusyChange: (busy: boolean) => void) {

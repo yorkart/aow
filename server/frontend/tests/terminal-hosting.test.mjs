@@ -29,11 +29,11 @@ try {
       const url = new URL(route.request().url()); requests.push(url.pathname);
       if (url.pathname === '/api/terminals') return route.fulfill({ json: { tabs: [currentTab()] } });
       if (url.pathname === '/api/terminals/agents') return route.fulfill({ json: { agents: { pane: 'codex' }, titles: { pane: '实现登录功能' }, processes: {} } });
-      if (url.pathname === '/api/aow/projects') return route.fulfill({ json: [{ id: 'project', worktrees: [{ id: 'worktree', path: '/repo' }] }] });
-      if (url.pathname === '/api/aow/agents') return route.fulfill({ json: [{ id: 'codex', available: true }] });
-      if (url.pathname === '/api/aow/projects/project/branches') return route.fulfill({ json: { branches: ['main'], default_branch: 'main' } });
-      if (url.pathname === '/api/aow/notification-settings') return route.fulfill({ json: { im: { providers: [] } } });
-      if (url.pathname === '/api/aow/automations') {
+      if (url.pathname === '/api/projects') return route.fulfill({ json: [{ id: 'project', worktrees: [{ id: 'worktree', path: '/repo' }] }] });
+      if (url.pathname === '/api/agents') return route.fulfill({ json: [{ id: 'codex', available: true }] });
+      if (url.pathname === '/api/projects/project/branches') return route.fulfill({ json: { branches: ['main'], default_branch: 'main' } });
+      if (url.pathname === '/api/notification-settings') return route.fulfill({ json: { im: { providers: [] } } });
+      if (url.pathname === '/api/automations') {
         if (route.request().method() === 'POST') {
           const input = route.request().postDataJSON(); saves.push(input);
           const created = { ...task, ...input, id: 'created', revision: 1 }; createdTasks.push(created);
@@ -42,8 +42,8 @@ try {
         assert.equal(url.searchParams.get('project_id'), 'project');
         return route.fulfill({ json: [...createdTasks, task, { ...task, id: 'schedule', kind: 'scheduled', name: '定时任务' }, ...['existing', 'new_worktree', 'temporary'].map(mode => ({ ...task, id: mode, workspace_mode: mode, name: `非动态任务 ${mode}` }))] });
       }
-      if (url.pathname === '/api/aow/automations/review') return route.fulfill({ json: task });
-      if (url.pathname === '/api/aow/automations/review/runs/run-one') return route.fulfill({ json: { id: 'run-one', task_id: 'review', status: 'failed' } });
+      if (url.pathname === '/api/automations/review') return route.fulfill({ json: task });
+      if (url.pathname === '/api/automations/review/runs/run-one') return route.fulfill({ json: { id: 'run-one', task_id: 'review', status: 'failed' } });
       if (url.pathname.endsWith('/hosting')) {
         starts.push(route.request().postDataJSON()); hosted = true; currentHosting = { ...currentHosting, max_inputs: starts.at(-1).max_inputs };
         socket?.send(JSON.stringify({ type: 'error', code: 'attachment_superseded', message: 'controller changed' }));
@@ -181,7 +181,7 @@ try {
     if (process.env.AOW_HOSTING_SCREENSHOT_DIR) await page.screenshot({ path: `${process.env.AOW_HOSTING_SCREENSHOT_DIR}/aow-hosting-narrow.png` });
     await link.click();
     await page.getByTestId('opened-run').getByText('run-one').waitFor();
-    assert.ok(requests.includes('/api/aow/automations/review/runs/run-one'));
+    assert.ok(requests.includes('/api/automations/review/runs/run-one'));
   });
   await test('takeover restores keyboard input after reopening an already hosted pane', async t => {
     const { page, inputs, claims } = await fixture(t);

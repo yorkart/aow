@@ -19,14 +19,14 @@ export async function themePreviewServer(port = 0) {
           response.setHeader('Content-Type', 'application/json');
           const data = {
             '/auth/status': { configured: true, authenticated: true },
-            '/aow/projects': [],
-            '/aow/settings': { notes_base: '/preview/notes', execution_path: ['/usr/bin'], node_addresses: [], editor: { word_wrap: false } },
-            '/aow/agents': [], '/aow/automations': [], '/aow/agent-sessions': [],
-            '/aow/pinned-worktrees': { paths: [], revision: 0 },
-            '/aow/notification-settings': { im: { providers: [] }, notifications: { agent_task_completed: { enabled: false, channels: [] } } },
+            '/projects': [],
+            '/settings': { notes_base: '/preview/notes', execution_path: ['/usr/bin'], node_addresses: [], editor: { word_wrap: false } },
+            '/agents': [], '/automations': [], '/agent-sessions': [],
+            '/pinned-worktrees': { paths: [], revision: 0 },
+            '/notification-settings': { im: { providers: [] }, notifications: { agent_task_completed: { enabled: false, channels: [] } } },
             '/terminals': { tabs: [] }, '/terminals/agents': { agents: {}, titles: {}, processes: {} },
-            '/aow/settings/configuration': { selection: { config_repo: '', config_id: '' }, active_selection: { config_repo: '', config_id: '' }, restart_required: false },
-            '/aow/git-platform-providers': { providers: [] }, '/aow/acp/agents': [],
+            '/settings/configuration': { selection: { config_repo: '', config_id: '' }, active_selection: { config_repo: '', config_id: '' }, restart_required: false },
+            '/git-platform-providers': { providers: [] }, '/acp/agents': [],
             '/operations/active': [],
           };
           if (path === '/terminals/task-stops') {

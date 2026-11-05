@@ -6,7 +6,7 @@
 
 v4 统一使用 `pull_requests` 命名；GitLab MR 也转换为相同字段。只读协议不等同于运行沙箱，上传的脚本以服务进程的账号权限执行，应只上传信任的实现。
 
-平台管理接口为 `GET/PUT /api/aow/git-platform-providers`；`POST /api/aow/git-platform-providers/test` 校验上传脚本。`GET /api/git-platform-targets?repo=...&operations=repository.info` 按域名和声明的能力筛选远端；`operations` 可省略或用逗号分隔多个操作名，同时满足全部操作的 Provider 才会返回。
+平台管理接口为 `GET/PUT /api/git-platform-providers`；`POST /api/git-platform-providers/test` 校验上传脚本。`GET /api/git-platform-targets?repo=...&operations=repository.info` 按域名和声明的能力筛选远端；`operations` 可省略或用逗号分隔多个操作名，同时满足全部操作的 Provider 才会返回。
 
 工作台提供 `GET /api/my-pull-requests?repo=<仓库绝对路径>`、`GET /api/my-pull-requests/<number>?repo=...` 和 `GET /api/my-pull-requests/<number>/diff?repo=...&path=<仓库相对路径>`。这三个接口均可携带 `provider` 和 `remote`；列表默认返回当前账号创建的 Open PR，可传 `state=all` 同时获取 Merged 和 Closed PR。桌面侧栏按 Open PRs、Merged PRs、Closed PRs 分组，Open PRs 的菜单可过滤 Draft。
 
@@ -72,7 +72,7 @@ Provider 元数据和默认版本记录保存在当前配置目录的 `git-platf
 
 项目使用 `origin`，没有 `origin` 时使用唯一的 remote；多个 remote 且没有 `origin` 时不自动选择。选定的 remote 无匹配 Provider 时显示默认图标，不借用其他 remote 的 Provider，也不随当前分支变化。未声明此能力时显示默认图标，PR 功能不受影响。查询不依赖仓库是否存在 PR，也不读取仓库中的 logo 文件。
 
-桌面和手机通过 `GET /api/aow/projects/<id>/avatar` 独立加载头像，不阻塞项目注册或列表。AoW 只保存头像 URL，不下载图片，前端直接引用，图片加载失败时回退到默认图标。查询失败时保留此前保存的头像 URL。已解析 URL 缓存 15 分钟，无头像或查询失败缓存 1 分钟；Provider 配置、remote 地址或执行 PATH 改变时重新查询。头像脚本的 describe 和 repository.info 合计最多 8 秒，整个元数据查询最多 12 秒。
+桌面和手机通过 `GET /api/projects/<id>/avatar` 独立加载头像，不阻塞项目注册或列表。AoW 只保存头像 URL，不下载图片，前端直接引用，图片加载失败时回退到默认图标。查询失败时保留此前保存的头像 URL。已解析 URL 缓存 15 分钟，无头像或查询失败缓存 1 分钟；Provider 配置、remote 地址或执行 PATH 改变时重新查询。头像脚本的 describe 和 repository.info 合计最多 8 秒，整个元数据查询最多 12 秒。
 
 ## repository.commit_links（可选）
 

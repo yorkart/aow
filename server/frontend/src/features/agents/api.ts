@@ -2,15 +2,15 @@ import type { AowAgent } from './types';
 import { aowRequest } from '../../lib/aowRequest';
 
 export const agentsApi = {
-  agents: (refresh = false) => aowRequest<AowAgent[]>(`/api/aow/agents?refresh=${refresh}`),
-  reorderAgents: (agentType: AowAgent['agent_type'], ids: string[]) => aowRequest<void>('/api/aow/agents', {
+  agents: (refresh = false) => aowRequest<AowAgent[]>(`/api/agents?refresh=${refresh}`),
+  reorderAgents: (agentType: AowAgent['agent_type'], ids: string[]) => aowRequest<void>('/api/agents', {
     method: 'PATCH',
     body: JSON.stringify({ agent_type: agentType, ids }),
   }),
-  setDefaultAgent: (id: string | null) => aowRequest<void>('/api/aow/agents/settings/default', {
+  setDefaultAgent: (id: string | null) => aowRequest<void>('/api/agents/settings/default', {
     method: 'PUT', body: JSON.stringify({ agent_id: id }),
   }),
-  registerAgent: (agent: { id: string; agentType: NonNullable<AowAgent['agent_type']>; displayName: string; command: string; args: string[]; env: Record<string, string> }, existingId?: string) => aowRequest<AowAgent>(existingId ? `/api/aow/agents/${encodeURIComponent(existingId)}` : '/api/aow/agents', {
+  registerAgent: (agent: { id: string; agentType: NonNullable<AowAgent['agent_type']>; displayName: string; command: string; args: string[]; env: Record<string, string> }, existingId?: string) => aowRequest<AowAgent>(existingId ? `/api/agents/${encodeURIComponent(existingId)}` : '/api/agents', {
     method: existingId ? 'PUT' : 'POST',
     body: JSON.stringify({
       id: agent.id,
@@ -21,5 +21,5 @@ export const agentsApi = {
       env: agent.env,
     }),
   }),
-  removeAgent: (id: string) => aowRequest<void>(`/api/aow/agents/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  removeAgent: (id: string) => aowRequest<void>(`/api/agents/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };

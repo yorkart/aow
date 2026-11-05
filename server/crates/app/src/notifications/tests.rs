@@ -558,7 +558,7 @@ async fn settings_api_redacts_secrets_and_rejects_invalid_preferences() {
             .oneshot(
                 Request::builder()
                     .method("PUT")
-                    .uri("/api/aow/notification-settings")
+                    .uri("/api/notification-settings")
                     .header("Content-Type", "application/json")
                     .body(Body::from(body.to_string()))
                     .unwrap(),
@@ -572,7 +572,7 @@ async fn settings_api_redacts_secrets_and_rejects_invalid_preferences() {
     let response = app
         .oneshot(
             Request::builder()
-                .uri("/api/aow/notification-settings")
+                .uri("/api/notification-settings")
                 .body(Body::empty())
                 .unwrap(),
         )

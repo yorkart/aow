@@ -37,12 +37,12 @@ async function fixture(t, width = 390, mobile = true, virtualViewport = false, a
     }
     let data = [];
     if (path === '/api/auth/status') data = { configured: true, authenticated: true };
-    else if (path === '/api/aow/projects') data = state.projects;
+    else if (path === '/api/projects') data = state.projects;
     else if (path === '/api/git/status') data = { repository: '/workspace/aow', branch: 'main', ahead: 0, behind: 0, files: [] };
-    else if (path === '/api/aow/settings') {
+    else if (path === '/api/settings') {
       if (writing) Object.assign(state.settings, body);
       data = state.settings;
-    } else if (path === '/api/aow/settings/server-environment') {
+    } else if (path === '/api/settings/server-environment') {
       if (!writing && state.failEnvironmentRead) {
         await route.fulfill({ status: 403, json: { message: 'server.env 读取失败' } }); return;
       }
@@ -53,12 +53,12 @@ async function fixture(t, width = 390, mobile = true, virtualViewport = false, a
         Object.assign(state.serverEnvironment, { content: body.content, revision: `${state.writes.length}`, exists: true });
       }
       data = state.serverEnvironment;
-    } else if (path === '/api/aow/settings/discovered-path') data = ['/opt/bin', '/usr/bin', '/bin'];
-    else if (path === '/api/aow/agents/settings/default') {
+    } else if (path === '/api/settings/discovered-path') data = ['/opt/bin', '/usr/bin', '/bin'];
+    else if (path === '/api/agents/settings/default') {
       assert.deepEqual(Object.keys(body), ['agent_id']);
       state.agents = state.agents.map(agent => ({ ...agent, is_default: agent.id === body.agent_id }));
       await route.fulfill({ status: 204 }); return;
-    } else if (path === '/api/aow/agents') {
+    } else if (path === '/api/agents') {
       if (request.method() === 'PATCH') {
         const group = state.agents.filter(agent => agent.source === 'configured' && agent.agent_type === body.agent_type);
         assert.deepEqual([...body.ids].sort(), group.map(agent => agent.id).sort());
@@ -74,24 +74,24 @@ async function fixture(t, width = 390, mobile = true, virtualViewport = false, a
         if (state.failAgentRefresh && url.searchParams.get('refresh') === 'true') { await route.fulfill({ status: 503, json: { message: 'Agent 列表读取失败' } }); return; }
         data = state.agents;
       }
-    } else if (path.startsWith('/api/aow/agents/') && request.method() === 'PUT') {
+    } else if (path.startsWith('/api/agents/') && request.method() === 'PUT') {
       const existing = decodeURIComponent(path.split('/').at(-1));
       assert.equal(body.id, existing, 'editing preserves the Agent ID');
       data = { ...body, available: true, source: 'configured', executable: body.command };
       state.agents = state.agents.map(agent => agent.id === existing ? data : agent);
-    } else if (path.startsWith('/api/aow/agents/') && request.method() === 'DELETE') {
+    } else if (path.startsWith('/api/agents/') && request.method() === 'DELETE') {
       state.agents = state.agents.filter(agent => agent.id !== path.split('/').at(-1));
       await route.fulfill({ status: 204 }); return;
-    } else if (path === '/api/aow/git-platform-providers') {
+    } else if (path === '/api/git-platform-providers') {
       if (writing) state.providers = { ...body, revision: body.revision + 1, providers: body.providers.map(provider => ({ ...provider, name: 'GitHub', hosts: ['github.com'] })) };
       data = state.providers;
-    } else if (path === '/api/aow/git-platform-providers/test') data = { name: 'GitHub', hosts: ['github.com'], operations: ['pull_requests.list', 'pull_requests.detail', 'pull_requests.diff'] };
-    else if (path === '/api/aow/im/feishu') {
+    } else if (path === '/api/git-platform-providers/test') data = { name: 'GitHub', hosts: ['github.com'], operations: ['pull_requests.list', 'pull_requests.detail', 'pull_requests.diff'] };
+    else if (path === '/api/im/feishu') {
       state.notifications.im.providers = state.notifications.im.providers.filter(provider => provider.provider !== 'feishu');
       if (request.method() === 'PUT') state.notifications.im.providers.push({ provider: 'feishu', app_id: body.app_id });
       data = state.notifications;
-    } else if (path === '/api/aow/im/wechat') data = { connection: { context_ready: true } };
-    else if (path === '/api/aow/notification-settings') {
+    } else if (path === '/api/im/wechat') data = { connection: { context_ready: true } };
+    else if (path === '/api/notification-settings') {
       if (writing) state.notifications.notifications = { agent_task_completed: body.agent_task_completed, public_base_url: body.public_base_url };
       data = state.notifications;
     } else if (path.includes('/pinned-')) data = { paths: [], revision: 0 };
@@ -186,7 +186,7 @@ try {
     state.agents[0] = { ...state.agents[0], args: ['--latest'], env: { MODE: 'latest' } };
     await detected.click();
     await waitDefault('Codex', true);
-    assert.deepEqual(state.writes, [{ path: '/api/aow/agents/settings/default', method: 'PUT', body: { agent_id: 'codex' } }]);
+    assert.deepEqual(state.writes, [{ path: '/api/agents/settings/default', method: 'PUT', body: { agent_id: 'codex' } }]);
     assert.equal(state.agents[0].source, 'detected');
     assert.deepEqual(state.agents[0].args, ['--latest']);
     assert.deepEqual(state.agents[0].env, { MODE: 'latest' });
@@ -260,7 +260,7 @@ try {
     assert.equal(state.writes.length, 0, 'cross-type, detected targets and cancelled gestures never save');
     await drag('work-codex', 'personal-codex');
     await dialog.getByRole('status').filter({ hasText: '顺序已保存' }).waitFor();
-    assert.deepEqual(state.writes.at(-1), { path: '/api/aow/agents', method: 'PATCH', body: { agent_type: 'codex', ids: ['personal-codex', 'work-codex'] } });
+    assert.deepEqual(state.writes.at(-1), { path: '/api/agents', method: 'PATCH', body: { agent_type: 'codex', ids: ['personal-codex', 'work-codex'] } });
     const ordered = ['claude', 'work-claude', 'codex', 'personal-codex', 'work-codex'];
     assert.deepEqual(await ids(), ordered);
     state.failSave = true;
@@ -334,7 +334,7 @@ try {
     await dialog.getByRole('button', { name: '保存配置', exact: true }).click();
     await dialog.getByRole('status').filter({ hasText: 'Updated Work Codex 配置已保存' }).waitFor();
     assert.equal(state.writes.at(-1).method, 'PUT');
-    assert.equal(state.writes.at(-1).path, '/api/aow/agents/Work_codex-2');
+    assert.equal(state.writes.at(-1).path, '/api/agents/Work_codex-2');
     assert.equal(state.writes.at(-1).body.id, 'Work_codex-2');
     assert.equal(state.agents.find(agent => agent.id === 'Work_codex-2').display_name, 'Updated Work Codex');
     assert.equal(await dialog.getByRole('textbox', { name: 'Agent ID', exact: true }).count(), 0);
@@ -466,7 +466,7 @@ try {
     assert.equal(state.serverEnvironment.content.includes('HTTP_PROXY='), false);
     assert.equal(state.serverEnvironment.content.includes('AOW_AUTH_SESSION_MAX_AGE_SECONDS='), false);
     assert.ok(state.serverEnvironment.content.includes(`http_proxy=${values.http_proxy}\n`));
-    assert.ok(state.writes.every(write => write.path === '/api/aow/settings/server-environment'), 'Enter in the table never submits the separate PATH form');
+    assert.ok(state.writes.every(write => write.path === '/api/settings/server-environment'), 'Enter in the table never submits the separate PATH form');
   });
 
   for (const width of [320, 390]) await test(`mobile ${width}px uploads named mjs providers with derived metadata`, async t => {

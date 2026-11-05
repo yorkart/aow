@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Folder } from 'lucide-react';
-import { aowApi } from './aowApi';
+import { projectsApi } from '../features/projects/api';
 import type { AowProject } from './types';
 import './project-icon.css';
 
@@ -27,7 +27,7 @@ export function ProjectIcon({ project, size = 14 }: { project: AowProject; size?
     let live = true;
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 15_000);
-    void aowApi.projectAvatar(project.id, controller.signal)
+    void projectsApi.projectAvatar(project.id, controller.signal)
       .then(value => { if (live) setResolved({ key, url: value.avatar_url }); })
       .catch(() => { /* Keep the saved avatar when metadata is unavailable. */ })
       .finally(() => window.clearTimeout(timer));

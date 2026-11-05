@@ -3364,7 +3364,7 @@ try {
   });
   await test('role mentions are atomic avatars, survive clipboard round trips and keep stable IDs', async t => {
     const { page, state } = await fixture(t);
-    await page.route('**/api/aow/agent-roles', route => route.fulfill({ json: [
+    await page.route('**/api/agent-roles', route => route.fulfill({ json: [
       { id: 'dev', name: 'Dev', description: 'Implements', runtime: { mode: 'acp', agent_id: 'test' } },
       { id: 'review', name: 'Reviewer', description: 'Reviews', runtime: { mode: 'acp', agent_id: 'test' } },
       { id: 'cli', name: 'Terminal only', runtime: { mode: 'cli', agent_id: 'test' } },

@@ -8,17 +8,14 @@ use super::*;
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
         .route(
-            "/api/aow/agents",
+            "/api/agents",
             get(list_agents).post(register_agent).patch(reorder_agents),
         )
         .route(
-            "/api/aow/agents/settings/default",
+            "/api/agents/settings/default",
             axum::routing::put(set_default_agent),
         )
-        .route(
-            "/api/aow/agents/{id}",
-            delete(remove_agent).put(update_agent),
-        )
+        .route("/api/agents/{id}", delete(remove_agent).put(update_agent))
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

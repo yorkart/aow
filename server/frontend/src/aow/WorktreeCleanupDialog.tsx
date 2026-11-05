@@ -2,7 +2,7 @@ import { t } from '../lib/i18n';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { LoaderCircle, Trash2, X } from 'lucide-react';
 import type { AowProject } from './types';
-import { aowApi } from './aowApi';
+import { worktreesApi } from '../features/projects/worktrees/api';
 import type { WorktreeRemovalJob, WorktreeRemovalPreview } from './types';
 import { removalActive, removalStatusLabel } from './useWorktreeRemovals';
 
@@ -43,7 +43,7 @@ export function WorktreeCleanupDialog({ project, isUnallocated, jobs, progressEr
       const result: WorktreeRemovalPreview[] = [];
       // Bound Git scans even for a large selection.
       for (let index = 0; index < paths.length; index += 3) {
-        result.push(...await Promise.all(paths.slice(index, index + 3).map(path => aowApi.inspectWorktreeRemoval(project.id, path, abort.signal))));
+        result.push(...await Promise.all(paths.slice(index, index + 3).map(path => worktreesApi.inspectWorktreeRemoval(project.id, path, abort.signal))));
       }
       if (!abort.signal.aborted) setPreviews(result);
     } catch (reason) {
@@ -54,7 +54,7 @@ export function WorktreeCleanupDialog({ project, isUnallocated, jobs, progressEr
     if (!previews?.length) return;
     setBusy(true); setError('');
     try {
-      const job = await aowApi.removeWorktrees(project.id, previews.map(preview => ({ path: preview.worktree.path, force: preview.dirty })));
+      const job = await worktreesApi.removeWorktrees(project.id, previews.map(preview => ({ path: preview.worktree.path, force: preview.dirty })));
       onSubmitted(job);
       if (mounted.current) { setSelected(new Set()); setPreviews(undefined); }
     } catch (reason) {

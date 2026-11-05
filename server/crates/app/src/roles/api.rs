@@ -11,20 +11,14 @@ use serde::Deserialize;
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
-        .route("/api/aow/agent-roles", get(list).post(create))
+        .route("/api/agent-roles", get(list).post(create))
+        .route("/api/agent-roles/test-and-create", post(test_and_create))
+        .route("/api/agent-roles/identity-sources", get(identity_sources))
         .route(
-            "/api/aow/agent-roles/test-and-create",
-            post(test_and_create),
-        )
-        .route(
-            "/api/aow/agent-roles/identity-sources",
-            get(identity_sources),
-        )
-        .route(
-            "/api/aow/agent-roles/{id}",
+            "/api/agent-roles/{id}",
             axum::routing::put(update).delete(remove),
         )
-        .route("/api/aow/agent-roles/{id}/sessions", post(launch))
+        .route("/api/agent-roles/{id}/sessions", post(launch))
 }
 
 async fn list(State(state): State<AppState>) -> Result<Json<Vec<super::AgentRole>>, HttpError> {

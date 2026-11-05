@@ -51,7 +51,7 @@ async fn project_queries_return_registry_metadata_without_git_or_terminald() {
     }
     let app = crate::build_router(state);
     let response = app.clone().oneshot(
-        Request::post("/api/aow/projects")
+        Request::post("/api/projects")
             .header("content-type", "application/json")
             .body(Body::from(json!({"path":repo, "name":"项目", "notes_path":directory.path().join("notes")}).to_string())).unwrap()
     ).await.unwrap();
@@ -101,12 +101,9 @@ async fn project_queries_return_registry_metadata_without_git_or_terminald() {
     // Removing the registration is immediately reflected by both CLI queries.
     let response = app
         .oneshot(
-            Request::delete(format!(
-                "/api/aow/projects/{}",
-                project["id"].as_str().unwrap()
-            ))
-            .body(Body::empty())
-            .unwrap(),
+            Request::delete(format!("/api/projects/{}", project["id"].as_str().unwrap()))
+                .body(Body::empty())
+                .unwrap(),
         )
         .await
         .unwrap();

@@ -44,7 +44,7 @@ try {
           stored ??= { id: `share-${creations}`, path: `/share/token-${creations}`, created_at: new Date().toISOString() };
           return route.fulfill({ json: stored });
         }
-        if (path.startsWith('/api/aow/session-shares/') && request.method() === 'DELETE') {
+        if (path.startsWith('/api/session-shares/') && request.method() === 'DELETE') {
           stored = null;
           return route.fulfill({ status: 204 });
         }

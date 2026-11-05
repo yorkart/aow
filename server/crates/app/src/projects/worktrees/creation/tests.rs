@@ -90,7 +90,7 @@ async fn accepts_without_waiting_rejects_duplicates_and_completes_after_request_
     let guard = lock.lock().await;
     let router = crate::build_router(state.clone());
     let response = tokio::time::timeout(Duration::from_secs(1), router.clone().oneshot(
-        Request::post(format!("/api/aow/projects/{}/worktrees", project.id)).header("content-type", "application/json")
+        Request::post(format!("/api/projects/{}/worktrees", project.id)).header("content-type", "application/json")
             .body(Body::from(serde_json::json!({"branch":input.branch,"base_ref":input.base_ref,"path":input.path,"pull_first":false}).to_string())).unwrap(),
     )).await.unwrap().unwrap();
     assert_eq!(response.status(), StatusCode::ACCEPTED);
@@ -141,7 +141,7 @@ async fn accepts_without_waiting_rejects_duplicates_and_completes_after_request_
     assert_eq!(operation.completed, 5);
     let response = crate::build_router(state.clone())
         .oneshot(
-            Request::get("/api/aow/worktree-creations")
+            Request::get("/api/worktree-creations")
                 .body(Body::empty())
                 .unwrap(),
         )

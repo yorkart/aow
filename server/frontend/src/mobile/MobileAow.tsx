@@ -9,7 +9,8 @@ import type { ResolvedTab } from '../aow/tabRoutes';
 import { mobileTabTarget } from '../aow/tabRoutes/mobile';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowUpRight, CalendarClock, ChevronRight, FolderOpen, GitBranch, GitPullRequest, Home, MessageSquare, Pin, PinOff, Search, Settings, Sparkles, TerminalSquare, X } from 'lucide-react';
-import { aowApi } from '../aow/aowApi';
+import { projectsApi } from '../features/projects/api';
+import { settingsApi } from '../features/settings/api';
 import { ProjectIcon } from '../aow/ProjectIcon';
 import { usePinnedWorktrees } from '../aow/usePinnedWorktrees';
 import { useAowTabLocation } from '../aow/AowTabEntry';
@@ -41,7 +42,7 @@ const navigation = [
 ] as const;
 
 export function MobileAow({ initialEntry }: { initialEntry?: ResolvedTab } = {}) {
-  const projects = useMobileResource('projects', () => aowApi.projects());
+  const projects = useMobileResource('projects', () => projectsApi.projects());
   const inboxUnread = useInboxUnread();
   const { route, navigate, back } = useMobileRoute(initialEntry, projects.data);
   const syncLocation = useAowTabLocation();
@@ -84,7 +85,7 @@ export function MobileAow({ initialEntry }: { initialEntry?: ResolvedTab } = {})
 }
 
 function MobileNodeSwitcher({ addresses }: { addresses?: string[] }) {
-  const settings = useMobileResource('aow-settings', () => aowApi.settings());
+  const settings = useMobileResource('aow-settings', () => settingsApi.settings());
   return <AowNodeSwitcher mobile addresses={addresses ?? (settings.data ? settings.data.node_addresses ?? [] : undefined)} error={addresses ? undefined : settings.error} />;
 }
 

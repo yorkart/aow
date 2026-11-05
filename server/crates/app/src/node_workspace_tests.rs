@@ -93,7 +93,7 @@ async fn node_only_paths_support_project_registration_and_file_apis() {
     let response = app
         .clone()
         .oneshot(
-            Request::get("/api/aow/settings/discovered-path")
+            Request::get("/api/settings/discovered-path")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -111,7 +111,7 @@ async fn node_only_paths_support_project_registration_and_file_apis() {
     let response = app
         .clone()
         .oneshot(
-            Request::post("/api/aow/projects")
+            Request::post("/api/projects")
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({"path":root,"notes_path":format!("{root}/notes")}).to_string(),

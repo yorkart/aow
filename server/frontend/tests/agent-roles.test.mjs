@@ -32,13 +32,13 @@ try {
     let acpList = [acp, unknown, { ...acp, id: 'codex-uninstalled', installed: false }, { ...acp, id: 'codex-unsupported', supported: false }, { ...acp, id: 'codex-unconfigured', configured: false }];
     await context.route('**/api/**', async route => {
       const request = route.request(), path = new URL(request.url()).pathname;
-      if (path.startsWith('/api/acp/') || path === '/api/aow/agents') runtimeRequests.push({ path, method: request.method() });
+      if (path.startsWith('/api/acp/') || path === '/api/agents') runtimeRequests.push({ path, method: request.method() });
       let data = [];
       if (path.startsWith('/api/fs/')) browsed.push(path);
-      else if (path === '/api/aow/settings') data = { notes_base: '/notes', execution_path: ['/tools'], editor: {} };
-      else if (path === '/api/aow/agents') data = cliList;
-      else if (path === '/api/aow/agent-roles/identity-sources') data = identities;
-      else if (path === '/api/aow/agent-roles/test-and-create') {
+      else if (path === '/api/settings') data = { notes_base: '/notes', execution_path: ['/tools'], editor: {} };
+      else if (path === '/api/agents') data = cliList;
+      else if (path === '/api/agent-roles/identity-sources') data = identities;
+      else if (path === '/api/agent-roles/test-and-create') {
         const body = request.postDataJSON(); probes.push(body);
         if (probes.length === 1) {
           await new Promise(resolve => { finishProbe = resolve; });
@@ -46,17 +46,17 @@ try {
         }
         const config = { ...body }; delete config.request_id;
         data = { ...config, home_layout: config.runtime.mode === 'cli' ? cliList.find(item => item.id === config.runtime.agent_id).agent_type : 'codex', id: `role-${roles.length}` }; roles.push(data);
-      } else if (path === '/api/aow/agent-roles') {
+      } else if (path === '/api/agent-roles') {
         assert.equal(request.method(), 'GET', 'creation must use the tested endpoint'); data = roles;
-      } else if (path.match(/^\/api\/aow\/agent-roles\/[^/]+\/sessions$/)) {
+      } else if (path.match(/^\/api\/agent-roles\/[^/]+\/sessions$/)) {
         launches.push({ path, ...request.postDataJSON() }); data = { kind: 'acp', session: { thread_id: 'session', agent_id: acp.id } };
-      } else if (path.match(/^\/api\/aow\/agent-roles\/[^/]+$/) && request.method() === 'PUT') {
+      } else if (path.match(/^\/api\/agent-roles\/[^/]+$/) && request.method() === 'PUT') {
         const role = roles.find(item => path.endsWith(`/${item.id}`)); Object.assign(role, request.postDataJSON()); data = role;
       } else if (path === '/api/acp/settings') data = settings;
       else if (path === '/api/acp/agents') data = acpList;
-      else if (path === '/api/aow/tasks' && request.method() === 'POST') {
+      else if (path === '/api/tasks' && request.method() === 'POST') {
         data = { ...request.postDataJSON(), id: 'task-role', resources: [] }; tasks.push(data);
-      } else if (path === '/api/aow/projects') data = [{ id: 'p', name: 'Project', registered_path: '/repo', worktrees: [{ id: 'w', path: '/repo', branch: 'main', is_main: true }] }];
+      } else if (path === '/api/projects') data = [{ id: 'p', name: 'Project', registered_path: '/repo', worktrees: [{ id: 'w', path: '/repo', branch: 'main', is_main: true }] }];
       return route.fulfill({ json: data });
     });
     const page = await context.newPage(); page.setDefaultTimeout(15000);
@@ -140,7 +140,7 @@ try {
     await page.getByRole('button', { name: 'Workspace creation', exact: true }).click();
     await page.getByRole('button', { name: 'Reviewer ACP', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('output')?.textContent?.includes('session'));
-    assert.equal(launches[0].path, '/api/aow/agent-roles/role-0/sessions');
+    assert.equal(launches[0].path, '/api/agent-roles/role-0/sessions');
     await page.getByRole('button', { name: 'Create task', exact: true }).click();
     await page.getByRole('textbox', { name: 'Task description' }).fill('Investigate the change');
     await page.getByRole('button', { name: 'Initial agent', exact: true }).click();

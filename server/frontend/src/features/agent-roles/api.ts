@@ -19,7 +19,7 @@ export interface AgentRole extends RoleConfig { id: string; home_layout: HomeLay
 export interface IdentitySource { layout: HomeLayout; source: string }
 export type RoleSession = { kind: 'acp'; session: SessionSnapshot } | { kind: 'cli'; terminal: TerminalTab };
 export const rolesChanged = 'aow:agent-roles-changed';
-const root = '/api/aow/agent-roles';
+const root = '/api/agent-roles';
 const rolePath = (id: string) => `${root}/${encodeURIComponent(id)}`;
 async function mutate<T>(url: string, method: string, body?: unknown): Promise<T> {
   const result = await acpRequest<T>(url, { method, body: body === undefined ? undefined : JSON.stringify(body) });

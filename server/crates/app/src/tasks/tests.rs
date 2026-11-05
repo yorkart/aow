@@ -69,7 +69,7 @@ async fn task_dependencies_do_not_cascade_archive_or_delete() {
         call(
             &app,
             "PATCH",
-            "/api/aow/tasks/a",
+            "/api/tasks/a",
             serde_json::json!({"dependencies":["b"]})
         )
         .await
@@ -80,24 +80,24 @@ async fn task_dependencies_do_not_cascade_archive_or_delete() {
         call(
             &app,
             "PATCH",
-            "/api/aow/tasks/a",
+            "/api/tasks/a",
             serde_json::json!({"archived":true})
         )
         .await
         .0,
         StatusCode::NO_CONTENT
     );
-    let (_, tasks) = call(&app, "GET", "/api/aow/tasks", serde_json::json!({})).await;
+    let (_, tasks) = call(&app, "GET", "/api/tasks", serde_json::json!({})).await;
     assert_eq!(tasks[0]["archived"], true);
     assert_eq!(tasks[1]["archived"], false);
     assert!(tasks[1].get("parent_id").is_none());
     assert_eq!(
-        call(&app, "DELETE", "/api/aow/tasks/a", serde_json::json!({}))
+        call(&app, "DELETE", "/api/tasks/a", serde_json::json!({}))
             .await
             .0,
         StatusCode::NO_CONTENT
     );
-    let (_, tasks) = call(&app, "GET", "/api/aow/tasks", serde_json::json!({})).await;
+    let (_, tasks) = call(&app, "GET", "/api/tasks", serde_json::json!({})).await;
     assert_eq!(tasks.as_array().unwrap().len(), 1);
     assert_eq!(tasks[0]["id"], "b");
 }
@@ -111,7 +111,7 @@ async fn invalid_task_creation_does_not_allocate_a_session() {
         serde_json::json!({"request_id":"task", "project_id":"missing", "prompt":"hello", "agent_id":"agent", "workspace_mode":"existing", "workspace":"/repo", "dependencies":["missing"]}),
     ] {
         assert_eq!(
-            call(&app, "POST", "/api/aow/tasks", body).await.0,
+            call(&app, "POST", "/api/tasks", body).await.0,
             StatusCode::BAD_REQUEST
         );
     }
@@ -157,12 +157,12 @@ async fn creating_tasks_and_helper_sessions_keeps_dependencies_out_of_runtime_li
         .merge(crate::acp::routes())
         .with_state(state.clone());
     let request = serde_json::json!({"request_id":"a", "project_id":project.id, "agent_id":"test", "workspace_mode":"existing", "workspace":repo, "prompt":"Inspect this repository"});
-    let (status, first) = call(&app, "POST", "/api/aow/tasks", request.clone()).await;
+    let (status, first) = call(&app, "POST", "/api/tasks", request.clone()).await;
     assert_eq!(status, StatusCode::OK, "{first}");
-    let (status, repeated) = call(&app, "POST", "/api/aow/tasks", request).await;
+    let (status, repeated) = call(&app, "POST", "/api/tasks", request).await;
     assert_eq!(status, StatusCode::OK, "{repeated}");
     assert_eq!(first, repeated);
-    let (status, second) = call(&app, "POST", "/api/aow/tasks", serde_json::json!({"request_id":"b", "project_id":project.id, "agent_id":"test", "workspace_mode":"existing", "workspace":repo, "prompt":"Review", "dependencies":["a"]})).await;
+    let (status, second) = call(&app, "POST", "/api/tasks", serde_json::json!({"request_id":"b", "project_id":project.id, "agent_id":"test", "workspace_mode":"existing", "workspace":repo, "prompt":"Review", "dependencies":["a"]})).await;
     assert_eq!(status, StatusCode::OK, "{second}");
     assert!(
         state
@@ -235,7 +235,7 @@ async fn creating_tasks_and_helper_sessions_keeps_dependencies_out_of_runtime_li
     call(
         &app,
         "PATCH",
-        "/api/aow/tasks/a",
+        "/api/tasks/a",
         serde_json::json!({"archived":true}),
     )
     .await;
@@ -385,7 +385,7 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
     let (status, role) = call(
         &app,
         "POST",
-        "/api/aow/agent-roles",
+        "/api/agent-roles",
         json!({
             "name":"Engineer", "description":"Implement and investigate",
             "runtime":{"mode":"acp","agent_id":"codex.test"},
@@ -396,7 +396,7 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
     .await;
     assert_eq!(status, StatusCode::OK, "{role}");
     let role_id = role["id"].as_str().unwrap();
-    let route = format!("/api/aow/projects/{}/router", project.id);
+    let route = format!("/api/projects/{}/router", project.id);
     let (first, second) = tokio::join!(
         call(&app, "POST", &route, json!({"agent_id":"codex.test"})),
         call(&app, "POST", &route, json!({"agent_id":"codex.test"}))
@@ -576,7 +576,7 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
             .is_empty(),
         "Finishing delegated work does not publish a report"
     );
-    let launch=app.clone().oneshot(Request::builder().method("POST").uri(format!("/api/aow/agent-roles/{role_id}/sessions"))
+    let launch=app.clone().oneshot(Request::builder().method("POST").uri(format!("/api/agent-roles/{role_id}/sessions"))
         .header("content-type","application/json").header("X-Aow-Task","implementation")
         .body(Body::from(json!({"project_id":project.id,"cwd":implementation["workspace"],"parent_thread_id":worker}).to_string())).unwrap()).await.unwrap();
     assert_eq!(launch.status(), StatusCode::OK);
@@ -690,7 +690,7 @@ async fn new_worktree_defaults_create_and_execute_without_client_configuration()
     .await
     .unwrap();
     let request = serde_json::json!({"request_id":"auto-workspace", "project_id":project.id, "agent_id":"test", "workspace_mode":"new_worktree", "prompt":"Inspect repository"});
-    let (status, task) = call(&app, "POST", "/api/aow/tasks", request.clone()).await;
+    let (status, task) = call(&app, "POST", "/api/tasks", request.clone()).await;
     assert_eq!(status, StatusCode::OK, "{task}");
     let target = directory
         .path()
@@ -712,14 +712,14 @@ async fn new_worktree_defaults_create_and_execute_without_client_configuration()
             .await
             .unwrap()
     );
-    let (_, retry) = call(&app, "POST", "/api/aow/tasks", request.clone()).await;
+    let (_, retry) = call(&app, "POST", "/api/tasks", request.clone()).await;
     assert_eq!(retry, task);
     assert_eq!(state.tasks.inner.tasks.list().unwrap().len(), 1);
     let mut changed_mode = request.clone();
     changed_mode["workspace_mode"] = serde_json::json!("existing");
     changed_mode["workspace"] = task["workspace"].clone();
     assert_eq!(
-        call(&app, "POST", "/api/aow/tasks", changed_mode).await.0,
+        call(&app, "POST", "/api/tasks", changed_mode).await.0,
         StatusCode::BAD_REQUEST
     );
     assert_eq!(
@@ -735,7 +735,7 @@ async fn new_worktree_defaults_create_and_execute_without_client_configuration()
     let mut changed = request;
     changed["slug"] = serde_json::json!("different");
     assert_eq!(
-        call(&app, "POST", "/api/aow/tasks", changed).await.0,
+        call(&app, "POST", "/api/tasks", changed).await.0,
         StatusCode::BAD_REQUEST
     );
     let info = state
@@ -810,7 +810,7 @@ async fn default_prefers_remote_head_and_future_slug_can_be_supplied() {
     )
     .await
     .unwrap();
-    let (status, task) = call(&app, "POST", "/api/aow/tasks", serde_json::json!({"request_id":"with-slug", "project_id":project.id, "agent_id":"test", "workspace_mode":"new_worktree", "slug":"Review UI", "prompt":"Review"})).await;
+    let (status, task) = call(&app, "POST", "/api/tasks", serde_json::json!({"request_id":"with-slug", "project_id":project.id, "agent_id":"test", "workspace_mode":"new_worktree", "slug":"Review UI", "prompt":"Review"})).await;
     assert_eq!(status, StatusCode::OK, "{task}");
     let target = Path::new(task["workspace"].as_str().unwrap());
     assert_eq!(
@@ -838,7 +838,7 @@ async fn checkout_failure_does_not_create_task_or_start_acp() {
     state.projects.test_registry().unwrap().projects[0]
         .task_worktree
         .base_ref = Some("missing-ref".into());
-    let (status, _) = call(&app, "POST", "/api/aow/tasks", serde_json::json!({"request_id":"fail-checkout", "project_id":project.id, "agent_id":"test", "workspace_mode":"new_worktree", "slug":"", "prompt":"Review"})).await;
+    let (status, _) = call(&app, "POST", "/api/tasks", serde_json::json!({"request_id":"fail-checkout", "project_id":project.id, "agent_id":"test", "workspace_mode":"new_worktree", "slug":"", "prompt":"Review"})).await;
     assert!(!status.is_success());
     assert!(state.tasks.inner.tasks.list().unwrap().is_empty());
     assert!(state.acp.sessions(None).await.unwrap().is_empty());
@@ -854,7 +854,7 @@ async fn project_policy_can_resolve_custom_defaults_without_a_ui_editor() {
         policy.branch_template = "feature/{{task_id}}-{{slug}}".into();
         policy.base_ref = Some("main".into());
     }
-    let (status, task) = call(&app, "POST", "/api/aow/tasks", serde_json::json!({"request_id":"configured", "project_id":project.id, "agent_id":"test", "workspace_mode":"new_worktree", "slug":"", "prompt":"Review"})).await;
+    let (status, task) = call(&app, "POST", "/api/tasks", serde_json::json!({"request_id":"configured", "project_id":project.id, "agent_id":"test", "workspace_mode":"new_worktree", "slug":"", "prompt":"Review"})).await;
     assert_eq!(status, StatusCode::OK, "{task}");
     let target = directory
         .path()
@@ -922,7 +922,7 @@ async fn invalid_creation_intent_does_not_create_a_checkout() {
             .as_object_mut()
             .unwrap()
             .extend(changes.as_object().unwrap().clone());
-        let (status, payload) = call(&app, "POST", "/api/aow/tasks", input).await;
+        let (status, payload) = call(&app, "POST", "/api/tasks", input).await;
         assert!(!status.is_success(), "{payload}");
         assert!(state.tasks.inner.tasks.list().unwrap().is_empty());
         assert!(state.acp.sessions(None).await.unwrap().is_empty());
@@ -1000,7 +1000,7 @@ async fn task_role_reuses_acp_configuration_and_retries_without_creating_another
     let (status, role) = call(
         &app,
         "POST",
-        "/api/aow/agent-roles",
+        "/api/agent-roles",
         serde_json::json!({
             "name":"Reviewer", "runtime":{"mode":"acp","agent_id":"codex.test"}, "home_layout":"codex",
             "identity":{"kind":"local_home","source":null}, "instruction":"Review only", "skills":[]
@@ -1009,7 +1009,7 @@ async fn task_role_reuses_acp_configuration_and_retries_without_creating_another
     .await;
     assert_eq!(status, StatusCode::OK, "{role}");
     let request = serde_json::json!({"request_id":"role-task", "project_id":project.id, "prompt":"Check this change", "agent_role_id":role["id"], "workspace_mode":"existing", "workspace":repo});
-    let (status, task) = call(&app, "POST", "/api/aow/tasks", request.clone()).await;
+    let (status, task) = call(&app, "POST", "/api/tasks", request.clone()).await;
     assert_eq!(status, StatusCode::OK, "{task}");
     assert_eq!(task["agent_id"], "codex.test");
     assert_eq!(task["agent_role_id"], role["id"]);
@@ -1020,7 +1020,7 @@ async fn task_role_reuses_acp_configuration_and_retries_without_creating_another
         session.execution_environment.as_ref().unwrap().home,
         state.roles.role_home(role["id"].as_str().unwrap()).unwrap()
     );
-    assert_eq!(call(&app, "POST", "/api/aow/tasks", request).await.1, task);
+    assert_eq!(call(&app, "POST", "/api/tasks", request).await.1, task);
     assert_eq!(state.acp.sessions(None).await.unwrap().len(), 1);
     assert_eq!(state.acp.agents().await.unwrap().len(), 1);
     let home = state.roles.role_home(role["id"].as_str().unwrap()).unwrap();

@@ -1,7 +1,7 @@
 import { t } from '../../lib/i18n';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronsUpDown } from 'lucide-react';
-import { aowApi } from '../../aow/aowApi';
+import { worktreesApi } from '../projects/worktrees/api';
 import type { AowProject, ProjectBranches } from '../../aow/types';
 import { workspaceNames, type WorkspaceConfig, type WorkspaceMode } from './types';
 import './workspaces.css';
@@ -26,7 +26,7 @@ export function WorkspaceSelect({ project, value, disabled = false, allowDynamic
     const controller = new AbortController();
     setBranches(undefined);
     setError('');
-    void aowApi.projectBranches(project.id, controller.signal).then(result => {
+    void worktreesApi.projectBranches(project.id, controller.signal).then(result => {
       if (controller.signal.aborted) return;
       setBranches(result);
       const { value: selected, onChange: change } = current.current;

@@ -8,17 +8,14 @@ use super::*;
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
         .merge(super::server_environment_routes())
-        .route("/api/aow/settings", get(get_settings).put(update_settings))
+        .route("/api/settings", get(get_settings).put(update_settings))
+        .route("/api/settings/discovered-path", get(get_discovered_path))
         .route(
-            "/api/aow/settings/discovered-path",
-            get(get_discovered_path),
-        )
-        .route(
-            "/api/aow/pinned-worktrees",
+            "/api/pinned-worktrees",
             get(get_pinned_worktrees).patch(update_pinned_worktrees),
         )
         .route(
-            "/api/aow/pinned-directories",
+            "/api/pinned-directories",
             get(get_pinned_directories).patch(update_pinned_directories),
         )
 }

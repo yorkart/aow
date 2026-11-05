@@ -7,26 +7,23 @@ use super::*;
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
-        .route("/api/aow/projects/{id}/branches", get(project_branches))
-        .route("/api/aow/projects/{id}/worktrees", post(create_worktree))
+        .route("/api/projects/{id}/branches", get(project_branches))
+        .route("/api/projects/{id}/worktrees", post(create_worktree))
         .route(
-            "/api/aow/projects/{id}/worktrees/color",
+            "/api/projects/{id}/worktrees/color",
             post(set_worktree_color),
         )
+        .route("/api/projects/{id}/worktrees/icon", post(set_worktree_icon))
         .route(
-            "/api/aow/projects/{id}/worktrees/icon",
-            post(set_worktree_icon),
-        )
-        .route(
-            "/api/aow/projects/{id}/worktrees/removal",
+            "/api/projects/{id}/worktrees/removal",
             get(inspect_worktree_removal).delete(remove_worktree),
         )
         .route(
-            "/api/aow/projects/{id}/worktrees/removals",
+            "/api/projects/{id}/worktrees/removals",
             post(removal::submit_batch),
         )
-        .route("/api/aow/worktree-removals", get(removal::list_jobs))
-        .route("/api/aow/worktree-creations", get(creation::list_jobs))
+        .route("/api/worktree-removals", get(removal::list_jobs))
+        .route("/api/worktree-creations", get(creation::list_jobs))
 }
 async fn project_branches(
     State(state): State<AppState>,

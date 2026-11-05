@@ -42,7 +42,7 @@ async function fixture(context, pins = { paths: [], revision: 0, failWrites: fal
   await context.route('**/api/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
-    if (url.pathname === '/api/aow/pinned-worktrees') {
+    if (url.pathname === '/api/pinned-worktrees') {
       if (request.method() === 'PATCH') {
         if (pins.failWrites) { await route.fulfill({ status: 500, json: { message: 'Config write failed' } }); return; }
         const { add = [], remove = [], order } = request.postDataJSON();
@@ -61,20 +61,20 @@ async function fixture(context, pins = { paths: [], revision: 0, failWrites: fal
     if (request.method() !== 'GET') { mutations.push(`${request.method()} ${url.pathname}`); await route.fulfill({ status: 405, json: { message: 'Unexpected mutation in browser test' } }); return; }
     let data;
     if (url.pathname === '/api/auth/status') data = { configured: true, authenticated: true };
-    else if (url.pathname === '/api/aow/projects') data = [project];
-    else if (url.pathname === '/api/aow/projects/project/avatar') data = { avatar_url: null };
-    else if (url.pathname === '/api/aow/agents') data = [{ id: 'codex', display_name: 'Codex', available: true, args: [], env: {} }];
-    else if (url.pathname === '/api/aow/settings') data = { notes_base: '/notes' };
+    else if (url.pathname === '/api/projects') data = [project];
+    else if (url.pathname === '/api/projects/project/avatar') data = { avatar_url: null };
+    else if (url.pathname === '/api/agents') data = [{ id: 'codex', display_name: 'Codex', available: true, args: [], env: {} }];
+    else if (url.pathname === '/api/settings') data = { notes_base: '/notes' };
     else if (url.pathname === '/api/terminals') data = terminalTabs.filter(tab => !url.searchParams.has('workspace_root') || tab.workspace_root === url.searchParams.get('workspace_root'));
     else if (url.pathname === '/api/terminals/agents') data = { agents, titles };
     else if (/^\/api\/terminals\/[^/]+$/.test(url.pathname)) {
       data = terminalTabs.find(tab => tab.id === decodeURIComponent(url.pathname.split('/').at(-1)));
       if (!data) { await route.fulfill({ status: 404, json: { message: 'Tab not found' } }); return; }
     }
-    else if (url.pathname === '/api/aow/agent-sessions/automation-session/snapshot') data = { ...automationSession, captured_at: automationRun.finished_at, status: 'completed', truncated: false, turns: [{ id: 'automation-turn', status: 'completed', user: { text: automation.prompt, timestamp: automationRun.started_at }, final: { text: '## 本次巡检结果\n\n构建和测试均已通过。', timestamp: automationRun.finished_at } }] };
+    else if (url.pathname === '/api/agent-sessions/automation-session/snapshot') data = { ...automationSession, captured_at: automationRun.finished_at, status: 'completed', truncated: false, turns: [{ id: 'automation-turn', status: 'completed', user: { text: automation.prompt, timestamp: automationRun.started_at }, final: { text: '## 本次巡检结果\n\n构建和测试均已通过。', timestamp: automationRun.finished_at } }] };
     else if (url.pathname.endsWith('/snapshot')) data = { ...session, captured_at: session.updated_at, status: 'completed', truncated: false, turns: [{ id: 'turn-1', status: 'completed', user: { text: '请实现 **手机端** UI', timestamp: session.created_at }, final: { text: '已完成。\n\n```ts\nconst mobile = true;\n```\n\n<img src=x onerror="window.__unsafe=true">', timestamp: session.updated_at } }] };
-    else if (url.pathname === '/api/aow/agent-sessions') data = url.searchParams.get('agent') === 'codex' ? [session] : [];
-    else if (url.pathname === '/api/aow/agent-sessions/automation-run') data = automationSession;
+    else if (url.pathname === '/api/agent-sessions') data = url.searchParams.get('agent') === 'codex' ? [session] : [];
+    else if (url.pathname === '/api/agent-sessions/automation-run') data = automationSession;
     else if (url.pathname.startsWith('/api/fs/tree')) {
       const dir = decodeURIComponent(url.pathname.slice('/api/fs/tree'.length));
       data = { path: dir, entries: [{ name: 'README.md', path: `${dir}/README.md`, kind: 'file', size: 4096 }, ...(dir.endsWith('/src') ? [] : [{ name: 'src', path: `${dir}/src`, kind: 'directory', size: 0 }])] };
@@ -88,11 +88,11 @@ async function fixture(context, pins = { paths: [], revision: 0, failWrites: fal
     else if (url.pathname.startsWith('/api/fs/text')) data = { path: workspace + '/README.md', content: '# AoW\n\n手机端 **文件预览**。\n\n<script>window.__unsafe=true</script>\n', language: 'markdown', mime: 'text/markdown', size: 100, version: 'v1' };
     else if (url.pathname === '/api/git/status') data = { repository: workspace, branch: 'main', ahead: 1, behind: 0, files: [{ path: 'frontend/src/main.tsx', index_status: 'M', worktree_status: 'M', original_path: null }] };
     else if (url.pathname === '/api/git/diff') data = { repository: workspace, path: 'frontend/src/main.tsx', staged: url.searchParams.get('staged') === 'true', patch: '@@ -1 +1 @@\n-desktop\n+mobile\n', truncated: false };
-    else if (url.pathname === '/api/aow/automations/task-one/runs/run-one') data = automationRun;
-    else if (url.pathname === '/api/aow/automations/task-one/runs/run-one/output/stdio') { await route.fulfill({ body: '构建和测试均已通过。', contentType: 'text/plain' }); return; }
-    else if (url.pathname === '/api/aow/automations/task-one/runs') data = [automationRun];
-    else if (url.pathname === '/api/aow/automations/task-one') data = automation;
-    else if (url.pathname === '/api/aow/automations') data = [automation];
+    else if (url.pathname === '/api/automations/task-one/runs/run-one') data = automationRun;
+    else if (url.pathname === '/api/automations/task-one/runs/run-one/output/stdio') { await route.fulfill({ body: '构建和测试均已通过。', contentType: 'text/plain' }); return; }
+    else if (url.pathname === '/api/automations/task-one/runs') data = [automationRun];
+    else if (url.pathname === '/api/automations/task-one') data = automation;
+    else if (url.pathname === '/api/automations') data = [automation];
     else if (url.pathname === '/api/git/repositories') data = [{ name: 'AoW', path: workspace, branch: 'main' }];
     else if (url.pathname === '/api/git/ignored') data = { repository: workspace, ignored: [] };
     else if (url.pathname === '/api/git/log') data = { commits: [], repository: workspace, upstream: null, upstream_commit: null };
@@ -214,7 +214,7 @@ try {
     t.after(() => context.close());
     const state = await fixture(context);
     let avatarUrl = 'https://avatars.example.com/owner.svg';
-    await context.route('**/api/aow/projects/project/avatar', route => route.fulfill({ json: { avatar_url: avatarUrl } }));
+    await context.route('**/api/projects/project/avatar', route => route.fulfill({ json: { avatar_url: avatarUrl } }));
     await context.route('https://avatars.example.com/**', route => route.request().url().includes('broken') ? route.abort()
       : route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" rx="12" fill="#3267cf"/><circle cx="32" cy="24" r="10" fill="white"/><path d="M12 58a20 20 0 0 1 40 0" fill="white"/></svg>' }));
     const page = await context.newPage();
@@ -246,7 +246,7 @@ try {
     const state = await fixture(context);
     const created = [];
     const configured = { id: 'codex-review', agent_type: 'codex', display_name: 'Review Codex', source: 'configured', available: true, args: [], env: {} };
-    await context.route('**/api/aow/agents?**', route => route.fulfill({ json: [
+    await context.route('**/api/agents?**', route => route.fulfill({ json: [
       { ...configured, id: 'codex', display_name: 'Codex', source: 'detected' }, configured,
       { ...configured, id: 'unavailable', display_name: 'Unavailable Agent', available: false },
     ] }));
@@ -312,7 +312,7 @@ try {
     t.after(() => context.close());
     const state = await fixture(context);
     let failed = true;
-    await context.route('**/api/aow/agents?**', route => route.fulfill(failed
+    await context.route('**/api/agents?**', route => route.fulfill(failed
       ? { status: 500, json: { message: 'Agent service unavailable' } } : { json: [] }));
     const page = await context.newPage();
     await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
@@ -805,7 +805,7 @@ try {
     await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => context.close());
     const state = await fixture(context);
-    await context.route('**/api/aow/automations/task-one', route => route.fulfill({ status: 404, json: { message: '自动化任务已删除' } }));
+    await context.route('**/api/automations/task-one', route => route.fulfill({ status: 404, json: { message: '自动化任务已删除' } }));
     const page = await context.newPage();
     await page.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     await page.goto(`${baseURL}/m#workspace=${encodeURIComponent(workspace)}&view=automations&task=task-one`);
@@ -1678,7 +1678,7 @@ try {
       '```mermaid', 'flowchart LR', '  A[用户请求] --> B[处理任务]', '  B --> C[完成]', '```', '',
       '```mermaid', 'sequenceDiagram', '  participant U as 用户', '  participant S as 服务', '  U->>S: 读取会话', '  S-->>U: 返回结果', '```',
     ].join('\n');
-    await context.route('**/api/aow/agent-sessions/session-one/snapshot?**', route => route.fulfill({ json: {
+    await context.route('**/api/agent-sessions/session-one/snapshot?**', route => route.fulfill({ json: {
       ...session, captured_at: session.updated_at, status: 'completed', truncated: false,
       turns: [{ id: 'diagram-turn', status: 'completed', user: { text: '查看流程图和时序图', timestamp: session.created_at },
         final: { text: diagrams, timestamp: session.updated_at } }],

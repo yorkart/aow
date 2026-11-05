@@ -1,7 +1,7 @@
 import { t } from '../../lib/i18n';
 import { appUrl } from '../../lib/basePath';
 import { terminalApi } from '../../features/terminals/terminalApi';
-import { aowApi } from '../aowApi';
+import { projectsApi } from '../../features/projects/api';
 import type { ResolvedTab, TabContext, TabOpenActions, TabRouteAdapter, TabTarget } from './types';
 import { terminalRoute } from './terminal';
 import { fileRoute, filesRoute } from './files';
@@ -43,7 +43,7 @@ export function captureTabTarget(context: TabContext) {
 export async function resolveTabTarget(target: TabTarget, signal: AbortSignal): Promise<ResolvedTab> {
   const terminal = target.type === 'terminal' ? await terminalApi.get(target.tabId, signal) : undefined;
   const located = await registry.get(target.type)!.locate?.(target, signal);
-  const projects = await aowApi.projects();
+  const projects = await projectsApi.projects();
   signal.throwIfAborted();
   const contexts = projects.flatMap(project => project.worktrees.map(worktree => ({ project, worktree })));
   const workspacePath = terminal?.workspace_root ?? located?.workspacePath;

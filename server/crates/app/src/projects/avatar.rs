@@ -102,12 +102,11 @@ mod tests {
     }
 
     async fn provider(app: &Router, result: &str) {
-        let (_, current) =
-            request(app, "GET", "/api/aow/git-platform-providers", Value::Null).await;
+        let (_, current) = request(app, "GET", "/api/git-platform-providers", Value::Null).await;
         let script = format!(
             "import {{readFileSync}} from 'node:fs';\nconst r=JSON.parse(readFileSync(0,'utf8'));\nconst result=r.operation==='describe'?{{name:'Test',hosts:['git.example.com'],operations:['repository.info']}}:({result});\nconsole.log(JSON.stringify({{version:4,result}}));"
         );
-        let (status, _) = request(app, "PUT", "/api/aow/git-platform-providers", json!({
+        let (status, _) = request(app, "PUT", "/api/git-platform-providers", json!({
             "revision": current["revision"],
             "providers": [{"id":"test.mjs","name":"Test","hosts":["git.example.com"],"script":script}]
         })).await;
@@ -154,24 +153,19 @@ mod tests {
             "{'avatar_url':'https://avatars.example.com/team.png'}",
         )
         .await;
-        let (status, project) = request(
-            &app,
-            "POST",
-            "/api/aow/projects",
-            json!({"path":repository}),
-        )
-        .await;
+        let (status, project) =
+            request(&app, "POST", "/api/projects", json!({"path":repository})).await;
         assert_eq!(status, StatusCode::CREATED);
         assert!(
             project["avatar_url"].is_null(),
             "registration does not wait for platform metadata"
         );
         let id = project["id"].as_str().unwrap();
-        let endpoint = format!("/api/aow/projects/{id}/avatar");
+        let endpoint = format!("/api/projects/{id}/avatar");
         let (status, avatar) = request(&app, "GET", &endpoint, Value::Null).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(avatar["avatar_url"], "https://avatars.example.com/team.png");
-        let (_, projects) = request(&app, "GET", "/api/aow/projects", Value::Null).await;
+        let (_, projects) = request(&app, "GET", "/api/projects", Value::Null).await;
         assert_eq!(projects[0]["avatar_url"], avatar["avatar_url"]);
         let restored = crate::test_support::TestServices::persistent_with_notes_base(
             &state_dir,
@@ -211,7 +205,7 @@ mod tests {
         .await;
         assert!(request(&app, "GET", &endpoint, Value::Null).await.1["avatar_url"].is_null());
         assert_eq!(
-            request(&app, "GET", "/api/aow/projects/missing/avatar", Value::Null)
+            request(&app, "GET", "/api/projects/missing/avatar", Value::Null)
                 .await
                 .0,
             StatusCode::NOT_FOUND

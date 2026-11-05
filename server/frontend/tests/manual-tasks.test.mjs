@@ -27,9 +27,9 @@ try {
       { ...common, id: '87654321', name: '分支检查', kind: 'manual', cron: '', prompt, prompt_bindings: bindings },
       { ...common, id: '11223344', name: '直接执行', kind: 'manual', cron: '', prompt: '不需要输入', prompt_bindings: [], ...(dynamic ? { workspace_mode: 'dynamic', workspace_path: '', base_branch: '' } : {}) },
     ];
-    await page.route('**/api/aow/projects/*/branches', route => route.fulfill({ json: { branches: ['main', 'origin/main'], default_branch: 'origin/main' } }));
-    await page.route('**/api/aow/notification-settings', route => route.fulfill({ json: { im: { providers: [] } } }));
-    await page.route('**/api/aow/automations**', route => {
+    await page.route('**/api/projects/*/branches', route => route.fulfill({ json: { branches: ['main', 'origin/main'], default_branch: 'origin/main' } }));
+    await page.route('**/api/notification-settings', route => route.fulfill({ json: { im: { providers: [] } } }));
+    await page.route('**/api/automations**', route => {
       const url = new URL(route.request().url());
       const suffix = url.pathname.split('/automations')[1];
       if (suffix === '/status') return route.fulfill({ json: { platform: 'systemd', ready: true, timezone: 'UTC' } });

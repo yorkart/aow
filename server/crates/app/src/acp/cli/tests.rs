@@ -68,7 +68,7 @@ async fn fixture(command: &str) -> (tempfile::TempDir, AppState, Router, String,
     .unwrap();
     state.instances = instances::InstanceStore::persistent(directory.path()).unwrap();
     let app = crate::build_router(state.clone());
-    let (status, project) = call(&app, "POST", "/api/aow/projects", json!({"path":repo})).await;
+    let (status, project) = call(&app, "POST", "/api/projects", json!({"path":repo})).await;
     assert!(status.is_success(), "{project}");
     let project = project["id"].as_str().unwrap().to_owned();
     let app = routes()

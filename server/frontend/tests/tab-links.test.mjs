@@ -82,7 +82,7 @@ try {
       let data;
       if (request.method() === 'GET') state.reads.push(url.pathname + url.search);
       if (url.pathname.startsWith('/api/acp/') && request.method() !== 'GET') state.acpWrites.push(request.method() + ' ' + url.pathname);
-      if (request.method() !== 'GET' && /\/api\/(fs|aow\/automations)\//.test(url.pathname)) state.mutations.push(request.method() + url.pathname);
+      if (request.method() !== 'GET' && /\/api\/(fs|automations)\//.test(url.pathname)) state.mutations.push(request.method() + url.pathname);
       if (url.pathname === '/api/auth/status') data = { configured: true, authenticated: state.authenticated };
       else if (url.pathname === '/api/auth/login') { state.authenticated = true; data = { configured: true, authenticated: true }; }
       else if (!state.authenticated) { await route.fulfill({ status: 401, json: { message: 'Login required' } }); return; }
@@ -124,9 +124,9 @@ try {
       }
       else if (acp && url.pathname === '/api/acp/connection-status') data = null;
       else if (acp && url.pathname === '/api/acp/connections/acp-connection/requests') data = [];
-      else if (url.pathname === '/api/aow/projects') data = projects;
-      else if (url.pathname === '/api/aow/agents') data = sessionAgent ? [{ id: 'codex', display_name: 'Codex', available: true, args: [], env: {} }] : [];
-      else if (url.pathname === '/api/aow/settings') data = { notes_base: '/notes', execution_path: ['/usr/bin'] };
+      else if (url.pathname === '/api/projects') data = projects;
+      else if (url.pathname === '/api/agents') data = sessionAgent ? [{ id: 'codex', display_name: 'Codex', available: true, args: [], env: {} }] : [];
+      else if (url.pathname === '/api/settings') data = { notes_base: '/notes', execution_path: ['/usr/bin'] };
       else if (url.pathname.includes('/pinned-')) data = { paths: url.pathname.endsWith('/pinned-worktrees') ? pinned : [], revision: 0 };
       else if (url.pathname === '/api/terminals/task-stops') { await route.fulfill({ contentType: 'text/event-stream', body: ': ready\n\n' }); return; }
       else if (url.pathname === '/api/terminals/agents') data = { agents: {}, titles: {}, processes: {} };
@@ -164,13 +164,13 @@ try {
         if (url.searchParams.get('provider') === 'missing') { await route.fulfill({ status: 503, json: { message: 'Provider 未配置或已停用。' } }); return; }
         data = { ...pr, provider: url.searchParams.get('provider') || 'github', remote: url.searchParams.get('remote') || 'origin' };
       }
-      else if (url.pathname === '/api/aow/agent-sessions') data = url.searchParams.get('agent') === 'codex' ? [session] : [];
+      else if (url.pathname === '/api/agent-sessions') data = url.searchParams.get('agent') === 'codex' ? [session] : [];
       else if (url.pathname.endsWith('/session-one/snapshot')) data = { ...session, status: 'completed', turns: [{ id: 'turn', status: 'completed', user: { text: 'Input', timestamp: null }, final: { text: sessionMarkdown, timestamp: null } }], truncated: false, captured_at: '' };
-      else if (url.pathname === '/api/aow/automations/status') data = { platform: 'systemd', ready: true, message: '', timezone: 'Asia/Shanghai' };
-      else if (url.pathname === '/api/aow/automations') data = [task];
-      else if (url.pathname === '/api/aow/automations/task-one') data = task;
-      else if (url.pathname === '/api/aow/automations/task-one/runs') data = []; // Target run is beyond the first page.
-      else if (url.pathname === '/api/aow/automations/task-one/runs/run-old') data = run;
+      else if (url.pathname === '/api/automations/status') data = { platform: 'systemd', ready: true, message: '', timezone: 'Asia/Shanghai' };
+      else if (url.pathname === '/api/automations') data = [task];
+      else if (url.pathname === '/api/automations/task-one') data = task;
+      else if (url.pathname === '/api/automations/task-one/runs') data = []; // Target run is beyond the first page.
+      else if (url.pathname === '/api/automations/task-one/runs/run-old') data = run;
       else if (url.pathname === '/api/git/ignored') data = { repository: root, ignored: [] };
       else if (url.pathname === '/api/git/status') data = { repository: root, branch: 'dev', files: [] };
       else if (url.pathname === '/api/git/repositories') data = [];
@@ -281,7 +281,7 @@ try {
 
   async function refreshOnActivation(page, event) {
     await Promise.all([
-      page.waitForResponse(response => new URL(response.url()).pathname === '/api/aow/projects'),
+      page.waitForResponse(response => new URL(response.url()).pathname === '/api/projects'),
       page.evaluate(event => {
         if (event === 'focus') window.dispatchEvent(new Event('focus'));
         else {

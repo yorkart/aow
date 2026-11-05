@@ -31,7 +31,7 @@ const server = await createServer({
     server.httpServer.on('upgrade', (request, socket, head) => {
       if (new URL(request.url, 'http://localhost').pathname === '/api/events/ws') events.handleUpgrade(request, socket, head, ws => events.emit('connection', ws));
     });
-    server.middlewares.use('/api/aow/notification-settings', async (request, response) => {
+    server.middlewares.use('/api/notification-settings', async (request, response) => {
       response.setHeader('Content-Type', 'application/json');
       if (request.method === 'PUT') {
         let text = '';
@@ -51,7 +51,7 @@ const server = await createServer({
       }
       response.end(JSON.stringify(settings()));
     });
-    server.middlewares.use('/api/aow/im/feishu', async (request, response) => {
+    server.middlewares.use('/api/im/feishu', async (request, response) => {
       response.setHeader('Content-Type', 'application/json');
       if (request.method === 'DELETE') {
         if (preferences.channels.includes('feishu')) {
@@ -90,7 +90,7 @@ const server = await createServer({
       const path = request.url.split('?')[0];
       response.end(JSON.stringify(path === '/agents' ? [] : path === '/sessions' ? [session] : session));
     });
-    server.middlewares.use('/api/aow/projects', (_request, response) => {
+    server.middlewares.use('/api/projects', (_request, response) => {
       response.setHeader('Content-Type', 'application/json');
       response.end(JSON.stringify([{ id: 'project', name: 'AoW', worktrees: [{ id: 'worktree', path: '/workspace/demo' }] }]));
     });
@@ -459,7 +459,7 @@ try {
     let contextReady = false;
     let verification = null;
     const qr = `data:image/svg+xml;base64,${Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="white"/><rect x="32" y="32" width="64" height="64"/></svg>').toString('base64')}`;
-    await page.route('**/api/aow/im/wechat**', async route => {
+    await page.route('**/api/im/wechat**', async route => {
       const request = route.request();
       const path = new URL(request.url()).pathname;
       if (path.endsWith('/login')) return route.fulfill({ json: { id: 'qr-1', status: 'wait', qr_image: qr, message: '请用手机微信扫码。' } });
@@ -567,7 +567,7 @@ try {
     let statusUnavailable = true;
     let testsSent = 0;
     let verification = null;
-    await page.route('**/api/aow/im/wechat**', async route => {
+    await page.route('**/api/im/wechat**', async route => {
       const request = route.request();
       const path = new URL(request.url()).pathname;
       if (path.endsWith('/login')) return route.fulfill({ json: { id: 'same-account', status: 'wait', qr_image: null, message: '等待扫码' } });
@@ -663,7 +663,7 @@ try {
     await mobile.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
     t.after(() => Promise.all([desktop.close(), mobile.close()]));
     for (const page of [desktop, mobile]) {
-      await page.route('**/api/aow/im/wechat**', async route => {
+      await page.route('**/api/im/wechat**', async route => {
         const request = route.request();
         const path = new URL(request.url()).pathname;
         if (path.endsWith('/test/receipt')) {
@@ -729,7 +729,7 @@ try {
     t.after(() => page.close());
     let starts = 0;
     const cancelled = [];
-    await page.route('**/api/aow/im/wechat/login**', route => {
+    await page.route('**/api/im/wechat/login**', route => {
       const request = route.request();
       if (request.url().endsWith('/login')) return route.fulfill({ json: { id: `qr-${++starts}`, status: 'wait', qr_image: null, message: '等待扫码' } });
       if (request.method() === 'DELETE') { cancelled.push(request.url().split('/').at(-1)); return route.fulfill({ status: 204 }); }

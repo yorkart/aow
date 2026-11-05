@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { EditorSettings, OpenDocument } from './types';
-import { aowApi } from '../../aow/aowApi';
+import { settingsApi } from '../settings/api';
 
 export const defaultEditorSettings: EditorSettings = { word_wrap: false };
 const EditorSettingsContext = createContext({
@@ -18,7 +18,7 @@ export function EditorSettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let active = true;
     const started = revision.current;
-    void aowApi.settings().then(settings => {
+    void settingsApi.settings().then(settings => {
       // A later Settings load/save takes precedence over the initial request.
       if (active && revision.current === started) setEditor(settings.editor ?? defaultEditorSettings);
     }).catch(() => {});

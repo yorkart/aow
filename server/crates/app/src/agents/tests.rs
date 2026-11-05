@@ -48,32 +48,32 @@ async fn explicit_ids_are_required_unique_and_immutable() {
         "中文",
         "line\n",
     ] {
-        let (status, _) = call(&app, "POST", "/api/aow/agents", profile(id)).await;
+        let (status, _) = call(&app, "POST", "/api/agents", profile(id)).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{id:?}");
     }
-    let (status, _) = call(&app, "POST", "/api/aow/agents", profile(&"a".repeat(81))).await;
+    let (status, _) = call(&app, "POST", "/api/agents", profile(&"a".repeat(81))).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     let mut missing = profile("unused");
     missing.as_object_mut().unwrap().remove("id");
     assert_eq!(
-        call(&app, "POST", "/api/aow/agents", missing).await.0,
+        call(&app, "POST", "/api/agents", missing).await.0,
         StatusCode::UNPROCESSABLE_ENTITY
     );
 
     for id in ["Work_codex-2", "other"] {
         assert_eq!(
-            call(&app, "POST", "/api/aow/agents", profile(id)).await.0,
+            call(&app, "POST", "/api/agents", profile(id)).await.0,
             StatusCode::CREATED
         );
     }
     assert_eq!(
-        call(&app, "POST", "/api/aow/agents", profile("Work_codex-2"))
+        call(&app, "POST", "/api/agents", profile("Work_codex-2"))
             .await
             .0,
         StatusCode::CONFLICT
     );
     for id in ["other", "my-agent_3"] {
-        let (status, error) = call(&app, "PUT", "/api/aow/agents/Work_codex-2", profile(id)).await;
+        let (status, error) = call(&app, "PUT", "/api/agents/Work_codex-2", profile(id)).await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert!(
             error["message"]
@@ -83,7 +83,7 @@ async fn explicit_ids_are_required_unique_and_immutable() {
         );
     }
     assert_eq!(
-        call(&app, "PUT", "/api/aow/agents/missing", profile("new"))
+        call(&app, "PUT", "/api/agents/missing", profile("new"))
             .await
             .0,
         StatusCode::NOT_FOUND
@@ -92,7 +92,7 @@ async fn explicit_ids_are_required_unique_and_immutable() {
     edited["display_name"] = json!("Renamed display");
     edited["args"] = json!(["--updated"]);
     edited["env"] = json!({"MODE": "updated"});
-    let (status, saved) = call(&app, "PUT", "/api/aow/agents/Work_codex-2", edited.clone()).await;
+    let (status, saved) = call(&app, "PUT", "/api/agents/Work_codex-2", edited.clone()).await;
     assert_eq!(status, StatusCode::OK);
     for key in ["id", "display_name", "args", "env"] {
         assert_eq!(saved[key], edited[key]);
@@ -101,12 +101,12 @@ async fn explicit_ids_are_required_unique_and_immutable() {
     assert!(agents.iter().any(|agent| agent.id == "Work_codex-2"));
     assert!(!agents.iter().any(|agent| agent.id == "my-agent_3"));
     assert_eq!(
-        call(&app, "DELETE", "/api/aow/agents/Work_codex-2", Value::Null)
+        call(&app, "DELETE", "/api/agents/Work_codex-2", Value::Null)
             .await
             .0,
         StatusCode::NO_CONTENT
     );
-    let (status, saved) = call(&app, "POST", "/api/aow/agents", profile("my-agent_3")).await;
+    let (status, saved) = call(&app, "POST", "/api/agents", profile("my-agent_3")).await;
     assert_eq!(status, StatusCode::CREATED, "{saved}");
     assert_eq!(saved["id"], "my-agent_3");
     assert_eq!(saved["args"], profile("unused")["args"]);
@@ -123,8 +123,8 @@ async fn explicit_ids_are_required_unique_and_immutable() {
 async fn simultaneous_creates_cannot_claim_the_same_id() {
     let app = crate::build_router(AppState::for_test(PathBuf::new()));
     let (left, right) = tokio::join!(
-        call(&app, "POST", "/api/aow/agents", profile("unique-agent")),
-        call(&app, "POST", "/api/aow/agents", profile("unique-agent"))
+        call(&app, "POST", "/api/agents", profile("unique-agent")),
+        call(&app, "POST", "/api/agents", profile("unique-agent"))
     );
     let mut statuses = [left.0.as_u16(), right.0.as_u16()];
     statuses.sort();
@@ -305,14 +305,14 @@ async fn reorder_api_rejects_detected_cross_type_duplicate_and_stale_lists() {
     let app = crate::build_router(state.clone());
     for id in ["z-work", "a-work"] {
         assert_eq!(
-            call(&app, "POST", "/api/aow/agents", profile(id)).await.0,
+            call(&app, "POST", "/api/agents", profile(id)).await.0,
             StatusCode::CREATED
         );
     }
     let mut other = profile("other");
     other["agent_type"] = json!("claude");
     assert_eq!(
-        call(&app, "POST", "/api/aow/agents", other).await.0,
+        call(&app, "POST", "/api/agents", other).await.0,
         StatusCode::CREATED
     );
     for ids in [
@@ -326,7 +326,7 @@ async fn reorder_api_rejects_detected_cross_type_duplicate_and_stale_lists() {
             call(
                 &app,
                 "PATCH",
-                "/api/aow/agents",
+                "/api/agents",
                 json!({"agent_type":"codex", "ids":ids})
             )
             .await
@@ -349,14 +349,14 @@ async fn reorder_api_rejects_detected_cross_type_duplicate_and_stale_lists() {
         call(
             &app,
             "PATCH",
-            "/api/aow/agents",
+            "/api/agents",
             json!({"agent_type":"codex", "ids":["a-work", "z-work"]})
         )
         .await
         .0,
         StatusCode::NO_CONTENT
     );
-    let (status, agents) = call(&app, "GET", "/api/aow/agents", Value::Null).await;
+    let (status, agents) = call(&app, "GET", "/api/agents", Value::Null).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         agents
@@ -492,23 +492,23 @@ async fn default_endpoint_preserves_concurrent_profile_edits_and_rejects_unknown
     let mut state = AppState::for_test(PathBuf::new());
     state.replace_services(manager.clone());
     let app = crate::build_router(state);
-    let (_, stale) = call(&app, "GET", "/api/aow/agents", Value::Null).await;
+    let (_, stale) = call(&app, "GET", "/api/agents", Value::Null).await;
     let mut updated = profile("work");
     updated["command"] = json!("/bin/bash");
     updated["args"] = json!(["--updated"]);
     updated["env"] = json!({"MODE":"latest"});
     let (edit, selected) = tokio::join!(
-        call(&app, "PUT", "/api/aow/agents/work", updated.clone()),
+        call(&app, "PUT", "/api/agents/work", updated.clone()),
         call(
             &app,
             "PUT",
-            "/api/aow/agents/settings/default",
+            "/api/agents/settings/default",
             json!({"agent_id":"work"})
         ),
     );
     assert_eq!(edit.0, StatusCode::OK);
     assert_eq!(selected.0, StatusCode::NO_CONTENT);
-    let (_, latest) = call(&app, "GET", "/api/aow/agents", Value::Null).await;
+    let (_, latest) = call(&app, "GET", "/api/agents", Value::Null).await;
     let work = latest
         .as_array()
         .unwrap()
@@ -546,7 +546,7 @@ async fn default_endpoint_preserves_concurrent_profile_edits_and_rejects_unknown
         call(
             &app,
             "PUT",
-            "/api/aow/agents/settings/default",
+            "/api/agents/settings/default",
             json!({"agent_id":"missing"})
         )
         .await
@@ -558,7 +558,7 @@ async fn default_endpoint_preserves_concurrent_profile_edits_and_rejects_unknown
         call(
             &app,
             "PUT",
-            "/api/aow/agents/settings/default",
+            "/api/agents/settings/default",
             json!({"agent_id":null})
         )
         .await

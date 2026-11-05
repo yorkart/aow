@@ -1,7 +1,7 @@
 import { t } from '../../lib/i18n';
 import { useEffect, useState } from 'react';
 import { AlertTriangle, CircleCheck } from 'lucide-react';
-import { aowApi } from '../../aow/aowApi';
+import { projectsApi } from '../projects/api';
 import { useAowTabNavigation } from '../../aow/AowTabEntry';
 import { tabTargetUrl, type TabTarget } from '../../aow/tabRoutes';
 import type { TerminalHosting } from './types';
@@ -28,7 +28,7 @@ export function TerminalHostingDetails({ hosting }: { hosting: TerminalHosting }
     let active = true;
     setTarget(undefined); setError('');
     if (!show || !hosting.run_id) return;
-    void aowApi.projects().then(projects => {
+    void projectsApi.projects().then(projects => {
       const worktree = projects.flatMap(project => project.worktrees).find(worktree => worktree.path === hosting.workspace_root);
       if (!worktree) throw new Error(t("terminals.the_workspace_for_this_run_has_been_removed"));
       if (active) setTarget({ type: 'automation', workspace: worktree.id, taskId: hosting.task_id, runId: hosting.run_id!, view: 'runs' });

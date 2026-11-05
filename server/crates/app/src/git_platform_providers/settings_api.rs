@@ -13,10 +13,10 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route(super::schema::PUBLIC_PATH, get(super::schema::get))
         .route(
-            "/api/aow/git-platform-providers",
+            "/api/git-platform-providers",
             get(settings).put(save_settings),
         )
-        .route("/api/aow/git-platform-providers/test", post(test_provider))
+        .route("/api/git-platform-providers/test", post(test_provider))
         .route("/api/git-platform-targets", get(targets))
         .layer(DefaultBodyLimit::max(4 * 1024 * 1024))
 }

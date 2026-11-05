@@ -179,7 +179,7 @@ async fn project_dock_endpoint_uses_registered_project_defaults_and_rejects_unkn
     let app = crate::build_router(state);
     let (status, project) = post(
         &app,
-        "/api/aow/projects",
+        "/api/projects",
         json!({"path": root, "name": "Example", "notes_path": directory.path().join("notes")}),
     )
     .await;

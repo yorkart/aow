@@ -45,7 +45,7 @@ async fn remote_cli_requires_its_own_revocable_token_and_cannot_use_browser_apis
     let response = app
         .clone()
         .oneshot(
-            Request::get("/api/aow/settings")
+            Request::get("/api/settings")
                 .header("authorization", format!("Bearer {}", grant.token))
                 .body(Body::empty())
                 .unwrap(),

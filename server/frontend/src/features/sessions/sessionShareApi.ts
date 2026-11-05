@@ -23,7 +23,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return payload as T;
 }
 
-const sharePath = (session: AowAgentSession) => `/api/aow/agent-sessions/${encodeURIComponent(session.session_id)}/share`;
+const sharePath = (session: AowAgentSession) => `/api/agent-sessions/${encodeURIComponent(session.session_id)}/share`;
 
 export const sessionShareApi = {
   info: (session: AowAgentSession, signal?: AbortSignal) => request<SessionShare | null>(
@@ -32,7 +32,7 @@ export const sessionShareApi = {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ agent: session.agent, worktree_path: workspacePath }),
   }),
-  revoke: (id: string) => request<void>(`/api/aow/session-shares/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  revoke: (id: string) => request<void>(`/api/session-shares/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   read: (token: string, signal?: AbortSignal) => request<AgentSessionSnapshot>(
     `/api/public/session-shares/${encodeURIComponent(token)}`, { signal, credentials: 'omit', referrerPolicy: 'no-referrer' }),
 };

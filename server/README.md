@@ -33,8 +33,20 @@ service keeps its state private to its module; consumers call explicit methods.
 Task creation coordinates project worktrees, role/session preparation and
 resource binding in `tasks/workflow.rs`. Project job reservation keeps the
 registry-before-job lock order, and task/session admission retains the task
-operation lock. The existing `/api/aow/...` URLs and stored document formats
-are unchanged.
+operation lock. Stored document formats are unchanged.
+
+Business APIs use `/api/<resource>` directly, including `/api/projects`,
+`/api/agents`, `/api/agent-roles`, `/api/tasks` and `/api/settings`. Worktree
+operations remain under `/api/projects/{id}/worktrees`; job lists use
+`/api/worktree-creations` and `/api/worktree-removals`. Automation, notification,
+IM, provider and session-sharing APIs follow the same convention. The former
+`/api/aow/...` addresses have been removed without aliases or redirects; deploy
+the matching frontend with the Server update. A configured deployment base path
+is still prepended to these application paths.
+
+Frontend request methods live in `features/projects/api.ts`,
+`features/projects/worktrees/api.ts` and `features/settings/api.ts`, alongside
+the other business API modules. There is no aggregate `aowApi` facade.
 
 `runtime_connection` supplies the configured SDK client and node-operation
 helpers. Its local fixture configuration exists only under `cfg(test)` and

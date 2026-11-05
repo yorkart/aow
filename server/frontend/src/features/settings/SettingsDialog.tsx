@@ -2,7 +2,7 @@ import { t } from '../../lib/i18n';
 import type { MutableRefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Bell, Bot, ChevronRight, FileText, GitBranch, MessageSquare, Network, NotebookPen, Palette, RefreshCw, Settings, SquareTerminal, X } from 'lucide-react';
-import { aowApi } from '../../aow/aowApi';
+import { settingsApi } from './api';
 import { parseNodeAddresses } from '../../aow/aowNodes';
 import type { AowSettings } from '../../aow/types';
 import type { AowAgent } from '../agents/types';
@@ -100,7 +100,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
 
   useEffect(() => {
     let active = true;
-    void aowApi.settings()
+    void settingsApi.settings()
       .then((next) => {
         if (!active) return;
         setSettings(next);
@@ -122,7 +122,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
     try {
       const addresses = parseNodeAddresses(nodeAddresses);
       setSettingsBusy(true);
-      const next = await aowApi.updateSettings({ nodeAddresses: addresses });
+      const next = await settingsApi.updateSettings({ nodeAddresses: addresses });
       setSettings(next);
       setNodeAddresses(next.node_addresses.join('\n'));
       onNodesChange(next.node_addresses);
@@ -139,7 +139,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
     setError('');
     setEditorSaved(false);
     try {
-      const next = await aowApi.updateSettings({ editor: { word_wrap: editorWordWrap } });
+      const next = await settingsApi.updateSettings({ editor: { word_wrap: editorWordWrap } });
       setSettings(next);
       setEditorWordWrap(next.editor.word_wrap);
       updateEditorSettings(next.editor);
@@ -161,7 +161,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
     setSettingsBusy(true);
     setError('');
     try {
-      const next = await aowApi.updateSettings({ notesBase: target });
+      const next = await settingsApi.updateSettings({ notesBase: target });
       setSettings(next);
       setNotesBase(next.notes_base);
       setNotesSaved(true);
@@ -177,7 +177,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
     setError('');
     setEnvironmentSaved(false);
     try {
-      setExecutionPath((await aowApi.discoveredPath()).join('\n'));
+      setExecutionPath((await settingsApi.discoveredPath()).join('\n'));
     } catch (reason) {
       setError(message(reason));
     } finally {
@@ -195,7 +195,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
     setError('');
     setEnvironmentSaved(false);
     try {
-      const next = await aowApi.updateSettings({ executionPath: paths });
+      const next = await settingsApi.updateSettings({ executionPath: paths });
       setSettings(next);
       setExecutionPath(next.execution_path.join('\n'));
       setEnvironmentSaved(true);

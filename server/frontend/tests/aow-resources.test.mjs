@@ -12,7 +12,7 @@ const worktrees = [0, 1].map(i => ({ id: `wt-${i}`, project_id: 'project', path:
 const project = { id: 'project', name: 'Resource Fixture', registered_path: worktrees[0].path, common_git_dir: '/workspace/.git', notes_path: '/notes', worktrees };
 const task = { id: 'task-one', revision: 1, name: 'Fixture Task', prompt: 'fixture', agent: 'codex', project_id: 'project', project_name: project.name, workspace_mode: 'existing', workspace_path: worktrees[0].path, cron: '0 9 * * *', interval_seconds: null, enabled: true, max_concurrent_runs: 1, yolo: false, is_running: false, last_run: null, created_at: '2026-09-15T00:00:00Z', updated_at: '2026-09-15T00:00:00Z' };
 const run = { id: 'run-one', task_id: task.id, task_name: task.name, agent: 'codex', source: 'scheduled', status: 'completed', started_at: task.created_at, finished_at: task.updated_at, workspace_path: worktrees[0].path, branch: 'main', duration_ms: 1000, session_id: 'session-one', agent_command: ['codex'], exit_code: 0 };
-const detailPath = '/api/aow/automations/task-one';
+const detailPath = '/api/automations/task-one';
 const runsPath = `${detailPath}/runs`;
 const diffFiles = [0, 1, 2].map(index => {
   const lines = Array.from({ length: 8 + index * 3 }, (_, line) => `File ${index}: unchanged line ${line + 1}`);
@@ -157,7 +157,7 @@ try {
       const url = new URL(request.url());
       state.requests.push(url.pathname);
       let data;
-      if (url.pathname === '/api/aow/projects/project' && request.method() === 'DELETE') {
+      if (url.pathname === '/api/projects/project' && request.method() === 'DELETE') {
         state.projects = [];
         await route.fulfill({ status: 204 });
         return;
@@ -175,14 +175,14 @@ try {
           (!query.operation_id || item.operation_id === query.operation_id) && (!query.source || item.source === query.source)),
           next_cursor: null, budget_exhausted: false, scanned_bytes: 500 };
       }
-      else if (url.pathname === '/api/aow/projects') data = state.projects;
-      else if (/\/api\/aow\/projects\/[^/]+\/avatar$/.test(url.pathname)) {
+      else if (url.pathname === '/api/projects') data = state.projects;
+      else if (/\/api\/projects\/[^/]+\/avatar$/.test(url.pathname)) {
         await state.avatarGate;
         if (state.avatarFailure) { await route.fulfill({ status: 503, json: { message: 'Avatar unavailable' } }); return; }
         data = { avatar_url: state.avatarUrl ?? null };
       }
-      else if (url.pathname === '/api/aow/worktree-removals') data = state.removalJobs;
-      else if (url.pathname === '/api/aow/worktree-creations') data = state.creationJobs;
+      else if (url.pathname === '/api/worktree-removals') data = state.removalJobs;
+      else if (url.pathname === '/api/worktree-creations') data = state.creationJobs;
       else if (url.pathname.endsWith('/worktrees/removals') || (url.pathname.endsWith('/worktrees/removal') && request.method() === 'DELETE')) {
         const items = request.method() === 'DELETE' ? [{ path: url.searchParams.get('path'), force: url.searchParams.get('force') === 'true' }] : request.postDataJSON().items;
         state.removalSubmissions.push(items);
@@ -197,7 +197,7 @@ try {
         const dirty = state.dirtyWorktrees.includes(path);
         data = { worktree, dirty, changes: dirty ? ['?? uncommitted.txt'] : [], change_count: dirty ? 1 : 0, truncated: false, terminal_tabs: 0, agent_tabs: 0 };
       }
-      else if (/\/api\/aow\/projects\/project\/worktrees\/(color|icon)$/.test(url.pathname)) {
+      else if (/\/api\/projects\/project\/worktrees\/(color|icon)$/.test(url.pathname)) {
         const update = request.postDataJSON();
         state.appearanceWrites.push(update);
         await state.appearanceGate;
@@ -206,7 +206,7 @@ try {
         state.projects = state.projects.map(item => ({ ...item, worktrees: item.worktrees.map(worktree => worktree.path === path ? { ...worktree, ...appearance } : worktree) }));
         data = state.projects.find(item => item.id === 'project');
       }
-      else if (url.pathname === '/api/aow/agents') {
+      else if (url.pathname === '/api/agents') {
         if (request.method() === 'POST') {
           const update = request.postDataJSON();
           state.agentUpdates.push(update);
@@ -217,7 +217,7 @@ try {
           state.registeredAgents = [...state.registeredAgents.filter(agent => agent.id !== id), data];
         } else data = state.registeredAgents;
       }
-      else if (url.pathname.startsWith('/api/aow/agents/') && request.method() === 'DELETE') {
+      else if (url.pathname.startsWith('/api/agents/') && request.method() === 'DELETE') {
         const id = decodeURIComponent(url.pathname.split('/').at(-1));
         state.registeredAgents = state.registeredAgents.filter(agent => agent.id !== id);
         const detected = registeredAgents.find(agent => agent.id === id && agent.source === 'detected');
@@ -225,7 +225,7 @@ try {
         await route.fulfill({ status: 204 });
         return;
       }
-      else if (url.pathname === '/api/aow/settings') {
+      else if (url.pathname === '/api/settings') {
         if (request.method() === 'PUT') {
           const update = request.postDataJSON();
           state.settingsUpdates.push(update);
@@ -234,7 +234,7 @@ try {
         }
         data = state.settings;
       }
-      else if (url.pathname === '/api/aow/git-platform-providers') {
+      else if (url.pathname === '/api/git-platform-providers') {
         if (request.method() === 'PUT') {
           const update = request.postDataJSON();
           state.gitPlatformWrites.push(update);
@@ -243,11 +243,11 @@ try {
         }
         data = state.gitPlatformProviders;
       }
-      else if (url.pathname === '/api/aow/git-platform-providers/test') { state.gitPlatformTests.push(request.postDataJSON()); data = { name: 'Custom Git', hosts: ['git.example.com'], operations: ['pull_requests.list', 'pull_requests.detail', 'pull_requests.diff'] }; }
+      else if (url.pathname === '/api/git-platform-providers/test') { state.gitPlatformTests.push(request.postDataJSON()); data = { name: 'Custom Git', hosts: ['git.example.com'], operations: ['pull_requests.list', 'pull_requests.detail', 'pull_requests.diff'] }; }
       else if (url.pathname === '/api/git-platform-targets') data = state.gitPlatformTargets;
-      else if (url.pathname === '/api/aow/settings/discovered-path') data = ['/discovered/bin', '/usr/bin', '/bin'];
-      else if (url.pathname === '/api/aow/settings/server-environment') data = { path: '/home/aow/.aow/server.env', content: '', revision: 'missing', exists: false, platform: 'linux' };
-      else if (url.pathname === '/api/aow/pinned-worktrees') {
+      else if (url.pathname === '/api/settings/discovered-path') data = ['/discovered/bin', '/usr/bin', '/bin'];
+      else if (url.pathname === '/api/settings/server-environment') data = { path: '/home/aow/.aow/server.env', content: '', revision: 'missing', exists: false, platform: 'linux' };
+      else if (url.pathname === '/api/pinned-worktrees') {
         if (request.method() === 'PATCH') {
           const update = request.postDataJSON();
           state.pinnedWorktrees.paths = [...new Set([...state.pinnedWorktrees.paths, ...(update.add ?? [])])].filter(path => !update.remove?.includes(path));
@@ -255,14 +255,14 @@ try {
         }
         data = state.pinnedWorktrees;
       }
-      else if (url.pathname === '/api/aow/automations') data = [state.task];
+      else if (url.pathname === '/api/automations') data = [state.task];
       else if (url.pathname === detailPath) {
         data = { ...state.task };
         await state.detailGate;
       }
       else if (url.pathname === runsPath) data = [run];
-      else if (url.pathname === '/api/aow/automations/status') data = { timezone: 'Asia/Shanghai', ready: true };
-      else if (url.pathname === '/api/aow/agent-sessions') {
+      else if (url.pathname === '/api/automations/status') data = { timezone: 'Asia/Shanghai', ready: true };
+      else if (url.pathname === '/api/agent-sessions') {
         state.sessionAgents.push(url.searchParams.get('agent'));
         data = (state.sessionFixtures ?? []).filter(session => session.agent === url.searchParams.get('agent'));
       }
@@ -275,7 +275,7 @@ try {
       else if (url.pathname === '/api/fs/home') {
         data = { path: worktrees[0].path, entries: [{ name: 'edit.txt', path: `${worktrees[0].path}/edit.txt`, kind: 'file', readonly: false, size: 12, modified_ms: 1 }] };
       }
-      else if (url.pathname === '/api/aow/pinned-directories') data = { paths: [], revision: 0 };
+      else if (url.pathname === '/api/pinned-directories') data = { paths: [], revision: 0 };
       else if (url.pathname.startsWith('/api/fs/tree')) {
         const path = decodeURIComponent(url.pathname.slice('/api/fs/tree'.length));
         data = { path, entries: Object.keys(state.textFiles).filter(file => file.slice(0, file.lastIndexOf('/')) === path).map(file => ({ name: file.split('/').at(-1), path: file, kind: 'file', size: 12, modified_ms: 1, readonly: false, hidden: false, is_symlink: false, link_target: null })) };
@@ -733,7 +733,7 @@ try {
   await test('worktree creation continues after closing, restores progress after reload and reports step timeout before retry', async t => {
     const submissions = [];
     const { page, state } = await fixture(t, { beforeOpen: async ({ context, state }) => {
-      await context.route('**/api/aow/projects/project/worktrees', async route => {
+      await context.route('**/api/projects/project/worktrees', async route => {
         const input = route.request().postDataJSON();
         submissions.push(input);
         const job = creationJob(input, `create-${submissions.length}`);
@@ -801,7 +801,7 @@ try {
     const gate = new Promise(resolve => { release = resolve; });
     t.after(() => release());
     const { page, state } = await fixture(t, { beforeOpen: async ({ context, state }) => {
-      await context.route('**/api/aow/projects/project/worktrees', async route => {
+      await context.route('**/api/projects/project/worktrees', async route => {
         const job = creationJob(route.request().postDataJSON());
         await gate;
         state.creationJobs.push(job);
@@ -889,7 +889,7 @@ try {
         }
         await route.fulfill({ json: { path, entries: directories.get(path) } });
       });
-      await context.route('**/api/aow/projects', async route => {
+      await context.route('**/api/projects', async route => {
         if (route.request().method() !== 'POST') { await route.fallback(); return; }
         const payload = route.request().postDataJSON();
         state.registrations.push(payload);
@@ -1054,7 +1054,7 @@ try {
   await test('empty Pinned keeps synchronization errors visible and allows retrying', async t => {
     let failLoad = true;
     const { page } = await fixture(t, { beforeOpen: async ({ context }) => {
-      await context.route('**/api/aow/pinned-worktrees', route => route.fulfill(failLoad
+      await context.route('**/api/pinned-worktrees', route => route.fulfill(failLoad
         ? { status: 503, json: { message: 'Pinned synchronization failed' } }
         : { json: { paths: [], revision: 1 } }));
     } });
@@ -1141,8 +1141,8 @@ try {
   await test('sidebar section titles are plain headings and project rows toggle without intercepting actions', async t => {
     const { page, state } = await fixture(t, { beforeOpen: async ({ context, state }) => {
       state.pinnedWorktrees.paths = [worktrees[0].path];
-      await context.route('**/api/aow/projects/project/refresh', async route => {
-        state.requests.push('/api/aow/projects/project/refresh');
+      await context.route('**/api/projects/project/refresh', async route => {
+        state.requests.push('/api/projects/project/refresh');
         await route.fulfill({ json: state.projects[0] });
       });
       await context.addInitScript(() => localStorage.setItem('aow-left-width', '280'));
@@ -1167,7 +1167,7 @@ try {
     assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
     assert.equal(await projectPanel.locator('.project-aow-worktrees').isVisible(), false);
     await header.getByRole('button', { name: `刷新 ${project.name} Worktree`, exact: true }).click();
-    await eventually(() => state.requests.includes('/api/aow/projects/project/refresh'));
+    await eventually(() => state.requests.includes('/api/projects/project/refresh'));
     assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
     await header.getByRole('button', { name: `${project.name} Project 操作`, exact: true }).click();
     await page.getByRole('menu').waitFor();
@@ -2316,7 +2316,7 @@ try {
     await tab(page, 'edit.txt').click();
     await file(worktrees[1].path).waitFor();
     assert.equal(await file(worktrees[1].path).getAttribute('class').then(value => value.includes('selected')), true);
-    assert.equal(reads.some(path => path === '/api/git/status' || path === '/api/aow/agent-sessions'), false);
+    assert.equal(reads.some(path => path === '/api/git/status' || path === '/api/agent-sessions'), false);
 
     const heading = explorer.getByRole('button', { name: /^(展开|收起) Project Explorer$/ });
     await heading.click();
@@ -2379,14 +2379,14 @@ try {
     const gate = new Promise(resolve => { release = resolve; });
     t.after(release);
     let delayRemote = true;
-    await page.context().route('**/api/aow/agent-sessions?**', async route => {
+    await page.context().route('**/api/agent-sessions?**', async route => {
       const root = new URL(route.request().url()).searchParams.get('worktree_path');
       reads.push(root);
       if (root === worktrees[1].path && delayRemote) await gate;
       await route.fulfill({ json: [sessionFor(root)] });
     });
     const snapshotRoots = [];
-    await page.context().route('**/api/aow/agent-sessions/*/snapshot?**', async route => {
+    await page.context().route('**/api/agent-sessions/*/snapshot?**', async route => {
       const root = new URL(route.request().url()).searchParams.get('worktree_path');
       snapshotRoots.push(root);
       await route.fulfill({ json: { ...sessionFor(root), turns: [], captured_at: task.updated_at, status: 'completed', truncated: false } });
@@ -2437,11 +2437,11 @@ try {
     const queries = { git: [], sessions: [] };
     const { page } = await fixture(t, { floating: builtin, registeredAgents: [{ id: 'codex', display_name: 'Codex', available: true, args: [], env: {} }], beforeOpen: async ({ context, state }) => {
       state.sessionFixtures = [session];
-      await context.route('**/api/aow/agent-sessions/*/snapshot?**', route => route.fulfill({ json: { ...session, turns: [], captured_at: task.updated_at, status: 'completed', truncated: false } }));
+      await context.route('**/api/agent-sessions/*/snapshot?**', route => route.fulfill({ json: { ...session, turns: [], captured_at: task.updated_at, status: 'completed', truncated: false } }));
       context.on('request', request => {
         const url = new URL(request.url());
         if (url.pathname === '/api/git/status') queries.git.push(url.searchParams.get('repo'));
-        if (url.pathname === '/api/aow/agent-sessions') queries.sessions.push(url.searchParams.get('worktree_path'));
+        if (url.pathname === '/api/agent-sessions') queries.sessions.push(url.searchParams.get('worktree_path'));
       });
       await context.addInitScript(({ root, foreignRoot, session, builtin }) => {
         const path = `${foreignRoot}/edit.txt`;
@@ -3462,7 +3462,7 @@ try {
       queries.push(Object.fromEntries(url.searchParams));
       await route.fulfill({ json: url.pathname.endsWith('/42') ? pr : { repository: worktrees[0].path, current_branch: 'main', current_user: pr.author, pull_requests: [pr] } });
     });
-    await page.context().route('**/api/aow/agent-sessions/*/snapshot?**', async route => {
+    await page.context().route('**/api/agent-sessions/*/snapshot?**', async route => {
       const url = new URL(route.request().url());
       queries.push(Object.fromEntries(url.searchParams));
       await route.fulfill({ json: { ...session, captured_at: task.updated_at, status: 'completed', truncated: false, turns: [{ id: 'turn', status: 'completed', user: { text: 'Session fixture prompt' }, final: { text: 'Session fixture result' } }] } });
@@ -4301,7 +4301,7 @@ try {
         assert.equal(await toggle.getAttribute('aria-expanded'), 'true', 'refresh preserves a manual expansion of an empty group');
       } else {
         await panel.getByText('暂无可用的 Session Agent', { exact: true }).waitFor();
-        assert.equal(state.requests.includes('/api/aow/agent-sessions'), false);
+        assert.equal(state.requests.includes('/api/agent-sessions'), false);
       }
     }
   });
@@ -4361,14 +4361,14 @@ try {
     await eventually(() => statuses() > initialStatus);
     assert.equal(logs(), initialLogs, 'healthy idle stream does not poll history');
     assert.equal(state.requests.filter(path => path.startsWith('/api/fs/tree')).length, trees);
-    const projectLoads = state.requests.filter(path => path === '/api/aow/projects').length;
+    const projectLoads = state.requests.filter(path => path === '/api/projects').length;
     await sendWorkspaceSnapshot(page, { revision: 1, repositories: { '/unrelated': 1 } });
     await delay(100);
     assert.equal(logs(), initialLogs, 'unrelated repository events do not reload history');
     await sendWorkspaceSnapshot(page, { revision: 2, repositories: { [worktrees[0].path]: 2 } });
     await eventually(() => logs() === initialLogs + 1);
     await page.clock.runFor(500);
-    assert.equal(state.requests.filter(path => path === '/api/aow/projects').length, projectLoads, 'commits do not reload the worktree list');
+    assert.equal(state.requests.filter(path => path === '/api/projects').length, projectLoads, 'commits do not reload the worktree list');
     await switchWorktree(page, 1);
     await delay(100);
     const before = logs() + statuses();

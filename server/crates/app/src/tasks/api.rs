@@ -8,17 +8,14 @@ use axum::{
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
-        .route("/api/aow/tasks", get(list).post(create))
+        .route("/api/tasks", get(list).post(create))
         .route(
-            "/api/aow/tasks/{id}",
+            "/api/tasks/{id}",
             get(super::routing::get).patch(update).delete(remove),
         )
-        .route(
-            "/api/aow/projects/{id}/router",
-            post(super::routing::router),
-        )
-        .route("/api/aow/tasks/{id}/resources", post(attach))
-        .route("/api/aow/tasks/{id}/status", post(super::messages::status))
+        .route("/api/projects/{id}/router", post(super::routing::router))
+        .route("/api/tasks/{id}/resources", post(attach))
+        .route("/api/tasks/{id}/status", post(super::messages::status))
 }
 
 async fn list(State(state): State<AppState>) -> Result<Json<Vec<Task>>, HttpError> {

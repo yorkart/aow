@@ -18,12 +18,12 @@ try {
     t.after(() => page.close());
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.route('**/api/aow/projects/*/branches', route => route.fulfill({ json: { branches: ['main', 'origin/main', 'origin/release'], default_branch: 'origin/main' } }));
-    await page.route('**/api/aow/notification-settings', route => route.fulfill({
+    await page.route('**/api/projects/*/branches', route => route.fulfill({ json: { branches: ['main', 'origin/main', 'origin/release'], default_branch: 'origin/main' } }));
+    await page.route('**/api/notification-settings', route => route.fulfill({
       status: unavailable ? 503 : 200,
       json: unavailable ? { message: 'unavailable' } : { im: { providers: [...(bot ? [{ provider: 'feishu', app_id: 'test', secret_configured: true }] : []), ...(wechat ? [{ provider: 'wechat', account_id: 'bot', user_id: 'owner' }] : [])] }, notifications: { agent_task_completed: { enabled: false, channels: [] } } },
     }));
-    await page.route('**/api/aow/automations/12345678', route => route.fulfill({ json: route.request().postDataJSON() }));
+    await page.route('**/api/automations/12345678', route => route.fulfill({ json: route.request().postDataJSON() }));
     await page.goto(`${base}/tests/automation-notifications-preview.html${selected ? '?feishu' : ''}`);
     await page.getByLabel('失败提醒').waitFor();
     await page.getByText('正在检查 IM Bot 配置…', { exact: true }).waitFor({ state: 'hidden' });
