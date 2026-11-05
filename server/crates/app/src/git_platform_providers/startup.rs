@@ -20,7 +20,7 @@ pub(super) struct Loaded {
 pub(super) fn load(
     config: &ConfigStore,
     defaults: Vec<GitPlatformProvider>,
-    node: Option<&aow_runtime_client::RuntimeClient>,
+    node: Option<&aow_host_client::HostClient>,
 ) -> anyhow::Result<Loaded> {
     let mut changed = false;
     let mut document = match std::fs::read(config.directory().join(CONFIG)) {
@@ -84,7 +84,7 @@ pub(super) fn load(
         }
     }
     // This is the sole runtime loading source, including newly installed defaults.
-    let mut providers = defaults::load_with_runtime(&directory, node)?;
+    let mut providers = defaults::load_with_host(&directory, node)?;
     providers.sort_by_key(|p| {
         document
             .providers

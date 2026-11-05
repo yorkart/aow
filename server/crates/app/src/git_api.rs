@@ -23,9 +23,9 @@ fn default_depth() -> usize {
 pub(crate) async fn git_repositories(
     State(state): State<AppState>,
     Query(query): Query<RepositoryQuery>,
-) -> Result<Json<Vec<aow_runtime_contract::workspace::RepositorySummary>>, HttpError> {
+) -> Result<Json<Vec<aow_host_contract::workspace::RepositorySummary>>, HttpError> {
     Ok(Json(
-        runtime(&state)
+        host(&state)
             .await?
             .workspace_git_repositories(std::path::Path::new(&query.root), query.depth.min(8))
             .await?,
@@ -41,9 +41,9 @@ pub(crate) struct IgnoredPathsRequest {
 pub(crate) async fn git_ignored(
     State(state): State<AppState>,
     Json(request): Json<IgnoredPathsRequest>,
-) -> Result<Json<aow_runtime_contract::workspace::GitIgnoredPaths>, HttpError> {
+) -> Result<Json<aow_host_contract::workspace::GitIgnoredPaths>, HttpError> {
     Ok(Json(
-        runtime(&state)
+        host(&state)
             .await?
             .workspace_git_ignored(std::path::Path::new(&request.root), &request.paths)
             .await?,
@@ -58,9 +58,9 @@ pub(crate) struct RepoOnlyQuery {
 pub(crate) async fn git_status(
     State(state): State<AppState>,
     Query(query): Query<RepoOnlyQuery>,
-) -> Result<Json<aow_runtime_contract::workspace::GitStatus>, HttpError> {
+) -> Result<Json<aow_host_contract::workspace::GitStatus>, HttpError> {
     Ok(Json(
-        runtime(&state)
+        host(&state)
             .await?
             .workspace_git_status(std::path::Path::new(&query.repo))
             .await?,
@@ -71,7 +71,7 @@ pub(crate) async fn git_pull(
     State(state): State<AppState>,
     Json(request): Json<RepoOnlyQuery>,
 ) -> Result<StatusCode, HttpError> {
-    let () = runtime(&state)
+    let () = host(&state)
         .await?
         .workspace_git_pull(std::path::Path::new(&request.repo))
         .await?;
@@ -82,7 +82,7 @@ pub(crate) async fn git_push(
     State(state): State<AppState>,
     Json(request): Json<RepoOnlyQuery>,
 ) -> Result<StatusCode, HttpError> {
-    let () = runtime(&state)
+    let () = host(&state)
         .await?
         .workspace_git_push(std::path::Path::new(&request.repo))
         .await?;
@@ -103,9 +103,9 @@ fn default_log_limit() -> usize {
 pub(crate) async fn git_log(
     State(state): State<AppState>,
     Query(query): Query<LogQuery>,
-) -> Result<Json<aow_runtime_contract::workspace::GitLog>, HttpError> {
+) -> Result<Json<aow_host_contract::workspace::GitLog>, HttpError> {
     Ok(Json(
-        runtime(&state)
+        host(&state)
             .await?
             .workspace_git_log(std::path::Path::new(&query.repo), query.limit)
             .await?,
@@ -123,9 +123,9 @@ pub(crate) struct DiffQuery {
 pub(crate) async fn git_diff(
     State(state): State<AppState>,
     Query(query): Query<DiffQuery>,
-) -> Result<Json<aow_runtime_contract::workspace::GitDiff>, HttpError> {
+) -> Result<Json<aow_host_contract::workspace::GitDiff>, HttpError> {
     Ok(Json(
-        runtime(&state)
+        host(&state)
             .await?
             .workspace_git_diff(
                 std::path::Path::new(&query.repo),
@@ -146,7 +146,7 @@ pub(crate) async fn git_commit_detail(
     State(state): State<AppState>,
     Query(query): Query<CommitQuery>,
 ) -> Result<Json<aow_api_contract::git::GitCommitDetail>, HttpError> {
-    let commit = runtime(&state)
+    let commit = host(&state)
         .await?
         .workspace_git_commit_detail(std::path::Path::new(&query.repo), &query.commit)
         .await?;
@@ -185,9 +185,9 @@ pub(crate) async fn git_commit_detail(
 pub(crate) async fn git_commit_files(
     State(state): State<AppState>,
     Query(query): Query<CommitQuery>,
-) -> Result<Json<aow_runtime_contract::workspace::GitCommitFiles>, HttpError> {
+) -> Result<Json<aow_host_contract::workspace::GitCommitFiles>, HttpError> {
     Ok(Json(
-        runtime(&state)
+        host(&state)
             .await?
             .workspace_git_commit_files(std::path::Path::new(&query.repo), &query.commit)
             .await?,
@@ -205,9 +205,9 @@ pub(crate) struct CommitDiffQuery {
 pub(crate) async fn git_commit_diff(
     State(state): State<AppState>,
     Query(query): Query<CommitDiffQuery>,
-) -> Result<Json<aow_runtime_contract::workspace::GitDiff>, HttpError> {
+) -> Result<Json<aow_host_contract::workspace::GitDiff>, HttpError> {
     Ok(Json(
-        runtime(&state)
+        host(&state)
             .await?
             .workspace_git_commit_diff(
                 std::path::Path::new(&query.repo),
@@ -219,7 +219,7 @@ pub(crate) async fn git_commit_diff(
     ))
 }
 
-async fn runtime(state: &AppState) -> Result<aow_runtime_client::RuntimeClient, HttpError> {
+async fn host(state: &AppState) -> Result<aow_host_client::HostClient, HttpError> {
     state
         .node
         .agent_node()

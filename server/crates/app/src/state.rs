@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use aow_runtime_client::{RuntimeClient, RuntimeEndpoint, TerminalClient};
+use aow_host_client::{HostClient, HostEndpoint, TerminalClient};
 
 use crate::{
     BasePath, TerminalError, auth, automations, git_platform_providers, operations, session_shares,
@@ -11,7 +11,7 @@ use crate::{
 pub struct AppState {
     pub(crate) collaboration: crate::collaboration::Runtime,
     pub(crate) file_search: crate::filesystem::search::SearchRequests,
-    pub(crate) acp: aow_runtime_client::acp::AcpClient,
+    pub(crate) acp: aow_host_client::acp::AcpClient,
     pub(crate) acp_controls: crate::acp::Controls,
     pub(crate) instances: crate::instances::InstanceStore,
     pub(crate) base_path: BasePath,
@@ -24,7 +24,7 @@ pub struct AppState {
     pub(crate) roles: crate::roles::RoleService,
     pub(crate) tasks: crate::tasks::TaskService,
     pub(crate) settings: crate::settings::SettingsService,
-    pub(crate) node: crate::runtime_connection::RuntimeConnection,
+    pub(crate) node: crate::host_connection::HostConnection,
     pub(crate) notifications: crate::notifications::NotificationManager,
     pub(crate) cli_access: aow_cli_access::Access,
     pub(crate) automations: Option<automations::AutomationManager>,
@@ -35,12 +35,12 @@ pub struct AppState {
 
 impl AppState {
     /// Creates an application state with in-memory terminal metadata. This is
-    /// useful for embedding and tests; the server binary uses `with_runtime`.
+    /// useful for embedding and tests; the server binary uses `with_host`.
     pub fn for_test(frontend_dist: PathBuf) -> Self {
-        Self::for_test_with_runtime_config(frontend_dist, PathBuf::new())
+        Self::for_test_with_host_config(frontend_dist, PathBuf::new())
     }
 
-    pub fn for_test_with_runtime_config(frontend_dist: PathBuf, runtime_config: PathBuf) -> Self {
+    pub fn for_test_with_host_config(frontend_dist: PathBuf, host_config: PathBuf) -> Self {
         let (projects, agents, roles, tasks, settings, node, cli_access) =
             (|| -> Result<_, crate::error::ServiceError> {
                 let runtime = None;
@@ -48,7 +48,7 @@ impl AppState {
                 let config = None;
                 let notes_base = crate::settings::default_notes_base();
                 let cli_access = aow_cli_access::Access::default();
-                let node = crate::runtime_connection::RuntimeConnection::new(
+                let node = crate::host_connection::HostConnection::new(
                     runtime.clone(),
                     directory.as_deref(),
                     config.clone(),
@@ -82,7 +82,7 @@ impl AppState {
             .expect("in-memory business services");
         let notifications = crate::notifications::NotificationManager::in_memory();
         let terminals =
-            terminal::TerminalManager::in_memory(TerminalClient::for_test_config(runtime_config));
+            terminal::TerminalManager::in_memory(TerminalClient::for_test_config(host_config));
         let workspace_events = workspace_events::WorkspaceEvents::new();
         Self {
             collaboration: Default::default(),
@@ -131,18 +131,18 @@ impl AppState {
             None,
         )
     }
-    pub fn with_runtime(
+    pub fn with_host(
         frontend_dist: PathBuf,
         state_dir: PathBuf,
-        endpoint: RuntimeEndpoint,
+        endpoint: HostEndpoint,
     ) -> Result<Self, TerminalError> {
-        let runtime = RuntimeClient::new(endpoint);
+        let runtime = HostClient::new(endpoint);
         Self::build(frontend_dist, state_dir, runtime.terminal(), Some(runtime))
     }
     #[cfg(test)]
-    pub(crate) fn with_test_runtime_client(
+    pub(crate) fn with_test_host_client(
         state_dir: PathBuf,
-        runtime: RuntimeClient,
+        runtime: HostClient,
     ) -> Result<Self, TerminalError> {
         Self::build(PathBuf::new(), state_dir, runtime.terminal(), Some(runtime))
     }
@@ -151,7 +151,7 @@ impl AppState {
         frontend_dist: PathBuf,
         state_dir: PathBuf,
         terminal: TerminalClient,
-        runtime: Option<RuntimeClient>,
+        runtime: Option<HostClient>,
     ) -> Result<Self, TerminalError> {
         let config = Some(
             aow_config::ConfigStore::initialize(&state_dir)
@@ -162,7 +162,7 @@ impl AppState {
         let (projects, agents, roles, tasks, settings, node, cli_access) =
             (|| -> Result<_, crate::error::ServiceError> {
                 let cli_access = aow_cli_access::Access::default();
-                let node = crate::runtime_connection::RuntimeConnection::new(
+                let node = crate::host_connection::HostConnection::new(
                     runtime.clone(),
                     directory.as_deref(),
                     config.clone(),
@@ -201,9 +201,9 @@ impl AppState {
         #[cfg(test)]
         let execution_runtime = runtime.clone().or_else(|| {
             terminal
-                .runtime()
+                .host()
                 .is_configured()
-                .then(|| terminal.runtime().clone())
+                .then(|| terminal.host().clone())
         });
         #[cfg(not(test))]
         let execution_runtime = runtime.clone();
@@ -230,7 +230,7 @@ impl AppState {
             })?,
             workspace_events,
             git_platform_providers:
-                git_platform_providers::GitPlatformProviderManager::persistent_with_runtime(
+                git_platform_providers::GitPlatformProviderManager::persistent_with_host(
                     &state_dir,
                     runtime.clone(),
                 )
@@ -243,13 +243,13 @@ impl AppState {
             .map_err(|error| TerminalError::Invalid(error.to_string()))?,
             auth: auth::AuthService::persistent(&state_dir),
             session_shares: session_shares::SessionShares::persistent(&state_dir)
-                .map(|shares| shares.with_runtime(runtime.clone()))
+                .map(|shares| shares.with_host(runtime.clone()))
                 .map_err(|error| {
                     TerminalError::Invalid(format!("failed to initialize session shares: {error}"))
                 })?,
             automations: Some(
                 automations::AutomationManager::new(state_dir.clone(), notifications.clone())
-                    .and_then(|manager| manager.with_runtime(execution_runtime.as_ref()))
+                    .and_then(|manager| manager.with_host(execution_runtime.as_ref()))
                     .map_err(|error| {
                         TerminalError::Invalid(format!("failed to initialize automations: {error}"))
                     })?,
@@ -327,11 +327,8 @@ impl AppState {
 pub async fn initialize_aow_state(path: &Path) -> anyhow::Result<()> {
     let config = aow_config::ConfigStore::initialize(path)?;
     let directory = std::fs::canonicalize(path)?;
-    let node = crate::runtime_connection::RuntimeConnection::new(
-        None,
-        Some(&directory),
-        Some(config.clone()),
-    );
+    let node =
+        crate::host_connection::HostConnection::new(None, Some(&directory), Some(config.clone()));
     let settings = crate::settings::SettingsService::new(
         Some(config.clone()),
         directory.join("data/notes"),
@@ -355,6 +352,6 @@ pub async fn initialize_aow_state(path: &Path) -> anyhow::Result<()> {
     let _tasks = crate::tasks::TaskService::new(Some(directory.clone()), roles, node)?;
     let _notifications = crate::notifications::NotificationManager::persistent(&directory)?;
     git_platform_providers::seed_configuration(path)?;
-    // Node workspaces are initialized after Server connects to its runtime endpoint.
+    // Node workspaces are initialized after Server connects to its Host endpoint.
     Ok(())
 }

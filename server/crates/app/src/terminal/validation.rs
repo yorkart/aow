@@ -69,7 +69,7 @@ impl TerminalManager {
         let metadata = self
             .inner
             .terminald
-            .runtime()
+            .host()
             .workspace_metadata(Path::new(path), true)
             .await
             .map_err(map_client_error)?;
@@ -97,7 +97,7 @@ impl TerminalManager {
         Ok(self
             .inner
             .terminald
-            .runtime()
+            .host()
             .workspace_home()
             .await
             .map_err(map_client_error)?
@@ -110,7 +110,7 @@ impl TerminalManager {
         } else {
             self.inner
                 .terminald
-                .runtime()
+                .host()
                 .workspace_terminal_defaults()
                 .await
                 .map_err(map_client_error)?

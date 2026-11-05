@@ -6,7 +6,7 @@ license.workspace = true
 
 [dependencies]
 aow-api-contract = { path = "../api-contract" }
-aow-runtime-contract = { path = "../../../common/crates/runtime-contract" }
+aow-host-contract = { path = "../../../common/crates/host-contract" }
 aow-config = { path = "../config" }
 reqwest.workspace = true
 aow-server-client = { path = "../server-client" }

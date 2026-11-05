@@ -10,7 +10,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const temporary = mkdtempSync(join(tmpdir(), 'aow-remote-deployment-'));
 const prefix = `aow-acceptance-${randomUUID().slice(0, 8)}`;
 const network = `${prefix}-network`;
-const node = `${prefix}-runtime`;
+const node = `${prefix}-host`;
 const server = `${prefix}-server`;
 const image = process.env.AOW_ACCEPTANCE_IMAGE || `${prefix}:local`;
 const dockerEnv = { ...process.env, BUILDX_CONFIG: join(temporary, 'buildx') };
@@ -31,27 +31,27 @@ async function ready(container, url) {
   }
   throw new Error(`Service readiness timed out: ${container}`);
 }
-const runtimeToken = randomUUID() + randomUUID();
+const hostToken = randomUUID() + randomUUID();
 const startup = `import {mkdirSync,writeFileSync} from 'node:fs';import{spawn}from'node:child_process';
-writeFileSync('/run/runtime-token',process.env.TEST_RUNTIME_TOKEN,{mode:0o600});
+writeFileSync('/run/host-token',process.env.TEST_HOST_TOKEN,{mode:0o600});
 const role=process.argv[1];let args;
-if(role==='runtime') {mkdirSync('/node/repository',{recursive:true});args=['aow-runtime-daemon','--state-dir','/node/state','--listen','0.0.0.0:9760','--token-file','/run/runtime-token','--vt-node','/opt/aow/node','--vt-worker','/opt/aow/worker.mjs'];}
-else {mkdirSync('/server/state',{recursive:true});const {randomBytes,pbkdf2Sync}=await import('node:crypto');const salt=randomBytes(16);writeFileSync('/server/state/credentials.json',JSON.stringify({version:1,username:'acceptance',salt:salt.toString('hex'),password_hash:pbkdf2Sync('acceptance-password',salt,600000,32,'sha256').toString('hex')}),{mode:0o600});args=['aow-server','--state-dir','/server/state','--host','0.0.0.0','--port','9800','--base-path','/aow','--runtime-url','http://runtime:9760','--runtime-token-file','/run/runtime-token','--server-url','http://server:9800/aow'];}
+if(role==='host') {mkdirSync('/node/repository',{recursive:true});args=['aow-host-daemon','--state-dir','/node/state','--listen','0.0.0.0:9760','--token-file','/run/host-token','--vt-node','/opt/aow/node','--vt-worker','/opt/aow/worker.mjs'];}
+else {mkdirSync('/server/state',{recursive:true});const {randomBytes,pbkdf2Sync}=await import('node:crypto');const salt=randomBytes(16);writeFileSync('/server/state/credentials.json',JSON.stringify({version:1,username:'acceptance',salt:salt.toString('hex'),password_hash:pbkdf2Sync('acceptance-password',salt,600000,32,'sha256').toString('hex')}),{mode:0o600});args=['aow-server','--state-dir','/server/state','--host','0.0.0.0','--port','9800','--base-path','/aow','--host-url','http://host:9760','--host-token-file','/run/host-token','--server-url','http://server:9800/aow'];}
 const child=spawn(args[0],args.slice(1),{stdio:'inherit'});for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>child.kill(signal));child.on('exit',code=>process.exit(code??1));`;
 try {
   if (!process.env.AOW_ACCEPTANCE_IMAGE) {
     mkdirSync(join(temporary, 'bin'));
-    for (const binary of ['aow-server', 'aow-runtime-daemon', 'aow-cli', 'aow-automation-runner']) cpSync(join(root, 'target/debug', binary), join(temporary, 'bin', binary));
+    for (const binary of ['aow-server', 'aow-host-daemon', 'aow-cli', 'aow-automation-runner']) cpSync(join(root, 'target/debug', binary), join(temporary, 'bin', binary));
     cpSync(process.execPath, join(temporary, 'bin/node'));
-    cpSync(join(root, 'runtime/vt-worker/dist/vt-worker.mjs'), join(temporary, 'worker.mjs'));
+    cpSync(join(root, 'host/vt-worker/dist/vt-worker.mjs'), join(temporary, 'worker.mjs'));
     cpSync(join(root, 'server/git-platform-providers'), join(temporary, 'git-platform-providers'), { recursive: true });
     writeFileSync(join(temporary, 'Dockerfile'), 'FROM ubuntu:24.04\nRUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates libstdc++6 && rm -rf /var/lib/apt/lists/*\nCOPY bin/ /opt/aow/\nCOPY worker.mjs /opt/aow/worker.mjs\nCOPY git-platform-providers/ /opt/git-platform-providers/\nENV PATH="/opt/aow:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"\n');
     docker(['build', '-t', image, temporary]);
   }
   docker(['network', 'create', '--internal', network]);
-  dockerEnv.TEST_RUNTIME_TOKEN = runtimeToken;
-  for (const [name, role] of [[node, 'runtime'], [server, 'server']]) {
-    docker(['run', '-d', '--init', '--name', name, '--network', network, '--network-alias', role, '-e', 'TEST_RUNTIME_TOKEN', '-e', 'NO_PROXY=server,runtime,localhost,127.0.0.1', image, 'node', '--input-type=module', '-e', startup, role]);
+  dockerEnv.TEST_HOST_TOKEN = hostToken;
+  for (const [name, role] of [[node, 'host'], [server, 'server']]) {
+    docker(['run', '-d', '--init', '--name', name, '--network', network, '--network-alias', role, '-e', 'TEST_HOST_TOKEN', '-e', 'NO_PROXY=server,host,localhost,127.0.0.1', image, 'node', '--input-type=module', '-e', startup, role]);
   }
   await ready(server, 'http://server:9800/aow/api/health');
   // The node owns /node. Server has no mount or filesystem path to it.
@@ -83,9 +83,9 @@ const base='http://server:9800/aow';
 const login=await fetch(base+'/api/auth/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:'acceptance',password:'acceptance-password'})});
 if(!login.ok)throw new Error('Login failed');const cookie=login.headers.get('set-cookie').split(';')[0];
 const issued=await fetch(base+'/api/cli-tokens',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({ttl_seconds:300})});if(!issued.ok)throw new Error('Grant failed');const grant=await issued.json();
-const headers={authorization:'Bearer '+process.env.TEST_RUNTIME_TOKEN,'content-type':'application/json'};
-const settings=await (await fetch('http://runtime:9760/v1/acp/settings',{headers})).json();
-const changed=await fetch('http://runtime:9760/v1/acp/settings',{method:'PUT',headers,body:JSON.stringify({revision:settings.revision,content:JSON.stringify({default_agent_id:'callback-acp',agent_servers:{'callback-acp':{type:'custom',command:'/opt/aow/node',args:['/opt/aow/callback-acp.mjs']}}})})});if(!changed.ok)throw new Error('Node ACP settings rejected');
+const headers={authorization:'Bearer '+process.env.TEST_HOST_TOKEN,'content-type':'application/json'};
+const settings=await (await fetch('http://host:9760/v1/acp/settings',{headers})).json();
+const changed=await fetch('http://host:9760/v1/acp/settings',{method:'PUT',headers,body:JSON.stringify({revision:settings.revision,content:JSON.stringify({default_agent_id:'callback-acp',agent_servers:{'callback-acp':{type:'custom',command:'/opt/aow/node',args:['/opt/aow/callback-acp.mjs']}}})})});if(!changed.ok)throw new Error('Node ACP settings rejected');
 execFileSync('aow-cli',['acp','create','--agent-id','callback-acp','--project-id',${JSON.stringify(task.project_id)},'--cwd','/node/repository','--no-parent','--session-id','acceptance-controller','--task','Verify ACP callback','--timeout','20'],{env:{...process.env,AOW_SERVER_URL:base,AOW_SERVER_TOKEN:grant.token},encoding:'utf8'});
 for(let i=0;i<100 && !existsSync('/node/acp-callback-result.json');i++)await new Promise(resolve=>setTimeout(resolve,100));
 console.log(readFileSync('/node/acp-callback-result.json','utf8'));

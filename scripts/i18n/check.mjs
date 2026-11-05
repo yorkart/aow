@@ -10,7 +10,7 @@ function flatten(value, prefix = '', result = {}) {
   }
   return result;
 }
-for (const directory of ['server/frontend/src/lib/i18n/locales', 'server/crates/i18n/locales', 'runtime/crates/i18n/locales']) {
+for (const directory of ['server/frontend/src/lib/i18n/locales', 'server/crates/i18n/locales', 'host/crates/i18n/locales']) {
   const english = flatten(JSON.parse(await readFile(`${directory}/en-US.json`, 'utf8')));
   const files = await readdir(directory);
   for (const file of files.filter(name => name.endsWith('.json'))) {
@@ -44,7 +44,7 @@ async function checkRust(directory, backend) {
     validateRustSource(source, file, backend);
   }
 }
-for (const product of ['server', 'runtime']) {
+for (const product of ['server', 'host']) {
   const backend = JSON.parse(await readFile(`${product}/crates/i18n/locales/en-US.json`, 'utf8'));
   await checkRust(`${product}/crates`, backend);
 }

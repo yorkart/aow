@@ -12,13 +12,13 @@ import { publishTestRelease } from './github-fixture.mjs';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const quote = value => `'${value.replaceAll("'", "'\\''")}'`;
 const files = ['server/skills/aow-agent/SKILL.md', 'server/skills/aow-acp/SKILL.md', 'server/git-platform-providers/github.mjs', 'server/git-platform-providers/gitlab.mjs', 'scripts/install-release.sh', 'scripts/package-release.sh',
-  'scripts/start-server.sh', 'scripts/start-runtime-daemon.sh', 'scripts/start-launchd.sh', 'scripts/launchd-service.mjs',
-  'scripts/activate-runtime.mjs', 'scripts/service-health.mjs',
+  'scripts/start-server.sh', 'scripts/start-host-daemon.sh', 'scripts/start-launchd.sh', 'scripts/launchd-service.mjs',
+  'scripts/activate-host.mjs', 'scripts/service-health.mjs',
   'scripts/launchd-mode.mjs', 'scripts/start-launchdaemon.mjs', 'scripts/register-launchdaemon.py',
   'scripts/replace-symlink.mjs', 'scripts/server-state-dir.sh', 'packaging/bin/aow',
-  'packaging/bin/aow-server', 'packaging/bin/aow-runtime-daemon',
-  'packaging/systemd/aow-server.service', 'packaging/systemd/aow-runtime-daemon.service'];
-const binaries = ['aow-server', 'aow-runtime-daemon', 'aow-cli', 'aow-automation-runner'];
+  'packaging/bin/aow-server', 'packaging/bin/aow-host-daemon',
+  'packaging/systemd/aow-server.service', 'packaging/systemd/aow-host-daemon.service'];
+const binaries = ['aow-server', 'aow-host-daemon', 'aow-cli', 'aow-automation-runner'];
 function write(path, data, executable = false) {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, data, { mode: executable ? 0o755 : 0o600 });
@@ -58,7 +58,7 @@ case "$1" in
   */service-health.mjs)
     component=\${3##*.}
     if [ "\${FAIL_HEALTH:-}" = "$component" ]; then
-      case "$(readlink "$AOW_RUNTIME_ROOT/active/$component")" in *2.0.0) exit 1;; esac
+      case "$(readlink "$AOW_INSTALL_ROOT/active/$component")" in *2.0.0) exit 1;; esac
     fi
     exit 0;;
   */start-launchdaemon.mjs)
@@ -95,12 +95,12 @@ fi
 `, true);
   write(join(tools, 'kill'), `#!/bin/sh
 printf "signal %s\\n" "$*" >> "$SERVICE_LOG"
-for component in server runtime-daemon; do
+for component in server host-daemon; do
   state=$SERVICE_STATE/org.aow.service.$component
   [ -f "$state" ] || continue
   pid=$(cat "$state")
   if [ -z "$pid" ]; then
-    case "$component" in server) pid=987654;; runtime-daemon) pid=987655;; esac
+    case "$component" in server) pid=987654;; host-daemon) pid=987655;; esac
   fi
   [ "$2" = "$pid" ] || continue
   printf 'signal-component %s %s %s\\n' "$component" "$1" "$pid" >> "$SERVICE_LOG"
@@ -136,7 +136,7 @@ case "$1" in
     if [ ! -f "$SERVICE_STATE/$name" ]; then echo 'Could not find service' >&2; exit 113; fi
     pid=$(cat "$SERVICE_STATE/$name")
     if [ -z "$pid" ]; then
-      case "$name" in org.aow.service.runtime-daemon) pid=987655;; *) pid=987654;; esac
+      case "$name" in org.aow.service.host-daemon) pid=987655;; *) pid=987654;; esac
     fi
     printf 'state = running\\npid = %s\\n' "$pid";;
   enable) exit 0;;
@@ -153,7 +153,7 @@ case "$1" in
       exit 5
     fi
     if [ "\${FAIL_LAUNCH:-}" = "$component" ]; then
-      case "$(readlink "$AOW_RUNTIME_ROOT/active/$component")" in *2.0.0) exit 5;; esac
+      case "$(readlink "$AOW_INSTALL_ROOT/active/$component")" in *2.0.0) exit 5;; esac
     fi
     mkdir -p "$SERVICE_STATE"; touch "$SERVICE_STATE/$name";;
   *) exit 99;;
@@ -174,10 +174,10 @@ cp "$DOWNLOAD_ROOT/$path" "$output"
 `, true);
   const env = { ...process.env, HOME: home, PATH: `${tools}:${process.env.PATH}`, SHELL: '/bin/zsh',
     // Exercise the unprivileged preparation phase of the administrator installer.
-    AOW_INSTALL_MANAGED: '1', AOW_INSTALL_RUNTIME: '',
-    AOW_RUNTIME_ROOT: runtime, AOW_USER_BIN_DIR: join(home, '.local/bin'),
+    AOW_INSTALL_MANAGED: '1', AOW_INSTALL_HOST: '',
+    AOW_INSTALL_ROOT: runtime, AOW_USER_BIN_DIR: join(home, '.local/bin'),
     AOW_STATE_DIR: '', AOW_SERVER_STATE_DIR: '', AOW_RELEASE_REPOSITORY: '',
-    AOW_SERVER_HOST: '', AOW_SERVER_PORT: '', AOW_BASE_PATH: '', AOW_RUNTIME_URL: '',
+    AOW_SERVER_HOST: '', AOW_SERVER_PORT: '', AOW_BASE_PATH: '', AOW_HOST_URL: '',
     // Omit inherited limits: an explicitly empty timeout is invalid configuration.
     AOW_AUTH_SESSION_MAX_AGE_SECONDS: undefined, AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS: undefined,
     XDG_STATE_HOME: '', XDG_RUNTIME_DIR: '', XDG_CONFIG_HOME: join(home, '.config'),
@@ -223,7 +223,7 @@ for (const mode of ['launchagent', 'launchdaemon']) {
   }, t => {
     const f = fixture(t);
     const node = join(f.runtime, 'node');
-    const marker = join(f.runtime, '.aow-runtime-daemon-node-target');
+    const marker = join(f.runtime, '.aow-host-daemon-node-target');
     const legacyMarker = join(f.runtime, '.aow-terminald-node-target');
     write(legacyMarker, '/old/node\n');
     symlinkSync('/old/node', node);
@@ -242,18 +242,18 @@ for (const mode of ['launchagent', 'launchdaemon']) {
     rmSync(node);
     symlinkSync('/old/node', node);
     succeeds(f.pack('2.0.0')); succeeds(f.publish('2.0.0'));
-    const failed = f.install([], { FAIL_HEALTH: 'runtime-daemon' });
+    const failed = f.install([], { FAIL_HEALTH: 'host-daemon' });
     assert.notEqual(failed.status, 0);
     assert.match(failed.stdout + failed.stderr, /activation failed/);
     assert.equal(readlinkSync(node), '/old/node');
     assert.equal(existsSync(marker), false);
     assert.equal(f.log(legacyMarker), '/old/node\n');
-    assert.equal(realpathSync(join(f.runtime, 'active/runtime-daemon')), join(f.runtime, 'releases/1.0.0'));
+    assert.equal(realpathSync(join(f.runtime, 'active/host-daemon')), join(f.runtime, 'releases/1.0.0'));
     succeeds(f.install());
     succeeds(f.install());
     assert.equal(f.log(marker), `${readlinkSync(node)}\n`);
     assert.equal(f.log(legacyMarker), '/old/node\n');
-    assert.equal(realpathSync(join(f.runtime, 'active/runtime-daemon')), join(f.runtime, 'releases/2.0.0'));
+    assert.equal(realpathSync(join(f.runtime, 'active/host-daemon')), join(f.runtime, 'releases/2.0.0'));
   });
 }
 
@@ -266,8 +266,8 @@ test('LaunchAgent update preserves a usable Node link when the managed Node is f
   succeeds(f.run(join(f.home, '.local/bin/aow'), ['update'], { PATH: `${f.runtime}:${f.env.PATH}` }));
   assert.equal(realpathSync(node), target);
   assert.equal(readlinkSync(node), target);
-  assert.equal(f.log(join(f.runtime, '.aow-runtime-daemon-node-target')), `${target}\n`);
-  assert.equal(realpathSync(join(f.runtime, 'active/runtime-daemon')), join(f.runtime, 'releases/2.0.0'));
+  assert.equal(f.log(join(f.runtime, '.aow-host-daemon-node-target')), `${target}\n`);
+  assert.equal(realpathSync(join(f.runtime, 'active/host-daemon')), join(f.runtime, 'releases/2.0.0'));
 });
 
 test('launchd removal has a bounded wait and never loads over a job that is still registered', t => {
@@ -294,7 +294,7 @@ for (const source of ['local', 'github']) {
       : f.install([], extra, 'y\n');
     succeeds(f.pack('1.0.0')); succeeds(f.publish('1.0.0')); succeeds(install());
     const previousServer = f.log(f.plist('server'));
-    const previousTerminald = f.log(f.plist('runtime-daemon'));
+    const previousTerminald = f.log(f.plist('host-daemon'));
     const previousNode = readlinkSync(join(f.runtime, 'node'));
     succeeds(f.pack('2.0.0')); succeeds(f.publish('2.0.0'));
     const failed = install({ BOOTOUT_POLLS: '3', FAIL_HEALTH: 'server' });
@@ -304,17 +304,17 @@ for (const source of ['local', 'github']) {
     assert.equal(realpathSync(join(f.runtime, 'active/server')), join(f.runtime, 'releases/1.0.0'));
     assert.equal(f.log(f.plist('server')), previousServer);
     succeeds(f.run('launchctl', ['print', `gui/${process.getuid()}/org.aow.server`]));
-    const terminaldFailed = install({ BOOTOUT_POLLS: '3', FAIL_HEALTH: 'runtime-daemon' });
+    const terminaldFailed = install({ BOOTOUT_POLLS: '3', FAIL_HEALTH: 'host-daemon' });
     assert.notEqual(terminaldFailed.status, 0);
     assert.match(terminaldFailed.stdout + terminaldFailed.stderr, /activation failed/);
     assert.doesNotMatch(terminaldFailed.stdout + terminaldFailed.stderr, /Bootstrap failed/);
     assert.equal(realpathSync(join(f.runtime, 'active/server')), join(f.runtime, 'releases/2.0.0'));
-    assert.equal(realpathSync(join(f.runtime, 'active/runtime-daemon')), join(f.runtime, 'releases/1.0.0'));
-    assert.equal(f.log(f.plist('runtime-daemon')), previousTerminald);
+    assert.equal(realpathSync(join(f.runtime, 'active/host-daemon')), join(f.runtime, 'releases/1.0.0'));
+    assert.equal(f.log(f.plist('host-daemon')), previousTerminald);
     assert.equal(readlinkSync(join(f.runtime, 'node')), previousNode);
-    succeeds(f.run('launchctl', ['print', `gui/${process.getuid()}/org.aow.runtime-daemon`]));
+    succeeds(f.run('launchctl', ['print', `gui/${process.getuid()}/org.aow.host-daemon`]));
     succeeds(install({ BOOTOUT_POLLS: '3' }));
-    for (const component of ['server', 'runtime-daemon']) {
+    for (const component of ['server', 'host-daemon']) {
       assert.equal(realpathSync(join(f.runtime, `active/${component}`)), join(f.runtime, 'releases/2.0.0'));
     }
     assert.equal(existsSync(join(f.runtime, '.install.lock')), false);
@@ -322,14 +322,14 @@ for (const source of ['local', 'github']) {
 }
 
 for (const arch of ['aarch64', 'x86_64']) {
-  test(`macOS ${arch}: local packages share launchd activation, rollback and --skip-runtime`, t => {
+  test(`macOS ${arch}: local packages share launchd activation, rollback and --skip-host`, t => {
     const f = fixture(t, arch);
     const install = (path = 'target/packages/latest', extra = {}, args = []) =>
       f.run('/bin/bash', ['scripts/install-release.sh', '--package', path, ...args], extra);
     succeeds(f.pack('local-1'));
     succeeds(install());
     const serverPlist = f.log(f.plist('server'));
-    const terminaldPlist = f.log(f.plist('runtime-daemon'));
+    const terminaldPlist = f.log(f.plist('host-daemon'));
     const updateSettings = f.log(join(f.runtime, 'update.json'));
     succeeds(f.pack('2.0.0'));
     const failed = install(undefined, { FAIL_LAUNCH: 'server' });
@@ -338,10 +338,10 @@ for (const arch of ['aarch64', 'x86_64']) {
     assert.equal(realpathSync(join(f.runtime, 'active/server')), join(f.runtime, 'releases/local-1'));
     assert.equal(f.log(f.plist('server')), serverPlist);
     assert.equal(f.log(join(f.runtime, 'update.json')), updateSettings);
-    succeeds(install(undefined, {}, ['--skip-runtime']));
+    succeeds(install(undefined, {}, ['--skip-host']));
     assert.equal(realpathSync(join(f.runtime, 'active/server')), join(f.runtime, 'releases/2.0.0'));
-    assert.equal(realpathSync(join(f.runtime, 'active/runtime-daemon')), join(f.runtime, 'releases/local-1'));
-    assert.equal(f.log(f.plist('runtime-daemon')), terminaldPlist);
+    assert.equal(realpathSync(join(f.runtime, 'active/host-daemon')), join(f.runtime, 'releases/local-1'));
+    assert.equal(f.log(f.plist('host-daemon')), terminaldPlist);
     succeeds(install('target/packages/aow-local-1.tar.gz'));
     assert.equal(realpathSync(join(f.runtime, 'active/server')), join(f.runtime, 'releases/local-1'));
     assert.equal(f.log(f.env.DOWNLOAD_LOG), '');
@@ -367,9 +367,9 @@ for (const arch of ['aarch64', 'x86_64']) {
     const installer = join(f.output, 'aow-install.sh');
     succeeds(f.run('bash', ['-c', `cat ${quote(installer)} | bash`]));
     assert.equal(realpathSync(join(f.runtime, 'active/server')), join(f.runtime, 'releases/1.0.0'));
-    assert.equal(realpathSync(join(f.runtime, 'active/runtime-daemon')), join(f.runtime, 'releases/1.0.0'));
-    const terminaldPlist = f.log(f.plist('runtime-daemon'));
-    for (const component of ['server', 'runtime-daemon']) {
+    assert.equal(realpathSync(join(f.runtime, 'active/host-daemon')), join(f.runtime, 'releases/1.0.0'));
+    const terminaldPlist = f.log(f.plist('host-daemon'));
+    for (const component of ['server', 'host-daemon']) {
       const plist = f.log(f.plist(component));
       assert.match(plist, /AOW_LOG_MODE<\/key><string>unified/);
       assert.doesNotMatch(plist, /AOW_SERVICE_LOG|Library\/Logs\/AOW/);
@@ -380,10 +380,10 @@ for (const arch of ['aarch64', 'x86_64']) {
     succeeds(f.pack('2.0.0'));
     succeeds(f.publish('2.0.0'));
     const manager = join(f.home, '.local/bin/aow');
-    succeeds(f.run(manager, ['update', '--skip-runtime']));
+    succeeds(f.run(manager, ['update', '--skip-host']));
     assert.equal(realpathSync(join(f.runtime, 'active/server')), join(f.runtime, 'releases/2.0.0'));
-    assert.equal(realpathSync(join(f.runtime, 'active/runtime-daemon')), join(f.runtime, 'releases/1.0.0'));
-    assert.equal(f.log(f.plist('runtime-daemon')), terminaldPlist);
+    assert.equal(realpathSync(join(f.runtime, 'active/host-daemon')), join(f.runtime, 'releases/1.0.0'));
+    assert.equal(f.log(f.plist('host-daemon')), terminaldPlist);
     assert.equal(readlinkSync(join(f.runtime, 'node')), nodeTarget);
     assert.match(f.log(f.plist('server')), /AOW_SERVER_PORT<\/key><string>8283/);
     assert.match(f.log(f.plist('server')), /home &amp; &apos;quotes&apos;/);
@@ -396,7 +396,7 @@ for (const arch of ['aarch64', 'x86_64']) {
   });
 }
 
-for (const component of ['server', 'runtime-daemon']) {
+for (const component of ['server', 'host-daemon']) {
   test(`launchd ${component} activation failure restores its previous release and plist`, t => {
     const f = fixture(t);
     succeeds(f.pack('1.0.0')); succeeds(f.publish('1.0.0')); succeeds(f.install([], {}, 'y\n'));
@@ -421,7 +421,7 @@ test('macOS package rejects wrong architecture and non-system dynamic libraries 
   }
 });
 
-for (const component of ['server', 'runtime-daemon']) {
+for (const component of ['server', 'host-daemon']) {
   test(`launchd ${component} running without a healthy endpoint restores the previous release`, t => {
     const f = fixture(t);
     succeeds(f.pack('1.0.0')); succeeds(f.publish('1.0.0')); succeeds(f.install([], {}, 'y\n'));
@@ -460,7 +460,7 @@ test('macOS first install sets a login account and hidden password with the syst
   assert.doesNotMatch(result.stdout + result.stderr, /test-password/);
   assertCredentials(f.log(join(f.home, '.aow/credentials.json')), 'test-password');
   assert.equal(existsSync(f.plist('server')), true);
-  assert.equal(existsSync(f.plist('runtime-daemon')), true);
+  assert.equal(existsSync(f.plist('host-daemon')), true);
 });
 
 test('a missing macOS release asset fails without changing services', t => {
@@ -547,7 +547,7 @@ test('local install stages LaunchDaemons when the GUI domain returns unsupported
   const f = fixture(t);
   succeeds(f.pack('1.0.0'));
   const pending = f.run('/bin/bash', ['scripts/install-release.sh', '--package', 'target/packages/latest'],
-    { FAIL_GUI: '125', AOW_INSTALL_RUNTIME: 'y' });
+    { FAIL_GUI: '125', AOW_INSTALL_HOST: 'y' });
   assert.equal(pending.status, 78, pending.stdout + pending.stderr);
   assert.match(pending.stdout, /macOS service mode: launchdaemon/);
   assert.match(pending.stdout + pending.stderr, /registration is pending/);
@@ -555,9 +555,9 @@ test('local install stages LaunchDaemons when the GUI domain returns unsupported
   const settings = JSON.parse(f.log(join(f.runtime, 'update.json')));
   assert.deepEqual(settings.service, { mode: 'launchdaemon', user: userInfo().username, uid: process.getuid() });
   const request = JSON.parse(f.log(join(f.runtime, 'pending-launchdaemon.json')));
-  assert.deepEqual(Object.keys(request.components).sort(), ['runtime-daemon', 'server']);
+  assert.deepEqual(Object.keys(request.components).sort(), ['host-daemon', 'server']);
   assert.equal(existsSync(f.plist('server')), false);
-  assert.equal(existsSync(f.plist('runtime-daemon')), false);
+  assert.equal(existsSync(f.plist('host-daemon')), false);
   assert.doesNotMatch(f.log(f.serviceLog), /bootstrap|bootout|signal/);
 });
 
@@ -578,23 +578,23 @@ test('unregistered headless installs stop before account setup; registered servi
   write(account, credentials());
   // An interrupted administrator installation is still unregistered, even if
   // files, saved mode and a pending request exist.
-  assert.equal(f.install(['--skip-runtime'], { FAIL_GUI: '125' }).status, 78);
+  assert.equal(f.install(['--skip-host'], { FAIL_GUI: '125' }).status, 78);
   const request = f.log(join(f.runtime, 'pending-launchdaemon.json'));
   const pending = f.install([], { AOW_INSTALL_MANAGED: '' });
   assert.equal(pending.status, 78, pending.stdout + pending.stderr);
   assert.match(pending.stderr, /just install --user/);
   assert.equal(f.log(join(f.runtime, 'pending-launchdaemon.json')), request);
   f.registerDaemons();
-  const checked = f.run(process.execPath, [join(f.repo, 'scripts/launchd-mode.mjs'), 'check-install', f.runtime, '--skip-runtime']);
+  const checked = f.run(process.execPath, [join(f.repo, 'scripts/launchd-mode.mjs'), 'check-install', f.runtime, '--skip-host']);
   succeeds(checked);
   assert.equal(JSON.parse(checked.stdout).registrationRequired, false);
-  const update = f.install(['--skip-runtime'], { AOW_INSTALL_MANAGED: '' });
+  const update = f.install(['--skip-host'], { AOW_INSTALL_MANAGED: '' });
   succeeds(update);
   assert.doesNotMatch(update.stderr, /requires an administrator account/);
   assert.equal(existsSync(join(f.runtime, 'pending-launchdaemon.json')), false);
 });
 
-test('enabling runtime-daemon after a server-only LaunchDaemon install requests administrator registration', {
+test('enabling host-daemon after a server-only LaunchDaemon install requests administrator registration', {
   skip: process.getuid() === 0,
 }, t => {
   const f = fixture(t);
@@ -604,11 +604,11 @@ test('enabling runtime-daemon after a server-only LaunchDaemon install requests 
     return JSON.parse(result.stdout).registrationRequired;
   };
   succeeds(f.pack('1.0.0')); succeeds(f.publish('1.0.0'));
-  assert.equal(f.install(['--skip-runtime'], { FAIL_GUI: '1' }).status, 78);
+  assert.equal(f.install(['--skip-host'], { FAIL_GUI: '1' }).status, 78);
   f.registerDaemons();
-  succeeds(f.install(['--skip-runtime'], { AOW_INSTALL_MANAGED: '' }));
+  succeeds(f.install(['--skip-host'], { AOW_INSTALL_MANAGED: '' }));
   assert.equal(checkRegistration([]), true);
-  assert.equal(checkRegistration(['--skip-runtime']), false);
+  assert.equal(checkRegistration(['--skip-host']), false);
   writeFileSync(f.serviceLog, '');
   const unregistered = f.install([], { AOW_INSTALL_MANAGED: '' });
   assert.equal(unregistered.status, 78, unregistered.stdout + unregistered.stderr);
@@ -643,24 +643,24 @@ with patch.object(m.sys, 'platform', 'darwin'), patch.object(m.pwd, 'getpwuid', 
         assert m.main(['--package', 'target/packages/latest', *flags]) == 0
         command = sudo_calls[-1]
         assert command[command.index('--user') + 1] == account.pw_name
-        assert '--skip-runtime' not in command
-    assert len(sudo_calls) == 2, 'Missing runtime-daemon registration must reach the administrator coordinator'
-    assert m.main(['--package', 'target/packages/latest', '--skip-runtime']) == 0
-    assert len(sudo_calls) == 2, 'Skipping runtime-daemon must not require its registration'
+        assert '--skip-host' not in command
+    assert len(sudo_calls) == 2, 'Missing host-daemon registration must reach the administrator coordinator'
+    assert m.main(['--package', 'target/packages/latest', '--skip-host']) == 0
+    assert len(sudo_calls) == 2, 'Skipping host-daemon must not require its registration'
 `, join(root, 'scripts/install-macos.py')], { AOW_INSTALL_MANAGED: '' }));
 
   // Complete the administrator preparation/registration/verification phases.
   assert.equal(f.install().status, 78);
   const request = JSON.parse(f.log(join(f.runtime, 'pending-launchdaemon.json')));
-  assert.deepEqual(Object.keys(request.components), ['runtime-daemon']);
+  assert.deepEqual(Object.keys(request.components), ['host-daemon']);
   f.registerDaemons();
   succeeds(f.install([], { AOW_INSTALL_MANAGED: '' }));
   assert.equal(checkRegistration([]), false);
   assert.equal(existsSync(join(f.runtime, 'pending-launchdaemon.json')), false);
   // An existing plist alone is insufficient if the job has been unregistered.
-  rmSync(join(f.env.SERVICE_STATE, 'org.aow.service.runtime-daemon'));
+  rmSync(join(f.env.SERVICE_STATE, 'org.aow.service.host-daemon'));
   assert.equal(checkRegistration([]), true);
-  assert.equal(checkRegistration(['--skip-runtime']), false);
+  assert.equal(checkRegistration(['--skip-host']), false);
 });
 
 test('headless install stages registration, persists mode, updates without sudo and rolls back failures', {
@@ -674,7 +674,7 @@ test('headless install stages registration, persists mode, updates without sudo 
   const settings = JSON.parse(f.log(join(f.runtime, 'update.json')));
   assert.equal(settings.service.mode, 'launchdaemon');
   const request = JSON.parse(f.log(join(f.runtime, 'pending-launchdaemon.json')));
-  assert.deepEqual(Object.keys(request.components).sort(), ['runtime-daemon', 'server']);
+  assert.deepEqual(Object.keys(request.components).sort(), ['host-daemon', 'server']);
   for (const config of Object.values(request.components)) {
     assert.equal(config.UserName, userInfo().username);
     assert.equal(config.KeepAlive, true);
@@ -692,12 +692,12 @@ test('headless install stages registration, persists mode, updates without sudo 
   succeeds(f.pack('2.0.0')); succeeds(f.publish('2.0.0'));
   // Even with a GUI now present, aow update must retain the saved daemon mode.
   const manager = join(f.home, '.local/bin/aow');
-  succeeds(f.run(manager, ['update', '--skip-runtime']));
+  succeeds(f.run(manager, ['update', '--skip-host']));
   assert.equal(realpathSync(join(f.runtime, 'active/server')), join(f.runtime, 'releases/2.0.0'));
-  assert.equal(realpathSync(join(f.runtime, 'active/runtime-daemon')), join(f.runtime, 'releases/1.0.0'));
-  const failed = f.install([], { FAIL_HEALTH: 'runtime-daemon' }, 'y\n');
+  assert.equal(realpathSync(join(f.runtime, 'active/host-daemon')), join(f.runtime, 'releases/1.0.0'));
+  const failed = f.install([], { FAIL_HEALTH: 'host-daemon' }, 'y\n');
   assert.notEqual(failed.status, 0);
-  assert.equal(realpathSync(join(f.runtime, 'active/runtime-daemon')), join(f.runtime, 'releases/1.0.0'));
+  assert.equal(realpathSync(join(f.runtime, 'active/host-daemon')), join(f.runtime, 'releases/1.0.0'));
   assert.match(f.log(f.serviceLog), /signal -TERM 987654/);
   assert.doesNotMatch(f.log(f.serviceLog), /signal -KILL/);
   assert.doesNotMatch(f.log(f.serviceLog), /bootstrap|bootout|kickstart/);
@@ -719,21 +719,21 @@ test('headless update bounds stuck shutdown and rollback without signalling skip
 
   // A stuck old server and an unhealthy replacement must both be stopped so
   // that rollback can start a healthy process on the previous release.
-  const failed = f.install(['--skip-runtime'], { STALL_TERM: 'server', FAIL_HEALTH: 'server' });
+  const failed = f.install(['--skip-host'], { STALL_TERM: 'server', FAIL_HEALTH: 'server' });
   assert.notEqual(failed.status, 0);
   assert.match(failed.stdout + failed.stderr, /restored previous release/);
   assert.equal((f.log(f.serviceLog).match(/signal-component server -KILL/g) || []).length, 2);
   assert.equal(realpathSync(join(f.runtime, 'active/server')), join(f.runtime, 'releases/1.0.0'));
-  assert.doesNotMatch(f.log(f.serviceLog), /signal-component runtime-daemon/);
+  assert.doesNotMatch(f.log(f.serviceLog), /signal-component host-daemon/);
 
   writeFileSync(f.serviceLog, '');
-  const updated = f.install(['--skip-runtime'], { STALL_TERM: 'server' });
+  const updated = f.install(['--skip-host'], { STALL_TERM: 'server' });
   succeeds(updated);
   assert.match(updated.stdout + updated.stderr, /did not exit within 5 seconds/);
   assert.equal((f.log(f.serviceLog).match(/signal-component server -KILL/g) || []).length, 1);
-  assert.doesNotMatch(f.log(f.serviceLog), /signal-component runtime-daemon/);
+  assert.doesNotMatch(f.log(f.serviceLog), /signal-component host-daemon/);
   assert.equal(realpathSync(join(f.runtime, 'active/server')), join(f.runtime, 'releases/2.0.0'));
-  assert.equal(realpathSync(join(f.runtime, 'active/runtime-daemon')), join(f.runtime, 'releases/1.0.0'));
+  assert.equal(realpathSync(join(f.runtime, 'active/host-daemon')), join(f.runtime, 'releases/1.0.0'));
   assert.equal(readlinkSync(join(f.runtime, 'node')), nodeTarget);
   assert.equal(existsSync(join(f.runtime, '.launchdaemon-activation.lock')), false);
 });
@@ -798,37 +798,37 @@ test('proxy-only changes activate an existing daemon and clear stale registratio
   const proxy = { HTTP_PROXY: 'http://127.0.0.1:7890', HTTPS_PROXY: 'http://127.0.0.1:7890', NO_PROXY: 'localhost,127.0.0.1,::1' };
   write(join(f.home, '.aow/server.env'), Object.entries(proxy).map(([key, value]) => `${key}=${value}\n`).join(''));
   // Reproduce the pending request created by versions that put proxies in the plist.
-  delete request.components['runtime-daemon'];
+  delete request.components['host-daemon'];
   Object.assign(request.components.server.EnvironmentVariables, proxy);
   write(join(f.runtime, 'pending-launchdaemon.json'), JSON.stringify(request));
   writeFileSync(f.serviceLog, '');
-  const result = f.install(['--package', join(f.repo, 'target/packages/aow-2.0.0.tar.gz'), '--skip-runtime']);
+  const result = f.install(['--package', join(f.repo, 'target/packages/aow-2.0.0.tar.gz'), '--skip-host']);
   succeeds(result);
   assert.doesNotMatch(result.stdout + result.stderr, /registration is required|registration is pending/);
   assert.equal(f.log(plist), previousPlist);
   assert.equal(realpathSync(join(f.runtime, 'active/server')), join(f.runtime, 'releases/2.0.0'));
-  assert.equal(realpathSync(join(f.runtime, 'active/runtime-daemon')), join(f.runtime, 'releases/1.0.0'));
+  assert.equal(realpathSync(join(f.runtime, 'active/host-daemon')), join(f.runtime, 'releases/1.0.0'));
   assert.equal(existsSync(join(f.runtime, 'pending-launchdaemon.json')), false);
   assert.match(f.log(f.serviceLog), /signal-component server/);
-  assert.doesNotMatch(f.log(f.serviceLog), /bootstrap|bootout|signal-component runtime-daemon/);
+  assert.doesNotMatch(f.log(f.serviceLog), /bootstrap|bootout|signal-component host-daemon/);
 });
 
-test('pending headless installation retains its mode before registration and leaves skipped runtime-daemon untouched', {
+test('pending headless installation retains its mode before registration and leaves skipped host-daemon untouched', {
   skip: process.getuid() === 0,
 }, t => {
   const f = fixture(t);
   succeeds(f.pack('1.0.0')); succeeds(f.publish('1.0.0'));
-  assert.equal(f.install(['--skip-runtime'], { FAIL_GUI: '1' }).status, 78);
+  assert.equal(f.install(['--skip-host'], { FAIL_GUI: '1' }).status, 78);
   // A graphical login after preparation must not change the saved mode.
-  assert.equal(f.install(['--skip-runtime']).status, 78);
+  assert.equal(f.install(['--skip-host']).status, 78);
   const request = JSON.parse(f.log(join(f.runtime, 'pending-launchdaemon.json')));
   assert.deepEqual(Object.keys(request.components).sort(), ['server']);
-  assert.equal(existsSync(join(f.runtime, 'active/runtime-daemon')), false);
+  assert.equal(existsSync(join(f.runtime, 'active/host-daemon')), false);
   assert.equal(existsSync(join(f.runtime, 'node')), false);
   assert.equal(existsSync(f.plist('server')), false);
   assert.doesNotMatch(f.log(f.serviceLog), /bootstrap|bootout|signal/);
   f.registerDaemons();
-  succeeds(f.install(['--skip-runtime']));
+  succeeds(f.install(['--skip-host']));
   rmSync(join(f.home, '.aow/credentials.json'));
   writeFileSync(f.serviceLog, '');
   const missingAccount = f.run('/bin/sh', ['scripts/start-server.sh', '1.0.0']);
@@ -837,7 +837,7 @@ test('pending headless installation retains its mode before registration and lea
   assert.doesNotMatch(f.log(f.serviceLog), /signal|bootstrap|bootout/);
   // Conflicting registrations cannot be resolved by silently changing mode.
   write(f.plist('server'), '<plist/>');
-  const conflict = f.install(['--skip-runtime']);
+  const conflict = f.install(['--skip-host']);
   assert.notEqual(conflict.status, 0);
   assert.match(conflict.stderr, /Both LaunchAgent and LaunchDaemon/);
 });
@@ -890,13 +890,13 @@ test('native macOS Mach-O binaries pass the real packaging checks', { skip: proc
   succeeds(f.run('/usr/bin/plutil', ['-lint', plist]));
 });
 
-test('confirmed runtime-daemon activation finishes after its waiting parent receives SIGHUP', t => {
+test('confirmed host-daemon activation finishes after its waiting parent receives SIGHUP', t => {
   const temp = mkdtempSync(join(tmpdir(), 'aow-detached-'));
   t.after(() => rmSync(temp, { recursive: true, force: true }));
   const marker = join(temp, 'completed');
   const script = join(temp, 'activation.sh');
   write(script, `#!/bin/sh\nkill -HUP "$PPID"\nprintf done > ${quote(marker)}\n`);
-  const result = spawnSync(process.execPath, [join(root, 'scripts/activate-runtime.mjs'), script], { timeout: 5000 });
+  const result = spawnSync(process.execPath, [join(root, 'scripts/activate-host.mjs'), script], { timeout: 5000 });
   assert.ifError(result.error);
   assert.equal(result.signal, 'SIGHUP');
   assert.equal(readFileSync(marker, 'utf8'), 'done');
@@ -919,7 +919,7 @@ test('real AoW macOS release installs with isolated mocked services', {
   succeeds(f.publish(manifest.release_id, isolated));
   succeeds(f.install());
   assert.equal(existsSync(f.plist('server')), true);
-  assert.equal(existsSync(f.plist('runtime-daemon')), true);
-  assert.equal(existsSync(join(f.runtime, 'active/runtime-daemon')), true);
+  assert.equal(existsSync(f.plist('host-daemon')), true);
+  assert.equal(existsSync(join(f.runtime, 'active/host-daemon')), true);
   assert.equal(existsSync(join(f.home, '.aow/aow-projects.json')), true);
 });

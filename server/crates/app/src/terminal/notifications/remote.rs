@@ -1,7 +1,7 @@
 //! Server consumes node completions and adds business labels and delivery policy.
 use super::super::*;
 use super::{TaskStopNotification, sources::add_sources};
-use aow_runtime_client::{CompletionCursor, CompletionFrame};
+use aow_host_client::{CompletionCursor, CompletionFrame};
 use std::sync::atomic::Ordering;
 
 impl TerminalManager {
@@ -18,7 +18,7 @@ impl TerminalManager {
             return;
         }
         let weak = Arc::downgrade(&self.inner);
-        let client = self.inner.terminald.runtime().clone();
+        let client = self.inner.terminald.host().clone();
         let path = self
             .inner
             .metadata_path
@@ -73,7 +73,7 @@ impl TerminalManager {
                             let frame = match serde_json::from_str::<CompletionFrame>(&text) {
                                 Ok(frame) => frame,
                                 Err(error) => {
-                                    tracing::error!(%error,"invalid runtime completion frame");
+                                    tracing::error!(%error,"invalid Host completion frame");
                                     break;
                                 }
                             };
@@ -92,7 +92,7 @@ impl TerminalManager {
                                         })
                                     {
                                         tracing::error!(
-                                            "runtime completion history changed or expired; listener stopped"
+                                            "Host completion history changed or expired; listener stopped"
                                         );
                                         return;
                                     }
@@ -105,7 +105,7 @@ impl TerminalManager {
                                     ready = true;
                                 }
                                 CompletionFrame::Gap { node_id, after } => {
-                                    tracing::error!(%node_id,after,"runtime completion history expired; listener stopped");
+                                    tracing::error!(%node_id,after,"Host completion history expired; listener stopped");
                                     return;
                                 }
                                 CompletionFrame::Completion {
@@ -127,7 +127,7 @@ impl TerminalManager {
                                     if sequence != current.sequence + 1 {
                                         tracing::error!(
                                             sequence,
-                                            "runtime completion sequence gap; listener stopped"
+                                            "Host completion sequence gap; listener stopped"
                                         );
                                         return;
                                     }
@@ -138,7 +138,7 @@ impl TerminalManager {
                                     ) {
                                         Ok(event) => event,
                                         Err(error) => {
-                                            tracing::error!(%error,"invalid runtime completion event; listener stopped");
+                                            tracing::error!(%error,"invalid Host completion event; listener stopped");
                                             return;
                                         }
                                     };
@@ -179,7 +179,7 @@ impl TerminalManager {
                             }
                         }
                     }
-                    Err(error) => tracing::warn!(%error,"runtime completion stream disconnected"),
+                    Err(error) => tracing::warn!(%error,"Host completion stream disconnected"),
                 }
                 tokio::time::sleep(Duration::from_secs(2)).await;
             }

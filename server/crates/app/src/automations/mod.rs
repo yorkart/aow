@@ -55,13 +55,10 @@ impl AutomationManager {
     pub(crate) fn store(&self) -> &Store {
         &self.store
     }
-    pub(crate) fn with_runtime(
-        self,
-        runtime: Option<&aow_runtime_client::RuntimeClient>,
-    ) -> Result<Self> {
+    pub(crate) fn with_host(self, runtime: Option<&aow_host_client::HostClient>) -> Result<Self> {
         if let Some(runtime) = runtime {
             runtime
-                .write_connection_file(&self.store.state_dir.join("runtime/runtime-client.json"))?;
+                .write_connection_file(&self.store.state_dir.join("runtime/host-client.json"))?;
         }
         Ok(self)
     }
@@ -79,10 +76,7 @@ impl AutomationManager {
                 interval.tick().await;
                 warnings.flush();
                 let Some(store) = store.upgrade() else { break };
-                if store
-                    .state_dir
-                    .join("runtime/runtime-client.json")
-                    .is_file()
+                if store.state_dir.join("runtime/host-client.json").is_file()
                     && let Err(error) = aow_automations::runner::reconcile(&store).await
                 {
                     warnings.report("reconcile node executions", "", "", &error);

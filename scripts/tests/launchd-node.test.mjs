@@ -8,9 +8,10 @@ import test from 'node:test';
 
 const generator = fileURLToPath(new URL('../launchd-service.mjs', import.meta.url));
 
-for (const mode of ['launchagent', 'launchdaemon']) {
+for (const [mode, legacy] of ['launchagent', 'launchdaemon'].flatMap(mode =>
+  ['runtime-daemon', 'terminald'].map(legacy => [mode, legacy]))) {
   for (const state of ['legacy', 'mismatched legacy', 'mismatched current', 'unmanaged', 'orphaned legacy', 'regular file']) {
-    test(`${mode} configuration validates ${state} Node ownership before staging`, {
+    test(`${mode} configuration validates ${state} ${legacy} Node ownership before staging`, {
       skip: mode === 'launchdaemon' && process.getuid() === 0,
     }, t => {
       const home = mkdtempSync(join(tmpdir(), 'aow-launchd-node-'));
@@ -20,20 +21,20 @@ for (const mode of ['launchagent', 'launchdaemon']) {
       mkdirSync(runtime);
       mkdirSync(stage);
       const node = join(runtime, 'node');
-      const marker = join(runtime, '.aow-runtime-daemon-node-target');
-      const legacyMarker = join(runtime, '.aow-terminald-node-target');
+      const marker = join(runtime, '.aow-host-daemon-node-target');
+      const legacyMarker = join(runtime, `.aow-${legacy}-node-target`);
       if (state === 'regular file') writeFileSync(node, 'user-owned node');
       else if (state !== 'orphaned legacy') symlinkSync('/old/node', node);
       if (state !== 'unmanaged') writeFileSync(legacyMarker, state === 'mismatched legacy' ? '/other/node\n' : '/old/node\n');
       if (state === 'mismatched current') writeFileSync(marker, '/other/node\n');
       const result = spawnSync(process.execPath,
-        [generator, 'runtime-daemon', runtime, join(stage, 'service.plist'), process.execPath, mode],
+        [generator, 'host-daemon', runtime, join(stage, 'service.plist'), process.execPath, mode],
         { env: { ...process.env, HOME: home }, encoding: 'utf8', timeout: 5000 });
       assert.ifError(result.error);
       if (state === 'legacy') {
         assert.equal(result.status, 0, result.stderr);
         assert.equal(readlinkSync(join(stage, 'node')), process.execPath);
-        assert.equal(readFileSync(join(stage, '.aow-runtime-daemon-node-target'), 'utf8'), `${process.execPath}\n`);
+        assert.equal(readFileSync(join(stage, '.aow-host-daemon-node-target'), 'utf8'), `${process.execPath}\n`);
         assert.equal(readlinkSync(node), '/old/node');
         assert.equal(readFileSync(legacyMarker, 'utf8'), '/old/node\n');
       } else {

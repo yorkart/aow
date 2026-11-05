@@ -118,7 +118,7 @@ impl TerminalManager {
                     error: progress.error,
                     task_submitted: progress.task_submitted,
                 }),
-                Err(aow_runtime_client::RuntimeError::HttpStatus { status, .. })
+                Err(aow_host_client::HostError::HttpStatus { status, .. })
                     if restored && status == StatusCode::NOT_FOUND =>
                 {
                     Some(AgentTerminalState {

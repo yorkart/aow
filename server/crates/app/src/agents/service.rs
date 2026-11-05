@@ -1,9 +1,9 @@
 use super::*;
-use crate::runtime_connection::RuntimeConnection;
+use crate::host_connection::HostConnection;
 #[derive(Clone)]
 pub(crate) struct AgentService {
     pub(super) inner: Arc<AgentState>,
-    pub(super) node: RuntimeConnection,
+    pub(super) node: HostConnection,
     pub(super) cli_access: aow_cli_access::Access,
 }
 pub(super) struct AgentState {
@@ -17,7 +17,7 @@ pub(super) struct AgentState {
 impl AgentService {
     pub(crate) fn new(
         config: Option<aow_config::ConfigStore>,
-        node: RuntimeConnection,
+        node: HostConnection,
         cli_access: aow_cli_access::Access,
     ) -> Result<Self, ServiceError> {
         let agents_path = config

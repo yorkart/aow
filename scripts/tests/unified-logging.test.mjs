@@ -60,7 +60,7 @@ test('native Unified Logging preserves severity, fields, Unicode, long errors an
   assert.doesNotMatch(entries.map(entry => entry.eventMessage).join('\n'), /\x1b\[|�/);
 });
 
-for (const component of ['server', 'runtime-daemon']) {
+for (const component of ['server', 'host-daemon']) {
   test(`${component} startup errors survive RUST_LOG=off and foreground errors stay on stderr`, {
     skip: !enabled, timeout: 25000,
   }, async () => {
@@ -82,7 +82,7 @@ for (const component of ['server', 'runtime-daemon']) {
   });
 }
 
-test('macOS runtime-daemon forwards Node worker stderr into Unified Logging', {
+test('macOS host-daemon forwards Node worker stderr into Unified Logging', {
   skip: !enabled, timeout: 30000,
 }, async t => {
   const directory = mkdtempSync('/private/tmp/aow-log-');
@@ -90,7 +90,7 @@ test('macOS runtime-daemon forwards Node worker stderr into Unified Logging', {
   const marker = `vt-worker-${process.pid}-${Date.now()}`;
   const worker = join(directory, 'broken-worker.mjs');
   writeFileSync(worker, `process.stderr.write(${JSON.stringify(`${marker}\n`)}); setTimeout(() => process.exit(1), 200);\n`);
-  const child = spawn(join(root, 'target/debug/aow-runtime-daemon'), ['--state-dir', directory, '--listen', '127.0.0.1:0',
+  const child = spawn(join(root, 'target/debug/aow-host-daemon'), ['--state-dir', directory, '--listen', '127.0.0.1:0',
     '--vt-node', process.execPath, '--vt-worker', worker], { env, stdio: 'ignore' });
   const exited = new Promise(resolve => child.once('exit', resolve));
   t.after(async () => { child.kill('SIGTERM'); await exited; });

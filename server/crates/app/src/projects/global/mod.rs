@@ -12,7 +12,7 @@ impl ProjectService {
             runtime
                 .node_environment()
                 .await
-                .map_err(crate::runtime_connection::node_error)?
+                .map_err(crate::host_connection::node_error)?
                 .state_dir
         } else {
             state_directory.clone()

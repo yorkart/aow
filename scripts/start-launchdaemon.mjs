@@ -112,7 +112,7 @@ function waitForHealth(previousPid) {
 }
 
 async function main() {
-  if (!['server', 'runtime-daemon'].includes(component) || !runtime?.startsWith('/')) throw new Error('Invalid LaunchDaemon activation arguments');
+  if (!['server', 'host-daemon'].includes(component) || !runtime?.startsWith('/')) throw new Error('Invalid LaunchDaemon activation arguments');
   if (resolveService(runtime).mode !== 'launchdaemon') throw new Error('Installation is not configured for LaunchDaemon');
   if (requested !== 'latest' && !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(requested)) throw new Error('Invalid release id');
   const releases = realpathSync(join(runtime, 'releases'));
@@ -128,9 +128,9 @@ async function main() {
   const active = join(runtime, 'active', component);
   const previous = linkSnapshot(active);
   const nodeLink = join(runtime, 'node');
-  const nodeMarker = join(runtime, '.aow-runtime-daemon-node-target');
-  const previousNode = component === 'runtime-daemon' ? linkSnapshot(nodeLink) : null;
-  const previousMarker = component === 'runtime-daemon' && existsSync(nodeMarker) ? readFileSync(nodeMarker) : null;
+  const nodeMarker = join(runtime, '.aow-host-daemon-node-target');
+  const previousNode = component === 'host-daemon' ? linkSnapshot(nodeLink) : null;
+  const previousMarker = component === 'host-daemon' && existsSync(nodeMarker) ? readFileSync(nodeMarker) : null;
   // A daemon terminal inherits runtime/node in PATH. Resolve that managed link
   // before replacing it, otherwise an update can create a self-referencing link.
   const nodePath = realpathSync(execFileSync('/bin/sh', ['-c', 'command -v node'], { encoding: 'utf8' }).trim());
@@ -146,7 +146,7 @@ async function main() {
     // Seed a first installation so the administrator can start it. Existing
     // releases keep running until registration succeeds and install is retried.
     if (previous === null) {
-      if (component === 'runtime-daemon') {
+      if (component === 'host-daemon') {
         replaceLink(nodePath, nodeLink);
         writeAtomic(nodeMarker, nodePath + '\n');
       }
@@ -156,7 +156,7 @@ async function main() {
     return 78;
   }
   try {
-    if (component === 'runtime-daemon') {
+    if (component === 'host-daemon') {
       replaceLink(nodePath, nodeLink);
       writeAtomic(nodeMarker, nodePath + '\n');
     }
@@ -164,7 +164,7 @@ async function main() {
     waitForHealth(await restartOwnJob());
   } catch (error) {
     replaceLink(previous, active);
-    if (component === 'runtime-daemon') {
+    if (component === 'host-daemon') {
       replaceLink(previousNode, nodeLink);
       if (previousMarker !== null) writeAtomic(nodeMarker, previousMarker);
       else if (existsSync(nodeMarker)) unlinkSync(nodeMarker);

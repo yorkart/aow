@@ -1,5 +1,5 @@
 use super::*;
-use aow_runtime_client::WorkspaceChanges;
+use aow_host_client::WorkspaceChanges;
 use futures_util::{SinkExt, StreamExt};
 use std::path::Path;
 use tokio_tungstenite::tungstenite::Message;
@@ -8,7 +8,7 @@ pub(super) async fn run(
     changes: watch::Sender<Snapshot>,
     reconcile: Arc<Notify>,
 ) {
-    let Ok(runtime) = projects.runtime().agent_node().await else {
+    let Ok(runtime) = projects.host().agent_node().await else {
         return;
     };
     loop {

@@ -1,0 +1,35 @@
+[package]
+name = "aow-host-workspace"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "aow_workspaces"
+
+[dependencies]
+aow-host-contract = { path = "../../../common/crates/host-contract" }
+aow-i18n = { package = "aow-host-i18n", path = "../i18n" }
+aow-filesystem = { package = "aow-host-filesystem", path = "../filesystem" }
+anyhow.workspace = true
+chrono.workspace = true
+axum.workspace = true
+bytes.workspace = true
+futures-util.workspace = true
+http.workspace = true
+mime_guess.workspace = true
+percent-encoding.workspace = true
+tokio-util = { workspace = true, features = ["rt"] }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+thiserror.workspace = true
+notify.workspace = true
+walkdir.workspace = true
+uuid.workspace = true
+libc.workspace = true
+tracing.workspace = true
+tempfile = "3.20"
+
+[dev-dependencies]
+aow-process = { package = "aow-host-process", path = "../process" }

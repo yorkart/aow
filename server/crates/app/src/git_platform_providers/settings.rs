@@ -51,7 +51,7 @@ impl From<&GitPlatformProvider> for StoredProvider {
 }
 #[derive(Clone)]
 pub struct GitPlatformProviderManager {
-    pub(super) runtime: Option<aow_runtime_client::RuntimeClient>,
+    pub(super) runtime: Option<aow_host_client::HostClient>,
     inner: Arc<Mutex<Settings>>,
     pub(super) config: Option<ConfigStore>,
     bundled: Arc<Mutex<BTreeMap<String, String>>>,
@@ -72,24 +72,24 @@ impl Default for GitPlatformProviderManager {
     }
 }
 impl GitPlatformProviderManager {
-    pub(crate) fn persistent_with_runtime(
+    pub(crate) fn persistent_with_host(
         state_dir: &Path,
-        node: Option<aow_runtime_client::RuntimeClient>,
+        node: Option<aow_host_client::HostClient>,
     ) -> anyhow::Result<Self> {
         let defaults = super::bundled::load(node.as_ref())?;
-        Self::persistent_with_defaults_and_runtime(state_dir, defaults, node)
+        Self::persistent_with_defaults_and_host(state_dir, defaults, node)
     }
     #[cfg(test)]
     pub(super) fn persistent_with_defaults(
         state_dir: &Path,
         defaults: Vec<GitPlatformProvider>,
     ) -> anyhow::Result<Self> {
-        Self::persistent_with_defaults_and_runtime(state_dir, defaults, None)
+        Self::persistent_with_defaults_and_host(state_dir, defaults, None)
     }
-    fn persistent_with_defaults_and_runtime(
+    fn persistent_with_defaults_and_host(
         state_dir: &Path,
         defaults: Vec<GitPlatformProvider>,
-        node: Option<aow_runtime_client::RuntimeClient>,
+        node: Option<aow_host_client::HostClient>,
     ) -> anyhow::Result<Self> {
         let config = ConfigStore::initialize(state_dir)?;
         let loaded = super::startup::load(&config, defaults, node.as_ref())?;

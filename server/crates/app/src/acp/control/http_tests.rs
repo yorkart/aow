@@ -10,7 +10,7 @@ struct Host {
     fork: bool,
 }
 #[async_trait::async_trait]
-impl aow_runtime_client::testing::AcpFixture for Host {
+impl aow_host_client::testing::AcpFixture for Host {
     async fn settings(&self) -> anyhow::Result<String> {
         if self.fork {
             return Ok(json!({"agent_servers":{"test":{"type":"custom","command":"node","args":[
@@ -68,7 +68,7 @@ async fn api_prepares_named_identity_and_reads_metadata_before_owned_startup() {
     let directory = tempfile::tempdir().unwrap();
     let workspace = directory.path().canonicalize().unwrap();
     let mut state = crate::AppState::for_test(Default::default());
-    state.acp = aow_runtime_client::acp::AcpClient::for_test_host(
+    state.acp = aow_host_client::acp::AcpClient::for_test_host(
         Arc::new(Host { fork: false }),
         Some(workspace.join("state")),
     )
@@ -220,7 +220,7 @@ async fn api_prepares_named_identity_and_reads_metadata_before_owned_startup() {
 async fn fork_requires_control_and_returns_a_distinct_session_with_ancestry() {
     let directory = tempfile::tempdir().unwrap();
     let mut state = crate::AppState::for_test(Default::default());
-    state.acp = aow_runtime_client::acp::AcpClient::for_test_host(
+    state.acp = aow_host_client::acp::AcpClient::for_test_host(
         Arc::new(Host { fork: true }),
         Some(directory.path().join("state")),
     )
@@ -261,7 +261,7 @@ async fn fork_requires_control_and_returns_a_distinct_session_with_ancestry() {
         assert_eq!(fork["overview"], json!([]));
         assert_eq!(state.acp.sessions(None).await.unwrap().len(), 2);
         assert!(state.instances.snapshot().unwrap().contains_key(
-            &aow_runtime_contract::instance::InstanceRef::acp(fork["thread_id"].as_str().unwrap())
+            &aow_host_contract::instance::InstanceRef::acp(fork["thread_id"].as_str().unwrap())
         ));
     }
 }

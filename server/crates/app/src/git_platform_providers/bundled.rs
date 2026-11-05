@@ -4,7 +4,7 @@ use super::{GitPlatformProvider, defaults};
 use std::path::PathBuf;
 
 pub(super) fn load(
-    node: Option<&aow_runtime_client::RuntimeClient>,
+    node: Option<&aow_host_client::HostClient>,
 ) -> anyhow::Result<Vec<GitPlatformProvider>> {
     if let Some(root) = std::env::current_exe()?
         .parent()
@@ -12,7 +12,7 @@ pub(super) fn load(
     {
         let directory = root.join("git-platform-providers");
         if directory.is_dir() {
-            return defaults::load_with_runtime(&directory, node);
+            return defaults::load_with_host(&directory, node);
         }
     }
     #[cfg(debug_assertions)]
@@ -20,7 +20,7 @@ pub(super) fn load(
         let directory =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../git-platform-providers");
         if directory.is_dir() {
-            return defaults::load_with_runtime(&directory, node);
+            return defaults::load_with_host(&directory, node);
         }
     }
     // Existing configurations remain usable without an adjacent release bundle.

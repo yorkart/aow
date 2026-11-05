@@ -12,7 +12,7 @@ struct Host {
     default_agent_id: Option<String>,
 }
 #[async_trait::async_trait]
-impl aow_runtime_client::testing::AcpFixture for Host {
+impl aow_host_client::testing::AcpFixture for Host {
     async fn settings(&self) -> anyhow::Result<String> {
         let mut settings = json!({"agent_servers":{"test":{"type":"custom","command":self.command,"env":{"START_DELAY_MS":self.delay_ms.to_string()},"args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/acp/lineage-agent.mjs")]}}});
         settings["agent_servers"]["another"] = settings["agent_servers"]["test"].clone();
@@ -57,7 +57,7 @@ async fn fixture(command: &str) -> (tempfile::TempDir, AppState, Router, String,
             .success()
     );
     let mut state = AppState::for_test(Default::default());
-    state.acp = aow_runtime_client::acp::AcpClient::for_test_host(
+    state.acp = aow_host_client::acp::AcpClient::for_test_host(
         Arc::new(Host {
             command: command.into(),
             delay_ms: 0,
@@ -123,13 +123,10 @@ async fn cli_creates_submits_traces_and_respects_browser_ownership() {
     assert_eq!(first["task_submitted"], true);
     let id = first["thread_id"].as_str().unwrap();
     let root_info = state.acp.session_info(id).await.unwrap();
-    assert_eq!(
-        root_info.source,
-        aow_runtime_client::acp::SessionSource::Cli
-    );
+    assert_eq!(root_info.source, aow_host_client::acp::SessionSource::Cli);
     assert!(root_info.parent.is_none());
     assert!(!root_info.created_at.is_empty());
-    let parent = aow_runtime_contract::instance::InstanceRef::acp(id);
+    let parent = aow_host_contract::instance::InstanceRef::acp(id);
     let mut create = create;
     create["agent_id"] = json!("test");
     create["no_parent"] = json!(false);
@@ -142,7 +139,7 @@ async fn cli_creates_submits_traces_and_respects_browser_ownership() {
     let child_id = child["thread_id"].as_str().unwrap();
     assert_eq!(
         state.acp.session_info(child_id).await.unwrap().source,
-        aow_runtime_client::acp::SessionSource::Cli
+        aow_host_client::acp::SessionSource::Cli
     );
     let controller = state.acp_controls.session(child_id);
     let owner = controller.claim_cli().unwrap();
@@ -199,14 +196,14 @@ async fn failed_startup_returns_identity_and_invalid_parent_allocates_nothing() 
             .instances
             .snapshot()
             .unwrap()
-            .contains_key(&aow_runtime_contract::instance::InstanceRef::acp(id))
+            .contains_key(&aow_host_contract::instance::InstanceRef::acp(id))
     );
 }
 
 #[tokio::test]
 async fn timed_out_creation_finishes_once_and_busy_submission_is_rejected() {
     let (_directory, mut state, _, project, repo) = fixture("node").await;
-    state.acp = aow_runtime_client::acp::AcpClient::for_test_host(
+    state.acp = aow_host_client::acp::AcpClient::for_test_host(
         Arc::new(Host {
             command: "node".into(),
             delay_ms: 1500,
@@ -250,7 +247,7 @@ async fn timed_out_creation_finishes_once_and_busy_submission_is_rejected() {
 #[tokio::test]
 async fn acp_default_and_explicit_override_select_the_expected_adapter() {
     let (_directory, mut state, _, project, repo) = fixture("node").await;
-    state.acp = aow_runtime_client::acp::AcpClient::for_test_host(
+    state.acp = aow_host_client::acp::AcpClient::for_test_host(
         Arc::new(Host {
             command: "node".into(),
             delay_ms: 0,

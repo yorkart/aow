@@ -1,12 +1,12 @@
 use super::*;
-use crate::runtime_connection::RuntimeConnection;
+use crate::host_connection::HostConnection;
 use crate::settings::SettingsService;
 use crate::settings::persistence::load_registry;
 #[derive(Clone)]
 pub(crate) struct ProjectService {
     pub(super) inner: Arc<ProjectState>,
     pub(super) settings: SettingsService,
-    pub(super) node: RuntimeConnection,
+    pub(super) node: HostConnection,
 }
 pub(super) struct ProjectState {
     pub(super) state_dir: Option<PathBuf>,
@@ -19,14 +19,14 @@ pub(super) struct ProjectState {
     pub(super) creations: worktrees::creation::CreationJobs,
 }
 impl ProjectService {
-    pub(crate) fn runtime(&self) -> &RuntimeConnection {
+    pub(crate) fn host(&self) -> &HostConnection {
         &self.node
     }
     pub(crate) fn new(
         state_dir: Option<PathBuf>,
         config: Option<aow_config::ConfigStore>,
         settings: SettingsService,
-        node: RuntimeConnection,
+        node: HostConnection,
     ) -> Result<Self, ServiceError> {
         let projects_path = config
             .as_ref()

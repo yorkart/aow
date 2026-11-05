@@ -25,7 +25,7 @@ pub(super) struct ShareInfo {
 #[derive(Clone)]
 pub(crate) struct SessionShares {
     path: Option<PathBuf>,
-    runtime: Option<aow_runtime_client::RuntimeClient>,
+    runtime: Option<aow_host_client::HostClient>,
     entries: Arc<Mutex<BTreeMap<String, Arc<LiveShare>>>>,
 }
 
@@ -45,7 +45,7 @@ struct StoredShare {
     cwd: PathBuf,
     created_at: String,
     #[serde(default)]
-    reference: Option<aow_runtime_client::NativeSessionReference>,
+    reference: Option<aow_host_client::NativeSessionReference>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -110,10 +110,7 @@ impl SessionShares {
         })
     }
 
-    pub(crate) fn with_runtime(
-        mut self,
-        runtime: Option<aow_runtime_client::RuntimeClient>,
-    ) -> Self {
+    pub(crate) fn with_host(mut self, runtime: Option<aow_host_client::HostClient>) -> Self {
         self.runtime = runtime;
         self
     }
@@ -256,15 +253,15 @@ fn unavailable() -> HttpError {
 }
 
 pub(crate) async fn read_snapshot(
-    runtime: Option<&aow_runtime_client::RuntimeClient>,
+    runtime: Option<&aow_host_client::HostClient>,
     locator: SessionReference,
 ) -> Result<serde_json::Value, HttpError> {
     match (runtime, locator) {
         (Some(runtime), SessionReference::Node(reference)) => runtime.native_snapshot(&reference).await.map_err(|error| {
-            if matches!(error, aow_runtime_client::RuntimeError::HttpStatus{status,..} if status == StatusCode::GONE || status == StatusCode::NOT_FOUND) {
+            if matches!(error, aow_host_client::HostError::HttpStatus{status,..} if status == StatusCode::GONE || status == StatusCode::NOT_FOUND) {
                 unavailable()
             } else {
-                HttpError::new(StatusCode::SERVICE_UNAVAILABLE,"runtime_unavailable","Native session service is unavailable",None)
+                HttpError::new(StatusCode::SERVICE_UNAVAILABLE,"host_unavailable","Native session service is unavailable",None)
             }
         }),
         _ => Err(unavailable()),

@@ -6,7 +6,7 @@ async fn metadata_preserves_osc_titles_and_filters_other_workspaces() {
         tests::{pane, tab_with},
     };
     use aow_api_contract::terminal::{TerminalLayout, TerminalPaneStatus};
-    use aow_runtime_client::TerminalClient;
+    use aow_host_client::TerminalClient;
     use axum::{Json, Router, routing::get};
 
     let directory = tempfile::tempdir().unwrap();

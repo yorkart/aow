@@ -1,9 +1,9 @@
 use super::*;
-use crate::runtime_connection::RuntimeConnection;
+use crate::host_connection::HostConnection;
 #[derive(Clone)]
 pub(crate) struct SettingsService {
     pub(super) inner: Arc<SettingsState>,
-    pub(super) node: RuntimeConnection,
+    pub(super) node: HostConnection,
 }
 pub(super) struct SettingsState {
     pub(super) config: Option<aow_config::ConfigStore>,
@@ -15,7 +15,7 @@ impl SettingsService {
     pub(crate) fn new(
         config: Option<aow_config::ConfigStore>,
         notes_base: PathBuf,
-        node: RuntimeConnection,
+        node: HostConnection,
     ) -> Result<Self, ServiceError> {
         let settings_path = config
             .as_ref()

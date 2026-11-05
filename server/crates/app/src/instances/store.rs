@@ -1,6 +1,6 @@
 use crate::HttpError;
 use aow_api_contract::instance::InstanceInfo;
-use aow_runtime_contract::instance::InstanceRef;
+use aow_host_contract::instance::InstanceRef;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,

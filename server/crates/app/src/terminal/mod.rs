@@ -9,8 +9,8 @@ use aow_api_contract::terminal::{
     TerminalLayout, TerminalPane, TerminalPaneKind, TerminalPaneStatus, TerminalSplitAxis,
     TerminalTab, TerminalTabList,
 };
-use aow_runtime_client::{RuntimeError, RuntimeSocket, TerminalClient};
-use aow_runtime_contract::terminal::{
+use aow_host_client::{HostError, HostSocket, TerminalClient};
+use aow_host_contract::terminal::{
     TerminalAgentList, TerminalAttachServerMessage, TerminalRuntime, TerminalRuntimeSpec,
 };
 #[cfg(test)]

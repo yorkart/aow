@@ -18,7 +18,7 @@
 curl -fsSL https://github.com/yorkart/aow/releases/latest/download/aow-install.sh | bash
 ```
 
-安装器从 GitHub Release 获取对应平台的包，校验后安装并启动 Web 服务。首次安装必须在终端输入登录账号、密码并确认密码，保存后才启动服务。安装和升级默认一并更新并启动或重启 runtime-daemon，无需额外确认；重启会结束它管理的现有终端会话。需要在本次操作中保留 runtime-daemon 当前状态时，使用 `just install --skip-runtime`、`aow update --skip-runtime`，或将上方管道命令中的 `bash` 改为 `bash -s -- --skip-runtime`。
+安装器从 GitHub Release 获取对应平台的包，校验后安装并启动 Web 服务。首次安装必须在终端输入登录账号、密码并确认密码，保存后才启动服务。安装和升级默认一并更新并启动或重启 host-daemon，无需额外确认；重启会结束它管理的现有终端会话。需要在本次操作中保留 host-daemon 当前状态时，使用 `just install --skip-host`、`aow update --skip-host`，或将上方管道命令中的 `bash` 改为 `bash -s -- --skip-host`。
 
 LaunchDaemon 首次安装会暂停，等待本地管理员登记后再启动服务。服务以安装账户运行，无需登录该账户的桌面；后续程序更新不需要管理员权限，系统服务配置变化时需再次登记。
 
@@ -76,11 +76,11 @@ ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:18282:127.0.0.1:8282 user@host
 
 在源码目录运行 `just build` 编译、`just test` 测试；本地部署先 `just package`，再 `just install`。本地包与 GitHub 包使用相同安装流程，会更新当前用户实际运行的服务。开发服务也默认仅监听本机。
 
-源码开发时，先在单独终端运行 `just run-runtime-daemon`，再启动 Web 服务。两个进程使用相同的 `AOW_STATE_DIR`，Server 会沿用已有 ACP 会话历史。
+源码开发时，先在单独终端运行 `just run-host-daemon`，再启动 Web 服务。两个进程使用相同的 `AOW_STATE_DIR`，Server 会沿用已有 ACP 会话历史。
 
 ## 源码子项目
 
-`server/` 包含 Server、CLI、自动化调度和前端；`runtime/` 包含节点执行能力。
+`server/` 包含 Server、CLI、自动化调度和前端；`host/` 包含节点执行能力。
 两边分别拥有 Cargo workspace 和锁文件，生产代码没有跨子项目源码依赖。
 根目录的 `just` 命令负责组合构建和安装包。独立构建、远程 CLI 地址与认证配置见
 [Server 子项目说明](server/README.md)。

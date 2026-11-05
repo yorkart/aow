@@ -4,7 +4,7 @@ use super::{
 };
 use crate::AppState;
 use crate::test_support::TestServices;
-use aow_runtime_client::acp::{Content, SessionSource};
+use aow_host_client::acp::{Content, SessionSource};
 use serde_json::{Value, json};
 use std::{path::Path, time::Duration};
 
@@ -133,7 +133,7 @@ async fn role_policy_is_owned_by_the_application_and_survives_edits_removal_and_
             .unwrap()
             .contains("New instructions")
     );
-    let parent = aow_runtime_contract::instance::InstanceRef::acp(&id);
+    let parent = aow_host_contract::instance::InstanceRef::acp(&id);
     let child = state
         .roles
         .prepare_acp_child_session(

@@ -8,7 +8,7 @@ use std::{collections::BTreeMap, sync::Mutex};
 pub(crate) struct RoleStore {
     pub items: Mutex<Vec<AgentRole>>,
     pub sessions: Mutex<BTreeMap<String, super::AcpRoleSession>>,
-    pub environments: Mutex<BTreeMap<String, aow_runtime_client::NodeEnvironment>>,
+    pub environments: Mutex<BTreeMap<String, aow_host_client::NodeEnvironment>>,
     pub operation: tokio::sync::Mutex<()>,
 }
 

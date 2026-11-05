@@ -1,8 +1,8 @@
 use super::{AgentRole, model::IdentityPreset};
 use crate::error::ServiceError;
 use crate::roles::RoleService;
-pub(super) fn spec(role: &AgentRole) -> aow_runtime_contract::environment::RoleEnvironmentSpec {
-    aow_runtime_contract::environment::RoleEnvironmentSpec {
+pub(super) fn spec(role: &AgentRole) -> aow_host_contract::environment::RoleEnvironmentSpec {
+    aow_host_contract::environment::RoleEnvironmentSpec {
         id: role.id.clone(),
         home_layout: role.config.home_layout,
         identity: role.config.identity.clone(),
@@ -10,9 +10,9 @@ pub(super) fn spec(role: &AgentRole) -> aow_runtime_contract::environment::RoleE
     }
 }
 pub(super) struct PreparedRole {
-    client: aow_runtime_client::RuntimeClient,
+    client: aow_host_client::HostClient,
     token: String,
-    spec: aow_runtime_contract::environment::RoleEnvironmentSpec,
+    spec: aow_host_contract::environment::RoleEnvironmentSpec,
     published: bool,
 }
 impl Drop for PreparedRole {

@@ -31,15 +31,15 @@ with tempfile.TemporaryDirectory(prefix='aow-registration-') as temporary:
             'ThrottleInterval': 1, 'Umask': 63,
             'StandardOutPath': '/dev/null', 'StandardErrorPath': '/dev/null',
             'EnvironmentVariables': {'HOME': str(home), 'USER': account.pw_name,
-                'LOGNAME': account.pw_name, 'AOW_RUNTIME_ROOT': str(runtime),
+                'LOGNAME': account.pw_name, 'AOW_INSTALL_ROOT': str(runtime),
                 'AOW_LOG_MODE': 'unified', 'AOW_SERVER_PORT': port, 'AOW_AUTH_SECURE_COOKIE': 'true',
                 'AOW_AUTH_SESSION_MAX_AGE_SECONDS': '86400', 'AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS': '7200'},
         }
     request = {'version': 1, 'user': account.pw_name, 'uid': account.pw_uid,
                'home': str(home), 'runtime': str(runtime),
-               'components': {name: config(name) for name in ['server', 'runtime-daemon']}}
+               'components': {name: config(name) for name in ['server', 'host-daemon']}}
     valid = m.validate_request(request, account)
-    assert [name for name, _ in valid] == ['runtime-daemon', 'server']
+    assert [name for name, _ in valid] == ['host-daemon', 'server']
     for _, configuration in valid:
         assert configuration['EnvironmentVariables']['AOW_AUTH_SESSION_MAX_AGE_SECONDS'] == '86400'
         assert configuration['EnvironmentVariables']['AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS'] == '7200'
@@ -71,7 +71,7 @@ with tempfile.TemporaryDirectory(prefix='aow-registration-') as temporary:
         bad = copy.deepcopy(request)
         bad['components']['server'][key] = {}
         rejects(bad)
-    for key, value in [('HOME', '/var/root'), ('USER', 'root'), ('AOW_RUNTIME_ROOT', '/tmp/other'),
+    for key, value in [('HOME', '/var/root'), ('USER', 'root'), ('AOW_INSTALL_ROOT', '/tmp/other'),
                        ('AOW_LOG_MODE', 'file'), ('DYLD_INSERT_LIBRARIES', '/tmp/evil'),
                        ('PATH', '/usr/bin\nmalformed')]:
         bad = copy.deepcopy(request)
@@ -120,10 +120,10 @@ with tempfile.TemporaryDirectory(prefix='aow-registration-') as temporary:
     daemons = root / 'LaunchDaemons'
     daemons.mkdir()
     m.DAEMON_DIRECTORY = daemons
-    labels = {f'org.aow.service.{name}' for name in ['server', 'runtime-daemon']}
+    labels = {f'org.aow.service.{name}' for name in ['server', 'host-daemon']}
     running = set(labels)
     previous = {}
-    for component in ['server', 'runtime-daemon']:
+    for component in ['server', 'host-daemon']:
         path = daemons / f'org.aow.service.{component}.plist'
         previous[path] = plistlib.dumps(config(component))
         path.write_bytes(previous[path])
@@ -149,7 +149,7 @@ with tempfile.TemporaryDirectory(prefix='aow-registration-') as temporary:
                 raise RuntimeError('simulated bootstrap failure')
             running.add(label)
         return ''
-    desired = [(name, config(name, '8283')) for name in ['runtime-daemon', 'server']]
+    desired = [(name, config(name, '8283')) for name in ['host-daemon', 'server']]
     with patch.object(pathlib.Path, 'lstat', root_owned), \
          patch.object(m, 'launchctl', mocked_launchctl), \
          patch.object(m, 'loaded', lambda label: label in running), \

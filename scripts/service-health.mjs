@@ -20,14 +20,14 @@ export function requestHealth(config, timeout = 1000) {
   return new Promise((resolve, reject) => {
     let options;
     try {
-      if (config.component === 'runtime-daemon') {
+      if (config.component === 'host-daemon') {
         const root = config.stateDir;
         let transport = {};
-        try { transport = JSON.parse(readFileSync(join(root, 'runtime-daemon.json'), 'utf8')); }
+        try { transport = JSON.parse(readFileSync(join(root, 'host-daemon.json'), 'utf8')); }
         catch (error) { if (error.code !== 'ENOENT') throw error; }
         const url = new URL(`http://${transport.listen || '127.0.0.1:9760'}`);
         const host = url.hostname.replace(/^\[|\]$/g, '');
-        const tokenFile = transport.token_file ? resolvePath(root, transport.token_file) : join(root, 'runtime/runtime-daemon/token');
+        const tokenFile = transport.token_file ? resolvePath(root, transport.token_file) : join(root, 'runtime/host-daemon/token');
         const token = readFileSync(tokenFile, 'utf8').trim();
         options = { hostname: host === '0.0.0.0' ? '127.0.0.1' : host === '::' ? '::1' : host,
           port: Number(url.port), path: '/v1/health', headers: { Authorization: `Bearer ${token}` } };
@@ -60,7 +60,7 @@ export function requestHealth(config, timeout = 1000) {
 }
 
 export async function waitForHealth(config, runningPid, timeout = 10000, previousPid = null) {
-  if (!['server', 'runtime-daemon'].includes(config.component)) throw new Error('invalid service component');
+  if (!['server', 'host-daemon'].includes(config.component)) throw new Error('invalid service component');
   const deadline = Date.now() + timeout;
   let last;
   do {

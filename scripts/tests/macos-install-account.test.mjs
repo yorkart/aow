@@ -19,8 +19,8 @@ test('local install forwards its optional user and keeps positional package comp
     [['--user', 'aow-service'], ['--package', 'target/packages/latest', '--user', 'aow-service']],
     [['a package.tar.gz', '--user', 'aow-service'], ['--package', 'a package.tar.gz', '--user', 'aow-service']],
     [['--user', 'aow-service', '--package', 'a package.tar.gz'], ['--package', 'a package.tar.gz', '--user', 'aow-service']],
-    [['--skip-runtime'], ['--package', 'target/packages/latest', '--skip-runtime']],
-    [['a package.tar.gz', '--skip-runtime', '--user', 'aow-service'], ['--package', 'a package.tar.gz', '--skip-runtime', '--user', 'aow-service']],
+    [['--skip-host'], ['--package', 'target/packages/latest', '--skip-host']],
+    [['a package.tar.gz', '--skip-host', '--user', 'aow-service'], ['--package', 'a package.tar.gz', '--skip-host', '--user', 'aow-service']],
   ]) {
     const result = spawnSync('bash', ['scripts/install-local.sh', ...args], { cwd: directory, encoding: 'utf8', timeout: 10000,
       env: { ...process.env, PATH: `${join(directory, 'tools')}:${process.env.PATH}` } });
@@ -60,25 +60,25 @@ def entry(arguments, admin=False, registration=False, uid=501):
 
 # Default and explicit-current-account updates never elevate. GUI first installs
 # use the same path. Another target requires the caller's administrator rights.
-for args in [[], ['--user', 'operator'], ['--skip-runtime'], ['--user', 'operator', '--skip-runtime']]:
+for args in [[], ['--user', 'operator'], ['--skip-host'], ['--user', 'operator', '--skip-host']]:
     status, calls = entry(args)
     assert status == 0 and len(calls) == 2
     assert calls[0][0][3] == '/Users/operator/.local/lib/aow'
-    assert ('--skip-runtime' in calls[0][0]) == ('--skip-runtime' in args)
+    assert ('--skip-host' in calls[0][0]) == ('--skip-host' in args)
     assert calls[1][0][0] == '/bin/bash'
-    assert ('--skip-runtime' in calls[1][0]) == ('--skip-runtime' in args)
+    assert ('--skip-host' in calls[1][0]) == ('--skip-host' in args)
     assert not any('/usr/bin/sudo' in command for command, _ in calls)
 status, calls = entry([], registration=True)
 assert status == 78 and len(calls) == 1
 status, calls = entry(['--user', 'aow-service'])
 assert status == 78 and calls == []
 for args, expected in [([], 'operator'), (['--user', 'aow-service'], 'aow-service'),
-                       (['--skip-runtime'], 'operator'), (['--user', 'aow-service', '--skip-runtime'], 'aow-service')]:
+                       (['--skip-host'], 'operator'), (['--user', 'aow-service', '--skip-host'], 'aow-service')]:
     status, calls = entry(args, admin=True, registration=True)
     command = calls[-1][0]
     assert status == 0 and command[:4] == ['/usr/bin/sudo', '-k', '/usr/bin/python3', '-I']
     assert command[command.index('--user') + 1] == expected
-    assert ('--skip-runtime' in command) == ('--skip-runtime' in args)
+    assert ('--skip-host' in command) == ('--skip-host' in args)
 for args, uid in [(['--user', 'root'], 501), ([], 0)]:
     try:
         entry(args, uid=uid)
@@ -91,7 +91,7 @@ with patch.dict(os.environ, {'SSH_AUTH_SOCK': '/private/admin-agent', 'PYTHONPAT
                              'AOW_SERVER_STATE_DIR': '/Users/operator/private-data'}, clear=True):
     env = m.target_environment(target, True)
 assert env['HOME'] == target.pw_dir and env['USER'] == target.pw_name
-assert env['AOW_INSTALL_RUNTIME'] == 'y'
+assert env['AOW_INSTALL_HOST'] == 'y'
 assert not {'SSH_AUTH_SOCK', 'PYTHONPATH', 'AOW_SERVER_STATE_DIR'} & env.keys()
 with patch.object(m.os, 'getgrouplist', return_value=[20, 12]), patch.object(m.subprocess, 'run') as run:
     run.return_value = SimpleNamespace(returncode=0, stdout='shell greeting\nAOW_INSTALL_PATH=/Users/aow-service/.nvm/node/bin:/usr/bin\n')
@@ -124,7 +124,7 @@ with temporary_directory(prefix='aow-admin-test-') as temporary:
     pathlib.Path(str(archive) + '.sha256').write_text('checksum data')
     registration = directory / 'register-launchdaemon.py'
     registration.write_text('# trusted registration helper\n')
-    for skip_terminald, components in [(False, ['runtime-daemon', 'server']), (True, ['server'])]:
+    for skip_terminald, components in [(False, ['host-daemon', 'server']), (True, ['server'])]:
         events = []
         frozen_paths = []
         def run_target(account, arguments, environment):
@@ -135,21 +135,21 @@ with temporary_directory(prefix='aow-admin-test-') as temporary:
                 assert frozen.read_bytes() == b'package data'
                 assert stat.S_IMODE(frozen.parent.stat().st_mode) == 0o711
                 assert stat.S_IMODE(frozen.stat().st_mode) == 0o644
-                assert environment['AOW_INSTALL_RUNTIME'] == ('n' if skip_terminald else 'y')
-                assert ('--skip-runtime' in arguments) == skip_terminald
+                assert environment['AOW_INSTALL_HOST'] == ('n' if skip_terminald else 'y')
+                assert ('--skip-host' in arguments) == skip_terminald
                 events.append('prepare as target')
                 return 78
             events.append('verify ' + arguments[-2])
             assert arguments[:2] == ['/usr/bin/env', 'node']
             assert arguments[2].startswith(target.pw_dir + '/.local/lib/aow/')
             return 0
-        helper = SimpleNamespace(read_request=lambda account: {'components': {'server': {}, 'runtime-daemon': {}}},
-            validate_request=lambda request, account: [('runtime-daemon', {}), ('server', {})],
+        helper = SimpleNamespace(read_request=lambda account: {'components': {'server': {}, 'host-daemon': {}}},
+            validate_request=lambda request, account: [('host-daemon', {}), ('server', {})],
             register=lambda configs, account: events.append('register ' + ','.join(name for name, _ in configs)))
         with patch.object(m, 'SCRIPT_DIR', directory), patch.object(m, 'require_local_terminal'), \
              patch.object(m, 'target_login_path', return_value='/usr/bin:/bin'), \
              patch.object(m, 'trusted_path', side_effect=lambda path, owner: pathlib.Path(path)), \
-             patch('builtins.input', side_effect=AssertionError('unexpected runtime-daemon prompt')), \
+             patch('builtins.input', side_effect=AssertionError('unexpected host-daemon prompt')), \
              patch.object(m, 'run_as_user', side_effect=run_target), \
              patch.object(m, 'registration_module', return_value=helper), \
              patch.object(m.tempfile, 'TemporaryDirectory', side_effect=administrator_stage), contextlib.redirect_stdout(io.StringIO()):
@@ -161,7 +161,7 @@ with temporary_directory(prefix='aow-admin-test-') as temporary:
         with patch.object(m, 'SCRIPT_DIR', directory), patch.object(m, 'require_local_terminal'), \
              patch.object(m, 'target_login_path', return_value='/usr/bin:/bin'), \
              patch.object(m, 'trusted_path', side_effect=lambda path, owner: pathlib.Path(path)), \
-             patch('builtins.input', side_effect=AssertionError('unexpected runtime-daemon prompt')), \
+             patch('builtins.input', side_effect=AssertionError('unexpected host-daemon prompt')), \
              patch.object(m, 'run_as_user', return_value=code), \
              patch.object(m, 'registration_module') as load_helper, \
              patch.object(m.tempfile, 'TemporaryDirectory', side_effect=administrator_stage), contextlib.redirect_stdout(io.StringIO()):
@@ -175,7 +175,7 @@ with temporary_directory(prefix='aow-admin-test-') as temporary:
     else:
         raise AssertionError('writable administrator input was accepted')
 
-print('account selection, privilege separation, runtime-daemon selection and installation sequencing passed')
+print('account selection, privilege separation, host-daemon selection and installation sequencing passed')
 `, script], { encoding: 'utf8', timeout: 15000 });
   assert.equal(result.status, 0, result.stdout + result.stderr);
 });

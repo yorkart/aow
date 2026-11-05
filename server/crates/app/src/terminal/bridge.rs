@@ -2,7 +2,7 @@ use super::*;
 
 pub(super) async fn bridge_terminal_socket(
     browser: WebSocket,
-    daemon: RuntimeSocket,
+    daemon: HostSocket,
     manager: TerminalManager,
     pane_id: String,
     access: Option<crate::auth::SessionAccess>,
@@ -46,7 +46,7 @@ pub(super) async fn bridge_terminal_socket(
                     // cannot write after another client enables hosting.
                     let _hosting_gate = hosting_gate.lock().await;
                     if !close {
-                        use aow_runtime_contract::terminal::TerminalAttachClientMessage as ClientMessage;
+                        use aow_host_contract::terminal::TerminalAttachClientMessage as ClientMessage;
                         let command = if let tungstenite::Message::Text(text) = &message {
                             serde_json::from_str::<ClientMessage>(text).ok()
                         } else { None };
@@ -70,7 +70,7 @@ pub(super) async fn bridge_terminal_socket(
                         }
                     }
                     if cli_pane && !close {
-                        use aow_runtime_contract::terminal::TerminalAttachClientMessage as ClientMessage;
+                        use aow_host_contract::terminal::TerminalAttachClientMessage as ClientMessage;
                         let command = if let tungstenite::Message::Text(text) = &message {
                             serde_json::from_str::<ClientMessage>(text).ok()
                         } else { None };

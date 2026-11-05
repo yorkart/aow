@@ -1,45 +1,45 @@
 use super::*;
 
-pub(super) fn map_client_error(error: RuntimeError) -> TerminalError {
+pub(super) fn map_client_error(error: HostError) -> TerminalError {
     match &error {
-        RuntimeError::Http(cause) if cause.is_connect() || cause.is_timeout() => {
+        HostError::Http(cause) if cause.is_connect() || cause.is_timeout() => {
             TerminalError::DaemonUnavailable(error.to_string())
         }
-        RuntimeError::HttpStatus { status, .. } if status.is_server_error() => {
+        HostError::HttpStatus { status, .. } if status.is_server_error() => {
             TerminalError::DaemonUnavailable(error.to_string())
         }
-        RuntimeError::Io(_) | RuntimeError::WebSocket(_) => {
+        HostError::Io(_) | HostError::WebSocket(_) => {
             TerminalError::DaemonUnavailable(error.to_string())
         }
-        RuntimeError::HttpStatus { status, .. } if *status == StatusCode::CONFLICT => {
+        HostError::HttpStatus { status, .. } if *status == StatusCode::CONFLICT => {
             TerminalError::Conflict(error.to_string())
         }
         _ => TerminalError::Daemon(error.to_string()),
     }
 }
 
-pub(super) fn map_prepare_error(error: RuntimeError) -> TerminalError {
-    if matches!(&error, RuntimeError::HttpStatus { status, .. } if *status == StatusCode::BAD_REQUEST)
+pub(super) fn map_prepare_error(error: HostError) -> TerminalError {
+    if matches!(&error, HostError::HttpStatus { status, .. } if *status == StatusCode::BAD_REQUEST)
     {
         return TerminalError::Invalid(error.to_string());
     }
     map_create_error(error)
 }
 
-pub(super) fn map_create_error(error: RuntimeError) -> TerminalError {
+pub(super) fn map_create_error(error: HostError) -> TerminalError {
     match map_client_error(error) {
         TerminalError::Daemon(message) => TerminalError::RuntimeCreate(message),
         error => error,
     }
 }
 
-pub(super) fn client_error_is_not_found(error: &RuntimeError) -> bool {
+pub(super) fn client_error_is_not_found(error: &HostError) -> bool {
     matches!(
         error,
-        RuntimeError::HttpStatus { status, .. } if *status == StatusCode::NOT_FOUND
+        HostError::HttpStatus { status, .. } if *status == StatusCode::NOT_FOUND
     ) || matches!(
         error,
-        RuntimeError::WebSocket(tungstenite::Error::Http(response))
+        HostError::WebSocket(tungstenite::Error::Http(response))
             if response.status() == StatusCode::NOT_FOUND
     )
 }

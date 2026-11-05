@@ -4,11 +4,11 @@ set -eu
 
 script_dir=$(CDPATH='' cd -P "$(dirname "$0")" && pwd)
 repo_root=$(CDPATH='' cd -P "$script_dir/.." && pwd)
-runtime_root=${AOW_RUNTIME_ROOT:-${HOME:?HOME must be set}/.local/lib/aow}
-releases_dir=$runtime_root/releases
-active_dir=$runtime_root/active
-runtime_bin_dir=$runtime_root/bin
-launcher=$runtime_bin_dir/aow-server
+install_root=${AOW_INSTALL_ROOT:-${HOME:?HOME must be set}/.local/lib/aow}
+releases_dir=$install_root/releases
+active_dir=$install_root/active
+install_bin_dir=$install_root/bin
+launcher=$install_bin_dir/aow-server
 unit_dir=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user
 unit_name=aow-server.service
 unit_source=$repo_root/packaging/systemd/aow-server.service
@@ -26,7 +26,7 @@ user_manager_available() {
 resolve_release() {
     requested=$1
     case "$requested" in
-        latest) candidate=$runtime_root/latest ;;
+        latest) candidate=$install_root/latest ;;
         ''|[!A-Za-z0-9]*|*[!A-Za-z0-9._-]*)
             printf 'error: invalid release id: %s\n' "$requested" >&2
             return 1

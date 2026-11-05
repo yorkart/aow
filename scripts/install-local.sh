@@ -5,22 +5,22 @@ script_dir=$(CDPATH='' cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 package=target/packages/latest
 target_user=
 package_set=0
-skip_runtime=0
+skip_host=0
 fail() { printf 'error: %s\n' "$*" >&2; exit 1; }
 while (( $# )); do
     case "$1" in
-        --skip-runtime) skip_runtime=1; shift ;;
+        --skip-host) skip_host=1; shift ;;
         --user|--package)
             (( $# >= 2 )) && [[ -n "$2" ]] || fail "$1 requires a value"
             if [[ "$1" == --user ]]; then target_user=$2
             else package=$2; package_set=1; fi
             shift 2 ;;
         -h|--help)
-            printf '%s\n' 'Usage: just install [PACKAGE] [--user USER] [--skip-runtime]' \
+            printf '%s\n' 'Usage: just install [PACKAGE] [--user USER] [--skip-host]' \
                 'PACKAGE defaults to target/packages/latest; --package PACKAGE is also accepted.' \
                 'Without --user, install for the current account.' \
-                'Services, including runtime daemon, are updated and started/restarted by default.' \
-                '--skip-runtime keeps runtime daemon and its existing sessions unchanged for this installation.' \
+                'Services, including Host daemon, are updated and started/restarted by default.' \
+                '--skip-host keeps Host daemon and its existing sessions unchanged for this installation.' \
                 'On macOS, administrators can specify another account and complete service registration.'
             exit 0 ;;
         -*) fail "unknown argument: $1" ;;
@@ -30,7 +30,7 @@ while (( $# )); do
     esac
 done
 args=(--package "$package")
-if (( skip_runtime )); then args+=(--skip-runtime); fi
+if (( skip_host )); then args+=(--skip-host); fi
 if [[ $(uname -s) == Darwin ]]; then
     if [[ -n "$target_user" ]]; then args+=(--user "$target_user"); fi
     exec /usr/bin/python3 -I "$script_dir/install-macos.py" "${args[@]}"

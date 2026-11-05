@@ -112,9 +112,9 @@ pub enum RunEvent {
     },
 }
 
-impl From<aow_runtime_contract::execution::RunEvent> for RunEvent {
-    fn from(event: aow_runtime_contract::execution::RunEvent) -> Self {
-        use aow_runtime_contract::execution::{RunEvent as E, RunOutput as O, RunStatus as S};
+impl From<aow_host_contract::execution::RunEvent> for RunEvent {
+    fn from(event: aow_host_contract::execution::RunEvent) -> Self {
+        use aow_host_contract::execution::{RunEvent as E, RunOutput as O, RunStatus as S};
         match event {
             E::Workspace {
                 path,

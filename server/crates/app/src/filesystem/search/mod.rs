@@ -11,18 +11,18 @@ use axum::{
 use crate::{AppState, HttpError};
 pub(crate) use requests::SearchRequests;
 
-use aow_runtime_contract::workspace::SearchRequest as Request;
+use aow_host_contract::workspace::SearchRequest as Request;
 
 pub(crate) async fn search(
     State(state): State<AppState>,
     Json(request): Json<Request>,
-) -> Result<Json<aow_runtime_contract::workspace::FileSearchResult>, HttpError> {
+) -> Result<Json<aow_host_contract::workspace::FileSearchResult>, HttpError> {
     let guard = state.file_search.begin(request.request_id.clone())?;
     let _permit = tokio::select! {
         _ = guard.cancel.cancelled() => return Err(cancelled()),
         permit = state.file_search.capacity.acquire() => permit.map_err(|error| HttpError::internal(error.to_string()))?,
     };
-    let runtime = super::node::runtime(&state)?;
+    let runtime = super::node::host(&state)?;
     let mut remote = RemoteSearch {
         client: runtime.clone(),
         id: request.request_id.clone(),
@@ -41,7 +41,7 @@ pub(crate) async fn cancel(
     Path(request_id): Path<String>,
 ) -> Result<StatusCode, HttpError> {
     state.file_search.cancel(request_id.clone())?;
-    super::node::runtime(&state)?
+    super::node::host(&state)?
         .cancel_workspace_search(&request_id)
         .await?;
     Ok(StatusCode::NO_CONTENT)
@@ -57,7 +57,7 @@ fn cancelled() -> HttpError {
 }
 
 struct RemoteSearch {
-    client: aow_runtime_client::RuntimeClient,
+    client: aow_host_client::HostClient,
     id: String,
     finished: bool,
 }

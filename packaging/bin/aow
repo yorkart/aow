@@ -20,7 +20,7 @@ trap 'exit 129' HUP
 fail() { printf 'error: %s\n' "$*" >&2; exit 1; }
 usage() {
     cat <<'HELP'
-Usage: aow update [--version VERSION] [--repo OWNER/REPO] [--skip-runtime]
+Usage: aow update [--version VERSION] [--repo OWNER/REPO] [--skip-host]
        aow account
 
 account           Set or change the local login account and password; no server restart needed.
@@ -28,11 +28,11 @@ account           Set or change the local login account and password; no server 
 Update from the saved GitHub repository, following its latest release.
 --version VERSION  Install a specific GitHub release tag.
 --repo OWNER/REPO Use a different GitHub repository and remember it after activation.
---skip-runtime  Keep runtime daemon and its existing sessions unchanged for this update.
+--skip-host  Keep Host daemon and its existing sessions unchanged for this update.
 -h, --help         Show help without downloading or changing services.
 
 Repository priority: --repo > AOW_RELEASE_REPOSITORY > saved repository > yorkart/aow.
-By default, update and start/restart runtime daemon without prompting; existing terminal sessions end.
+By default, update and start/restart Host daemon without prompting; existing terminal sessions end.
 HELP
 }
 account_command() {
@@ -118,7 +118,7 @@ account_command() {
     printf '账号和密码已保存到 %s；请使用账号和密码登录网页，无需重启 server。\n' "$account_file"
 }
 config_value() {
-    node --input-type=module - "$runtime_root/update.json" "$1" <<'JS'
+    node --input-type=module - "$install_root/update.json" "$1" <<'JS'
 import { readFileSync } from 'node:fs';
 const [path, field] = process.argv.slice(2);
 try {
@@ -140,10 +140,10 @@ main() {
         update) shift ;;
         *) fail "unknown command: $1 (use: aow update / aow account)" ;;
     esac
-    local repository=${AOW_RELEASE_REPOSITORY:-} version='' skip_runtime=0
+    local repository=${AOW_RELEASE_REPOSITORY:-} version='' skip_host=0
     while (( $# )); do
         case "$1" in
-            --skip-runtime) skip_runtime=1; shift ;;
+            --skip-host) skip_host=1; shift ;;
             --repo|--version)
                 if (( $# < 2 )) || [[ -z "$2" ]]; then fail "$1 requires a value"; fi
                 if [[ "$1" == --repo ]]; then repository=$2; else version=$2; fi
@@ -156,9 +156,9 @@ main() {
         [[ "$version" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && "$version" != latest ]] \
             || fail "invalid version: $version"
     fi
-    local runtime_root=${HOME:?HOME must be set}/.local/lib/aow
-    [[ ${AOW_RUNTIME_ROOT:-$runtime_root} == "$runtime_root" ]] \
-        || fail 'aow update requires ~/.local/lib/aow as AOW_RUNTIME_ROOT'
+    local install_root=${HOME:?HOME must be set}/.local/lib/aow
+    [[ ${AOW_INSTALL_ROOT:-$install_root} == "$install_root" ]] \
+        || fail 'aow update requires ~/.local/lib/aow as AOW_INSTALL_ROOT'
     command -v node >/dev/null || fail 'Node.js 20+ is required'
     if [[ -z "$repository" ]]; then repository=$(config_value repository); fi
     repository=${repository:-yorkart/aow}
@@ -171,7 +171,7 @@ main() {
     [[ "$user_bin_dir" == /* ]] || fail 'the command directory must be an absolute path'
     export AOW_USER_BIN_DIR=$user_bin_dir
     command -v curl >/dev/null || fail 'curl is required for updates'
-    stage=$(mktemp -d "$runtime_root/.update.XXXXXX")
+    stage=$(mktemp -d "$install_root/.update.XXXXXX")
     printf 'Downloading installer from %s\n' "$installer_url"
     curl --fail --show-error --location --retry 3 --connect-timeout 15 \
         --proto '=https' --proto-redir '=https' \
@@ -180,7 +180,7 @@ main() {
     bash -n "$stage/aow-install.sh"
     local -a args=(--repo "$repository")
     if [[ -n "$version" ]]; then args+=(--version "$version"); fi
-    if (( skip_runtime )); then args+=(--skip-runtime); fi
+    if (( skip_host )); then args+=(--skip-host); fi
     # Invoke the same public installer; it owns version resolution, installation,
     # configuration persistence and service activation. Keep EXIT cleanup here.
     bash "$stage/aow-install.sh" "${args[@]}"

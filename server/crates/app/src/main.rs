@@ -52,12 +52,12 @@ async fn run() -> Result<()> {
     tracing::info!(%local, "AoW listening");
     println!("AoW: http://{local}{}/", base_path.as_str());
     let callback_base = base_path.as_str().to_owned();
-    let state = AppState::with_runtime(
+    let state = AppState::with_host(
         options.frontend,
         options.state_dir.clone(),
-        aow_runtime_client::RuntimeEndpoint::new(
-            &options.runtime_url,
-            std::fs::read_to_string(&options.runtime_token_file)?
+        aow_host_client::HostEndpoint::new(
+            &options.host_url,
+            std::fs::read_to_string(&options.host_token_file)?
                 .trim()
                 .into(),
         )?,

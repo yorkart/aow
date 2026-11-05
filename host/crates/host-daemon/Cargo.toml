@@ -1,0 +1,42 @@
+[package]
+name = "aow-host-daemon"
+version.workspace = true
+edition.workspace = true
+license = "GPL-3.0-or-later"
+
+[dependencies]
+aow-i18n = { package = "aow-host-i18n", path = "../i18n" }
+aow-process = { package = "aow-host-process", path = "../process", features = ["execution"] }
+aow-host-contract = { path = "../../../common/crates/host-contract" }
+aow-acp-core = { path = "../acp-core" }
+aow-exec-core = { path = "../exec-core" }
+aow-exec-service = { path = "../exec-service" }
+aow-agents-service = { path = "../agents-service" }
+tempfile = "3.20"
+aow-workspaces = { package = "aow-host-workspace", path = "../workspace" }
+aow-host-environment = { path = "../environment" }
+aow-agents-core = { path = "../agents-core", features = ["management"] }
+anyhow.workspace = true
+aow-acp-service = { path = "../acp-service" }
+aow-terminal-core = { path = "../terminal-core" }
+aow-terminal-service = { path = "../terminal-service" }
+aow-filesystem = { package = "aow-host-filesystem", path = "../filesystem" }
+axum.workspace = true
+clap.workspace = true
+libc.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+futures-util = { workspace = true, features = ["sink"] }
+rusqlite.workspace = true
+async-trait.workspace = true
+reqwest.workspace = true
+tokio-tungstenite.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+aow-macos-log = { path = "../../../common/crates/macos-log" }

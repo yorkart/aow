@@ -10,7 +10,7 @@ Manage Git repositories and worktrees, browse and edit files, use terminals, rev
 
 ## Installation and upgrades
 
-Supports **Linux and macOS on x86_64 and ARM64**. Runtime requirements are Bash, Node.js 20+, Git, tar, and curl. Linux requires working systemd user services. On first installation, macOS selects LaunchAgent if the installing account has a graphical session, otherwise LaunchDaemon; updates retain that choice. Existing LaunchAgent installations keep their mode.
+Supports **Linux and macOS on x86_64 and ARM64**. Host requirements are Bash, Node.js 20+, Git, tar, and curl. Linux requires working systemd user services. On first installation, macOS selects LaunchAgent if the installing account has a graphical session, otherwise LaunchDaemon; updates retain that choice. Existing LaunchAgent installations keep their mode.
 
 Run the following command on the machine where you want to run AoW:
 
@@ -18,7 +18,7 @@ Run the following command on the machine where you want to run AoW:
 curl -fsSL https://github.com/yorkart/aow/releases/latest/download/aow-install.sh | bash
 ```
 
-The installer downloads the package for your platform from GitHub Releases, verifies it, installs it, and starts the web service. On the first installation, you must enter a local login username and password in the terminal and confirm the password before the service starts. Installation and updates also update and start/restart runtime-daemon by default, without prompting. Restarting runtime-daemon ends any existing terminal sessions it manages. To preserve runtime-daemon for one installation or update, use `just install --skip-runtime`, `aow update --skip-runtime`, or append `-s -- --skip-runtime` to `bash` in the command above.
+The installer downloads the package for your platform from GitHub Releases, verifies it, installs it, and starts the web service. On the first installation, you must enter a local login username and password in the terminal and confirm the password before the service starts. Installation and updates also update and start/restart host-daemon by default, without prompting. Restarting host-daemon ends any existing terminal sessions it manages. To preserve host-daemon for one installation or update, use `just install --skip-host`, `aow update --skip-host`, or append `-s -- --skip-host` to `bash` in the command above.
 
 LaunchDaemon installations pause for registration by a local administrator before starting services. They run as the installing account and do not require its desktop login. Subsequent code updates need no administrator privileges; changes to the system service configuration require registration again.
 
@@ -76,15 +76,15 @@ In addition to the runtime dependencies, install Rust stable / Cargo, npm, and j
 
 From the repository root, run `just build` to build and `just test` to run tests. For local deployment, run `just package`, then `just install`. Local packages use the same installation process as GitHub release packages and update the services actually running under the current user. Development services also listen only on localhost by default.
 
-For source development, start `just run-runtime-daemon` in a separate terminal before the Web server. Runtime owns ACP history under its own `AOW_STATE_DIR`; Server connects through the configured endpoint.
+For source development, start `just run-host-daemon` in a separate terminal before the Web server. Host owns ACP history under its own `AOW_STATE_DIR`; Server connects through the configured endpoint.
 
-The standalone [runtime daemon](docs/runtime/runtime-daemon.md) embeds ACP and
-terminal runtimes in one process and exposes authenticated HTTP management and
-WebSocket transports for remote node deployments.
+The standalone [Host daemon](docs/host/host-daemon.md) owns local Agents, ACP
+conversations, terminals, workspaces and individual executions. It exposes
+authenticated HTTP and WebSocket services for local or remote node deployments.
 
 ## Source projects
 
-`server/` owns Server, CLI, automation scheduling and the frontend. `runtime/` owns
+`server/` owns Server, CLI, automation scheduling and the frontend. `host/` owns
 node execution and has its own Cargo workspace and lockfile. Neither product has
 production source dependencies on the other. Root `just` targets orchestrate both
 projects and the combined installation package. See [Server](server/README.md) for

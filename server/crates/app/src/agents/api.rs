@@ -6,7 +6,7 @@
 use super::{AgentsQuery, RegisterAgentRequest, ReorderAgentsRequest, sessions};
 use crate::error::{ServiceError, service_response};
 use crate::{AppState, HttpError};
-use aow_runtime_contract::agents::AgentRegistration;
+use aow_host_contract::agents::AgentRegistration;
 use axum::extract::{Path as AxumPath, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};

@@ -70,9 +70,9 @@ impl TerminalManager {
         let result = self
             .run_agent_operation(
                 pane_id,
-                aow_runtime_client::agents::TerminalAgentRequest {
+                aow_host_client::agents::TerminalAgentRequest {
                     request_id: format!("initialize-{pane_id}"),
-                    operation: aow_runtime_client::agents::TerminalAgentOperation::Initialize {
+                    operation: aow_host_client::agents::TerminalAgentOperation::Initialize {
                         agent: agent.into(),
                         task: task.map(str::to_owned),
                         timeout_seconds: timeout.as_secs(),
@@ -117,7 +117,7 @@ impl TerminalManager {
     pub(in crate::terminal) async fn run_agent_operation(
         &self,
         pane_id: &str,
-        request: aow_runtime_client::agents::TerminalAgentRequest,
+        request: aow_host_client::agents::TerminalAgentRequest,
     ) -> Result<(), TerminalError> {
         let progress = self
             .inner

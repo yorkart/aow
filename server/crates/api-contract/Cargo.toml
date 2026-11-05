@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-aow-runtime-contract = { path = "../../../common/crates/runtime-contract" }
+aow-host-contract = { path = "../../../common/crates/host-contract" }
 serde.workspace = true
 
 [dev-dependencies]

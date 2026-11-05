@@ -57,10 +57,10 @@ impl From<std::io::Error> for HttpError {
     }
 }
 
-impl From<aow_runtime_client::RuntimeError> for HttpError {
-    fn from(error: aow_runtime_client::RuntimeError) -> Self {
+impl From<aow_host_client::HostError> for HttpError {
+    fn from(error: aow_host_client::HostError) -> Self {
         match error {
-            aow_runtime_client::RuntimeError::HttpStatus {
+            aow_host_client::HostError::HttpStatus {
                 status,
                 error: Some(body),
                 ..
@@ -69,13 +69,13 @@ impl From<aow_runtime_client::RuntimeError> for HttpError {
                 body,
                 extra_headers: Box::default(),
             },
-            aow_runtime_client::RuntimeError::HttpStatus {
+            aow_host_client::HostError::HttpStatus {
                 status, message, ..
             } => Self::new(status, "runtime_error", message, None),
             _ => Self::new(
                 StatusCode::SERVICE_UNAVAILABLE,
-                "runtime_unavailable",
-                "Runtime service is unavailable",
+                "host_unavailable",
+                "Host service is unavailable",
                 None,
             ),
         }

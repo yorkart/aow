@@ -177,7 +177,7 @@ async fn upgrade_requires_authentication_and_matching_origin() {
 
 struct AcpConfiguration;
 #[async_trait::async_trait]
-impl aow_runtime_client::testing::AcpFixture for AcpConfiguration {
+impl aow_host_client::testing::AcpFixture for AcpConfiguration {
     async fn settings(&self) -> anyhow::Result<String> {
         Ok(serde_json::json!({"agent_servers":{"test":{"type":"custom","command":"/missing/adapter"}}}).to_string())
     }
@@ -191,7 +191,7 @@ async fn acp_ready_bounds_snapshot_races_reconnect_deletion_and_unsubscribe() {
     let directory = tempfile::tempdir().unwrap();
     let cwd = directory.path().canonicalize().unwrap();
     let mut state = AppState::for_test(Default::default());
-    state.acp = aow_runtime_client::acp::AcpClient::for_test_host(
+    state.acp = aow_host_client::acp::AcpClient::for_test_host(
         std::sync::Arc::new(AcpConfiguration),
         Some(cwd.join("state")),
     )
@@ -201,7 +201,7 @@ async fn acp_ready_bounds_snapshot_races_reconnect_deletion_and_unsubscribe() {
         .prepare_session("test", cwd.clone())
         .await
         .unwrap();
-    let resource = aow_runtime_client::acp::SyncResource::Session {
+    let resource = aow_host_client::acp::SyncResource::Session {
         thread_id: session.thread_id.clone(),
     };
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -285,16 +285,14 @@ async fn acp_ready_bounds_snapshot_races_reconnect_deletion_and_unsubscribe() {
 #[tokio::test]
 async fn acp_coalesces_list_changes_and_keeps_urgent_session_boundaries() {
     let directory = tempfile::tempdir().unwrap();
-    let service = aow_runtime_client::acp::AcpClient::for_test_host(
-        std::sync::Arc::new(AcpConfiguration),
-        None,
-    )
-    .unwrap();
+    let service =
+        aow_host_client::acp::AcpClient::for_test_host(std::sync::Arc::new(AcpConfiguration), None)
+            .unwrap();
     let session = service
         .prepare_session("test", directory.path().into())
         .await
         .unwrap();
-    let resource = aow_runtime_client::acp::SyncResource::Sessions {
+    let resource = aow_host_client::acp::SyncResource::Sessions {
         cwd: session.cwd.clone(),
     };
     let mut subscriptions = acp::Subscriptions::default();
@@ -318,7 +316,7 @@ async fn acp_coalesces_list_changes_and_keeps_urgent_session_boundaries() {
     let messages = subscriptions.due();
     assert_eq!(messages.len(), 1);
     assert_eq!(messages[0]["head"]["version"], 99);
-    let resource = aow_runtime_client::acp::SyncResource::Session {
+    let resource = aow_host_client::acp::SyncResource::Session {
         thread_id: session.thread_id,
     };
     subscriptions

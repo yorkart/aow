@@ -1,6 +1,6 @@
 use super::*;
 use anyhow::{Context, Result};
-use aow_runtime_contract::terminal::TerminalAgentProcess;
+use aow_host_contract::terminal::TerminalAgentProcess;
 pub(super) struct Source {
     pub agent: String,
     pub session_id: String,

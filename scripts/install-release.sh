@@ -28,13 +28,13 @@ fail() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
 usage() {
     cat <<EOF
-Usage: install-release.sh [--repo OWNER/REPO] [--version VERSION] [--skip-runtime]
-       install-release.sh --package FILE [--repo OWNER/REPO] [--skip-runtime]
+Usage: install-release.sh [--repo OWNER/REPO] [--version VERSION] [--skip-host]
+       install-release.sh --package FILE [--repo OWNER/REPO] [--skip-host]
 
 Install a GitHub Release or local package, then start/restart its services.
 Without --version, install this script's release (or resolve latest from source).
 With --version, download that release directly. All packages require SHA256 verification.
-By default, update and start/restart runtime daemon without prompting; existing terminal sessions end.
+By default, update and start/restart Host daemon without prompting; existing terminal sessions end.
 On first installation, set a login account and confirm its password interactively before starting the server.
 
 Options:
@@ -44,7 +44,7 @@ Options:
   --package FILE   Install a local archive with its adjacent FILE.sha256.
                     Resolves symlinks once; reads the version from the manifest.
                     Cannot be combined with --version. No downloads required.
-  --skip-runtime Keep runtime daemon and its existing sessions unchanged for this installation.
+  --skip-host Keep Host daemon and its existing sessions unchanged for this installation.
   -h, --help        Show this help.
 
 Requires Bash, tar, Node.js 20+, Git, and Linux/systemd or macOS/launchd.
@@ -159,7 +159,7 @@ try {
         }
     }
     for (const path of ['manifest.json', 'bin', 'frontend', 'frontend/dist',
-        'bin/aow-server', 'bin/aow-runtime-daemon',
+        'bin/aow-server', 'bin/aow-host-daemon',
         'bin/aow-automation-runner', 'bin/aow-cli', 'frontend/dist/index.html',
         ...(manifest.components?.skills ? ['skills', 'skills/aow-agent', 'skills/aow-agent/SKILL.md', 'skills/aow-acp', 'skills/aow-acp/SKILL.md'] : []),
         ...(manifest.components?.git_platform_providers ? ['git-platform-providers'] : []),
@@ -233,16 +233,16 @@ replace_link() {
     pending_file=
 }
 
-start_runtime() {
-    sh "$support/scripts/start-runtime-daemon.sh" "$version"
+start_host() {
+    sh "$support/scripts/start-host-daemon.sh" "$version"
 }
 
 main() {
     local repository=${AOW_RELEASE_REPOSITORY:-}
-    local version='' explicit_version=0 package='' skip_runtime=0
+    local version='' explicit_version=0 package='' skip_host=0
     while (( $# )); do
         case "$1" in
-            --skip-runtime) skip_runtime=1; shift ;;
+            --skip-host) skip_host=1; shift ;;
             --repo|--version|--package)
                 if (( $# < 2 )) || [[ -z "$2" ]]; then fail "$1 requires a value"; fi
                 if [[ "$1" == --repo ]]; then repository=$2
@@ -256,9 +256,9 @@ main() {
     if [[ -n "$package" ]] && (( explicit_version )); then
         fail '--package cannot be combined with --version; local versions come from the manifest'
     fi
-    local runtime_root=${HOME:?HOME must be set}/.local/lib/aow
-    if [[ -n "$package" && -z "$repository" && -f "$runtime_root/update.json" ]]; then
-        repository=$(node --input-type=module - "$runtime_root/update.json" <<'JS'
+    local install_root=${HOME:?HOME must be set}/.local/lib/aow
+    if [[ -n "$package" && -z "$repository" && -f "$install_root/update.json" ]]; then
+        repository=$(node --input-type=module - "$install_root/update.json" <<'JS'
 import { readFileSync } from 'node:fs';
 const repository = JSON.parse(readFileSync(process.argv[2], 'utf8')).repository;
 if (repository != null && typeof repository !== 'string') throw new Error('invalid saved repository');
@@ -297,11 +297,11 @@ JS
     fi
 
     # The shipped systemd units use %h/.local/lib/aow.
-    [[ ${AOW_RUNTIME_ROOT:-$runtime_root} == "$runtime_root" ]] \
-        || fail 'the installer currently requires ~/.local/lib/aow as AOW_RUNTIME_ROOT'
+    [[ ${AOW_INSTALL_ROOT:-$install_root} == "$install_root" ]] \
+        || fail 'the installer currently requires ~/.local/lib/aow as AOW_INSTALL_ROOT'
     local user_bin_dir=${AOW_USER_BIN_DIR:-}
-    if [[ -z "$user_bin_dir" && -f "$runtime_root/update.json" ]]; then
-        user_bin_dir=$(node --input-type=module - "$runtime_root/update.json" <<'JS'
+    if [[ -z "$user_bin_dir" && -f "$install_root/update.json" ]]; then
+        user_bin_dir=$(node --input-type=module - "$install_root/update.json" <<'JS'
 import { readFileSync } from 'node:fs';
 const directory = JSON.parse(readFileSync(process.argv[2], 'utf8')).user_bin_dir;
 if (directory != null && typeof directory !== 'string') throw new Error('invalid saved command directory');
@@ -310,13 +310,13 @@ JS
 )
     fi
     user_bin_dir=${user_bin_dir:-$HOME/.local/bin}
-    [[ "$runtime_root" == /* && "$user_bin_dir" == /* ]] || fail 'installation paths must be absolute'
-    export AOW_RUNTIME_ROOT=$runtime_root
-    mkdir -p -- "$runtime_root/releases" "$runtime_root/bin" "$runtime_root/active" "$user_bin_dir"
-    lock_dir=$runtime_root/.install.lock
+    [[ "$install_root" == /* && "$user_bin_dir" == /* ]] || fail 'installation paths must be absolute'
+    export AOW_INSTALL_ROOT=$install_root
+    mkdir -p -- "$install_root/releases" "$install_root/bin" "$install_root/active" "$user_bin_dir"
+    lock_dir=$install_root/.install.lock
     mkdir -- "$lock_dir" 2>/dev/null || fail "another install is running: $lock_dir"
     lock_acquired=1
-    stage=$(mktemp -d "$runtime_root/.download.XXXXXX")
+    stage=$(mktemp -d "$install_root/.download.XXXXXX")
     local asset
     if [[ -n "$package" ]]; then
         asset=$(stage_local_package "$package")
@@ -345,11 +345,11 @@ JS
     version=$(validate_release "$support" "$version")
     printf 'Installing AoW %s\n' "$version"
     local -a helpers=(
-        scripts/start-server.sh scripts/start-runtime-daemon.sh scripts/activate-runtime.mjs scripts/replace-symlink.mjs scripts/server-state-dir.sh
-        packaging/bin/aow packaging/bin/aow-server packaging/bin/aow-runtime-daemon
+        scripts/start-server.sh scripts/start-host-daemon.sh scripts/activate-host.mjs scripts/replace-symlink.mjs scripts/server-state-dir.sh
+        packaging/bin/aow packaging/bin/aow-server packaging/bin/aow-host-daemon
     )
     if [[ "$os" == linux ]]; then
-        helpers+=(packaging/systemd/aow-server.service packaging/systemd/aow-runtime-daemon.service)
+        helpers+=(packaging/systemd/aow-server.service packaging/systemd/aow-host-daemon.service)
     else
         helpers+=(scripts/start-launchd.sh scripts/launchd-service.mjs
             scripts/launchd-mode.mjs scripts/start-launchdaemon.mjs scripts/service-health.mjs
@@ -361,14 +361,14 @@ JS
     local service_mode='' service_record=''
     if [[ "$os" == macos ]]; then
         service_record=$stage/service.json
-        local mode_args=(resolve "$runtime_root" "$service_record")
-        if [[ "$skip_runtime" == 1 ]]; then mode_args+=(--skip-runtime); fi
+        local mode_args=(resolve "$install_root" "$service_record")
+        if [[ "$skip_host" == 1 ]]; then mode_args+=(--skip-host); fi
         service_mode=$(node "$support/scripts/launchd-mode.mjs" "${mode_args[@]}")
         printf 'macOS service mode: %s\n' "$service_mode"
     fi
     chmod 0755 "$support"/bin/* "$support"/packaging/bin/*
 
-    local release=$runtime_root/releases/$version
+    local release=$install_root/releases/$version
     if [[ -e "$release" || -L "$release" ]]; then
         [[ -d "$release" && ! -L "$release" ]] || fail "invalid existing release: $release"
         validate_release "$release" "$version" >/dev/null
@@ -379,25 +379,25 @@ JS
     fi
     "$release/bin/aow-cli" --help >/dev/null
     local destination
-    for destination in "$runtime_root/latest" "$user_bin_dir/aow" "$user_bin_dir/aow-cli" \
-        "$user_bin_dir/aow-automation-runner" "$runtime_root/active/server" "$runtime_root/active/runtime-daemon"; do
+    for destination in "$install_root/latest" "$user_bin_dir/aow" "$user_bin_dir/aow-cli" \
+        "$user_bin_dir/aow-automation-runner" "$install_root/active/server" "$install_root/active/host-daemon"; do
         [[ ! -e "$destination" || -L "$destination" ]] || fail "refusing to replace unmanaged entry: $destination"
     done
-    for destination in "$runtime_root/bin/aow-server" "$runtime_root/bin/aow-runtime-daemon"; do
+    for destination in "$install_root/bin/aow-server" "$install_root/bin/aow-host-daemon"; do
         [[ ! -d "$destination" || -L "$destination" ]] || fail "launcher destination is a directory: $destination"
     done
-    [[ ! -d "$runtime_root/update.json" ]] || fail 'update.json must be a file, not a directory'
+    [[ ! -d "$install_root/update.json" ]] || fail 'update.json must be a file, not a directory'
     if [[ -L "$user_bin_dir/aow" ]]; then
         local command_target command_version
         command_target=$(readlink -- "$user_bin_dir/aow")
-        command_version=${command_target#"$runtime_root/releases/"}
+        command_version=${command_target#"$install_root/releases/"}
         command_version=${command_version%/packaging/bin/aow}
         if ! valid_version "$command_version" \
-            || [[ "$command_target" != "$runtime_root/releases/$command_version/packaging/bin/aow" ]]; then
+            || [[ "$command_target" != "$install_root/releases/$command_version/packaging/bin/aow" ]]; then
             fail "refusing to replace unmanaged entry: $user_bin_dir/aow"
         fi
     fi
-    node --input-type=module - "$stage/update.json" "$repository" "$user_bin_dir" "$runtime_root/update.json" "$service_record" <<'JS'
+    node --input-type=module - "$stage/update.json" "$repository" "$user_bin_dir" "$install_root/update.json" "$service_record" <<'JS'
 import { readFileSync, writeFileSync } from 'node:fs';
 const [destination, repository, userBinDir, previous, serviceRecord] = process.argv.slice(2);
 let settings = {};
@@ -419,7 +419,7 @@ JS
     bash "$support/packaging/bin/aow" account --if-missing
     "$release/bin/aow-server" --initialize-state-if-missing --state-dir "$state_dir"
     if [[ "$release" == "$support" ]]; then
-        release=$runtime_root/releases/$version
+        release=$install_root/releases/$version
         node -e 'require("node:fs").renameSync(process.argv[1], process.argv[2])' "$support" "$release"
         support=$release
     fi
@@ -432,10 +432,10 @@ JS
             replace_file "$release/skills/$skill/SKILL.md" "$HOME/.aow/skills/$skill/SKILL.md" 0644
         done
     fi
-    replace_file "$support/packaging/bin/aow-server" "$runtime_root/bin/aow-server" 0755
-    replace_file "$support/packaging/bin/aow-runtime-daemon" "$runtime_root/bin/aow-runtime-daemon" 0755
+    replace_file "$support/packaging/bin/aow-server" "$install_root/bin/aow-server" 0755
+    replace_file "$support/packaging/bin/aow-host-daemon" "$install_root/bin/aow-host-daemon" 0755
     replace_link "$release/packaging/bin/aow" "$user_bin_dir/aow"
-    replace_link "releases/$version" "$runtime_root/latest"
+    replace_link "releases/$version" "$install_root/latest"
     replace_link "$release/bin/aow-automation-runner" "$user_bin_dir/aow-automation-runner"
     replace_link "$release/bin/aow-cli" "$user_bin_dir/aow-cli"
     printf 'Installed AoW %s in %s\n' "$version" "$release"
@@ -444,33 +444,33 @@ JS
         *) printf 'Add this directory to PATH to use aow and aow-cli: %s\n' "$user_bin_dir" ;;
     esac
 
-    # On first installation the runtime must create its token before Server starts.
+    # On first installation Host must create its token before Server starts.
     # On updates restart it last: its PTYs may contain this installer process.
-    local runtime_first=1 runtime_status=0 server_status=0
-    if [[ -L "$runtime_root/active/runtime-daemon" ]]; then runtime_first=0; fi
+    local host_first=1 host_status=0 server_status=0
+    if [[ -L "$install_root/active/host-daemon" ]]; then host_first=0; fi
     if [[ "$service_mode" == launchdaemon ]]; then
-        replace_file "$stage/update.json" "$runtime_root/update.json" 0600
+        replace_file "$stage/update.json" "$install_root/update.json" 0600
     fi
-    if (( ! skip_runtime && runtime_first )); then start_runtime || runtime_status=$?; fi
-    if [[ "$runtime_status" != 0 && "$runtime_status" != 78 ]]; then fail 'runtime-daemon activation failed'; fi
+    if (( ! skip_host && host_first )); then start_host || host_status=$?; fi
+    if [[ "$host_status" != 0 && "$host_status" != 78 ]]; then fail 'host-daemon activation failed'; fi
     sh "$support/scripts/start-server.sh" "$version" || server_status=$?
     if [[ "$server_status" != 0 && "$server_status" != 78 ]]; then fail 'Server activation failed'; fi
     # Complete configuration and release the lock before a restart can close our PTY.
-    replace_file "$stage/update.json" "$runtime_root/update.json" 0600
+    replace_file "$stage/update.json" "$install_root/update.json" 0600
     rmdir -- "$lock_dir"
     lock_acquired=0
-    if (( ! skip_runtime && ! runtime_first )); then start_runtime || runtime_status=$?; fi
-    if [[ "$runtime_status" != 0 && "$runtime_status" != 78 ]]; then fail 'runtime-daemon activation failed'; fi
-    if [[ "$runtime_status" == 78 || "$server_status" == 78 ]]; then
+    if (( ! skip_host && ! host_first )); then start_host || host_status=$?; fi
+    if [[ "$host_status" != 0 && "$host_status" != 78 ]]; then fail 'host-daemon activation failed'; fi
+    if [[ "$host_status" == 78 || "$server_status" == 78 ]]; then
         if [[ ${AOW_INSTALL_MANAGED:-} == 1 ]]; then
             printf '%s\n' 'LaunchDaemon registration is pending; the administrator installer will register and verify services automatically.' >&2
         else
-            node "$support/scripts/launchd-mode.mjs" hint "$runtime_root"
+            node "$support/scripts/launchd-mode.mjs" hint "$install_root"
         fi
         return 78
     fi
-    if (( skip_runtime )); then
-        printf 'Skipped runtime-daemon; Server, CLI and Runner are updated to %s.\n' "$version"
+    if (( skip_host )); then
+        printf 'Skipped host-daemon; Server, CLI and Runner are updated to %s.\n' "$version"
     else
         printf 'AoW %s is installed and its services are active.\n' "$version"
     fi

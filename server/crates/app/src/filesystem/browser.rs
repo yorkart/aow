@@ -61,14 +61,14 @@ async fn fs_browser(
             let encoded = encode_absolute(&entry.path);
             let kind = match (entry.is_symlink, &entry.kind) {
                 (true, _) => aow_i18n::text("server.symbolic_link"),
-                (_, aow_runtime_contract::workspace::FileKind::Directory) => aow_i18n::text("server.directory"),
-                (_, aow_runtime_contract::workspace::FileKind::File) => aow_i18n::text("server.file"),
-                (_, aow_runtime_contract::workspace::FileKind::Symlink) => aow_i18n::text("server.symbolic_link"),
-                (_, aow_runtime_contract::workspace::FileKind::Other) => aow_i18n::text("server.other"),
+                (_, aow_host_contract::workspace::FileKind::Directory) => aow_i18n::text("server.directory"),
+                (_, aow_host_contract::workspace::FileKind::File) => aow_i18n::text("server.file"),
+                (_, aow_host_contract::workspace::FileKind::Symlink) => aow_i18n::text("server.symbolic_link"),
+                (_, aow_host_contract::workspace::FileKind::Other) => aow_i18n::text("server.other"),
             };
             let directory = matches!(
                 entry.kind,
-                aow_runtime_contract::workspace::FileKind::Directory
+                aow_host_contract::workspace::FileKind::Directory
             );
             let slash = if directory { "/" } else { "" };
             let icon = if directory { "📁" } else { "📄" };

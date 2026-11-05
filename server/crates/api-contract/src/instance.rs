@@ -1,4 +1,4 @@
-use aow_runtime_contract::instance::InstanceRef;
+use aow_host_contract::instance::InstanceRef;
 use serde::{Deserialize, Serialize};
 
 /// Execution context of the caller, independent of the newly created instance.

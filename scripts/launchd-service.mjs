@@ -6,9 +6,9 @@ import { delimiter, join, resolve } from 'node:path';
 // Generate data, never shell source: paths/config values may contain quotes,
 // whitespace, XML characters or dollar signs.
 const [component, runtime, destination, nodePath, mode = 'launchagent'] = process.argv.slice(2);
-if (!['server', 'runtime-daemon'].includes(component) || !runtime?.startsWith('/') || !destination
+if (!['server', 'host-daemon'].includes(component) || !runtime?.startsWith('/') || !destination
   || !['launchagent', 'launchdaemon'].includes(mode)) {
-  throw new Error('Usage: launchd-service.mjs server|runtime-daemon RUNTIME PLIST [NODE] [launchagent|launchdaemon]');
+  throw new Error('Usage: launchd-service.mjs server|host-daemon RUNTIME PLIST [NODE] [launchagent|launchdaemon]');
 }
 const daemon = mode === 'launchdaemon';
 const identity = userInfo();
@@ -20,11 +20,11 @@ const environment = {
   PATH: [...new Set([process.env.AOW_USER_BIN_DIR || join(home, '.local/bin'),
     ...(daemon ? [runtime, join(home, '.cargo/bin')] : process.env.PATH.split(delimiter)),
     '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin'])].join(delimiter),
-  AOW_RUNTIME_ROOT: runtime,
+  AOW_INSTALL_ROOT: runtime,
 };
 const daemonKeys = new Set(['HOME', 'USER', 'LOGNAME', 'SHELL', 'PATH', 'LANG', 'LC_ALL', 'LC_CTYPE',
-  'AOW_RUNTIME_ROOT', 'AOW_SERVER_HOST', 'AOW_SERVER_PORT', 'AOW_SERVER_STATE_DIR', 'AOW_STATE_DIR',
-  'AOW_RUNTIME_URL', 'AOW_RUNTIME_TOKEN_FILE', 'AOW_BASE_PATH', 'AOW_AUTH_SECURE_COOKIE',
+  'AOW_INSTALL_ROOT', 'AOW_SERVER_HOST', 'AOW_SERVER_PORT', 'AOW_SERVER_STATE_DIR', 'AOW_STATE_DIR',
+  'AOW_HOST_URL', 'AOW_HOST_TOKEN_FILE', 'AOW_BASE_PATH', 'AOW_AUTH_SECURE_COOKIE',
   'AOW_AUTH_SESSION_MAX_AGE_SECONDS', 'AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS',
   'AOW_LOG_MODE']);
 const proxyKeys = new Set(['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY',
@@ -49,13 +49,13 @@ try {
   if (error.code !== 'ENOENT') throw error;
 }
 for (const key of ['AOW_SERVER_HOST', 'AOW_SERVER_PORT', 'AOW_SERVER_STATE_DIR',
-  'AOW_STATE_DIR', 'AOW_RUNTIME_URL', 'AOW_RUNTIME_TOKEN_FILE', 'AOW_BASE_PATH', 'AOW_AUTH_SECURE_COOKIE',
+  'AOW_STATE_DIR', 'AOW_HOST_URL', 'AOW_HOST_TOKEN_FILE', 'AOW_BASE_PATH', 'AOW_AUTH_SECURE_COOKIE',
   'AOW_AUTH_SESSION_MAX_AGE_SECONDS', 'AOW_AUTH_SESSION_IDLE_TIMEOUT_SECONDS']) {
   if (process.env[key]) environment[key] = process.env[key];
 }
 // These paths define the installation and cannot be redirected by server.env.
 environment.HOME = home;
-environment.AOW_RUNTIME_ROOT = runtime;
+environment.AOW_INSTALL_ROOT = runtime;
 if (daemon) {
   environment.USER = identity.username;
   environment.LOGNAME = identity.username;
@@ -63,14 +63,15 @@ if (daemon) {
 }
 delete environment.AOW_SERVICE_LOG;
 environment.AOW_LOG_MODE = 'unified';
-if (component === 'runtime-daemon') {
-  delete environment.AOW_RUNTIME_VT_WORKER;
+if (component === 'host-daemon') {
+  delete environment.AOW_HOST_VT_WORKER;
   const nodeLink = join(runtime, 'node');
-  const currentMarker = join(runtime, '.aow-runtime-daemon-node-target');
-  // terminald managed this same link before the unified runtime was introduced.
-  // Prefer the current marker when present; never bypass a mismatched marker.
-  const marker = lstatSync(currentMarker, { throwIfNoEntry: false })
-    ? currentMarker : join(runtime, '.aow-terminald-node-target');
+  const currentMarker = join(runtime, '.aow-host-daemon-node-target');
+  // Earlier installers managed the same link. Prefer the newest existing
+  // marker; never bypass a mismatched marker with an older one.
+  const marker = [currentMarker, join(runtime, '.aow-runtime-daemon-node-target'),
+    join(runtime, '.aow-terminald-node-target')]
+    .find(path => lstatSync(path, { throwIfNoEntry: false })) ?? currentMarker;
   let info;
   try { info = lstatSync(nodeLink); } catch (error) { if (error.code !== 'ENOENT') throw error; }
   if (info && (!info.isSymbolicLink() || !existsSync(marker))) {
@@ -87,7 +88,7 @@ if (component === 'runtime-daemon') {
   const stage = resolve(destination, '..');
   if (!nodePath?.startsWith('/')) throw new Error('An absolute Node.js path is required');
   symlinkSync(nodePath, join(stage, 'node'));
-  writeFileSync(join(stage, '.aow-runtime-daemon-node-target'), `${nodePath}\n`, { mode: 0o600 });
+  writeFileSync(join(stage, '.aow-host-daemon-node-target'), `${nodePath}\n`, { mode: 0o600 });
 }
 function xml(value) {
   const text = String(value);

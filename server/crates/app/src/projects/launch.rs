@@ -3,12 +3,12 @@ impl ProjectService {
     pub(crate) async fn execution_reference_path(
         &self,
         project_id: &str,
-        config: &aow_runtime_contract::workspace::WorkspaceConfig,
+        config: &aow_host_contract::workspace::WorkspaceConfig,
     ) -> Result<String, ServiceError> {
         config
             .validate()
             .map_err(|error| ServiceError::Invalid(aow_i18n::text(error.0).into()))?;
-        if config.workspace_mode == aow_runtime_contract::workspace::WorkspaceMode::Existing {
+        if config.workspace_mode == aow_host_contract::workspace::WorkspaceMode::Existing {
             return self
                 .agent_worktree_path(project_id, &config.workspace_path.to_string_lossy())
                 .await;

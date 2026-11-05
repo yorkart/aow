@@ -14,7 +14,7 @@ fn config(source: Option<String>) -> RoleConfig {
         name: "Reviewer".into(),
         description: String::new(),
         runtime: RoleRuntime::Cli {
-            agent_id: "role-test-runtime".into(),
+            agent_id: "role-test-host".into(),
         },
         home_layout: HomeLayout::Codex,
         identity: Identity::LocalHome { source },
@@ -214,12 +214,12 @@ async fn skill_edits_reconcile_only_injected_skills_and_roll_back_failed_updates
 
 pub(super) async fn configure_cli(
     manager: &TestServices,
-    agent_type: aow_runtime_contract::agents::AgentType,
+    agent_type: aow_host_contract::agents::AgentType,
     command: &str,
     args: Vec<String>,
     env: BTreeMap<String, String>,
 ) {
-    let id = "role-test-runtime";
+    let id = "role-test-host";
     let exists = manager
         .agents
         .agents()
@@ -247,7 +247,7 @@ pub(super) async fn configure_cli(
 pub(super) async fn configure_default_cli(manager: &TestServices) {
     configure_cli(
         manager,
-        aow_runtime_contract::agents::AgentType::Codex,
+        aow_host_contract::agents::AgentType::Codex,
         "/bin/echo",
         vec![],
         BTreeMap::from([("CODEX_HOME".into(), "/wrong".into())]),
@@ -263,7 +263,7 @@ async fn cli_roles_resolve_current_configuration_without_duplicating_or_mutating
     let role = manager.roles.save_role(None, config(None)).await.unwrap();
     assert_eq!(
         serde_json::to_value(&role).unwrap()["runtime"],
-        serde_json::json!({"mode":"cli", "agent_id":"role-test-runtime"})
+        serde_json::json!({"mode":"cli", "agent_id":"role-test-host"})
     );
     let first = manager.roles.role_cli_launch(&role).await.unwrap();
     let env = BTreeMap::from([
@@ -273,7 +273,7 @@ async fn cli_roles_resolve_current_configuration_without_duplicating_or_mutating
     ]);
     configure_cli(
         &manager,
-        aow_runtime_contract::agents::AgentType::Codex,
+        aow_host_contract::agents::AgentType::Codex,
         "/bin/cat",
         vec!["--updated".into()],
         env.clone(),
@@ -291,7 +291,7 @@ async fn cli_roles_resolve_current_configuration_without_duplicating_or_mutating
         .await
         .unwrap()
         .into_iter()
-        .find(|agent| agent.id == "role-test-runtime")
+        .find(|agent| agent.id == "role-test-host")
         .unwrap();
     assert_eq!(base.env, env);
     assert_eq!(base.args, ["--updated"]);
@@ -340,7 +340,7 @@ async fn cli_roles_reject_missing_unconfigured_unavailable_and_changed_runtime_t
     let role = manager.roles.save_role(None, config(None)).await.unwrap();
     configure_cli(
         &manager,
-        aow_runtime_contract::agents::AgentType::Codex,
+        aow_host_contract::agents::AgentType::Codex,
         "/missing/role-runtime",
         vec![],
         BTreeMap::new(),
@@ -350,7 +350,7 @@ async fn cli_roles_reject_missing_unconfigured_unavailable_and_changed_runtime_t
     assert!(manager.roles.save_role(None, config(None)).await.is_err());
     configure_cli(
         &manager,
-        aow_runtime_contract::agents::AgentType::Claude,
+        aow_host_contract::agents::AgentType::Claude,
         "/bin/echo",
         vec![],
         BTreeMap::new(),
@@ -368,7 +368,7 @@ async fn cli_roles_reject_missing_unconfigured_unavailable_and_changed_runtime_t
     );
     configure_cli(
         &manager,
-        aow_runtime_contract::agents::AgentType::Pi,
+        aow_host_contract::agents::AgentType::Pi,
         "/bin/echo",
         vec![],
         BTreeMap::new(),
@@ -377,11 +377,7 @@ async fn cli_roles_reject_missing_unconfigured_unavailable_and_changed_runtime_t
     let mut unsupported = config(None);
     unsupported.home_layout = HomeLayout::Custom;
     assert!(manager.roles.save_role(None, unsupported).await.is_err());
-    manager
-        .agents
-        .remove_agent("role-test-runtime")
-        .await
-        .unwrap();
+    manager.agents.remove_agent("role-test-host").await.unwrap();
     assert!(manager.roles.role_cli_launch(&role).await.is_err());
     assert!(manager.roles.role_home(&role.id).unwrap().is_dir());
 }
@@ -391,13 +387,13 @@ async fn node_environment_updates_reconcile_unfinished_edits_before_retrying() {
     let directory = tempfile::tempdir().unwrap();
     let node_root = directory.path().join("node");
     std::fs::create_dir(&node_root).unwrap();
-    let runtime = aow_runtime_client::testing::TestRuntime::with_state_dir(
+    let runtime = aow_host_client::testing::TestHost::with_state_dir(
         &directory.path().join("runtime.json"),
         node_root.clone(),
     )
     .await;
-    let client = aow_runtime_client::RuntimeClient::new(runtime.endpoint.clone());
-    let manager = AppState::with_runtime(
+    let client = aow_host_client::HostClient::new(runtime.endpoint.clone());
+    let manager = AppState::with_host(
         Default::default(),
         directory.path().join("server"),
         runtime.endpoint.clone(),

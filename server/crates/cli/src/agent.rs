@@ -10,7 +10,7 @@ use crate::input::{CreationArgs, TaskInput};
 
 const HELP: &str = "create requires --session-id or AOW_SESSION_ID for the calling session.
 This execution context never changes the task text or the child session identity.
-Requires a running AoW server and runtime daemon for the same --state-dir.
+Requires a running AoW server and Host daemon for the same --state-dir.
 Uses a same-user Unix socket, without a browser login or Cookie.
 CLI terminals start hidden at 160 columns by 48 rows. Open Terminal in the right
 sidebar to observe; take over explicitly once startup is complete.
@@ -135,7 +135,7 @@ pub fn execute(args: AgentArgs, state_dir: PathBuf) -> Result<Value> {
                 AgentCommand::List => Ok(client.get_json::<Value>("/v1/agents").await?),
             }
         }).await.context("AoW CLI request timed out; operation may still be running, inspect agent list before retrying")?
-    }).with_context(|| format!("Server agent API at {}; check Server/runtime services and connection settings", client.address()))
+    }).with_context(|| format!("Server agent API at {}; check Server/Host services and connection settings", client.address()))
 }
 
 fn parse_agent_id(value: &str) -> Result<String, String> {

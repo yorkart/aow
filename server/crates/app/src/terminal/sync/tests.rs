@@ -46,7 +46,7 @@ async fn sockets_share_live_state_detect_exit_and_title_changes_and_resynchroniz
     let daemon_socket = directory.path().join("terminald/terminald.sock");
     let (shutdown, daemon) = start_daemon(daemon_socket.clone()).await;
     let state =
-        crate::AppState::for_test_with_runtime_config(Default::default(), daemon_socket.clone());
+        crate::AppState::for_test_with_host_config(Default::default(), daemon_socket.clone());
     let manager = &state.terminals;
     let tab = manager
         .create(CreateTerminalRequest {

@@ -48,7 +48,7 @@ impl RoleService {
                 .node
                 .agent_node()
                 .await?
-                .match_terminal_profiles(&aow_runtime_client::agents::MatchTerminalProfile {
+                .match_terminal_profiles(&aow_host_client::agents::MatchTerminalProfile {
                     profiles: self.agents.agents().await?,
                     agent: pane.agent_id.clone().unwrap_or_default(),
                     executable: pane.shell.clone(),

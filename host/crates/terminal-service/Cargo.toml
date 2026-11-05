@@ -1,0 +1,15 @@
+[package]
+name = "aow-terminal-service"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+aow-i18n = { package = "aow-host-i18n", path = "../i18n" }
+aow-terminal-core = { path = "../terminal-core" }
+aow-host-contract = { path = "../../../common/crates/host-contract" }
+axum.workspace = true
+futures-util = { workspace = true, features = ["sink"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

@@ -51,7 +51,7 @@ def target_environment(account, runtime_enabled):
         'PATH': ':'.join([f'{home}/.local/bin', f'{home}/.local/lib/aow', f'{home}/.cargo/bin',
                           '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin']),
         'TMPDIR': '/private/tmp', 'AOW_INSTALL_MANAGED': '1',
-        'AOW_INSTALL_RUNTIME': 'y' if runtime_enabled else 'n',
+        'AOW_INSTALL_HOST': 'y' if runtime_enabled else 'n',
     }
 
 
@@ -87,7 +87,7 @@ def registration_module(path):
     return module
 
 
-def install_as_administrator(account, package, administrator_uid, skip_runtime=False):
+def install_as_administrator(account, package, administrator_uid, skip_host=False):
     require_local_terminal()
     trusted_path(__file__, administrator_uid)
     installer = trusted_path(SCRIPT_DIR / 'install-release.sh', administrator_uid)
@@ -95,7 +95,7 @@ def install_as_administrator(account, package, administrator_uid, skip_runtime=F
     archive = trusted_path(package, administrator_uid)
     checksum = trusted_path(str(archive) + '.sha256', administrator_uid)
     print(f'Installation account: {account.pw_name} (HOME={account.pw_dir})', flush=True)
-    runtime_enabled = not skip_runtime
+    runtime_enabled = not skip_host
     environment = target_environment(account, runtime_enabled)
     environment['PATH'] = target_login_path(account, environment)
     with tempfile.TemporaryDirectory(prefix='aow-admin-install-', dir='/private/tmp') as temporary:
@@ -108,8 +108,8 @@ def install_as_administrator(account, package, administrator_uid, skip_runtime=F
             shutil.copyfile(source, destination)
             destination.chmod(0o644)
         arguments = ['/bin/bash', str(stage / 'install-release.sh'), '--package', str(stage / archive.name)]
-        if skip_runtime:
-            arguments.append('--skip-runtime')
+        if skip_host:
+            arguments.append('--skip-host')
         result = run_as_user(account, arguments, environment)
         if result != 78:
             return result
@@ -119,7 +119,7 @@ def install_as_administrator(account, package, administrator_uid, skip_runtime=F
         # A previous interrupted attempt may have left a runtime
         # request. This invocation authorizes only the components selected above.
         configurations = [(component, config) for component, config in configurations
-                          if component == 'server' or (component == 'runtime-daemon' and runtime_enabled)]
+                          if component == 'server' or (component == 'host-daemon' and runtime_enabled)]
         if not configurations:
             raise ValueError('No selected services are ready for registration')
         helper.register(configurations, account)
@@ -147,8 +147,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--user', help='Target account (default: the current account)')
     parser.add_argument('--package', required=True)
-    parser.add_argument('--skip-runtime', action='store_true',
-                        help='Keep runtime-daemon and its existing sessions unchanged for this installation')
+    parser.add_argument('--skip-host', action='store_true',
+                        help='Keep host-daemon and its existing sessions unchanged for this installation')
     parser.add_argument('--elevated', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     if sys.platform != 'darwin':
@@ -164,7 +164,7 @@ def main(argv=None):
         account = pwd.getpwnam(args.user)
         if account.pw_uid == 0:
             parser.error('AoW must run as a non-root account')
-        return install_as_administrator(account, args.package, administrator.pw_uid, args.skip_runtime)
+        return install_as_administrator(account, args.package, administrator.pw_uid, args.skip_host)
     caller = pwd.getpwuid(os.getuid())
     if caller.pw_uid == 0:
         parser.error('Run just install as your normal macOS account, without sudo')
@@ -172,7 +172,7 @@ def main(argv=None):
     if account.pw_uid == 0:
         parser.error('AoW must run as a non-root account')
     print(f'Installation account: {account.pw_name} (HOME={account.pw_dir})', flush=True)
-    runtime_options = ['--skip-runtime'] if args.skip_runtime else []
+    runtime_options = ['--skip-host'] if args.skip_host else []
     if account.pw_uid == caller.pw_uid:
         checked = subprocess.run(['node', str(SCRIPT_DIR / 'launchd-mode.mjs'), 'check-install',
                                   str(Path(account.pw_dir) / '.local/lib/aow'), *runtime_options],

@@ -1,8 +1,8 @@
 use crate::error::ServiceError;
 use crate::validation;
-pub(crate) use aow_runtime_contract::agents::AgentLaunch;
-use aow_runtime_contract::agents::AgentRegistration;
-use aow_runtime_contract::agents::AgentType;
+pub(crate) use aow_host_contract::agents::AgentLaunch;
+use aow_host_contract::agents::AgentRegistration;
+use aow_host_contract::agents::AgentType;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};

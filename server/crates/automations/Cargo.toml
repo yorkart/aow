@@ -9,9 +9,9 @@ name = "aow-automation-runner"
 path = "src/main.rs"
 
 [dependencies]
-aow-runtime-contract = { path = "../../../common/crates/runtime-contract" }
+aow-host-contract = { path = "../../../common/crates/host-contract" }
 aow-cli-access = { path = "../cli-access" }
-aow-runtime-client = { path = "../runtime-client" }
+aow-host-client = { path = "../host-client" }
 aow-i18n = { path = "../i18n" }
 aow-id = { path = "../../../common/crates/id" }
 aow-config = { path = "../config" }
@@ -27,4 +27,4 @@ tempfile = "3.20"
 uuid.workspace = true
 
 [dev-dependencies]
-aow-runtime-client = { path = "../runtime-client", features = ["test-support"] }
+aow-host-client = { path = "../host-client", features = ["test-support"] }

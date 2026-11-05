@@ -3,8 +3,8 @@ use super::{AgentRole, RoleRuntime};
 use crate::error::ServiceError;
 use crate::roles::RoleService;
 use crate::settings::persistence::{RegistryDocument, atomic_save_document};
-use aow_runtime_client::acp::AcpClient;
-use aow_runtime_client::acp::{
+use aow_host_client::acp::AcpClient;
+use aow_host_client::acp::{
     Content, ExecutionEnvironment, SessionCreation, SessionSnapshot, SessionSource,
 };
 use serde::{Deserialize, Serialize};
@@ -107,7 +107,7 @@ impl RoleService {
             snapshot
                 .parent
                 .as_ref()
-                .filter(|parent| parent.kind == aow_runtime_contract::instance::InstanceKind::Acp)
+                .filter(|parent| parent.kind == aow_host_contract::instance::InstanceKind::Acp)
                 .and_then(|parent| sessions.get(&parent.id))
                 .filter(|binding| binding.home == environment.home)
                 .cloned()
@@ -161,10 +161,10 @@ impl RoleService {
         agent_id: &str,
         cwd: PathBuf,
         source: SessionSource,
-        parent: Option<aow_runtime_contract::instance::InstanceRef>,
+        parent: Option<aow_host_contract::instance::InstanceRef>,
     ) -> anyhow::Result<SessionSnapshot> {
         let inherited = if let Some(parent) = &parent
-            && parent.kind == aow_runtime_contract::instance::InstanceKind::Acp
+            && parent.kind == aow_host_contract::instance::InstanceKind::Acp
         {
             match self.acp_role_binding(service, &parent.id).await? {
                 Some(binding) => Some((

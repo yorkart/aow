@@ -51,7 +51,7 @@ async fn create(
         let cwd = state.projects.agent_worktree_path(&request.project_id, &request.cwd).await.map_err(crate::error::service_http_error)?;
         let parent = instances::creation_parent(&state, request.parent, request.caller.as_ref(), request.no_parent).await?;
         let agent_id = state.acp.select_agent_id(request.agent_id.as_deref()).await.map_err(super::api::error)?;
-        let session = state.roles.prepare_acp_child_session(&state.acp, &agent_id, cwd.into(), aow_runtime_client::acp::SessionSource::Cli, parent).await.map_err(super::api::error)?;
+        let session = state.roles.prepare_acp_child_session(&state.acp, &agent_id, cwd.into(), aow_host_client::acp::SessionSource::Cli, parent).await.map_err(super::api::error)?;
         let id = session.thread_id;
         let info = state.acp.session_info(&id).await.map_err(super::api::error)?;
         if let Err(error) = state.instances.record_all(vec![instances::acp(&info)]) {
@@ -107,7 +107,7 @@ pub(crate) fn start(
         // A browser takeover during initialization revokes admission of the pending prompt.
         controller.authorize(&lease.headers, false)?;
         if let Some(task) = task {
-            let content = vec![aow_runtime_client::acp::Content {
+            let content = vec![aow_host_client::acp::Content {
                 kind: "text".into(),
                 data: serde_json::Map::from_iter([("text".into(), task.into())]),
             }];
@@ -191,7 +191,7 @@ async fn list(State(state): State<AppState>) -> Result<Json<Value>, HttpError> {
 async fn snapshot(
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> Result<Json<aow_runtime_client::acp::SessionSnapshot>, HttpError> {
+) -> Result<Json<aow_host_client::acp::SessionSnapshot>, HttpError> {
     state
         .acp
         .snapshot(&id)

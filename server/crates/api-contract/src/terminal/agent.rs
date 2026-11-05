@@ -28,7 +28,7 @@ pub struct AgentTerminalCreate {
     pub agent: Option<String>,
     pub project_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub parent: Option<aow_runtime_contract::instance::InstanceRef>,
+    pub parent: Option<aow_host_contract::instance::InstanceRef>,
     pub cwd: String,
     pub task: Option<String>,
     pub timeout_seconds: u64,
@@ -43,7 +43,7 @@ pub struct AgentTerminalSubmit {
 pub struct AgentTerminalInfo {
     pub pane_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub parent: Option<aow_runtime_contract::instance::InstanceRef>,
+    pub parent: Option<aow_host_contract::instance::InstanceRef>,
     pub tab_id: String,
     pub cwd: String,
     pub agent: String,

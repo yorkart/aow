@@ -224,7 +224,7 @@ async fn review_environment_case(home_only: bool) {
         );
     }
     let connection = directory.path().join("runtime.json");
-    let _runtime = aow_runtime_client::testing::TestRuntime::start(&connection).await;
+    let _runtime = aow_host_client::testing::TestHost::start(&connection).await;
     let mut state = AppState::for_test_with_state_dir(
         PathBuf::new(),
         directory.path().join("state"),
@@ -350,10 +350,10 @@ async fn run_hosting_case(case: HostingCase) {
     let (stop, stopped) = tokio::sync::oneshot::channel();
     let _guard = DaemonGuard(Some(stop));
     let daemon_socket = socket.clone();
-    let daemon = tokio::spawn(aow_runtime_client::testing::run(daemon_socket, async {
+    let daemon = tokio::spawn(aow_host_client::testing::run(daemon_socket, async {
         let _ = stopped.await;
     }));
-    let native = aow_runtime_client::TerminalClient::for_test_config(socket.clone());
+    let native = aow_host_client::TerminalClient::for_test_config(socket.clone());
     tokio::time::timeout(Duration::from_secs(5), async {
         while native.health().await.is_err() {
             tokio::time::sleep(Duration::from_millis(20)).await;

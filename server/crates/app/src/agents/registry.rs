@@ -60,7 +60,7 @@ impl AgentService {
             let state = self.lock()?;
             (state.agents.clone(), state.default_agent_id.clone())
         };
-        let request = aow_runtime_client::agents::DiscoverAgents {
+        let request = aow_host_client::agents::DiscoverAgents {
             profiles: serde_json::from_value(serde_json::to_value(profiles)?)?,
             default_agent_id,
         };

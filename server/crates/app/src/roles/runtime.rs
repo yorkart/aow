@@ -4,7 +4,7 @@ use crate::agents::AgentLaunch;
 use crate::error::ServiceError;
 use crate::roles::RoleService;
 use anyhow::Result;
-use aow_runtime_client::acp::AcpClient;
+use aow_host_client::acp::AcpClient;
 
 impl RoleService {
     pub(super) async fn role_layout(&self, id: &str) -> Result<HomeLayout, ServiceError> {
@@ -12,7 +12,7 @@ impl RoleService {
             .node
             .agent_node()
             .await?
-            .agent_role_layout(&aow_runtime_client::agents::ResolveRoleLayout {
+            .agent_role_layout(&aow_host_client::agents::ResolveRoleLayout {
                 agent_id: id.into(),
             })
             .await
@@ -38,7 +38,7 @@ impl RoleService {
         self.node
             .agent_node()
             .await?
-            .resolve_agent(&aow_runtime_client::agents::ResolveAgent {
+            .resolve_agent(&aow_host_client::agents::ResolveAgent {
                 profile: serde_json::from_value(serde_json::to_value(agent)?)?,
             })
             .await
@@ -55,7 +55,7 @@ impl RoleService {
         }
         #[cfg(not(test))]
         {
-            anyhow::bail!("Runtime is unavailable")
+            anyhow::bail!("Host is unavailable")
         }
     }
 

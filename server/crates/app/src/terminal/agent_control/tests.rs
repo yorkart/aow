@@ -78,14 +78,14 @@ impl Fixture {
         let (shutdown, receiver) = tokio::sync::oneshot::channel();
         let daemon_socket = socket.clone();
         let worker = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../../runtime/vt-worker/dist/vt-worker.mjs");
+            .join("../../../host/vt-worker/dist/vt-worker.mjs");
         let daemon = tokio::spawn(async move {
-            aow_runtime_client::testing::run_with_worker(
+            aow_host_client::testing::run_with_worker(
                 daemon_socket,
                 async {
                     let _ = receiver.await;
                 },
-                Some(aow_runtime_client::testing::VtWorkerConfig::new(
+                Some(aow_host_client::testing::VtWorkerConfig::new(
                     "node", worker,
                 )),
             )
@@ -133,7 +133,7 @@ impl Fixture {
             state.auth = crate::auth::AuthService::disabled();
             state
         } else {
-            AppState::for_test_with_runtime_config(PathBuf::new(), socket)
+            AppState::for_test_with_host_config(PathBuf::new(), socket)
         };
         state.operations = crate::operations::OperationService::persistent(
             &directory.path().join("operation-logs"),
@@ -378,7 +378,7 @@ time.sleep(30)
                 .terminals
                 .inner
                 .terminald
-                .runtime()
+                .host()
                 .node_environment()
                 .await
                 .unwrap();
@@ -423,7 +423,7 @@ time.sleep(30)
             invocation,
             json!({"args": invocation_args,
             "cwd": session_cwd.canonicalize().unwrap(), "profile": id,
-            "state_dir": fixture.state.terminals.inner.terminald.runtime().node_environment().await.unwrap().state_dir})
+            "state_dir": fixture.state.terminals.inner.terminald.host().node_environment().await.unwrap().state_dir})
         );
         let launch = fixture
             .state
@@ -587,7 +587,7 @@ async fn rejected_runtime_does_not_leave_a_lineage_record() {
     let mut request = fixture.request();
     request.agent = Some("broken-agent".into());
     request.no_parent = false;
-    request.parent = Some(aow_runtime_contract::instance::InstanceRef::terminal(
+    request.parent = Some(aow_host_contract::instance::InstanceRef::terminal(
         &parent.panes[0].id,
     ));
     let error = fixture
@@ -616,7 +616,7 @@ async fn rejected_runtime_does_not_leave_a_lineage_record() {
     let saved = reloaded.snapshot().unwrap();
     assert_eq!(saved.len(), 1);
     assert!(
-        saved.contains_key(&aow_runtime_contract::instance::InstanceRef::terminal(
+        saved.contains_key(&aow_host_contract::instance::InstanceRef::terminal(
             &parent.panes[0].id
         ))
     );
@@ -663,7 +663,7 @@ async fn agent_parentage_is_validated_returned_and_survives_parent_removal() {
         .unwrap();
     let mut request = fixture.request();
     request.no_parent = false;
-    request.parent = Some(aow_runtime_contract::instance::InstanceRef::terminal(
+    request.parent = Some(aow_host_contract::instance::InstanceRef::terminal(
         "missing-pane",
     ));
     let error = fixture
@@ -681,7 +681,7 @@ async fn agent_parentage_is_validated_returned_and_survives_parent_removal() {
     assert_eq!(manager.list_snapshot(None).unwrap().tabs.len(), 1);
 
     request.no_parent = false;
-    request.parent = Some(aow_runtime_contract::instance::InstanceRef::terminal(
+    request.parent = Some(aow_host_contract::instance::InstanceRef::terminal(
         &parent.panes[0].id,
     ));
     let child: AgentTerminalInfo = fixture
@@ -691,7 +691,7 @@ async fn agent_parentage_is_validated_returned_and_survives_parent_removal() {
         .unwrap();
     assert_eq!(child.parent, request.parent);
     request.no_parent = false;
-    request.parent = Some(aow_runtime_contract::instance::InstanceRef::terminal(
+    request.parent = Some(aow_host_contract::instance::InstanceRef::terminal(
         &child.pane_id,
     ));
     let grandchild: AgentTerminalInfo = fixture
@@ -701,7 +701,7 @@ async fn agent_parentage_is_validated_returned_and_survives_parent_removal() {
         .unwrap();
     assert_eq!(
         grandchild.parent,
-        Some(aow_runtime_contract::instance::InstanceRef::terminal(
+        Some(aow_host_contract::instance::InstanceRef::terminal(
             &child.pane_id
         ))
     );
@@ -800,7 +800,7 @@ async fn mixed_terminal_acp_lineage_survives_deleted_intermediate_instances_and_
         .unwrap();
     assert_eq!(
         child.parent,
-        Some(aow_runtime_contract::instance::InstanceRef::acp(acp_id))
+        Some(aow_host_contract::instance::InstanceRef::acp(acp_id))
     );
     fixture.state.acp.delete_session(acp_id).await.unwrap();
     fixture
@@ -832,12 +832,12 @@ async fn mixed_terminal_acp_lineage_survives_deleted_intermediate_instances_and_
     .unwrap();
     let graph = crate::instances::graph(&reloaded).await.unwrap();
     assert_eq!(
-        graph[&aow_runtime_contract::instance::InstanceRef::terminal(&child.pane_id)].parent,
-        Some(aow_runtime_contract::instance::InstanceRef::acp(acp_id))
+        graph[&aow_host_contract::instance::InstanceRef::terminal(&child.pane_id)].parent,
+        Some(aow_host_contract::instance::InstanceRef::acp(acp_id))
     );
     assert_eq!(
-        graph[&aow_runtime_contract::instance::InstanceRef::acp(acp_id)].parent,
-        Some(aow_runtime_contract::instance::InstanceRef::terminal(
+        graph[&aow_host_contract::instance::InstanceRef::acp(acp_id)].parent,
+        Some(aow_host_contract::instance::InstanceRef::terminal(
             &root.pane_id
         ))
     );
@@ -1614,7 +1614,7 @@ async fn native_startup_probes() {
                     cols: Some(COLS),
                 },
                 AgentLaunch {
-                    agent_type: aow_runtime_contract::agents::AgentType::from_id(name).unwrap(),
+                    agent_type: aow_host_contract::agents::AgentType::from_id(name).unwrap(),
                     display_name: name.into(),
                     executable: executable.to_string_lossy().into_owned(),
                     args: vec![],
@@ -1699,7 +1699,7 @@ async fn native_pi_submits_through_terminald_and_resolves_its_session() {
             let terminal = &fixture.state.terminals.inner.terminald;
             if let Ok(sessions) = terminal.native_sessions(&created.pane_id).await
                 && let Some(reference) = sessions.current
-                && let Ok(snapshot) = terminal.runtime().native_snapshot(&reference).await
+                && let Ok(snapshot) = terminal.host().native_snapshot(&reference).await
                 && snapshot["status"] == "completed"
             {
                 assert!(sessions.process.unwrap().pi_binding.is_some());
@@ -1791,7 +1791,7 @@ async fn native_pi_submits_through_terminald_and_resolves_its_session() {
 #[tokio::test]
 async fn hosting_owns_input_and_explicit_takeover_cancels_feedback() {
     use aow_api_contract::terminal::{TerminalHosting, TerminalHostingPhase};
-    use aow_runtime_contract::terminal::TerminalAgentProcess;
+    use aow_host_contract::terminal::TerminalAgentProcess;
     let fixture = Fixture::new("ready").await;
     let info: AgentTerminalInfo = fixture
         .client

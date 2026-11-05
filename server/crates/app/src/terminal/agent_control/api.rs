@@ -249,9 +249,9 @@ pub(crate) async fn submit(
         manager
             .run_agent_operation(
                 &pane_id,
-                aow_runtime_client::agents::TerminalAgentRequest {
+                aow_host_client::agents::TerminalAgentRequest {
                     request_id: aow_id::new_id(),
-                    operation: aow_runtime_client::agents::TerminalAgentOperation::Submit {
+                    operation: aow_host_client::agents::TerminalAgentOperation::Submit {
                         task: request.task,
                     },
                 },

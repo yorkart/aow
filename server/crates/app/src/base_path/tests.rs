@@ -12,7 +12,7 @@ async fn fixture(
 ) -> (
     tempfile::TempDir,
     AppState,
-    aow_runtime_client::testing::TestRuntime,
+    aow_host_client::testing::TestHost,
 ) {
     let root = tempfile::tempdir().unwrap();
     std::fs::create_dir(root.path().join("assets")).unwrap();

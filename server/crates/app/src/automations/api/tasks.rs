@@ -82,7 +82,7 @@ async fn resolve(state: &AppState, input: &TaskInput) -> Result<(String, PathBuf
         environment,
     };
     runtime
-        .validate_agent_automation(&aow_runtime_client::agents::ValidateAutomation {
+        .validate_agent_automation(&aow_host_client::agents::ValidateAutomation {
             agent: input.agent,
             arguments: launch.args.clone(),
         })

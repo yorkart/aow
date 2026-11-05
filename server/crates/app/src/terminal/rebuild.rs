@@ -86,7 +86,7 @@ impl TerminalManager {
                 let agent_type = pane
                     .agent_id
                     .as_deref()
-                    .and_then(aow_runtime_contract::agents::AgentType::from_id)
+                    .and_then(aow_host_contract::agents::AgentType::from_id)
                     .ok_or_else(|| TerminalError::Invalid("Unknown agent type".into()))?;
                 let launch = AgentLaunch {
                     agent_type,
@@ -98,8 +98,8 @@ impl TerminalManager {
                 let launch: AgentLaunch = self
                     .inner
                     .terminald
-                    .runtime()
-                    .prepare_agent_terminal(&aow_runtime_client::agents::PrepareTerminal {
+                    .host()
+                    .prepare_agent_terminal(&aow_host_client::agents::PrepareTerminal {
                         launch,
                         pane_id: pane.id.clone(),
                         cwd: spec.cwd.clone().into(),
@@ -248,7 +248,7 @@ mod tests {
             assert_ne!(replacement.id, old.panes[index].id);
             assert_eq!(replacement.status, TerminalPaneStatus::Running);
             assert_eq!(replacement.exit_code, None);
-            // Runtime responses intentionally redact environment variables.
+            // Host responses intentionally redact environment variables.
             let mut expected_spec = specs[index].clone();
             expected_spec.environment.clear();
             expected_spec.environment_remove.clear();

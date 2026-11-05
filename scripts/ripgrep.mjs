@@ -1,4 +1,4 @@
-import { stageRipgrep } from '../runtime/scripts/ripgrep.mjs';
+import { stageRipgrep } from '../host/scripts/ripgrep.mjs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 export { stageRipgrep };

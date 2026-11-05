@@ -1,6 +1,6 @@
 //! Per-socket subscriptions and bounded coalescing of committed ACP changes.
-use aow_runtime_client::acp::AcpClient;
-use aow_runtime_client::acp::{SyncEvent, SyncResource};
+use aow_host_client::acp::AcpClient;
+use aow_host_client::acp::{SyncEvent, SyncResource};
 use serde::Deserialize;
 use std::{
     collections::HashMap,

@@ -15,9 +15,9 @@ pub(super) fn read_script(path: &Path) -> anyhow::Result<String> {
     Ok(std::fs::read_to_string(path)?)
 }
 
-pub(super) fn load_with_runtime(
+pub(super) fn load_with_host(
     directory: &Path,
-    node: Option<&aow_runtime_client::RuntimeClient>,
+    node: Option<&aow_host_client::HostClient>,
 ) -> anyhow::Result<Vec<GitPlatformProvider>> {
     match std::fs::symlink_metadata(directory) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),

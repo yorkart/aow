@@ -11,7 +11,7 @@ impl AgentService {
             .into_iter()
             .find(|agent| agent.id == id && agent.available)
             .ok_or_else(|| ServiceError::AgentNotFound(id.into()))?;
-        let request = aow_runtime_client::agents::ResolveAgent {
+        let request = aow_host_client::agents::ResolveAgent {
             profile: serde_json::from_value(serde_json::to_value(agent)?)?,
         };
         let mut launch = runtime

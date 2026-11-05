@@ -24,7 +24,7 @@ pub(crate) fn removed_directory_path(path: &Path) -> Result<PathBuf, ServiceErro
 
 #[derive(Debug, Clone)]
 pub(crate) enum SessionReference {
-    Node(aow_runtime_client::NativeSessionReference),
+    Node(aow_host_client::NativeSessionReference),
 }
 impl SessionReference {
     pub(crate) fn agent(&self) -> &str {
@@ -89,7 +89,7 @@ impl AgentService {
         &self,
         worktree: &Path,
         agent: Option<&str>,
-        sessions: &[aow_runtime_client::NativeSession],
+        sessions: &[aow_host_client::NativeSession],
         replace: bool,
     ) -> Result<(), ServiceError> {
         let mut cache = self

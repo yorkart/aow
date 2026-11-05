@@ -61,7 +61,7 @@ async fn filesystem_routes_do_not_access_local_files_when_runtime_is_unavailable
             let uri = request.uri().clone();
             let response = app.clone().oneshot(request).await.unwrap();
             assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE, "{uri}");
-            assert_eq!(response_json(response).await["code"], "runtime_unavailable");
+            assert_eq!(response_json(response).await["code"], "host_unavailable");
         }
         assert_eq!(std::fs::read_to_string(&file).unwrap(), "original");
     }
@@ -70,10 +70,10 @@ async fn filesystem_routes_do_not_access_local_files_when_runtime_is_unavailable
 pub(crate) async fn node_state(
     root: &Path,
     frontend: std::path::PathBuf,
-) -> (AppState, aow_runtime_client::testing::TestRuntime) {
-    let node = aow_runtime_client::testing::TestRuntime::start(&root.join("runtime.json")).await;
+) -> (AppState, aow_host_client::testing::TestHost) {
+    let node = aow_host_client::testing::TestHost::start(&root.join("runtime.json")).await;
     let mut state =
-        AppState::with_runtime(frontend, root.join("server-state"), node.endpoint.clone()).unwrap();
+        AppState::with_host(frontend, root.join("server-state"), node.endpoint.clone()).unwrap();
     state.auth = auth::AuthService::disabled();
     (state, node)
 }

@@ -8,9 +8,9 @@ __pycache__/
 *.pyc
 .DS_Store
 
-/runtime/target/
-/runtime/vt-worker/node_modules/
-/runtime/vt-worker/dist/
+/host/target/
+/host/vt-worker/node_modules/
+/host/vt-worker/dist/
 
 /server/target/
 

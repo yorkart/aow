@@ -2,8 +2,8 @@
 
 set -eu
 
-runtime_root=${AOW_RUNTIME_ROOT:-${HOME:?HOME must be set}/.local/lib/aow}
-active_release=$runtime_root/active/server
+install_root=${AOW_INSTALL_ROOT:-${HOME:?HOME must be set}/.local/lib/aow}
+active_release=$install_root/active/server
 
 if [ ! -d "$active_release" ]; then
     printf 'error: no active AoW server release; run the AoW installer first\n' >&2
@@ -11,7 +11,7 @@ if [ ! -d "$active_release" ]; then
 fi
 
 release=$(CDPATH='' cd -P "$active_release" && pwd)
-releases_dir=$(CDPATH='' cd -P "$runtime_root/releases" && pwd)
+releases_dir=$(CDPATH='' cd -P "$install_root/releases" && pwd)
 case "$release" in
     "$releases_dir"/*) ;;
     *)
@@ -60,12 +60,12 @@ fi
 if [ -n "${AOW_SERVER_STATE_DIR:-}" ]; then
     set -- "$@" --state-dir "$AOW_SERVER_STATE_DIR"
 fi
-if [ -n "${AOW_RUNTIME_URL:-}" ]; then
-    set -- "$@" --runtime-url "$AOW_RUNTIME_URL"
+if [ -n "${AOW_HOST_URL:-}" ]; then
+    set -- "$@" --host-url "$AOW_HOST_URL"
 fi
 
-if [ -n "${AOW_RUNTIME_TOKEN_FILE:-}" ]; then
-    set -- "$@" --runtime-token-file "$AOW_RUNTIME_TOKEN_FILE"
+if [ -n "${AOW_HOST_TOKEN_FILE:-}" ]; then
+    set -- "$@" --host-token-file "$AOW_HOST_TOKEN_FILE"
 fi
 
 exec "$@"

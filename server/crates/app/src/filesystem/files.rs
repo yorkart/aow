@@ -1,4 +1,4 @@
-use aow_runtime_contract::workspace::RenameResult;
+use aow_host_contract::workspace::RenameResult;
 use axum::{
     Json,
     body::Body,
@@ -39,7 +39,7 @@ pub(crate) async fn rename_file_path(
     Json(request): Json<RenameFileRequest>,
 ) -> Result<Json<RenameResult>, HttpError> {
     let _filesystem = state.projects.filesystem_access().await;
-    super::node::runtime(&state)?
+    super::node::host(&state)?
         .workspace_rename(&decode_absolute(&path)?, &request.name, true)
         .await
         .map(Json)

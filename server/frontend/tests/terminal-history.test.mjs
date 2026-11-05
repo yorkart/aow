@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
-import { VtService } from '../../../runtime/vt-worker/src/vt-service.mjs';
+import { VtService } from '../../../host/vt-worker/src/vt-service.mjs';
 
 const server = await createServer({ root: fileURLToPath(new URL('../', import.meta.url)),
   server: { host: '127.0.0.1', port: 0, proxy: {}, watch: { usePolling: true } } });

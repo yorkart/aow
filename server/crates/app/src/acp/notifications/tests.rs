@@ -61,7 +61,7 @@ async fn real_acp_prompts_reach_the_terminal_notification_subscription_without_a
 
 fn completion(turn_id: &str) -> TurnCompletion {
     TurnCompletion {
-        session: aow_runtime_client::acp::SessionInfo {
+        session: aow_host_client::acp::SessionInfo {
             source: Default::default(),
             created_at: "2026-01-01T00:00:00Z".into(),
             parent: None,

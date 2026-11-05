@@ -1,5 +1,5 @@
 use super::super::*;
-use aow_runtime_client::{CompletionCursor, RuntimeClient, RuntimeEndpoint};
+use aow_host_client::{CompletionCursor, HostClient, HostEndpoint};
 use axum::{
     Router,
     extract::{
@@ -79,8 +79,8 @@ async fn node_completion_reconnect_deduplicates_and_recovers_cursor_after_restar
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
-    let client = RuntimeClient::new(
-        RuntimeEndpoint::new(
+    let client = HostClient::new(
+        HostEndpoint::new(
             &format!("http://{address}"),
             "token-0123456789abcdef0123456789abcdef".into(),
         )

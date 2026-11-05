@@ -57,13 +57,13 @@ export function resolveService(runtime) {
     || saved.user !== identity.username || (saved.uid != null && saved.uid !== identity.uid))) {
     throw new Error('Saved service mode/account does not match the installation account');
   }
-  const agents = ['server', 'runtime-daemon'].some(component => existsSync(join(home, 'Library/LaunchAgents', `org.aow.${component}.plist`)));
-  const daemons = ['server', 'runtime-daemon'].map(readDaemon).filter(Boolean);
+  const agents = ['server', 'host-daemon'].some(component => existsSync(join(home, 'Library/LaunchAgents', `org.aow.${component}.plist`)));
+  const daemons = ['server', 'host-daemon'].map(readDaemon).filter(Boolean);
   const ownedDaemons = daemons.filter(config => config.UserName === identity.username);
   for (const config of ownedDaemons) {
     const component = config.Label?.split('.').at(-1);
-    if (!['server', 'runtime-daemon'].includes(component) || config.Label !== daemonLabel(component)
-      || config.EnvironmentVariables?.HOME !== home || config.EnvironmentVariables?.AOW_RUNTIME_ROOT !== runtime
+    if (!['server', 'host-daemon'].includes(component) || config.Label !== daemonLabel(component)
+      || config.EnvironmentVariables?.HOME !== home || config.EnvironmentVariables?.AOW_INSTALL_ROOT !== runtime
       || JSON.stringify(config.ProgramArguments) !== JSON.stringify([join(runtime, 'bin', `aow-${component}`)])) {
       throw new Error('Existing LaunchDaemon does not match this installation; migrate it explicitly');
     }
@@ -99,9 +99,9 @@ export function registrationHint(runtime) {
   console.error('Exit code 78 means administrator registration is required and startup has not been verified; just reports this incomplete installation as failed.');
 }
 
-export function registrationRequired(service, skipRuntime = false) {
+export function registrationRequired(service, skipHost = false) {
   if (service.mode !== 'launchdaemon') return false;
-  for (const component of ['server', ...(!skipRuntime ? ['runtime-daemon'] : [])]) {
+  for (const component of ['server', ...(!skipHost ? ['host-daemon'] : [])]) {
     if (!readDaemon(component)) return true;
     const result = launchctl(['print', `system/${daemonLabel(component)}`]);
     if (result.status === 0) continue;
@@ -124,24 +124,24 @@ function firstInstallHint(service) {
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const args = process.argv.slice(2);
-    const skipRuntime = args.includes('--skip-runtime');
+    const skipHost = args.includes('--skip-host');
     for (let index = args.length - 1; index >= 0; index--) {
-      if (['--skip-runtime'].includes(args[index])) args.splice(index, 1);
+      if (['--skip-host'].includes(args[index])) args.splice(index, 1);
     }
     const [command, runtime, destination] = args;
     if (command === 'hint') registrationHint(runtime);
     else if (command === 'check-install') {
       const service = resolveService(runtime);
-      process.stdout.write(JSON.stringify({ ...service, registrationRequired: registrationRequired(service, skipRuntime) }) + '\n');
+      process.stdout.write(JSON.stringify({ ...service, registrationRequired: registrationRequired(service, skipHost) }) + '\n');
     } else if (command === 'resolve') {
       const service = resolveService(runtime);
-      if (destination && process.env.AOW_INSTALL_MANAGED !== '1' && registrationRequired(service, skipRuntime)) {
+      if (destination && process.env.AOW_INSTALL_MANAGED !== '1' && registrationRequired(service, skipHost)) {
         firstInstallHint(service);
         process.exitCode = 78;
       } else {
         if (destination) writeFileSync(destination, JSON.stringify(service) + '\n', { mode: 0o600 });
         process.stdout.write(service.mode + '\n');
       }
-    } else throw new Error('Usage: launchd-mode.mjs resolve|check-install|hint RUNTIME [OUTPUT] [--skip-runtime]');
+    } else throw new Error('Usage: launchd-mode.mjs resolve|check-install|hint RUNTIME [OUTPUT] [--skip-host]');
   } catch (error) { console.error(`error: ${error.message}`); process.exitCode = 1; }
 }

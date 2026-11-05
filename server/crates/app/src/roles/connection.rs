@@ -26,7 +26,7 @@ pub(super) async fn test_with_timeout(
             _ => None,
         };
         runtime
-            .probe_role_environment(&aow_runtime_contract::environment::ProbeEnvironment {
+            .probe_role_environment(&aow_host_contract::environment::ProbeEnvironment {
                 spec: super::node::spec(role),
                 launch,
                 acp_agent_id: agent.cloned(),

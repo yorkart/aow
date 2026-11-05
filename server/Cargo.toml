@@ -10,7 +10,7 @@ members = [
   "crates/im",
   "crates/automations",
   "crates/cli",
-  "crates/runtime-client",
+  "crates/host-client",
   "crates/server-client",
 ]
 resolver = "2"

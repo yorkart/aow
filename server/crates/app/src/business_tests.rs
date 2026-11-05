@@ -12,8 +12,8 @@ use crate::settings::{EditorSettings, UpdateSettingsRequest};
 use crate::settings::{UpdatePinnedDirectoriesRequest, UpdatePinnedWorktreesRequest};
 use crate::test_support::{TestServices, git_output};
 use aow_config::environment::SETTINGS_FILE;
-use aow_runtime_contract::agents::AgentRegistration;
-use aow_runtime_contract::agents::AgentType;
+use aow_host_contract::agents::AgentRegistration;
+use aow_host_contract::agents::AgentType;
 use axum::http::StatusCode;
 use std::path::{Path, PathBuf};
 
@@ -1178,8 +1178,8 @@ async fn executable_resolution_does_not_invoke_the_command() {
         .agent_node()
         .await
         .unwrap()
-        .resolve_agent(&aow_runtime_client::agents::ResolveAgent {
-            profile: aow_runtime_client::agents::AgentProfile {
+        .resolve_agent(&aow_host_client::agents::ResolveAgent {
+            profile: aow_host_client::agents::AgentProfile {
                 id: "test".into(),
                 agent_type: Some(AgentType::Codex),
                 display_name: "Test".into(),
@@ -1696,8 +1696,8 @@ fn test_agent_session(
     cwd: &Path,
     _transcript_path: &Path,
     _trusted_root: &Path,
-) -> aow_runtime_client::NativeSession {
-    aow_runtime_client::NativeSession {
+) -> aow_host_client::NativeSession {
+    aow_host_client::NativeSession {
         id: session_id.into(),
         agent: agent.into(),
         session_id: session_id.into(),
@@ -1705,7 +1705,7 @@ fn test_agent_session(
         cwd: cwd.to_string_lossy().into_owned(),
         created_at: String::new(),
         updated_at: String::new(),
-        reference: aow_runtime_client::NativeSessionReference {
+        reference: aow_host_client::NativeSessionReference {
             node_id: "node".into(),
             handle: session_id.into(),
             agent: agent.into(),

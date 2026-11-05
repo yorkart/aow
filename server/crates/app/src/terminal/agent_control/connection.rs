@@ -1,11 +1,11 @@
 use super::super::*;
-use aow_runtime_contract::terminal::{
+use aow_host_contract::terminal::{
     TerminalAttachClientMessage, TerminalAttachServerMessage, TerminalControlState,
 };
 use tokio_tungstenite::tungstenite;
 
 pub(in crate::terminal) struct AgentConnection {
-    pub(in crate::terminal) socket: RuntimeSocket,
+    pub(in crate::terminal) socket: HostSocket,
 }
 
 impl AgentConnection {

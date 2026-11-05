@@ -225,7 +225,7 @@ pub(super) async fn create(state: AppState, request: Create) -> Result<Task, Htt
                     request
                         .source_thread_id
                         .as_ref()
-                        .map(aow_runtime_contract::instance::InstanceRef::acp),
+                        .map(aow_host_contract::instance::InstanceRef::acp),
                 )
                 .await?
         } else {
@@ -236,11 +236,11 @@ pub(super) async fn create(state: AppState, request: Create) -> Result<Task, Htt
                         .prepare_session_with_options(
                             &agent,
                             workspace.clone().into(),
-                            aow_runtime_client::acp::SessionCreation {
+                            aow_host_client::acp::SessionCreation {
                                 parent: request
                                     .source_thread_id
                                     .as_ref()
-                                    .map(aow_runtime_contract::instance::InstanceRef::acp),
+                                    .map(aow_host_contract::instance::InstanceRef::acp),
                                 ..Default::default()
                             },
                         )

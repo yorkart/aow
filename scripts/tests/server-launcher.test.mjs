@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 const launcher = fileURLToPath(new URL('../../packaging/bin/aow-server', import.meta.url));
-const terminalLauncher = fileURLToPath(new URL('../../packaging/bin/aow-runtime-daemon', import.meta.url));
+const terminalLauncher = fileURLToPath(new URL('../../packaging/bin/aow-host-daemon', import.meta.url));
 const generator = fileURLToPath(new URL('../launchd-service.mjs', import.meta.url));
 const proxyKeys = ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'all_proxy', 'no_proxy'];
 const quote = value => `'${value.replaceAll("'", "'\\''")}'`;
@@ -24,9 +24,9 @@ function fixture(t) {
   // Capture the arguments passed to the binary by the real installed launcher.
   writeFileSync(join(release, 'bin/aow-server'), '#!/bin/sh\nprintf "%s\\n" "$@"\n', { mode: 0o700 });
   mkdirSync(join(home, '.aow'), { recursive: true });
-  const env = { ...process.env, HOME: home, AOW_RUNTIME_ROOT: runtime };
+  const env = { ...process.env, HOME: home, AOW_INSTALL_ROOT: runtime };
   for (const key of Object.keys(env)) {
-    if (key.startsWith('AOW_') && key !== 'AOW_RUNTIME_ROOT') delete env[key];
+    if (key.startsWith('AOW_') && key !== 'AOW_INSTALL_ROOT') delete env[key];
     if (proxyKeys.includes(key)) delete env[key];
   }
   function run(command, args, extra = {}) {
@@ -55,14 +55,14 @@ test('installed server listens on loopback unless a host is explicitly configure
 test('systemd services load the same application home for the unified runtime', t => {
   const f = fixture(t);
   const configuration = join(f.home, '.aow/server.env');
-  const paths = ['server', 'runtime-daemon'].map(component => {
+  const paths = ['server', 'host-daemon'].map(component => {
     const unit = readFileSync(new URL(`../../packaging/systemd/aow-${component}.service`, import.meta.url), 'utf8');
     return unit.match(/^EnvironmentFile=-(.+)$/m)?.[1].replaceAll('%h', f.home);
   });
   assert.deepEqual(paths, [configuration, configuration]);
-  symlinkSync('../releases/test', join(f.runtime, 'active/runtime-daemon'));
+  symlinkSync('../releases/test', join(f.runtime, 'active/host-daemon'));
   symlinkSync(process.execPath, join(f.runtime, 'node'));
-  writeFileSync(join(f.release, 'bin/aow-runtime-daemon'), '#!/bin/sh\nprintf "%s\\n" "$@"\n', { mode: 0o700 });
+  writeFileSync(join(f.release, 'bin/aow-host-daemon'), '#!/bin/sh\nprintf "%s\\n" "$@"\n', { mode: 0o700 });
   const home = join(f.home, 'custom application home');
   writeFileSync(configuration, `AOW_STATE_DIR="${home}"\n`);
   const args = f.run('/bin/sh', [terminalLauncher], { AOW_STATE_DIR: home }).trim().split('\n');

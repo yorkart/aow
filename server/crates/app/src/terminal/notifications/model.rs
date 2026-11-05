@@ -11,7 +11,7 @@ pub(crate) struct TaskStopNotification {
     pub(crate) turn_id: Option<String>,
     pub(crate) conclusion: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) usage: Option<aow_runtime_contract::agents::TokenUsage>,
+    pub(crate) usage: Option<aow_host_contract::agents::TokenUsage>,
     pub(crate) instance_ids: Vec<String>,
     #[serde(default)]
     pub(crate) sources: Vec<TaskStopSource>,

@@ -1,6 +1,6 @@
 use crate::agents::*;
 impl AgentService {
-    pub(crate) async fn agent_node(&self) -> Result<aow_runtime_client::RuntimeClient, ServiceError> {
+    pub(crate) async fn agent_node(&self) -> Result<aow_host_client::HostClient, ServiceError> {
         if let Some(runtime) = self.node.node() {
             return Ok(runtime.clone());
         }
@@ -8,13 +8,13 @@ impl AgentService {
         {
             self.node.test_acp_client()
                 .map_err(|e| ServiceError::Invalid(e.to_string()))?
-                .test_runtime()
+                .test_host()
                 .await
                 .map_err(|e| ServiceError::Invalid(e.to_string()))
         }
         #[cfg(not(test))]
         {
-            Err(ServiceError::Invalid("Runtime is unavailable".into()))
+            Err(ServiceError::Invalid("Host is unavailable".into()))
         }
     }
 }
@@ -49,7 +49,7 @@ pub(crate) async fn resolve_on_node(
     manager.agents_in_path(paths).await?;
     manager.node.agent_node()
         .await?
-        .resolve_agent(&aow_runtime_client::agents::ResolveAgent {
+        .resolve_agent(&aow_host_client::agents::ResolveAgent {
             profile: serde_json::from_value(serde_json::to_value(agent)?)?,
         })
         .await

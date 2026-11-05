@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GitCommitDetail {
     #[serde(flatten)]
-    pub commit: aow_runtime_contract::workspace::GitCommitDetail,
+    pub commit: aow_host_contract::workspace::GitCommitDetail,
     pub remote_url: Option<String>,
     pub commit_url: Option<String>,
 }

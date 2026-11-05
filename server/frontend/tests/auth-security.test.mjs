@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright';
 import WebSocket from 'ws';
-import { runtimeNode } from './fixtures/runtime-node.mjs';
+import { hostNode } from './fixtures/host-node.mjs';
 import { credentials } from '../../../scripts/tests/account-fixture.mjs';
 
 const repo = fileURLToPath(new URL('../../', import.meta.url));
@@ -58,9 +58,9 @@ async function fixture(t, { secure = false, base = '', maxAge = 43200, idleTimeo
     child.stderr.on('data', chunk => child.output += chunk);
     children.push(child); return child;
   };
-  const node = await runtimeNode(start, state);
+  const node = await hostNode(start, state);
   const server = start('aow-server', ['--host', '127.0.0.1', '--port', '0', '--state-dir', state,
-    '--runtime-url', node.url, '--runtime-token-file', node.tokenFile,
+    '--host-url', node.url, '--host-token-file', node.tokenFile,
     '--frontend', join(repo, 'frontend/dist'), ...serverArgs]);
   let origin;
   await until(() => { origin = /AoW: (http:\/\/127\.0\.0\.1:\d+)/.exec(server.output)?.[1]; return !!origin; }, 'server startup');

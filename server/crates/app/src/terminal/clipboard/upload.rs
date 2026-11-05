@@ -11,19 +11,19 @@ impl TerminalManager {
         let response = self
             .inner
             .terminald
-            .runtime()
+            .host()
             .workspace_clipboard(reqwest::Body::wrap_stream(body.into_data_stream()))
             .await
             .map_err(|error| match error {
-                RuntimeError::HttpStatus {
+                HostError::HttpStatus {
                     status: StatusCode::PAYLOAD_TOO_LARGE,
                     ..
                 } => TerminalError::ClipboardImageTooLarge,
-                RuntimeError::HttpStatus {
+                HostError::HttpStatus {
                     status: StatusCode::UNSUPPORTED_MEDIA_TYPE,
                     ..
                 } => TerminalError::UnsupportedClipboardImage,
-                RuntimeError::HttpStatus {
+                HostError::HttpStatus {
                     status: StatusCode::INSUFFICIENT_STORAGE,
                     ..
                 } => TerminalError::ClipboardQuotaExceeded,

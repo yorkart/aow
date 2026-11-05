@@ -1,5 +1,5 @@
 use super::*;
-use aow_runtime_contract::terminal::TerminalAgentProcess;
+use aow_host_contract::terminal::TerminalAgentProcess;
 
 fn hosting(id: &str) -> TerminalHosting {
     TerminalHosting {

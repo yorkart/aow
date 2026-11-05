@@ -246,7 +246,7 @@ fn completed_messages_include_only_the_observed_turn_usage_when_available() {
             "Total: 1M tokens\nInput: 1M tokens · Output: 1.3K tokens\nCache hits: 0 tokens (included in input)",
         ),
     ] {
-        event.usage = Some(aow_runtime_contract::agents::TokenUsage {
+        event.usage = Some(aow_host_contract::agents::TokenUsage {
             input_tokens: input,
             output_tokens: output,
             cached_input_tokens: cached,

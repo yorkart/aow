@@ -14,14 +14,14 @@ pub(super) struct Description {
     pub operations: Vec<String>,
 }
 pub(super) async fn describe(
-    runtime: Option<&aow_runtime_client::RuntimeClient>,
+    runtime: Option<&aow_host_client::HostClient>,
     provider: &GitPlatformProvider,
     paths: &[PathBuf],
 ) -> Result<Description> {
     describe_at(runtime, provider, paths, None).await
 }
 pub(super) async fn describe_at(
-    runtime: Option<&aow_runtime_client::RuntimeClient>,
+    runtime: Option<&aow_host_client::HostClient>,
     provider: &GitPlatformProvider,
     paths: &[PathBuf],
     script_path: Option<&Path>,

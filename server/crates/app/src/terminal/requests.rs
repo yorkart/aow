@@ -63,7 +63,7 @@ pub(super) struct UpdateLayoutRequest {
     pub(super) revision: Option<u64>,
 }
 
-pub(super) use aow_runtime_contract::workspace::ClipboardImage as ClipboardImageResponse;
+pub(super) use aow_host_contract::workspace::ClipboardImage as ClipboardImageResponse;
 use serde::Deserialize;
 
 use super::*;

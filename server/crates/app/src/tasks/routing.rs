@@ -29,7 +29,7 @@ pub(crate) fn cli_routes() -> Router<AppState> {
 impl TaskService {
     pub(crate) async fn task_policy_for_thread(
         &self,
-        service: &aow_runtime_client::acp::AcpClient,
+        service: &aow_host_client::acp::AcpClient,
         thread: &str,
     ) -> anyhow::Result<Option<aow_db::tasks::ConversationPolicy>> {
         let Some(task) = self.task_for_thread(service, thread).await? else {
@@ -53,7 +53,7 @@ impl TaskService {
             let info = service.session_info(&current).await?;
             match info
                 .parent
-                .filter(|parent| parent.kind == aow_runtime_contract::instance::InstanceKind::Acp)
+                .filter(|parent| parent.kind == aow_host_contract::instance::InstanceKind::Acp)
             {
                 Some(parent) => current = parent.id,
                 None => break,
@@ -66,7 +66,7 @@ impl TaskService {
 
     pub(crate) async fn task_for_thread(
         &self,
-        service: &aow_runtime_client::acp::AcpClient,
+        service: &aow_host_client::acp::AcpClient,
         thread: &str,
     ) -> anyhow::Result<Option<TaskRecord>> {
         let tasks = self.inner.tasks.list()?;
@@ -87,7 +87,7 @@ impl TaskService {
             };
             match info
                 .parent
-                .filter(|parent| parent.kind == aow_runtime_contract::instance::InstanceKind::Acp)
+                .filter(|parent| parent.kind == aow_host_contract::instance::InstanceKind::Acp)
             {
                 Some(parent) => current = parent.id,
                 None => break,

@@ -138,8 +138,8 @@ async fn run(
         }
         tokio::select! {
             message = connection.socket.next() => {
-                if let Some(aow_runtime_contract::terminal::TerminalAttachServerMessage::Control { state }) = AgentConnection::check(message)? {
-                    ensure!(state == aow_runtime_contract::terminal::TerminalControlState::Claimed, aow_i18n::message("server.autopilot_control_lost_take_control_and_retry", &[]));
+                if let Some(aow_host_contract::terminal::TerminalAttachServerMessage::Control { state }) = AgentConnection::check(message)? {
+                    ensure!(state == aow_host_contract::terminal::TerminalControlState::Claimed, aow_i18n::message("server.autopilot_control_lost_take_control_and_retry", &[]));
                 }
             }
             event = completions.recv() => {

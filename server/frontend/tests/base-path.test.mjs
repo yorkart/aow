@@ -1,5 +1,5 @@
 // Uses the real Rust server and the same production frontend build for both
-// mounts. Build Server and Runtime in target/debug, then build server/frontend.
+// mounts. Build Server and Host in target/debug, then build server/frontend.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { execFileSync, spawn } from 'node:child_process';
@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
-import { runtimeNode } from './fixtures/runtime-node.mjs';
+import { hostNode } from './fixtures/host-node.mjs';
 import { snapshot } from './fixtures/session-snapshot.mjs';
 
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
@@ -40,7 +40,7 @@ async function startServer(t, base, { envBase = base, args = [] } = {}) {
   });
   // Keep all initialization writes inside this test's temporary directory.
   await writeFile(join(state, 'aow-settings.json'), JSON.stringify({ version: 1, notes_base: join(state, 'notes') }));
-  const node = await runtimeNode((name, args) => {
+  const node = await hostNode((name, args) => {
     nodeChild = spawn(join(repo, 'target/debug', name), args, { cwd: repo, stdio: ['ignore', 'pipe', 'pipe'] });
     nodeChild.output = '';
     nodeChild.stdout.on('data', chunk => nodeChild.output += chunk);
@@ -49,7 +49,7 @@ async function startServer(t, base, { envBase = base, args = [] } = {}) {
   }, state);
   child = spawn(process.env.AOW_TEST_SERVER ?? join(repo, 'target/debug/aow-server'), [
     '--host', '127.0.0.1', '--port', '0', '--state-dir', state,
-    '--runtime-url', node.url, '--runtime-token-file', node.tokenFile, '--frontend', join(repo, 'server/frontend/dist'),
+    '--host-url', node.url, '--host-token-file', node.tokenFile, '--frontend', join(repo, 'server/frontend/dist'),
     ...args,
   ], { cwd: repo, env: { ...process.env, AOW_BASE_PATH: envBase }, stdio: ['ignore', 'pipe', 'pipe'] });
   const origin = await new Promise((resolve, reject) => {
@@ -198,7 +198,7 @@ try {
       await page.getByRole('button', { name: "设置", exact: true }).click();
       const settingsDialog = page.locator('.project-aow-settings, .settings-action-dialog');
       await settingsDialog.getByRole('navigation', { name: '设置分类' }).getByRole('button').filter({ has: page.getByText('环境', { exact: true }) }).click();
-      const runtimeUrl = settingsDialog.getByRole('textbox', { name: 'AOW_RUNTIME_URL', exact: true });
+      const runtimeUrl = settingsDialog.getByRole('textbox', { name: 'AOW_HOST_URL', exact: true });
       await runtimeUrl.waitFor();
       assert.equal(await runtimeUrl.inputValue(), '');
       await settingsDialog.getByRole('button', { name: '关闭', exact: true }).click();

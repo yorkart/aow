@@ -4,7 +4,7 @@ pub mod instance;
 pub mod pull_request;
 pub mod terminal;
 
-pub use aow_runtime_contract::error::ApiError;
+pub use aow_host_contract::error::ApiError;
 
 #[cfg(test)]
 mod tests;

@@ -154,7 +154,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 name = "aow-api-contract"
 version = "0.1.0"
 dependencies = [
- "aow-runtime-contract",
+ "aow-host-contract",
  "serde",
  "serde_json",
 ]
@@ -166,10 +166,10 @@ dependencies = [
  "anyhow",
  "aow-cli-access",
  "aow-config",
+ "aow-host-client",
+ "aow-host-contract",
  "aow-i18n",
  "aow-id",
- "aow-runtime-client",
- "aow-runtime-contract",
  "chrono",
  "http",
  "libc",
@@ -189,9 +189,9 @@ dependencies = [
  "aow-api-contract",
  "aow-automations",
  "aow-config",
+ "aow-host-contract",
  "aow-i18n",
  "aow-id",
- "aow-runtime-contract",
  "aow-server-client",
  "axum",
  "chrono",
@@ -241,6 +241,43 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+]
+
+[[package]]
+name = "aow-host-client"
+version = "0.1.0"
+dependencies = [
+ "agent-client-protocol",
+ "anyhow",
+ "aow-host-contract",
+ "aow-i18n",
+ "async-trait",
+ "axum",
+ "bytes",
+ "futures",
+ "futures-util",
+ "http",
+ "libc",
+ "percent-encoding",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "aow-host-contract"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -309,43 +346,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "aow-runtime-client"
-version = "0.1.0"
-dependencies = [
- "agent-client-protocol",
- "anyhow",
- "aow-i18n",
- "aow-runtime-contract",
- "async-trait",
- "axum",
- "bytes",
- "futures",
- "futures-util",
- "http",
- "libc",
- "percent-encoding",
- "reqwest",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "tokio-tungstenite",
- "tokio-util",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "aow-runtime-contract"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "aow-server"
 version = "0.1.0"
 dependencies = [
@@ -355,13 +355,13 @@ dependencies = [
  "aow-cli-access",
  "aow-config",
  "aow-db",
+ "aow-host-client",
+ "aow-host-contract",
  "aow-i18n",
  "aow-id",
  "aow-im",
  "aow-macos-log",
  "aow-operation-log",
- "aow-runtime-client",
- "aow-runtime-contract",
  "aow-server-client",
  "async-trait",
  "axum",

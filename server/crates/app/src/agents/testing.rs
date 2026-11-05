@@ -30,7 +30,7 @@ pub(crate) async fn resolve_on_node(
         .node
         .agent_node()
         .await?
-        .resolve_agent(&aow_runtime_client::agents::ResolveAgent {
+        .resolve_agent(&aow_host_client::agents::ResolveAgent {
             profile: serde_json::from_value(serde_json::to_value(agent)?)?,
         })
         .await

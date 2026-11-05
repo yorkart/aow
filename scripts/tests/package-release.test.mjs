@@ -30,27 +30,27 @@ function fixture(t) {
   write(join(rustLibdir, 'libstd-fixture.rlib'), 'fixture');
   mkdirSync(tools);
   write(join(tools, 'uname'), `#!/bin/sh\ncase "$1" in -s) echo Linux;; -m) echo ${machine};; esac\n`, true);
-  mkdirSync(join(repo, 'runtime/vt-worker'), { recursive: true });
+  mkdirSync(join(repo, 'host/vt-worker'), { recursive: true });
   for (const path of [
     'server/skills/aow-agent/SKILL.md', 'server/skills/aow-acp/SKILL.md', 'server/git-platform-providers/github.mjs', 'server/git-platform-providers/gitlab.mjs',
     'scripts/package-release.sh', 'scripts/install-release.sh', 'scripts/install-local.sh',
-    'scripts/start-server.sh', 'scripts/start-runtime-daemon.sh', 'scripts/replace-symlink.mjs', 'scripts/server-state-dir.sh',
-    'scripts/start-launchd.sh', 'scripts/launchd-service.mjs', 'scripts/activate-runtime.mjs', 'scripts/service-health.mjs',
+    'scripts/start-server.sh', 'scripts/start-host-daemon.sh', 'scripts/replace-symlink.mjs', 'scripts/server-state-dir.sh',
+    'scripts/start-launchd.sh', 'scripts/launchd-service.mjs', 'scripts/activate-host.mjs', 'scripts/service-health.mjs',
     'scripts/launchd-mode.mjs', 'scripts/start-launchdaemon.mjs', 'scripts/register-launchdaemon.py',
-    'packaging/bin/aow', 'packaging/bin/aow-server', 'packaging/bin/aow-runtime-daemon',
-    'packaging/systemd/aow-server.service', 'packaging/systemd/aow-runtime-daemon.service',
+    'packaging/bin/aow', 'packaging/bin/aow-server', 'packaging/bin/aow-host-daemon',
+    'packaging/systemd/aow-server.service', 'packaging/systemd/aow-host-daemon.service',
   ]) {
     mkdirSync(dirname(join(repo, path)), { recursive: true });
     copyFileSync(join(root, path), join(repo, path));
     if (path.endsWith('.sh')) chmodSync(join(repo, path), 0o755);
   }
-  for (const name of ['aow-cli', 'aow-server', 'aow-runtime-daemon', 'aow-automation-runner']) {
+  for (const name of ['aow-cli', 'aow-server', 'aow-host-daemon', 'aow-automation-runner']) {
     write(join(artifacts, name), '#!/bin/sh\n[ "${FAIL_BINARY:-}" != 1 ]\n', true);
   }
   vendorRipgrepFixture(repo);
   write(join(repo, 'server/frontend/dist/index.html'), '<html>release frontend</html>');
   write(join(repo, 'server/frontend/dist/assets/app.js'), 'console.log("release")');
-  write(join(repo, 'runtime/vt-worker/dist/vt-worker.mjs'), '// bundled worker');
+  write(join(repo, 'host/vt-worker/dist/vt-worker.mjs'), '// bundled worker');
   for (const name of ['cargo', 'npm']) {
     write(join(tools, name), `#!/bin/sh
 printf '%s %s\\n' '${name}' "$*" >> "$BUILD_LOG"
@@ -67,7 +67,7 @@ printf '%s %s\\n' '${name}' "$*" >> "$BUILD_LOG"
   const env = {
     ...process.env,
     HOME: home, PATH: `${tools}:${process.env.PATH}`,
-    AOW_RUNTIME_ROOT: runtime, AOW_USER_BIN_DIR: join(home, '.local/bin'),
+    AOW_INSTALL_ROOT: runtime, AOW_USER_BIN_DIR: join(home, '.local/bin'),
     AOW_STATE_DIR: join(home, '.aow'), AOW_SERVER_STATE_DIR: '',
     XDG_CONFIG_HOME: join(home, '.config'), XDG_STATE_HOME: join(home, '.local/state'),
     BUILD_LOG: buildLog, SERVICE_LOG: serviceLog, ALLOW_SERVICES: '1',
@@ -105,7 +105,7 @@ test('full native packaging builds four binaries and both frontends without inst
   assert.equal(packed.stdout.trim(), join(f.repo, 'target/packages/aow-1.2.0.tar.gz'));
   const builds = f.log(f.buildLog);
   assert.equal((builds.match(/^cargo /gm) ?? []).length, 2);
-  for (const binary of ['aow-server', 'aow-runtime-daemon', 'aow-automation-runner', 'aow-cli']) {
+  for (const binary of ['aow-server', 'aow-host-daemon', 'aow-automation-runner', 'aow-cli']) {
     assert.ok(builds.includes(`--bin ${binary}`), builds);
   }
   for (const line of builds.split('\n').filter(line => line.startsWith('cargo '))) {
@@ -140,11 +140,11 @@ test('default version and skip-build create a complete package without invoking 
   }
   assert.deepEqual(manifest.platform, { os: 'linux', arch: machine, target, libc: 'musl', linkage: 'static' });
   assert.equal(archive.endsWith(`aow-${manifest.release_id}.tar.gz`), true);
-  for (const path of ['bin/aow-server', 'bin/aow-runtime-daemon', 'bin/aow-automation-runner',
+  for (const path of ['bin/aow-server', 'bin/aow-host-daemon', 'bin/aow-automation-runner',
     'skills/aow-agent/SKILL.md', 'skills/aow-acp/SKILL.md', 'git-platform-providers/github.mjs', 'git-platform-providers/gitlab.mjs',
-    'bin/aow-cli', 'bin/rg', 'licenses/ripgrep/COPYING', 'frontend/dist/index.html', 'scripts/start-server.sh', 'scripts/start-runtime-daemon.sh',
-    'scripts/replace-symlink.mjs', 'scripts/server-state-dir.sh', 'packaging/bin/aow', 'packaging/bin/aow-server', 'packaging/bin/aow-runtime-daemon',
-    'packaging/systemd/aow-server.service', 'packaging/systemd/aow-runtime-daemon.service']) {
+    'bin/aow-cli', 'bin/rg', 'licenses/ripgrep/COPYING', 'frontend/dist/index.html', 'scripts/start-server.sh', 'scripts/start-host-daemon.sh',
+    'scripts/replace-symlink.mjs', 'scripts/server-state-dir.sh', 'packaging/bin/aow', 'packaging/bin/aow-server', 'packaging/bin/aow-host-daemon',
+    'packaging/systemd/aow-server.service', 'packaging/systemd/aow-host-daemon.service']) {
     assert.equal(existsSync(join(extracted, path)), true, path);
   }
   assert.equal(existsSync(f.runtime), false);
@@ -158,7 +158,7 @@ test('provider resources are packaged and installed without a fixed platform fil
   write(join(f.repo, 'server/git-platform-providers/tests/fixture.test.mjs'), '// test only');
   const packed = f.pack(['--version', 'custom-provider', '--skip-build']);
   assert.equal(packed.status, 0, packed.stderr);
-  const installed = f.run('bash', ['scripts/install-local.sh', packed.stdout.trim(), '--skip-runtime']);
+  const installed = f.run('bash', ['scripts/install-local.sh', packed.stdout.trim(), '--skip-host']);
   assert.equal(installed.status, 0, installed.stdout + installed.stderr);
   const directory = join(f.runtime, 'releases/custom-provider/git-platform-providers');
   assert.deepEqual(readdirSync(directory), ['forge.v2.mjs']);
@@ -179,7 +179,7 @@ test('shared web assets still build and validate all native binaries without npm
   f.assertClean();
 });
 
-for (const asset of ['server/frontend/dist/index.html', 'runtime/vt-worker/dist/vt-worker.mjs']) {
+for (const asset of ['server/frontend/dist/index.html', 'host/vt-worker/dist/vt-worker.mjs']) {
   test(`missing shared asset ${asset} fails before compiling`, t => {
     const f = fixture(t);
     rmSync(join(f.repo, asset));
@@ -204,7 +204,7 @@ test('local install deploys the latest package or an explicit path without downl
   assert.equal(installed.status, 0, installed.stdout + installed.stderr);
   assert.equal(readlinkSync(join(f.runtime, 'active/server')), '../releases/local-1');
   assert.match(installed.stdout, /services are active/);
-  assert.equal(readlinkSync(join(f.runtime, 'active/runtime-daemon')), '../releases/local-1');
+  assert.equal(readlinkSync(join(f.runtime, 'active/host-daemon')), '../releases/local-1');
   assert.doesNotMatch(installed.stdout + installed.stderr, /Enter lowercase y|请输入 y/);
   for (const name of ['aow-agent', 'aow-acp']) {
     const installedSkill = join(f.home, '.aow/skills', name, 'SKILL.md');
@@ -219,11 +219,11 @@ test('local install deploys the latest package or an explicit path without downl
   const packed = f.pack(['--version', 'local-2', '--output-dir', output]);
   assert.equal(packed.status, 0, packed.stderr);
   const servicesBefore = readFileSync(f.serviceLog, 'utf8');
-  const explicit = f.run('bash', ['scripts/install-local.sh', packed.stdout.trim(), '--skip-runtime']);
+  const explicit = f.run('bash', ['scripts/install-local.sh', packed.stdout.trim(), '--skip-host']);
   assert.equal(explicit.status, 0, explicit.stdout + explicit.stderr);
   assert.equal(readlinkSync(join(f.runtime, 'active/server')), '../releases/local-2');
-  assert.equal(readlinkSync(join(f.runtime, 'active/runtime-daemon')), '../releases/local-1');
-  assert.doesNotMatch(readFileSync(f.serviceLog, 'utf8').slice(servicesBefore.length), /runtime-daemon/);
+  assert.equal(readlinkSync(join(f.runtime, 'active/host-daemon')), '../releases/local-1');
+  assert.doesNotMatch(readFileSync(f.serviceLog, 'utf8').slice(servicesBefore.length), /host-daemon/);
   assert.equal(readFileSync(join(f.home, '.aow/skills/aow-agent/SKILL.md'), 'utf8'), readFileSync(join(root, 'server/skills/aow-agent/SKILL.md'), 'utf8'));
   assert.equal(readFileSync(join(f.home, '.aow/skills/custom/SKILL.md'), 'utf8'), 'user skill');
   assert.equal(existsSync(join(f.runtime, '.install.lock')), false);
@@ -246,7 +246,7 @@ test('an existing checksum is never overwritten or selected by latest', t => {
 test('any dynamic glibc binary is rejected even in the musl directory with skip-build', { skip: process.platform !== 'linux' }, t => {
   const f = fixture(t);
   assert.equal(f.pack(['--version', '1.0.0']).status, 0);
-  for (const name of ['aow-server', 'aow-runtime-daemon', 'aow-automation-runner', 'aow-cli']) {
+  for (const name of ['aow-server', 'aow-host-daemon', 'aow-automation-runner', 'aow-cli']) {
     const path = join(f.artifacts, name);
     const original = readFileSync(path);
     copyFileSync('/bin/true', path);

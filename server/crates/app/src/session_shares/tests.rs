@@ -1,6 +1,6 @@
 use super::*;
 use crate::agents::sessions::SessionReference;
-use aow_runtime_client::{NativeSession, NativeSessionReference, RuntimeClient, RuntimeEndpoint};
+use aow_host_client::{HostClient, HostEndpoint, NativeSession, NativeSessionReference};
 use axum::Json;
 use axum::{
     body::{Body, to_bytes},
@@ -14,7 +14,7 @@ use tower::ServiceExt;
 
 const FIRST_TURN: &str = r#"{"agent":"codex","session_id":"test-session","turns":[{"user":{"text":"first question"},"final":{"text":"first answer"}}]}"#;
 
-async fn snapshot_node(root: &Path) -> RuntimeClient {
+async fn snapshot_node(root: &Path) -> HostClient {
     let root = root.to_owned();
     let app = Router::new().route(
         "/v1/agent-sessions/snapshot",
@@ -40,16 +40,14 @@ async fn snapshot_node(root: &Path) -> RuntimeClient {
     tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
     });
-    RuntimeClient::new(
-        RuntimeEndpoint::new(&format!("http://{address}"), "test-token".into()).unwrap(),
-    )
+    HostClient::new(HostEndpoint::new(&format!("http://{address}"), "test-token".into()).unwrap())
 }
 async fn state(root: &Path) -> AppState {
     let mut state = AppState::for_test(root.join("frontend"));
     state.auth = crate::auth::AuthService::persistent(root);
     state.session_shares = SessionShares::persistent(root)
         .unwrap()
-        .with_runtime(Some(snapshot_node(root).await));
+        .with_host(Some(snapshot_node(root).await));
     state
 }
 fn locator(root: &Path) -> SessionReference {
@@ -411,7 +409,7 @@ async fn sharing_requires_login_but_live_reading_survives_restart_and_revocation
 #[tokio::test]
 async fn unavailable_node_history_hides_internal_paths() {
     let dir = tempfile::tempdir().unwrap();
-    let shares = SessionShares::in_memory().with_runtime(Some(snapshot_node(dir.path()).await));
+    let shares = SessionShares::in_memory().with_host(Some(snapshot_node(dir.path()).await));
     let info = shares.create(locator(dir.path())).unwrap();
     let error = shares
         .read(info.path.strip_prefix("/share/").unwrap())
@@ -431,7 +429,7 @@ async fn unavailable_node_history_hides_internal_paths() {
 async fn a_revoked_share_waiting_for_another_reader_cannot_return_cached_content() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join("snapshot.json"), FIRST_TURN).unwrap();
-    let shares = SessionShares::in_memory().with_runtime(Some(snapshot_node(dir.path()).await));
+    let shares = SessionShares::in_memory().with_host(Some(snapshot_node(dir.path()).await));
     let info = shares.create(locator(dir.path())).unwrap();
     let token = info.path.strip_prefix("/share/").unwrap();
     shares.read(token).await.unwrap();
@@ -462,7 +460,7 @@ fn a_failed_save_does_not_publish_a_share() {
 
 #[tokio::test]
 async fn node_owned_share_survives_server_restart_without_a_local_history_store() {
-    use aow_runtime_client::{NativeSessionReference, RuntimeClient, RuntimeEndpoint};
+    use aow_host_client::{HostClient, HostEndpoint, NativeSessionReference};
     let root = tempfile::tempdir().unwrap();
     let reference = NativeSessionReference {
         node_id: "node-a".into(),
@@ -480,12 +478,12 @@ async fn node_owned_share_survives_server_restart_without_a_local_history_store(
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let server = tokio::spawn(async move { axum::serve(listener, remote).await.unwrap() });
-    let client = RuntimeClient::new(
-        RuntimeEndpoint::new(&format!("http://{address}"), "test-node-token".into()).unwrap(),
+    let client = HostClient::new(
+        HostEndpoint::new(&format!("http://{address}"), "test-node-token".into()).unwrap(),
     );
     let shares = SessionShares::persistent(root.path())
         .unwrap()
-        .with_runtime(Some(client.clone()));
+        .with_host(Some(client.clone()));
     let info = shares
         .create(crate::agents::sessions::SessionReference::Node(reference))
         .unwrap();
@@ -503,7 +501,7 @@ async fn node_owned_share_survives_server_restart_without_a_local_history_store(
     drop(shares);
     let restored = SessionShares::persistent(root.path())
         .unwrap()
-        .with_runtime(Some(client));
+        .with_host(Some(client));
     assert!(
         restored
             .read(token)
@@ -521,9 +519,9 @@ async fn node_owned_share_survives_server_restart_without_a_local_history_store(
 async fn configured_runtime_never_falls_back_to_a_server_local_transcript() {
     let root = tempfile::tempdir().unwrap();
     std::fs::write(root.path().join("snapshot.json"), FIRST_TURN).unwrap();
-    let shares = SessionShares::in_memory().with_runtime(Some(
-        aow_runtime_client::RuntimeClient::new(aow_runtime_client::RuntimeEndpoint::unavailable()),
-    ));
+    let shares = SessionShares::in_memory().with_host(Some(aow_host_client::HostClient::new(
+        aow_host_client::HostEndpoint::unavailable(),
+    )));
     let info = shares.create(locator(root.path())).unwrap();
     let token = info.path.strip_prefix("/share/").unwrap();
     let error = shares.read(token).await.unwrap_err();

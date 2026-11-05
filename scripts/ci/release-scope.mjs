@@ -10,7 +10,7 @@ export function requiresNativePackages(event, paths = []) {
   if (event !== 'pull_request') return true;
   return paths.some(original => {
     const path = original.replace(/^server\//, '');
-    return /^(scripts|packaging|skills|git-platform-providers|vendor|\.cargo|runtime|common)\//.test(path)
+    return /^(scripts|packaging|skills|git-platform-providers|vendor|\.cargo|host|common)\//.test(path)
       || path === '.github/workflows/release.yml'
       || /^(Cargo\.(toml|lock)|rust-toolchain(\.toml)?)$/.test(path)
       || /^crates\/[^/]+\/(Cargo\.toml|build\.rs)$/.test(path)

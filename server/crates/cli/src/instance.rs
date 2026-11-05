@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use aow_runtime_contract::instance::InstanceRef;
+use aow_host_contract::instance::InstanceRef;
 use clap::{Args, Subcommand};
 use serde_json::Value;
 use std::{path::PathBuf, time::Duration};

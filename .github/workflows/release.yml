@@ -85,7 +85,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: runtime/vt-worker/package-lock.json
+          cache-dependency-path: host/vt-worker/package-lock.json
       - name: Set up Rust
         run: rustup toolchain install stable --profile minimal --component clippy --component rustfmt --no-self-update && rustup default stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
@@ -93,14 +93,14 @@ jobs:
           workspaces: |
             common -> ../target
             server -> ../target
-            runtime -> ../target
+            host -> ../target
           shared-key: test-${{ matrix.runner }}
           cache-bin: false
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Test VT worker
         run: |
-          npm --prefix runtime/vt-worker ci --ignore-scripts --no-audit --no-fund
-          npm --prefix runtime/vt-worker test
+          npm --prefix host/vt-worker ci --ignore-scripts --no-audit --no-fund
+          npm --prefix host/vt-worker test
       - name: Test Git platform providers
         run: node --test server/git-platform-providers/tests/*.test.mjs
       - name: Test Rust workspace
@@ -109,19 +109,19 @@ jobs:
             TMPDIR="$(node -p 'require("node:fs").realpathSync(require("node:os").tmpdir())')"
             export TMPDIR
           fi
-          export AOW_RUNTIME_TEST_HOST="$GITHUB_WORKSPACE/target/debug/examples/runtime-test-host"
-          cargo build --manifest-path runtime/Cargo.toml --example runtime-test-host --locked --target-dir target
+          export AOW_HOST_TEST_DAEMON="$GITHUB_WORKSPACE/target/debug/examples/host-test-daemon"
+          cargo build --manifest-path host/Cargo.toml --example host-test-daemon --locked --target-dir target
           cargo test --manifest-path server/Cargo.toml --target-dir target --workspace --locked -- --test-threads=4
           cargo test --manifest-path common/Cargo.toml --workspace --locked --target-dir target
-          cargo test --manifest-path runtime/Cargo.toml --workspace --locked --target-dir target -- --test-threads=4
+          cargo test --manifest-path host/Cargo.toml --workspace --locked --target-dir target -- --test-threads=4
       - name: Check Rust formatting and lint
         run: |
           cargo fmt --manifest-path common/Cargo.toml --all -- --check
           cargo fmt --manifest-path server/Cargo.toml --all -- --check
-          cargo fmt --manifest-path runtime/Cargo.toml --all -- --check
+          cargo fmt --manifest-path host/Cargo.toml --all -- --check
           cargo clippy --manifest-path common/Cargo.toml --workspace --all-targets --locked --target-dir target -- -D warnings
           cargo clippy --manifest-path server/Cargo.toml --target-dir target --workspace --all-targets --locked -- -D warnings
-          cargo clippy --manifest-path runtime/Cargo.toml --workspace --all-targets --locked --target-dir target -- -D warnings
+          cargo clippy --manifest-path host/Cargo.toml --workspace --all-targets --locked --target-dir target -- -D warnings
       - name: Check macOS C bridge
         if: runner.os == 'macOS'
         run: |
@@ -159,7 +159,7 @@ jobs:
           cache: npm
           cache-dependency-path: |
             server/frontend/package-lock.json
-            runtime/vt-worker/package-lock.json
+            host/vt-worker/package-lock.json
       - name: Build and check frontend
         env:
           NODE_OPTIONS: --max-old-space-size=4096
@@ -175,8 +175,8 @@ jobs:
       - name: Build portable VT worker bundle
         if: needs.version.outputs.native-packages == 'true'
         run: |
-          npm --prefix runtime/vt-worker ci --ignore-scripts --no-audit --no-fund
-          npm --prefix runtime/vt-worker run build
+          npm --prefix host/vt-worker ci --ignore-scripts --no-audit --no-fund
+          npm --prefix host/vt-worker run build
       - name: Upload shared web assets
         if: needs.version.outputs.native-packages == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -184,7 +184,7 @@ jobs:
           name: web-assets
           path: |
             server/frontend/dist/
-            runtime/vt-worker/dist/
+            host/vt-worker/dist/
           if-no-files-found: error
           retention-days: 1
 

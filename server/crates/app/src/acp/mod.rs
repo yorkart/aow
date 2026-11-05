@@ -1,4 +1,4 @@
-//! Business API and notification wiring around the remote runtime client.
+//! Business API and notification wiring around the remote Host client.
 mod api;
 mod cli;
 mod client;

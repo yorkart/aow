@@ -1,12 +1,12 @@
 use super::*;
 use crate::agents::AgentService;
+use crate::host_connection::HostConnection;
 use crate::projects::ProjectService;
-use crate::runtime_connection::RuntimeConnection;
 use crate::settings::persistence::load_registry;
 #[derive(Clone)]
 pub(crate) struct RoleService {
     pub(super) inner: Arc<RoleState>,
-    pub(super) node: RuntimeConnection,
+    pub(super) node: HostConnection,
     pub(super) agents: AgentService,
     pub(super) projects: ProjectService,
 }
@@ -19,7 +19,7 @@ impl RoleService {
     pub(crate) fn new(
         state_dir: Option<PathBuf>,
         config: Option<aow_config::ConfigStore>,
-        node: RuntimeConnection,
+        node: HostConnection,
         agents: AgentService,
         projects: ProjectService,
     ) -> Result<Self, ServiceError> {

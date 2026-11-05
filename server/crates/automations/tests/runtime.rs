@@ -114,7 +114,7 @@ fn fixture(script: &str) -> (TempDir, Store, Task) {
 
 struct NodeFixture {
     directory: TempDir,
-    _runtime: aow_runtime_client::testing::TestRuntime,
+    _runtime: aow_host_client::testing::TestHost,
 }
 impl std::ops::Deref for NodeFixture {
     type Target = TempDir;
@@ -126,8 +126,8 @@ async fn node_fixture(script: &str) -> (NodeFixture, Store, Task) {
     let (directory, store, task) = fixture(script);
     let node_root = directory.path().join("node");
     fs::create_dir_all(&node_root).unwrap();
-    let runtime = aow_runtime_client::testing::TestRuntime::with_state_dir(
-        &store.state_dir.join("runtime/runtime-client.json"),
+    let runtime = aow_host_client::testing::TestHost::with_state_dir(
+        &store.state_dir.join("runtime/host-client.json"),
         node_root,
     )
     .await;

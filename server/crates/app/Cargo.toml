@@ -6,9 +6,9 @@ license.workspace = true
 
 [dependencies]
 aow-api-contract = { path = "../api-contract" }
-aow-runtime-contract = { path = "../../../common/crates/runtime-contract" }
+aow-host-contract = { path = "../../../common/crates/host-contract" }
 aow-cli-access = { path = "../cli-access" }
-aow-runtime-client = { path = "../runtime-client" }
+aow-host-client = { path = "../host-client" }
 aow-server-client = { path = "../server-client" }
 aow-i18n = { path = "../i18n" }
 aow-id = { path = "../../../common/crates/id" }
@@ -45,7 +45,7 @@ uuid.workspace = true
 tempfile = "3.20"
 
 [dev-dependencies]
-aow-runtime-client = { path = "../runtime-client", features = ["test-support"] }
+aow-host-client = { path = "../host-client", features = ["test-support"] }
 rusqlite.workspace = true
 tower = { version = "0.5", features = ["util"] }
 

@@ -7,7 +7,7 @@ mod tests;
 use crate::{AppState, HttpError};
 use aow_api_contract::instance::InstanceInfo;
 use aow_api_contract::terminal::{TerminalPane, TerminalTab};
-use aow_runtime_contract::instance::InstanceRef;
+use aow_host_contract::instance::InstanceRef;
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) use api::{get, list};
@@ -27,7 +27,7 @@ pub(crate) fn terminal(tab: &TerminalTab, pane: &TerminalPane) -> InstanceInfo {
     }
 }
 
-pub(crate) fn acp(session: &aow_runtime_client::acp::SessionInfo) -> InstanceInfo {
+pub(crate) fn acp(session: &aow_host_client::acp::SessionInfo) -> InstanceInfo {
     InstanceInfo {
         instance: InstanceRef::acp(&session.thread_id),
         parent: session.parent.clone(),

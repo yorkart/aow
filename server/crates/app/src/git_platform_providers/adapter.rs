@@ -2,7 +2,7 @@ use super::{GitPlatformError, GitPlatformProvider, Result, invalid_json};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 pub(super) async fn git(
-    runtime: Option<&aow_runtime_client::RuntimeClient>,
+    runtime: Option<&aow_host_client::HostClient>,
     repo: &str,
     args: &[&str],
     paths: &[PathBuf],
@@ -37,7 +37,7 @@ pub(super) async fn git(
     }
 }
 pub(super) async fn run_adapter(
-    runtime: Option<&aow_runtime_client::RuntimeClient>,
+    runtime: Option<&aow_host_client::HostClient>,
     provider: &GitPlatformProvider,
     request: Value,
     cwd: Option<&Path>,
@@ -71,7 +71,7 @@ pub(super) async fn run_adapter(
 
     let value: Value = if let Some(runtime) = runtime {
         runtime
-            .workspace_provider(&aow_runtime_contract::workspace::ProviderRequest {
+            .workspace_provider(&aow_host_contract::workspace::ProviderRequest {
                 filename: provider.id.clone(),
                 script: provider.script.clone(),
                 request,

@@ -1,4 +1,4 @@
-use aow_runtime_contract::workspace::RenameResult;
+use aow_host_contract::workspace::RenameResult;
 use axum::{
     Json,
     extract::{Query, State},
@@ -16,7 +16,7 @@ pub(crate) struct CreateFsEntryRequest {
     kind: FsEntryKind,
 }
 
-use aow_runtime_contract::workspace::EntryKind as FsEntryKind;
+use aow_host_contract::workspace::EntryKind as FsEntryKind;
 
 #[derive(Debug, Deserialize, serde::Serialize)]
 pub(crate) struct RenameFsEntryRequest {
@@ -34,7 +34,7 @@ pub(crate) async fn create_fs_entry(
     Json(request): Json<CreateFsEntryRequest>,
 ) -> Result<impl IntoResponse, HttpError> {
     let _filesystem = state.projects.filesystem_access().await;
-    let value = super::node::runtime(&state)?
+    let value = super::node::host(&state)?
         .workspace_create(
             std::path::Path::new(&request.parent),
             &request.name,
@@ -49,7 +49,7 @@ pub(crate) async fn rename_fs_entry(
     Json(request): Json<RenameFsEntryRequest>,
 ) -> Result<Json<RenameResult>, HttpError> {
     let _filesystem = state.projects.filesystem_access().await;
-    super::node::runtime(&state)?
+    super::node::host(&state)?
         .workspace_rename(std::path::Path::new(&request.path), &request.name, false)
         .await
         .map(Json)
@@ -61,7 +61,7 @@ pub(crate) async fn delete_fs_entry(
     Query(query): Query<FsEntryPathQuery>,
 ) -> Result<StatusCode, HttpError> {
     let _filesystem = state.projects.filesystem_access().await;
-    let () = super::node::runtime(&state)?
+    let () = super::node::host(&state)?
         .workspace_delete(std::path::Path::new(&query.path))
         .await?;
     Ok(StatusCode::NO_CONTENT)

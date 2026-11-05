@@ -19,7 +19,7 @@ async function endpoint(t, component, handler, host = '127.0.0.1') {
     await new Promise(resolve => server.close(resolve));
   });
   if (component !== 'server') {
-    writeFileSync(join(root, 'runtime-daemon.json'), JSON.stringify({ listen: `${host}:${server.address().port}`, token_file: 'token' }));
+    writeFileSync(join(root, 'host-daemon.json'), JSON.stringify({ listen: `${host}:${server.address().port}`, token_file: 'token' }));
     writeFileSync(join(root, 'token'), 'health-fixture-token');
   }
   return { component, host, port: server.address()?.port, stateDir: root };
@@ -41,7 +41,7 @@ test('server health can reach an IPv6 loopback listener', async t => {
   await waitForHealth(config, () => 1234, 1000);
 });
 
-for (const component of ['server', 'runtime-daemon']) {
+for (const component of ['server', 'host-daemon']) {
   test(`${component} health waits for its own process and checks the expected endpoint`, async t => {
     let requests = 0;
     const config = await endpoint(t, component, (request, response) => {

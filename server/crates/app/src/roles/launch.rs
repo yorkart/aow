@@ -9,7 +9,7 @@ use serde::Serialize;
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub(crate) enum RoleSession {
     Acp {
-        session: Box<aow_runtime_client::acp::SessionSnapshot>,
+        session: Box<aow_host_client::acp::SessionSnapshot>,
     },
     Cli {
         terminal: Box<aow_api_contract::terminal::TerminalTab>,
@@ -84,7 +84,7 @@ impl RoleService {
         self.node
             .agent_node()
             .await?
-            .prepare_agent_role(&aow_runtime_client::agents::PrepareRole {
+            .prepare_agent_role(&aow_host_client::agents::PrepareRole {
                 launch,
                 instruction: role.config.instruction.clone(),
             })
@@ -136,7 +136,7 @@ impl RoleService {
         state: &AppState,
         cwd: &str,
         prompt: Option<&str>,
-        parent: Option<aow_runtime_contract::instance::InstanceRef>,
+        parent: Option<aow_host_contract::instance::InstanceRef>,
     ) -> Result<RoleSession, HttpError> {
         self.check_role_runtime(role, state).await?;
         match &role.config.runtime {
@@ -146,7 +146,7 @@ impl RoleService {
                     .prepare_session_with_options(
                         agent_id,
                         cwd.into(),
-                        aow_runtime_client::acp::SessionCreation {
+                        aow_host_client::acp::SessionCreation {
                             parent,
                             execution_environment: Some(
                                 self.role_acp_environment(role)
@@ -175,7 +175,7 @@ impl RoleService {
                     .agent_node()
                     .await
                     .map_err(service_http_error)?
-                    .prepare_role_session(&aow_runtime_client::agents::PrepareRoleSession {
+                    .prepare_role_session(&aow_host_client::agents::PrepareRoleSession {
                         launch,
                         instruction: role.config.instruction.clone(),
                         prompt: prompt.map(str::to_owned),

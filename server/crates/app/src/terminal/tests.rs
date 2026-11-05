@@ -173,7 +173,7 @@ fn persistent_load_preserves_running_desired_state() {
     );
     // Current metadata includes naming intent; legacy migration has its own test.
     original.name_is_custom = Some(true);
-    original.panes[0].parent = Some(aow_runtime_contract::instance::InstanceRef::terminal(
+    original.panes[0].parent = Some(aow_host_contract::instance::InstanceRef::terminal(
         "previous-parent",
     ));
     atomic_save(
@@ -314,7 +314,7 @@ async fn delete_workspace_stops_runtimes_and_removes_only_matching_metadata() {
                 cols: Some(80),
             },
             AgentLaunch {
-                agent_type: aow_runtime_contract::agents::AgentType::Codex,
+                agent_type: aow_host_contract::agents::AgentType::Codex,
                 display_name: "Test Agent".to_owned(),
                 executable: "/bin/sh".to_owned(),
                 args: vec!["-c".to_owned(), "sleep 30".to_owned()],
@@ -397,7 +397,7 @@ async fn agent_pane_can_split_into_a_terminal_pane() {
                 cols: Some(80),
             },
             AgentLaunch {
-                agent_type: aow_runtime_contract::agents::AgentType::Codex,
+                agent_type: aow_host_contract::agents::AgentType::Codex,
                 display_name: "Test Agent".to_owned(),
                 executable: "/bin/sh".to_owned(),
                 args: vec!["-c".to_owned(), "sleep 30".to_owned()],
@@ -438,7 +438,7 @@ async fn agent_pane_can_split_into_a_terminal_pane() {
         manager
             .inner
             .terminald
-            .runtime()
+            .host()
             .workspace_terminal_defaults()
             .await
             .unwrap()
@@ -1486,7 +1486,7 @@ async fn pane_sessions_use_live_cwd_and_config_and_cache_readable_claude_snapsho
     )
     .unwrap();
     let mut state =
-        AppState::with_test_runtime_client(root.join("server"), client.runtime().clone()).unwrap();
+        AppState::with_test_host_client(root.join("server"), client.host().clone()).unwrap();
     state.auth = crate::auth::AuthService::disabled();
     state.terminals = manager.clone();
     let app = crate::build_router(state);
@@ -1697,7 +1697,7 @@ pub(super) async fn start_daemon(
     let (shutdown, stopped) = oneshot::channel();
     let daemon_socket = socket.clone();
     let daemon = tokio::spawn(async move {
-        aow_runtime_client::testing::run(daemon_socket, async move {
+        aow_host_client::testing::run(daemon_socket, async move {
             let _ = stopped.await;
         })
         .await
@@ -1740,15 +1740,11 @@ fn native_environment_fixture() {
     }
 }
 
-async fn clipboard_manager() -> (
-    aow_runtime_client::testing::TestRuntime,
-    TerminalManager,
-    PathBuf,
-) {
+async fn clipboard_manager() -> (aow_host_client::testing::TestHost, TerminalManager, PathBuf) {
     let root = tempfile::tempdir().unwrap();
     let runtime =
-        aow_runtime_client::testing::TestRuntime::start(&root.path().join("runtime.json")).await;
-    let client = aow_runtime_client::RuntimeClient::new(runtime.endpoint.clone());
+        aow_host_client::testing::TestHost::start(&root.path().join("runtime.json")).await;
+    let client = aow_host_client::HostClient::new(runtime.endpoint.clone());
     let directory = client
         .node_environment()
         .await

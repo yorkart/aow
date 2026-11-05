@@ -7,7 +7,7 @@ pub(crate) enum RoleRuntime {
     Cli { agent_id: String },
 }
 
-pub(crate) use aow_runtime_contract::environment::{HomeLayout, Identity, IdentityPreset};
+pub(crate) use aow_host_contract::environment::{HomeLayout, Identity, IdentityPreset};
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct RoleConfig {

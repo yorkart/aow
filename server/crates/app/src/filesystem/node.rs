@@ -6,11 +6,11 @@ use axum::{
     response::Response,
 };
 use std::path::Path;
-pub(super) fn runtime(state: &AppState) -> Result<&aow_runtime_client::RuntimeClient, HttpError> {
-    state.acp.runtime().ok_or_else(|| {
+pub(super) fn host(state: &AppState) -> Result<&aow_host_client::HostClient, HttpError> {
+    state.acp.host().ok_or_else(|| {
         HttpError::new(
             StatusCode::SERVICE_UNAVAILABLE,
-            "runtime_unavailable",
+            "host_unavailable",
             "Workspace runtime is unavailable",
             None,
         )
@@ -45,7 +45,7 @@ pub(super) async fn download(
     attachment: bool,
 ) -> Result<Response, HttpError> {
     Ok(forwarded(
-        runtime(state)?
+        host(state)?
             .workspace_transfer(Method::GET, path, false, attachment, headers, None)
             .await?,
     ))
@@ -59,7 +59,7 @@ pub(super) async fn upload(
 ) -> Result<Response, HttpError> {
     let body = reqwest::Body::wrap_stream(body.into_data_stream());
     Ok(forwarded(
-        runtime(state)?
+        host(state)?
             .workspace_transfer(Method::PUT, path, keep_both, false, headers, Some(body))
             .await?,
     ))
@@ -67,14 +67,14 @@ pub(super) async fn upload(
 pub(super) async fn listing(
     state: &AppState,
     path: &Path,
-) -> Result<aow_runtime_contract::workspace::DirectoryListing, HttpError> {
-    Ok(runtime(state)?.workspace_list(path).await?)
+) -> Result<aow_host_contract::workspace::DirectoryListing, HttpError> {
+    Ok(host(state)?.workspace_list(path).await?)
 }
 pub(super) async fn home(state: &AppState) -> Result<std::path::PathBuf, HttpError> {
-    Ok(runtime(state)?.workspace_home().await?)
+    Ok(host(state)?.workspace_home().await?)
 }
 pub(super) async fn is_file(state: &AppState, path: &Path) -> Result<bool, HttpError> {
-    let metadata = runtime(state)?.workspace_metadata(path, true).await?;
+    let metadata = host(state)?.workspace_metadata(path, true).await?;
     if !metadata.exists {
         return Err(std::io::Error::from(std::io::ErrorKind::NotFound).into());
     }

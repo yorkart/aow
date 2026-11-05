@@ -1,9 +1,8 @@
 use crate::{
-    notifications::NotificationManager, projects::ProjectService,
-    runtime_connection::RuntimeConnection,
+    host_connection::HostConnection, notifications::NotificationManager, projects::ProjectService,
 };
 use anyhow::Result;
-use aow_runtime_client::acp::{AcpClient, AcpObserver};
+use aow_host_client::acp::{AcpClient, AcpObserver};
 use std::{path::PathBuf, sync::Arc};
 struct Observer {
     projects: ProjectService,
@@ -18,11 +17,11 @@ impl AcpObserver for Observer {
     fn session_metadata_changed(&self) {
         self.workspace_events.instances_changed();
     }
-    async fn turn_completed(&self, completion: aow_runtime_client::acp::TurnCompletion) {
+    async fn turn_completed(&self, completion: aow_host_client::acp::TurnCompletion) {
         super::notifications::dispatch(&self.projects, &self.notifications, &self.page, completion)
             .await;
     }
-    fn completion_cursor(&self) -> Result<Option<aow_runtime_client::acp::ConversationCursor>> {
+    fn completion_cursor(&self) -> Result<Option<aow_host_client::acp::ConversationCursor>> {
         let Some(path) = &self.cursor_path else {
             return Ok(None);
         };
@@ -34,7 +33,7 @@ impl AcpObserver for Observer {
     }
     fn save_completion_cursor(
         &self,
-        cursor: &aow_runtime_client::acp::ConversationCursor,
+        cursor: &aow_host_client::acp::ConversationCursor,
     ) -> Result<()> {
         let Some(path) = &self.cursor_path else {
             return Ok(());
@@ -60,7 +59,7 @@ pub(crate) fn service(
     projects: &ProjectService,
     notifications: &NotificationManager,
     cli_access: &aow_cli_access::Access,
-    node: &RuntimeConnection,
+    node: &HostConnection,
     directory: Option<PathBuf>,
     page: tokio::sync::broadcast::Sender<crate::terminal::notifications::TaskStopNotification>,
     workspace_events: crate::workspace_events::WorkspaceEvents,
@@ -84,9 +83,7 @@ pub(crate) fn service(
             #[cfg(not(test))]
             {
                 Ok(AcpClient::with_observer(
-                    aow_runtime_client::RuntimeClient::new(
-                        aow_runtime_client::RuntimeEndpoint::unavailable(),
-                    ),
+                    aow_host_client::HostClient::new(aow_host_client::HostEndpoint::unavailable()),
                     Some(observer),
                 ))
             }
@@ -97,18 +94,18 @@ pub(crate) fn service(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aow_runtime_client::testing::RuntimeTransport;
-    use aow_runtime_client::{RuntimeClient, testing::TestRuntime};
+    use aow_host_client::testing::HostTransport;
+    use aow_host_client::{HostClient, testing::TestHost};
     use serde_json::json;
     use std::time::Duration;
 
     #[tokio::test]
     async fn server_uses_node_configuration_and_remote_conversation_history() {
         let caller = tempfile::tempdir().unwrap();
-        let node = TestRuntime::start(&caller.path().join("node.json")).await;
-        let runtime = RuntimeClient::new(node.endpoint.clone());
+        let node = TestHost::start(&caller.path().join("node.json")).await;
+        let runtime = HostClient::new(node.endpoint.clone());
         let script = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../runtime-client/tests/fixtures/agent.mjs");
+            .join("../host-client/tests/fixtures/agent.mjs");
         let settings: serde_json::Value = runtime.get_json("/v1/acp/settings").await.unwrap();
         let _: serde_json::Value = runtime
             .put_json(
@@ -123,14 +120,11 @@ mod tests {
             .unwrap();
         // The caller has no adapter configuration. Production AppState must use
         // the node catalog and transport rather than resolving a local command.
-        let state = crate::AppState::with_runtime(
-            PathBuf::new(),
-            caller.path().into(),
-            node.endpoint.clone(),
-        )
-        .unwrap()
-        .with_cli_callback("http://callback-server:9800", None)
-        .unwrap();
+        let state =
+            crate::AppState::with_host(PathBuf::new(), caller.path().into(), node.endpoint.clone())
+                .unwrap()
+                .with_cli_callback("http://callback-server:9800", None)
+                .unwrap();
         assert_eq!(state.acp.agents().await.unwrap()[0].id, "node-agent");
         let session = state
             .acp
@@ -199,12 +193,9 @@ mod tests {
         .unwrap();
         state.flush_acp_history().await.unwrap();
         drop(state);
-        let reopened = crate::AppState::with_runtime(
-            PathBuf::new(),
-            caller.path().into(),
-            node.endpoint.clone(),
-        )
-        .unwrap();
+        let reopened =
+            crate::AppState::with_host(PathBuf::new(), caller.path().into(), node.endpoint.clone())
+                .unwrap();
         let snapshot = reopened.acp.snapshot(&session.thread_id).await.unwrap();
         assert!(snapshot.entries.iter().any(
             |entry| entry.kind == "assistant" && entry.content["text"] == "permission received"

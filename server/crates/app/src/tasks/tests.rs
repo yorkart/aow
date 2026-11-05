@@ -121,7 +121,7 @@ async fn invalid_task_creation_does_not_allocate_a_session() {
 
 struct Host(&'static str);
 #[async_trait::async_trait]
-impl aow_runtime_client::testing::AcpFixture for Host {
+impl aow_host_client::testing::AcpFixture for Host {
     async fn settings(&self) -> anyhow::Result<String> {
         Ok(serde_json::json!({"agent_servers":{(self.0):{"type":"custom","command":"node","args":[PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/acp/lineage-agent.mjs")]}}}).to_string())
     }
@@ -139,7 +139,7 @@ async fn creating_tasks_and_helper_sessions_keeps_dependencies_out_of_runtime_li
         .await
         .unwrap();
     let mut state = AppState::for_test(Default::default());
-    state.acp = aow_runtime_client::acp::AcpClient::for_test_host(
+    state.acp = aow_host_client::acp::AcpClient::for_test_host(
         Arc::new(Host("test")),
         Some(directory.path().join("acp")),
     )
@@ -303,7 +303,7 @@ async fn workspace_fixture() -> (tempfile::TempDir, AppState, Project, Router) {
         );
     }
     let mut state = AppState::for_test(Default::default());
-    state.acp = aow_runtime_client::acp::AcpClient::for_test_host(
+    state.acp = aow_host_client::acp::AcpClient::for_test_host(
         Arc::new(Host("test")),
         Some(directory.path().join("acp")),
     )
@@ -354,7 +354,7 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
     use serde_json::json;
     let (directory, mut state, original, _) = workspace_fixture().await;
     state.replace_services(TestServices::persistent(&directory.path().join("state")).unwrap());
-    state.acp = aow_runtime_client::acp::AcpClient::for_test_host(
+    state.acp = aow_host_client::acp::AcpClient::for_test_host(
         Arc::new(Host("codex.test")),
         Some(directory.path().join("routing-acp")),
     )
@@ -971,7 +971,7 @@ async fn task_role_reuses_acp_configuration_and_retries_without_creating_another
         .unwrap();
     let mut state = AppState::for_test(Default::default());
     state.replace_services(TestServices::persistent(&directory.path().join("aow")).unwrap());
-    state.acp = aow_runtime_client::acp::AcpClient::for_test_host(
+    state.acp = aow_host_client::acp::AcpClient::for_test_host(
         Arc::new(Host("codex.test")),
         Some(directory.path().join("acp")),
     )
@@ -980,7 +980,7 @@ async fn task_role_reuses_acp_configuration_and_retries_without_creating_another
     state
         .node
         .save_acp_settings(
-            aow_runtime_client::testing::AcpFixture::settings(&Host("codex.test"))
+            aow_host_client::testing::AcpFixture::settings(&Host("codex.test"))
                 .await
                 .unwrap(),
             settings.revision,

@@ -8,7 +8,7 @@ const { serverEnvironmentFields, readServerEnvironment: read, writeServerEnviron
 test('the table covers the installer allowlist and proxies, excluding installer-owned values', async () => {
   const installer = await readFile(new URL('../../../scripts/launchd-service.mjs', import.meta.url), 'utf8');
   const keys = name => [...installer.match(new RegExp(`const ${name} = new Set\\(\\[([\\s\\S]*?)\\]\\)`))[1].matchAll(/'([^']+)'/g)].map(match => match[1]);
-  const fixed = ['HOME', 'USER', 'LOGNAME', 'AOW_RUNTIME_ROOT', 'AOW_LOG_MODE'];
+  const fixed = ['HOME', 'USER', 'LOGNAME', 'AOW_INSTALL_ROOT', 'AOW_LOG_MODE'];
   assert.deepEqual(serverEnvironmentFields.map(field => field.key).sort(), [...keys('daemonKeys').filter(key => !fixed.includes(key)), ...keys('proxyKeys')].sort());
 });
 

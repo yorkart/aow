@@ -4,8 +4,8 @@ use crate::tasks::TaskService;
 use crate::workspace_events::WorkspaceEvents;
 use anyhow::{Context, Result, ensure};
 use aow_db::tasks::{DeliveryState, MessageDelivery, TaskStatus};
-use aow_runtime_client::acp::AcpClient;
-use aow_runtime_client::acp::{Content, SessionSnapshot};
+use aow_host_client::acp::AcpClient;
+use aow_host_client::acp::{Content, SessionSnapshot};
 use serde_json::json;
 use std::{
     collections::{HashMap, HashSet},
@@ -244,12 +244,12 @@ impl Worker {
             }
             Ok(false) => {}
             Err(error) => {
-                let state =
-                    if aow_runtime_client::acp::is_unavailable(&error) || message.attempts < 2 {
-                        DeliveryState::Pending
-                    } else {
-                        DeliveryState::Blocked
-                    };
+                let state = if aow_host_client::acp::is_unavailable(&error) || message.attempts < 2
+                {
+                    DeliveryState::Pending
+                } else {
+                    DeliveryState::Blocked
+                };
                 db.update_message(
                     &message.id,
                     state,

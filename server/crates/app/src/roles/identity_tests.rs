@@ -13,7 +13,7 @@ fn config(source: &Path) -> RoleConfig {
         name: "Identity import".into(),
         description: String::new(),
         runtime: RoleRuntime::Cli {
-            agent_id: "role-test-runtime".into(),
+            agent_id: "role-test-host".into(),
         },
         home_layout: HomeLayout::Custom,
         identity: Identity::LocalHome {

@@ -27,7 +27,7 @@ async fn fixture() -> (tempfile::TempDir, AppState, RoleConfig) {
         name: "Reviewer".into(),
         description: "Reviews changes".into(),
         runtime: RoleRuntime::Cli {
-            agent_id: "role-test-runtime".into(),
+            agent_id: "role-test-host".into(),
         },
         home_layout: HomeLayout::Custom,
         identity: Identity::LocalHome {
@@ -38,7 +38,7 @@ async fn fixture() -> (tempfile::TempDir, AppState, RoleConfig) {
     };
     configure(
         &state,
-        aow_runtime_contract::agents::AgentType::Codex,
+        aow_host_contract::agents::AgentType::Codex,
         BTreeMap::new(),
     )
     .await;
@@ -78,12 +78,12 @@ async fn tested_creation_uses_persistent_home_and_retries_without_reseeding_or_r
     let (directory, state, config) = fixture().await;
     let app = super::routes().with_state(state.clone());
     for (id, agent) in [
-        ("codex", aow_runtime_contract::agents::AgentType::Codex),
-        ("claude", aow_runtime_contract::agents::AgentType::Claude),
-        ("traecli", aow_runtime_contract::agents::AgentType::TraeCli),
+        ("codex", aow_host_contract::agents::AgentType::Codex),
+        ("claude", aow_host_contract::agents::AgentType::Claude),
+        ("traecli", aow_host_contract::agents::AgentType::TraeCli),
     ] {
         let mut env = BTreeMap::from([("PROBE_REPLY".into(), format!("Ready to help from {id}."))]);
-        if agent == aow_runtime_contract::agents::AgentType::TraeCli {
+        if agent == aow_host_contract::agents::AgentType::TraeCli {
             env.insert("PROBE_REQUIRED_HOME".into(), "TRAECLI_HOME".into());
             env.insert("PROBE_REQUIRED_FILE".into(), "auth.json".into());
         }
@@ -138,7 +138,7 @@ async fn missing_builtin_identity_retries_in_a_fresh_home_and_probe_reads_the_im
     std::fs::remove_file(&identity).unwrap();
     configure(
         &state,
-        aow_runtime_contract::agents::AgentType::Codex,
+        aow_host_contract::agents::AgentType::Codex,
         BTreeMap::from([("PROBE_REQUIRED_FILE".into(), ".codex/auth.json".into())]),
     )
     .await;
@@ -162,7 +162,7 @@ async fn failed_or_incomplete_cli_connections_do_not_publish_a_role_or_keep_cand
     for mode in ["fail", "empty", "whitespace"] {
         configure(
             &state,
-            aow_runtime_contract::agents::AgentType::Codex,
+            aow_host_contract::agents::AgentType::Codex,
             BTreeMap::from([("PROBE_MODE".into(), mode.into())]),
         )
         .await;
@@ -226,7 +226,7 @@ async fn timed_out_cli_is_terminated_and_scratch_workspace_is_removed() {
     let late = directory.path().join("late");
     configure(
         &state,
-        aow_runtime_contract::agents::AgentType::Codex,
+        aow_host_contract::agents::AgentType::Codex,
         BTreeMap::from([
             ("PROBE_MODE".into(), "timeout".into()),
             ("PROBE_PID".into(), pid.to_string_lossy().into_owned()),
@@ -254,7 +254,7 @@ async fn timed_out_cli_is_terminated_and_scratch_workspace_is_removed() {
 
 async fn configure(
     state: &AppState,
-    agent_type: aow_runtime_contract::agents::AgentType,
+    agent_type: aow_host_contract::agents::AgentType,
     env: BTreeMap<String, String>,
 ) {
     super::tests::configure_cli(state, agent_type, "node", vec![script()], env).await;

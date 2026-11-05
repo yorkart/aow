@@ -119,27 +119,27 @@ fn invalid_or_missing_session_limits_fail_with_the_setting_name() {
 #[test]
 fn runtime_endpoint_uses_the_selected_root_and_explicit_overrides() {
     let selected = options(&["--state-dir", "/tmp/aow-custom"], &[]).unwrap();
-    assert_eq!(selected.runtime_url, "http://127.0.0.1:9760");
+    assert_eq!(selected.host_url, "http://127.0.0.1:9760");
     assert_eq!(
-        selected.runtime_token_file,
-        PathBuf::from("/tmp/aow-custom/runtime/runtime-daemon/token")
+        selected.host_token_file,
+        PathBuf::from("/tmp/aow-custom/runtime/host-daemon/token")
     );
     let selected = options(
         &[
-            "--runtime-url",
+            "--host-url",
             "https://node.example:9760",
-            "--runtime-token-file",
+            "--host-token-file",
             "/tmp/argument.token",
         ],
         &[
-            ("AOW_RUNTIME_URL", "http://env.example:9760"),
-            ("AOW_RUNTIME_TOKEN_FILE", "/tmp/env.token"),
+            ("AOW_HOST_URL", "http://env.example:9760"),
+            ("AOW_HOST_TOKEN_FILE", "/tmp/env.token"),
         ],
     )
     .unwrap();
-    assert_eq!(selected.runtime_url, "https://node.example:9760");
+    assert_eq!(selected.host_url, "https://node.example:9760");
     assert_eq!(
-        selected.runtime_token_file,
+        selected.host_token_file,
         PathBuf::from("/tmp/argument.token")
     );
     assert!(options(&["--acpd-socket", "/tmp/old.sock"], &[]).is_err());

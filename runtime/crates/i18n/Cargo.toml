@@ -1,8 +1,0 @@
-[package]
-name = "aow-runtime-i18n"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-
-[dependencies]
-aow-i18n-core = { path = "../../../common/crates/i18n" }

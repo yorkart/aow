@@ -1,11 +1,11 @@
 use super::*;
+use crate::host_connection::HostConnection;
 use crate::roles::RoleService;
-use crate::runtime_connection::RuntimeConnection;
 #[derive(Clone)]
 pub(crate) struct TaskService {
     pub(super) inner: Arc<TaskState>,
     pub(super) roles: RoleService,
-    pub(super) node: RuntimeConnection,
+    pub(super) node: HostConnection,
 }
 pub(super) struct TaskState {
     pub(super) tasks: aow_db::tasks::TaskDb,
@@ -16,7 +16,7 @@ impl TaskService {
     pub(crate) fn new(
         state_dir: Option<PathBuf>,
         roles: RoleService,
-        node: RuntimeConnection,
+        node: HostConnection,
     ) -> Result<Self, ServiceError> {
         let path = state_dir.as_ref().map(|p| p.join("state/tasks.sqlite3"));
         let tasks =

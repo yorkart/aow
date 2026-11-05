@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use aow_runtime_contract::terminal::TerminalAgentProcess;
+use aow_host_contract::terminal::TerminalAgentProcess;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

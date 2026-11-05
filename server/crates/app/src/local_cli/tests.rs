@@ -10,7 +10,7 @@ use tower::ServiceExt;
 #[tokio::test]
 async fn project_queries_return_registry_metadata_without_git_or_terminald() {
     let directory = tempfile::tempdir().unwrap();
-    let state = AppState::for_test_with_runtime_config(
+    let state = AppState::for_test_with_host_config(
         PathBuf::new(),
         directory.path().join("no-terminald.sock"),
     );

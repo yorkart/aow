@@ -18,9 +18,9 @@ use aow_api_contract::terminal::{
     AgentTerminalSubmit,
 };
 #[cfg(test)]
-use aow_operation_log::Outcome;
+use aow_host_contract::terminal::{TerminalAttachServerMessage, TerminalControlState};
 #[cfg(test)]
-use aow_runtime_contract::terminal::{TerminalAttachServerMessage, TerminalControlState};
+use aow_operation_log::Outcome;
 pub(crate) use api::{create, get, list, submit};
 #[cfg(test)]
 use connection::AgentConnection;

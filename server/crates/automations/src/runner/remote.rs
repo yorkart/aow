@@ -1,11 +1,11 @@
 use super::*;
-use aow_runtime_client::{ExecutionReference, RuntimeClient, RuntimeError};
-use aow_runtime_contract::execution::{CapacityReservation, ExecutionInput, ExecutionSpec};
+use aow_host_client::{ExecutionReference, HostClient, HostError};
+use aow_host_contract::execution::{CapacityReservation, ExecutionInput, ExecutionSpec};
 use serde_json::{Value, json};
 use std::{fs::OpenOptions, io::Write, time::Duration};
 const REFERENCE: &str = "node-execution.json";
-fn client(store: &Store) -> RuntimeClient {
-    RuntimeClient::from_connection_file(store.state_dir.join("runtime/runtime-client.json"))
+fn client(store: &Store) -> HostClient {
+    HostClient::from_connection_file(store.state_dir.join("runtime/host-client.json"))
 }
 pub fn execution_reference(
     store: &Store,
@@ -36,7 +36,7 @@ fn consumed(store: &Store, task_id: &str, id: &str) -> Result<u64> {
         .unwrap_or(0))
 }
 async fn copy_output(
-    client: &RuntimeClient,
+    client: &HostClient,
     store: &Store,
     task_id: &str,
     reference: &ExecutionReference,
@@ -59,7 +59,7 @@ async fn copy_output(
     Ok(())
 }
 async fn sync(
-    client: &RuntimeClient,
+    client: &HostClient,
     store: &Store,
     task_id: &str,
     reference: &mut ExecutionReference,
@@ -68,7 +68,7 @@ async fn sync(
     let after = consumed(store, task_id, &reference.id)?;
     let snapshot = match client.execution(reference, after).await {
         Ok(snapshot) => snapshot,
-        Err(RuntimeError::HttpStatus { status, .. }) if status == http::StatusCode::NOT_FOUND => {
+        Err(HostError::HttpStatus { status, .. }) if status == http::StatusCode::NOT_FOUND => {
             let spec: ExecutionSpec = serde_json::from_slice(&std::fs::read(
                 store
                     .run_path(task_id, &reference.id)?
@@ -126,7 +126,7 @@ async fn sync(
     Ok(status)
 }
 async fn await_completion(
-    client: &RuntimeClient,
+    client: &HostClient,
     store: &Store,
     task_id: &str,
     reference: &mut ExecutionReference,
@@ -136,7 +136,7 @@ async fn await_completion(
         match sync(client, store, task_id, reference, writer).await {
             Ok(Some(status)) => return Ok(status),
             Ok(None) => {}
-            Err(error) if error.downcast_ref::<RuntimeError>().is_some_and(transient) => {
+            Err(error) if error.downcast_ref::<HostError>().is_some_and(transient) => {
                 tracing::warn!(%error,"execution node is unavailable; keeping the run for reconnect")
             }
             Err(error) => return Err(error),
@@ -144,21 +144,21 @@ async fn await_completion(
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
 }
-fn transient(error: &RuntimeError) -> bool {
+fn transient(error: &HostError) -> bool {
     matches!(
         error,
-        RuntimeError::Http(_) | RuntimeError::Io(_) | RuntimeError::WebSocket(_)
-    ) || matches!(error,RuntimeError::HttpStatus{status,..} if status.is_server_error())
+        HostError::Http(_) | HostError::Io(_) | HostError::WebSocket(_)
+    ) || matches!(error,HostError::HttpStatus{status,..} if status.is_server_error())
 }
 async fn submit_intent(
-    client: &RuntimeClient,
+    client: &HostClient,
     reference: &ExecutionReference,
     spec: ExecutionSpec,
 ) -> Result<()> {
     loop {
         match client.submit_execution(reference, spec.clone()).await {
             Ok(()) => return Ok(()),
-            Err(RuntimeError::HttpStatus { status, .. }) if status == http::StatusCode::GONE => {
+            Err(HostError::HttpStatus { status, .. }) if status == http::StatusCode::GONE => {
                 return Ok(());
             }
             Err(error) if transient(&error) => {
@@ -170,7 +170,7 @@ async fn submit_intent(
     }
 }
 async fn cancel_intent(
-    client: &RuntimeClient,
+    client: &HostClient,
     store: &Store,
     task_id: &str,
     reference: &ExecutionReference,
@@ -254,7 +254,7 @@ pub(super) async fn run(
             crate::store::atomic_write(&store.run_path(task_id,&run.id)?.join("node-spec.json"),&serde_json::to_vec(&spec)?)?;
             save_reference(store,task_id,&reference)?;
             if let Err(error)=submit_intent(&client,&reference,spec).await {
-                if matches!(error.downcast_ref::<RuntimeError>(),Some(RuntimeError::HttpStatus{status,error:Some(error),..}) if *status==http::StatusCode::CONFLICT&&error.code=="execution_busy") {return Ok(RunStatus::Skipped);}
+                if matches!(error.downcast_ref::<HostError>(),Some(HostError::HttpStatus{status,error:Some(error),..}) if *status==http::StatusCode::CONFLICT&&error.code=="execution_busy") {return Ok(RunStatus::Skipped);}
                 return Err(error);
             }
             await_completion(&client,store,task_id,&mut reference,&mut writer).await

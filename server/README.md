@@ -2,17 +2,17 @@
 
 Server owns business APIs, CLI, automation scheduling and the web frontend. This
 is an independent Cargo workspace. Its shared data contracts and IDs come from
-`../common`; no path dependency refers to Runtime implementation crates.
+`../common`; no path dependency refers to Host implementation crates.
 ACP conversation state and history are owned by the daemon. The local
-`runtime-client` crate exposes typed node operations and transports requests, responses and events.
-Business modules do not construct Runtime HTTP paths or JSON envelopes.
+`host-client` crate exposes typed node operations and transports requests, responses and events.
+Business modules do not construct Host HTTP paths or JSON envelopes.
 Workspace files, Git processes, role HOME preparation and clipboard storage execute
-only in Runtime, including Server integration tests.
+only in Host, including Server integration tests.
 
 `crates/api-contract` defines Server business API data for the application and
 its clients: instance creation, terminal tabs/layouts/hosting, pull requests and
-Git provider links. Runtime wire types come from Common's `runtime-contract`;
-the Runtime SDK has no dependency on Server business contracts.
+Git provider links. Host wire types come from Common's `host-contract`;
+the Host SDK has no dependency on Server business contracts.
 
 The main application source lives in `crates/app`. Its Cargo package and binary
 are both named `aow-server`; Rust callers continue to use `aow_server`.
@@ -48,9 +48,9 @@ Frontend request methods live in `features/projects/api.ts`,
 `features/projects/worktrees/api.ts` and `features/settings/api.ts`, alongside
 the other business API modules. There is no aggregate `aowApi` facade.
 
-`runtime_connection` supplies the configured SDK client and node-operation
+`host_connection` supplies the configured SDK client and node-operation
 helpers. Its local fixture configuration exists only under `cfg(test)` and
-still launches the external Runtime fixture; it has no execution implementation.
+still launches the external Host fixture; it has no execution implementation.
 
 ```text
 server/
@@ -60,7 +60,7 @@ server/
   crates/api-contract/    Server business API data
   crates/cli/             aow-cli command-line entry point
   crates/server-client/   Server business API client
-  crates/runtime-client/  Runtime daemon client
+  crates/host-client/  Host daemon client
   crates/cli-access/      CLI authorization
   crates/db/              Server business storage
 ```
@@ -69,8 +69,8 @@ server/
 npm --prefix frontend ci --ignore-scripts --no-audit --no-fund
 npm --prefix frontend run build
 cargo build --workspace --locked
-cargo run -p aow-server -- --runtime-url http://node:9760 \
-  --runtime-token-file /private/runtime-token --server-url https://aow.example.com
+cargo run -p aow-server -- --host-url http://node:9760 \
+  --host-token-file /private/host-token --server-url https://aow.example.com
 ```
 
 `--server-url` (or `AOW_SERVER_PUBLIC_URL`) is the externally reachable Server
@@ -85,7 +85,7 @@ AOW_SERVER_TOKEN_FILE=/private/cli-token aow-cli project list
 
 Server creates a private master CLI token in `<state>/runtime/cli/token` unless
 `--cli-token-file` / `AOW_SERVER_CLI_TOKEN_FILE` specifies another private file.
-CLI tokens authorize `/api/cli/v1/*` only. Browser Cookies and runtime tokens do
+CLI tokens authorize `/api/cli/v1/*` only. Browser Cookies and Host tokens do
 not authorize those endpoints; CLI tokens cannot access browser administration
 APIs. Use HTTPS outside a trusted private network. Never pass tokens as arguments.
 
@@ -96,36 +96,36 @@ Replacing the master token revokes every previously signed grant. Grant metadata
 persists in the Server state directory across restarts.
 
 Server injects `AOW_SERVER_URL` and a 24-hour CLI grant into CLI/ACP agent
-environments. Shared ACP adapters reuse a valid grant to retain their process identity. Scheduled execution obtains a new grant for each run. runtime
+environments. Shared ACP adapters reuse a valid grant to retain their process identity. Scheduled execution obtains a new grant for each run. Host
 forwards those environment values without implementing or importing Server
 business code. Expired/revoked agents need a new launch to receive a fresh grant.
 Local same-user Unix socket access and read-only offline automation inspection
 remain available when no remote connection is configured. A failed remote
 connection never falls back to local state.
 
-For black-box caller tests, build the independent runtime fixture separately and
-provide `AOW_RUNTIME_TEST_HOST=/absolute/path/runtime-test-host`. The monorepo root
+For black-box caller tests, build the independent Host fixture separately and
+provide `AOW_HOST_TEST_DAEMON=/absolute/path/host-test-daemon`. The monorepo root
 `just test` handles this preparation. From this directory use `cargo test
 --workspace --locked`, `cargo fmt --all -- --check` and `cargo clippy --workspace
 --all-targets --locked -- -D warnings`.
 
 Server has no native Agent implementation crate. Agent discovery, launch adaptation,
 argument validation, interactive readiness, prompt delivery and native session reads
-use `crates/runtime-client`. Server keeps configured profiles, business roles,
+use `crates/host-client`. Server keeps configured profiles, business roles,
 automation schedules, concurrency policy and notification delivery. Native database
-formats and Agent execution traits belong exclusively to Runtime.
+formats and Agent execution traits belong exclusively to Host.
 
-Agent integration tests start the external Runtime fixture. They do not link Runtime
-implementation crates. Shared wire types are in `../common/crates/runtime-contract`.
+Agent integration tests start the external Host fixture. They do not link Host
+implementation crates. Shared wire types are in `../common/crates/host-contract`.
 
 Both products use `../common/crates/sqlite` for generic SQLite connections and
 migration bookkeeping. Server's `crates/db` owns task schemas, migration SQL and
-business transactions; Runtime owns ACP and native Agent storage.
+business transactions; Host owns ACP and native Agent storage.
 
 `../common/crates/macos-log` provides the macOS Unified Logging adapter for both
 products. Operation history and business audit policy remain in Server.
 
-Workspace file reads, writes, searches and transfers always use the Runtime SDK,
+Workspace file reads, writes, searches and transfers always use the Host SDK,
 including in caller tests. Server has no filesystem execution crate or bundled
 ripgrep. Its own state-directory selection belongs to `crates/config`; workspace
-filesystem implementations and the search tool belong to Runtime.
+filesystem implementations and the search tool belong to Host.

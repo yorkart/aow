@@ -1,5 +1,5 @@
 use crate::{instance::*, terminal::*};
-use aow_runtime_contract::instance::InstanceRef;
+use aow_host_contract::instance::InstanceRef;
 
 #[test]
 fn instance_creation_rejects_unknown_fields_instead_of_losing_parentage() {

@@ -1,7 +1,7 @@
 use super::*;
 use aow_db::tasks::{EventKind, EventTarget, TaskEvent, TaskResource, TaskStatus};
-use aow_runtime_client::acp::AcpClient;
-use aow_runtime_client::{acp::Content, testing::AcpFixture};
+use aow_host_client::acp::AcpClient;
+use aow_host_client::{acp::Content, testing::AcpFixture};
 use axum::{
     Router,
     body::{Body, to_bytes},
@@ -477,10 +477,8 @@ async fn conversation_policy_and_task_cancellation_stop_at_task_ownership_bounda
             .prepare_session_with_options(
                 "test",
                 directory.path().into(),
-                aow_runtime_client::acp::SessionCreation {
-                    parent: Some(aow_runtime_contract::instance::InstanceRef::acp(
-                        parent_thread,
-                    )),
+                aow_host_client::acp::SessionCreation {
+                    parent: Some(aow_host_contract::instance::InstanceRef::acp(parent_thread)),
                     ..Default::default()
                 },
             )

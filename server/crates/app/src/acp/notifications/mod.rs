@@ -1,6 +1,6 @@
 //! Translate ACP prompt completion into the existing page/IM notification pipeline.
-use aow_runtime_client::acp::TurnCompletion;
-use aow_runtime_contract::agents::TokenUsage;
+use aow_host_client::acp::TurnCompletion;
+use aow_host_contract::agents::TokenUsage;
 use serde_json::Value;
 use tokio::sync::broadcast;
 
@@ -27,7 +27,7 @@ pub(super) async fn dispatch(
                 .unwrap_or(&session.cwd)
                 .to_owned()
         });
-    let display_name = match projects.runtime().agent_node().await {
+    let display_name = match projects.host().agent_node().await {
         Ok(node) => node.agent_capabilities().await.ok().and_then(|items| {
             items
                 .into_iter()

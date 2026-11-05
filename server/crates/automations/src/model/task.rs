@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use super::AgentKind;
-use aow_runtime_contract::workspace::{WorkspaceConfig, WorkspaceMode};
+use aow_host_contract::workspace::{WorkspaceConfig, WorkspaceMode};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -256,7 +256,7 @@ pub struct ManualRunRequest {
     pub hosted: bool,
 }
 
-pub use aow_runtime_contract::execution::AgentLaunch;
+pub use aow_host_contract::execution::AgentLaunch;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Task {

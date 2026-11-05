@@ -1,27 +1,27 @@
 #!/bin/sh
-# Called by the Server and runtime-daemon activation helpers.
+# Called by the Server and host-daemon activation helpers.
 set -eu
 umask 077
 
 component=${1:?service component is required}
 requested=${2:-latest}
-case "$component" in server|runtime-daemon) ;; *) exit 1 ;; esac
+case "$component" in server|host-daemon) ;; *) exit 1 ;; esac
 script_dir=$(CDPATH='' cd -P "$(dirname "$0")" && pwd)
 repo_root=$(CDPATH='' cd -P "$script_dir/.." && pwd)
-runtime_root=${AOW_RUNTIME_ROOT:-${HOME:?HOME must be set}/.local/lib/aow}
-service_mode=$(node "$script_dir/launchd-mode.mjs" resolve "$runtime_root")
+install_root=${AOW_INSTALL_ROOT:-${HOME:?HOME must be set}/.local/lib/aow}
+service_mode=$(node "$script_dir/launchd-mode.mjs" resolve "$install_root")
 if [ "$service_mode" = launchdaemon ]; then
     if [ "$component" = server ]; then
         bash "$repo_root/packaging/bin/aow" account --if-missing
     fi
-    exec node "$script_dir/start-launchdaemon.mjs" "$component" "$runtime_root" "$requested"
+    exec node "$script_dir/start-launchdaemon.mjs" "$component" "$install_root" "$requested"
 fi
 label=org.aow.$component
 domain=gui/$(id -u)
 service=$domain/$label
 plist_dir=$HOME/Library/LaunchAgents
 plist=$plist_dir/$label.plist
-active=$runtime_root/active/$component
+active=$install_root/active/$component
 stage=
 fail() { printf 'error: %s\n' "$*" >&2; exit 1; }
 rename() { node -e 'require("node:fs").renameSync(process.argv[1], process.argv[2])' "$1" "$2"; }
@@ -32,15 +32,15 @@ if ! command -v launchctl >/dev/null || ! launchctl print "$domain" >/dev/null 2
     fail 'a logged-in macOS graphical user session is required (launchd gui domain)'
 fi
 case "$requested" in
-    latest) candidate=$runtime_root/latest ;;
+    latest) candidate=$install_root/latest ;;
     ''|[!A-Za-z0-9]*|*[!A-Za-z0-9._-]*) fail "invalid release id: $requested" ;;
-    *) candidate=$runtime_root/releases/$requested ;;
+    *) candidate=$install_root/releases/$requested ;;
 esac
 [ -d "$candidate" ] || fail "AoW release is unavailable: $candidate"
 release=$(CDPATH='' cd -P "$candidate" && pwd)
-releases=$(CDPATH='' cd -P "$runtime_root/releases" && pwd)
+releases=$(CDPATH='' cd -P "$install_root/releases" && pwd)
 case "$release" in "$releases"/*) ;; *) fail 'release resolves outside the releases directory' ;; esac
-[ -x "$release/bin/aow-$component" ] && [ -x "$runtime_root/bin/aow-$component" ] \
+[ -x "$release/bin/aow-$component" ] && [ -x "$install_root/bin/aow-$component" ] \
     || fail 'AoW binary or launcher is unavailable; run the installer first'
 if [ "$component" = server ]; then
     [ -f "$release/frontend/dist/index.html" ] || fail 'incomplete server frontend'
@@ -48,25 +48,25 @@ if [ "$component" = server ]; then
 fi
 [ ! -e "$active" ] || [ -L "$active" ] || fail 'active release must be a symlink'
 [ ! -L "$plist" ] && [ ! -d "$plist" ] || fail 'LaunchAgent destination must be a regular file'
-mkdir -p "$plist_dir" "$runtime_root/active"
-stage=$(mktemp -d "$runtime_root/.launchd-$component.XXXXXX")
+mkdir -p "$plist_dir" "$install_root/active"
+stage=$(mktemp -d "$install_root/.launchd-$component.XXXXXX")
 node_path=$(command -v node)
 case "$node_path" in /*) ;; *) fail 'Node.js must resolve to an absolute path' ;; esac
-# PATH may select the managed Node link that runtime-daemon activation replaces.
+# PATH may select the managed Node link that host-daemon activation replaces.
 node_path=$("$node_path" -e 'process.stdout.write(require("node:fs").realpathSync(process.argv[1]))' "$node_path")
 [ -f "$script_dir/service-health.mjs" ] || fail 'service health helper is missing; reinstall the package'
-node "$script_dir/launchd-service.mjs" "$component" "$runtime_root" "$stage/service.plist" "$node_path"
+node "$script_dir/launchd-service.mjs" "$component" "$install_root" "$stage/service.plist" "$node_path"
 plutil -lint "$stage/service.plist" >/dev/null
 previous_active=
 if [ -L "$active" ]; then previous_active=$(readlink "$active"); fi
 if [ -f "$plist" ]; then cp "$plist" "$stage/previous.plist"; fi
 previous_node=
-if [ "$component" = runtime-daemon ] && [ -L "$runtime_root/node" ]; then
-    previous_node=$(readlink "$runtime_root/node")
+if [ "$component" = host-daemon ] && [ -L "$install_root/node" ]; then
+    previous_node=$(readlink "$install_root/node")
     # A legacy terminald installation has only its old marker. Leave that marker
     # untouched and remember whether the current marker existed for rollback.
-    if [ -f "$runtime_root/.aow-runtime-daemon-node-target" ]; then
-        cp "$runtime_root/.aow-runtime-daemon-node-target" "$stage/previous-node-marker"
+    if [ -f "$install_root/.aow-host-daemon-node-target" ]; then
+        cp "$install_root/.aow-host-daemon-node-target" "$stage/previous-node-marker"
     fi
 fi
 was_loaded=0
@@ -105,14 +105,14 @@ rollback() {
     if [ "$node_changed" = 1 ]; then
         if [ -n "$previous_node" ]; then
             ln -s "$previous_node" "$stage/restore-node" || return 1
-            rename "$stage/restore-node" "$runtime_root/node" || return 1
+            rename "$stage/restore-node" "$install_root/node" || return 1
             if [ -f "$stage/previous-node-marker" ]; then
-                rename "$stage/previous-node-marker" "$runtime_root/.aow-runtime-daemon-node-target" || return 1
+                rename "$stage/previous-node-marker" "$install_root/.aow-host-daemon-node-target" || return 1
             else
-                rm -f "$runtime_root/.aow-runtime-daemon-node-target" || return 1
+                rm -f "$install_root/.aow-host-daemon-node-target" || return 1
             fi
         else
-            rm -f "$runtime_root/node" "$runtime_root/.aow-runtime-daemon-node-target" || return 1
+            rm -f "$install_root/node" "$install_root/.aow-host-daemon-node-target" || return 1
         fi
     fi
     if [ -f "$stage/previous.plist" ]; then
@@ -133,15 +133,15 @@ activate() {
     if [ "$was_loaded" = 1 ]; then unload_job || return; fi
     ln -s "$release" "$stage/active" || return
     rename "$stage/active" "$active" || return
-    if [ "$component" = runtime-daemon ]; then
+    if [ "$component" = host-daemon ]; then
         node_changed=1
-        rename "$stage/node" "$runtime_root/node" || return
-        rename "$stage/.aow-runtime-daemon-node-target" "$runtime_root/.aow-runtime-daemon-node-target" || return
+        rename "$stage/node" "$install_root/node" || return
+        rename "$stage/.aow-host-daemon-node-target" "$install_root/.aow-host-daemon-node-target" || return
     fi
     rename "$stage/service.plist" "$plist" || return
     launchctl enable "$service" || return
     launchctl bootstrap "$domain" "$plist" || return
-    # RunAtLoad starts the job. Do not kickstart -k here: a second runtime-daemon
+    # RunAtLoad starts the job. Do not kickstart -k here: a second host-daemon
     # restart could destroy shells opened during activation.
     node "$script_dir/service-health.mjs" "$stage/health.json" "$service"
 }

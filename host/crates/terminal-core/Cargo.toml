@@ -1,0 +1,30 @@
+[package]
+name = "aow-terminal-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+aow-i18n = { package = "aow-host-i18n", path = "../i18n" }
+aow-host-contract = { path = "../../../common/crates/host-contract" }
+aow-filesystem = { package = "aow-host-filesystem", path = "../filesystem" }
+aow-id = { path = "../../../common/crates/id" }
+anyhow.workspace = true
+async-trait.workspace = true
+bytes.workspace = true
+futures-util = { workspace = true, features = ["sink"] }
+libc.workspace = true
+md5.workspace = true
+portable-pty.workspace = true
+aow-agents-core = { path = "../agents-core", features = ["sessions"] }
+aow-process = { package = "aow-host-process", path = "../process" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tempfile = "3.20"
+tokio = { workspace = true, features = ["process"] }
+tracing.workspace = true
+vte.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+aow-macos-log = { path = "../../../common/crates/macos-log" }

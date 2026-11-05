@@ -81,13 +81,13 @@ async fn node_only_paths_support_project_registration_and_file_apis() {
         .route("/v1/workspace/operations", post(operation))
         .with_state(node.clone());
     let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
-    let endpoint = aow_runtime_client::RuntimeEndpoint::new(
+    let endpoint = aow_host_client::HostEndpoint::new(
         &format!("http://{address}"),
         "remote-node-token-0123456789abcdef".into(),
     )
     .unwrap();
     let mut state =
-        AppState::with_runtime(Default::default(), directory.path().into(), endpoint).unwrap();
+        AppState::with_host(Default::default(), directory.path().into(), endpoint).unwrap();
     state.auth = crate::auth::AuthService::disabled();
     let app = crate::build_router(state);
     let response = app
