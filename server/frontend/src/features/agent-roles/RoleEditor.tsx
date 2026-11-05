@@ -1,37 +1,48 @@
 import { useEffect, useId, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, LoaderCircle } from 'lucide-react';
 import { t } from '../../lib/i18n';
-import { RoleAcpRuntime } from './RoleAcpRuntime';
 import { RoleIdentity } from './RoleIdentity';
+import { acpApi, settingsChanged } from '../acp/api';
+import type { AgentInfo } from '../acp/types';
 import { agentsApi } from '../agents/api';
+import { aowAgentType } from '../agents/agentTypes';
 import type { AowAgent } from '../agents/types';
-import { rolesApi, type AgentRole, type RoleConfig, type IdentitySource } from './api';
+import { rolesApi, type AgentRole, type RoleConfig, type RoleRuntime, type IdentitySource } from './api';
 
 export function RoleEditor({ role, onClose, onSaved, onBusyChange, onDirtyChange }: { role?: AgentRole; onClose: () => void; onSaved: () => void; onBusyChange: (busy: boolean) => void; onDirtyChange: (dirty: boolean) => void }) {
   const [requestId] = useState(() => Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join(''));
   const [step, setStep] = useState(0);
   const [description, setDescription] = useState(role?.description ?? '');
   const [name, setName] = useState(role?.name ?? '');
-  const [mode, setMode] = useState<'cli' | 'acp'>(role?.runtime.mode ?? 'acp');
-  const [agentId, setAgentId] = useState(role?.runtime.mode === 'acp' ? role.runtime.agent_id : '');
-  const [cliId, setCliId] = useState(role?.runtime.mode === 'cli' ? role.runtime.agent_id : '');
+  const [runtime, setRuntime] = useState<RoleRuntime | undefined>(role?.runtime);
   const [source, setSource] = useState(role?.identity.source ?? '');
   const [presets, setPresets] = useState<IdentitySource[]>([]);
   const [reload, setReload] = useState(0);
   const [instruction, setInstruction] = useState(role?.instruction ?? '');
   const [skills, setSkills] = useState(role?.skills.join('\n') ?? '');
   const [localAgents, setLocalAgents] = useState<AowAgent[]>([]);
+  const [acpAgents, setAcpAgents] = useState<AgentInfo[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [acpReady, setAcpReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const titleId = useId();
   const locked = busy;
-  const configuredCli = localAgents.filter(agent => agent.source === 'configured' && presets.some(preset => preset.layout === agent.agent_type));
-  const selectedCli = configuredCli.find(agent => agent.id === cliId);
-  const preset = presets.find(item => mode === 'cli' ? item.layout === selectedCli?.agent_type : agentId.toLowerCase().split(/[^a-z0-9]+/).includes(item.layout));
-  const runtimeReady = !loading && !!preset && (mode === 'acp' ? acpReady : !!selectedCli?.available);
-  const draft = JSON.stringify([name, description, mode, agentId, cliId, source, instruction, skills]);
+  const runtimes = [
+    ...acpAgents.map(agent => ({
+      key: `acp:${agent.id}`, runtime: { mode: 'acp', agent_id: agent.id } as const, name: agent.name,
+      available: agent.configured && agent.supported && agent.installed,
+      preset: presets.find(item => agent.id.toLowerCase().split(/[^a-z0-9]+/).includes(item.layout)),
+    })),
+    ...localAgents.map(agent => ({
+      key: `cli:${agent.id}`, runtime: { mode: 'cli', agent_id: agent.id } as const, name: agent.display_name,
+      available: agent.available, preset: presets.find(item => item.layout === aowAgentType(agent)),
+    })),
+  ];
+  const runtimeKey = runtime ? `${runtime.mode}:${runtime.agent_id}` : '';
+  const selectedRuntime = runtimes.find(item => item.key === runtimeKey);
+  const preset = selectedRuntime?.preset;
+  const runtimeReady = !loading && !!preset && !!selectedRuntime?.available;
+  const draft = JSON.stringify([name, description, runtime, source, instruction, skills]);
   const [baseline] = useState(draft);
   const dirty = draft !== baseline;
   useEffect(() => { onBusyChange(busy); return () => onBusyChange(false); }, [busy, onBusyChange]);
@@ -39,13 +50,18 @@ export function RoleEditor({ role, onClose, onSaved, onBusyChange, onDirtyChange
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    void Promise.all([agentsApi.agents(true), rolesApi.sources()]).then(([agents, sources]) => {
-      if (!cancelled) { setLocalAgents(agents); setPresets(sources); }
-    }).catch(reason => { if (!cancelled) { setLocalAgents([]); setPresets([]); setError(String(reason)); } }).finally(() => { if (!cancelled) setLoading(false); });
+    void Promise.all([agentsApi.agents(true), acpApi.agents(), rolesApi.sources()]).then(([agents, acp, sources]) => {
+      if (!cancelled) { setLocalAgents(agents); setAcpAgents(acp); setPresets(sources); }
+    }).catch(reason => { if (!cancelled) { setLocalAgents([]); setAcpAgents([]); setPresets([]); setError(String(reason)); } }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [reload]);
-  const config = (): RoleConfig => ({
-    name: name.trim(), description: description.trim(), runtime: { mode, agent_id: mode === 'acp' ? agentId : cliId },
+  useEffect(() => {
+    const refresh = () => setReload(value => value + 1);
+    window.addEventListener(settingsChanged, refresh);
+    return () => window.removeEventListener(settingsChanged, refresh);
+  }, []);
+  const config = (runtime: RoleRuntime): RoleConfig => ({
+    name: name.trim(), description: description.trim(), runtime,
     ...(role ? { home_layout: role.home_layout } : {}), identity: role?.identity ?? { kind: 'local_home', source: source.trim() }, instruction, skills: skills.split('\n').map(value => value.trim()).filter(Boolean),
   });
   const next = () => {
@@ -54,11 +70,11 @@ export function RoleEditor({ role, onClose, onSaved, onBusyChange, onDirtyChange
     setStep(current => current + 1);
   };
   const save = async () => {
-    if (locked || !name.trim() || !runtimeReady || (!role && !source.trim())) return;
+    if (locked || !name.trim() || !runtime || !runtimeReady || (!role && !source.trim())) return;
     setBusy(true); setError('');
     try {
-      if (role) await rolesApi.save(config(), role.id);
-      else await rolesApi.testAndCreate(config(), requestId);
+      if (role) await rolesApi.save(config(runtime), role.id);
+      else await rolesApi.testAndCreate(config(runtime), requestId);
       onSaved();
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
     finally { setBusy(false); }
@@ -75,16 +91,19 @@ export function RoleEditor({ role, onClose, onSaved, onBusyChange, onDirtyChange
         <label className="project-aow-dialog-field"><span>{t('roles.role_description')}</span><textarea rows={4} maxLength={4096} value={description} disabled={locked} onChange={event => setDescription(event.target.value)} placeholder={t('roles.description_hint')} /></label>
         </div>
         <div hidden={!role && step !== 1} className="role-step">
-        <label className="project-aow-dialog-field"><span>{t('roles.mode')}</span><select aria-label={t('roles.mode')} value={mode} disabled={locked} onChange={event => setMode(event.target.value as 'cli' | 'acp')}><option value="acp">ACP</option><option value="cli">CLI</option></select></label>
-        {mode === 'acp' ? <RoleAcpRuntime layouts={presets.map(item => item.layout)} value={agentId} onChange={setAgentId} disabled={busy} onReadyChange={setAcpReady} /> : <>
-          <label className="project-aow-dialog-field"><span>{t('roles.local_runtime')}</span><select aria-label={t('roles.local_runtime')} value={cliId} disabled={locked || loading} onChange={event => setCliId(event.target.value)}><option value="">{t('roles.select_local_runtime')}</option>{cliId && !selectedCli && <option value={cliId} disabled>{cliId} · {t('roles.runtime_unavailable')}</option>}{configuredCli.map(agent => <option key={agent.id} value={agent.id} disabled={!agent.available}>{agent.display_name}{agent.available ? '' : ` · ${t('roles.runtime_unavailable')}`}</option>)}</select></label>
-          <p className="project-aow-form-intro">{t('roles.shared_cli')}</p>
-          {!loading && !configuredCli.some(agent => agent.available) && <p className="project-aow-empty">{t('roles.cli_empty')}</p>}
-          <button className="project-aow-dialog-button" type="button" disabled={locked || loading} onClick={() => { setError(''); setReload(value => value + 1); }}>{t('roles.reload_runtimes')}</button>
-        </>}
+        <label className="project-aow-dialog-field"><span>{t('settings.runtime')}</span><select aria-label={t('settings.runtime')} value={runtimeKey} disabled={locked || loading} onChange={event => setRuntime(runtimes.find(item => item.key === event.target.value)?.runtime)}>
+          <option value="">{t('roles.select_runtime')}</option>
+          {runtime && !selectedRuntime && <option value={runtimeKey} disabled>{runtime.mode === 'acp' ? 'ACP' : t('settings.agent_cli')} · {runtime.agent_id} · {t('roles.runtime_unavailable')}</option>}
+          {(['acp', 'cli'] as const).map(mode => <optgroup key={mode} label={mode === 'acp' ? 'ACP' : t('settings.agent_cli')}>
+            {runtimes.filter(item => item.runtime.mode === mode).map(item => <option key={item.key} value={item.key} disabled={!item.available || !item.preset}>{item.name} · {mode === 'acp' ? 'ACP' : t('settings.agent_cli')} · {item.runtime.agent_id}{item.available && item.preset ? '' : ` · ${t('roles.runtime_unavailable')}`}</option>)}
+          </optgroup>)}
+        </select></label>
+        <p className="project-aow-form-intro">{t('roles.shared_runtime')}</p>
+        {!loading && !runtimes.some(item => item.available && item.preset) && <p className="project-aow-empty">{t('roles.runtime_empty')}</p>}
+        <button className="project-aow-dialog-button" type="button" disabled={locked || loading} onClick={() => { setError(''); setReload(value => value + 1); }}>{t('roles.reload_runtimes')}</button>
         </div>
         {!role && <div hidden={step !== 2} className="role-step">
-          <div className="role-connection-summary"><strong>{name}</strong><span>{mode.toUpperCase()} · {mode === 'acp' ? agentId : selectedCli?.display_name}</span></div>
+          <div className="role-connection-summary"><strong>{name}</strong><span>{runtime?.mode === 'acp' ? 'ACP' : t('settings.agent_cli')} · {selectedRuntime?.name}</span></div>
           <RoleIdentity preset={preset} source={source} onSourceChange={setSource} disabled={locked} />
           <p className="project-aow-form-intro">{t('roles.managed_home')}</p>
           <p className="project-aow-form-intro">{t('roles.test_hint')}</p>

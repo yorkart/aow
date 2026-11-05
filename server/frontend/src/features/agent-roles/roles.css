@@ -7,6 +7,7 @@
 .role-editor { display:flex; flex-direction:column; min-height:0; height:100%; }
 .role-editor > .project-aow-dialog-form { display:flex; flex-direction:column; flex:1; min-height:0; }
 .role-step:not([hidden]) { display:flex; flex-direction:column; gap:14px; }
+.role-step > .project-aow-dialog-button { align-self:flex-start; }
 .role-wizard-steps { display:flex; gap:18px; margin:0 0 8px; padding:0; list-style:none; }
 .role-wizard-steps li { flex:1; display:flex; align-items:center; gap:8px; color:var(--aow-muted); font-size:12px; }
 .role-wizard-steps li > span { display:flex; align-items:center; justify-content:center; flex:0 0 24px; height:24px; border:1px solid var(--aow-control-line); border-radius:50%; }

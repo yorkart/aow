@@ -1,14 +1,13 @@
 import { t } from '../../lib/i18n';
 import type { MutableRefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Bell, Bot, ChevronRight, FileText, GitBranch, MessageSquare, Network, NotebookPen, Palette, RefreshCw, Settings, SquareTerminal, X } from 'lucide-react';
+import { ArrowLeft, Bell, Bot, ChevronRight, Cpu, FileText, GitBranch, MessageSquare, Network, NotebookPen, Palette, RefreshCw, Settings, SquareTerminal, X } from 'lucide-react';
 import { settingsApi } from './api';
 import { parseNodeAddresses } from '../../aow/aowNodes';
 import type { AowSettings } from '../../aow/types';
 import type { AowAgent } from '../agents/types';
 import { agentsApi } from '../agents/api';
 import { AgentIcon } from '../agents/AgentIcon';
-import { AcpIcon } from '../agents/AcpIcon';
 import { AgentArgumentsInput } from '../agents/AgentArgumentsInput';
 import { argumentsDraft, normalizeArguments } from '../agents/arguments';
 import { environmentDraft, parseEnvironment } from '../agents/environment';
@@ -33,9 +32,8 @@ const sections = [
   { id: 'editor', label: t("navigation.editor"), description: t("settings.configure_the_file_editor"), icon: FileText },
   { id: 'notes', label: t("navigation.notes"), description: t("settings.set_the_default_notes_root_directory"), icon: NotebookPen },
   { id: 'environment', label: t("navigation.environment"), description: t("settings.configure_execution_path_and_service_environment_variables"), icon: SquareTerminal },
-  { id: 'acp', label: 'ACP', description: t("settings.configure_acp_agents"), icon: AcpIcon },
-  { id: 'roles', label: t('roles.title'), description: t('roles.description'), icon: Bot },
-  { id: 'agents', label: t("navigation.agents"), description: t("settings.configure_agent_launch_methods"), icon: Bot },
+  { id: 'runtime', label: t("settings.runtime"), description: t("settings.configure_runtimes"), icon: Cpu },
+  { id: 'agents', label: t('roles.title'), description: t('roles.description'), icon: Bot },
   { id: 'im', label: 'IM', description: t("settings.configure_feishu_and_wechat_bots"), icon: MessageSquare },
   { id: 'notifications', label: t("notifications.notifications_2"), description: t("settings.choose_task_completion_notifications"), icon: Bell },
   { id: 'git-platforms', label: t("git_platform.title"), description: t("settings.providers_cli_and_scripts"), icon: GitBranch },
@@ -359,9 +357,38 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
         </nav>
         <div className="project-aow-settings-content" hidden={mobile && overview}>
           <div className="git-platform-provider-settings-host" hidden={section !== 'git-platforms'}><GitPlatformProviderSettings active={section === 'git-platforms'} onBusyChange={setSettingsBusy} /></div>
-          <div className="acp-settings-host" hidden={section !== 'acp'}><AcpSettings active={section === 'acp'} onBusyChange={setSettingsBusy} onDirtyChange={setAcpDirty} /></div>
-          <div className="role-settings-host" hidden={section !== 'roles'}><RoleSettings active={section === 'roles'} onBusyChange={setSettingsBusy} onDirtyChange={setRoleDirty} /></div>
-          {section === 'git-platforms' || section === 'acp' || section === 'roles' ? null : section === 'appearance' ? <AppearanceSettings /> : section === 'nodes' ? (
+          <div className="runtime-settings-host" hidden={section !== 'runtime'}>
+            <div className="project-aow-dialog-body runtime-settings-body">
+              <AcpSettings active={section === 'runtime'} onBusyChange={setSettingsBusy} onDirtyChange={setAcpDirty} />
+              <section className="runtime-cli-settings" aria-label={t("settings.agent_cli")}>
+                  <div className="project-aow-settings-heading"><div><h2>{t("settings.agent_cli")}</h2><p>{t("settings.supports_claude_code_codex_traecode_cli_hermes_and_pi")}</p></div><button type="button" className="project-aow-dialog-button" title={t("settings.detect_local_agents_again")} disabled={busy} onClick={() => void reloadAgentList()}><RefreshCw />{t("files.refresh")}</button><button type="button" className="project-aow-dialog-button primary" disabled={busy} onClick={() => { resetAgentForm(); setAgentDialog('new'); }}>{t("settings.add_agent")}</button></div>
+                  {agentsError && <div className="project-aow-error" role="alert">{agentsError}</div>}
+                  <AgentList agents={agents} busy={busy} editingAgentId={editingAgentId} onEdit={loadAgent} onCopy={agent => loadAgent(agent, true)} onRemove={id => void removeAgent(id)} onReorder={reorderAgents} onDefaultChange={id => void selectDefaultAgent(id)} />
+                  {agentSaved && <p role="status">{agentSaved}</p>}
+                  {agentRefreshError && <div className="project-aow-error" role="alert">{t("settings.failed_to_refresh_list")}{agentRefreshError}<button type="button" className="project-aow-dialog-button" disabled={busy} onClick={() => void reloadAgentList()}>{t("settings.retry_refresh")}</button></div>}
+                  {!agentDialog && error && <div className="project-aow-error" role="alert">{error}</div>}
+              </section>
+              {agentDialog && <SettingsActionDialog title={agentDialog === 'edit' ? t("settings.edit_agent_configuration") : agentDialog === 'copy' ? t("settings.copy_agent_configuration") : t("settings.add_agent")} busy={busy} onClose={closeAgentDialog}>
+                <form className="project-aow-dialog-form" ref={agentForm} onSubmit={event => { event.preventDefault(); event.stopPropagation(); void save(); }}>
+                  <div className="project-aow-dialog-body">
+                  <label className="project-aow-dialog-field"><span>Agent ID <em>{t("settings.required")}</em></span><input aria-label="Agent ID" value={agentId} readOnly={!!editingAgentId} disabled={busy} onChange={event => { setAgentId(event.target.value); setAgentSaved(''); setError(''); }} placeholder={t("settings.for_example_work_codex")} pattern={'[A-Za-z0-9_\\-]+'} maxLength={80} autoCapitalize="none" spellCheck={false} required /><small>{t("settings.unique_identifier_using_letters_digits_hyphens_and_underscores_immutable")}</small></label>
+                  <label className="project-aow-dialog-field"><span>{t("settings.agent_type")} <em>{t("settings.required")}</em></span><div className="project-aow-agent-type"><AgentIcon agentId={agentType} /><select aria-label={t("settings.agent_type")} value={agentType ?? ''} disabled={busy || !!builtinAgentType(editingAgentId)} onChange={(event) => selectAgentType(event.target.value)} required><option value="" disabled>{t("settings.choose_agent_type")}</option>{agentTypes.map(type => <option key={type.id} value={type.id}>{type.label}</option>)}</select></div></label>
+                  <p className="project-aow-form-intro">{t("settings.selecting_a_type_fills_the_detected_executable_path_or")}</p>
+                  <label className="project-aow-dialog-field"><span>{t("navigation.display_name")}</span><input value={displayName} disabled={busy} onChange={(event) => setDisplayName(event.target.value)} placeholder={t("settings.for_example_work_codex_2")} required /></label>
+                  <label className="project-aow-dialog-field"><span>{t("navigation.executable")}</span><input className="project-aow-dialog-monospace" spellCheck={false} value={command} disabled={busy} onChange={(event) => setCommand(event.target.value)} placeholder={t("settings.command_name_or_absolute_path")} required /></label>
+                  <AgentArgumentsInput value={args} onChange={setArgs} executable={command} disabled={busy} onError={setError} />
+                  <label className="project-aow-dialog-field"><span>{t("navigation.environment_variables")}</span><textarea aria-label={t("navigation.environment_variables")} spellCheck={false} rows={4} value={env.text} disabled={busy} onChange={(event) => setEnv({ ...env, text: event.target.value })} placeholder={'BASE_URL=https://example.com\nAPI_KEY=your-key'} /></label>
+                  <p className="project-aow-form-intro">{t("settings.inherits_the_launch_environment_enter_key_value_per_line")}</p>
+                  <p className="project-aow-form-intro">{t("settings.saved_settings_apply_to_newly_started_terminal_agents_configure")}</p>
+                    {error && <div className="project-aow-error" role="alert">{error}</div>}
+                  </div>
+                  <footer className="project-aow-dialog-footer"><button type="button" className="project-aow-dialog-button" disabled={busy} onClick={closeAgentDialog}>{t("aow.cancel")}</button><button type="submit" className="project-aow-dialog-button primary" disabled={busy || !agentType}>{busy ? t("automations.saving") : editingAgentId ? t("settings.save_configuration") : t("settings.register")}</button></footer>
+                </form>
+              </SettingsActionDialog>}
+            </div>
+          </div>
+          <div className="role-settings-host" hidden={section !== 'agents'}><RoleSettings active={section === 'agents'} onBusyChange={setSettingsBusy} onDirtyChange={setRoleDirty} /></div>
+          {section === 'git-platforms' || section === 'runtime' || section === 'agents' ? null : section === 'appearance' ? <AppearanceSettings /> : section === 'nodes' ? (
             <form className="project-aow-dialog-form" onSubmit={event => { event.preventDefault(); void saveNodes(); }}>
               <div className="project-aow-dialog-body">
                 <div className="project-aow-settings-heading"><div><h2>{t("navigation.nodes")}</h2><p>{t("settings.configure_aow_deployments_on_other_machines_click_the_logo")}</p></div></div>
@@ -413,33 +440,7 @@ export function SettingsDialog({ agents, agentsError, mobile = false, embedded =
                 <ServerEnvironmentFields environment={serverEnvironment} busy={settingsBusy} />
               </div>
             </form>
-          </> : <>
-            <div className="project-aow-dialog-form"><div className="project-aow-dialog-body">
-                <div className="project-aow-settings-heading"><div><h2>{t("navigation.agents")}</h2><p>{t("settings.supports_claude_code_codex_traecode_cli_hermes_and_pi")}</p></div><button type="button" className="project-aow-dialog-button" title={t("settings.detect_local_agents_again")} disabled={busy} onClick={() => void reloadAgentList()}><RefreshCw />{t("files.refresh")}</button><button type="button" className="project-aow-dialog-button primary" disabled={busy} onClick={() => { resetAgentForm(); setAgentDialog('new'); }}>{t("settings.add_agent")}</button></div>
-                {agentsError && <div className="project-aow-error" role="alert">{agentsError}</div>}
-                <AgentList agents={agents} busy={busy} editingAgentId={editingAgentId} onEdit={loadAgent} onCopy={agent => loadAgent(agent, true)} onRemove={id => void removeAgent(id)} onReorder={reorderAgents} onDefaultChange={id => void selectDefaultAgent(id)} />
-                {agentSaved && <p role="status">{agentSaved}</p>}
-                {agentRefreshError && <div className="project-aow-error" role="alert">{t("settings.failed_to_refresh_list")}{agentRefreshError}<button type="button" className="project-aow-dialog-button" disabled={busy} onClick={() => void reloadAgentList()}>{t("settings.retry_refresh")}</button></div>}
-                {!agentDialog && error && <div className="project-aow-error" role="alert">{error}</div>}
-              </div></div>
-            {agentDialog && <SettingsActionDialog title={agentDialog === 'edit' ? t("settings.edit_agent_configuration") : agentDialog === 'copy' ? t("settings.copy_agent_configuration") : t("settings.add_agent")} busy={busy} onClose={closeAgentDialog}>
-              <form className="project-aow-dialog-form" ref={agentForm} onSubmit={event => { event.preventDefault(); event.stopPropagation(); void save(); }}>
-                <div className="project-aow-dialog-body">
-                <label className="project-aow-dialog-field"><span>Agent ID <em>{t("settings.required")}</em></span><input aria-label="Agent ID" value={agentId} readOnly={!!editingAgentId} disabled={busy} onChange={event => { setAgentId(event.target.value); setAgentSaved(''); setError(''); }} placeholder={t("settings.for_example_work_codex")} pattern={'[A-Za-z0-9_\\-]+'} maxLength={80} autoCapitalize="none" spellCheck={false} required /><small>{t("settings.unique_identifier_using_letters_digits_hyphens_and_underscores_immutable")}</small></label>
-                <label className="project-aow-dialog-field"><span>{t("settings.agent_type")} <em>{t("settings.required")}</em></span><div className="project-aow-agent-type"><AgentIcon agentId={agentType} /><select aria-label={t("settings.agent_type")} value={agentType ?? ''} disabled={busy || !!builtinAgentType(editingAgentId)} onChange={(event) => selectAgentType(event.target.value)} required><option value="" disabled>{t("settings.choose_agent_type")}</option>{agentTypes.map(type => <option key={type.id} value={type.id}>{type.label}</option>)}</select></div></label>
-                <p className="project-aow-form-intro">{t("settings.selecting_a_type_fills_the_detected_executable_path_or")}</p>
-                <label className="project-aow-dialog-field"><span>{t("navigation.display_name")}</span><input value={displayName} disabled={busy} onChange={(event) => setDisplayName(event.target.value)} placeholder={t("settings.for_example_work_codex_2")} required /></label>
-                <label className="project-aow-dialog-field"><span>{t("navigation.executable")}</span><input className="project-aow-dialog-monospace" spellCheck={false} value={command} disabled={busy} onChange={(event) => setCommand(event.target.value)} placeholder={t("settings.command_name_or_absolute_path")} required /></label>
-                <AgentArgumentsInput value={args} onChange={setArgs} executable={command} disabled={busy} onError={setError} />
-                <label className="project-aow-dialog-field"><span>{t("navigation.environment_variables")}</span><textarea aria-label={t("navigation.environment_variables")} spellCheck={false} rows={4} value={env.text} disabled={busy} onChange={(event) => setEnv({ ...env, text: event.target.value })} placeholder={'BASE_URL=https://example.com\nAPI_KEY=your-key'} /></label>
-                <p className="project-aow-form-intro">{t("settings.inherits_the_launch_environment_enter_key_value_per_line")}</p>
-                <p className="project-aow-form-intro">{t("settings.saved_settings_apply_to_newly_started_terminal_agents_configure")}</p>
-                  {error && <div className="project-aow-error" role="alert">{error}</div>}
-                </div>
-                <footer className="project-aow-dialog-footer"><button type="button" className="project-aow-dialog-button" disabled={busy} onClick={closeAgentDialog}>{t("aow.cancel")}</button><button type="submit" className="project-aow-dialog-button primary" disabled={busy || !agentType}>{busy ? t("automations.saving") : editingAgentId ? t("settings.save_configuration") : t("settings.register")}</button></footer>
-              </form>
-            </SettingsActionDialog>}
-          </>}
+          </> : null}
         </div>
       </div>
     </section>

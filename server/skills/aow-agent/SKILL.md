@@ -12,8 +12,8 @@ Use `aow-cli agent` to create or continue independent AoW Agent terminals when t
 - Use a Server CLI token for remote access, or run as the same OS user on the AoW host, with `aow-cli` on PATH, the AoW server and host-daemon running for the same state directory, and the selected Agent installed and logged in. Remote access uses AOW_SERVER_URL and AOW_SERVER_TOKEN injected by Server. A remote CLI does not require a shared filesystem. Local socket access uses the same OS user.
 - Discover the registered project with `aow-cli project list` or `aow-cli project get PROJECT-ID`. These return IDs and `repo_path`, not worktrees. Use `git -C /repo worktree list --porcelain` when needed. `--cwd` must be an existing repository/worktree root belonging to `--project-id`.
 - Prepare worktrees separately only when requested. Dispatch never creates, switches, resets, or removes worktrees or branches.
-- Interactive startup supports Codex, TraeCode CLI, Hermes, and Pi. Settings → Agents also lists other types; an unsupported type fails explicitly.
-- Pass a configuration ID from Settings → Agents via `--agent-id` only when the user selects one. IDs are case-sensitive and contain 1–80 letters, numbers, `-` or `_`. Omit the flag otherwise: the server uses the saved default Agent, then the first listed Agent if no default is set. Do not hardcode `codex`, skip an unavailable selection, or substitute an ACP adapter ID.
+- Interactive startup supports Codex, TraeCode CLI, Hermes, and Pi. Settings → Runtime → Agent CLI also lists other types; an unsupported type fails explicitly.
+- Pass a configuration ID from Settings → Runtime → Agent CLI via `--agent-id` only when the user selects one. IDs are case-sensitive and contain 1–80 letters, numbers, `-` or `_`. Omit the flag otherwise: the server uses the saved default Agent, then the first listed Agent if no default is set. Do not hardcode `codex`, skip an unavailable selection, or substitute an ACP adapter ID.
 - Ask for missing context only when project, worktree, or caller identity cannot be determined. Never invent IDs or paths.
 
 ## Caller session and parent

@@ -10,7 +10,7 @@ let browser;
 try {
   await server.listen();
   browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
-  await test('role wizard references configured runtimes, tests before saving and retains workspace/task integration', async t => {
+  await test('agent wizard selects ACP and Agent CLI instances in one step and retains workspace/task integration', async t => {
     const context = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
     t.after(() => context.close());
     await installLiveEvents(context);
@@ -25,7 +25,7 @@ try {
     const identities = [{ layout: 'codex', source: '/local' }, { layout: 'claude', source: '/local' }, { layout: 'traecli', source: '/local' }];
     const unknown = { id: 'my-agent', name: 'Custom Agent', supported: true, installed: true, configured: true };
     let finishProbe;
-    const cli = { id: 'local-codex', agent_type: 'codex', display_name: 'Local Codex', command: 'codex', executable: '/tools/codex', args: ['--profile', 'work'], env: {}, available: true, source: 'configured' };
+    const cli = { id: 'codex-acp', agent_type: 'codex', display_name: 'Local Codex', command: 'codex', executable: '/tools/codex', args: ['--profile', 'work'], env: {}, available: true, source: 'configured' };
     const traecli = { ...cli, id: 'local-traecli', agent_type: 'traecli', display_name: 'Local TraeCLI', command: 'traecli', executable: '/tools/traecli', args: [] };
     const claude = { ...cli, id: 'local-claude', agent_type: 'claude', display_name: 'Local Claude', command: 'claude', executable: '/tools/claude', args: [] };
     let cliList = [cli, claude, traecli, { ...cli, id: 'other', agent_type: 'pi', display_name: 'Pi' }, { ...cli, id: 'detected-only', source: 'detected' }, { ...cli, id: 'unavailable-cli', available: false }];
@@ -62,14 +62,14 @@ try {
     const page = await context.newPage(); page.setDefaultTimeout(15000);
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/tests/agent-roles-preview.html`);
-    await page.getByRole('button', { name: 'Agent Roles', exact: false }).click();
-    const editor = page.getByRole('region', { name: 'Add Agent Role', exact: true });
+    await page.getByRole('button', { name: /^Agents /, exact: false }).click();
+    const editor = page.getByRole('region', { name: 'Add Agent', exact: true });
     const next = () => editor.getByRole('button', { name: 'Next', exact: true }).click();
     const create = () => editor.getByRole('button', { name: 'Test connection and create' }).click();
     const noDialogs = async () => assert.equal(await page.getByRole('dialog').count(), 0);
     const start = async name => {
-      await page.getByRole('button', { name: 'Add Agent Role', exact: true }).click();
-      await editor.getByRole('textbox', { name: 'Role name', exact: true }).fill(name);
+      await page.getByRole('button', { name: 'Add Agent', exact: true }).click();
+      await editor.getByRole('textbox', { name: 'Agent name', exact: true }).fill(name);
     };
     await start('Reviewer');
     await editor.getByRole('textbox', { name: 'Description', exact: true }).fill('Review changes carefully');
@@ -77,7 +77,7 @@ try {
     await next(); await noDialogs();
     assert.equal(await editor.getByRole('tab').count(), 0);
     assert.equal(await editor.getByRole('button', { name: 'Install', exact: true }).count(), 0);
-    await editor.getByLabel('ACP runtime', { exact: true }).selectOption('codex-acp');
+    await editor.getByLabel('Runtime', { exact: true }).selectOption('acp:codex-acp');
     await noDialogs();
     await editor.getByRole('button', { name: 'Back', exact: true }).click();
     assert.equal(await editor.getByRole('textbox', { name: 'Description', exact: true }).inputValue(), 'Review changes carefully');
@@ -104,35 +104,40 @@ try {
     assert.deepEqual(roles[0].identity, { kind: 'local_home', source: '/custom/codex-home' });
     assert.deepEqual(roles[0].skills, []);
 
-    // The wizard only selects configured runtimes; unavailable entries cannot be used.
+    // Both runtime types share one selector; unavailable and unsupported entries stay visible.
     await start('Supported runtime draft'); await next();
-    assert.deepEqual(await editor.getByLabel('ACP runtime', { exact: true }).locator('option').evaluateAll(items => items.map(item => item.value)), ['', 'codex-acp', 'codex-uninstalled', 'codex-unsupported']);
-    assert.equal(await editor.locator('option[value=codex-uninstalled]').evaluate(option => option.disabled), true);
-    assert.equal(await editor.locator('option[value=codex-unsupported]').evaluate(option => option.disabled), true);
+    assert.equal(await editor.getByRole('combobox').count(), 1);
+    assert.deepEqual(await editor.getByLabel('Runtime', { exact: true }).locator('optgroup').evaluateAll(items => items.map(item => item.label)), ['ACP', 'Agent CLI']);
+    assert.deepEqual(await editor.getByLabel('Runtime', { exact: true }).locator('optgroup[label=ACP] option').evaluateAll(items => items.map(item => item.value)), acpList.map(item => `acp:${item.id}`));
+    assert.deepEqual(await editor.getByLabel('Runtime', { exact: true }).locator('optgroup[label="Agent CLI"] option').evaluateAll(items => items.map(item => item.value)), cliList.map(item => `cli:${item.id}`));
+    assert.equal(await editor.locator('option[value="acp:codex-uninstalled"]').evaluate(option => option.disabled), true);
+    assert.equal(await editor.locator('option[value="acp:codex-unsupported"]').evaluate(option => option.disabled), true);
+    assert.equal(await editor.locator('option[value="acp:my-agent"]').evaluate(option => option.disabled), true);
+    assert.equal(await editor.locator('option[value="acp:codex-unconfigured"]').evaluate(option => option.disabled), true);
     await noDialogs();
     await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
     assert.equal(roles.length, 1);
 
     await start('CLI helper'); await next();
-    await editor.getByLabel('Run with', { exact: true }).selectOption('cli');
     assert.equal(await editor.getByLabel('CLI type', { exact: true }).count(), 0);
     assert.equal(await editor.getByLabel('Executable', { exact: true }).count(), 0);
-    assert.equal(await editor.getByLabel('CLI runtime', { exact: true }).locator('option[value=detected-only]').count(), 0);
-    assert.equal(await editor.getByLabel('CLI runtime', { exact: true }).locator('option[value=unavailable-cli]').evaluate(option => option.disabled), true);
-    assert.equal(await editor.getByLabel('CLI runtime', { exact: true }).locator('option[value=other]').count(), 0);
-    await editor.getByLabel('CLI runtime', { exact: true }).selectOption('local-codex');
+    assert.equal(await editor.getByLabel('Runtime', { exact: true }).locator('option[value="cli:detected-only"]').evaluate(option => option.disabled), false);
+    assert.equal(await editor.getByLabel('Runtime', { exact: true }).locator('option[value="cli:unavailable-cli"]').evaluate(option => option.disabled), true);
+    assert.equal(await editor.getByLabel('Runtime', { exact: true }).locator('option[value="cli:other"]').evaluate(option => option.disabled), true);
+    await editor.getByLabel('Runtime', { exact: true }).selectOption('cli:codex-acp');
     await next(); await create(); await editor.waitFor({ state: 'hidden' });
-    assert.deepEqual(roles[1].runtime, { mode: 'cli', agent_id: 'local-codex' });
+    assert.deepEqual(roles[1].runtime, { mode: 'cli', agent_id: 'codex-acp' }, 'ACP and CLI may have the same ID without colliding');
     assert.deepEqual(roles[1].identity, { kind: 'local_home', source: '/local' });
     assert.deepEqual(browsed, []);
     assert.ok(runtimeRequests.every(request => request.method === 'GET'));
     assert.ok(runtimeRequests.every(request => !/registry|installation/.test(request.path)));
 
     await page.getByRole('article').filter({ hasText: 'Reviewer' }).getByRole('button', { name: 'Edit', exact: true }).click();
-    const editing = page.getByRole('region', { name: 'Edit Agent Role', exact: true });
+    const editing = page.getByRole('region', { name: 'Edit Agent', exact: true });
+    assert.equal(await editing.getByLabel('Runtime', { exact: true }).inputValue(), 'acp:codex-acp');
     await editing.getByLabel('Instructions', { exact: true }).fill('Use the review skill');
     await editing.getByLabel('Skills', { exact: true }).fill('/skills/review');
-    await editing.getByRole('button', { name: 'Save role' }).click();
+    await editing.getByRole('button', { name: 'Save agent' }).click();
     await editing.waitFor({ state: 'hidden' });
     assert.equal(roles[0].instruction, 'Use the review skill');
     assert.deepEqual(roles[0].skills, ['/skills/review']);
@@ -144,21 +149,21 @@ try {
     await page.getByRole('button', { name: 'Create task', exact: true }).click();
     await page.getByRole('textbox', { name: 'Task description' }).fill('Investigate the change');
     await page.getByRole('button', { name: 'Initial agent', exact: true }).click();
-    await page.getByRole('option', { name: /CLI helper/ }).click();
+    assert.equal(await page.getByRole('option', { name: /CLI helper/ }).count(), 0, 'task execution currently supports ACP agents');
+    await page.getByRole('option', { name: /Reviewer/ }).click();
     await page.getByRole('button', { name: 'Create task', exact: true }).last().click();
     await page.waitForFunction(() => document.querySelector('output')?.textContent?.includes('task-role'));
-    assert.equal(tasks[0].agent_role_id, 'role-1'); assert.equal(tasks[0].agent_id, '');
+    assert.equal(tasks[0].agent_role_id, 'role-0'); assert.equal(tasks[0].agent_id, '');
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await page.getByRole('button', { name: 'Agent Roles', exact: false }).click();
+    await page.getByRole('button', { name: /^Agents /, exact: false }).click();
     await start('New role'); await next();
-    await editor.getByLabel('ACP runtime', { exact: true }).selectOption('codex-acp');
+    await editor.getByLabel('Runtime', { exact: true }).selectOption('acp:codex-acp');
     await page.screenshot({ path: '/tmp/aow-agent-roles-desktop.png', fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({ path: '/tmp/aow-agent-roles-mobile.png', fullPage: true });
     assert.equal(await editor.evaluate(element => element.scrollWidth <= element.clientWidth + 1), true);
     await noDialogs();
-    await editor.getByLabel('Run with', { exact: true }).selectOption('cli');
-    await editor.getByLabel('CLI runtime', { exact: true }).selectOption('local-claude');
+    await editor.getByLabel('Runtime', { exact: true }).selectOption('cli:local-claude');
     await next();
     assert.equal(await editor.getByLabel('Source Home', { exact: true }).inputValue(), '/local');
     assert.equal(await editor.getByRole('textbox').count(), 1);
@@ -171,8 +176,7 @@ try {
     assert.deepEqual(roles[2].identity, { kind: 'local_home', source: '/another/home' });
     assert.deepEqual(roles[2].runtime, { mode: 'cli', agent_id: 'local-claude' });
     await start('TraeCLI helper'); await next();
-    await editor.getByLabel('Run with', { exact: true }).selectOption('cli');
-    await editor.getByLabel('CLI runtime', { exact: true }).selectOption('local-traecli');
+    await editor.getByLabel('Runtime', { exact: true }).selectOption('cli:local-traecli');
     await next();
     assert.equal(await editor.getByLabel('Source Home', { exact: true }).inputValue(), '/local');
     assert.equal(await editor.getByRole('textbox').count(), 1);
@@ -185,21 +189,22 @@ try {
     // A missing runtime remains visible on existing roles and disables saving.
     cliList = [];
     await page.getByRole('article').filter({ has: page.getByText('CLI helper', { exact: true }) }).getByRole('button', { name: 'Edit', exact: true }).click();
-    await editing.getByText(/No supported CLI runtime is ready/).waitFor();
-    assert.equal(await editing.getByLabel('CLI runtime', { exact: true }).inputValue(), 'local-codex');
-    assert.equal(await editing.getByRole('button', { name: 'Save role' }).isDisabled(), true);
+    await editing.getByRole('option', { name: /Agent CLI · codex-acp · Unavailable/ }).waitFor({ state: 'attached' });
+    assert.equal(await editing.getByLabel('Runtime', { exact: true }).inputValue(), 'cli:codex-acp');
+    assert.equal(await editing.getByRole('button', { name: 'Save agent' }).isDisabled(), true);
     cliList = [cli];
     await editing.getByRole('button', { name: 'Refresh runtime list' }).click();
-    await editing.getByRole('button', { name: 'Save role' }).click();
+    await editing.getByRole('button', { name: 'Save agent' }).click();
     await editing.waitFor({ state: 'hidden' });
 
     acpList = [];
     await start('Runtime configured elsewhere'); await next();
-    await editor.getByText(/No supported ACP runtime is ready/).waitFor();
+    await editor.getByRole('button', { name: 'Refresh runtime list' }).waitFor();
+    assert.equal(await editor.getByLabel('Runtime', { exact: true }).locator('optgroup[label=ACP] option').count(), 0);
     assert.equal(await editor.getByRole('button', { name: 'Next', exact: true }).isDisabled(), true);
     acpList = [acp];
     await editor.getByRole('button', { name: 'Refresh runtime list' }).click();
-    await editor.getByLabel('ACP runtime', { exact: true }).selectOption('codex-acp');
+    await editor.getByLabel('Runtime', { exact: true }).selectOption('acp:codex-acp');
     await next();
     await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
     assert.ok(runtimeRequests.every(request => request.method === 'GET'));

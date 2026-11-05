@@ -154,14 +154,14 @@ the server selects the corresponding saved default, or the first listed instance
 when no default is set. Old configurations need no migration. An empty list or
 an unavailable selection fails explicitly; AoW does not silently try another instance.
 
-In Settings → Agents, select **默认 Agent 实例**. This stores the root
+In Settings → Runtime → Agent CLI, select **默认 Agent 实例**. This stores the root
 `default_agent_id` field in `aow-agents.json`, separately
 from profile data. Selecting a detected instance preserves automatic discovery.
 Editing a profile does not change the default selection. Deleting the
 default profile restores the first-item fallback. Agent order matches the Agent
 list, including detected profiles and configured instance ordering.
 
-In Settings → ACP, select **默认 ACP 实例** and save, or set the root
+In Settings → Runtime → ACP, select **默认 ACP 实例** and save, or set the root
 `default_agent_id` field in `aow-acp.json`:
 
 ```jsonc

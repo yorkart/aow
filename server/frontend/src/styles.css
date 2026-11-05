@@ -688,6 +688,10 @@ body.resizing-project-aow,body.resizing-project-aow * { cursor:col-resize !impor
 .project-aow-settings-nav button small { color:var(--aow-muted); font-size:10px; }
 .project-aow-settings-nav button i { min-width:16px; height:16px; display:grid; place-items:center; padding:0 4px; color:var(--aow-muted); background:var(--aow-hover); border-radius:8px; font-size:10px; font-style:normal; }
 .project-aow-settings-content { min-width:0; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
+.runtime-settings-host:not([hidden]) { display:flex; flex:1; min-width:0; min-height:0; }
+.runtime-settings-body > .acp-settings { flex:0 0 auto; }
+.runtime-settings-body > .acp-settings > .project-aow-dialog-body { padding:0; overflow:visible; }
+.runtime-cli-settings { display:flex; flex-direction:column; gap:14px; }
 .project-aow-settings-heading { display:flex; align-items:flex-start; gap:12px; padding-bottom:12px; border-bottom:1px solid var(--aow-line); }
 .project-aow-settings-heading > div { min-width:0; flex:1; }
 .project-aow-settings-heading h2 { margin:0 0 4px; color:var(--aow-text-strong); font-size:13px; font-weight:600; }

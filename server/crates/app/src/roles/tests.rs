@@ -307,11 +307,11 @@ async fn cli_roles_resolve_current_configuration_without_duplicating_or_mutating
 }
 
 #[tokio::test]
-async fn cli_roles_reject_missing_unconfigured_unavailable_and_changed_runtime_types() {
+async fn cli_roles_accept_detected_instances_and_reject_missing_unavailable_or_changed_types() {
     let directory = tempfile::tempdir().unwrap();
     let manager = TestServices::persistent(&directory.path().join("aow")).unwrap();
     assert!(manager.roles.save_role(None, config(None)).await.is_err());
-    // A detected executable is not a saved runtime definition.
+    // Detected and configured instances are both selectable in Runtime.
     let bin = directory.path().join("bin");
     std::fs::create_dir(&bin).unwrap();
     symlink("/bin/echo", bin.join("codex")).unwrap();
@@ -329,12 +329,23 @@ async fn cli_roles_reject_missing_unconfigured_unavailable_and_changed_runtime_t
             .iter()
             .any(|agent| agent.id == "codex" && agent.source == "detected")
     );
-    assert!(
+    let mut detected_config = config(None);
+    detected_config.runtime = RoleRuntime::Cli {
+        agent_id: "codex".into(),
+    };
+    let detected_role = manager
+        .roles
+        .save_role(None, detected_config)
+        .await
+        .unwrap();
+    assert_eq!(
         manager
             .roles
-            .role_runtime_cli_launch("codex")
+            .role_cli_launch(&detected_role)
             .await
-            .is_err()
+            .unwrap()
+            .agent_type,
+        aow_host_contract::agents::AgentType::Codex
     );
     configure_default_cli(&manager).await;
     let role = manager.roles.save_role(None, config(None)).await.unwrap();

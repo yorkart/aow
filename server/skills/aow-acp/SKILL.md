@@ -10,9 +10,9 @@ Use `aow-cli acp` to create or continue durable ACP threads when the user reques
 ## Requirements and discovery
 
 - Run as the same OS user on the AoW host with `aow-cli` on PATH and the AoW server running for the same state directory. ACP commands use the local Unix socket, require no browser login or Cookie, and require the configured host-daemon for execution.
-- Configure and install the adapter in Settings → ACP, including any required authentication. `aow-cli acp agents` lists configured adapters and availability.
+- Configure and install the adapter in Settings → Runtime → ACP, including any required authentication. `aow-cli acp agents` lists configured adapters and availability.
 - Discover project IDs and `repo_path` using `aow-cli project list` or `aow-cli project get PROJECT-ID`. Use Git separately to discover existing worktrees. `--cwd` must be an existing repository/worktree root belonging to `--project-id`. Do not prepare a new worktree unless asked.
-- `--agent-id` selects an ACP adapter, distinct from a Settings → Agents terminal profile. Pass it only for an explicitly selected adapter; otherwise omit it. The server uses ACP's `default_agent_id`, then the first entry in `aow-cli acp agents` (ordered by adapter ID) when no default is set. Do not invent a default or silently skip unavailable adapters.
+- `--agent-id` selects an ACP adapter, distinct from a Settings → Runtime → Agent CLI terminal profile. Pass it only for an explicitly selected adapter; otherwise omit it. The server uses ACP's `default_agent_id`, then the first entry in `aow-cli acp agents` (ordered by adapter ID) when no default is set. Do not invent a default or silently skip unavailable adapters.
 
 ## Caller session and parent
 

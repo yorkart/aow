@@ -29,10 +29,10 @@ impl RoleService {
             .agents()
             .await?
             .into_iter()
-            .find(|agent| agent.id == id && agent.source == "configured" && agent.available)
+            .find(|agent| agent.id == id && agent.available)
             .ok_or_else(|| {
                 ServiceError::Invalid(
-                    "Select an available runtime configured in Settings → Agents".into(),
+                    "Select an available Agent CLI instance in Settings → Runtime".into(),
                 )
             })?;
         self.node
@@ -90,7 +90,7 @@ impl RoleService {
                     })
                 {
                     return Err(ServiceError::Invalid(
-                        "Select an installed runtime configured in Settings → ACP".into(),
+                        "Select an installed ACP instance in Settings → Runtime".into(),
                     ));
                 }
                 self.role_layout(agent_id).await?

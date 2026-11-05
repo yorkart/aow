@@ -3,14 +3,16 @@ import { test } from 'node:test';
 import { mkdir } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { productionPreview } from './fixtures/production-preview.mjs';
+import { installLiveEvents } from './fixtures/live-events.mjs';
 
 const server = await productionPreview();
 const base = `http://127.0.0.1:${server.httpServer.address().port}`;
 const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
-const categories = ['外观', '节点', '编辑器', '笔记', '环境', 'ACP', 'Agent Roles', 'Agent', 'IM', '通知', 'Git 平台'];
+const categories = ['外观', '节点', '编辑器', '笔记', '环境', 'Runtime', 'Agents', 'IM', '通知', 'Git 平台'];
 
 async function fixture(t, width = 390, mobile = true, virtualViewport = false, agents) {
   const context = await browser.newContext({ viewport: { width, height: 844 }, isMobile: mobile, hasTouch: mobile });
+  await installLiveEvents(context);
     await context.addInitScript(() => { try { localStorage.setItem('aow.language', 'zh-CN'); } catch { /* Explicit Chinese fixture with blocked-storage coverage. */ } });
   if (virtualViewport) await context.addInitScript(() => {
     Object.defineProperty(window, 'visualViewport', { value: Object.assign(new EventTarget(), { height: 844, width: 390, offsetTop: 0 }) });
@@ -54,6 +56,8 @@ async function fixture(t, width = 390, mobile = true, virtualViewport = false, a
       }
       data = state.serverEnvironment;
     } else if (path === '/api/settings/discovered-path') data = ['/opt/bin', '/usr/bin', '/bin'];
+    else if (path === '/api/acp/settings') data = { content: '{"agent_servers":{}}', revision: '1' };
+    else if (path === '/api/acp/agents') data = [];
     else if (path === '/api/agents/settings/default') {
       assert.deepEqual(Object.keys(body), ['agent_id']);
       state.agents = state.agents.map(agent => ({ ...agent, is_default: agent.id === body.agent_id }));
@@ -117,7 +121,7 @@ async function fixture(t, width = 390, mobile = true, virtualViewport = false, a
   await dialog.getByRole('navigation', { name: '设置分类' }).waitFor();
   const choose = async name => {
     if (mobile && await dialog.getByRole('button', { name: '返回设置分类' }).isVisible()) await dialog.getByRole('button', { name: '返回设置分类' }).click();
-    const label = { Agents: 'Agent', Environment: '环境', Editor: '编辑器', Notes: '笔记', Nodes: '节点', Appearance: '外观' }[name] ?? name;
+    const label = { Environment: '环境', Editor: '编辑器', Notes: '笔记', Nodes: '节点', Appearance: '外观' }[name] ?? name;
     await dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button').filter({ has: page.getByText(label, { exact: true }) }).click();
   };
   const save = async text => {
@@ -141,7 +145,7 @@ async function layout(page, dialog, name) {
   }
   if (process.env.MOBILE_TEST_SCREENSHOTS) {
     await mkdir(process.env.MOBILE_TEST_SCREENSHOTS, { recursive: true });
-    if (name === 'agents-grouped') await dialog.locator('.project-aow-dialog-body:visible').evaluate(element => { element.scrollTop = 0; });
+    if (name === 'agents-grouped') await dialog.locator('.runtime-settings-body').evaluate(element => { element.scrollTop = 0; });
     else if (name.startsWith('agents')) await dialog.locator('.project-aow-agent-list').scrollIntoViewIfNeeded();
     await (name === 'agents-grouped' ? dialog : page).screenshot({ path: `${process.env.MOBILE_TEST_SCREENSHOTS}/settings-${page.viewportSize().width}-${name}.png` });
   }
@@ -150,9 +154,9 @@ async function layout(page, dialog, name) {
 try {
   await test('a saved Agent closes its form even when refresh fails, and retry only reloads the list', async t => {
     const { page, state, dialog, choose } = await fixture(t);
-    await choose('Agents');
-    await dialog.getByRole('button', { name: '新增 Agent', exact: true }).click();
-    const action = page.getByRole('dialog', { name: '新增 Agent', exact: true });
+    await choose('Runtime');
+    await dialog.getByRole('button', { name: '新增 Agent CLI', exact: true }).click();
+    const action = page.getByRole('dialog', { name: '新增 Agent CLI', exact: true });
     await action.getByRole('textbox', { name: 'Agent ID', exact: true }).fill('saved-before-refresh');
     await action.getByRole('combobox', { name: 'Agent 类型' }).selectOption('codex');
     await action.getByRole('textbox', { name: "显示名称" }).fill('Saved Agent');
@@ -174,7 +178,7 @@ try {
     const { page, state, dialog, choose } = await fixture(t, mobile ? 320 : 1280, mobile, false, [
       profile, { ...profile, id: 'work-codex', display_name: 'Work Codex', source: 'configured' },
     ]);
-    await choose('Agents');
+    await choose('Runtime');
     assert.equal(await dialog.getByRole('combobox', { name: '默认 Agent 实例', exact: true }).count(), 0);
     const detected = dialog.getByRole('checkbox', { name: '默认 Agent：Codex', exact: true });
     const configured = dialog.getByRole('checkbox', { name: '默认 Agent：Work Codex', exact: true });
@@ -213,7 +217,7 @@ try {
     const { page, state, dialog, choose, trigger } = await fixture(t, mobile ? 320 : 1280, mobile, false, initial);
     if (!mobile) state.projects = [{ id: 'project', name: 'AoW', registered_path: '/workspace/aow', common_git_dir: '/workspace/aow/.git', notes_path: '/notes/aow',
       worktrees: [{ id: 'main', project_id: 'project', path: '/workspace/aow', branch: 'main', head: 'abc', is_main: true, detached: false, locked: false, prunable: false, color: 'default' }] }];
-    await choose('Agents');
+    await choose('Runtime');
     const row = id => dialog.locator(`[data-agent-id="${id}"]`);
     const ids = () => dialog.locator('[data-agent-id]').evaluateAll(rows => rows.map(row => row.dataset.agentId));
     const handle = id => row(id).getByRole('button', { name: /^调整/ });
@@ -274,7 +278,7 @@ try {
     await handle('work-codex').press('ArrowDown');
     await dialog.getByRole('status').filter({ hasText: '顺序已保存' }).waitFor();
     await dialog.getByRole('button', { name: mobile ? '关闭设置' : '关闭', exact: true }).click();
-    await trigger.click(); await choose('Agents');
+    await trigger.click(); await choose('Runtime');
     assert.deepEqual(await ids(), ordered, 'reopening settings retains persisted order');
     await layout(page, dialog, 'agents-grouped');
     if (mobile) { await page.setViewportSize({ width: 390, height: 844 }); await layout(page, dialog, 'agents-grouped'); }
@@ -289,10 +293,10 @@ try {
 
   for (const mobile of [false, true]) await test(`${mobile ? 'mobile' : 'desktop'} Agent IDs are required, unique, immutable, and can be replaced by delete and create`, async t => {
     const { page, state, dialog, choose } = await fixture(t, mobile ? 390 : 1280, mobile);
-    await choose('Agents');
+    await choose('Runtime');
     assert.equal(await dialog.getByRole('textbox', { name: 'Agent ID', exact: true }).count(), 0);
-    await dialog.getByRole('button', { name: '新增 Agent', exact: true }).click();
-    const action = page.getByRole('dialog', { name: '新增 Agent', exact: true });
+    await dialog.getByRole('button', { name: '新增 Agent CLI', exact: true }).click();
+    const action = page.getByRole('dialog', { name: '新增 Agent CLI', exact: true });
     await action.waitFor();
     assert.equal(await action.evaluate(element => element.scrollWidth <= element.clientWidth), true);
     const bounds = await action.boundingBox();
@@ -300,7 +304,7 @@ try {
     await page.keyboard.press('Escape');
     await action.waitFor({ state: 'hidden' });
     assert.equal(await page.locator('.project-aow-settings').isVisible(), true);
-    await dialog.getByRole('button', { name: '新增 Agent', exact: true }).click();
+    await dialog.getByRole('button', { name: '新增 Agent CLI', exact: true }).click();
     const id = dialog.getByRole('textbox', { name: 'Agent ID', exact: true });
     await dialog.getByRole('combobox', { name: 'Agent 类型' }).selectOption('codex');
     await dialog.getByRole('textbox', { name: "显示名称" }).fill('Work Codex');
@@ -341,7 +345,7 @@ try {
     await dialog.locator('.project-aow-agent-row').filter({ hasText: 'Work_codex-2' }).getByRole('button', { name: '移除配置' }).click();
     await dialog.locator('.project-aow-agent-row').filter({ hasText: 'Work_codex-2' }).waitFor({ state: 'detached' });
     assert.equal(state.writes.at(-1).method, 'DELETE');
-    await dialog.getByRole('button', { name: '新增 Agent', exact: true }).click();
+    await dialog.getByRole('button', { name: '新增 Agent CLI', exact: true }).click();
     assert.equal(await id.inputValue(), '');
     assert.equal(await id.isEditable(), true);
     await id.fill('New_codex-3');
@@ -523,8 +527,8 @@ try {
     assert.deepEqual(state.settings.execution_path, ['/opt/bin', '/usr/bin', '/bin']);
     await layout(page, dialog, 'environment');
 
-    await choose('Agents');
-    await dialog.getByRole('button', { name: '新增 Agent', exact: true }).click();
+    await choose('Runtime');
+    await dialog.getByRole('button', { name: '新增 Agent CLI', exact: true }).click();
     await dialog.getByRole('combobox', { name: 'Agent 类型' }).selectOption('codex');
     assert.equal(await dialog.getByRole('textbox', { name: "可执行文件" }).inputValue(), '/usr/bin/codex');
     await dialog.getByRole('textbox', { name: 'Agent ID', exact: true }).fill('Mobile_codex-1');
@@ -648,6 +652,10 @@ try {
   await test('desktop shares categories and keeps editor and provider save behavior', async t => {
     const { state, dialog, choose, save } = await fixture(t, 1280, false);
     assert.deepEqual(await dialog.locator('nav strong').allTextContents(), categories);
+    await choose('Runtime');
+    assert.deepEqual(await dialog.getByRole('heading', { level: 2 }).allTextContents(), ['ACP', 'Agent CLI']);
+    await choose('Agents');
+    await dialog.getByRole('button', { name: '新增 Agent', exact: true }).waitFor();
     await choose('Editor');
     await dialog.getByRole('checkbox', { name: /Word Wrap/ }).check();
     await save('已保存 Editor 配置');

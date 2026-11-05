@@ -8,7 +8,7 @@ use std::{io, path::PathBuf, time::Duration};
 const HELP: &str = "create requires --session-id or AOW_SESSION_ID for the calling session.
 This execution context never changes the task text or the child session identity.
 Requires the AoW server for the same --state-dir, without browser login or terminald.
---agent-id selects a configured Settings → ACP adapter, not a Settings → Agents profile.
+--agent-id selects a configured Settings → Runtime → ACP adapter, not a Settings → Runtime → Agent CLI profile.
 --cwd must be an existing repository/worktree root of --project-id.
 create starts a durable ACP thread and optionally submits its first task. Success means
 the session is ready or the task was accepted, not that the agent has finished.

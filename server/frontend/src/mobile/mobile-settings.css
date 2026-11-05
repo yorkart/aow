@@ -18,6 +18,9 @@
 .mobile-settings .project-aow-settings-heading { padding-bottom:16px; align-items:center; }
 .mobile-settings .project-aow-settings-heading h2 { display:none; }
 .mobile-settings .git-platform-provider-settings .project-aow-settings-heading h2 { display:block; }
+.mobile-settings .runtime-settings-host .project-aow-settings-heading h2 { display:block; }
+.mobile-settings .runtime-settings-host .project-aow-settings-heading { flex-wrap:wrap; }
+.mobile-settings .runtime-settings-host .project-aow-settings-heading > div:first-child { flex:1 0 100%; }
 .mobile-settings .project-aow-settings-heading p { font-size:13px; line-height:1.7; }
 .mobile-settings .project-aow-dialog-body h3 { font-size:15px; }
 .mobile-settings .project-aow-form-intro { font-size:13px; line-height:1.7; }
