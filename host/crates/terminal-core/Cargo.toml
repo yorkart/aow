@@ -16,7 +16,7 @@ futures-util = { workspace = true, features = ["sink"] }
 libc.workspace = true
 md5.workspace = true
 portable-pty.workspace = true
-aow-agents-core = { path = "../agents-core", features = ["sessions"] }
+aow-agent-runtime-core = { path = "../agent-runtime-core", features = ["sessions"] }
 aow-process = { package = "aow-host-process", path = "../process" }
 serde.workspace = true
 serde_json.workspace = true

@@ -12,7 +12,7 @@ use std::sync::Arc;
 pub struct Executions {
     manager: ExecutionManager,
     node_id: Arc<String>,
-    sessions: aow_agents_core::catalog::SessionCatalog,
+    sessions: aow_agent_runtime_core::catalog::SessionCatalog,
 }
 use aow_host_contract::execution::SubmitExecution as Submit;
 #[derive(Deserialize, Default)]
@@ -55,7 +55,7 @@ impl Executions {
     pub fn new(
         manager: ExecutionManager,
         node_id: String,
-        sessions: aow_agents_core::catalog::SessionCatalog,
+        sessions: aow_agent_runtime_core::catalog::SessionCatalog,
     ) -> Self {
         Self {
             manager,

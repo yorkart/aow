@@ -18,7 +18,7 @@ for (const product of ['common', 'server', 'host']) {
 test('Common contains contracts, IDs and generic infrastructure without product implementations', () => {
   assert.deepEqual(readdirSync(resolve(root, 'common/crates')).sort(), ['host-contract', 'i18n', 'id', 'macos-log', 'sqlite']);
   const contract = readFileSync(resolve(root, 'common/crates/host-contract/Cargo.toml'), 'utf8');
-  assert.doesNotMatch(contract, /rusqlite|tokio|reqwest|agent-client-protocol|aow-(?:acp|storage|filesystem|agents|process|sqlite|macos-log)/);
+  assert.doesNotMatch(contract, /rusqlite|tokio|reqwest|agent-client-protocol|aow-(?:acp|storage|filesystem|agent-runtime|agents|process|sqlite|macos-log)/);
   for (const name of ['sqlite', 'macos-log']) {
     const manifest = readFileSync(resolve(root, 'common/crates', name, 'Cargo.toml'), 'utf8');
     assert.doesNotMatch(manifest, /\baow-[\w-]+\s*=/);
@@ -90,7 +90,7 @@ test('Server reaches native agents only through Host contracts and the SDK', () 
   }
   for (const entry of readdirSync(resolve(root, 'server/crates'))) {
     const manifest = readFileSync(resolve(root, 'server/crates', entry, 'Cargo.toml'), 'utf8');
-    assert.doesNotMatch(manifest, /aow-(?:host-)?(?:agents|exec)(?:-core|-service)?\s*=/);
+    assert.doesNotMatch(manifest, /aow-(?:host-)?(?:agent-runtime|agents|exec)(?:-core|-service)?\s*=/);
   }
   const controller = readFileSync(resolve(root, 'server/crates/app/src/terminal/agent_control/connection.rs'), 'utf8');
   assert.doesNotMatch(controller, /200~|201~|input_ready/);

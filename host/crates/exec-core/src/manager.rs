@@ -79,7 +79,7 @@ impl ExecutionManager {
             .workspace
             .validate()
             .map_err(|error| anyhow::anyhow!(aow_i18n::text(error.0)))?;
-        use aow_agents_core::automation::AgentAutomation;
+        use aow_agent_runtime_core::automation::AgentAutomation;
         spec.input.agent.validate_arguments(&spec.launch.args)?;
         if let Some(capacity) = &spec.capacity {
             valid_id(&capacity.key)?;
@@ -262,7 +262,7 @@ impl ExecutionManager {
     pub fn native_session(
         &self,
         id: &str,
-    ) -> Result<Option<aow_agents_core::sessions::AgentSession>> {
+    ) -> Result<Option<aow_agent_runtime_core::sessions::AgentSession>> {
         let directory = self.0.store.run_path("", id)?;
         let spec: ExecutionSpec =
             serde_json::from_slice(&std::fs::read(directory.join("spec.json"))?)?;
@@ -279,7 +279,7 @@ impl ExecutionManager {
             return Ok(None);
         };
         let roots = self.0.store.run_session_roots("", id)?;
-        Ok(aow_agents_core::sessions::find_session(
+        Ok(aow_agent_runtime_core::sessions::find_session(
             spec.input.agent.id(),
             session,
             roots,

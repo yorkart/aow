@@ -6,7 +6,7 @@ license.workspace = true
 
 [dependencies]
 aow-host-contract = { path = "../../../common/crates/host-contract" }
-aow-agents-core = { path = "../agents-core", features = ["automation", "sessions", "launch"] }
+aow-agent-runtime-core = { path = "../agent-runtime-core", features = ["automation", "sessions", "launch"] }
 aow-workspaces = { package = "aow-host-workspace", path = "../workspace" }
 aow-process = { package = "aow-host-process", path = "../process" }
 aow-i18n = { package = "aow-host-i18n", path = "../i18n" }

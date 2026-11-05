@@ -17,7 +17,7 @@ pub(crate) async fn execute(
 ) -> Result<()> {
     let started = Instant::now();
     let slot = ConcurrencySlot::open(&store.run_path("", &task.id)?.join("owner.lock"))?;
-    let paths = aow_agents_core::environment::load_path_from(&store.config_dir).await?;
+    let paths = aow_agent_runtime_core::environment::load_path_from(&store.config_dir).await?;
     task.launch
         .environment
         .entry("AOW_STATE_DIR".into())
@@ -26,7 +26,7 @@ pub(crate) async fn execute(
     task.agent_environment.remove("PATH");
     task.launch.environment.insert(
         "PATH".into(),
-        aow_agents_core::environment::path_value(&paths)?,
+        aow_agent_runtime_core::environment::path_value(&paths)?,
     );
     let result = tokio::select! {
         result=agent::execute(&store,&task,&task.agent_environment,&task.id,&mut writer,started,&slot)=>result,

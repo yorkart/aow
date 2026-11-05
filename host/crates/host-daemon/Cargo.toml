@@ -8,16 +8,16 @@ license = "GPL-3.0-or-later"
 aow-i18n = { package = "aow-host-i18n", path = "../i18n" }
 aow-process = { package = "aow-host-process", path = "../process", features = ["execution"] }
 aow-host-contract = { path = "../../../common/crates/host-contract" }
-aow-acp-core = { path = "../acp-core" }
+aow-acp-runtime-core = { path = "../acp-runtime-core" }
 aow-exec-core = { path = "../exec-core" }
 aow-exec-service = { path = "../exec-service" }
-aow-agents-service = { path = "../agents-service" }
+aow-agent-runtime-service = { path = "../agent-runtime-service" }
 tempfile = "3.20"
 aow-workspaces = { package = "aow-host-workspace", path = "../workspace" }
 aow-host-environment = { path = "../environment" }
-aow-agents-core = { path = "../agents-core", features = ["management"] }
+aow-agent-runtime-core = { path = "../agent-runtime-core", features = ["management"] }
 anyhow.workspace = true
-aow-acp-service = { path = "../acp-service" }
+aow-acp-runtime-service = { path = "../acp-runtime-service" }
 aow-terminal-core = { path = "../terminal-core" }
 aow-terminal-service = { path = "../terminal-service" }
 aow-filesystem = { package = "aow-host-filesystem", path = "../filesystem" }

@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, ffi::OsStr, path::PathBuf, process::Command};
 
 use anyhow::{Context, Result};
-use aow_agents_core::sessions::SessionRoots;
+use aow_agent_runtime_core::sessions::SessionRoots;
 
 use super::{Store, atomic_write};
 
@@ -21,7 +21,7 @@ impl Store {
         let overrides = command.get_envs().collect::<BTreeMap<_, _>>();
         let mut environment = std::iter::once("HOME")
             .chain(
-                aow_agents_core::KNOWN_AGENTS
+                aow_agent_runtime_core::KNOWN_AGENTS
                     .iter()
                     .flat_map(|agent| agent.definition().configuration_env.iter().copied()),
             )

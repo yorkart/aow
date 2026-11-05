@@ -1,6 +1,6 @@
 //! Node-owned interactive readiness and prompt delivery. Retries reuse an immutable operation ID.
 use super::*;
-use aow_agents_core::interactive::AgentInteractive;
+use aow_agent_runtime_core::interactive::AgentInteractive;
 use aow_host_contract::agents::{
     TerminalAgentOperation, TerminalAgentProgress, TerminalAgentRequest,
 };
@@ -54,8 +54,8 @@ pub(super) async fn admit(
             task,
             timeout_seconds,
         } => {
-            if aow_agents_core::Agent::from_id(agent)
-                .and_then(aow_agents_core::Agent::interactive)
+            if aow_agent_runtime_core::Agent::from_id(agent)
+                .and_then(aow_agent_runtime_core::Agent::interactive)
                 .is_none()
             {
                 return Err(TerminalError::Invalid(
@@ -172,8 +172,8 @@ async fn execute(
     let lease = Lease { runtime, owner };
     let task = match operation {
         TerminalAgentOperation::Initialize { agent, task, .. } => {
-            let adapter = aow_agents_core::Agent::from_id(agent)
-                .and_then(aow_agents_core::Agent::interactive)
+            let adapter = aow_agent_runtime_core::Agent::from_id(agent)
+                .and_then(aow_agent_runtime_core::Agent::interactive)
                 .unwrap();
             loop {
                 if state.inner.shutting_down.load(Ordering::Acquire)

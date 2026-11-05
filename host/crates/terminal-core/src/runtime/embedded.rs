@@ -77,7 +77,7 @@ impl TerminalObserver {
 }
 
 #[async_trait::async_trait]
-impl aow_agents_core::sessions::observer::ManagedTerminals for TerminalObserver {
+impl aow_agent_runtime_core::sessions::observer::ManagedTerminals for TerminalObserver {
     async fn agents(&self) -> anyhow::Result<TerminalAgentList> {
         Ok(TerminalObserver::agents(self).await?)
     }

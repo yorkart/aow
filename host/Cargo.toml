@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/exec-core", "crates/exec-service", "crates/workspace", "crates/environment", "crates/acp-core", "crates/acp-service", "crates/terminal-core", "crates/terminal-service", "crates/host-daemon", "crates/agents-core", "crates/agents-service", "crates/db", "crates/filesystem", "crates/i18n", "crates/process",]
+members = ["crates/exec-core", "crates/exec-service", "crates/workspace", "crates/environment", "crates/acp-runtime-core", "crates/acp-runtime-service", "crates/terminal-core", "crates/terminal-service", "crates/host-daemon", "crates/agent-runtime-core", "crates/agent-runtime-service", "crates/db", "crates/filesystem", "crates/i18n", "crates/process",]
 resolver = "2"
 
 [workspace.package]

@@ -32,8 +32,8 @@ async fn invoke(
             request.request["version"] == 4,
             "Unsupported Git platform protocol"
         );
-        let paths = aow_agents_core::environment::load_path_from(&root).await?;
-        let node = aow_agents_core::management::executable("node", &paths)
+        let paths = aow_agent_runtime_core::environment::load_path_from(&root).await?;
+        let node = aow_agent_runtime_core::management::executable("node", &paths)
             .ok_or_else(|| anyhow::anyhow!("Node.js is unavailable on the execution node"))?;
         let parent = root.join("cache/git-platform-providers");
         tokio::fs::create_dir_all(&parent).await?;
@@ -44,7 +44,7 @@ async fn invoke(
         tokio::fs::write(&script, &request.script).await?;
         let environment = BTreeMap::from([(
             "PATH".into(),
-            aow_agents_core::environment::path_value(&paths)?,
+            aow_agent_runtime_core::environment::path_value(&paths)?,
         )]);
         let result = aow_process::run_once(aow_process::ProcessSpec {
             executable: node.into(),

@@ -5,14 +5,18 @@ on its local machine: Agents, ACP conversations, terminals, workspace files and
 Git, role environments and individual executions. Server accesses these
 capabilities through one authenticated HTTP/WebSocket endpoint.
 
+The `acp-runtime-*` and `agent-runtime-*` crates implement execution capabilities
+on the node. User-facing Agent role definitions and their business workflows
+belong to Server's `roles` module.
+
 ```text
 host/
   Cargo.toml          Independent Rust workspace
   Cargo.lock
-  crates/acp-core/    Native ACP SDK, adapter resolution and session model
-  crates/acp-service/ Adapter process ownership and native ACP WebSocket service
-  crates/agents-core/  Native adapters, discovery, session catalog and completion collection
-  crates/agents-service/  Agent management, session HTTP APIs and completion WebSocket
+  crates/acp-runtime-core/    Native ACP SDK, adapter resolution and session model
+  crates/acp-runtime-service/ Adapter process ownership and native ACP WebSocket service
+  crates/agent-runtime-core/  Native adapters, discovery, session catalog and completion collection
+  crates/agent-runtime-service/  Agent management, session HTTP APIs and completion WebSocket
   crates/terminal-core/  PTY lifecycle, typed attachments, replay and VT worker host
   crates/terminal-service/  Terminal HTTP routes and WebSocket transport
   crates/workspace/   Node files, Git, worktrees, search and clipboard storage
@@ -47,8 +51,8 @@ injects the callback URL and a business grant; the node never receives its signi
 
 See the [service and deployment reference](../docs/host/host-daemon.md)
 for node configuration, authentication, remote Server connection, lifecycle and
-API details. The only execution binary is `aow-host-daemon`; acp-service,
-terminal-service, agents-service and exec-service are embedded libraries.
+API details. The only execution binary is `aow-host-daemon`; acp-runtime-service,
+terminal-service, agent-runtime-service and exec-service are embedded libraries.
 
 Terminal service depends on terminal core. Core exposes a cloneable manager and
 typed input/output streams; it owns controller leases, replay boundaries, Agent
@@ -118,7 +122,7 @@ The node only enforces the capacity reservation supplied with a single execution
 Installation initialization writes Server configuration; normal startup creates
 the default workspace on the configured node. Only one endpoint is configured.
 
-Native Agent traits and their implementations live only in `crates/agents-core`.
+Native Agent traits and their implementations live only in `crates/agent-runtime-core`.
 Common defines serializable agent IDs, launch requests, capabilities, usage and
 opaque session references. Native adapters, execution and Agent storage belong
 to Host; Common's SQLite crate supplies generic connections and migrations.
@@ -143,14 +147,14 @@ controller lease. Host performs paste and Enter and acknowledges completion.
 A forced takeover invalidates that lease before further input; Server retains
 only the review workflow and feedback policy.
 
-Agent and execution services follow the same core/service boundary. `agents-core`
+Agent and execution services follow the same core/service boundary. `agent-runtime-core`
 retains the capability traits and native implementations, and owns discovery,
 launch preparation, session references, completion collection and durable cursors.
-`agents-service` adapts these APIs to HTTP and WebSocket. `exec-core` owns one
+`agent-runtime-service` adapts these APIs to HTTP and WebSocket. `exec-core` owns one
 execution's process lifecycle and output journal; `exec-service` exposes its
 management routes. Scheduling and business notifications remain on Server.
 
-`agents-core` observes managed terminals through the `ManagedTerminals` trait,
+`agent-runtime-core` observes managed terminals through the `ManagedTerminals` trait,
 implemented by `terminal-core` and injected by the daemon. It does not depend on
 terminal or execution crates. Bounded one-shot subprocess execution lives in
 Host's `process` crate under its `execution` feature, used by Agent probes

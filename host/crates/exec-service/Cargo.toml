@@ -8,7 +8,7 @@ license.workspace = true
 aow-i18n = { package = "aow-host-i18n", path = "../i18n" }
 aow-host-contract = { path = "../../../common/crates/host-contract" }
 aow-exec-core = { path = "../exec-core" }
-aow-agents-core = { path = "../agents-core", features = ["management"] }
+aow-agent-runtime-core = { path = "../agent-runtime-core", features = ["management"] }
 anyhow.workspace = true
 axum.workspace = true
 serde.workspace = true

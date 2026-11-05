@@ -136,7 +136,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
-name = "aow-acp-core"
+name = "aow-acp-runtime-core"
 version = "0.1.0"
 dependencies = [
  "agent-client-protocol",
@@ -166,13 +166,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "aow-acp-service"
+name = "aow-acp-runtime-service"
 version = "0.1.0"
 dependencies = [
  "agent-client-protocol",
  "anyhow",
- "aow-acp-core",
- "aow-agents-core",
+ "aow-acp-runtime-core",
+ "aow-agent-runtime-core",
  "aow-host-contract",
  "aow-host-filesystem",
  "aow-host-i18n",
@@ -196,7 +196,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "aow-agents-core"
+name = "aow-agent-runtime-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -221,11 +221,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "aow-agents-service"
+name = "aow-agent-runtime-service"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "aow-agents-core",
+ "aow-agent-runtime-core",
  "aow-host-contract",
  "aow-host-environment",
  "aow-host-i18n",
@@ -243,7 +243,7 @@ name = "aow-exec-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "aow-agents-core",
+ "aow-agent-runtime-core",
  "aow-host-contract",
  "aow-host-i18n",
  "aow-host-process",
@@ -264,7 +264,7 @@ name = "aow-exec-service"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "aow-agents-core",
+ "aow-agent-runtime-core",
  "aow-exec-core",
  "aow-host-contract",
  "aow-host-i18n",
@@ -288,10 +288,10 @@ name = "aow-host-daemon"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "aow-acp-core",
- "aow-acp-service",
- "aow-agents-core",
- "aow-agents-service",
+ "aow-acp-runtime-core",
+ "aow-acp-runtime-service",
+ "aow-agent-runtime-core",
+ "aow-agent-runtime-service",
  "aow-exec-core",
  "aow-exec-service",
  "aow-host-contract",
@@ -452,7 +452,7 @@ name = "aow-terminal-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "aow-agents-core",
+ "aow-agent-runtime-core",
  "aow-host-contract",
  "aow-host-filesystem",
  "aow-host-i18n",

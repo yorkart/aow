@@ -1,8 +1,8 @@
-use aow_agents_core::launch::AgentTypeExt;
+use aow_agent_runtime_core::launch::AgentTypeExt;
 use std::{collections::BTreeMap, path::Path, process::Stdio};
 
 use anyhow::Result;
-use aow_agents_core::automation::{AgentAutomation, PromptMode};
+use aow_agent_runtime_core::automation::{AgentAutomation, PromptMode};
 use tokio::process::Command;
 
 use crate::{AgentKind, Task};
@@ -27,7 +27,7 @@ pub fn command(
         .stderr(Stdio::piped())
         .kill_on_drop(true)
         .process_group(0);
-    if task.input.agent.agent() == aow_agents_core::Agent::Pi {
+    if task.input.agent.agent() == aow_agent_runtime_core::Agent::Pi {
         // A scheduled process must not inherit the launching terminal's binding.
         command.env_remove("AOW_PI_BINDING");
     }

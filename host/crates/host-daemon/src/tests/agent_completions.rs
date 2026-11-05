@@ -2,7 +2,7 @@ use std::{fs::OpenOptions, io::Write, time::Duration};
 #[cfg(unix)]
 #[tokio::test]
 async fn collector_reads_the_managed_process_store_and_keeps_its_final_completion() {
-    use aow_agents_core::catalog::SessionCatalog;
+    use aow_agent_runtime_core::catalog::SessionCatalog;
     use aow_terminal_core::TerminalRuntimeHost;
     use serde_json::json;
     let root = tempfile::tempdir().unwrap();
@@ -15,11 +15,13 @@ async fn collector_reads_the_managed_process_store_and_keeps_its_final_completio
     std::fs::write(&transcript,"{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_complete\",\"turn_id\":\"historic\"}}\n").unwrap();
     let db = rusqlite::Connection::open(home.join("state_5.sqlite")).unwrap();
     db.execute_batch(include_str!(
-        "../../../agents-core/src/completions/sql/tests/create_session_threads.sql"
+        "../../../agent-runtime-core/src/completions/sql/tests/create_session_threads.sql"
     ))
     .unwrap();
     db.execute(
-        include_str!("../../../agents-core/src/completions/sql/tests/insert_session_thread.sql"),
+        include_str!(
+            "../../../agent-runtime-core/src/completions/sql/tests/insert_session_thread.sql"
+        ),
         rusqlite::params!["native", transcript.to_str(), cwd.to_str()],
     )
     .unwrap();
@@ -34,7 +36,7 @@ async fn collector_reads_the_managed_process_store_and_keeps_its_final_completio
     )
     .unwrap();
     let (stop, stopping) = tokio::sync::watch::channel(false);
-    let service = aow_agents_core::completions::Completions::open(
+    let service = aow_agent_runtime_core::completions::Completions::open(
         root.path(),
         "node".into(),
         stopping.clone(),
@@ -51,7 +53,7 @@ async fn collector_reads_the_managed_process_store_and_keeps_its_final_completio
     client.put(&url).json(&json!({"cwd":cwd,"shell":"/bin/sh","arguments":["-c",r#"printf '\033]0;Same title\007'; exec "$FIXTURE_CLI""#],"environment":{"TRAECLI_HOME":home,"FIXTURE_CLI":executable},"rows":24,"cols":80})).send().await.unwrap().error_for_status().unwrap();
     tokio::time::timeout(Duration::from_secs(10), async {
         loop {
-            let binding = aow_agents_core::catalog::read_pane(
+            let binding = aow_agent_runtime_core::catalog::read_pane(
                 sessions.clone(),
                 aow_host_contract::agents::NativePaneRequest {
                     pane_id: "pane".into(),
@@ -86,7 +88,7 @@ async fn collector_reads_the_managed_process_store_and_keeps_its_final_completio
     assert_eq!(events[0]["event"]["agent"], "traecli");
     assert_eq!(events[0]["event"]["instance_ids"], json!(["pane"]));
     db.execute(
-        include_str!("../../../agents-core/src/completions/sql/tests/rename_thread.sql"),
+        include_str!("../../../agent-runtime-core/src/completions/sql/tests/rename_thread.sql"),
         rusqlite::params!["Renamed on node", "native"],
     )
     .unwrap();

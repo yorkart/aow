@@ -419,7 +419,7 @@ async fn node_identity_settings_and_exclusive_ownership_survive_restart() {
         .unwrap();
     assert!(response.status().is_success());
     assert!(
-        aow_acp_service::AcpRuntime::open(root.path().into())
+        aow_acp_runtime_service::AcpRuntime::open(root.path().into())
             .await
             .is_err()
     );

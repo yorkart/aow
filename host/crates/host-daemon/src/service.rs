@@ -3,7 +3,7 @@ use crate::{
     config::node_id,
 };
 use anyhow::{Context, Result, ensure};
-use aow_acp_service::AcpRuntime;
+use aow_acp_runtime_service::AcpRuntime;
 use aow_terminal_core::{TerminalRuntimeHost, configure_vt_worker};
 use axum::{Json, Router, middleware, routing::get};
 use std::{
@@ -76,13 +76,13 @@ pub async fn run_with_listener_and_vt_config(
         )]),
     )
     .await;
-    let sessions = aow_agents_core::catalog::SessionCatalog::open(
+    let sessions = aow_agent_runtime_core::catalog::SessionCatalog::open(
         &options.state_dir,
         id.clone(),
         Arc::new(terminal.observer()),
     )?;
     let (stop, mut stopping) = watch::channel(false);
-    let completions = aow_agents_core::completions::Completions::open(
+    let completions = aow_agent_runtime_core::completions::Completions::open(
         &options.state_dir,
         id.clone(),
         stopping.clone(),
@@ -121,11 +121,13 @@ pub async fn run_with_listener_and_vt_config(
     let router = Router::new()
         .route("/v1/health", get(move || async move { Json(health) }))
         .merge(acp.router())
-        .merge(aow_agents_service::management_router(
+        .merge(aow_agent_runtime_service::management_router(
             std::fs::canonicalize(&options.state_dir)?,
         ))
-        .merge(aow_agents_service::sessions_router(sessions.clone()))
-        .merge(aow_agents_service::events_router(completions.clone()))
+        .merge(aow_agent_runtime_service::sessions_router(sessions.clone()))
+        .merge(aow_agent_runtime_service::events_router(
+            completions.clone(),
+        ))
         .merge(environments.router())
         .merge(executions.router())
         .merge(crate::providers::router(node_root.clone()))

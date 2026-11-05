@@ -1,7 +1,7 @@
 # Host daemon
 
 `aow-host-daemon` is a standalone node service. One Rust process embeds the
-`aow-acp-service`, `aow-terminal-service`, `aow-agents-service` and
+`aow-acp-runtime-service`, `aow-terminal-service`, `aow-agent-runtime-service` and
 `aow-exec-service` libraries and owns a single TCP HTTP listener,
 configuration, authentication and shutdown sequence. ACP adapters, PTY shells
 and the optional Node.js VT worker are child processes; it does not launch
@@ -22,8 +22,8 @@ and WebSocket transport; daemon startup and shutdown own the underlying core hos
 Terminal routes and wire messages are unchanged, including the `aow-terminald`
 health service identifier.
 
-`aow-agents-core` owns discovery, native adapters, the session catalog and durable
-completion collection. `aow-agents-service` exposes Agent and session management
+`aow-agent-runtime-core` owns discovery, native adapters, the session catalog and durable
+completion collection. `aow-agent-runtime-service` exposes Agent and session management
 routes and `/v1/agent-events`. A read-only `ManagedTerminals` trait connects Agent
 collection to terminal core without an implementation dependency in the reverse
 direction. `aow-exec-core` owns individual executions; `aow-exec-service` exposes

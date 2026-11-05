@@ -14,7 +14,7 @@ use std::{
 #[derive(Clone)]
 pub(crate) struct Environments(Arc<Inner>);
 struct Inner {
-    prober: aow_acp_service::AcpProber,
+    prober: aow_acp_runtime_service::AcpProber,
     manager: EnvironmentManager,
     root: PathBuf,
     pending: Mutex<HashMap<String, Pending>>,
@@ -61,7 +61,7 @@ fn write_json(path: &Path, value: &impl Serialize) -> Result<()> {
     result
 }
 impl Environments {
-    pub(crate) fn open(root: PathBuf, prober: aow_acp_service::AcpProber) -> Result<Self> {
+    pub(crate) fn open(root: PathBuf, prober: aow_acp_runtime_service::AcpProber) -> Result<Self> {
         let directory = root.join("data/environments/transactions");
         std::fs::create_dir_all(&directory)?;
         let service = Self(Arc::new(Inner {
@@ -346,7 +346,7 @@ async fn probe(State(service): State<Environments>, Json(request): Json<Probe>) 
             let mut env = service.0.manager.role_environment(&request.spec)?;
             if let Some(mut launch) = request.launch {
                 launch.env.extend(env);
-                aow_agents_core::management::probe::cli(
+                aow_agent_runtime_core::management::probe::cli(
                     launch,
                     workspace.path(),
                     request.timeout_ms,
@@ -362,7 +362,7 @@ async fn probe(State(service): State<Environments>, Json(request): Json<Probe>) 
                     .probe(
                         &agent,
                         workspace.path().into(),
-                        aow_acp_core::ExecutionEnvironment { home, env },
+                        aow_acp_runtime_core::ExecutionEnvironment { home, env },
                     )
                     .await?;
             }

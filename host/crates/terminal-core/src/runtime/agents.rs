@@ -3,7 +3,7 @@
 use std::{collections::BTreeMap, time::Instant};
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-use aow_agents_core::process::{ProcessInfo, recognize_process};
+use aow_agent_runtime_core::process::{ProcessInfo, recognize_process};
 
 use super::*;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
