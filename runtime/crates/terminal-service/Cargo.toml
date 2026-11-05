@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+aow-i18n = { package = "aow-runtime-i18n", path = "../i18n" }
 aow-terminal-core = { path = "../terminal-core" }
 aow-protocol = { path = "../../../common/crates/protocol" }
 aow-runtime-contract = { path = "../../../common/crates/runtime-contract" }

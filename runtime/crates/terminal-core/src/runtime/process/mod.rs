@@ -30,7 +30,7 @@ pub(super) fn compare_existing(
 pub(super) fn start_runtime_workers(mut spawned: SpawnedRuntime) {
     if spawned.runtime.vt_session.is_some() {
         let runtime = spawned.runtime.clone();
-        tokio::spawn(async move { runtime.publish_vt_output().await });
+        aow_i18n::spawn(async move { runtime.publish_vt_output().await });
     }
     let reader_runtime = spawned.runtime.clone();
     let mut reader = spawned

@@ -84,15 +84,7 @@ const DEFAULT_ROWS: u16 = 24;
 const DEFAULT_COLS: u16 = 80;
 const MAX_PANES_PER_TAB: usize = 64;
 const MAX_LAYOUT_DEPTH: usize = 64;
-#[cfg(test)]
-const CLIPBOARD_DIRECTORY: &str = "clipboard-images";
 const MAX_CLIPBOARD_IMAGE_BYTES: u64 = 10 * 1024 * 1024;
-#[cfg(test)]
-const MAX_CLIPBOARD_DIRECTORY_BYTES: u64 = 256 * 1024 * 1024;
-#[cfg(test)]
-const CLIPBOARD_IMAGE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
-#[cfg(test)]
-const CLIPBOARD_CLEANUP_INTERVAL: Duration = Duration::from_secs(60 * 60);
 const BRIDGE_CLOSE_FORWARD_TIMEOUT: Duration = Duration::from_secs(1);
 const BRIDGE_MESSAGE_FORWARD_TIMEOUT: Duration = Duration::from_secs(5);
 const BRIDGE_RUNTIME_SYNC_TIMEOUT: Duration = Duration::from_secs(2);
@@ -101,6 +93,3 @@ pub use aow_config::default_state_dir;
 
 #[cfg(test)]
 mod tests;
-
-#[cfg(test)]
-use validation::normalize_shell;

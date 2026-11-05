@@ -5,15 +5,9 @@ mod acp_tests;
 mod api;
 mod connection;
 #[cfg(test)]
-mod connection_fixture;
-#[cfg(test)]
 mod connection_tests;
 mod home;
-#[cfg(test)]
-mod home_fixture;
 mod identity;
-#[cfg(test)]
-mod identity_fixture;
 #[cfg(test)]
 mod identity_tests;
 mod launch;

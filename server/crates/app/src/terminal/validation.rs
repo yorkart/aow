@@ -1,71 +1,5 @@
 use super::*;
 
-#[cfg(test)]
-pub(super) fn resolve_cwd(
-    cwd: Option<&str>,
-    workspace_root: Option<&str>,
-) -> Result<String, TerminalError> {
-    let value = cwd
-        .filter(|value| !value.trim().is_empty())
-        .or_else(|| workspace_root.filter(|value| !value.trim().is_empty()))
-        .map(ToOwned::to_owned)
-        .unwrap_or_else(|| {
-            std::env::current_dir()
-                .unwrap_or_else(|_| PathBuf::from("/"))
-                .to_string_lossy()
-                .into_owned()
-        });
-    if !Path::new(&value).is_absolute() {
-        return Err(TerminalError::Invalid(format!(
-            "terminal cwd must be absolute: {value}"
-        )));
-    }
-    Ok(value)
-}
-
-#[cfg(test)]
-pub(super) async fn validate_directory(path: &str) -> Result<(), TerminalError> {
-    if !Path::new(path).is_absolute() {
-        return Err(TerminalError::Invalid(format!(
-            "directory must be absolute: {path}"
-        )));
-    }
-    let metadata = tokio::fs::metadata(path)
-        .await
-        .map_err(|error| TerminalError::Invalid(format!("cannot access {path}: {error}")))?;
-    if !metadata.is_dir() {
-        return Err(TerminalError::Invalid(format!(
-            "path is not a directory: {path}"
-        )));
-    }
-    Ok(())
-}
-
-#[cfg(test)]
-pub(super) fn normalize_shell(shell: Option<&str>) -> Result<String, TerminalError> {
-    let shell = shell
-        .filter(|value| !value.trim().is_empty())
-        .map(ToOwned::to_owned)
-        .or_else(|| {
-            std::env::var("SHELL")
-                .ok()
-                .filter(|value| !value.is_empty())
-        })
-        .unwrap_or_else(|| {
-            if Path::new("/bin/bash").is_file() {
-                "/bin/bash".to_owned()
-            } else {
-                "/bin/sh".to_owned()
-            }
-        });
-    if shell.as_bytes().contains(&0) {
-        return Err(TerminalError::Invalid(
-            aow_i18n::text("validation.shell_contains_a_nul_byte").to_owned(),
-        ));
-    }
-    Ok(shell)
-}
-
 pub(super) fn terminal_size(
     rows: Option<u16>,
     cols: Option<u16>,
@@ -131,21 +65,7 @@ pub(super) fn migrate_terminal_names(tab: &mut TerminalTab) {
 }
 
 impl TerminalManager {
-    #[cfg(test)]
-    pub(crate) fn enable_node_workspace(&self) {
-        self.inner
-            .node_workspace
-            .store(true, std::sync::atomic::Ordering::Relaxed);
-    }
     pub(super) async fn validate_node_directory(&self, path: &str) -> Result<(), TerminalError> {
-        #[cfg(test)]
-        if !self
-            .inner
-            .node_workspace
-            .load(std::sync::atomic::Ordering::Relaxed)
-        {
-            return validate_directory(path).await;
-        }
         let metadata = self
             .inner
             .terminald
@@ -165,14 +85,6 @@ impl TerminalManager {
         cwd: Option<&str>,
         workspace_root: Option<&str>,
     ) -> Result<String, TerminalError> {
-        #[cfg(test)]
-        if !self
-            .inner
-            .node_workspace
-            .load(std::sync::atomic::Ordering::Relaxed)
-        {
-            return resolve_cwd(cwd, workspace_root);
-        }
         if let Some(value) = cwd
             .filter(|value| !value.trim().is_empty())
             .or_else(|| workspace_root.filter(|value| !value.trim().is_empty()))
@@ -193,28 +105,15 @@ impl TerminalManager {
             .into_owned())
     }
     pub(super) async fn node_shell(&self, shell: Option<&str>) -> Result<String, TerminalError> {
-        #[cfg(test)]
-        if !self
-            .inner
-            .node_workspace
-            .load(std::sync::atomic::Ordering::Relaxed)
-        {
-            return normalize_shell(shell);
-        }
         let shell = if let Some(shell) = shell.filter(|shell| !shell.trim().is_empty()) {
             shell.to_owned()
         } else {
-            let value: serde_json::Value = self
-                .inner
+            self.inner
                 .terminald
                 .runtime()
-                .workspace_operation("terminal_defaults", serde_json::json!({}))
+                .workspace_terminal_defaults()
                 .await
-                .map_err(map_client_error)?;
-            value["shell"]
-                .as_str()
-                .ok_or_else(|| TerminalError::Invalid("Node shell is unavailable".into()))?
-                .to_owned()
+                .map_err(map_client_error)?
         };
         if shell.contains('\0') {
             return Err(TerminalError::Invalid("Shell contains a NUL byte".into()));

@@ -107,7 +107,10 @@ async fn tested_creation_uses_persistent_home_and_retries_without_reseeding_or_r
         changed.name = "different".into();
         assert_eq!(create(&app, &changed, id).await.0, StatusCode::BAD_REQUEST);
         assert_eq!(
-            std::fs::read_dir(home.parent().unwrap()).unwrap().count(),
+            std::fs::read_dir(home.parent().unwrap())
+                .unwrap()
+                .filter(|entry| entry.as_ref().unwrap().file_type().unwrap().is_dir())
+                .count(),
             1
         );
     }
@@ -141,7 +144,7 @@ async fn missing_builtin_identity_retries_in_a_fresh_home_and_probe_reads_the_im
     let (status, body) = create(&app, &config, "identity-retry").await;
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
     assert!(state.aow.agent_roles().unwrap().is_empty());
-    assert!(!state.aow.role_home("identity-retry").unwrap().exists());
+    assert!(state.aow.role_home("identity-retry").is_err());
     std::fs::write(&identity, "opaque identity bytes").unwrap();
     let (status, body) = create(&app, &config, "identity-retry").await;
     assert_eq!(status, StatusCode::OK, "{body}");
@@ -165,7 +168,7 @@ async fn failed_or_incomplete_cli_connections_do_not_publish_a_role_or_keep_cand
         let (status, body) = create(&app, &config, mode).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
         assert!(!body.to_string().contains("private provider error"));
-        assert!(!state.aow.role_home(mode).unwrap().exists());
+        assert!(state.aow.role_home(mode).is_err());
         assert!(state.aow.agent_roles().unwrap().is_empty());
     }
     config.identity = Identity::LocalHome { source: None };
@@ -196,7 +199,7 @@ async fn acp_probe_uses_shared_settings_without_leaving_workspace_sessions() {
         let (status, body) = create(&app, &config, "acp-probe").await;
         if mode != "success" {
             assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-            assert!(!state.aow.role_home("acp-probe").unwrap().exists());
+            assert!(state.aow.role_home("acp-probe").is_err());
             assert!(state.aow.agent_roles().unwrap().is_empty());
         } else {
             assert_eq!(status, StatusCode::OK, "{body}");
@@ -240,7 +243,10 @@ async fn timed_out_cli_is_terminated_and_scratch_workspace_is_removed() {
     assert!(!late.exists(), "runtime survived its timeout");
     let home = state.aow.role_home(&role.id).unwrap();
     assert_eq!(
-        std::fs::read_dir(home.parent().unwrap()).unwrap().count(),
+        std::fs::read_dir(home.parent().unwrap())
+            .unwrap()
+            .filter(|entry| entry.as_ref().unwrap().file_type().unwrap().is_dir())
+            .count(),
         1
     );
 }

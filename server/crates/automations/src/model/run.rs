@@ -111,3 +111,57 @@ pub enum RunEvent {
         limit_bytes: u64,
     },
 }
+
+impl From<aow_runtime_contract::execution::RunEvent> for RunEvent {
+    fn from(event: aow_runtime_contract::execution::RunEvent) -> Self {
+        use aow_runtime_contract::execution::{RunEvent as E, RunOutput as O, RunStatus as S};
+        match event {
+            E::Workspace {
+                path,
+                branch,
+                elapsed_ms,
+            } => Self::Workspace {
+                path,
+                branch,
+                elapsed_ms,
+            },
+            E::AgentStarted { pid, command } => Self::AgentStarted { pid, command },
+            E::Session {
+                session_id,
+                elapsed_ms,
+            } => Self::Session {
+                session_id,
+                elapsed_ms,
+            },
+            E::Finished {
+                at,
+                status,
+                exit_code,
+                message,
+                duration_ms,
+            } => Self::Finished {
+                at,
+                status: match status {
+                    S::Preparing => RunStatus::Preparing,
+                    S::Running => RunStatus::Running,
+                    S::Completed => RunStatus::Completed,
+                    S::Failed => RunStatus::Failed,
+                    S::Interrupted => RunStatus::Interrupted,
+                },
+                exit_code,
+                message,
+                duration_ms,
+            },
+            E::OutputTruncated {
+                output,
+                limit_bytes,
+            } => Self::OutputTruncated {
+                output: match output {
+                    O::Stdio => RunOutput::Stdio,
+                    O::Stderr => RunOutput::Stderr,
+                },
+                limit_bytes,
+            },
+        }
+    }
+}

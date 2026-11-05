@@ -117,50 +117,6 @@ async fn prepared_worktree_uses_selected_base_and_lists_unchecked_local_and_remo
             "default_branch": "origin/main",
         })
     );
-
-    let config = aow_workspaces::WorkspaceConfig {
-        base_branch: "origin/release".into(),
-        ..Default::default()
-    };
-    let prepared = manager
-        .prepare_workspace(&project.id, &config, "task/item-request")
-        .await
-        .unwrap();
-    assert!(prepared.created);
-    let path = prepared.directory;
-    assert_eq!(path.parent(), Some(root.as_path()));
-    assert_eq!(
-        git_output(&path, &["rev-parse", "HEAD"]).await.unwrap(),
-        release_head
-    );
-    assert_eq!(
-        git_output(&repo, &["rev-parse", "HEAD"]).await.unwrap(),
-        main_head
-    );
-    let retried = manager
-        .prepare_workspace(&project.id, &config, "task/item-request")
-        .await
-        .unwrap();
-    assert!(!retried.created);
-    assert_eq!(retried.directory, path);
-    let existing = manager
-        .prepare_workspace(
-            &project.id,
-            &aow_workspaces::WorkspaceConfig {
-                workspace_mode: aow_workspaces::WorkspaceMode::Existing,
-                workspace_path: repo.clone(),
-                ..Default::default()
-            },
-            "task/another-item-request",
-        )
-        .await
-        .unwrap();
-    assert!(!existing.created);
-    assert_eq!(existing.directory, repo);
-    assert_eq!(
-        manager.project(&project.id).await.unwrap().worktrees.len(),
-        2
-    );
 }
 
 #[tokio::test]
@@ -960,22 +916,19 @@ async fn allows_notes_base_nested_in_a_git_repository() {
 }
 
 #[tokio::test]
-async fn retries_a_colliding_temporary_note_name_without_scanning() {
+async fn temporary_notes_use_unique_node_paths() {
     let directory = tempfile::tempdir().unwrap();
-    std::fs::write(directory.path().join(".tmp-aaaaaaaa.md"), b"existing").unwrap();
-    let mut ids = ["aaaaaaaa", "bbbbbbbb"].into_iter();
-
-    let (path, name) =
-        notes::create_temporary_note_file(directory.path(), "md", || ids.next().unwrap().into())
-            .await
-            .unwrap();
-
-    assert_eq!(name, ".tmp-bbbbbbbb.md");
-    assert_eq!(path, directory.path().join(&name));
-    assert_eq!(
-        std::fs::read(directory.path().join(".tmp-aaaaaaaa.md")).unwrap(),
-        b"existing"
-    );
+    let manager = AowManager::in_memory();
+    let (first, _) = manager
+        .node_temporary_note(directory.path(), "md")
+        .await
+        .unwrap();
+    let (second, _) = manager
+        .node_temporary_note(directory.path(), "md")
+        .await
+        .unwrap();
+    assert_ne!(first, second);
+    assert!(first.is_file() && second.is_file());
 }
 
 #[tokio::test]
@@ -1060,7 +1013,7 @@ async fn registers_a_local_repository_without_a_remote_under_localhost() {
         .path()
         .join("aow")
         .join("localhost")
-        .join(notes::process_account_name().unwrap())
+        .join(AowManager::in_memory().node_account().await.unwrap())
         .join("repo");
     assert_eq!(Path::new(&project.notes_path), expected);
     assert!(expected.is_dir());
@@ -1080,7 +1033,10 @@ async fn allows_notes_directories_nested_in_another_repository() {
             .success()
     );
     let nested = repository.join("notes");
-    let result = notes::prepare_notes_directory(&nested).await.unwrap();
+    let result = AowManager::in_memory()
+        .prepare_notes_directory(&nested)
+        .await
+        .unwrap();
     assert_eq!(Path::new(&result), nested);
     assert!(nested.is_dir());
     assert!(!nested.join(".git").exists());

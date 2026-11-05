@@ -1,3 +1,4 @@
+use crate::model::HomeLayoutExt;
 use crate::{
     EnvironmentError as AowError, EnvironmentManager as AowManager,
     RoleEnvironmentSpec as AgentRole,

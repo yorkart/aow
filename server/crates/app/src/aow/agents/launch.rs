@@ -6,12 +6,12 @@ impl AowManager {
     pub(crate) async fn execution_reference_path(
         &self,
         project_id: &str,
-        config: &aow_workspaces::WorkspaceConfig,
+        config: &aow_runtime_contract::workspace::WorkspaceConfig,
     ) -> Result<String, AowError> {
         config
             .validate()
-            .map_err(|error| AowError::Invalid(error.to_string()))?;
-        if config.workspace_mode == aow_workspaces::WorkspaceMode::Existing {
+            .map_err(|error| AowError::Invalid(aow_i18n::text(error.0).into()))?;
+        if config.workspace_mode == aow_runtime_contract::workspace::WorkspaceMode::Existing {
             return self
                 .agent_worktree_path(project_id, &config.workspace_path.to_string_lossy())
                 .await;
@@ -28,26 +28,6 @@ impl AowManager {
                 )
             })?;
         self.agent_worktree_path(project_id, &main.path).await
-    }
-
-    #[cfg(test)]
-    pub(crate) async fn prepare_workspace(
-        &self,
-        project_id: &str,
-        config: &aow_workspaces::WorkspaceConfig,
-        name: &str,
-    ) -> Result<aow_workspaces::PreparedWorkspace, AowError> {
-        let project_lock = self.inner.removals.project_lock(project_id)?;
-        let _project = project_lock.lock().await;
-        let project = self.project(project_id).await?;
-        aow_workspaces::prepare(
-            config,
-            Path::new(&project.registered_path),
-            name,
-            &WorkspaceGit,
-        )
-        .await
-        .map_err(|error| AowError::Invalid(format!("{error:#}")))
     }
 
     pub(crate) async fn automation_project_for_cwd(
@@ -193,14 +173,5 @@ impl AowManager {
             )));
         }
         Ok(requested.to_string_lossy().into_owned())
-    }
-}
-
-#[cfg(test)]
-struct WorkspaceGit;
-#[cfg(test)]
-impl aow_workspaces::GitExecutor for WorkspaceGit {
-    async fn output(&self, cwd: &Path, args: &[&str]) -> anyhow::Result<String> {
-        git_output(cwd, args).await.map_err(Into::into)
     }
 }

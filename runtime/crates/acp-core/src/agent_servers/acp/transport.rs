@@ -106,7 +106,7 @@ pub(crate) fn spawn_transport(
     let stop = tokio_util::sync::CancellationToken::new();
     let stopped = stop.clone();
     let lifetime = async move {
-        let stderr = tokio::spawn(stderr);
+        let stderr = aow_i18n::spawn(stderr);
         tokio::select! {_ = stopped.cancelled() => {}, _ = child.wait() => {}}
         drop(process_group);
         let _ = child.kill().await;

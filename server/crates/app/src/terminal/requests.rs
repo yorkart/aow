@@ -63,13 +63,7 @@ pub(super) struct UpdateLayoutRequest {
     pub(super) revision: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub(super) struct ClipboardImageResponse {
-    pub(super) path: String,
-    pub(super) mime: String,
-    pub(super) size: u64,
-    pub(super) expires_at: String,
-}
-use serde::{Deserialize, Serialize};
+pub(super) use aow_runtime_contract::workspace::ClipboardImage as ClipboardImageResponse;
+use serde::Deserialize;
 
 use super::*;

@@ -10,7 +10,7 @@ impl Completions {
         mut stopping: watch::Receiver<bool>,
     ) -> tokio::task::JoinHandle<()> {
         let service = self.clone();
-        tokio::spawn(async move {
+        aow_i18n::spawn(async move {
             let mut registry = registry::Registry::default();
             let mut pending = Vec::new();
             let mut interval = tokio::time::interval(Duration::from_millis(500));
@@ -20,7 +20,7 @@ impl Completions {
                 if !pending.is_empty() {
                     let log = service.clone();
                     let batch = pending.clone();
-                    match tokio::task::spawn_blocking(move || log.append(&batch)).await {
+                    match aow_i18n::spawn_blocking(move || log.append(&batch)).await {
                         Ok(Ok(())) => pending.clear(),
                         error => {
                             tracing::error!(?error, "cannot persist native completions; retrying");
@@ -29,7 +29,7 @@ impl Completions {
                     }
                 }
                 // Read first, even when a CLI has just exited.
-                let output = tokio::task::spawn_blocking(move || {
+                let output = aow_i18n::spawn_blocking(move || {
                     let events = registry.poll();
                     (registry, events)
                 })
@@ -39,10 +39,9 @@ impl Completions {
                 pending = events;
                 let service_for_log = service.clone();
                 let batch = pending.clone();
-                if let Err(error) =
-                    tokio::task::spawn_blocking(move || service_for_log.append(&batch))
-                        .await
-                        .unwrap_or_else(|error| Err(error.into()))
+                if let Err(error) = aow_i18n::spawn_blocking(move || service_for_log.append(&batch))
+                    .await
+                    .unwrap_or_else(|error| Err(error.into()))
                 {
                     // A durable log failure must be visible; never acknowledge an unlogged event.
                     tracing::error!(%error,"cannot persist native completions");
@@ -110,7 +109,7 @@ impl Completions {
                         continue;
                     }
                     let identity_for_candidates = identity.clone();
-                    let Ok(candidates) = tokio::task::spawn_blocking(move || {
+                    let Ok(candidates) = aow_i18n::spawn_blocking(move || {
                         registry::candidates(&identity_for_candidates, binding.roots)
                     })
                     .await
@@ -120,7 +119,7 @@ impl Completions {
                     if !same_process(&binding.process) {
                         continue;
                     }
-                    let Ok(next) = tokio::task::spawn_blocking(move || {
+                    let Ok(next) = aow_i18n::spawn_blocking(move || {
                         registry.refresh(instance, identity, candidates);
                         registry
                     })
@@ -131,7 +130,7 @@ impl Completions {
                     registry = next;
                 }
             }
-            if let Err(error) = tokio::task::spawn_blocking(move || {
+            if let Err(error) = aow_i18n::spawn_blocking(move || {
                 pending.extend(registry.poll());
                 service.append(&pending)
             })

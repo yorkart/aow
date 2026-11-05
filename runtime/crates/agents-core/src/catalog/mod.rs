@@ -78,7 +78,7 @@ fn roots(scope: &Scope) -> Result<SessionRoots> {
 }
 pub async fn list(service: SessionCatalog, scope: Scope) -> SessionResult {
     let roots = roots(&scope).map_err(|e| error(SessionErrorKind::Invalid, e))?;
-    tokio::task::spawn_blocking(move || {
+    aow_i18n::spawn_blocking(move || {
         let sessions = crate::sessions::list_sessions(&scope.cwd, scope.agent.as_deref(), roots);
         let values: Result<Vec<_>> = sessions
             .iter()
@@ -102,7 +102,7 @@ fn find_session(scope: &Scope, roots: SessionRoots) -> Result<crate::sessions::A
 }
 pub async fn find(service: SessionCatalog, scope: Scope) -> SessionResult {
     if let Some(reference) = scope.reference {
-        return tokio::task::spawn_blocking(move || {
+        return aow_i18n::spawn_blocking(move || {
             service
                 .metadata(&reference)
                 .map_err(|e| error(SessionErrorKind::Unavailable, e))
@@ -111,7 +111,7 @@ pub async fn find(service: SessionCatalog, scope: Scope) -> SessionResult {
         .map_err(|e| error(SessionErrorKind::Internal, e))?;
     }
     let roots = roots(&scope).map_err(|e| error(SessionErrorKind::Invalid, e))?;
-    tokio::task::spawn_blocking(move || {
+    aow_i18n::spawn_blocking(move || {
         let session =
             find_session(&scope, roots).map_err(|e| error(SessionErrorKind::NotFound, e))?;
         service
@@ -127,7 +127,7 @@ pub async fn snapshot(service: SessionCatalog, scope: Scope) -> SessionResult {
     } else {
         None
     };
-    tokio::task::spawn_blocking(move || {
+    aow_i18n::spawn_blocking(move || {
         let locator = match &scope.reference {
             Some(reference) => service
                 .locate(reference)

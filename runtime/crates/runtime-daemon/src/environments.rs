@@ -1,5 +1,6 @@
 //! Durable node environment transactions. Server publishes the business decision.
 use anyhow::{Context, Result, ensure};
+use aow_runtime_contract::environment::{EnvironmentPreparation, PreparedEnvironment};
 use aow_runtime_environment::{EnvironmentManager, PreparedHome, RoleEnvironmentSpec};
 use axum::{Json, Router, extract::State, http::StatusCode, routing::post};
 use serde::{Deserialize, Serialize};
@@ -28,19 +29,9 @@ struct Decision {
     spec: RoleEnvironmentSpec,
     commit: bool,
 }
-#[derive(Deserialize)]
-struct Prepare {
-    spec: RoleEnvironmentSpec,
-    #[serde(default)]
-    published: bool,
-    token: Option<String>,
-}
-#[derive(Deserialize)]
-struct Finish {
-    token: String,
-    spec: RoleEnvironmentSpec,
-    commit: bool,
-}
+use aow_runtime_contract::environment::{
+    FinishEnvironment as Finish, PrepareEnvironment as Prepare, ProbeEnvironment as Probe,
+};
 type Response = Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)>;
 fn error(error: anyhow::Error) -> (StatusCode, Json<serde_json::Value>) {
     (
@@ -158,12 +149,13 @@ impl Environments {
     fn save_spec(&self, spec: &RoleEnvironmentSpec) -> Result<()> {
         write_json(&self.spec_path(spec)?, spec)
     }
-    fn environment(&self, spec: &RoleEnvironmentSpec) -> Result<serde_json::Value> {
-        Ok(
-            serde_json::json!({"home":self.0.manager.role_home(&spec.id)?,"env":self.0.manager.role_environment(spec)?}),
-        )
+    fn environment(&self, spec: &RoleEnvironmentSpec) -> Result<PreparedEnvironment> {
+        Ok(PreparedEnvironment {
+            home: self.0.manager.role_home(&spec.id)?,
+            env: self.0.manager.role_environment(spec)?,
+        })
     }
-    fn ensure(&self, spec: &RoleEnvironmentSpec) -> Result<serde_json::Value> {
+    fn ensure(&self, spec: &RoleEnvironmentSpec) -> Result<PreparedEnvironment> {
         let pending = self.0.pending.lock().unwrap();
         if let Some(operation) = pending
             .values()
@@ -233,7 +225,7 @@ impl Environments {
     }
 }
 async fn prepare(State(service): State<Environments>, Json(request): Json<Prepare>) -> Response {
-    tokio::task::spawn_blocking(move || {
+    aow_i18n::spawn_blocking(move || {
         service.0.manager.validate(&request.spec)?;
         let token = request
             .token
@@ -245,18 +237,22 @@ async fn prepare(State(service): State<Environments>, Json(request): Json<Prepar
                 decision.spec == request.spec && decision.commit,
                 "Environment preparation was cancelled or changed"
             );
-            let mut value = service.environment(&request.spec)?;
-            value["token"] = serde_json::json!(token);
-            return Ok(Json(value));
+            let environment = service.environment(&request.spec)?;
+            return Ok(Json(serde_json::to_value(EnvironmentPreparation {
+                token,
+                environment,
+            })?));
         }
         if let Some(operation) = pending.get(&token) {
             ensure!(
                 operation.spec == request.spec,
                 "Environment transaction identity changed"
             );
-            let mut value = service.environment(&request.spec)?;
-            value["token"] = serde_json::json!(token);
-            return Ok(Json(value));
+            let environment = service.environment(&request.spec)?;
+            return Ok(Json(serde_json::to_value(EnvironmentPreparation {
+                token,
+                environment,
+            })?));
         }
         ensure!(pending.len() < 64, "Too many pending environment updates");
         ensure!(
@@ -277,16 +273,18 @@ async fn prepare(State(service): State<Environments>, Json(request): Json<Prepar
         write_json(&service.transaction_path(&token)?, &operation)?;
         home.suspend();
         pending.insert(token.clone(), operation);
-        let mut value = service.environment(&request.spec)?;
-        value["token"] = serde_json::json!(token);
-        Ok(Json(value))
+        let environment = service.environment(&request.spec)?;
+        Ok(Json(serde_json::to_value(EnvironmentPreparation {
+            token,
+            environment,
+        })?))
     })
     .await
     .map_err(|e| error(e.into()))?
     .map_err(error)
 }
 async fn finish(State(service): State<Environments>, Json(request): Json<Finish>) -> Response {
-    tokio::task::spawn_blocking(move || {
+    aow_i18n::spawn_blocking(move || {
         service.0.manager.validate(&request.spec)?;
         {
             let mut pending = service.0.pending.lock().unwrap();
@@ -299,7 +297,7 @@ async fn finish(State(service): State<Environments>, Json(request): Json<Finish>
     .map_err(error)
 }
 async fn resolve(State(service): State<Environments>, Json(request): Json<Prepare>) -> Response {
-    tokio::task::spawn_blocking(move || {
+    aow_i18n::spawn_blocking(move || {
         service.0.manager.validate(&request.spec)?;
         if request.published {
             let mut pending = service.0.pending.lock().unwrap();
@@ -311,7 +309,9 @@ async fn resolve(State(service): State<Environments>, Json(request): Json<Prepar
                 service.decide_locked(&mut pending, &token, &spec, spec == request.spec)?;
             }
         }
-        service.ensure(&request.spec).map(Json)
+        service
+            .ensure(&request.spec)
+            .and_then(|environment| Ok(Json(serde_json::to_value(environment)?)))
     })
     .await
     .map_err(|e| error(e.into()))?
@@ -324,17 +324,6 @@ async fn sources(State(service): State<Environments>) -> Response {
             .map_err(error)?,
     ))
 }
-#[derive(Deserialize)]
-struct Probe {
-    spec: RoleEnvironmentSpec,
-    launch: Option<aow_agents_core::launch::AgentLaunch>,
-    acp_agent_id: Option<String>,
-    #[serde(default = "probe_timeout")]
-    timeout_ms: u64,
-}
-fn probe_timeout() -> u64 {
-    60_000
-}
 async fn probe(State(service): State<Environments>, Json(request): Json<Probe>) -> Response {
     if request.timeout_ms == 0 || request.timeout_ms > 120_000 {
         return Err(error(anyhow::anyhow!("Invalid probe timeout")));
@@ -343,7 +332,7 @@ async fn probe(State(service): State<Environments>, Json(request): Json<Probe>) 
         std::time::Duration::from_millis(request.timeout_ms),
         async {
             let environment = service.ensure(&request.spec)?;
-            let home = PathBuf::from(environment["home"].as_str().context("Invalid node home")?);
+            let home = environment.home;
             let workspace = tempfile::Builder::new()
                 .prefix("connection-")
                 .tempdir_in(home.parent().unwrap())?;

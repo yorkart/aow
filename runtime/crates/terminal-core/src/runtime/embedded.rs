@@ -65,7 +65,7 @@ impl TerminalRuntimeHost {
 impl TerminalObserver {
     pub async fn agents(&self) -> Result<TerminalAgentList, TerminalError> {
         let state = self.state.clone();
-        let mut detected = tokio::task::spawn_blocking(move || state.agents())
+        let mut detected = aow_i18n::spawn_blocking(move || state.agents())
             .await
             .map_err(|error| TerminalError::Worker(error.to_string()))??;
         super::session_titles::enrich(&mut detected).await;

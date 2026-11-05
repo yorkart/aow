@@ -57,7 +57,7 @@ pub(super) async fn run_git_with_timeout(
             .spawn()?;
         let mut stdout = child.stdout.take().expect("stdout configured");
         let stderr = child.stderr.take().expect("stderr configured");
-        let stderr_task = tokio::spawn(async move {
+        let stderr_task = aow_i18n::spawn(async move {
             let mut bytes = Vec::new();
             let _ = stderr.take(256 * 1024).read_to_end(&mut bytes).await;
             bytes
@@ -113,10 +113,10 @@ pub(super) async fn run_git_check_ignore(
             .kill_on_drop(true)
             .spawn()?;
         let mut stdin = child.stdin.take().expect("stdin configured");
-        let stdin_task = tokio::spawn(async move { stdin.write_all(&input).await });
+        let stdin_task = aow_i18n::spawn(async move { stdin.write_all(&input).await });
         let mut stdout = child.stdout.take().expect("stdout configured");
         let stderr = child.stderr.take().expect("stderr configured");
-        let stderr_task = tokio::spawn(async move {
+        let stderr_task = aow_i18n::spawn(async move {
             let mut bytes = Vec::new();
             let _ = stderr.take(256 * 1024).read_to_end(&mut bytes).await;
             bytes

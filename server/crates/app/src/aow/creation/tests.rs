@@ -199,12 +199,13 @@ async fn helpers_stopped(marker: &Path) {
     assert_eq!(pids.len(), 2);
     tokio::time::timeout(Duration::from_secs(3), async {
         loop {
-            if pids.iter().all(|pid| match aow_process::info(*pid) {
-                Ok(process) => process.state == 'Z',
-                Err(error) => {
-                    error.kind() == std::io::ErrorKind::NotFound
-                        || error.raw_os_error() == Some(libc::ESRCH)
-                }
+            if pids.iter().all(|pid| {
+                let output = std::process::Command::new("ps")
+                    .args(["-o", "stat=", "-p", &pid.to_string()])
+                    .output()
+                    .unwrap();
+                let state = String::from_utf8_lossy(&output.stdout);
+                !output.status.success() || state.trim().starts_with('Z')
             }) {
                 break;
             }

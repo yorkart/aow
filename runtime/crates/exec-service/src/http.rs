@@ -1,5 +1,5 @@
 //! Single-execution management; upper-level scheduling stays at the caller.
-use aow_exec_core::{ExecutionManager, ExecutionSpec};
+use aow_exec_core::ExecutionManager;
 use axum::{
     Json, Router,
     extract::{DefaultBodyLimit, Path, Query, State},
@@ -14,11 +14,7 @@ pub struct Executions {
     node_id: Arc<String>,
     sessions: aow_agents_core::catalog::SessionCatalog,
 }
-#[derive(Deserialize)]
-struct Submit {
-    node_id: String,
-    spec: ExecutionSpec,
-}
+use aow_runtime_contract::execution::SubmitExecution as Submit;
 #[derive(Deserialize, Default)]
 struct Cursor {
     node_id: Option<String>,
@@ -89,7 +85,7 @@ async fn submit(
             "Execution node or job identity changed"
         )));
     }
-    tokio::task::spawn_blocking(move || {
+    aow_i18n::spawn_blocking(move || {
         service.manager.submit(request.spec)?;
         Ok(Json(
             serde_json::json!({"id":id,"node_id":*service.node_id}),
@@ -113,15 +109,17 @@ async fn snapshot(
             "Execution belongs to a different node"
         )));
     }
-    tokio::task::spawn_blocking(move || {
+    aow_i18n::spawn_blocking(move || {
         let mut value = service.manager.snapshot(&id, cursor.after)?;
-        value["node_id"] = serde_json::json!(*service.node_id);
-        if value["terminal"] == true
+        value.node_id = service.node_id.as_ref().clone();
+        if value.terminal
             && let Ok(Some(session)) = service.manager.native_session(&id)
         {
-            value["native_session"] = service.sessions.remember(&session)?;
+            value.native_session = Some(serde_json::from_value(
+                service.sessions.remember(&session)?,
+            )?);
         }
-        Ok(Json(value))
+        Ok(Json(serde_json::to_value(value)?))
     })
     .await
     .map_err(|error| self::error(error.into()))?
@@ -157,7 +155,7 @@ async fn remove(
             "Execution belongs to a different node"
         )));
     }
-    tokio::task::spawn_blocking(move || {
+    aow_i18n::spawn_blocking(move || {
         service
             .manager
             .remove(&id)
@@ -177,7 +175,7 @@ async fn output(
             "Execution belongs to a different node"
         )));
     }
-    tokio::task::spawn_blocking(move || {
+    aow_i18n::spawn_blocking(move || {
         service
             .manager
             .output(&id, &query.output, query.offset)

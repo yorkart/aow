@@ -373,15 +373,16 @@ time.sleep(30)
                 .unwrap()
                 .clone();
             let extension_path = Path::new(extension.as_str().unwrap());
-            let node_environment: Value = fixture
+            let node_environment = fixture
                 .state
                 .terminals
                 .inner
                 .terminald
-                .get_json("/v1/environment")
+                .runtime()
+                .node_environment()
                 .await
                 .unwrap();
-            let node_state = PathBuf::from(node_environment["state_dir"].as_str().unwrap());
+            let node_state = PathBuf::from(node_environment.state_dir.to_str().unwrap());
             assert!(extension_path.starts_with(node_state.join("data/agents/pi")));
             assert!(
                 std::fs::read_to_string(extension_path)
@@ -422,7 +423,7 @@ time.sleep(30)
             invocation,
             json!({"args": invocation_args,
             "cwd": session_cwd.canonicalize().unwrap(), "profile": id,
-            "state_dir": fixture.state.terminals.inner.terminald.get_json::<Value>("/v1/environment").await.unwrap()["state_dir"]})
+            "state_dir": fixture.state.terminals.inner.terminald.runtime().node_environment().await.unwrap().state_dir})
         );
         let launch = fixture
             .state

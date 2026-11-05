@@ -1,8 +1,6 @@
 //! Read-only Git hosting platform providers, independent of their business consumers.
 
 mod adapter;
-#[cfg(test)]
-mod adapter_fixture;
 mod bundled;
 mod defaults;
 mod description;
@@ -14,6 +12,8 @@ mod schema;
 mod settings;
 mod settings_api;
 mod startup;
+#[cfg(test)]
+mod test_node;
 mod validation;
 
 pub(crate) use bundled::seed_configuration;
@@ -24,8 +24,6 @@ pub(crate) use settings::GitPlatformProviderManager;
 pub(crate) use settings_api::routes;
 
 use adapter::{git, run_adapter};
-#[cfg(test)]
-use adapter_fixture::{read_limited, run_command};
 use error::Result;
 use request::{CommitLinks, Target};
 #[cfg(test)]

@@ -75,3 +75,6 @@ impl ConcurrencySlot {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests;

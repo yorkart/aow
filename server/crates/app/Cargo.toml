@@ -27,13 +27,10 @@ pulldown-cmark = { version = "0.13", default-features = false }
 reqwest.workspace = true
 ring = "0.17"
 aow-automations = { path = "../automations" }
-aow-workspaces = { path = "../workspaces" }
 aow-im = { path = "../im" }
 aow-config = { path = "../config" }
-aow-git-service = { path = "../git-service" }
 aow-operation-log = { path = "../operation-log" }
 aow-protocol = { path = "../../../common/crates/protocol" }
-aow-process = { path = "../process" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

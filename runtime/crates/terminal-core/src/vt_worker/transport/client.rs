@@ -46,7 +46,7 @@ impl RpcClient {
         // channel and update their session directly; they cannot fill a reply
         // queue while the actor is blocked writing to a full pipe.
         let (sender, responses) = mpsc::channel(1);
-        let reader = tokio::spawn(async move {
+        let reader = aow_i18n::spawn(async move {
             let mut stdout = BufReader::new(stdout);
             loop {
                 let response = match read_frame(&mut stdout).await {

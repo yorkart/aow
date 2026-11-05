@@ -1,6 +1,4 @@
-//! Stable per-task concurrency slots with process-group ownership tracking.
-
-mod process;
+//! Server scheduling slots retained while a remote execution is unfinished.
 
 #[cfg(test)]
 mod tests;
@@ -17,29 +15,18 @@ use std::{
     os::unix::fs::OpenOptionsExt,
 };
 
-use process::{boot_identity, group_alive};
-
 struct TaskLock {
     file: File,
 }
 
-/// A stable task-local concurrency slot. The slot stays reserved by every
-/// process group the runner starts, so a crashed runner cannot immediately
-/// allow an orphaned Agent to be exceeded.
+/// A scheduler slot remains reserved until its node execution is reconciled.
 pub(crate) struct ConcurrencySlot {
     lock: TaskLock,
 }
 
 #[derive(Deserialize)]
 struct Owner {
-    boot: String,
     run_id: String,
-}
-
-#[derive(Deserialize)]
-struct Process {
-    process_group: i32,
-    started_before: u64,
 }
 
 impl Store {
@@ -61,8 +48,7 @@ impl Store {
         Ok(None)
     }
 
-    /// Observe registered process groups without ever acquiring a runner slot.
-    /// The active journal covers the runner; these records cover orphaned children.
+    /// Check the caller lock and durable remote execution reference.
     pub(crate) fn has_occupied_concurrency_slot(&self, task_id: &str) -> Result<bool> {
         valid_component(task_id)?;
         let directory = self.root.join("runs").join(task_id);
@@ -94,22 +80,22 @@ impl Store {
                 aow_i18n::text("common.lockNotFile")
             );
             let mut contents = String::new();
-            file.take(64 * 1024 + 1).read_to_string(&mut contents)?;
+            (&file).take(64 * 1024 + 1).read_to_string(&mut contents)?;
             ensure!(
                 contents.len() <= 64 * 1024,
                 aow_i18n::text("common.lockTooLarge")
             );
-            let mut lines = contents
+            let lines = contents
                 .split_inclusive('\n')
                 .filter(|line| line.ends_with('\n'));
-            let Some(first) = lines.next() else {
+            let Some(first) = lines.into_iter().next() else {
                 continue;
             };
             // Diagnostic metadata can be empty, partial, or stale during a handoff.
             let Ok(owner) = serde_json::from_str::<Owner>(first) else {
                 continue;
             };
-            if valid_component(&owner.run_id).is_err() || owner.boot != boot_identity()? {
+            if valid_component(&owner.run_id).is_err() {
                 continue;
             }
             match self.read_run(task_id, &owner.run_id) {
@@ -118,12 +104,13 @@ impl Store {
                 Err(error) if crate::store::is_not_found(&error) => {}
                 Err(error) => return Err(error),
             }
-            for line in lines {
-                if let Ok(process) = serde_json::from_str::<Process>(line)
-                    && group_alive(&process)?
-                {
-                    return Ok(true);
-                }
+            if !try_exclusive(&file)?
+                || self
+                    .run_path(task_id, &owner.run_id)?
+                    .join("node-execution.json")
+                    .is_file()
+            {
+                return Ok(true);
             }
         }
         Ok(false)
@@ -161,26 +148,15 @@ impl Store {
         let mut lines = contents.lines();
         if let Some(first) = lines.next()
             && let Ok(owner) = serde_json::from_str::<Owner>(first)
-            && owner.boot == boot_identity()?
-        {
-            if self
+            && self
                 .run_path(task_id, &owner.run_id)?
                 .join("node-execution.json")
                 .is_file()
-                && self
-                    .read_run(task_id, &owner.run_id)?
-                    .is_some_and(|run| !run.status.terminal())
-            {
-                return Ok(None);
-            }
-            for line in lines {
-                // A partial final registration cannot have reached exec.
-                if let Ok(process) = serde_json::from_str::<Process>(line)
-                    && group_alive(&process)?
-                {
-                    return Ok(None);
-                }
-            }
+            && self
+                .read_run(task_id, &owner.run_id)?
+                .is_some_and(|run| !run.status.terminal())
+        {
+            return Ok(None);
         }
         Ok(Some(TaskLock { file }))
     }
@@ -192,7 +168,7 @@ impl TaskLock {
         serde_json::to_writer(
             &mut self.file,
             &serde_json::json!({
-                "runner_pid": std::process::id(), "run_id": run_id, "boot": boot_identity()?
+                "runner_pid": std::process::id(), "run_id": run_id
             }),
         )?;
         self.file.write_all(b"\n")?;

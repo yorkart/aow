@@ -69,7 +69,7 @@ async fn create(
     Json(spec): Json<InstanceSpec>,
 ) -> Result<Response, ApiError> {
     // Creation owns its lifecycle even if an HTTP client disconnects mid-installation.
-    tokio::spawn(async move {
+    aow_i18n::spawn(async move {
         let (instance, created) = state.create(id, spec).await?;
         Ok((
             if created {
@@ -88,7 +88,7 @@ async fn delete(
     State(state): State<WireRuntime>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    tokio::spawn(async move {
+    aow_i18n::spawn(async move {
         state.delete(&id).await;
     })
     .await
@@ -118,21 +118,24 @@ fn upgrade(
 ) -> Result<Response, ApiError> {
     let id = attachment.instance.id.clone();
     let failed_cleanup = cleanup.clone();
+    let language = aow_i18n::current_language();
     let mut response = ws
         .max_message_size(MAX_MESSAGE_BYTES)
         .max_frame_size(MAX_MESSAGE_BYTES)
         .on_failed_upgrade(move |_| {
             if let Some((state, id)) = failed_cleanup {
-                tokio::spawn(async move {
+                aow_i18n::spawn(async move {
                     state.delete(&id).await;
                 });
             }
         })
-        .on_upgrade(move |socket| async move {
-            socket_loop(socket, attachment).await;
-            if let Some((state, id)) = cleanup {
-                state.delete(&id).await;
-            }
+        .on_upgrade(move |socket| {
+            aow_i18n::scope(language, async move {
+                socket_loop(socket, attachment).await;
+                if let Some((state, id)) = cleanup {
+                    state.delete(&id).await;
+                }
+            })
         });
     response
         .headers_mut()
@@ -244,7 +247,7 @@ async fn install(
     State(state): State<WireRuntime>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    tokio::spawn(async move {
+    aow_i18n::spawn(async move {
         let mut stop=state.stopping.clone();
         if *stop.borrow(){anyhow::bail!("Runtime is stopping");}
         tokio::select! {result=state.service.install_agent(&id)=>result,_=stop.changed()=>Err(anyhow::anyhow!("Runtime is stopping"))}
@@ -269,10 +272,15 @@ async fn environment(
         .execution_path()
         .await
         .map_err(ApiError::invalid)?;
-    let path = path.map(|path| std::env::split_paths(&path).collect::<Vec<_>>());
-    Ok(Json(
-        serde_json::json!({"execution_path":path,"state_dir":state.host.root}),
-    ))
+    let path = path
+        .map(|path| std::env::split_paths(&path).collect::<Vec<_>>())
+        .unwrap_or_default();
+    Ok(Json(serde_json::json!(
+        aow_runtime_contract::environment::NodeEnvironment {
+            execution_path: path,
+            state_dir: state.host.root.clone()
+        }
+    )))
 }
 #[derive(Deserialize)]
 struct FileRequest {
@@ -374,10 +382,7 @@ async fn recover_workspaces(State(state): State<WireRuntime>) -> Json<serde_json
     Json(serde_json::json!({}))
 }
 
-#[derive(Deserialize)]
-struct DirectoryRequest {
-    path: PathBuf,
-}
+use aow_runtime_contract::workspace::PathResponse as DirectoryRequest;
 async fn resolve_directory(
     Json(request): Json<DirectoryRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
@@ -390,13 +395,10 @@ async fn resolve_directory(
     if !path.is_dir() {
         return Err(ApiError::invalid("Node working directory must exist"));
     }
-    Ok(Json(serde_json::json!({"path":path})))
+    Ok(Json(serde_json::json!(DirectoryRequest { path })))
 }
 
-#[derive(Deserialize)]
-struct EnvironmentUpdate {
-    execution_path: Vec<PathBuf>,
-}
+use aow_runtime_contract::environment::EnvironmentUpdate;
 async fn save_environment(
     State(state): State<WireRuntime>,
     Json(request): Json<EnvironmentUpdate>,

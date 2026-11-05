@@ -13,112 +13,116 @@ pub(super) async fn upgrade(
 ) -> axum::response::Response {
     let mut changes = state.service.subscribe_sync();
     let mut protocol = state.service.subscribe_protocol();
-    ws.max_message_size(32 * 1024 * 1024).on_upgrade(move |mut socket| async move {
-        let (output, mut responses) = mpsc::channel::<Value>(128);
-        let mut stopping = state.stopping.clone();
-        let mut initialized = false;
-        let mut permissions = HashMap::<String, (String, bool)>::new();
-        let mut workers = tokio::task::JoinSet::new();
-        let mut heartbeat = tokio::time::interval(Duration::from_secs(15));
-        heartbeat.tick().await;
-        let mut last_seen = tokio::time::Instant::now();
-        loop {
-            tokio::select! {
-                biased;
-                _ = stopping.changed() => break,
-                notification = protocol.recv(), if initialized => {
-                    let Ok(notification) = notification else { break; };
-                    if send(&mut socket, Message::Text(notification.to_string().into())).await.is_err() { break; }
-                },
-                response = responses.recv() => {
-                    let Some(response) = response else { break; };
-                    if send(&mut socket, Message::Text(response.to_string().into())).await.is_err() { break; }
-                },
-                _ = workers.join_next(), if !workers.is_empty() => {},
-                change = changes.recv(), if initialized => {
-                    let Ok(change) = change else { break; };
-                    let requests = match change.resource {
-                        SyncResource::Session { thread_id } => state.service.snapshot(&thread_id).ok().map(|snapshot| (thread_id, false, snapshot.data.permissions)),
-                        SyncResource::Requests { connection_id } => state.service.connection_requests(&connection_id).ok().map(|requests| (connection_id, true, requests)),
-                        _ => None,
-                    };
-                    if let Some((owner, connection, requests)) = requests {
-                        for request in requests {
-                            if permissions.contains_key(&request.id) { continue; }
-                            permissions.insert(request.id.clone(), (owner.clone(), connection));
-                            let mut params = request.request;
-                            if !connection { params["sessionId"] = json!(owner); }
-                            else if let Some(session) = params["sessionId"].as_str()
-                                && let Ok(thread) = state.service.thread_for_session(&owner, session) {
-                                params["sessionId"] = json!(thread);
-                            }
-                            let message = json!({"jsonrpc":"2.0","id":request.id,"method":if request.kind == "elicitation" {"elicitation/create"} else {"session/request_permission"},"params":params});
-                            if send(&mut socket, Message::Text(message.to_string().into())).await.is_err() { return; }
-                        }
-                    }
-                },
-                message = socket.recv() => {
-                    last_seen = tokio::time::Instant::now();
-                    let text = match message {
-                        Some(Ok(Message::Text(text))) => text,
-                        Some(Ok(Message::Ping(data))) => { if send(&mut socket, Message::Pong(data)).await.is_err() { break; } continue; },
-                        Some(Ok(Message::Pong(_))) => continue,
-                        _ => break,
-                    };
-                    let Ok(message) = serde_json::from_str::<Value>(&text) else { break; };
-                    if message["jsonrpc"] != "2.0" { break; }
-                    let id = message["id"].clone();
-                    if !initialized {
-                        if message["method"] != "initialize" || id.is_null() { break; }
-                        if serde_json::from_value::<agent_client_protocol::schema::v1::InitializeRequest>(message["params"].clone()).is_err() { break; }
-                        for session in state.service.sessions(None) {
-                            if let Ok(snapshot) = state.service.snapshot(&session.thread_id) {
-                                for request in &snapshot.permissions { permissions.insert(request.id.clone(), (session.thread_id.clone(), false)); }
-                            }
-                            if let Ok(Some(connection)) = state.service.session_connection_info(&session.thread_id)
-                                && let Ok(requests) = state.service.connection_requests(&connection.id) {
-                                    for request in requests { permissions.entry(request.id).or_insert((connection.id.clone(), true)); }
-                            }
-                        }
-                        initialized = true;
-                        let result = json!({"jsonrpc":"2.0","id":id,"result":{"protocolVersion":1,"agentCapabilities":{"loadSession":true},"authMethods":[],"_meta":{"aow":{"admission":true}}}});
-                        if send(&mut socket, Message::Text(result.to_string().into())).await.is_err() { break; }
-                        continue;
-                    }
-                    if message.get("method").is_none() {
-                        let key = id.as_str().unwrap_or_default();
-                        let result = if let Some((owner, connection)) = permissions.remove(key) {
-                            if connection { state.service.answer_connection(&owner,key,message["result"].clone()) }
-                            else { state.service.answer(&owner,key,message["result"].clone()) }
-                        } else { Err(anyhow::anyhow!("Unknown permission request")) };
-                        let response = match result { Ok(()) => json!({"jsonrpc":"2.0","method":"_aow/answered","params":{"id":id}}), Err(e) => failure(id,e) };
+    aow_i18n::http::upgrade(
+        ws.max_message_size(32 * 1024 * 1024),
+        move |mut socket| async move {
+            let (output, mut responses) = mpsc::channel::<Value>(128);
+            let mut stopping = state.stopping.clone();
+            let mut initialized = false;
+            let mut permissions = HashMap::<String, (String, bool)>::new();
+            let mut workers = tokio::task::JoinSet::new();
+            let mut heartbeat = tokio::time::interval(Duration::from_secs(15));
+            heartbeat.tick().await;
+            let mut last_seen = tokio::time::Instant::now();
+            loop {
+                tokio::select! {
+                    biased;
+                    _ = stopping.changed() => break,
+                    notification = protocol.recv(), if initialized => {
+                        let Ok(notification) = notification else { break; };
+                        if send(&mut socket, Message::Text(notification.to_string().into())).await.is_err() { break; }
+                    },
+                    response = responses.recv() => {
+                        let Some(response) = response else { break; };
                         if send(&mut socket, Message::Text(response.to_string().into())).await.is_err() { break; }
-                        continue;
-                    }
-                    if workers.len() >= 128 {
-                        let response = failure(id, anyhow::anyhow!("Too many pending ACP operations"));
-                        if send(&mut socket, Message::Text(response.to_string().into())).await.is_err() { break; }
-                        continue;
-                    }
-                    let service = state.service.clone();
-                    let output = output.clone();
-                    workers.spawn(async move {
-                        let language = message["params"]["_meta"]["aow"]["language"].as_str().map(aow_i18n::Language::parse).unwrap_or_default();
-                        let result = aow_i18n::scope(language, dispatch(&service, &message, &output)).await;
-                        // session/cancel is a notification. It never receives a response.
-                        if !id.is_null() {
-                            let response = match result { Ok(value) => json!({"jsonrpc":"2.0","id":id,"result":value}), Err(error) => failure(id,error) };
-                            let _ = output.send(response).await;
+                    },
+                    _ = workers.join_next(), if !workers.is_empty() => {},
+                    change = changes.recv(), if initialized => {
+                        let Ok(change) = change else { break; };
+                        let requests = match change.resource {
+                            SyncResource::Session { thread_id } => state.service.snapshot(&thread_id).ok().map(|snapshot| (thread_id, false, snapshot.data.permissions)),
+                            SyncResource::Requests { connection_id } => state.service.connection_requests(&connection_id).ok().map(|requests| (connection_id, true, requests)),
+                            _ => None,
+                        };
+                        if let Some((owner, connection, requests)) = requests {
+                            for request in requests {
+                                if permissions.contains_key(&request.id) { continue; }
+                                permissions.insert(request.id.clone(), (owner.clone(), connection));
+                                let mut params = request.request;
+                                if !connection { params["sessionId"] = json!(owner); }
+                                else if let Some(session) = params["sessionId"].as_str()
+                                    && let Ok(thread) = state.service.thread_for_session(&owner, session) {
+                                    params["sessionId"] = json!(thread);
+                                }
+                                let message = json!({"jsonrpc":"2.0","id":request.id,"method":if request.kind == "elicitation" {"elicitation/create"} else {"session/request_permission"},"params":params});
+                                if send(&mut socket, Message::Text(message.to_string().into())).await.is_err() { return; }
+                            }
                         }
-                    });
-                },
-                _ = heartbeat.tick() => {
-                    if last_seen.elapsed() > Duration::from_secs(45) || send(&mut socket, Message::Ping(vec![].into())).await.is_err() { break; }
+                    },
+                    message = socket.recv() => {
+                        last_seen = tokio::time::Instant::now();
+                        let text = match message {
+                            Some(Ok(Message::Text(text))) => text,
+                            Some(Ok(Message::Ping(data))) => { if send(&mut socket, Message::Pong(data)).await.is_err() { break; } continue; },
+                            Some(Ok(Message::Pong(_))) => continue,
+                            _ => break,
+                        };
+                        let Ok(message) = serde_json::from_str::<Value>(&text) else { break; };
+                        if message["jsonrpc"] != "2.0" { break; }
+                        let id = message["id"].clone();
+                        if !initialized {
+                            if message["method"] != "initialize" || id.is_null() { break; }
+                            if serde_json::from_value::<agent_client_protocol::schema::v1::InitializeRequest>(message["params"].clone()).is_err() { break; }
+                            for session in state.service.sessions(None) {
+                                if let Ok(snapshot) = state.service.snapshot(&session.thread_id) {
+                                    for request in &snapshot.permissions { permissions.insert(request.id.clone(), (session.thread_id.clone(), false)); }
+                                }
+                                if let Ok(Some(connection)) = state.service.session_connection_info(&session.thread_id)
+                                    && let Ok(requests) = state.service.connection_requests(&connection.id) {
+                                        for request in requests { permissions.entry(request.id).or_insert((connection.id.clone(), true)); }
+                                }
+                            }
+                            initialized = true;
+                            let result = json!({"jsonrpc":"2.0","id":id,"result":{"protocolVersion":1,"agentCapabilities":{"loadSession":true},"authMethods":[],"_meta":{"aow":{"admission":true}}}});
+                            if send(&mut socket, Message::Text(result.to_string().into())).await.is_err() { break; }
+                            continue;
+                        }
+                        if message.get("method").is_none() {
+                            let key = id.as_str().unwrap_or_default();
+                            let result = if let Some((owner, connection)) = permissions.remove(key) {
+                                if connection { state.service.answer_connection(&owner,key,message["result"].clone()) }
+                                else { state.service.answer(&owner,key,message["result"].clone()) }
+                            } else { Err(anyhow::anyhow!("Unknown permission request")) };
+                            let response = match result { Ok(()) => json!({"jsonrpc":"2.0","method":"_aow/answered","params":{"id":id}}), Err(e) => failure(id,e) };
+                            if send(&mut socket, Message::Text(response.to_string().into())).await.is_err() { break; }
+                            continue;
+                        }
+                        if workers.len() >= 128 {
+                            let response = failure(id, anyhow::anyhow!("Too many pending ACP operations"));
+                            if send(&mut socket, Message::Text(response.to_string().into())).await.is_err() { break; }
+                            continue;
+                        }
+                        let service = state.service.clone();
+                        let output = output.clone();
+                        let request_language = aow_i18n::current_language();
+                        workers.spawn(async move {
+                            let language = message["params"]["_meta"]["aow"]["language"].as_str().map(aow_i18n::Language::parse).unwrap_or(request_language);
+                            let result = aow_i18n::scope(language, dispatch(&service, &message, &output)).await;
+                            // session/cancel is a notification. It never receives a response.
+                            if !id.is_null() {
+                                let response = match result { Ok(value) => json!({"jsonrpc":"2.0","id":id,"result":value}), Err(error) => failure(id,error) };
+                                let _ = output.send(response).await;
+                            }
+                        });
+                    },
+                    _ = heartbeat.tick() => {
+                        if last_seen.elapsed() > Duration::from_secs(45) || send(&mut socket, Message::Ping(vec![].into())).await.is_err() { break; }
+                    }
                 }
             }
-        }
-        // Dropping the gateway never cancels an admitted daemon-owned turn.
-    })
+            // Dropping the gateway never cancels an admitted daemon-owned turn.
+        },
+    )
 }
 fn failure(id: Value, error: anyhow::Error) -> Value {
     let error = error

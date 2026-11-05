@@ -10,7 +10,8 @@ pub(super) async fn test_with_timeout(
     role: &AgentRole,
     deadline: Duration,
 ) -> Result<(), AowError> {
-    if let Some(runtime) = state.aow.inner.runtime_client.as_ref() {
+    {
+        let runtime = state.aow.agent_node().await?;
         let mut probe = role.clone();
         probe.config.instruction.clear();
         let launch = match &probe.config.runtime {
@@ -23,15 +24,15 @@ pub(super) async fn test_with_timeout(
             RoleRuntime::Acp { agent_id } => Some(agent_id),
             _ => None,
         };
-        let _:serde_json::Value=runtime.post_json("/v1/environments/roles/probe",&serde_json::json!({"spec":super::node::spec(role),"launch":launch,"acp_agent_id":agent,"timeout_ms":deadline.as_millis().min(120_000)})).await.map_err(|error|AowError::Invalid(format!("Connection test failed: {error}")))?;
-        return Ok(());
-    }
-    #[cfg(test)]
-    {
-        super::connection_fixture::test_with_timeout(state, role, deadline).await
-    }
-    #[cfg(not(test))]
-    {
-        Err(AowError::Invalid("Runtime is unavailable".into()))
+        runtime
+            .probe_role_environment(&aow_runtime_contract::environment::ProbeEnvironment {
+                spec: super::node::spec(role),
+                launch,
+                acp_agent_id: agent.cloned(),
+                timeout_ms: deadline.as_millis().min(120_000) as u64,
+            })
+            .await
+            .map_err(|error| AowError::Invalid(format!("Connection test failed: {error}")))?;
+        Ok(())
     }
 }

@@ -4,10 +4,11 @@ Common is an independent Cargo workspace for shared data contracts, IDs and
 generic infrastructure.
 Server and Runtime may depend on it; Common depends on neither product.
 
+- `i18n`: locale context, HTTP language negotiation and interpolation; product catalogs remain in each product.
 - `id`: public identifier generation and encoding.
 - `macos-log`: the macOS Unified Logging adapter shared by Server and Runtime.
 - `protocol`: terminal, filesystem and instance wire types.
-- `runtime-contract`: conversation management requests, responses and events.
+- `runtime-contract`: ACP management, agents, workspace operations, role environments and single-execution requests, responses and events.
 - `sqlite`: private owned-database connections, external read-only connections and
   transactional migration infrastructure (`aow-sqlite`).
 

@@ -103,10 +103,6 @@ impl AppState {
         #[cfg(not(test))]
         let execution_runtime = runtime.clone();
         let terminals = terminal::TerminalManager::persistent(state_dir.clone(), terminal)?;
-        #[cfg(test)]
-        if runtime.is_some() {
-            terminals.enable_node_workspace();
-        }
         let workspace_events = workspace_events::WorkspaceEvents::new();
         Ok(Self {
             collaboration: Default::default(),

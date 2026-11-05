@@ -37,9 +37,7 @@ pub(crate) async fn read_text(
     AxumPath(path): AxumPath<String>,
 ) -> Result<impl IntoResponse, HttpError> {
     let path = decode_absolute(&path)?;
-    let text: aow_protocol::TextFile = super::node::runtime(&state)?
-        .workspace_operation("read", serde_json::json!({"path":path}))
-        .await?;
+    let text: aow_protocol::TextFile = super::node::runtime(&state)?.workspace_read(&path).await?;
     let etag = HeaderValue::from_str(&format!("\"{}\"", text.version))
         .map_err(|error| HttpError::internal(error.to_string()))?;
     let mut headers = HeaderMap::new();

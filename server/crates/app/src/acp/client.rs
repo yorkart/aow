@@ -95,6 +95,7 @@ pub(crate) fn service_with_runtime(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aow_runtime_client::testing::RuntimeTransport;
     use aow_runtime_client::{RuntimeClient, testing::TestRuntime};
     use serde_json::json;
     use std::time::Duration;

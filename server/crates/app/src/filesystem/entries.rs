@@ -16,12 +16,7 @@ pub(crate) struct CreateFsEntryRequest {
     kind: FsEntryKind,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, serde::Serialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum FsEntryKind {
-    File,
-    Directory,
-}
+use aow_runtime_contract::workspace::EntryKind as FsEntryKind;
 
 #[derive(Debug, Deserialize, serde::Serialize)]
 pub(crate) struct RenameFsEntryRequest {
@@ -39,11 +34,11 @@ pub(crate) async fn create_fs_entry(
     Json(request): Json<CreateFsEntryRequest>,
 ) -> Result<impl IntoResponse, HttpError> {
     let _filesystem = state.aow.filesystem_access().await;
-    let value: serde_json::Value = super::node::runtime(&state)?
-        .workspace_operation(
-            "create",
-            serde_json::to_value(&request)
-                .map_err(|error| HttpError::internal(error.to_string()))?,
+    let value = super::node::runtime(&state)?
+        .workspace_create(
+            std::path::Path::new(&request.parent),
+            &request.name,
+            request.kind,
         )
         .await?;
     Ok((StatusCode::CREATED, Json(value)))
@@ -55,10 +50,7 @@ pub(crate) async fn rename_fs_entry(
 ) -> Result<Json<RenameResult>, HttpError> {
     let _filesystem = state.aow.filesystem_access().await;
     super::node::runtime(&state)?
-        .workspace_operation(
-            "rename",
-            serde_json::json!({"path":request.path,"name":request.name}),
-        )
+        .workspace_rename(std::path::Path::new(&request.path), &request.name, false)
         .await
         .map(Json)
         .map_err(Into::into)
@@ -69,8 +61,8 @@ pub(crate) async fn delete_fs_entry(
     Query(query): Query<FsEntryPathQuery>,
 ) -> Result<StatusCode, HttpError> {
     let _filesystem = state.aow.filesystem_access().await;
-    let _: serde_json::Value = super::node::runtime(&state)?
-        .workspace_operation("delete", serde_json::json!({"path":query.path}))
+    let () = super::node::runtime(&state)?
+        .workspace_delete(std::path::Path::new(&query.path))
         .await?;
     Ok(StatusCode::NO_CONTENT)
 }

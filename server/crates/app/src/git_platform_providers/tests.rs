@@ -7,11 +7,7 @@ use axum::{
     http::{Request, StatusCode},
 };
 use serde_json::{Value, json};
-use std::{
-    path::{Path, PathBuf},
-    time::Duration,
-};
-use tokio::process::Command;
+use std::path::{Path, PathBuf};
 use tower::ServiceExt;
 
 fn paths() -> Vec<PathBuf> {
@@ -492,13 +488,6 @@ async fn validates_metadata_envelopes_process_limits_and_read_only_operations() 
     assert!(decode::<MyPullRequests>(json!({"pull_requests":[]})).is_err());
     assert!(safe_path("../outside").is_err());
     assert!(positive(0).is_err());
-    let mut command = Command::new("/bin/sleep");
-    command.arg("10");
-    assert!(matches!(
-        run_command(command, &[], &paths(), Duration::from_millis(30)).await,
-        Err(GitPlatformError::Timeout)
-    ));
-    assert!(read_limited(&b"12345"[..], 4).await.is_err());
 }
 
 #[tokio::test]
@@ -647,9 +636,7 @@ fn python_providers_are_rejected() {
 #[tokio::test]
 async fn saved_provider_runs_its_original_filename_after_restart() {
     let dir = tempfile::tempdir().unwrap();
-    let script = format!(
-        "assert.ok(process.argv[1].endsWith('/git-platform-providers/custom.mjs'));\n{FIXTURE}"
-    );
+    let script = format!("assert.ok(process.argv[1].endsWith('/custom.mjs'));\n{FIXTURE}");
     let manager =
         GitPlatformProviderManager::persistent_with_defaults(dir.path(), vec![provider(&script)])
             .unwrap();

@@ -8,16 +8,6 @@ impl TerminalManager {
         body: Body,
     ) -> Result<ClipboardImageResponse, TerminalError> {
         self.ensure_pane(tab_id, pane_id)?;
-        #[cfg(test)]
-        if !self
-            .inner
-            .node_workspace
-            .load(std::sync::atomic::Ordering::Relaxed)
-        {
-            return self
-                .store_local_clipboard_image(tab_id, pane_id, body)
-                .await;
-        }
         let response = self
             .inner
             .terminald
@@ -40,6 +30,6 @@ impl TerminalManager {
                 error => map_client_error(error),
             })?;
         self.ensure_pane(tab_id, pane_id)?;
-        serde_json::from_value(response).map_err(TerminalError::Json)
+        Ok(response)
     }
 }

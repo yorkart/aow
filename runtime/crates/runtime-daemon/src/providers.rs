@@ -1,19 +1,12 @@
 //! Git hosting adapters execute beside the repository, under node process ownership.
+use aow_runtime_contract::workspace::ProviderRequest as Request;
 use axum::{
     Json, Router,
     extract::{DefaultBodyLimit, State},
     http::StatusCode,
     routing::post,
 };
-use serde::Deserialize;
 use std::{collections::BTreeMap, path::PathBuf};
-#[derive(Deserialize)]
-struct Request {
-    filename: String,
-    script: String,
-    request: serde_json::Value,
-    cwd: Option<PathBuf>,
-}
 pub(crate) fn router(root: PathBuf) -> Router {
     Router::new()
         .route("/v1/workspace/provider", post(invoke))

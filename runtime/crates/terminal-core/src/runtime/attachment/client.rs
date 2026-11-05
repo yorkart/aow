@@ -22,7 +22,7 @@ where
                 let _gate = runtime.delivery_gate.lock().await;
                 let write_runtime = runtime.clone();
                 let result =
-                    tokio::task::spawn_blocking(move || write_runtime.write_input(owner, &bytes))
+                    aow_i18n::spawn_blocking(move || write_runtime.write_input(owner, &bytes))
                         .await;
                 match result {
                     Ok(Ok(true)) => Some(current),
@@ -121,7 +121,7 @@ where
                 } else if let Some(owner) = current.owner {
                     let _gate = runtime.delivery_gate.lock().await;
                     let write_runtime = runtime.clone();
-                    let result = tokio::task::spawn_blocking(move || {
+                    let result = aow_i18n::spawn_blocking(move || {
                         write_runtime.write_input(owner, data.as_bytes())
                     })
                     .await;

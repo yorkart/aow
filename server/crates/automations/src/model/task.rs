@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use super::AgentKind;
-use aow_workspaces::{WorkspaceConfig, WorkspaceMode};
+use aow_runtime_contract::workspace::{WorkspaceConfig, WorkspaceMode};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -120,7 +120,9 @@ impl TaskInput {
                 &[]
             )
         );
-        self.workspace.validate()?;
+        self.workspace
+            .validate()
+            .map_err(|error| anyhow::anyhow!(aow_i18n::text(error.0)))?;
         ensure!(
             self.workspace.workspace_mode != WorkspaceMode::Dynamic
                 || self.kind == TaskKind::Manual,
@@ -195,7 +197,9 @@ impl TaskInput {
                 })?,
             base_branch: String::new(),
         };
-        workspace.validate()?;
+        workspace
+            .validate()
+            .map_err(|error| anyhow::anyhow!(aow_i18n::text(error.0)))?;
         self.workspace = workspace;
         Ok(())
     }
@@ -252,14 +256,7 @@ pub struct ManualRunRequest {
     pub hosted: bool,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AgentLaunch {
-    pub executable: PathBuf,
-    pub args: Vec<String>,
-    /// Agent configuration locations only; PATH is loaded from shared Settings per run.
-    /// Legacy PATH snapshots are accepted on read but ignored during execution.
-    pub environment: BTreeMap<String, String>,
-}
+pub use aow_runtime_contract::execution::AgentLaunch;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Task {

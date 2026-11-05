@@ -11,7 +11,7 @@ mod error;
 pub use environments::{EnvironmentPreparation, NodeEnvironment};
 mod management;
 mod workspace;
-pub use workspace::{GitCommandResult, NodeMetadata, WorkspaceChanges};
+pub use aow_runtime_contract::workspace::{GitCommandResult, NodeMetadata, WorkspaceChanges};
 mod sessions;
 mod terminal;
 

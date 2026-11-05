@@ -6,14 +6,19 @@ pub(super) async fn subscribe(
     State(state): State<WorkspaceState>,
     ws: WebSocketUpgrade,
 ) -> axum::response::Response {
-    ws.on_upgrade(move |mut socket| async move {
-        let mut stopping=state.stopping.clone();
-        let watcher=match crate::git::GitWatcher::new(Vec::new()){Ok(watcher)=>watcher,Err(_)=>return};
-        let mut changes=watcher.subscribe();
-        let mut heartbeat=tokio::time::interval(Duration::from_secs(15));
-        let mut received=Instant::now();
+    aow_i18n::http::upgrade(ws, move |mut socket| async move {
+        let mut stopping = state.stopping.clone();
+        let watcher = match crate::git::GitWatcher::new(Vec::new()) {
+            Ok(watcher) => watcher,
+            Err(_) => return,
+        };
+        let mut changes = watcher.subscribe();
+        let mut heartbeat = tokio::time::interval(Duration::from_secs(15));
+        let mut received = Instant::now();
         loop {
-            if *stopping.borrow(){return;}
+            if *stopping.borrow() {
+                return;
+            }
             tokio::select! {
                 _=stopping.changed()=>return,
                 message=socket.next()=>match message {
@@ -32,7 +37,7 @@ pub(super) async fn subscribe(
                 changed=changes.changed()=>{
                     if changed.is_err(){return;}
                     let next=changes.borrow_and_update().clone();
-                    let value=serde_json::json!({"revision":next.revision,"worktrees":next.worktrees,"repositories":next.repositories});
+                    let value=serde_json::json!(next);
                     if !matches!(tokio::time::timeout(Duration::from_secs(5),socket.send(Message::Text(value.to_string().into()))).await,Ok(Ok(()))){return;}
                 },
                 _=heartbeat.tick()=>{

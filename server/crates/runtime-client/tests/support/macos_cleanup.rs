@@ -7,7 +7,7 @@ struct Cleanup(Vec<(i32, String)>);
 impl Drop for Cleanup {
     fn drop(&mut self) {
         for (pid, identity) in &self.0 {
-            if aow_process::same_process(*pid, identity) {
+            if info(*pid).is_some_and(|value| value.start_time == *identity) {
                 unsafe {
                     libc::kill(*pid, libc::SIGKILL);
                 }
@@ -43,8 +43,8 @@ async fn await_file(path: &std::path::Path) {
     .expect("cleanup fixture did not start");
 }
 
-fn track(guard: &mut Cleanup, pid: i32) -> aow_process::ProcessInfo {
-    let info = aow_process::info(pid).unwrap();
+fn track(guard: &mut Cleanup, pid: i32) -> ProcessInfo {
+    let info = info(pid).unwrap();
     guard.0.push((pid, info.start_time.clone()));
     info
 }
@@ -166,4 +166,30 @@ fn session_cleanup_fixture() {
         std::thread::sleep(Duration::from_millis(10));
     }
     // Intentionally leave the child for terminald's natural-exit cleanup.
+}
+
+struct ProcessInfo {
+    pid: i32,
+    group: i32,
+    session: i32,
+    start_time: String,
+}
+fn info(pid: i32) -> Option<ProcessInfo> {
+    let output = std::process::Command::new("ps")
+        .args(["-o", "lstart=", "-p", &pid.to_string()])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let start_time = String::from_utf8(output.stdout).ok()?.trim().to_owned();
+    if start_time.is_empty() {
+        return None;
+    }
+    Some(ProcessInfo {
+        pid,
+        group: unsafe { libc::getpgid(pid) },
+        session: unsafe { libc::getsid(pid) },
+        start_time,
+    })
 }

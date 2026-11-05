@@ -32,7 +32,6 @@ uuid.workspace = true
 
 [dev-dependencies]
 axum.workspace = true
-aow-process = { path = "../process" }
 libc.workspace = true
 tempfile = "3.20"
 
@@ -46,4 +45,8 @@ required-features = ["test-support"]
 
 [[test]]
 name = "agents"
+required-features = ["test-support"]
+
+[[test]]
+name = "workspace"
 required-features = ["test-support"]

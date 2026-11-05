@@ -87,9 +87,9 @@ impl Instance {
             exit_code: None,
             error: None,
         });
-        let task = tokio::spawn(async move {
+        let task = aow_i18n::spawn(async move {
             // Drain diagnostics without leaking adapter credentials or unbounded lines into logs.
-            let diagnostics = tokio::spawn(async move {
+            let diagnostics = aow_i18n::spawn(async move {
                 let _ = tokio::io::copy(&mut stderr, &mut tokio::io::sink()).await;
             });
             let mut reader =

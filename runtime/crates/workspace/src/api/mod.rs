@@ -32,7 +32,7 @@ pub fn router(
     };
     let clipboard = std::sync::Arc::downgrade(&state.clipboard);
     let mut stopped = state.stopping.clone();
-    tokio::spawn(async move {
+    aow_i18n::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
         loop {
             tokio::select! {_=stopped.changed()=>return,_=interval.tick()=>{let Some(clipboard)=clipboard.upgrade()else{return};if let Err(error)=clipboard.clean(){tracing::warn!(%error,"clipboard cleanup failed");}}}

@@ -128,7 +128,8 @@ async fn npm_network_retries_are_visible_before_the_installer_exits() -> Result<
     let progress = Progress::default();
     progress.set("installing");
     let reading_progress = progress.clone();
-    let reader = tokio::spawn(async move { read_install_output(stderr, &reading_progress).await });
+    let reader =
+        aow_i18n::spawn(async move { read_install_output(stderr, &reading_progress).await });
     tokio::time::timeout(Duration::from_secs(5), async {
         while progress.snapshot().detail.as_deref() != Some("ETIMEDOUT") {
             tokio::time::sleep(Duration::from_millis(10)).await;

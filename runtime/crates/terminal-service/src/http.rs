@@ -109,11 +109,12 @@ async fn attach_runtime(
             observe: query.observer.as_deref() == Some("v1"),
         },
     )?;
-    Ok(websocket
-        .write_buffer_size(SOCKET_WRITE_BUFFER_SIZE)
-        .max_write_buffer_size(SOCKET_MAX_WRITE_BUFFER_SIZE)
-        .on_upgrade(move |socket| runtime_socket(socket, connection))
-        .into_response())
+    Ok(aow_i18n::http::upgrade(
+        websocket
+            .write_buffer_size(SOCKET_WRITE_BUFFER_SIZE)
+            .max_write_buffer_size(SOCKET_MAX_WRITE_BUFFER_SIZE),
+        move |socket| runtime_socket(socket, connection),
+    ))
 }
 
 #[derive(Debug, Default, Deserialize)]

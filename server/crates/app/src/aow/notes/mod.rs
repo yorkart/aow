@@ -23,7 +23,4 @@ impl TemporaryNoteExtension {
 pub(super) use files::{CreateTemporaryNoteRequest, TemporaryNoteResult, notes_root_canonical};
 pub(super) use identity::default_notes_identity;
 #[cfg(test)]
-pub(super) use identity::{local_repository_identity, parse_remote_identity, process_account_name};
-
-#[cfg(test)]
-pub(super) use files::{create_temporary_note_file, prepare_notes_directory};
+pub(super) use identity::{local_repository_identity, parse_remote_identity};

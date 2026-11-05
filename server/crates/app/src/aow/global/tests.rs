@@ -49,7 +49,7 @@ async fn initializes_real_global_repository_once_and_reuses_regular_project_regi
         Path::new(&project.notes_path).canonicalize().unwrap(),
         temp.path()
             .join("notes/localhost")
-            .join(notes::process_account_name().unwrap())
+            .join(AowManager::in_memory().node_account().await.unwrap())
             .join(FLOATING_PROJECT_ID)
             .canonicalize()
             .unwrap()
@@ -217,7 +217,7 @@ async fn notes_root_accepts_existing_notes_without_changing_project_bindings_or_
     let next = temp.path().join("new");
     let target = next
         .join("localhost")
-        .join(notes::process_account_name().unwrap())
+        .join(AowManager::in_memory().node_account().await.unwrap())
         .join(FLOATING_PROJECT_ID);
     std::fs::create_dir_all(&target).unwrap();
     std::fs::write(target.join("keep.md"), "keep").unwrap();
@@ -364,7 +364,7 @@ async fn failed_settings_persistence_preserves_settings_notes_and_project_bindin
     assert!(
         !next
             .join("localhost")
-            .join(notes::process_account_name().unwrap())
+            .join(AowManager::in_memory().node_account().await.unwrap())
             .join(FLOATING_PROJECT_ID)
             .exists()
     );

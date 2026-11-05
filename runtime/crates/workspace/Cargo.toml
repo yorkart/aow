@@ -8,6 +8,7 @@ license.workspace = true
 name = "aow_workspaces"
 
 [dependencies]
+aow-runtime-contract = { path = "../../../common/crates/runtime-contract" }
 aow-i18n = { package = "aow-runtime-i18n", path = "../i18n" }
 aow-protocol = { path = "../../../common/crates/protocol" }
 aow-filesystem = { package = "aow-runtime-filesystem", path = "../filesystem" }
@@ -30,3 +31,6 @@ uuid.workspace = true
 libc.workspace = true
 tracing.workspace = true
 tempfile = "3.20"
+
+[dev-dependencies]
+aow-process = { package = "aow-runtime-process", path = "../process" }

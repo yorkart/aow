@@ -36,7 +36,7 @@ impl DaemonState {
         let spawn_spec = spec.clone();
         let spawn_id = id.clone();
         let vt_worker = self.inner.vt_worker.clone();
-        let spawned = tokio::task::spawn_blocking(move || {
+        let spawned = aow_i18n::spawn_blocking(move || {
             spawn_runtime_blocking(spawn_id, spawn_spec, spawn_permit, vt_worker)
         })
         .await
@@ -74,9 +74,9 @@ impl DaemonState {
         // This task intentionally outlives a canceled HTTP request. Once a
         // DELETE has marked a runtime, cleanup must either reap and remove it
         // or retain the tombstone in the map so a later DELETE can retry.
-        tokio::spawn(async move {
+        aow_i18n::spawn(async move {
             let delete_runtime = runtime.clone();
-            tokio::task::spawn_blocking(move || delete_runtime.force_delete_and_reap())
+            aow_i18n::spawn_blocking(move || delete_runtime.force_delete_and_reap())
                 .await
                 .map_err(|error| TerminalError::Worker(error.to_string()))??;
 
@@ -112,7 +112,7 @@ impl DaemonState {
         }
         let mut first_error = None;
         for runtime in runtimes {
-            match tokio::task::spawn_blocking(move || runtime.force_delete_and_reap()).await {
+            match aow_i18n::spawn_blocking(move || runtime.force_delete_and_reap()).await {
                 Ok(Ok(())) => {}
                 Ok(Err(error)) => {
                     first_error.get_or_insert(error);

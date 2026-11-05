@@ -42,7 +42,7 @@ impl SessionCatalog {
             return Ok(None);
         };
         let identity = process.clone();
-        let environment = tokio::task::spawn_blocking(move || process_environment(&identity))
+        let environment = aow_i18n::spawn_blocking(move || process_environment(&identity))
             .await?
             .context("Agent process changed")?;
         let cwd = process.cwd.clone();
@@ -89,7 +89,7 @@ pub async fn read(service: SessionCatalog, request: PaneRequest) -> SessionResul
         .await
         .map_err(|e| error(SessionErrorKind::Conflict, e))?
         .ok_or_else(|| error(SessionErrorKind::Conflict, "No native session in this pane"))?;
-    tokio::task::spawn_blocking(move || {
+    aow_i18n::spawn_blocking(move || {
         let tracker = Agent::from_id(binding.agent)
             .and_then(Agent::session_tracking)
             .unwrap();

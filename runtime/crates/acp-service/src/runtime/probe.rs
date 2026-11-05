@@ -11,7 +11,7 @@ impl Drop for Session {
     fn drop(&mut self) {
         let service = self.0.clone();
         let Some(id) = self.1.take() else { return };
-        tokio::spawn(async move {
+        aow_i18n::spawn(async move {
             let _ = service.delete_session(&id).await;
         });
     }

@@ -2,23 +2,16 @@ mod requests;
 #[cfg(test)]
 mod tests;
 
-use aow_protocol::FileSearchRequest;
 use axum::{
     Json,
     extract::{Path, State},
     http::StatusCode,
 };
-use serde::Deserialize;
 
 use crate::{AppState, HttpError};
 pub(crate) use requests::SearchRequests;
 
-#[derive(Deserialize, serde::Serialize)]
-pub(crate) struct Request {
-    request_id: String,
-    #[serde(flatten)]
-    search: FileSearchRequest,
-}
+use aow_runtime_contract::workspace::SearchRequest as Request;
 
 pub(crate) async fn search(
     State(state): State<AppState>,
@@ -37,7 +30,7 @@ pub(crate) async fn search(
     };
     let result = tokio::select! {
         _=guard.cancel.cancelled()=>return Err(cancelled()),
-        result=runtime.post_json("/v1/workspace/search",&request)=>result,
+        result=runtime.search_workspace(&request)=>result,
     };
     remote.finished = true;
     result.map(Json).map_err(Into::into)
@@ -49,7 +42,7 @@ pub(crate) async fn cancel(
 ) -> Result<StatusCode, HttpError> {
     state.file_search.cancel(request_id.clone())?;
     super::node::runtime(&state)?
-        .delete(&format!("/v1/workspace/search/{request_id}"))
+        .cancel_workspace_search(&request_id)
         .await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -76,7 +69,7 @@ impl Drop for RemoteSearch {
             let client = self.client.clone();
             let id = self.id.clone();
             handle.spawn(async move {
-                let _ = client.delete(&format!("/v1/workspace/search/{id}")).await;
+                let _ = client.cancel_workspace_search(&id).await;
             });
         }
     }

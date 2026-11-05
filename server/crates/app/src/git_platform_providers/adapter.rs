@@ -1,14 +1,21 @@
 use super::{GitPlatformError, GitPlatformProvider, Result, invalid_json};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
-#[cfg(test)]
-pub(super) const OUTPUT_LIMIT: usize = 16 * 1024 * 1024;
 pub(super) async fn git(
     runtime: Option<&aow_runtime_client::RuntimeClient>,
     repo: &str,
     args: &[&str],
     paths: &[PathBuf],
 ) -> Result<String> {
+    #[cfg(test)]
+    let fixture = if runtime.is_none() {
+        Some(super::test_node::start(paths).await)
+    } else {
+        None
+    };
+    #[cfg(test)]
+    let runtime = runtime.or_else(|| fixture.as_ref().map(|(_, client)| client));
+
     if let Some(runtime) = runtime {
         let output = runtime
             .workspace_git(Path::new(repo), args)
@@ -21,11 +28,7 @@ pub(super) async fn git(
         }
         return String::from_utf8(output.stdout).map_err(invalid_json);
     }
-    #[cfg(test)]
-    {
-        super::adapter_fixture::git(repo, args, paths).await
-    }
-    #[cfg(not(test))]
+
     {
         let _ = paths;
         Err(GitPlatformError::Unavailable(
@@ -41,6 +44,15 @@ pub(super) async fn run_adapter(
     paths: &[PathBuf],
     script_path: Option<&Path>,
 ) -> Result<Value> {
+    #[cfg(test)]
+    let fixture = if runtime.is_none() {
+        Some(super::test_node::start(paths).await)
+    } else {
+        None
+    };
+    #[cfg(test)]
+    let runtime = runtime.or_else(|| fixture.as_ref().map(|(_, client)| client));
+
     if !super::validation::valid_filename(&provider.id)
         || provider.script.len() > super::SCRIPT_LIMIT
     {
@@ -58,14 +70,16 @@ pub(super) async fn run_adapter(
     }
 
     let value: Value = if let Some(runtime) = runtime {
-        runtime.post_json("/v1/workspace/provider",&serde_json::json!({"filename":provider.id,"script":provider.script,"request":request,"cwd":cwd})).await.map_err(|error|GitPlatformError::Command(error.to_string()))?
+        runtime
+            .workspace_provider(&aow_runtime_contract::workspace::ProviderRequest {
+                filename: provider.id.clone(),
+                script: provider.script.clone(),
+                request,
+                cwd: cwd.map(Path::to_path_buf),
+            })
+            .await
+            .map_err(|error| GitPlatformError::Command(error.to_string()))?
     } else {
-        #[cfg(test)]
-        {
-            return super::adapter_fixture::run_adapter(provider, request, cwd, paths, script_path)
-                .await;
-        }
-        #[cfg(not(test))]
         {
             let _ = (paths, script_path);
             return Err(GitPlatformError::Unavailable(

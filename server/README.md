@@ -4,7 +4,10 @@ Server owns business APIs, CLI, automation scheduling and the web frontend. This
 is an independent Cargo workspace. Its shared data contracts and IDs come from
 `../common`; no path dependency refers to Runtime implementation crates.
 ACP conversation state and history are owned by the daemon. The local
-`runtime-client` crate only transports requests, responses and events.
+`runtime-client` crate exposes typed node operations and transports requests, responses and events.
+Business modules do not construct Runtime HTTP paths or JSON envelopes.
+Workspace files, Git processes, role HOME preparation and clipboard storage execute
+only in Runtime, including Server integration tests.
 
 The main application source lives in `crates/app`. Its Cargo package and binary
 are both named `aow-server`; Rust callers continue to use `aow_server`.

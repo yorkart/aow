@@ -159,7 +159,7 @@ async fn concurrent_producer_and_consumer_preserve_every_byte() {
     receiver.recv().await.unwrap();
     let expected: Vec<_> = (0..256 * 1024).map(|index| index as u8).collect();
     let output = expected.clone();
-    let producer = tokio::task::spawn_blocking(move || {
+    let producer = aow_i18n::spawn_blocking(move || {
         for (index, chunk) in output.chunks(31).enumerate() {
             session.write((index * 31) as u64, chunk);
         }
@@ -727,7 +727,7 @@ for await (const frame of readFrames(process.stdin)) {{
     let client = worker.client();
     let session = client.create_session("blocked".to_owned(), 80, 24);
     wait_for_snapshot(&session, |_| true).await;
-    let producer = tokio::task::spawn_blocking(move || {
+    let producer = aow_i18n::spawn_blocking(move || {
         let data = vec![b'x'; MAX_WRITE_BATCH_BYTES];
         for index in 0..1024 {
             session.write((index * data.len()) as u64, &data);

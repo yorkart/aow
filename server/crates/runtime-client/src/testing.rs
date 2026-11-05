@@ -170,3 +170,48 @@ pub async fn run_with_worker(
 }
 
 pub use crate::acp::fixture::AcpFixture;
+
+/// Raw wire probes for protocol tests only; absent from production builds.
+#[allow(async_fn_in_trait)]
+pub trait RuntimeTransport {
+    async fn get_json<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+    ) -> Result<T, crate::RuntimeError>;
+    async fn put_json<T: serde::Serialize + ?Sized, R: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+        body: &T,
+    ) -> Result<R, crate::RuntimeError>;
+    async fn post_json<T: serde::Serialize + ?Sized, R: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+        body: &T,
+    ) -> Result<R, crate::RuntimeError>;
+    async fn websocket(&self, path: &str) -> Result<crate::RuntimeSocket, crate::RuntimeError>;
+}
+impl RuntimeTransport for crate::RuntimeClient {
+    async fn get_json<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+    ) -> Result<T, crate::RuntimeError> {
+        self.get_json(path).await
+    }
+    async fn put_json<T: serde::Serialize + ?Sized, R: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+        body: &T,
+    ) -> Result<R, crate::RuntimeError> {
+        self.put_json(path, body).await
+    }
+    async fn post_json<T: serde::Serialize + ?Sized, R: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+        body: &T,
+    ) -> Result<R, crate::RuntimeError> {
+        self.post_json(path, body).await
+    }
+    async fn websocket(&self, path: &str) -> Result<crate::RuntimeSocket, crate::RuntimeError> {
+        self.websocket(path).await
+    }
+}

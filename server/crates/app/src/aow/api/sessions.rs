@@ -121,19 +121,13 @@ pub(crate) async fn resolve_session_locator(
         if let Ok(reference) = state.aow.session_locator(requested, agent, session_id) {
             return Ok(reference);
         }
-        let value: serde_json::Value = runtime
-            .post_json(
-                "/v1/directories/resolve",
-                &serde_json::json!({"path":requested}),
-            )
+        let cwd = runtime
+            .resolve_directory(requested)
             .await
             .map_err(|error| aow_response(AowError::Invalid(error.to_string())))?;
-        let cwd = Path::new(value["path"].as_str().ok_or_else(|| {
-            HttpError::internal("Invalid node directory response").into_response()
-        })?);
         state
             .aow
-            .session_locator(cwd, agent, session_id)
+            .session_locator(&cwd, agent, session_id)
             .map_err(aow_response)
     }
 }

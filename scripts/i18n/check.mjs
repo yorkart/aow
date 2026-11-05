@@ -10,7 +10,7 @@ function flatten(value, prefix = '', result = {}) {
   }
   return result;
 }
-for (const directory of ['server/frontend/src/lib/i18n/locales', 'server/crates/i18n/locales']) {
+for (const directory of ['server/frontend/src/lib/i18n/locales', 'server/crates/i18n/locales', 'runtime/crates/i18n/locales']) {
   const english = flatten(JSON.parse(await readFile(`${directory}/en-US.json`, 'utf8')));
   const files = await readdir(directory);
   for (const file of files.filter(name => name.endsWith('.json'))) {
@@ -35,17 +35,18 @@ async function scan(directory) {
 await scan('server/frontend/src');
 console.log('Frontend keys and hardcoded text checks passed.');
 
-const backend = JSON.parse(await readFile('server/crates/i18n/locales/en-US.json', 'utf8'));
-async function checkRust(directory) {
+async function checkRust(directory, backend) {
   for (const item of await readdir(directory, { withFileTypes: true })) {
     const file = `${directory}/${item.name}`;
-    if (item.isDirectory()) { await checkRust(file); continue; }
+    if (item.isDirectory()) { await checkRust(file, backend); continue; }
     if (!file.endsWith('.rs')) continue;
     const source = await readFile(file, 'utf8');
     validateRustSource(source, file, backend);
   }
 }
-await checkRust('server/crates');
-await checkRust('runtime/crates');
-await checkRust('common/crates');
+for (const product of ['server', 'runtime']) {
+  const backend = JSON.parse(await readFile(`${product}/crates/i18n/locales/en-US.json`, 'utf8'));
+  await checkRust(`${product}/crates`, backend);
+}
+await checkRust('common/crates', {});
 console.log('Backend translation references passed.');

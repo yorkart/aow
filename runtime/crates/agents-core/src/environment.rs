@@ -1,6 +1,6 @@
 //! Shared execution environment for interactive agents and background runners.
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::HashSet,
     path::{Path, PathBuf},
     process::Stdio,
     time::Duration,
@@ -11,83 +11,13 @@ use serde::Deserialize;
 use tokio::process::Command;
 
 pub const SETTINGS_FILE: &str = "aow-settings.json";
-pub const AGENTS_FILE: &str = "aow-agents.json";
-const REGISTRY_VERSION: u32 = 1;
 
-/// Only read the shared part of Settings; other settings belong to the server.
+/// Node-local executable search paths. Business agent registrations belong to Server.
 #[derive(Deserialize)]
 struct SettingsDocument {
     version: u32,
     #[serde(default)]
     execution_path: Option<Vec<PathBuf>>,
-}
-
-#[derive(Deserialize)]
-struct AgentRegistryDocument {
-    version: u32,
-    items: Vec<RegisteredAgentEnvironment>,
-}
-
-#[derive(Deserialize)]
-struct RegisteredAgentEnvironment {
-    id: String,
-    #[serde(default)]
-    env: BTreeMap<String, String>,
-}
-
-fn validate_agent_environment(environment: &BTreeMap<String, String>) -> Result<()> {
-    ensure!(
-        environment.len() <= 128
-            && environment.iter().all(|(key, value)| {
-                !key.is_empty()
-                    && key.len() <= 256
-                    && key
-                        .chars()
-                        .all(|character| character.is_ascii_alphanumeric() || character == '_')
-                    && value.len() <= 32 * 1024
-                    && !value.contains('\0')
-            }),
-        aow_i18n::message("agents.invalid_agent_environment_configuration", &[])
-    );
-    Ok(())
-}
-
-/// Load the latest registered overrides for one Agent at the start of each run.
-/// A missing registry or an Agent without an explicit registration has no overrides.
-pub async fn load_agent_environment_from(
-    config_dir: &Path,
-    agent_id: &str,
-) -> Result<BTreeMap<String, String>> {
-    let path = config_dir.join(AGENTS_FILE);
-    let document: AgentRegistryDocument = match tokio::fs::read(&path).await {
-        Ok(bytes) => serde_json::from_slice(&bytes).with_context(|| {
-            aow_i18n::message(
-                "agents.unable_to_read_agent_environment_configuration",
-                &[("auto0", format!("{}", path.display()))],
-            )
-        })?,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(BTreeMap::new()),
-        Err(error) => {
-            return Err(error).context(aow_i18n::text(
-                "agents.unable_to_read_agent_environment_configuration_2",
-            ));
-        }
-    };
-    ensure!(
-        document.version == REGISTRY_VERSION,
-        aow_i18n::message(
-            "agents.unsupported_agent_configuration_version",
-            &[("auto0", format!("{}", document.version))]
-        )
-    );
-    let environment = document
-        .items
-        .into_iter()
-        .find(|agent| agent.id == agent_id)
-        .map(|agent| agent.env)
-        .unwrap_or_default();
-    validate_agent_environment(&environment)?;
-    Ok(environment)
 }
 
 pub fn normalize_path(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {

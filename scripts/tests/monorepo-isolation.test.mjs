@@ -16,7 +16,7 @@ for (const product of ['common', 'server', 'runtime']) {
   });
 }
 test('Common contains contracts, IDs and generic infrastructure without product implementations', () => {
-  assert.deepEqual(readdirSync(resolve(root, 'common/crates')).sort(), ['id', 'macos-log', 'protocol', 'runtime-contract', 'sqlite']);
+  assert.deepEqual(readdirSync(resolve(root, 'common/crates')).sort(), ['i18n', 'id', 'macos-log', 'protocol', 'runtime-contract', 'sqlite']);
   const contract = readFileSync(resolve(root, 'common/crates/runtime-contract/Cargo.toml'), 'utf8');
   assert.doesNotMatch(contract, /rusqlite|tokio|reqwest|agent-client-protocol|aow-(?:acp|storage|filesystem|agents|process|sqlite|macos-log)/);
   for (const name of ['sqlite', 'macos-log']) {
@@ -92,4 +92,24 @@ test('workspace filesystem execution and bundled search belong only to Runtime',
   }
   assert.ok(existsSync(resolve(root, 'runtime/crates/filesystem/Cargo.toml')));
   assert.ok(existsSync(resolve(root, 'runtime/vendor/ripgrep/manifest.json')));
+});
+
+test('Server has no workspace, process, role HOME or clipboard execution copies', () => {
+  for (const path of ['server/crates/git-service', 'server/crates/workspaces', 'server/crates/process', 'server/crates/app/src/aow/roles/home_fixture.rs', 'server/crates/app/src/aow/roles/identity_fixture.rs', 'server/crates/app/src/terminal/clipboard/storage.rs', 'server/crates/app/src/git_platform_providers/adapter_fixture.rs']) {
+    assert.equal(existsSync(resolve(root, path)), false, path);
+  }
+  const client = readFileSync(resolve(root, 'server/crates/runtime-client/src/client.rs'), 'utf8');
+  assert.doesNotMatch(client, /pub async fn (?:get_json|post_json|put_json|delete|websocket)\b/);
+  assert.doesNotMatch(readFileSync(resolve(root, 'server/crates/runtime-client/src/workspace.rs'), 'utf8'), /pub async fn workspace_operation/);
+});
+test('products share only the locale engine and own independent catalogs', () => {
+  for (const product of ['server', 'runtime']) {
+    assert.equal(existsSync(resolve(root, product, 'crates/i18n/src/language.rs')), false);
+    assert.match(readFileSync(resolve(root, product, 'crates/i18n/Cargo.toml'), 'utf8'), /aow-i18n-core/);
+  }
+  const server = JSON.parse(readFileSync(resolve(root, 'server/crates/i18n/locales/en-US.json')));
+  const runtime = JSON.parse(readFileSync(resolve(root, 'runtime/crates/i18n/locales/en-US.json')));
+  assert.notDeepEqual(Object.keys(server), Object.keys(runtime));
+  assert.ok(server['server.untitled_project']);
+  assert.equal(runtime['server.untitled_project'], undefined);
 });

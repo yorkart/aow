@@ -104,16 +104,35 @@ impl AowManager {
             config,
         };
         let home = self.prepare_node_role(&role, previous.as_ref()).await?;
-        if let Some(state) = test {
-            super::connection::test(state, &role).await?;
+        let result = async {
+            if let Some(state) = test {
+                super::connection::test(state, &role).await?;
+            }
+            let mut roles = self.agent_roles()?;
+            if let Some(existing) = roles.iter_mut().find(|item| item.id == role.id) {
+                *existing = role.clone();
+            } else {
+                roles.push(role.clone());
+            }
+            self.persist_roles(&roles)?;
+            Ok::<_, AowError>(roles)
         }
-        let mut roles = self.agent_roles()?;
-        if let Some(existing) = roles.iter_mut().find(|item| item.id == role.id) {
-            *existing = role.clone();
-        } else {
-            roles.push(role.clone());
-        }
-        self.persist_roles(&roles)?;
+        .await;
+        let roles = match result {
+            Ok(roles) => roles,
+            Err(error) => {
+                if let Err(rollback) = home.rollback().await {
+                    tracing::error!(%rollback,"role environment rollback remains pending");
+                }
+                self.inner
+                    .roles
+                    .environments
+                    .lock()
+                    .map_err(|_| AowError::Poisoned)?
+                    .remove(&role.id);
+                return Err(error);
+            }
+        };
         home.commit().await;
         *self
             .inner

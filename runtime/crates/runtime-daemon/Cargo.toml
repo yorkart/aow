@@ -5,6 +5,7 @@ edition.workspace = true
 license = "GPL-3.0-or-later"
 
 [dependencies]
+aow-i18n = { package = "aow-runtime-i18n", path = "../i18n" }
 aow-process = { package = "aow-runtime-process", path = "../process", features = ["execution"] }
 aow-runtime-contract = { path = "../../../common/crates/runtime-contract" }
 aow-acp-core = { path = "../acp-core" }

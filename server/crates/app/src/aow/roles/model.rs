@@ -7,58 +7,7 @@ pub(crate) enum RoleRuntime {
     Cli { agent_id: String },
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
-pub(crate) enum Identity {
-    LocalHome { source: Option<String> },
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct IdentityPreset {
-    pub layout: HomeLayout,
-    pub source: String,
-}
-
-#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum HomeLayout {
-    Codex,
-    Claude,
-    Pi,
-    Hermes,
-    Traecli,
-    Gemini,
-    Opencode,
-    #[default]
-    Custom,
-}
-
-#[cfg(test)]
-impl HomeLayout {
-    pub(super) fn directory(self) -> &'static str {
-        match self {
-            Self::Codex => ".codex",
-            Self::Claude => ".claude",
-            Self::Pi => ".pi/agent",
-            Self::Hermes => ".hermes",
-            Self::Traecli => ".trae",
-            Self::Gemini => ".gemini",
-            Self::Opencode => ".local/share/opencode",
-            Self::Custom => ".",
-        }
-    }
-
-    pub(super) fn skills_directory(self) -> std::path::PathBuf {
-        // OpenCode credentials live in XDG data, but its skills live in config.
-        std::path::Path::new(if self == Self::Opencode {
-            ".config/opencode"
-        } else {
-            self.directory()
-        })
-        .join("skills")
-    }
-}
-
+pub(crate) use aow_runtime_contract::environment::{HomeLayout, Identity, IdentityPreset};
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct RoleConfig {

@@ -33,7 +33,7 @@ async fn native_title(
     terminal_title: &str,
 ) -> Option<String> {
     let identity = process.clone();
-    let environment = tokio::task::spawn_blocking(move || sessions::process_environment(&identity))
+    let environment = aow_i18n::spawn_blocking(move || sessions::process_environment(&identity))
         .await
         .ok()??;
     let title = provider

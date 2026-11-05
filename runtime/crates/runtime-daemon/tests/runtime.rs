@@ -898,7 +898,13 @@ async fn workspace_transfers_preserve_ranges_versions_and_node_paths() {
     let metadata: Value = node
         .post(
             "/v1/workspace/operations",
-            json!({"operation":"metadata","arguments":{"path":file}}),
+            serde_json::to_value(
+                aow_runtime_contract::workspace::WorkspaceRequest::Metadata {
+                    path: file.clone(),
+                    follow: true,
+                },
+            )
+            .unwrap(),
         )
         .await;
     assert_eq!(metadata["size"], 7);

@@ -3,7 +3,8 @@ use crate::{
     ExecutionSpec, RunEvent, RunStatus, Store, store::valid_id, tracking::ConcurrencySlot,
 };
 use anyhow::{Result, ensure};
-use serde_json::{Value, json};
+use aow_runtime_contract::execution::{ExecutionEvent, ExecutionResult, ExecutionSnapshot};
+use serde_json::Value;
 use std::{
     collections::HashMap,
     io::{Read, Seek, SeekFrom},
@@ -46,10 +47,7 @@ impl ExecutionManager {
             }
             let id = path.file_name().unwrap().to_string_lossy();
             valid_id(&id)?;
-            if !service.snapshot(&id, 0)?["terminal"]
-                .as_bool()
-                .unwrap_or(false)
-            {
+            if !service.snapshot(&id, 0)?.terminal {
                 ConcurrencySlot::recover(&path.join("owner.lock"))?;
                 service.0.store.finish(
                     &id,
@@ -77,7 +75,10 @@ impl ExecutionManager {
             spec.input.prompt.len() <= 8 * 1024 * 1024,
             "Execution prompt exceeds limit"
         );
-        spec.input.workspace.validate()?;
+        spec.input
+            .workspace
+            .validate()
+            .map_err(|error| anyhow::anyhow!(aow_i18n::text(error.0)))?;
         use aow_agents_core::automation::AgentAutomation;
         spec.input.agent.validate_arguments(&spec.launch.args)?;
         if let Some(capacity) = &spec.capacity {
@@ -121,7 +122,7 @@ impl ExecutionManager {
         let (cancel, stopping) = watch::channel(false);
         let service = self.clone();
         let job_id = id.clone();
-        let task = tokio::spawn(async move {
+        let task = aow_i18n::spawn(async move {
             if let Err(error) =
                 crate::runner::execute(service.0.store.clone(), spec, writer, stopping).await
             {
@@ -173,15 +174,31 @@ impl ExecutionManager {
         }
         Ok(())
     }
-    pub fn snapshot(&self, id: &str, after: u64) -> Result<Value> {
+    pub fn snapshot(&self, id: &str, after: u64) -> Result<ExecutionSnapshot> {
         valid_id(id)?;
         if let Some(receipt) = self.receipt(id)? {
             if let Some(at) = receipt.strip_prefix("cancelled|") {
                 ensure!(after <= 1, "Execution cursor is ahead of journal");
-                let event = serde_json::json!({"type":"finished","at":at,"status":"interrupted","exit_code":null,"message":"Execution was cancelled before admission","duration_ms":0});
-                return Ok(
-                    json!({"id":id,"head":1,"terminal":true,"events":if after==0{vec![json!({"sequence":1,"event":event})]}else{Vec::new()},"result":null}),
-                );
+                let event = RunEvent::Finished {
+                    at: chrono::DateTime::parse_from_rfc3339(at)?.with_timezone(&chrono::Utc),
+                    status: RunStatus::Interrupted,
+                    exit_code: None,
+                    message: Some("Execution was cancelled before admission".into()),
+                    duration_ms: 0,
+                };
+                return Ok(ExecutionSnapshot {
+                    id: id.into(),
+                    node_id: String::new(),
+                    head: 1,
+                    terminal: true,
+                    events: if after == 0 {
+                        vec![ExecutionEvent { sequence: 1, event }]
+                    } else {
+                        Vec::new()
+                    },
+                    result: None,
+                    native_session: None,
+                });
             }
             anyhow::bail!("Execution has been retired");
         }
@@ -198,20 +215,28 @@ impl ExecutionManager {
             if !line.ends_with(b"\n") {
                 break;
             }
-            let event: Value = serde_json::from_slice(line)?;
+            let event: RunEvent = serde_json::from_slice(line)?;
             sequence += 1;
-            terminal = event["type"] == "finished";
+            terminal = matches!(event, RunEvent::Finished { .. });
             if sequence > after {
-                events.push(json!({"sequence":sequence,"event":event}));
+                events.push(ExecutionEvent { sequence, event });
             }
         }
         ensure!(after <= sequence, "Execution cursor is ahead of journal");
         let result = match std::fs::read(directory.join("result.json")) {
-            Ok(bytes) => Some(serde_json::from_slice::<Value>(&bytes)?),
+            Ok(bytes) => Some(serde_json::from_slice::<ExecutionResult>(&bytes)?),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
             Err(error) => return Err(error.into()),
         };
-        Ok(json!({"id":id,"head":sequence,"terminal":terminal,"events":events,"result":result}))
+        Ok(ExecutionSnapshot {
+            id: id.into(),
+            node_id: String::new(),
+            head: sequence,
+            terminal,
+            events,
+            result,
+            native_session: None,
+        })
     }
     pub fn output(&self, id: &str, output: &str, offset: u64) -> Result<Vec<u8>> {
         ensure!(
@@ -242,12 +267,14 @@ impl ExecutionManager {
         let spec: ExecutionSpec =
             serde_json::from_slice(&std::fs::read(directory.join("spec.json"))?)?;
         let snapshot = self.snapshot(id, 0)?;
-        let session = snapshot["events"]
-            .as_array()
-            .unwrap()
+        let session = snapshot
+            .events
             .iter()
             .rev()
-            .find_map(|item| item["event"]["session_id"].as_str());
+            .find_map(|item| match &item.event {
+                RunEvent::Session { session_id, .. } => Some(session_id.as_str()),
+                _ => None,
+            });
         let Some(session) = session else {
             return Ok(None);
         };
@@ -265,7 +292,7 @@ impl ExecutionManager {
         let path = self.0.store.run_path("", id)?;
         if path.exists() {
             ensure!(
-                self.snapshot(id, 0)?["terminal"] == true,
+                self.snapshot(id, 0)?.terminal,
                 "Execution has not completed"
             );
         }

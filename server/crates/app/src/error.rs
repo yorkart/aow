@@ -1,4 +1,3 @@
-use aow_git_service as git;
 use aow_protocol::ApiError;
 use axum::{
     Json,
@@ -57,50 +56,6 @@ impl From<std::io::Error> for HttpError {
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         Self::new(status, "io_error", error.to_string(), None)
-    }
-}
-
-impl From<git::GitError> for HttpError {
-    fn from(error: git::GitError) -> Self {
-        match error {
-            git::GitError::PathNotAbsolute(path) => Self::new(
-                StatusCode::BAD_REQUEST,
-                "path_not_absolute",
-                aow_i18n::text("errors.repository_path_must_be_absolute"),
-                Some(path),
-            ),
-            git::GitError::NotRepository(path) => Self::new(
-                StatusCode::NOT_FOUND,
-                "git_repository_not_found",
-                aow_i18n::text("errors.the_terminal_s_current_directory_is_not_inside_a"),
-                Some(path),
-            ),
-            git::GitError::Timeout => Self::new(
-                StatusCode::GATEWAY_TIMEOUT,
-                "git_timeout",
-                error.to_string(),
-                None,
-            ),
-            git::GitError::Command(_) => Self::new(
-                StatusCode::BAD_REQUEST,
-                "git_command_failed",
-                error.to_string(),
-                None,
-            ),
-            git::GitError::InvalidUtf8 => Self::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "git_invalid_utf8",
-                error.to_string(),
-                None,
-            ),
-            git::GitError::Io(error) => error.into(),
-            git::GitError::WalkDir(error) => Self::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "repository_discovery_failed",
-                error.to_string(),
-                None,
-            ),
-        }
     }
 }
 

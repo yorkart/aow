@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/id", "crates/macos-log", "crates/protocol", "crates/runtime-contract", "crates/sqlite"]
+members = ["crates/i18n", "crates/id", "crates/macos-log", "crates/protocol", "crates/runtime-contract", "crates/sqlite"]
 resolver = "2"
 
 [workspace.package]

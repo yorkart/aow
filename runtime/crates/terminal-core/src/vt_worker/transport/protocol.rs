@@ -67,7 +67,7 @@ mod tests {
         let mut wire = frame(metadata.clone(), data);
         wire.extend(frame(metadata.clone(), &[]));
         let (mut writer, mut reader) = tokio::io::duplex(7);
-        let task = tokio::spawn(async move {
+        let task = aow_i18n::spawn(async move {
             for byte in wire {
                 writer.write_all(&[byte]).await.unwrap();
             }

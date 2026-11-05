@@ -119,6 +119,10 @@ async fn homes_are_seeded_once_shared_by_role_and_persist_without_changing_runti
     );
     let reopened = AowManager::persistent(&directory.path().join("aow")).unwrap();
     assert_eq!(reopened.agent_roles().unwrap().len(), 2);
+    reopened
+        .resolve_node_role(&reopened.agent_role(&role.id).unwrap())
+        .await
+        .unwrap();
     assert_eq!(reopened.role_home(&role.id).unwrap(), home);
     assert_eq!(manager.acp_settings().unwrap().content, initial_acp);
     assert_eq!(manager.agents().await.unwrap().len(), initial_agents);

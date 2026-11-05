@@ -31,7 +31,10 @@ pub(super) async fn execute(
     started: Instant,
     concurrency_slot: &ConcurrencySlot,
 ) -> Result<Outcome> {
-    task.input.workspace.validate()?;
+    task.input
+        .workspace
+        .validate()
+        .map_err(|error| anyhow::anyhow!(aow_i18n::text(error.0)))?;
     task.input.agent.validate_arguments(&task.launch.args)?;
     let workspace = workspace::prepare(task, id, concurrency_slot).await?;
     let directory = &workspace.directory;

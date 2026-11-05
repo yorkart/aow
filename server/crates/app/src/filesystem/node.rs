@@ -68,9 +68,7 @@ pub(super) async fn listing(
     state: &AppState,
     path: &Path,
 ) -> Result<aow_protocol::DirectoryListing, HttpError> {
-    Ok(runtime(state)?
-        .workspace_operation("list", serde_json::json!({"path":path}))
-        .await?)
+    Ok(runtime(state)?.workspace_list(path).await?)
 }
 pub(super) async fn home(state: &AppState) -> Result<std::path::PathBuf, HttpError> {
     Ok(runtime(state)?.workspace_home().await?)

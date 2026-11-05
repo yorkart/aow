@@ -93,8 +93,12 @@ impl Store {
         result: Result<String>,
     ) -> Result<()> {
         let value = match result {
-            Ok(conclusion) => serde_json::json!({"status":"completed","conclusion":conclusion}),
-            Err(error) => serde_json::json!({"status":"unavailable","error":format!("{error:#}")}),
+            Ok(conclusion) => {
+                aow_runtime_contract::execution::ExecutionResult::Completed { conclusion }
+            }
+            Err(error) => aow_runtime_contract::execution::ExecutionResult::Unavailable {
+                error: format!("{error:#}"),
+            },
         };
         atomic_write(
             &self.run_path(task, id)?.join("result.json"),

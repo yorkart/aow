@@ -66,21 +66,68 @@ impl Clipboard {
         let id = uuid::Uuid::new_v4();
         let temporary = self.directory.join(format!(".{id}.tmp"));
         let _cleanup = Temporary(temporary.clone());
-        let result=async {
-            let mut options=tokio::fs::OpenOptions::new();options.create_new(true).write(true).mode(0o600);
-            let mut file=options.open(&temporary).await?;let mut bytes=Vec::new();let mut stream=body.into_data_stream();
-            while let Some(chunk)=stream.next().await {
-                let chunk=chunk.map_err(|error|HttpError::new(StatusCode::BAD_REQUEST,"request_stream_failed",error.to_string(),None))?;
-                if (bytes.len() as u64).saturating_add(chunk.len() as u64)>IMAGE_LIMIT{return Err(HttpError::new(StatusCode::PAYLOAD_TOO_LARGE,"clipboard_image_too_large","Clipboard image exceeds 10 MiB",None));}
-                if used.saturating_add(bytes.len() as u64).saturating_add(chunk.len() as u64)>QUOTA{return Err(HttpError::new(StatusCode::INSUFFICIENT_STORAGE,"clipboard_quota_exceeded","Clipboard storage quota exceeded",None));}
-                bytes.extend_from_slice(&chunk);file.write_all(&chunk).await?;
+        let result = async {
+            let mut options = tokio::fs::OpenOptions::new();
+            options.create_new(true).write(true).mode(0o600);
+            let mut file = options.open(&temporary).await?;
+            let mut bytes = Vec::new();
+            let mut stream = body.into_data_stream();
+            while let Some(chunk) = stream.next().await {
+                let chunk = chunk.map_err(|error| {
+                    HttpError::new(
+                        StatusCode::BAD_REQUEST,
+                        "request_stream_failed",
+                        error.to_string(),
+                        None,
+                    )
+                })?;
+                if (bytes.len() as u64).saturating_add(chunk.len() as u64) > IMAGE_LIMIT {
+                    return Err(HttpError::new(
+                        StatusCode::PAYLOAD_TOO_LARGE,
+                        "clipboard_image_too_large",
+                        "Clipboard image exceeds 10 MiB",
+                        None,
+                    ));
+                }
+                if used
+                    .saturating_add(bytes.len() as u64)
+                    .saturating_add(chunk.len() as u64)
+                    > QUOTA
+                {
+                    return Err(HttpError::new(
+                        StatusCode::INSUFFICIENT_STORAGE,
+                        "clipboard_quota_exceeded",
+                        "Clipboard storage quota exceeded",
+                        None,
+                    ));
+                }
+                bytes.extend_from_slice(&chunk);
+                file.write_all(&chunk).await?;
             }
-            let kind=image::clipboard_image_type(&bytes).ok_or_else(||HttpError::new(StatusCode::UNSUPPORTED_MEDIA_TYPE,"unsupported_clipboard_image","Unsupported clipboard image",None))?;
-            file.sync_all().await?;drop(file);
-            let path=self.directory.join(format!("{id}.{}",kind.extension));tokio::fs::rename(&temporary,&path).await?;
-            let expires_at=(chrono::Utc::now()+chrono::Duration::from_std(TTL).unwrap()).to_rfc3339_opts(chrono::SecondsFormat::Millis,true);
-            Ok(Json(serde_json::json!({"path":path,"mime":kind.mime,"size":bytes.len(),"expires_at":expires_at})))
-        }.await;
+            let kind = image::clipboard_image_type(&bytes).ok_or_else(|| {
+                HttpError::new(
+                    StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                    "unsupported_clipboard_image",
+                    "Unsupported clipboard image",
+                    None,
+                )
+            })?;
+            file.sync_all().await?;
+            drop(file);
+            let path = self.directory.join(format!("{id}.{}", kind.extension));
+            tokio::fs::rename(&temporary, &path).await?;
+            let expires_at = (chrono::Utc::now() + chrono::Duration::from_std(TTL).unwrap())
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+            Ok(Json(serde_json::json!(
+                aow_runtime_contract::workspace::ClipboardImage {
+                    path: path.to_string_lossy().into_owned(),
+                    mime: kind.mime.into(),
+                    size: bytes.len() as u64,
+                    expires_at
+                }
+            )))
+        }
+        .await;
         if result.is_err() {
             let _ = tokio::fs::remove_file(temporary).await;
         }
@@ -94,3 +141,6 @@ impl Drop for Temporary {
         let _ = std::fs::remove_file(&self.0);
     }
 }
+
+#[cfg(test)]
+mod tests;

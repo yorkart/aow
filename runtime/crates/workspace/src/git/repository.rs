@@ -16,7 +16,7 @@ pub async fn discover_repositories(
     maximum_depth: usize,
 ) -> Result<Vec<RepositorySummary>, GitError> {
     let root = absolute(root)?;
-    let roots = tokio::task::spawn_blocking(move || discover_sync(&root, maximum_depth))
+    let roots = aow_i18n::spawn_blocking(move || discover_sync(&root, maximum_depth))
         .await
         .map_err(|error| GitError::Command(error.to_string()))??;
     let mut repositories = Vec::with_capacity(roots.len());

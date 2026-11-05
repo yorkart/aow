@@ -1,32 +1,12 @@
-use serde::{Deserialize, Serialize};
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
-pub enum Identity {
-    LocalHome { source: Option<String> },
+pub use aow_runtime_contract::environment::{
+    HomeLayout, Identity, IdentityPreset, PreparedEnvironment, RoleEnvironmentSpec,
+};
+pub(crate) trait HomeLayoutExt {
+    fn directory(self) -> &'static str;
+    fn skills_directory(self) -> std::path::PathBuf;
 }
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct IdentityPreset {
-    pub layout: HomeLayout,
-    pub source: String,
-}
-
-#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum HomeLayout {
-    Codex,
-    Claude,
-    Pi,
-    Hermes,
-    Traecli,
-    Gemini,
-    Opencode,
-    #[default]
-    Custom,
-}
-
-impl HomeLayout {
-    pub(crate) fn directory(self) -> &'static str {
+impl HomeLayoutExt for HomeLayout {
+    fn directory(self) -> &'static str {
         match self {
             Self::Codex => ".codex",
             Self::Claude => ".claude",
@@ -39,7 +19,7 @@ impl HomeLayout {
         }
     }
 
-    pub(crate) fn skills_directory(self) -> std::path::PathBuf {
+    fn skills_directory(self) -> std::path::PathBuf {
         // OpenCode credentials live in XDG data, but its skills live in config.
         std::path::Path::new(if self == Self::Opencode {
             ".config/opencode"
@@ -48,19 +28,4 @@ impl HomeLayout {
         })
         .join("skills")
     }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
-pub struct RoleEnvironmentSpec {
-    pub id: String,
-    pub home_layout: HomeLayout,
-    pub identity: Identity,
-    #[serde(default)]
-    pub skills: Vec<String>,
-}
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct PreparedEnvironment {
-    pub home: std::path::PathBuf,
-    pub env: std::collections::BTreeMap<String, String>,
 }

@@ -111,7 +111,7 @@ pub(super) async fn admit(
             },
         );
     }
-    tokio::spawn(async move {
+    aow_i18n::spawn(async move {
         let result = timeout(
             Duration::from_secs(timeout_seconds),
             execute(&state, runtime.clone(), &request.operation),
@@ -147,7 +147,7 @@ async fn write(
 ) -> Result<(), TerminalError> {
     let _gate = runtime.delivery_gate.lock().await;
     let runtime = runtime.clone();
-    let written = tokio::task::spawn_blocking(move || runtime.write_input(owner, data.as_bytes()))
+    let written = aow_i18n::spawn_blocking(move || runtime.write_input(owner, data.as_bytes()))
         .await
         .map_err(|e| TerminalError::Worker(e.to_string()))??;
     if !written {

@@ -69,48 +69,26 @@ fn skill_name(value: &str) -> Result<String, AowError> {
 
 impl AowManager {
     pub(crate) fn role_home(&self, id: &str) -> Result<std::path::PathBuf, AowError> {
-        if self.inner.runtime_client.is_some() {
-            return self
-                .inner
-                .roles
-                .environments
-                .lock()
-                .map_err(|_| AowError::Poisoned)?
-                .get(id)
-                .map(|environment| environment.home.clone())
-                .ok_or_else(|| invalid("Resolve the role environment on the node first"));
-        }
-        #[cfg(test)]
-        {
-            self.local_role_home(id)
-        }
-        #[cfg(not(test))]
-        {
-            Err(invalid("Runtime is unavailable"))
-        }
+        self.inner
+            .roles
+            .environments
+            .lock()
+            .map_err(|_| AowError::Poisoned)?
+            .get(id)
+            .map(|environment| environment.home.clone())
+            .ok_or_else(|| invalid("Resolve the role environment on the node first"))
     }
     pub(crate) fn role_environment(
         &self,
         role: &AgentRole,
     ) -> Result<std::collections::BTreeMap<String, String>, AowError> {
-        if self.inner.runtime_client.is_some() {
-            return self
-                .inner
-                .roles
-                .environments
-                .lock()
-                .map_err(|_| AowError::Poisoned)?
-                .get(&role.id)
-                .map(|environment| environment.env.clone())
-                .ok_or_else(|| invalid("Resolve the role environment on the node first"));
-        }
-        #[cfg(test)]
-        {
-            self.local_role_environment(role)
-        }
-        #[cfg(not(test))]
-        {
-            Err(invalid("Runtime is unavailable"))
-        }
+        self.inner
+            .roles
+            .environments
+            .lock()
+            .map_err(|_| AowError::Poisoned)?
+            .get(&role.id)
+            .map(|environment| environment.env.clone())
+            .ok_or_else(|| invalid("Resolve the role environment on the node first"))
     }
 }

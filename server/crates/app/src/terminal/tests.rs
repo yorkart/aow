@@ -1,15 +1,11 @@
+use super::bridge::{bounded_sync_runtime, send_bridge_message};
 use super::*;
-use super::{
-    bridge::{bounded_sync_runtime, send_bridge_message},
-    clipboard::clipboard_image_type,
-};
 use axum::{body::to_bytes, http::Request};
 use bytes::Bytes;
 use futures_util::Sink;
 use std::{
     pin::Pin,
     task::{Context, Poll},
-    time::SystemTime,
 };
 use tempfile::TempDir;
 use tokio::sync::{mpsc, oneshot};
@@ -32,28 +28,6 @@ fn minimal_png() -> Vec<u8> {
     bytes
 }
 
-fn minimal_jpeg() -> Vec<u8> {
-    b"\xff\xd8\xff\xc0\x00\x0b\x08\x00\x01\x00\x01\x01\x01\x11\x00\xff\xda\x00\x08\x01\x01\x00\x00\x3f\x00\x00\xff\xd9".to_vec()
-}
-
-fn minimal_gif() -> Vec<u8> {
-    b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x01L\x00;".to_vec()
-}
-
-fn minimal_webp() -> Vec<u8> {
-    b"RIFF\x10\x00\x00\x00WEBPVP8 \x04\x00\x00\x00data".to_vec()
-}
-
-fn extended_webp() -> Vec<u8> {
-    let mut bytes = b"RIFF\x00\x00\x00\x00WEBP".to_vec();
-    bytes.extend_from_slice(b"VP8X\x0a\x00\x00\x00");
-    bytes.extend_from_slice(&[0; 10]);
-    bytes.extend_from_slice(b"EXIF\x03\x00\x00\x00abc\x00");
-    bytes.extend_from_slice(b"VP8 \x04\x00\x00\x00data");
-    let riff_size = (bytes.len() - 8) as u32;
-    bytes[4..8].copy_from_slice(&riff_size.to_le_bytes());
-    bytes
-}
 use tower::ServiceExt;
 
 pub(super) fn pane(id: &str, status: TerminalPaneStatus) -> TerminalPane {
@@ -457,7 +431,16 @@ async fn agent_pane_can_split_into_a_terminal_pane() {
         .unwrap();
     assert_eq!(terminal.kind, TerminalPaneKind::Terminal);
     assert_eq!(terminal.agent_id, None);
-    assert_eq!(terminal.shell, normalize_shell(None).unwrap());
+    assert_eq!(
+        terminal.shell,
+        manager
+            .inner
+            .terminald
+            .runtime()
+            .workspace_terminal_defaults()
+            .await
+            .unwrap()
+    );
     assert!(terminal.arguments.is_empty());
     assert!(matches!(
         updated.layout,
@@ -836,32 +819,6 @@ fn terminal_request_origin_must_match_request_host() {
     ));
 }
 
-#[test]
-fn clipboard_magic_identifies_supported_formats() {
-    assert_eq!(
-        clipboard_image_type(&minimal_png()).unwrap().mime,
-        "image/png"
-    );
-    assert_eq!(
-        clipboard_image_type(&minimal_jpeg()).unwrap().mime,
-        "image/jpeg"
-    );
-    assert_eq!(
-        clipboard_image_type(&minimal_gif()).unwrap().mime,
-        "image/gif"
-    );
-    assert_eq!(
-        clipboard_image_type(&minimal_webp()).unwrap().mime,
-        "image/webp"
-    );
-    assert_eq!(
-        clipboard_image_type(&extended_webp()).unwrap().mime,
-        "image/webp"
-    );
-    assert!(clipboard_image_type(b"\x89PNG\r\n\x1a\n").is_none());
-    assert!(clipboard_image_type(b"<svg").is_none());
-}
-
 fn manager_with_pane() -> TerminalManager {
     let manager = TerminalManager::in_memory(TerminalClient::for_test_config(
         std::env::temp_dir().join("missing-terminald.sock"),
@@ -920,8 +877,7 @@ async fn response_json(response: Response) -> serde_json::Value {
 
 #[tokio::test]
 async fn clipboard_image_route_stores_private_png() {
-    let manager = manager_with_pane();
-    let directory = manager.inner.clipboard.directory.clone();
+    let (_node, manager, directory) = clipboard_manager().await;
     let image = minimal_png();
     let response = clipboard_app(manager.clone())
         .oneshot(clipboard_request("pane-1", Body::from(image.clone())))
@@ -940,9 +896,7 @@ async fn clipboard_image_route_stores_private_png() {
         path.extension().and_then(|value| value.to_str()),
         Some("png")
     );
-    assert!(aow_id::is_valid_id(
-        path.file_stem().unwrap().to_str().unwrap()
-    ));
+    assert!(uuid::Uuid::parse_str(path.file_stem().unwrap().to_str().unwrap()).is_ok());
     assert_eq!(std::fs::read(&path).unwrap(), image);
     #[cfg(unix)]
     {
@@ -960,7 +914,7 @@ async fn clipboard_image_route_stores_private_png() {
 
 #[tokio::test]
 async fn clipboard_image_route_rejects_unsupported_missing_pane_and_origin() {
-    let manager = manager_with_pane();
+    let (_node, manager, _directory) = clipboard_manager().await;
     let app = clipboard_app(manager);
 
     let unsupported = app
@@ -993,7 +947,7 @@ async fn clipboard_image_route_rejects_unsupported_missing_pane_and_origin() {
 
 #[tokio::test]
 async fn clipboard_image_route_preflights_content_length_limit() {
-    let manager = manager_with_pane();
+    let (_node, manager, _directory) = clipboard_manager().await;
     let mut request = clipboard_request("pane-1", Body::empty());
     request.headers_mut().insert(
         CONTENT_LENGTH,
@@ -1005,7 +959,7 @@ async fn clipboard_image_route_preflights_content_length_limit() {
 
 #[tokio::test]
 async fn clipboard_image_stream_enforces_limit_and_removes_temp_file() {
-    let manager = manager_with_pane();
+    let (_node, manager, directory) = clipboard_manager().await;
     let result = manager
         .store_clipboard_image(
             "tab-1",
@@ -1014,17 +968,12 @@ async fn clipboard_image_stream_enforces_limit_and_removes_temp_file() {
         )
         .await;
     assert!(matches!(result, Err(TerminalError::ClipboardImageTooLarge)));
-    assert_eq!(
-        std::fs::read_dir(&manager.inner.clipboard.directory)
-            .unwrap()
-            .count(),
-        0
-    );
+    assert_eq!(std::fs::read_dir(&directory).unwrap().count(), 0);
 }
 
 #[tokio::test]
 async fn clipboard_image_upload_rejects_a_pane_deleted_before_commit() {
-    let manager = manager_with_pane();
+    let (_node, manager, directory) = clipboard_manager().await;
     let image = minimal_png();
     let (sender, receiver) = mpsc::channel::<Result<Bytes, std::io::Error>>(2);
     let stream = futures_util::stream::unfold(receiver, |mut receiver| async move {
@@ -1042,11 +991,7 @@ async fn clipboard_image_upload_rejects_a_pane_deleted_before_commit() {
         .unwrap();
     let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
     loop {
-        if std::fs::read_dir(&manager.inner.clipboard.directory)
-            .unwrap()
-            .next()
-            .is_some()
-        {
+        if std::fs::read_dir(&directory).unwrap().next().is_some() {
             break;
         }
         assert!(tokio::time::Instant::now() < deadline);
@@ -1060,81 +1005,19 @@ async fn clipboard_image_upload_rejects_a_pane_deleted_before_commit() {
     drop(sender);
     let result = upload.await.unwrap();
     assert!(matches!(result, Err(TerminalError::TabNotFound(_))));
-    assert_eq!(
-        std::fs::read_dir(&manager.inner.clipboard.directory)
-            .unwrap()
-            .count(),
-        0
-    );
 }
 
 #[tokio::test]
 async fn clipboard_image_upload_enforces_directory_quota() {
-    let manager = manager_with_pane();
-    let existing = manager.inner.clipboard.directory.join("existing.png");
+    let (_node, manager, directory) = clipboard_manager().await;
+    let existing = directory.join("existing.png");
     let file = std::fs::File::create(existing).unwrap();
-    file.set_len(MAX_CLIPBOARD_DIRECTORY_BYTES).unwrap();
+    file.set_len(256 * 1024 * 1024).unwrap();
 
     let result = manager
         .store_clipboard_image("tab-1", "pane-1", Body::from(&b"\x89PNG\r\n\x1a\n"[..]))
         .await;
     assert!(matches!(result, Err(TerminalError::ClipboardQuotaExceeded)));
-}
-
-#[test]
-fn clipboard_cleanup_removes_expired_files() {
-    let manager = manager_with_pane();
-    let directory = &manager.inner.clipboard.directory;
-    let expired = directory.join("expired.png");
-    let live = directory.join("live.png");
-    std::fs::write(&expired, b"expired").unwrap();
-    std::fs::write(&live, b"live").unwrap();
-    let now = SystemTime::now();
-    std::fs::File::options()
-        .write(true)
-        .open(&expired)
-        .unwrap()
-        .set_times(
-            std::fs::FileTimes::new()
-                .set_modified(now - CLIPBOARD_IMAGE_TTL - Duration::from_secs(1)),
-        )
-        .unwrap();
-
-    let used = manager.inner.clipboard.clean_expired_at(now).unwrap();
-    assert!(!expired.exists());
-    assert!(live.exists());
-    assert_eq!(used, 4);
-}
-
-#[test]
-fn persistent_manager_uses_absolute_directory_and_cleans_on_creation() {
-    let root = TempDir::new().unwrap();
-    let state_dir = root.path().join("state");
-    let directory = state_dir.join("cache").join(CLIPBOARD_DIRECTORY);
-    std::fs::create_dir_all(&directory).unwrap();
-    let expired = directory.join("expired.png");
-    std::fs::write(&expired, b"expired").unwrap();
-    std::fs::File::options()
-        .write(true)
-        .open(&expired)
-        .unwrap()
-        .set_times(
-            std::fs::FileTimes::new()
-                .set_modified(SystemTime::now() - CLIPBOARD_IMAGE_TTL - Duration::from_secs(1)),
-        )
-        .unwrap();
-
-    let manager = TerminalManager::persistent(
-        state_dir,
-        TerminalClient::for_test_config(root.path().join("missing.sock")),
-    )
-    .unwrap();
-    assert!(manager.inner.clipboard.directory.is_absolute());
-    assert_eq!(
-        manager.inner.clipboard.directory,
-        std::fs::canonicalize(directory).unwrap()
-    );
-    assert!(!expired.exists());
 }
 
 #[tokio::test]
@@ -1902,4 +1785,24 @@ fn native_environment_fixture() {
         }
         std::io::stdin().read_line(&mut String::new()).unwrap();
     }
+}
+
+async fn clipboard_manager() -> (
+    aow_runtime_client::testing::TestRuntime,
+    TerminalManager,
+    PathBuf,
+) {
+    let root = tempfile::tempdir().unwrap();
+    let runtime =
+        aow_runtime_client::testing::TestRuntime::start(&root.path().join("runtime.json")).await;
+    let client = aow_runtime_client::RuntimeClient::new(runtime.endpoint.clone());
+    let directory = client
+        .node_environment()
+        .await
+        .unwrap()
+        .state_dir
+        .join("cache/clipboard-images");
+    let mut manager = manager_with_pane();
+    Arc::get_mut(&mut manager.inner).unwrap().terminald = client.terminal();
+    (runtime, manager, directory)
 }

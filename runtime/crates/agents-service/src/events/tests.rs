@@ -25,7 +25,7 @@ async fn websocket_replays_persisted_events_and_rejects_another_node() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let router: Router = super::router(service.clone());
-    let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let server = aow_i18n::spawn(async move { axum::serve(listener, router).await.unwrap() });
     let base = format!("ws://{address}/v1/agent-events");
     async fn next(
         socket: &mut tokio_tungstenite::WebSocketStream<

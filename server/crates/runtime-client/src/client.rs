@@ -50,7 +50,7 @@ impl RuntimeClient {
     pub fn terminal(&self) -> TerminalClient {
         TerminalClient::new(self.clone())
     }
-    pub async fn health(&self) -> Result<serde_json::Value, RuntimeError> {
+    pub async fn health(&self) -> Result<aow_runtime_contract::node::RuntimeHealth, RuntimeError> {
         self.get_json("/v1/health").await
     }
     pub(crate) fn url(&self, endpoint: &RuntimeEndpoint, path: &str) -> reqwest::Url {
@@ -76,7 +76,11 @@ impl RuntimeClient {
         let mut request = self
             .http
             .request(method, self.url(&endpoint, path))
-            .bearer_auth(&endpoint.token);
+            .bearer_auth(&endpoint.token)
+            .header(
+                http::header::ACCEPT_LANGUAGE,
+                aow_i18n::current_language().tag(),
+            );
         if let Some(body) = body {
             request = request.json(body);
         }
@@ -114,11 +118,14 @@ impl RuntimeClient {
             error,
         }
     }
-    pub async fn get_json<T: DeserializeOwned>(&self, path: &str) -> Result<T, RuntimeError> {
+    pub(crate) async fn get_json<T: DeserializeOwned>(
+        &self,
+        path: &str,
+    ) -> Result<T, RuntimeError> {
         let (status, body) = self.request(http::Method::GET, path, None::<&()>).await?;
         Self::json(status, body)
     }
-    pub async fn put_json<T: Serialize + ?Sized, R: DeserializeOwned>(
+    pub(crate) async fn put_json<T: Serialize + ?Sized, R: DeserializeOwned>(
         &self,
         path: &str,
         body: &T,
@@ -126,7 +133,7 @@ impl RuntimeClient {
         let (status, body) = self.request(http::Method::PUT, path, Some(body)).await?;
         Self::json(status, body)
     }
-    pub async fn post_json<T: Serialize + ?Sized, R: DeserializeOwned>(
+    pub(crate) async fn post_json<T: Serialize + ?Sized, R: DeserializeOwned>(
         &self,
         path: &str,
         body: &T,
@@ -134,7 +141,7 @@ impl RuntimeClient {
         let (status, body) = self.request(http::Method::POST, path, Some(body)).await?;
         Self::json(status, body)
     }
-    pub async fn delete(&self, path: &str) -> Result<(), RuntimeError> {
+    pub(crate) async fn delete(&self, path: &str) -> Result<(), RuntimeError> {
         let (status, body) = self
             .request(http::Method::DELETE, path, None::<&()>)
             .await?;
@@ -143,7 +150,7 @@ impl RuntimeClient {
         }
         Ok(())
     }
-    pub async fn websocket(&self, path: &str) -> Result<RuntimeSocket, RuntimeError> {
+    pub(crate) async fn websocket(&self, path: &str) -> Result<RuntimeSocket, RuntimeError> {
         let endpoint = self.resolved_endpoint()?;
         let mut url = self.url(&endpoint, path);
         let scheme = if url.scheme() == "https" { "wss" } else { "ws" };
@@ -154,6 +161,10 @@ impl RuntimeClient {
             format!("Bearer {}", endpoint.token)
                 .parse()
                 .expect("validated token"),
+        );
+        request.headers_mut().insert(
+            http::header::ACCEPT_LANGUAGE,
+            http::HeaderValue::from_static(aow_i18n::current_language().tag()),
         );
         let config = WebSocketConfig::default()
             .max_message_size(Some(64 * 1024 * 1024))
@@ -219,6 +230,10 @@ impl RuntimeClient {
             .request(method, self.url(&endpoint, path))
             .headers(headers)
             .bearer_auth(&endpoint.token)
+            .header(
+                http::header::ACCEPT_LANGUAGE,
+                aow_i18n::current_language().tag(),
+            )
             .timeout(Duration::from_secs(3600));
         if let Some(body) = body {
             request = request.body(body);

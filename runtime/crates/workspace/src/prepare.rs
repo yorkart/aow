@@ -83,7 +83,9 @@ pub async fn prepare(
     name: &str,
     git: &impl GitExecutor,
 ) -> Result<PreparedWorkspace> {
-    config.validate()?;
+    config
+        .validate()
+        .map_err(|error| anyhow::anyhow!(aow_i18n::text(error.0)))?;
     ensure!(
         config.workspace_mode != WorkspaceMode::Dynamic,
         aow_i18n::message(

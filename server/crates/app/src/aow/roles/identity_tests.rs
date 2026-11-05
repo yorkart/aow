@@ -99,7 +99,19 @@ async fn invalid_source_or_missing_builtin_file_does_not_publish_a_role_or_parti
     std::fs::create_dir(source.join(".codex/auth.json")).unwrap();
     assert!(manager.save_role(None, config(&source)).await.is_err());
     assert!(manager.agent_roles().unwrap().is_empty());
-    for entry in std::fs::read_dir(directory.path().join("aow/data/agent-roles")).unwrap() {
+    for entry in std::fs::read_dir(
+        manager
+            .agent_node()
+            .await
+            .unwrap()
+            .node_environment()
+            .await
+            .unwrap()
+            .state_dir
+            .join("data/environments/roles"),
+    )
+    .unwrap()
+    {
         assert_eq!(std::fs::read_dir(entry.unwrap().path()).unwrap().count(), 0);
     }
 }
@@ -136,7 +148,7 @@ async fn all_advertised_agents_have_builtin_identity_files_and_accept_only_sourc
         )
         .await
         .unwrap();
-    let presets = manager.role_identity_sources();
+    let presets = manager.node_role_identity_sources().await.unwrap();
     assert_eq!(presets.len(), 3);
     for preset in presets {
         let mut input = config(&source);

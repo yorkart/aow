@@ -132,7 +132,7 @@ async fn creating_tasks_and_helper_sessions_keeps_dependencies_out_of_runtime_li
     let directory = tempfile::tempdir().unwrap();
     let repo = directory.path().join("repo");
     std::fs::create_dir(&repo).unwrap();
-    git::git_output(&repo, &["init", "-b", "main"])
+    testing::git_output(&repo, &["init", "-b", "main"])
         .await
         .unwrap();
     let mut state = AppState::for_test(Default::default());
@@ -960,7 +960,7 @@ async fn task_role_reuses_acp_configuration_and_retries_without_creating_another
     let directory = tempfile::tempdir().unwrap();
     let repo = directory.path().join("repo");
     std::fs::create_dir(&repo).unwrap();
-    git::git_output(&repo, &["init", "-b", "main"])
+    testing::git_output(&repo, &["init", "-b", "main"])
         .await
         .unwrap();
     let mut state = AppState::for_test(Default::default());

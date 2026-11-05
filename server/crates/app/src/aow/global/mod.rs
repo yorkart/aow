@@ -8,18 +8,15 @@ impl AowManager {
             return Ok(());
         };
         let _operation = self.inner.project_operation.lock().await;
-        let node_root =
-            if let Some(runtime) = self.node() {
-                let value: serde_json::Value = runtime
-                    .get_json("/v1/environment")
-                    .await
-                    .map_err(super::workspace::node_error)?;
-                PathBuf::from(value["state_dir"].as_str().ok_or_else(|| {
-                    AowError::Invalid("Node state directory is unavailable".into())
-                })?)
-            } else {
-                state_directory.clone()
-            };
+        let node_root = if let Some(runtime) = self.node() {
+            runtime
+                .node_environment()
+                .await
+                .map_err(super::workspace::node_error)?
+                .state_dir
+        } else {
+            state_directory.clone()
+        };
         if self.node().is_some()
             && self
                 .inner

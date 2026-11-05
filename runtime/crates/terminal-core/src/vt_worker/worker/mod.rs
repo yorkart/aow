@@ -41,7 +41,7 @@ impl VtWorker {
             .spawn()?;
         #[cfg(target_os = "macos")]
         if let Some(stderr) = child.stderr.take() {
-            tokio::spawn(forward_worker_stderr(stderr));
+            aow_i18n::spawn(forward_worker_stderr(stderr));
         }
         let stdin = child
             .stdin
@@ -62,7 +62,7 @@ impl VtWorker {
             pending_write_bytes: Arc::new(AtomicUsize::new(0)),
             request_timeout: config.request_timeout,
         };
-        let task = tokio::spawn(actor::run_worker_actor(
+        let task = aow_i18n::spawn(actor::run_worker_actor(
             child,
             RpcClient::new(
                 stdin,

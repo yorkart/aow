@@ -63,7 +63,9 @@ pub(in crate::aow) fn default_notes_base() -> PathBuf {
 #[cfg(test)]
 pub(in crate::aow) async fn prepare_notes_base_directory(path: &Path) -> Result<PathBuf, AowError> {
     Ok(PathBuf::from(
-        super::super::notes::prepare_notes_directory(path).await?,
+        AowManager::in_memory()
+            .prepare_notes_directory(path)
+            .await?,
     ))
 }
 

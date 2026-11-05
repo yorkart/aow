@@ -34,7 +34,7 @@ Without just, build the worker with `npm --prefix vt-worker ci --ignore-scripts
 `cargo build --workspace --locked` or `cargo test --workspace --locked`.
 Runtime owns its execution implementation and build assets. Source builds require
 the sibling `../common/` workspace for IDs, wire contracts, SQLite infrastructure
-and the macOS logging adapter, and require no
+the locale engine and the macOS logging adapter, and require no
 Server or runtime-client source. Compiled runtime binaries deploy independently.
 
 The independent caller SDK lives at `../server/crates/runtime-client`. Server uses that SDK

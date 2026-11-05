@@ -1,5 +1,6 @@
 use super::*;
 use aow_runtime_client::{ExecutionReference, RuntimeClient, RuntimeError};
+use aow_runtime_contract::execution::{CapacityReservation, ExecutionInput, ExecutionSpec};
 use serde_json::{Value, json};
 use std::{fs::OpenOptions, io::Write, time::Duration};
 const REFERENCE: &str = "node-execution.json";
@@ -68,7 +69,7 @@ async fn sync(
     let snapshot = match client.execution(reference, after).await {
         Ok(snapshot) => snapshot,
         Err(RuntimeError::HttpStatus { status, .. }) if status == http::StatusCode::NOT_FOUND => {
-            let spec: Value = serde_json::from_slice(&std::fs::read(
+            let spec: ExecutionSpec = serde_json::from_slice(&std::fs::read(
                 store
                     .run_path(task_id, &reference.id)?
                     .join("node-spec.json"),
@@ -101,14 +102,14 @@ async fn sync(
             item.sequence == expected,
             "Execution event sequence has a gap"
         );
-        let event: RunEvent = serde_json::from_value(item.event.clone())?;
+        let event: RunEvent = item.event.into();
         if let RunEvent::Finished {
             status: finished, ..
         } = event
         {
             status = Some(finished);
         }
-        let mut value = item.event;
+        let mut value = serde_json::to_value(&event)?;
         value["_node_sequence"] = json!(item.sequence);
         writer.append(&value)?;
     }
@@ -152,7 +153,7 @@ fn transient(error: &RuntimeError) -> bool {
 async fn submit_intent(
     client: &RuntimeClient,
     reference: &ExecutionReference,
-    spec: Value,
+    spec: ExecutionSpec,
 ) -> Result<()> {
     loop {
         match client.submit_execution(reference, spec.clone()).await {
@@ -239,18 +240,17 @@ pub(super) async fn run(
             let mut prompt=task.input.render_prompt(&variables)?;
             if hosted {prompt=crate::hosting::prompt(&prompt);}
             let health=client.health().await?;
-            let node_id=health["node_id"].as_str().context("Runtime node ID is unavailable")?.to_owned();
+            let node_id=health.node_id;
             let mut environment=aow_config::environment::load_agent_environment_from(&store.config_dir,task.input.agent_id()).await?;
             environment.remove("PATH");
             let callback=aow_cli_access::Access::from_state(&store.state_dir)?.environment()?;
             environment.extend(callback);
             let mut reference=ExecutionReference{node_id,id:run.id.clone(),native_session:None};
-            let spec=json!({
-                "id":run.id,"repository_path":task.repository_path,"launch":task.launch,
-                "input":{"agent":task.input.agent,"prompt":prompt,"yolo":task.input.yolo,
-                    "workspace_mode":task.input.workspace.workspace_mode,"workspace_path":task.input.workspace.workspace_path,"base_branch":task.input.workspace.base_branch},
-                "agent_environment":environment,"capacity":{"key":task.id,"limit":task.input.max_concurrent_runs}
-            });
+            let spec=ExecutionSpec {
+                id:run.id.clone(),repository_path:task.repository_path.clone(),launch:task.launch.clone(),
+                input:ExecutionInput{agent:task.input.agent,prompt,yolo:task.input.yolo,workspace:task.input.workspace.clone()},
+                agent_environment:environment,capacity:Some(CapacityReservation{key:task.id.clone(),limit:task.input.max_concurrent_runs})
+            };
             crate::store::atomic_write(&store.run_path(task_id,&run.id)?.join("node-spec.json"),&serde_json::to_vec(&spec)?)?;
             save_reference(store,task_id,&reference)?;
             if let Err(error)=submit_intent(&client,&reference,spec).await {

@@ -685,7 +685,7 @@ async fn stalled_owned_send_bounds_force_takeover() {
     let polled = Arc::new(Notify::new());
     let stalled_polled = polled.clone();
     let send_runtime = runtime.clone();
-    let stalled = tokio::spawn(async move {
+    let stalled = aow_i18n::spawn(async move {
         send_owned(
             &mut PendingSink {
                 polled: stalled_polled,
@@ -1153,8 +1153,8 @@ async fn graceful_shutdown_reaps_canceled_spawn_with_unread_output() {
     let (release_tx, release_rx) = std::sync::mpsc::channel();
     // Reproduce create's ownership boundary: abort the awaiting task while
     // spawn_blocking still owns the uncommitted result and its permit.
-    let request = tokio::spawn(async move {
-        tokio::task::spawn_blocking(move || {
+    let request = aow_i18n::spawn(async move {
+        aow_i18n::spawn_blocking(move || {
             let spawned =
                 spawn_runtime_blocking("canceled-shutdown".to_owned(), spec, permit, None).unwrap();
             spawned_tx.send(spawned.runtime.child_pid.unwrap()).ok();
@@ -1180,7 +1180,7 @@ async fn graceful_shutdown_reaps_canceled_spawn_with_unread_output() {
     assert!(request.await.err().unwrap().is_cancelled());
 
     let shutdown_state = state.clone();
-    let shutdown = tokio::spawn(async move { shutdown_state.shutdown_all().await });
+    let shutdown = aow_i18n::spawn(async move { shutdown_state.shutdown_all().await });
     tokio::task::yield_now().await;
     assert!(!shutdown.is_finished());
     assert!(state.inner.shutting_down.load(Ordering::Acquire));
@@ -1209,7 +1209,7 @@ async fn graceful_shutdown_waits_for_in_flight_spawn_cleanup() {
         state.inner.in_flight_spawns.begin()
     };
     let shutdown_state = state.clone();
-    let shutdown = tokio::spawn(async move { shutdown_state.shutdown_all().await });
+    let shutdown = aow_i18n::spawn(async move { shutdown_state.shutdown_all().await });
 
     tokio::task::yield_now().await;
     assert!(

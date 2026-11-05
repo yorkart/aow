@@ -1,20 +1,13 @@
 use aow_filesystem::{SearchError, search_files};
-use aow_protocol::FileSearchRequest;
 use axum::{
     Json,
     extract::{Path, State},
     http::StatusCode,
 };
-use serde::Deserialize;
 
 use super::{HttpError, WorkspaceState as AppState};
 
-#[derive(Deserialize)]
-pub(crate) struct Request {
-    request_id: String,
-    #[serde(flatten)]
-    search: FileSearchRequest,
-}
+use aow_runtime_contract::workspace::SearchRequest as Request;
 
 pub(crate) async fn search(
     State(state): State<AppState>,

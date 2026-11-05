@@ -3,12 +3,9 @@
 use std::{
     collections::BTreeMap,
     convert::Infallible,
-    path::Path,
     sync::{Arc, Mutex},
 };
 
-#[cfg(test)]
-use aow_git_service::{GitChanges, GitWatcher};
 mod remote;
 use axum::{
     Router,
@@ -120,56 +117,7 @@ impl WorkspaceEvents {
 }
 
 async fn run(aow: AowManager, changes: watch::Sender<Snapshot>, reconcile: Arc<Notify>) {
-    if aow.node().is_some() {
-        remote::run(aow, changes, reconcile).await;
-    } else {
-        #[cfg(test)]
-        {
-            let roots = match aow.repository_roots() {
-                Ok(roots) => roots,
-                Err(error) => {
-                    tracing::warn!(%error, "Could not load repositories for Git watching");
-                    return;
-                }
-            };
-            let watcher = match GitWatcher::new(roots) {
-                Ok(watcher) => watcher,
-                Err(error) => {
-                    tracing::warn!(%error, "Could not start Git watching");
-                    return;
-                }
-            };
-            let mut receiver = watcher.subscribe();
-            let mut previous = GitChanges::default();
-            loop {
-                tokio::select! {
-                    _ = reconcile.notified() => {
-                        if let Ok(roots) = aow.repository_roots()
-                            && let Err(error) = watcher.set_repositories(roots) {
-                            tracing::warn!(%error, "Could not update Git watch roots");
-                        }
-                    },
-                    changed = receiver.changed() => {
-                        if changed.is_err() { return; }
-                        let next = receiver.borrow_and_update().clone();
-                        changes.send_modify(|snapshot| {
-                            snapshot.revision += 1;
-                            if previous.worktrees != next.worktrees {
-                                snapshot.projects = snapshot.revision;
-                            }
-                            snapshot.repositories.retain(|root, _| next.repositories.contains_key(Path::new(root)));
-                            for (root, revision) in &next.repositories {
-                                if previous.repositories.get(root) != Some(revision) {
-                                    snapshot.repositories.insert(root.to_string_lossy().into_owned(), snapshot.revision);
-                                }
-                            }
-                        });
-                        previous = next;
-                    },
-                }
-            }
-        }
-    }
+    remote::run(aow, changes, reconcile).await;
 }
 
 pub(crate) fn routes() -> Router<AppState> {

@@ -55,7 +55,7 @@ async fn operation(
         .unwrap_or_default();
     // Once admitted, the whole operation belongs to the node, including fences.
     // Losing the HTTP caller must not cancel cleanup between its two phases.
-    let result = tokio::spawn(aow_i18n::scope(language, async move {
+    let result = aow_i18n::spawn(aow_i18n::scope(language, async move {
         anyhow::ensure!(!*state.stopping.borrow(), "Runtime is stopping");
         if let Some(environment) = request.callback_environment {
             state.host.set_callback_environment(environment)?;
@@ -127,7 +127,9 @@ async fn events(
         return axum::http::StatusCode::CONFLICT.into_response();
     }
     let receiver = state.service.subscribe_sync();
-    ws.on_upgrade(move |socket| stream(state, receiver, socket, cursor.after.unwrap_or(head), head))
+    aow_i18n::http::upgrade(ws, move |socket| {
+        stream(state, receiver, socket, cursor.after.unwrap_or(head), head)
+    })
 }
 async fn stream(
     mut state: Conversations,
@@ -157,7 +159,7 @@ async fn stream(
         tokio::select! {
             _ = completion_tick.tick() => {
                 let host = state.host.clone();
-                let batch = tokio::task::spawn_blocking(move || host.completions.after(after)).await;
+                let batch = aow_i18n::spawn_blocking(move || host.completions.after(after)).await;
                 let Ok(Ok(batch)) = batch else { break; };
                 for (sequence, completion) in batch {
                     let message = ConversationEvent::Completion { journal_id: state.host.completions.id.clone(), sequence, completion };

@@ -91,8 +91,7 @@ pub(super) async fn run(
         // directories and rereading them; otherwise its next move is missed.
         for attempt in 0..3 {
             let scan = repositories.clone();
-            let Ok((current, desired)) =
-                tokio::task::spawn_blocking(move || collect_all(&scan)).await
+            let Ok((current, desired)) = aow_i18n::spawn_blocking(move || collect_all(&scan)).await
             else {
                 return;
             };

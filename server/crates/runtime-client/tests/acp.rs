@@ -1,4 +1,5 @@
 use anyhow::Result;
+use aow_runtime_client::testing::RuntimeTransport;
 use aow_runtime_client::{
     RuntimeClient,
     acp::{AcpClient, AcpObserver, ExecutionEnvironment, SessionCreation, TurnCompletion},

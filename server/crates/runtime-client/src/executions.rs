@@ -9,21 +9,8 @@ pub struct ExecutionReference {
     #[serde(default)]
     pub native_session: Option<crate::NativeSessionReference>,
 }
-#[derive(Debug, Deserialize)]
-pub struct ExecutionEvent {
-    pub sequence: u64,
-    pub event: Value,
-}
-#[derive(Debug, Deserialize)]
-pub struct ExecutionSnapshot {
-    pub id: String,
-    pub node_id: String,
-    pub head: u64,
-    pub terminal: bool,
-    pub events: Vec<ExecutionEvent>,
-    pub result: Option<Value>,
-    pub native_session: Option<crate::NativeSession>,
-}
+pub use aow_runtime_contract::execution::{ExecutionEvent, ExecutionSnapshot};
+use aow_runtime_contract::execution::{ExecutionSpec, SubmitExecution};
 fn path(id: &str) -> Result<String, RuntimeError> {
     if id.is_empty()
         || id.len() > 128
@@ -42,12 +29,15 @@ impl RuntimeClient {
     pub async fn submit_execution(
         &self,
         reference: &ExecutionReference,
-        spec: Value,
+        spec: ExecutionSpec,
     ) -> Result<(), RuntimeError> {
         let _: Value = self
             .put_json(
                 &path(&reference.id)?,
-                &json!({"node_id":reference.node_id,"spec":spec}),
+                &SubmitExecution {
+                    node_id: reference.node_id.clone(),
+                    spec,
+                },
             )
             .await?;
         Ok(())

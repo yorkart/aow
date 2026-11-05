@@ -93,12 +93,27 @@ pub async fn run_with_listener_and_vt_config(
         .with_ownership(acp.ownership());
     let executions = aow_exec_service::Executions::new(exec.clone(), id.clone(), sessions.clone());
     let instance_id = uuid::Uuid::new_v4().to_string();
-    let health = serde_json::json!({
-        "service": "aow-runtime-daemon", "api_version": 1,
-        "node_id": id, "instance_id": instance_id,
-        "version": env!("CARGO_PKG_VERSION"), "pid": std::process::id(),
-        "capabilities": ["acp-websocket", "terminal-websocket", "runtime-management", "agent-discovery", "native-sessions", "completion-events", "workspace-management", "execution-environments", "task-execution"],
-    });
+    let health = aow_runtime_contract::node::RuntimeHealth {
+        service: "aow-runtime-daemon".into(),
+        api_version: 1,
+        node_id: id,
+        instance_id,
+        version: env!("CARGO_PKG_VERSION").into(),
+        pid: std::process::id(),
+        capabilities: [
+            "acp-websocket",
+            "terminal-websocket",
+            "runtime-management",
+            "agent-discovery",
+            "native-sessions",
+            "completion-events",
+            "workspace-management",
+            "execution-environments",
+            "task-execution",
+        ]
+        .map(str::to_owned)
+        .into(),
+    };
     let environments = crate::environments::Environments::open(
         std::fs::canonicalize(&options.state_dir)?,
         acp.prober(),
@@ -119,6 +134,7 @@ pub async fn run_with_listener_and_vt_config(
             "/v1/terminal",
             aow_terminal_service::router(terminal.manager()),
         )
+        .layer(axum::middleware::from_fn(aow_i18n::http::middleware))
         .layer(middleware::from_fn_with_state(
             Auth {
                 token: Arc::from(options.token),

@@ -67,14 +67,7 @@ impl RuntimeClient {
         self.get_json("/v1/environment/discovered-path").await
     }
     pub async fn execution_path(&self) -> Result<Vec<std::path::PathBuf>, RuntimeError> {
-        #[derive(serde::Deserialize)]
-        struct Environment {
-            execution_path: Vec<std::path::PathBuf>,
-        }
-        Ok(self
-            .get_json::<Environment>("/v1/environment")
-            .await?
-            .execution_path)
+        Ok(self.node_environment().await?.execution_path)
     }
     pub async fn set_execution_path(
         &self,
@@ -83,7 +76,9 @@ impl RuntimeClient {
         let _: serde_json::Value = self
             .put_json(
                 "/v1/environment",
-                &serde_json::json!({"execution_path":paths}),
+                &aow_runtime_contract::environment::EnvironmentUpdate {
+                    execution_path: paths.to_vec(),
+                },
             )
             .await?;
         Ok(())

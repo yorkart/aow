@@ -40,10 +40,7 @@ pub(crate) async fn rename_file_path(
 ) -> Result<Json<RenameResult>, HttpError> {
     let _filesystem = state.aow.filesystem_access().await;
     super::node::runtime(&state)?
-        .workspace_operation(
-            "rename",
-            serde_json::json!({"path":decode_absolute(&path)?,"name":request.name,"file_only":true}),
-        )
+        .workspace_rename(&decode_absolute(&path)?, &request.name, true)
         .await
         .map(Json)
         .map_err(Into::into)

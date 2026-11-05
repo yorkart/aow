@@ -178,7 +178,7 @@ async fn cancellation_timeout_and_missing_executable_are_reported() {
     let root = TempDir::new().unwrap();
     let cancel = CancellationToken::new();
     let signal = cancel.clone();
-    tokio::spawn(async move {
+    aow_i18n::spawn(async move {
         tokio::time::sleep(Duration::from_millis(30)).await;
         signal.cancel();
     });

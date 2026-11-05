@@ -34,7 +34,7 @@ async fn events(
         )
             .into_response();
     }
-    ws.on_upgrade(move |socket| stream(service, cursor, socket))
+    aow_i18n::http::upgrade(ws, move |socket| stream(service, cursor, socket))
 }
 async fn send(socket: &mut WebSocket, value: serde_json::Value) -> Result<()> {
     tokio::time::timeout(
@@ -58,7 +58,7 @@ async fn stream(service: Completions, cursor: Cursor, mut socket: WebSocket) {
             return;
         }
         let log = service.clone();
-        let batch = tokio::task::spawn_blocking(move || log.read(after)).await;
+        let batch = aow_i18n::spawn_blocking(move || log.read(after)).await;
         match batch {
             Ok(Ok(events)) if !events.is_empty() => {
                 for mut event in events {

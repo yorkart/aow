@@ -1,38 +1,229 @@
-//! Node workspace operations and streaming file transport.
+//! Typed node workspace capabilities and streaming file transport.
 use crate::{RuntimeClient, RuntimeError, RuntimeSocket};
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use serde_json::{Value, json};
-use std::{
-    collections::BTreeMap,
-    path::{Path, PathBuf},
-};
-#[derive(Debug, Deserialize)]
-pub struct NodeMetadata {
-    pub exists: bool,
-    #[serde(default)]
-    pub file: bool,
-    #[serde(default)]
-    pub directory: bool,
-    #[serde(default)]
-    pub symlink: bool,
-    #[serde(default)]
-    pub size: u64,
-}
-#[derive(Debug, Deserialize)]
-pub struct GitCommandResult {
-    pub success: bool,
-    pub code: Option<i32>,
-    pub stdout: Vec<u8>,
-    pub stderr: Vec<u8>,
-}
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-pub struct WorkspaceChanges {
-    pub revision: u64,
-    pub worktrees: u64,
-    pub repositories: BTreeMap<PathBuf, u64>,
-}
+use aow_runtime_contract::workspace::*;
+use serde::de::DeserializeOwned;
+use std::path::{Path, PathBuf};
 impl RuntimeClient {
-    pub async fn workspace_clipboard(&self, body: reqwest::Body) -> Result<Value, RuntimeError> {
+    async fn workspace_request<R: DeserializeOwned>(
+        &self,
+        request: WorkspaceRequest,
+    ) -> Result<R, RuntimeError> {
+        self.post_json("/v1/workspace/operations", &request).await
+    }
+    pub async fn workspace_home(&self) -> Result<PathBuf, RuntimeError> {
+        let result: PathResponse = self.workspace_request(WorkspaceRequest::Home {}).await?;
+        Ok(result.path)
+    }
+    pub async fn workspace_terminal_defaults(&self) -> Result<String, RuntimeError> {
+        let result: TerminalDefaults = self
+            .workspace_request(WorkspaceRequest::TerminalDefaults {})
+            .await?;
+        Ok(result.shell)
+    }
+    pub async fn workspace_account(&self) -> Result<String, RuntimeError> {
+        let result: Account = self.workspace_request(WorkspaceRequest::Account {}).await?;
+        Ok(result.name)
+    }
+    pub async fn workspace_temporary_note(
+        &self,
+        root: &Path,
+        extension: &str,
+    ) -> Result<Note, RuntimeError> {
+        self.workspace_request(WorkspaceRequest::TemporaryNote {
+            root: root.into(),
+            extension: extension.into(),
+        })
+        .await
+    }
+    pub async fn workspace_list(
+        &self,
+        path: &Path,
+    ) -> Result<aow_protocol::DirectoryListing, RuntimeError> {
+        self.workspace_request(WorkspaceRequest::List { path: path.into() })
+            .await
+    }
+    pub async fn workspace_read(
+        &self,
+        path: &Path,
+    ) -> Result<aow_protocol::TextFile, RuntimeError> {
+        self.workspace_request(WorkspaceRequest::Read { path: path.into() })
+            .await
+    }
+    pub async fn workspace_canonicalize(
+        &self,
+        path: &Path,
+    ) -> Result<(PathBuf, bool), RuntimeError> {
+        let result: CanonicalPath = self
+            .workspace_request(WorkspaceRequest::Canonicalize { path: path.into() })
+            .await?;
+        Ok((result.path, result.directory))
+    }
+    pub async fn workspace_metadata(
+        &self,
+        path: &Path,
+        follow: bool,
+    ) -> Result<NodeMetadata, RuntimeError> {
+        self.workspace_request(WorkspaceRequest::Metadata {
+            path: path.into(),
+            follow,
+        })
+        .await
+    }
+    pub async fn workspace_create(
+        &self,
+        parent: &Path,
+        name: &str,
+        kind: EntryKind,
+    ) -> Result<CreatedEntry, RuntimeError> {
+        self.workspace_request(WorkspaceRequest::Create {
+            parent: parent.into(),
+            name: name.into(),
+            kind,
+        })
+        .await
+    }
+    pub async fn workspace_mkdir_all(&self, path: &Path) -> Result<(), RuntimeError> {
+        let _: Empty = self
+            .workspace_request(WorkspaceRequest::MkdirAll { path: path.into() })
+            .await?;
+        Ok(())
+    }
+    pub async fn workspace_rename(
+        &self,
+        path: &Path,
+        name: &str,
+        file_only: bool,
+    ) -> Result<aow_protocol::RenameResult, RuntimeError> {
+        self.workspace_request(WorkspaceRequest::Rename {
+            path: path.into(),
+            name: name.into(),
+            file_only,
+        })
+        .await
+    }
+    pub async fn workspace_delete(&self, path: &Path) -> Result<(), RuntimeError> {
+        let _: Empty = self
+            .workspace_request(WorkspaceRequest::Delete { path: path.into() })
+            .await?;
+        Ok(())
+    }
+    pub async fn workspace_git(
+        &self,
+        cwd: &Path,
+        args: &[&str],
+    ) -> Result<GitCommandResult, RuntimeError> {
+        self.workspace_request(WorkspaceRequest::GitCommand {
+            cwd: cwd.into(),
+            args: args.iter().map(|arg| (*arg).to_owned()).collect(),
+        })
+        .await
+    }
+    pub async fn workspace_git_status(
+        &self,
+        repo: &Path,
+    ) -> Result<aow_protocol::GitStatus, RuntimeError> {
+        self.workspace_request(WorkspaceRequest::GitStatus { repo: repo.into() })
+            .await
+    }
+    pub async fn workspace_git_repositories(
+        &self,
+        root: &Path,
+        depth: usize,
+    ) -> Result<Vec<aow_protocol::RepositorySummary>, RuntimeError> {
+        self.workspace_request(WorkspaceRequest::GitRepositories {
+            root: root.into(),
+            depth,
+        })
+        .await
+    }
+    pub async fn workspace_git_ignored(
+        &self,
+        root: &Path,
+        paths: &[PathBuf],
+    ) -> Result<aow_protocol::GitIgnoredPaths, RuntimeError> {
+        self.workspace_request(WorkspaceRequest::GitIgnored {
+            root: root.into(),
+            paths: paths.to_vec(),
+        })
+        .await
+    }
+    pub async fn workspace_git_pull(&self, repo: &Path) -> Result<(), RuntimeError> {
+        let _: Empty = self
+            .workspace_request(WorkspaceRequest::GitPull { repo: repo.into() })
+            .await?;
+        Ok(())
+    }
+    pub async fn workspace_git_push(&self, repo: &Path) -> Result<(), RuntimeError> {
+        let _: Empty = self
+            .workspace_request(WorkspaceRequest::GitPush { repo: repo.into() })
+            .await?;
+        Ok(())
+    }
+    pub async fn workspace_git_log(
+        &self,
+        repo: &Path,
+        limit: usize,
+    ) -> Result<aow_protocol::GitLog, RuntimeError> {
+        self.workspace_request(WorkspaceRequest::GitLog {
+            repo: repo.into(),
+            limit,
+        })
+        .await
+    }
+    pub async fn workspace_git_diff(
+        &self,
+        repo: &Path,
+        path: Option<&str>,
+        staged: bool,
+    ) -> Result<aow_protocol::GitDiff, RuntimeError> {
+        self.workspace_request(WorkspaceRequest::GitDiff {
+            repo: repo.into(),
+            path: path.map(str::to_owned),
+            staged,
+        })
+        .await
+    }
+    pub async fn workspace_git_commit_detail(
+        &self,
+        repo: &Path,
+        commit: &str,
+    ) -> Result<aow_protocol::GitCommitDetail, RuntimeError> {
+        self.workspace_request(WorkspaceRequest::GitCommitDetail {
+            repo: repo.into(),
+            commit: commit.into(),
+        })
+        .await
+    }
+    pub async fn workspace_git_commit_files(
+        &self,
+        repo: &Path,
+        commit: &str,
+    ) -> Result<aow_protocol::GitCommitFiles, RuntimeError> {
+        self.workspace_request(WorkspaceRequest::GitCommitFiles {
+            repo: repo.into(),
+            commit: commit.into(),
+        })
+        .await
+    }
+    pub async fn workspace_git_commit_diff(
+        &self,
+        repo: &Path,
+        commit: &str,
+        path: &str,
+        original_path: Option<&str>,
+    ) -> Result<aow_protocol::GitDiff, RuntimeError> {
+        self.workspace_request(WorkspaceRequest::GitCommitDiff {
+            repo: repo.into(),
+            commit: commit.into(),
+            path: path.into(),
+            original_path: original_path.map(str::to_owned),
+        })
+        .await
+    }
+    pub async fn workspace_clipboard(
+        &self,
+        body: reqwest::Body,
+    ) -> Result<ClipboardImage, RuntimeError> {
         let response = self
             .stream_request(
                 http::Method::POST,
@@ -41,58 +232,26 @@ impl RuntimeClient {
                 Some(body),
             )
             .await?;
-        let status = response.status();
-        Self::json(status, response.bytes().await?)
+        Self::json(response.status(), response.bytes().await?)
     }
-
-    pub async fn workspace_operation<R: DeserializeOwned>(
+    pub async fn search_workspace(
         &self,
-        operation: &str,
-        arguments: Value,
-    ) -> Result<R, RuntimeError> {
-        self.post_json(
-            "/v1/workspace/operations",
-            &json!({"operation":operation,"arguments":arguments}),
-        )
+        request: &SearchRequest,
+    ) -> Result<aow_protocol::FileSearchResult, RuntimeError> {
+        self.post_json("/v1/workspace/search", request).await
+    }
+    pub async fn cancel_workspace_search(&self, id: &str) -> Result<(), RuntimeError> {
+        self.delete(&format!(
+            "/v1/workspace/search/{}",
+            percent_encoding::utf8_percent_encode(id, percent_encoding::NON_ALPHANUMERIC)
+        ))
         .await
     }
-    pub async fn workspace_metadata(
+    pub async fn workspace_provider(
         &self,
-        path: &Path,
-        follow: bool,
-    ) -> Result<NodeMetadata, RuntimeError> {
-        self.workspace_operation("metadata", json!({"path":path,"follow":follow}))
-            .await
-    }
-    pub async fn workspace_canonicalize(
-        &self,
-        path: &Path,
-    ) -> Result<(PathBuf, bool), RuntimeError> {
-        #[derive(Deserialize)]
-        struct Canonical {
-            path: PathBuf,
-            directory: bool,
-        }
-        let result: Canonical = self
-            .workspace_operation("canonicalize", json!({"path":path}))
-            .await?;
-        Ok((result.path, result.directory))
-    }
-    pub async fn workspace_home(&self) -> Result<PathBuf, RuntimeError> {
-        #[derive(Deserialize)]
-        struct Home {
-            path: PathBuf,
-        }
-        let result: Home = self.workspace_operation("home", json!({})).await?;
-        Ok(result.path)
-    }
-    pub async fn workspace_git(
-        &self,
-        cwd: &Path,
-        args: &[&str],
-    ) -> Result<GitCommandResult, RuntimeError> {
-        self.workspace_operation("git_command", json!({"cwd":cwd,"args":args}))
-            .await
+        request: &ProviderRequest,
+    ) -> Result<serde_json::Value, RuntimeError> {
+        self.post_json("/v1/workspace/provider", request).await
     }
     pub async fn watch_workspaces(&self) -> Result<RuntimeSocket, RuntimeError> {
         self.websocket("/v1/workspace/watch").await

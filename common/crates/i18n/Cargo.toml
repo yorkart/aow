@@ -1,0 +1,10 @@
+[package]
+name = "aow-i18n-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+tokio = { version = "1.47", features = ["rt", "macros"] }
+axum = { version = "0.8", features = ["ws"] }

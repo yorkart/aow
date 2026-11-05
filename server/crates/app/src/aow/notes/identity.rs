@@ -1,6 +1,3 @@
-#[cfg(test)]
-use std::ffi::CStr;
-
 use super::*;
 
 async fn repository_remote_identity(
@@ -60,26 +57,6 @@ pub(in crate::aow) fn local_repository_identity(
     Ok(PathBuf::from("localhost")
         .join(validate_remote_component(account_name)?)
         .join(validate_remote_component(repository_name)?))
-}
-
-#[cfg(test)]
-pub(in crate::aow) fn process_account_name() -> Result<String, AowError> {
-    // SAFETY: The passwd record is copied into an owned String before returning.
-    unsafe {
-        let account = libc::getpwuid(libc::geteuid());
-        if !account.is_null() && !(*account).pw_name.is_null() {
-            let name = CStr::from_ptr((*account).pw_name)
-                .to_string_lossy()
-                .into_owned();
-            if !name.is_empty() {
-                return Ok(name);
-            }
-        }
-    }
-    Err(AowError::Invalid(
-        aow_i18n::text("validation.current_account_name_is_unavailable_for_local_notes_mapping")
-            .to_owned(),
-    ))
 }
 
 pub(in crate::aow) fn parse_remote_identity(remote: &str) -> Result<PathBuf, AowError> {

@@ -17,18 +17,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::{AppState, HttpError};
 #[cfg(test)]
-use git::git_output;
+use testing::git_output;
 
 mod agents;
 mod api;
 mod creation;
 mod error;
-#[cfg(test)]
-mod git;
 mod global;
 mod notes;
-#[cfg(test)]
-mod paths;
 mod project_avatar;
 mod projects;
 mod registry;
@@ -37,6 +33,8 @@ pub(crate) mod roles;
 mod sessions;
 mod settings;
 mod tasks;
+#[cfg(test)]
+mod testing;
 mod workspace;
 pub(crate) use tasks::cli_routes as task_cli_routes;
 mod validation;

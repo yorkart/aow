@@ -6,8 +6,6 @@ pub(crate) struct TerminalManager {
 }
 
 pub(super) struct ManagerInner {
-    #[cfg(test)]
-    pub(super) node_workspace: std::sync::atomic::AtomicBool,
     pub(super) metadata_path: Option<PathBuf>,
     pub(super) state: Mutex<ManagerState>,
     pub(super) terminald: TerminalClient,
@@ -18,10 +16,6 @@ pub(super) struct ManagerInner {
     pub(super) agent_operations: Mutex<HashMap<String, std::sync::Weak<tokio::sync::RwLock<()>>>>,
     pub(super) hosting_gates: Mutex<HashMap<String, std::sync::Weak<tokio::sync::Mutex<()>>>>,
     pub(super) hosting_workers: Mutex<HashSet<String>>,
-    #[cfg(test)]
-    pub(super) clipboard: clipboard::ClipboardStorage,
-    #[cfg(test)]
-    pub(super) clipboard_operation: tokio::sync::Mutex<()>,
     pub(super) task_stops: tokio::sync::broadcast::Sender<notifications::TaskStopNotification>,
     pub(super) task_completions:
         tokio::sync::broadcast::Sender<notifications::TaskStopNotification>,
