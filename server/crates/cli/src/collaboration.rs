@@ -61,7 +61,7 @@ enum TaskCommand {
     },
     /// Create an independent task. Reuse the request ID and payload on retries.
     #[command(
-        after_help = "change creates a worktree from project defaults. analyze uses the project checkout without edits. review requires --target-task with a clean, committed workspace and records its HEAD. Without --role, use the source task's ACP adapter. New tasks receive only the supplied task text and role instructions. After acceptance end your turn. The task explicitly reports milestones and conclusions through Inbox; ordinary turn completion sends no report. Do not poll or wait."
+        after_help = "change creates a worktree from project defaults. analyze uses the project checkout without edits. review requires --target-task with a clean, committed workspace and records its HEAD. Without --role, use the source task's ACP adapter. New tasks receive only the supplied task text; AoW prompt injection is currently limited to the project Router. After acceptance end your turn. Inbox reports require an explicit task report call; do not assume the recipient will send one. Do not poll or wait."
     )]
     Create {
         #[arg(long, value_parser = crate::parse_id)]

@@ -166,6 +166,22 @@ async fn multiple_turns_do_not_report_but_explicit_reports_wake_the_busy_parent_
     );
     assert_eq!(event["source"]["thread_id"], parent_thread);
     assert_eq!(event["source"]["request"], "wait");
+    let log = std::fs::read_to_string(directory.path().join("lineage-prompts.jsonl")).unwrap();
+    let prompts: Vec<Value> = log
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    let child_session = state.acp.snapshot(child_thread).await.unwrap();
+    for sent in prompts
+        .iter()
+        .filter(|sent| sent["sessionId"] == json!(child_session.session_id))
+    {
+        assert_eq!(
+            sent["prompt"],
+            json!([{ "type":"text", "text":"Check again" }]),
+            "source correlation stays in the database, not the provider prompt"
+        );
+    }
     let event_id = event["id"].as_str().unwrap();
     assert_eq!(db.status("child").unwrap(), Some(TaskStatus::Waiting));
     db.update_inbox(event_id, Some(true), Some(true)).unwrap();
@@ -186,6 +202,11 @@ async fn multiple_turns_do_not_report_but_explicit_reports_wake_the_busy_parent_
     until(|| async { state.acp.snapshot(parent_thread).await.unwrap().status == "idle" }).await;
     let snapshot = state.acp.snapshot(parent_thread).await.unwrap();
     assert_eq!(snapshot.prompt_receipts.len(), 1);
+    let wakeup_log =
+        std::fs::read_to_string(directory.path().join("lineage-prompts.jsonl")).unwrap();
+    let wakeup: Value = serde_json::from_str(wakeup_log.lines().last().unwrap()).unwrap();
+    assert_eq!(wakeup["prompt"].as_array().unwrap().len(), 1);
+    assert!(wakeup["prompt"][0]["_meta"]["aow/instructions"].is_null());
     assert!(
         snapshot
             .entries
@@ -206,6 +227,18 @@ async fn multiple_turns_do_not_report_but_explicit_reports_wake_the_busy_parent_
         StatusCode::BAD_REQUEST
     );
     assert_eq!(call(&app,"POST","/v1/tasks/parent/report",json!({"request_id":"wrong-owner","source_thread_id":child_thread,"kind":"result","message":"Not mine"})).await.0,StatusCode::BAD_REQUEST);
+    state
+        .acp
+        .start_prompt(child_thread, content("New direct instruction"))
+        .await
+        .unwrap();
+    until(|| async { state.acp.snapshot(child_thread).await.unwrap().status == "idle" }).await;
+    let direct = report_source(&state, &child, child_thread).await.unwrap();
+    assert_eq!(direct.thread_id, child_thread);
+    assert_eq!(
+        direct.request, "New direct instruction",
+        "a later user turn must not reuse an earlier assignment's source"
+    );
     state.acp.close_session(child_thread).await.unwrap();
     state.acp.close_session(parent_thread).await.unwrap();
 }
@@ -642,4 +675,77 @@ async fn daemon_outages_do_not_exhaust_durable_message_retries() {
             .state,
         DeliveryState::Delivered
     );
+}
+
+#[tokio::test]
+async fn router_receives_routing_guidance_for_queued_messages_and_wakeups() {
+    let directory = tempfile::tempdir().unwrap();
+    let state = state(directory.path());
+    let router = task(&state, directory.path(), "router").await;
+    let child = task(&state, directory.path(), "child").await;
+    let thread = router.initial_thread_id.as_ref().unwrap();
+    let message = new_message(
+        &router,
+        "dispatch".into(),
+        "Clarify this request".into(),
+        Some(MessageSource {
+            task_id: child.id.clone(),
+            thread_id: child.initial_thread_id.clone().unwrap(),
+            turn_id: None,
+            message_id: None,
+            request: "[@Deleted](mention://role/missing-role) follow up".into(),
+        }),
+    );
+    let db = state.tasks.test_db();
+    db.enqueue_message(&message).unwrap();
+    worker(&state).deliver(message).await.unwrap();
+    until(|| async { state.acp.snapshot(thread).await.unwrap().status == "idle" }).await;
+    let event = TaskEvent {
+        id: "router-report".into(),
+        request_id: "router-report".into(),
+        project_id: router.project_id.clone(),
+        task_id: child.id.clone(),
+        thread_id: child.initial_thread_id.clone().unwrap(),
+        kind: EventKind::Result,
+        message: "Investigation complete; original requester mentioned [@Deleted](mention://role/missing-role)".into(),
+        target: Some(EventTarget {
+            task_id: router.id.clone(),
+            thread_id: thread.clone(),
+        }),
+        source: None,
+        created_at: now(),
+    };
+    db.publish_event(&event).unwrap();
+    worker(&state)
+        .deliver(db.pending_messages().unwrap().pop().unwrap())
+        .await
+        .unwrap();
+    until(|| async { state.acp.snapshot(thread).await.unwrap().status == "idle" }).await;
+    let log = std::fs::read_to_string(directory.path().join("lineage-prompts.jsonl")).unwrap();
+    let prompts: Vec<Value> = log
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(prompts.len(), 2);
+    for sent in &prompts {
+        assert!(
+            sent["prompt"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("AoW Router instructions")
+        );
+    }
+    assert_eq!(prompts[0]["prompt"].as_array().unwrap().len(), 3);
+    assert_eq!(
+        prompts[0]["prompt"][1]["_meta"]["aow/message"]["source"]["task_id"],
+        child.id
+    );
+    assert_eq!(prompts[0]["prompt"][2]["text"], "Clarify this request");
+    assert_eq!(prompts[1]["prompt"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        prompts[1]["prompt"][1]["_meta"]["aow/event"]["id"],
+        event.id
+    );
+    assert_eq!(db.inbox(None, false, false, 0, 30).unwrap().items.len(), 1);
+    state.acp.close_session(thread).await.unwrap();
 }

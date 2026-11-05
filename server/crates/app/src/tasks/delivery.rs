@@ -3,6 +3,14 @@ use super::TaskService;
 use anyhow::Result;
 use aow_db::tasks::{DeliveryState, InboxPage, MessageDelivery, TaskEvent, TaskRecord, TaskStatus};
 impl TaskService {
+    pub(crate) fn message_for_prompt(
+        &self,
+        task: &str,
+        thread: &str,
+        id: &str,
+    ) -> Result<Option<MessageDelivery>> {
+        self.inner.tasks.message_for_prompt(task, thread, id)
+    }
     pub(crate) fn list(&self) -> Result<Vec<TaskRecord>> {
         self.inner.tasks.list()
     }

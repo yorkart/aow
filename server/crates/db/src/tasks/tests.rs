@@ -175,6 +175,21 @@ fn queued_messages_survive_restart_and_reject_request_id_reuse() {
     drop(db);
     let db = TaskDb::open(Some(&path)).unwrap();
     assert_eq!(db.pending_messages().unwrap(), vec![first.clone()]);
+    assert_eq!(
+        db.message_for_prompt("worker", "thread-worker", &first.id)
+            .unwrap(),
+        Some(first.clone())
+    );
+    assert!(
+        db.message_for_prompt("other-task", "thread-worker", &first.id)
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        db.message_for_prompt("worker", "other-thread", &first.id)
+            .unwrap()
+            .is_none()
+    );
     let mut retry = first.clone();
     retry.id = "new-id".into();
     assert_eq!(db.enqueue_message(&retry).unwrap(), first);

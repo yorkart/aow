@@ -97,6 +97,17 @@ pub(crate) async fn report_source(
     thread: &str,
 ) -> Result<MessageSource> {
     let snapshot = state.acp.snapshot(thread).await?;
+    if let Some(turn) = snapshot.turns.last() {
+        for (id, receipt) in &snapshot.prompt_receipts {
+            if receipt.user_entry_id == turn.user_entry_id
+                && let Some(message) = state.tasks.message_for_prompt(&task.id, thread, id)?
+                && let Some(origin) = message.source
+            {
+                return Ok(origin);
+            }
+        }
+    }
+    // Older conversations can still contain a previously injected source prefix.
     if let Some(turn) = snapshot.turns.last()
         && let Some(start) = snapshot
             .entries

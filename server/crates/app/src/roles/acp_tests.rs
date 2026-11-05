@@ -308,3 +308,244 @@ async fn acp_roles_follow_shared_configuration_and_reject_removed_or_unavailable
         }
     }
 }
+
+#[tokio::test]
+async fn only_the_project_router_injects_task_and_role_prompts_across_entry_points() {
+    use aow_db::tasks::{TaskRecord, TaskResource, TaskStatus};
+    use axum::{
+        body::{Body, to_bytes},
+        http::Request,
+    };
+    use tower::ServiceExt;
+    let (directory, state, role) = fixture().await;
+    let cwd = directory.path().to_str().unwrap();
+    let mut threads = Vec::new();
+    for is_router in [true, false] {
+        let prepared = state
+            .roles
+            .prepare_role_session(&role, &state, cwd, None, None)
+            .await
+            .unwrap();
+        let thread = prepared.resource().1.to_owned();
+        let task = TaskRecord {
+            id: if is_router { "router" } else { "worker" }.into(),
+            project_id: "project".into(),
+            status: TaskStatus::InProgress,
+            prompt: "Task goal".into(),
+            agent_id: "codex.test".into(),
+            agent_role_id: Some(role.id.clone()),
+            is_router,
+            source_task_id: None,
+            source_thread_id: None,
+            workspace_intent: Some("analyze".into()),
+            target_task_id: None,
+            target_revision: None,
+            workspace: cwd.into(),
+            workspace_mode: "existing".into(),
+            slug: None,
+            initial_thread_id: Some(thread.clone()),
+            pinned: false,
+            archived: false,
+            dependencies: vec![],
+            resources: vec![TaskResource {
+                kind: "acp".into(),
+                id: thread.clone(),
+            }],
+        };
+        state.tasks.test_db().insert(&task).unwrap();
+        threads.push(thread);
+    }
+    let router = &threads[0];
+    let worker = &threads[1];
+    let input = json!([
+        {"type":"text","text":format!("[@Reviewer](mention://role/{}) inspect this",role.id)},
+        {"type":"image","mimeType":"image/png","data":"fixture-image"}
+    ]);
+    let routed = state
+        .tasks
+        .acp_role_content(
+            &state.acp,
+            router,
+            serde_json::from_value(input.clone()).unwrap(),
+        )
+        .await
+        .unwrap();
+    let routed = serde_json::to_value(routed).unwrap();
+    assert_eq!(&routed.as_array().unwrap()[2..], input.as_array().unwrap());
+    assert!(
+        routed[0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("Review carefully")
+    );
+    let guidance = routed[1]["text"].as_str().unwrap();
+    assert!(
+        guidance.contains("persistent Router")
+            && guidance.contains("task create")
+            && guidance.contains("END YOUR TURN")
+    );
+    assert!(
+        !guidance.contains("task report")
+            && !guidance.contains("Any task conversation can create a child task")
+    );
+    assert_eq!(
+        serde_json::to_value(
+            state
+                .tasks
+                .acp_role_content(
+                    &state.acp,
+                    worker,
+                    serde_json::from_value(input.clone()).unwrap()
+                )
+                .await
+                .unwrap()
+        )
+        .unwrap(),
+        input
+    );
+    let unknown =
+        json!([{ "type":"text", "text":"[@Gone](mention://role/missing-role) just text" }]);
+    assert_eq!(
+        serde_json::to_value(
+            state
+                .tasks
+                .acp_role_content(
+                    &state.acp,
+                    worker,
+                    serde_json::from_value(unknown.clone()).unwrap()
+                )
+                .await
+                .unwrap()
+        )
+        .unwrap(),
+        unknown
+    );
+    assert!(
+        state
+            .tasks
+            .acp_role_content(&state.acp, router, serde_json::from_value(unknown).unwrap())
+            .await
+            .is_err()
+    );
+
+    // New role instances and native children/forks do not inherit the Router persona.
+    for parent in [router, worker] {
+        let child = state
+            .roles
+            .prepare_acp_child_session(
+                &state.acp,
+                "codex.test",
+                directory.path().into(),
+                SessionSource::Cli,
+                Some(aow_host_contract::instance::InstanceRef::acp(parent)),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(
+                state
+                    .tasks
+                    .acp_role_content(&state.acp, &child.thread_id, content())
+                    .await
+                    .unwrap()
+            )
+            .unwrap(),
+            serde_json::to_value(content()).unwrap()
+        );
+    }
+    state.acp.resume(worker).await.unwrap();
+    let fork = state.acp.fork_session(worker).await.unwrap();
+    assert_eq!(
+        serde_json::to_value(
+            state
+                .tasks
+                .acp_role_content(&state.acp, &fork.thread_id, content())
+                .await
+                .unwrap()
+        )
+        .unwrap(),
+        serde_json::to_value(content()).unwrap()
+    );
+
+    // CLI startup and browser input share the same application-owned policy.
+    crate::acp::start_task(state.clone(), worker.clone(), Some("CLI request".into()))
+        .unwrap()
+        .await
+        .unwrap()
+        .unwrap();
+    idle(&state, worker).await;
+    use futures_util::{SinkExt, StreamExt};
+    use tokio_tungstenite::tungstenite::Message;
+    let app = crate::acp::routes().with_state(state.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let routes = app.clone();
+    let server = tokio::spawn(async move { axum::serve(listener, routes).await.unwrap() });
+    let (mut socket, _) = tokio_tungstenite::connect_async(format!(
+        "ws://{address}/api/acp/sessions/{worker}/control"
+    ))
+    .await
+    .unwrap();
+    socket
+        .send(Message::Text(json!({"type":"claim"}).to_string().into()))
+        .await
+        .unwrap();
+    let token = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            match socket.next().await.unwrap().unwrap() {
+                Message::Text(text) => {
+                    let control: Value = serde_json::from_str(&text).unwrap();
+                    if let Some(token) = control["token"].as_str() {
+                        break token.to_owned();
+                    }
+                }
+                Message::Ping(_) => socket.flush().await.unwrap(),
+                message => panic!("Unexpected control message: {message:?}"),
+            }
+        }
+    })
+    .await
+    .unwrap();
+    let mut request = Request::post(format!("/api/acp/sessions/{worker}/actions"))
+        .header("content-type", "application/json")
+        .body(Body::from(
+            json!({"action":"prompt","content":[{"type":"text","text":"Browser request"}]})
+                .to_string(),
+        ))
+        .unwrap();
+    request
+        .headers_mut()
+        .insert("x-aow-acp-control", token.parse().unwrap());
+    let response = app.oneshot(request).await.unwrap();
+    let status = response.status();
+    let body = to_bytes(response.into_body(), 1_048_576).await.unwrap();
+    assert!(
+        status.is_success(),
+        "{status}: {}",
+        String::from_utf8_lossy(&body)
+    );
+    idle(&state, worker).await;
+    let log = std::fs::read_to_string(directory.path().join("lineage-prompts.jsonl")).unwrap();
+    let prompts: Vec<Value> = log
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(prompts.len(), 2);
+    for (sent, expected) in prompts.iter().zip(["CLI request", "Browser request"]) {
+        assert_eq!(sent["prompt"], json!([{ "type":"text", "text":expected }]));
+        assert_eq!(
+            sent["home"],
+            state
+                .roles
+                .role_home(&role.id)
+                .unwrap()
+                .to_string_lossy()
+                .as_ref()
+        );
+    }
+    socket.close(None).await.unwrap();
+    server.abort();
+    for session in state.acp.sessions(None).await.unwrap() {
+        state.acp.close_session(&session.thread_id).await.unwrap();
+    }
+}

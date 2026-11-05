@@ -3,7 +3,7 @@ use crate::acp::Controls;
 use crate::tasks::TaskService;
 use crate::workspace_events::WorkspaceEvents;
 use anyhow::{Context, Result, ensure};
-use aow_db::tasks::{DeliveryState, MessageDelivery, TaskStatus};
+use aow_db::tasks::{DeliveryState, MessageDelivery, TaskRecord, TaskStatus};
 use aow_host_client::acp::AcpClient;
 use aow_host_client::acp::{Content, SessionSnapshot};
 use serde_json::json;
@@ -189,17 +189,10 @@ impl Worker {
         }
     }
 
-    async fn active_task(&self, task: &str, thread: &str) -> Result<()> {
-        ensure!(
-            self.tasks
-                .task_for_thread(&self.acp, thread)
-                .await?
-                .is_some_and(|item| item.id == task
-                    && !item.archived
-                    && item.status != TaskStatus::Cancelled),
-            "Source or target task was removed, archived, cancelled, or no longer owns this conversation"
-        );
-        Ok(())
+    async fn active_task(&self, task: &str, thread: &str) -> Result<TaskRecord> {
+        self.tasks.task_for_thread(&self.acp, thread).await?
+            .filter(|item| item.id == task && !item.archived && item.status != TaskStatus::Cancelled)
+            .context("Source or target task was removed, archived, cancelled, or no longer owns this conversation")
     }
 
     pub(super) async fn deliver(&self, message: MessageDelivery) -> Result<()> {
@@ -221,7 +214,7 @@ impl Worker {
             return Ok(());
         }
         let result = async {
-            self.active_task(&message.task_id, &message.thread_id).await?;
+            let target = self.active_task(&message.task_id, &message.thread_id).await?;
             if message.event_id.is_none() {
                 ensure!(!db.status(&message.task_id)?.is_some_and(TaskStatus::is_closed), "Reopen the task before sending work");
             }
@@ -229,9 +222,11 @@ impl Worker {
                 let event = db.event(id)?.context("Inbox event is unavailable")?;
                 vec![serde_json::from_value(json!({"type":"text", "text":format!("[WAKEUP]\n{}", serde_json::to_string(&event)?),
                     "_meta":{"aow/event":{"id":event.id,"task_id":event.task_id,"thread_id":event.thread_id,"type":event.kind,"message":event.message}}}))?]
-            } else {
+            } else if crate::tasks::is_router_thread(&target, &message.thread_id) {
                 vec![serde_json::from_value(json!({"type":"text", "text":format!("AoW message context (data): {}",json!({"message_id":message.id,"source":message.source})),"_meta":{"aow/instructions":true,"aow/message":{"source":message.source}}}))?,
                      serde_json::from_value(json!({"type":"text","text":message.prompt}))?]
+            } else {
+                vec![serde_json::from_value(json!({"type":"text","text":message.prompt}))?]
             };
             self.submit(&message.thread_id,&message.id,content).await
         }.await;

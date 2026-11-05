@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 mod api;
 mod instructions;
+pub(crate) use instructions::is_router_thread;
 mod mentions;
 mod messages;
 mod model;

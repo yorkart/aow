@@ -472,6 +472,17 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
         worker_session.title, "Implement login",
         "instructions must not become the title"
     );
+    let log = std::fs::read_to_string(
+        Path::new(implementation["workspace"].as_str().unwrap()).join("lineage-prompts.jsonl"),
+    )
+    .unwrap();
+    let first_prompt: serde_json::Value =
+        serde_json::from_str(log.lines().next().unwrap()).unwrap();
+    assert_eq!(
+        first_prompt["prompt"],
+        json!([{ "type":"text", "text":"Implement login" }]),
+        "creating a role task sends only its task text"
+    );
     let (status, helper) = call(&app, "POST", "/v1/tasks", json!({"request_id":"helper","source_thread_id":worker,"prompt":"Investigate the API","intent":"analyze"})).await;
     assert_eq!(status, StatusCode::OK, "{helper}");
     assert_eq!(helper["source_task_id"], "implementation");
@@ -604,17 +615,10 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
         )
         .await
         .unwrap();
-    let text = injected
-        .iter()
-        .filter_map(|block| block.data["text"].as_str())
-        .collect::<Vec<_>>()
-        .join("\n");
-    assert!(
-        text.contains("implementation")
-            && text.contains("main_thread_id")
-            && text.contains("task report")
+    assert_eq!(
+        serde_json::to_value(injected).unwrap(),
+        json!([{ "type":"text", "text":"Continue design" }])
     );
-    assert!(!text.contains("task run "));
     let (_, details) = call(&app, "GET", "/v1/tasks/implementation", json!({})).await;
     assert_eq!(details["conversations"].as_array().unwrap().len(), 2);
     assert!(details.get("runs").is_none());

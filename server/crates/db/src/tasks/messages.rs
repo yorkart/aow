@@ -69,6 +69,24 @@ pub(super) fn for_event(connection: &Connection, event: &str) -> Result<Option<M
 }
 
 impl TaskDb {
+    /// Correlate an ACP admission receipt without adding routing data to the prompt.
+    pub fn message_for_prompt(
+        &self,
+        task: &str,
+        thread: &str,
+        id: &str,
+    ) -> Result<Option<MessageDelivery>> {
+        decode(
+            self.lock()?
+                .query_row(
+                    "SELECT payload FROM task_messages WHERE id=?1 AND task_id=?2 AND thread_id=?3",
+                    params![id, task, thread],
+                    |row| row.get(0),
+                )
+                .optional()?,
+        )
+    }
+
     pub fn message_for_request(
         &self,
         task: &str,
