@@ -23,7 +23,7 @@ export function TaskProperties({ project, worktree }: { project: AowProject; wor
   const scope = useTaskScope();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  if (!scope) return null;
+  if (!scope || scope.task.is_router) return null;
   const { task } = scope;
   const related = scope.tasks.filter(item => item.project_id === task.project_id);
   const parent = related.find(item => item.id === task.source_task_id);
@@ -42,8 +42,7 @@ export function TaskProperties({ project, worktree }: { project: AowProject; wor
   const branch = worktree.detached ? `${t('tasks.detached_head')} · ${worktree.head.slice(0, 7)}` : worktree.branch;
   return <section className="task-properties" aria-label={t('tasks.properties')} aria-busy={saving}>
     <section className="task-property-group"><h3>{t('tasks.work')}</h3><dl>
-      <Property label={t('tasks.status')}>{task.is_router ? <span className="task-property-empty">—</span>
-        : <TaskStatusPicker status={task.status} disabled={saving || task.archived} onChange={status => void changeStatus(status)} />}</Property>
+      <Property label={t('tasks.status')}><TaskStatusPicker status={task.status} disabled={saving || task.archived} onChange={status => void changeStatus(status)} /></Property>
       <Property label={t('tasks.project')}><button type="button" className="task-property-link" title={project.name} disabled={!scope.openProject} onClick={scope.openProject}>
         <Folder size={16} /><span>{project.name}</span><ArrowUpRight size={13} />
       </button></Property>

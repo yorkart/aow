@@ -2078,7 +2078,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const renderSidebar = () => (
     <aside className="project-aow-right" hidden={!rightSidebarVisible}>
       <nav aria-label={t("navigation.aow_side_views")}>
-        {taskScope && <button className={rightView === 'properties' ? 'active' : ''} title={t('tasks.properties')} aria-label={t('tasks.properties')} onClick={() => setRightView('properties')}><ListTodo /></button>}
+        {taskScope && !taskScope.task.is_router && <button className={rightView === 'properties' ? 'active' : ''} title={t('tasks.properties')} aria-label={t('tasks.properties')} onClick={() => setRightView('properties')}><ListTodo /></button>}
         <button className={rightView === 'conversations' ? 'active' : ''} title={t("navigation.conversation")} aria-label={t("navigation.conversation")} onClick={() => setRightView('conversations')}><MessageSquare /></button>
         <button className={rightView === 'automations' ? 'active' : ''} title={t("navigation.automation")} aria-label={t("navigation.automation")} onClick={() => setRightView('automations')}><CalendarClock /></button>
         <span className="project-aow-view-separator" aria-hidden="true" />
@@ -2121,7 +2121,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
       <div className="project-aow-right-content" hidden={rightView !== 'pullRequests'}>
         <PullRequestsPanel key={'pull-requests:' + worktree.path} repository={worktree.path} visible={active && rightSidebarVisible && rightView === 'pullRequests'} activeNumber={activePullRequest?.number} activeProvider={activePullRequest?.provider} activeRemote={activePullRequest?.remote} onOpen={pr => selectTab(() => openPullRequest(pr))} />
       </div>
-      {taskScope && <div className="project-aow-right-content" hidden={rightView !== 'properties'}><TaskProperties key={taskScope.task.id} project={project} worktree={worktree} /></div>}
+      {taskScope && !taskScope.task.is_router && <div className="project-aow-right-content" hidden={rightView !== 'properties'}><TaskProperties key={taskScope.task.id} project={project} worktree={worktree} /></div>}
       <div className="project-aow-right-content" hidden={rightView !== 'conversations'}>
         <ConversationPanel key={scope} workspace={worktree.path} visible={active && rightSidebarVisible && rightView === 'conversations'}
           activeTerminalId={terminalDock.visible ? terminalDock.terminalId : activeTerminalId}

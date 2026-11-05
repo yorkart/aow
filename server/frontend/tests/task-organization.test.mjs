@@ -355,11 +355,16 @@ try {
     await row('Router').waitFor();
     await surface.getByRole('tab').filter({ hasText: 'router-thread' }).waitFor();
     assert.equal(await surface.locator('.task-collaboration').count(), 0);
+    assert.equal(await surface.getByRole('button', { name: 'Properties', exact: true }).count(), 0, 'Router is a persistent conversation entry without task properties');
+    assert.equal(await surface.locator('.task-properties').count(), 0);
+    await surface.locator('.conversation-instance').filter({ hasText: 'router-thread' }).waitFor();
     await page.reload();
     await row('Router').waitFor();
     await sidebar.getByRole('button', { name: 'Open project Router', exact: true }).click();
     assert.equal(routerCreations, 1, 'opening the persistent Router reuses its task and conversation');
     assert.equal(await page.getByRole('dialog').count(), 0);
+    assert.equal(await surface.getByRole('button', { name: 'Properties', exact: true }).count(), 0);
+    await surface.locator('.conversation-instance').filter({ hasText: 'router-thread' }).waitFor();
     tasks[2].source_task_id = tasks[1].id;
     await row(tasks[1].prompt).getByRole('button', { name: tasks[1].prompt, exact: true }).click();
     await page.reload();
