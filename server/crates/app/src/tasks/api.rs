@@ -118,6 +118,7 @@ async fn update(
             request.dependencies.as_deref(),
         )
         .map_err(|error| crate::instances::invalid(error.to_string()))?;
+    state.workspace_events.projects_changed();
     Ok(StatusCode::NO_CONTENT)
 }
 

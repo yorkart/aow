@@ -49,6 +49,9 @@ async fn task(state: &AppState, root: &Path, id: &str) -> TaskRecord {
         id: id.into(),
         project_id: "project".into(),
         status: TaskStatus::Todo,
+        created_at: Some(1_700_000_000_000),
+        updated_at: Some(1_700_000_000_000),
+        completed_at: None,
         prompt: id.into(),
         agent_id: "test".into(),
         agent_role_id: None,
@@ -153,7 +156,7 @@ async fn multiple_turns_do_not_report_but_explicit_reports_wake_the_busy_parent_
             .items
             .is_empty()
     );
-    db.set_status("child", TaskStatus::Waiting).unwrap();
+    db.set_status("child", TaskStatus::Blocked).unwrap();
     let app = crate::tasks::cli_routes().with_state(state.clone());
     let request = json!({"request_id":"poc-conclusion","source_thread_id":child_thread,"kind":"progress","message":"POC confirmed","target_thread_id":parent_thread});
     let (status, event) = call(&app, "POST", "/v1/tasks/child/report", request.clone()).await;
@@ -183,7 +186,7 @@ async fn multiple_turns_do_not_report_but_explicit_reports_wake_the_busy_parent_
         );
     }
     let event_id = event["id"].as_str().unwrap();
-    assert_eq!(db.status("child").unwrap(), Some(TaskStatus::Waiting));
+    assert_eq!(db.status("child").unwrap(), Some(TaskStatus::Blocked));
     db.update_inbox(event_id, Some(true), Some(true)).unwrap();
     assert_eq!(
         state.acp.snapshot(parent_thread).await.unwrap().status,

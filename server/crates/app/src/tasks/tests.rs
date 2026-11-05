@@ -44,6 +44,9 @@ async fn task_dependencies_do_not_cascade_archive_or_delete() {
                 id: id.into(),
                 project_id: "project".into(),
                 status: TaskStatus::Todo,
+                created_at: Some(1_700_000_000_000),
+                updated_at: Some(1_700_000_000_000),
+                completed_at: None,
                 prompt: id.into(),
                 agent_id: "agent".into(),
                 agent_role_id: None,
@@ -625,25 +628,33 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
     let (status,event)=call(&app,"POST","/v1/tasks/implementation/report",json!({"request_id":"milestone","source_thread_id":helper_thread,"kind":"progress","message":"Design ready"})).await;
     assert_eq!(status, StatusCode::OK, "{event}");
     assert_eq!(event["target"]["thread_id"], source);
-    for status in ["in_review", "done"] {
-        assert_eq!(
-            call(
-                &app,
-                "POST",
-                "/v1/tasks/implementation/status",
-                json!({"source_thread_id":worker,"status":status})
-            )
-            .await
-            .0,
-            StatusCode::OK
-        );
+    for status in ["backlog", "in_review", "done", "in_progress", "done"] {
+        let (code, updated) = call(
+            &app,
+            "POST",
+            "/v1/tasks/implementation/status",
+            json!({"source_thread_id":worker,"status":status}),
+        )
+        .await;
+        assert_eq!(code, StatusCode::OK);
+        assert_eq!(updated["status"], status);
+        assert!(updated["created_at"].as_i64().unwrap() > 0);
+        assert_eq!(updated["created_at"], implementation["created_at"]);
+        assert!(updated["updated_at"].as_i64().unwrap() >= updated["created_at"].as_i64().unwrap());
+        if status == "done" {
+            assert_eq!(updated["completed_at"], updated["updated_at"]);
+        } else {
+            assert!(updated["completed_at"].is_null());
+        }
+        let (_, details) = call(&app, "GET", "/v1/tasks/implementation", json!({})).await;
+        assert_eq!(details["task"], updated);
     }
     assert_eq!(
         call(
             &app,
             "POST",
             "/v1/tasks/implementation/status",
-            json!({"status":"invalid","source_thread_id":source})
+            json!({"status":"waiting","source_thread_id":source})
         )
         .await
         .0,

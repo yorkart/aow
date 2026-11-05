@@ -96,7 +96,7 @@ enum TaskCommand {
     Status {
         #[arg(value_parser = crate::parse_id)]
         id: String,
-        #[arg(value_parser = ["todo", "in_progress", "waiting", "in_review", "done", "blocked", "cancelled"])]
+        #[arg(value_parser = ["backlog", "todo", "in_progress", "in_review", "done", "cancelled", "blocked"])]
         status: String,
         #[arg(long, value_parser = crate::parse_id)]
         source_thread: String,

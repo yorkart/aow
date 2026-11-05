@@ -6,7 +6,7 @@ import { TaskScopeProvider } from '../src/features/tasks/TaskScope';
 import type { WorkTask } from '../src/features/tasks/api';
 import '../src/styles.css';
 
-const task: WorkTask = { id: 'task', project_id: 'project', workspace: '/repo', prompt: 'Task', agent_id: 'codex',
+const task: WorkTask = { status: 'todo', created_at: null, updated_at: null, completed_at: null, id: 'task', project_id: 'project', workspace: '/repo', prompt: 'Task', agent_id: 'codex',
   workspace_mode: 'existing', slug: null, initial_thread_id: 'root', pinned: false, archived: false,
   resources: [{ kind: 'acp', id: 'root' }], dependencies: ['other'] };
 const other: WorkTask = { ...task, id: 'other', resources: [{ kind: 'acp', id: 'other' }], dependencies: [] };

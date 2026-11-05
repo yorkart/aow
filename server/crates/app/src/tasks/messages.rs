@@ -161,7 +161,7 @@ pub(super) async fn status(
     Json(request): Json<Status>,
 ) -> Result<Json<Task>, HttpError> {
     let _operation = state.tasks.task_resource_access().await;
-    let mut task = find_task(&state, &id)?;
+    let task = find_task(&state, &id)?;
     if let Some(thread) = &request.source_thread_id
         && source_task(&state, thread).await?.project_id != task.project_id
     {
@@ -173,7 +173,6 @@ pub(super) async fn status(
         .tasks
         .set_status(&id, request.status)
         .map_err(|error| invalid(error.to_string()))?;
-    task.status = request.status;
     if request.status == TaskStatus::Cancelled {
         for session in state
             .acp
@@ -203,5 +202,5 @@ pub(super) async fn status(
     }
     state.workspace_events.projects_changed();
     state.collaboration.start(&state);
-    Ok(Json(task.into()))
+    Ok(Json(find_task(&state, &id)?.into()))
 }

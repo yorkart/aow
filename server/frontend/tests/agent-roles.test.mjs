@@ -55,7 +55,7 @@ try {
       } else if (path === '/api/acp/settings') data = settings;
       else if (path === '/api/acp/agents') data = acpList;
       else if (path === '/api/tasks' && request.method() === 'POST') {
-        data = { ...request.postDataJSON(), id: 'task-role', resources: [] }; tasks.push(data);
+        data = { ...request.postDataJSON(), status: 'in_progress', created_at: null, updated_at: null, completed_at: null, id: 'task-role', resources: [] }; tasks.push(data);
       } else if (path === '/api/projects') data = [{ id: 'p', name: 'Project', registered_path: '/repo', worktrees: [{ id: 'w', path: '/repo', branch: 'main', is_main: true }] }];
       return route.fulfill({ json: data });
     });

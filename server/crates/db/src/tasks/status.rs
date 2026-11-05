@@ -8,21 +8,21 @@ use serde::{Deserialize, Serialize, de::value::StrDeserializer};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TaskStatus {
+    Backlog,
     Todo,
     InProgress,
-    Waiting,
     InReview,
     Done,
-    Blocked,
     Cancelled,
+    Blocked,
 }
 
 impl TaskStatus {
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::Backlog => "backlog",
             Self::Todo => "todo",
             Self::InProgress => "in_progress",
-            Self::Waiting => "waiting",
             Self::InReview => "in_review",
             Self::Done => "done",
             Self::Blocked => "blocked",
@@ -33,7 +33,7 @@ impl TaskStatus {
     pub const fn is_closed(self) -> bool {
         match self {
             Self::Done | Self::Cancelled => true,
-            Self::Todo | Self::InProgress | Self::Waiting | Self::InReview | Self::Blocked => false,
+            Self::Backlog | Self::Todo | Self::InProgress | Self::InReview | Self::Blocked => false,
         }
     }
 }

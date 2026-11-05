@@ -2121,7 +2121,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
       <div className="project-aow-right-content" hidden={rightView !== 'pullRequests'}>
         <PullRequestsPanel key={'pull-requests:' + worktree.path} repository={worktree.path} visible={active && rightSidebarVisible && rightView === 'pullRequests'} activeNumber={activePullRequest?.number} activeProvider={activePullRequest?.provider} activeRemote={activePullRequest?.remote} onOpen={pr => selectTab(() => openPullRequest(pr))} />
       </div>
-      {taskScope && <div className="project-aow-right-content" hidden={rightView !== 'properties'}><TaskProperties key={taskScope.task.id} /></div>}
+      {taskScope && <div className="project-aow-right-content" hidden={rightView !== 'properties'}><TaskProperties key={taskScope.task.id} project={project} worktree={worktree} /></div>}
       <div className="project-aow-right-content" hidden={rightView !== 'conversations'}>
         <ConversationPanel key={scope} workspace={worktree.path} visible={active && rightSidebarVisible && rightView === 'conversations'}
           activeTerminalId={terminalDock.visible ? terminalDock.terminalId : activeTerminalId}
@@ -2910,7 +2910,8 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
             const worktree = project?.worktrees.find(item => item.path === task.workspace);
             if (!project || !worktree || busyWorktrees.has(worktree.path)) return null;
             const scope = taskScopeKey(task.id);
-            return <TaskScopeProvider key={task.id} task={task} tasks={taskState.tasks} instances={taskGraph.items} onOpenTask={selectTask}>
+            return <TaskScopeProvider key={task.id} task={task} tasks={taskState.tasks} instances={taskGraph.items} onOpenTask={selectTask}
+              onOpenProject={() => selectWorktree(project.worktrees.find(item => item.is_main)?.path ?? project.registered_path)}>
               <ProjectTerminalDockProvider project={project} worktree={worktree} controls={terminalDockControls} onShow={() => setBottomPanel(undefined)}>
                 <WorkspaceSurface globalTabs={globalTabs.tabs} browserPath={browserPath} locationSource={locationSource(scope)}
                   initialEntry={taskMode && activeTaskId === task.id && initialEntry?.workspacePath === worktree.path ? initialEntry : undefined}

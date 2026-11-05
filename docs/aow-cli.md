@@ -61,7 +61,7 @@ Inbox 由会话主动调用 `task report` 产生，支持 `result`、`progress`�
 
 报告与待投递消息在同一事务内保存。接收会话空闲后，以 `[WAKEUP]` 触发新一轮，携带事件 ID、报告任务及会话、来源请求和报告正文。Router 或父任务据此识别工作并处理新消息；需要向上汇总时可再次显式报告。消息来源通过持久化投递记录与 ACP 接收凭据关联，无需在普通任务的模型输入中插入来源上下文。重复投递通过 ACP 消息接收凭据去重，已经接收但中断的轮次不会自动重跑。Inbox 的已读、归档不影响投递；接收会话无法恢复时保留报告和错误，支持重试。
 
-Task 状态独立维护：`todo`、`in_progress`、`waiting`、`in_review`、`done`、`blocked`、`cancelled`。首次分配进入进行中，轮次结束或发送报告不会自动完成 Task。通过 `task status` 或 Properties 更新状态；已完成或取消的 Task 要先显式重新打开才能发送新工作。取消阻止排队工作并中断任务会话，不删除会话、工作区或 Inbox。归档与业务状态互不替代。
+Task 状态独立维护：`backlog`、`todo`、`in_progress`、`in_review`、`done`、`cancelled`、`blocked`。首次分配进入进行中，轮次结束或发送报告不会自动完成 Task。通过 `task status` 或 Properties 更新状态；已完成或取消的 Task 要先显式重新打开才能发送新工作。取消阻止排队工作并中断任务会话，不删除会话、工作区或 Inbox。归档与业务状态互不替代。Properties 按 Work、Relationships、Workspace、About 展示状态、项目、父子任务、分支、目录和时间。`created_at`、`updated_at`、`completed_at` 为毫秒时间戳；标记 Done 记录完成时间，重新打开清空完成时间。未记录过的历史时间为空；旧 Waiting 状态一次性迁移为 Blocked。
 
 升级会保留任务、ACP 会话、已有 Inbox、待投递消息和旧角色会话的工作区策略，移除旧执行记录表。独立的自动化任务及其执行记录不受此调整影响。
 

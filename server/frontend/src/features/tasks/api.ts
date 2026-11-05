@@ -3,13 +3,16 @@ import type { AcpSessionInfo } from '../acp';
 import { mentionPreview } from '../agent-roles/mentions';
 
 export interface TaskResource { kind: 'acp' | 'terminal'; id: string }
-export const taskStatuses = ['todo', 'in_progress', 'waiting', 'in_review', 'done', 'blocked', 'cancelled'] as const;
+export const taskStatuses = ['backlog', 'todo', 'in_progress', 'in_review', 'done', 'cancelled', 'blocked'] as const;
 export type TaskStatus = typeof taskStatuses[number];
 export interface WorkTask {
   id: string;
   project_id: string;
   prompt: string;
-  status?: TaskStatus;
+  status: TaskStatus;
+  created_at: number | null;
+  updated_at: number | null;
+  completed_at: number | null;
   agent_id: string;
   agent_role_id?: string | null;
   is_router?: boolean;

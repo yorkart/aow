@@ -15,7 +15,9 @@ try {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
     t.after(() => context.close());
     await context.addInitScript(() => localStorage.setItem('aow.language', 'en-US'));
-    let failDelete = false, nextTerminal = 0, routerCreations = 0;
+    let failStatus = false, failDelete = false, nextTerminal = 0, routerCreations = 0;
+    const createdAt = Date.parse('2026-11-05T09:00:00Z');
+    let updatedAt = createdAt;
     const tasks = [], sessions = [], terminals = [], creations = [], deleted = [], worktreeRequests = [];
     const worktree = { id: 'wt', project_id: 'project', path: '/repo', branch: 'main', head: 'abc', is_main: true, detached: false, locked: false, prunable: false, color: 'default' };
     const project = { id: 'project', name: 'Task project', registered_path: '/repo', common_git_dir: '/repo/.git', notes_path: '/notes', worktrees: [worktree] };
@@ -51,7 +53,7 @@ try {
         data = tasks.find(task => task.is_router);
         if (!data) {
           const first = session('router-thread');
-          data = { id: 'router-project', project_id: 'project', prompt: 'Router', agent_id: 'test', is_router: true, workspace: '/repo', workspace_mode: 'existing', dependencies: [], pinned: false, archived: false, initial_thread_id: first.thread_id, resources: [{ kind: 'acp', id: first.thread_id }] };
+          data = { status: 'todo', created_at: createdAt, updated_at: createdAt, completed_at: null, id: 'router-project', project_id: 'project', prompt: 'Router', agent_id: 'test', is_router: true, workspace: '/repo', workspace_mode: 'existing', dependencies: [], pinned: false, archived: false, initial_thread_id: first.thread_id, resources: [{ kind: 'acp', id: first.thread_id }] };
           tasks.push(data);
         }
       }
@@ -61,15 +63,17 @@ try {
           const workspace = input.workspace_mode === 'new_worktree' ? '/repo-isolated' : input.workspace;
           if (input.workspace_mode === 'new_worktree') project.worktrees.push({ ...worktree, id: 'new-wt', path: workspace, branch: `task/${input.request_id}-isolated-implementation`, is_main: false });
           const first = session(`initial-${tasks.length}`, workspace);
-          data = { ...input, status: 'in_progress', workspace, slug: null, id: input.request_id, initial_thread_id: first.thread_id, pinned: false, archived: false, resources: [{ kind: 'acp', id: first.thread_id }] };
+          data = { ...input, created_at: createdAt, updated_at: createdAt, completed_at: null, status: 'in_progress', workspace, slug: null, id: input.request_id, initial_thread_id: first.thread_id, pinned: false, archived: false, resources: [{ kind: 'acp', id: first.thread_id }] };
           tasks.push(data);
         } else data = tasks;
       } else if (path.startsWith('/api/tasks/') && request.method() === 'GET') {
         const task = tasks.find(task => task.id === path.split('/').at(-1));
         data = { task, conversations: sessions.filter(session => task.resources.some(resource => resource.kind === 'acp' && resource.id === session.thread_id)), delegated: [] };
       } else if (path.startsWith('/api/tasks/') && path.endsWith('/status') && request.method() === 'POST') {
+        if (failStatus) return route.fulfill({ status: 500, json: { error: 'Status could not be saved' } });
         data = tasks.find(task => task.id === path.split('/').at(-2));
-        Object.assign(data, request.postDataJSON());
+        Object.assign(data, request.postDataJSON(), { updated_at: updatedAt += 60_000 });
+        data.completed_at = data.status === 'done' ? data.updated_at : null;
       } else if (path.startsWith('/api/tasks/') && request.method() === 'PATCH') {
         Object.assign(tasks.find(task => task.id === path.split('/').at(-1)), request.postDataJSON());
         return route.fulfill({ status: 204 });
@@ -155,26 +159,65 @@ try {
       await surface.getByRole('tab').first().waitFor();
     };
     await create('Implement login');
+    assert.equal(await row('Implement login').locator('small').count(), 0, 'task rows show only their status icon and title');
     assert.equal(await surface.getByRole('button', { name: 'ACP panel', exact: true }).count(), 0);
     assert.equal(await surface.getByRole('button', { name: 'Terminal panel', exact: true }).count(), 0);
     assert.equal(await surface.getByRole('button', { name: 'Conversation', exact: true }).count(), 1);
     assert.equal(await surface.getByRole('button', { name: 'Automation', exact: true }).count(), 1);
     assert.equal(await surface.locator('.task-collaboration').count(), 0);
-    assert.equal(await surface.getByRole('combobox', { name: 'Task status', exact: true }).isVisible(), false);
+    assert.equal(await surface.getByRole('button', { name: 'Task status', exact: true }).isVisible(), false);
     await surface.getByRole('button', { name: 'Properties', exact: true }).click();
     const properties = surface.getByRole('region', { name: 'Properties', exact: true });
-    await properties.getByRole('combobox', { name: 'Task status', exact: true }).selectOption('in_review');
-    await properties.getByRole('combobox', { name: 'Task status', exact: true }).selectOption('done');
-    assert.equal(tasks[0].status, 'done');
-    await properties.getByRole('combobox', { name: 'Task status', exact: true }).selectOption('in_review');
-    assert.equal(tasks.length, 1, 'task status belongs to the task');
-    await properties.getByRole('textbox', { name: 'Task description', exact: true }).fill('Implement login with roles');
-    await properties.getByRole('button', { name: 'Save', exact: true }).click();
-    await row('Implement login with roles').waitFor();
-    await properties.getByRole('textbox', { name: 'Task description', exact: true }).fill('Implement login');
-    await properties.getByRole('button', { name: 'Save', exact: true }).click();
-    await row('Implement login').waitFor();
+    const picker = properties.getByRole('button', { name: 'Task status', exact: true });
+    const property = label => properties.locator('.task-property-row').filter({ has: page.locator('dt', { hasText: new RegExp(`^${label}$`) }) }).locator('dd');
+    assert.deepEqual(await properties.getByRole('heading').allTextContents(), ['Work', 'Relationships', 'Workspace', 'About']);
+    assert.equal(await properties.getByRole('textbox').count(), 0);
+    assert.equal(await properties.getByText('Labels', { exact: true }).count(), 0);
+    assert.equal(await property('Branch').innerText(), 'main');
+    assert.equal(await property('Folder').innerText(), '/repo');
+    assert.equal(await property('Parent').innerText(), 'None');
+    assert.equal(await property('Subtasks').innerText(), 'None');
+    assert.equal(await property('Created').locator('time').getAttribute('datetime'), new Date(createdAt).toISOString());
+    assert.equal(await property('Completed').innerText(), '—');
+    await picker.click();
+    const statuses = page.getByRole('listbox', { name: 'Task status', exact: true });
+    assert.deepEqual(await statuses.getByRole('option').allTextContents(), ['Backlog', 'Todo', 'In Progress', 'In Review', 'Done', 'Cancelled', 'Blocked']);
+    assert.equal(await statuses.locator('svg').count(), 7);
+    await page.screenshot({ path: '/tmp/aow-task-status-picker.png' });
+    await page.keyboard.press('Home');
+    await page.keyboard.press('Enter');
+    await picker.filter({ hasText: 'Backlog' }).waitFor();
+    assert.equal(tasks[0].status, 'backlog');
+    assert.equal(await picker.evaluate(element => element === document.activeElement), true);
+    await picker.press('ArrowDown');
+    await statuses.waitFor();
+    await page.keyboard.press('Escape');
+    assert.equal(await picker.getAttribute('aria-expanded'), 'false');
+    const setStatus = async name => {
+      await picker.click();
+      await statuses.getByRole('option', { name, exact: true }).click();
+      await picker.filter({ hasText: name }).waitFor();
+    };
+    await setStatus('In Review');
+    failStatus = true;
+    await picker.click();
+    await statuses.getByRole('option', { name: 'Done', exact: true }).click();
+    await properties.getByRole('alert').waitFor();
+    assert.equal(tasks[0].status, 'in_review');
+    assert.equal(await picker.innerText(), 'In Review');
+    failStatus = false;
+    await setStatus('Done');
+    assert.equal(await property('Completed').locator('time').getAttribute('datetime'), new Date(tasks[0].completed_at).toISOString());
+    assert.equal(await property('Updated').locator('time').getAttribute('datetime'), new Date(tasks[0].updated_at).toISOString());
     await page.screenshot({ path: '/tmp/aow-task-properties.png' });
+    await setStatus('In Review');
+    assert.equal(await property('Completed').innerText(), '—');
+    assert.equal(tasks.length, 1, 'task status belongs to the task');
+    assert.equal(tasks[0].prompt, 'Implement login', 'Properties must not rewrite the task description');
+    await properties.getByRole('button', { name: 'Task project', exact: true }).click();
+    await sidebar.locator('.project-aow-worktrees').waitFor();
+    await page.getByRole('button', { name: 'Organize by task', exact: true }).click();
+    await row('Implement login').getByRole('button', { name: 'Implement login', exact: true }).click();
     const first = surface.getByRole('tab').filter({ hasText: 'initial-0' });
     assert.equal(await first.locator('.project-aow-tab-close').count(), 1);
     await surface.locator('.project-aow-new-trigger').click();
@@ -191,7 +234,7 @@ try {
     await surface.locator('.conversation-instance').filter({ hasText: 'helper-' }).waitFor();
     await surface.getByText('Main conversation', { exact: false }).waitFor();
     assert.equal(sessions[1].parent.id, sessions[0].thread_id);
-    assert.equal(await surface.getByRole('combobox', { name: 'Task status', exact: true }).isVisible(), false);
+    assert.equal(await surface.getByRole('button', { name: 'Task status', exact: true }).isVisible(), false);
     const helper = surface.getByRole('tab').filter({ hasText: 'helper-' });
     await helper.click({ button: 'right' });
     await page.getByRole('menuitem', { name: 'Open · Floating workspace', exact: true }).click();
@@ -324,6 +367,24 @@ try {
     await parentNode.locator('.task-tree-children').getByRole('button', { name: tasks[2].prompt, exact: true }).click();
     await surface.getByRole('button', { name: 'Properties', exact: true }).click();
     await properties.getByRole('button', { name: tasks[1].prompt, exact: true }).waitFor();
+    assert.equal(await property('Branch').innerText(), project.worktrees[1].branch);
+    await properties.getByRole('button', { name: tasks[1].prompt, exact: true }).click();
+    if (!await properties.isVisible()) await surface.getByRole('button', { name: 'Properties', exact: true }).click();
+    await property('Subtasks').getByRole('button', { name: tasks[2].prompt, exact: true }).click();
+    await property('Parent').getByRole('button', { name: tasks[1].prompt, exact: true }).waitFor();
+    await properties.screenshot({ path: '/tmp/aow-task-properties-relations.png' });
+    await page.setViewportSize({ width: 1024, height: 768 });
+    assert.equal(await properties.evaluate(element => element.scrollWidth > element.clientWidth), false);
+    for (const label of ['Created', 'Updated']) {
+      const time = property(label).locator('time');
+      assert.equal(await time.evaluate(element => getComputedStyle(element).whiteSpace), 'nowrap');
+      assert.equal(await time.evaluate(element => getComputedStyle(element).textOverflow), 'ellipsis');
+      assert.ok(await time.getAttribute('title'));
+    }
+    assert.equal(await property('Folder').locator('.task-property-path > span').evaluate(element => getComputedStyle(element).whiteSpace), 'nowrap');
+    assert.notEqual(await properties.locator('h3').first().evaluate(element => getComputedStyle(element).color), await properties.locator('dt').first().evaluate(element => getComputedStyle(element).color));
+    await properties.screenshot({ path: '/tmp/aow-task-properties-narrow.png' });
+    await page.setViewportSize({ width: 1440, height: 1000 });
     // A delegated task may appear before the project/worktree event reaches this browser.
     const delegated = session('delegated-thread', '/repo-delegated');
     project.worktrees.push({ ...worktree, id: 'delegated-wt', path: delegated.cwd, branch: 'task/delegated', is_main: false });

@@ -4,6 +4,39 @@ use serde_json::{Value, json};
 use support::run;
 
 #[test]
+fn task_status_accepts_backlog_and_rejects_removed_waiting() {
+    let (output, header, body) = run(
+        &[
+            "task",
+            "status",
+            "login",
+            "backlog",
+            "--source-thread",
+            "router",
+        ],
+        None,
+        200,
+        json!({"status":"backlog"}),
+    );
+    assert!(output.status.success(), "{output:?}");
+    assert!(header.starts_with("POST /v1/tasks/login/status HTTP/1.1"));
+    assert_eq!(body["status"], "backlog");
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_aow-cli"))
+        .args([
+            "task",
+            "status",
+            "login",
+            "waiting",
+            "--source-thread",
+            "router",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("invalid value 'waiting'"));
+}
+
+#[test]
 fn role_discovery_and_task_results_preserve_scope() {
     for (args, path) in [
         (vec!["role", "list"], "/v1/roles"),

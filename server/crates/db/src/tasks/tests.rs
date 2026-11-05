@@ -5,6 +5,9 @@ fn task(id: &str, dependencies: &[&str]) -> TaskRecord {
         id: id.into(),
         project_id: "project".into(),
         status: TaskStatus::Todo,
+        created_at: Some(1_700_000_000_000),
+        updated_at: Some(1_700_000_000_000),
+        completed_at: None,
         prompt: format!("Task {id}"),
         agent_id: "agent".into(),
         agent_role_id: None,
@@ -35,7 +38,7 @@ fn business_status_preserves_json_and_sqlite_values() {
     for (status, value) in [
         (TaskStatus::Todo, "todo"),
         (TaskStatus::InProgress, "in_progress"),
-        (TaskStatus::Waiting, "waiting"),
+        (TaskStatus::Backlog, "backlog"),
         (TaskStatus::InReview, "in_review"),
         (TaskStatus::Done, "done"),
         (TaskStatus::Blocked, "blocked"),
@@ -61,7 +64,15 @@ fn business_status_preserves_json_and_sqlite_values() {
 #[test]
 fn invalid_business_status_is_rejected_at_json_and_sqlite_boundaries() {
     let db = TaskDb::open(None).unwrap();
-    for value in ["", "running", "result_available", "Done", "in_progess"] {
+    db.insert(&task("invalid", &[])).unwrap();
+    for value in [
+        "",
+        "waiting",
+        "running",
+        "result_available",
+        "Done",
+        "in_progess",
+    ] {
         assert!(serde_json::from_value::<TaskStatus>(serde_json::json!(value)).is_err());
         assert!(
             db.lock()
@@ -69,7 +80,56 @@ fn invalid_business_status_is_rejected_at_json_and_sqlite_boundaries() {
                 .query_row("SELECT ?1", [value], |row| row.get::<_, TaskStatus>(0))
                 .is_err()
         );
+        assert!(
+            db.lock()
+                .unwrap()
+                .execute("UPDATE tasks SET status = ?1 WHERE id = 'invalid'", [value])
+                .is_err()
+        );
     }
+}
+
+#[test]
+fn task_timestamps_persist_and_completion_tracks_business_status() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("tasks.db");
+    let db = TaskDb::open(Some(&path)).unwrap();
+    let original = task("lifecycle", &[]);
+    db.insert(&original).unwrap();
+    db.update("lifecycle", Some("Revised goal"), None, None, None)
+        .unwrap();
+    let edited = db.list().unwrap().remove(0);
+    assert_eq!(edited.created_at, original.created_at);
+    assert!(edited.updated_at > original.updated_at);
+    assert_eq!(edited.completed_at, None);
+
+    db.set_status("lifecycle", TaskStatus::Done).unwrap();
+    let completed = db.list().unwrap().remove(0);
+    assert!(completed.completed_at.is_some());
+    assert_eq!(completed.completed_at, completed.updated_at);
+    assert_eq!(completed.created_at, original.created_at);
+    // Retrying a status mutation must not invent a new completion time.
+    db.set_status("lifecycle", TaskStatus::Done).unwrap();
+    assert_eq!(db.list().unwrap()[0], completed);
+    drop(db);
+    let db = TaskDb::open(Some(&path)).unwrap();
+    assert_eq!(db.list().unwrap()[0], completed);
+
+    db.set_status("lifecycle", TaskStatus::InProgress).unwrap();
+    assert_eq!(db.list().unwrap()[0].completed_at, None);
+    db.set_status("lifecycle", TaskStatus::Cancelled).unwrap();
+    assert_eq!(db.list().unwrap()[0].completed_at, None);
+    db.set_status("lifecycle", TaskStatus::Backlog).unwrap();
+    let reopened = db.list().unwrap().remove(0);
+    db.enqueue_message(&message("more-work", "lifecycle"))
+        .unwrap();
+    db.update_message("more-work", DeliveryState::Delivered, None, 0)
+        .unwrap();
+    assert_eq!(
+        db.list().unwrap()[0],
+        reopened,
+        "Conversation delivery must not change task progress or timestamps"
+    );
 }
 
 fn message(id: &str, task: &str) -> MessageDelivery {
@@ -122,7 +182,7 @@ fn explicit_reports_are_durable_idempotent_and_independent_of_task_status() {
             .is_empty(),
         "Admission is not a report"
     );
-    db.set_status("worker", TaskStatus::Waiting).unwrap();
+    db.set_status("worker", TaskStatus::Blocked).unwrap();
     let report = db.publish_event(&event("poc")).unwrap();
     let mut retry = report.clone();
     retry.id = "another-id".into();
@@ -136,7 +196,7 @@ fn explicit_reports_are_durable_idempotent_and_independent_of_task_status() {
         1,
         "Reading and archiving do not suppress delivery"
     );
-    assert_eq!(db.status("worker").unwrap(), Some(TaskStatus::Waiting));
+    assert_eq!(db.status("worker").unwrap(), Some(TaskStatus::Blocked));
     let id = db.pending_messages().unwrap()[0].id.clone();
     db.update_message(
         &id,
@@ -217,6 +277,25 @@ fn migration_preserves_notifications_pending_messages_and_conversation_policies(
         )
         .unwrap();
         connection.execute("INSERT INTO tasks (id,project_id,prompt,agent_id,workspace,workspace_mode,status) VALUES ('worker','project','Goal','agent','/repo','existing','waiting')",[]).unwrap();
+        connection.execute("INSERT INTO tasks (id,project_id,prompt,agent_id,workspace,workspace_mode,status) VALUES ('parent','project','Parent','agent','/repo','existing','todo')",[]).unwrap();
+        connection
+            .execute(
+                "UPDATE tasks SET source_task_id = 'parent' WHERE id = 'worker'",
+                [],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO task_dependencies VALUES ('worker', 'parent')",
+                [],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO task_resources VALUES ('worker', 'acp', 'thread-worker')",
+                [],
+            )
+            .unwrap();
         for (id, state) in [("complete", "result_available"), ("pending", "queued")] {
             let payload = json!({"id":id,"request_id":id,"task_id":"worker","project_id":"project","thread_id":"thread-worker","prompt":"Original task","state":state,"result":"POC verified","created_at":1,
                 "source":{"task_id":"parent","thread_id":"thread-parent","turn_id":"user-turn","message_id":"user-message","request":"Original user request","parent_run_id":"old-parent"},
@@ -232,7 +311,26 @@ fn migration_preserves_notifications_pending_messages_and_conversation_policies(
         connection.execute("INSERT INTO task_wakeups VALUES ('legacy-event','legacy-prompt','old-parent','pending',?1)",[json!({"attempts":1,"retry_at":0,"error":null}).to_string()]).unwrap();
     }
     let db = TaskDb::open(Some(&path)).unwrap();
-    assert_eq!(db.status("worker").unwrap(), Some(TaskStatus::Waiting));
+    assert_eq!(db.status("worker").unwrap(), Some(TaskStatus::Blocked));
+    let worker = db
+        .list()
+        .unwrap()
+        .into_iter()
+        .find(|task| task.id == "worker")
+        .unwrap();
+    assert_eq!(worker.source_task_id.as_deref(), Some("parent"));
+    assert_eq!(worker.dependencies, vec!["parent"]);
+    assert_eq!(
+        worker.resources,
+        vec![TaskResource {
+            kind: "acp".into(),
+            id: "thread-worker".into()
+        }]
+    );
+    assert_eq!(
+        (worker.created_at, worker.updated_at, worker.completed_at),
+        (None, None, None)
+    );
     let inbox = db.inbox(None, false, true, 0, 30).unwrap();
     assert_eq!(inbox.items[0].event.message, "POC verified");
     assert!(inbox.items[0].read);

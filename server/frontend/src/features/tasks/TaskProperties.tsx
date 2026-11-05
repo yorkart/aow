@@ -1,43 +1,65 @@
-import { useEffect, useState } from 'react';
-import { ListTodo } from 'lucide-react';
-import { AowPanel, AowPanelStack } from '../../components/AowPanel';
-import { t } from '../../lib/i18n';
-import { taskStatuses, tasksApi, taskTitle, type TaskStatus } from './api';
+import { useState, type ReactNode } from 'react';
+import { ArrowUpRight, Folder, GitBranch, MessageSquare } from 'lucide-react';
+import type { AowProject, AowWorktree } from '../../aow/types';
+import { getLanguage, t } from '../../lib/i18n';
+import { tasksApi, taskTitle, type WorkTask, type TaskStatus } from './api';
 import { useTaskScope } from './TaskScope';
+import { TaskStatusIcon, TaskStatusPicker } from './TaskStatus';
 import './tasks.css';
 
-export function TaskProperties() {
+function Property({ label, children }: { label: string; children: ReactNode }) {
+  return <div className="task-property-row"><dt>{label}</dt><dd>{children}</dd></div>;
+}
+
+function Timestamp({ value }: { value: number | null }) {
+  if (value == null) return <span className="task-property-empty">—</span>;
+  const date = new Date(value);
+  return <time dateTime={date.toISOString()} title={date.toLocaleString(getLanguage())}>{date.toLocaleString(getLanguage(), {
+    year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+  })}</time>;
+}
+
+export function TaskProperties({ project, worktree }: { project: AowProject; worktree: AowWorktree }) {
   const scope = useTaskScope();
-  const task = scope?.task;
-  const [prompt, setPrompt] = useState(task?.prompt ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  useEffect(() => { setPrompt(task?.prompt ?? ''); setError(''); }, [task?.id, task?.prompt]);
-  if (!scope || !task) return null;
-  const parent = scope.tasks.find(item => item.id === task.source_task_id);
-  const save = async (action: () => Promise<unknown>) => {
+  if (!scope) return null;
+  const { task } = scope;
+  const related = scope.tasks.filter(item => item.project_id === task.project_id);
+  const parent = related.find(item => item.id === task.source_task_id);
+  const subtasks = related.filter(item => item.source_task_id === task.id);
+  const changeStatus = async (status: TaskStatus) => {
     setSaving(true); setError('');
-    try { await action(); }
+    try { await tasksApi.status(task.id, status); }
     catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
     finally { setSaving(false); }
   };
-  return <section className="task-properties" aria-label={t('tasks.properties')}>
-    <AowPanelStack><AowPanel title={t('tasks.properties')} icon={<ListTodo />} collapsible={false}>
-      <h3>{taskTitle(task)}</h3>
-      {task.is_router ? <p>{t('tasks.router_hint')}</p> : <>
-        <label>{t('tasks.business_status')}<select aria-label={t('tasks.business_status')} value={task.status ?? 'todo'} disabled={saving || task.archived}
-          onChange={event => { const status = event.target.value as TaskStatus; void save(() => tasksApi.status(task.id, status)); }}>
-          {taskStatuses.map(status => <option key={status} value={status}>{t('tasks.status_' + status)}</option>)}
-        </select></label>
-        <form onSubmit={event => { event.preventDefault(); void save(() => tasksApi.update(task.id, { prompt })); }}>
-          <label>{t('tasks.prompt')}<textarea aria-label={t('tasks.prompt')} value={prompt} required maxLength={131072} disabled={saving || task.archived} onChange={event => setPrompt(event.target.value)} /></label>
-          <button type="submit" disabled={saving || task.archived || !prompt.trim() || prompt === task.prompt}>{t(saving ? 'tasks.saving' : 'tasks.save')}</button>
-        </form>
-      </>}
-      <dl><dt>{t('tasks.workspace')}</dt><dd>{task.workspace}</dd>
-        {parent && <><dt>{t('tasks.parent')}</dt><dd><button type="button" disabled={!scope.openTask || parent.archived} onClick={() => scope.openTask?.(parent)}>{taskTitle(parent)}</button></dd></>}
-      </dl>
-      {error && <p role="alert">{error}</p>}
-    </AowPanel></AowPanelStack>
+  const link = (item: WorkTask) => <button key={item.id} type="button" className="task-property-task" title={taskTitle(item)}
+    disabled={!scope.openTask || item.archived} onClick={() => scope.openTask?.(item)}>
+    {item.is_router ? <MessageSquare size={15} /> : <TaskStatusIcon status={item.status} size={15} />}<span>{taskTitle(item)}</span>
+  </button>;
+  const none = <span className="task-property-empty">{t('tasks.none')}</span>;
+  const branch = worktree.detached ? `${t('tasks.detached_head')} · ${worktree.head.slice(0, 7)}` : worktree.branch;
+  return <section className="task-properties" aria-label={t('tasks.properties')} aria-busy={saving}>
+    <section className="task-property-group"><h3>{t('tasks.work')}</h3><dl>
+      <Property label={t('tasks.status')}>{task.is_router ? <span className="task-property-empty">—</span>
+        : <TaskStatusPicker status={task.status} disabled={saving || task.archived} onChange={status => void changeStatus(status)} />}</Property>
+      <Property label={t('tasks.project')}><button type="button" className="task-property-link" title={project.name} disabled={!scope.openProject} onClick={scope.openProject}>
+        <Folder size={16} /><span>{project.name}</span><ArrowUpRight size={13} />
+      </button></Property>
+    </dl>{error && <p className="task-properties-error" role="alert">{error}</p>}</section>
+    <section className="task-property-group"><h3>{t('tasks.relationships')}</h3><dl>
+      <Property label={t('tasks.parent')}>{parent ? link(parent) : task.source_task_id ? <span className="task-property-empty" title={task.source_task_id}>{task.source_task_id}</span> : none}</Property>
+      <Property label={t('tasks.subtasks')}><div className="task-property-links">{subtasks.length ? subtasks.map(link) : none}</div></Property>
+    </dl></section>
+    <section className="task-property-group"><h3>{t('tasks.workspace')}</h3><dl>
+      <Property label={t('tasks.branch')}><span className="task-property-path" title={branch || undefined}><GitBranch size={16} /><span>{branch || '—'}</span></span></Property>
+      <Property label={t('tasks.folder')}><span className="task-property-path" title={task.workspace}><Folder size={16} /><span>{task.workspace}</span></span></Property>
+    </dl></section>
+    <section className="task-property-group"><h3>{t('tasks.about')}</h3><dl>
+      <Property label={t('tasks.created')}><Timestamp value={task.created_at} /></Property>
+      <Property label={t('tasks.updated')}><Timestamp value={task.updated_at} /></Property>
+      <Property label={t('tasks.completed')}><Timestamp value={task.completed_at} /></Property>
+    </dl></section>
   </section>;
 }

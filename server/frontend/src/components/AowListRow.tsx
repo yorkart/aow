@@ -16,7 +16,7 @@ export function AowListRow({ className, openClassName = '', icon, title, tooltip
   disabled?: boolean;
   actions?: ReactNode;
   tooltip?: string;
-  children: ReactNode;
+  children?: ReactNode;
   role?: 'listitem';
   menuLabel: string;
   menuExpanded?: boolean;

@@ -250,10 +250,14 @@ pub(super) async fn create(state: AppState, request: Create) -> Result<Task, Htt
             }
         };
         let (kind, resource_id) = session.resource();
+        let created_at = chrono::Utc::now().timestamp_millis();
         let mut task = TaskRecord {
             id: request.request_id,
             project_id: request.project_id,
             status: TaskStatus::Todo,
+            created_at: Some(created_at),
+            updated_at: Some(created_at),
+            completed_at: None,
             prompt: request.prompt,
             agent_id: agent,
             agent_role_id: request.agent_role_id,

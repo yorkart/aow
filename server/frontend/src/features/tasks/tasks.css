@@ -65,15 +65,38 @@
 }
 
 .project-aow-task-list { padding: 3px 6px; }
-.task-properties { padding:10px; overflow:auto; height:100%; }
-.task-properties h3 { margin:0 0 12px; overflow-wrap:anywhere; }
-.task-properties label { display:flex; flex-direction:column; gap:6px; margin:12px 0; color:var(--aow-muted); }
-.task-properties textarea { width:100%; min-height:140px; resize:vertical; }
-.task-properties textarea, .task-properties select { border:1px solid var(--aow-control-line); border-radius:5px; padding:7px; color:var(--aow-text); background:var(--aow-panel); font:inherit; }
-.task-properties button { border:1px solid var(--aow-control-line); border-radius:5px; padding:5px 9px; color:var(--aow-text); background:transparent; cursor:pointer; }
-.task-properties button:disabled { opacity:.5; cursor:default; }
-.task-properties dt { color:var(--aow-muted); margin-top:12px; }
-.task-properties dd { margin:5px 0; overflow-wrap:anywhere; }
+/* Task properties use the same seven status glyphs and colors as Paperclip. */
+.task-status-icon { flex-shrink:0; }
+.task-status-icon.task-status-backlog, .task-status-icon.task-status-cancelled { color:light-dark(#52585d, #9a958a); }
+.task-status-icon.task-status-todo { color:light-dark(#cc7a00, #fbbf24); }
+.task-status-icon.task-status-in_progress { color:light-dark(#2563eb, #60a5fa); }
+.task-status-icon.task-status-in_review { color:light-dark(#7c3aed, #9474f0); }
+.task-status-icon.task-status-done { color:light-dark(#16a34a, #34d06f); }
+.task-status-icon.task-status-blocked { color:#dc2626; }
+.task-properties { height:100%; padding:24px 12px; overflow:auto; color:var(--aow-text); font-size:13px; line-height:1.5; }
+.task-property-group + .task-property-group { margin-top:28px; }
+.task-property-group h3 { margin:0 0 10px; color:color-mix(in srgb, var(--aow-muted) 75%, var(--aow-panel)); font-family:ui-monospace, SFMono-Regular, monospace; font-size:11px; font-weight:400; letter-spacing:.04em; text-transform:uppercase; }
+.task-property-group dl { display:flex; flex-direction:column; gap:4px; margin:0; }
+.task-property-row { display:grid; grid-template-columns:64px minmax(0, 1fr); gap:8px; align-items:start; min-height:28px; }
+.task-property-row dt { padding-top:4px; color:var(--aow-muted); white-space:nowrap; }
+.task-property-row dd { min-width:0; margin:0; }
+.task-properties button { display:inline-flex; align-items:center; gap:7px; max-width:100%; min-height:28px; padding:3px 6px; color:inherit; background:transparent; border:1px solid transparent; border-radius:5px; font:inherit; text-align:left; cursor:pointer; }
+.task-properties button:hover:not(:disabled):not([aria-disabled="true"]), .task-properties button[aria-expanded="true"] { background:var(--aow-subtle-hover); }
+.task-properties button:focus-visible { outline:2px solid var(--aow-accent); outline-offset:2px; }
+.task-properties button:disabled, .task-properties button[aria-disabled="true"] { cursor:default; opacity:.6; }
+.task-properties button > span, .task-property-path > span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.task-properties svg { flex-shrink:0; }
+.task-properties .task-status-picker { gap:6px; background:var(--aow-subtle-hover); }
+.row-menu.task-status-options { color-scheme:inherit; }
+.task-status-options button { justify-content:flex-start; gap:10px; padding:5px 8px; font-size:13px; }
+.task-properties .task-property-task { border-color:var(--aow-control-line); border-radius:20px; }
+.task-property-link > svg:first-child { color:var(--aow-accent); }
+.task-property-link > svg:last-child, .task-property-path > svg { color:var(--aow-muted); }
+.task-property-links { display:flex; align-items:flex-start; flex-direction:column; gap:4px; }
+.task-property-path { display:flex; align-items:center; gap:8px; min-height:28px; padding:4px 6px; }
+.task-property-row time, .task-property-empty { display:block; padding:4px 6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.task-property-empty { color:var(--aow-muted); }
+.task-properties-error { margin:10px 0 0; color:var(--aow-error); overflow-wrap:anywhere; }
 .task-tree-row { display:flex; align-items:center; min-width:0; }
 .task-tree-row > .project-aow-task-row { flex:1; min-width:0; }
 .task-tree-children { padding-left:14px; }
