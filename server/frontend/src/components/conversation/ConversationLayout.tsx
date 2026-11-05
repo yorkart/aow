@@ -1,6 +1,7 @@
 import { t } from '../../lib/i18n';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { ArrowDown, UserRound } from 'lucide-react';
+import { ConversationNavigation } from './ConversationNavigation';
 import '../conversation-theme.css';
 import './conversation-layout.css';
 
@@ -54,12 +55,6 @@ export function ConversationAgentMessage({ agentName, agentIcon, agentClassName 
   </section>;
 }
 
-function promptPreview(text: string) {
-  const normalized = text.replace(/\s+/g, ' ').trim();
-  const characters = Array.from(normalized);
-  return characters.length > 32 ? `${characters.slice(0, 32).join('')}…` : normalized || t("components.empty_input");
-}
-
 // Presentation only: callers supply message contents and retain their process renderers.
 export function ConversationLayout({ sessionId, turns, header, headerContent, agentClassName, className = '', label, revision, banner, alternateContent, state, leadingContent, accessory, footer, footerExpanded = false, live = false, followRequest = 0, scrollClassName = '', scrollRef }: {
   sessionId: string;
@@ -88,7 +83,6 @@ export function ConversationLayout({ sessionId, turns, header, headerContent, ag
   const accessoryRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
   const turnRefs = useRef<Array<HTMLElement | null>>([]);
-  const navigationRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [activeTurn, setActiveTurn] = useState(0);
   const [following, setFollowing] = useState(true);
   const followRef = useRef(true);
@@ -116,16 +110,12 @@ export function ConversationLayout({ sessionId, turns, header, headerContent, ag
 
   useEffect(() => {
     turnRefs.current.length = turnCount;
-    navigationRefs.current.length = turnCount;
   }, [turnCount]);
   useEffect(() => {
     setActiveTurn(0);
     followRef.current = true; setFollowing(true);
     conversationRef.current?.scrollTo({ top: 0, behavior: 'instant' });
   }, [sessionId, conversationRef]);
-  useEffect(() => {
-    navigationRefs.current[activeTurn]?.scrollIntoView({ block: 'nearest', behavior: 'instant' });
-  }, [activeTurn]);
 
   const updateActiveTurn = useCallback(() => {
     const conversation = conversationRef.current;
@@ -182,38 +172,32 @@ export function ConversationLayout({ sessionId, turns, header, headerContent, ag
     {headerContent ?? <ConversationHeader {...header} />}
     {banner}
     {alternateContent}
-    <div className={`project-aow-snapshot-body${turnCount ? '' : ' without-navigation'}`} hidden={!!alternateContent}>
+    <div className="project-aow-snapshot-body" hidden={!!alternateContent}>
       <div className="conversation-main">
-        <div className={`project-aow-snapshot-conversation ${scrollClassName}`} hidden={!!footer && !hasMessages && !state} ref={conversationRef} onScroll={event => {
-          if (!event.currentTarget.clientHeight) return;
-          updateActiveTurn();
-          if (live) { const element = event.currentTarget; setFollow(element.scrollHeight - element.scrollTop - element.clientHeight < 60); }
-        }}>
-          {state}
-          <div className="project-aow-snapshot-chat" ref={chatRef}>
-            {leadingContent}
-            {turns.map((turn, index) => <article className="project-aow-snapshot-turn" key={turn.id} ref={node => { turnRefs.current[index] = node; }}>
-              <section className="project-aow-snapshot-message user">
-                <header className="project-aow-snapshot-message-header"><UserRound size={22} /><strong>{t("navigation.user")}</strong>{turn.userMeta}</header>
-                <div className="project-aow-snapshot-bubble">{turn.user}</div>
-              </section>
-              <ConversationAgentMessage agentName={header.agentName} agentIcon={header.agentIcon} agentClassName={agentClassName} metadata={turn.assistantMeta}>{turn.assistant}</ConversationAgentMessage>
-            </article>)}
+        <div className="conversation-transcript" hidden={!!footer && !hasMessages && !state}>
+          {turnCount > 0 && <ConversationNavigation key={sessionId} turns={turns} activeTurn={activeTurn} onNavigate={navigateToTurn} />}
+          <div className={`project-aow-snapshot-conversation ${scrollClassName}`} hidden={!!footer && !hasMessages && !state} ref={conversationRef} onScroll={event => {
+            if (!event.currentTarget.clientHeight) return;
+            updateActiveTurn();
+            if (live) { const element = event.currentTarget; setFollow(element.scrollHeight - element.scrollTop - element.clientHeight < 60); }
+          }}>
+            {state}
+            <div className="project-aow-snapshot-chat" ref={chatRef}>
+              {leadingContent}
+              {turns.map((turn, index) => <article className="project-aow-snapshot-turn" key={turn.id} ref={node => { turnRefs.current[index] = node; }}>
+                <section className="project-aow-snapshot-message user">
+                  <header className="project-aow-snapshot-message-header"><UserRound size={22} /><strong>{t("navigation.user")}</strong>{turn.userMeta}</header>
+                  <div className="project-aow-snapshot-bubble">{turn.user}</div>
+                </section>
+                <ConversationAgentMessage agentName={header.agentName} agentIcon={header.agentIcon} agentClassName={agentClassName} metadata={turn.assistantMeta}>{turn.assistant}</ConversationAgentMessage>
+              </article>)}
+            </div>
           </div>
         </div>
         {live && !following && hasMessages && <div className="conversation-follow"><button type="button" onClick={() => { setFollow(true); scrollToEnd(); }}><ArrowDown size={13} />{t("components.jump_to_latest_message")}</button></div>}
         {accessory && <div ref={accessoryRef} className="conversation-accessory">{accessory}</div>}
         {footer && <div ref={footerRef} className={`conversation-footer${!hasMessages ? ' empty' : ''}${footerExpanded ? ' expanded' : ''}`}>{footer}</div>}
       </div>
-      {turnCount > 0 && <nav className="project-aow-snapshot-navigation" aria-label={t("components.user_input_navigation")}>
-        <header><strong>{t("components.conversation_navigation")}</strong><span>{turnCount}</span></header>
-        <ol>{turns.map((turn, index) => <li key={turn.id}>
-          <button className={activeTurn === index ? 'active' : undefined} type="button" title={turn.prompt} aria-current={activeTurn === index ? 'location' : undefined} ref={node => { navigationRefs.current[index] = node; }} onClick={() => navigateToTurn(index)}>
-            <span>{index + 1}</span><strong>{promptPreview(turn.prompt)}</strong>
-            {turn.status && <i className={turn.status} title={conversationStatusNames[turn.status]} />}
-          </button>
-        </li>)}</ol>
-      </nav>}
     </div>
   </section>;
 }

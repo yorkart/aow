@@ -309,7 +309,7 @@ try {
     await toggles(page).last().click();
     await page.locator('.session-tool-group-toggle').click();
     await page.locator('.session-tool-group-details').getByText('结果未记录', { exact: true }).waitFor();
-    assert.equal(await page.locator('.project-aow-snapshot-navigation').isVisible(), false);
+    assert.equal(await page.locator('.project-aow-snapshot-navigation').isVisible(), true);
     assert.equal(await page.evaluate(() => window.__unsafe), undefined);
     await noOverflow(page);
   });

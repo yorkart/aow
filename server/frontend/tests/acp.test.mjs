@@ -1154,7 +1154,25 @@ try {
     await input.fill('Keep draft while navigating');
     assert.equal(await content.locator('.project-aow-snapshot-turn').count(), 8);
     assert.equal(await navigation.getByRole('button').count(), 8);
+    const rail = await navigation.boundingBox();
+    const transcript = await content.locator('.acp-conversation').boundingBox();
+    const body = await content.locator('.project-aow-snapshot-body').boundingBox();
+    assert.equal(await navigation.evaluate(element => getComputedStyle(element).position), 'absolute');
+    assert.ok(rail.x >= transcript.x && rail.x < transcript.x + 8, 'navigation floats at the left edge of the transcript');
+    assert.deepEqual([transcript.x, transcript.width], [body.x, body.width], 'floating navigation leaves the entire conversation width available');
+    assert.ok(rail.width <= 40, 'the floating marks stay compact');
+    assert.equal(await navigation.innerText(), '', 'input text stays in the hover preview');
     await page.waitForFunction(() => document.querySelector('.project-aow-snapshot-navigation li:last-child button')?.getAttribute('aria-current') === 'location');
+    const mark = navigation.getByRole('button', { name: '1. Request 1', exact: true });
+    const idleWidth = (await mark.locator('span').boundingBox()).width;
+    await mark.hover();
+    await page.getByRole('tooltip').getByText('Request 1', { exact: true }).waitFor();
+    await page.waitForFunction(width => document.querySelector('.conversation-navigation-mark').getBoundingClientRect().width > width, idleWidth);
+    const preview = await page.getByRole('tooltip').boundingBox();
+    assert.ok(preview.x >= rail.x + rail.width, 'the preview opens to the right of the marks');
+    if (process.env.ACP_SCREENSHOT_DIR) await page.screenshot({ path: `${process.env.ACP_SCREENSHOT_DIR}/acp-navigation-hover.png` });
+    await page.keyboard.press('Escape');
+    await page.getByRole('tooltip').waitFor({ state: 'detached' });
     const fixedPositions = async () => ({ header: await content.locator('.project-aow-snapshot-header').boundingBox(), composer: await content.locator('.acp-composer').boundingBox() });
     const before = await fixedPositions();
     const positionAfterClick = await navigation.getByRole('button').first().evaluate(button => {
@@ -1209,10 +1227,49 @@ try {
     if (process.env.ACP_SCREENSHOT_DIR) await page.screenshot({ path: `${process.env.ACP_SCREENSHOT_DIR}/acp-shared-conversation.png` });
     await page.locator('aside').evaluate(element => { element.style.display = 'none'; });
     await page.setViewportSize({ width: 390, height: 844 });
-    assert.equal(await navigation.isVisible(), false);
+    assert.equal(await navigation.isVisible(), true);
     assert.equal(await input.isVisible(), true);
     assert.equal(await content.locator('.acp-conversation').evaluate(element => element.scrollWidth <= element.clientWidth + 1), true);
     if (process.env.ACP_SCREENSHOT_DIR) await page.screenshot({ path: `${process.env.ACP_SCREENSHOT_DIR}/acp-shared-conversation-mobile.png` });
+  });
+  await test('conversation marks support keyboard navigation and long histories without moving the page', async t => {
+    const { page, state } = await fixture(t);
+    const prompt = `Inspect this input:\n<b>literal markup</b>\n${'A long input preview. '.repeat(100)}`;
+    state.session.entries = Array.from({ length: 80 }, (_, index) => [
+      { id: `u${index}`, kind: 'user', content: { type: 'text', text: index === 1 ? prompt : `Request ${index + 1}` } },
+      { id: `a${index}`, kind: 'assistant', content: { type: 'text', text: `Answer ${index + 1}\n\n${'Paragraph content.\n\n'.repeat(6)}` } },
+    ]).flat();
+    await newSession(page);
+    const navigation = page.getByRole('navigation', { name: '用户输入导航' });
+    const marks = navigation.getByRole('button');
+    const scroll = page.locator('.acp-conversation');
+    await page.waitForFunction(() => document.querySelector('.project-aow-snapshot-navigation li:last-child button')?.getAttribute('aria-current') === 'location');
+    assert.equal(await marks.count(), 80);
+    assert.ok(await navigation.locator('ol').evaluate(element => element.scrollTop > 0), 'the active mark remains visible in an overflowing rail');
+    const transcriptTop = await scroll.evaluate(element => element.scrollTop);
+    await marks.last().focus();
+    await page.keyboard.press('Home');
+    assert.equal(await marks.first().evaluate(element => element === document.activeElement), true);
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await marks.nth(1).evaluate(element => element === document.activeElement), true);
+    await page.getByRole('tooltip').waitFor();
+    assert.equal(await page.getByRole('tooltip').innerText(), prompt);
+    assert.equal(await page.getByRole('tooltip').locator('b').count(), 0, 'previews render input as text');
+    const preview = await page.getByRole('tooltip').boundingBox();
+    const viewport = page.viewportSize();
+    assert.ok(preview.x >= 8 && preview.y >= 8 && preview.x + preview.width <= viewport.width - 8 && preview.y + preview.height <= viewport.height - 8, 'long previews stay within the viewport');
+    assert.equal(await scroll.evaluate(element => element.scrollTop), transcriptTop, 'moving keyboard focus in the rail does not scroll messages');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => document.querySelectorAll('.project-aow-snapshot-navigation button')[1]?.getAttribute('aria-current') === 'location');
+    assert.ok(await scroll.evaluate(element => element.scrollTop < element.scrollHeight / 2));
+    await page.getByRole('tooltip').waitFor({ state: 'detached' });
+    await page.keyboard.press('End');
+    assert.equal(await marks.last().evaluate(element => element === document.activeElement), true);
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => document.querySelector('.project-aow-snapshot-navigation li:last-child button')?.getAttribute('aria-current') === 'location');
+    assert.equal(await page.evaluate(() => window.scrollY), 0);
+    state.session.entries = []; state.session.revision++;
+    await navigation.waitFor({ state: 'detached' });
   });
   await test('ACP layout retains unpaired history and groups multipart user content into one turn', async t => {
     const { page, state } = await fixture(t);
@@ -1230,7 +1287,8 @@ try {
     assert.equal(await page.locator('.project-aow-snapshot-chat > .assistant [data-entry-id="history"]').count(), 1);
     const navigation = page.getByRole('navigation', { name: '用户输入导航' });
     assert.equal(await navigation.getByRole('button').count(), 1);
-    assert.match(await navigation.getByRole('button').getAttribute('title'), /Inspect the attachment\nmain.rs/);
+    await navigation.getByRole('button').hover();
+    assert.equal(await page.getByRole('tooltip').innerText(), 'Inspect the attachment\nmain.rs');
     assert.equal(await page.locator('.project-aow-snapshot-message.user').getByRole('button', { name: '/repo/main.rs', exact: true }).count(), 1);
   });
   await test('ACP and Conversation share page typography, controls and responsive layout', async t => {
@@ -1268,25 +1326,26 @@ try {
     for (const width of [1140, 800, 600, 390]) {
       await page.setViewportSize({ width, height: 900 }); await native.setViewportSize({ width, height: 900 });
       const nav = target => target.getByRole('navigation', { name: '用户输入导航' });
-      if (width > 720) {
-        for (const target of [page, native]) {
-          await nav(target).getByRole('button').first().click();
-          // Wait for React to render the active navigation state.
-          await target.waitForFunction(() => document.querySelector('.project-aow-snapshot-conversation').scrollTop < 40
-            && document.querySelector('.project-aow-snapshot-navigation button')?.getAttribute('aria-current') === 'location');
-        }
+      for (const target of [page, native]) {
+        await nav(target).getByRole('button').first().click();
+        // Wait for React to render the active navigation state.
+        await target.waitForFunction(() => document.querySelector('.project-aow-snapshot-conversation').scrollTop < 40
+          && document.querySelector('.project-aow-snapshot-navigation button')?.getAttribute('aria-current') === 'location');
       }
-      for (const selector of ['.aow-conversation-layout', '.project-aow-snapshot-header', '.project-aow-snapshot-heading h2', '.project-aow-snapshot-workspace', '.project-aow-snapshot-latest', '.project-aow-snapshot-header > button:last-child', '.project-aow-snapshot-conversation', '.project-aow-snapshot-turn', '.project-aow-snapshot-message.user', '.project-aow-snapshot-message-header', '.project-aow-snapshot-message-header > strong', '.project-aow-snapshot-bubble', '.project-aow-snapshot-navigation', '.project-aow-snapshot-navigation > header', '.project-aow-snapshot-navigation button', '.conversation-prose', '.conversation-prose h1', '.conversation-prose h2', '.conversation-prose h3', '.conversation-prose blockquote', '.conversation-prose pre', '.conversation-prose table']) {
+      for (const selector of ['.aow-conversation-layout', '.project-aow-snapshot-header', '.project-aow-snapshot-heading h2', '.project-aow-snapshot-workspace', '.project-aow-snapshot-header > button:last-child', '.project-aow-snapshot-conversation', '.project-aow-snapshot-turn', '.project-aow-snapshot-message.user', '.project-aow-snapshot-message-header', '.project-aow-snapshot-message-header > strong', '.project-aow-snapshot-bubble', '.project-aow-snapshot-navigation', '.project-aow-snapshot-navigation button', '.conversation-prose', '.conversation-prose h1', '.conversation-prose h2', '.conversation-prose h3', '.conversation-prose blockquote', '.conversation-prose pre', '.conversation-prose table']) {
         assert.deepEqual(await styles(page, selector), await styles(native, selector), `${width}px: ${selector}`);
       }
       for (const target of [page, native]) {
         assert.equal(await target.locator('.project-aow-snapshot-turn-label').count(), 0);
         assert.equal((await target.locator('.project-aow-snapshot-header').boundingBox()).height, 48);
-        assert.equal(await nav(target).isVisible(), width > 720);
+        assert.equal(await nav(target).isVisible(), true);
       }
-      if (width > 720) {
-        assert.equal((await nav(page).boundingBox()).width, (await nav(native).boundingBox()).width);
-        assert.equal((await nav(page).getByRole('button').first().boundingBox()).height, (await nav(native).getByRole('button').first().boundingBox()).height);
+      assert.equal((await nav(page).boundingBox()).width, (await nav(native).boundingBox()).width);
+      assert.equal((await nav(page).getByRole('button').first().boundingBox()).height, (await nav(native).getByRole('button').first().boundingBox()).height);
+      for (const target of [page, native]) {
+        const transcript = await target.locator('.project-aow-snapshot-conversation').boundingBox();
+        const body = await target.locator('.project-aow-snapshot-body').boundingBox();
+        assert.deepEqual([transcript.x, transcript.width], [body.x, body.width], `${width}px: navigation never displaces the conversation`);
       }
       assert.equal(await page.getByLabel('ACP 消息', { exact: true }).isVisible(), true);
     }
@@ -2984,7 +3043,7 @@ try {
     assert.deepEqual(await user.locator('img').evaluateAll(images => images.map(image => image.src)), [source, source]);
     assert.equal(await user.textContent(), 'Before **literal** <b>text</b>\n\nBetween\n\nAfter');
     assert.equal(await user.locator('b, strong, a').count(), 0, 'surrounding user text stays literal');
-    assert.equal(await page.getByRole('navigation', { name: '用户输入导航' }).getByRole('button').getAttribute('title'), 'Before **literal** <b>text</b>\n[图片]\nBetween\n[图片]\nAfter');
+    assert.equal(await page.getByRole('navigation', { name: '用户输入导航' }).getByRole('button').getAttribute('aria-label'), '1. Before **literal** <b>text</b>\n[图片]\nBetween\n[图片]\nAfter');
     assert.equal(state.session.entries[0].content.text, replayed, 'display recovery does not rewrite agent history');
     await page.reload();
     await page.getByRole('tab').filter({ hasText: 'Conversation' }).click();
@@ -3037,7 +3096,7 @@ try {
         return image?.src === source && image.complete && image.naturalWidth > 0;
       }, source);
       assert.equal(await user.textContent(), '');
-      assert.equal(await page.getByRole('navigation', { name: '用户输入导航' }).getByRole('button').getAttribute('title'), '[图片]');
+      assert.equal(await page.getByRole('navigation', { name: '用户输入导航' }).getByRole('button').getAttribute('aria-label'), '1. [图片]');
     }
   });
   await test('steering is capability-gated, preserves its turn and shares one composer button with stop', async t => {

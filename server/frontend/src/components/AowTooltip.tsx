@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type HTMLAttributes, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
-type Placement = 'top' | 'bottom';
+type Placement = 'top' | 'bottom' | 'right';
 
 function AowTooltip({ id, anchor, children, onClose, placement }: {
   id: string; anchor: HTMLElement; children: ReactNode; onClose: () => void; placement: Placement;
@@ -14,11 +14,14 @@ function AowTooltip({ id, anchor, children, onClose, placement }: {
     const rect = anchor.getBoundingClientRect();
     const above = rect.top - bounds.height - 4;
     const below = rect.bottom + 4;
-    const top = placement === 'bottom'
-      ? below + bounds.height <= window.innerHeight - 8 ? below : above
-      : above >= 8 ? above : below;
+    const top = placement === 'right' ? rect.top + (rect.height - bounds.height) / 2
+      : placement === 'bottom' ? below + bounds.height <= window.innerHeight - 8 ? below : above
+        : above >= 8 ? above : below;
+    const left = placement === 'right'
+      ? rect.right + bounds.width + 8 <= window.innerWidth - 8 ? rect.right + 8 : rect.left - bounds.width - 8
+      : rect.left;
     setPosition({
-      left: Math.max(8, Math.min(rect.left, window.innerWidth - bounds.width - 8)),
+      left: Math.max(8, Math.min(left, window.innerWidth - bounds.width - 8)),
       top: Math.max(8, Math.min(top, window.innerHeight - bounds.height - 8)),
     });
   }, [anchor, children, placement]);

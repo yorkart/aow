@@ -17,7 +17,7 @@
 .aow-conversation-layout .status.failed { color:var(--aow-error); background:var(--aow-error-background); }
 .aow-conversation-layout .status.interrupted { color:var(--aow-warning); background:var(--aow-warning-background); }
 .aow-conversation-layout .status.in_progress { color:var(--aow-info); background:var(--aow-info-background); }
-.project-aow-snapshot-body { min-width:0; min-height:0; flex:1; display:grid; grid-template-columns:minmax(0,1fr) 200px; overflow:hidden; }
+.project-aow-snapshot-body { min-width:0; min-height:0; flex:1; display:grid; grid-template-columns:minmax(0,1fr); overflow:hidden; }
 .project-aow-snapshot-conversation { min-width:0; min-height:0; flex:1; overflow:auto; padding:28px var(--conversation-content-inset) 64px; overflow-wrap:anywhere; scrollbar-color:var(--aow-scrollbar) transparent; }
 .project-aow-snapshot-state { min-height:180px; display:flex; align-items:center; justify-content:center; gap:8px; color:var(--aow-text-secondary); text-align:center; }
 .project-aow-snapshot-state svg { width:18px; }
@@ -39,31 +39,26 @@
 .project-aow-snapshot-message time { margin-left:auto; color:var(--aow-muted); font-size:10px; }
 .project-aow-snapshot-message-meta time { margin-left:0; white-space:nowrap; }
 .project-aow-snapshot-message.user time { color:var(--aow-muted); }
-.project-aow-snapshot-navigation { min-width:0; min-height:0; display:flex; flex-direction:column; overflow:hidden; background:var(--aow-panel); border-left:1px solid var(--aow-line-subtle); }
-.project-aow-snapshot-navigation > header { min-height:50px; display:flex; align-items:center; justify-content:space-between; gap:8px; padding:0 16px; color:var(--aow-muted); }
-.project-aow-snapshot-navigation > header strong { font-size:11px; font-weight:500; }
-.project-aow-snapshot-navigation > header span { color:var(--aow-muted); font-size:10px; }
-.project-aow-snapshot-navigation ol { min-height:0; margin:0; padding:0 8px 12px; overflow:auto; list-style:none; scrollbar-color:var(--aow-scrollbar) transparent; }
-.project-aow-snapshot-navigation li + li { margin-top:2px; }
-.project-aow-snapshot-navigation button { width:100%; min-height:26px; display:flex; align-items:center; gap:8px; padding:4px 8px; overflow:hidden; color:var(--aow-text); border:0; border-radius:0; background:transparent; text-align:left; cursor:pointer; }
-.project-aow-snapshot-navigation button:hover { color:var(--aow-text-hover); background:var(--aow-list-highlight); }
-.project-aow-snapshot-navigation button.active { color:var(--aow-text-strong); background:var(--aow-list-selection); }
-.project-aow-snapshot-navigation button > span { flex:0 0 16px; color:var(--aow-muted); font:10px/18px ui-monospace,monospace; text-align:center; }
-.project-aow-snapshot-navigation button.active > span { color:var(--aow-accent); }
-.project-aow-snapshot-navigation button > strong { min-width:0; flex:1; overflow:hidden; font-size:11px; font-weight:400; line-height:18px; text-overflow:ellipsis; white-space:nowrap; }
-.project-aow-snapshot-navigation button > i { width:5px; height:5px; flex:0 0 5px; border-radius:50%; background:var(--aow-success); }
-.project-aow-snapshot-navigation button > i.failed { background:var(--aow-error); }
-.project-aow-snapshot-navigation button > i.interrupted { background:var(--aow-warning); }
-.project-aow-snapshot-navigation button > i.in_progress { background:var(--aow-accent); box-shadow:0 0 0 3px var(--aow-selection); }
+.project-aow-snapshot-navigation { position:absolute; z-index:2; top:16px; bottom:16px; left:4px; width:32px; min-height:0; display:flex; flex-direction:column; justify-content:center; padding:0 2px; overflow:hidden; pointer-events:none; }
+.project-aow-snapshot-navigation ol { min-height:0; margin:0; padding:4px 0; overflow:auto; list-style:none; scrollbar-width:none; overscroll-behavior:contain; pointer-events:auto; }
+.project-aow-snapshot-navigation button { width:100%; height:24px; display:flex; align-items:center; justify-content:center; padding:0; color:var(--aow-muted); border:0; border-radius:4px; background:transparent; cursor:pointer; }
+.conversation-navigation-mark { width:12px; height:2px; flex:none; border-radius:2px; background:currentColor; opacity:.55; transition:width .15s ease,height .15s ease,opacity .15s ease; }
+.project-aow-snapshot-navigation button[aria-current="location"] { color:var(--aow-text-strong); }
+.project-aow-snapshot-navigation button[aria-current="location"] .conversation-navigation-mark { width:20px; opacity:1; }
+.project-aow-snapshot-navigation button:is(:hover,:focus-visible) { color:var(--aow-text-strong); }
+.project-aow-snapshot-navigation button:is(:hover,:focus-visible) .conversation-navigation-mark { width:24px; height:3px; opacity:1; }
+.project-aow-snapshot-navigation button:focus-visible { outline-offset:-2px; }
+.conversation-navigation-preview { display:-webkit-box; max-height:min(240px,calc(100vh - 32px)); padding:4px 0; overflow:hidden; -webkit-box-orient:vertical; -webkit-line-clamp:8; white-space:pre-wrap; }
+@media (prefers-reduced-motion:reduce) {
+  .conversation-navigation-mark { transition:none; }
+}
 @container (max-width:1000px) {
   .project-aow-snapshot-captured { display:none; }
-  .project-aow-snapshot-body { grid-template-columns:minmax(0,1fr) 168px; }
   .conversation-main { --conversation-content-inset:24px; }
 }
 @container (max-width:720px) {
   .project-aow-snapshot-header { padding:8px 14px; gap:10px; }
-  .project-aow-snapshot-body { grid-template-columns:minmax(0,1fr); }
-  .project-aow-snapshot-navigation { display:none; }
+  .project-aow-snapshot-navigation { left:0; width:24px; padding:0; }
   .conversation-main { --conversation-content-inset:16px; }
   .project-aow-snapshot-conversation { padding:20px var(--conversation-content-inset) 48px; }
   .project-aow-snapshot-message.user { max-width:96%; }
@@ -75,9 +70,9 @@
   .project-aow-snapshot-message time { font-size:9px; }
   .aow-conversation-layout .session-process-count { font-size:10px; }
 }
-.project-aow-snapshot-body.without-navigation { grid-template-columns:minmax(0,1fr); }
 .conversation-main { position:relative; display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; }
-.project-aow-snapshot-body[hidden],.project-aow-snapshot-conversation[hidden] { display:none; }
+.conversation-transcript { position:relative; display:flex; flex:1; min-width:0; min-height:0; overflow:hidden; }
+.project-aow-snapshot-body[hidden],.conversation-transcript[hidden],.project-aow-snapshot-conversation[hidden] { display:none; }
 .conversation-accessory { display:flex; flex-direction:column; flex-shrink:0; min-height:0; max-height:45%; }
 .conversation-footer { display:flex; flex-direction:column; flex-shrink:0; min-height:0; max-height:75%; }
 .conversation-footer.empty { flex:1; max-height:none; }
