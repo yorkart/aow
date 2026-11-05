@@ -91,7 +91,6 @@ pub fn build_router(state: AppState) -> Router {
         .merge(crate::projects::routes())
         .merge(crate::projects::worktrees::routes())
         .merge(crate::agents::routes())
-        .merge(crate::agents::sessions::routes())
         .merge(crate::roles::routes())
         .merge(crate::tasks::routes())
         .merge(crate::settings::routes())

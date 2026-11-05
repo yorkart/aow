@@ -79,13 +79,11 @@ async fn create(
     AxumPath(session_id): AxumPath<String>,
     Json(input): Json<CreateShare>,
 ) -> Result<Json<ShareInfo>, Response> {
-    let locator = crate::agents::sessions::resolve_session_locator(
-        &state,
-        &session_id,
-        &input.agent,
-        &input.worktree_path,
-    )
-    .await?;
+    let locator = state
+        .agents
+        .resolve_session_locator(&session_id, &input.agent, &input.worktree_path)
+        .await
+        .map_err(crate::error::service_response)?;
     // Check availability before publishing; never accept a client-supplied transcript path.
     state
         .session_shares

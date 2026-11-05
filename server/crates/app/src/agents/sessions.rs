@@ -1,24 +1,6 @@
-use super::*;
-mod api;
-pub(crate) use api::{resolve_session_locator, routes};
-
-#[derive(Debug, Deserialize)]
-pub(super) struct AgentSessionsQuery {
-    pub(super) worktree_path: String,
-    pub(super) agent: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub(super) struct AgentSessionSnapshotQuery {
-    pub(super) agent: String,
-    pub(super) worktree_path: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub(super) struct AutomationRunSessionQuery {
-    pub(super) task_id: String,
-    pub(super) run_id: String,
-}
+use super::AgentService;
+use crate::error::ServiceError;
+use std::path::{Path, PathBuf};
 
 #[cfg(test)]
 pub(crate) fn removed_directory_path(path: &Path) -> Result<PathBuf, ServiceError> {
@@ -74,6 +56,35 @@ pub(super) struct CachedSessionLocator {
 }
 
 impl AgentService {
+    pub(crate) async fn resolve_session_locator(
+        &self,
+        session_id: &str,
+        agent: &str,
+        worktree_path: &str,
+    ) -> Result<SessionReference, ServiceError> {
+        if agent.is_empty() || session_id.is_empty() || session_id.len() > 256 {
+            return Err(ServiceError::Invalid(
+                aow_i18n::text("validation.invalid_agent_session_identity").to_owned(),
+            ));
+        }
+        // A locator is only cached by a registered-session scan or a trusted
+        // automation run lookup. Once one exists, the exact workspace key is
+        // enough to read its snapshot, including an automation-created worktree
+        // that is intentionally not registered as a project worktree.
+        let requested = Path::new(worktree_path);
+        {
+            let runtime = self.node.agent_node().await?;
+            if let Ok(reference) = self.session_locator(requested, agent, session_id) {
+                return Ok(reference);
+            }
+            let cwd = runtime
+                .resolve_directory(requested)
+                .await
+                .map_err(|error| ServiceError::Invalid(error.to_string()))?;
+            self.session_locator(&cwd, agent, session_id)
+        }
+    }
+
     pub(crate) fn cache_native_sessions(
         &self,
         worktree: &Path,
