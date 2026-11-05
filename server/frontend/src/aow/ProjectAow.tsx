@@ -2183,7 +2183,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
           {(['files', 'git', 'pullRequests', conversationView, 'automations'] as ToolView[]).map(view => <button key={view} onClick={() => { close(); tools.open({ id: `view:${view}`, view }); }}><WorkspaceTabIcon kind="tool" path={view} /><span>{toolLabels[view]}</span></button>)}
         </>}
       />
-      <div className={`agent-tools-body${['files', 'git', 'pullRequests', 'automations'].includes(rightView ?? '') ? ' with-details' : ''}`}>
+      <div className={`agent-tools-body${['files', 'git', 'pullRequests', 'automations'].includes(rightView ?? '') ? ' with-details' : ''}${rightView === 'files' || rightView === 'git' ? ' navigation-right' : ''}`}>
       <div className="agent-tools-details" key={`${activeAgentId}:${agentWorkspace}`}>
       <div className="project-aow-right-content" hidden={rightView !== 'files'}>
         <ExplorerSearch key={`search:${worktree.path}:${project.id}`} projectRoot={explorerRoot} notesRoot={project.notes_path}

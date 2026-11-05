@@ -1,6 +1,8 @@
 .agent-tools-body { display:flex; flex:1; min-height:0; min-width:0; }
 .agent-tools-details { flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; }
 .agent-tools-body.with-details > .agent-tools-details { flex:0 0 auto; width:clamp(150px,30%,240px); border-right:1px solid var(--aow-line); resize:horizontal; overflow:auto; max-width:60%; }
+.agent-tools-body.navigation-right { flex-direction:row-reverse; }
+.agent-tools-body.navigation-right > .agent-tools-details { border-right:0; border-left:1px solid var(--aow-line); }
 .agent-tools-content { position:relative; flex:1; min-width:0; min-height:0; overflow:hidden; }
 .agent-tools-body:not(.with-details):has(.agent-tools-details > .project-aow-right-content:not([hidden])) > .agent-tools-content { display:none; }
 .agent-tools-body:not(.with-details):not(:has(.agent-tools-details > .project-aow-right-content:not([hidden]))) > .agent-tools-details { display:none; }
