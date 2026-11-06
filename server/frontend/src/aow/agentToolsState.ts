@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { persist, readStored } from './floatingWorkspaceState';
 
-export type ToolView = 'properties' | 'conversations' | 'files' | 'git' | 'pullRequests' | 'automations' | 'terminal';
+export type ToolView = 'properties' | 'conversations' | 'files' | 'notes' | 'git' | 'pullRequests' | 'automations' | 'terminal';
 export interface ToolTab { id: string; view: ToolView; preview?: boolean }
 export interface AgentToolsState { tabs: ToolTab[]; active?: string; detailsVisible?: boolean }
 export function openTool(state: AgentToolsState, tab: ToolTab): AgentToolsState {
-  if (state.tabs.some(item => item.id === tab.id)) return { ...state, active: tab.id };
+  if (state.tabs.some(item => item.id === tab.id)) return { ...state, tabs: state.tabs.map(item => item.id === tab.id ? { ...item, view: tab.view } : item), active: tab.id };
   // A browsing entry becomes the first preview; kept editors are never replaced.
   const replace = state.tabs.findIndex(item => tab.preview && (item.preview || item.id === `view:${tab.view}`));
   const tabs = [...state.tabs];
@@ -21,7 +21,7 @@ export function useAgentTools(scope: string, owner: string, defaultView: ToolVie
   const [owners, setOwners] = useState<Record<string, AgentToolsState>>(() => {
     const saved = readStored<Record<string, AgentToolsState>>(`aow-agent-tools:${scope}`, {});
     return Object.fromEntries(Object.entries(saved ?? {}).filter(([, state]) => state && Array.isArray(state.tabs)
-      && state.tabs.every(tab => tab && typeof tab.id === 'string' && ['properties', 'conversations', 'files', 'git', 'pullRequests', 'automations', 'terminal'].includes(tab.view))));
+      && state.tabs.every(tab => tab && typeof tab.id === 'string' && ['properties', 'conversations', 'files', 'notes', 'git', 'pullRequests', 'automations', 'terminal'].includes(tab.view))));
   });
   const fallback: AgentToolsState = { tabs: [{ id: `view:${defaultView}`, view: defaultView }], active: `view:${defaultView}` };
   const current = owners[owner] ?? fallback;

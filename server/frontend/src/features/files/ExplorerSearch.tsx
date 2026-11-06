@@ -9,11 +9,11 @@ import type { OpenSearchFile, SearchOptions } from './searchTypes';
 import './explorer-search.css';
 
 interface Props {
-  projectRoot: string; notesRoot: string; visible: boolean; onOpen: OpenSearchFile; children: ReactNode;
-  projectRefresh: number; notesRefresh: number;
+  root: string; source: 'project' | 'notes'; visible: boolean; onOpen: OpenSearchFile; children: ReactNode;
+  refreshGeneration: number;
 }
 
-export function ExplorerSearch({ projectRoot, notesRoot, visible, onOpen, children, projectRefresh, notesRefresh }: Props) {
+export function ExplorerSearch({ root, source, visible, onOpen, children, refreshGeneration }: Props) {
   const [query, setQuery] = useState('');
   const [composing, setComposing] = useState(false);
   const [options, setOptions] = useState<SearchOptions>({ mode: 'name', case_sensitive: false, whole_word: false, use_regex: false, include_ignored: false, include_pattern: '', exclude_pattern: '' });
@@ -22,16 +22,15 @@ export function ExplorerSearch({ projectRoot, notesRoot, visible, onOpen, childr
   const content = options.mode === 'content';
   // Name filtering follows the existing tree, including ignored files.
   const effectiveOptions = useMemo(() => content ? options : { ...options, include_pattern: '', exclude_pattern: '', include_ignored: true }, [content, options]);
-  const project = useFileSearch(projectRoot, query, effectiveOptions, visible && !composing, refresh + projectRefresh);
-  const notes = useFileSearch(notesRoot, query, effectiveOptions, visible && !composing, refresh + notesRefresh);
+  const search = useFileSearch(root, query, effectiveOptions, visible && !composing, refresh + refreshGeneration);
   const searching = Boolean(query.trim());
   const toggle = (key: 'case_sensitive' | 'whole_word' | 'use_regex' | 'include_ignored') => setOptions(previous => ({ ...previous, [key]: !previous[key] }));
   return <div className="explorer-search">
     <div className="explorer-search-controls">
       <div className="explorer-search-input">
         <div className="explorer-search-query">
-          {project.loading || notes.loading ? <LoaderCircle className="spinning" size={15} /> : content ? <Search size={15} /> : <ListFilter size={15} />}
-          <input aria-label={t("files.search_project_and_notes")} placeholder={content ? t("files.search_file_contents") : t("files.find_by_file_name_or_path")} value={query} spellCheck={false}
+          {search.loading ? <LoaderCircle className="spinning" size={15} /> : content ? <Search size={15} /> : <ListFilter size={15} />}
+          <input aria-label={t(source === 'notes' ? 'files.search_notes' : 'files.search_project')} placeholder={content ? t("files.search_file_contents") : t("files.find_by_file_name_or_path")} value={query} spellCheck={false}
             onChange={event => setQuery(event.currentTarget.value)} onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)}
             onKeyDown={event => { if (event.nativeEvent.isComposing) return; if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setQuery(''); } if (event.key === 'Enter') setRefresh(value => value + 1); }} />
           {query ? <ExplorerSearchButton label={t("files.clear_search")} onClick={() => setQuery('')}><X size={14} /></ExplorerSearchButton> : null}
@@ -56,8 +55,8 @@ export function ExplorerSearch({ projectRoot, notesRoot, visible, onOpen, childr
     </div>
     <div className="explorer-search-body" hidden={searching}>{children}</div>
     {searching ? <AowPanelStack className="project-aow-explorer-stack explorer-search-results">
-      <SearchResultTree key={`project:${project.key}`} root={projectRoot} title={t("navigation.project_explorer")} icon={<Files />} source="project" state={project} content={content} onOpen={onOpen} onRefresh={() => setRefresh(value => value + 1)} />
-      <SearchResultTree key={`notes:${notes.key}`} root={notesRoot} title={t("navigation.notes_explorer")} icon={<NotebookPen />} source="notes" state={notes} content={content} onOpen={onOpen} onRefresh={() => setRefresh(value => value + 1)} />
+      <SearchResultTree key={search.key} root={root} title={t(source === 'notes' ? 'navigation.notes_explorer' : 'navigation.project_explorer')}
+        icon={source === 'notes' ? <NotebookPen /> : <Files />} source={source} state={search} content={content} onOpen={onOpen} onRefresh={() => setRefresh(value => value + 1)} />
     </AowPanelStack> : null}
   </div>;
 }

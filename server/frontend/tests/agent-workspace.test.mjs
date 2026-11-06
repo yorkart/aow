@@ -21,7 +21,7 @@ try {
     let updatedAt = createdAt;
     const tasks = [], sessions = [], terminals = [], creations = [], deleted = [], worktreeRequests = [];
     const worktree = { id: 'wt', project_id: 'project', path: '/repo', branch: 'main', head: 'abc', is_main: true, detached: false, locked: false, prunable: false, color: 'default' };
-    const toolRequests = [], writes = [];
+    const toolRequests = [], writes = [], searchRequests = [];
     let names = ['a.md', 'b.md', 'c.md', 'slow.md'];
     let slowRead, releaseSlow;
     t.after(() => releaseSlow?.());
@@ -115,7 +115,12 @@ try {
       } else if (path === '/api/worktree-creations') data = [];
       else if (path.startsWith('/api/fs/tree')) {
         const root = decodeURIComponent(path.slice('/api/fs/tree'.length)); toolRequests.push(root);
-        data = { path: root, entries: root === '/notes' ? [] : names.map(name => ({ name, path: root + '/' + name, kind: 'file', readonly: false, size: 12, modified_ms: null, hidden: false, mode: 0, links: 1, uid: 0, gid: 0, is_symlink: false, link_target: null })) };
+        data = { path: root, entries: (root === '/notes' ? ['plan.md', 'ideas.md', 'note.md'] : names).map(name => ({ name, path: root + '/' + name, kind: 'file', readonly: false, size: 12, modified_ms: null, hidden: false, mode: 0, links: 1, uid: 0, gid: 0, is_symlink: false, link_target: null })) };
+      }
+      else if (path === '/api/fs/search') {
+        const input = request.postDataJSON(); searchRequests.push(input);
+        const name = input.root === '/notes' ? 'plan.md' : 'a.md';
+        data = { files: [{ path: input.root + '/' + name, relative_path: name, matches: input.mode === 'content' ? [{ line: 1, column: 1, match_length: 4, text: 'plan', preview_column: 0, preview_length: 4 }] : [] }], total_matches: 1, truncated: false };
       }
       else if (path === '/api/fs/entries' && request.method() === 'PATCH') {
         const input = request.postDataJSON(); names = names.map(name => input.path.endsWith('/' + name) ? input.name : name);
@@ -156,13 +161,21 @@ try {
     assert.equal(await page.getByRole('button', { name: 'Hide right sidebar', exact: true }).count(), 0);
     const openTool = async label => {
       await right.getByRole('button', { name: 'New tool', exact: true }).click();
+      const menuItems = await page.locator('.project-aow-new-menu > button').allTextContents();
+      assert.equal(menuItems.indexOf('Notes'), menuItems.indexOf('Files') + 1);
       await page.locator('.project-aow-new-menu').getByRole('button', { name: label, exact: true }).click();
     };
-    const file = name => right.locator('.tree-list').getByText(name, { exact: true });
+    const file = name => right.locator('.tree-list:visible').getByText(name, { exact: true });
     await center.getByRole('button', { name: 'New window', exact: true }).click();
     assert.equal(await page.locator('.project-aow-new-menu').getByRole('button', { name: 'Terminal', exact: true }).count(), 0);
     await page.keyboard.press('Escape');
     await openTool('Files');
+    assert.equal(await right.getByRole('textbox', { name: 'Search notes', exact: true }).count(), 0);
+    const projectSearch = right.getByRole('textbox', { name: 'Search project files', exact: true });
+    await projectSearch.fill('project-query');
+    await right.getByRole('tree', { name: 'Project Explorer search results' }).getByText('a.md', { exact: true }).waitFor();
+    assert.deepEqual(searchRequests.map(request => request.root), ['/repo']);
+    await projectSearch.press('Escape');
     await file('a.md').click();
     await right.getByRole('tab').filter({ hasText: 'a.md' }).waitFor();
     assert.equal(await center.getByRole('tab').count(), 1);
@@ -245,9 +258,28 @@ try {
     await toggleDetails.click();
     assert.equal(await details.isVisible(), false);
     assert.equal(await content.isVisible(), true);
+    await openTool('Notes');
+    await right.getByRole('tab', { selected: true }).filter({ hasText: 'Notes' }).waitFor();
     await openTool('New Markdown');
     await right.getByRole('tab').filter({ hasText: 'note.md' }).waitFor();
     assert.equal(await toggleDetails.getAttribute('aria-pressed'), 'false');
+    await toggleDetails.click();
+    assert.equal(await right.getByRole('textbox', { name: 'Search project files', exact: true }).count(), 0);
+    const notesSearch = right.getByRole('textbox', { name: 'Search notes', exact: true });
+    await notesSearch.fill('notes-query');
+    const notesResults = right.getByRole('tree', { name: 'Notes Explorer search results' });
+    await notesResults.getByText('plan.md', { exact: true }).waitFor();
+    await right.getByRole('button', { name: 'Content', exact: true }).click();
+    await notesResults.locator('mark').click();
+    await right.getByRole('tab', { selected: true }).filter({ hasText: 'plan.md' }).dblclick();
+    assert.deepEqual(searchRequests.filter(request => request.query === 'notes-query').map(request => [request.root, request.mode]), [['/notes', 'name'], ['/notes', 'content']]);
+    await notesSearch.press('Escape');
+    await file('ideas.md').click();
+    await right.getByRole('tab').filter({ hasText: 'ideas.md' }).waitFor();
+    assert.equal(await right.getByRole('tab').filter({ hasText: 'plan.md' }).count(), 1);
+    assert.ok((await details.boundingBox()).x > (await content.boundingBox()).x);
+    await page.screenshot({ path: '/tmp/aow-notes-tools.png' });
+    await toggleDetails.click();
     assert.equal(await center.getByRole('tab').count(), 1);
     await center.getByRole('button', { name: 'New window', exact: true }).click();
     await page.locator('.project-aow-new-menu').getByRole('button', { name: 'Reviewer ACP', exact: true }).click();
@@ -295,6 +327,11 @@ try {
     await center.getByRole('tab').filter({ hasText: 'initial-0' }).waitFor();
     await right.getByRole('tab').filter({ hasText: 'renamed.md' }).waitFor();
     await right.getByRole('tab').filter({ hasText: 'c.md' }).waitFor();
+    await right.getByRole('tab').filter({ hasText: 'plan.md' }).click();
+    await toggleDetails.click();
+    await right.getByRole('textbox', { name: 'Search notes', exact: true }).waitFor();
+    assert.equal(await right.getByRole('textbox', { name: 'Search project files', exact: true }).count(), 0);
+    await toggleDetails.click();
     await right.getByRole('tab').filter({ hasText: 'renamed.md' }).click();
     assert.equal(await toggleDetails.getAttribute('aria-pressed'), 'false');
     await toggleDetails.click();

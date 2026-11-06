@@ -893,7 +893,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const toolOwner = activeAgentId ?? (initialTask?.initial_thread_id ? `acp:${initialTask.initial_thread_id}` : 'workspace');
   const tools = useAgentTools(scope, `${toolOwner}:${agentWorkspace}`, conversationView);
   const rightView = tools.tabs.find(tab => tab.id === tools.active)?.view;
-  const hasDetails = ['files', 'git', 'pullRequests', 'automations'].includes(rightView ?? '');
+  const hasDetails = ['files', 'notes', 'git', 'pullRequests', 'automations'].includes(rightView ?? '');
   const detailsVisible = tools.detailsVisible !== false;
   const detailsId = useId();
   const toolRevealRequest = useMemo(() => tools.active ? { tabId: tools.active } : undefined, [tools.active, toolOwner, agentWorkspace]);
@@ -907,8 +907,14 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     if (!id.startsWith('view:')) setActiveCenterId(id);
     if (!restoring.current) { tools.open({ id, view, preview }); onShowRightSidebar?.(); }
   }, [tools.open, onShowRightSidebar]);
+  const documentToolView = (id: string): ToolView => {
+    const document = documents.find(item => item.id === id);
+    return tools.tabs.find(tab => tab.id === `document:${id}`)?.view
+      ?? (document?.diffSource ? 'git' : document?.explorerSource === 'notes' ? 'notes' : 'files');
+  };
   const viewForTab = (tab: CenterTab): ToolView => tab.kind === 'diff' ? 'git' : tab.kind === 'pullRequest' ? 'pullRequests'
-    : tab.kind === 'automation' ? 'automations' : tab.kind === 'terminal' ? 'terminal' : 'files';
+    : tab.kind === 'automation' ? 'automations' : tab.kind === 'terminal' ? 'terminal'
+      : documentToolView(tab.targetId);
   useEffect(() => {
     for (const document of documents) if (document.dirty || document.saving || document.pendingExternal) tools.pinResource(`document:${document.id}`);
   }, [documents, tools.pinResource]);
@@ -1167,7 +1173,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     else if (source === 'project') setFilesExplorerCollapsed(false);
 
     routeToFloating(`document:${id}`, targetFloating);
-    selectTool(`document:${id}`, 'files', preview);
+    selectTool(`document:${id}`, source === 'notes' ? 'notes' : 'files', preview);
     if (workspaceDocument(scope, id)) return;
     const existing = sharedDocument(id);
     if (project.builtin && preview && !existing?.dirty && !existing?.saving) floating.openPreview(scope, `document:${id}`, targetFloating || !!project.builtin);
@@ -2068,7 +2074,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
               activeId={selectedDocumentId}
               wordWrapOverride={wordWrapFor(selectedDocumentId)}
               onWordWrapChange={setWordWrap}
-              onActivate={id => selectTab(() => selectTool(`document:${id}`, documents.find(document => document.id === id)?.diffSource ? 'git' : 'files'))}
+              onActivate={id => selectTab(() => selectTool(`document:${id}`, documentToolView(id)))}
               onClose={closeDocument}
               onCloseOthers={(id) => {
                 const dirty = documents.filter((document) => document.id !== id && document.dirty);
@@ -2156,7 +2162,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
           />
         </div>)}</Fragment>)}
   </div>;
-  const toolLabels: Record<ToolView, string> = { properties: t('tasks.properties'), conversations: t('navigation.conversation'), files: t('navigation.files'), git: t('navigation.source_control'), pullRequests: t('navigation.pull_requests'), automations: t('navigation.automation'), terminal: t('navigation.terminal') };
+  const toolLabels: Record<ToolView, string> = { properties: t('tasks.properties'), conversations: t('navigation.conversation'), files: t('navigation.files'), notes: t('navigation.notes'), git: t('navigation.source_control'), pullRequests: t('navigation.pull_requests'), automations: t('navigation.automation'), terminal: t('navigation.terminal') };
   const toolTabs: CenterTab[] = tools.tabs.map(item => item.id.startsWith('view:')
     ? { id: item.id, kind: 'tool', label: toolLabels[item.view], targetId: item.view, renameable: false }
     : { ...(centerTabs.find(tab => tab.id === item.id) ?? { id: item.id, kind: 'file' as const, targetId: item.id, label: basename(item.id) }), preview: item.preview });
@@ -2193,15 +2199,15 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
         newMenuContent={close => <>
           <button onClick={() => { close(); void createTerminal(); }}><WorkspaceTabIcon kind="terminal" path="" /><span>{t('navigation.terminal')}</span></button>
           <button onClick={() => { close(); void createTemporaryNote('md'); }}><NotebookPen /><span>{t('aow.new_markdown')}</span></button>
-          {(['files', 'git', 'pullRequests', conversationView, 'automations'] as ToolView[]).map(view => <button key={view} onClick={() => { close(); tools.open({ id: `view:${view}`, view }); }}><WorkspaceTabIcon kind="tool" path={view} /><span>{toolLabels[view]}</span></button>)}
+          {(['files', 'notes', 'git', 'pullRequests', conversationView, 'automations'] as ToolView[]).map(view => <button key={view} onClick={() => { close(); tools.open({ id: `view:${view}`, view }); }}><WorkspaceTabIcon kind="tool" path={view} /><span>{toolLabels[view]}</span></button>)}
         </>}
       />
-      <div className={`agent-tools-body${hasDetails ? ' with-details' : ''}${rightView === 'files' || rightView === 'git' ? ' navigation-right' : ''}`}>
+      <div className={`agent-tools-body${hasDetails ? ' with-details' : ''}${rightView === 'files' || rightView === 'notes' || rightView === 'git' ? ' navigation-right' : ''}`}>
       <div id={detailsId} className="agent-tools-details" key={`${activeAgentId}:${agentWorkspace}`} hidden={hasDetails && !detailsVisible}>
       <div className="project-aow-right-content" hidden={rightView !== 'files'}>
-        <ExplorerSearch key={`search:${worktree.path}:${project.id}`} projectRoot={explorerRoot} notesRoot={project.notes_path}
+        <ExplorerSearch key={`search:${explorerRoot}`} root={explorerRoot} source="project"
           visible={active && rightSidebarVisible && detailsVisible && rightView === 'files'} onOpen={(path, source, match) => void selectTab(() => openSearchFile(path, source, match))}
-          projectRefresh={explorerRefresh.generation} notesRefresh={notesRefresh.generation}>
+          refreshGeneration={explorerRefresh.generation}>
         <AowPanelStack className="project-aow-explorer-stack">
           <Explorer
             key={`files:${explorerRoot}`} root={explorerRoot}
@@ -2213,6 +2219,14 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
             onCreateDirectory={(directory, name) => createExplorerEntry('project', directory, name, 'directory')}
             onDeleteEntry={(path, directory) => void deleteExplorerEntry('project', path, directory)} refreshRequest={explorerRefresh}
           />
+        </AowPanelStack>
+        </ExplorerSearch>
+      </div>
+      <div className="project-aow-right-content" hidden={rightView !== 'notes'}>
+        <ExplorerSearch key={`search:${project.notes_path}`} root={project.notes_path} source="notes"
+          visible={active && rightSidebarVisible && detailsVisible && rightView === 'notes'} onOpen={(path, source, match) => void selectTab(() => openSearchFile(path, source, match))}
+          refreshGeneration={notesRefresh.generation}>
+        <AowPanelStack className="project-aow-explorer-stack">
           <Explorer
             key={`notes:${project.id}:${project.notes_path}`} root={project.notes_path}
             title={t("navigation.notes_explorer")} titleIcon={<NotebookPen />} aowHeader collapsed={notesExplorerCollapsed} onCollapsedChange={setNotesExplorerCollapsed}
