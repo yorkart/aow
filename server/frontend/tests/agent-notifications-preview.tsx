@@ -22,7 +22,7 @@ function Preview({ entry }: { entry?: ResolvedTab }) {
     <button onClick={() => syncTab({ type: 'terminal', tabId: 'shared' })}>查看同名 Terminal</button>
     <output aria-label="Terminal 未读数">{unreadTerminals.size}</output>
     <output aria-label="工作区未读数">{unreadWorktrees.get('/workspace/demo') ?? 0}</output>
-    <ConversationPanel onOpenTerminal={() => undefined} workspace="/workspace/demo" visible onOpenAcp={session => syncTab({ type: 'acp', thread_id: session.thread_id })} />
+    <ConversationPanel tasks={[]} onOpenTerminal={() => undefined} workspace="/workspace/demo" visible onOpenAcp={session => syncTab({ type: 'acp', thread_id: session.thread_id })} />
     <button disabled={busy} onClick={() => setSection('im')}>IM 设置</button>
     <button disabled={busy} onClick={() => setSection('notifications')}>通知设置</button>
     {section && <section className="project-aow-modal project-aow-dialog"><NotificationSettingsPanel section={section} onBusyChange={setBusy} /></section>}

@@ -34,6 +34,19 @@ pub struct TaskEvent {
 }
 
 impl TaskDb {
+    pub fn event_for_request(&self, thread: &str, request: &str) -> Result<Option<TaskEvent>> {
+        let data: Option<String> = self
+            .lock()?
+            .query_row(
+                "SELECT payload FROM task_events WHERE thread_id=?1 AND request_id=?2",
+                params![thread, request],
+                |row| row.get(0),
+            )
+            .optional()?;
+        data.map(|data| serde_json::from_str(&data).map_err(Into::into))
+            .transpose()
+    }
+
     pub fn event(&self, id: &str) -> Result<Option<TaskEvent>> {
         let data: Option<String> = self
             .lock()?

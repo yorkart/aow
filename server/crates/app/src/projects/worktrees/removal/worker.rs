@@ -15,7 +15,6 @@ pub(super) fn spawn(
         let inner_job = worker_job.clone();
         let worker_operation = operation.clone();
         let worker = aow_i18n::spawn(async move {
-            let _project = project_lock.lock().await;
             let _permit = worker_state
                 .projects
                 .inner
@@ -24,6 +23,10 @@ pub(super) fn spawn(
                 .acquire()
                 .await
                 .expect("removal semaphore closed");
+            // Match task creation: task resources before project mutation.
+            // Wait for worker capacity first, without holding either lock.
+            let _tasks = worker_state.tasks.task_resource_access().await;
+            let _project = project_lock.lock().await;
             run_job(&worker_state, &inner_job, &worker_operation).await;
         });
         if let Err(error) = worker.await {
@@ -93,15 +96,15 @@ pub(super) fn spawn(
     });
 }
 
-pub(super) async fn run_job(state: &AppState, job: &RemovalJob, operation: &Handle) {
+async fn run_job(state: &AppState, job: &RemovalJob, operation: &Handle) {
     for (index, item) in job.items.iter().enumerate() {
         operation.progress(
             aow_i18n::message("server.checking", &[("auto0", item.path.to_string())]),
             Some(index),
         );
         let outcome = async {
-            // Recheck after queueing, serialized with task creation/unarchiving.
-            let _tasks = state.tasks.task_resource_access().await;
+            // The caller retains both locks through cleanup; recheck protection
+            // after queueing so creation/unarchiving cannot race with deletion.
             state
                 .tasks
                 .ensure_workspace_deletable(&state.acp, &item.path)

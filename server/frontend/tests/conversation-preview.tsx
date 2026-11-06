@@ -9,12 +9,12 @@ import '../src/styles.css';
 const task: WorkTask = { status: 'todo', created_at: null, updated_at: null, completed_at: null, id: 'task', project_id: 'project', workspace: '/repo', prompt: 'Task', agent_id: 'codex',
   workspace_mode: 'existing', slug: null, initial_thread_id: 'root', pinned: false, archived: false,
   resources: [{ kind: 'acp', id: 'root' }], dependencies: ['other'] };
-const other: WorkTask = { ...task, id: 'other', resources: [{ kind: 'acp', id: 'other' }], dependencies: [] };
+const other: WorkTask = { ...task, id: 'other', initial_thread_id: 'other', resources: [{ kind: 'acp', id: 'other' }], dependencies: [] };
 function Preview() {
   const graph = useInstanceGraph();
   const [mode, setMode] = useState('worktree');
   const [opened, setOpened] = useState('');
-  const panel = <ConversationPanel workspace="/repo" visible onOpenAcp={session => setOpened(`acp:${session.thread_id}`)} onOpenTerminal={tab => setOpened(`terminal:${tab.id}`)} />;
+  const panel = <ConversationPanel tasks={[task, other]} workspace="/repo" visible onOpenAcp={session => setOpened(`acp:${session.thread_id}`)} onOpenTerminal={tab => setOpened(`terminal:${tab.id}`)} />;
   return <><button onClick={() => setMode(mode === 'task' ? 'worktree' : 'task')}>{mode}</button><output aria-label="Opened instance">{opened}</output>
     <aside style={{ width: 320, height: 600 }}>{mode === 'task' ? <TaskScopeProvider task={task} tasks={[task, other]} instances={graph.items}>{panel}</TaskScopeProvider> : panel}</aside></>;
 }

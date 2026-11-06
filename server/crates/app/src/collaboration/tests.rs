@@ -482,6 +482,87 @@ async fn automatic_messages_and_child_reports_use_main_conversations_not_auxilia
 }
 
 #[tokio::test]
+async fn child_reports_survive_parent_deletion_and_retries_keep_the_original_destination() {
+    let directory = tempfile::tempdir().unwrap();
+    let state = state(directory.path());
+    let parent = task(&state, directory.path(), "parent").await;
+    let mut child = task(&state, directory.path(), "child").await;
+    let db = state.tasks.test_db();
+    db.remove(&child.id).unwrap();
+    child.source_task_id = Some(parent.id.clone());
+    child.source_thread_id = parent.initial_thread_id.clone();
+    db.insert(&child).unwrap();
+    let thread = child.initial_thread_id.as_deref().unwrap();
+    let parent_thread = parent.initial_thread_id.as_deref().unwrap();
+    state.acp.resume(parent_thread).await.unwrap();
+    state
+        .acp
+        .start_prompt(parent_thread, content("wait"))
+        .await
+        .unwrap();
+    let app = crate::tasks::cli_routes()
+        .merge(crate::tasks::routes())
+        .with_state(state.clone());
+    let request = json!({"request_id":"before-delete","source_thread_id":thread,"kind":"progress","message":"POC ready"});
+    let (status, original) = call(&app, "POST", "/v1/tasks/child/report", request.clone()).await;
+    assert_eq!(status, StatusCode::OK, "{original}");
+    assert_eq!(original["target"]["thread_id"], parent_thread);
+    assert_eq!(
+        call(&app, "DELETE", "/api/tasks/parent", json!({})).await.0,
+        StatusCode::NO_CONTENT
+    );
+
+    let after = json!({"request_id":"after-delete","source_thread_id":thread,"kind":"result","message":"Final conclusion"});
+    let (status, event) = call(&app, "POST", "/v1/tasks/child/report", after.clone()).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "a missing destination must not lose the report: {event}"
+    );
+    assert_eq!(event["message"], "Final conclusion");
+    assert!(
+        event["target"].is_null(),
+        "do not wake an orphaned auxiliary or an unrelated task"
+    );
+    for (request, expected) in [(request, original.clone()), (after.clone(), event.clone())] {
+        let (code, retried) = call(&app, "POST", "/v1/tasks/child/report", request).await;
+        assert_eq!(code, StatusCode::OK, "{retried}");
+        assert_eq!(retried, expected);
+    }
+    let mut conflict = after;
+    conflict["message"] = json!("Changed conclusion");
+    assert_eq!(
+        call(&app, "POST", "/v1/tasks/child/report", conflict)
+            .await
+            .0,
+        StatusCode::BAD_REQUEST
+    );
+    let inbox = db.inbox(Some("project"), false, false, 0, 30).unwrap();
+    assert_eq!(inbox.items.len(), 2);
+    let saved = inbox
+        .items
+        .iter()
+        .find(|item| item.event.id == event["id"].as_str().unwrap())
+        .unwrap();
+    assert_eq!(saved.event.task_id, child.id);
+    assert!(saved.delivery.is_none());
+    until(|| async {
+        db.inbox(Some("project"), false, false, 0, 30)
+            .unwrap()
+            .items
+            .iter()
+            .find(|item| item.event.id == original["id"].as_str().unwrap())
+            .unwrap()
+            .delivery
+            .as_ref()
+            .is_some_and(|message| message.state == DeliveryState::Blocked)
+    })
+    .await;
+    state.acp.close_session(parent_thread).await.unwrap();
+    state.acp.close_session(thread).await.unwrap();
+}
+
+#[tokio::test]
 async fn blocked_delivery_can_retry_without_losing_report_or_replaying_accepted_messages() {
     let directory = tempfile::tempdir().unwrap();
     let state = state(directory.path());

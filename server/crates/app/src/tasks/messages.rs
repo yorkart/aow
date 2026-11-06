@@ -117,23 +117,37 @@ pub(super) async fn report(
             task_id: target.id,
             thread_id: thread,
         })
+    } else if let Some(existing) = state
+        .tasks
+        .inner
+        .tasks
+        .event_for_request(&request.source_thread_id, &request.request_id)
+        .map_err(storage)?
+    {
+        // Retries retain the original resolved destination even if the parent
+        // has since been deleted. publish_event still rejects changed content.
+        existing.target
     } else {
         // The originating thread is provenance, not the parent's collaboration
         // endpoint. A child created from an auxiliary session still reports to
         // its parent task's fixed main conversation.
-        task.source_task_id
-            .as_deref()
-            .map(|id| {
-                let parent = find_task(&state, id)?;
-                let thread_id = parent
-                    .initial_thread_id
-                    .ok_or_else(|| invalid("Parent task has no main conversation"))?;
-                Ok::<_, HttpError>(EventTarget {
+        // If that parent no longer exists, retain the report in the project
+        // inbox without waking an orphaned session or inventing a new target.
+        state
+            .tasks
+            .list()
+            .map_err(storage)?
+            .into_iter()
+            .find(|parent| {
+                Some(&parent.id) == task.source_task_id.as_ref()
+                    && parent.project_id == task.project_id
+            })
+            .and_then(|parent| {
+                parent.initial_thread_id.map(|thread_id| EventTarget {
                     task_id: parent.id,
                     thread_id,
                 })
             })
-            .transpose()?
     };
     let source = crate::collaboration::report_source(&state, &task, &request.source_thread_id)
         .await

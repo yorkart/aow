@@ -29,7 +29,7 @@ function Preview() {
         })}</div>
         <div ref={setPortal} style={{ flex: 1, position: 'relative' }} hidden={!moved} />
       </main>
-      <aside style={{ width: 300 }}><ConversationPanel onOpenTerminal={() => undefined} workspace="/repo" visible activeThreadId={acp.tabs.find(tab => tab.id === activeId)?.thread_id} onOpenAcp={session => setActiveId(acp.open(session))} /></aside>
+      <aside style={{ width: 300 }}><ConversationPanel tasks={[]} onOpenTerminal={() => undefined} workspace="/repo" visible activeThreadId={acp.tabs.find(tab => tab.id === activeId)?.thread_id} onOpenAcp={session => setActiveId(acp.open(session))} /></aside>
     </div>}
     <output hidden aria-label="Opened file">{opened}</output><output hidden aria-label="Unsaved settings">{String(dirty)}</output>
   </div>;

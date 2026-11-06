@@ -67,6 +67,8 @@ try {
     const panel = page.locator('.conversation-panel');
     await panel.locator('[data-instance="acp:grandchild"]').waitFor();
     assert.equal(await panel.locator('[data-instance]').count(), 5);
+    assert.equal(await panel.locator('[data-instance="acp:root"] > .conversation-row .aow-list-row-menu').count(), 0, 'main conversations are protected in the worktree view too');
+    assert.equal(await panel.locator('[data-instance="acp:child"] > .conversation-row .aow-list-row-menu').count(), 1, 'auxiliary conversations retain deletion');
     assert.equal(await panel.locator('[data-instance="terminal:shell"]').count(), 0);
     assert.equal(await panel.locator('[data-instance="acp:root"] [data-instance="terminal:agent"] [data-instance="acp:child"]').count(), 1);
     await panel.getByRole('button', { name: 'agent', exact: true }).click();
