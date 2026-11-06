@@ -29,7 +29,7 @@ import { FloatingWorkspaceProvider, FloatingOpenMenu, useFloatingWorkspace, open
 import type { SetStateAction, CSSProperties, DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from 'react';
 import {
   ArrowUp, Bell, Check, ChevronRight, CornerDownLeft, FileText, Files, FolderGit2, GitBranchPlus, MessageSquare, MoreHorizontal,
-  Archive, Inbox, ListTodo, LoaderCircle, NotebookPen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Pin, PinOff, Plus, RefreshCw, Settings, Trash2, X,
+  Archive, Inbox, ListTodo, LoaderCircle, NotebookPen, PanelLeftClose, PanelLeftOpen, Maximize, Minimize, ListFilter, Pin, PinOff, Plus, RefreshCw, Settings, Trash2, X,
 } from 'lucide-react';
 import { gitApi } from '../features/git/api';
 import { filesApi } from '../features/files/api';
@@ -105,7 +105,6 @@ const textExtensions = new Set(['rs', 'ts', 'tsx', 'js', 'jsx', 'py', 'go', 'jav
 const leftSidebarWidthStorageKey = 'aow-left-width';
 const leftSidebarVisibleStorageKey = 'aow-left-visible';
 const rightSidebarWidthStorageKey = 'aow-right-width';
-const rightSidebarVisibleStorageKey = 'aow-right-visible';
 const defaultLeftSidebarWidth = 280;
 const defaultRightSidebarWidth = 640;
 const minLeftSidebarWidth = 180;
@@ -716,9 +715,10 @@ interface WorkspaceSurfaceProps {
   active: boolean;
   agents: AowAgent[];
   onShowLeftSidebar?: () => void;
-  rightSidebarVisible: boolean;
-  onHideRightSidebar: () => void;
-  onShowRightSidebar: () => void;
+  rightSidebarVisible?: boolean;
+  onShowRightSidebar?: () => void;
+  editorMaximized?: boolean;
+  onToggleEditorMaximized?: () => void;
   onStartRightResize: (event: ReactPointerEvent<HTMLDivElement>) => void;
   notesRefresh: ExplorerRefresh;
   onNotesChanged: (projectId: string, directory: string) => void;
@@ -726,7 +726,7 @@ interface WorkspaceSurfaceProps {
 }
 
 const WorkspaceSurface = memo(function WorkspaceSurface({
-  globalTabs: allGlobalTabs = emptyGlobalTabs, browserPath = '', worktree, project, active, agents, onShowLeftSidebar, rightSidebarVisible, onHideRightSidebar,
+  globalTabs: allGlobalTabs = emptyGlobalTabs, browserPath = '', worktree, project, active, agents, onShowLeftSidebar, rightSidebarVisible = true, editorMaximized = false, onToggleEditorMaximized,
   onShowRightSidebar, onStartRightResize, notesRefresh, onNotesChanged: onProjectNotesChanged, onResourcesChanged, initialEntry, locationSource,
 }: WorkspaceSurfaceProps) {
   const navigateTab = useAowTabNavigation();
@@ -759,7 +759,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   };
   const tabLive = (id: string) => {
     const hosted = hostedLocation(id);
-    return tabVisible(id) && (hosted ? !!floating.hosts[hosted.host]?.visible : isFloating(id) ? floating.visible : active && (agentTabs.some(tab => tab.id === id) || rightSidebarVisible));
+    return tabVisible(id) && (hosted ? !!floating.hosts[hosted.host]?.visible : isFloating(id) ? floating.visible : active && (agentTabs.some(tab => tab.id === id) ? !editorMaximized : rightSidebarVisible));
   };
   const projectContent = (id: string, content: React.ReactNode) => {
     // The owner keeps the terminal state and callbacks; only its render target moves.
@@ -810,9 +810,9 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     if (!tab) return;
     restoreSelectionOverridden.current = true;
     setActiveCenterId(tab.id);
-
+    if (editorMaximized) onToggleEditorMaximized?.();
     setTabRevealRequest({ tabId: tab.id });
-  }, [globalTabs]);
+  }, [globalTabs, editorMaximized, onToggleEditorMaximized]);
   const [hostPortal, setHostPortal] = useState<HTMLDivElement | null>(null);
   useEffect(() => () => floating.publishHost(scope), [floating.publishHost, worktree.path, scope]);
   const conversationView = taskScope ? 'properties' : 'conversations';
@@ -881,8 +881,8 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     persist(`aow-selected-agent:${scope}`, activeAgentId);
   }, [activeAgentId, restored, scope]);
   useLayoutEffect(() => {
-    floating.publishHost(scope, { portal: hostPortal, activeId: activeAgentId, visible: active });
-  }, [floating.publishHost, scope, hostPortal, activeAgentId, active]);
+    floating.publishHost(scope, { portal: hostPortal, activeId: activeAgentId, visible: active && !editorMaximized });
+  }, [floating.publishHost, scope, hostPortal, activeAgentId, active, editorMaximized]);
   const selectedAcp = acp.tabs.find(tab => `acp:${tab.id}` === activeAgentId);
   const selectedTerminal = terminals.tabs.find(tab => `terminal:${tab.id}` === activeAgentId)
     ?? terminalInventory.tabs?.find(tab => `terminal:${tab.id}` === activeAgentId);
@@ -893,6 +893,9 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const toolOwner = activeAgentId ?? (initialTask?.initial_thread_id ? `acp:${initialTask.initial_thread_id}` : 'workspace');
   const tools = useAgentTools(scope, `${toolOwner}:${agentWorkspace}`, conversationView);
   const rightView = tools.tabs.find(tab => tab.id === tools.active)?.view;
+  const hasDetails = ['files', 'git', 'pullRequests', 'automations'].includes(rightView ?? '');
+  const detailsVisible = tools.detailsVisible !== false;
+  const detailsId = useId();
   const toolRevealRequest = useMemo(() => tools.active ? { tabId: tools.active } : undefined, [tools.active, toolOwner, agentWorkspace]);
   const sidebarActiveId = activeAgentId;
   const activeTerminalId = selectedTerminal?.id;
@@ -902,7 +905,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const gitRoot = agentWorkspace;
   const selectTool = useCallback((id: string, view: ToolView, preview = false) => {
     if (!id.startsWith('view:')) setActiveCenterId(id);
-    if (!restoring.current) { tools.open({ id, view, preview }); onShowRightSidebar(); }
+    if (!restoring.current) { tools.open({ id, view, preview }); onShowRightSidebar?.(); }
   }, [tools.open, onShowRightSidebar]);
   const viewForTab = (tab: CenterTab): ToolView => tab.kind === 'diff' ? 'git' : tab.kind === 'pullRequest' ? 'pullRequests'
     : tab.kind === 'automation' ? 'automations' : tab.kind === 'terminal' ? 'terminal' : 'files';
@@ -980,6 +983,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     if ((tab.kind === 'terminal' || tab.kind === 'agent') && !hostedTab(tab.id)) terminals.activate(tab.targetId);
   };
   const activateAcp = (id: string) => {
+    if (editorMaximized) onToggleEditorMaximized?.();
     setActiveCenterId(`acp:${id}`); routeToFloating(`acp:${id}`);
   };
   const createAcp = (agentId: string) => activateAcp(acp.create(agentId));
@@ -994,6 +998,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     terminalDock.show();
   };
   const openTerminal = (tab: TerminalTab, targetFloating = openingInFloatingWorkspace()) => {
+    if (editorMaximized && !targetFloating && tab.panes.some(pane => pane.kind === 'agent')) onToggleEditorMaximized?.();
     const owner = taskScope?.owner('terminal', tab.id);
     if (owner && owner !== taskScope?.task.id) {
       void navigateTab({ type: 'terminal', tabId: tab.id, workTaskId: owner }).catch(reason => setOperationError(message(reason)));
@@ -1045,11 +1050,11 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   }, [worktree.path, scope]);
 
   const openSession = useCallback((session: AowAgentSession, sessionWorkspace = session.cwd || worktree.path) => {
-
+    if (editorMaximized && !openingInFloatingWorkspace()) onToggleEditorMaximized?.();
     routeToFloating(`session:${session.id}`);
     setActiveCenterId(`session:${session.id}`);
     if (!sessionPreviews.some((item) => item.session.id === session.id)) void loadSessionSnapshot(session, sessionWorkspace);
-  }, [loadSessionSnapshot, sessionPreviews]);
+  }, [loadSessionSnapshot, sessionPreviews, editorMaximized, onToggleEditorMaximized]);
 
   const resolveAutomationSession = useCallback(async (session: AowAgentSession, reference: AutomationSessionReference) => {
     const requestId = (sessionSnapshotRequestIds.current.get(session.id) ?? 0) + 1;
@@ -1073,6 +1078,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
 
   const openAutomationSession = useCallback((taskId: string, run: AutomationRun) => {
     if (!run.session_id) return;
+    if (editorMaximized && !openingInFloatingWorkspace()) onToggleEditorMaximized?.();
     const session: AowAgentSession = {
       id: `${run.agent}:${run.session_id}`,
       agent: run.agent,
@@ -1092,7 +1098,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
     if (sessionPreviews.some((item) => item.session.id === session.id)) return;
     setSessionPreviews((items) => [...items, { session, workspacePath: session.cwd, automationRun: reference, loading: true }]);
     void resolveAutomationSession(session, reference);
-  }, [resolveAutomationSession, sessionPreviews, worktree.path, scope]);
+  }, [resolveAutomationSession, sessionPreviews, worktree.path, scope, editorMaximized, onToggleEditorMaximized]);
 
   const taskChanged = useCallback((task?: AutomationTask, mutated = false) => {
     if (task) setAutomationTasks((items) => ({ ...items, [task.id]: task }));
@@ -2176,18 +2182,25 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
         onPin={tab => tools.pin(tab.id)} onCloseTab={closeToolTab} onCloseTabs={async tabs => { for (const tab of tabs) await closeToolTab(tab); }}
         onCanRename={canRenameTab} onRename={renameTab} onError={setOperationError} destination={tab => tab.kind === 'tool' ? undefined : 'floating'} onOpenElsewhere={tab => floating.add(scope, tab.id)}
         onCreateNote={kind => void createTemporaryNote(kind)} onCreateTerminal={() => void createTerminal()}
-        controls={<button title={t('aow.hide_right_sidebar')} aria-label={t('aow.hide_right_sidebar')} onClick={onHideRightSidebar}><PanelRightClose size={16} /></button>}
+        leadingControls={editorMaximized && onShowLeftSidebar ? <LeftSidebarToggle onClick={onShowLeftSidebar} /> : null}
+        controls={onToggleEditorMaximized || hasDetails ? <div className="agent-tools-layout-controls">
+          {onToggleEditorMaximized && <button type="button" title={t(editorMaximized ? 'aow.restore_editor_area' : 'aow.maximize_editor_area')}
+            aria-label={t(editorMaximized ? 'aow.restore_editor_area' : 'aow.maximize_editor_area')} aria-pressed={editorMaximized} onClick={onToggleEditorMaximized}>
+            {editorMaximized ? <Minimize /> : <Maximize />}
+          </button>}
+          {hasDetails && <button type="button" title={t('aow.toggle_details')} aria-label={t('aow.toggle_details')} aria-pressed={detailsVisible} aria-controls={detailsId} onClick={tools.toggleDetails}><ListFilter /></button>}
+        </div> : null}
         newMenuContent={close => <>
           <button onClick={() => { close(); void createTerminal(); }}><WorkspaceTabIcon kind="terminal" path="" /><span>{t('navigation.terminal')}</span></button>
           <button onClick={() => { close(); void createTemporaryNote('md'); }}><NotebookPen /><span>{t('aow.new_markdown')}</span></button>
           {(['files', 'git', 'pullRequests', conversationView, 'automations'] as ToolView[]).map(view => <button key={view} onClick={() => { close(); tools.open({ id: `view:${view}`, view }); }}><WorkspaceTabIcon kind="tool" path={view} /><span>{toolLabels[view]}</span></button>)}
         </>}
       />
-      <div className={`agent-tools-body${['files', 'git', 'pullRequests', 'automations'].includes(rightView ?? '') ? ' with-details' : ''}${rightView === 'files' || rightView === 'git' ? ' navigation-right' : ''}`}>
-      <div className="agent-tools-details" key={`${activeAgentId}:${agentWorkspace}`}>
+      <div className={`agent-tools-body${hasDetails ? ' with-details' : ''}${rightView === 'files' || rightView === 'git' ? ' navigation-right' : ''}`}>
+      <div id={detailsId} className="agent-tools-details" key={`${activeAgentId}:${agentWorkspace}`} hidden={hasDetails && !detailsVisible}>
       <div className="project-aow-right-content" hidden={rightView !== 'files'}>
         <ExplorerSearch key={`search:${worktree.path}:${project.id}`} projectRoot={explorerRoot} notesRoot={project.notes_path}
-          visible={active && rightSidebarVisible && rightView === 'files'} onOpen={(path, source, match) => void selectTab(() => openSearchFile(path, source, match))}
+          visible={active && rightSidebarVisible && detailsVisible && rightView === 'files'} onOpen={(path, source, match) => void selectTab(() => openSearchFile(path, source, match))}
           projectRefresh={explorerRefresh.generation} notesRefresh={notesRefresh.generation}>
         <AowPanelStack className="project-aow-explorer-stack">
           <Explorer
@@ -2214,10 +2227,10 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
         </ExplorerSearch>
       </div>
       <div className="project-aow-right-content" hidden={rightView !== 'git'}>
-        <SourceControl key={`git:${worktree.path}`} root={gitRoot} fixedRepository={repository} titleCase aowHeader refreshGeneration={sourceControlRefresh} visible={active && rightSidebarVisible && rightView === 'git'} activeDocumentId={sidebarDocument?.id} onOpenDiff={(repo, file, staged) => selectTab(() => openDiff(repo, file, staged))} onOpenCommitDiff={(repo, commit, file) => selectTab(() => openCommitDiff(repo, commit, file))} />
+        <SourceControl key={`git:${worktree.path}`} root={gitRoot} fixedRepository={repository} titleCase aowHeader refreshGeneration={sourceControlRefresh} visible={active && rightSidebarVisible && detailsVisible && rightView === 'git'} activeDocumentId={sidebarDocument?.id} onOpenDiff={(repo, file, staged) => selectTab(() => openDiff(repo, file, staged))} onOpenCommitDiff={(repo, commit, file) => selectTab(() => openCommitDiff(repo, commit, file))} />
       </div>
       <div className="project-aow-right-content" hidden={rightView !== 'pullRequests'}>
-        <PullRequestsPanel key={'pull-requests:' + agentWorkspace} repository={agentWorkspace} visible={active && rightSidebarVisible && rightView === 'pullRequests'} activeNumber={activePullRequest?.number} activeProvider={activePullRequest?.provider} activeRemote={activePullRequest?.remote} onOpen={pr => selectTab(() => openPullRequest(pr, agentWorkspace))} />
+        <PullRequestsPanel key={'pull-requests:' + agentWorkspace} repository={agentWorkspace} visible={active && rightSidebarVisible && detailsVisible && rightView === 'pullRequests'} activeNumber={activePullRequest?.number} activeProvider={activePullRequest?.provider} activeRemote={activePullRequest?.remote} onOpen={pr => selectTab(() => openPullRequest(pr, agentWorkspace))} />
       </div>
       <div className="project-aow-right-content" hidden={rightView !== conversationView}>
         {taskScope
@@ -2232,9 +2245,9 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
       </div>
     </aside>
   );
-  return <WorkspaceMarkdownProvider workspace={project.worktrees.find(item => item.path === agentWorkspace)?.id ?? worktree.id} directory={agentWorkspace}><FloatingOpenMenu><section className="project-aow-surface" hidden={!active || project.builtin}>
-    <main className="project-aow-center">
-      <WorkspaceTabs workspaceKey={`project:${scope}`} revealRequest={tabRevealRequest} tabs={agentTabs} activeId={activeAgentId} visible={active && !project.builtin} ungrouped
+  return <WorkspaceMarkdownProvider workspace={project.worktrees.find(item => item.path === agentWorkspace)?.id ?? worktree.id} directory={agentWorkspace}><FloatingOpenMenu><section className={`project-aow-surface${editorMaximized ? ' editor-maximized' : ''}`} hidden={!active || project.builtin}>
+    <main className="project-aow-center" hidden={editorMaximized}>
+      <WorkspaceTabs workspaceKey={`project:${scope}`} revealRequest={tabRevealRequest} tabs={agentTabs} activeId={activeAgentId} visible={active && !project.builtin && !editorMaximized} ungrouped
         newMenuContent={close => <RoleMenu acpOnly={!!taskScope} onCreate={role => { close(); void createRole(role); }} />} agents={agents}
         onActivate={tab => selectTab(() => activateCenter(tab))} onCloseTab={tab => selectTab(() => closeTab(tab))} onCloseTabs={targets => selectTab(async () => { for (const tab of targets) await closeTab(tab); })}
         onPin={tab => floating.pinPreview(scope, tab.id)}
@@ -2249,7 +2262,6 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
         onOpenFile={() => { setOpenFileFloating(openingInFloatingWorkspace()); setShowOpenFile(true); }}
         onCreateNote={kind => void selectTab(() => createTemporaryNote(kind))} onCreateTerminal={agent => void selectTab(() => createTerminal(agent))} onCreateAcp={agentId => selectTab(() => createAcp(agentId))} onCreateRole={role => void selectTab(() => createRole(role))}
         leadingControls={onShowLeftSidebar ? <LeftSidebarToggle onClick={onShowLeftSidebar} /> : null}
-        controls={!rightSidebarVisible ? <button className="project-aow-right-show" title={t("aow.show_right_sidebar")} aria-label={t("aow.show_right_sidebar")} onClick={onShowRightSidebar}><PanelRightOpen /></button> : null}
       />
       {operationError || terminals.error ? <div className="project-aow-inline-error" role="alert">{operationError || terminals.error}<button onClick={() => setOperationError('')}><X /></button></div> : null}
       <div className="project-aow-center-content">
@@ -2291,7 +2303,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
         {!activeAgentId ? <div className="project-aow-welcome"><ProjectIcon project={project} size={32} /><h2>{project.name}</h2><p>{worktree.path}</p><span>{t("aow.create_agent_to_start")}</span></div> : null}
       </div>
     </main>
-    <div className="project-aow-right-resizer" role="separator" aria-label={t("aow.resize_right_sidebar")} aria-orientation="vertical" onPointerDown={onStartRightResize} />
+    <div className="project-aow-right-resizer" hidden={editorMaximized} role="separator" aria-label={t("aow.resize_right_sidebar")} aria-orientation="vertical" onPointerDown={onStartRightResize} />
     {project.builtin && floating.sidebar ? createPortal(renderSidebar(), floating.sidebar) : renderSidebar()}
     {floating.dockPortal ? createPortal(<ProjectTerminalDockHost active={locationSource === 'floating' && centerTabs.some(tab => tab.id === floatingId && centerTabGroup(tab) !== 'terminal')} />, floating.dockPortal) : null}
     {showOpenFile ? <OpenFileDialog worktreePath={worktree.path} onClose={() => setShowOpenFile(false)} onOpen={path => openFileFloating ? withFloatingOpen(() => openExternalFile(path)) : openExternalFile(path)} /> : null}
@@ -2386,7 +2398,8 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(() => storedWidth(leftSidebarWidthStorageKey, defaultLeftSidebarWidth, minLeftSidebarWidth, maxLeftSidebarWidth));
   const [leftSidebarVisible, setLeftSidebarVisible] = useState(() => appLocalStorage.getItem(leftSidebarVisibleStorageKey) !== 'false');
   const [rightSidebarWidth, setRightSidebarWidth] = useState(() => storedWidth(rightSidebarWidthStorageKey, defaultRightSidebarWidth, minRightSidebarWidth, maxRightSidebarWidth));
-  const [rightSidebarVisible, setRightSidebarVisible] = useState(() => appLocalStorage.getItem(rightSidebarVisibleStorageKey) !== 'false');
+  const [editorMaximized, setEditorMaximized] = useState(false);
+  const toggleEditorMaximized = useCallback(() => setEditorMaximized(value => !value), []);
   const [pinnedWorktrees, setPinnedWorktrees, pinnedState] = usePinnedWorktrees();
   const [draggingPinnedPath, setDraggingPinnedPath] = useState<string>();
   const [pinnedDropTarget, setPinnedDropTarget] = useState<PinnedDropTarget>();
@@ -2487,7 +2500,6 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
   useEffect(() => { appLocalStorage.setItem(leftSidebarWidthStorageKey, String(leftSidebarWidth)); }, [leftSidebarWidth]);
   useEffect(() => { appLocalStorage.setItem(leftSidebarVisibleStorageKey, String(leftSidebarVisible)); }, [leftSidebarVisible]);
   useEffect(() => { appLocalStorage.setItem(rightSidebarWidthStorageKey, String(rightSidebarWidth)); }, [rightSidebarWidth]);
-  useEffect(() => { appLocalStorage.setItem(rightSidebarVisibleStorageKey, String(rightSidebarVisible)); }, [rightSidebarVisible]);
   useEffect(() => {
     if (activeWorktreePath) appLocalStorage.setItem('aow-active', activeWorktreePath);
     else appLocalStorage.removeItem('aow-active');
@@ -2691,10 +2703,10 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
     window.setTimeout(() => { suppressPinnedClickRef.current = false; }, 0);
   };
 
-  const sidebarDimensions = useRef({ leftSidebarWidth, leftSidebarVisible, rightSidebarWidth, rightSidebarVisible });
-  sidebarDimensions.current = { leftSidebarWidth, leftSidebarVisible, rightSidebarWidth, rightSidebarVisible };
+  const sidebarDimensions = useRef({ leftSidebarWidth, leftSidebarVisible, rightSidebarWidth, editorMaximized });
+  sidebarDimensions.current = { leftSidebarWidth, leftSidebarVisible, rightSidebarWidth, editorMaximized };
   const startSidebarResize = useCallback((side: 'left' | 'right', event: ReactPointerEvent<HTMLDivElement>) => {
-    const { leftSidebarWidth, leftSidebarVisible, rightSidebarWidth, rightSidebarVisible } = sidebarDimensions.current;
+    const { leftSidebarWidth, leftSidebarVisible, rightSidebarWidth, editorMaximized } = sidebarDimensions.current;
     event.preventDefault();
     const handle = event.currentTarget;
     const pointerId = event.pointerId;
@@ -2705,14 +2717,14 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
     const panelGap = parseFloat(layoutStyle?.getPropertyValue('--project-aow-panel-gap') ?? '') || 0;
     const layoutWidth = (layout?.clientWidth ?? window.innerWidth)
       - (parseFloat(layoutStyle?.paddingLeft ?? '') || 0) - (parseFloat(layoutStyle?.paddingRight ?? '') || 0)
-      - (Number(leftSidebarVisible) + Number(rightSidebarVisible)) * panelGap;
+      - (Number(leftSidebarVisible) + Number(!editorMaximized)) * panelGap;
     handle.setPointerCapture(pointerId);
     document.body.classList.add('resizing-project-aow');
 
     const move = (moveEvent: PointerEvent) => {
       const delta = moveEvent.clientX - startX;
       if (side === 'left') {
-        const available = layoutWidth - (rightSidebarVisible ? rightSidebarWidth : 0) - minCenterWidth;
+        const available = layoutWidth - (editorMaximized ? 0 : rightSidebarWidth) - minCenterWidth;
         const max = Math.max(minLeftSidebarWidth, Math.min(maxLeftSidebarWidth, available));
         setLeftSidebarWidth(Math.min(max, Math.max(minLeftSidebarWidth, startWidth + delta)));
       } else {
@@ -2734,8 +2746,6 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
   }, []);
   const hideLeftSidebar = useCallback(() => setLeftSidebarVisible(false), []);
   const showLeftSidebar = useCallback(() => setLeftSidebarVisible(true), []);
-  const hideRightSidebar = useCallback(() => setRightSidebarVisible(false), []);
-  const showRightSidebar = useCallback(() => setRightSidebarVisible(true), []);
   const startRightResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => startSidebarResize('right', event), [startSidebarResize]);
 
   const projectRegistered = async (project: AowProject) => {
@@ -2889,7 +2899,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
     onPointerDownCapture={event => { if (!(event.target as HTMLElement).closest('.project-terminal-dock-controls')) setFloatingFocused(!!(event.target as HTMLElement).closest('[data-floating-workspace]')); }}
     onFocusCapture={event => { if (!(event.target as HTMLElement).closest('.project-terminal-dock-controls')) setFloatingFocused(!!(event.target as HTMLElement).closest('[data-floating-workspace]')); }}>
     <div
-      className={`project-aow-layout${leftSidebarVisible ? '' : ' left-sidebar-hidden'}${rightSidebarVisible ? '' : ' right-sidebar-hidden'}`}
+      className={`project-aow-layout${leftSidebarVisible ? '' : ' left-sidebar-hidden'}`}
       ref={layoutRef}
       style={{ '--project-left-width': `${leftSidebarWidth}px`, '--project-right-width': `${rightSidebarWidth}px` } as CSSProperties}
     >
@@ -2970,7 +2980,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
           {projects.map(project => <Fragment key={project.id}>
             {project.worktrees.filter(worktree => !busyWorktrees.has(worktree.path)).filter(worktree => visitedWorktrees.has(worktree.path) || globalTabs.tabs.some(tab => tab.workspace === worktree.path) || floating.tabs.some(tab => tab.workspace === worktree.path)
               || floating.hostedTabs.some(tab => tab.workspace === worktree.path || tab.host === worktree.path)).map(worktree => <ProjectTerminalDockProvider key={worktree.path} project={project} worktree={worktree} controls={terminalDockControls} onShow={() => setBottomPanel(undefined)}><WorkspaceSurface globalTabs={globalTabs.tabs} browserPath={browserPath} locationSource={locationSource(worktree.path)} initialEntry={!taskMode && initialEntry && initialEntry.target.type !== 'files' && (initialEntry.workspacePath === worktree.path
-                || floating.hostedTabs.some(tab => tab.host === worktree.path && tab.workspace === initialEntry.workspacePath && tab.id === tabCenterId(initialEntry))) ? initialEntry : undefined} key={worktree.path} project={project} worktree={worktree} active={!taskMode && worktree.path === activeWorktreePath} agents={agents} onShowLeftSidebar={leftSidebarVisible ? undefined : showLeftSidebar} rightSidebarVisible={rightSidebarVisible} onHideRightSidebar={hideRightSidebar} onShowRightSidebar={showRightSidebar} onStartRightResize={startRightResize} notesRefresh={notesRefreshByProject[project.id] ?? initialExplorerRefresh} onNotesChanged={notesChanged} onResourcesChanged={reportResources} /></ProjectTerminalDockProvider>)}
+                || floating.hostedTabs.some(tab => tab.host === worktree.path && tab.workspace === initialEntry.workspacePath && tab.id === tabCenterId(initialEntry))) ? initialEntry : undefined} key={worktree.path} project={project} worktree={worktree} active={!taskMode && worktree.path === activeWorktreePath} agents={agents} onShowLeftSidebar={leftSidebarVisible ? undefined : showLeftSidebar} editorMaximized={editorMaximized} onToggleEditorMaximized={toggleEditorMaximized} onStartRightResize={startRightResize} notesRefresh={notesRefreshByProject[project.id] ?? initialExplorerRefresh} onNotesChanged={notesChanged} onResourcesChanged={reportResources} /></ProjectTerminalDockProvider>)}
           </Fragment>)}
           {taskState.tasks.filter(task => !task.archived && (visitedTasks.has(task.id) || floating.tabs.some(tab => tab.workspace === taskScopeKey(task.id)) || globalTabs.tabs.some(tab => tab.workspace === taskScopeKey(task.id)) || floating.hostedTabs.some(tab => tab.workspace === taskScopeKey(task.id) || tab.host === taskScopeKey(task.id)))).map(task => {
             const project = projects.find(item => item.id === task.project_id);
@@ -2983,8 +2993,8 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
                 <WorkspaceSurface globalTabs={globalTabs.tabs} browserPath={browserPath} locationSource={locationSource(scope)}
                   initialEntry={taskMode && activeTaskId === task.id && initialEntry?.workspacePath === worktree.path ? initialEntry : undefined}
                   project={project} worktree={worktree} active={taskMode && activeTaskId === task.id} agents={agents}
-                  onShowLeftSidebar={leftSidebarVisible ? undefined : showLeftSidebar} rightSidebarVisible={rightSidebarVisible}
-                  onHideRightSidebar={hideRightSidebar} onShowRightSidebar={showRightSidebar} onStartRightResize={startRightResize}
+                  onShowLeftSidebar={leftSidebarVisible ? undefined : showLeftSidebar}
+                  editorMaximized={editorMaximized} onToggleEditorMaximized={toggleEditorMaximized} onStartRightResize={startRightResize}
                   notesRefresh={notesRefreshByProject[project.id] ?? initialExplorerRefresh} onNotesChanged={notesChanged} />
               </ProjectTerminalDockProvider>
             </TaskScopeProvider>;
@@ -3057,7 +3067,7 @@ function ProjectAowContents({ initialEntry }: { initialEntry?: ResolvedTab }) {
       onOpenFile={entry => floating.sources.current.get(browserTab?.workspace || floating.globalRoot)?.openFile(entry)} />, globalTabs.elements.browser) : null}
     <FloatingWorkspace agents={agents} projects={projects} activeLocation={locationInFloating} />
     {globalProject && globalProject.worktrees[0] && (floating.open || floating.tabs.length > 0 || browserVisited || standaloneTabs.length > 0) ? <ProjectTerminalDockProvider key={globalProject.id} project={globalProject} worktree={globalProject.worktrees.find(worktree => worktree.is_main) ?? globalProject.worktrees[0]} controls={terminalDockControls} onShow={() => setBottomPanel(undefined)}>
-      <WorkspaceSurface locationSource={locationSource(floating.globalRoot)} initialEntry={initialEntry?.target.type !== 'files' && globalProject.worktrees.some(worktree => worktree.path === initialEntry?.workspacePath) ? initialEntry : undefined} project={globalProject} worktree={globalProject.worktrees.find(worktree => worktree.is_main) ?? globalProject.worktrees[0]} active={floating.visible} agents={agents} rightSidebarVisible={floating.sidebarOpen} onHideRightSidebar={() => floating.setSidebarOpen(false)} onShowRightSidebar={() => floating.setSidebarOpen(true)} onStartRightResize={() => undefined} notesRefresh={notesRefreshByProject[globalProject.id] ?? initialExplorerRefresh} onNotesChanged={notesChanged} />
+      <WorkspaceSurface locationSource={locationSource(floating.globalRoot)} initialEntry={initialEntry?.target.type !== 'files' && globalProject.worktrees.some(worktree => worktree.path === initialEntry?.workspacePath) ? initialEntry : undefined} project={globalProject} worktree={globalProject.worktrees.find(worktree => worktree.is_main) ?? globalProject.worktrees[0]} active={floating.visible} agents={agents} rightSidebarVisible={floating.sidebarOpen} onShowRightSidebar={() => floating.setSidebarOpen(true)} onStartRightResize={() => undefined} notesRefresh={notesRefreshByProject[globalProject.id] ?? initialExplorerRefresh} onNotesChanged={notesChanged} />
     </ProjectTerminalDockProvider> : null}
   </div>;
 }
