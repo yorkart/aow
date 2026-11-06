@@ -2558,6 +2558,46 @@ try {
     assert.equal(await page.getByText('Unsafe', { exact: true }).getAttribute('href'), null);
     await page.getByRole('link', { name: 'Malformed', exact: true }).click();
   });
+  await test('Markdown local images load through the file API using the conversation directory', async t => {
+    const { page, state } = await fixture(t);
+    state.session.cwd = '/repo/sub';
+    const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
+    const images = [
+      ['飞书授权二维码', '/tmp/acp-cancel-task-authorization.png', '/api/fs/raw/tmp/acp-cancel-task-authorization.png'],
+      ['Relative', '../assets/qr%20%23中文.png', '/api/fs/raw/repo/assets/qr%20%23%E4%B8%AD%E6%96%87.png'],
+      ['File URI', 'file:///tmp/qr%20code.png', '/api/fs/raw/tmp/qr%20code.png'],
+      ['Resolved', '/api/fs/raw/tmp/ready.png', '/api/fs/raw/tmp/ready.png'],
+      ['HTTPS', 'https://example.com/qr.png', 'https://example.com/qr.png'],
+      ['Protocol relative', '//example.com/qr.png', '//example.com/qr.png'],
+      ['Embedded', `data:image/png;base64,${png}`, `data:image/png;base64,${png}`],
+    ];
+    const requested = new Set();
+    await page.route('**/api/fs/raw/**', route => {
+      requested.add(new URL(route.request().url()).pathname);
+      return route.fulfill({ contentType: 'image/png', body: Buffer.from(png, 'base64') });
+    });
+    await page.route(/^https?:\/\/example\.com\//, route => route.fulfill({ contentType: 'image/png', body: Buffer.from(png, 'base64') }));
+    state.session.entries = [{ id: 'a', kind: 'assistant', content: { type: 'text', text: [
+      ...images.map(([name, src]) => `![${name}](${src})`),
+      '<img src="./html.png" alt="HTML image" onerror="window.imageScriptRan=true">',
+      '![Unsafe](javascript:alert%281%29)',
+    ].join('\n\n') } }];
+    await newSession(page);
+    for (const [name, , src] of [...images, ['HTML image', '', '/api/fs/raw/repo/sub/html.png']]) {
+      const image = page.getByRole('img', { name, exact: true });
+      await image.waitFor();
+      assert.equal(await image.getAttribute('src'), src);
+      await page.waitForFunction(name => {
+        const image = [...document.images].find(image => image.alt === name);
+        return image?.complete && image.naturalWidth > 0;
+      }, name);
+    }
+    assert.deepEqual([...requested].sort(), [...images.filter(([, , src]) => src.startsWith('/api/')).map(([, , src]) => src), '/api/fs/raw/repo/sub/html.png'].sort());
+    assert.equal(await page.getByRole('img', { name: 'HTML image', exact: true }).getAttribute('onerror'), null);
+    assert.equal(await page.getByRole('img', { name: 'Unsafe', exact: true }).getAttribute('src'), null);
+    assert.equal(await page.evaluate(() => window.imageScriptRan), undefined);
+    await page.screenshot({ path: '/tmp/aow-acp-local-images.png' });
+  });
   await test('reply copying supports LAN HTTP and handles denied clipboard operations', async t => {
     const { page, state } = await fixture(t, false, { insecure: true });
     state.session.entries = [{ id: 'a', kind: 'assistant', content: { type: 'text', text: 'LAN reply' } }];

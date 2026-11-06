@@ -2,9 +2,9 @@ import { createContext, useCallback, useContext, useMemo, type ComponentProps, t
 import { useAowTabLocationError, useAowTabNavigation } from '../../aow/AowTabEntry';
 import { MarkdownContent } from '../../components/MarkdownContent';
 import { MarkdownImagePreview } from './MarkdownImagePreview';
-import { fileTabLink, localFileLink, resolveMarkdownFileLink } from './markdownFileLinks';
+import { fileTabLink, localFileLink, resolveMarkdownFileLink, resolveMarkdownImage } from './markdownFileLinks';
 
-type MarkdownProps = Omit<ComponentProps<typeof MarkdownContent>, 'resolveLink' | 'onOpenLink'> & {
+type MarkdownProps = Omit<ComponentProps<typeof MarkdownContent>, 'resolveLink' | 'resolveImage' | 'onOpenLink'> & {
   onOpenFile?: (path: string, line?: number) => void;
 };
 type Workspace = { workspace: string; directory: string };
@@ -24,8 +24,9 @@ export function WorkspaceMarkdownContent({ workspace, directory, onOpenFile, ...
   const navigateTab = useAowTabNavigation();
   const reportError = useAowTabLocationError();
   const resolveLink = useCallback((href: string) => resolveMarkdownFileLink(href, workspace, directory), [workspace, directory]);
+  const resolveImage = useCallback((src: string) => resolveMarkdownImage(src, directory), [directory]);
   return <MarkdownImagePreview key={`${workspace}:${directory}`} content={props.text}>
-    <MarkdownContent {...props} resolveLink={resolveLink} onOpenLink={href => {
+    <MarkdownContent {...props} resolveLink={resolveLink} resolveImage={resolveImage} onOpenLink={href => {
       const file = fileTabLink(href);
       if (!file) return false;
       if (onOpenFile && file.target.workspace === workspace) onOpenFile(file.target.path, file.line);

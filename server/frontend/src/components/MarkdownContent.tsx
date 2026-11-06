@@ -17,7 +17,7 @@ function isMermaidCodeBlock(code: HTMLElement) {
   });
 }
 
-export function MarkdownContent({ text, className = 'project-aow-snapshot-markdown', readOnly = false, breaks = false, imageReferences, onOpenLink, resolveLink }: { text: string; className?: string; readOnly?: boolean; breaks?: boolean; imageReferences?: ReadonlyMap<string, string>; onOpenLink?: (href: string) => boolean; resolveLink?: (href: string) => string }) {
+export function MarkdownContent({ text, className = 'project-aow-snapshot-markdown', readOnly = false, breaks = false, imageReferences, onOpenLink, resolveLink, resolveImage }: { text: string; className?: string; readOnly?: boolean; breaks?: boolean; imageReferences?: ReadonlyMap<string, string>; onOpenLink?: (href: string) => boolean; resolveLink?: (href: string) => string; resolveImage?: (src: string) => string }) {
   const theme = useTheme();
   const markdownRef = useRef<HTMLDivElement>(null);
   const handlesLinks = !!onOpenLink;
@@ -31,8 +31,11 @@ export function MarkdownContent({ text, className = 'project-aow-snapshot-markdo
       if (!handlesLinks || !/^file:\/\//i.test(token.href)) return Renderer.prototype.link.call(this, token);
       return `<a href="#" data-local-file="${encodeURIComponent(token.href)}">${this.parser.parseInline(token.tokens)}</a>`;
     };
+    if (resolveImage) renderer.image = function (token) {
+      return Renderer.prototype.image.call(this, { ...token, href: resolveImage(token.href) });
+    };
     const source = marked.parse(text, { renderer, breaks }) as string;
-    if (!readOnly && !resolveLink) return DOMPurify.sanitize(source);
+    if (!readOnly && !resolveLink && !resolveImage) return DOMPurify.sanitize(source);
     const content = document.createElement('div');
     content.append(DOMPurify.sanitize(source, {
       RETURN_DOM_FRAGMENT: true,
@@ -42,6 +45,9 @@ export function MarkdownContent({ text, className = 'project-aow-snapshot-markdo
     // Transform only sanitized destinations, including links authored as HTML.
     if (resolveLink) content.querySelectorAll('a[href]').forEach(link => {
       link.setAttribute('href', resolveLink(link.getAttribute('href')!));
+    });
+    if (resolveImage) content.querySelectorAll('img[src]').forEach(image => {
+      image.setAttribute('src', resolveImage(image.getAttribute('src')!));
     });
     if (handlesLinks || resolveLink) content.querySelectorAll('a[href]').forEach(link => {
       if (/^https?:\/\//i.test(link.getAttribute('href')?.trim() ?? '')) {
@@ -54,7 +60,7 @@ export function MarkdownContent({ text, className = 'project-aow-snapshot-markdo
     });
     if (imageReferences?.size) linkImageReferences(content, imageReferences);
     return content.innerHTML;
-  }, [readOnly, text, breaks, imageReferences, handlesLinks, resolveLink]);
+  }, [readOnly, text, breaks, imageReferences, handlesLinks, resolveLink, resolveImage]);
 
   useEffect(() => {
     const markdown = markdownRef.current;

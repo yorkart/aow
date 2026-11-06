@@ -1,5 +1,6 @@
 import { parseTabUrl } from '../../aow/tabRoutes';
 import { fileRoute } from '../../aow/tabRoutes/files';
+import { filesApi } from './api';
 
 export function localFileLink(href: string): { path: string; line?: number; hash: string } | undefined {
   const value = href.trim();
@@ -45,4 +46,12 @@ export function resolveMarkdownFileLink(href: string, workspace: string, directo
   if (!file) return href;
   return fileRoute.url({ type: 'file', workspace, path: absoluteFilePath(file.path, directory), source: 'external' })
     + (file.line ? `#L${file.line}` : file.hash);
+}
+
+export function resolveMarkdownImage(src: string, directory: string) {
+  // Markdown images are resolved before sanitization, then visited again along
+  // with authored HTML images. Keep already resolved resource URLs unchanged.
+  if (src.startsWith(filesApi.rawUrl('/'))) return src;
+  const file = localFileLink(src);
+  return file ? filesApi.rawUrl(absoluteFilePath(file.path, directory)) + file.hash : src;
 }
