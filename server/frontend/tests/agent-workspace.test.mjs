@@ -53,11 +53,11 @@ try {
       else if (path.includes('/pinned-')) data = { paths: [], revision: 0 };
       else if (path === '/api/notifications') data = { revision: 0, items: [], unread_count: 0 };
       else if (path === '/api/instances') data = { items: [] };
-      else if (path === '/api/projects/project/router' && request.method() === 'POST') {
-        data = tasks.find(task => task.is_router);
+      else if (path === '/api/projects/project/orchestrator' && request.method() === 'POST') {
+        data = tasks.find(task => task.is_orchestrator);
         if (!data) {
-          const first = session('router-thread');
-          data = { status: 'todo', created_at: createdAt, updated_at: createdAt, completed_at: null, id: 'router-project', project_id: 'project', prompt: 'Router', agent_id: 'test', is_router: true, workspace: '/repo', workspace_mode: 'existing', dependencies: [], pinned: false, archived: false, initial_thread_id: first.thread_id, resources: [{ kind: 'acp', id: first.thread_id }] };
+          const first = session('orchestrator-thread');
+          data = { status: 'todo', created_at: createdAt, updated_at: createdAt, completed_at: null, id: 'orchestrator-project', project_id: 'project', prompt: 'Orchestrator', agent_id: 'test', is_orchestrator: true, workspace: '/repo', workspace_mode: 'existing', dependencies: [], pinned: false, archived: false, initial_thread_id: first.thread_id, resources: [{ kind: 'acp', id: first.thread_id }] };
           tasks.push(data);
         }
       }

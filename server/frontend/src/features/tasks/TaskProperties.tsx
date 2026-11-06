@@ -36,12 +36,12 @@ export function TaskProperties({ project, worktree, conversations }: { project: 
   };
   const link = (item: WorkTask) => <button key={item.id} type="button" className="task-property-task" title={taskTitle(item)}
     disabled={!scope.openTask || item.archived} onClick={() => scope.openTask?.(item)}>
-    {item.is_router ? <MessageSquare size={15} /> : <TaskStatusIcon status={item.status} size={15} />}<span>{taskTitle(item)}</span>
+    {item.is_orchestrator ? <MessageSquare size={15} /> : <TaskStatusIcon status={item.status} size={15} />}<span>{taskTitle(item)}</span>
   </button>;
   const none = <span className="task-property-empty">{t('tasks.none')}</span>;
   const branch = worktree.detached ? `${t('tasks.detached_head')} · ${worktree.head.slice(0, 7)}` : worktree.branch;
   return <section className="task-properties" aria-label={t('tasks.properties')} aria-busy={saving}>
-    {!task.is_router && <>
+    {!task.is_orchestrator && <>
     <section className="task-property-group"><h3>{t('tasks.work')}</h3><dl>
       <Property label={t('tasks.status')}><TaskStatusPicker status={task.status} disabled={saving || task.archived} onChange={status => void changeStatus(status)} /></Property>
       <Property label={t('tasks.project')}><button type="button" className="task-property-link" title={project.name} disabled={!scope.openProject} onClick={scope.openProject}>

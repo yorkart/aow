@@ -13,7 +13,10 @@ pub(crate) fn routes() -> Router<AppState> {
             "/api/tasks/{id}",
             get(super::routing::get).patch(update).delete(remove),
         )
-        .route("/api/projects/{id}/router", post(super::routing::router))
+        .route(
+            "/api/projects/{id}/orchestrator",
+            post(super::routing::orchestrator),
+        )
         .route("/api/tasks/{id}/resources", post(attach))
         .route("/api/tasks/{id}/status", post(super::messages::status))
 }
@@ -49,6 +52,7 @@ impl WorkspaceMode {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(super) struct Create {
     pub request_id: String,
     pub project_id: String,
@@ -62,7 +66,7 @@ pub(super) struct Create {
     #[serde(default)]
     pub dependencies: Vec<String>,
     #[serde(default)]
-    pub is_router: bool,
+    pub is_orchestrator: bool,
     pub source_thread_id: Option<String>,
     pub workspace_intent: Option<String>,
     pub target_task_id: Option<String>,
@@ -99,11 +103,11 @@ async fn update(
         .list()
         .map_err(storage)?
         .iter()
-        .any(|task| task.id == id && task.is_router)
+        .any(|task| task.id == id && task.is_orchestrator)
         && (request.archived == Some(true) || request.dependencies.is_some())
     {
         return Err(crate::instances::invalid(
-            "The project Router remains active and has no task dependencies",
+            "The project Orchestrator remains active and has no task dependencies",
         ));
     }
     state
@@ -134,10 +138,10 @@ async fn remove(
         .list()
         .map_err(storage)?
         .iter()
-        .any(|task| task.id == id && task.is_router)
+        .any(|task| task.id == id && task.is_orchestrator)
     {
         return Err(crate::instances::invalid(
-            "The project Router cannot be deleted as a task",
+            "The project Orchestrator cannot be deleted as a task",
         ));
     }
     state

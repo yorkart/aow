@@ -50,7 +50,7 @@ async fn task_dependencies_do_not_cascade_archive_or_delete() {
                 prompt: id.into(),
                 agent_id: "agent".into(),
                 agent_role_id: None,
-                is_router: false,
+                is_orchestrator: false,
                 source_task_id: None,
                 source_thread_id: None,
                 workspace_intent: None,
@@ -353,7 +353,7 @@ async fn task_idle(state: &AppState, thread: &str) {
 }
 
 #[tokio::test]
-async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenance() {
+async fn orchestrator_and_execution_tasks_share_delegation_with_isolation_and_provenance() {
     use serde_json::json;
     let (directory, mut state, original, _) = workspace_fixture().await;
     state.replace_services(TestServices::persistent(&directory.path().join("state")).unwrap());
@@ -399,16 +399,42 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
     .await;
     assert_eq!(status, StatusCode::OK, "{role}");
     let role_id = role["id"].as_str().unwrap();
-    let route = format!("/api/projects/{}/router", project.id);
+    let route = format!("/api/projects/{}/orchestrator", project.id);
     let (first, second) = tokio::join!(
         call(&app, "POST", &route, json!({"agent_id":"codex.test"})),
         call(&app, "POST", &route, json!({"agent_id":"codex.test"}))
     );
     assert_eq!(first.0, StatusCode::OK, "{}", first.1);
     assert_eq!(first.1, second.1);
-    let router = first.1;
-    assert_eq!(router["is_router"], true);
-    let source = router["initial_thread_id"].as_str().unwrap();
+    assert_eq!(first.1["id"], format!("orchestrator-{}", project.id));
+    // An upgraded project keeps its original identity and main conversation.
+    let mut existing = state.tasks.test_db().list().unwrap().remove(0);
+    state.tasks.test_db().remove(&existing.id).unwrap();
+    existing.id = format!("router-{}", project.id);
+    state.tasks.test_db().insert(&existing).unwrap();
+    let (status, orchestrator) = call(&app, "POST", &route, json!({"agent_id":"codex.test"})).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(orchestrator["id"], existing.id);
+    assert_eq!(
+        orchestrator["initial_thread_id"],
+        first.1["initial_thread_id"]
+    );
+    assert_eq!(state.tasks.test_db().list().unwrap().len(), 1);
+    assert_eq!(orchestrator["is_orchestrator"], true);
+    assert!(orchestrator.get("is_router").is_none());
+    assert_eq!(
+        call(
+            &app,
+            "POST",
+            &format!("/api/projects/{}/router", project.id),
+            json!({})
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(call(&app, "POST", "/api/tasks", json!({"request_id":"obsolete", "project_id":project.id, "prompt":"Router", "agent_id":"codex.test", "workspace_mode":"existing", "is_router":true})).await.0, StatusCode::UNPROCESSABLE_ENTITY);
+    let source = orchestrator["initial_thread_id"].as_str().unwrap();
     task_idle(&state, source).await;
     assert_eq!(
         call(
@@ -423,7 +449,7 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
     );
     assert!(
         state.acp.snapshot(source).await.unwrap().entries.is_empty(),
-        "opening Router must not dispatch work"
+        "opening Orchestrator must not dispatch work"
     );
     let content = state.tasks.acp_role_content(&state.acp, source, serde_json::from_value(json!([
         {"type":"text","text":format!("[@Engineer](mention://role/{role_id}) implement login")}
@@ -432,7 +458,7 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
         content[0].data["text"]
             .as_str()
             .unwrap()
-            .contains("persistent Router")
+            .contains("persistent Orchestrator")
     );
     assert!(content[0].data["text"].as_str().unwrap().contains(role_id));
     assert!(
@@ -445,10 +471,10 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
     let request = json!({"request_id":"implementation","source_thread_id":source,"prompt":"Implement login","agent_role_id":role_id,"intent":"change"});
     let (status, implementation) = call(&app, "POST", "/v1/tasks", request.clone()).await;
     assert_eq!(status, StatusCode::OK, "{implementation}");
-    assert_eq!(implementation["source_task_id"], router["id"]);
+    assert_eq!(implementation["source_task_id"], orchestrator["id"]);
     assert_eq!(implementation["source_thread_id"], source);
     assert_eq!(implementation["workspace_mode"], "new_worktree");
-    assert_ne!(implementation["workspace"], router["workspace"]);
+    assert_ne!(implementation["workspace"], orchestrator["workspace"]);
     let (_, retry) = call(&app, "POST", "/v1/tasks", request.clone()).await;
     assert_eq!(retry, implementation);
     let mut changed = request;
@@ -489,7 +515,7 @@ async fn router_and_execution_tasks_share_delegation_with_isolation_and_provenan
     let (status, helper) = call(&app, "POST", "/v1/tasks", json!({"request_id":"helper","source_thread_id":worker,"prompt":"Investigate the API","intent":"analyze"})).await;
     assert_eq!(status, StatusCode::OK, "{helper}");
     assert_eq!(helper["source_task_id"], "implementation");
-    assert_eq!(helper["workspace"], router["workspace"]);
+    assert_eq!(helper["workspace"], orchestrator["workspace"]);
     assert!(
         helper["agent_role_id"].is_null(),
         "fallback executor must not inherit the sender's role"

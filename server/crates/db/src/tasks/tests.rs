@@ -11,7 +11,7 @@ fn task(id: &str, dependencies: &[&str]) -> TaskRecord {
         prompt: format!("Task {id}"),
         agent_id: "agent".into(),
         agent_role_id: None,
-        is_router: false,
+        is_orchestrator: false,
         source_task_id: None,
         source_thread_id: None,
         workspace_intent: None,
@@ -360,6 +360,123 @@ fn migration_preserves_notifications_pending_messages_and_conversation_policies(
 }
 
 #[test]
+fn orchestrator_migration_preserves_identity_relationships_and_pending_reports() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("tasks.db");
+    let mut report = event("legacy-report");
+    report.target = Some(EventTarget {
+        task_id: "router-project".into(),
+        thread_id: "thread-router".into(),
+    });
+    report.source = Some(MessageSource {
+        task_id: "router-project".into(),
+        thread_id: "thread-router".into(),
+        turn_id: Some("original-turn".into()),
+        message_id: Some("original-message".into()),
+        request: "Ask the Router to investigate".into(),
+    });
+    let mut delivery = message("inbox-legacy-report", "router-project");
+    delivery.thread_id = "thread-router".into();
+    delivery.event_id = Some(report.id.clone());
+    delivery.source = report.source.clone();
+    {
+        let mut connection = aow_sqlite::open(Some(&path)).unwrap();
+        aow_sqlite::migrate(
+            &mut connection,
+            "AowTasks",
+            &[
+                include_str!("sql/initialize.sql"),
+                include_str!("sql/roles.sql"),
+                include_str!("sql/routing.sql"),
+                include_str!("sql/collaboration.sql"),
+                include_str!("sql/executions.sql"),
+                include_str!("sql/messages.sql"),
+                include_str!("sql/properties.sql"),
+            ],
+        )
+        .unwrap();
+        connection.execute_batch("INSERT INTO tasks (id,project_id,prompt,agent_id,workspace,workspace_mode,is_router,initial_thread_id,created_at,updated_at) VALUES
+            ('router-project','project','Router','agent','/repo','existing',1,'thread-router',10,20),
+            ('worker','project','Router','agent','/repo','existing',0,'thread-worker',10,20),
+            ('custom','other','My coordinator','agent','/other','existing',1,'thread-custom',10,20);
+            UPDATE tasks SET source_task_id='router-project', source_thread_id='thread-router' WHERE id='worker';
+            INSERT INTO task_resources VALUES ('router-project','acp','thread-router');
+            INSERT INTO task_dependencies VALUES ('worker','router-project');").unwrap();
+        connection.execute("INSERT INTO task_events (id,project_id,thread_id,request_id,created_at,payload,is_read) VALUES (?1,?2,?3,?4,?5,?6,1)",
+            rusqlite::params![report.id,report.project_id,report.thread_id,report.request_id,report.created_at,serde_json::to_string(&report).unwrap()]).unwrap();
+        super::messages::insert(&connection, &delivery).unwrap();
+    }
+    let db = TaskDb::open(Some(&path)).unwrap();
+    let tasks = db.list().unwrap();
+    let orchestrator = tasks
+        .iter()
+        .find(|task| task.id == "router-project")
+        .unwrap();
+    assert!(orchestrator.is_orchestrator);
+    assert_eq!(orchestrator.prompt, "Orchestrator");
+    assert_eq!(
+        orchestrator.initial_thread_id.as_deref(),
+        Some("thread-router")
+    );
+    assert_eq!(orchestrator.resources[0].id, "thread-router");
+    assert_eq!(
+        (orchestrator.created_at, orchestrator.updated_at),
+        (Some(10), Some(20))
+    );
+    let worker = tasks.iter().find(|task| task.id == "worker").unwrap();
+    assert!(!worker.is_orchestrator);
+    assert_eq!(
+        worker.prompt, "Router",
+        "ordinary user task text is preserved"
+    );
+    assert_eq!(worker.source_task_id.as_deref(), Some("router-project"));
+    assert_eq!(worker.source_thread_id.as_deref(), Some("thread-router"));
+    assert_eq!(worker.dependencies, ["router-project"]);
+    assert_eq!(
+        tasks
+            .iter()
+            .find(|task| task.id == "custom")
+            .unwrap()
+            .prompt,
+        "My coordinator"
+    );
+    let inbox = db.inbox(None, false, false, 0, 30).unwrap();
+    assert_eq!(inbox.items[0].event, report);
+    assert!(inbox.items[0].read);
+    assert_eq!(inbox.items[0].delivery.as_ref(), Some(&delivery));
+    assert_eq!(
+        db.message_for_prompt("router-project", "thread-router", &delivery.id)
+            .unwrap(),
+        Some(delivery.clone())
+    );
+    let mut duplicate = task("duplicate", &[]);
+    duplicate.is_orchestrator = true;
+    assert!(db.insert(&duplicate).is_err());
+    let connection = db.lock().unwrap();
+    let old_columns: u32 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('tasks') WHERE name='is_router'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(old_columns, 0);
+    let index_count: u32 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE name='tasks_orchestrator_project'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(index_count, 1);
+    drop(connection);
+    drop(db);
+    let reopened = TaskDb::open(Some(&path)).unwrap();
+    assert_eq!(reopened.list().unwrap(), tasks);
+    assert_eq!(reopened.pending_messages().unwrap(), vec![delivery]);
+}
+
+#[test]
 fn dependencies_are_a_dag_and_failed_edits_are_atomic() {
     let db = TaskDb::open(None).unwrap();
     db.insert(&task("a", &[])).unwrap();
@@ -385,27 +502,27 @@ fn dependencies_are_a_dag_and_failed_edits_are_atomic() {
 }
 
 #[test]
-fn router_uniqueness_and_delegation_provenance_survive_restart_and_source_removal() {
+fn orchestrator_uniqueness_and_delegation_provenance_survive_restart_and_source_removal() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("tasks.sqlite3");
     let db = TaskDb::open(Some(&path)).unwrap();
-    let mut router = task("router", &[]);
-    router.is_router = true;
-    db.insert(&router).unwrap();
-    let mut duplicate = task("other-router", &[]);
-    duplicate.is_router = true;
+    let mut orchestrator = task("orchestrator", &[]);
+    orchestrator.is_orchestrator = true;
+    db.insert(&orchestrator).unwrap();
+    let mut duplicate = task("other-orchestrator", &[]);
+    duplicate.is_orchestrator = true;
     assert!(db.insert(&duplicate).is_err());
     let mut child = task("child", &[]);
-    child.source_task_id = Some(router.id.clone());
-    child.source_thread_id = Some("thread-router".into());
+    child.source_task_id = Some(orchestrator.id.clone());
+    child.source_thread_id = Some("thread-orchestrator".into());
     child.workspace_intent = Some("review".into());
     child.target_task_id = Some("implementation".into());
     child.target_revision = Some("revision".into());
     db.insert(&child).unwrap();
     drop(db);
     let db = TaskDb::open(Some(&path)).unwrap();
-    assert_eq!(db.list().unwrap(), vec![router, child.clone()]);
-    db.remove("router").unwrap();
+    assert_eq!(db.list().unwrap(), vec![orchestrator, child.clone()]);
+    db.remove("orchestrator").unwrap();
     assert_eq!(db.list().unwrap(), vec![child]);
 }
 

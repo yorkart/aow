@@ -15,7 +15,7 @@ try {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
     t.after(() => context.close());
     await context.addInitScript(() => localStorage.setItem('aow.language', 'en-US'));
-    let failStatus = false, failDelete = false, nextTerminal = 0, routerCreations = 0;
+    let failStatus = false, failDelete = false, nextTerminal = 0, orchestratorCreations = 0;
     const createdAt = Date.parse('2026-11-05T09:00:00Z');
     let updatedAt = createdAt;
     const tasks = [], sessions = [], terminals = [], creations = [], deleted = [], worktreeRequests = [];
@@ -48,12 +48,12 @@ try {
       else if (path.includes('/pinned-')) data = { paths: [], revision: 0 };
       else if (path === '/api/notifications') data = { revision: 0, items: [], unread_count: 0 };
       else if (path === '/api/instances') data = { items: [] };
-      else if (path === '/api/projects/project/router' && request.method() === 'POST') {
-        routerCreations++;
-        data = tasks.find(task => task.is_router);
+      else if (path === '/api/projects/project/orchestrator' && request.method() === 'POST') {
+        orchestratorCreations++;
+        data = tasks.find(task => task.is_orchestrator);
         if (!data) {
-          const first = session('router-thread');
-          data = { status: 'todo', created_at: createdAt, updated_at: createdAt, completed_at: null, id: 'router-project', project_id: 'project', prompt: 'Router', agent_id: 'test', is_router: true, workspace: '/repo', workspace_mode: 'existing', dependencies: [], pinned: false, archived: false, initial_thread_id: first.thread_id, resources: [{ kind: 'acp', id: first.thread_id }] };
+          const first = session('orchestrator-thread');
+          data = { status: 'todo', created_at: createdAt, updated_at: createdAt, completed_at: null, id: 'orchestrator-project', project_id: 'project', prompt: 'Orchestrator', agent_id: 'test', is_orchestrator: true, workspace: '/repo', workspace_mode: 'existing', dependencies: [], pinned: false, archived: false, initial_thread_id: first.thread_id, resources: [{ kind: 'acp', id: first.thread_id }] };
           tasks.push(data);
         }
       }
@@ -367,33 +367,33 @@ try {
     await agentTab.first().waitFor({ state: 'hidden' });
     assert.equal(terminals.filter(tab => tasks.at(-1).resources.some(resource => resource.kind === 'terminal' && resource.id === tab.id)).length, 0);
     if (await floating.isVisible()) await floating.getByRole('button', { name: 'Minimize floating workspace', exact: true }).click();
-    await sidebar.getByRole('button', { name: 'Open project Router', exact: true }).click();
-    const routerDialog = page.getByRole('dialog');
-    await routerDialog.getByText(/Choose an agent for the project Router/).waitFor();
-    assert.equal(await routerDialog.getByRole('textbox', { name: 'Task description', exact: true }).count(), 0);
-    await routerDialog.getByRole('button', { name: 'Open project Router', exact: true }).click();
-    await row('Router').waitFor();
-    await surface.getByRole('tab').filter({ hasText: 'router-thread' }).waitFor();
+    await sidebar.getByRole('button', { name: 'Open project Orchestrator', exact: true }).click();
+    const orchestratorDialog = page.getByRole('dialog');
+    await orchestratorDialog.getByText(/Choose an agent for the project Orchestrator/).waitFor();
+    assert.equal(await orchestratorDialog.getByRole('textbox', { name: 'Task description', exact: true }).count(), 0);
+    await orchestratorDialog.getByRole('button', { name: 'Open project Orchestrator', exact: true }).click();
+    await row('Orchestrator').waitFor();
+    await surface.getByRole('tab').filter({ hasText: 'orchestrator-thread' }).waitFor();
     assert.equal(await surface.locator('.task-collaboration').count(), 0);
-    assert.equal(await surface.locator('.project-aow-right [role=tab]').filter({ hasText: 'Properties' }).count(), 1, 'Router uses the same Properties entry as tasks');
+    assert.equal(await surface.locator('.project-aow-right [role=tab]').filter({ hasText: 'Properties' }).count(), 1, 'Orchestrator uses the same Properties entry as tasks');
     assert.equal(await properties.isVisible(), true);
     assert.deepEqual(await properties.getByRole('heading').allTextContents(), ['Conversation']);
-    assert.equal(await properties.locator('.task-property-row').count(), 0, 'Router has no task attributes');
+    assert.equal(await properties.locator('.task-property-row').count(), 0, 'Orchestrator has no task attributes');
     assert.equal(await surface.getByRole('button', { name: 'Conversation', exact: true }).count(), 0);
-    await conversations.locator('.conversation-instance').filter({ hasText: 'router-thread' }).waitFor();
+    await conversations.locator('.conversation-instance').filter({ hasText: 'orchestrator-thread' }).waitFor();
     assert.equal(await conversations.locator('.conversation-instance').count(), 1);
     await conversations.locator('.aow-list-row-open').click();
     assert.equal(await properties.isVisible(), true);
-    await properties.screenshot({ path: '/tmp/aow-router-properties-conversations.png' });
+    await properties.screenshot({ path: '/tmp/aow-orchestrator-properties-conversations.png' });
     await page.reload();
-    await row('Router').waitFor();
-    await sidebar.getByRole('button', { name: 'Open project Router', exact: true }).click();
-    assert.equal(routerCreations, 1, 'opening the persistent Router reuses its task and conversation');
+    await row('Orchestrator').waitFor();
+    await sidebar.getByRole('button', { name: 'Open project Orchestrator', exact: true }).click();
+    assert.equal(orchestratorCreations, 1, 'opening the persistent Orchestrator reuses its task and conversation');
     assert.equal(await page.getByRole('dialog').count(), 0);
     assert.equal(await surface.locator('.project-aow-right [role=tab]').filter({ hasText: 'Properties' }).count(), 1);
     assert.deepEqual(await properties.getByRole('heading').allTextContents(), ['Conversation']);
     assert.equal(await surface.getByRole('button', { name: 'Conversation', exact: true }).count(), 0);
-    await conversations.locator('.conversation-instance').filter({ hasText: 'router-thread' }).waitFor();
+    await conversations.locator('.conversation-instance').filter({ hasText: 'orchestrator-thread' }).waitFor();
     tasks[2].source_task_id = tasks[1].id;
     await row(tasks[1].prompt).getByRole('button', { name: tasks[1].prompt, exact: true }).click();
     await page.reload();

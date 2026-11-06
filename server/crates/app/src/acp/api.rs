@@ -439,10 +439,12 @@ async fn delete_session(
         .task_for_thread(&state.acp, &thread_id)
         .await
         .map_err(error)?
-        .is_some_and(|task| task.is_router && task.initial_thread_id.as_deref() == Some(&thread_id))
+        .is_some_and(|task| {
+            task.is_orchestrator && task.initial_thread_id.as_deref() == Some(&thread_id)
+        })
     {
         return Err(crate::instances::invalid(
-            "The project Router conversation is persistent and cannot be deleted",
+            "The project Orchestrator conversation is persistent and cannot be deleted",
         ));
     }
     state.acp.delete_session(&thread_id).await.map_err(error)?;

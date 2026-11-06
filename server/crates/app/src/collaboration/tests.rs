@@ -55,7 +55,7 @@ async fn task(state: &AppState, root: &Path, id: &str) -> TaskRecord {
         prompt: id.into(),
         agent_id: "test".into(),
         agent_role_id: None,
-        is_router: id == "router",
+        is_orchestrator: id == "orchestrator",
         source_task_id: None,
         source_thread_id: None,
         workspace_intent: Some("analyze".into()),
@@ -681,14 +681,14 @@ async fn daemon_outages_do_not_exhaust_durable_message_retries() {
 }
 
 #[tokio::test]
-async fn router_receives_routing_guidance_for_queued_messages_and_wakeups() {
+async fn orchestrator_receives_routing_guidance_for_queued_messages_and_wakeups() {
     let directory = tempfile::tempdir().unwrap();
     let state = state(directory.path());
-    let router = task(&state, directory.path(), "router").await;
+    let orchestrator = task(&state, directory.path(), "orchestrator").await;
     let child = task(&state, directory.path(), "child").await;
-    let thread = router.initial_thread_id.as_ref().unwrap();
+    let thread = orchestrator.initial_thread_id.as_ref().unwrap();
     let message = new_message(
-        &router,
+        &orchestrator,
         "dispatch".into(),
         "Clarify this request".into(),
         Some(MessageSource {
@@ -704,15 +704,15 @@ async fn router_receives_routing_guidance_for_queued_messages_and_wakeups() {
     worker(&state).deliver(message).await.unwrap();
     until(|| async { state.acp.snapshot(thread).await.unwrap().status == "idle" }).await;
     let event = TaskEvent {
-        id: "router-report".into(),
-        request_id: "router-report".into(),
-        project_id: router.project_id.clone(),
+        id: "orchestrator-report".into(),
+        request_id: "orchestrator-report".into(),
+        project_id: orchestrator.project_id.clone(),
         task_id: child.id.clone(),
         thread_id: child.initial_thread_id.clone().unwrap(),
         kind: EventKind::Result,
         message: "Investigation complete; original requester mentioned [@Deleted](mention://role/missing-role)".into(),
         target: Some(EventTarget {
-            task_id: router.id.clone(),
+            task_id: orchestrator.id.clone(),
             thread_id: thread.clone(),
         }),
         source: None,
@@ -735,7 +735,7 @@ async fn router_receives_routing_guidance_for_queued_messages_and_wakeups() {
             sent["prompt"][0]["text"]
                 .as_str()
                 .unwrap()
-                .contains("AoW Router instructions")
+                .contains("AoW Orchestrator instructions")
         );
     }
     assert_eq!(prompts[0]["prompt"].as_array().unwrap().len(), 3);

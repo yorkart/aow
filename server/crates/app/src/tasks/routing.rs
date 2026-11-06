@@ -1,4 +1,4 @@
-//! Shared task collaboration for every ACP task conversation, including the project Router.
+//! Shared task collaboration for every ACP task conversation, including the project Orchestrator.
 use super::api;
 use super::api::{Create, WorkspaceMode};
 use super::model::{Task, storage};
@@ -257,7 +257,7 @@ async fn delegate(
                     .as_deref()
                     .ok_or_else(|| invalid("Review requires target_task_id"))?,
             )?;
-            if target.archived || target.project_id != source.project_id || target.is_router {
+            if target.archived || target.project_id != source.project_id || target.is_orchestrator {
                 return Err(invalid(
                     "Review target must be an active execution task in this project",
                 ));
@@ -288,7 +288,7 @@ async fn delegate(
             workspace,
             slug: None,
             dependencies: vec![],
-            is_router: false,
+            is_orchestrator: false,
             source_thread_id: Some(request.source_thread_id),
             workspace_intent: Some(request.intent),
             target_task_id: request.target_task_id,
@@ -302,11 +302,11 @@ pub(super) async fn validate_workspace(
     request: &Create,
     workspace: &str,
 ) -> Result<Option<String>, HttpError> {
-    if (request.is_router || request.workspace_intent.as_deref() == Some("analyze"))
+    if (request.is_orchestrator || request.workspace_intent.as_deref() == Some("analyze"))
         && workspace != main_workspace(state, &request.project_id).await?
     {
         return Err(invalid(
-            "Router and analysis tasks use the project workspace",
+            "Orchestrator and analysis tasks use the project workspace",
         ));
     }
     if request.source_thread_id.is_none()
@@ -331,7 +331,7 @@ pub(super) async fn validate_workspace(
             if target.project_id != request.project_id
                 || target.workspace != workspace
                 || target.archived
-                || target.is_router
+                || target.is_orchestrator
             {
                 return Err(invalid("Invalid review workspace or target"));
             }
@@ -381,42 +381,42 @@ pub(super) async fn main_workspace(
 }
 
 #[derive(Deserialize)]
-pub(super) struct RouterRequest {
+pub(super) struct OrchestratorRequest {
     #[serde(default)]
     agent_id: String,
     agent_role_id: Option<String>,
 }
 
-pub(super) async fn router(
+pub(super) async fn orchestrator(
     State(state): State<AppState>,
     Path(project_id): Path<String>,
-    Json(request): Json<RouterRequest>,
+    Json(request): Json<OrchestratorRequest>,
 ) -> Result<Json<Task>, HttpError> {
-    if let Some(router) = state
+    if let Some(orchestrator) = state
         .tasks
         .inner
         .tasks
         .list()
         .map_err(storage)?
         .into_iter()
-        .find(|task| task.project_id == project_id && task.is_router)
+        .find(|task| task.project_id == project_id && task.is_orchestrator)
     {
-        return Ok(Json(router.into()));
+        return Ok(Json(orchestrator.into()));
     }
     let workspace = main_workspace(&state, &project_id).await?;
     api::create(
         State(state),
         Json(Create {
-            request_id: format!("router-{project_id}"),
+            request_id: format!("orchestrator-{project_id}"),
             project_id,
-            prompt: "Router".into(),
+            prompt: "Orchestrator".into(),
             agent_id: request.agent_id,
             agent_role_id: request.agent_role_id,
             workspace_mode: WorkspaceMode::Existing,
             workspace: Some(workspace),
             slug: None,
             dependencies: vec![],
-            is_router: true,
+            is_orchestrator: true,
             source_thread_id: None,
             workspace_intent: None,
             target_task_id: None,

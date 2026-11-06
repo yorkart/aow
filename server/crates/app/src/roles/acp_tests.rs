@@ -310,7 +310,7 @@ async fn acp_roles_follow_shared_configuration_and_reject_removed_or_unavailable
 }
 
 #[tokio::test]
-async fn only_the_project_router_injects_task_and_role_prompts_across_entry_points() {
+async fn only_the_project_orchestrator_injects_task_and_role_prompts_across_entry_points() {
     use aow_db::tasks::{TaskRecord, TaskResource, TaskStatus};
     use axum::{
         body::{Body, to_bytes},
@@ -320,7 +320,7 @@ async fn only_the_project_router_injects_task_and_role_prompts_across_entry_poin
     let (directory, state, role) = fixture().await;
     let cwd = directory.path().to_str().unwrap();
     let mut threads = Vec::new();
-    for is_router in [true, false] {
+    for is_orchestrator in [true, false] {
         let prepared = state
             .roles
             .prepare_role_session(&role, &state, cwd, None, None)
@@ -328,7 +328,12 @@ async fn only_the_project_router_injects_task_and_role_prompts_across_entry_poin
             .unwrap();
         let thread = prepared.resource().1.to_owned();
         let task = TaskRecord {
-            id: if is_router { "router" } else { "worker" }.into(),
+            id: if is_orchestrator {
+                "orchestrator"
+            } else {
+                "worker"
+            }
+            .into(),
             project_id: "project".into(),
             status: TaskStatus::InProgress,
             created_at: Some(1_700_000_000_000),
@@ -337,7 +342,7 @@ async fn only_the_project_router_injects_task_and_role_prompts_across_entry_poin
             prompt: "Task goal".into(),
             agent_id: "codex.test".into(),
             agent_role_id: Some(role.id.clone()),
-            is_router,
+            is_orchestrator,
             source_task_id: None,
             source_thread_id: None,
             workspace_intent: Some("analyze".into()),
@@ -358,7 +363,7 @@ async fn only_the_project_router_injects_task_and_role_prompts_across_entry_poin
         state.tasks.test_db().insert(&task).unwrap();
         threads.push(thread);
     }
-    let router = &threads[0];
+    let orchestrator = &threads[0];
     let worker = &threads[1];
     let input = json!([
         {"type":"text","text":format!("[@Reviewer](mention://role/{}) inspect this",role.id)},
@@ -368,7 +373,7 @@ async fn only_the_project_router_injects_task_and_role_prompts_across_entry_poin
         .tasks
         .acp_role_content(
             &state.acp,
-            router,
+            orchestrator,
             serde_json::from_value(input.clone()).unwrap(),
         )
         .await
@@ -383,7 +388,7 @@ async fn only_the_project_router_injects_task_and_role_prompts_across_entry_poin
     );
     let guidance = routed[1]["text"].as_str().unwrap();
     assert!(
-        guidance.contains("persistent Router")
+        guidance.contains("persistent Orchestrator")
             && guidance.contains("task create")
             && guidance.contains("END YOUR TURN")
     );
@@ -426,13 +431,17 @@ async fn only_the_project_router_injects_task_and_role_prompts_across_entry_poin
     assert!(
         state
             .tasks
-            .acp_role_content(&state.acp, router, serde_json::from_value(unknown).unwrap())
+            .acp_role_content(
+                &state.acp,
+                orchestrator,
+                serde_json::from_value(unknown).unwrap()
+            )
             .await
             .is_err()
     );
 
-    // New role instances and native children/forks do not inherit the Router persona.
-    for parent in [router, worker] {
+    // New role instances and native children/forks do not inherit the Orchestrator persona.
+    for parent in [orchestrator, worker] {
         let child = state
             .roles
             .prepare_acp_child_session(

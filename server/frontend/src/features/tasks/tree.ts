@@ -6,7 +6,7 @@ export function taskTree(tasks: WorkTask[]): TaskNode[] {
   const roots: WorkTask[] = [];
   for (const task of tasks) {
     const parent = task.source_task_id ? byId.get(task.source_task_id) : undefined;
-    if (parent && !parent.is_router && parent.id !== task.id) children.set(parent.id, [...(children.get(parent.id) ?? []), task]);
+    if (parent && !parent.is_orchestrator && parent.id !== task.id) children.set(parent.id, [...(children.get(parent.id) ?? []), task]);
     else roots.push(task);
   }
   const visited = new Set<string>();

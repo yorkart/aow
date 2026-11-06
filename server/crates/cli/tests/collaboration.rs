@@ -12,7 +12,7 @@ fn task_status_accepts_backlog_and_rejects_removed_waiting() {
             "login",
             "backlog",
             "--source-thread",
-            "router",
+            "orchestrator",
         ],
         None,
         200,
@@ -28,7 +28,7 @@ fn task_status_accepts_backlog_and_rejects_removed_waiting() {
             "login",
             "waiting",
             "--source-thread",
-            "router",
+            "orchestrator",
         ])
         .output()
         .unwrap();
@@ -152,7 +152,7 @@ fn explicit_reports_and_task_status_are_independent_commands() {
             "login",
             "done",
             "--source-thread",
-            "router",
+            "orchestrator",
         ],
         None,
         200,
@@ -160,5 +160,8 @@ fn explicit_reports_and_task_status_are_independent_commands() {
     );
     assert!(output.status.success(), "{output:?}");
     assert!(header.starts_with("POST /v1/tasks/login/status HTTP/1.1"));
-    assert_eq!(body, json!({"status":"done", "source_thread_id":"router"}));
+    assert_eq!(
+        body,
+        json!({"status":"done", "source_thread_id":"orchestrator"})
+    );
 }

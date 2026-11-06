@@ -24,7 +24,7 @@ pub struct TaskRecord {
     pub completed_at: Option<i64>,
     pub agent_id: String,
     pub agent_role_id: Option<String>,
-    pub is_router: bool,
+    pub is_orchestrator: bool,
     pub source_task_id: Option<String>,
     pub source_thread_id: Option<String>,
     pub workspace_intent: Option<String>,
@@ -57,6 +57,7 @@ impl TaskDb {
                 include_str!("sql/executions.sql"),
                 include_str!("sql/messages.sql"),
                 include_str!("sql/properties.sql"),
+                include_str!("sql/orchestrator.sql"),
             ],
         )?;
         let db = Self(Arc::new(Mutex::new(connection)));
@@ -71,7 +72,7 @@ impl TaskDb {
 
     pub fn list(&self) -> Result<Vec<TaskRecord>> {
         let connection = self.lock()?;
-        let mut query = connection.prepare("SELECT id, project_id, prompt, agent_id, workspace, initial_thread_id, pinned, archived, workspace_mode, slug, agent_role_id, is_router, source_task_id, source_thread_id, workspace_intent, target_task_id, target_revision, status, created_at, updated_at, completed_at FROM tasks ORDER BY rowid")?;
+        let mut query = connection.prepare("SELECT id, project_id, prompt, agent_id, workspace, initial_thread_id, pinned, archived, workspace_mode, slug, agent_role_id, is_orchestrator, source_task_id, source_thread_id, workspace_intent, target_task_id, target_revision, status, created_at, updated_at, completed_at FROM tasks ORDER BY rowid")?;
         let mut tasks = query
             .query_map([], |row| {
                 Ok(TaskRecord {
@@ -86,7 +87,7 @@ impl TaskDb {
                     workspace_mode: row.get(8)?,
                     slug: row.get(9)?,
                     agent_role_id: row.get(10)?,
-                    is_router: row.get(11)?,
+                    is_orchestrator: row.get(11)?,
                     source_task_id: row.get(12)?,
                     source_thread_id: row.get(13)?,
                     workspace_intent: row.get(14)?,
@@ -125,8 +126,8 @@ impl TaskDb {
     ) -> Result<()> {
         let mut connection = self.lock()?;
         let tx = connection.transaction()?;
-        tx.execute("INSERT INTO tasks (id, project_id, prompt, agent_id, workspace, initial_thread_id, pinned, archived, workspace_mode, slug, agent_role_id, is_router, source_task_id, source_thread_id, workspace_intent, target_task_id, target_revision, status, created_at, updated_at, completed_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
-            params![task.id, task.project_id, task.prompt, task.agent_id, task.workspace, task.initial_thread_id, task.pinned, task.archived, task.workspace_mode, task.slug, task.agent_role_id, task.is_router, task.source_task_id, task.source_thread_id, task.workspace_intent, task.target_task_id, task.target_revision, task.status, task.created_at, task.updated_at, task.completed_at])?;
+        tx.execute("INSERT INTO tasks (id, project_id, prompt, agent_id, workspace, initial_thread_id, pinned, archived, workspace_mode, slug, agent_role_id, is_orchestrator, source_task_id, source_thread_id, workspace_intent, target_task_id, target_revision, status, created_at, updated_at, completed_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
+            params![task.id, task.project_id, task.prompt, task.agent_id, task.workspace, task.initial_thread_id, task.pinned, task.archived, task.workspace_mode, task.slug, task.agent_role_id, task.is_orchestrator, task.source_task_id, task.source_thread_id, task.workspace_intent, task.target_task_id, task.target_revision, task.status, task.created_at, task.updated_at, task.completed_at])?;
         replace_dependencies(&tx, &task.id, &task.dependencies)?;
         for resource in &task.resources {
             tx.execute(
@@ -165,7 +166,7 @@ impl TaskDb {
                 "UPDATE tasks SET status = ?2,
                     updated_at = CASE WHEN status != ?2 THEN ?3 ELSE updated_at END,
                     completed_at = CASE WHEN ?2 = 'done' THEN CASE WHEN status = 'done' THEN completed_at ELSE ?3 END ELSE NULL END
-                 WHERE id = ?1 AND archived = 0 AND is_router = 0",
+                 WHERE id = ?1 AND archived = 0 AND is_orchestrator = 0",
                 params![id, status, timestamp()?]
             )? == 1,
             "Active execution task not found"

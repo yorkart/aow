@@ -43,7 +43,10 @@ pub(super) async fn create(state: AppState, request: Create) -> Result<Task, Htt
         let _operation = state.tasks.task_resource_access().await;
         let tasks = state.tasks.inner.tasks.list().map_err(storage)?;
         if let Some(task) = tasks.iter().find(|task| task.id == request.request_id) {
-            if task.is_router && request.is_router && task.project_id == request.project_id {
+            if task.is_orchestrator
+                && request.is_orchestrator
+                && task.project_id == request.project_id
+            {
                 return Ok(task.clone().into());
             }
             let requested_workspace = if matches!(request.workspace_mode, WorkspaceMode::Existing) {
@@ -64,7 +67,7 @@ pub(super) async fn create(state: AppState, request: Create) -> Result<Task, Htt
                 || (matches!(request.workspace_mode, WorkspaceMode::Existing)
                     && requested_workspace.as_deref() != Some(Path::new(&task.workspace)))
                 || task.dependencies != request.dependencies
-                || task.is_router != request.is_router
+                || task.is_orchestrator != request.is_orchestrator
                 || task.source_thread_id != request.source_thread_id
                 || task.workspace_intent != request.workspace_intent
                 || task.target_task_id != request.target_task_id
@@ -131,7 +134,7 @@ pub(super) async fn create(state: AppState, request: Create) -> Result<Task, Htt
                 "Delegation must stay within the source project",
             ));
         }
-        if request.is_router
+        if request.is_orchestrator
             && (source.is_some()
                 || request.workspace_intent.is_some()
                 || request.target_task_id.is_some()
@@ -139,7 +142,7 @@ pub(super) async fn create(state: AppState, request: Create) -> Result<Task, Htt
                 || !matches!(request.workspace_mode, WorkspaceMode::Existing))
         {
             return Err(crate::instances::invalid(
-                "Router must use the project workspace without a delegation source",
+                "Orchestrator must use the project workspace without a delegation source",
             ));
         }
         let mut seen = std::collections::HashSet::new();
@@ -261,7 +264,7 @@ pub(super) async fn create(state: AppState, request: Create) -> Result<Task, Htt
             prompt: request.prompt,
             agent_id: agent,
             agent_role_id: request.agent_role_id,
-            is_router: request.is_router,
+            is_orchestrator: request.is_orchestrator,
             source_task_id: source.map(|task| task.id),
             source_thread_id: request.source_thread_id,
             workspace_intent: request.workspace_intent,
@@ -279,7 +282,7 @@ pub(super) async fn create(state: AppState, request: Create) -> Result<Task, Htt
                 id: resource_id.into(),
             }],
         };
-        let message = (!task.is_router && task.initial_thread_id.is_some()).then(|| {
+        let message = (!task.is_orchestrator && task.initial_thread_id.is_some()).then(|| {
             crate::collaboration::new_message(
                 &task,
                 "initial".into(),
@@ -302,7 +305,7 @@ pub(super) async fn create(state: AppState, request: Create) -> Result<Task, Htt
         if message.is_some() {
             state.collaboration.start(&state);
         } else {
-            session.start(&state, (!task.is_router).then(|| task.prompt.clone()))?;
+            session.start(&state, (!task.is_orchestrator).then(|| task.prompt.clone()))?;
         }
         Ok(task.into())
     })

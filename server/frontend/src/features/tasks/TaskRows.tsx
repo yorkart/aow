@@ -29,7 +29,7 @@ export function TaskRows({ tasks, activeId, onSelect, onEdit, onPin, onArchive, 
       {children.length > 0 && <button className="task-tree-toggle" type="button" aria-label={t('tasks.children', { task: taskTitle(task) })} aria-expanded={!collapsed.has(task.id)}
         onClick={() => setCollapsed(current => { const next = new Set(current); if (next.has(task.id)) next.delete(task.id); else next.add(task.id); return next; })}><ChevronRight className={!collapsed.has(task.id) ? 'expanded' : undefined} size={13} /></button>}
       <AowListRow className={`project-aow-task-row${activeId === task.id ? ' active' : ''}`} title={taskTitle(task)} tooltip={`${task.prompt}\n${task.workspace}`} active={activeId === task.id}
-        icon={task.is_router ? <MessageSquare /> : <TaskStatusIcon status={task.status} />} actions={task.is_router ? <></> : undefined} openLabel={taskTitle(task)} onOpen={() => onSelect(task)} menuLabel={t('tasks.actions')}
+        icon={task.is_orchestrator ? <MessageSquare /> : <TaskStatusIcon status={task.status} />} actions={task.is_orchestrator ? <></> : undefined} openLabel={taskTitle(task)} onOpen={() => onSelect(task)} menuLabel={t('tasks.actions')}
         menuExpanded={menu?.task.id === task.id} onMenu={(x, y) => setMenu({ task, x, y })} />
     </div>
     {!collapsed.has(task.id) && children.length > 0 && <div className="task-tree-children">{children.map(render)}</div>}

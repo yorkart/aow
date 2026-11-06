@@ -22,7 +22,7 @@ try {
         worktrees: [{ id: 'wt', project_id: 'project', path: '/repo', branch: 'main', head: 'abc', is_main: true, detached: false, locked: false, prunable: false }] };
       const items = [{ id: 'result-one', read: false, archived: false, created_at: Date.now(), delivery: { state: 'delivered', error: null },
         request_id: 'report-one', task_id: 'child', project_id: 'project', thread_id: 'child-thread', kind: 'result', message: '104151 lines of Rust',
-        target: { task_id: 'router', thread_id: 'router-thread' }, source: { task_id: 'router', thread_id: 'router-thread', request: '@Developer count Rust code', turn_id: 'turn-one', message_id: 'message-one' } }];
+        target: { task_id: 'orchestrator', thread_id: 'orchestrator-thread' }, source: { task_id: 'orchestrator', thread_id: 'orchestrator-thread', request: '@Developer count Rust code', turn_id: 'turn-one', message_id: 'message-one' } }];
       let retries = 0;
       await context.route('**/api/**', async route => {
         const request = route.request(), url = new URL(request.url()), path = url.pathname;
