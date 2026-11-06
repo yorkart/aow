@@ -138,9 +138,10 @@ function useFloatingController() {
   const minimize = useCallback(() => { setOpen(false); setAutoHidden(false); returnFocus.current?.focus({ preventScroll: true }); }, []);
   const togglePinned = useCallback(() => { setPinned(value => !value); setAutoHidden(false); }, []);
   const add = useCallback((workspace: string, id: string, initial?: WorkspaceTab & { external?: boolean }) => {
+    const descriptor = sources.current.get(workspace)?.tabs.find(tab => tab.id === id) ?? initial;
+    if (descriptor?.fixed) { sources.current.get(workspace)?.reveal(id); return; }
     removeHosted(workspace, id);
     if (previewTabsRef.current.some(tab => tab.workspace === workspace && tab.id === id && !tab.floating)) pinPreview(workspace, id);
-    const descriptor = sources.current.get(workspace)?.tabs.find(tab => tab.id === id) ?? initial;
     const tab: FloatingTab = { workspace, ...(descriptor ?? { id, label: t("aow.opening_2"), kind: 'file', pending: true, targetId: id.slice(id.indexOf(':') + 1) }) };
     setTabs(items => items.some(item => tabKey(item) === tabKey(tab)) ? items : [...items, tab]);
     setActiveKey(tabKey(tab));
@@ -148,6 +149,7 @@ function useFloatingController() {
     show();
   }, [show, removeHosted, pinPreview]);
   const hostTerminal = useCallback((workspace: string, host: string, descriptor: WorkspaceTab) => {
+    if (descriptor.fixed) return;
     setTabs(items => items.filter(tab => tab.workspace !== workspace || tab.id !== descriptor.id));
     const tab = { ...(sources.current.get(workspace)?.tabs.find(tab => tab.id === descriptor.id) ?? descriptor), workspace, host };
     setHostedTabs(items => items.some(item => tabKey(item) === tabKey(tab))
@@ -155,7 +157,7 @@ function useFloatingController() {
   }, []);
   const restore = useCallback((workspace: string, restored: WorkspaceCommands['tabs']) => {
     setTabs(items => {
-      const missing = restored.filter(tab => !items.some(item => item.workspace === workspace && item.id === tab.id));
+      const missing = restored.filter(tab => !tab.fixed && !items.some(item => item.workspace === workspace && item.id === tab.id));
       return missing.length ? [...items, ...missing.map(tab => ({ workspace, ...tab }))] : items;
     });
   }, []);
@@ -180,8 +182,9 @@ function useFloatingController() {
   const publish = useCallback((workspace: string, commands: WorkspaceCommands) => {
     sources.current.set(workspace, commands);
     const update = <T extends FloatingTab,>(items: T[]): T[] => {
-      let changed = false;
-      const next = items.map(item => {
+      const retained = items.filter(item => item.workspace !== workspace || !commands.tabs.some(tab => tab.id === item.id && tab.fixed));
+      let changed = retained.length !== items.length;
+      const next = retained.map(item => {
         const tab = item.workspace === workspace ? commands.tabs.find(tab => tab.id === item.id) : undefined;
         if (!tab || !item.pending && tab.label === item.label && tab.kind === item.kind && tab.renameable === item.renameable
           && tab.targetId === item.targetId && tab.dirty === item.dirty && tab.preview === item.preview && tab.acpAgentId === item.acpAgentId && JSON.stringify(tab.terminal) === JSON.stringify(item.terminal)) return item;

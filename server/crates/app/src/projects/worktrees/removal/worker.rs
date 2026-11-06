@@ -100,6 +100,13 @@ pub(super) async fn run_job(state: &AppState, job: &RemovalJob, operation: &Hand
             Some(index),
         );
         let outcome = async {
+            // Recheck after queueing, serialized with task creation/unarchiving.
+            let _tasks = state.tasks.task_resource_access().await;
+            state
+                .tasks
+                .ensure_workspace_deletable(&state.acp, &item.path)
+                .await
+                .map_err(|error| ServiceError::Invalid(error.to_string()))?;
             state.projects.inner.removals.update(
                 &job.id,
                 &item.path,

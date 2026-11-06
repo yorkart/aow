@@ -9,7 +9,7 @@ use axum::{
 };
 use tower::ServiceExt;
 
-async fn call(
+pub(super) async fn call(
     app: &Router,
     method: &str,
     path: &str,
@@ -278,7 +278,7 @@ fn optional_slug_has_no_dangling_separator_and_normalizes_future_values() {
     assert!(workspace::task_branch("{{task_id}}-{{unknown}}", "abc", None).is_err());
 }
 
-async fn workspace_fixture() -> (tempfile::TempDir, AppState, Project, Router) {
+pub(super) async fn workspace_fixture() -> (tempfile::TempDir, AppState, Project, Router) {
     let directory = tempfile::tempdir().unwrap();
     let repo = directory.path().join("repo");
     std::fs::create_dir(&repo).unwrap();
@@ -324,7 +324,7 @@ async fn workspace_fixture() -> (tempfile::TempDir, AppState, Project, Router) {
     (directory, state, project, app)
 }
 
-async fn task_idle(state: &AppState, thread: &str) {
+pub(super) async fn task_idle(state: &AppState, thread: &str) {
     tokio::time::timeout(std::time::Duration::from_secs(10), async {
         loop {
             let session = state.acp.snapshot(thread).await.unwrap();
@@ -406,7 +406,12 @@ async fn orchestrator_and_execution_tasks_share_delegation_with_isolation_and_pr
     );
     assert_eq!(first.0, StatusCode::OK, "{}", first.1);
     assert_eq!(first.1, second.1);
-    assert_eq!(first.1["id"], format!("orchestrator-{}", project.id));
+    assert!(
+        first.1["id"]
+            .as_str()
+            .unwrap()
+            .starts_with(&format!("orchestrator-{}-", project.id))
+    );
     // An upgraded project keeps its original identity and main conversation.
     let mut existing = state.tasks.test_db().list().unwrap().remove(0);
     state.tasks.test_db().remove(&existing.id).unwrap();
@@ -508,9 +513,9 @@ async fn orchestrator_and_execution_tasks_share_delegation_with_isolation_and_pr
     let first_prompt: serde_json::Value =
         serde_json::from_str(log.lines().next().unwrap()).unwrap();
     assert_eq!(
-        first_prompt["prompt"],
-        json!([{ "type":"text", "text":"Implement login" }]),
-        "creating a role task sends only its task text"
+        first_prompt["prompt"].as_array().unwrap().last().unwrap(),
+        &json!({ "type":"text", "text":"Implement login" }),
+        "main conversation context must stay separate from the faithful task text"
     );
     let (status, helper) = call(&app, "POST", "/v1/tasks", json!({"request_id":"helper","source_thread_id":worker,"prompt":"Investigate the API","intent":"analyze"})).await;
     assert_eq!(status, StatusCode::OK, "{helper}");

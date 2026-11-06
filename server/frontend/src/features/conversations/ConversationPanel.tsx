@@ -13,6 +13,7 @@ import { instanceKey, type InstanceInfo } from '../instances/types';
 import { useInstanceGraph } from '../instances/useInstanceGraph';
 import { useUnreadAcpThreadIds, useUnreadTerminalIds } from '../notifications/taskNotifications';
 import { useTaskScope } from '../tasks/TaskScope';
+import type { WorkTask } from '../tasks/api';
 import { useTerminalState } from '../terminals/useTerminalState';
 import { terminalStore } from '../terminals/terminalStore';
 import { terminalPaneAgent, terminalPaneTitle, terminalTabPresentation } from '../terminals/terminalPresentation';
@@ -28,7 +29,8 @@ function timestamp(value: string) {
   return minutes < 60 ? `${minutes}m` : hours < 24 ? `${hours}h` : days < 7 ? `${days}d` : days < 28 ? `${Math.floor(days / 7)}w` : `${Math.max(1, Math.floor(days / 30))}mo`;
 }
 
-function Row({ node, sessions, activeTerminalId, activeThreadId, unreadTerminals, unreadAcp, onOpen, onRemove, searching }: {
+function Row({ node, sessions, activeTerminalId, activeThreadId, unreadTerminals, unreadAcp, onOpen, onRemove, searching, protectedThreads }: {
+  protectedThreads: ReadonlySet<string>;
   node: ConversationNode; sessions: Map<string, AcpSessionInfo>; activeTerminalId?: string; activeThreadId?: string;
   unreadTerminals: ReadonlySet<string>; unreadAcp: ReadonlySet<string>; searching: boolean;
   onOpen: (instance: InstanceInfo) => void; onRemove: (instance: InstanceInfo) => void;
@@ -36,6 +38,7 @@ function Row({ node, sessions, activeTerminalId, activeThreadId, unreadTerminals
   const [expanded, setExpanded] = useState(true);
   const { instance, children } = node;
   const scope = useTaskScope();
+  const protectedMain = instance.kind === 'acp' && protectedThreads.has(instance.id);
   const session = instance.kind === 'acp' ? sessions.get(instance.id) : undefined;
   const title = (instance.kind === 'acp' ? session?.title : undefined) || instance.title;
   const active = !instance.deleted && (instance.kind === 'acp' ? activeThreadId === instance.id : !!activeTerminalId && activeTerminalId === instance.tab_id);
@@ -52,7 +55,7 @@ function Row({ node, sessions, activeTerminalId, activeThreadId, unreadTerminals
         icon={<AgentIcon agentId={instance.agent_id?.replace(/-acp$/, '').replace(/^claude-agent$/, 'claude')} />}
         titlePrefix={session?.status === 'working' ? <span role="status" aria-label={t('aow.agent_is_working')}><LoaderCircle className="spinning" /></span> : undefined}
         menuLabel={t('acp.session_actions')}
-        actions={instance.kind === 'acp' && !instance.deleted ? <AowIconButton className="aow-list-row-menu"
+        actions={instance.kind === 'acp' && !instance.deleted && !protectedMain ? <AowIconButton className="aow-list-row-menu"
           title={t('acp.delete_session_2')} aria-label={t('acp.delete_acp_session_2', { value0: title })} onClick={() => onRemove(instance)}><Trash2 /></AowIconButton> : <span />}>
         <small title={session ? `${session.agent_id} · ${sessionDisplayTime(session)}` : instance.cwd}>
           {session ? `${session.thread_id === scope?.task.initial_thread_id ? t('tasks.main_conversation') + ' · ' : ''}${timestamp(sessionDisplayTime(session))}` : instance.kind === 'acp' ? 'ACP' : t('conversations.terminal_agent')}
@@ -62,15 +65,17 @@ function Row({ node, sessions, activeTerminalId, activeThreadId, unreadTerminals
     </div>
     {children.length && open ? <ul>{children.map(child => <Row key={instanceKey(child.instance)} node={child} sessions={sessions}
       activeTerminalId={activeTerminalId} activeThreadId={activeThreadId} unreadTerminals={unreadTerminals} unreadAcp={unreadAcp}
-      onOpen={onOpen} onRemove={onRemove} searching={searching} />)}</ul> : null}
+      onOpen={onOpen} onRemove={onRemove} searching={searching} protectedThreads={protectedThreads} />)}</ul> : null}
   </li>;
 }
 
-export function ConversationPanel({ workspace, visible, embedded = false, activeTerminalId, activeThreadId, onOpenTerminal, onOpenAcp }: {
+export function ConversationPanel({ tasks, workspace, visible, embedded = false, activeTerminalId, activeThreadId, onOpenTerminal, onOpenAcp }: {
+  tasks: WorkTask[];
   workspace: string; visible: boolean; embedded?: boolean; activeTerminalId?: string; activeThreadId?: string;
   onOpenTerminal: (tab: TerminalTab) => void; onOpenAcp: (session: AcpSessionInfo) => void;
 }) {
   const taskScope = useTaskScope();
+  const protectedThreads = new Set(tasks.filter(task => !task.archived && task.initial_thread_id).map(task => task.initial_thread_id!));
   const graph = useInstanceGraph(visible);
   const terminals = useTerminalState(visible);
   const navigate = useAowTabNavigation();
@@ -121,6 +126,7 @@ export function ConversationPanel({ workspace, visible, embedded = false, active
     }
   });
   const remove = (instance: InstanceInfo) => run(async () => {
+    if (protectedThreads.has(instance.id)) return;
     if (!await confirm({ title: t('acp.delete_acp_session'), description: t('acp.delete_session', { value0: instance.title }),
       warning: t('acp.for_agents_supporting_remote_deletion_the_remote_record_will'), confirmLabel: t('acp.delete'), danger: true })) return;
     await acpApi.remove(instance.id);
@@ -137,7 +143,7 @@ export function ConversationPanel({ workspace, visible, embedded = false, active
     {!nodes.length && <p className="conversation-empty">{status.loading ? t('conversations.loading') : t('conversations.empty')}</p>}
     <ul className="conversation-tree">{nodes.map(node => <Row key={instanceKey(node.instance)} node={node} sessions={sessions}
       activeTerminalId={activeTerminalId} activeThreadId={activeThreadId} unreadTerminals={unreadTerminals} unreadAcp={unreadAcp}
-      onOpen={open} onRemove={remove} searching={!!search.trim()} />)}</ul>
+      onOpen={open} onRemove={remove} searching={!!search.trim()} protectedThreads={protectedThreads} />)}</ul>
   </>;
   return <section className={`conversation-panel${embedded ? ' conversation-panel-embedded' : ''}`} aria-label={t('navigation.conversation')}>
     {embedded ? <><div className="conversation-toolbar">{searchInput}{actions}</div>{content}</> : <>

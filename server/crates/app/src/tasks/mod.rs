@@ -9,7 +9,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 mod api;
 mod instructions;
-pub(crate) use instructions::is_orchestrator_thread;
+pub(crate) use instructions::is_main_thread;
+#[cfg(test)]
+mod main_tests;
 mod mentions;
 mod messages;
 mod model;

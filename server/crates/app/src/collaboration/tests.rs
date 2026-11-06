@@ -180,9 +180,13 @@ async fn multiple_turns_do_not_report_but_explicit_reports_wake_the_busy_parent_
         .filter(|sent| sent["sessionId"] == json!(child_session.session_id))
     {
         assert_eq!(
-            sent["prompt"],
-            json!([{ "type":"text", "text":"Check again" }]),
-            "source correlation stays in the database, not the provider prompt"
+            sent["prompt"].as_array().unwrap().last().unwrap(),
+            &json!({ "type":"text", "text":"Check again" }),
+            "main-session guidance and provenance stay separate from the task text"
+        );
+        assert_eq!(
+            sent["prompt"][1]["_meta"]["aow/message"]["source"]["thread_id"],
+            parent_thread
         );
     }
     let event_id = event["id"].as_str().unwrap();
@@ -208,8 +212,9 @@ async fn multiple_turns_do_not_report_but_explicit_reports_wake_the_busy_parent_
     let wakeup_log =
         std::fs::read_to_string(directory.path().join("lineage-prompts.jsonl")).unwrap();
     let wakeup: Value = serde_json::from_str(wakeup_log.lines().last().unwrap()).unwrap();
-    assert_eq!(wakeup["prompt"].as_array().unwrap().len(), 1);
-    assert!(wakeup["prompt"][0]["_meta"]["aow/instructions"].is_null());
+    assert_eq!(wakeup["prompt"].as_array().unwrap().len(), 2);
+    assert_eq!(wakeup["prompt"][0]["_meta"]["aow/instructions"], true);
+    assert_eq!(wakeup["prompt"][1]["_meta"]["aow/event"]["id"], event_id);
     assert!(
         snapshot
             .entries
@@ -366,6 +371,114 @@ async fn send_queues_without_waiting_and_enforces_identity_and_task_ownership() 
             .is_empty()
     );
     state.acp.close_session(thread).await.unwrap();
+}
+
+#[tokio::test]
+async fn automatic_messages_and_child_reports_use_main_conversations_not_auxiliaries() {
+    let directory = tempfile::tempdir().unwrap();
+    let state = state(directory.path());
+    let parent = task(&state, directory.path(), "parent").await;
+    let mut child = task(&state, directory.path(), "child").await;
+    let parent_main = parent.initial_thread_id.as_deref().unwrap();
+    let child_main = child.initial_thread_id.clone().unwrap();
+    let parent_aux = state
+        .acp
+        .prepare_session("test", directory.path().into())
+        .await
+        .unwrap();
+    let child_aux = state
+        .acp
+        .prepare_session("test", directory.path().into())
+        .await
+        .unwrap();
+    state
+        .tasks
+        .attach_task_resource(Some(&parent.id), "acp", &parent_aux.thread_id)
+        .unwrap();
+    state
+        .tasks
+        .attach_task_resource(Some(&child.id), "acp", &child_aux.thread_id)
+        .unwrap();
+    // Preserve the actual auxiliary initiator as provenance, but route reports
+    // through the parent task's stable collaboration entry.
+    child = state
+        .tasks
+        .list()
+        .unwrap()
+        .into_iter()
+        .find(|task| task.id == child.id)
+        .unwrap();
+    state.tasks.test_db().remove(&child.id).unwrap();
+    child.source_task_id = Some(parent.id.clone());
+    child.source_thread_id = Some(parent_aux.thread_id.clone());
+    state.tasks.test_db().insert(&child).unwrap();
+    let app = crate::tasks::cli_routes().with_state(state.clone());
+    let (code, sent) = call(
+        &app,
+        "POST",
+        "/v1/tasks/child/send",
+        json!({
+            "request_id":"followup","source_thread_id":parent_main,"prompt":"Continue investigation"
+        }),
+    )
+    .await;
+    assert_eq!(code, StatusCode::OK, "{sent}");
+    assert_eq!(sent["thread_id"], child_main);
+    let (code, report) = call(&app, "POST", "/v1/tasks/child/report", json!({
+        "request_id":"conclusion","source_thread_id":child_main,"kind":"result","message":"Investigation ready"
+    })).await;
+    assert_eq!(code, StatusCode::OK, "{report}");
+    assert_eq!(report["target"]["thread_id"], parent_main);
+    assert_eq!(report["target"]["task_id"], parent.id);
+    until(|| async {
+        state
+            .tasks
+            .test_db()
+            .message_for_request(
+                &parent.id,
+                &format!("inbox-{}", report["id"].as_str().unwrap()),
+            )
+            .unwrap()
+            .is_some_and(|message| message.state == DeliveryState::Delivered)
+    })
+    .await;
+    for auxiliary in [parent_aux.thread_id, child_aux.thread_id] {
+        assert!(
+            state
+                .acp
+                .snapshot(&auxiliary)
+                .await
+                .unwrap()
+                .entries
+                .is_empty()
+        );
+        assert_eq!(
+            serde_json::to_value(
+                state
+                    .tasks
+                    .acp_role_content(&state.acp, &auxiliary, content("Manual work"))
+                    .await
+                    .unwrap()
+            )
+            .unwrap(),
+            serde_json::to_value(content("Manual work")).unwrap()
+        );
+    }
+    assert_eq!(
+        state
+            .tasks
+            .list()
+            .unwrap()
+            .into_iter()
+            .find(|task| task.id == parent.id)
+            .unwrap()
+            .initial_thread_id
+            .as_deref(),
+        Some(parent_main)
+    );
+    for session in state.acp.sessions(None).await.unwrap() {
+        state.acp.close_session(&session.thread_id).await.unwrap();
+    }
 }
 
 #[tokio::test]

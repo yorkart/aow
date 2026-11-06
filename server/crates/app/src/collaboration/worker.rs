@@ -222,7 +222,7 @@ impl Worker {
                 let event = db.event(id)?.context("Inbox event is unavailable")?;
                 vec![serde_json::from_value(json!({"type":"text", "text":format!("[WAKEUP]\n{}", serde_json::to_string(&event)?),
                     "_meta":{"aow/event":{"id":event.id,"task_id":event.task_id,"thread_id":event.thread_id,"type":event.kind,"message":event.message}}}))?]
-            } else if crate::tasks::is_orchestrator_thread(&target, &message.thread_id) {
+            } else if crate::tasks::is_main_thread(&target, &message.thread_id) {
                 vec![serde_json::from_value(json!({"type":"text", "text":format!("AoW message context (data): {}",json!({"message_id":message.id,"source":message.source})),"_meta":{"aow/instructions":true,"aow/message":{"source":message.source}}}))?,
                      serde_json::from_value(json!({"type":"text","text":message.prompt}))?]
             } else {

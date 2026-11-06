@@ -432,21 +432,19 @@ async fn delete_session(
     Path(thread_id): Path<String>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, HttpError> {
+    // Report task protection even while the adapter is starting or another
+    // browser controls it. Recheck under the task lock before deleting below.
+    state
+        .tasks
+        .ensure_conversation_deletable(&thread_id)
+        .map_err(|error| crate::instances::invalid(error.to_string()))?;
     let controller = state.acp_controls.session(&thread_id);
     let _lifecycle = controller.authorize_lifecycle(&headers, true).await?;
-    if state
+    let _operation = state.tasks.task_resource_access().await;
+    state
         .tasks
-        .task_for_thread(&state.acp, &thread_id)
-        .await
-        .map_err(error)?
-        .is_some_and(|task| {
-            task.is_orchestrator && task.initial_thread_id.as_deref() == Some(&thread_id)
-        })
-    {
-        return Err(crate::instances::invalid(
-            "The project Orchestrator conversation is persistent and cannot be deleted",
-        ));
-    }
+        .ensure_conversation_deletable(&thread_id)
+        .map_err(|error| crate::instances::invalid(error.to_string()))?;
     state.acp.delete_session(&thread_id).await.map_err(error)?;
     Ok(Json(json!({})))
 }

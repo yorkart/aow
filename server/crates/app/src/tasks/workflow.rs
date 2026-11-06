@@ -78,6 +78,15 @@ pub(super) async fn create(state: AppState, request: Create) -> Result<Task, Htt
             }
             return Ok(task.clone().into());
         }
+        // Concurrent openings may have different request IDs, but a project
+        // still has exactly one Orchestrator space and one bound main session.
+        if request.is_orchestrator
+            && let Some(task) = tasks
+                .iter()
+                .find(|task| task.is_orchestrator && task.project_id == request.project_id)
+        {
+            return Ok(task.clone().into());
+        }
         // Reject unresolved references before provisioning a workspace or session.
         for id in super::mentions::role_mentions(&request.prompt) {
             state.roles.agent_role(&id).map_err(service_http_error)?;

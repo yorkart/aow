@@ -28,6 +28,8 @@ export interface WorkspaceTab {
   dirty?: boolean;
   preview?: boolean;
   pending?: boolean;
+  /** The space's main conversation cannot be closed or moved. */
+  fixed?: boolean;
 }
 export interface TabRevealRequest { tabId: string }
 type WorkspaceTabGroup = Exclude<WorkspaceTab['kind'], 'agent' | 'settings' | 'browser' | 'inbox'> | 'global';
@@ -108,9 +110,9 @@ function CenterTabContextMenu({
   const canRename = state.tab.renameable !== false && (state.tab.kind === 'terminal' || state.tab.kind === 'agent' || state.tab.kind === 'file');
 
   return <div ref={menu} className="project-aow-context-menu project-aow-tab-context-menu" style={{ left: position.x, top: position.y }} role="menu" aria-label={t("aow.actions", { value0: state.tab.label })} onPointerDown={(event) => event.stopPropagation()}>
-    {onOpenElsewhere && destination ? <button role="menuitem" onClick={action(onOpenElsewhere)}><WorkspaceMenuLabel action={destination} /></button> : null}
+    {!state.tab.fixed && onOpenElsewhere && destination ? <button role="menuitem" onClick={action(onOpenElsewhere)}><WorkspaceMenuLabel action={destination} /></button> : null}
     {canRename ? <button role="menuitem" onClick={action(onRename)}><Pencil />{t("aow.rename")}</button> : null}
-    <button role="menuitem" onClick={action(onCloseTab)}><X />{t("aow.close")}</button>
+    <button role="menuitem" disabled={state.tab.fixed} onClick={action(onCloseTab)}><X />{t("aow.close")}</button>
     <button role="menuitem" disabled={!hasOtherTabs} onClick={action(onCloseOthers)}><ListX />{t("aow.close_others")}</button>
     <button role="menuitem" onClick={action(onCloseAll)}><ListX />{t("aow.close_all")}</button>
   </div>;
@@ -288,7 +290,7 @@ export function WorkspaceTabs({ workspaceKey, revealRequest, tabs, activeId, vis
   };
   const closeGroup = (selected: WorkspaceTab, keep: boolean) => run(async () => {
     const group = workspaceTabGroup(selected);
-    const targets = tabs.filter(tab => (ungrouped || workspaceTabGroup(tab) === group) && (!keep || tab.id !== selected.id));
+    const targets = tabs.filter(tab => !tab.fixed && (ungrouped || workspaceTabGroup(tab) === group) && (!keep || tab.id !== selected.id));
     if (!targets.length) return;
     const dirty = targets.filter(tab => tab.dirty).length;
     if (!ungrouped && group === 'file' && dirty && !window.confirm(t("aow.files_have_unsaved_changes_close_them", { value0: dirty }))) return;
@@ -313,7 +315,7 @@ export function WorkspaceTabs({ workspaceKey, revealRequest, tabs, activeId, vis
               {folded ? <span className="project-aow-group-count" aria-hidden="true">{group.tabs.length > 9 ? '…' : group.tabs.length}</span> : null}
             </button>}
             <div id={`${groupId}-${group.id}`} className="project-aow-group-tabs" role="presentation">
-              {!folded ? group.tabs.map(tab => <div key={tab.id} data-workspace-tab-id={tab.id} role="tab" tabIndex={0} aria-selected={activeId === tab.id}
+              {!folded ? group.tabs.map(tab => <div key={tab.id} data-workspace-tab-id={tab.id} data-fixed={tab.fixed || undefined} role="tab" tabIndex={0} aria-selected={activeId === tab.id}
                 className={`project-aow-center-tab${activeId === tab.id ? ' active' : ''}${tab.preview ? ' preview' : ''}`} title={tab.title ?? tab.label}
                 aria-describedby={preview?.tabId === tab.id ? previewId : undefined}
                 onMouseEnter={event => showPreview(tab, event.currentTarget)} onMouseLeave={dismissPreview}
@@ -322,7 +324,7 @@ export function WorkspaceTabs({ workspaceKey, revealRequest, tabs, activeId, vis
                 onAuxClick={event => {
                   if (event.button !== 1) return;
                   event.preventDefault(); event.stopPropagation(); dismissPreview();
-                  run(() => onCloseTab(tab));
+                  if (!tab.fixed) run(() => onCloseTab(tab));
                 }}
                 onClick={() => onActivate(tab)} onDoubleClick={() => { if (tab.preview) onPin?.(tab); }} onContextMenu={event => {
                   event.preventDefault(); event.stopPropagation(); dismissPreview(); onActivate(tab); setNewMenu(false);
@@ -340,7 +342,7 @@ export function WorkspaceTabs({ workspaceKey, revealRequest, tabs, activeId, vis
                     if (event.key === 'Escape') { cancelRename.current = true; event.currentTarget.blur(); } }} /> : <span>{tab.label}</span>}
                 {tab.terminal && tab.terminal.agentCount > 1 && tab.label !== t("terminals.agent_count", { count: tab.terminal.agentCount })
                   ? <small className="terminal-tab-agent-count" aria-label={t("terminals.agent_count", { count: tab.terminal.agentCount })}>{tab.terminal.agentCount}</small> : null}
-                {rename?.tabId !== tab.id ? <button className="project-aow-tab-close" title={t("aow.close_2", { value0: tab.label })} aria-label={t("aow.close_2", { value0: tab.label })}
+                {!tab.fixed && rename?.tabId !== tab.id ? <button className="project-aow-tab-close" title={t("aow.close_2", { value0: tab.label })} aria-label={t("aow.close_2", { value0: tab.label })}
                   onClick={event => { event.stopPropagation(); run(() => onCloseTab(tab)); }}><X /></button> : null}
               </div>) : null}
             </div>
@@ -358,8 +360,8 @@ export function WorkspaceTabs({ workspaceKey, revealRequest, tabs, activeId, vis
       left={preview.left} top={preview.top} onDismiss={dismissPreview} /> : null}
     {contextMenu && tabs.some(tab => tab.id === contextMenu.tab.id) ? createPortal(<CenterTabContextMenu state={contextMenu} destination={destination(contextMenu.tab)}
       onOpenElsewhere={() => onOpenElsewhere(contextMenu.tab)} onClose={dismissMenu} onRename={() => beginRename(contextMenu.tab)}
-      hasOtherTabs={tabs.some(tab => tab.id !== contextMenu.tab.id && (ungrouped || workspaceTabGroup(tab) === workspaceTabGroup(contextMenu.tab)))}
-      onCloseTab={() => run(() => onCloseTab(contextMenu.tab))} onCloseOthers={() => closeGroup(contextMenu.tab, true)}
+      hasOtherTabs={tabs.some(tab => !tab.fixed && tab.id !== contextMenu.tab.id && (ungrouped || workspaceTabGroup(tab) === workspaceTabGroup(contextMenu.tab)))}
+      onCloseTab={() => { if (!contextMenu.tab.fixed) run(() => onCloseTab(contextMenu.tab)); }} onCloseOthers={() => closeGroup(contextMenu.tab, true)}
       onCloseAll={() => closeGroup(contextMenu.tab, false)} />, document.body) : null}
   </>;
 }

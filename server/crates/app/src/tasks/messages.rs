@@ -118,10 +118,22 @@ pub(super) async fn report(
             thread_id: thread,
         })
     } else {
+        // The originating thread is provenance, not the parent's collaboration
+        // endpoint. A child created from an auxiliary session still reports to
+        // its parent task's fixed main conversation.
         task.source_task_id
-            .clone()
-            .zip(task.source_thread_id.clone())
-            .map(|(task_id, thread_id)| EventTarget { task_id, thread_id })
+            .as_deref()
+            .map(|id| {
+                let parent = find_task(&state, id)?;
+                let thread_id = parent
+                    .initial_thread_id
+                    .ok_or_else(|| invalid("Parent task has no main conversation"))?;
+                Ok::<_, HttpError>(EventTarget {
+                    task_id: parent.id,
+                    thread_id,
+                })
+            })
+            .transpose()?
     };
     let source = crate::collaboration::report_source(&state, &task, &request.source_thread_id)
         .await

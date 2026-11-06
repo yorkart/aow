@@ -59,6 +59,14 @@ pub(crate) async fn submit(
             ));
         }
     }
+    let _tasks = state.tasks.task_resource_access().await;
+    for path in &paths {
+        state
+            .tasks
+            .ensure_workspace_deletable(&state.acp, path)
+            .await
+            .map_err(|error| ServiceError::Invalid(error.to_string()))?;
+    }
     let job = RemovalJob {
         id: aow_id::new_id(),
         project_id,
@@ -136,6 +144,7 @@ pub(crate) async fn submit(
         resource: None,
         total: Some(job.items.len()),
     });
+    drop(_tasks);
     worker::spawn(state, job.clone(), operation, project_lock);
     Ok(job)
 }

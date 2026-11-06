@@ -61,7 +61,7 @@ enum TaskCommand {
     },
     /// Create an independent task. Reuse the request ID and payload on retries.
     #[command(
-        after_help = "change creates a worktree from project defaults. analyze uses the project checkout without edits. review requires --target-task with a clean, committed workspace and records its HEAD. Without --role, use the source task's ACP adapter. New tasks receive only the supplied task text; AoW prompt injection is currently limited to the project Orchestrator. After acceptance end your turn. Inbox reports require an explicit task report call; do not assume the recipient will send one. Do not poll or wait."
+        after_help = "change creates a worktree from project defaults. analyze uses the project checkout without edits. review requires --target-task with a clean, committed workspace and records its HEAD. Without --role, use the source task's ACP adapter. Every task has a fixed main conversation, which receives AoW collaboration context separately from the supplied task text. Auxiliary sessions remain manual. After acceptance end your turn. Inbox reports require an explicit task report call; a turn ending is not a report. Do not poll or wait."
     )]
     Create {
         #[arg(long, value_parser = crate::parse_id)]
@@ -77,7 +77,7 @@ enum TaskCommand {
         #[command(flatten)]
         task: TaskInput,
     },
-    /// Publish an explicit report to Inbox and optionally wake a conversation.
+    /// Publish to Inbox and wake the parent task's main conversation by default.
     Report {
         #[arg(value_parser = crate::parse_id)]
         id: String,
@@ -101,7 +101,7 @@ enum TaskCommand {
         #[arg(long, value_parser = crate::parse_id)]
         source_thread: String,
     },
-    /// Queue a message in a task's main conversation or a selected role conversation.
+    /// Queue work in the task's fixed main conversation (explicit --thread overrides it).
     Send {
         #[arg(value_parser = crate::parse_id)]
         id: String,

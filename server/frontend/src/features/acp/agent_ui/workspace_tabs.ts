@@ -44,7 +44,7 @@ export function removeAcpWorkspaceTabs(workspace: string) {
   try { localStorage.removeItem(`aow-acp-tabs:${workspace}`); } catch { /* Storage can be unavailable. */ }
 }
 
-export function useAcpTabs(workspace: string) {
+export function useAcpTabs(workspace: string, mainThreadId?: string | null) {
   const [tabs, setTabs] = useState<AcpTab[]>(() => savedAcpTabs(workspace));
   const current = useRef(tabs);
   current.current = tabs;
@@ -78,7 +78,7 @@ export function useAcpTabs(workspace: string) {
     const tab = { id: session.thread_id, thread_id: session.thread_id, agentId: session.agent_id, title: session.title, cwd: session.cwd, working: session.status === 'working' };
     update([...current.current, tab]); return tab.id;
   }, [update]);
-  const close = useCallback((ids: string[]) => update(current.current.filter(tab => !ids.includes(tab.id))), [update]);
+  const close = useCallback((ids: string[]) => update(current.current.filter(tab => (!!mainThreadId && tab.thread_id === mainThreadId) || !ids.includes(tab.id))), [update, mainThreadId]);
   const changed = useCallback((id: string, session: SessionInfo) => {
     const tab = current.current.find(item => item.id === id);
     const working = session.status === 'working';

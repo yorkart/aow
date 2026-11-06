@@ -310,7 +310,7 @@ async fn acp_roles_follow_shared_configuration_and_reject_removed_or_unavailable
 }
 
 #[tokio::test]
-async fn only_the_project_orchestrator_injects_task_and_role_prompts_across_entry_points() {
+async fn only_main_conversations_receive_collaboration_context_across_entry_points() {
     use aow_db::tasks::{TaskRecord, TaskResource, TaskStatus};
     use axum::{
         body::{Body, to_bytes},
@@ -396,38 +396,27 @@ async fn only_the_project_orchestrator_injects_task_and_role_prompts_across_entr
         !guidance.contains("task report")
             && !guidance.contains("Any task conversation can create a child task")
     );
+    let worker_content = serde_json::to_value(
+        state
+            .tasks
+            .acp_role_content(
+                &state.acp,
+                worker,
+                serde_json::from_value(input.clone()).unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .unwrap();
     assert_eq!(
-        serde_json::to_value(
-            state
-                .tasks
-                .acp_role_content(
-                    &state.acp,
-                    worker,
-                    serde_json::from_value(input.clone()).unwrap()
-                )
-                .await
-                .unwrap()
-        )
-        .unwrap(),
-        input
+        &worker_content.as_array().unwrap()[2..],
+        input.as_array().unwrap()
     );
+    let guidance = worker_content[1]["text"].as_str().unwrap();
+    assert!(guidance.contains("fixed main conversation") && guidance.contains("task report"));
+    assert!(!guidance.contains("persistent Orchestrator"));
     let unknown =
         json!([{ "type":"text", "text":"[@Gone](mention://role/missing-role) just text" }]);
-    assert_eq!(
-        serde_json::to_value(
-            state
-                .tasks
-                .acp_role_content(
-                    &state.acp,
-                    worker,
-                    serde_json::from_value(unknown.clone()).unwrap()
-                )
-                .await
-                .unwrap()
-        )
-        .unwrap(),
-        unknown
-    );
     assert!(
         state
             .tasks
@@ -544,7 +533,16 @@ async fn only_the_project_orchestrator_injects_task_and_role_prompts_across_entr
         .collect();
     assert_eq!(prompts.len(), 2);
     for (sent, expected) in prompts.iter().zip(["CLI request", "Browser request"]) {
-        assert_eq!(sent["prompt"], json!([{ "type":"text", "text":expected }]));
+        let blocks = sent["prompt"].as_array().unwrap();
+        assert_eq!(
+            blocks.last().unwrap(),
+            &json!({ "type":"text", "text":expected })
+        );
+        assert!(blocks.iter().any(|block| {
+            block["text"]
+                .as_str()
+                .is_some_and(|text| text.contains("fixed main conversation"))
+        }));
         assert_eq!(
             sent["home"],
             state

@@ -407,7 +407,8 @@ pub(super) async fn orchestrator(
     api::create(
         State(state),
         Json(Create {
-            request_id: format!("orchestrator-{project_id}"),
+            // A deleted space's messages/history keep their old task identity.
+            request_id: format!("orchestrator-{project_id}-{}", uuid::Uuid::new_v4()),
             project_id,
             prompt: "Orchestrator".into(),
             agent_id: request.agent_id,

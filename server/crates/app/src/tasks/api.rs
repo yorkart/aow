@@ -96,19 +96,22 @@ async fn update(
         validate_prompt(prompt)?;
     }
     let _operation = state.tasks.task_resource_access().await;
-    if state
-        .tasks
-        .inner
-        .tasks
-        .list()
-        .map_err(storage)?
-        .iter()
-        .any(|task| task.id == id && task.is_orchestrator)
-        && (request.archived == Some(true) || request.dependencies.is_some())
-    {
+    let task = super::routing::find_task(&state, &id)?;
+    if task.is_orchestrator && request.dependencies.is_some() {
         return Err(crate::instances::invalid(
-            "The project Orchestrator remains active and has no task dependencies",
+            "The project Orchestrator has no task dependencies",
         ));
+    }
+    if task.archived && request.archived == Some(false) {
+        let thread = task
+            .initial_thread_id
+            .as_deref()
+            .ok_or_else(|| crate::instances::invalid("Task has no main conversation"))?;
+        state.acp.session_info(thread).await.map_err(|error| {
+            crate::instances::invalid(
+                format!("Cannot restore this task while its original main conversation is unavailable: {error}"),
+            )
+        })?;
     }
     state
         .tasks
@@ -131,25 +134,13 @@ async fn remove(
     AxumPath(id): AxumPath<String>,
 ) -> Result<StatusCode, HttpError> {
     let _operation = state.tasks.task_resource_access().await;
-    if state
-        .tasks
-        .inner
-        .tasks
-        .list()
-        .map_err(storage)?
-        .iter()
-        .any(|task| task.id == id && task.is_orchestrator)
-    {
-        return Err(crate::instances::invalid(
-            "The project Orchestrator cannot be deleted as a task",
-        ));
-    }
     state
         .tasks
         .inner
         .tasks
         .remove(&id)
         .map_err(|error| crate::instances::invalid(error.to_string()))?;
+    state.workspace_events.projects_changed();
     Ok(StatusCode::NO_CONTENT)
 }
 

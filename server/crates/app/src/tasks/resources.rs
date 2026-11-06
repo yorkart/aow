@@ -1,5 +1,41 @@
 use super::*;
 impl TaskService {
+    /// Recheck under task_resource_access and retain that guard through deletion.
+    pub(crate) fn ensure_conversation_deletable(&self, thread: &str) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            !self.inner.tasks.list()?.iter().any(|task| {
+                !task.archived && task.initial_thread_id.as_deref() == Some(thread)
+            }),
+            "Archive or delete the owning task before deleting its main conversation"
+        );
+        Ok(())
+    }
+
+    /// Workspace cleanup deletes history too, so it must respect the same protection.
+    pub(crate) async fn ensure_workspace_deletable(
+        &self,
+        service: &aow_host_client::acp::AcpClient,
+        workspace: &str,
+    ) -> anyhow::Result<()> {
+        let protected = self
+            .inner
+            .tasks
+            .list()?
+            .into_iter()
+            .filter(|task| !task.archived)
+            .filter_map(|task| task.initial_thread_id)
+            .collect::<std::collections::HashSet<_>>();
+        anyhow::ensure!(
+            !service
+                .sessions(Some(workspace))
+                .await?
+                .iter()
+                .any(|session| protected.contains(&session.thread_id)),
+            "Archive or delete tasks with main conversations in this workspace before cleanup"
+        );
+        Ok(())
+    }
+
     #[cfg(test)]
     pub(crate) fn test_db(&self) -> aow_db::tasks::TaskDb {
         self.inner.tasks.clone()
