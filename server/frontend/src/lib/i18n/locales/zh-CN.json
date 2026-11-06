@@ -176,6 +176,7 @@
     "maximize_editor_area": "最大化编辑区",
     "restore_editor_area": "恢复编辑区",
     "toggle_details": "切换详情面板",
+    "resize_details": "调整详情面板宽度",
     "new_tool": "新建辅助标签",
     "create_agent_to_start": "创建 Agent 开始工作",
     "new_window": "新建窗体",

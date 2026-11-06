@@ -3,7 +3,7 @@ import { persist, readStored } from './floatingWorkspaceState';
 
 export type ToolView = 'properties' | 'conversations' | 'files' | 'notes' | 'git' | 'pullRequests' | 'automations' | 'terminal';
 export interface ToolTab { id: string; view: ToolView; preview?: boolean }
-export interface AgentToolsState { tabs: ToolTab[]; active?: string; detailsVisible?: boolean }
+export interface AgentToolsState { tabs: ToolTab[]; active?: string; detailsVisible?: boolean; detailsWidth?: number }
 export function openTool(state: AgentToolsState, tab: ToolTab): AgentToolsState {
   if (state.tabs.some(item => item.id === tab.id)) return { ...state, tabs: state.tabs.map(item => item.id === tab.id ? { ...item, view: tab.view } : item), active: tab.id };
   // A browsing entry becomes the first preview; kept editors are never replaced.
@@ -32,6 +32,7 @@ export function useAgentTools(scope: string, owner: string, defaultView: ToolVie
   const open = useCallback((tab: ToolTab) => update(state => openTool(state, tab)), [update]);
   const close = useCallback((id: string) => update(state => closeTool(state, id)), [update]);
   const toggleDetails = useCallback(() => update(state => ({ ...state, detailsVisible: state.detailsVisible === false })), [update]);
+  const resizeDetails = useCallback((detailsWidth: number) => update(state => ({ ...state, detailsWidth })), [update]);
   const pin = useCallback((id: string) => update(state => ({ ...state, tabs: state.tabs.map(tab => tab.id === id ? { ...tab, preview: false } : tab) })), [update]);
   const replaceResource = useCallback((id: string, replacement?: string) => {
     setOwners(previous => {
@@ -49,5 +50,5 @@ export function useAgentTools(scope: string, owner: string, defaultView: ToolVie
       }]));
     });
   }, []);
-  return { ...current, owners, open, close, pin, toggleDetails, replaceResource, pinResource };
+  return { ...current, owners, open, close, pin, toggleDetails, resizeDetails, replaceResource, pinResource };
 }

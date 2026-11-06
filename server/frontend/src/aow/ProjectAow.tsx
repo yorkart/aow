@@ -59,6 +59,7 @@ import { AowPanel, AowPanelStack } from '../components/AowPanel';
 import { AowNodeSwitcher } from './AowNodeSwitcher';
 import { WorktreeIcon, worktreeColors, worktreeColorValues, worktreeIconGroups, worktreeIconLabel } from './WorktreeIcon';
 import { useAgentTools, type ToolView } from './agentToolsState';
+import { AgentToolsResizer } from './AgentToolsResizer';
 import { RoleMenu } from '../features/agent-roles/RoleMenu';
 import './agent-tools.css';
 import { WorkspaceTabIcon } from './WorkspaceTabIcon';
@@ -902,6 +903,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
   const tools = useAgentTools(scope, `${toolOwner}:${agentWorkspace}`, conversationView);
   const rightView = tools.tabs.find(tab => tab.id === tools.active)?.view;
   const hasDetails = ['files', 'notes', 'git', 'pullRequests', 'automations'].includes(rightView ?? '');
+  const detailsOnRight = ['files', 'notes', 'git', 'pullRequests'].includes(rightView ?? '');
   const detailsVisible = tools.detailsVisible !== false;
   const detailsId = useId();
   const toolRevealRequest = useMemo(() => tools.active ? { tabId: tools.active } : undefined, [tools.active, toolOwner, agentWorkspace]);
@@ -2211,8 +2213,8 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
           {(['files', 'notes', 'git', 'pullRequests', conversationView, 'automations'] as ToolView[]).map(view => <button key={view} onClick={() => { close(); tools.open({ id: `view:${view}`, view }); }}><WorkspaceTabIcon kind="tool" path={view} /><span>{toolLabels[view]}</span></button>)}
         </>}
       />
-      <div className={`agent-tools-body${hasDetails ? ' with-details' : ''}${rightView === 'files' || rightView === 'notes' || rightView === 'git' ? ' navigation-right' : ''}`}>
-      <div id={detailsId} className="agent-tools-details" key={`${activeAgentId}:${agentWorkspace}`} hidden={hasDetails && !detailsVisible}>
+      <div className={`agent-tools-body${hasDetails ? ' with-details' : ''}${detailsOnRight ? ' navigation-right' : ''}`}>
+      <div id={detailsId} className="agent-tools-details" key={`${activeAgentId}:${agentWorkspace}`} hidden={hasDetails && !detailsVisible} style={hasDetails ? { width: tools.detailsWidth } : undefined}>
       <div className="project-aow-right-content" hidden={rightView !== 'files'}>
         <ExplorerSearch key={`search:${explorerRoot}`} root={explorerRoot} source="project"
           visible={active && rightSidebarVisible && detailsVisible && rightView === 'files'} onOpen={(path, source, match) => void selectTab(() => openSearchFile(path, source, match))}
@@ -2264,6 +2266,7 @@ const WorkspaceSurface = memo(function WorkspaceSurface({
         <AutomationPanel project={project} agents={agents} activeTaskId={tools.active?.startsWith('automation:') ? tools.active.slice('automation:'.length) : undefined} refreshKey={automationRefreshKey} onOpenTask={task => selectTab(() => openAutomation(task))} onTaskChanged={taskChanged} onTaskDeleted={taskDeleted} />
       </div>
       </div>
+      {hasDetails && detailsVisible && <AgentToolsResizer key={`${toolOwner}:${agentWorkspace}:${rightView}`} controls={detailsId} right={detailsOnRight} onResize={tools.resizeDetails} />}
       {auxiliaryContent}
       </div>
     </aside>

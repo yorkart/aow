@@ -1,8 +1,12 @@
 .agent-tools-body { display:flex; flex:1; min-height:0; min-width:0; }
 .agent-tools-details { flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; }
-.agent-tools-body.with-details > .agent-tools-details { flex:0 0 auto; width:clamp(150px,30%,240px); border-right:1px solid var(--aow-line); resize:horizontal; overflow:auto; max-width:60%; }
+.agent-tools-body.with-details > .agent-tools-details { flex:0 0 auto; width:clamp(150px,30%,240px); min-width:min(150px,60%); border-right:1px solid var(--aow-line); overflow:auto; max-width:60%; }
 .agent-tools-body.navigation-right { flex-direction:row-reverse; }
 .agent-tools-body.navigation-right > .agent-tools-details { border-right:0; border-left:1px solid var(--aow-line); }
+.agent-tools-resizer { position:relative; flex:0 0 4px; margin:0 -2px; z-index:4; cursor:col-resize; touch-action:none; outline:none; }
+.agent-tools-resizer::after { content:""; position:absolute; top:0; bottom:0; left:1px; width:2px; }
+.agent-tools-resizer:hover::after,.agent-tools-resizer:focus-visible::after,.agent-tools-resizer.dragging::after { background:var(--aow-accent); }
+.agent-tools-body:has(> .agent-tools-resizer.dragging) { user-select:none; cursor:col-resize; }
 .agent-tools-content { position:relative; flex:1; min-width:0; min-height:0; overflow:hidden; }
 .agent-tools-body:not(.with-details):has(.agent-tools-details > .project-aow-right-content:not([hidden])) > .agent-tools-content { display:none; }
 .agent-tools-body:not(.with-details):not(:has(.agent-tools-details > .project-aow-right-content:not([hidden]))) > .agent-tools-details { display:none; }

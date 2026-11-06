@@ -184,10 +184,28 @@ try {
     await composer.fill('Keep this unsent Agent draft');
     const originalRight = await right.boundingBox();
     const content = right.locator('.agent-tools-content');
+    const resizer = right.getByRole('separator', { name: 'Resize details panel', exact: true });
+    const resizeDetails = async delta => {
+      const before = await details.boundingBox(), editor = await content.boundingBox();
+      assert.ok(before.x >= editor.x + editor.width - 2, 'navigation stays to the right of the editor');
+      const handle = await resizer.boundingBox();
+      await page.mouse.move(handle.x + handle.width / 2, handle.y + 80);
+      await page.mouse.down();
+      await page.mouse.move(handle.x + handle.width / 2 - delta, handle.y + 80, { steps: 5 });
+      await page.mouse.up();
+      const after = await details.boundingBox();
+      assert.ok(Math.abs(after.width - before.width - delta) < 2, 'dragging the divider changes navigation width');
+      assert.ok(Math.abs((await content.boundingBox()).width - editor.width + delta) < 2, 'editor fills the remaining width');
+      assert.ok(Math.abs((await right.boundingBox()).width - originalRight.width) < 2, 'outer sidebar width is unchanged');
+      return after.width;
+    };
+    const initialDetailsWidth = (await details.boundingBox()).width;
+    const filesWidth = await resizeDetails(50);
     const originalContent = await content.boundingBox();
     assert.ok((await details.boundingBox()).x > originalContent.x);
     await toggleDetails.click();
     assert.equal(await details.isVisible(), false);
+    assert.equal(await resizer.count(), 0);
     assert.ok((await content.boundingBox()).width > originalContent.width + 100);
     assert.equal((await right.boundingBox()).x, originalRight.x);
     await maximize();
@@ -198,6 +216,7 @@ try {
     assert.equal(await toggleDetails.getAttribute('aria-pressed'), 'false');
     await toggleDetails.click();
     assert.equal(await details.isVisible(), true);
+    assert.ok(Math.abs((await details.boundingBox()).width - filesWidth) < 2, 'maximizing preserves the chosen width');
     await page.screenshot({ path: '/tmp/aow-editor-maximized.png' });
     await page.getByRole('button', { name: 'Hide left sidebar', exact: true }).click();
     await page.setViewportSize({ width: 900, height: 800 });
@@ -244,6 +263,7 @@ try {
     await right.locator('.source-control').getByText('changed.md', { exact: true }).click();
     await right.getByRole('tab').filter({ hasText: 'changed.md (Diff)' }).waitFor();
     assert.ok(toolRequests.includes('diff:/repo'));
+    await resizeDetails(-25);
     await toggleDetails.click();
     assert.equal(await details.isVisible(), false);
     assert.equal(await content.isVisible(), true);
@@ -255,6 +275,12 @@ try {
     await right.locator('.my-pr-list').getByText(pullRequests[1].title, { exact: false }).click();
     await right.getByRole('tab').filter({ hasText: 'PR #43' }).waitFor();
     assert.equal(await right.getByRole('tab').filter({ hasText: 'PR #42' }).count(), 1);
+    const prWidth = await resizeDetails(35);
+    await resizer.focus();
+    await page.keyboard.press('ArrowRight');
+    const savedDetailsWidth = (await details.boundingBox()).width;
+    assert.ok(Math.abs(savedDetailsWidth - prWidth + 20) < 2, 'keyboard resizing follows the divider direction');
+    await page.screenshot({ path: '/tmp/aow-resizable-pr-details.png' });
     await toggleDetails.click();
     assert.equal(await details.isVisible(), false);
     assert.equal(await content.isVisible(), true);
@@ -287,6 +313,7 @@ try {
     assert.equal(await right.getByRole('tab').filter({ hasText: 'renamed.md' }).count(), 0);
     await openTool('Files');
     assert.equal(await toggleDetails.getAttribute('aria-pressed'), 'true');
+    assert.ok(Math.abs((await details.boundingBox()).width - initialDetailsWidth) < 2, 'new Agent has its own navigation width');
     await file('a.md').click();
     await page.waitForFunction(() => document.querySelector('.agent-tools-content .project-aow-document-host:not([hidden])')?.textContent.includes('/repo-other'));
     assert.ok(toolRequests.includes('/repo-other'));
@@ -330,6 +357,7 @@ try {
     await right.getByRole('tab').filter({ hasText: 'plan.md' }).click();
     await toggleDetails.click();
     await right.getByRole('textbox', { name: 'Search notes', exact: true }).waitFor();
+    assert.ok(Math.abs((await details.boundingBox()).width - savedDetailsWidth) < 2, 'navigation width survives Agent changes and reload');
     assert.equal(await right.getByRole('textbox', { name: 'Search project files', exact: true }).count(), 0);
     await toggleDetails.click();
     await right.getByRole('tab').filter({ hasText: 'renamed.md' }).click();

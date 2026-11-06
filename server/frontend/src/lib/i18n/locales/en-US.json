@@ -176,6 +176,7 @@
     "maximize_editor_area": "Maximize Editor Area",
     "restore_editor_area": "Restore Editor Area",
     "toggle_details": "Toggle Details",
+    "resize_details": "Resize details panel",
     "new_tool": "New tool",
     "create_agent_to_start": "Create an Agent to start working",
     "new_window": "New window",
